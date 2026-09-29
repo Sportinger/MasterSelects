@@ -1,0 +1,12 @@
+.preview-scene-preparation { bottom: 80px; }
+.preview-scene-preparation .indeterminate {
+  width: 35%;
+  animation: scene-preparation-slide 1.2s ease-in-out infinite alternate;
+}
+@keyframes scene-preparation-slide {
+  from { transform: translateX(-80%); }
+  to { transform: translateX(265%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .preview-scene-preparation .indeterminate { animation: none; width: 100%; opacity: 0.55; }
+}

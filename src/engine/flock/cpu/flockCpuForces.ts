@@ -172,16 +172,23 @@ export function accumulateFieldForces(
         break;
       }
       case 10: {
+        let weight = 1;
+        if (f[4] > 0) {
+          const distance = Math.hypot(px - op.v1[0], py - op.v1[1], pz - op.v1[2]);
+          if (distance >= f[4]) break;
+          const u = distance / f[4];
+          weight = 1 - u * u * (3 - 2 * u);
+        }
         const t = f[2];
-        const x = px * f[1] + t;
-        const y = py * f[1] + t * 0.7;
-        const z = pz * f[1] - t * 0.4;
+        const x = px * f[1] + t + op.v0[0];
+        const y = py * f[1] + t * 0.7 + op.v0[1];
+        const z = pz * f[1] - t * 0.4 + op.v0[2];
         const flow = curlNoise3(x, y, z);
         if (f[3] > 0) {
           const fine = curlNoise3(x * 2.07 + 19.1, y * 2.07 - 7.3, z * 2.07 + 11.7);
           flow[0] += fine[0] * f[3] * 0.5; flow[1] += fine[1] * f[3] * 0.5; flow[2] += fine[2] * f[3] * 0.5;
         }
-        acc[0] += flow[0] * f[0]; acc[1] += flow[1] * f[0]; acc[2] += flow[2] * f[0];
+        acc[0] += flow[0] * f[0] * weight; acc[1] += flow[1] * f[0] * weight; acc[2] += flow[2] * f[0] * weight;
         break;
       }
       case 12:

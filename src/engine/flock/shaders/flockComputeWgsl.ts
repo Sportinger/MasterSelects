@@ -279,10 +279,17 @@ fn fieldForces(sim: SimParams, index: u32, p: Particle, mask: u32) -> vec3f {
       acc += (vec3f(valueNoise3(x, 1u), valueNoise3(x, 2u), valueNoise3(x, 3u)) * 2.0 - vec3f(1.0)) * op.f0;
     } else if (kind == 10u) {
       let t = op.f2;
-      let q = p.pos * op.f1 + vec3f(t, t * 0.7, -t * 0.4);
+      var weight = 1.0;
+      if (op.f4 > 0.0) {
+        let distance = length(p.pos - op.v1);
+        if (distance >= op.f4) { continue; }
+        let u = distance / op.f4;
+        weight = 1.0 - u * u * (3.0 - 2.0 * u);
+      }
+      let q = p.pos * op.f1 + vec3f(t, t * 0.7, -t * 0.4) + op.v0;
       var flow = curlNoise3(q);
       if (op.f3 > 0.0) { flow += curlNoise3(q * 2.07 + vec3f(19.1, -7.3, 11.7)) * (op.f3 * 0.5); }
-      acc += flow * op.f0;
+      acc += flow * op.f0 * weight;
     } else if (kind == 12u) {
       acc += op.v0;
     } else if (kind == 11u) {

@@ -218,6 +218,34 @@ buffers directly (no per-particle CPU copies):
 
 ### Data-sculpture canvas (Refik Anadol-style)
 
+**Terracotta Sculpture** and **Lilac Sculpture** are reusable starting presets
+for a slowly settling sculpture in a square gallery box. They combine 524,288 grid
+particles, sixteen requested render sub-particles, weak downward gravity (Y = -8), APIC, slow Curl
+Flow, restoring Home Pull, Drag, spatial color regions and lit opaque grains.
+Six local Curl Flow fields overlap a slower global flow. Each has its own
+noise offset, frequency and evolution rate; their forces add in shared regions
+so larger folds emerge from interacting flows instead of timed crest triggers.
+Curl Flow supports Noise Offset, Field Center and a smoothly fading Field Radius
+(zero retains the existing global behavior).
+The dense rest sheet starts inside the box, behind the frame.
+Home Pull and Drag limit dispersal. Motion follows source time and repeats on
+seek/export; emerging crests have no fixed two-second cadence. The simulation domain
+extends beyond the gallery opening so folds can project in front of the frame.
+They start without simulation pre-roll, so the first frame is calm and folds
+develop during playback. Exposed controls include flow, fold frequency, damping,
+pre-roll, grain size, pigment colors and lighting.
+
+Preview shows a preparation bar while active Flock clips catch up: the percentage
+comes from completed simulation steps versus the requested step. Initial scene
+preparation has an indeterminate bar until that work is measurable. The overlay
+waits briefly to avoid flashing on fast frames and disappears when ready.
+
+These are particle-surface approximations: Curl Flow applies a force, Drag
+damps velocity, and APIC transfers velocity through the pressure grid. They
+do not implement a prescribed velocity field, a viscosity solve, FLIP or a
+reconstructed continuous fluid surface. Dense folded sculpture references
+remain a visual target, not a claim of equivalence or real-time performance.
+
 A Grid emitter lays its particles out as a flat canvas whose columns and rows
 follow the emitter size aspect. **Curl Flow** is a divergence-free curl-noise
 force (strength, frequency, evolution over source time, optional finer detail

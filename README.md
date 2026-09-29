@@ -23,6 +23,11 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 
 ### Node graphs
 
+Flock includes Terracotta and Lilac Sculpture presets: dense, low-gravity
+APIC sheets with slow curl forces, spatial pigment colors and a lit gallery box.
+They start calmly inside the box, with overlapping curl fields developing during playback.
+Preview displays simulation preparation progress and loading activity for 3D models.
+
 [Flock](docs/Features/Flock-Clips.md) point rendering adapts sub-particle density
 to the scene target, scales screen point sizes from a 1080p reference, and uses
 parent particles for shadows. Optional GPU timestamps expose simulation,

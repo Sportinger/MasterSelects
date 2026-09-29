@@ -194,10 +194,13 @@ export function prepareCpuStepParams(resolved: FlockResolvedStep): CpuStepParams
         f[2] = (p.n.evolution ?? 0) * resolved.time;
         break;
       case 'curl':
+        v0 = vec(p.v.offset);
+        v1 = vec(p.v.center);
         f[0] = p.n.strength ?? 0;
         f[1] = p.n.frequency ?? 0.008;
         f[2] = (p.n.evolution ?? 0) * resolved.time;
         f[3] = Math.max(0, Math.min(1, p.n.detail ?? 0));
+        f[4] = Math.max(0, p.n.radius ?? 0);
         break;
       case 'home':
         f[0] = Math.max(0, p.n.stiffness ?? 0);

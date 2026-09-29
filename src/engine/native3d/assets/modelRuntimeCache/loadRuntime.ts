@@ -13,10 +13,28 @@ import { parseFbx } from './fbx';
 import { decodeText, fetchModelBytes, fetchModelText } from './io';
 import { parseObj, resolveObjMaterials } from './obj';
 import type { GltfAsset, ModelRuntimeBounds, ModelRuntimeData } from './types';
+import { sceneModelLoadProgress } from '../../../../services/render/sceneModelLoadProgress';
 
 const log = Logger.create('ModelRuntimeCache');
 
 export async function loadModelRuntime(
+  url: string,
+  resolvedFileName: string,
+  normalizationBounds?: ModelRuntimeBounds,
+  normalizationKey?: string,
+): Promise<ModelRuntimeData | null> {
+  const finish = sceneModelLoadProgress.begin(url, resolvedFileName);
+  let failed = true;
+  try {
+    const result = await loadModelRuntimeData(url, resolvedFileName, normalizationBounds, normalizationKey);
+    failed = !result;
+    return result;
+  } finally {
+    finish(failed);
+  }
+}
+
+async function loadModelRuntimeData(
   url: string,
   resolvedFileName: string,
   normalizationBounds?: ModelRuntimeBounds,

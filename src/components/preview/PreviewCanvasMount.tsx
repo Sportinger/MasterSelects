@@ -40,6 +40,7 @@ import { TrackingPreviewOverlay } from './tracking/TrackingPreviewOverlay';
 import { usePreview3DMediaDrop } from './usePreview3DMediaDrop';
 import { FlockGuidanceOverlay } from './flock/FlockGuidanceOverlay';
 import { rendersFlock } from '../../services/flock/flockEffect';
+import { PreviewScenePreparationOverlay } from './PreviewScenePreparationOverlay';
 
 interface PreviewCanvasMountProps {
   activeSharedSceneOverlayContent: boolean;
@@ -403,6 +404,8 @@ export function PreviewCanvasMount({
         )}
 
         <PreviewSplatProgressOverlay progress={activeSplatLoadProgress} />
+        {!activeSplatLoadProgress && !isExporting && !sourceMonitorActive && isEngineReady
+          && <PreviewScenePreparationOverlay clips={clips} tracks={tracks} />}
 
         {layerTransformMode && isEngineReady && !rotoActive && (
           <canvas

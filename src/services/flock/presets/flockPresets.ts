@@ -1,5 +1,6 @@
 import type { FlockDefinition } from '../../../types/flock';
 import { FlockGraphBuilder } from './flockGraphBuilder';
+import { createSculpturePreset } from './flockSculpturePresets';
 
 export interface FlockPresetDescriptor {
   id: string;
@@ -239,6 +240,8 @@ function violetFilaments(): FlockDefinition {
 }
 
 export const FLOCK_PRESETS: readonly FlockPresetDescriptor[] = [
+  { id: 'sculpture-terracotta', label: 'Terracotta Sculpture', description: 'Gently settling APIC sheet with slow folds, cream and orange pigment, and a lit gallery box. Calm start without pre-roll.', showcase: true, create: () => createSculpturePreset('terracotta') },
+  { id: 'sculpture-lilac', label: 'Lilac Sculpture', description: 'Gently settling APIC sheet with slow folds, lilac pigment, and a lit gallery box. Calm start without pre-roll.', showcase: true, create: () => createSculpturePreset('lilac') },
   { id: 'free-swarm', label: 'Free Swarm', description: 'Boids with turbulence inside a soft sphere.', create: freeSwarm },
   { id: 'krill-cloud', label: 'Krill Cloud', description: 'Aligned krill bodies in drifting clusters with faint neighbor links.', create: krillCloud },
   { id: 'vortex', label: 'Vortex', description: 'A swirling shell of particles with velocity strokes.', create: vortex },
