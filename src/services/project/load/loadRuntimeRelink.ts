@@ -84,6 +84,8 @@ async function runDeferredProjectCacheRestore(
     log.info('Skipping deferred metadata/cache restoration for large project', {
       mediaCount: projectData.media.length,
     });
+    // Without a codec id, MXF/ProRes/HAP media would fall back to <video> and stay black.
+    await refreshMediaMetadata(undefined, { codecRoutingOnly: true });
     return;
   }
 

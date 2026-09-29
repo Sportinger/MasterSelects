@@ -115,19 +115,34 @@ export async function restoreCachedMediaThumbnails(
   return restoredCount;
 }
 
+/**
+ * Video whose decoder routing depends on the container codec id (ProRes/HAP in
+ * MOV/MP4, every MXF) but whose id is missing. `== null`: projects written by
+ * external tools store an explicit null.
+ */
+function needsCodecRoutingProbe(f: { type: string; name: string; videoCodecId?: string | null }): boolean {
+  return f.type === 'video'
+    && (isIsobmffFileName(f.name) || isMxfFileName(f.name))
+    && f.videoCodecId == null;
+}
+
 export async function refreshMediaMetadata(
   onProgress?: (done: number, total: number, name: string) => void,
+  options: { codecRoutingOnly?: boolean } = {},
 ): Promise<void> {
   const mediaState = useMediaStore.getState();
   const filesToRefresh = mediaState.files.filter(f =>
     (f.type === 'video' || f.type === 'audio' || f.type === 'image') &&
     f.file && (
-      f.codec === undefined ||
-      f.container === undefined ||
-      f.fileSize === undefined ||
-      (f.type === 'video' && f.hasAudio === undefined) ||
-      // `== null`: projects written by external tools store an explicit null codec id.
-      (f.type === 'video' && (isIsobmffFileName(f.name) || isMxfFileName(f.name)) && f.videoCodecId == null)
+      options.codecRoutingOnly
+        ? needsCodecRoutingProbe(f)
+        : (
+          f.codec === undefined ||
+          f.container === undefined ||
+          f.fileSize === undefined ||
+          (f.type === 'video' && f.hasAudio === undefined) ||
+          needsCodecRoutingProbe(f)
+        )
     )
   );
 
