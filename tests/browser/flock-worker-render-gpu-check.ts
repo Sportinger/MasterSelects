@@ -49,7 +49,8 @@ async function check() {
     context.fillStyle = '#20ff40'; context.fillRect(0, 0, 2, 2);
     return { canvas: canvas.transferControlToOffscreen(), program: compiled.program, definition, keyframes, frameStackUrls, audioCurves, pigment: await createImageBitmap(pigmentSource) };
   };
-  const main = await renderFlockProbe(await makeInput());
+  const workerOnly = new URLSearchParams(location.search).get('workerOnly') === '1';
+  const main = workerOnly ? null : await renderFlockProbe(await makeInput());
   const worker = new Worker(new URL('./flock-worker-render.worker.ts', import.meta.url), { type: 'module' });
   const input = await makeInput();
   let heartbeats = 0;
@@ -64,13 +65,13 @@ async function check() {
       };
       worker.postMessage(input, [input.canvas, input.pigment]);
     });
-    if (!result.worker || main.worker) throw new Error('Probe did not execute in separate realms');
+    if (!result.worker || main?.worker) throw new Error('Probe did not execute in separate realms');
     if (heartbeats < 1) throw new Error('Main event loop did not run during worker render');
-    for (let i = 0; i < main.particles.length; i++) {
+    for (let i = 0; main && i < main.particles.length; i++) {
       if (main.particles[i] !== result.particles[i]) throw new Error(`Worker simulation mismatch at ${i}`);
     }
     let maxPixelDelta = 0;
-    for (let frame = 0; frame < main.images.length; frame++) {
+    for (let frame = 0; main && frame < main.images.length; frame++) {
       const a = main.images[frame], b = result.images[frame];
       for (let i = 0; i < a.length; i++) {
         const delta = Math.abs(a[i] - b[i]); maxPixelDelta = Math.max(maxPixelDelta, delta);
@@ -78,9 +79,9 @@ async function check() {
       }
     }
     if (!result.images[0].some((value, i) => value !== result.images[1][i])) throw new Error('Model replacement did not change pixels');
-    return { success: true, audioSnapshots: true, audioResimulation: true, hostProjection: true, frameStackAssets: true, comparedImages: main.images.length, nativeFrameStack: result.nativeFrameStack, sharedScene: result.sharedScene, sharedDepth: result.sharedDepth, worker: result.worker, offscreenTransferred: true, steps: result.step,
+    return { success: true, workerOnly, orderedSimulation: result.orderedSimulation, audioSnapshots: true, audioResimulation: true, hostProjection: true, frameStackAssets: true, comparedImages: main?.images.length ?? 0, nativeFrameStack: result.nativeFrameStack, sharedScene: result.sharedScene, sharedDepth: result.sharedDepth, worker: result.worker, offscreenTransferred: true, steps: result.step,
       count: compiled.program.capacity, coloredPixels: result.coloredPixels, pigmentPixels: result.pigmentPixels, modelReplacement: 'verified',
-      simulation: 'exact', persistedCheckpoints: result.persistedCheckpoints, persistentSession: result.persistentSession, seekReplay: result.seekReplay, keyframeInvalidation: result.keyframeInvalidation, statusCount: result.statusCount, maxPixelDelta, mainThreadHeartbeats: heartbeats };
+      simulation: 'exact', persistedCheckpoints: result.persistedCheckpoints, persistentSession: result.persistentSession, seekReplay: result.seekReplay, keyframeInvalidation: result.keyframeInvalidation, statusCount: result.statusCount, maxPixelDelta: main ? maxPixelDelta : null, mainThreadHeartbeats: heartbeats };
   } finally { clearInterval(heartbeat); [...frameStackUrls, ...audioCurves.map(curve => curve.url)].forEach(url => URL.revokeObjectURL(url)); /* Keep the worker's canvas visible for inspection. */ }
 }
 

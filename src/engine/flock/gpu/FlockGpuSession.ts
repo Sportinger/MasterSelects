@@ -284,7 +284,7 @@ export class FlockGpuSession {
   hasCheckpointAtOrBefore(step: number): number { return this.checkpoints.atOrBefore(step); }
 
   /** Advances toward `targetStep` using at most `maxSteps`; returns whether it arrived. */
-  advanceTo(targetStep: number, maxSteps: number, boundedPreview = false): boolean {
+  advanceTo(targetStep: number, maxSteps: number, boundedPreview = false, submissionWindow: 1 | 2 = 1): boolean {
     if (this.disposed) return false;
     if (boundedPreview && this.previewSubmissionPending) return this.step === targetStep;
     if (targetStep < this.step) this.restoreAtOrBefore(targetStep);
@@ -293,7 +293,9 @@ export class FlockGpuSession {
     // buffer short enough to yield to presentation and the OS GPU watchdog.
     const batchLimit = this.fluid ? Math.max(1, Math.min(FLOCK_MAX_STEPS_PER_SUBMIT,
       Math.floor(3_000_000 / this.capacity))) : FLOCK_MAX_STEPS_PER_SUBMIT;
-    if (boundedPreview) remaining = Math.min(remaining, batchLimit);
+    // A small window lets the backend prepare the next command buffer while
+    // the GPU executes the preceding one. Keep each buffer's watchdog bound.
+    if (boundedPreview) remaining = Math.min(remaining, batchLimit * submissionWindow);
     const submitted = remaining > 0;
     while (remaining > 0) {
       const batch = Math.min(remaining, batchLimit);

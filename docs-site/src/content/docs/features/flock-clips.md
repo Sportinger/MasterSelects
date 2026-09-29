@@ -427,6 +427,20 @@ timestamps remain disabled; raised limits do not themselves allocate GPU memory.
 Render-host `flockStatus.frameTiming` separates Worker frame age, resource setup,
 simulation preparation, command encoding and submission wait in wall-clock
 milliseconds. These include scheduling and waiting, unlike GPU pass timestamps.
+`flockStatus.preparation` adds simulation step and `prepareCalls` counts,
+CPU `encodeMs`, intermediate completion `waitMs`, and `deferredSteps` whose
+completion is covered by the final compositor fence. Intermediate catch-up
+uses a window of at most two simulation command buffers before waiting for
+completion; each buffer retains its capacity-dependent step limit. This allows
+backend command preparation to overlap preceding GPU work. The final simulation
+block and rendering use the same GPU queue in order, avoiding an extra CPU
+round trip before rendering. Exact presentation still requires the compositor's
+completion fence; queued work is not reported as completed deadline progress.
+Each GPU timing sample also reports `spanMs` from its first measured pass start
+to its last measured pass end, and `gapMs` for time within that span outside
+the measured passes. This includes GPU scheduling gaps and any intervening
+unmeasured commands, not CPU time or a whole-frame GPU total. Truncated samples
+describe only their measured prefix.
 Presented-frame status remains current during playback even when the next frame
 is already queued; partial catch-up status still requires the newest request.
 If simulation catch-up exceeds a frame deadline, the Worker reports its retained

@@ -8,6 +8,10 @@ export interface FlockGpuTimingSample {
   milliseconds: Record<string, number>;
   passes: Record<string, number>;
   truncated: boolean;
+  /** First measured pass start to last measured pass end, including gaps. */
+  spanMs?: number;
+  /** Time inside that span not covered by measured passes; not CPU time. */
+  gapMs?: number;
 }
 
 export interface FlockDrawDiagnostics {
@@ -107,10 +111,12 @@ export class FlockGpuTimings {
           milliseconds[label] = (milliseconds[label] ?? 0) + Math.max(0, elapsed);
           passes[label] = (passes[label] ?? 0) + 1;
         });
+        const spanMs = labels.length ? Math.max(0, Number(times[count - 1] - times[0]) / 1e6) : 0;
+        const gapMs = Math.max(0, spanMs - Object.values(milliseconds).reduce((sum, value) => sum + value, 0));
         slot.readback.unmap();
         if ((this.samples.get(scope)?.sequence ?? -1) < sequence) {
           this.samples.delete(scope);
-          this.samples.set(scope, { sequence, updatedAt: Date.now(), milliseconds, passes, truncated });
+          this.samples.set(scope, { sequence, updatedAt: Date.now(), milliseconds, passes, truncated, spanMs, gapMs });
           if (this.samples.size > 16) this.samples.delete(this.samples.keys().next().value!);
         }
       }).catch(() => { /* Device loss must not interrupt playback. */ }).finally(() => { slot.busy = false; });

@@ -30,7 +30,7 @@ describe('Flock GPU pass timings', () => {
     expect(owner.snapshot().samples).toEqual({});
     read();
     await vi.waitFor(() => expect(owner.snapshot().samples.simulation).toMatchObject({
-      milliseconds: { pressure: 5 }, passes: { pressure: 2 }, truncated: false,
+      milliseconds: { pressure: 5 }, passes: { pressure: 2 }, truncated: false, spanMs: 6, gapMs: 1,
     }));
   });
 

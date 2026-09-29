@@ -11,6 +11,7 @@ import type { SceneCamera, SceneFlockLayer } from '../../src/engine/scene/types'
 import { createWorkerGpuTargetSurface } from '../../src/services/render/workerGpuTargetSurface';
 import { renderNativeSceneProbe } from './flock-worker-scene-probe';
 import { renderNativeFrameStackProbe } from './flock-worker-frame-stack-probe';
+import { checkOrderedSessions } from './flock-ordered-session-gpu-check';
 import type { WorkerGpuNativeAudioInput } from '../../src/services/render/workerGpuNativeAudioContract';
 
 export interface FlockWorkerProbeInput {
@@ -31,6 +32,7 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
   const { device, context } = created.surface;
   const errors: string[] = [];
   device.addEventListener('uncapturederror', event => errors.push(event.error.message));
+  const orderedSimulation = await checkOrderedSessions(device);
   // COPY_SRC is used only by this verification probe; production need not read pixels.
   context.configure({ device, format: 'rgba8unorm', alphaMode: 'opaque', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
   const assets = new FlockGpuAssetRegistry(device);
@@ -129,7 +131,7 @@ export async function renderFlockProbe(input: FlockWorkerProbeInput) {
     await runtime.clearCache('worker-probe');
     images.push(...await renderNativeFrameStackProbe(created.surface, input.frameStackUrls, input.audioCurves));
     if (errors.length) throw new Error(errors.join('\n'));
-    return { nativeFrameStack: true, sharedScene: true, sharedDepth: true, persistedCheckpoints, persistentSession: true, seekReplay: true, keyframeInvalidation: true, renderRequests, statusCount: statuses.size, worker: typeof document === 'undefined', step: session.step, coloredPixels, pigmentPixels, images, particles };
+    return { orderedSimulation, nativeFrameStack: true, sharedScene: true, sharedDepth: true, persistedCheckpoints, persistentSession: true, seekReplay: true, keyframeInvalidation: true, renderRequests, statusCount: statuses.size, worker: typeof document === 'undefined', step: session.step, coloredPixels, pigmentPixels, images, particles };
   } finally {
     runtime.dispose(); assets.dispose(); depth.destroy(); readback.destroy();
     temporary.forEach(buffer => buffer.destroy());

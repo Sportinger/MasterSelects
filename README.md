@@ -51,6 +51,9 @@ GPU pass timestamps when supported. Worker devices request the adapter's buffer
 limits for large simulations; timing readbacks stay asynchronous and bounded.
 Worker frame diagnostics also separate simulation preparation, encoding and GPU
 submission wait, and stay updated while playback queues subsequent frames.
+The final Worker simulation block shares the compositor's GPU completion fence;
+intermediate catch-up blocks remain bounded. Diagnostics distinguish CPU encoding,
+completion waits and the GPU span between measured passes.
 Long Worker seeks resume retained simulation progress with fresh frame deadlines;
 newer requests take priority and stalled work is not retried indefinitely.
 Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both

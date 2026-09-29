@@ -40,6 +40,7 @@ export class WorkerGpuNativeSceneOwner {
   private readonly assets: WorkerGpuNativeSceneAssets;
   private readonly scenes = new Map<string, SceneEntry>();
   private disposed = false;
+  private preparation = { steps: 0, prepareCalls: 0, encodeMs: 0, waitMs: 0, deferredSteps: 0 };
 
   constructor(device: GPUDevice) {
     this.device = device;
@@ -71,6 +72,7 @@ export class WorkerGpuNativeSceneOwner {
 
   /** Prepare all occurrences before encoding the frozen compositor stack. */
   async prepare(stack: WorkerGpuFrameStackContractV1, current: () => boolean, clock = Date.now): Promise<void> {
+    this.preparation = { steps: 0, prepareCalls: 0, encodeMs: 0, waitMs: 0, deferredSteps: 0 };
     const active = new Set<string>();
     const deadline = new WorkerNativeSceneDeadline(stack.frame.expireAfterMs, clock, () => !this.disposed && current());
     const guard = deadline.assertCurrent;
@@ -127,13 +129,28 @@ export class WorkerGpuNativeSceneOwner {
             const encoder = this.device.createCommandEncoder();
             const sessionKey = `${layer.clipId}|${layer.flock.consumer}`;
             const beforeStep = entry.simulation.entries.get(sessionKey)?.session.step ?? 0;
-            const plan = entry.simulation.prepare(this.device, encoder, layer, { realtime: false });
+            const encodeStarted = performance.now();
+            const plan = entry.simulation.prepare(this.device, encoder, layer, { realtime: false, submissionWindow: 2 });
             if (!plan) throw new Error(entry.statuses.get(layer.clipId)?.message ?? 'Worker Flock simulation could not prepare');
             this.device.queue.submit([encoder.finish()]);
-            await this.device.queue.onSubmittedWorkDone();
             const session = entry.simulation.entries.get(sessionKey);
-            deadline.completed(beforeStep, session?.session.step ?? 0);
+            const afterStep = session?.session.step ?? 0;
+            const steps = Math.max(0, afterStep < beforeStep ? afterStep : afterStep - beforeStep);
+            this.preparation.encodeMs += performance.now() - encodeStarted;
+            this.preparation.steps += steps;
+            this.preparation.prepareCalls++;
             ready = session?.caughtUp === true;
+            if (ready) {
+              // Simulation and rendering share this queue. The compositor's final
+              // fence proves completion; a CPU round trip here would idle it.
+              // Do not count these steps as resumable completed GPU work yet.
+              this.preparation.deferredSteps += steps;
+            } else {
+              const waitStarted = performance.now();
+              await this.device.queue.onSubmittedWorkDone();
+              this.preparation.waitMs += performance.now() - waitStarted;
+              deadline.completed(beforeStep, afterStep);
+            }
           }
         }
         guard();
@@ -186,7 +203,7 @@ export class WorkerGpuNativeSceneOwner {
     };
     visit(stack);
     const limits = this.device.limits;
-    return { compositionId: stack.frame.compositionId, occurrences,
+    return { compositionId: stack.frame.compositionId, occurrences, preparation: { ...this.preparation },
       gpuTimings: { ...flockGpuTimings(this.device).snapshot(), capturedAt: Date.now() }, capabilities: {
       webgpu: true, gpuCompute: true, fallback: 'none', cpuFallbackMaxParticles: 0,
       maxStorageBufferBindingSize: limits.maxStorageBufferBindingSize,

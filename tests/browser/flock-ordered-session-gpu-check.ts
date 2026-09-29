@@ -72,6 +72,17 @@ export async function checkOrderedSessions(device: GPUDevice) {
       await device.queue.onSubmittedWorkDone();
     }
     compare(expected, await sorted.sampleParticles(257), 'bounded preview replay');
-    return { orderedSession: 'matched', count: 257, steps: 12, interpolation: true, respawn: true, neighbors: true, trails: true, checkpoint: 'restore/import/adopt' };
+    canonical.advanceTo(60, 60);
+    const expected60 = await canonical.sampleParticles(257);
+    sorted.invalidateFrom(0);
+    sorted.advanceTo(60, 60, true, 2);
+    if (sorted.step !== 48) throw new Error(`Two-buffer window exceeded or missed its bound: ${sorted.step}`);
+    sorted.advanceTo(60, 60, true, 2);
+    if (sorted.step !== 48) throw new Error('Two-buffer window accepted more work before completion');
+    await device.queue.onSubmittedWorkDone();
+    sorted.advanceTo(60, 60, true, 2);
+    compare(expected60, await sorted.sampleParticles(257), 'two-buffer preview state');
+    compare(await canonical.sampleParticles(257, 'previous'), await sorted.sampleParticles(257, 'previous'), 'two-buffer interpolation');
+    return { orderedSession: 'matched', count: 257, steps: 60, submissionWindow: 2, interpolation: true, respawn: true, neighbors: true, trails: true, checkpoint: 'restore/import/adopt' };
   } finally { sessions.forEach(session => session.dispose()); }
 }

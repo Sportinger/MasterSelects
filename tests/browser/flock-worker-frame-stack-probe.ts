@@ -79,7 +79,14 @@ export async function renderNativeFrameStackProbe(surface: WorkerGpuTargetSurfac
         const expires = clock + 1000;
         const expired = { ...command, commandId: requestId,
           admission: { ...command.admission, requestId, nowMs: clock },
-          stack: { ...stack, frame: { ...stack.frame, requestId, submitByMs: clock, expireAfterMs: expires } } };
+          // Require more than one bounded submission: the final block now shares
+          // the compositor fence and must not create an intermediate CPU wait.
+          stack: { ...stack, frame: { ...stack.frame, requestId, timelineTime: 1, frameIndex: 60,
+            submitByMs: clock, expireAfterMs: expires },
+            bindings: stack.bindings.map(binding => binding.payload.kind === 'native-scene'
+              ? { ...binding, payload: { ...binding.payload, timelineTime: 1,
+                layers: binding.payload.layers.map(layer => layer.kind === 'flock' ? { ...layer, sourceTime: 1 } : layer) } }
+              : binding) } };
         const queue = surface.device.queue;
         const completion = queue.onSubmittedWorkDone.bind(queue);
         queue.onSubmittedWorkDone = async () => { await completion(); clock = expires; };
