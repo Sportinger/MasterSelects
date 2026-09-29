@@ -52,8 +52,8 @@ Frame-wrapped PCM (SMPTE 382 BWF/AES3 sound elements, e.g. Sony's four mono trac
 edit unit by edit unit into the 16-bit WAV audio proxy (`mxfPcmWav.ts`); index slices locate the
 sound elements after the picture so each edit unit costs one small read. Mapping v1: A1 → left,
 A2 → right (a single mono track is doubled, a stereo track is used as is). Playback, scrubbing and
-export use the regular audio-proxy path. Not yet: D-10 AES3-in-picture audio, clip-wrapped
-(OP-Atom) audio files, choosing other track pairs.
+export use the regular audio-proxy path. D-10 (IMX) AES3 sound elements (4-byte header, 8 channel slots, 24-bit audio in bits 4–27)
+are read the same way. Not yet: clip-wrapped (OP-Atom) audio files, choosing other track pairs.
 
 Until a codec's decoder exists, its plan is `{ backend: 'unsupported', reason:
 'mxf-decoder-unavailable' }`, so the editor reports it instead of showing a black

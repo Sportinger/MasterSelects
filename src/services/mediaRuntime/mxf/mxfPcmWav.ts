@@ -17,27 +17,36 @@ export class MxfAudioUnavailableError extends Error {}
 interface ChannelSource {
   trackNumber: number;
   channelIndex: number;
+  /** Interleaved channel slots per sample in the element. */
   channels: number;
+  /** Bytes before the first sample (SMPTE 386M D-10 AES3 element header). */
+  headerBytes: number;
 }
+
+/** D-10 sound elements always carry 8 AES3 channel slots after a 4-byte header. */
+const D10_CHANNEL_SLOTS = 8;
+const D10_HEADER_BYTES = 4;
 
 function isSoundElementKey(key: string): boolean {
   return key.startsWith('060e2b340102010') && key.slice(16, 24) === '0d010301';
 }
 
 function pickChannels(audio: readonly MxfAudioInfo[]): [ChannelSource, ChannelSource] | null {
-  const usable = audio.filter((a) => a.channels > 0 && a.trackNumber !== 0 && !a.aes3InPicture);
+  const usable = audio.filter((a) => a.channels > 0 && a.trackNumber !== 0);
   const first = usable[0];
   if (!first) return null;
+  const slots = (track: MxfAudioInfo) => (track.aes3InPicture ? D10_CHANNEL_SLOTS : track.channels);
+  const header = (track: MxfAudioInfo) => (track.aes3InPicture ? D10_HEADER_BYTES : 0);
   if (first.channels >= 2) {
     return [
-      { trackNumber: first.trackNumber, channelIndex: 0, channels: first.channels },
-      { trackNumber: first.trackNumber, channelIndex: 1, channels: first.channels },
+      { trackNumber: first.trackNumber, channelIndex: 0, channels: slots(first), headerBytes: header(first) },
+      { trackNumber: first.trackNumber, channelIndex: 1, channels: slots(first), headerBytes: header(first) },
     ];
   }
   const second = usable[1] ?? first;
   return [
-    { trackNumber: first.trackNumber, channelIndex: 0, channels: first.channels },
-    { trackNumber: second.trackNumber, channelIndex: 0, channels: second.channels },
+    { trackNumber: first.trackNumber, channelIndex: 0, channels: slots(first), headerBytes: header(first) },
+    { trackNumber: second.trackNumber, channelIndex: 0, channels: slots(second), headerBytes: header(second) },
   ];
 }
 
@@ -116,7 +125,9 @@ export async function buildMxfPcmWavBlob(
           const klv = parseKlvHeader(bytes, at);
           if (!klv || klv.end > bytes.length) break;
           if (isSoundElementKey(klv.key)) {
-            elements.set(parseInt(klv.key.slice(24, 32), 16) >>> 0, bytes.subarray(klv.valueOffset, klv.end));
+            const trackNumber = parseInt(klv.key.slice(24, 32), 16) >>> 0;
+            const skip = mapping.find((c) => c.trackNumber === trackNumber)?.headerBytes ?? 0;
+            elements.set(trackNumber, bytes.subarray(klv.valueOffset + skip, klv.end));
           }
           at = klv.end;
         }
