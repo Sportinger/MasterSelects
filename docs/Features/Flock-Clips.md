@@ -403,6 +403,13 @@ Other 3D layer kinds, scene effectors, gizmos and complete
 status/cache control routing remain outstanding. The default editor preview
 remains on the main renderer; this is not yet the full Worker migration.
 
+For a development-only integration check, open
+`/editor?renderHost=worker-gpu-only`. The host is selected before preview canvases
+acquire a context, allowing the existing editor preview to register directly with
+the Worker. This explicit URL is ignored in production; ordinary reloads still
+clear stale experimental host preferences. A live mode switch does not transfer
+canvases that already belong to the main renderer.
+
 The GPU fluid, cell-order and separation kernels also accept a 32-byte fluid
 core (`position/age`, `velocity/generation`). Pipeline caches distinguish it
 from the full 64-byte particle state, and sorting scratch uses the same stride.

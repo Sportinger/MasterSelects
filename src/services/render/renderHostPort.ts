@@ -18,6 +18,7 @@ import {
   type WorkerPresentingPresentationStrategy,
 } from './workerPresentingRenderHostPort';
 import { createWorkerShadowRenderHostPort } from './workerShadowRenderHostPort';
+import { renderHostStartupMode } from './renderHostStartupMode';
 
 export type {
   ConfigureRenderHostSelectionOptions,
@@ -200,7 +201,8 @@ function workerRuntimeBlockers(): readonly string[] {
 }
 
 const persistedInitialDevMode = readRenderHostDevMode();
-const initialDevMode = persistedInitialDevMode === 'main' ? 'main' : null;
+const initialDevMode = renderHostStartupMode(import.meta.env.DEV,
+  typeof location === 'undefined' ? '' : location.search, persistedInitialDevMode);
 if (persistedInitialDevMode && persistedInitialDevMode !== 'main') {
   writeRenderHostDevMode(null);
 }

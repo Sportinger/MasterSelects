@@ -229,7 +229,7 @@ describe('renderHostPort', () => {
     expect(engine.stop).toHaveBeenCalledTimes(1);
     expect(diagnosticRenderLoopStart).toHaveBeenCalledTimes(1);
     expect(engine.clearVideoCache).toHaveBeenCalledTimes(1);
-    expect(engine.clearScrubbingCache).toHaveBeenCalledWith(undefined);
+    expect(engine.clearScrubbingCache).toHaveBeenCalledWith(undefined, undefined);
     expect(engine.clearCompositeCache).toHaveBeenCalledTimes(1);
     expect(engine.clearCaches).toHaveBeenCalledTimes(1);
     expect(engine.clearFrame).toHaveBeenCalledTimes(1);

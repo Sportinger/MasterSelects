@@ -42,6 +42,8 @@ image pigments, instance models and audio analysis in the Worker. Audio-driven
 checkpoints distinguish analysis content and clip placement; export preparation pins
 that identity across asynchronous work. The default preview remains
 on the main renderer while the remaining scene and control integrations are completed.
+Development can explicitly boot the Worker preview with
+`/editor?renderHost=worker-gpu-only`; production ignores this URL override.
 Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both
 CPU and GPU, with residual-based convergence and solid domain walls.
 The fluid node exposes particle separation, spacing and deterministic position
