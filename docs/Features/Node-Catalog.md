@@ -475,9 +475,20 @@ reproduces the preview; width 0 draws nothing. Visibility is decided per segment
 so a thread that ends inside a segment tapers to nothing instead of stretching a
 sliver across the frame. Curve graphs are authored Y-up: +Y is the top edge and the
 opposite of gravity, and +Z faces the viewer. The shared scene draws +Y downward like
-composition pixels, so the strand pass mirrors local Y into it. Shading is Kajiya-Kay (tangent
-based) with a fixed key light and ambient term; scene lights, shadows and a
-dedicated generator clip are not connected yet. The cloth simulation runs on the
+composition pixels, so the strand pass mirrors local Y into it.
+
+**Shading.** Every fiber is lit as a round tube.
+- **Wide fibers** (a few pixels or more, as in close-ups): wrapped Lambert diffuse on a
+  cylinder normal reconstructed across the ribbon. **Thin fibers** fall back to
+  Kajiya-Kay.
+- **Highlights:** two shifted highlights after Marschner/Karis, a white R and a TRT
+  in the fiber color, plus forward scattering when a light is behind the fiber.
+- **Light clips** light the strands like native meshes. Point and panel lights use the
+  same falloff and panel direction, up to four direct lights; environment lights add
+  ambient color. Without a light clip a fixed upper-left key light applies.
+- **Not yet supported:** shadows and a dedicated generator clip.
+
+The cloth simulation runs on the
 CPU of the rendering thread (the Worker render host in the default mode); a long
 jump into an unsimulated range blocks that thread while it catches up.
 

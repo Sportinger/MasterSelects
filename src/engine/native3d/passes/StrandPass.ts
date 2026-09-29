@@ -1,12 +1,15 @@
 import shader from '../shaders/StrandScene.wgsl?raw';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
-import type { SceneCamera, SceneLayer3DData, SceneStrandLayer } from '../../scene/types';
+import type { SceneCamera, SceneLayer3DData, SceneLightLayer, SceneStrandLayer } from '../../scene/types';
 import { evaluateGeometryProgram } from '../../../services/operators/geometry/geometryEvaluation';
 import { packStrandPoints } from './strandFrames';
+import { packStrandLights, STRAND_LIGHT_FLOATS } from './strandLights';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('StrandPass');
-const UNIFORM_FLOATS = 76;
+/** Fixed layout up to the flyaway vector, then the packed scene lights. */
+const LIGHTS_OFFSET = 76;
+const UNIFORM_FLOATS = LIGHTS_OFFSET + STRAND_LIGHT_FLOATS;
 /** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
 export const FLYAWAY_CHANNELS = 4;
 /** Evaluated curve buffers kept across frames and render targets, least recently used first. */
@@ -21,7 +24,7 @@ export function strandSceneMatrix(world: Float32Array): Float32Array {
   for (let row = 4; row < 8; row++) matrix[row] = -matrix[row];
   return matrix;
 }
-/** Fixed key light in scene space until strands consume scene lights: upper left, toward the camera. */
+/** Key light in scene space when no light clip is present: upper left, toward the camera. */
 const KEY_LIGHT = normalize3([-0.4, -0.7, 0.6]);
 const AMBIENT = 0.35;
 
@@ -140,7 +143,7 @@ export class StrandPass {
   }
 
   render(device: GPUDevice, commandEncoder: GPUCommandEncoder, sceneView: GPUTextureView, sceneDepthView: GPUTextureView,
-    prepared: PreparedStrandLayer[], camera: SceneCamera, temporaryBuffers: GPUBuffer[]): boolean {
+    prepared: PreparedStrandLayer[], camera: SceneCamera, temporaryBuffers: GPUBuffer[], lights: readonly SceneLightLayer[] = []): boolean {
     if (!prepared.length) return true;
     if (!this.pipeline || !this.layout) return false;
     const pass = commandEncoder.beginRenderPass({ label: 'native-scene-strands-pass',
@@ -166,6 +169,7 @@ export class StrandPass {
         data[69] = flyaways.seed;
         data.set([channels / flyaways.density, flyaways.length, flyaways.lift, flyaways.hair], 72);
       }
+      packStrandLights(lights, data, LIGHTS_OFFSET);
       const uniforms = device.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         label: `native-strands-uniforms-${layer.layerId}` });
       temporaryBuffers.push(uniforms);

@@ -23,6 +23,15 @@ struct StrandUniforms {
   yarn: vec4f,    // x: plies, y: fibers per ply, z: yarn radius (local), w: ply twist (turns per unit length)
   twist: vec4f,   // x: fiber twist (turns per unit length), y: flyaway seed
   fly: vec4f,     // x: flyaway cell length per channel, y: flyaway length, z: lift (yarn radii), w: free-end fraction
+  ambient: vec4f, // rgb: ambient from environment lights, w: direct scene lights (-1: none, use the key light)
+  lights: array<StrandLight, 4>,
+};
+
+/** A point (kind 1) or panel (kind 2) scene light, packed like MeshPass lights. */
+struct StrandLight {
+  positionKind: vec4f,
+  colorIntensity: vec4f,
+  directionDiameter: vec4f,
 };
 
 struct Flyaway {
@@ -45,6 +54,8 @@ struct VertexOutput {
   @location(2) across: f32,
   @location(3) coverage: f32,
   @location(4) @interpolate(flat) segment: u32,
+  @location(5) widthAxis: vec3f,  // world direction of the ribbon's +across side
+  @location(6) pixels: f32,       // projected fiber width
 };
 
 fn hash3(x: u32, y: u32, z: u32) -> f32 {
@@ -171,9 +182,38 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let screen = select(toPixels(clipB) - toPixels(clipA), toPixels(ahead) - toPixels(clip), ahead.w > 1e-5);
   let direction = select(vec2f(1.0, 0.0), normalize(screen), dot(screen, screen) > 1e-12);
   let normal = vec2f(-direction.y, direction.x);
+  // The world width axis that the ribbon's +across side projects onto, for the tube normal.
+  let edgeScreen = toPixels(edge) - toPixels(clip);
+  out.widthAxis = widthDirection * select(1.0, -1.0, dot(edgeScreen, normal) < 0.0);
+  out.pixels = pixels;
   let offset = normal * side * max(pixels, 1.0) * 0.5 / (0.5 * u.params.yz);
   out.position = vec4f(clip.xy + offset * clip.w, clip.zw);
   return out;
+}
+
+/** Kajiya-Kay style highlight around a tangent tilted by `shift` along the fiber normal. */
+fn specularLobe(tangent: vec3f, normal: vec3f, halfway: vec3f, shift: f32, exponent: f32) -> f32 {
+  let shifted = normalize(tangent + normal * shift);
+  let th = dot(shifted, halfway);
+  return pow(sqrt(max(0.0, 1.0 - th * th)), exponent);
+}
+
+/**
+ * One light on a fiber. Diffuse blends Kajiya-Kay (thin fibers) with wrapped Lambert on the
+ * reconstructed cylinder normal (fibers several pixels wide), so close-ups read as round tubes.
+ * Two shifted lobes follow Marschner 2003 / Karis 2016: R (white, toward the root) and TRT
+ * (tinted, toward the tip); TT lets a light behind the fiber shine through it.
+ */
+fn shadeFiber(tangent: vec3f, normal: vec3f, view: vec3f, light: vec3f, tube: f32) -> vec3f {
+  let tl = dot(tangent, light);
+  let kajiya = sqrt(max(0.0, 1.0 - tl * tl));
+  let wrapped = max(0.0, (dot(normal, light) + 0.35) / 1.35);
+  let diffuse = mix(kajiya, wrapped, tube);
+  let halfway = normalize(light + view);
+  let r = specularLobe(tangent, normal, halfway, -0.08, 90.0);
+  let trt = specularLobe(tangent, normal, halfway, 0.12, 24.0);
+  let tt = pow(max(0.0, -dot(view, light)), 6.0) * kajiya;
+  return u.color.rgb * (diffuse + 0.3 * trt + 0.35 * tt) + vec3f(0.22 * r);
 }
 
 @fragment
@@ -181,17 +221,40 @@ fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
   if (in.coverage < 1.0 && hash3(u32(in.position.x), u32(in.position.y), in.segment) >= in.coverage) {
     discard;
   }
-  // Kajiya-Kay: diffuse and specular depend on the fiber tangent, not a surface normal.
   let tangent = normalize(in.tangent);
   let view = normalize(in.toCamera);
-  let light = normalize(u.light.xyz);
-  let tl = dot(tangent, light);
-  let diffuse = sqrt(max(0.0, 1.0 - tl * tl));
-  let halfway = normalize(light + view);
-  let th = dot(tangent, halfway);
-  let specular = pow(sqrt(max(0.0, 1.0 - th * th)), 48.0);
-  let profile = sqrt(max(0.0, 1.0 - in.across * in.across));
-  let shade = u.light.w + (1.0 - u.light.w) * diffuse;
-  let rgb = u.color.rgb * shade * mix(0.55, 1.0, profile) + vec3f(0.25 * specular * profile);
-  return vec4f(rgb, 1.0);
+  // Cylinder normal across the ribbon: the width axis at the edges, facing the viewer in the middle.
+  let across = clamp(in.across, -1.0, 1.0);
+  let facingRaw = view - tangent * dot(view, tangent);
+  let facing = select(view, normalize(facingRaw), dot(facingRaw, facingRaw) > 1e-12);
+  let widthRaw = in.widthAxis - tangent * dot(in.widthAxis, tangent);
+  let width = select(cross(tangent, facing), normalize(widthRaw), dot(widthRaw, widthRaw) > 1e-12);
+  let profile = sqrt(max(0.0, 1.0 - across * across));
+  let normal = normalize(width * across + facing * profile);
+  let tube = smoothstep(1.5, 4.0, in.pixels);
+  // Ambient darkens toward the silhouette of wide fibers, like occlusion between neighbours.
+  let occlusion = mix(1.0, mix(0.55, 1.0, profile), tube);
+  if (u.ambient.w < 0.0) {
+    let keyLit = u.light.w * u.color.rgb * occlusion + (1.0 - u.light.w) * shadeFiber(tangent, normal, view, normalize(u.light.xyz), tube);
+    return vec4f(keyLit, 1.0);
+  }
+  // Scene lights, with the MeshPass falloff and panel direction.
+  let position = u.camera.xyz - in.toCamera;
+  var rgb = u.ambient.rgb * u.color.rgb * occlusion;
+  let count = i32(u.ambient.w + 0.5);
+  for (var index = 0; index < 4; index++) {
+    if (index >= count) {
+      break;
+    }
+    let light = u.lights[index];
+    let toLight = light.positionKind.xyz - position;
+    let distance = max(length(toLight), 0.001);
+    let direction = toLight / distance;
+    var attenuation = 1.0 / (1.0 + pow(distance / max(light.directionDiameter.w, 0.001), 2.0));
+    if (light.positionKind.w > 1.5) {
+      attenuation *= max(dot(-direction, normalize(light.directionDiameter.xyz)), 0.0);
+    }
+    rgb += light.colorIntensity.rgb * light.colorIntensity.a * attenuation * shadeFiber(tangent, normal, view, direction, tube);
+  }
+  return vec4f(min(rgb, vec3f(8.0)), 1.0);
 }

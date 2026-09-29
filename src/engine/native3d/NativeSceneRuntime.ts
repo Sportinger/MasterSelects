@@ -420,7 +420,7 @@ export class NativeSceneRuntime {
     });
     if (!this.voxelPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, readyVoxels, camera, temporaryBuffers)) return null;
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'opaque', temporaryBuffers)) return null;
-    if (!this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandPlans, camera, temporaryBuffers)) return null;
+    if (!this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandPlans, camera, temporaryBuffers, lightLayers)) return null;
 
     for (const layer of sortedLayers) {
       const renderSettings = layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
