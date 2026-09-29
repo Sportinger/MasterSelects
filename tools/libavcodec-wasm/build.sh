@@ -6,21 +6,23 @@ set -euo pipefail
 DECODERS="${1:-mpeg2video,dnxhd,h264}"
 PARSERS="${2:-h264,mpegvideo}"
 FFMPEG_TAG="${FFMPEG_TAG:-n7.1.1}"
-WORK=/tmp/build; mkdir -p "$WORK"; cd "$WORK"
+WORK="${WORK:-/tmp/build}"; mkdir -p "$WORK"; cd "$WORK"
 [ -d ffmpeg ] || git clone --depth 1 --branch "$FFMPEG_TAG" https://github.com/FFmpeg/FFmpeg.git ffmpeg
 cd ffmpeg
-git rev-parse HEAD > /w/FFMPEG_REVISION
-emconfigure ./configure --prefix=/opt/ffmpeg --cc=emcc --cxx=em++ --ar=emar --ranlib=emranlib \
+git rev-parse HEAD > "${OUTDIR:-/w}/FFMPEG_REVISION"
+# configure is run directly (emconfigure cannot exec shell scripts on Windows); needs a host clang for C11 probing.
+# Windows/Git Bash: put emsdk upstream/emscripten + upstream/bin + GNU make on PATH, set TMPDIR to a writable dir.
+./configure --prefix="${PREFIX:-/opt/ffmpeg}" --cc=emcc --cxx=em++ --ar=emar --ranlib=emranlib --nm=llvm-nm --host-cc=clang \
   --target-os=none --arch=x86_32 --enable-cross-compile \
   --disable-everything --disable-all --disable-gpl --disable-nonfree --disable-version3 \
-  --disable-programs --disable-doc --disable-network --disable-autodetect --disable-asm --disable-stripping \
-  --disable-pthreads --disable-debug --enable-avcodec --enable-avutil --enable-small=no \
-  --enable-decoder="$DECODERS" --enable-parser="$PARSERS" \
-  --extra-cflags="-O3 -msimd128 -fno-exceptions" --extra-ldflags="-msimd128"
-emmake make -j"$(nproc)" install 2>&1 | tail -3
-cd /w
-emcc -O3 -msimd128 shim.c -I/opt/ffmpeg/include -L/opt/ffmpeg/lib -lavcodec -lavutil \
-  -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=worker -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB \
-  -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPU16 -sEXPORT_NAME=createLibavcodec -sFILESYSTEM=0 \
-  -o out/libavcodec.js
+  --disable-programs --disable-doc --disable-network --disable-autodetect --disable-asm --disable-pthreads --disable-debug \
+  --enable-avcodec --enable-avutil --enable-decoder="$DECODERS" --enable-parser="$PARSERS" \
+  --extra-cflags="-O3 -msimd128"
+make -j"$(nproc)" install
+I="${PREFIX:-/opt/ffmpeg}"
+cd "${OUTDIR:-/w}"
+EXP='["_dec_open","_dec_send","_dec_receive","_dec_flush","_dec_close","_dec_width","_dec_height","_dec_pix_fmt","_dec_pts","_dec_interlaced","_dec_tff","_dec_plane","_dec_stride","_dec_malloc","_dec_free"]'
+emcc -O3 -msimd128 shim.c -I"$I/include" -L"$I/lib" -lavcodec -lavutil \
+  -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=worker,node -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB \
+  -sEXPORTED_FUNCTIONS="$EXP" -sEXPORT_NAME=createLibavcodec -sFILESYSTEM=0 -o out/libavcodec.js
 ls -la out
