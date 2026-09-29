@@ -11,6 +11,14 @@ import { MxfPacketSource } from './MxfPacketSource';
 const WAV_HEADER_BYTES = 44;
 const READ_BATCH = 16;
 const PART_TARGET_BYTES = 4 * 1024 * 1024;
+/**
+ * Parts are folded into Blobs of this size so the PCM leaves the JS heap early
+ * (Chromium moves large Blobs to disk-backed storage); an 80-minute stereo proxy
+ * is ~1 GB and must never exist twice in memory.
+ */
+const BLOB_FOLD_BYTES = 64 * 1024 * 1024;
+
+const yieldToEventLoop = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 export class MxfAudioUnavailableError extends Error {}
 
@@ -97,16 +105,25 @@ export async function buildMxfPcmWavBlob(
     const sampleRate = source.mxf.audio[0]!.sampleRate || 48_000;
     const fps = source.metadata.fps;
     const frameCount = source.frameCount;
-    const parts: ArrayBuffer[] = [];
+    const blobs: Blob[] = [];
+    let parts: ArrayBuffer[] = [];
+    let partBytes = 0;
     let current = new Int16Array(PART_TARGET_BYTES / 2);
     let currentLength = 0;
     let totalFrames = 0;
 
+    const foldParts = () => {
+      if (parts.length === 0) return;
+      blobs.push(new Blob(parts));
+      parts = [];
+      partBytes = 0;
+    };
     const flush = () => {
       if (currentLength === 0) return;
       parts.push(current.slice(0, currentLength).buffer);
-      current = new Int16Array(PART_TARGET_BYTES / 2);
+      partBytes += currentLength * 2;
       currentLength = 0;
+      if (partBytes >= BLOB_FOLD_BYTES) foldParts();
     };
 
     for (let batchStart = 0; batchStart < frameCount; batchStart += READ_BATCH) {
@@ -151,9 +168,12 @@ export async function buildMxfPcmWavBlob(
         totalFrames += samples;
       }
       options.onProgress?.(Math.min(1, (batchStart + indices.length) / frameCount));
+      // Keep playback and UI responsive during long extractions.
+      if ((batchStart / READ_BATCH) % 8 === 7) await yieldToEventLoop();
     }
     flush();
-    return new Blob([wavHeader(sampleRate, 2, totalFrames), ...parts], { type: 'audio/wav' });
+    foldParts();
+    return new Blob([wavHeader(sampleRate, 2, totalFrames), ...blobs], { type: 'audio/wav' });
   } finally {
     source.dispose();
   }

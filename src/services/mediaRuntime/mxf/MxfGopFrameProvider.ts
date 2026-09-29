@@ -36,8 +36,15 @@ export interface MxfGopFrameProviderOptions extends CodecFrameProviderBaseOption
   packetSourceFactory?: (file: File, codecId: string) => Promise<MxfPacketSource>;
 }
 
-/** Decoded frames kept ahead of the current target (bounded: hardware decoders own few surfaces). */
-const MAX_READY_FRAMES = 6;
+/**
+ * Decoded frames kept ahead of the current target. Hardware decoders own only a
+ * few output surfaces (4K on D3D11: often 4-5); frames we keep alive stall them.
+ */
+const MAX_READY_FRAMES = 3;
+/** Re-check interval while waiting for decoder capacity (never wait unbounded). */
+const CAPACITY_WAIT_MS = 100;
+/** Capacity waits without progress before held frames are released to unstall the decoder. */
+const STALL_WAITS_BEFORE_RELEASE = 5;
 /** Keep at most this many packets queued inside the decoder. */
 export const MAX_GOP_DECODE_QUEUE = 4;
 /** Jumping further than this many stored units ahead restarts from the target's key frame. */
@@ -208,6 +215,7 @@ export abstract class MxfGopFrameProvider<
   private async feedUntilResolved(source: MxfPacketSource, decoder: GopDecoder): Promise<void> {
     const frameCount = source.frameCount;
     let fedPastTarget = 0;
+    let stalledWaits = 0;
     while (this.pending && !this.destroyed) {
       if (this.decoderError) throw this.decoderError;
       if (this.nextStored >= frameCount) {
@@ -215,7 +223,17 @@ export abstract class MxfGopFrameProvider<
         return;
       }
       if (decoder.queueSize >= MAX_GOP_DECODE_QUEUE) {
-        await decoder.waitForCapacity();
+        const progressed = await Promise.race([
+          decoder.waitForCapacity().then(() => true),
+          new Promise<boolean>((resolve) => setTimeout(() => resolve(false), CAPACITY_WAIT_MS)),
+        ]);
+        stalledWaits = progressed ? 0 : stalledWaits + 1;
+        if (stalledWaits >= STALL_WAITS_BEFORE_RELEASE) {
+          // The decoder is starved of output surfaces: give back the frames we hold.
+          for (const frame of this.readyFrames.values()) closeVideoFrame(frame);
+          this.readyFrames.clear();
+          stalledWaits = 0;
+        }
         continue;
       }
       const packet = await source.getPacketByStoredIndex(this.nextStored);
