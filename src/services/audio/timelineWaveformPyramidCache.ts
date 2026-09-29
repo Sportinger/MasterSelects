@@ -7,6 +7,8 @@ import type { TimelineWaveformPyramid } from '../../components/timeline/utils/wa
 import { Logger } from '../logger';
 import { AudioArtifactStore } from './AudioArtifactStore';
 import { AudioDecodeService } from './AudioDecodeService';
+import { generateSourceWaveformPreview } from './sourceWaveformPreview';
+import { sourceWaveformAnalysisCacheForFile, rememberSourceWaveformAnalysis } from './sourceWaveformAnalysisCache';
 import type { AudioAnalysisArtifact, AudioArtifactRef, AudioChannelLayout } from './audioArtifactTypes';
 import { isAudioAnalysisArtifactStaleForInput } from './audioAnalysisManifestKeys';
 import {
@@ -35,6 +37,7 @@ export interface GenerateTimelineWaveformAnalysisOptions {
   pyramidTimeoutMs?: number;
   samplesPerSecond?: number;
   maxPreviewSamples?: number;
+  reuseCompleted?: boolean;
   signal?: AbortSignal;
   onProgress?: (progress: number, partialWaveform: number[]) => void;
   onPyramidProgress?: (progress: WaveformPyramidGenerationProgress) => void;
@@ -61,11 +64,6 @@ interface ActiveTimelineWaveformAnalysisJob {
 
 const activeTimelineWaveformAnalysisJobs = new Map<string, ActiveTimelineWaveformAnalysisJob>();
 const log = Logger.create('TimelineWaveformPyramid');
-
-interface LegacyWaveformPreview {
-  waveform: number[];
-  waveformChannels?: number[][];
-}
 
 function getProjectHandle(): FileSystemDirectoryHandle | null {
   return (
@@ -105,71 +103,6 @@ export function createCurrentAudioArtifactStore(): AudioArtifactStore {
       ? artifactService.createStore(projectHandle)
       : artifactService.createIndexedDBStore(),
   );
-}
-
-function clampAbs01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, Math.abs(value)));
-}
-
-function generateLegacyWaveformPreviewFromBuffer(
-  audioBuffer: AudioBuffer,
-  samplesPerSecond: number,
-  onProgress?: (progress: number, partialWaveform: number[]) => void,
-  maxSamples = 10000,
-): LegacyWaveformPreview {
-  const channelCount = Math.max(1, audioBuffer.numberOfChannels);
-  const sampleCount = Math.max(200, Math.min(Math.max(200, maxSamples), Math.floor(audioBuffer.duration * samplesPerSecond)));
-  const channelSamples: number[][] = Array.from({ length: channelCount }, () => []);
-  const aggregateSamples: number[] = new Array(sampleCount).fill(0);
-  let runningMax = 0;
-  let completedSamples = 0;
-  const totalSamples = Math.max(1, sampleCount * channelCount);
-  const progressStep = Math.max(1, Math.floor(totalSamples / 20));
-
-  for (let channelIndex = 0; channelIndex < channelCount; channelIndex += 1) {
-    const channelData = audioBuffer.getChannelData(channelIndex);
-    const blockSize = Math.max(1, Math.floor(channelData.length / sampleCount));
-    const samples = channelSamples[channelIndex];
-
-    for (let index = 0; index < sampleCount; index += 1) {
-      const start = index * blockSize;
-      const end = Math.min(start + blockSize, channelData.length);
-      let peak = 0;
-
-      for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
-        peak = Math.max(peak, Math.abs(channelData[sampleIndex] ?? 0));
-      }
-
-      samples.push(peak);
-      aggregateSamples[index] = Math.max(aggregateSamples[index] ?? 0, peak);
-      runningMax = Math.max(runningMax, peak);
-      completedSamples += 1;
-
-      if (onProgress && (completedSamples % progressStep === 0 || completedSamples === totalSamples)) {
-        const progress = Math.round((completedSamples / totalSamples) * 70);
-        const normalizedPartial = runningMax > 0
-          ? aggregateSamples.map((sample) => sample / runningMax)
-          : aggregateSamples;
-        onProgress(progress, normalizedPartial);
-      }
-    }
-  }
-
-  const max = Math.max(0, ...aggregateSamples);
-  if (max <= 0) {
-    return {
-      waveform: aggregateSamples,
-      ...(channelCount > 1 ? { waveformChannels: channelSamples } : {}),
-    };
-  }
-
-  return {
-    waveform: aggregateSamples.map((sample) => clampAbs01(sample / max)),
-    ...(channelCount > 1
-      ? { waveformChannels: channelSamples.map((samples) => samples.map((sample) => clampAbs01(sample / max))) }
-      : {}),
-  };
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -419,6 +352,13 @@ export async function generateTimelineWaveformAnalysisForFile(
   options: GenerateTimelineWaveformAnalysisOptions = {},
 ): Promise<TimelineWaveformAnalysisResult> {
   const jobKey = getTimelineWaveformAnalysisJobKey(file, options);
+  throwIfAborted(options.signal);
+  const completedResults = sourceWaveformAnalysisCacheForFile(file);
+  const completed = options.reuseCompleted ? completedResults.get(jobKey) : undefined;
+  if (completed) {
+    options.onProgress?.(100, completed.waveform);
+    return completed;
+  }
   const activeJob = activeTimelineWaveformAnalysisJobs.get(jobKey);
   if (activeJob) {
     const disposeListener = addTimelineWaveformAnalysisListener(activeJob, options);
@@ -449,6 +389,12 @@ export async function generateTimelineWaveformAnalysisForFile(
   };
 
   nextJob.promise = withProjectArtifactWriteBatch(() => generateTimelineWaveformAnalysisForFileUncached(file, wrappedOptions))
+    .then(result => {
+      // A pyramid failure must remain retryable, rather than caching fallback
+      // previews as completed analysis forever.
+      if (result.pyramid || options.includePyramid === false) rememberSourceWaveformAnalysis(completedResults, jobKey, result);
+      return result;
+    })
     .finally(() => {
       activeTimelineWaveformAnalysisJobs.delete(jobKey);
       nextJob.listeners.clear();
@@ -572,11 +518,12 @@ async function generateTimelineWaveformAnalysisFromBuffer(
   audioBuffer: AudioBuffer,
   options: GenerateTimelineWaveformAnalysisOptions,
 ): Promise<TimelineWaveformAnalysisResult> {
-  const preview = generateLegacyWaveformPreviewFromBuffer(
+  const preview = await generateSourceWaveformPreview(
     audioBuffer,
     options.samplesPerSecond ?? DEFAULT_LEGACY_SAMPLES_PER_SECOND,
     options.onProgress,
     options.maxPreviewSamples,
+    options.signal,
   );
   if (options.includePyramid === false) {
     options.onProgress?.(100, preview.waveform);

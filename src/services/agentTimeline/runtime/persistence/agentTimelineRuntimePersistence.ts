@@ -9,10 +9,17 @@ import { materializeLegacyAgentTimelineReadSource } from '../legacyReadSource/ma
 import { loadAudioIntelligencePayloads } from '../../artifacts/audioIntelligencePayloadLoader';
 import { sourceIdentityRuntimeCache } from '../sourceIdentityCache';
 import type { AgentTimelineArtifactStorage } from '../../storage/AgentTimelineArtifactStorage';
+import { projectFileService } from '../../../projectFileService';
+import {
+  collectSourceAnalysisSnapshots,
+  sourceAnalysisSnapshotsMatch,
+  type SourceAnalysisSnapshot,
+} from './sourceAnalysisSnapshot';
 import {
   readTimelineAnalysisClips,
   readTimelineAnalysisMediaFiles,
   subscribeTimelineAnalysisRuntime,
+  readMediaRuntimeState,
 } from '../../../timeline/timelineRuntimeCoordinator';
 
 const DEBOUNCE_MS = 350;
@@ -24,7 +31,7 @@ const EVENT_TYPES: Record<ArtifactShardDescriptor['channel'], readonly AgentTime
   redundancy: ['duplicate-group'],
 };
 
-type RuntimeSnapshot = { files: readonly MediaFile[]; clips: readonly TimelineClip[] };
+type RuntimeSnapshot = { files: readonly MediaFile[]; clips: readonly TimelineClip[]; projectScope?: unknown };
 
 export interface AgentTimelineRuntimePersistenceDependencies {
   readSnapshot(): RuntimeSnapshot;
@@ -42,6 +49,7 @@ interface PublishInput {
   durationSeconds: number;
   media?: MediaFile;
   sourceClips: readonly TimelineClip[];
+  projectScope?: unknown;
 }
 
 function isDuration(value: unknown): value is number {
@@ -153,6 +161,10 @@ function defaultDependencies(): AgentTimelineRuntimePersistenceDependencies {
     readSnapshot: () => ({
       files: readTimelineAnalysisMediaFiles(),
       clips: readTimelineAnalysisClips(),
+      projectScope: projectFileService.getProjectPackageSession()
+        ?? projectFileService.getProjectHandle()
+        ?? projectFileService.getProjectPath()
+        ?? readMediaRuntimeState().currentProjectId,
     }),
     subscribe: subscribeTimelineAnalysisRuntime,
     getSourceIdentity: source => sourceIdentityRuntimeCache.get(source, { strategy: 'sampled-chunks' }),
@@ -179,17 +191,33 @@ export class AgentTimelineRuntimePersistence {
   private readonly generations = new Map<string, number>();
   private readonly publishQueues = new Map<string, Promise<void>>();
   private readonly published = new Map<string, string>();
+  private observedSources = new Map<string, SourceAnalysisSnapshot>();
+  private projectScope: unknown;
   private unsubscribe?: () => void;
-  private readonly dependencies: AgentTimelineRuntimePersistenceDependencies;
+  private dependencies: AgentTimelineRuntimePersistenceDependencies;
 
   constructor(dependencies: AgentTimelineRuntimePersistenceDependencies = defaultDependencies()) {
     this.dependencies = dependencies;
   }
 
+  /** Preserve the runtime owner across HMR while replacing its implementation. */
+  static restore(previous?: AgentTimelineRuntimePersistence): AgentTimelineRuntimePersistence {
+    if (!previous) return new AgentTimelineRuntimePersistence();
+    const restart = Boolean(previous.unsubscribe);
+    previous.dispose();
+    Object.setPrototypeOf(previous, AgentTimelineRuntimePersistence.prototype);
+    previous.observedSources = new Map();
+    previous.dependencies = defaultDependencies();
+    if (restart) {
+      void Promise.allSettled([...previous.publishQueues.values()]).then(() => previous.start());
+    }
+    return previous;
+  }
+
   start(): void {
     if (this.unsubscribe) return;
-    this.unsubscribe = this.dependencies.subscribe(() => this.requestAll());
-    this.requestAll();
+    this.unsubscribe = this.dependencies.subscribe(() => this.requestChangedSources());
+    this.requestChangedSources();
   }
 
   dispose(): void {
@@ -197,7 +225,32 @@ export class AgentTimelineRuntimePersistence {
     this.unsubscribe = undefined;
     this.timers.forEach(timer => clearTimeout(timer));
     this.timers.clear();
-    this.generations.clear();
+    this.generations.forEach((generation, id) => this.generations.set(id, generation + 1));
+    this.observedSources?.clear();
+  }
+
+  private requestChangedSources(): void {
+    const snapshot = this.dependencies.readSnapshot();
+    if (snapshot.projectScope !== this.projectScope) {
+      this.timers.forEach(timer => clearTimeout(timer));
+      this.timers.clear();
+      this.generations.forEach((generation, id) => this.generations.set(id, generation + 1));
+      this.observedSources.clear();
+      this.published.clear();
+      this.projectScope = snapshot.projectScope;
+    }
+    const sources = collectSourceAnalysisSnapshots(snapshot.files, snapshot.clips);
+    for (const [id, next] of sources) {
+      if (!sourceAnalysisSnapshotsMatch(this.observedSources.get(id), next)) this.request(id);
+    }
+    for (const id of this.observedSources.keys()) {
+      if (sources.has(id)) continue;
+      const timer = this.timers.get(id);
+      if (timer) clearTimeout(timer);
+      this.timers.delete(id);
+      this.generations.set(id, (this.generations.get(id) ?? 0) + 1);
+    }
+    this.observedSources = sources;
   }
 
   requestAll(): void {
@@ -232,7 +285,7 @@ export class AgentTimelineRuntimePersistence {
 
   private async publishCurrent(mediaFileId: string, generation: number): Promise<void> {
     const input = this.inputFor(mediaFileId);
-    if (!input || !this.isCurrent(mediaFileId, generation, input.source)) return;
+    if (!input || !this.isCurrent(mediaFileId, generation, input)) return;
     try {
       const audioArtifactsPromise = this.dependencies.listAudioArtifacts(mediaFileId);
       const [sourceIdentity, audioArtifacts, audioIntelligence] = await Promise.all([
@@ -243,7 +296,7 @@ export class AgentTimelineRuntimePersistence {
           return loadAudioIntelligencePayloads(artifacts, createCurrentAudioArtifactStore());
         }),
       ]);
-      if (!this.isCurrent(mediaFileId, generation, input.source)) return;
+      if (!this.isCurrent(mediaFileId, generation, input)) return;
       const clips = input.sourceClips;
       const analysis = selectReady(clips, clip => clip.analysisStatus === 'ready' ? clip.analysis : undefined);
       const transcript = input.media?.transcriptStatus === 'ready' && input.media.transcript
@@ -280,20 +333,20 @@ export class AgentTimelineRuntimePersistence {
           includeFrames: false,
         }),
       )));
-      if (writes.length === 0 || !this.isCurrent(mediaFileId, generation, input.source)) return;
+      if (writes.length === 0 || !this.isCurrent(mediaFileId, generation, input)) return;
       const draft = emptyManifest(materialized.manifest);
       const nextSignature = signature(draft, writes);
       const signatureKey = `${mediaFileId}:${sourceIdentity.hash}`;
       const storage = await this.dependencies.createStorage();
       const existing = await storage.read({ mediaFileId, sourceIdentity });
-      if (!this.isCurrent(mediaFileId, generation, input.source)) return;
+      if (!this.isCurrent(mediaFileId, generation, input)) return;
       // The HMR survivor knows this exact snapshot, but still checks that the
       // currently selected project retains its published pointer.
       if (this.published.get(signatureKey) === nextSignature && existing.status === 'ready') return;
       const persisted = preserveCorrections(draft, existing);
-      if (!this.isCurrent(mediaFileId, generation, input.source)) return;
+      if (!this.isCurrent(mediaFileId, generation, input)) return;
       await storage.write({ manifest: persisted.manifest, shards: writes, existingShardIndex: persisted.existingShardIndex });
-      if (this.isCurrent(mediaFileId, generation, input.source)) this.published.set(signatureKey, nextSignature);
+      if (this.isCurrent(mediaFileId, generation, input)) this.published.set(signatureKey, nextSignature);
     } catch {
       // Analysis persistence is opportunistic. The live legacy source remains queryable.
     }
@@ -305,11 +358,15 @@ export class AgentTimelineRuntimePersistence {
     const sourceClips = snapshot.clips.filter(clip => sourceId(clip) === mediaFileId);
     const source = runtimeSource(media, sourceClips);
     const durationSeconds = sourceDuration(media, sourceClips);
-    return source && durationSeconds ? { mediaFileId, source, durationSeconds, media, sourceClips } : undefined;
+    return source && durationSeconds
+      ? { mediaFileId, source, durationSeconds, media, sourceClips, projectScope: snapshot.projectScope }
+      : undefined;
   }
 
-  private isCurrent(mediaFileId: string, generation: number, source: Blob): boolean {
-    return this.generations.get(mediaFileId) === generation && this.inputFor(mediaFileId)?.source === source;
+  private isCurrent(mediaFileId: string, generation: number, input: PublishInput): boolean {
+    if (this.generations.get(mediaFileId) !== generation) return false;
+    const current = this.inputFor(mediaFileId);
+    return current?.source === input.source && current.projectScope === input.projectScope;
   }
 }
 
@@ -318,9 +375,15 @@ type PersistenceGlobal = typeof globalThis & {
 };
 
 const persistenceGlobal = globalThis as PersistenceGlobal;
-export const agentTimelineRuntimePersistence = persistenceGlobal.__MASTERSELECTS_AGENT_TIMELINE_RUNTIME_PERSISTENCE__
-  ?? new AgentTimelineRuntimePersistence();
+export const agentTimelineRuntimePersistence = AgentTimelineRuntimePersistence.restore(
+  import.meta.hot?.data.persistence ?? persistenceGlobal.__MASTERSELECTS_AGENT_TIMELINE_RUNTIME_PERSISTENCE__,
+);
 persistenceGlobal.__MASTERSELECTS_AGENT_TIMELINE_RUNTIME_PERSISTENCE__ = agentTimelineRuntimePersistence;
+
+if (import.meta.hot) {
+  import.meta.hot.dispose(data => { data.persistence = agentTimelineRuntimePersistence; });
+  import.meta.hot.accept();
+}
 
 export function startAgentTimelineRuntimePersistence(): void {
   agentTimelineRuntimePersistence.start();

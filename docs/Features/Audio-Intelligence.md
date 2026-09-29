@@ -52,6 +52,22 @@ artifact references on the loudness, onset, VAD, and speech-marker derived
 events. Missing coverage remains missing rather than being interpreted as an
 empty result.
 
+Background Agent Timeline persistence observes completed source-analysis
+changes rather than playback, selection, clip placement, or progress updates.
+Only affected media sources are refreshed. Packaged artifacts use direct
+content-addressed lookup and a shared source index; unrelated package sidecar
+writes do not invalidate it.
+
+Folder-backed projects read linked analysis binaries on demand when opening a
+`.msproj`, rather than hydrating the complete binary cache before restoring the
+timeline. Ordinary saves retain unread binary references; standalone package
+encoding embeds their contents.
+
+Long waveform previews yield between bounded PCM chunks and limit progress
+updates. Split clips reuse completed source waveform analysis within the same
+project. Undo comparisons inspect changed clips and media items instead of
+serializing the complete timeline on every background progress update.
+
 ## Analysis UI
 
 The Analysis overview has an **Audio** sparkline lane for loaded loudness and

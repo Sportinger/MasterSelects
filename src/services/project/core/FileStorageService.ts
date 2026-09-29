@@ -97,10 +97,8 @@ export class FileStorageService {
   ): Promise<File | null> {
     const packageSession = getFsaProjectPackageSession(projectHandle);
     if (packageSession && isPackagedProjectFolder(subFolder)) {
-      const bytes = packageSession.readEntry(subFolder, fileName);
-      if (!bytes) return null;
-      const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-      return new File([buffer], fileName);
+      const blob = await packageSession.readEntryBlob(subFolder, fileName);
+      return blob ? new File([blob], fileName) : null;
     }
 
     try {

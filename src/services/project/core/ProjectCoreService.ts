@@ -17,6 +17,7 @@ import { readProjectParent, rememberLastProject, rememberProjectParent } from '.
 
 const log = Logger.create('ProjectCore');
 import { FileStorageService } from './FileStorageService';
+import { readLinkedArtifactFile } from './linkedArtifactFiles';
 import { PROJECT_FOLDERS } from './constants';
 import {
   PROJECT_AUTOSAVE_FILE_NAME,
@@ -490,6 +491,10 @@ export class ProjectCoreService {
         : null;
       if (newPackageSession && renamedMediaFolder) {
         newPackageSession.setMediaFolderName(renamedMediaFolder.to);
+      }
+      if (newPackageSession && oldPackageSession) {
+        newPackageSession.configureLinkedArtifacts(oldPackageSession.getLinkedArtifactPaths(),
+          path => readLinkedArtifactFile(newFolder, newPackageSession.getMediaFolderName(), path));
       }
 
       this.projectData.name = trimmedName;

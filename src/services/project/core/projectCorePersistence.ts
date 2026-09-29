@@ -1,4 +1,4 @@
-import { isLinkedArtifactEntry, persistLinkedArtifacts, readLinkedArtifact } from './linkedArtifactFiles';
+import { isLinkedArtifactEntry, persistLinkedArtifacts, readLinkedArtifact, readLinkedArtifactFile } from './linkedArtifactFiles';
 import { persistLinkedTerrain, readLinkedTerrain } from './linkedTerrainGeometry';
 import { getProjectWriteSupportError, resolveProjectRootMode } from './projectRootAccess';
 import { Logger } from '../../logger';
@@ -167,10 +167,11 @@ export async function readFsaProjectPackage(
   if (!packageHandle) return null;
   const file = await packageHandle.getFile();
   const archive = await decodeProjectPackage(await file.arrayBuffer(), (mediaFolder, path) => isLinkedArtifactEntry(path)
-    ? readLinkedArtifact(handle, mediaFolder, path) : readLinkedTerrain(handle, mediaFolder, path));
+    ? readLinkedArtifact(handle, mediaFolder, path) : readLinkedTerrain(handle, mediaFolder, path), { deferLinkedArtifacts: true });
   return {
     projectData: archive.projectData,
-    session: ProjectPackageSession.fromArchive(archive, packageHandle.name),
+    session: ProjectPackageSession.fromArchive(archive, packageHandle.name,
+      path => readLinkedArtifactFile(handle, archive.manifest.mediaFolderName, path)),
   };
 }
 
@@ -209,8 +210,10 @@ export async function writeFsaProjectPackage(
     if (supportError) throw new DOMException(supportError, 'NotSupportedError');
     // Snapshot sidecars once so files arriving during this save belong to the next save.
     const entries = new Map(session.getEntries());
+    const linkedArtifactPaths = session.getLinkedArtifactPaths();
     progress.phase = 'persisting-artifacts';
     const linkedArtifacts = await persistLinkedArtifacts(handle, session.getMediaFolderName(), entries);
+    for (const path of linkedArtifactPaths) linkedArtifacts.add(path);
     const linkedTerrain = await persistLinkedTerrain(handle, session.getMediaFolderName(), projectData);
     progress.phase = 'opening';
     writable = await openProjectPackageWritable(handle, session.getPackageFileName());

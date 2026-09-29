@@ -1,4 +1,5 @@
 import { isLinkedArtifactEntry } from './linkedArtifactFiles';
+import { LinkedProjectArtifacts } from './linkedProjectArtifacts';
 import { encodeProjectTerrain, decodeProjectTerrain, isTerrainGeometryEntry, terrainGeometryReferences } from './packageTerrainGeometry';
 import { AsyncZipDeflate, strFromU8, strToU8, unzip, zip, Zip, ZipPassThrough } from 'fflate';
 import type { ProjectFile } from '../types/project.types';
@@ -37,6 +38,7 @@ interface ProjectPackageArchive {
   manifest: ProjectPackageManifest;
   projectData: ProjectFile;
   entries: Map<string, Uint8Array>;
+  deferredArtifactEntries?: string[];
 }
 
 type PackagePersistence = () => Promise<boolean>;
@@ -335,7 +337,7 @@ export async function streamProjectPackage(
   const nextManifest = createProjectPackageManifest(projectData, manifest);
   if (linkedTerrain) nextManifest.terrainStorage = 'linked-media-v1';
   if (linkedArtifacts.size) {
-    nextManifest.linkedArtifactEntries = [...linkedArtifacts].filter(path => sidecarEntries.has(path) && isLinkedArtifactEntry(path));
+    nextManifest.linkedArtifactEntries = [...linkedArtifacts].filter(isLinkedArtifactEntry);
   }
   const terrain = await encodeProjectTerrain(projectData);
   const archiveEntries: Array<readonly [string, Uint8Array]> = [
@@ -356,6 +358,7 @@ export async function streamProjectPackage(
 
 export async function decodeProjectPackage(data: ArrayBuffer | Uint8Array,
   readLinkedEntry?: (mediaFolder: string, path: string) => Promise<Uint8Array>,
+  options: { deferLinkedArtifacts?: boolean } = {},
 ): Promise<ProjectPackageArchive> {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
   const archiveEntries = await unzipArchive(bytes);
@@ -370,9 +373,11 @@ export async function decodeProjectPackage(data: ArrayBuffer | Uint8Array,
       archiveEntries[path] = await readLinkedEntry(manifest.mediaFolderName, path);
     }
   }
+  const deferredArtifactEntries: string[] = [];
   for (const path of manifest.linkedArtifactEntries ?? []) {
     if (!isLinkedArtifactEntry(path)) throw new Error('Invalid linked artifact path');
     if (archiveEntries[path]) continue;
+    if (options.deferLinkedArtifacts) { deferredArtifactEntries.push(path); continue; }
     if (!readLinkedEntry) throw new Error('This project requires its linked media folder for artifacts');
     archiveEntries[path] = await readLinkedEntry(manifest.mediaFolderName, path);
   }
@@ -387,13 +392,15 @@ export async function decodeProjectPackage(data: ArrayBuffer | Uint8Array,
     if (normalizedPath === PROJECT_PACKAGE_MANIFEST_ENTRY || normalizedPath === PROJECT_PACKAGE_PROJECT_ENTRY || isTerrainGeometryEntry(normalizedPath)) continue;
     entries.set(normalizedPath, cloneBytes(entryBytes));
   }
-  return { manifest, projectData, entries };
+  return { manifest, projectData, entries, deferredArtifactEntries };
 }
 
 export class ProjectPackageSession {
   private entries: Map<string, Uint8Array>;
+  private readonly linkedArtifacts = new LinkedProjectArtifacts();
   private persistCallback: PackagePersistence | null = null;
   private entryRevision = 0;
+  private readonly folderRevisions = new Map<ProjectFolderKey, number>();
   private persistedEntryRevision = 0;
   private writeBatchDepth = 0;
   private batchNeedsPersist = false;
@@ -416,8 +423,13 @@ export class ProjectPackageSession {
     return new ProjectPackageSession(createProjectPackageManifest(projectData));
   }
 
-  static fromArchive(archive: ProjectPackageArchive, packageFileName: string): ProjectPackageSession {
-    return new ProjectPackageSession(archive.manifest, archive.entries, packageFileName);
+  static fromArchive(archive: ProjectPackageArchive, packageFileName: string, readArtifact?: (path: string) => Promise<Blob>): ProjectPackageSession {
+    const session = new ProjectPackageSession(archive.manifest, archive.entries, packageFileName);
+    if (archive.deferredArtifactEntries?.length) {
+      if (!readArtifact) throw new Error('Linked project artifacts require a reader');
+      session.configureLinkedArtifacts(archive.deferredArtifactEntries, readArtifact);
+    }
+    return session;
   }
 
   get isBatchingWrites(): boolean { return this.writeBatchDepth > 0; }
@@ -495,8 +507,28 @@ export class ProjectPackageSession {
     return this.entries;
   }
 
+  configureLinkedArtifacts(paths: Iterable<string>, reader: (path: string) => Promise<Blob>): void {
+    const validated = [...paths];
+    if (validated.some(path => !isLinkedArtifactEntry(path))) throw new Error('Invalid linked artifact path');
+    this.linkedArtifacts.configure(validated, reader);
+  }
+  getLinkedArtifactPaths(): ReadonlySet<string> { return this.linkedArtifacts.snapshot(); }
+  private entryPaths(): string[] { return [...new Set([...this.entries.keys(), ...this.getLinkedArtifactPaths()])]; }
+
+  async readEntryBlob(folder: ProjectFolderKey, fileName: string): Promise<Blob | null> {
+    const path = getProjectPackageEntryPath(folder, fileName);
+    const bytes = this.entries.get(path);
+    return bytes ? new Blob([bytes as Uint8Array<ArrayBuffer>]) : this.linkedArtifacts.read(path);
+  }
+
+  /** Invalidates runtime indexes only when their package folder changes. */
+  getFolderRevision(folder: ProjectFolderKey): number {
+    return this.folderRevisions.get(folder) ?? 0;
+  }
+
   hasEntry(folder: ProjectFolderKey, fileName: string): boolean {
-    return this.entries.has(getProjectPackageEntryPath(folder, fileName));
+    const path = getProjectPackageEntryPath(folder, fileName);
+    return this.entries.has(path) || this.linkedArtifacts.has(path);
   }
 
   readEntry(folder: ProjectFolderKey, fileName: string): Uint8Array | null {
@@ -520,24 +552,27 @@ export class ProjectPackageSession {
   async deleteEntry(folder: ProjectFolderKey, entryName: string, recursive = false): Promise<boolean> {
     const path = getProjectPackageEntryPath(folder, entryName);
     let changed = this.entries.delete(path);
+    changed = this.linkedArtifacts.delete(path) || changed;
     if (recursive) {
       const prefix = `${path}/`;
-      for (const candidate of [...this.entries.keys()]) {
+      for (const candidate of this.entryPaths()) {
         if (candidate.startsWith(prefix)) {
           this.entries.delete(candidate);
+          this.linkedArtifacts.delete(candidate);
           changed = true;
         }
       }
     }
     if (!changed) return false;
     this.entryRevision++;
+    this.folderRevisions.set(folder, this.getFolderRevision(folder) + 1);
     return this.persist();
   }
 
   listFiles(folder: ProjectFolderKey): string[] {
     const prefix = `${normalizeEntryPath(PROJECT_FOLDERS[folder])}/`;
     const names = new Set<string>();
-    for (const path of this.entries.keys()) {
+    for (const path of this.entryPaths()) {
       if (!path.startsWith(prefix)) continue;
       const remainder = path.slice(prefix.length);
       if (remainder && !remainder.includes('/')) names.add(remainder);
@@ -547,7 +582,7 @@ export class ProjectPackageSession {
 
   listEntryPaths(folder: ProjectFolderKey): string[] {
     const prefix = `${normalizeEntryPath(PROJECT_FOLDERS[folder])}/`;
-    return [...this.entries.keys()]
+    return this.entryPaths()
       .filter((path) => path.startsWith(prefix))
       .map((path) => path.slice(prefix.length))
       .toSorted();
@@ -557,18 +592,24 @@ export class ProjectPackageSession {
     const normalizedPath = normalizeEntryPath(path);
     if (normalizedPath === PROJECT_PACKAGE_MANIFEST_ENTRY || normalizedPath === PROJECT_PACKAGE_PROJECT_ENTRY) return;
     this.entries.set(normalizedPath, cloneBytes(bytes));
+    this.linkedArtifacts.delete(normalizedPath);
+    for (const folder of Object.keys(PROJECT_FOLDERS) as ProjectFolderKey[]) {
+      if (normalizedPath.startsWith(`${normalizeEntryPath(PROJECT_FOLDERS[folder])}/`)) {
+        this.folderRevisions.set(folder, this.getFolderRevision(folder) + 1);
+      }
+    }
   }
 
   async encode(projectData: ProjectFile): Promise<Uint8Array> {
     this.syncManifest(projectData);
-    return encodeProjectPackage(projectData, this.manifest, this.entries);
+    return encodeProjectPackage(projectData, this.manifest, await this.linkedArtifacts.archiveEntries(this.entries));
   }
 
   async streamEncode(projectData: ProjectFile, writeChunk: PackageChunkWriter, linkedTerrain = false,
     linkedArtifacts: ReadonlySet<string> = new Set(), entries: ReadonlyMap<string, Uint8Array> = this.entries,
   ): Promise<void> {
     this.syncManifest(projectData);
-    await streamProjectPackage(projectData, this.manifest, entries, writeChunk, linkedTerrain, linkedArtifacts);
+    await streamProjectPackage(projectData, this.manifest, await this.linkedArtifacts.archiveEntries(entries, linkedArtifacts), writeChunk, linkedTerrain, linkedArtifacts);
   }
 
   toFile(content: Uint8Array): File {
@@ -591,7 +632,9 @@ export class ProjectPackageSession {
     const existing = this.entries.get(path);
     if (existing?.byteLength === bytes.byteLength && existing.every((value, index) => value === bytes[index])) return false;
     this.entries.set(path, bytes);
+    this.linkedArtifacts.delete(path);
     this.entryRevision++;
+    this.folderRevisions.set(folder, this.getFolderRevision(folder) + 1);
     return true;
   }
 }

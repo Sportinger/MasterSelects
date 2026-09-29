@@ -60,8 +60,15 @@ export function invalidateTimelineRuntimeCache(): void {
 }
 
 export function subscribeTimelineAnalysisRuntime(listener: () => void): () => void {
-  const unsubscribeMedia = mediaStore().subscribe(listener);
-  const unsubscribeTimeline = timelineStore().subscribe(listener);
+  const unsubscribeMedia = mediaStore().subscribe(
+    state => [state.files, state.currentProjectId] as const,
+    listener,
+    { equalityFn: (previous, next) => previous[0] === next[0] && previous[1] === next[1] },
+  );
+  const unsubscribeTimeline = timelineStore().subscribe(
+    state => state.clips,
+    listener,
+  );
   return () => {
     unsubscribeMedia();
     unsubscribeTimeline();

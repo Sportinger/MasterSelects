@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ArtifactStore, MemoryArtifactStorageAdapter } from '../../src/artifacts';
 import { AgentTimelineRuntimePersistence, type AgentTimelineRuntimePersistenceDependencies } from '../../src/services/agentTimeline/runtime/persistence/agentTimelineRuntimePersistence';
 import { PersistentAgentTimelineShardReader } from '../../src/services/agentTimeline/runtime/persistence/persistentShardReader';
@@ -49,6 +49,54 @@ function sceneCutMedia(source: Blob): MediaFile {
 }
 
 describe('AgentTimelineRuntimePersistence', () => {
+  it('schedules only sources with changed analysis, ignoring clip edits and progress', async () => {
+    vi.useFakeTimers();
+    const source = new Blob(['source'], { type: 'video/mp4' });
+    const first = sceneCutMedia(source);
+    const second = { ...sceneCutMedia(new Blob(['second'])), id: 'media-b' };
+    let snapshot = { files: [first, second], clips: [] as TimelineClip[], projectScope: 'project-a' };
+    let listener!: () => void;
+    const listAudioArtifacts = vi.fn(async (_mediaFileId: string) => []);
+    const publisher = new AgentTimelineRuntimePersistence({
+      readSnapshot: () => snapshot,
+      subscribe: callback => { listener = callback; return () => undefined; },
+      getSourceIdentity: async () => identity(),
+      listAudioArtifacts,
+      createStorage: () => new AgentTimelineArtifactStorage({
+        artifacts: new ArtifactStore(new MemoryArtifactStorageAdapter()), pointers: new Pointers(),
+      }),
+      now: () => NOW,
+      debounceMs: 350,
+    });
+    try {
+      publisher.start();
+      await vi.advanceTimersByTimeAsync(350);
+      expect(listAudioArtifacts.mock.calls.map(call => call[0])).toEqual(['media-a', 'media-b']);
+      listAudioArtifacts.mockClear();
+      snapshot = { ...snapshot, files: snapshot.files.map(file => ({ ...file, proxyProgress: 50 })) };
+      listener();
+      listener();
+      await vi.advanceTimersByTimeAsync(350);
+      expect(listAudioArtifacts).not.toHaveBeenCalled();
+
+      snapshot = { ...snapshot, files: [
+        { ...first, sceneCutAnalysis: { ...first.sceneCutAnalysis!, completedAt: 2 } }, second,
+      ] };
+      listener();
+      await vi.advanceTimersByTimeAsync(350);
+      expect(listAudioArtifacts.mock.calls.map(call => call[0])).toEqual(['media-a']);
+
+      listAudioArtifacts.mockClear();
+      snapshot = { ...snapshot, projectScope: 'project-b' };
+      listener();
+      await vi.advanceTimersByTimeAsync(350);
+      expect(listAudioArtifacts.mock.calls.map(call => call[0])).toEqual(['media-a', 'media-b']);
+    } finally {
+      publisher.dispose();
+      vi.useRealTimers();
+    }
+  });
+
   it('starts its browser subscriptions exactly once when bootstrap is evaluated repeatedly', () => {
     let subscriptions = 0;
     const publisher = new AgentTimelineRuntimePersistence({

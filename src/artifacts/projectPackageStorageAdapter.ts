@@ -1,8 +1,10 @@
 import type { ProjectPackageSession } from '../services/project/core/projectPackage';
+import { PROJECT_FOLDERS } from '../services/project/core/constants';
 import { isArtifactManifest } from './guards';
 import {
   buildArtifactManifestProjectRelativePath,
   buildArtifactProjectRelativePath,
+  getHashFromArtifactId,
 } from './ids';
 import {
   ARTIFACT_BINARY_FILE_NAME,
@@ -12,6 +14,17 @@ import {
   type ArtifactStorageAdapter,
   type ArtifactStorageLocation,
 } from './types';
+
+interface PackageArtifactIndex {
+  revision: number;
+  manifests: ArtifactManifest[];
+  bySource: Map<string, ArtifactManifest[]>;
+  entries: Map<string, { bytes: Uint8Array; manifest: ArtifactManifest | null }>;
+}
+
+// Adapters are short lived; the index belongs to the package session and must
+// be shared by every reader, without retaining closed projects.
+const packageIndexes = new WeakMap<ProjectPackageSession, PackageArtifactIndex>();
 
 /** Durable content-addressed artifacts stored inside the active .msproj ZIP. */
 export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdapter {
@@ -48,28 +61,18 @@ export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdap
   }
 
   async getArtifactManifest(artifactId: string): Promise<ArtifactManifest | null> {
-    return (await this.listArtifactManifests()).find((manifest) => manifest.artifactId === artifactId) ?? null;
+    const hash = getHashFromArtifactId(artifactId);
+    if (!hash) return null;
+    const manifest = this.readManifest(`${this.getArtifactEntryBase(hash)}/${ARTIFACT_MANIFEST_FILE_NAME}`);
+    return manifest?.artifactId === artifactId ? manifest : null;
   }
 
   async listArtifactManifests(): Promise<ArtifactManifest[]> {
-    const manifests: ArtifactManifest[] = [];
-    for (const path of this.session.listEntryPaths('CACHE_ARTIFACTS')) {
-      if (!path.endsWith(`/${ARTIFACT_MANIFEST_FILE_NAME}`)) continue;
-      const bytes = this.session.readEntry('CACHE_ARTIFACTS', path);
-      if (!bytes) continue;
-      try {
-        const parsed = JSON.parse(new TextDecoder().decode(bytes)) as unknown;
-        if (isArtifactManifest(parsed)) manifests.push(parsed);
-      } catch {
-        // Ignore a corrupt individual artifact; the remaining package stays usable.
-      }
-    }
-    return manifests;
+    return structuredClone(this.manifestIndex().manifests);
   }
 
   async listArtifactManifestsBySource(sourceRef: string): Promise<ArtifactManifest[]> {
-    return (await this.listArtifactManifests())
-      .filter((manifest) => manifest.sourceRefs.includes(sourceRef));
+    return structuredClone(this.manifestIndex().bySource.get(sourceRef) ?? []);
   }
 
   async deleteArtifactManifest(artifactId: string): Promise<void> {
@@ -82,15 +85,10 @@ export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdap
   }
 
   async readArtifactBlob(manifest: ArtifactManifest): Promise<Blob | null> {
-    const bytes = this.session.readEntry(
-      'CACHE_ARTIFACTS',
-      `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_BINARY_FILE_NAME}`,
+    const blob = await this.session.readEntryBlob(
+      'CACHE_ARTIFACTS', `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_BINARY_FILE_NAME}`,
     );
-    return bytes
-      ? new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer], {
-        type: manifest.mimeType,
-      })
-      : null;
+    return blob?.slice(0, blob.size, manifest.mimeType) ?? null;
   }
 
   async hasArtifactBlob(manifest: ArtifactManifest): Promise<boolean> {
@@ -106,5 +104,48 @@ export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdap
 
   private getArtifactEntryBase(hash: string): string {
     return `${ARTIFACT_HASH_ALGORITHM}/${hash.slice(0, 2)}/${hash}`;
+  }
+
+  private readManifest(path: string): ArtifactManifest | null {
+    const bytes = this.session.getEntries().get(`${PROJECT_FOLDERS.CACHE_ARTIFACTS}/${path}`);
+    return this.parseManifest(bytes ?? null);
+  }
+
+  private parseManifest(bytes: Uint8Array | null): ArtifactManifest | null {
+    if (!bytes) return null;
+    try {
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+      return isArtifactManifest(parsed) ? parsed : null;
+    } catch {
+      // A corrupt individual artifact does not invalidate the remaining package.
+      return null;
+    }
+  }
+
+  private manifestIndex(): PackageArtifactIndex {
+    const revision = this.session.getFolderRevision('CACHE_ARTIFACTS');
+    const cached = packageIndexes.get(this.session);
+    if (cached?.revision === revision) return cached;
+    const manifests: ArtifactManifest[] = [];
+    const bySource = new Map<string, ArtifactManifest[]>();
+    const entries: PackageArtifactIndex['entries'] = new Map();
+    for (const path of this.session.listEntryPaths('CACHE_ARTIFACTS')) {
+      if (!path.endsWith(`/${ARTIFACT_MANIFEST_FILE_NAME}`)) continue;
+      const bytes = this.session.getEntries().get(`${PROJECT_FOLDERS.CACHE_ARTIFACTS}/${path}`);
+      if (!bytes) continue;
+      const previous = cached?.entries.get(path);
+      const manifest = previous?.bytes === bytes ? previous.manifest : this.parseManifest(bytes);
+      entries.set(path, { bytes, manifest });
+      if (!manifest) continue;
+      manifests.push(manifest);
+      for (const sourceRef of new Set(manifest.sourceRefs)) {
+        const entries = bySource.get(sourceRef) ?? [];
+        entries.push(manifest);
+        bySource.set(sourceRef, entries);
+      }
+    }
+    const index = { revision, manifests, bySource, entries };
+    packageIndexes.set(this.session, index);
+    return index;
   }
 }

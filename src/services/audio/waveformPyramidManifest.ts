@@ -343,9 +343,7 @@ function decodePackedSpan(
     throw new Error('Packed waveform span exceeds payload length.');
   }
 
-  const valuesBuffer = new ArrayBuffer(byteEnd - byteStart);
-  new Uint8Array(valuesBuffer).set(dataBytes.subarray(byteStart, byteEnd));
-  return new Float32Array(valuesBuffer);
+  return new Float32Array(dataBytes.buffer, dataBytes.byteOffset + byteStart, span.valueCount);
 }
 
 export function decodeWaveformPyramidPackedPayload(input: ArrayBuffer): WaveformPackedPayload {
@@ -366,7 +364,11 @@ export function decodeWaveformPyramidPackedPayload(input: ArrayBuffer): Waveform
     throw new Error(`Unsupported packed waveform payload schema version: ${header.schemaVersion}`);
   }
 
-  const dataBytes = new Uint8Array(input, headerEnd);
+  const packedBytes = new Uint8Array(input, headerEnd);
+  // JSON headers have variable length. Align the payload once, then share
+  // typed views across all statistics and levels instead of copying each span.
+  const dataBytes = headerEnd % Float32Array.BYTES_PER_ELEMENT === 0
+    ? packedBytes : new Uint8Array(packedBytes);
   const levels = header.levels.map(level => ({
     samplesPerBucket: level.samplesPerBucket,
     bucketDuration: level.bucketDuration,

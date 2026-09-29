@@ -147,12 +147,10 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
   async readArtifactBlob(manifest: ArtifactManifest): Promise<Blob | null> {
     const packageSession = getFsaProjectPackageSession(this.projectHandle);
     if (packageSession) {
-      const bytes = packageSession.readEntry(
+      return packageSession.readEntryBlob(
         'CACHE_ARTIFACTS',
         `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_BINARY_FILE_NAME}`,
       );
-      if (!bytes) return null;
-      return new Blob([bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer]);
     }
 
     try {

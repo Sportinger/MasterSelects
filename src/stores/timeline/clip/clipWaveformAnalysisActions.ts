@@ -99,6 +99,7 @@ export async function generateWaveformForClipAction(
         const analysis = await generateTimelineWaveformAnalysisForFile(sourceFile, {
           mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
           includePyramid,
+          reuseCompleted: options.derivedOnly === true && options.force !== true,
           signal,
           onProgress: (progress, partialWaveform) => {
             updateClips(clips => updateAudioAnalysisJobProgress(

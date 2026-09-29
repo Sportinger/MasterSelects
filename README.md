@@ -24,6 +24,8 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 | **3D** | Combine footage, models, lights, cameras, Gaussian splats, and particle effects. |
 | **AI** | Ask the in-app agent to edit the timeline or generate media. Nodes and cables appear beside Preview as individual AI instructions arrive. AI Studio keeps Chat and Generation free of a floating credit banner. |
 
+Large timelines limit background analysis updates, reuse source waveforms across split clips, and read linked analysis binaries on demand. Packaged artifacts use a shared source index to reduce UI stalls. See [Audio Intelligence](docs/Features/Audio-Intelligence.md).
+
 ### Node graphs
 
 Flock includes Terracotta and Lilac Sculpture presets: dense, low-gravity

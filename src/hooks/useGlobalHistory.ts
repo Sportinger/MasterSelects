@@ -1,4 +1,5 @@
-import { createCompositionHistorySignature, createTimelineClipsHistorySignature, createTimelineMasksHistorySignature, createMediaFilesHistorySignature } from './historyContentSignatures';
+import { createCompositionHistorySignature } from './historyContentSignatures';
+import { mediaFilesHistoryMatch, timelineClipsHistoryMatch, timelineMasksHistoryMatch } from './historyContentComparison';
 export { createCompositionHistorySignature, createTimelineClipsHistorySignature, createMediaFilesHistorySignature } from './historyContentSignatures';
 // Global history hook - initializes undo/redo system and keyboard shortcuts
 
@@ -349,12 +350,10 @@ export function useGlobalHistory() {
         if (useTimelineStore.getState().maskDragging) return;
 
         if (curr.clips !== prev.clips) {
-          const currClipSignature = createTimelineClipsHistorySignature(curr.clips);
-          const prevClipSignature = createTimelineClipsHistorySignature(prev.clips);
-          if (currClipSignature !== prevClipSignature) {
+          if (!timelineClipsHistoryMatch(curr.clips, prev.clips)) {
             if (curr.clips.length !== prev.clips.length) {
               debouncedCapture(curr.clips.length > prev.clips.length ? 'Add clip' : 'Remove clip');
-            } else if (createTimelineMasksHistorySignature(curr.clips) !== createTimelineMasksHistorySignature(prev.clips)) {
+            } else if (!timelineMasksHistoryMatch(curr.clips, prev.clips)) {
               debouncedCapture('Modify mask', MASK_HISTORY_CAPTURE_IDLE_MS);
             } else {
               debouncedCapture('Modify clip');
@@ -395,7 +394,7 @@ export function useGlobalHistory() {
 
         if (
           curr.files !== prev.files &&
-          createMediaFilesHistorySignature(curr.files) !== createMediaFilesHistorySignature(prev.files)
+          !mediaFilesHistoryMatch(curr.files, prev.files)
         ) {
           const label = curr.files.length > prev.files.length
             ? 'Import file'

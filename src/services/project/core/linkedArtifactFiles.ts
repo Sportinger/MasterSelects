@@ -22,12 +22,15 @@ async function artifactDirectory(root: FileSystemDirectoryHandle, mediaFolder: s
   return folder;
 }
 
-export async function readLinkedArtifact(root: FileSystemDirectoryHandle, mediaFolder: string, path: string) {
+export async function readLinkedArtifactFile(root: FileSystemDirectoryHandle, mediaFolder: string, path: string): Promise<File> {
   const folder = await artifactDirectory(root, mediaFolder, path, false);
   const file = await (await folder.getFileHandle('artifact.bin')).getFile();
-  const bytes = new Uint8Array(await file.arrayBuffer());
   knownPaths(root).add(`${mediaFolder}/${path}`);
-  return bytes;
+  return file;
+}
+
+export async function readLinkedArtifact(root: FileSystemDirectoryHandle, mediaFolder: string, path: string) {
+  return new Uint8Array(await (await readLinkedArtifactFile(root, mediaFolder, path)).arrayBuffer());
 }
 
 /** All binaries must be durable before the ZIP can reference them. Never remove old files here. */
