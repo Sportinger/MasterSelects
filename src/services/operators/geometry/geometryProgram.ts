@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
 import { getEffectOperator } from '../operatorRegistry';
+import { applyOperatorGroupBypasses } from '../operatorGroupBypass';
 import { lowerPointwiseNode, pointwiseLoweringFor, type PointwiseInstruction } from '../fields/pointwiseLowering';
 import type { PointwiseValueType } from '../fields/pointwiseOperations';
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
@@ -24,13 +25,18 @@ export type GeometryStage =
   | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField };
 /** Render-time yarn: plies around the curve and fibers around each ply, twisted along curve length. */
 export interface YarnProfile { plies: number; fibers: number; radius: number; plyTwist: number; fiberTwist: number }
-export interface GeometryStrandRender { nodeId: string; width: number; color: string; profile?: YarnProfile }
+/**
+ * Render-time stray fibers of a yarn: Density per unit curve length, each spanning Length along the
+ * curve and rising Lift yarn radii off its surface; a Hair fraction ends free at the peak.
+ */
+export interface YarnFlyaways { density: number; length: number; lift: number; hair: number; seed: number }
+export interface GeometryStrandRender { nodeId: string; width: number; color: string; profile?: YarnProfile; flyaways?: YarnFlyaways }
 export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStrandRender; pointCount: number; strandCount: number }
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern']);
-const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile']);
+const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways']);
 /** Every warp crosses every weft; each thread has `resolution` points per crossing plus its end. */
 export const weavePatternPointCount = (stage: { warps: number; wefts: number; resolution: number }) =>
   stage.warps * (stage.wefts * stage.resolution + 1) + stage.wefts * (stage.warps * stage.resolution + 1);
@@ -51,6 +57,7 @@ export interface GeometryCompileContext { time?: number }
 export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryParameterReader, target?: string,
   context: GeometryCompileContext = {}): GeometryProgram {
   if (graph.domain !== 'geometry') throw new Error('Expected a geometry operator graph.');
+  graph = applyOperatorGroupBypasses(graph);
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const sourceOf = (node: BoundOperatorNode, input: string) => {
     const edge = graph.edges.find(item => item.to === node.id && item.input === input);
@@ -85,7 +92,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
   }
   if (!chain.length) throw new Error('The geometry node is unavailable.');
   const stages: GeometryStage[] = [];
-  let profile: YarnProfile | undefined;
+  let profile: YarnProfile | undefined, flyaways: YarnFlyaways | undefined;
   for (const node of chain.toReversed()) {
     if (node.bypassed && !GENERATORS.has(node.operator)) continue;
     if (node.operator === 'weave.pattern') {
@@ -101,6 +108,10 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         radius: Math.max(0, finite(read(node, 'radius'), 'Yarn radius')), plyTwist: finite(read(node, 'plyTwist'), 'Ply twist'),
         fiberTwist: finite(read(node, 'fiberTwist'), 'Fiber twist') };
       if (profile.plies < 1 || profile.fibers < 1 || profile.plies * profile.fibers > 256) throw new Error('Yarn Profile allows 1 to 256 fibers per yarn.');
+    } else if (node.operator === 'geometry.flyaways') {
+      flyaways = { density: Math.max(0, finite(read(node, 'density'), 'Flyaway density')),
+        length: Math.max(0.001, finite(read(node, 'length'), 'Flyaway length')), lift: Math.max(0, finite(read(node, 'lift'), 'Flyaway lift')),
+        hair: Math.min(1, Math.max(0, finite(read(node, 'hair'), 'Free ends'))), seed: Math.round(finite(read(node, 'seed'), 'Seed')) };
     } else if (node.operator === 'geometry.curve-line') {
       stages.push({ kind: 'curve-line', nodeId: node.id, points: Math.round(finite(read(node, 'points'), 'Curve points')),
         length: finite(read(node, 'length'), 'Curve length'), axis: axisIndex(read(node, 'axis')) });
@@ -128,7 +139,11 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
   if (pointCount > CURVE_POINT_LIMIT || strandCount > CURVE_STRAND_LIMIT) {
     throw new Error(`Geometry exceeds ${CURVE_POINT_LIMIT.toLocaleString('en-US')} points or ${CURVE_STRAND_LIMIT.toLocaleString('en-US')} curves.`);
   }
-  if (render && profile) render.profile = profile;
+  if (render && profile) {
+    render.profile = profile;
+    // Flyaways leave the yarn surface, so they need a profile to leave from.
+    if (flyaways && flyaways.density > 0) render.flyaways = flyaways;
+  }
   return { stages, ...(render ? { render } : {}), pointCount, strandCount };
 
   function compileField(owner: BoundOperatorNode, input: string, type: 'vec3' | 'scalar'): GeometryField | undefined {

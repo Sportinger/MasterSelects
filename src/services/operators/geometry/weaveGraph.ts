@@ -80,8 +80,9 @@ export function createWaveStrandsGraph(): EffectOperatorGraph {
 const FABRIC_NODES: Spec[] = [
   ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 24, wefts: 16, width: 2.4, height: 1.6, crimp: 0.03, resolution: 16 }],
   ['yarn', 'geometry.yarn-profile', 1320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
-  ['render', 'render.strands', 1640, 80, { width: 0.0035, color: '#e8e2d6' }],
-  ['output', 'scene.output', 1960, 80],
+  ['render', 'render.strands', 1960, 80, { width: 0.0035, color: '#e8e2d6' }],
+  ['output', 'scene.output', 2280, 80],
+  ['flyaways', 'geometry.flyaways', 1640, 80, { density: 3, length: 0.08, lift: 2.5, hair: 0.35, seed: 0 }],
 ];
 /** Reveal by Shape: a growing sphere with a noisy front scales the yarn radius (0 hides, >1 swells the front). */
 const REVEAL_NODES: Spec[] = [
@@ -93,15 +94,17 @@ const REVEAL_NODES: Spec[] = [
   ['reveal-ramp', 'field.ramp', 1040, 460, { x0: -0.12, y0: 1, x1: 0, y1: 1.6, x2: 0.1, y2: 0 }],
 ];
 const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: string]> = [
-  ['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'render', 'curves'], ['render', 'scene', 'output', 'scene'],
+  ['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'flyaways', 'curves'], ['flyaways', 'curves', 'render', 'curves'],
+  ['render', 'scene', 'output', 'scene'],
   ['reveal', 'value', 'reveal-radius', 'a'], ['reach', 'value', 'reveal-radius', 'b'], ['reveal-radius', 'value', 'reveal-shape', 'size'],
   ['reveal-shape', 'value', 'reveal-edge', 'a'], ['reveal-noise', 'value', 'reveal-edge', 'b'], ['reveal-edge', 'value', 'reveal-ramp', 'value'],
   ['reveal-ramp', 'value', 'yarn', 'radius'],
 ];
 
 /**
- * Default Weave graph: a plain-woven sheet of three-ply yarns that grows from its center.
- * The exposed Reveal value (1 = fully grown) is keyframeable in the Effects tab.
+ * Default Weave graph: a plain-woven sheet of fuzzy three-ply yarns that grows from its center.
+ * The exposed Reveal value (1 = fully grown) is keyframeable in the Effects tab; bypassing the
+ * Yarn group draws the bare curves, bypassing Reveal by Shape shows the full sheet.
  */
 export function createDefaultWeaveGraph(): EffectOperatorGraph {
   const specs = [...FABRIC_NODES, ...REVEAL_NODES];
@@ -113,7 +116,8 @@ export function createDefaultWeaveGraph(): EffectOperatorGraph {
   return { version: 1, schemaVersion: 1, domain: 'geometry', nodes,
     edges: FABRIC_LINKS.map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
     layout: Object.fromEntries(specs.map(([id, , x, y]) => [id, { x, y }])),
-    groups: [{ id: 'reveal-by-shape', label: 'Reveal by Shape', color: '#5f9ea0', nodeIds: REVEAL_NODES.map(([id]) => id) }] };
+    groups: [{ id: 'reveal-by-shape', label: 'Reveal by Shape', color: '#5f9ea0', nodeIds: REVEAL_NODES.map(([id]) => id) },
+      { id: 'yarn', label: 'Yarn', color: '#c8a45a', nodeIds: ['yarn', 'flyaways'] }] };
 }
 
 export function validateWeaveGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {

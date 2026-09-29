@@ -6,7 +6,9 @@ import { packStrandPoints } from './strandFrames';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('StrandPass');
-const UNIFORM_FLOATS = 72;
+const UNIFORM_FLOATS = 76;
+/** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
+export const FLYAWAY_CHANNELS = 4;
 /** Evaluated curve buffers kept across frames and render targets, least recently used first. */
 const CACHE_LIMIT = 24;
 /** Fixed key light until strands consume scene lights: upper left, toward the camera. */
@@ -149,6 +151,11 @@ export class StrandPass {
       data.set([...KEY_LIGHT, AMBIENT], 60);
       const profile = render.profile;
       data.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist, profile.fiberTwist] : [1, 1, 0, 0, 0], 64);
+      const flyaways = profile && render.flyaways, channels = flyaways ? FLYAWAY_CHANNELS : 0;
+      if (flyaways) {
+        data[69] = flyaways.seed;
+        data.set([channels / flyaways.density, flyaways.length, flyaways.lift, flyaways.hair], 72);
+      }
       const uniforms = device.createBuffer({ size: data.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
         label: `native-strands-uniforms-${layer.layerId}` });
       temporaryBuffers.push(uniforms);
@@ -158,7 +165,7 @@ export class StrandPass {
         { binding: 1, resource: { buffer: buffers.positions } },
         { binding: 2, resource: { buffer: buffers.segments } },
       ] }));
-      pass.draw(buffers.segmentCount * 6, profile ? profile.plies * profile.fibers : 1);
+      pass.draw(buffers.segmentCount * 6, (profile ? profile.plies * profile.fibers : 1) + channels);
     }
     pass.end();
     return true;

@@ -57,12 +57,17 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     if (points > CURVE_POINT_LIMIT || strands > CURVE_STRAND_LIMIT) return false;
   }
   const render = value.render;
-  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'profile']) || typeof render.nodeId !== 'string'
+  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'profile', 'flyaways']) || typeof render.nodeId !== 'string'
     || !finite(render.width) || render.width < 0 || typeof render.color !== 'string' || render.color.length > 32)) return false;
   const profile = record(render) ? render.profile : undefined;
   if (profile !== undefined && (!record(profile) || !exactKeys(profile, ['plies', 'fibers', 'radius', 'plyTwist', 'fiberTwist'])
     || !Number.isInteger(profile.plies) || !Number.isInteger(profile.fibers) || (profile.plies as number) < 1 || (profile.fibers as number) < 1
     || (profile.plies as number) * (profile.fibers as number) > 256 || ![profile.radius, profile.plyTwist, profile.fiberTwist].every(finite)
     || (profile.radius as number) < 0)) return false;
+  const flyaways = record(render) ? render.flyaways : undefined;
+  if (flyaways !== undefined && (profile === undefined || !record(flyaways) || !exactKeys(flyaways, ['density', 'length', 'lift', 'hair', 'seed'])
+    || ![flyaways.density, flyaways.length, flyaways.lift, flyaways.hair].every(finite) || !Number.isInteger(flyaways.seed)
+    || (flyaways.density as number) <= 0 || (flyaways.length as number) <= 0 || (flyaways.lift as number) < 0
+    || (flyaways.hair as number) < 0 || (flyaways.hair as number) > 1)) return false;
   return value.pointCount === points && value.strandCount === strands;
 }

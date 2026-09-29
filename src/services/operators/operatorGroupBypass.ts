@@ -1,7 +1,11 @@
 import type { EffectOperatorGraph, OperatorGroup } from '../../types/operatorGraph';
 import { getEffectOperator } from './operatorRegistry';
 
-type BypassRoutes = Map<string, { from: string; output: string }> | undefined;
+/** A replacement source per outgoing edge; null disconnects it so the consumer input falls back to its default. */
+type BypassRoute = { from: string; output: string } | null;
+type BypassRoutes = Map<string, BypassRoute> | undefined;
+/** Per-element field signals: in geometry graphs an unconnected field input has a neutral default. */
+const GEOMETRY_FIELD_SIGNALS = new Set(['number', 'boolean', 'vec2', 'vec3', 'vec4']);
 interface GraphIndex {
   nodes: Map<string, EffectOperatorGraph['nodes'][number]>;
   sources: Map<string, string[]>;
@@ -37,9 +41,13 @@ export function operatorGroupMembers(graph: EffectOperatorGraph, groupId: string
   return members;
 }
 
-/** Only offer pass-through when every output has one unique, type-compatible external source. */
+/**
+ * Only offer pass-through when every output has one unique, type-compatible external source.
+ * Geometry field outputs without such a source are disconnected instead: a bypassed Reveal
+ * group leaves the yarn radius at its default rather than blocking the bypass.
+ */
 export function operatorGroupBypassRoutes(graph: EffectOperatorGraph, group: OperatorGroup): BypassRoutes {
-  if (graph.domain !== 'image') return undefined;
+  if (graph.domain !== 'image' && graph.domain !== 'geometry') return undefined;
   const index = graphIndex(graph);
   if (index.routes.has(group)) return index.routes.get(group);
   const routes = computeBypassRoutes(graph, group, index);
@@ -51,12 +59,13 @@ function computeBypassRoutes(graph: EffectOperatorGraph, group: OperatorGroup, i
   const members = operatorGroupMembers(graph, group.id);
   const incoming = graph.edges.filter(edge => !members.has(edge.from) && members.has(edge.to));
   const outgoing = graph.edges.filter(edge => members.has(edge.from) && !members.has(edge.to));
-  if (!incoming.length || !outgoing.length) return undefined;
+  const disconnects = (type: string) => graph.domain === 'geometry' && GEOMETRY_FIELD_SIGNALS.has(type);
+  if (!outgoing.length || (!incoming.length && graph.domain !== 'geometry')) return undefined;
   const signal = (id: string, port: string) => {
     const node = index.nodes.get(id);
     return node && getEffectOperator(node.operator)?.outputs.find(output => output.id === port)?.type;
   };
-  const routes = new Map<string, { from: string; output: string }>();
+  const routes = new Map<string, BypassRoute>();
   for (const edge of outgoing) {
     const type = signal(edge.from, edge.output);
     if (!type) return undefined;
@@ -64,7 +73,11 @@ function computeBypassRoutes(graph: EffectOperatorGraph, group: OperatorGroup, i
     if (group.bypassOutputs && (!declared || members.has(declared.nodeId) || signal(declared.nodeId, declared.portId) !== type)) return undefined;
     const candidates = declared ? new Map([['declared', { from: declared.nodeId, output: declared.portId }]]) : new Map(incoming.filter(input => signal(input.from, input.output) === type)
       .map(input => [`${input.from}:${input.output}`, { from: input.from, output: input.output }]));
-    if (candidates.size !== 1) return undefined;
+    if (candidates.size !== 1) {
+      if (declared || !disconnects(type)) return undefined;
+      routes.set(edge.id, null);
+      continue;
+    }
     const candidate = [...candidates.values()][0];
     const visited = new Set<string>();
     const dependsOnGroup = (id: string): boolean => {
@@ -105,21 +118,22 @@ function bypassGraph(graph: EffectOperatorGraph, bypassed: OperatorGroup[]): Eff
     }
     return visited.size - 1;
   };
-  const replacements = new Map<string, { from: string; output: string }>();
+  const replacements = new Map<string, BypassRoute>();
   for (const group of bypassed.toSorted((a, b) => depth(b) - depth(a))) {
     const routes = operatorGroupBypassRoutes(graph, group);
     if (!routes) throw new Error(`Group ${group.label} no longer has an unambiguous bypass boundary.`);
     for (const edge of graph.edges) {
       const replacement = routes.get(edge.id);
-      if (replacement) replacements.set(`${edge.from}:${edge.output}`, replacement);
+      if (replacement !== undefined) replacements.set(`${edge.from}:${edge.output}`, replacement);
     }
   }
-  return { ...graph, edges: graph.edges.map(edge => {
+  return { ...graph, edges: graph.edges.flatMap(edge => {
     let endpoint = { from: edge.from, output: edge.output };
     const visited = new Set<string>();
     for (;;) {
       const id = `${endpoint.from}:${endpoint.output}`, replacement = replacements.get(id);
-      if (!replacement) return { ...edge, ...endpoint };
+      if (replacement === null) return [];
+      if (!replacement) return [{ ...edge, ...endpoint }];
       if (visited.has(id)) throw new Error('Group bypass boundaries form a cycle.');
       visited.add(id); endpoint = replacement;
     }

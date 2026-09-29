@@ -117,8 +117,9 @@ new atomic operator; Slit Scan supplies timestamped source frames to it, not its
 Saved graph edits, effect bypass and numeric keyframes use the existing editor paths.
 
 Inspector section switches and matching Node group bypasses share one saved state.
-This includes nested image groups with an unambiguous typed pass-through boundary
-and scene groups with an existing renderer mute. Parent image-group bypasses keep
+This includes nested image groups with an unambiguous typed pass-through boundary,
+geometry groups (curves pass through, per-point fields fall back to their input
+defaults) and scene groups with an existing renderer mute. Parent image-group bypasses keep
 child bypass states, values, keyframes and wiring intact. Sections without a valid
 bypass omit the automatic blue indicator; explicit read-only status remains supported.
 Slit Scan explicitly links Time map source / Time

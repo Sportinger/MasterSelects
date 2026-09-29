@@ -3,14 +3,14 @@ import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 import type { Keyframe } from '../../../types/keyframes';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
-import { exposedGraphValues } from '../../../services/operators/exposedGraphValues';
+import { exposedGraphValueSections } from '../../../services/operators/exposedGraphValues';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
 import { EffectKeyframeToggle } from './shared';
 
 const EMPTY_KEYS: Keyframe[] = [];
 
-/** Value nodes the user exposed from the node graph; keyframes drive the node output. */
+/** Value nodes the user exposed from the node graph, one section per node group; keyframes drive the node output. */
 export function ExposedGraphValueControls({ clipId, effect }: {
   clipId: string;
   effect: { id: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
@@ -20,10 +20,10 @@ export function ExposedGraphValueControls({ clipId, effect }: {
     return clip ? state.playheadPosition - clip.startTime : 0;
   });
   const keys = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYS);
-  const values = exposedGraphValues(effect.operatorGraph);
-  if (!values.length) return null;
-  return <ResolveInspectorSection title="Graph values">
-    {values.map(exposed => {
+  const sections = exposedGraphValueSections(effect.operatorGraph);
+  if (!sections.length) return null;
+  return <>{sections.map(section => <ResolveInspectorSection key={section.groupId ?? ''} title={section.label} bypassGroupId={section.groupId}>
+    {section.values.map(exposed => {
       const property = `effect.${effect.id}.${exposed.key}` as AnimatableProperty;
       const base = Number(effect.params[exposed.key] ?? 0);
       const value = interpolateKeyframes(keys, property, time, Number.isFinite(base) ? base : 0);
@@ -34,5 +34,5 @@ export function ExposedGraphValueControls({ clipId, effect }: {
         persistenceKey={`effect.${clipId}.${effect.id}.${exposed.key}`}
         keyframeToggle={<EffectKeyframeToggle clipId={clipId} effectId={effect.id} paramName={exposed.key} value={value} />} />;
     })}
-  </ResolveInspectorSection>;
+  </ResolveInspectorSection>)}</>;
 }

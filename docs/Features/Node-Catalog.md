@@ -41,7 +41,7 @@ Streamed records execute from text deltas, so the model does not receive their i
 
 ### Exposing Value nodes
 
-A `Value` node (`values.number` / `values.integer`) can be published to the clip's **Effects** tab. Select the node and enable **Effects tab** in its inspector; an optional **Exposed name** labels the row. The effect then shows a **Graph values** section with a keyframeable row per exposed node, and its keyframes drive the node output through the effect parameter `<nodeId>_value` (animatable property `effect.<effectId>.<nodeId>_value`). Turning the toggle off in an image graph writes the current base value back into the node as a literal and removes that parameter's keyframes; the edit is undoable. Audio graphs and values already owned by a built-in effect parameter cannot be exposed.
+A `Value` node (`values.number` / `values.integer`) can be published to the clip's **Effects** tab. Select the node and enable **Effects tab** in its inspector; an optional **Exposed name** labels the row. The effect then shows a keyframeable row per exposed node. Rows appear in a section named after the node group that directly contains the node, and that section carries the group's bypass switch when the group has one. Ungrouped rows appear under **Graph values**. Each row's keyframes drive the node output through the effect parameter `<nodeId>_value` (animatable property `effect.<effectId>.<nodeId>_value`). Turning the toggle off in an image graph writes the current base value back into the node as a literal and removes that parameter's keyframes; the edit is undoable. Audio graphs and values already owned by a built-in effect parameter cannot be exposed.
 
 The agent uses `editOperatorGraph` with `action: "expose"`, `nodeId`, `exposed: true|false` and an optional `label`, or passes `exposed: true` (and optional `label`) when adding a Value node. `slider` on an exposed node sets the Effects tab row range. `getOperatorGraph` returns the node's `exposed` field.
 
@@ -380,11 +380,12 @@ node is one node in every graph rather than a per-domain copy.
 | Set Position | Curves + optional Position / Offset (Vector 3, per point) → curves |
 | Position, Curve Info | Per-point position, Curve Param (0–1), point/strand index and counts |
 | Yarn Profile | Curves (+ optional per-point Radius Scale) → curves drawn as plies and fibers twisted along curve length |
+| Flyaways | Curves → curves whose Yarn Profile lets single fibers stray: loops arc off and return, free ends stick out (Density, Length, Lift, Free Ends, Seed) |
 | Weave Pattern | Draft (plain, twill 2/2 and 2/1, satin 5, basket), warp/weft counts, size, crimp → interlaced curves |
 | Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color) |
 
-The default Weave graph is Weave Pattern → Yarn Profile → Strand Render: a plain
-weave of three-ply yarns. Weave Pattern is the only weave-specific node; crimp is
+The default Weave graph is Weave Pattern → Yarn Profile → Flyaways → Strand Render:
+a plain weave of fuzzy three-ply yarns. Weave Pattern is the only weave-specific node; crimp is
 analytic (cosine transitions between crossings, with the draft deciding which
 thread lies in front). Yarn Profile is general: plies circle the curve and fibers
 circle each ply, with both angles driven by arc length along rotation-minimizing
@@ -392,12 +393,28 @@ frames, so radius changes never spin the twist (the Houdini sweep issue). Its
 Radius Scale input is a per-point field: a scale of zero also thins the fibers to
 nothing, values above one swell them.
 
+**Flyaways.** Flyaways add stray fibers at render time, with no extra geometry.
+Along each yarn, every curve cell holds one hashed window per flyaway channel.
+Inside that window one fiber leaves the outer fiber ring and rises Lift yarn radii
+above it. A loop returns to the yarn; a Free Ends share stops at the peak. Density
+counts flyaways per unit of curve length. Flyaways follow the Radius Scale field,
+so a reveal hides and grows them with the yarn. They need a Yarn Profile to leave
+from.
+
 **Reveal.** The default graph grows the sheet from its center: *Shape Distance*
 (sphere, cube or plane; an unconnected Position reads the curve point) plus
 *Noise* (fractal lattice noise, the same deterministic noise Flock uses) feed a
 three-key *Ramp* whose front key swells the yarns before they settle. The group
 *Reveal by Shape* exposes **Reveal** (0–1) in the Effects tab; keyframe it to
-animate the growth. These field nodes are general per-element operators; *Time*
+animate the growth.
+
+**Groups.** Geometry groups can be bypassed from their **Byp** header button or
+their Effects tab section. A curves output passes the group's incoming curves
+through: bypassing *Yarn* draws the bare woven curves. A field output (number or
+vector) without a unique incoming source of its type is disconnected, and its
+consumer falls back to its default. Bypassing *Reveal by Shape* therefore leaves
+the Radius Scale at 1 and shows the whole sheet. Bypass changes only the compiled
+view: the saved wiring, values and keyframes stay intact. These field nodes are general per-element operators; *Time*
 reads the composition clock, as in image graphs. An example graph
 of general nodes only (`createWaveStrandsGraph`) builds an alternating wave from
 Value, Multiply, Sine, Fraction and Add nodes. Curve ports show

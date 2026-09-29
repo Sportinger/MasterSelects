@@ -198,6 +198,7 @@ const CATALOG_TEXT: Readonly<Record<string, { d?: string; t?: readonly string[] 
   "geometry.curve-line": { d: "Creates one straight curve of evenly spaced points centered on the origin; Points sets the resolution.", t: ["line", "curve", "polyline", "resample", "strand"] },
   "geometry.depth": { d: "Builds a 3D surface mesh from a calibrated depth map, textured with the source image.", t: ["depth mesh", "displacement", "3d surface", "relief", "heightmap"] },
   "geometry.face": { d: "Builds a 3D face mesh from tracked face landmarks, textured with the source image.", t: ["face mesh", "landmarks to mesh", "3d face", "face geometry"] },
+  "geometry.flyaways": { d: "Lets single fibers of a yarn stray at random places: loops arc off the surface and return, free ends stick out; Density, Length and Lift set how hairy it looks.", t: ["flyaways", "fuzz", "hairiness", "stray fibers", "fuzzy yarn", "loops"] },
   "geometry.position": { d: "The current position of each curve point, read where a modifier evaluates it.", t: ["position", "p", "point position", "xyz"] },
   "geometry.jump-flood": { d: "Spreads the nearest seed point to every pixel, turning scattered seeds into complete Voronoi cells.", t: ["voronoi", "nearest point", "distance field", "cells", "flood fill"] },
   "geometry.marching-squares-topology": { d: "Finds up to two contour line segments in a grid cell from its four corner values, used to draw iso-contour lines.", t: ["contour", "isolines", "marching squares", "line segments"] },

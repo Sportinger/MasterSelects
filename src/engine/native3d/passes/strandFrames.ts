@@ -1,10 +1,10 @@
 import type { CurveSet } from '../../../services/operators/geometry/geometryEvaluation';
 
-/** Floats per point in the strand point buffer: position, arc length, frame normal, radius scale, tangent. */
+/** Floats per point in the strand point buffer: position, arc length, frame normal, radius scale, tangent, strand index. */
 export const STRAND_POINT_FLOATS = 12;
 
 /**
- * Packs render data per point: [x, y, z, arcLength, nx, ny, nz, radiusScale, tx, ty, tz, 0]. Normals are
+ * Packs render data per point: [x, y, z, arcLength, nx, ny, nz, radiusScale, tx, ty, tz, strand]. Normals are
  * rotation-minimizing frames (double reflection, Wang et al. 2008), so yarn twist driven by arc
  * length does not pick up spurious rotation where a curve bends.
  */
@@ -38,7 +38,7 @@ export function packStrandPoints(curves: CurveSet): Float32Array {
         }
       }
       const t = tangents[i];
-      packed.set([p[0], p[1], p[2], arc, normal[0], normal[1], normal[2], radius ? radius[index] : 1, t[0], t[1], t[2], 0], base);
+      packed.set([p[0], p[1], p[2], arc, normal[0], normal[1], normal[2], radius ? radius[index] : 1, t[0], t[1], t[2], strand], base);
     }
   }
   return packed;

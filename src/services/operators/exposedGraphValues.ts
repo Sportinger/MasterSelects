@@ -40,6 +40,23 @@ export function exposedGraphValues(graph: EffectOperatorGraph | undefined): Expo
   });
 }
 
+export interface ExposedGraphValueSection { groupId?: string; label: string; values: ExposedGraphValue[] }
+
+/**
+ * Exposed values sectioned by the node group that directly contains them, so a group such as
+ * Reveal by Shape keeps its controls (and its bypass switch) together; ungrouped values come first.
+ */
+export function exposedGraphValueSections(graph: EffectOperatorGraph | undefined): ExposedGraphValueSection[] {
+  const sections = new Map<string | undefined, ExposedGraphValueSection>();
+  for (const value of exposedGraphValues(graph)) {
+    const group = graph?.groups?.find(candidate => candidate.nodeIds.includes(value.nodeId));
+    let section = sections.get(group?.id);
+    if (!section) sections.set(group?.id, section = { ...(group ? { groupId: group.id } : {}), label: group?.label ?? 'Graph values', values: [] });
+    section.values.push(value);
+  }
+  return [...sections.values()].toSorted((a, b) => Number(!!a.groupId) - Number(!!b.groupId));
+}
+
 function defaultExposedLabel(graph: EffectOperatorGraph, node: BoundOperatorNode) {
   if (node.valueControl?.label) return node.valueControl.label;
   const taken = new Set(graph.nodes.map(item => item.exposed?.label));
