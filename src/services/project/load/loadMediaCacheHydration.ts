@@ -126,7 +126,8 @@ export async function refreshMediaMetadata(
       f.container === undefined ||
       f.fileSize === undefined ||
       (f.type === 'video' && f.hasAudio === undefined) ||
-      (f.type === 'video' && (isIsobmffFileName(f.name) || isMxfFileName(f.name)) && f.videoCodecId === undefined)
+      // `== null`: projects written by external tools store an explicit null codec id.
+      (f.type === 'video' && (isIsobmffFileName(f.name) || isMxfFileName(f.name)) && f.videoCodecId == null)
     )
   );
 
