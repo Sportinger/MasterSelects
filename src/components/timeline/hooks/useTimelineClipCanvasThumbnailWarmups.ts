@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { thumbnailCacheService } from '../../../services/thumbnailCacheService';
 import { flockThumbnailService } from '../../../services/flock/flockThumbnailService';
 import { useTimelineStore } from '../../../stores/timeline';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { ensureThumbnailBitmap } from '../../../services/timeline/thumbnailBitmapCache';
 import {
   collectVisibleTimelineThumbnailRefs,
@@ -84,10 +85,15 @@ export function useTimelineClipCanvasThumbnailWarmups(
   const storeClips = useTimelineStore((state) => state.clips);
   const clipKeyframes = useTimelineStore((state) => state.clipKeyframes);
   const timelineBusy = useTimelineStore((state) => state.isPlaying === true || state.isExporting === true);
+  const flockThumbnails = useSettingsStore((state) => state.flockTimelineThumbnails);
   const flockClipIds = useMemo(
-    () => new Set(clips.filter((clip) => clip.source?.type === 'flock').map((clip) => clip.id)),
-    [clips],
+    () => new Set(flockThumbnails ? clips.filter((clip) => clip.source?.type === 'flock').map((clip) => clip.id) : []),
+    [clips, flockThumbnails],
   );
+
+  useEffect(() => {
+    flockThumbnailService.setEnabled(flockThumbnails);
+  }, [flockThumbnails]);
 
   useEffect(() => {
     flockThumbnailService.setBusy(timelineBusy);

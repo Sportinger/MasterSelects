@@ -552,7 +552,9 @@ the clip.
 With a flock clip selected, the preview draws guidance overlays for the graph:
 emitter, vortex, attractor, boundary and obstacle centers are draggable handles
 (one undo step per drag), paths and boundary volumes are shown as dashed
-outlines. Timeline clips show a filmstrip rendered from the clip's simulation.
+outlines. Timeline clips show their icon by default. *Settings → Performance →
+Simulated Flock thumbnails* adds a filmstrip from a capped CPU re-simulation; it
+runs on the editor thread and stalls heavy scenes such as fluid sculptures.
 
 ---
 

@@ -99,6 +99,7 @@ class FlockThumbnailService {
   private readonly pending = new Map<string, PendingJob>();
   private readonly listeners = new Set<() => void>();
   private busy = false;
+  private enabled = false;
   private running: { clipId: string; key: string } | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -109,7 +110,21 @@ class FlockThumbnailService {
     if (!busy && this.pending.size > 0) this.schedule(DEBOUNCE_MS);
   }
 
+  /**
+   * Simulated filmstrips are opt-in (Settings → Performance): the CPU reference
+   * solver runs on the main thread. Disabling cancels work and releases frames.
+   */
+  setEnabled(enabled: boolean): void {
+    if (this.enabled === enabled) return;
+    this.enabled = enabled;
+    if (enabled) return;
+    this.pending.clear();
+    for (const clipId of [...this.entries.keys()]) this.drop(clipId);
+    this.emit();
+  }
+
   request(clip: FlockThumbnailClip, keyframes: readonly Keyframe[] | undefined): void {
+    if (!this.enabled) return;
     const key = getFlockThumbnailKey(clip, keyframes, OPTIONS);
     const entry = this.entries.get(clip.id);
     if (!key) {
@@ -185,7 +200,7 @@ class FlockThumbnailService {
     const job = next;
     this.pending.delete(job.clip.id);
     this.running = { clipId: job.clip.id, key: job.key };
-    const superseded = () => this.pending.has(job.clip.id);
+    const superseded = () => !this.enabled || this.pending.has(job.clip.id);
     try {
       const result = await renderFlockThumbnailFrames(job.clip, job.keyframes, OPTIONS, {
         shouldCancel: () => this.busy || superseded(),

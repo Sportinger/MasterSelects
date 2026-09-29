@@ -5,6 +5,8 @@ export function PerformanceSettings() {
   const {
     gpuPowerPreference,
     setGpuPowerPreference,
+    flockTimelineThumbnails,
+    setFlockTimelineThumbnails,
   } = useSettingsStore();
 
   return (
@@ -28,6 +30,24 @@ export function PerformanceSettings() {
         </label>
         <p className="settings-hint">
           Requires page reload to take effect.
+        </p>
+      </div>
+
+      <div className="settings-group">
+        <div className="settings-group-title">Timeline</div>
+
+        <label className="settings-row">
+          <span className="settings-label">Simulated Flock thumbnails</span>
+          <input
+            type="checkbox"
+            checked={flockTimelineThumbnails}
+            onChange={(event) => setFlockTimelineThumbnails(event.target.checked)}
+            className="settings-checkbox"
+          />
+        </label>
+        <p className="settings-hint">
+          Off by default: the filmstrip re-simulates the swarm on the CPU in the editor thread, which stalls heavy
+          scenes such as fluid sculptures. Clips show their icon instead.
         </p>
       </div>
     </div>
