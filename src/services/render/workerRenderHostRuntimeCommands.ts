@@ -367,6 +367,7 @@ export interface WorkerRenderHostGpuTransferredVideoFrameLayer extends WorkerGpu
 }
 
 export type WorkerRenderHostRuntimeCommand =
+  | import('./workerFlockControls').WorkerFlockControlCommand
   | RenderCommand
   | WorkerGpuRuntimeCommand
   | { readonly type: 'probeCapabilities'; readonly requestId: string }

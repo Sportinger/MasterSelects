@@ -119,6 +119,8 @@ function PrecomputeBlock({ clip }: { clip: TimelineClip }) {
           ? `Precomputed ${start.toFixed(2)}–${end.toFixed(2)} s${result.steps ? ` (${result.steps.toLocaleString()} steps)` : ''}`
           : result.message ?? 'Precompute failed');
       }
+    } catch (error) {
+      if (mounted.current) setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       if (mounted.current) setBusy(false);
     }

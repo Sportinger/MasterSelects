@@ -261,7 +261,7 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
     device: GPUDevice,
     commandEncoder: GPUCommandEncoder,
     layer: Pick<SceneFlockLayer, 'clipId' | 'worldMatrix' | 'flock'>,
-    options: { realtime: boolean; submissionWindow?: 1 | 2 },
+    options: { realtime: boolean; submissionWindow?: 1 | 2; previewStepBudget?: number },
   ): FlockDrawPlan | null {
     const data = layer.flock;
     if (data.program) this.lastValidPrograms.set(data.clipId, data.program);
@@ -278,7 +278,8 @@ export class FlockSimulationRuntime implements FlockRuntimeBackend {
     const targetStep = sample.step + 1;
     void this.loadPersistedCheckpoint(entry, targetStep, false);
     entry.session.seekCheckpoint(targetStep);
-    const budget = data.consumer === 'export' ? Number.MAX_SAFE_INTEGER : options.realtime ? 12 : 90;
+    const budget = data.consumer === 'export' ? Number.MAX_SAFE_INTEGER
+      : Math.min(options.realtime ? 12 : 90, Math.max(1, options.previewStepBudget ?? 90));
     const stepStarted = performance.now();
     const caughtUp = entry.session.advanceTo(targetStep, budget, data.consumer !== 'export', options.submissionWindow);
     entry.timings.stepsEncode = performance.now() - stepStarted;

@@ -483,6 +483,19 @@ Local development defaults to strict `worker-gpu-only`, including `/editor`
 without a query parameter. Automatic main-renderer fallback is disabled, even
 when worker capabilities are unavailable. Explicit `?renderHost=main` is still
 available for diagnostics. Production startup is unchanged.
+Worker frame stacks use the current render-target size, including Half/Quarter
+preview quality. The Worker resizes the transferred canvas itself, and sizes set
+before canvas registration are retained. Preview simulation catches up in batches
+of at most four steps, yielding at the asynchronous GPU completion fence between
+batches. No fixed timer is added after the fence, avoiding extra playback backlog.
+Simulation time steps and particle counts
+are preserved; export keeps its unrestricted step budget.
+Worker preview cache controls route Precompute, Cancel and Clear cache to the
+prepared scene's simulation owner. Precompute uses a separate GPU session with
+four-step submissions; the UI polls bounded progress snapshots every 250 ms.
+Persistent checkpoints use IndexedDB in the Worker and can be reused after reopen.
+These are restart checkpoints, not a cache of every rendered output frame.
+Replacing the scene or editing simulation inputs cancels the old computation.
 The host is selected before preview canvases
 acquire a context, allowing the existing editor preview to register directly with
 the Worker. Development URL overrides are ignored in production; reloads still

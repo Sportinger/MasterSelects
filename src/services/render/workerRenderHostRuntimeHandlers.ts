@@ -1,3 +1,5 @@
+import { peekWorkerGpuNativeSceneOwner } from './workerGpuVideoFrameResources';
+import type { WorkerFlockControlReply } from './workerFlockControls';
 import type {
   RenderCommandTarget,
   RenderGraphId,
@@ -99,6 +101,7 @@ export interface WorkerRenderHostRuntimeJobInput {
 }
 
 export interface WorkerRenderHostRuntimeJobOutput {
+  readonly flockControl?: WorkerFlockControlReply;
   readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp;
   readonly flockStatus?: WorkerFlockStatusSnapshot;
   readonly accepted: boolean;
@@ -209,6 +212,7 @@ interface WorkerGpuWebCodecsStreamSession {
 }
 
 interface AcceptedRenderCommand {
+  readonly flockControl?: WorkerFlockControlReply;
   readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp;
   readonly flockStatus?: WorkerFlockStatusSnapshot;
   readonly statusEvents: readonly WorkerRenderStatusEvent[];
@@ -355,6 +359,12 @@ function jobForCommand(command: WorkerRenderHostRuntimeCommand, nowMs: number): 
 
 function acceptTarget(target: RenderCommandTarget, nowMs: number): void {
   state.targets.set(target.id, target);
+  const surface = state.targetSurfaces.get(target.id);
+  if (surface) {
+    // A transferred canvas is resized by its Worker owner, not the DOM canvas.
+    if (surface.canvas.width !== target.size.x) surface.canvas.width = target.size.x;
+    if (surface.canvas.height !== target.size.y) surface.canvas.height = target.size.y;
+  }
   state.cache.allocate({
     id: targetCacheId(target.id),
     owner: 'target-surface',
@@ -407,6 +417,8 @@ async function attachTargetSurface(surface: WorkerRenderHostTargetSurfaceCommand
       ...created.surface,
       presentation: surface.presentation,
     });
+    const target = state.targets.get(surface.targetId);
+    if (target) acceptTarget(target, nowMs);
     state.cache.allocate({
       id: targetSurfaceCacheId(surface.targetId),
       owner: 'target-surface',
@@ -2483,6 +2495,13 @@ function shouldEmitCommandLifecycleEvents(command: WorkerRenderHostRuntimeComman
 }
 
 async function acceptCommand(command: WorkerRenderHostRuntimeCommand, nowMs: number): Promise<AcceptedRenderCommand> {
+  if (command.type === 'flock.control') {
+    const surface = state.targetSurfaces.get(command.targetId);
+    const owner = surface?.kind === 'worker-gpu-target-surface' ? peekWorkerGpuNativeSceneOwner(surface) : undefined;
+    const flockControl = owner ? await owner.controls.accept(command)
+      : { running: false, result: { ok: false, message: 'Show the Flock scene in the preview first.' } };
+    return { statusEvents: [], presentedFrameId: null, flockControl };
+  }
   if (isWorkerWebCodecsCommand(command)) {
     return acceptWorkerWebCodecsCommand(command);
   }
@@ -2721,6 +2740,7 @@ export const workerRenderHostRuntimeHandler: RuntimeJobHandler<
       webCodecs: accepted.webCodecs ?? null,
       readback: accepted.readback ?? null,
       flockStatus: accepted.flockStatus,
+      flockControl: accepted.flockControl,
       nativeSceneCatchUp: accepted.nativeSceneCatchUp,
     },
   };

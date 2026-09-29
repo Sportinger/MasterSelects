@@ -240,6 +240,10 @@ function ensureRenderTextures(
   resources.height = height;
 }
 
+export function peekWorkerGpuNativeSceneOwner(surface: WorkerGpuTargetSurface): WorkerGpuNativeSceneOwner | undefined {
+  return resourcesBySurface.get(surface)?.nativeSceneOwner;
+}
+
 export async function getWorkerGpuCompositorResources(
   surface: WorkerGpuTargetSurface,
 ): Promise<WorkerGpuCompositorResources> {

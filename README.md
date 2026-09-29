@@ -1,5 +1,8 @@
 # MasterSelects
 
+Development automation can open an authorized project folder by disk path with
+the confirmed `openLocalProject` bridge operation (Native Helper required).
+
 A browser-based video editor and a workspace you can extend while you create.
 Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in one multitrack timeline. The editor runs on React, TypeScript, WebGPU, and WebCodecs.
 
@@ -51,6 +54,10 @@ fallback is disabled in this mode. An explicit development `?renderHost=main`
 remains available for diagnostics; production startup is unchanged.
 Playback health telemetry avoids synchronous GPU pixel reads, keeping those
 readback stalls off the UI thread; unavailable pixel-health metrics are omitted.
+Worker 3D rendering honors preview quality and retains resolution changes across
+canvas registration. Small preview simulation batches leave GPU time for the UI.
+Precompute, cancellation and cache clearing also run in the Worker, with progress
+and optional persistent simulation checkpoints.
 The Worker preview reports its own Flock simulation, memory and checkpoint status
 to the inspector; nested occurrences remain separate in render-host diagnostics.
 `getStats.flockGpu` identifies the active renderer and includes the Worker's own

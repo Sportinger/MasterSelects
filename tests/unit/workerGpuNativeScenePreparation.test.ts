@@ -20,11 +20,11 @@ vi.mock('../../src/engine/flock/runtime/FlockSimulationRuntime', () => ({
   FlockSimulationRuntime: class {
     entries = new Map();
     jobs = new Map();
-    prepare() {
+    prepare(_device: unknown, _encoder: unknown, _layer: unknown, options: { previewStepBudget?: number }) {
       const entry = this.entries.get('particles|preview') ?? {
         session: { step: 0 }, program: { diagnostics: [] }, runtimeDiagnostics: [],
       };
-      entry.session.step += Math.min(4, state.target - entry.session.step);
+      entry.session.step += Math.min(options.previewStepBudget ?? 4, state.target - entry.session.step);
       entry.caughtUp = entry.session.step === state.target;
       this.entries.set('particles|preview', entry);
       state.prepares(entry.session.step);

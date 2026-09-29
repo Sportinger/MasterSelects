@@ -586,6 +586,32 @@ describe('worker presenting render host port', () => {
     });
   });
 
+  it.each([true, false])('projects the resized target instead of stale DOM dimensions (early=%s)', async (early) => {
+    const animation = installAnimationFrameQueue();
+    const bridge = createBridge();
+    installWorkerCanvasSupport({ width: 1920, height: 1080 } as OffscreenCanvas);
+    const host = createWorkerPresentingRenderHostPort({ fallback: createFallback(), createBridge: () => bridge,
+      strictWorkerOnly: true, presentationStrategy: 'worker-webgpu-present', getSelectionTelemetry: () => ({
+        selectedId: 'worker-primary', selectedRole: 'primary', workerPrimaryRequested: true,
+        workerPrimaryRegistered: true, workerPrimaryAvailable: true, blockers: [], reason: 'test',
+      }) });
+    const canvas = document.createElement('canvas'); canvas.width = 1920; canvas.height = 1080;
+    try {
+      if (early) host.setResolution(480, 270);
+      host.registerTargetCanvas('preview', canvas);
+      await vi.waitFor(() => expect(bridge.attachTargetSurface).toHaveBeenCalledOnce());
+      if (!early) host.setResolution(480, 270);
+      host.render([{ id: 'solid', name: 'solid', visible: true, opacity: 1, blendMode: 'normal',
+        source: { type: 'solid', color: '#ffffff' }, effects: [],
+        position: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0,
+      }], { compositionId: 'resized-comp', timelineTimeSeconds: 0 });
+      await vi.waitFor(() => expect(bridge.presentGpuFrameStack).toHaveBeenCalledOnce());
+      expect(vi.mocked(bridge.presentGpuFrameStack).mock.calls[0][0].stack.dimensions).toEqual({ width: 480, height: 270 });
+      expect(canvas.width).toBe(1920);
+      expect(host.getOutputDimensions()).toEqual({ width: 480, height: 270 });
+    } finally { host.stopRenderLoopForDiagnostics(); animation.restore(); }
+  });
+
   it('uses a 30fps drop baseline while worker-presenting scrub is active', () => {
     const host = createWorkerPresentingRenderHostPort({
       fallback: createFallback(),

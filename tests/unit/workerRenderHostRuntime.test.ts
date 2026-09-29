@@ -304,6 +304,8 @@ describe('worker render host runtime bridge', () => {
         presentation: 'offscreen-canvas',
       }]);
 
+
+
       const rendered = await bridge.renderNow('render-presented-1', 'preview', 3);
 
       expect(canvas.getContext).toHaveBeenCalledWith('2d');
@@ -484,6 +486,13 @@ describe('worker render host runtime bridge', () => {
         requestId: null,
         presentation: 'offscreen-canvas',
       }]);
+
+      // Registration and later quality changes resize the Worker-owned canvas.
+      expect(fake.canvas.width).toBe(target.size.x);
+      expect(fake.canvas.height).toBe(target.size.y);
+      await bridge.sendCommand({ type: 'resizeTarget', targetId: 'preview', size: { x: 480, y: 270 } });
+      expect(fake.canvas.width).toBe(480);
+      expect(fake.canvas.height).toBe(270);
 
       const rendered = await bridge.presentGpuTestPattern('gpu-pattern-1', 'preview', 1.5, 9);
 

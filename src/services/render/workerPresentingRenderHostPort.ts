@@ -1,3 +1,4 @@
+import { WorkerFlockControlClient } from './workerFlockControlClient';
 import type {
   RenderCommandTarget,
   WorkerRenderStatusEvent,
@@ -248,6 +249,7 @@ class WorkerPresentingRenderHostPortCore {
   private readonly readStrictWorkerOnly: () => boolean;
   private readonly readPresentationStrategy: () => WorkerPresentingPresentationStrategy;
   private readonly targetRecords = new Map<string, WorkerRenderTargetRecord>();
+  private requestedResolution: { width: number; height: number } | null = null;
   private readonly fallbackTargetIds = new Set<string>();
   private readonly pendingTargetDetachTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private bridge: WorkerRenderHostRuntimeBridge | null = null;
@@ -316,9 +318,15 @@ class WorkerPresentingRenderHostPortCore {
   private lastGpuOnlyVideoFrameSourceFrameRate: number | null = null;
   private lastGpuOnlyVideoFrameStats: Record<string, unknown> | null = null;
   private readonly flockStatuses = new WorkerFlockStatusMirror();
+  private readonly flockControls = new WorkerFlockControlClient(
+    async command => (await this.withBridge(bridge => bridge.sendCommand(command)))?.flockControl,
+    () => useMediaStore.getState().activeCompositionId,
+    () => { flockRuntime.setStatusSource(this.readFlockStatuses); this.requestRender(); },
+  );
   private readonly readFlockStatuses = () => this.isGpuOnlyPresentation
     && this.getSelectionTelemetry().selectedRole === 'primary'
-    ? { statuses: this.flockStatuses.statuses(useMediaStore.getState().activeCompositionId),
+    ? { statuses: this.flockControls.merge(this.flockStatuses.statuses(useMediaStore.getState().activeCompositionId)),
+      controls: this.flockControls,
       capabilities: this.flockStatuses.diagnostics()?.capabilities ?? null }
     : null;
   private gpuOnlyVideoSourceLoadCount = 0;
@@ -482,7 +490,15 @@ class WorkerPresentingRenderHostPortCore {
       }
     }
 
-    const target = createWorkerRenderTarget(targetId, canvas);
+    const initialTarget = createWorkerRenderTarget(targetId, canvas);
+    const resolution = this.requestedResolution;
+    const targetStore = useRenderTargetStore.getState();
+    const target = resolution ? { ...initialTarget, size: resolveWorkerTargetResizeSize({
+      canvasWidth: initialTarget.size.x, canvasHeight: initialTarget.size.y,
+      followsActiveComposition: targetStore.getActiveCompTargets().some(item => item.id === targetId),
+      requestedWidth: resolution.width, requestedHeight: resolution.height,
+      viewportOverride: targetStore.targets.get(targetId)?.viewportOverride,
+    }) } : initialTarget;
     const context = createWorkerCanvasContext(targetId, canvas);
     const targetSurfaceGeneration = this.nextTargetSurfaceGeneration(targetId);
     this.targetRecords.set(targetId, { canvas, context, target, targetSurfaceGeneration });
@@ -805,6 +821,7 @@ class WorkerPresentingRenderHostPortCore {
   }
 
   setResolution(width: number, height: number): void {
+    this.requestedResolution = { width, height };
     const targetStore = useRenderTargetStore.getState();
     const activeTargetIds = new Set(targetStore.getActiveCompTargets().map((target) => target.id));
     this.targetRecords.forEach((record, targetId) => {
@@ -823,6 +840,7 @@ class WorkerPresentingRenderHostPortCore {
       });
       void this.withBridge((bridge) => bridge.sendCommand({ type: 'resizeTarget', targetId, size }));
     });
+    this.requestRender();
   }
 
   readPixels(): Promise<Uint8ClampedArray | null> { return Promise.resolve(null); }
@@ -1615,8 +1633,8 @@ class WorkerPresentingRenderHostPortCore {
     const projectionRequest = buildWorkerGpuFrameStackProjectionRequest({
       projectNativeScene: projectMainNativeScene,
       layers: request.layers,
-      width: record.canvas.width,
-      height: record.canvas.height,
+      width: record.target.size.x,
+      height: record.target.size.y,
       frame,
       occurrenceNamespace: `${frameContext.compositionId}:${targetId}:frame-stack`,
       intent,
@@ -1632,8 +1650,8 @@ class WorkerPresentingRenderHostPortCore {
           layer,
           videoSources.byLayer,
           loadedDimensions,
-          record.canvas.width,
-          record.canvas.height,
+          record.target.size.x,
+          record.target.size.y,
         );
         if (!resolved || resolved.kind === 'solid') return null;
         if (resolved.kind === 'bitmap' && 'runtimeSourceKind' in resolved) return null;
@@ -1643,8 +1661,8 @@ class WorkerPresentingRenderHostPortCore {
         layer,
         videoSources.byLayer,
         loadedDimensions,
-        record.canvas.width,
-        record.canvas.height,
+        record.target.size.x,
+        record.target.size.y,
       ),
     });
     const stack = await projectWorkerGpuFrameStack(projectionRequest);

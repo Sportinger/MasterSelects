@@ -6,7 +6,7 @@ import { buildFlockRuntimeStatus } from './flockRuntimeStatus';
 import type { FlockSimulationRuntime } from './FlockSimulationRuntime';
 
 const log = Logger.create('FlockPrecompute');
-const CHUNK_STEPS = 240;
+const CHUNK_STEPS = 4;
 
 export interface FlockPrecomputeJob {
   clipId: string;
@@ -54,6 +54,11 @@ export async function runFlockPrecompute(
   let completed = false;
   let audioChanged = false;
   const inputsCurrent = () => {
+    if (worker.session.isDisposed || registry.latestInputs.get(clipId)?.program?.hashes.behavior !== program.hashes.behavior
+      || registry.latestInputs.get(clipId)?.program?.hashes.topology !== program.hashes.topology
+      || registry.latestInputs.get(clipId)?.keyframes !== input.keyframes) {
+      job.cancelled = true;
+    }
     if (program.assets.audioClips.length
       && registry.host.audioFingerprint(clipId, program.assets.audioClips) !== worker.audioFingerprint) {
       audioChanged = true;
@@ -121,7 +126,7 @@ export async function runFlockPrecompute(
     job.finished = true;
     if (completed) job.progress = 1;
     worker.session.dispose();
-    registry.entries.delete(worker.key);
+    if (registry.entries.get(worker.key) === worker) registry.entries.delete(worker.key);
     registry.host.requestRender();
   }
 }

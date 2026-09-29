@@ -85,11 +85,14 @@ export interface FlockRuntimeBackend {
   clearCache(clipId: string): Promise<void>;
 }
 
+export type FlockRuntimeControls = Pick<FlockRuntimeBackend, 'requestPrecompute' | 'cancelPrecompute' | 'clearCache'>;
+
 type Listener = () => void;
 
 export interface FlockRuntimeStatusSource {
   readonly statuses: readonly FlockRuntimeStatus[];
   readonly capabilities: FlockHostCapabilities | null;
+  readonly controls?: FlockRuntimeControls;
 }
 
 const WORKER_CONTROL_UNAVAILABLE = 'Flock Worker cache and precompute controls are not connected yet.';
@@ -156,13 +159,16 @@ class FlockRuntimeApi {
   }
 
   requestPrecompute(clipId: string, range: { start: number; end: number }, options: { persist?: boolean } = {}): Promise<FlockPrecomputeResult> {
-    if (this.statusSource?.()) return Promise.resolve({ ok: false, message: WORKER_CONTROL_UNAVAILABLE });
+    const external = this.statusSource?.();
+    if (external) return external.controls?.requestPrecompute(clipId, range, { persist: options.persist === true })
+      ?? Promise.resolve({ ok: false, message: WORKER_CONTROL_UNAVAILABLE });
     if (!this.backend) return Promise.resolve({ ok: false, message: 'Flock runtime is not initialized yet (no GPU device).' });
     return this.backend.requestPrecompute(clipId, range, { persist: options.persist === true });
   }
 
   cancelPrecompute(clipId: string): void {
-    if (this.statusSource?.()) return;
+    const external = this.statusSource?.();
+    if (external) { external.controls?.cancelPrecompute(clipId); return; }
     this.backend?.cancelPrecompute(clipId);
   }
 
@@ -173,7 +179,8 @@ class FlockRuntimeApi {
   }
 
   clearCache(clipId: string): Promise<void> {
-    if (this.statusSource?.()) return Promise.reject(new Error(WORKER_CONTROL_UNAVAILABLE));
+    const external = this.statusSource?.();
+    if (external) return external.controls?.clearCache(clipId) ?? Promise.reject(new Error(WORKER_CONTROL_UNAVAILABLE));
     return this.backend?.clearCache(clipId) ?? Promise.resolve();
   }
 

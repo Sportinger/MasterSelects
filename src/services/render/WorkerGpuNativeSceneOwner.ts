@@ -14,9 +14,11 @@ import type { WorkerGpuFrameStackNativeSceneInput } from './workerGpuFrameStackM
 import type { WorkerFlockStatusSnapshot } from './workerFlockStatus';
 import { buildFlockRuntimeStatus } from '../../engine/flock/runtime/flockRuntimeStatus';
 import { WorkerNativeSceneDeadline } from './workerNativeSceneCatchUp';
+import { WorkerFlockControls } from './workerFlockControls';
 import { flockGpuTimings } from '../../engine/flock/gpu/FlockGpuTimings';
 
 interface SceneEntry {
+  compositionId?: string;
   audio: WorkerGpuNativeSceneAudio;
   simulation: FlockSimulationRuntime;
   scene: NativeSceneRuntime;
@@ -40,6 +42,11 @@ export class WorkerGpuNativeSceneOwner {
   private readonly assets: WorkerGpuNativeSceneAssets;
   private readonly scenes = new Map<string, SceneEntry>();
   private disposed = false;
+  readonly controls = new WorkerFlockControls((compositionId, clipId) => {
+    const entries = [...this.scenes.values()].filter(entry => entry.compositionId === compositionId
+      && entry.simulation.latestInputs.has(clipId));
+    return entries.length === 1 ? entries[0].simulation : null;
+  });
   private preparation = { steps: 0, prepareCalls: 0, encodeMs: 0, waitMs: 0, deferredSteps: 0 };
 
   constructor(device: GPUDevice) {
@@ -85,6 +92,7 @@ export class WorkerGpuNativeSceneOwner {
         const key = this.key(frame, binding.layerId), payload = binding.payload;
         active.add(key);
         const entry = await this.acquire(key);
+        entry.compositionId = stack.frame.compositionId;
         guard();
         entry.payload = null;
         entry.preparingPayload = payload;
@@ -130,7 +138,9 @@ export class WorkerGpuNativeSceneOwner {
             const sessionKey = `${layer.clipId}|${layer.flock.consumer}`;
             const beforeStep = entry.simulation.entries.get(sessionKey)?.session.step ?? 0;
             const encodeStarted = performance.now();
-            const plan = entry.simulation.prepare(this.device, encoder, layer, { realtime: false, submissionWindow: 2 });
+            const plan = entry.simulation.prepare(this.device, encoder, layer, {
+              realtime: false, submissionWindow: 1, previewStepBudget: 4,
+            });
             if (!plan) throw new Error(entry.statuses.get(layer.clipId)?.message ?? 'Worker Flock simulation could not prepare');
             this.device.queue.submit([encoder.finish()]);
             const session = entry.simulation.entries.get(sessionKey);
@@ -150,6 +160,9 @@ export class WorkerGpuNativeSceneOwner {
               await this.device.queue.onSubmittedWorkDone();
               this.preparation.waitMs += performance.now() - waitStarted;
               deadline.completed(beforeStep, afterStep);
+              // The asynchronous GPU fence already yields to the browser. A fixed
+              // timer here adds latency to every catch-up block and increases
+              // the backlog required by the next playback frame.
             }
           }
         }
@@ -215,6 +228,7 @@ export class WorkerGpuNativeSceneOwner {
 
   dispose(): void {
     this.disposed = true;
+    this.controls.dispose();
     for (const entry of this.scenes.values()) { entry.scene.dispose(); entry.simulation.dispose(); entry.audio.dispose(); }
     this.scenes.clear(); this.assets.dispose();
   }
