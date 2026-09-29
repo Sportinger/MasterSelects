@@ -1,0 +1,124 @@
+{
+    "packets": [
+        {
+            "stream_index": 0,
+            "pts": 0,
+            "dts": 0,
+            "duration": 1,
+            "size": "16384",
+            "pos": "5657",
+            "flags": "K__"
+        },
+        {
+            "stream_index": 0,
+            "pts": 1,
+            "dts": 1,
+            "duration": 1,
+            "size": "16384",
+            "pos": "22041",
+            "flags": "K__"
+        },
+        {
+            "stream_index": 0,
+            "pts": 2,
+            "dts": 2,
+            "duration": 1,
+            "size": "16384",
+            "pos": "38425",
+            "flags": "K__"
+        },
+        {
+            "stream_index": 0,
+            "pts": 3,
+            "dts": 3,
+            "duration": 1,
+            "size": "16384",
+            "pos": "54809",
+            "flags": "K__"
+        }
+    ],
+    "streams": [
+        {
+            "index": 0,
+            "codec_name": "dnxhd",
+            "codec_long_name": "VC3/DNxHD",
+            "profile": "DNXHR HQ",
+            "codec_type": "video",
+            "codec_tag_string": "[0][0][0][0]",
+            "codec_tag": "0x0000",
+            "width": 256,
+            "height": 128,
+            "coded_width": 256,
+            "coded_height": 128,
+            "has_b_frames": 0,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "2:1",
+            "pix_fmt": "yuv422p",
+            "level": -99,
+            "color_range": "tv",
+            "color_space": "bt709",
+            "field_order": "progressive",
+            "refs": 1,
+            "r_frame_rate": "25/1",
+            "avg_frame_rate": "25/1",
+            "time_base": "1/25",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 4,
+            "duration": "0.160000",
+            "bits_per_raw_sample": "8",
+            "nb_read_packets": "4",
+            "disposition": {
+                "default": 0,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+            },
+            "tags": {
+                "file_package_umid": "0x060A2B340101010501010D00134A59B3529471347D4A59B300529471347D4A01"
+            }
+        }
+    ],
+    "format": {
+        "filename": "C:/Users/admin/Documents/MasterSelects-Public/tests/fixtures/mxf/dnxhr_hq_opatom.mxf",
+        "nb_streams": 1,
+        "nb_programs": 0,
+        "nb_stream_groups": 0,
+        "format_name": "mxf",
+        "format_long_name": "MXF (Material eXchange Format)",
+        "start_time": "0.000000",
+        "duration": "0.160000",
+        "size": "72761",
+        "bit_rate": "3638050",
+        "probe_score": 100,
+        "tags": {
+            "operational_pattern_ul": "060e2b34.04010102.0d010201.10030000",
+            "uid": "adab4424-2f25-4dc7-92ff-000c00000000",
+            "generation_uid": "adab4424-2f25-4dc7-92ff-000c00000001",
+            "company_name": "FFmpeg",
+            "product_name": "OPAtom Muxer",
+            "product_version_num": "62.3.100.0.0",
+            "product_version": "62.3.100",
+            "application_platform": "Lavf (mingw32)",
+            "product_uid": "adab4424-2f25-4dc7-92ff-29bd000c0002",
+            "toolkit_version_num": "62.3.100.0.0",
+            "material_package_umid": "0x060A2B340101010501010D00134A59B3529471347D4A59B300529471347D4A00",
+            "timecode": "00:00:00:00"
+        }
+    }
+}

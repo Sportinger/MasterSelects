@@ -1,0 +1,217 @@
+{
+    "packets": [
+        {
+            "stream_index": 0,
+            "pts": 0,
+            "dts": -1,
+            "duration": 1,
+            "size": "8775",
+            "pos": "7168",
+            "flags": "K__"
+        },
+        {
+            "stream_index": 1,
+            "pts": 0,
+            "dts": 0,
+            "duration": 1920,
+            "size": "11520",
+            "pos": "16384",
+            "flags": "K__"
+        },
+        {
+            "stream_index": 0,
+            "pts": 3,
+            "dts": 0,
+            "duration": 1,
+            "size": "8005",
+            "pos": "28672",
+            "flags": "___"
+        },
+        {
+            "stream_index": 1,
+            "pts": 1920,
+            "dts": 1920,
+            "duration": 1920,
+            "size": "11520",
+            "pos": "36864",
+            "flags": "K__"
+        },
+        {
+            "stream_index": 0,
+            "pts": 1,
+            "dts": 1,
+            "duration": 1,
+            "size": "3268",
+            "pos": "49152",
+            "flags": "___"
+        },
+        {
+            "stream_index": 1,
+            "pts": 3840,
+            "dts": 3840,
+            "duration": 1920,
+            "size": "11520",
+            "pos": "52736",
+            "flags": "K__"
+        },
+        {
+            "stream_index": 0,
+            "pts": 2,
+            "dts": 2,
+            "duration": 1,
+            "size": "3266",
+            "pos": "65024",
+            "flags": "___"
+        },
+        {
+            "stream_index": 1,
+            "pts": 5760,
+            "dts": 5760,
+            "duration": 1920,
+            "size": "11520",
+            "pos": "68608",
+            "flags": "K__"
+        }
+    ],
+    "streams": [
+        {
+            "index": 0,
+            "codec_name": "mpeg2video",
+            "codec_long_name": "MPEG-2 video",
+            "profile": "4:2:2",
+            "codec_type": "video",
+            "codec_tag_string": "[0][0][0][0]",
+            "codec_tag": "0x0000",
+            "width": 256,
+            "height": 128,
+            "coded_width": 0,
+            "coded_height": 0,
+            "has_b_frames": 1,
+            "sample_aspect_ratio": "1:1",
+            "display_aspect_ratio": "2:1",
+            "pix_fmt": "yuv422p",
+            "level": 5,
+            "color_range": "tv",
+            "chroma_location": "topleft",
+            "field_order": "progressive",
+            "refs": 1,
+            "r_frame_rate": "25/1",
+            "avg_frame_rate": "25/1",
+            "time_base": "1/25",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 4,
+            "duration": "0.160000",
+            "nb_read_packets": "4",
+            "extradata_size": 22,
+            "disposition": {
+                "default": 0,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+            },
+            "tags": {
+                "file_package_umid": "0x060A2B340101010501010D00138018A952947134828018A90052947134828001"
+            },
+            "side_data_list": [
+                {
+                    "side_data_type": "CPB properties",
+                    "max_bitrate": 0,
+                    "min_bitrate": 0,
+                    "avg_bitrate": 0,
+                    "buffer_size": 14221312,
+                    "vbv_delay": -1
+                }
+            ]
+        },
+        {
+            "index": 1,
+            "codec_name": "pcm_s24le",
+            "codec_long_name": "PCM signed 24-bit little-endian",
+            "codec_type": "audio",
+            "codec_tag_string": "[0][0][0][0]",
+            "codec_tag": "0x0000",
+            "sample_fmt": "s32",
+            "sample_rate": "48000",
+            "channels": 2,
+            "bits_per_sample": 24,
+            "initial_padding": 0,
+            "r_frame_rate": "0/0",
+            "avg_frame_rate": "0/0",
+            "time_base": "1/48000",
+            "start_pts": 0,
+            "start_time": "0.000000",
+            "duration_ts": 7680,
+            "duration": "0.160000",
+            "bit_rate": "2304000",
+            "bits_per_raw_sample": "24",
+            "nb_read_packets": "4",
+            "disposition": {
+                "default": 0,
+                "dub": 0,
+                "original": 0,
+                "comment": 0,
+                "lyrics": 0,
+                "karaoke": 0,
+                "forced": 0,
+                "hearing_impaired": 0,
+                "visual_impaired": 0,
+                "clean_effects": 0,
+                "attached_pic": 0,
+                "timed_thumbnails": 0,
+                "non_diegetic": 0,
+                "captions": 0,
+                "descriptions": 0,
+                "metadata": 0,
+                "dependent": 0,
+                "still_image": 0,
+                "multilayer": 0
+            },
+            "tags": {
+                "file_package_umid": "0x060A2B340101010501010D00138018A952947134828018A90052947134828001"
+            }
+        }
+    ],
+    "format": {
+        "filename": "C:/Users/admin/Documents/MasterSelects-Public/tests/fixtures/mxf/mpeg2_422_pcm.mxf",
+        "nb_streams": 2,
+        "nb_programs": 0,
+        "nb_stream_groups": 0,
+        "format_name": "mxf",
+        "format_long_name": "MXF (Material eXchange Format)",
+        "start_time": "0.000000",
+        "duration": "0.160000",
+        "size": "81465",
+        "bit_rate": "4073250",
+        "probe_score": 100,
+        "tags": {
+            "operational_pattern_ul": "060e2b34.04010101.0d010201.01010900",
+            "uid": "adab4424-2f25-4dc7-92ff-000c00000000",
+            "generation_uid": "adab4424-2f25-4dc7-92ff-000c00000001",
+            "company_name": "FFmpeg",
+            "product_name": "OP1a Muxer",
+            "product_version_num": "62.3.100.0.0",
+            "product_version": "62.3.100",
+            "application_platform": "Lavf (mingw32)",
+            "product_uid": "adab4424-2f25-4dc7-92ff-29bd000c0002",
+            "toolkit_version_num": "62.3.100.0.0",
+            "material_package_umid": "0x060A2B340101010501010D00138018A952947134828018A90052947134828000",
+            "timecode": "00:00:00:00"
+        }
+    }
+}
