@@ -83,6 +83,14 @@ Project database operations reopen a cached IndexedDB connection if it starts cl
 Persistent-storage permission applies to the browser origin, covering both OPFS and IndexedDB. It does not prevent users or browser settings from clearing site data; FSA project files remain in their selected filesystem folders, but cleared IndexedDB handles must be selected again.
 
 ### Native Helper Backend
+
+The confirmed dev-bridge operation `openLocalProject({ directory })` opens an
+absolute project folder through the Native Helper and hydrates the editor stores.
+The directory must pass the file-access broker. It refuses unsaved changes,
+active exports and concurrent open requests. Supply the folder containing the
+`.msproj`, not the package filename. A missing helper is reported explicitly;
+the tool does not silently import a disconnected browser copy. Project switching
+is outside timeline undo and this operation is not exposed to in-app chat.
 - Uses a local Rust helper (`tools/native-helper`) communicating via WebSocket (port 9876) and HTTP (port 9877)
 - OS folder picker via `NativeHelperClient.pickFolder()`
 - Manual project path fallback via `ProjectFileService` when the helper reports that no native picker is available

@@ -7,7 +7,10 @@ title: "Project Persistence"
 Local project storage with manual saving and interval autosave (five minutes by default), backups, and media relinking. Projects can use a user-selected folder through the **File System Access API**, **browser storage (OPFS)**, or the **Native Helper**.
 
 Development reloads, including Vite refreshes, skip the browser's unsaved-work
-confirmation. Save before refreshing if you need to retain unsaved edits.
+confirmation. When a source edit forces a Vite full reload while an open project
+has unsaved changes and interval save is enabled, the project is saved first
+(bounded to eight seconds); manual-save projects are left untouched. Save before
+refreshing the page yourself if you need to retain unsaved edits.
 Recent-project entries are retained when a cached folder handle is unavailable,
 permission is denied, or a project read fails. The project picker explains which
 recovery action is needed; reconnect the existing folder rather than create a
@@ -82,6 +85,14 @@ Project database operations reopen a cached IndexedDB connection if it starts cl
 Persistent-storage permission applies to the browser origin, covering both OPFS and IndexedDB. It does not prevent users or browser settings from clearing site data; FSA project files remain in their selected filesystem folders, but cleared IndexedDB handles must be selected again.
 
 ### Native Helper Backend
+
+The confirmed dev-bridge operation `openLocalProject({ directory })` opens an
+absolute project folder through the Native Helper and hydrates the editor stores.
+The directory must pass the file-access broker. It refuses unsaved changes,
+active exports and concurrent open requests. Supply the folder containing the
+`.msproj`, not the package filename. A missing helper is reported explicitly;
+the tool does not silently import a disconnected browser copy. Project switching
+is outside timeline undo and this operation is not exposed to in-app chat.
 - Uses a local Rust helper (`tools/native-helper`) communicating via WebSocket (port 9876) and HTTP (port 9877)
 - OS folder picker via `NativeHelperClient.pickFolder()`
 - Manual project path fallback via `ProjectFileService` when the helper reports that no native picker is available
@@ -271,7 +282,7 @@ The `setupAutoSync()` function (in `projectLifecycle.ts`) subscribes to store ch
 - Syncs all store state to project data, then writes `project.json`
 
 ### On Page Unload
-In production, unsaved edits retain the browser leave-page warning. Development reloads show no confirmation. Save explicitly before closing or refreshing when you want to retain edits; unloading does not reintroduce continuous saving.
+In production, unsaved edits retain the browser leave-page warning. Development reloads show no confirmation. Save explicitly before closing or refreshing when you want to retain edits; unloading does not reintroduce continuous saving. The only exception is a Vite full reload caused by a source edit during development: Vite awaits the `vite:beforeFullReload` hook, which saves an open, dirty interval-save project before the page reloads.
 
 The active composition and clip selection (including the focused Properties clip) are remembered in tab-local session storage and restored after a refresh. Selection recovery needs no explicit Save, does not dirty the project, and only selects clips still present in the loaded project. It does not save unsaved timeline edits.
 

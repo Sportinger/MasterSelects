@@ -4,6 +4,18 @@ export const statsToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'openLocalProject',
+      description: 'Open a saved project folder by absolute disk path using the Native Helper and hydrate the editor. Dev bridge only. Refuses unsaved changes or an active export. Project switching is not timeline-undoable. Requires explicit confirmation.',
+      parameters: {
+        type: 'object',
+        properties: { directory: { type: 'string', description: 'Absolute project folder, e.g. C:/Users/admin/Documents/MS/My Project. Not a .msproj file.' } },
+        required: ['directory'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'profileAppInteraction',
       description: 'Measure browser frame gaps and long tasks while the connected dev tab is idle or while a visible canvas is panned in a circle with synthetic middle-pointer input. Dev-bridge debugging only.',
       parameters: {

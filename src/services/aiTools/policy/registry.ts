@@ -1,3 +1,4 @@
+import { APP_CONTROL_POLICIES } from './appControlPolicies';
 // AI Tool Policy Registry
 // Classifies every tool by risk level, read-only status, and caller permissions
 
@@ -212,38 +213,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
 
   // ── SENSITIVE (read-only but debug data) ──────────────────────────────
   ['getStats', bridgeTelemetry()],
-  ['profileAppInteraction', {
-    ...bridgeTelemetry(),
-    readOnly: false,
-    riskLevel: 'medium',
-    requiresConfirmation: true,
-    allowedCallers: ['devBridge', 'console', 'internal'],
-  }],
-  ['clickAppControl', {
-    ...bridgeTelemetry(),
-    readOnly: false,
-    riskLevel: 'medium',
-    requiresConfirmation: true,
-    allowedCallers: ['devBridge', 'console', 'internal'],
-  }],
-  ['fillAppControl', {
-    ...bridgeTelemetry(),
-    readOnly: false,
-    riskLevel: 'medium',
-    requiresConfirmation: true,
-    allowedCallers: ['devBridge', 'console', 'internal'],
-  }],
-  ['probeSameOriginRequest', {
-    ...bridgeTelemetry(),
-    readOnly: false,
-    riskLevel: 'medium',
-    requiresConfirmation: true,
-    allowedCallers: ['devBridge', 'console', 'internal'],
-  }],
-  ['captureAppScreenshot', {
-    ...bridgeTelemetry(),
-    allowedCallers: ['devBridge', 'console', 'internal'],
-  }],
+  ...APP_CONTROL_POLICIES,
   ['getCaptureState', bridgeTelemetry()],
   ['getAudioDiagnostics', bridgeTelemetry()],
   ['getStatsHistory', bridgeTelemetry()],

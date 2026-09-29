@@ -237,6 +237,7 @@ import {
   handlePreviewMediaGeneration,
   handleStartMediaGeneration,
 } from './mediaGeneration';
+import { handleOpenLocalProject } from './localProject';
 import {
   handleListDocuments, handleSearchDocuments, handleReadDocument,
   handleGetDocumentLinks, handleCreateProjectDocument, handleEditDocumentBlock,
@@ -276,6 +277,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   addDocumentMediaLink: handleAddDocumentMediaLink,
   profileAppInteraction: handleProfileAppInteraction,
   clickAppControl: handleClickAppControl,
+  openLocalProject: handleOpenLocalProject,
   fillAppControl: handleFillAppControl,
   probeSameOriginRequest: handleProbeSameOriginRequest,
   inspectMediaGenerationModel: handleInspectMediaGenerationModel,
