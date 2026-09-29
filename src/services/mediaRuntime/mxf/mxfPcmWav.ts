@@ -94,17 +94,29 @@ function wavHeader(sampleRate: number, channels: number, sampleFrames: number): 
   return buffer;
 }
 
-export async function buildMxfPcmWavBlob(
-  file: File,
-  options: { onProgress?: (fraction: number) => void; isCancelled?: () => boolean } = {},
-): Promise<Blob> {
+export interface MxfPcmWavOptions {
+  onProgress?: (fraction: number) => void;
+  isCancelled?: () => boolean;
+  /** Stop after this many edit units (benchmarks). */
+  maxEditUnits?: number;
+}
+
+export async function buildMxfPcmWavBlob(file: File, options: MxfPcmWavOptions = {}): Promise<Blob> {
   const source = await MxfPacketSource.create(file);
   try {
+    return await buildMxfPcmWavBlobFromSource(source, options);
+  } finally {
+    source.dispose();
+  }
+}
+
+export async function buildMxfPcmWavBlobFromSource(source: MxfPacketSource, options: MxfPcmWavOptions = {}): Promise<Blob> {
+  {
     const mapping = pickChannels(source.mxf.audio);
     if (!mapping) throw new MxfAudioUnavailableError('MXF file has no frame-wrapped PCM audio track');
     const sampleRate = source.mxf.audio[0]!.sampleRate || 48_000;
     const fps = source.metadata.fps;
-    const frameCount = source.frameCount;
+    const frameCount = Math.min(source.frameCount, options.maxEditUnits ?? Number.POSITIVE_INFINITY);
     const blobs: Blob[] = [];
     let parts: ArrayBuffer[] = [];
     let partBytes = 0;
@@ -174,7 +186,5 @@ export async function buildMxfPcmWavBlob(
     flush();
     foldParts();
     return new Blob([wavHeader(sampleRate, 2, totalFrames), ...blobs], { type: 'audio/wav' });
-  } finally {
-    source.dispose();
   }
 }

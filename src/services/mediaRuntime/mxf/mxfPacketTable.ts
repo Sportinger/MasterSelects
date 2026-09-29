@@ -165,6 +165,17 @@ export class MxfPacketTable {
   async contentPackageSpan(storedIndex: number): Promise<{ afterPicture: number; end: number } | null> {
     if (this.clipValueOffset !== null) return null;
     const index = this.clampIndex(storedIndex);
+    // Sliced index (e.g. Sony XAVC): the sound elements' offset is known without touching
+    // the picture element, so each edit unit costs exactly one read.
+    const slice = this.scannedUnits ? undefined : this.entryAt(index)?.sliceOffsets[0];
+    if (slice !== undefined && slice > 0) {
+      const packageStart = this.fileOffsetForStream(this.streamOffset(index));
+      const afterPicture = packageStart + slice;
+      const end = index + 1 < this.frameCount
+        ? this.fileOffsetForStream(this.streamOffset(index + 1))
+        : Math.min(this.source.size, afterPicture + LAST_PACKAGE_TAIL_BYTES);
+      return { afterPicture, end: Math.max(afterPicture, end) };
+    }
     const picture = await this.resolve(index);
     const pictureEnd = picture.valueOffset + picture.size;
     let end: number;
@@ -175,11 +186,7 @@ export class MxfPacketTable {
     } else {
       end = Math.min(this.source.size, pictureEnd + LAST_PACKAGE_TAIL_BYTES);
     }
-    const sliceOffset = this.scannedUnits ? undefined : this.entryAt(index)?.sliceOffsets[0];
-    const afterPicture = sliceOffset !== undefined && sliceOffset > 0
-      ? this.fileOffsetForStream(this.streamOffset(index) + sliceOffset)
-      : pictureEnd;
-    return { afterPicture, end: Math.max(afterPicture, end) };
+    return { afterPicture: pictureEnd, end: Math.max(pictureEnd, end) };
   }
 
   async resolve(storedIndex: number): Promise<MxfResolvedUnit> {

@@ -73,6 +73,43 @@ function isDecodeMissingAudio(error: unknown): boolean {
     && error.cause.name === 'EncodingError';
 }
 
+/**
+ * Builds the WAV for MXF sources outside the project write batch.
+ * Returns the WAV, null for non-MXF sources, or 'handled' when a final status was reported.
+ */
+async function prebuildMxfAudioProxy(
+  mediaFile: MediaFile,
+  storageKey: string,
+  callbacks: AudioProxyGenerationCallbacks,
+): Promise<Blob | null | 'handled'> {
+  if (projectFileService.isProjectOpen() && !callbacks.force
+    && await projectFileService.hasProxyAudio(storageKey)) {
+    return null; // the batch path reports 'ready'
+  }
+  const sourceFile = await resolveSourceFile(mediaFile);
+  if (!sourceFile || !await isMxfFile(sourceFile)) return null;
+  callbacks.onUpdate?.({ status: 'generating', progress: 2, storageKey });
+  try {
+    // Neither Mediabunny nor decodeAudioData read MXF: stream the PCM elements straight to WAV.
+    return await buildMxfPcmWavBlob(sourceFile, {
+      onProgress: (fraction) => callbacks.onUpdate?.({
+        status: 'generating',
+        progress: Math.round(2 + fraction * 86),
+        storageKey,
+      }),
+    });
+  } catch (error) {
+    if (error instanceof MxfAudioUnavailableError) {
+      callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
+      return 'handled';
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
+    log.warn('MXF audio proxy failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+    return 'handled';
+  }
+}
+
 export async function ensureAudioProxyForMediaFile(
   mediaFile: MediaFile,
   callbacks: AudioProxyGenerationCallbacks = {},
@@ -89,7 +126,15 @@ export async function ensureAudioProxyForMediaFile(
   }
 
   let readyUpdate: AudioProxyGenerationUpdate | undefined;
-  const job = withProjectArtifactWriteBatch(async () => {
+  const job = (async () => {
+    // MXF PCM extraction reads the whole camera file (minutes for long clips). It runs
+    // before the artifact write batch so project saves are not held back meanwhile.
+    const prebuilt = await prebuildMxfAudioProxy(mediaFile, storageKey, callbacks);
+    if (prebuilt === 'handled') return;
+    await withProjectArtifactWriteBatch(() => generateAudioProxyInBatch(prebuilt));
+  })();
+
+  async function generateAudioProxyInBatch(prebuiltWav: Blob | null): Promise<void> {
     callbacks.onUpdate?.({ status: 'generating', progress: 2, storageKey });
 
     if (projectFileService.isProjectOpen() && !callbacks.force) {
@@ -113,28 +158,7 @@ export async function ensureAudioProxyForMediaFile(
 
     callbacks.onUpdate?.({ status: 'generating', progress: 18, storageKey });
 
-    let wavBlob: Blob | null = null;
-    if (await isMxfFile(sourceFile)) {
-      // Neither Mediabunny nor decodeAudioData read MXF: stream the PCM elements straight to WAV.
-      try {
-        wavBlob = await buildMxfPcmWavBlob(sourceFile, {
-          onProgress: (fraction) => callbacks.onUpdate?.({
-            status: 'generating',
-            progress: Math.round(18 + fraction * 70),
-            storageKey,
-          }),
-        });
-      } catch (error) {
-        if (error instanceof MxfAudioUnavailableError) {
-          callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
-          return;
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
-        log.warn('MXF audio proxy failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
-        return;
-      }
-    }
+    let wavBlob: Blob | null = prebuiltWav;
 
     if (!wavBlob) {
       let audioBuffer: AudioBuffer;
@@ -212,7 +236,9 @@ export async function ensureAudioProxyForMediaFile(
       storageKey,
       url: URL.createObjectURL(wavBlob),
     };
-  }).then(() => {
+  }
+
+  const settled = job.then(() => {
     // Ready means the WAV sidecar or temporary URL is available. Concurrent or
     // parent batches may still be staging package artifacts for a later save.
     if (readyUpdate) callbacks.onUpdate?.(readyUpdate);
@@ -227,9 +253,9 @@ export async function ensureAudioProxyForMediaFile(
     throw error;
   });
 
-  activeJobs.set(mediaFile.id, job);
+  activeJobs.set(mediaFile.id, settled);
   try {
-    await job;
+    await settled;
   } finally {
     activeJobs.delete(mediaFile.id);
   }
