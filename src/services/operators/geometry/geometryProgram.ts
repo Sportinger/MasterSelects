@@ -2,7 +2,7 @@ import type { BoundOperatorNode, EffectOperatorGraph, OperatorValue } from '../.
 import { getEffectOperator } from '../operatorRegistry';
 import { applyOperatorGroupBypasses } from '../operatorGroupBypass';
 import { lowerPointwiseNode, pointwiseLoweringFor, type PointwiseInstruction } from '../fields/pointwiseLowering';
-import type { PointwiseValueType } from '../fields/pointwiseOperations';
+import { pointwiseOperation, type PointwiseValueType } from '../fields/pointwiseOperations';
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { compileClothSpec, type ClothSpec } from './clothProgram';
@@ -43,6 +43,38 @@ const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'ge
 /** Every warp crosses every weft; each thread has `resolution` points per crossing plus its end. */
 export const weavePatternPointCount = (stage: { warps: number; wefts: number; resolution: number }) =>
   stage.warps * (stage.wefts * stage.resolution + 1) + stage.wefts * (stage.warps * stage.resolution + 1);
+const constant = (nodeId: string, value: number): PointwiseInstruction => ({ nodeId, operation: 'constant', type: 'scalar', inputs: [], value });
+
+/**
+ * Scalar operations whose inputs are all constants are evaluated once while lowering. A field
+ * driven by a clock that has settled (for example min(time / duration, 1)) then compiles to the
+ * same program every frame, and time-independent curves stay cached.
+ */
+function foldConstant(instruction: PointwiseInstruction, instructions: readonly PointwiseInstruction[]): PointwiseInstruction {
+  if (instruction.type !== 'scalar' || !instruction.inputs.length || !instruction.inputs.every(input => instructions[input].operation === 'constant')) return instruction;
+  const operation = pointwiseOperation(instruction.operation);
+  const value = operation?.evaluate(instruction.inputs.map(input => instructions[input].value ?? 0), instruction.value);
+  return typeof value === 'number' && Number.isFinite(value) ? constant(instruction.nodeId, value) : instruction;
+}
+
+/** Drops instructions the output no longer reads (folded operands) and renumbers the rest in order. */
+function pruneField(field: GeometryField): GeometryField {
+  const used = new Set<number>(), pending = [field.output];
+  while (pending.length) {
+    const index = pending.pop()!;
+    if (used.has(index)) continue;
+    used.add(index);
+    pending.push(...field.instructions[index].inputs);
+  }
+  const remap = new Map<number, number>(), instructions: PointwiseInstruction[] = [];
+  field.instructions.forEach((instruction, index) => {
+    if (!used.has(index)) return;
+    remap.set(index, instructions.length);
+    instructions.push({ ...instruction, inputs: instruction.inputs.map(input => remap.get(input)!) });
+  });
+  return { instructions, output: remap.get(field.output)! };
+}
+
 const axisIndex = (value: OperatorValue): CurveAxis => value === 'x' ? 0 : value === 'y' ? 1 : 2;
 const finite = (value: OperatorValue, label: string) => {
   const number = Number(value);
@@ -162,7 +194,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     const linked = sourceOf(owner, input);
     if (!linked) return undefined;
     const instructions: PointwiseInstruction[] = [], registers = new Map<string, number>(), visiting = new Set<string>();
-    const emit = (instruction: PointwiseInstruction) => instructions.push(instruction) - 1;
+    const emit = (instruction: PointwiseInstruction) => instructions.push(foldConstant(instruction, instructions)) - 1;
     const visit = (node: BoundOperatorNode, output: string): number => {
       const key = `${node.id}:${output}`, cached = registers.get(key);
       if (cached !== undefined) return cached;
@@ -175,7 +207,8 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         register = lowerPointwiseNode(rule, node, id => {
           const linked = sourceOf(node, id), fallback = rule.defaults?.[id];
           if (linked || !fallback) { const source = linked ?? required(node, id); return visit(source.node, source.output); }
-          return 'context' in fallback ? emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] }) : literal(node, fallback.parameter);
+          if ('context' in fallback) return emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
+          return 'constant' in fallback ? emit(constant(node.id, fallback.constant)) : literal(node, fallback.parameter);
         }, emit, spec => {
           const value = read(node, spec.parameter);
           const index = spec.options ? spec.options.indexOf(String(value)) : Math.round(finite(value, spec.parameter));
@@ -186,6 +219,8 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         if (node.operator === 'values.integer') register = emit({ nodeId: node.id, operation: 'trunc-scalar', type: 'scalar', inputs: [register] });
       } else if (node.operator === 'image.timeline-time') {
         register = emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: Number.isFinite(context.time) ? context.time! : 0 });
+      } else if (node.operator === 'geometry.clip-time') {
+        register = emit(constant(node.id, Number.isFinite(context.simulationTime) ? context.simulationTime! : 0));
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {
@@ -203,6 +238,6 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     }
     const output = visit(linked.node, linked.output);
     if (instructions[output].type !== type) throw new Error(`${getEffectOperator(owner.operator)?.label}: ${input} needs a ${type === 'vec3' ? 'Vector 3' : 'Number'}.`);
-    return { instructions, output };
+    return pruneField({ instructions, output });
   }
 }

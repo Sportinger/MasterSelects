@@ -11,8 +11,18 @@ const UNIFORM_FLOATS = 76;
 export const FLYAWAY_CHANNELS = 4;
 /** Evaluated curve buffers kept across frames and render targets, least recently used first. */
 const CACHE_LIMIT = 24;
-/** Fixed key light until strands consume scene lights: upper left, toward the camera. */
-const KEY_LIGHT = normalize3([-0.4, 0.7, 0.6]);
+/**
+ * The shared scene is displayed with +Y down (like composition pixels) and +Z toward the camera.
+ * Geometry graphs are authored Y-up (gravity pulls to -Y, the top edge is +Y), so strands mirror
+ * their local Y into the scene.
+ */
+export function strandSceneMatrix(world: Float32Array): Float32Array {
+  const matrix = Float32Array.from(world);
+  for (let row = 4; row < 8; row++) matrix[row] = -matrix[row];
+  return matrix;
+}
+/** Fixed key light in scene space until strands consume scene lights: upper left, toward the camera. */
+const KEY_LIGHT = normalize3([-0.4, -0.7, 0.6]);
 const AMBIENT = 0.35;
 
 interface StrandBuffers { signature: string; positions: GPUBuffer; segments: GPUBuffer; segmentCount: number }
@@ -141,7 +151,7 @@ export class StrandPass {
     for (const { layer, buffers } of prepared) {
       const render = layer.strands.program.render!;
       const data = new Float32Array(UNIFORM_FLOATS);
-      data.set(layer.worldMatrix, 0);
+      data.set(strandSceneMatrix(layer.worldMatrix), 0);
       data.set(camera.viewMatrix, 16);
       data.set(camera.projectionMatrix, 32);
       data.set(cameraPosition, 48);

@@ -8,7 +8,8 @@ import { addableEffectOperators } from '../../src/services/operators/effectGraph
 import { exposedGraphValues } from '../../src/services/operators/exposedGraphValues';
 
 const radiusAt = (reveal: number) => {
-  const program = compileGeometryGraph(createDefaultWeaveGraph(), geometryParameterReader({ reveal_value: reveal }));
+  // Long after the weave-in has finished, only the reveal shapes the radius.
+  const program = compileGeometryGraph(createDefaultWeaveGraph(), geometryParameterReader({ reveal_value: reveal }), undefined, { simulationTime: 100 });
   expect(isGeometryProgram(structuredClone(program))).toBe(true);
   return evaluateGeometryProgram(program);
 };
@@ -39,7 +40,8 @@ describe('Weave reveal fields', () => {
 
   it('grows the default weave from its center with a swollen front', () => {
     expect(validateWeaveGraph(createDefaultWeaveGraph())).toEqual([]);
-    expect(exposedGraphValues(createDefaultWeaveGraph())).toMatchObject([{ nodeId: 'reveal', key: 'reveal_value', label: 'Reveal', min: 0, max: 1 }]);
+    expect(exposedGraphValues(createDefaultWeaveGraph())).toMatchObject([{ nodeId: 'reveal', key: 'reveal_value', label: 'Reveal', min: 0, max: 1 },
+      { nodeId: 'weave', key: 'weave_value', label: 'Weave Speed' }]);
     const full = radiusAt(1).radius!;
     expect(Math.min(...full)).toBe(1);
     const hidden = radiusAt(0).radius!;
@@ -63,8 +65,12 @@ describe('Weave reveal fields', () => {
     graph.nodes.push({ id: 'clock', operator: 'image.timeline-time', bindings: {}, operatorVersion: 1 });
     graph.edges = graph.edges.filter(edge => edge.id !== 'reveal-value-reveal-radius-a');
     graph.edges.push({ id: 'clock-radius', from: 'clock', output: 'value', to: 'reveal-radius', input: 'a' });
-    const program = compileGeometryGraph(graph, geometryParameterReader({}), undefined, { time: 0.25 });
-    const shape = program.stages.find(stage => stage.kind === 'yarn-profile');
-    expect(shape && 'radius' in shape && shape.radius?.instructions.some(item => item.operation === 'constant' && item.value === 0.25)).toBe(true);
+    const radius = (time: number) => {
+      const shape = compileGeometryGraph(graph, geometryParameterReader({}), undefined, { time, simulationTime: 100 }).stages.find(stage => stage.kind === 'yarn-profile');
+      // Time x reach folds into one constant: the sphere size.
+      return shape && 'radius' in shape ? shape.radius!.instructions.find(item => item.nodeId === 'reveal-radius')?.value : undefined;
+    };
+    expect(radius(0.25)).toBeCloseTo(0.25 * 1.7, 9);
+    expect(radius(0.5)).toBeCloseTo(0.5 * 1.7, 9);
   });
 });

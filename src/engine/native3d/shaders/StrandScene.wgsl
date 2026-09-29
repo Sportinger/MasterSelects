@@ -140,7 +140,18 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let side = select(-1.0, 1.0, corner == 2u || corner == 3u || corner == 5u);
   let p = select(a, b, atB);
   // A yarn radius scale of zero hides the strand: fibers thin out with the radius they grow from.
-  let widthScale = clamp(points[select(first, first + 1u, atB) * 3u + 1u].w, 0.0, 1.0);
+  let scaleA = clamp(points[first * 3u + 1u].w, 0.0, 1.0);
+  let scaleB = clamp(points[(first + 1u) * 3u + 1u].w, 0.0, 1.0);
+  let widthScale = select(scaleA, scaleB, atB);
+  let viewProjection = u.projection * u.view;
+  let clipA = viewProjection * vec4f(a, 1.0);
+  let clipB = viewProjection * vec4f(b, 1.0);
+  // Visibility is decided per segment so all six vertices agree: a segment hidden at one end tapers
+  // to zero coverage instead of stretching a triangle toward the parking position. Segments that
+  // reach behind the near plane are skipped rather than clipped.
+  if (max(scaleA, scaleB) <= 0.0 || u.params.w <= 0.0 || clipA.w <= 1e-5 || clipB.w <= 1e-5) {
+    return out;
+  }
   let span = b - a;
   let spanTangent = select(vec3f(1.0, 0.0, 0.0), normalize(span), dot(span, span) > 1e-18);
   let joint = select(b - before, after - a, atB);
@@ -149,23 +160,15 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   out.across = side;
   out.tangent = tangent;
   out.toCamera = u.camera.xyz - p;
-  let viewProjection = u.projection * u.view;
-  let clip = viewProjection * vec4f(p, 1.0);
+  let clip = select(clipA, clipB, atB);
   let ahead = viewProjection * vec4f(p + tangent * 1e-3, 1.0);
-  // Points behind the near plane are skipped rather than clipped.
-  if (clip.w <= 1e-5 || ahead.w <= 1e-5) {
-    return out;
-  }
   let toCamera = normalize(u.camera.xyz - p);
   let widthAxis = cross(tangent, toCamera);
   let widthDirection = select(vec3f(0.0, 1.0, 0.0), normalize(widthAxis), dot(widthAxis, widthAxis) > 1e-12);
   let edge = viewProjection * vec4f(p + widthDirection * u.params.x * widthScale, 1.0);
   let pixels = select(0.0, length(toPixels(edge) - toPixels(clip)), edge.w > 1e-5);
   out.coverage = clamp(pixels, 0.0, 1.0) * u.params.w;
-  if (out.coverage <= 1e-3) {
-    return out;
-  }
-  let screen = toPixels(ahead) - toPixels(clip);
+  let screen = select(toPixels(clipB) - toPixels(clipA), toPixels(ahead) - toPixels(clip), ahead.w > 1e-5);
   let direction = select(vec2f(1.0, 0.0), normalize(screen), dot(screen, screen) > 1e-12);
   let normal = vec2f(-direction.y, direction.x);
   let offset = normal * side * max(pixels, 1.0) * 0.5 / (0.5 * u.params.yz);

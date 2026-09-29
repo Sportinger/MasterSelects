@@ -34,6 +34,8 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
     { bypass: 'passthrough' }),
   operator('geometry.position', 'Position', 'The current position of each curve point, evaluated where a modifier reads it.',
     [], [{ id: 'position', label: 'Position', type: 'vec3' }]),
+  operator('geometry.clip-time', 'Clip Time', 'Seconds of source time of the clip that hosts the effect: 0 where the clip starts, continuing across splits. Cloth runs on the same clock.',
+    [], [{ id: 'value', label: 'Seconds', type: 'number' }]),
   operator('geometry.curve-info', 'Curve Info', 'Per-point curve data: Curve Param runs from 0 to 1 along each curve; indices count from 0.',
     [], [{ id: 'u', label: 'Curve Param', type: 'number' }, { id: 'point', label: 'Point Index', type: 'number' },
       { id: 'strand', label: 'Strand Index', type: 'number' }, { id: 'points', label: 'Point Count', type: 'number' },

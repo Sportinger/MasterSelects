@@ -13,12 +13,12 @@ export interface PointwiseLowering {
   /** Input returned unchanged when the node is bypassed; it is evaluated first. Omitted: bypass has no effect. */
   bypass?: string;
   value?: number;
-  /** Inputs that may stay unconnected: they read a node parameter or the evaluated element's position. */
+  /** Inputs that may stay unconnected: they read a node parameter, the evaluated element's position or a neutral constant. */
   defaults?: Readonly<Record<string, PointwiseDefault>>;
   /** Node parameter that supplies the instruction value (a choice index or an integer count). */
   valueParameter?: { parameter: string; options?: readonly string[] };
 }
-export type PointwiseDefault = { parameter: string } | { context: 'position' };
+export type PointwiseDefault = { parameter: string } | { context: 'position' } | { constant: number };
 const parameterDefaults = (...ids: string[]) => Object.fromEntries(ids.map(id => [id, { parameter: id }])) as Record<string, PointwiseDefault>;
 type LoweringRule = PointwiseLowering | ((output: string) => PointwiseLowering);
 
@@ -26,6 +26,9 @@ const unary = (operation: string, type: PointwiseValueType, input = 'value', byp
   ({ operation, type, inputs: [input], ...(bypass ? { bypass } : {}) });
 const passUnary = (operation: string, type: PointwiseValueType = 'scalar') => unary(operation, type, 'value', 'value');
 const binaryA = (operation: string, type: PointwiseValueType = 'scalar'): PointwiseLowering => ({ operation, type, inputs: ['a', 'b'], bypass: 'a' });
+/** Add and Multiply leave a value unchanged through an unconnected operand (0 and 1). */
+const identity = (operation: string, value: number): PointwiseLowering =>
+  ({ ...binaryA(operation), defaults: { a: { constant: value }, b: { constant: value } } });
 const clampRule = (operation: string, type: PointwiseValueType): PointwiseLowering => ({ operation, type, inputs: ['value', 'min', 'max'], bypass: 'value' });
 const mixB = (operation: string, type: PointwiseValueType): PointwiseLowering => ({ operation, type, inputs: ['a', 'b', 't'], bypass: 'b' });
 const splitComponent = (output: string): PointwiseLowering => {
@@ -37,7 +40,7 @@ const combine = (size: 2 | 3 | 4): PointwiseLowering => ({ operation: 'combine-v
 
 const RULES: Readonly<Record<string, LoweringRule>> = {
   'math.subtract.scalar': { operation: 'subtract', type: 'scalar', inputs: ['a', 'b'], bypass: 'b' },
-  'math.add.scalar': binaryA('add-scalar'), 'math.multiply.scalar': binaryA('multiply-scalar'), 'math.divide-ieee.scalar': binaryA('divide-ieee-scalar'),
+  'math.add.scalar': identity('add-scalar', 0), 'math.multiply.scalar': identity('multiply-scalar', 1), 'math.divide-ieee.scalar': binaryA('divide-ieee-scalar'),
   'math.reciprocal.scalar': passUnary('reciprocal-scalar'), 'math.exp2.scalar': passUnary('exp2-scalar'), 'math.fract.scalar': passUnary('fract-scalar'),
   'math.floor.scalar': passUnary('floor-scalar'), 'math.round-even.scalar': passUnary('round-even-scalar'),
   'math.step.scalar': { operation: 'step-scalar', type: 'scalar', inputs: ['edge', 'value'] },

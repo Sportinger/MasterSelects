@@ -379,6 +379,7 @@ node is one node in every graph rather than a per-domain copy.
 | Strand Array | Curves → curves repeated Count times along Axis |
 | Set Position | Curves + optional Position / Offset (Vector 3, per point) → curves |
 | Position, Curve Info | Per-point position, Curve Param (0–1), point/strand index and counts |
+| Clip Time | Seconds of the host clip's source time (0 at its start, continuing across splits); the clock cloth runs on |
 | Yarn Profile | Curves (+ optional per-point Radius Scale) → curves drawn as plies and fibers twisted along curve length |
 | Flyaways | Curves → curves whose Yarn Profile lets single fibers stray: loops arc off and return, free ends stick out (Density, Length, Lift, Free Ends, Seed) |
 | Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll) |
@@ -387,8 +388,8 @@ node is one node in every graph rather than a per-domain copy.
 | Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color) |
 
 The default Weave graph is Weave Pattern → Yarn Profile → Flyaways → Surface Bind →
-Strand Render: a plain weave of fuzzy three-ply yarns on a cloth that billows in the
-wind. Weave Pattern is the only weave-specific node; crimp is
+Strand Render: a plain weave of fuzzy three-ply yarns that weaves itself in over the
+first four seconds of the clip and then billows in the wind. Weave Pattern is the only weave-specific node; crimp is
 analytic (cosine transitions between crossings, with the draft deciding which
 thread lies in front). Yarn Profile is general: plies circle the curve and fibers
 circle each ply, with both angles driven by arc length along rotation-minimizing
@@ -410,6 +411,21 @@ from.
 three-key *Ramp* whose front key swells the yarns before they settle. The group
 *Reveal by Shape* exposes **Reveal** (0–1) in the Effects tab; keyframe it to
 animate the growth.
+
+**Weave In.** The group grows every thread along its length in turn, with a swollen
+tip. Warps rise from the bottom edge from left to right, then the wefts weave in
+row by row, like a loom. It uses only general nodes: *Clip Time* × **Weave Speed**
+(exposed, keyframeable, 1 = four seconds) gives the progress, capped at 1 by Min.
+Curve Info's strand index staggers the start, and a Ramp of (progress − Curve
+Param) shapes the tip. Its result multiplies the reveal radius. Bypass the group
+for a finished weave from the first frame.
+
+Add and Multiply read 0 and 1 through an unconnected operand in curve graphs. A
+bypassed field group that feeds one of them therefore leaves the other factor
+unchanged. Scalar operations on constants are folded while lowering, and unused
+instructions are dropped. A clock that has settled, such as the capped weave
+progress, therefore compiles to the same program every frame, and the
+time-independent curves stay cached.
 
 **Wind Cloth.** *Cloth Sheet* simulates a regular grid with XPBD: a fixed number of
 substeps per step, one pass per substep, stretch/shear/bend links and double
@@ -455,7 +471,11 @@ until the program changes and expands every segment into a camera-facing ribbon
 in the vertex shader. Width is in world units and follows the layer scale. A
 strand narrower than one pixel keeps one pixel of geometry with a deterministic
 hashed coverage instead of blending, so dense strands need no sorting and export
-reproduces the preview; width 0 draws nothing. Shading is Kajiya-Kay (tangent
+reproduces the preview; width 0 draws nothing. Visibility is decided per segment,
+so a thread that ends inside a segment tapers to nothing instead of stretching a
+sliver across the frame. Curve graphs are authored Y-up: +Y is the top edge and the
+opposite of gravity, and +Z faces the viewer. The shared scene draws +Y downward like
+composition pixels, so the strand pass mirrors local Y into it. Shading is Kajiya-Kay (tangent
 based) with a fixed key light and ambient term; scene lights, shadows and a
 dedicated generator clip are not connected yet. The cloth simulation runs on the
 CPU of the rendering thread (the Worker render host in the default mode); a long

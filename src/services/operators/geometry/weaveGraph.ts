@@ -103,31 +103,60 @@ const REVEAL_NODES: Spec[] = [
   ['reveal-edge', 'math.add.scalar', 780, 460],
   ['reveal-ramp', 'field.ramp', 1040, 460, { x0: -0.12, y0: 1, x1: 0, y1: 1.6, x2: 0.1, y2: 0 }],
 ];
+/**
+ * Weave In: every thread grows along its length in turn, warps first, with a swollen tip. Progress
+ * is min(clip time × Weave Speed / 4 s, 1); thread k of n starts at progress 1.5·k/n / 2.6 and is
+ * complete before progress 1, so a finished weave compiles to the same program every frame.
+ */
+const WEAVE_IN_NODES: Spec[] = [
+  ['weave-clock', 'geometry.clip-time', 0, 860], ['weave', 'values.number', 0, 1000], ['weave-rate', 'values.number', 0, 1140, { value: 0.25 }],
+  ['weave-scaled', 'math.multiply.scalar', 260, 900], ['weave-progress-raw', 'math.multiply.scalar', 520, 900],
+  ['weave-one', 'values.number', 520, 1060, { value: 1 }], ['weave-progress', 'math.min.scalar', 780, 900],
+  ['weave-spread', 'values.number', 780, 1060, { value: 2.6 }], ['weave-front', 'math.multiply.scalar', 1040, 900],
+  ['weave-info', 'geometry.curve-info', 260, 1240], ['weave-order', 'math.divide-ieee.scalar', 520, 1240],
+  ['weave-lag', 'values.number', 520, 1380, { value: 1.5 }], ['weave-delay', 'math.multiply.scalar', 780, 1240],
+  ['weave-local', 'math.subtract.scalar', 1300, 1000], ['weave-along', 'math.subtract.scalar', 1560, 1000],
+  ['weave-tip', 'field.ramp', 1820, 1000, { x0: -0.04, y0: 0, x1: 0, y1: 1.4, x2: 0.06, y2: 1 }],
+  ['weave-mix', 'math.multiply.scalar', 1080, 700],
+];
 const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: string]> = [
   ['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'flyaways', 'curves'], ['flyaways', 'curves', 'bind', 'curves'],
   ['bind', 'curves', 'render', 'curves'], ['render', 'scene', 'output', 'scene'],
   ['wind', 'force', 'cloth', 'forces'], ['swirl', 'force', 'cloth', 'forces'], ['cloth', 'surface', 'bind', 'surface'],
   ['reveal', 'value', 'reveal-radius', 'a'], ['reach', 'value', 'reveal-radius', 'b'], ['reveal-radius', 'value', 'reveal-shape', 'size'],
   ['reveal-shape', 'value', 'reveal-edge', 'a'], ['reveal-noise', 'value', 'reveal-edge', 'b'], ['reveal-edge', 'value', 'reveal-ramp', 'value'],
-  ['reveal-ramp', 'value', 'yarn', 'radius'],
+  ['reveal-ramp', 'value', 'weave-mix', 'a'], ['weave-tip', 'value', 'weave-mix', 'b'], ['weave-mix', 'value', 'yarn', 'radius'],
+  ['weave-clock', 'value', 'weave-scaled', 'a'], ['weave', 'value', 'weave-scaled', 'b'],
+  ['weave-scaled', 'value', 'weave-progress-raw', 'a'], ['weave-rate', 'value', 'weave-progress-raw', 'b'],
+  ['weave-progress-raw', 'value', 'weave-progress', 'a'], ['weave-one', 'value', 'weave-progress', 'b'],
+  ['weave-progress', 'value', 'weave-front', 'a'], ['weave-spread', 'value', 'weave-front', 'b'],
+  ['weave-info', 'strand', 'weave-order', 'a'], ['weave-info', 'strands', 'weave-order', 'b'],
+  ['weave-order', 'value', 'weave-delay', 'a'], ['weave-lag', 'value', 'weave-delay', 'b'],
+  ['weave-front', 'value', 'weave-local', 'a'], ['weave-delay', 'value', 'weave-local', 'b'],
+  ['weave-local', 'value', 'weave-along', 'a'], ['weave-info', 'u', 'weave-along', 'b'], ['weave-along', 'value', 'weave-tip', 'value'],
 ];
 
 /**
- * Default Weave graph: a plain-woven sheet of fuzzy three-ply yarns that grows from its center and
- * billows in the wind. The exposed Reveal value (1 = fully grown) is keyframeable in the Effects
- * tab; bypassing Yarn draws the bare curves, Reveal by Shape the full sheet, Wind Cloth a flat one.
+ * Default Weave graph: a plain-woven sheet of fuzzy three-ply yarns whose threads weave in over the
+ * first four seconds of the clip and billow in the wind. Reveal (1 = fully grown) and Weave Speed are
+ * keyframeable in the Effects tab; bypassing Weave In shows the finished weave at once, Yarn the bare
+ * curves, Reveal by Shape the full sheet and Wind Cloth a flat one.
  */
 export function createDefaultWeaveGraph(): EffectOperatorGraph {
-  const specs = [...FABRIC_NODES, ...REVEAL_NODES, ...CLOTH_NODES];
+  const specs = [...FABRIC_NODES, ...REVEAL_NODES, ...WEAVE_IN_NODES, ...CLOTH_NODES];
   const nodes: BoundOperatorNode[] = specs.map(([id, operator, , , constants]) =>
     ({ id, operator, operatorVersion: 1, bindings: {}, ...(constants ? { constants: { ...constants } } : {}) }));
   const reveal = nodes.find(node => node.id === 'reveal')!;
   reveal.bindings = { value: 'reveal_value' };
   reveal.exposed = { label: 'Reveal', min: 0, max: 1, step: 0.01 };
+  const weave = nodes.find(node => node.id === 'weave')!;
+  weave.bindings = { value: 'weave_value' };
+  weave.exposed = { label: 'Weave Speed', min: 0, max: 10, step: 0.05 };
   return { version: 1, schemaVersion: 1, domain: 'geometry', nodes,
     edges: FABRIC_LINKS.map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
     layout: Object.fromEntries(specs.map(([id, , x, y]) => [id, { x, y }])),
     groups: [{ id: 'reveal-by-shape', label: 'Reveal by Shape', color: '#5f9ea0', nodeIds: REVEAL_NODES.map(([id]) => id) },
+      { id: 'weave-in', label: 'Weave In', color: '#b07fc8', nodeIds: WEAVE_IN_NODES.map(([id]) => id) },
       { id: 'yarn', label: 'Yarn', color: '#c8a45a', nodeIds: ['yarn', 'flyaways'] },
       { id: 'wind-cloth', label: 'Wind Cloth', color: '#6f8fc8', nodeIds: CLOTH_NODES.map(([id]) => id) }] };
 }

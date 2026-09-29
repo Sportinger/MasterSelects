@@ -12,7 +12,8 @@ const flatWeave = () => {
   graph.groups!.find(group => group.id === 'wind-cloth')!.bypassed = true;
   return graph;
 };
-const compile = (graph = flatWeave()) => compileGeometryGraph(graph, geometryParameterReader({}));
+/** Long after the weave-in, so every yarn is fully grown. */
+const compile = (graph = flatWeave()) => compileGeometryGraph(graph, geometryParameterReader({}), undefined, { simulationTime: 100 });
 const z = (curves: ReturnType<typeof evaluateGeometryProgram>, strand: number, point: number) => curves.positions[(curves.starts[strand] + point) * 3 + 2];
 
 describe('Weave pattern and yarn profile', () => {

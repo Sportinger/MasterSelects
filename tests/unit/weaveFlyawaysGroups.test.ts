@@ -51,17 +51,24 @@ describe('Weave flyaways and node groups', () => {
 
   it('bypasses a field group by returning its consumers to their defaults', () => {
     const graph = createDefaultWeaveGraph();
-    expect(operatorGroupBypassRoutes(graph, graph.groups![0])?.get('reveal-ramp-value-yarn-radius')).toBeNull();
-    const program = compile(bypass(graph, 'reveal-by-shape'), { reveal_value: 0 });
+    expect(operatorGroupBypassRoutes(graph, graph.groups!.find(group => group.id === 'reveal-by-shape')!)?.get('reveal-ramp-value-weave-mix-a')).toBeNull();
+    bypass(graph, 'reveal-by-shape');
+    // Multiply reads 1 through the disconnected operand, so a hidden reveal no longer hides anything.
+    const woven = evaluateGeometryProgram(compileGeometryGraph(graph, geometryParameterReader({ reveal_value: 0 }), undefined, { simulationTime: 100 })).radius!;
+    expect(Math.min(...woven)).toBe(1);
+    expect(Math.max(...woven)).toBe(1);
+    // With Weave In bypassed as well, Yarn Profile has no radius field left. Graphs are immutable
+    // snapshots (their bypassed view is cached), so this uses a new one.
+    const both = bypass(bypass(createDefaultWeaveGraph(), 'reveal-by-shape'), 'weave-in');
+    const program = compileGeometryGraph(both, geometryParameterReader({ reveal_value: 0 }));
     expect(program.stages.find(stage => stage.kind === 'yarn-profile')).toEqual({ kind: 'yarn-profile', nodeId: 'yarn' });
-    expect(evaluateGeometryProgram(program).radius).toBeUndefined();
     // The saved graph keeps its wiring; only the compiled view changes.
-    expect(graph.edges.some(edge => edge.id === 'reveal-ramp-value-yarn-radius')).toBe(true);
+    expect(graph.edges.some(edge => edge.id === 'reveal-ramp-value-weave-mix-a')).toBe(true);
   });
 
   it('bypasses a curves group by passing the incoming curves through', () => {
     const graph = createDefaultWeaveGraph();
-    expect(operatorGroupBypassRoutes(graph, graph.groups![1])?.get('flyaways-curves-bind-curves')).toEqual({ from: 'pattern', output: 'curves' });
+    expect(operatorGroupBypassRoutes(graph, graph.groups!.find(group => group.id === 'yarn')!)?.get('flyaways-curves-bind-curves')).toEqual({ from: 'pattern', output: 'curves' });
     const program = compile(bypass(graph, 'yarn'));
     expect(program.stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'surface-bind']);
     expect(program.render).not.toHaveProperty('profile');
@@ -78,8 +85,10 @@ describe('Weave flyaways and node groups', () => {
 
   it('sections exposed values by their node group', () => {
     const graph = createDefaultWeaveGraph();
-    expect(exposedGraphValueSections(graph)).toMatchObject([{ groupId: 'reveal-by-shape', label: 'Reveal by Shape', values: [{ key: 'reveal_value' }] }]);
+    expect(exposedGraphValueSections(graph)).toMatchObject([{ groupId: 'reveal-by-shape', label: 'Reveal by Shape', values: [{ key: 'reveal_value' }] },
+      { groupId: 'weave-in', label: 'Weave In', values: [{ key: 'weave_value' }] }]);
     graph.groups = [];
-    expect(exposedGraphValueSections(graph)).toEqual([{ label: 'Graph values', values: [expect.objectContaining({ key: 'reveal_value' })] }]);
+    expect(exposedGraphValueSections(graph)).toEqual([{ label: 'Graph values',
+      values: [expect.objectContaining({ key: 'reveal_value' }), expect.objectContaining({ key: 'weave_value' })] }]);
   });
 });
