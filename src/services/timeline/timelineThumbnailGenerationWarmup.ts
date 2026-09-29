@@ -15,7 +15,7 @@ import {
   getTimelineWarmupTimerDeps,
 } from './timelineWarmupTimers';
 import { flags } from '../../engine/featureFlags';
-import { selectRuntimeFrameProviderPlan } from '../mediaRuntime/providerSelection';
+import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../mediaRuntime/providerSelection';
 import { createTurboResFrameProvider } from '../mediaRuntime/prores/TurboResFrameProvider';
 import { createHapFrameProvider } from '../mediaRuntime/hap/HapFrameProvider';
 
@@ -115,7 +115,7 @@ function getDefaultDeps(): TimelineThumbnailGenerationWarmupDeps {
         turboResEnabled: flags.turboResProRes,
       });
       if (
-        (providerPlan.backend !== 'turbores' && providerPlan.backend !== 'hap')
+        !isCodecProviderPlan(providerPlan)
         || !mediaFile?.file
       ) {
         await thumbnailCacheService.generateForSourceUrl(

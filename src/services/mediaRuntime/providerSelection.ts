@@ -6,12 +6,27 @@ import {
   getHapVideoFourCC,
   type HapVideoFourCC,
 } from '../hap/hapCodecIdentity';
+import type { CodecProviderBackend } from './types';
+export type { CodecProviderBackend };
 
 export type RuntimeFrameProviderPlan =
   | { backend: 'turbores'; fourCC: TurboResProResFourCC }
   | { backend: 'hap'; fourCC: HapVideoFourCC }
   | { backend: 'default'; reason: 'not-prores' | 'turbores-disabled' }
   | { backend: 'unsupported'; reason: 'prores-raw' };
+
+const CODEC_PROVIDER_BACKENDS: readonly CodecProviderBackend[] = ['turbores', 'hap'];
+
+/** Plans whose frames come from a codec-specific provider (not the browser's native decoder). */
+export type CodecProviderPlan = Extract<RuntimeFrameProviderPlan, { backend: CodecProviderBackend }>;
+
+export function isCodecProviderBackend(backend: string | undefined): backend is CodecProviderBackend {
+  return backend !== undefined && CODEC_PROVIDER_BACKENDS.includes(backend as CodecProviderBackend);
+}
+
+export function isCodecProviderPlan(plan: RuntimeFrameProviderPlan): plan is CodecProviderPlan {
+  return isCodecProviderBackend(plan.backend);
+}
 
 export function selectRuntimeFrameProviderPlan(options: {
   videoCodecId: string | undefined;

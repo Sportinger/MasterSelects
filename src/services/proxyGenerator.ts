@@ -30,7 +30,7 @@ import { ProxySceneCutAnalyzer } from './sceneCutDetection/proxySceneCutAnalyzer
 import { getSceneCutCompletenessError } from './sceneCutDetection/sceneCutDetector';
 import type { SceneCutAnalysis } from '../types/sceneCutAnalysis';
 import { flags } from '../engine/featureFlags';
-import { selectRuntimeFrameProviderPlan } from './mediaRuntime/providerSelection';
+import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from './mediaRuntime/providerSelection';
 import { generateTurboResProxy } from './proxyGeneration/turboResProxyStrategy';
 
 const log = Logger.create('ProxyGenerator');
@@ -107,7 +107,7 @@ class ProxyGeneratorWebCodecs {
     if (providerPlan.backend === 'unsupported') {
       throw new Error('Proxy and scene-cut generation do not support ProRes RAW.');
     }
-    if (providerPlan.backend === 'turbores' || providerPlan.backend === 'hap') {
+    if (isCodecProviderPlan(providerPlan)) {
       return generateTurboResProxy({
         file,
         mediaFileId: _mediaFileId,

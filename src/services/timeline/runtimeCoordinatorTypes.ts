@@ -1,3 +1,5 @@
+import type { CodecProviderBackend } from '../mediaRuntime/types';
+
 export const TIMELINE_RUNTIME_POLICY_IDS = [
   'interactive',
   'background',
@@ -117,8 +119,7 @@ export interface RenderResourceDimensions {
 
 export type RuntimeProviderKind =
   | 'webcodecs'
-  | 'turbores'
-  | 'hap'
+  | CodecProviderBackend
   | 'html-video'
   | 'html-audio'
   | 'native-decoder'
@@ -226,7 +227,7 @@ interface RenderResourceDescriptorBase {
 export interface VideoFrameProviderResourceDescriptor extends RenderResourceDescriptorBase {
   kind: 'video-frame-provider';
   providerId: string;
-  providerKind: 'webcodecs' | 'turbores' | 'hap' | 'runtime-frame-provider';
+  providerKind: 'webcodecs' | CodecProviderBackend | 'runtime-frame-provider';
   canSeek?: boolean;
   canProvideStaleFrame?: boolean;
   frameFormat?: 'video-frame' | 'image-bitmap' | 'canvas-image-source' | 'unknown';

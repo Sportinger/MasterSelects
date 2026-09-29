@@ -42,6 +42,7 @@ import {
   releaseReverseWorkerRuntimeSources,
 } from './reverseWorkerWebCodecsRuntime';
 import { VideoSyncFreeRunCoordinator } from './videoSyncFreeRunCoordinator';
+import { isCodecProviderBackend } from '../mediaRuntime/providerSelection';
 import { syncActiveTransitionCompositionVideosWithCoordinator } from './videoSyncTransitionCompositionCoordinator';
 
 export class VideoSyncManager {
@@ -208,7 +209,7 @@ export class VideoSyncManager {
   private usesFullWebCodecsPreview(clip: TimelineClip): boolean {
     const provider = this.getClipRuntimeProvider(clip);
     return !!(
-      (flags.useFullWebCodecsPlayback || provider?.backend === 'turbores') &&
+      (flags.useFullWebCodecsPlayback || isCodecProviderBackend(provider?.backend)) &&
       provider?.isFullMode?.()
     );
   }

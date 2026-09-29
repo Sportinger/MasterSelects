@@ -57,7 +57,10 @@ export interface FrameRequest {
 
 export type RuntimeFrame = VideoFrame | ImageBitmap | null;
 
-export type RuntimeFrameProviderBackend = 'webcodecs' | 'worker-webcodecs' | 'turbores' | 'hap';
+/** Backends that decode through a codec-specific provider. Add new codec backends here. */
+export type CodecProviderBackend = 'turbores' | 'hap';
+
+export type RuntimeFrameProviderBackend = 'webcodecs' | 'worker-webcodecs' | CodecProviderBackend;
 
 export interface RuntimeFrameProvider {
   readonly backend?: RuntimeFrameProviderBackend;

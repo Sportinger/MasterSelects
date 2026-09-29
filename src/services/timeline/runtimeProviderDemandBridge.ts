@@ -17,6 +17,7 @@ import type {
   TimelineRuntimeAdmissionDecision,
   TimelineRuntimeCoordinator,
 } from './runtimeCoordinatorTypes';
+import type { CodecProviderBackend } from '../mediaRuntime/types';
 
 interface RuntimeProviderDemandDescriptorOptions {
   resourceId?: string;
@@ -30,7 +31,7 @@ export type RuntimeProviderDemandResourceDetails =
   | (RuntimeProviderDemandDescriptorOptions & {
       resourceKind: 'video-frame-provider';
       providerId?: string;
-      providerKind?: 'webcodecs' | 'turbores' | 'hap' | 'runtime-frame-provider';
+      providerKind?: 'webcodecs' | CodecProviderBackend | 'runtime-frame-provider';
       canSeek?: boolean;
       canProvideStaleFrame?: boolean;
       frameFormat?: 'video-frame' | 'image-bitmap' | 'canvas-image-source' | 'unknown';

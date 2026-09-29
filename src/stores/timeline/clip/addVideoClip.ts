@@ -20,7 +20,7 @@ import { loadLinkedAudio } from './videoLinkedAudioLoader';
 import { loadCachedProjectAnalysisForVideo } from './videoCachedAnalysisLoader';
 import { startVideoThumbnailGeneration } from './videoThumbnailLoader';
 import { flags } from '../../../engine/featureFlags';
-import { selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
 import { releaseClipTreeRuntimeBindings } from '../../../services/mediaRuntime/clipBindings';
 export { createVideoClipPlaceholders } from './videoClipPlaceholders';
 export type { AddVideoClipParams, AddVideoClipResult } from './videoClipPlaceholders';
@@ -275,7 +275,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       videoCodecId: importedMedia?.videoCodecId,
       turboResEnabled: flags.turboResProRes,
     });
-    if ((providerPlan.backend === 'turbores' || providerPlan.backend === 'hap') && mediaFileId) {
+    if (isCodecProviderPlan(providerPlan) && mediaFileId) {
       void importedMediaStore.generateAudioProxy(mediaFileId);
     }
   } else if (linkedAudioClipId && nativeDecoder) {

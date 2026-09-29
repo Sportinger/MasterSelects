@@ -5,6 +5,7 @@ import type {
   DecodeSessionPolicy,
   MediaSourceRuntime,
 } from './types';
+import type { CodecProviderBackend } from './types';
 
 export type RuntimeProviderReservation =
   | {
@@ -24,7 +25,7 @@ export function reserveRuntimeProviderResources(
   runtime: MediaSourceRuntime,
   sessionKey: string,
   file: File,
-  providerKind: 'webcodecs' | 'turbores' | 'hap',
+  providerKind: 'webcodecs' | CodecProviderBackend,
 ): RuntimeProviderReservation {
   const retainedResourceIds: string[] = [];
   let released = false;

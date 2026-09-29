@@ -7,6 +7,7 @@ import {
   getScrubRuntimeSource,
 } from '../mediaRuntime/runtimePlayback';
 import type { RuntimeFrameProvider } from '../mediaRuntime/types';
+import { isCodecProviderBackend } from '../mediaRuntime/providerSelection';
 import { scrubSettleState } from '../scrubSettleState';
 import type { FrameContext } from './types';
 import { getReverseWorkerRuntimeSource } from './reverseWorkerWebCodecsRuntime';
@@ -62,8 +63,7 @@ export function resolveRuntimeLayerBuilderVideoSource(params: {
   const forceTurboResRuntimeFrame =
     !!reversePresentationProvider &&
     'backend' in reversePresentationProvider &&
-    (reversePresentationProvider.backend === 'turbores'
-      || reversePresentationProvider.backend === 'hap') &&
+    isCodecProviderBackend(reversePresentationProvider.backend) &&
     reversePresentationProvider.isFullMode();
   const presentReverseRuntimeFrame = reverseWorkerRuntimeSource
     ? shouldPresentReverseRuntimeProvider({

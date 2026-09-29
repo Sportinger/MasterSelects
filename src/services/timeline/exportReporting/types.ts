@@ -1,4 +1,5 @@
 import type { FullExportSettings } from '../../../engine/export/types';
+import type { CodecProviderBackend } from '../../mediaRuntime/types';
 
 export interface ExportRunReport {
   runId: string;
@@ -86,7 +87,7 @@ export interface ExportFrameProviderAdmissionReport {
   };
   width?: number;
   height?: number;
-  providerKind?: 'webcodecs' | 'turbores' | 'hap' | 'runtime-frame-provider';
+  providerKind?: 'webcodecs' | CodecProviderBackend | 'runtime-frame-provider';
   frameFormat?: 'video-frame' | 'image-bitmap' | 'canvas-image-source' | 'unknown';
   label?: string;
   tags?: readonly string[];

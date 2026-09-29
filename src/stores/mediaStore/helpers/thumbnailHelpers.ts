@@ -6,7 +6,7 @@ import { projectDB } from '../../../services/projectDB';
 import { Logger } from '../../../services/logger';
 import { createThumbnailMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 import { flags } from '../../../engine/featureFlags';
-import { selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
 import { decodeTurboResOneFrame } from '../../../services/mediaRuntime/prores/turboResOneFrame';
 import { decodeHapOneFrame } from '../../../services/mediaRuntime/hap/hapOneFrame';
 
@@ -36,7 +36,7 @@ export async function createThumbnail(
         videoCodecId: videoMetadata?.videoCodecId,
         turboResEnabled: flags.turboResProRes,
       });
-      if (providerPlan.backend === 'turbores' || providerPlan.backend === 'hap') {
+      if (isCodecProviderPlan(providerPlan)) {
         const targetTime = getVideoThumbnailTargetTime(videoMetadata?.duration ?? 0);
         const oneFramePromise = providerPlan.backend === 'turbores'
           ? decodeTurboResOneFrame(file, providerPlan.fourCC, targetTime, {

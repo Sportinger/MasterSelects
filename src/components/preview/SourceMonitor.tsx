@@ -38,7 +38,7 @@ import {
   MIN_MARK_GAP_SECONDS,
 } from './sourceMonitor/sourceMonitorTimecode';
 import { flags } from '../../engine/featureFlags';
-import { selectRuntimeFrameProviderPlan } from '../../services/mediaRuntime/providerSelection';
+import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../services/mediaRuntime/providerSelection';
 import { TurboResSourceMonitorCanvas } from './sourceMonitor/TurboResSourceMonitorCanvas';
 import { usePreviewTransportPortal } from './PreviewTransportPortalContext';
 
@@ -104,7 +104,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
     videoCodecId: file.videoCodecId,
     turboResEnabled: flags.turboResProRes,
   });
-  const turboResFourCC = sourceProviderPlan.backend === 'turbores' || sourceProviderPlan.backend === 'hap'
+  const turboResFourCC = isCodecProviderPlan(sourceProviderPlan)
     ? sourceProviderPlan.fourCC
     : null;
   const useTurboResVideo = isVideo && turboResFourCC !== null && file.file instanceof File;

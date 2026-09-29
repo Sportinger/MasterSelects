@@ -5,7 +5,7 @@ import { releaseReservedExportFrameProvider, reserveExportFrameProvider } from '
 import type { WebCodecsPlayer } from '../../WebCodecsPlayer';
 import type { RuntimeFrameProvider } from '../../../services/mediaRuntime/types';
 import { flags } from '../../featureFlags';
-import { selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { isCodecProviderBackend, isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
 import { ensureRuntimeFrameProvider } from '../../../services/mediaRuntime/runtimePlayback';
 import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import {
@@ -87,7 +87,7 @@ export async function initializeFastMode(
       ? clip.outPoint - speedAdjusted
       : clip.inPoint + speedAdjusted);
 
-    if (providerPlan.backend === 'turbores' || providerPlan.backend === 'hap') {
+    if (isCodecProviderPlan(providerPlan)) {
       const runtimeSource = createExportRuntimeSource(
         clip,
         runtimeOwnerId,
@@ -254,7 +254,7 @@ export async function initializeFastMode(
       videoCodecId: mediaFile?.videoCodecId,
       turboResEnabled: flags.turboResProRes,
     }).backend;
-    return backend === 'turbores' || backend === 'hap';
+    return isCodecProviderBackend(backend);
   });
   if (nestedVideoClips.length > 0 && !hasTurboResClip) {
     log.info(`Using PARALLEL decoding for ${regularVideoClips.length} regular + ${nestedVideoClips.length} nested = ${totalVideoClips} video clips`);
