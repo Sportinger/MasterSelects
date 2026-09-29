@@ -97,10 +97,11 @@ export class MxfPacketTable {
     const first = await findFirstElement(source, partitions[0]!.essenceOffset, video.trackNumber);
     if (!first) throw new Error('MXF picture essence element not found');
     const frameCount = Math.max(1, meta.durationFrames);
-    const averageUnitBytes = (source.size - partitions[0]!.essenceOffset) / frameCount;
+    const essenceBytes = source.size - partitions[0]!.essenceOffset;
     // Clip wrapping: one KLV holds every edit unit. Label bytes are unreliable (FFmpeg OP-Atom
-    // writes the frame-wrapped label), so decide from the element size.
-    const clipWrapped = frameCount > 1 && first.length > averageUnitBytes * 1.5;
+    // writes the frame-wrapped label), so decide from the element size: a clip-wrapped element
+    // spans most of the essence, while a long-GOP I-frame is only a few times the average unit.
+    const clipWrapped = frameCount > 1 && first.length > essenceBytes / 2;
     const hasIndex = segments.some((s) => s.editUnitByteCount > 0 || s.entries.length > 0);
 
     let scannedUnits: { keyOffset: number; valueOffset: number; size: number }[] | null = null;
