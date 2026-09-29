@@ -49,7 +49,7 @@ import { flockingEffectOf, hasFlockGraph } from '../../../services/flock/flockEf
 import { flockMenuOperators } from '../../../services/flock/flockMenuOperators';
 import { getFlockOperator } from '../../../services/flock/operators/flockOperatorRegistry';
 /** Graph kinds that accept operator nodes, in the order they receive a node nobody else offers. */
-const GRAPH_OWNER_TYPES = ['invert', 'analog-signal-lab', 'voxel-relief', 'face-cables', 'splat-exploration', 'pixel-particle-disintegrate'];
+const GRAPH_OWNER_TYPES = ['invert', 'analog-signal-lab', 'voxel-relief', 'face-cables', 'splat-exploration', 'pixel-particle-disintegrate', 'weave'];
 
 interface NodeWorkspaceContextMenuState {
   x: number;

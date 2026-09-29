@@ -25,6 +25,8 @@ import { buildVideoLayer } from './layerBuilder/videoLayers';
 import { buildMotionAdjustmentLayerFromBase } from '../../services/layerBuilder/layerBuilderMotionAdjustment';
 import { bindTerrainLayer } from '../../services/planarTracking/terrainLayerBindings';
 import { buildFlockLayerSource, flockSourceTimeFromClipTime } from '../../services/layerBuilder/layerBuilderFlockLayers';
+import { buildStrandsOverlayLayers } from '../../services/layerBuilder/layerBuilderStrandsLayers';
+import { buildStrandsLayerSources } from '../../services/operators/geometry/strandsLayerSource';
 import { useTimelineStore } from '../../stores/timeline';
 
 const log = Logger.create('ExportLayerBuilder');
@@ -273,8 +275,12 @@ function buildExportLayerForClip(
   // Handle flock clips (pinned export simulation session)
   if (clip.source?.type === 'flock') {
     const sourceTime = flockSourceTimeFromClipTime(clip, getClipSourceWindowTime(clip, clipLocalTime, ctx));
-    const source = buildFlockLayerSource(clip, sourceTime, useTimelineStore.getState().clipKeyframes.get(clip.id), 'export');
-    return source ? { ...baseLayerProps, source, effects: [], is3D: true } : null;
+    const keyframes = useTimelineStore.getState().clipKeyframes.get(clip.id);
+    const source = buildFlockLayerSource(clip, sourceTime, keyframes, 'export');
+    if (source) return { ...baseLayerProps, source, effects: [], is3D: true };
+    // An empty generator host can carry a Weave effect instead of a swarm.
+    const strands = buildStrandsLayerSources(clip, clipLocalTime, keyframes)[0];
+    return strands ? { ...baseLayerProps, source: strands.source, effects: [], is3D: true } : null;
   }
   // Handle Gaussian Splat clips (native WebGPU)
   if (clip.source?.type === 'gaussian-splat') {
@@ -376,6 +382,7 @@ export function buildLayersAtTime(
       parallelDecoder,
       useParallelDecode,
     );
+    if (layer) layers.push(...buildStrandsOverlayLayers(layer, clip, layerContext.time - clip.startTime, useTimelineStore.getState().clipKeyframes.get(clip.id)));
     const flockOverlay = layer ? buildExportFlockOverlay(clip, layer, layerContext) : null;
     if (flockOverlay) layers.push(flockOverlay);
     if (layer) layers.push(bindTerrainLayer(

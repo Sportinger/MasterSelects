@@ -121,9 +121,11 @@ export type TransitionRenderState =
     };
 
 export interface LayerSource {
-  type: 'video' | 'image' | 'camera' | 'light' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion' | 'motion-adjustment' | 'flock';
+  type: 'video' | 'image' | 'camera' | 'light' | 'color' | 'text' | 'solid' | 'model' | 'gaussian-avatar' | 'gaussian-splat' | 'motion' | 'motion-adjustment' | 'flock' | 'strands';
   /** Runtime-only flock payload (compiled program, source time, keyframes). */
   flock?: import('../services/flock/flockLayerSource').FlockLayerSourceData;
+  /** Runtime-only Weave strands: a geometry program sampled at the frame time. */
+  strands?: import('../services/operators/geometry/strandsLayerSource').StrandsLayerSourceData;
   modelUrl?: string;  // Blob URL to 3D model file (OBJ/glTF/GLB)
   modelFileName?: string;
   modelSequence?: ModelSequenceData;

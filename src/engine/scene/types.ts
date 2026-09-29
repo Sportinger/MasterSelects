@@ -26,7 +26,7 @@ export interface SceneWorldTransform {
 }
 
 export interface SceneLayerBase {
-  kind: 'splat' | 'plane' | 'primitive' | 'text3d' | 'model' | 'light' | 'voxel' | 'flock' | 'face-cables';
+  kind: 'splat' | 'plane' | 'primitive' | 'text3d' | 'model' | 'light' | 'voxel' | 'flock' | 'face-cables' | 'strands';
   layerId: string;
   clipId: string;
   opacity: number;
@@ -137,6 +137,12 @@ export interface SceneFlockLayer extends SceneLayerBase {
   flock: import('../../services/flock/flockLayerSource').FlockLayerSourceData;
 }
 
+/** Weave strands: curves evaluated from a sampled geometry program, drawn as thin ribbons. */
+export interface SceneStrandLayer extends SceneLayerBase {
+  kind: 'strands';
+  strands: import('../../services/operators/geometry/strandsLayerSource').StrandsLayerSourceData;
+}
+
 export type SceneLayer3DData =
   | ScenePlaneLayer
   | SceneVoxelLayer
@@ -146,6 +152,7 @@ export type SceneLayer3DData =
   | SceneLightLayer
   | SceneSplatLayer
   | SceneFlockLayer
+  | SceneStrandLayer
   | SceneFaceCableLayer;
 
 export interface SceneCameraConfig {

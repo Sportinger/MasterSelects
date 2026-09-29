@@ -109,6 +109,9 @@ function resolveSceneLayerKind(data: LayerRenderData): SceneLayer3DData['kind'] 
   if (source?.type === 'flock') {
     return 'flock';
   }
+  if (source?.type === 'strands') {
+    return 'strands';
+  }
   if (source?.type === 'model') {
     if ((source.meshType ?? undefined) === 'text3d' || source.text3DProperties) {
       return 'text3d';
@@ -244,6 +247,13 @@ export function collectScene3DLayers(
     if (base.kind === 'flock') {
       if (source?.flock) {
         result.push({ ...base, kind: 'flock', flock: source.flock });
+      }
+      continue;
+    }
+
+    if (base.kind === 'strands') {
+      if (source?.strands) {
+        result.push({ ...base, kind: 'strands', strands: source.strands });
       }
       continue;
     }

@@ -4,6 +4,8 @@ import type { Keyframe } from '../../types/keyframes';
 import type { LightClipSettings } from '../../types/light';
 import { validateFlockDefinition } from '../flock/graph/flockGraphValidation';
 import { isWorkerGpuNativeAudioInputs, type WorkerGpuNativeAudioInput } from './workerGpuNativeAudioContract';
+import type { GeometryProgram } from '../operators/geometry/geometryProgram';
+import { isGeometryProgram } from '../operators/geometry/geometryProgramValidation';
 
 interface NativeLayerBase {
   readonly layerId: string;
@@ -17,7 +19,8 @@ export type WorkerGpuNativeSceneLayer =
   | (NativeLayerBase & { readonly kind: 'light'; readonly lightSettings: Pick<LightClipSettings,
       'kind' | 'color' | 'intensity' | 'diameter' | 'castsShadows' | 'shadowStrength'> })
   | (NativeLayerBase & { readonly kind: 'flock'; readonly definition: FlockDefinition;
-      readonly keyframes: Keyframe[]; readonly sourceTime: number; readonly audioInputs?: readonly WorkerGpuNativeAudioInput[] });
+      readonly keyframes: Keyframe[]; readonly sourceTime: number; readonly audioInputs?: readonly WorkerGpuNativeAudioInput[] })
+  | (NativeLayerBase & { readonly kind: 'strands'; readonly effectId: string; readonly program: GeometryProgram });
 
 /** Runtime media references, never persisted with project scene data. */
 export interface WorkerGpuNativeSceneAsset {
@@ -119,6 +122,8 @@ export function isWorkerGpuNativeScenePayload(value: unknown): value is WorkerGp
       }
       try { if (!validateFlockDefinition(layer.definition as FlockDefinition).valid) return false; }
       catch { return false; }
+    } else if (layer.kind === 'strands') {
+      if (!keys(layer, [...common, 'effectId', 'program']) || !id(layer.effectId) || !isGeometryProgram(layer.program)) return false;
     } else return false;
   }
   return true;

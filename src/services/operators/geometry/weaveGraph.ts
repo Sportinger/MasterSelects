@@ -41,8 +41,8 @@ const WAVE_NODES: Spec[] = [
   ['offset', 'vector.combine.vec3', 1820, 760],
 ];
 const CHAIN_NODES: Spec[] = [
-  ['line', 'geometry.curve-line', 0, 80, { points: 2000, length: 2, axis: 'z' }],
-  ['array', 'geometry.strand-array', 360, 80, { count: 8, spacing: 0.12, axis: 'x' }],
+  ['line', 'geometry.curve-line', 0, 80, { points: 2000, length: 2, axis: 'x' }],
+  ['array', 'geometry.strand-array', 360, 80, { count: 8, spacing: 0.12, axis: 'y' }],
   ['set-position', 'geometry.set-position', 2080, 80],
   ['render', 'render.strands', 2360, 80, { width: 0.004, color: '#e8e2d6' }],
   ['output', 'scene.output', 2640, 80],
@@ -58,15 +58,16 @@ const LINKS: Array<[from: string, output: string, to: string, input: string]> = 
   ['lift', 'value', 'over-under', 'a'], ['sign', 'value', 'over-under', 'b'],
   ['phase', 'value', 'half-phase', 'a'], ['half', 'value', 'half-phase', 'b'], ['half-phase', 'value', 'sway-wave', 'value'],
   ['sway-wave', 'value', 'side', 'a'], ['sway', 'value', 'side', 'b'],
-  ['side', 'value', 'offset', 'x'], ['over-under', 'value', 'offset', 'y'], ['zero', 'value', 'offset', 'z'],
+  ['zero', 'value', 'offset', 'x'], ['over-under', 'value', 'offset', 'y'], ['side', 'value', 'offset', 'z'],
   ['offset', 'value', 'set-position', 'offset'],
 ];
 
 /**
- * Default Weave graph: parallel strands whose over/under wave alternates per strand.
- * The wave is ordinary Math nodes evaluated per curve point (the Houdini wrangle as nodes).
+ * Example graph from general nodes only: horizontal strands whose wave alternates per strand,
+ * with a slower sway in depth. The wave is ordinary Math nodes evaluated per curve point
+ * (the Houdini wrangle as nodes).
  */
-export function createDefaultWeaveGraph(): EffectOperatorGraph {
+export function createWaveStrandsGraph(): EffectOperatorGraph {
   const specs = [...CHAIN_NODES, ...WAVE_NODES];
   const nodes: BoundOperatorNode[] = specs.map(([id, operator, , , constants]) =>
     ({ id, operator, operatorVersion: 1, bindings: {}, ...(constants ? { constants: { ...constants } } : {}) }));
@@ -74,6 +75,22 @@ export function createDefaultWeaveGraph(): EffectOperatorGraph {
     edges: LINKS.map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
     layout: Object.fromEntries(specs.map(([id, , x, y]) => [id, { x, y }])),
     groups: [{ id: 'wave-offset', label: 'Wave Offset', color: '#8a7fd1', nodeIds: WAVE_NODES.map(([id]) => id) }] };
+}
+
+const FABRIC_NODES: Spec[] = [
+  ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 24, wefts: 16, width: 2.4, height: 1.6, crimp: 0.03, resolution: 16 }],
+  ['yarn', 'geometry.yarn-profile', 320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
+  ['render', 'render.strands', 640, 80, { width: 0.0035, color: '#e8e2d6' }],
+  ['output', 'scene.output', 960, 80],
+];
+
+/** Default Weave graph: a plain-woven sheet of three-ply yarns. */
+export function createDefaultWeaveGraph(): EffectOperatorGraph {
+  return { version: 1, schemaVersion: 1, domain: 'geometry',
+    nodes: FABRIC_NODES.map(([id, operator, , , constants]) => ({ id, operator, operatorVersion: 1, bindings: {}, ...(constants ? { constants: { ...constants } } : {}) })),
+    edges: [['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'render', 'curves'], ['render', 'scene', 'output', 'scene']]
+      .map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
+    layout: Object.fromEntries(FABRIC_NODES.map(([id, , x, y]) => [id, { x, y }])) };
 }
 
 export function validateWeaveGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {

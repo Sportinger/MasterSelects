@@ -32,6 +32,7 @@ import {
 import { buildNestedVideoSourceLayer } from './layerBuilderNestedVideoSource';
 import { bindTerrainLayer } from '../planarTracking/terrainLayerBindings';
 import { buildNestedFlockOverlayLayer, buildNestedLayerBuilderFlockLayer } from './layerBuilderFlockLayers';
+import { buildStrandsOverlayLayers } from './layerBuilderStrandsLayers';
 
 const log = Logger.create('LayerBuilderNestedLayers');
 
@@ -182,6 +183,7 @@ export function buildLayerBuilderNestedLayers(params: BuildNestedLayersParams): 
 
     const nestedLocalTime = clipTime - nestedClip.startTime;
     const nestedLayer = buildNestedClipLayer(nestedClip, nestedLocalTime, params);
+    if (nestedLayer) layers.push(...buildStrandsOverlayLayers(nestedLayer, nestedClip, nestedLocalTime, getNestedClipKeyframes(nestedClip)));
     const flockOverlay = nestedLayer ? buildNestedFlockOverlayLayer(nestedLayer, nestedClip, nestedLocalTime, getNestedClipKeyframes(nestedClip)) : null;
     if (flockOverlay) layers.push(flockOverlay);
     if (nestedLayer) {

@@ -19,6 +19,7 @@ import { createTransitionNestedCompositionLayer } from '../../../services/layerB
 import type { ExportClipStateLike } from './contracts';
 import { buildNestedBaseLayer, getClipKeyframes } from './baseLayers';
 import { buildFlockLayerSource } from '../../../services/layerBuilder/layerBuilderFlockLayers';
+import { buildStrandsOverlayLayers } from '../../../services/layerBuilder/layerBuilderStrandsLayers';
 import { nestedFlockSourceTime } from '../../../services/flock/time/flockTimeMapper';
 import {
   buildGaussianSplatSource,
@@ -325,6 +326,7 @@ export function buildNestedLayersForExport(
     const flockSource = nestedLayer && nestedClip.source?.type !== 'flock'
       ? buildFlockLayerSource(nestedClip, nestedFlockSourceTime(nestedClip, nestedClipLocalTime), getClipKeyframes(nestedClip), 'export')
       : null;
+    if (nestedLayer) layers.push(...buildStrandsOverlayLayers(nestedLayer, nestedClip, nestedClipLocalTime, getClipKeyframes(nestedClip)));
     if (nestedLayer && flockSource) layers.push({ ...nestedLayer, id: `${nestedLayer.id}_flock`, source: flockSource, effects: [], is3D: true });
     if (nestedLayer) {
       layers.push(bindTerrainLayer(nestedLayer, nestedClip, clip.nestedClips, nestedTime));

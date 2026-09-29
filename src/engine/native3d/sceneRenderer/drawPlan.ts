@@ -27,9 +27,10 @@ export function canRenderNativeScene(
   const voxelLayerCount = layers.filter((layer) => layer.kind === 'voxel').length;
   const flockLayerCount = layers.filter((layer) => layer.kind === 'flock').length;
   const cableLayerCount = layers.filter((layer) => layer.kind === 'face-cables').length;
+  const strandLayerCount = layers.filter((layer) => layer.kind === 'strands').length;
   return (
     layers.length > 0 &&
-    layers.length === planeLayers.length + nativeMeshLayers.length + splatLayers.length + lightLayers.length + voxelLayerCount + flockLayerCount + cableLayerCount
+    layers.length === planeLayers.length + nativeMeshLayers.length + splatLayers.length + lightLayers.length + voxelLayerCount + flockLayerCount + cableLayerCount + strandLayerCount
   );
 }
 

@@ -44,5 +44,4 @@ export function effectEngine(effectId: string): string | undefined { return ENGI
 export function effectEngineMembers(engine: string): readonly string[] { return ENGINES[engine] ?? []; }
 
 /** Kept for saved projects and reachable as a style of its engine, but not offered as a new effect. */
-// Weave stays out of pickers until its strand renderer lands; its graph and nodes already work.
-export const EFFECTS_HIDDEN_FROM_CATALOG: ReadonlySet<string> = new Set(['rom1', 'weave']);
+export const EFFECTS_HIDDEN_FROM_CATALOG: ReadonlySet<string> = new Set(['rom1']);

@@ -15,6 +15,7 @@ import type {
   ScenePlaneLayer,
   SceneSplatEffectorRuntimeData,
   SceneSplatLayer,
+  SceneStrandLayer,
   SceneVoxelLayer,
 } from '../scene/types';
 import type { ModelSequenceData } from '../../types';
@@ -22,6 +23,7 @@ import type { MaskTextureManager } from '../texture/MaskTextureManager';
 import { ModelRuntimeCache } from './assets/ModelRuntimeCache';
 import { EffectorCompute } from './passes/EffectorCompute';
 import { FlockPass } from './passes/FlockPass';
+import { StrandPass } from './passes/StrandPass';
 import type { NativeSceneHost } from './sceneRenderer/NativeSceneHost';
 import { GizmoPass } from './passes/GizmoPass';
 import { MeshPass, type SceneNativeMeshLayer } from './passes/MeshPass';
@@ -73,6 +75,7 @@ export class NativeSceneRuntime {
   private readonly gizmoPass = new GizmoPass();
   private readonly splatPass = new SplatPass();
   private readonly voxelPass = new VoxelPass();
+  private readonly strandPass = new StrandPass();
   private flockPass: FlockPass;
   private readonly effectorCompute = new EffectorCompute();
   private readonly modelRuntimeCache = new ModelRuntimeCache();
@@ -173,6 +176,7 @@ export class NativeSceneRuntime {
     const splatLayers = this.splatPass.collect(layers);
     const voxelLayers = this.voxelPass.collect(layers);
     const flockLayers = this.flockPass.collect(layers);
+    const strandLayers = this.strandPass.collect(layers);
     const lightLayers = layers.filter((layer): layer is SceneLightLayer => layer.kind === 'light');
     const preparedMeshLayers = meshLayers.map((layer) =>
       layer.kind === 'model'
@@ -199,6 +203,7 @@ export class NativeSceneRuntime {
       splatLayers,
       lightLayers,
       layers.filter((layer): layer is SceneFaceCableLayer => layer.kind === 'face-cables'),
+      strandLayers,
       camera,
       effectors,
       realtimePlayback,
@@ -218,6 +223,7 @@ export class NativeSceneRuntime {
       splats: splatLayers.length,
       voxels: voxelLayers.length,
       flocks: flockLayers.length,
+      strands: strandLayers.length,
       lights: lightLayers.length,
     });
     return nativeSceneView;
@@ -244,6 +250,7 @@ export class NativeSceneRuntime {
     this.faceCablePass.dispose();
     this.meshPass.dispose();
     this.voxelPass.dispose();
+    this.strandPass.dispose();
     this.gizmoPass.dispose();
     this.layerSpaceEffectRenderer.destroy();
     this.slitScanSurfaces?.destroy(); this.slitScanSurfaces = undefined;
@@ -276,6 +283,7 @@ export class NativeSceneRuntime {
     layers: SceneSplatLayer[],
     lightLayers: SceneLightLayer[],
     cableLayers: SceneFaceCableLayer[],
+    strandLayers: SceneStrandLayer[],
     camera: SceneCamera,
     effectors: SceneSplatEffectorRuntimeData[],
     realtimePlayback: boolean,
@@ -358,6 +366,7 @@ export class NativeSceneRuntime {
     this.meshPass.pruneModelCache(activeModelUrls);
     // Flock simulations advance (compute) before any scene render pass is opened.
     const flockPlans = this.flockPass.prepare(device, commandEncoder, flockLayers, realtimePlayback);
+    const strandPlans = this.strandPass.prepare(device, strandLayers, temporaryBuffers);
 
     // Shared native scene pass graph, phase 1:
     //   1. Opaque depth-writing geometry -> scene color + shared depth
@@ -411,6 +420,7 @@ export class NativeSceneRuntime {
     });
     if (!this.voxelPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, readyVoxels, camera, temporaryBuffers)) return null;
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'opaque', temporaryBuffers)) return null;
+    if (!this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandPlans, camera, temporaryBuffers)) return null;
 
     for (const layer of sortedLayers) {
       const renderSettings = layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
@@ -515,7 +525,7 @@ export class NativeSceneRuntime {
     }
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'transparent', temporaryBuffers)) return null;
     const gizmoLayer = gizmo
-      ? [...planeLayers, ...voxelLayers, ...flockLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
+      ? [...planeLayers, ...voxelLayers, ...flockLayers, ...strandLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
         (gizmo.worldMatrix && gizmo.worldTransform
           ? {
               clipId: gizmo.clipId,

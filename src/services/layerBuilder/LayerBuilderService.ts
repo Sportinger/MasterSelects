@@ -46,6 +46,7 @@ import {
 } from './layerBuilderLayerPostProcessing';
 import { buildLayerBuilderMotionShapeLayer } from './layerBuilderMotionLayers';
 import { buildLayerBuilderFlockLayer } from './layerBuilderFlockLayers';
+import { buildLayerBuilderStrandsLayers } from './layerBuilderStrandsLayers';
 import { buildLayerBuilderMotionAdjustmentLayer } from './layerBuilderMotionAdjustment';
 import { buildLayerBuilderNestedCompLayer } from './layerBuilderNestedLayerBuilder';
 import {
@@ -356,6 +357,8 @@ export class LayerBuilderService {
       const flockLayer = clip.source?.type !== 'flock'
         ? buildLayerBuilderFlockLayer({ clip, layerIndex, ctx, transformCache: this.transformCache, overlay: true })
         : null;
+      // Weave strands are drawn above the clip (and its swarm) in the shared 3D scene.
+      layers.push(...buildLayerBuilderStrandsLayers({ clip, layerIndex, ctx, transformCache: this.transformCache }));
       if (flockLayer) {
         layers.push(flockLayer);
       }

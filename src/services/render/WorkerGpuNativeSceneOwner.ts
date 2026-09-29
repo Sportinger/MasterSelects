@@ -103,6 +103,7 @@ export class WorkerGpuNativeSceneOwner {
             opacity: layer.opacity, blendMode: 'normal' as const, sourceWidth: payload.width, sourceHeight: payload.height };
           if (layer.kind === 'primitive') return { ...base, kind: 'primitive', meshType: layer.meshType, wireframe: layer.wireframe };
           if (layer.kind === 'light') return { ...base, kind: 'light', lightSettings: { ...layer.lightSettings } };
+          if (layer.kind === 'strands') return { ...base, kind: 'strands', strands: { clipId: layer.clipId, effectId: layer.effectId, program: layer.program } };
           const signature = JSON.stringify(layer.definition);
           let compiled = entry.definitions.get(layer.clipId);
           if (!compiled || compiled.signature !== signature) {

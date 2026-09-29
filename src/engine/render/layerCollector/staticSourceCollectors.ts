@@ -99,7 +99,8 @@ export function collectStaticLayerData(
     source.type === 'light' ||
     source.type === 'gaussian-avatar' ||
     source.type === 'gaussian-splat' ||
-    source.type === 'flock'
+    source.type === 'flock' ||
+    source.type === 'strands'
   ) {
     return collectZeroSizedPlaceholderLayer(layer);
   }

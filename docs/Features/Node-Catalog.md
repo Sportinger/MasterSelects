@@ -364,7 +364,7 @@ plane and Face Cables shaders. Definitions are stored under `clip.nodeGraph.scen
 Face Cables definitions and groups remain in `effect.params.operatorGraph`.
 Only definitions and portable bake data are saved, never GPU/runtime handles.
 
-## Curve graphs (Weave, in development)
+## Curve graphs (Weave)
 
 The **Weave** effect owns an operator graph with domain `geometry`. Curves flow
 between general curve nodes; number and vector inputs of a modifier are evaluated
@@ -379,14 +379,34 @@ node is one node in every graph rather than a per-domain copy.
 | Strand Array | Curves → curves repeated Count times along Axis |
 | Set Position | Curves + optional Position / Offset (Vector 3, per point) → curves |
 | Position, Curve Info | Per-point position, Curve Param (0–1), point/strand index and counts |
-| Strand Render | Curves → scene (renderer pending) |
+| Yarn Profile | Curves (+ optional per-point Radius Scale) → curves drawn as plies and fibers twisted along curve length |
+| Weave Pattern | Draft (plain, twill 2/2 and 2/1, satin 5, basket), warp/weft counts, size, crimp → interlaced curves |
+| Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color) |
 
-The default graph builds an alternating over/under wave from ordinary Value,
-Multiply, Sine, Fraction and Add nodes in a **Wave Offset** group. Curve ports show
+The default Weave graph is Weave Pattern → Yarn Profile → Strand Render: a plain
+weave of three-ply yarns. Weave Pattern is the only weave-specific node; crimp is
+analytic (cosine transitions between crossings, with the draft deciding which
+thread lies in front). Yarn Profile is general: plies circle the curve and fibers
+circle each ply, with both angles driven by arc length along rotation-minimizing
+frames, so radius changes never spin the twist (the Houdini sweep issue). Its
+Radius Scale input is a per-point field, for example for reveals. An example graph
+of general nodes only (`createWaveStrandsGraph`) builds an alternating wave from
+Value, Multiply, Sine, Fraction and Add nodes. Curve ports show
 a CPU wireframe preview (curve and point counts). Value nodes use literals and can
-be exposed to the Effects tab like image Value nodes. The effect is hidden from
-the effect picker until strands render in the 3D scene; the plan is in
-`docs/ongoing/Strands-Weave-Plan.md`.
+be exposed to the Effects tab like image Value nodes.
+
+**Rendering.** *Effects → 3D & Particles → Weave* works on any clip; the strands
+are drawn as an extra 3D layer above the clip with the clip's transform, in
+preview, export and nested compositions, on the main thread or in the Worker
+render host. The layer carries the geometry program sampled at the frame time
+(plain data); the renderer evaluates the curves on its own thread, caches them
+until the program changes and expands every segment into a camera-facing ribbon
+in the vertex shader. Width is in world units and follows the layer scale. A
+strand narrower than one pixel keeps one pixel of geometry with a deterministic
+hashed coverage instead of blending, so dense strands need no sorting and export
+reproduces the preview; width 0 draws nothing. Shading is Kajiya-Kay (tangent
+based) with a fixed key light and ambient term; scene lights, shadows and a
+dedicated generator clip are not connected yet.
 
 ## Extending the system
 

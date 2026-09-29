@@ -201,6 +201,7 @@ const CATALOG_TEXT: Readonly<Record<string, { d?: string; t?: readonly string[] 
   "geometry.merge-surface": { d: "Stitches a primary mesh such as the face into a background depth surface, cutting out its outline and blending the seam; Seam blend sets smoothness.", t: ["merge meshes", "stitch", "seam", "combine surfaces"] },
   "geometry.set-position": { d: "Moves each curve point: a connected Position replaces it and a connected Offset is added, evaluated per point.", t: ["set position", "offset", "displace", "wrangle", "deform"] },
   "geometry.strand-array": { d: "Repeats every incoming curve Count times, spaced evenly along an axis and centered on the original.", t: ["copy", "array", "duplicate", "copy to points", "repeat"] },
+  "geometry.yarn-profile": { d: "Turns each curve into a twisted yarn of plies and fibers at render time; twist follows curve length and an optional Radius Scale grows or reveals it per point.", t: ["yarn", "sweep", "tube", "twist", "ply", "fibers", "rope"] },
   "geometry.voronoi-seeds": { d: "Places one randomly jittered, slowly drifting seed point per cell as starting points for a Voronoi pattern; Cell Size sets the spacing.", t: ["voronoi", "seeds", "cells", "random points", "jitter"] },
   "glyph.atlas": { d: "Provides the character sheet for glyph effects, drawn from the effect's Ramp and Font settings, plus its glyph count and grid size.", t: ["glyph atlas", "characters", "font", "ascii", "text sheet"] },
   "image.mask-overlay": { t: ["mask preview", "highlight", "tint mask", "overlay color", "debug mask"] },
@@ -285,6 +286,7 @@ const CATALOG_TEXT: Readonly<Record<string, { d?: string; t?: readonly string[] 
   "values.oscillator": { d: "Outputs a sine wave over time, Offset + Amplitude × sin(time × Frequency), for pulsing or swinging values.", t: ["lfo", "sine", "wave", "oscillate", "pulse", "wobble"] },
   "vector.combine.vec2": { t: ["make vector", "join xy", "compose", "pack"] },
   "vector.split.vec2": { t: ["separate xy", "decompose", "components", "break vector"] },
+  "weave.pattern": { d: "Creates interlaced warp and weft curves; the draft (plain, twill, satin, basket) decides which thread lies on top at each crossing and Crimp lifts it.", t: ["weave", "woven", "fabric", "warp", "weft", "twill", "satin", "cloth"] },
 };
 
 export interface CatalogText { description?: string; tags: readonly string[] }

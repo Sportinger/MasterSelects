@@ -1,4 +1,5 @@
 import type { OperatorDefinition, OperatorParameter, OperatorPort } from '../../../types/operatorGraph';
+import { WEAVE_OPERATORS } from './weaveOperators';
 
 /**
  * General curve geometry operators. Curves flow between generators and modifiers;
@@ -35,6 +36,13 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
     [], [{ id: 'u', label: 'Curve Param', type: 'number' }, { id: 'point', label: 'Point Index', type: 'number' },
       { id: 'strand', label: 'Strand Index', type: 'number' }, { id: 'points', label: 'Point Count', type: 'number' },
       { id: 'strands', label: 'Strand Count', type: 'number' }]),
+  operator('geometry.yarn-profile', 'Yarn Profile', 'Turns each curve into a twisted yarn of plies and fibers at render time; twist follows curve length, so animating Radius never spins it.',
+    [curves('curves', true), { id: 'radius', label: 'Radius Scale', type: 'number' }], [curves()],
+    [number('plies', 'Plies', 3, 1, 8, 1, false), number('fibers', 'Fibers per Ply', 7, 1, 32, 1, false),
+      number('radius', 'Radius', 0.03, 0, 10, 0.001), number('plyTwist', 'Ply Twist', 5, -500, 500, 0.1),
+      number('fiberTwist', 'Fiber Twist', -11, -2000, 2000, 0.1)],
+    { bypass: 'passthrough' }),
+  ...WEAVE_OPERATORS,
   operator('render.strands', 'Strand Render', 'Draws the connected curves as thin strands in the shared 3D scene.',
     [curves('curves', true)], [{ id: 'scene', label: 'Scene', type: 'scene' }],
     [number('width', 'Width', 0.004, 0, 1, 0.0005), { id: 'color', label: 'Color', type: 'color', default: '#e8e2d6', animatable: true }],
