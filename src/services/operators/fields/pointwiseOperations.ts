@@ -1,6 +1,7 @@
 import { evaluateScalarOperation } from '../scalarOperationSemantics';
 import { imageFract } from '../imageColorSemantics';
 import { roundImageScalarEven } from '../imageRoundingSemantics';
+import { fieldNoise, fieldRamp, fieldShapeDistance } from './fieldFunctions';
 
 /** Value shapes produced by per-element programs; names match the image plan vocabulary. */
 export type PointwiseValueType = 'image' | 'rgb' | 'alpha' | 'scalar' | 'boolean' | 'vec2' | 'vec3' | 'vec4';
@@ -14,6 +15,8 @@ export type PointwiseValue = number | boolean | number[];
 export interface PointwiseOperation {
   wgsl: (args: readonly string[], value?: number) => string;
   evaluate: (args: readonly PointwiseValue[], value?: number) => PointwiseValue;
+  /** Helper library an emitter must provide as WGSL (see fields/fieldFunctions); image graphs do not offer these yet. */
+  requires?: 'field-functions';
 }
 
 const num = (value: PointwiseValue) => value as number;
@@ -107,6 +110,12 @@ export const POINTWISE_OPERATIONS: Readonly<Record<string, PointwiseOperation>> 
   'split-component': { wgsl: (args, value) => `${args[0]}[${value}]`, evaluate: (args, value) => vec(args[0])[value ?? 0] },
   'combine-vector': { wgsl: args => `vec${args.length}f(${args.join(', ')})`, evaluate: args => args as number[] },
   'combine': { wgsl: args => `vec4f(${args[0]}, ${args[1]})`, evaluate: args => [...vec(args[0]), num(args[1])] },
+  'shape-distance': { requires: 'field-functions', wgsl: (args, value) => `fieldShapeDistance(${args.join(', ')}, ${value ?? 0}u)`,
+    evaluate: (args, value) => fieldShapeDistance(vec(args[0]), vec(args[1]), num(args[2]), value ?? 0) },
+  'noise3': { requires: 'field-functions', wgsl: (args, value) => `fieldNoise(${args.join(', ')}, ${value ?? 1}u)`,
+    evaluate: (args, value) => fieldNoise(vec(args[0]), num(args[1]), num(args[2]), num(args[3]), value ?? 1) },
+  'ramp3': { requires: 'field-functions', wgsl: args => `fieldRamp(${args.join(', ')})`,
+    evaluate: args => fieldRamp(num(args[0]), args.slice(1).map(num)) },
 };
 
 export function pointwiseOperation(operation: string): PointwiseOperation | undefined {

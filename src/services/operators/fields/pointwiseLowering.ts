@@ -1,4 +1,5 @@
 import type { PointwiseValueType } from './pointwiseOperations';
+import { FIELD_SHAPES } from './fieldFunctions';
 
 /**
  * Declarative lowering of pure registered operators to shared pointwise operations.
@@ -12,7 +13,13 @@ export interface PointwiseLowering {
   /** Input returned unchanged when the node is bypassed; it is evaluated first. Omitted: bypass has no effect. */
   bypass?: string;
   value?: number;
+  /** Inputs that may stay unconnected: they read a node parameter or the evaluated element's position. */
+  defaults?: Readonly<Record<string, PointwiseDefault>>;
+  /** Node parameter that supplies the instruction value (a choice index or an integer count). */
+  valueParameter?: { parameter: string; options?: readonly string[] };
 }
+export type PointwiseDefault = { parameter: string } | { context: 'position' };
+const parameterDefaults = (...ids: string[]) => Object.fromEntries(ids.map(id => [id, { parameter: id }])) as Record<string, PointwiseDefault>;
 type LoweringRule = PointwiseLowering | ((output: string) => PointwiseLowering);
 
 const unary = (operation: string, type: PointwiseValueType, input = 'value', bypass?: string): PointwiseLowering =>
@@ -76,6 +83,12 @@ const RULES: Readonly<Record<string, LoweringRule>> = {
   'color.luminance-rec709.rgb': unary('luminance-rec709', 'scalar', 'rgb'), 'color.luminance-rec709.image': unary('luminance-rec709', 'scalar', 'image'),
   'convert.rgb-to-vec3': unary('rgb-to-vec3', 'vec3', 'rgb'), 'convert.vec3-to-rgb': unary('vec3-to-rgb', 'rgb'),
   'vector.combine.rgba': { operation: 'combine', type: 'image', inputs: ['rgb', 'alpha'] },
+  'field.shape-distance': { operation: 'shape-distance', type: 'scalar', inputs: ['position', 'center', 'size'],
+    defaults: { position: { context: 'position' }, ...parameterDefaults('center', 'size') }, valueParameter: { parameter: 'shape', options: FIELD_SHAPES } },
+  'field.noise': { operation: 'noise3', type: 'scalar', inputs: ['position', 'frequency', 'amplitude', 'seed'],
+    defaults: { position: { context: 'position' }, ...parameterDefaults('frequency', 'amplitude', 'seed') }, valueParameter: { parameter: 'octaves' } },
+  'field.ramp': { operation: 'ramp3', type: 'scalar', inputs: ['value', 'x0', 'y0', 'x1', 'y1', 'x2', 'y2'],
+    defaults: parameterDefaults('x0', 'y0', 'x1', 'y1', 'x2', 'y2') },
 };
 
 export function pointwiseLoweringFor(operator: string, output: string): PointwiseLowering | undefined {
@@ -85,11 +98,16 @@ export function pointwiseLoweringFor(operator: string, output: string): Pointwis
 
 export interface PointwiseInstruction { nodeId: string; operation: string; type: PointwiseValueType; inputs: number[]; value?: number }
 
-/** Lowers one pure node: the bypass input is evaluated first and returned when bypassed. */
+/**
+ * Lowers one pure node: the bypass input is evaluated first and returned when bypassed.
+ * `resolveValue` supplies `valueParameter`; executors without such rules may omit it.
+ */
 export function lowerPointwiseNode(rule: PointwiseLowering, node: { id: string; bypassed?: boolean },
-  visitInput: (input: string) => number, emit: (instruction: PointwiseInstruction) => number): number {
+  visitInput: (input: string) => number, emit: (instruction: PointwiseInstruction) => number,
+  resolveValue?: (spec: NonNullable<PointwiseLowering['valueParameter']>) => number): number {
   const passthrough = rule.bypass === undefined ? undefined : visitInput(rule.bypass);
   if (passthrough !== undefined && node.bypassed) return passthrough;
   const inputs = rule.inputs.map(input => input === rule.bypass ? passthrough! : visitInput(input));
-  return emit({ nodeId: node.id, operation: rule.operation, type: rule.type, inputs, ...(rule.value === undefined ? {} : { value: rule.value }) });
+  const value = rule.value ?? (rule.valueParameter && resolveValue ? resolveValue(rule.valueParameter) : undefined);
+  return emit({ nodeId: node.id, operation: rule.operation, type: rule.type, inputs, ...(value === undefined ? {} : { value }) });
 }

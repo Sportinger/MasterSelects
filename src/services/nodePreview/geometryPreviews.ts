@@ -54,7 +54,8 @@ export function geometryPreview(request: PreviewRequest, effect: Effect, keys: K
     const target = curveSourceNode(graph, binding.nodeId, port?.id ?? '', port?.direction ?? 'output');
     if (!target) return { ...base, status: 'live', label: 'Per-point value', presentation: 'text',
       drawing: { kind: 'text', lines: ['Evaluated once per curve point', 'where a modifier reads it'] } };
-    const program = compileGeometryGraph(graph, geometryParameterReader(effectOperatorParams(effect), effect.id, keys, time), target);
+    const program = compileGeometryGraph(graph, geometryParameterReader(effectOperatorParams(effect), effect.id, keys, time), target,
+      { time: request.time });
     const wireframe = curveWireframe(evaluateGeometryProgram(program));
     return { ...base, status: 'live', label: `${program.strandCount.toLocaleString('en-US')} curves · ${program.pointCount.toLocaleString('en-US')} points`,
       drawing: { kind: 'points', dimensions: 3, ...wireframe } };

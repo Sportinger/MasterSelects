@@ -45,7 +45,11 @@ const finite = (value: OperatorValue, label: string) => {
  * Lowers a geometry graph. With `target`, only the curve chain feeding that node's
  * curves output is compiled (node previews); otherwise the chain feeding `scene.output`.
  */
-export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryParameterReader, target?: string): GeometryProgram {
+/** Frame context of a lowering; `time` is the composition time read by Time nodes (seconds). */
+export interface GeometryCompileContext { time?: number }
+
+export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryParameterReader, target?: string,
+  context: GeometryCompileContext = {}): GeometryProgram {
   if (graph.domain !== 'geometry') throw new Error('Expected a geometry operator graph.');
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const sourceOf = (node: BoundOperatorNode, input: string) => {
@@ -141,10 +145,20 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       const rule = pointwiseLoweringFor(node.operator, output);
       if (rule) {
         if (!FIELD_TYPES.has(rule.type)) throw new Error(`${getEffectOperator(node.operator)?.label ?? node.operator} is not available for curve points.`);
-        register = lowerPointwiseNode(rule, node, id => { const linked = required(node, id); return visit(linked.node, linked.output); }, emit);
+        register = lowerPointwiseNode(rule, node, id => {
+          const linked = sourceOf(node, id), fallback = rule.defaults?.[id];
+          if (linked || !fallback) { const source = linked ?? required(node, id); return visit(source.node, source.output); }
+          return 'context' in fallback ? emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] }) : literal(node, fallback.parameter);
+        }, emit, spec => {
+          const value = read(node, spec.parameter);
+          const index = spec.options ? spec.options.indexOf(String(value)) : Math.round(finite(value, spec.parameter));
+          return Math.max(0, index);
+        });
       } else if (node.operator === 'values.number' || node.operator === 'values.integer') {
         register = emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: finite(read(node, 'value'), 'Value') });
         if (node.operator === 'values.integer') register = emit({ nodeId: node.id, operation: 'trunc-scalar', type: 'scalar', inputs: [register] });
+      } else if (node.operator === 'image.timeline-time') {
+        register = emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: Number.isFinite(context.time) ? context.time! : 0 });
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {
@@ -153,6 +167,13 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       visiting.delete(key); registers.set(key, register);
       return register;
     };
+    /** A parameter-backed input: a number becomes one constant, a vector three combined constants. */
+    function literal(node: BoundOperatorNode, parameter: string): number {
+      const value = read(node, parameter);
+      if (!Array.isArray(value)) return emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: finite(value, parameter) });
+      const components = value.map(component => emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: finite(component, parameter) }));
+      return emit({ nodeId: node.id, operation: 'combine-vector', type: `vec${components.length}` as 'vec2' | 'vec3' | 'vec4', inputs: components });
+    }
     const output = visit(linked.node, linked.output);
     if (instructions[output].type !== type) throw new Error(`${getEffectOperator(owner.operator)?.label}: ${input} needs a ${type === 'vec3' ? 'Vector 3' : 'Number'}.`);
     return { instructions, output };

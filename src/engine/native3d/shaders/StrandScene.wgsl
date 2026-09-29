@@ -83,6 +83,8 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let atB = corner == 1u || corner == 4u || corner == 5u;
   let side = select(-1.0, 1.0, corner == 2u || corner == 3u || corner == 5u);
   let p = select(a, b, atB);
+  // A yarn radius scale of zero hides the strand: fibers thin out with the radius they grow from.
+  let widthScale = clamp(points[select(first, first + 1u, atB) * 3u + 1u].w, 0.0, 1.0);
   let span = b - a;
   let spanTangent = select(vec3f(1.0, 0.0, 0.0), normalize(span), dot(span, span) > 1e-18);
   let joint = select(b - before, after - a, atB);
@@ -103,7 +105,7 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let toCamera = normalize(u.camera.xyz - p);
   let widthAxis = cross(tangent, toCamera);
   let widthDirection = select(vec3f(0.0, 1.0, 0.0), normalize(widthAxis), dot(widthAxis, widthAxis) > 1e-12);
-  let edge = viewProjection * vec4f(p + widthDirection * u.params.x, 1.0);
+  let edge = viewProjection * vec4f(p + widthDirection * u.params.x * widthScale, 1.0);
   let pixels = select(0.0, length(toPixels(edge) - toPixels(clip)), edge.w > 1e-5);
   out.coverage = clamp(pixels, 0.0, 1.0) * u.params.w;
   if (out.coverage <= 1e-3) {

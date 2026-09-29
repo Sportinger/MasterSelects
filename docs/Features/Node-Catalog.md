@@ -389,7 +389,16 @@ analytic (cosine transitions between crossings, with the draft deciding which
 thread lies in front). Yarn Profile is general: plies circle the curve and fibers
 circle each ply, with both angles driven by arc length along rotation-minimizing
 frames, so radius changes never spin the twist (the Houdini sweep issue). Its
-Radius Scale input is a per-point field, for example for reveals. An example graph
+Radius Scale input is a per-point field: a scale of zero also thins the fibers to
+nothing, values above one swell them.
+
+**Reveal.** The default graph grows the sheet from its center: *Shape Distance*
+(sphere, cube or plane; an unconnected Position reads the curve point) plus
+*Noise* (fractal lattice noise, the same deterministic noise Flock uses) feed a
+three-key *Ramp* whose front key swells the yarns before they settle. The group
+*Reveal by Shape* exposes **Reveal** (0–1) in the Effects tab; keyframe it to
+animate the growth. These field nodes are general per-element operators; *Time*
+reads the composition clock, as in image graphs. An example graph
 of general nodes only (`createWaveStrandsGraph`) builds an alternating wave from
 Value, Multiply, Sine, Fraction and Add nodes. Curve ports show
 a CPU wireframe preview (curve and point counts). Value nodes use literals and can

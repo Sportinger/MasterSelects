@@ -35,6 +35,7 @@ describe('Weave pattern and yarn profile', () => {
 
   it('evaluates a per-point radius field', () => {
     const graph = createDefaultWeaveGraph();
+    graph.edges = graph.edges.filter(edge => !(edge.to === 'yarn' && edge.input === 'radius'));
     graph.nodes.push({ id: 'half', operator: 'values.number', bindings: {}, operatorVersion: 1, constants: { value: 0.5 } });
     graph.edges.push({ id: 'half-radius', from: 'half', output: 'value', to: 'yarn', input: 'radius' });
     expect(validateWeaveGraph(graph)).toEqual([]);

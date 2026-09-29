@@ -31,12 +31,15 @@ export const renderingWeaveEffects = (clip: Pick<TimelineClip, 'effects'>): Effe
  * Strand sources of a clip's enabled Weave effects at clip-local `time`. Graphs
  * that cannot be lowered, or whose Strand Render is muted, contribute no layer.
  */
-export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effects'>, time: number,
+export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effects'> & { startTime?: number }, time: number,
   keyframes: readonly Keyframe[] | undefined): Array<{ effectId: string; source: { type: 'strands'; strands: StrandsLayerSourceData } }> {
+  const clipTime = Number.isFinite(time) ? time : 0;
   return renderingWeaveEffects(clip).flatMap(effect => {
     try {
+      // Keyframes use clip time; Time nodes read the composition clock like image graphs.
       const program = compileGeometryGraph(weaveGraphOf(effect),
-        geometryParameterReader(effectOperatorParams(effect), effect.id, [...keyframes ?? []], Number.isFinite(time) ? time : 0));
+        geometryParameterReader(effectOperatorParams(effect), effect.id, [...keyframes ?? []], clipTime), undefined,
+        { time: (clip.startTime ?? 0) + clipTime });
       return program.render ? [{ effectId: effect.id, source: { type: 'strands' as const, strands: { clipId: clip.id, effectId: effect.id, program } } }] : [];
     } catch {
       return [];

@@ -18,7 +18,7 @@ let ownerOperators: OperatorDefinition[] | undefined;
 /** Nodes a geometry graph offers: curve operators, values and every shared pointwise math/vector operator. */
 export function geometryOwnerOperators(): OperatorDefinition[] {
   return ownerOperators ??= EFFECT_OPERATORS.filter(operator => operator.addable && (isCurveOperator(operator.id)
-    || operator.id === 'values.number' || operator.id === 'values.integer' || isCurveFieldOperator(operator)));
+    || ['values.number', 'values.integer', 'image.timeline-time'].includes(operator.id) || isCurveFieldOperator(operator)));
 }
 
 /** Reads literal node values, effect-bound values and their keyframes at `time`. */
@@ -79,18 +79,41 @@ export function createWaveStrandsGraph(): EffectOperatorGraph {
 
 const FABRIC_NODES: Spec[] = [
   ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 24, wefts: 16, width: 2.4, height: 1.6, crimp: 0.03, resolution: 16 }],
-  ['yarn', 'geometry.yarn-profile', 320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
-  ['render', 'render.strands', 640, 80, { width: 0.0035, color: '#e8e2d6' }],
-  ['output', 'scene.output', 960, 80],
+  ['yarn', 'geometry.yarn-profile', 1320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
+  ['render', 'render.strands', 1640, 80, { width: 0.0035, color: '#e8e2d6' }],
+  ['output', 'scene.output', 1960, 80],
+];
+/** Reveal by Shape: a growing sphere with a noisy front scales the yarn radius (0 hides, >1 swells the front). */
+const REVEAL_NODES: Spec[] = [
+  ['reveal', 'values.number', 0, 380], ['reach', 'values.number', 0, 520, { value: 1.7 }],
+  ['reveal-radius', 'math.multiply.scalar', 260, 420],
+  ['reveal-shape', 'field.shape-distance', 520, 380, { shape: 'sphere', center: [0, 0, 0], size: 0.5 }],
+  ['reveal-noise', 'field.noise', 520, 620, { frequency: 3, amplitude: 0.08, octaves: 3, seed: 0 }],
+  ['reveal-edge', 'math.add.scalar', 780, 460],
+  ['reveal-ramp', 'field.ramp', 1040, 460, { x0: -0.12, y0: 1, x1: 0, y1: 1.6, x2: 0.1, y2: 0 }],
+];
+const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: string]> = [
+  ['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'render', 'curves'], ['render', 'scene', 'output', 'scene'],
+  ['reveal', 'value', 'reveal-radius', 'a'], ['reach', 'value', 'reveal-radius', 'b'], ['reveal-radius', 'value', 'reveal-shape', 'size'],
+  ['reveal-shape', 'value', 'reveal-edge', 'a'], ['reveal-noise', 'value', 'reveal-edge', 'b'], ['reveal-edge', 'value', 'reveal-ramp', 'value'],
+  ['reveal-ramp', 'value', 'yarn', 'radius'],
 ];
 
-/** Default Weave graph: a plain-woven sheet of three-ply yarns. */
+/**
+ * Default Weave graph: a plain-woven sheet of three-ply yarns that grows from its center.
+ * The exposed Reveal value (1 = fully grown) is keyframeable in the Effects tab.
+ */
 export function createDefaultWeaveGraph(): EffectOperatorGraph {
-  return { version: 1, schemaVersion: 1, domain: 'geometry',
-    nodes: FABRIC_NODES.map(([id, operator, , , constants]) => ({ id, operator, operatorVersion: 1, bindings: {}, ...(constants ? { constants: { ...constants } } : {}) })),
-    edges: [['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'render', 'curves'], ['render', 'scene', 'output', 'scene']]
-      .map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
-    layout: Object.fromEntries(FABRIC_NODES.map(([id, , x, y]) => [id, { x, y }])) };
+  const specs = [...FABRIC_NODES, ...REVEAL_NODES];
+  const nodes: BoundOperatorNode[] = specs.map(([id, operator, , , constants]) =>
+    ({ id, operator, operatorVersion: 1, bindings: {}, ...(constants ? { constants: { ...constants } } : {}) }));
+  const reveal = nodes.find(node => node.id === 'reveal')!;
+  reveal.bindings = { value: 'reveal_value' };
+  reveal.exposed = { label: 'Reveal', min: 0, max: 1, step: 0.01 };
+  return { version: 1, schemaVersion: 1, domain: 'geometry', nodes,
+    edges: FABRIC_LINKS.map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
+    layout: Object.fromEntries(specs.map(([id, , x, y]) => [id, { x, y }])),
+    groups: [{ id: 'reveal-by-shape', label: 'Reveal by Shape', color: '#5f9ea0', nodeIds: REVEAL_NODES.map(([id]) => id) }] };
 }
 
 export function validateWeaveGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {

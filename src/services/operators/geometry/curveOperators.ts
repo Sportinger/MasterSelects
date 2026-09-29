@@ -1,5 +1,6 @@
 import type { OperatorDefinition, OperatorParameter, OperatorPort } from '../../../types/operatorGraph';
 import { WEAVE_OPERATORS } from './weaveOperators';
+import { FIELD_OPERATORS } from './fieldOperators';
 
 /**
  * General curve geometry operators. Curves flow between generators and modifiers;
@@ -43,6 +44,7 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
       number('fiberTwist', 'Fiber Twist', -11, -2000, 2000, 0.1)],
     { bypass: 'passthrough' }),
   ...WEAVE_OPERATORS,
+  ...FIELD_OPERATORS,
   operator('render.strands', 'Strand Render', 'Draws the connected curves as thin strands in the shared 3D scene.',
     [curves('curves', true)], [{ id: 'scene', label: 'Scene', type: 'scene' }],
     [number('width', 'Width', 0.004, 0, 1, 0.0005), { id: 'color', label: 'Color', type: 'color', default: '#e8e2d6', animatable: true }],
