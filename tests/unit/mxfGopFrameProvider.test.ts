@@ -153,6 +153,16 @@ describe('MxfGopFrameProvider (long GOP reorder, key-frame restart)', () => {
     expect(liveFrames).toBe(0);
   });
 
+  it('snaps thumbnail times to the key frame so a thumbnail costs one decode', async () => {
+    const provider = createProvider(4);
+    await provider.load();
+    // The 4-frame fixture has one GOP whose I frame is displayed first.
+    expect(provider.getThumbnailSeekTime(0.1)).toBeCloseTo(0.5 / FPS, 9);
+    await provider.seekExact(provider.getThumbnailSeekTime(0.1));
+    expect(frameIndex(provider)).toBe(0);
+    await provider.destroyAsync();
+  });
+
   it('does not deadlock when the decoder has only two output surfaces', async () => {
     const provider = createProvider(2);
     await provider.load();

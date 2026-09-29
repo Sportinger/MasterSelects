@@ -177,7 +177,8 @@ export class ThumbnailGenerator {
 
       for (let secondIndex = 0; secondIndex < totalThumbs; secondIndex += 1) {
         if (signal.aborted) return false;
-        const seekTime = Math.max(0, Math.min(secondIndex, duration - 0.01));
+        const requestedTime = Math.max(0, Math.min(secondIndex, duration - 0.01));
+        const seekTime = provider.getThumbnailSeekTime?.(requestedTime) ?? requestedTime;
         try {
           await provider.seekExact(seekTime);
           const frame = provider.getCurrentFrame();

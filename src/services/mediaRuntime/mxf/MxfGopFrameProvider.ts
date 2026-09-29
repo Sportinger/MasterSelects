@@ -98,6 +98,16 @@ export abstract class MxfGopFrameProvider<
     return source;
   }
 
+  getThumbnailSeekTime(timeSeconds: number): number {
+    const source = this.source;
+    if (!source) return timeSeconds;
+    const fps = source.metadata.fps || 25;
+    const display = Math.max(0, Math.floor(timeSeconds * fps + 1e-6));
+    const keyStored = source.keyframeStoredIndexFor(display);
+    // Middle of the key frame's display interval keeps the half-open packet test stable.
+    return (source.storedToDisplayIndex(keyStored) + 0.5) / fps;
+  }
+
   protected hasDecoder(): boolean {
     return this.decoder !== null;
   }

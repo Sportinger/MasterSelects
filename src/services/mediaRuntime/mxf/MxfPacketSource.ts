@@ -109,6 +109,10 @@ export class MxfPacketSource {
     return this.getPacketByStoredIndex(this.table.displayToStoredIndex(next));
   }
 
+  storedToDisplayIndex(storedIndex: number): number {
+    return this.table.storedToDisplayIndex(storedIndex);
+  }
+
   /** Stored index of the key frame to start decoding from for `displayIndex`. */
   keyframeStoredIndexFor(displayIndex: number): number {
     return this.table.keyframeAtOrBefore(this.table.displayToStoredIndex(displayIndex));

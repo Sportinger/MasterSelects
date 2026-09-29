@@ -106,6 +106,11 @@ export interface RuntimeFrameProvider {
   advanceReverseToTime?(timeSeconds: number): void;
   /** Resolve only after the exact requested frame is ready for deterministic export/tools. */
   seekExact?(timeSeconds: number): Promise<void>;
+  /**
+   * Cheapest nearby time to show as a thumbnail (long-GOP providers snap to the
+   * previous key frame so a thumbnail costs one decode instead of a GOP).
+   */
+  getThumbnailSeekTime?(timeSeconds: number): number;
   getSourceRotationDegrees?(): 0 | 90 | 180 | 270;
   seek(timeSeconds: number): void;
   scrubSeek?(timeSeconds: number): void;
