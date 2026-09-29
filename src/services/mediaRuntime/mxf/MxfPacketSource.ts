@@ -10,7 +10,10 @@ import {
 } from '../../mediaMetadata/mxf/mxfByteSource';
 import { readMxfMetadata, type MxfMetadata } from '../../mediaMetadata/mxf/mxfMetadata';
 import type { CodecPacket, CodecPacketSourceMetadata } from '../codec/CodecFrameProviderBase';
-import { MxfPacketTable } from './mxfPacketTable';
+import { MxfPacketTable, type MxfResolvedUnit } from './mxfPacketTable';
+
+/** Stored units read ahead during sequential access (a few MB for 4K Long GOP). */
+const READ_AHEAD_UNITS = 6;
 
 export interface MxfPacket extends CodecPacket {
   readonly isKeyframe: boolean;
@@ -30,6 +33,8 @@ export class MxfPacketSource {
   private readonly source: MxfByteSource;
   private readonly table: MxfPacketTable;
   private disposed = false;
+  private lastReadIndex = -2;
+  private readonly readAhead = new Map<number, Promise<{ unit: MxfResolvedUnit; data: Uint8Array }>>();
 
   private constructor(source: MxfByteSource, table: MxfPacketTable, mxf: MxfMetadata) {
     this.source = source;
@@ -95,8 +100,21 @@ export class MxfPacketSource {
 
   async getPacketByStoredIndex(storedIndex: number): Promise<MxfPacket | null> {
     if (this.disposed) return null;
-    const unit = await this.table.resolve(storedIndex);
-    const data = new Uint8Array(await this.source.read(unit.valueOffset, unit.size));
+    const index = Math.max(0, Math.min(this.table.frameCount - 1, Math.floor(storedIndex)));
+    const sequential = index === this.lastReadIndex + 1;
+    this.lastReadIndex = index;
+    for (const key of this.readAhead.keys()) {
+      if (key < index || key > index + READ_AHEAD_UNITS) this.readAhead.delete(key);
+    }
+    const pending = this.readAhead.get(index) ?? this.readUnit(index);
+    this.readAhead.delete(index);
+    if (sequential) {
+      // Playback, export and GOP decoding walk stored order: keep the next reads in flight.
+      for (let ahead = 1; ahead <= READ_AHEAD_UNITS && index + ahead < this.table.frameCount; ahead += 1) {
+        if (!this.readAhead.has(index + ahead)) this.readAhead.set(index + ahead, this.readUnit(index + ahead));
+      }
+    }
+    const { unit, data } = await pending;
     if (data.length !== unit.size) throw new Error(`MXF edit unit ${storedIndex} is truncated`);
     const frameDuration = 1 / this.metadata.fps;
     const timestamp = unit.displayIndex * frameDuration;
@@ -127,7 +145,14 @@ export class MxfPacketSource {
     return this.source.read(offset, length);
   }
 
+  private readUnit(index: number): Promise<{ unit: MxfResolvedUnit; data: Uint8Array }> {
+    const promise = this.table.readPictureElement(index, (offset, length) => this.source.read(offset, length));
+    void promise.catch(() => undefined);
+    return promise;
+  }
+
   dispose(): void {
     this.disposed = true;
+    this.readAhead.clear();
   }
 }
