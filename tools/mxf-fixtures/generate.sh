@@ -10,7 +10,7 @@ ROOT="$(cd ../.. && pwd)"
 if [ "$MODE" = small ]; then
   OUT="$ROOT/tests/fixtures/mxf"; W=256; H=128; N=4; R=25
 else
-  OUT="$ROOT/tools/mxf-fixtures/out"; W="${MXF_W:-1920}"; H="${MXF_H:-1080}"; N=50; R=25
+  OUT="${MXF_OUT:-$ROOT/tools/mxf-fixtures/out}"; W="${MXF_W:-1920}"; H="${MXF_H:-1080}"; N=50; R=25
 fi
 mkdir -p "$OUT"
 SRC="testsrc2=size=${W}x${H}:rate=${R}"
