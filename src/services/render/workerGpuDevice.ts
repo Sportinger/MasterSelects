@@ -85,9 +85,25 @@ function featuresToArray(features: GPUSupportedFeatures | undefined): readonly s
 
 function limitsToRecord(limits: GPUSupportedLimits | undefined): Readonly<Record<string, number>> {
   if (!limits) return {};
-  const entries = Object.entries(limits as unknown as Record<string, unknown>)
-    .filter((entry): entry is [string, number] => typeof entry[1] === 'number' && Number.isFinite(entry[1]));
-  return Object.fromEntries(entries);
+  const result: Record<string, number> = {};
+  // WebIDL exposes limits as enumerable prototype getters, not own properties.
+  for (const key in limits) {
+    const value = (limits as unknown as Record<string, unknown>)[key];
+    if (typeof value === 'number' && Number.isFinite(value)) result[key] = value;
+  }
+  return result;
+}
+
+function defaultDeviceDescriptor(adapter: GPUAdapter): GPUDeviceDescriptor {
+  const requiredLimits: Record<string, number> = {};
+  for (const key of ['maxStorageBufferBindingSize', 'maxBufferSize'] as const) {
+    const value = adapter.limits?.[key];
+    if (Number.isFinite(value) && value > 0) requiredLimits[key] = value;
+  }
+  return {
+    requiredFeatures: adapter.features?.has('timestamp-query') ? ['timestamp-query'] : [],
+    requiredLimits,
+  };
 }
 
 function copyAdapterInfo(adapter: GPUAdapter): WorkerGpuAdapterInfo | null {
@@ -230,7 +246,7 @@ export async function acquireWorkerGpuDevice(
 
   let device: GPUDevice | null = null;
   try {
-    device = await requestDevice.call(adapter, options.deviceDescriptor);
+    device = await requestDevice.call(adapter, options.deviceDescriptor ?? defaultDeviceDescriptor(adapter));
   } catch (error) {
     const diagnostics = createDiagnostics({
       status: 'device-request-failed',

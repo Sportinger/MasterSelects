@@ -14,6 +14,7 @@ import type { WorkerGpuFrameStackNativeSceneInput } from './workerGpuFrameStackM
 import type { WorkerFlockStatusSnapshot } from './workerFlockStatus';
 import { buildFlockRuntimeStatus } from '../../engine/flock/runtime/flockRuntimeStatus';
 import { WorkerNativeSceneDeadline } from './workerNativeSceneCatchUp';
+import { flockGpuTimings } from '../../engine/flock/gpu/FlockGpuTimings';
 
 interface SceneEntry {
   audio: WorkerGpuNativeSceneAudio;
@@ -185,7 +186,8 @@ export class WorkerGpuNativeSceneOwner {
     };
     visit(stack);
     const limits = this.device.limits;
-    return { compositionId: stack.frame.compositionId, occurrences, capabilities: {
+    return { compositionId: stack.frame.compositionId, occurrences,
+      gpuTimings: { ...flockGpuTimings(this.device).snapshot(), capturedAt: Date.now() }, capabilities: {
       webgpu: true, gpuCompute: true, fallback: 'none', cpuFallbackMaxParticles: 0,
       maxStorageBufferBindingSize: limits.maxStorageBufferBindingSize,
       maxBufferSize: limits.maxBufferSize,

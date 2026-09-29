@@ -405,6 +405,16 @@ nested occurrences remain separate under render-host diagnostics (`flockStatus`)
 Changing composition or detaching a target cannot expose a stale Main status as
 Worker progress. Precompute, particle sampling and cache mutation still await
 Worker command routing; requests do not operate on the dormant Main backend.
+`getStats.flockGpu` selects measurements from the active scene renderer and labels
+them with `source: worker` or `source: main`. Worker frame results include their
+device's latest completed GPU timing samples and point counts. `capturedAt` is the
+snapshot time; each sample's `updatedAt`, `sequence`, pass counts and `truncated`
+flag describe the asynchronous readback, which can precede the presented frame.
+These are bounded recent per-scope samples, not whole-frame totals or FPS; no
+extra wait or pixel readback is added. A missing Worker snapshot never substitutes
+stale Main measurements. Worker devices request `timestamp-query` when supported
+and the adapter's `maxStorageBufferBindingSize` / `maxBufferSize`. Unsupported
+timestamps remain disabled; raised limits do not themselves allocate GPU memory.
 If simulation catch-up exceeds a frame deadline, the Worker reports its retained
 completed steps and a computing status. The host requests a fresh frame from the
 current editor state; expired frame resources are never reused. A newer seek or

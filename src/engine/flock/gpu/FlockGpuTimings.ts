@@ -22,6 +22,13 @@ export interface FlockDrawDiagnostics {
   updatedAt: number;
 }
 
+/** Latest completed, bounded readbacks; samples may precede the captured frame. */
+export interface FlockGpuTimingSnapshot {
+  supported: boolean;
+  samples: Record<string, FlockGpuTimingSample>;
+  draws: FlockDrawDiagnostics[];
+}
+
 interface Slot {
   queries: GPUQuerySet;
   resolve: GPUBuffer;
@@ -117,7 +124,7 @@ export class FlockGpuTimings {
     if (this.draws.size > 16) this.draws.delete(this.draws.keys().next().value!);
   }
 
-  snapshot() {
+  snapshot(): FlockGpuTimingSnapshot {
     return { supported: this.supported && !this.disposed, samples: Object.fromEntries(this.samples), draws: [...this.draws.values()] };
   }
 
@@ -154,6 +161,6 @@ export function flockGpuTimings(device: GPUDevice): FlockGpuTimings {
   return owner;
 }
 
-export function getFlockGpuTimingSnapshot() {
+export function getFlockGpuTimingSnapshot(): FlockGpuTimingSnapshot {
   return current?.snapshot() ?? { supported: false, samples: {}, draws: [] };
 }

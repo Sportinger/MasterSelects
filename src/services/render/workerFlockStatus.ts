@@ -1,9 +1,11 @@
 import type { FlockHostCapabilities, FlockRuntimeStatus } from '../../engine/flock/runtime/flockRuntimeApi';
+import type { FlockGpuTimingSnapshot } from '../../engine/flock/gpu/FlockGpuTimings';
 
 /** Value-only diagnostics for every scene occurrence in one presented frame. */
 export interface WorkerFlockStatusSnapshot {
   readonly compositionId: string;
   readonly capabilities: FlockHostCapabilities | null;
+  readonly gpuTimings?: FlockGpuTimingSnapshot & { capturedAt: number };
   readonly occurrences: readonly {
     readonly occurrenceNamespace: string;
     readonly compositionId: string;
