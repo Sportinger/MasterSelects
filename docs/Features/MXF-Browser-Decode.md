@@ -15,6 +15,10 @@ Goal: import, preview, scrub, and export MXF files entirely in the browser throu
   ProRes in MXF goes to TurboRes; DNxHD/DNxHR and MPEG-2 use a separate, pure-LGPL libavcodec
   WASM build (`tools/libavcodec-wasm/`, not `@ffmpeg/core`). Parallelism comes from multiple
   workers, not pthreads.
+- **Long GOP.** `MxfGopFrameProvider` decodes from the previous key frame in stored order, reorders
+  by timestamp, keeps up to six upcoming frames and continues forward without a reset (playback,
+  export, proxy). Decoders plug in as `GopDecoder`: WebCodecs for H.264, a streaming libavcodec
+  worker for MPEG-2. Reverse playback restarts at the key frame for each frame (slow at 4K).
 - **Codec provider backends.** Every codec backend is a descriptor in
   `src/services/mediaRuntime/codec/codecProviderDescriptors.ts` on top of
   `CodecFrameProviderBase` (latest-wins queue, epochs, prefetch, exact seek). Playback, thumbnails,
@@ -30,7 +34,7 @@ MXF path. ProRes keeps its real FourCC (`apch`, …) and therefore the TurboRes 
 | ProRes (RDD 44) | `apco`/`apcs`/`apcn`/`apch`/`ap4h`/`ap4x` | TurboRes via `MxfPacketSource` | ✓ preview, scrub, thumbnails |
 | DNxHD / DNxHR | `mxf:dnxhd` | libavcodec WASM worker pool (`mxf-libav`) | ✓ decoder wired |
 | IMX / D-10 (MPEG-2 4:2:2 Intra) | `mxf:mpeg2-intra` | libavcodec WASM worker pool (`mxf-libav`), VBI cropped | ✓ decoder wired; interlaced shown as frames |
-| XDCAM HD422 (MPEG-2 Long GOP) | `mxf:mpeg2-lgop` | libavcodec WASM + GOP provider | metadata ✓, decoder pending |
+| XDCAM HD422 (MPEG-2 Long GOP) | `mxf:mpeg2-lgop` | one stateful libavcodec worker via `MxfGopFrameProvider` | ✓ decoder wired; interlaced shown as frames |
 | XAVC-I / AVC-Intra | `mxf:avc-intra` | WebCodecs (`mxf-avc` backend) | ✓ decoder wired |
 | XAVC Long GOP | `mxf:avc-lgop` | WebCodecs, decode from previous key frame (`mxf-avc`) | ✓ decoder wired (verified parse of a 38-min Sony XAVC 4K file) |
 | JPEG 2000, unknown | `mxf:unsupported:<reason>` | – | explicit "not supported" |

@@ -125,7 +125,7 @@ describe('MXF import wiring', () => {
     expect(selectRuntimeFrameProviderPlan({ videoCodecId: 'mxf:avc-lgop', turboResEnabled: true }))
       .toEqual({ backend: 'mxf-avc', codecId: 'mxf:avc-lgop' });
     expect(selectRuntimeFrameProviderPlan({ videoCodecId: 'mxf:mpeg2-lgop', turboResEnabled: true }))
-      .toEqual({ backend: 'unsupported', reason: 'mxf-decoder-unavailable' });
+      .toEqual({ backend: 'mxf-libav', codecId: 'mxf:mpeg2-lgop' });
     expect(selectRuntimeFrameProviderPlan({ videoCodecId: 'mxf:unsupported:jpeg2000', turboResEnabled: true }))
       .toEqual({ backend: 'unsupported', reason: 'mxf-unsupported-essence' });
     // ProRes in MXF keeps its real FourCC and the TurboRes backend.

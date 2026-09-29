@@ -18,20 +18,42 @@ import type {
 } from '../../../workers/libavDecodeWorker';
 import { MxfPacketSource, type MxfPacket } from './MxfPacketSource';
 
-export type MxfLibavCodecId = 'mxf:dnxhd' | 'mxf:mpeg2-intra';
+export type MxfLibavIntraCodecId = 'mxf:dnxhd' | 'mxf:mpeg2-intra';
 
 export interface MxfLibavFrameProviderOptions extends CodecFrameProviderBaseOptions {
-  codecId: MxfLibavCodecId;
+  codecId: MxfLibavIntraCodecId;
   /** 8-bit output for Canvas2D consumers (thumbnails); 10-bit renders black there. */
   eightBit?: boolean;
   workerCount?: number;
   packetSourceFactory?: (file: File, codecId: string) => Promise<MxfPacketSource>;
 }
 
-const CODEC_FOR_ID: Record<MxfLibavCodecId, LibavWorkerCodec> = {
+const CODEC_FOR_ID: Record<MxfLibavIntraCodecId, LibavWorkerCodec> = {
   'mxf:dnxhd': 'dnxhd',
   'mxf:mpeg2-intra': 'mpeg2video',
 };
+
+export type LibavOpenRequest = Extract<LibavDecodeWorkerRequest, { type: 'open' }>;
+
+/** Worker open parameters derived from the MXF picture descriptor. */
+export function createLibavOpenRequest(
+  source: MxfPacketSource,
+  codec: LibavWorkerCodec,
+  eightBit: boolean,
+): LibavOpenRequest {
+  const video = source.mxf.video!;
+  const visibleRect = video.displayYOffset > 0 || video.height !== video.codedHeight
+    ? { x: 0, y: video.displayYOffset, width: video.width, height: video.height }
+    : null;
+  return {
+    type: 'open',
+    codec,
+    eightBit,
+    visibleRect,
+    colorMatrix: video.height <= 576 ? 'smpte170m' : 'bt709',
+    frameDurationUs: Math.round(1e6 / (video.fps || 25)),
+  };
+}
 
 /** Workers per policy (plan: interactive/export up to 4, background up to 2), bounded by cores. */
 export function planLibavWorkerCount(policy: DecodeSessionPolicy, width: number, height: number): number {
@@ -43,7 +65,7 @@ export function planLibavWorkerCount(policy: DecodeSessionPolicy, width: number,
   return Math.max(1, Math.min(wanted, cores - 1));
 }
 
-class LibavWorker {
+export class LibavWorker {
   private readonly worker: Worker;
   private readonly pending = new Map<number, {
     resolve: (frame: VideoFrame) => void;
@@ -51,8 +73,14 @@ class LibavWorker {
   }>();
   private opened: Promise<void>;
   private terminated = false;
+  /** Long-GOP stream state (feed/drain). */
+  private unackedFeeds = 0;
+  private readonly feedWaiters: (() => void)[] = [];
+  private readonly drainWaiters = new Map<number, () => void>();
+  onStreamFrame: ((frame: VideoFrame) => void) | null = null;
+  onStreamError: ((error: Error) => void) | null = null;
 
-  constructor(open: Extract<LibavDecodeWorkerRequest, { type: 'open' }>) {
+  constructor(open: LibavOpenRequest) {
     this.worker = new Worker(new URL('../../../workers/libavDecodeWorker.ts', import.meta.url), {
       type: 'module',
       name: 'libav-decode',
@@ -64,13 +92,24 @@ class LibavWorker {
       const message = event.data;
       if (message.type === 'opened') {
         resolveOpen();
+      } else if (message.type === 'stream-frame') {
+        if (this.onStreamFrame) this.onStreamFrame(message.frame);
+        else closeVideoFrame(message.frame);
+      } else if (message.type === 'fed') {
+        this.unackedFeeds = Math.max(0, this.unackedFeeds - 1);
+        this.feedWaiters.shift()?.();
+      } else if (message.type === 'drained') {
+        this.drainWaiters.get(message.id)?.();
+        this.drainWaiters.delete(message.id);
       } else if (message.type === 'frame') {
         const entry = this.pending.get(message.id);
         if (!entry) { closeVideoFrame(message.frame); return; }
         this.pending.delete(message.id);
         entry.resolve(message.frame);
       } else if (message.id === null) {
-        rejectOpen(new Error(message.error));
+        const error = new Error(message.error);
+        rejectOpen(error);
+        this.onStreamError?.(error);
       } else {
         const entry = this.pending.get(message.id);
         this.pending.delete(message.id);
@@ -87,7 +126,36 @@ class LibavWorker {
   }
 
   get queueSize(): number {
-    return this.pending.size;
+    return this.pending.size + this.unackedFeeds;
+  }
+
+  feed(packet: MxfPacket): void {
+    if (this.terminated) return;
+    const copy = packet.data.slice();
+    const request: LibavDecodeWorkerRequest = {
+      type: 'feed',
+      packet: copy.buffer as ArrayBuffer,
+      timestampUs: packet.microsecondTimestamp,
+    };
+    this.unackedFeeds += 1;
+    this.worker.postMessage(request, [request.packet]);
+  }
+
+  waitForFeedAck(): Promise<void> {
+    if (this.unackedFeeds === 0) return Promise.resolve();
+    return new Promise((resolve) => this.feedWaiters.push(resolve));
+  }
+
+  drain(id: number): Promise<void> {
+    if (this.terminated) return Promise.resolve();
+    return new Promise((resolve) => {
+      this.drainWaiters.set(id, resolve);
+      this.worker.postMessage({ type: 'drain', id } satisfies LibavDecodeWorkerRequest);
+    });
+  }
+
+  resetStream(): void {
+    if (!this.terminated) this.worker.postMessage({ type: 'reset' } satisfies LibavDecodeWorkerRequest);
   }
 
   ready(): Promise<void> {
@@ -116,6 +184,9 @@ class LibavWorker {
     const error = new Error('libavcodec worker terminated');
     for (const entry of this.pending.values()) entry.reject(error);
     this.pending.clear();
+    for (const waiter of this.feedWaiters.splice(0)) waiter();
+    for (const waiter of this.drainWaiters.values()) waiter();
+    this.drainWaiters.clear();
     this.worker.terminate();
   }
 }
@@ -143,16 +214,7 @@ export class MxfLibavFrameProvider extends CodecFrameProviderBase<MxfPacket, Mxf
     );
     this.source = source;
     const video = source.mxf.video!;
-    const visibleRect = video.displayYOffset > 0 || video.height !== video.codedHeight
-      ? { x: 0, y: video.displayYOffset, width: video.width, height: video.height }
-      : null;
-    const open: Extract<LibavDecodeWorkerRequest, { type: 'open' }> = {
-      type: 'open',
-      codec: CODEC_FOR_ID[this.options.codecId],
-      eightBit: this.options.eightBit === true,
-      visibleRect,
-      colorMatrix: video.height <= 576 ? 'smpte170m' : 'bt709',
-    };
+    const open = createLibavOpenRequest(source, CODEC_FOR_ID[this.options.codecId], this.options.eightBit === true);
     const count = this.options.workerCount
       ?? planLibavWorkerCount(this.options.policy ?? 'interactive', video.width, video.height);
     this.workers = Array.from({ length: count }, () => new LibavWorker(open));

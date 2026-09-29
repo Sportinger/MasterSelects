@@ -1,6 +1,9 @@
-// libavcodec (LGPL WASM) decode worker for intra MXF essence (DNxHD/DNxHR,
-// MPEG-2 Intra/IMX). One decoder per worker; the frame provider owns ordering
-// and cancellation. Frames are built here and transferred as VideoFrames.
+// libavcodec (LGPL WASM) decode worker for MXF essence. One decoder per worker;
+// the frame provider owns ordering and cancellation. Frames are built here and
+// transferred as VideoFrames.
+//  - `decode`: one independent (intra) packet -> exactly one frame (DNxHD, IMX).
+//  - `feed`/`drain`/`reset`: stateful long-GOP stream; frames come out in display
+//    order stamped with the packet timestamps (MPEG-2 Long GOP).
 
 export type LibavWorkerCodec = 'dnxhd' | 'mpeg2video';
 
@@ -12,13 +15,21 @@ export type LibavDecodeWorkerRequest =
       eightBit: boolean;
       visibleRect: { x: number; y: number; width: number; height: number } | null;
       colorMatrix: 'bt709' | 'smpte170m';
+      frameDurationUs: number;
     }
   | { type: 'decode'; id: number; packet: ArrayBuffer; timestampUs: number; durationUs: number }
+  | { type: 'feed'; packet: ArrayBuffer; timestampUs: number }
+  | { type: 'drain'; id: number }
+  | { type: 'reset' }
   | { type: 'close' };
 
 export type LibavDecodeWorkerResponse =
   | { type: 'opened' }
   | { type: 'frame'; id: number; frame: VideoFrame; interlaced: boolean; topFieldFirst: boolean }
+  /** Frame produced by the long-GOP stream (`feed`/`drain`). */
+  | { type: 'stream-frame'; frame: VideoFrame; interlaced: boolean; topFieldFirst: boolean }
+  | { type: 'fed' }
+  | { type: 'drained'; id: number }
   | { type: 'error'; id: number | null; error: string };
 
 interface LibavModule {
@@ -32,6 +43,7 @@ interface LibavModule {
   _dec_height(dec: number): number;
   _dec_pix_fmt(dec: number): number;
   _dec_interlaced(dec: number): number;
+  _dec_pts(dec: number): number;
   _dec_tff(dec: number): number;
   _dec_plane(dec: number, index: number): number;
   _dec_stride(dec: number, index: number): number;
@@ -167,6 +179,27 @@ function decodePacket(m: LibavModule, packet: Uint8Array, timestampUs: number, d
   };
 }
 
+/** Long-GOP stream: send one packet, then emit every frame the decoder releases. */
+function feedPacket(m: LibavModule, packet: Uint8Array | null, timestampUs: number): void {
+  let ptr = 0;
+  if (packet) {
+    ptr = m._dec_malloc(packet.length);
+    m.HEAPU8.set(packet, ptr);
+  }
+  const sent = m._dec_send(decoder, ptr, packet ? packet.length : 0, timestampUs);
+  if (ptr) m._dec_free(ptr);
+  if (sent < 0 && packet) throw new Error(`libavcodec rejected the packet (${sent})`);
+  while (m._dec_receive(decoder) === 0) {
+    const frame = buildFrame(m, m._dec_pts(decoder), options!.frameDurationUs);
+    post({
+      type: 'stream-frame',
+      frame,
+      interlaced: m._dec_interlaced(decoder) === 1,
+      topFieldFirst: m._dec_tff(decoder) === 1,
+    }, [frame as unknown as Transferable]);
+  }
+}
+
 function post(message: LibavDecodeWorkerResponse, transfer: Transferable[] = []): void {
   (self as unknown as Worker).postMessage(message, transfer);
 }
@@ -184,6 +217,17 @@ self.onmessage = async (event: MessageEvent<LibavDecodeWorkerRequest>) => {
       if (!module || !decoder) throw new Error('libavcodec decoder is not open');
       const result = decodePacket(module, new Uint8Array(request.packet), request.timestampUs, request.durationUs);
       post({ type: 'frame', id: request.id, ...result }, [result.frame as unknown as Transferable]);
+    } else if (request.type === 'feed') {
+      if (!module || !decoder) throw new Error('libavcodec decoder is not open');
+      feedPacket(module, new Uint8Array(request.packet), request.timestampUs);
+      post({ type: 'fed' });
+    } else if (request.type === 'drain') {
+      if (!module || !decoder) throw new Error('libavcodec decoder is not open');
+      feedPacket(module, null, 0);
+      module._dec_flush(decoder);
+      post({ type: 'drained', id: request.id });
+    } else if (request.type === 'reset') {
+      if (module && decoder) module._dec_flush(decoder);
     } else if (request.type === 'close') {
       if (module && decoder) module._dec_close(decoder);
       decoder = 0;

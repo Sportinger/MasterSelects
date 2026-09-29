@@ -18,6 +18,7 @@ import { decodeTurboResOneFrame } from '../prores/turboResOneFrame';
 import { decodeHapOneFrame } from '../hap/hapOneFrame';
 import { createMxfAvcFrameProvider } from '../mxf/MxfAvcFrameProvider';
 import { createMxfLibavFrameProvider, planLibavWorkerCount } from '../mxf/MxfLibavFrameProvider';
+import { createMxfLibavGopFrameProvider } from '../mxf/MxfLibavGopFrameProvider';
 
 export interface CodecProviderCreateParams {
   sourceId: string;
@@ -191,12 +192,23 @@ const mxfLibavDescriptor: CodecProviderDescriptor = {
     const width = runtime.metadata.codedWidth ?? runtime.metadata.width ?? 1920;
     const height = runtime.metadata.codedHeight ?? runtime.metadata.height ?? 1080;
     const frameBytes = width * height * 2 * 2;
-    const workers = planLibavWorkerCount(policy, width, height);
+    const workers = runtime.metadata.videoCodecId === 'mxf:mpeg2-lgop' ? 1 : planLibavWorkerCount(policy, width, height);
     return workers * (LIBAV_WORKER_BASE_HEAP_BYTES + frameBytes * 2) + frameBytes * (workers + 2);
   },
   resourceTags: (runtime, policy) => ['runtime-playback', policy, 'mxf-libav', runtime.metadata.videoCodecId ?? 'mxf'],
   create: async (params) => {
     if (params.plan.backend !== 'mxf-libav') return null;
+    if (params.plan.codecId === 'mxf:mpeg2-lgop') {
+      return createMxfLibavGopFrameProvider({
+        sourceId: params.sourceId,
+        file: params.file,
+        codecId: params.plan.codecId,
+        policy: params.policy,
+        eightBit: params.outputProfile === 'sdr',
+        onFrame: params.onFrame,
+        onError: params.onError,
+      });
+    }
     return createMxfLibavFrameProvider({
       sourceId: params.sourceId,
       file: params.file,

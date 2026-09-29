@@ -22,7 +22,7 @@ const CODEC_PROVIDER_BACKENDS: readonly CodecProviderBackend[] = ['turbores', 'h
 
 export type MxfAvcCodecId = 'mxf:avc-intra' | 'mxf:avc-lgop';
 /** Intra essence decoded by the LGPL libavcodec WASM worker pool. */
-export type MxfLibavCodecId = 'mxf:dnxhd' | 'mxf:mpeg2-intra';
+export type MxfLibavCodecId = 'mxf:dnxhd' | 'mxf:mpeg2-intra' | 'mxf:mpeg2-lgop';
 
 /** Plans whose frames come from a codec-specific provider (not the browser's native decoder). */
 export type CodecProviderPlan = Extract<RuntimeFrameProviderPlan, { backend: CodecProviderBackend }>;
@@ -58,7 +58,11 @@ export function selectRuntimeFrameProviderPlan(options: {
     // H.264 essence decodes through WebCodecs (plan E2); no WASM H.264 until D5 is settled.
     return { backend: 'mxf-avc', codecId: options.videoCodecId };
   }
-  if (options.videoCodecId === 'mxf:dnxhd' || options.videoCodecId === 'mxf:mpeg2-intra') {
+  if (
+    options.videoCodecId === 'mxf:dnxhd'
+    || options.videoCodecId === 'mxf:mpeg2-intra'
+    || options.videoCodecId === 'mxf:mpeg2-lgop'
+  ) {
     return { backend: 'mxf-libav', codecId: options.videoCodecId };
   }
   if (isMxfCodecId(options.videoCodecId)) {
