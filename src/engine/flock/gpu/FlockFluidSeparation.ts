@@ -25,7 +25,10 @@ function pipelines(device: GPUDevice, layoutKind: FlockParticleLayout): Pipeline
   variants.set(layoutKind, result); cache.set(device, variants); finish(); return result;
 }
 
-/** Reuses the stable radix index and reorder scratch; only cell ranges are owned. */
+/** Reuses the stable radix index and reorder scratch; only cell ranges are owned.
+ * Scratch: N vec4 corrections followed by N vec4 sorted positions/ages (32N bytes).
+ * Both supported particle layouts provide enough reorder space; no extra buffer.
+ */
 export class FlockFluidSeparation {
   private readonly device: GPUDevice;
   private readonly order: FlockParticleOrder;

@@ -328,6 +328,15 @@ These controls are intended to reduce grid-aligned bands; they do not guarantee 
 preservation. CPU and GPU use the same rules. The GPU reuses the spatial sorter
 and reorder scratch, adding only two cell-range arrays; separation still incurs
 an additional sort and neighbor pass each active substep.
+The range pass also gathers positions and ages in sorted order. Neighbor queries
+read this contiguous snapshot instead of repeatedly following identity and slot
+maps. Corrections occupy the first 16 bytes per particle of reorder scratch, and
+the position snapshot the next 16 bytes; both full and compact layouts fit without
+another allocation. Candidate order, identity-based sampling and corrections are
+unchanged. A Worker GPU check on 262,144 particles produced bit-identical state
+and reduced the isolated separation median from about 10.1 to 2.7 ms on the tested
+AMD device (two runs each, 40-second cooldowns). This is a pass measurement, not
+an overall playback FPS guarantee.
 Fluid submissions scale their step count down with particle capacity. Preview
 simulation waits for its preceding submission to finish before queuing more
 steps, preventing a seek or playback catch-up from building an unbounded GPU

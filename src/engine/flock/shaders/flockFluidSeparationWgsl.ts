@@ -29,6 +29,10 @@ fn clearRanges(@builtin(global_invocation_id) gid: vec3u) {
 fn buildRanges(@builtin(global_invocation_id) gid: vec3u) {
   let index = indexOf(gid);
   if (index >= fp.count) { return; }
+  // Snapshot positions in cell order once, instead of mapping and gathering
+  // them for every neighbor. The second half fits even the 32-byte workspace.
+  let position = particles[particleSlot(pairs[index].identity)];
+  corrections[fp.count + index] = vec4f(position.pos, position.age);
   let key = pairs[index].key;
   if (key >= cellsCount()) { return; }
   if (index == 0u) { ranges[key] = index; }
@@ -44,11 +48,11 @@ fn computeCorrections(@builtin(global_invocation_id) gid: vec3u) {
   // scatters those gathers across the entire particle buffer after advection.
   let identity = pairs[sortedIndex].identity;
   corrections[identity] = vec4f(0.0);
-  let p = particles[particleSlot(identity)];
-  if (p.age < 0.0) { return; }
+  let p = corrections[fp.count + sortedIndex];
+  if (p.w < 0.0) { return; }
   let radius = clamp(fp.separationDistance, 0.0, 0.5) * fp.cellSize;
-  let low = max(vec3i(0), vec3i(floor((p.pos - fp.origin - vec3f(radius)) / fp.cellSize)));
-  let high = min(vec3i(fp.dims) - vec3i(1), vec3i(floor((p.pos - fp.origin + vec3f(radius)) / fp.cellSize)));
+  let low = max(vec3i(0), vec3i(floor((p.xyz - fp.origin - vec3f(radius)) / fp.cellSize)));
+  let high = min(vec3i(fp.dims) - vec3i(1), vec3i(floor((p.xyz - fp.origin + vec3f(radius)) / fp.cellSize)));
   var localCells: array<u32, 27>;
   var cellLength = 0u;
   var candidates = 0u;
@@ -72,11 +76,11 @@ fn computeCorrections(@builtin(global_invocation_id) gid: vec3u) {
     let first = (stride - ((running + phase) % stride)) % stride;
     running += end - start;
     for (var index = start + first; index < end; index += stride) {
-      let other = pairs[index].identity;
-      if (other == identity) { continue; }
-      let delta = p.pos - particles[particleSlot(other)].pos;
+      if (index == sortedIndex) { continue; }
+      let delta = p.xyz - corrections[fp.count + index].xyz;
       let distance = length(delta);
       if (distance >= radius) { continue; }
+      let other = pairs[index].identity;
       var direction = fluidPairDirection(identity, other);
       if (distance > fp.cellSize * 1e-7) { direction = delta / distance; }
       correction += direction * (radius - distance); neighbors++;

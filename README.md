@@ -57,7 +57,8 @@ Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both
 CPU and GPU, with residual-based convergence and solid domain walls.
 The fluid node exposes particle separation, spacing and deterministic position
 jitter to reduce grid-aligned bands; separation bounds dense-neighborhood work
-to 64 candidates per particle.
+to 64 candidates per particle. It gathers neighbor positions once in cell order
+using existing sort workspace, reducing GPU memory reads without changing the simulation.
 Graphs without boid rules or neighbor links use tiny placeholder bindings instead
 of allocating the full boid spatial index.
 Simulation, neighbor sorting, trails and links distribute GPU work across two
