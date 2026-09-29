@@ -284,7 +284,10 @@ export class MxfGopEngine {
 
   private wantsMoreFrames(): boolean {
     if (this.pending) return true;
-    return this.nextStored >= 0 && this.readyFrames.size + this.inDecoder < READY_AHEAD;
+    // Count only decoded frames: the decoder holds reordered frames until it gets
+    // more input, so counting those would stop the fill before anything is ready.
+    // MAX_IN_DECODER bounds what is in flight.
+    return this.nextStored >= 0 && this.readyFrames.size < READY_AHEAD;
   }
 
   private async pump(): Promise<void> {
