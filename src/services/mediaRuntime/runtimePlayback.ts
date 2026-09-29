@@ -234,7 +234,18 @@ export function isHapRuntimeSource(
 export function isProviderBackedRuntimeSource(
   source: RuntimeBackedSource | null | undefined
 ): boolean {
-  return isTurboResRuntimeSource(source) || isHapRuntimeSource(source);
+  if (!hasRuntimeBinding(source)) {
+    return false;
+  }
+  const runtime = mediaRuntimeRegistry.getRuntime(source.runtimeSourceId);
+  if (!runtime) {
+    return false;
+  }
+  refreshRuntimeMetadataFromMediaStore(runtime);
+  return isCodecProviderPlan(selectRuntimeFrameProviderPlan({
+    videoCodecId: runtime.metadata.videoCodecId,
+    turboResEnabled: flags.turboResProRes,
+  }));
 }
 
 export function peekRuntimeFrameProvider(

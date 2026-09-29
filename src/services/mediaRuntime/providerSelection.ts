@@ -13,10 +13,13 @@ export type { CodecProviderBackend };
 export type RuntimeFrameProviderPlan =
   | { backend: 'turbores'; fourCC: TurboResProResFourCC }
   | { backend: 'hap'; fourCC: HapVideoFourCC }
+  | { backend: 'mxf-avc'; codecId: MxfAvcCodecId }
   | { backend: 'default'; reason: 'not-prores' | 'turbores-disabled' }
   | { backend: 'unsupported'; reason: 'prores-raw' | 'mxf-unsupported-essence' | 'mxf-decoder-unavailable' };
 
-const CODEC_PROVIDER_BACKENDS: readonly CodecProviderBackend[] = ['turbores', 'hap'];
+const CODEC_PROVIDER_BACKENDS: readonly CodecProviderBackend[] = ['turbores', 'hap', 'mxf-avc'];
+
+export type MxfAvcCodecId = 'mxf:avc-intra' | 'mxf:avc-lgop';
 
 /** Plans whose frames come from a codec-specific provider (not the browser's native decoder). */
 export type CodecProviderPlan = Extract<RuntimeFrameProviderPlan, { backend: CodecProviderBackend }>;
@@ -48,6 +51,10 @@ export function selectRuntimeFrameProviderPlan(options: {
   // only playback path and is not feature-gated.
   // Namespaced MXF essence ids never fall back to the browser decoder: HTMLVideoElement
   // cannot open MXF. Decoder backends are added per codec (plan phases 3-5).
+  if (options.videoCodecId === 'mxf:avc-intra' || options.videoCodecId === 'mxf:avc-lgop') {
+    // H.264 essence decodes through WebCodecs (plan E2); no WASM H.264 until D5 is settled.
+    return { backend: 'mxf-avc', codecId: options.videoCodecId };
+  }
   if (isMxfCodecId(options.videoCodecId)) {
     return getMxfUnsupportedReason(options.videoCodecId)
       ? { backend: 'unsupported', reason: 'mxf-unsupported-essence' }

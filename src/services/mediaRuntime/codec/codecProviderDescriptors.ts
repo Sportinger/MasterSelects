@@ -16,6 +16,7 @@ import { estimateTurboResResources, planTurboResRuntimePolicy } from '../prores/
 import { estimateHapResources } from '../hap/hapResourceEstimate';
 import { decodeTurboResOneFrame } from '../prores/turboResOneFrame';
 import { decodeHapOneFrame } from '../hap/hapOneFrame';
+import { createMxfAvcFrameProvider } from '../mxf/MxfAvcFrameProvider';
 
 export interface CodecProviderCreateParams {
   sourceId: string;
@@ -124,9 +125,62 @@ const hapDescriptor: CodecProviderDescriptor = {
   },
 };
 
+/** Decodes one frame with a short-lived provider and returns an owned clone. */
+async function decodeOneFrameWithProvider(
+  descriptor: CodecProviderDescriptor,
+  file: File,
+  plan: CodecProviderPlan,
+  timeSeconds: number,
+): Promise<VideoFrame> {
+  const provider = await descriptor.create({
+    sourceId: `${descriptor.backend}-one-frame:${file.name}:${file.size}`,
+    file,
+    plan,
+    policy: 'background',
+    outputProfile: 'sdr',
+  });
+  if (!provider) throw new Error(`${descriptor.logName} could not initialize`);
+  try {
+    await provider.seekExact(timeSeconds);
+    const frame = provider.getCurrentFrame();
+    if (!(frame instanceof VideoFrame)) throw new Error(`${descriptor.logName} produced no frame`);
+    return frame.clone();
+  } finally {
+    await provider.destroyAsync();
+  }
+}
+
+const mxfAvcDescriptor: CodecProviderDescriptor = {
+  backend: 'mxf-avc',
+  logName: 'MXF AVC',
+  resourceLabel: 'MXF AVC (WebCodecs) frame provider',
+  exportResourceLabel: 'Export MXF AVC frame provider',
+  describePlan: (plan) => ({ codecId: plan.backend === 'mxf-avc' ? plan.codecId : undefined }),
+  // Decoder surfaces are GPU/driver owned; count the ready-frame window (NV12) plus demux reads.
+  estimateHeapBytes: (runtime) => {
+    const width = runtime.metadata.width ?? 1920;
+    const height = runtime.metadata.height ?? 1080;
+    return width * height * 1.5 * 8 + 8 * 1024 * 1024;
+  },
+  resourceTags: (runtime, policy) => ['runtime-playback', policy, 'mxf-avc', runtime.metadata.videoCodecId ?? 'mxf:avc'],
+  create: async (params) => {
+    if (params.plan.backend !== 'mxf-avc') return null;
+    return createMxfAvcFrameProvider({
+      sourceId: params.sourceId,
+      file: params.file,
+      codecId: params.plan.codecId,
+      policy: params.policy,
+      onFrame: params.onFrame,
+      onError: params.onError,
+    });
+  },
+  decodeOneFrame: (file, plan, timeSeconds) => decodeOneFrameWithProvider(mxfAvcDescriptor, file, plan, timeSeconds),
+};
+
 const DESCRIPTORS: Record<CodecProviderBackend, CodecProviderDescriptor> = {
   turbores: turboResDescriptor,
   hap: hapDescriptor,
+  'mxf-avc': mxfAvcDescriptor,
 };
 
 export function getCodecProviderDescriptor(backend: CodecProviderBackend): CodecProviderDescriptor {

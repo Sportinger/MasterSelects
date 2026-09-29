@@ -104,10 +104,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
     videoCodecId: file.videoCodecId,
     turboResEnabled: flags.turboResProRes,
   });
-  const turboResFourCC = isCodecProviderPlan(sourceProviderPlan)
-    ? sourceProviderPlan.fourCC
-    : null;
-  const useTurboResVideo = isVideo && turboResFourCC !== null && file.file instanceof File;
+  const useTurboResVideo = isVideo && isCodecProviderPlan(sourceProviderPlan) && file.file instanceof File;
   const fps = file.fps || 30;
 
   const [isScrubbing, setIsScrubbing] = useState(false);
@@ -442,7 +439,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
               ref={turboResMonitorRef}
               file={file}
               sourceFile={file.file!}
-              fourCC={turboResFourCC!}
+              videoCodecId={file.videoCodecId!}
               style={sourceViewportStyle}
               onTimeChange={(time) => {
                 currentTimeRef.current = time;

@@ -50,8 +50,9 @@ async function encodeFrameOnMainThread(
 export async function generateTurboResProxy(params: {
   file: File;
   mediaFileId: string;
-  fourCC: TurboResProResFourCC | HapVideoFourCC;
-  /** Which session-provider decodes the source; defaults to TurboRes/ProRes. */
+  /** Codec provider plan; `fourCC`/`backend` remain as the TurboRes/HAP shorthand. */
+  plan?: CodecProviderPlan;
+  fourCC?: TurboResProResFourCC | HapVideoFourCC;
   backend?: 'turbores' | 'hap';
   onProgress: (progress: number) => void;
   checkCancelled: () => boolean;
@@ -83,7 +84,7 @@ export async function generateTurboResProxy(params: {
   const pendingEncodes = new Set<Promise<void>>();
 
   try {
-    const plan = (params.backend === 'hap'
+    const plan = params.plan ?? (params.backend === 'hap'
       ? { backend: 'hap', fourCC: params.fourCC as HapVideoFourCC }
       : { backend: 'turbores', fourCC: params.fourCC as TurboResProResFourCC }) as CodecProviderPlan;
     provider = await getCodecProviderDescriptor(plan.backend).create({

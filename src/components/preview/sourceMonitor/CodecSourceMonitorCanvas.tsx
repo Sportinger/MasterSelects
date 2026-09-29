@@ -8,8 +8,6 @@ import {
   type CSSProperties,
 } from 'react';
 import type { MediaFile } from '../../../stores/mediaStore/types';
-import type { TurboResProResFourCC } from '../../../services/mediaRuntime/prores/turboResCodecIdentity';
-import type { HapVideoFourCC } from '../../../services/hap/hapCodecIdentity';
 import {
   bindSourceRuntimeForOwner,
   releaseClipSourceRuntime,
@@ -27,8 +25,8 @@ export interface CodecSourceMonitorHandle {
 interface CodecSourceMonitorCanvasProps {
   file: MediaFile;
   sourceFile: File;
-  /** Session-provider codec identity: ProRes, HAP, or another codec-provider backend. */
-  fourCC: TurboResProResFourCC | HapVideoFourCC;
+  /** Codec id routed to a session codec provider (ProRes/HAP FourCC or an `mxf:*` id). */
+  videoCodecId: string;
   style?: CSSProperties;
   onTimeChange(timeSeconds: number): void;
   onPlayingChange(playing: boolean): void;
@@ -167,7 +165,7 @@ export const CodecSourceMonitorCanvas = forwardRef<
       return undefined;
     }
     mediaRuntimeRegistry.getRuntime(source.runtimeSourceId)?.updateMetadata({
-      videoCodecId: props.fourCC,
+      videoCodecId: props.videoCodecId,
     });
 
     void ensureRuntimeFrameProvider(source, 'interactive', currentTimeRef.current, {
@@ -193,7 +191,7 @@ export const CodecSourceMonitorCanvas = forwardRef<
       providerRef.current = null;
       releaseClipSourceRuntime({ id: ownerId, source });
     };
-  }, [props.file, props.sourceFile, props.fourCC]);
+  }, [props.file, props.sourceFile, props.videoCodecId]);
 
   return (
     <>

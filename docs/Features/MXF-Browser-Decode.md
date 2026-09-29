@@ -1,7 +1,7 @@
 # MXF Browser Decode
 
-Status: **in development, behind the `mxfBrowserDecode` engine flag (default off).**
-Toggle for local testing with `window.__ENGINE_FLAGS__.mxfBrowserDecode = true` before importing.
+Status: **in development, behind the `mxfBrowserDecode` engine flag** — on in the dev server,
+off in production builds (`window.__ENGINE_FLAGS__.mxfBrowserDecode` toggles it at runtime).
 
 Goal: import, preview, scrub, and export MXF files entirely in the browser through the same
 `RuntimeFrameProvider` boundary as ProRes (TurboRes) and HAP. No server, no native helper.
@@ -27,13 +27,15 @@ MXF path. ProRes keeps its real FourCC (`apch`, …) and therefore the TurboRes 
 
 | Essence | `videoCodecId` | Decode path | Status |
 |---|---|---|---|
-| ProRes (RDD 44) | `apco`/`apcs`/`apcn`/`apch`/`ap4h`/`ap4x` | TurboRes | metadata ✓, playback pending (MXF packet source) |
+| ProRes (RDD 44) | `apco`/`apcs`/`apcn`/`apch`/`ap4h`/`ap4x` | TurboRes via `MxfPacketSource` | ✓ preview, scrub, thumbnails |
 | DNxHD / DNxHR | `mxf:dnxhd` | libavcodec WASM | metadata ✓, decoder pending |
 | IMX / D-10 (MPEG-2 4:2:2 Intra) | `mxf:mpeg2-intra` | libavcodec WASM | metadata ✓, decoder pending |
 | XDCAM HD422 (MPEG-2 Long GOP) | `mxf:mpeg2-lgop` | libavcodec WASM + GOP provider | metadata ✓, decoder pending |
-| XAVC-I / AVC-Intra | `mxf:avc-intra` | WebCodecs | metadata ✓, decoder pending |
-| XAVC Long GOP | `mxf:avc-lgop` | WebCodecs + GOP provider | metadata ✓, decoder pending |
+| XAVC-I / AVC-Intra | `mxf:avc-intra` | WebCodecs (`mxf-avc` backend) | ✓ decoder wired |
+| XAVC Long GOP | `mxf:avc-lgop` | WebCodecs, decode from previous key frame (`mxf-avc`) | ✓ decoder wired; audio pending |
 | JPEG 2000, unknown | `mxf:unsupported:<reason>` | – | explicit "not supported" |
+
+MXF audio (PCM) is not decoded yet (plan phase 6); MXF clips are picture-only until then.
 
 Until a codec's decoder exists, its plan is `{ backend: 'unsupported', reason:
 'mxf-decoder-unavailable' }`, so the editor reports it instead of showing a black

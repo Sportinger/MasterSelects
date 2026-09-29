@@ -111,8 +111,7 @@ class ProxyGeneratorWebCodecs {
       return generateTurboResProxy({
         file,
         mediaFileId: _mediaFileId,
-        fourCC: providerPlan.fourCC,
-        backend: providerPlan.backend,
+        plan: providerPlan,
         onProgress,
         checkCancelled,
         saveFrame,
