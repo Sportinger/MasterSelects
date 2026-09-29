@@ -7,13 +7,9 @@ import type { LayerSource, TimelineClip } from '../../types';
 import type { RuntimeProviderDemand } from '../../timeline/resources/TimelineVisualResourceDemand';
 import type { RenderResourceDescriptor } from '../timeline/runtimeCoordinatorTypes';
 import { createRenderResourceDescriptorFromDemand } from '../timeline/runtimeProviderDemandBridge';
-import type { PixelFormat } from 'turbores';
-import {
-  estimateTurboResResources,
-  planTurboResRuntimePolicy,
-} from './prores/turboResResourceEstimate';
-import { estimateHapResources } from './hap/hapResourceEstimate';
+import { getCodecProviderDescriptor } from './codec/codecProviderDescriptors';
 import type {
+  CodecProviderBackend,
   DecodeSessionPolicy,
   MediaSourceRuntime,
   RuntimeFrameProvider,
@@ -141,7 +137,7 @@ export function createRuntimeProviderAdmissionResources(
   runtime: MediaSourceRuntime,
   sessionKey: string,
   file: File,
-  providerKind: 'webcodecs' | 'turbores' | 'hap' = 'webcodecs',
+  providerKind: 'webcodecs' | CodecProviderBackend = 'webcodecs',
 ): RenderResourceDescriptor[] {
   const ownerId = `runtime-playback:${policy}:${runtime.sourceId}:${sessionKey}`;
   const runtimeBindingResourceId = getRuntimeProviderResourceId(
@@ -156,21 +152,7 @@ export function createRuntimeProviderAdmissionResources(
     sessionKey,
     'frame-provider'
   );
-  const turboResPixelFormat: PixelFormat = runtime.metadata.videoCodecId === 'ap4h'
-    || runtime.metadata.videoCodecId === 'ap4x'
-    ? 'I444AP12'
-    : 'I422P10';
-  const sharedMemoryAvailable = typeof SharedArrayBuffer !== 'undefined'
-    && typeof crossOriginIsolated !== 'undefined'
-    && crossOriginIsolated;
-  const turboResPolicy = planTurboResRuntimePolicy(policy, sharedMemoryAvailable);
-  const turboResEstimate = estimateTurboResResources({
-    width: runtime.metadata.codedWidth ?? runtime.metadata.width ?? 1920,
-    height: runtime.metadata.codedHeight ?? runtime.metadata.height ?? 1088,
-    pixelFormat: turboResPixelFormat,
-    concurrency: turboResPolicy.concurrency,
-    useSharedMemory: turboResPolicy.useSharedMemory,
-  });
+  const codecDescriptor = providerKind === 'webcodecs' ? null : getCodecProviderDescriptor(providerKind);
 
   return [
     createRenderResourceDescriptorFromDemand(createRuntimePlaybackDemand({
@@ -203,25 +185,12 @@ export function createRuntimeProviderAdmissionResources(
       runtimeSourceId: runtime.sourceId,
       runtimeSessionKey: sessionKey,
       memoryCost: {
-        heapBytes: providerKind === 'turbores'
-          ? turboResEstimate.heapBytes
-          : providerKind === 'hap'
-            ? estimateHapResources({
-              width: runtime.metadata.width ?? 1920,
-              height: runtime.metadata.height ?? 1080,
-            }).heapBytes
-            : file.size,
+        heapBytes: codecDescriptor ? codecDescriptor.estimateHeapBytes(runtime, policy) : file.size,
       },
-      label: providerKind === 'turbores'
-        ? 'TurboRes ProRes frame provider'
-        : providerKind === 'hap'
-          ? 'HAP frame provider'
-          : 'Runtime playback frame provider',
-      tags: providerKind === 'turbores'
-        ? ['runtime-playback', policy, 'turbores', runtime.metadata.videoCodecId ?? 'prores']
-        : providerKind === 'hap'
-          ? ['runtime-playback', policy, 'hap', runtime.metadata.videoCodecId ?? 'hap']
-          : ['runtime-playback', policy, 'webcodecs'],
+      label: codecDescriptor?.resourceLabel ?? 'Runtime playback frame provider',
+      tags: codecDescriptor
+        ? codecDescriptor.resourceTags(runtime, policy)
+        : ['runtime-playback', policy, 'webcodecs'],
     }),
   ];
 }

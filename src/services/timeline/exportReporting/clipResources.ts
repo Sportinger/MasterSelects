@@ -20,6 +20,8 @@ import type {
   ExportFrameProviderAdmissionReport,
   ExportRuntimeBindingAdmissionReport,
 } from './types';
+import { getCodecProviderDescriptor } from '../../mediaRuntime/codec/codecProviderDescriptors';
+import { isCodecProviderBackend } from '../../mediaRuntime/providerSelection';
 
 function getRuntimeSourceMediaFileId(report: ExportRuntimeBindingAdmissionReport): string | undefined {
   return report.runtimeSource.mediaFileId ?? report.clip.mediaFileId;
@@ -173,11 +175,9 @@ function reportExportFrameProvider(runId: string, state: ExportClipState): void 
   }
 
   const status: RuntimeHealthStatus = player.isFullMode() ? 'ok' : 'warning';
-  const providerKind = 'backend' in player && player.backend === 'turbores'
-    ? 'turbores'
-    : 'backend' in player && player.backend === 'hap'
-      ? 'hap'
-      : 'webcodecs';
+  const playerBackend = 'backend' in player ? player.backend : undefined;
+  const codecBackend = isCodecProviderBackend(playerBackend) ? playerBackend : null;
+  const providerKind = codecBackend ?? 'webcodecs';
   const resource = createExportFrameProviderResource({
     runId,
     clip: {
@@ -192,11 +192,9 @@ function reportExportFrameProvider(runId: string, state: ExportClipState): void 
         }
       : undefined,
     providerKind,
-    label: providerKind === 'turbores'
-      ? 'Export TurboRes frame provider'
-      : providerKind === 'hap'
-        ? 'Export HAP frame provider'
-        : 'Export WebCodecs frame provider',
+    label: codecBackend
+      ? getCodecProviderDescriptor(codecBackend).exportResourceLabel
+      : 'Export WebCodecs frame provider',
     tags: ['export', 'clip-state', providerKind],
   });
   retainExportResource({

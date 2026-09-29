@@ -9,10 +9,9 @@ import {
   createWorkerWebCodecsFrameProvider,
   WorkerWebCodecsFrameProvider,
 } from './workerWebCodecsFrameProvider';
-import { selectRuntimeFrameProviderPlan } from './providerSelection';
+import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from './providerSelection';
 import { buildRuntimeMetadataFromMediaFile } from './clipBindings';
-import { createTurboResFrameProvider } from './prores/TurboResFrameProvider';
-import { createHapFrameProvider } from './hap/HapFrameProvider';
+import { getCodecProviderDescriptor } from './codec/codecProviderDescriptors';
 import { Logger } from '../logger';
 import {
   reserveRuntimeProviderResources,
@@ -505,9 +504,8 @@ export async function ensureRuntimeFrameProvider(
   if (providerPlan.backend === 'unsupported') {
     return null;
   }
-  const wantsTurboRes = providerPlan.backend === 'turbores';
-  const wantsHap = providerPlan.backend === 'hap';
-  const wantsCodecProvider = wantsTurboRes || wantsHap;
+  const codecPlan = isCodecProviderPlan(providerPlan) ? providerPlan : null;
+  const wantsCodecProvider = codecPlan !== null;
 
   const wantsWorkerWebCodecs =
     !wantsCodecProvider &&
@@ -517,7 +515,7 @@ export async function ensureRuntimeFrameProvider(
   if (
     binding.frameProvider
     && (wantsCodecProvider
-      ? binding.frameProvider.backend === (wantsTurboRes ? 'turbores' : 'hap')
+      ? binding.frameProvider.backend === codecPlan?.backend
       : !wantsWorkerWebCodecs)
   ) {
     return binding.frameProvider;
@@ -554,7 +552,7 @@ export async function ensureRuntimeFrameProvider(
     runtime,
     binding.sessionKey,
     file,
-    wantsTurboRes ? 'turbores' : wantsHap ? 'hap' : 'webcodecs',
+    codecPlan ? codecPlan.backend : 'webcodecs',
   );
   if (!reservation.admitted) {
     if (!hadSession) {
@@ -566,11 +564,12 @@ export async function ensureRuntimeFrameProvider(
   const initialTime = sourceTime ?? binding.session.currentTime;
   const loadPromise = (async () => {
     try {
-      if (providerPlan.backend === 'hap') {
-        const hapProvider = await createHapFrameProvider({
+      if (codecPlan) {
+        const descriptor = getCodecProviderDescriptor(codecPlan.backend);
+        const codecProvider = await descriptor.create({
           sourceId: `${binding.sourceId}:${binding.sessionKey}`,
           file,
-          fourCC: providerPlan.fourCC,
+          plan: codecPlan,
           policy,
           onFrame: () => {
             options.onFrame?.();
@@ -578,60 +577,26 @@ export async function ensureRuntimeFrameProvider(
           },
           onError: (error) => {
             options.onError?.(error);
-            log.warn('HAP provider error', { sourceId: binding.sourceId, message: error.message });
+            log.warn(`${descriptor.logName} provider error`, { sourceId: binding.sourceId, message: error.message });
             renderHostPort.requestRender();
           },
         });
-        if (!hapProvider) {
-          log.warn('HAP provider failed to initialize', {
+        if (!codecProvider) {
+          log.warn(`${descriptor.logName} provider failed to initialize`, {
             sourceId: binding.sourceId,
             sessionKey: binding.sessionKey,
-            fourCC: providerPlan.fourCC,
+            ...descriptor.describePlan(codecPlan),
           });
           reservation.release();
           return null;
         }
-        log.info('HAP provider ready', { sourceId: binding.sourceId, fourCC: providerPlan.fourCC });
-        if (!attachOwnedRuntimeProvider(runtime, binding, hapProvider, reservation)) return null;
+        log.info(`${descriptor.logName} provider ready`, { sourceId: binding.sourceId, ...descriptor.describePlan(codecPlan) });
+        if (!attachOwnedRuntimeProvider(runtime, binding, codecProvider, reservation)) return null;
         if (Number.isFinite(initialTime) && initialTime !== undefined) {
-          hapProvider.seek(initialTime);
+          codecProvider.seek(initialTime);
         }
         renderHostPort.requestRender();
-        return hapProvider;
-      }
-
-      if (providerPlan.backend === 'turbores') {
-        const turboResProvider = await createTurboResFrameProvider({
-          sourceId: `${binding.sourceId}:${binding.sessionKey}`,
-          file,
-          fourCC: providerPlan.fourCC,
-          policy,
-          onFrame: () => {
-            options.onFrame?.();
-            renderHostPort.requestNewFrameRender();
-          },
-          onError: (error) => {
-            options.onError?.(error);
-            log.warn('TurboRes provider error', { sourceId: binding.sourceId, message: error.message });
-            renderHostPort.requestRender();
-          },
-        });
-        if (!turboResProvider) {
-          log.warn('TurboRes provider failed to initialize', {
-            sourceId: binding.sourceId,
-            sessionKey: binding.sessionKey,
-            fourCC: providerPlan.fourCC,
-          });
-          reservation.release();
-          return null;
-        }
-        log.info('TurboRes provider ready', { sourceId: binding.sourceId, fourCC: providerPlan.fourCC });
-        if (!attachOwnedRuntimeProvider(runtime, binding, turboResProvider, reservation)) return null;
-        if (Number.isFinite(initialTime) && initialTime !== undefined) {
-          turboResProvider.seek(initialTime);
-        }
-        renderHostPort.requestRender();
-        return turboResProvider;
+        return codecProvider;
       }
 
       if (wantsWorkerWebCodecs) {
