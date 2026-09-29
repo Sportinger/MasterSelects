@@ -53,6 +53,8 @@ export interface MxfVideoInfo {
   storedHeight: number;
   displayWidth: number;
   displayHeight: number;
+  /** Top of the display rectangle inside the stored frame (full-frame lines, e.g. 32 for D-10 VBI). */
+  displayYOffset: number;
   frameLayout: number;
   interlaced: boolean;
   topFieldFirst: boolean;
@@ -205,6 +207,7 @@ function buildVideoInfo(
     storedHeight,
     displayWidth,
     displayHeight,
+    displayYOffset: (propU32(descriptor, TAG.displayYOffset) ?? 0) * (interlaced ? 2 : 1),
     frameLayout,
     interlaced,
     topFieldFirst: dominance !== 2,

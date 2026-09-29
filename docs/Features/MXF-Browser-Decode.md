@@ -28,8 +28,8 @@ MXF path. ProRes keeps its real FourCC (`apch`, …) and therefore the TurboRes 
 | Essence | `videoCodecId` | Decode path | Status |
 |---|---|---|---|
 | ProRes (RDD 44) | `apco`/`apcs`/`apcn`/`apch`/`ap4h`/`ap4x` | TurboRes via `MxfPacketSource` | ✓ preview, scrub, thumbnails |
-| DNxHD / DNxHR | `mxf:dnxhd` | libavcodec WASM | metadata ✓, decoder pending |
-| IMX / D-10 (MPEG-2 4:2:2 Intra) | `mxf:mpeg2-intra` | libavcodec WASM | metadata ✓, decoder pending |
+| DNxHD / DNxHR | `mxf:dnxhd` | libavcodec WASM worker pool (`mxf-libav`) | ✓ decoder wired |
+| IMX / D-10 (MPEG-2 4:2:2 Intra) | `mxf:mpeg2-intra` | libavcodec WASM worker pool (`mxf-libav`), VBI cropped | ✓ decoder wired; interlaced shown as frames |
 | XDCAM HD422 (MPEG-2 Long GOP) | `mxf:mpeg2-lgop` | libavcodec WASM + GOP provider | metadata ✓, decoder pending |
 | XAVC-I / AVC-Intra | `mxf:avc-intra` | WebCodecs (`mxf-avc` backend) | ✓ decoder wired |
 | XAVC Long GOP | `mxf:avc-lgop` | WebCodecs, decode from previous key frame (`mxf-avc`) | ✓ decoder wired (verified parse of a 38-min Sony XAVC 4K file) |
@@ -47,6 +47,15 @@ export use the regular audio-proxy path. Not yet: D-10 AES3-in-picture audio, cl
 Until a codec's decoder exists, its plan is `{ backend: 'unsupported', reason:
 'mxf-decoder-unavailable' }`, so the editor reports it instead of showing a black
 `<video>` element.
+
+## libavcodec WASM
+
+`public/wasm/libavcodec/` ships the LGPL build (1.6 MB, replaceable, see its `SOURCE.md`); the
+decoder runs in `src/workers/libavDecodeWorker.ts`, which builds `I422`/`I420`/`I422P10` VideoFrames
+in the worker and transfers them. `MxfLibavFrameProvider` uses 1–4 workers depending on policy and
+frame size and decodes upcoming frames in parallel during forward playback. Thumbnail consumers get
+8-bit output. Measured decode rates are in the maintainer plan (DNxHR HQ: ~75 fps per worker at
+1080p, ~20 fps at 4K).
 
 ## Metadata
 

@@ -45,6 +45,18 @@ TurboRes is used as an unmodified npm dependency for browser-local Apple ProRes
 decoding. Its source code is available from the project link above.
 
 
+## FFmpeg libavcodec (MXF decoding)
+
+- Project: <https://ffmpeg.org/> (source: <https://github.com/FFmpeg/FFmpeg>, tag `n7.1.1`)
+- Components: `libavcodec` and `libavutil`, compiled to WebAssembly
+- License: GNU Lesser General Public License 2.1 or later (`--disable-gpl`, no nonfree parts)
+- License text: `public/wasm/libavcodec/LICENSE`
+- Build and provenance: `public/wasm/libavcodec/SOURCE.md`, `tools/libavcodec-wasm/`
+
+The decoder is shipped as a separate, replaceable `libavcodec.wasm` file and is loaded only
+when DNxHD/DNxHR or MPEG-2 Intra essence from an MXF file is decoded.
+
+
 ## Depth Anything V2 Small (optional download)
 
 - Original model: <https://huggingface.co/depth-anything/Depth-Anything-V2-Small>

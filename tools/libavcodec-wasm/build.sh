@@ -5,7 +5,7 @@
 set -euo pipefail
 DECODERS="${1:-mpeg2video,dnxhd,h264}"
 PARSERS="${2:-h264,mpegvideo}"
-FFMPEG_TAG="${FFMPEG_TAG:-n7.1.1}"
+FFMPEG_TAG="${FFMPEG_TAG:-n7.1.1}"  # commit db69d06eeeab4f46da15030a80d539efb4503ca8
 WORK="${WORK:-/tmp/build}"; mkdir -p "$WORK"; cd "$WORK"
 [ -d ffmpeg ] || git clone --depth 1 --branch "$FFMPEG_TAG" https://github.com/FFmpeg/FFmpeg.git ffmpeg
 cd ffmpeg

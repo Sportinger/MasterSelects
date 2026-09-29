@@ -14,12 +14,15 @@ export type RuntimeFrameProviderPlan =
   | { backend: 'turbores'; fourCC: TurboResProResFourCC }
   | { backend: 'hap'; fourCC: HapVideoFourCC }
   | { backend: 'mxf-avc'; codecId: MxfAvcCodecId }
+  | { backend: 'mxf-libav'; codecId: MxfLibavCodecId }
   | { backend: 'default'; reason: 'not-prores' | 'turbores-disabled' }
   | { backend: 'unsupported'; reason: 'prores-raw' | 'mxf-unsupported-essence' | 'mxf-decoder-unavailable' };
 
-const CODEC_PROVIDER_BACKENDS: readonly CodecProviderBackend[] = ['turbores', 'hap', 'mxf-avc'];
+const CODEC_PROVIDER_BACKENDS: readonly CodecProviderBackend[] = ['turbores', 'hap', 'mxf-avc', 'mxf-libav'];
 
 export type MxfAvcCodecId = 'mxf:avc-intra' | 'mxf:avc-lgop';
+/** Intra essence decoded by the LGPL libavcodec WASM worker pool. */
+export type MxfLibavCodecId = 'mxf:dnxhd' | 'mxf:mpeg2-intra';
 
 /** Plans whose frames come from a codec-specific provider (not the browser's native decoder). */
 export type CodecProviderPlan = Extract<RuntimeFrameProviderPlan, { backend: CodecProviderBackend }>;
@@ -54,6 +57,9 @@ export function selectRuntimeFrameProviderPlan(options: {
   if (options.videoCodecId === 'mxf:avc-intra' || options.videoCodecId === 'mxf:avc-lgop') {
     // H.264 essence decodes through WebCodecs (plan E2); no WASM H.264 until D5 is settled.
     return { backend: 'mxf-avc', codecId: options.videoCodecId };
+  }
+  if (options.videoCodecId === 'mxf:dnxhd' || options.videoCodecId === 'mxf:mpeg2-intra') {
+    return { backend: 'mxf-libav', codecId: options.videoCodecId };
   }
   if (isMxfCodecId(options.videoCodecId)) {
     return getMxfUnsupportedReason(options.videoCodecId)

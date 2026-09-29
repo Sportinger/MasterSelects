@@ -48,6 +48,7 @@ export const TAG = {
   sampledWidth: 0x3205,
   displayHeight: 0x3208,
   displayWidth: 0x3209,
+  displayYOffset: 0x320b,
   frameLayout: 0x320c,
   videoLineMap: 0x320d,
   aspectRatio: 0x320e,
@@ -63,7 +64,7 @@ export const TAG = {
   blockAlign: 0x3d0a,
 } as const;
 
-/** Index table segment tags (fixed local tags per SMPTE 377M §11.2). */
+/** Index table segment tags (fixed local tags per SMPTE 377M Â§11.2). */
 export const TAG_INDEX = {
   indexEditRate: 0x3f0b,
   indexStartPosition: 0x3f0c,
@@ -105,7 +106,7 @@ export function isMetadataSetKey(key: string): boolean {
   return key.startsWith('060e2b34') && key.slice(8, 12) === '0253';
 }
 
-/** Index table segments are sets too (…0d.01.02.01.01.10.01.00) but are not header metadata. */
+/** Index table segments are sets too (Â…0d.01.02.01.01.10.01.00) but are not header metadata. */
 export function isIndexSegmentKey(key: string): boolean {
   return isMetadataSetKey(key) && key.slice(16, 32) === '0d01020101100100';
 }

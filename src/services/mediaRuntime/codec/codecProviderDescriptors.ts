@@ -17,6 +17,7 @@ import { estimateHapResources } from '../hap/hapResourceEstimate';
 import { decodeTurboResOneFrame } from '../prores/turboResOneFrame';
 import { decodeHapOneFrame } from '../hap/hapOneFrame';
 import { createMxfAvcFrameProvider } from '../mxf/MxfAvcFrameProvider';
+import { createMxfLibavFrameProvider, planLibavWorkerCount } from '../mxf/MxfLibavFrameProvider';
 
 export interface CodecProviderCreateParams {
   sourceId: string;
@@ -177,10 +178,43 @@ const mxfAvcDescriptor: CodecProviderDescriptor = {
   decodeOneFrame: (file, plan, timeSeconds) => decodeOneFrameWithProvider(mxfAvcDescriptor, file, plan, timeSeconds),
 };
 
+/** WASM heap per worker: libavcodec state plus one 4:2:2 16-bit frame and packet copies. */
+const LIBAV_WORKER_BASE_HEAP_BYTES = 24 * 1024 * 1024;
+
+const mxfLibavDescriptor: CodecProviderDescriptor = {
+  backend: 'mxf-libav',
+  logName: 'MXF libavcodec',
+  resourceLabel: 'MXF libavcodec (WASM) frame provider',
+  exportResourceLabel: 'Export MXF libavcodec frame provider',
+  describePlan: (plan) => ({ codecId: plan.backend === 'mxf-libav' ? plan.codecId : undefined }),
+  estimateHeapBytes: (runtime, policy) => {
+    const width = runtime.metadata.codedWidth ?? runtime.metadata.width ?? 1920;
+    const height = runtime.metadata.codedHeight ?? runtime.metadata.height ?? 1080;
+    const frameBytes = width * height * 2 * 2;
+    const workers = planLibavWorkerCount(policy, width, height);
+    return workers * (LIBAV_WORKER_BASE_HEAP_BYTES + frameBytes * 2) + frameBytes * (workers + 2);
+  },
+  resourceTags: (runtime, policy) => ['runtime-playback', policy, 'mxf-libav', runtime.metadata.videoCodecId ?? 'mxf'],
+  create: async (params) => {
+    if (params.plan.backend !== 'mxf-libav') return null;
+    return createMxfLibavFrameProvider({
+      sourceId: params.sourceId,
+      file: params.file,
+      codecId: params.plan.codecId,
+      policy: params.policy,
+      eightBit: params.outputProfile === 'sdr',
+      onFrame: params.onFrame,
+      onError: params.onError,
+    });
+  },
+  decodeOneFrame: (file, plan, timeSeconds) => decodeOneFrameWithProvider(mxfLibavDescriptor, file, plan, timeSeconds),
+};
+
 const DESCRIPTORS: Record<CodecProviderBackend, CodecProviderDescriptor> = {
   turbores: turboResDescriptor,
   hap: hapDescriptor,
   'mxf-avc': mxfAvcDescriptor,
+  'mxf-libav': mxfLibavDescriptor,
 };
 
 export function getCodecProviderDescriptor(backend: CodecProviderBackend): CodecProviderDescriptor {
