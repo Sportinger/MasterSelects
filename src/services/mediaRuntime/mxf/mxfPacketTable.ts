@@ -25,6 +25,8 @@ export interface MxfResolvedUnit {
 }
 
 const KLV_PROBE_SIZE = 32;
+/** Upper bound for the sound/data elements after the last picture element. */
+const LAST_PACKAGE_TAIL_BYTES = 1024 * 1024;
 const MAX_ELEMENT_WALK = 64;
 /** Essence element keys: 06.0e.2b.34.01.02.01.xx.0d.01.03.01 + 4-byte track number. */
 function isEssenceElementKey(key: string): boolean {
@@ -146,6 +148,31 @@ export class MxfPacketTable {
     if (entry && entry.keyFrameOffset < 0) i = Math.max(0, i + entry.keyFrameOffset);
     while (i > 0 && !this.isKeyframe(i)) i -= 1;
     return i;
+  }
+
+  /**
+   * File span of one frame-wrapped content package plus, when the index has
+   * slices, the offset of the first element after the picture (sound/data).
+   * Null for clip-wrapped essence (no per-edit-unit content packages).
+   */
+  async contentPackageSpan(storedIndex: number): Promise<{ afterPicture: number; end: number } | null> {
+    if (this.clipValueOffset !== null) return null;
+    const index = this.clampIndex(storedIndex);
+    const picture = await this.resolve(index);
+    const pictureEnd = picture.valueOffset + picture.size;
+    let end: number;
+    if (index + 1 < this.frameCount) {
+      end = this.scannedUnits
+        ? this.scannedUnits[index + 1]!.keyOffset
+        : this.fileOffsetForStream(this.streamOffset(index + 1));
+    } else {
+      end = Math.min(this.source.size, pictureEnd + LAST_PACKAGE_TAIL_BYTES);
+    }
+    const sliceOffset = this.scannedUnits ? undefined : this.entryAt(index)?.sliceOffsets[0];
+    const afterPicture = sliceOffset !== undefined && sliceOffset > 0
+      ? this.fileOffsetForStream(this.streamOffset(index) + sliceOffset)
+      : pictureEnd;
+    return { afterPicture, end: Math.max(afterPicture, end) };
   }
 
   async resolve(storedIndex: number): Promise<MxfResolvedUnit> {

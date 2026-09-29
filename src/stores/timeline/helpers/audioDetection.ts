@@ -2,6 +2,7 @@
 // Supports: MP4, MOV, M4V, 3GP (via MediaBunny), WebM, MKV, AVI, etc.
 
 import { Logger } from '../../../services/logger';
+import { isMxfFile, readMxfMediaMetadata } from '../../../services/mediaMetadata/mxf/mxfMediaMetadata';
 
 const log = Logger.create('AudioDetection');
 
@@ -37,6 +38,12 @@ export async function detectVideoAudio(file: File): Promise<boolean> {
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
 
   log.debug('Detecting audio', { file: file.name, ext });
+
+  // MXF: browsers cannot open the container; the descriptors list the sound tracks.
+  if (await isMxfFile(file)) {
+    const metadata = await readMxfMediaMetadata(file);
+    return metadata?.hasAudio ?? false;
+  }
 
   // Method 1: MediaBunny for MP4-based containers (most reliable for positive detection)
   if (MP4_CONTAINERS.includes(ext)) {

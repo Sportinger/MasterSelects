@@ -117,6 +117,16 @@ export class MxfPacketSource {
     return this.table.resolve(storedIndex);
   }
 
+  /** See MxfPacketTable.contentPackageSpan (used by the PCM reader). */
+  contentPackageSpan(storedIndex: number) {
+    return this.table.contentPackageSpan(storedIndex);
+  }
+
+  /** Raw byte read for callers that parse essence themselves (PCM). */
+  readBytes(offset: number, length: number): Promise<Uint8Array> {
+    return this.source.read(offset, length);
+  }
+
   dispose(): void {
     this.disposed = true;
   }

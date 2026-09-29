@@ -9,6 +9,7 @@ import { isHapCodecId } from '../hap/hapCodecIdentity';
 import { MediaAudioRangeReader } from '../../engine/audio/exportPipeline/MediaAudioRangeReader';
 import { readIsobmffMetadata } from '../mediaMetadata/isobmffMetadata';
 import { isMxfFile } from '../mediaMetadata/mxf/mxfMediaMetadata';
+import { buildMxfPcmWavBlob, MxfAudioUnavailableError } from '../mediaRuntime/mxf/mxfPcmWav';
 
 const log = Logger.create('AudioProxy');
 
@@ -112,62 +113,79 @@ export async function ensureAudioProxyForMediaFile(
 
     callbacks.onUpdate?.({ status: 'generating', progress: 18, storageKey });
 
+    let wavBlob: Blob | null = null;
     if (await isMxfFile(sourceFile)) {
-      // MXF PCM is not decodable by Mediabunny or decodeAudioData; the MXF PCM reader
-      // (plan phase 6) will build this proxy. Until then MXF clips are picture-only.
-      callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
-      return;
-    }
-
-    let audioBuffer: AudioBuffer;
-    try {
-      callbacks.onUpdate?.({ status: 'generating', progress: 35, storageKey });
-      const proResDecision = decideTurboResCodec(mediaFile.videoCodecId, true);
-      if (proResDecision.kind === 'turbores' || isHapCodecId(mediaFile.videoCodecId)) {
-        const duration = mediaFile.duration ?? (await readIsobmffMetadata(sourceFile))?.duration;
-        if (!duration || duration <= 0) {
-          throw new Error('Provider-codec audio proxy could not determine source duration');
+      // Neither Mediabunny nor decodeAudioData read MXF: stream the PCM elements straight to WAV.
+      try {
+        wavBlob = await buildMxfPcmWavBlob(sourceFile, {
+          onProgress: (fraction) => callbacks.onUpdate?.({
+            status: 'generating',
+            progress: Math.round(18 + fraction * 70),
+            storageKey,
+          }),
+        });
+      } catch (error) {
+        if (error instanceof MxfAudioUnavailableError) {
+          callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
+          return;
         }
-        const reader = new MediaAudioRangeReader(sourceFile);
-        try {
-          audioBuffer = await reader.read(0, duration);
-        } finally {
-          reader.dispose();
-        }
-      } else {
-        audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
-          { kind: 'file', file: sourceFile },
-          {
-            mediaFileId: mediaFile.id,
-            sourceFingerprint: storageKey,
-            metadata: {
-              source: 'audio-proxy',
-              sourceFileName: sourceFile.name,
-              sourceFileSize: sourceFile.size,
-            },
-          },
-        );
-      }
-    } catch (error) {
-      if (mediaFile.type === 'video' && isDecodeMissingAudio(error)) {
-        callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
+        const message = error instanceof Error ? error.message : String(error);
+        callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
+        log.warn('MXF audio proxy failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
         return;
       }
-      const message = error instanceof Error ? error.message : String(error);
-      callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
-      log.warn('Audio proxy decode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
-      return;
     }
 
-    callbacks.onUpdate?.({ status: 'generating', progress: 75, storageKey });
-    let wavBlob: Blob;
-    try {
-      wavBlob = encodeAudioBufferToWavBlob(audioBuffer);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
-      log.warn('Audio proxy WAV encode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
-      return;
+    if (!wavBlob) {
+      let audioBuffer: AudioBuffer;
+      try {
+        callbacks.onUpdate?.({ status: 'generating', progress: 35, storageKey });
+        const proResDecision = decideTurboResCodec(mediaFile.videoCodecId, true);
+        if (proResDecision.kind === 'turbores' || isHapCodecId(mediaFile.videoCodecId)) {
+          const duration = mediaFile.duration ?? (await readIsobmffMetadata(sourceFile))?.duration;
+          if (!duration || duration <= 0) {
+            throw new Error('Provider-codec audio proxy could not determine source duration');
+          }
+          const reader = new MediaAudioRangeReader(sourceFile);
+          try {
+            audioBuffer = await reader.read(0, duration);
+          } finally {
+            reader.dispose();
+          }
+        } else {
+          audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
+            { kind: 'file', file: sourceFile },
+            {
+              mediaFileId: mediaFile.id,
+              sourceFingerprint: storageKey,
+              metadata: {
+                source: 'audio-proxy',
+                sourceFileName: sourceFile.name,
+                sourceFileSize: sourceFile.size,
+              },
+            },
+          );
+        }
+      } catch (error) {
+        if (mediaFile.type === 'video' && isDecodeMissingAudio(error)) {
+          callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
+          return;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
+        log.warn('Audio proxy decode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+        return;
+      }
+
+      callbacks.onUpdate?.({ status: 'generating', progress: 75, storageKey });
+      try {
+        wavBlob = encodeAudioBufferToWavBlob(audioBuffer);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
+        log.warn('Audio proxy WAV encode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+        return;
+      }
     }
 
     callbacks.onUpdate?.({ status: 'generating', progress: 92, storageKey });

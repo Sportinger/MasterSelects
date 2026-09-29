@@ -67,6 +67,8 @@ export interface MxfVideoInfo {
 
 export interface MxfAudioInfo {
   trackId: number;
+  /** Track number of the file-package track; the last 4 bytes of its sound element keys. */
+  trackNumber: number;
   channels: number;
   sampleRate: number;
   bitDepth: number;
@@ -219,6 +221,7 @@ function buildAudioInfo(descriptor: MxfSet): MxfAudioInfo {
   const container = propUl(descriptor, TAG.essenceContainer) ?? '';
   return {
     trackId: propU32(descriptor, TAG.linkedTrackId) ?? 0,
+    trackNumber: 0,
     channels: propU32(descriptor, TAG.channelCount) ?? 0,
     sampleRate: ratio(propRational(descriptor, TAG.audioSamplingRate)),
     bitDepth: propU32(descriptor, TAG.quantizationBits) ?? 0,
@@ -345,7 +348,10 @@ export async function readMxfMetadata(rawSource: MxfByteSource): Promise<MxfMeta
         videoBodySid = containerData ? propU32(containerData, ESSENCE_CONTAINER_DATA_TAG.bodySid) ?? 0 : 0;
         videoIndexSid = containerData ? propU32(containerData, ESSENCE_CONTAINER_DATA_TAG.indexSid) ?? 0 : 0;
       } else if (propU32(descriptor, TAG.channelCount) !== undefined) {
-        audio.push(buildAudioInfo(descriptor));
+        const info = buildAudioInfo(descriptor);
+        const track = findTrack(md, pkg, info.trackId);
+        info.trackNumber = track ? propU32(track, TAG.trackNumber) ?? 0 : 0;
+        audio.push(info);
       }
     }
   }
