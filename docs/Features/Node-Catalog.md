@@ -490,6 +490,11 @@ composition pixels, so the strand pass mirrors local Y into it.
   pieces, depending on how many pixels it spans at the nearest point of the layer.
   Curves stay round without resampling them, and distant views keep one piece per
   segment.
+- **Level of detail:** where a segment's fibers are thinner than a pixel, only a hashed
+  share of them is drawn, each with proportionally more coverage (stochastic
+  simplification, Cook et al. 2007). Distant yarns keep their density with fewer
+  fragments. The choice is made per segment and strand, so zooming lets fibers fade in
+  and out one by one.
 - **Self-shadowing:** fibers shadow each other through deep opacity maps. From the
   shadowing light, a depth pass records the nearest fiber per texel. An opacity pass
   then adds every fiber's coverage into four layers behind it (1024², additive,

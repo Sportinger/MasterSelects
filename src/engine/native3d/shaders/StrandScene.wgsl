@@ -189,6 +189,16 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   if (max(scaleA, scaleB) <= 0.0 || u.params.w <= 0.0 || clipA.w <= 1e-5 || clipB.w <= 1e-5) {
     return out;
   }
+  // Level of detail (stochastic simplification, Cook et al. 2007): where this segment's fibers are
+  // thinner than a pixel, only a hashed share of them is drawn, each with proportionally more
+  // coverage, so a distant yarn keeps its density with fewer and calmer fragments. The choice is
+  // made per segment and per strand, never per vertex.
+  let midClip = viewProjection * vec4f(0.5 * (a + b), 1.0);
+  let segmentPixels = u.params.x * max(scaleA, scaleB) * abs(u.projection[1][1]) * 0.5 * u.params.z / max(midClip.w, 1e-5);
+  let keep = clamp(segmentPixels, 1.0 / f32(yarnFibers + 4u), 1.0);
+  if (keep < 1.0 && hash3(u32(points[first * 3u + 2u].w), fiber, 0x5f3759dfu) >= keep) {
+    return out;
+  }
   let span = b - a;
   let spanTangent = select(vec3f(1.0, 0.0, 0.0), normalize(span), dot(span, span) > 1e-18);
   let derivative = catmullRomTangent(before, a, b, after, t);
@@ -204,7 +214,7 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let widthDirection = select(vec3f(0.0, 1.0, 0.0), normalize(widthAxis), dot(widthAxis, widthAxis) > 1e-12);
   let edge = viewProjection * vec4f(p + widthDirection * u.params.x * widthScale, 1.0);
   let pixels = select(0.0, length(toPixels(edge) - toPixels(clip)), edge.w > 1e-5);
-  out.coverage = clamp(pixels, 0.0, 1.0) * u.params.w;
+  out.coverage = clamp(pixels / keep, 0.0, 1.0) * u.params.w;
   let screen = select(toPixels(clipB) - toPixels(clipA), toPixels(ahead) - toPixels(clip), ahead.w > 1e-5);
   let direction = select(vec2f(1.0, 0.0), normalize(screen), dot(screen, screen) > 1e-12);
   let normal = vec2f(-direction.y, direction.x);
