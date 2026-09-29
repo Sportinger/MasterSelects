@@ -54,3 +54,7 @@ EMSCRIPTEN_KEEPALIVE int dec_pix_fmt_yuv420p10() { return AV_PIX_FMT_YUV420P10LE
 EMSCRIPTEN_KEEPALIVE int dec_pix_fmt_yuv420p() { return AV_PIX_FMT_YUV420P; }
 EMSCRIPTEN_KEEPALIVE uint8_t *dec_malloc(int n) { return malloc(n); }
 EMSCRIPTEN_KEEPALIVE void dec_free(uint8_t *p) { free(p); }
+
+// h2645_sei.o references the AOM film-grain cleanup, but aom_film_grain.c is only built with HEVC.
+// AV1 film-grain SEI never occurs in the MPEG-2/VC-3/H.264 paths, so nothing is ever allocated.
+void ff_aom_uninit_film_grain_params(void *params) { (void)params; }
