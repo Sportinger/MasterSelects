@@ -6,8 +6,10 @@ import {
   MxfGopFrameProvider,
   type GopDecoder,
   type GopDecoderCallbacks,
+  type GopFrameSource,
   type MxfGopFrameProviderOptions,
 } from '../../src/services/mediaRuntime/mxf/MxfGopFrameProvider';
+import { MxfGopEngine } from '../../src/services/mediaRuntime/mxf/mxfGopEngine';
 import { MxfPacketSource, type MxfPacket } from '../../src/services/mediaRuntime/mxf/MxfPacketSource';
 
 const FPS = 25;
@@ -110,8 +112,10 @@ class TestGopProvider extends MxfGopFrameProvider<MxfGopFrameProviderOptions> {
   protected readonly label = 'Test GOP';
   protected readonly packetLabel = 'test packet';
   static surfaces = 4;
-  protected async createGopDecoder(_source: MxfPacketSource, callbacks: GopDecoderCallbacks) {
-    return new FakeHardwareDecoder(callbacks, TestGopProvider.surfaces);
+  protected async createFrameSource(source: MxfPacketSource): Promise<GopFrameSource> {
+    const engine = new MxfGopEngine(source, this.label);
+    await engine.attachDecoder(async (callbacks: GopDecoderCallbacks) => new FakeHardwareDecoder(callbacks, TestGopProvider.surfaces));
+    return engine;
   }
   protected describeDecoder() {
     return { codec: 'test', hwAccel: 'test' };
@@ -167,6 +171,9 @@ function createSyntheticSource(frameCount: number) {
     getNextPacket: async (p: MxfPacket) => (p.displayIndex + 1 < frameCount ? packet(displayToStored[p.displayIndex + 1]!) : null),
     getPacketByStoredIndex: async (stored: number) => packet(stored),
     keyframeStoredIndexFor: (display: number) => Math.floor(displayToStored[display]! / 12) * 12,
+    displayToStoredIndex: (display: number) => displayToStored[display]!,
+    describePacketAt: (t: number) => packet(displayToStored[Math.min(frameCount - 1, Math.floor(t * FPS + 1e-6))]!),
+    describeNextPacket: (p: MxfPacket) => (p.displayIndex + 1 < frameCount ? packet(displayToStored[p.displayIndex + 1]!) : null),
     storedToDisplayIndex: (stored: number) => storedToDisplay[stored]!,
     dispose: () => undefined,
   } as unknown as MxfPacketSource;

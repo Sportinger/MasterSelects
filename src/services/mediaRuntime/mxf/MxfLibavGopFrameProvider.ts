@@ -3,10 +3,10 @@
 // Long GOP is decoded serially per stream: no frame parallelism (plan phase 5).
 
 import { normalizeError } from '../codec/CodecFrameProviderBase';
+import { MxfGopEngine, type GopDecoder, type GopDecoderCallbacks } from './mxfGopEngine';
 import {
   MxfGopFrameProvider,
-  type GopDecoder,
-  type GopDecoderCallbacks,
+  type GopFrameSource,
   type MxfGopFrameProviderOptions,
 } from './MxfGopFrameProvider';
 import { createLibavOpenRequest, LibavWorker } from './MxfLibavFrameProvider';
@@ -56,15 +56,20 @@ export class MxfLibavGopFrameProvider extends MxfGopFrameProvider<MxfLibavGopFra
   protected readonly label = 'MXF MPEG-2 Long GOP';
   protected readonly packetLabel = 'MXF packet';
 
-  protected async createGopDecoder(source: MxfPacketSource, callbacks: GopDecoderCallbacks): Promise<GopDecoder> {
-    const worker = new LibavWorker(createLibavOpenRequest(source, 'mpeg2video', this.options.eightBit === true));
-    try {
-      await worker.ready();
-    } catch (error) {
-      worker.terminate();
-      throw error;
-    }
-    return new LibavGopDecoder(worker, callbacks);
+  protected async createFrameSource(source: MxfPacketSource): Promise<GopFrameSource> {
+    // Decoding already runs in the libavcodec worker; the engine and reads stay here.
+    const engine = new MxfGopEngine(source, this.label);
+    await engine.attachDecoder(async (callbacks: GopDecoderCallbacks): Promise<GopDecoder> => {
+      const worker = new LibavWorker(createLibavOpenRequest(source, 'mpeg2video', this.options.eightBit === true));
+      try {
+        await worker.ready();
+      } catch (error) {
+        worker.terminate();
+        throw error;
+      }
+      return new LibavGopDecoder(worker, callbacks);
+    });
+    return engine;
   }
 
   protected describeDecoder() {

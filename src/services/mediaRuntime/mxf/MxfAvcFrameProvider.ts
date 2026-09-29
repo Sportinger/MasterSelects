@@ -1,70 +1,98 @@
-// H.264 essence from MXF (XAVC-I / XAVC Long GOP / AVC-Intra) decoded with
-// WebCodecs through the shared long-GOP provider (plan E2: WebCodecs first).
+// H.264 essence from MXF (XAVC-I / XAVC Long GOP / AVC-Intra), decoded with
+// WebCodecs inside mxfAvcDecodeWorker. The worker reads the file and runs the
+// long-GOP engine; the main thread only requests display frames.
 
-import { normalizeError } from '../codec/CodecFrameProviderBase';
-import { getAvcCodecStringFromAnnexB } from './avcCodecString';
+import { closeVideoFrame, normalizeError } from '../codec/CodecFrameProviderBase';
+import type { MxfGopEngineStats } from './mxfGopEngine';
 import {
   MxfGopFrameProvider,
-  type GopDecoder,
-  type GopDecoderCallbacks,
+  type GopFrameSource,
   type MxfGopFrameProviderOptions,
 } from './MxfGopFrameProvider';
-import type { MxfPacket, MxfPacketSource } from './MxfPacketSource';
+import type {
+  MxfAvcDecodeWorkerRequest,
+  MxfAvcDecodeWorkerResponse,
+} from '../../../workers/mxfAvcDecodeWorker';
 
 export type MxfAvcFrameProviderOptions = MxfGopFrameProviderOptions;
 
-class WebCodecsGopDecoder implements GopDecoder {
-  private decoder: VideoDecoder;
-  private readonly config: VideoDecoderConfig;
-  private readonly callbacks: GopDecoderCallbacks;
+class MxfAvcWorkerFrameSource implements GopFrameSource {
+  private readonly worker: Worker;
+  private readonly pending = new Map<number, {
+    resolve: (frame: VideoFrame) => void;
+    reject: (error: Error) => void;
+  }>();
+  private nextId = 1;
+  private closed = false;
+  private lastStats: MxfGopEngineStats = { decodeQueueSize: 0, readyFrameCount: 0, decoderResets: 0 };
+  codec = '';
 
-  constructor(config: VideoDecoderConfig, callbacks: GopDecoderCallbacks) {
-    this.config = config;
-    this.callbacks = callbacks;
-    this.decoder = this.createDecoder();
+  private constructor() {
+    this.worker = new Worker(new URL('../../../workers/mxfAvcDecodeWorker.ts', import.meta.url), {
+      type: 'module',
+      name: 'mxf-avc-decode',
+    });
   }
 
-  get queueSize(): number {
-    return this.decoder.decodeQueueSize;
+  static async open(file: File, codecId: string): Promise<MxfAvcWorkerFrameSource> {
+    const client = new MxfAvcWorkerFrameSource();
+    await client.start(file, codecId);
+    return client;
   }
 
-  decode(packet: MxfPacket): void {
-    this.decoder.decode(new EncodedVideoChunk({
-      type: packet.isKeyframe ? 'key' : 'delta',
-      timestamp: packet.microsecondTimestamp,
-      duration: packet.microsecondDuration,
-      data: packet.data,
-    }));
+  get stats(): MxfGopEngineStats {
+    return this.lastStats;
   }
 
-  waitForCapacity(): Promise<void> {
-    return new Promise((resolve) => this.decoder.addEventListener('dequeue', () => resolve(), { once: true }));
-  }
-
-  flush(): Promise<void> {
-    return this.decoder.flush();
-  }
-
-  reset(): void {
-    if (this.decoder.state === 'closed') {
-      this.decoder = this.createDecoder();
-      return;
-    }
-    this.decoder.reset();
-    this.decoder.configure(this.config);
+  decodeFrame(displayIndex: number): Promise<VideoFrame> {
+    if (this.closed) return Promise.reject(new Error('MXF AVC worker is closed'));
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.worker.postMessage({ type: 'frame', id, displayIndex } satisfies MxfAvcDecodeWorkerRequest);
+    });
   }
 
   close(): void {
-    if (this.decoder.state !== 'closed') this.decoder.close();
+    if (this.closed) return;
+    this.closed = true;
+    const error = new Error('MXF AVC worker closed');
+    for (const entry of this.pending.values()) entry.reject(error);
+    this.pending.clear();
+    this.worker.postMessage({ type: 'close' } satisfies MxfAvcDecodeWorkerRequest);
+    // Give the worker a moment to close its decoder, then make sure it is gone.
+    setTimeout(() => this.worker.terminate(), 1000);
   }
 
-  private createDecoder(): VideoDecoder {
-    const decoder = new VideoDecoder({
-      output: (frame) => this.callbacks.output(frame),
-      error: (error) => this.callbacks.error(normalizeError(error)),
+  private start(file: File, codecId: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.worker.onmessage = (event: MessageEvent<MxfAvcDecodeWorkerResponse>) => {
+        const message = event.data;
+        if (message.type === 'opened') {
+          this.codec = message.codec;
+          resolve();
+        } else if (message.type === 'frame') {
+          this.lastStats = message.stats;
+          const entry = this.pending.get(message.id);
+          this.pending.delete(message.id);
+          if (entry) entry.resolve(message.frame);
+          else closeVideoFrame(message.frame);
+        } else if (message.id === null) {
+          reject(new Error(message.error));
+        } else {
+          const entry = this.pending.get(message.id);
+          this.pending.delete(message.id);
+          entry?.reject(new Error(message.error));
+        }
+      };
+      this.worker.onerror = (event) => {
+        const error = new Error(`MXF AVC worker error: ${event.message}`);
+        reject(error);
+        for (const entry of this.pending.values()) entry.reject(error);
+        this.pending.clear();
+      };
+      this.worker.postMessage({ type: 'open', file, codecId } satisfies MxfAvcDecodeWorkerRequest);
     });
-    decoder.configure(this.config);
-    return decoder;
   }
 }
 
@@ -74,26 +102,14 @@ export class MxfAvcFrameProvider extends MxfGopFrameProvider<MxfAvcFrameProvider
   protected readonly packetLabel = 'MXF AVC packet';
   private codecString = '';
 
-  protected async createGopDecoder(source: MxfPacketSource, callbacks: GopDecoderCallbacks): Promise<GopDecoder> {
-    if (typeof VideoDecoder === 'undefined') throw new Error('WebCodecs VideoDecoder is unavailable');
-    const firstKey = await source.getPacketByStoredIndex(source.keyframeStoredIndexFor(0));
-    const codec = firstKey ? getAvcCodecStringFromAnnexB(firstKey.data) : null;
-    if (!codec) throw new Error('MXF AVC essence carries no in-band SPS');
-    const meta = source.metadata;
-    const config: VideoDecoderConfig = {
-      codec,
-      codedWidth: meta.codedWidth || meta.width,
-      codedHeight: meta.codedHeight || meta.height,
-      optimizeForLatency: true,
-    };
-    const support = await VideoDecoder.isConfigSupported(config);
-    if (!support.supported) throw new Error(`Browser cannot decode ${codec} (${meta.width}x${meta.height})`);
-    this.codecString = codec;
-    return new WebCodecsGopDecoder(support.config ?? config, callbacks);
+  protected async createFrameSource(): Promise<GopFrameSource> {
+    const frames = await MxfAvcWorkerFrameSource.open(this.options.file, this.options.codecId);
+    this.codecString = frames.codec;
+    return frames;
   }
 
   protected describeDecoder() {
-    return { codec: `mxf-avc:${this.codecString || this.options.codecId}`, hwAccel: 'webcodecs' };
+    return { codec: `mxf-avc:${this.codecString || this.options.codecId}`, hwAccel: 'webcodecs-worker' };
   }
 }
 

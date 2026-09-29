@@ -28,6 +28,7 @@ export interface MxfPacketSourceMetadata extends CodecPacketSourceMetadata {
 }
 
 const metadataCache = new WeakMap<Blob, Promise<MxfMetadata>>();
+const EMPTY_PACKET_DATA = new Uint8Array(0);
 
 function readMetadataCached(source: MxfByteSource, cacheKey: Blob | undefined): Promise<MxfMetadata> {
   if (!cacheKey) return readMxfMetadata(source);
@@ -107,6 +108,43 @@ export class MxfPacketSource {
     const next = packet.displayIndex + 1;
     if (next >= this.table.frameCount) return null;
     return this.getPacketByStoredIndex(this.table.displayToStoredIndex(next));
+  }
+
+  displayToStoredIndex(displayIndex: number): number {
+    return this.table.displayToStoredIndex(displayIndex);
+  }
+
+  /**
+   * Timing-only packet (empty data) for the display unit containing `timeSeconds`.
+   * Lets a provider drive request timing on the main thread while a decode worker
+   * owns the file reads.
+   */
+  describePacketAt(timeSeconds: number): MxfPacket | null {
+    if (this.disposed || !Number.isFinite(timeSeconds)) return null;
+    const displayIndex = Math.floor(Math.max(0, timeSeconds) * this.metadata.fps + 1e-6);
+    return this.describeDisplayUnit(displayIndex);
+  }
+
+  describeNextPacket(packet: MxfPacket): MxfPacket | null {
+    if (this.disposed || packet.displayIndex + 1 >= this.table.frameCount) return null;
+    return this.describeDisplayUnit(packet.displayIndex + 1);
+  }
+
+  private describeDisplayUnit(displayIndex: number): MxfPacket {
+    const clamped = Math.max(0, Math.min(this.table.frameCount - 1, displayIndex));
+    const storedIndex = this.table.displayToStoredIndex(clamped);
+    const frameDuration = 1 / this.metadata.fps;
+    const timestamp = clamped * frameDuration;
+    return {
+      data: EMPTY_PACKET_DATA,
+      timestamp,
+      duration: frameDuration,
+      microsecondTimestamp: Math.round(timestamp * 1e6),
+      microsecondDuration: Math.round(frameDuration * 1e6),
+      isKeyframe: this.table.isKeyframe(storedIndex),
+      storedIndex,
+      displayIndex: clamped,
+    };
   }
 
   storedToDisplayIndex(storedIndex: number): number {
