@@ -6,6 +6,7 @@ import type {
   WorkerRenderStatusEvent,
 } from '../../engine/render/contracts/workerRenderGraph';
 import type { RuntimeJobHandler, RuntimeJobHandlerRegistration } from '../../runtime/worker';
+import type { WorkerFlockStatusSnapshot } from './workerFlockStatus';
 import {
   RenderCacheRegistry,
   type RenderCacheRegistrySnapshot,
@@ -97,6 +98,7 @@ export interface WorkerRenderHostRuntimeJobInput {
 }
 
 export interface WorkerRenderHostRuntimeJobOutput {
+  readonly flockStatus?: WorkerFlockStatusSnapshot;
   readonly accepted: boolean;
   readonly commandType: WorkerRenderHostRuntimeCommand['type'];
   readonly initialized: boolean;
@@ -205,6 +207,7 @@ interface WorkerGpuWebCodecsStreamSession {
 }
 
 interface AcceptedRenderCommand {
+  readonly flockStatus?: WorkerFlockStatusSnapshot;
   readonly statusEvents: readonly WorkerRenderStatusEvent[];
   readonly presentedFrameId: string | null;
   readonly capabilities?: WorkerRenderHostRuntimeCapabilities | null;
@@ -2124,6 +2127,7 @@ async function presentWorkerGpuFrameStack(
         },
       ],
       presentedFrameId,
+      flockStatus: result.flockStatus,
       readback: result.readback ? {
         width: result.readback.request.width,
         height: result.readback.request.height,
@@ -2710,6 +2714,7 @@ export const workerRenderHostRuntimeHandler: RuntimeJobHandler<
       capabilities: accepted.capabilities ?? null,
       webCodecs: accepted.webCodecs ?? null,
       readback: accepted.readback ?? null,
+      flockStatus: accepted.flockStatus,
     },
   };
 };

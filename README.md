@@ -44,6 +44,8 @@ that identity across asynchronous work. The default preview remains
 on the main renderer while the remaining scene and control integrations are completed.
 Development can explicitly boot the Worker preview with
 `/editor?renderHost=worker-gpu-only`; production ignores this URL override.
+The Worker preview reports its own Flock simulation, memory and checkpoint status
+to the inspector; nested occurrences remain separate in render-host diagnostics.
 Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both
 CPU and GPU, with residual-based convergence and solid domain walls.
 The fluid node exposes particle separation, spacing and deterministic position

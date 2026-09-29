@@ -75,6 +75,14 @@ export async function renderNativeFrameStackProbe(surface: WorkerGpuTargetSurfac
       assertWorkerGpuPresentFrameStackCommand(command);
       const result = await presentGpuFrameStack(surface, { clock: Date.now, webCodecsFrames: new Map(), command });
       if (!result.ok || !result.readback) throw new Error(`Native frame-stack failed: ${JSON.stringify(result.diagnostics)}`);
+      const statuses = result.flockStatus?.occurrences[0]?.statuses;
+      if (!statuses || result.flockStatus?.compositionId !== stack.frame.compositionId) throw new Error('Missing Worker Flock status snapshot');
+      if (frame < 13 && (statuses.length !== 1 || statuses[0].state !== 'ready'
+        || statuses[0].step !== statuses[0].targetStep || statuses[0].simulatedCount !== 512
+        || Math.abs(statuses[0].sourceTime - time) > 1e-6 || !result.flockStatus.capabilities?.gpuCompute)) {
+        throw new Error(`Worker Flock status does not match presented frame: ${JSON.stringify(statuses)}`);
+      }
+      if (frame >= 13 && statuses.length !== 0) throw new Error('Removed Flock clip retained Worker status');
       images.push(new Uint8Array(result.readback.pixels));
     }
     const green = images.slice(0, 3).map(pixels => {

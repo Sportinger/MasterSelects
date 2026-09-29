@@ -145,7 +145,9 @@ function PrecomputeBlock({ clip }: { clip: TimelineClip }) {
         <button type="button" className="flock-button" disabled={!busy && progress == null} onPointerUp={blurOnPointer} onClick={() => flockRuntime.cancelPrecompute(clip.id)}>
           Cancel
         </button>
-        <button type="button" className="flock-button" onPointerUp={blurOnPointer} onClick={() => void flockRuntime.clearCache(clip.id).then(() => mounted.current && setMessage('Cache cleared'))}>
+        <button type="button" className="flock-button" onPointerUp={blurOnPointer} onClick={() => void flockRuntime.clearCache(clip.id)
+          .then(() => mounted.current && setMessage('Cache cleared'))
+          .catch(error => mounted.current && setMessage(error instanceof Error ? error.message : String(error)))}>
           Clear cache
         </button>
       </div>

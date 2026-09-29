@@ -11,6 +11,8 @@ import type { Keyframe } from '../../types/keyframes';
 import type { WorkerGpuFrameStackContractV1 } from './workerGpuFrameStackContract';
 import type { WorkerGpuNativeScenePayload } from './workerGpuNativeSceneContract';
 import type { WorkerGpuFrameStackNativeSceneInput } from './workerGpuFrameStackMaterializer';
+import type { WorkerFlockStatusSnapshot } from './workerFlockStatus';
+import { buildFlockRuntimeStatus } from '../../engine/flock/runtime/flockRuntimeStatus';
 
 interface SceneEntry {
   audio: WorkerGpuNativeSceneAudio;
@@ -144,6 +146,43 @@ export class WorkerGpuNativeSceneOwner {
     return { layer: input.layer, isVideo: false, isDynamic: true, externalTexture: null, textureView,
       sourceWidth: input.payload.width, sourceHeight: input.payload.height, targetMediaTime: input.payload.timelineTime,
       previewPath: 'worker-gpu-frame-stack:native-scene' };
+  }
+
+  /** Snapshot only prepared occurrences belonging to this exact frame. */
+  flockStatusSnapshot(stack: WorkerGpuFrameStackContractV1): WorkerFlockStatusSnapshot {
+    const occurrences: WorkerFlockStatusSnapshot['occurrences'][number][] = [];
+    const visit = (frame: WorkerGpuFrameStackContractV1) => {
+      const statuses: FlockRuntimeStatus[] = [];
+      occurrences.push({ compositionId: frame.frame.compositionId, occurrenceNamespace: frame.occurrenceNamespace, statuses });
+      for (const binding of frame.bindings) {
+        if (binding.payload.kind === 'nested-stack') { visit(binding.payload.stack); continue; }
+        if (binding.payload.kind !== 'native-scene') continue;
+        const entry = this.scenes.get(this.key(frame, binding.layerId));
+        if (!entry || entry.payload !== binding.payload) continue;
+        for (const layer of binding.payload.layers) {
+          if (layer.kind !== 'flock') continue;
+          const consumer = frame.frame.intent === 'export' ? 'export' : 'preview';
+          const session = entry.simulation.entries.get(`${layer.clipId}|${consumer}`);
+          if (!session) continue;
+          // Main UI publications are throttled. A frame result must describe this
+          // exact session, including a fast backward seek within that interval.
+          statuses.push(buildFlockRuntimeStatus({ clipId: layer.clipId,
+            state: session.stale ? 'stale' : session.caughtUp ? 'ready' : 'computing',
+            program: session.program, entry: session,
+            diagnostics: [...session.program.diagnostics, ...session.runtimeDiagnostics],
+            job: entry.simulation.jobs.get(layer.clipId) }));
+        }
+      }
+    };
+    visit(stack);
+    const limits = this.device.limits;
+    return { compositionId: stack.frame.compositionId, occurrences, capabilities: {
+      webgpu: true, gpuCompute: true, fallback: 'none', cpuFallbackMaxParticles: 0,
+      maxStorageBufferBindingSize: limits.maxStorageBufferBindingSize,
+      maxBufferSize: limits.maxBufferSize,
+      maxStorageBuffersPerShaderStage: limits.maxStorageBuffersPerShaderStage,
+      maxComputeWorkgroupsPerDimension: limits.maxComputeWorkgroupsPerDimension,
+    } };
   }
 
   dispose(): void {

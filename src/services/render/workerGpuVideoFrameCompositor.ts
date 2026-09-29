@@ -39,6 +39,7 @@ import type {
 } from './workerGpuRuntimeCommands';
 import { assertWorkerGpuFrameStackContract, closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
 import { hasWorkerGpuNativeScene, WorkerGpuNativeSceneOwner } from './WorkerGpuNativeSceneOwner';
+import type { WorkerFlockStatusSnapshot } from './workerFlockStatus';
 import {
   createWorkerGpuPresentDiagnostics as createPresentDiagnostics,
   destroyWorkerGpuResource,
@@ -218,7 +219,7 @@ export async function presentGpuFrameStack(
     readonly webCodecsFrames: ReadonlyMap<string, WorkerGpuFrameStackWebCodecsFrame>;
     readonly isSurfaceCurrent?: () => boolean;
   },
-): Promise<WorkerGpuPresentResult & { readonly readback: WorkerGpuFrameStackReadbackResult | null }> {
+): Promise<WorkerGpuPresentResult & { readonly readback: WorkerGpuFrameStackReadbackResult | null; readonly flockStatus?: WorkerFlockStatusSnapshot }> {
   const { command } = options;
   const nextSequence = surface.frameSequence + 1;
   const presentedFrameId = `${command.stack.frame.targetId}:${command.commandId}:gpu-frame-stack:${nextSequence}`;
@@ -357,6 +358,8 @@ export async function presentGpuFrameStack(
         error: null,
       }),
       readback,
+      flockStatus: nativeScenes?.flockStatusSnapshot(command.stack)
+        ?? { compositionId: command.stack.frame.compositionId, occurrences: [], capabilities: null },
     };
   } catch (error) {
     if (!executorInvocationStarted) {

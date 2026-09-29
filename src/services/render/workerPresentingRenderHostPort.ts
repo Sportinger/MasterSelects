@@ -99,6 +99,8 @@ import {
 } from './workerGpuFrameStackHostProjection';
 import { projectWorkerGpuFrameStack } from './workerGpuFrameStackProjector';
 import { projectMainNativeScene } from './workerGpuNativeSceneMainProjection';
+import { WorkerFlockStatusMirror } from './workerFlockStatus';
+import { flockRuntime } from '../../engine/flock/runtime/flockRuntimeApi';
 import { closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
 import { workerGpuOperatorProgramPresentationKey } from './workerGpuOperatorPipeline';
 
@@ -312,6 +314,12 @@ class WorkerPresentingRenderHostPortCore {
   private lastGpuOnlyVideoFrameTimestampSeconds: number | null = null;
   private lastGpuOnlyVideoFrameSourceFrameRate: number | null = null;
   private lastGpuOnlyVideoFrameStats: Record<string, unknown> | null = null;
+  private readonly flockStatuses = new WorkerFlockStatusMirror();
+  private readonly readFlockStatuses = () => this.isGpuOnlyPresentation
+    && this.getSelectionTelemetry().selectedRole === 'primary'
+    ? { statuses: this.flockStatuses.statuses(useMediaStore.getState().activeCompositionId),
+      capabilities: this.flockStatuses.diagnostics()?.capabilities ?? null }
+    : null;
   private gpuOnlyVideoSourceLoadCount = 0;
   private gpuOnlyVideoSourceLoadFailureCount = 0;
   private gpuOnlyFrameStackCount = 0;
@@ -384,6 +392,7 @@ class WorkerPresentingRenderHostPortCore {
   }
 
   initialize(): Promise<boolean> {
+    flockRuntime.setStatusSource(this.readFlockStatuses);
     if (this.initializePromise) return this.initializePromise;
     this.initializePromise = this.initializeWorker();
     return this.initializePromise;
@@ -456,6 +465,10 @@ class WorkerPresentingRenderHostPortCore {
     }
 
     if (existing) {
+      if (targetId === 'preview') {
+        this.flockStatuses.clear();
+        flockRuntime.setStatusSource(this.readFlockStatuses);
+      }
       const canceledPendingDetach = this.cancelPendingTargetDetach(targetId);
       this.targetRecords.delete(targetId);
       this.attachedWorkerTargetIds.delete(targetId);
@@ -522,6 +535,10 @@ class WorkerPresentingRenderHostPortCore {
       this.targetRecords.delete(targetId);
       this.attachedWorkerTargetIds.delete(targetId);
       this.latestPresentationSequenceByTarget.delete(targetId);
+      if (targetId === 'preview') {
+        this.flockStatuses.clear();
+        flockRuntime.setStatusSource(this.readFlockStatuses);
+      }
       this.workerBitmapCacheKeys.clear();
       void this.withBridge(async (bridge) => {
         await bridge.detachTargetSurface(targetId);
@@ -1665,6 +1682,13 @@ class WorkerPresentingRenderHostPortCore {
     }
     this.lastGpuOnlyVideoFrameStats = this.runtimeOutputStats(output);
     const presented = this.runtimeOutputPresentedRequest(output, requestId);
+    if (targetId === 'preview' && presented
+      && this.latestPresentationSequenceByTarget.get(targetId) === sequence
+      && this.currentTargetSurfaceGeneration(targetId) === record.targetSurfaceGeneration
+      && this.attachedWorkerTargetIds.has(targetId)) {
+      this.flockStatuses.accept(output.flockStatus);
+      flockRuntime.setStatusSource(this.readFlockStatuses);
+    }
     this.recordRuntimeOutput(output, {
       changed: presented,
       targetMoved,
@@ -2408,6 +2432,10 @@ class WorkerPresentingRenderHostPortCore {
 
   private async runGpuOnlyPresentation(request: WorkerGpuPresentationRequest): Promise<void> {
     const { record, source, sequence } = request;
+    if (record.target.id === 'preview' && !this.shouldUseGpuFrameStack(request)) {
+      this.flockStatuses.clear();
+      flockRuntime.setStatusSource(this.readFlockStatuses);
+    }
     const requestId = `worker-gpu-only:${source}:${sequence}`;
     this.presentationAttempts += 1;
     this.publishEngineStats();
@@ -3147,6 +3175,7 @@ class WorkerPresentingRenderHostPortCore {
       lastGpuOnlyVideoFrameTimestampSeconds: this.lastGpuOnlyVideoFrameTimestampSeconds,
       lastGpuOnlyVideoFrameSourceFrameRate: this.lastGpuOnlyVideoFrameSourceFrameRate,
       lastGpuOnlyVideoFrameStats: this.lastGpuOnlyVideoFrameStats,
+      flockStatus: this.flockStatuses.diagnostics(),
       gpuOnlyVideoSourceLoadCount: this.gpuOnlyVideoSourceLoadCount,
       gpuOnlyVideoSourceLoadFailureCount: this.gpuOnlyVideoSourceLoadFailureCount,
       gpuOnlyFrameStackCount: this.gpuOnlyFrameStackCount,

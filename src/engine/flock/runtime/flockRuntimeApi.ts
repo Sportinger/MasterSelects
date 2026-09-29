@@ -87,6 +87,13 @@ export interface FlockRuntimeBackend {
 
 type Listener = () => void;
 
+export interface FlockRuntimeStatusSource {
+  readonly statuses: readonly FlockRuntimeStatus[];
+  readonly capabilities: FlockHostCapabilities | null;
+}
+
+const WORKER_CONTROL_UNAVAILABLE = 'Flock Worker cache and precompute controls are not connected yet.';
+
 const DEFAULT_CAPABILITIES: FlockHostCapabilities = {
   webgpu: typeof navigator !== 'undefined' && 'gpu' in navigator,
   gpuCompute: false,
@@ -103,6 +110,13 @@ class FlockRuntimeApi {
   private readonly listeners = new Set<Listener>();
   private backend: FlockRuntimeBackend | null = null;
   private notifyScheduled = false;
+  private statusSource: (() => FlockRuntimeStatusSource | null) | null = null;
+
+  /** null means Main owns status; an empty snapshot means Worker has no current frame. */
+  setStatusSource(source: (() => FlockRuntimeStatusSource | null) | null): void {
+    this.statusSource = source;
+    this.emit();
+  }
 
   setBackend(backend: FlockRuntimeBackend | null): void {
     this.backend = backend;
@@ -110,10 +124,14 @@ class FlockRuntimeApi {
   }
 
   getStatus(clipId: string): FlockRuntimeStatus | null {
+    const external = this.statusSource?.();
+    if (external) return external.statuses.find(status => status.clipId === clipId) ?? null;
     return this.statuses.get(clipId) ?? null;
   }
 
   listStatuses(): FlockRuntimeStatus[] {
+    const external = this.statusSource?.();
+    if (external) return [...external.statuses];
     return [...this.statuses.values()];
   }
 
@@ -132,24 +150,30 @@ class FlockRuntimeApi {
   }
 
   getCapabilities(): FlockHostCapabilities {
+    const external = this.statusSource?.();
+    if (external) return external.capabilities ?? DEFAULT_CAPABILITIES;
     return this.backend?.getCapabilities() ?? DEFAULT_CAPABILITIES;
   }
 
   requestPrecompute(clipId: string, range: { start: number; end: number }, options: { persist?: boolean } = {}): Promise<FlockPrecomputeResult> {
+    if (this.statusSource?.()) return Promise.resolve({ ok: false, message: WORKER_CONTROL_UNAVAILABLE });
     if (!this.backend) return Promise.resolve({ ok: false, message: 'Flock runtime is not initialized yet (no GPU device).' });
     return this.backend.requestPrecompute(clipId, range, { persist: options.persist === true });
   }
 
   cancelPrecompute(clipId: string): void {
+    if (this.statusSource?.()) return;
     this.backend?.cancelPrecompute(clipId);
   }
 
   sampleParticles(clipId: string, maxCount = 64): Promise<FlockParticleSample | null> {
+    if (this.statusSource?.()) return Promise.resolve(null);
     if (!this.backend) return Promise.resolve(null);
     return this.backend.sampleParticles(clipId, { maxCount: Math.max(1, Math.min(1024, Math.round(maxCount))) });
   }
 
   clearCache(clipId: string): Promise<void> {
+    if (this.statusSource?.()) return Promise.reject(new Error(WORKER_CONTROL_UNAVAILABLE));
     return this.backend?.clearCache(clipId) ?? Promise.resolve();
   }
 
@@ -163,4 +187,8 @@ class FlockRuntimeApi {
   }
 }
 
-export const flockRuntime = new FlockRuntimeApi();
+export const flockRuntime: FlockRuntimeApi = import.meta.hot?.data?.flockRuntime ?? new FlockRuntimeApi();
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.dispose(data => { data.flockRuntime = flockRuntime; });
+}

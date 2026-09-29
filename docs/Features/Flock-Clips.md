@@ -399,8 +399,14 @@ Point, panel and constant-color environment lights carry evaluated transforms,
 color, intensity, diameter and shadow settings into the same native scene renderer.
 Environment-map resource references are rejected until their Worker resource path
 is implemented. Flock's Room-node lighting remains independent of these scene lights.
+Presented Worker frames return Flock simulation steps, memory, timings, checkpoints
+and device limits. The active composition's inspector reads this Worker status;
+nested occurrences remain separate under render-host diagnostics (`flockStatus`).
+Changing composition or detaching a target cannot expose a stale Main status as
+Worker progress. Precompute, particle sampling and cache mutation still await
+Worker command routing; requests do not operate on the dormant Main backend.
 Other 3D layer kinds, scene effectors, gizmos and complete
-status/cache control routing remain outstanding. The default editor preview
+cache control routing remain outstanding. The default editor preview
 remains on the main renderer; this is not yet the full Worker migration.
 
 For a development-only integration check, open
