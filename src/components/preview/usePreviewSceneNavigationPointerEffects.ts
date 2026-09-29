@@ -88,6 +88,15 @@ interface UsePreviewSceneNavigationPointerEffectsOptions {
 }
 
 const CAMERA_NAV_FPS_LOOK_SPEED = 0.18;
+const CAMERA_NAV_ORBIT_SPEED = 0.25;
+
+/**
+ * Orbit drag rotation. Pitch turns opposite to the FPS look, so a vertical drag carries the orbited
+ * scene with the pointer; yaw keeps the FPS-look direction.
+ */
+export function resolveSceneOrbitDragRotation(pitch: number, yaw: number, deltaX: number, deltaY: number): { pitch: number; yaw: number } {
+  return { pitch: pitch - deltaY * CAMERA_NAV_ORBIT_SPEED, yaw: yaw - deltaX * CAMERA_NAV_ORBIT_SPEED };
+}
 
 export function resolveSceneNavigationLookRotation(
   rotation: { x: number; y: number },
@@ -184,8 +193,7 @@ export function usePreviewSceneNavigationPointerEffects({
 
       const dx = event.clientX - x;
       const dy = event.clientY - y;
-      const nextPitch = pitch + dy * 0.25;
-      const nextYaw = yaw - dx * 0.25;
+      const { pitch: nextPitch, yaw: nextYaw } = resolveSceneOrbitDragRotation(pitch, yaw, dx, dy);
       const solveSettings = getSceneNavSolveSettings(navigationSceneNavClip);
 
       let nextPosition = { x: startPosX, y: startPosY, z: startPosZ };
