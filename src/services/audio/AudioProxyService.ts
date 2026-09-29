@@ -8,6 +8,7 @@ import { decideTurboResCodec } from '../mediaRuntime/prores/turboResCodecIdentit
 import { isHapCodecId } from '../hap/hapCodecIdentity';
 import { MediaAudioRangeReader } from '../../engine/audio/exportPipeline/MediaAudioRangeReader';
 import { readIsobmffMetadata } from '../mediaMetadata/isobmffMetadata';
+import { isMxfFile } from '../mediaMetadata/mxf/mxfMediaMetadata';
 
 const log = Logger.create('AudioProxy');
 
@@ -110,6 +111,13 @@ export async function ensureAudioProxyForMediaFile(
     }
 
     callbacks.onUpdate?.({ status: 'generating', progress: 18, storageKey });
+
+    if (await isMxfFile(sourceFile)) {
+      // MXF PCM is not decodable by Mediabunny or decodeAudioData; the MXF PCM reader
+      // (plan phase 6) will build this proxy. Until then MXF clips are picture-only.
+      callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
+      return;
+    }
 
     let audioBuffer: AudioBuffer;
     try {

@@ -1,5 +1,6 @@
 import type { SceneCutAnalysis } from '../../types/sceneCutAnalysis';
 import { readIsobmffMetadata } from '../mediaMetadata/isobmffMetadata';
+import { isMxfFile, readMxfMediaMetadata } from '../mediaMetadata/mxf/mxfMediaMetadata';
 import {
   getCodecProviderDescriptor,
   type CodecRuntimeFrameProvider,
@@ -59,8 +60,10 @@ export async function generateTurboResProxy(params: {
   options?: TurboResProxyGenerationOptions;
 }): Promise<TurboResProxyResult | null> {
   const options = params.options ?? {};
-  const metadata = await readIsobmffMetadata(params.file);
-  if (!metadata) throw new Error('TurboRes proxy could not read MOV/MP4 metadata');
+  const metadata = await isMxfFile(params.file)
+    ? await readMxfMediaMetadata(params.file)
+    : await readIsobmffMetadata(params.file);
+  if (!metadata) throw new Error('Codec proxy could not read container metadata');
   const duration = Math.max(0, metadata.duration ?? 0);
   if (!duration) throw new Error('TurboRes proxy source has no usable duration');
   const proxyFps = Math.max(1, Math.min(PROXY_FPS, metadata.fps ?? PROXY_FPS));

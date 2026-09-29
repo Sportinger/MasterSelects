@@ -35,6 +35,8 @@ export interface MxfRational {
 
 export interface MxfVideoInfo {
   trackId: number;
+  /** Track number of the file-package track; the last 4 bytes of its essence element keys. */
+  trackNumber: number;
   family: MxfCodecFamily;
   /** Media codec id (ProRes FourCC or `mxf:*`), null when unsupported. */
   codecId: string | null;
@@ -79,8 +81,20 @@ export interface MxfTimecode {
   dropFrame: boolean;
 }
 
+/** Where one partition's essence container data starts (first essence KLV). */
+export interface MxfEssencePartition {
+  partitionOffset: number;
+  bodySid: number;
+  bodyOffset: number;
+  essenceOffset: number;
+}
+
 export interface MxfMetadata {
   operationalPattern: string;
+  /** BodySID/IndexSID of the video essence container (EssenceContainerData), 0 when unknown. */
+  videoBodySid: number;
+  videoIndexSid: number;
+  essencePartitions: readonly MxfEssencePartition[];
   video: MxfVideoInfo | null;
   audio: MxfAudioInfo[];
   timecode: MxfTimecode | null;
@@ -99,10 +113,21 @@ const SET_CLASS = {
   timecode: '1400',
   track: '3b00',
   prefaceLast: '2f00',
+  essenceContainerData: '2300',
   avcSubDescriptor: '6e00',
 } as const;
 
 const AVC_TAG = { profile: 0x8201, level: 0x8202 } as const;
+const ESSENCE_CONTAINER_DATA_TAG = { linkedPackageUid: 0x2701, indexSid: 0x3f06, bodySid: 0x3f07 } as const;
+
+/** Package UIDs are 32-byte UMIDs; compare the full value. */
+function packageUidMatches(ecd: MxfSet, pkg: MxfSet): boolean {
+  const a = ecd.props.get(ESSENCE_CONTAINER_DATA_TAG.linkedPackageUid);
+  const b = pkg.props.get(TAG.packageUid);
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;
+  return true;
+}
 const FIELD_DOMINANCE_TAG = 0x3212;
 
 function setClass(set: MxfSet): string {
@@ -164,6 +189,7 @@ function buildVideoInfo(
 
   return {
     trackId: propU32(descriptor, TAG.linkedTrackId) ?? 0,
+    trackNumber: 0,
     family: identity.family,
     codecId,
     ...(identity.unsupportedReason ? { unsupportedReason: identity.unsupportedReason } : {}),
@@ -226,6 +252,14 @@ function findTimecode(md: MxfHeaderMetadata): MxfTimecode | null {
   };
 }
 
+function findTrack(md: MxfHeaderMetadata, packageSet: MxfSet, trackId: number): MxfSet | null {
+  for (const trackUid of propRefBatch(packageSet, TAG.packageTracks)) {
+    const track = md.sets.get(trackUid);
+    if (track && propU32(track, TAG.trackId) === trackId) return track;
+  }
+  return null;
+}
+
 function trackDuration(md: MxfHeaderMetadata, packageSet: MxfSet, trackId: number): number | null {
   for (const trackUid of propRefBatch(packageSet, TAG.packageTracks)) {
     const track = md.sets.get(trackUid);
@@ -271,9 +305,18 @@ export async function readMxfMetadata(rawSource: MxfByteSource): Promise<MxfMeta
 
   let metadata: MxfHeaderMetadata | null = null;
   const indexSegments: MxfIndexSegment[] = [];
+  const essencePartitions: MxfEssencePartition[] = [];
   for (const partition of partitions) {
     const scan = await scanPartition(source, partition);
     indexSegments.push(...scan.indexSegments);
+    if (partition.bodySid > 0) {
+      essencePartitions.push({
+        partitionOffset: partition.offset,
+        bodySid: partition.bodySid,
+        bodyOffset: partition.bodyOffset,
+        essenceOffset: scan.endOffset,
+      });
+    }
     const hasPreface = [...scan.metadata.sets.values()].some((s) => setClass(s) === SET_CLASS.prefaceLast);
     // The header copy is preferred; the footer only fills in for open/incomplete headers.
     if (hasPreface && !metadata) metadata = scan.metadata;
@@ -287,12 +330,20 @@ export async function readMxfMetadata(rawSource: MxfByteSource): Promise<MxfMeta
   let video: MxfVideoInfo | null = null;
   const audio: MxfAudioInfo[] = [];
   let durationFrames = 0;
+  let videoBodySid = 0;
+  let videoIndexSid = 0;
   for (const pkg of filePackages) {
     const descriptors = collectDescriptors(md, propRef(pkg, TAG.packageDescriptor)!);
     for (const descriptor of descriptors) {
       if (propU32(descriptor, TAG.storedWidth) !== undefined && !video) {
         video = buildVideoInfo(descriptor, descriptors, intraOnly);
+        const track = findTrack(md, pkg, video.trackId);
+        video.trackNumber = track ? propU32(track, TAG.trackNumber) ?? 0 : 0;
         durationFrames = trackDuration(md, pkg, video.trackId) ?? propI64(descriptor, TAG.containerDuration) ?? 0;
+        const containerData = setsOfClass(md, SET_CLASS.essenceContainerData)
+          .find((ecd) => packageUidMatches(ecd, pkg));
+        videoBodySid = containerData ? propU32(containerData, ESSENCE_CONTAINER_DATA_TAG.bodySid) ?? 0 : 0;
+        videoIndexSid = containerData ? propU32(containerData, ESSENCE_CONTAINER_DATA_TAG.indexSid) ?? 0 : 0;
       } else if (propU32(descriptor, TAG.channelCount) !== undefined) {
         audio.push(buildAudioInfo(descriptor));
       }
@@ -301,6 +352,9 @@ export async function readMxfMetadata(rawSource: MxfByteSource): Promise<MxfMeta
   const fps = video?.fps ?? 0;
   return {
     operationalPattern: describeOperationalPattern(header.operationalPattern),
+    videoBodySid,
+    videoIndexSid,
+    essencePartitions,
     video,
     audio,
     timecode: findTimecode(md),

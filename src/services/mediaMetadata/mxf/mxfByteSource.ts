@@ -1,6 +1,8 @@
 // Range-read abstraction so the MXF parser runs on File (browser) and on
 // in-memory bytes (tests) with identical code paths.
 
+import { readBlobAsArrayBuffer } from '../../../importers/fileIdentity';
+
 export interface MxfByteSource {
   readonly size: number;
   read(offset: number, length: number): Promise<Uint8Array>;
@@ -13,7 +15,7 @@ export function createFileByteSource(file: Blob): MxfByteSource {
       const start = Math.max(0, offset);
       const end = Math.min(file.size, start + Math.max(0, length));
       if (end <= start) return new Uint8Array(0);
-      return new Uint8Array(await file.slice(start, end).arrayBuffer());
+      return new Uint8Array(await readBlobAsArrayBuffer(file.slice(start, end)));
     },
   };
 }

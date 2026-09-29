@@ -5,11 +5,8 @@ import {
   type CodecFrameProviderBaseOptions,
   type CodecPacketReader,
 } from '../codec/CodecFrameProviderBase';
-import {
-  TurboResPacketSource,
-  type TurboResPacket,
-  type TurboResPacketReader,
-} from './TurboResPacketSource';
+import type { TurboResPacket, TurboResPacketReader } from './TurboResPacketSource';
+import { createProResPacketReader } from './proResPacketReader';
 import type { TurboResProResFourCC } from './turboResCodecIdentity';
 import { planTurboResRuntimePolicy } from './turboResResourceEstimate';
 import { probeTurboResVideoFrameFormats } from './turboResVideoFrameCapabilities';
@@ -88,7 +85,7 @@ export class TurboResFrameProvider extends CodecFrameProviderBase<TurboResPacket
 
   protected async initializeResources(): Promise<CodecPacketReader<TurboResPacket>> {
     const sourceFactory = this.options.packetSourceFactory
-      ?? ((file, fourCC) => TurboResPacketSource.create(file, fourCC));
+      ?? ((file, fourCC) => createProResPacketReader(file, fourCC));
     const moduleLoader = this.options.moduleLoader
       ?? (async () => await import('turbores') as unknown as TurboResModuleLike);
     const outputFormatProbe = this.options.outputFormatProbe
