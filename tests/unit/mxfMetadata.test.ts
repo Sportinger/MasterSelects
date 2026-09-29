@@ -118,9 +118,13 @@ describe('MXF import wiring', () => {
     expect(getMxfCodecLabel('mxf:unsupported:jpeg2000')).toBe('JPEG 2000 (not supported)');
   });
 
-  it('routes MXF essence to an explicit unsupported plan, never the browser decoder', async () => {
+  it('routes MXF essence to codec providers or an explicit unsupported plan, never the browser decoder', async () => {
     const { selectRuntimeFrameProviderPlan } = await import('../../src/services/mediaRuntime/providerSelection');
     expect(selectRuntimeFrameProviderPlan({ videoCodecId: 'mxf:dnxhd', turboResEnabled: true }))
+      .toEqual({ backend: 'mxf-libav', codecId: 'mxf:dnxhd' });
+    expect(selectRuntimeFrameProviderPlan({ videoCodecId: 'mxf:avc-lgop', turboResEnabled: true }))
+      .toEqual({ backend: 'mxf-avc', codecId: 'mxf:avc-lgop' });
+    expect(selectRuntimeFrameProviderPlan({ videoCodecId: 'mxf:mpeg2-lgop', turboResEnabled: true }))
       .toEqual({ backend: 'unsupported', reason: 'mxf-decoder-unavailable' });
     expect(selectRuntimeFrameProviderPlan({ videoCodecId: 'mxf:unsupported:jpeg2000', turboResEnabled: true }))
       .toEqual({ backend: 'unsupported', reason: 'mxf-unsupported-essence' });
