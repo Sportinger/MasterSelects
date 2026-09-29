@@ -13,6 +13,7 @@ import type { WorkerGpuNativeScenePayload } from './workerGpuNativeSceneContract
 import type { WorkerGpuFrameStackNativeSceneInput } from './workerGpuFrameStackMaterializer';
 import type { WorkerFlockStatusSnapshot } from './workerFlockStatus';
 import { buildFlockRuntimeStatus } from '../../engine/flock/runtime/flockRuntimeStatus';
+import { WorkerNativeSceneDeadline } from './workerNativeSceneCatchUp';
 
 interface SceneEntry {
   audio: WorkerGpuNativeSceneAudio;
@@ -24,6 +25,7 @@ interface SceneEntry {
   layers: SceneLayer3DData[];
   camera: SceneCamera | null;
   payload: WorkerGpuNativeScenePayload | null;
+  preparingPayload: WorkerGpuNativeScenePayload | null;
 }
 
 export function hasWorkerGpuNativeScene(stack: WorkerGpuFrameStackContractV1): boolean {
@@ -60,16 +62,17 @@ export class WorkerGpuNativeSceneOwner {
       status: { getStatus: id => statuses.get(id), publishStatus: s => { statuses.set(s.clipId, s); }, clearStatus: id => { statuses.delete(id); } },
     });
     const scene = new NativeSceneRuntime({ flockRuntime: () => simulation, isRealtime: () => false, sourceFingerprint: () => undefined });
-    const entry: SceneEntry = { audio, simulation, scene, statuses, definitions: new Map(), keyframes: new Map(), layers: [], camera: null, payload: null };
+    const entry: SceneEntry = { audio, simulation, scene, statuses, definitions: new Map(), keyframes: new Map(), layers: [], camera: null, payload: null, preparingPayload: null };
     this.scenes.set(key, entry);
     await scene.initialize(1, 1);
     return entry;
   }
 
   /** Prepare all occurrences before encoding the frozen compositor stack. */
-  async prepare(stack: WorkerGpuFrameStackContractV1, current: () => boolean): Promise<void> {
+  async prepare(stack: WorkerGpuFrameStackContractV1, current: () => boolean, clock = Date.now): Promise<void> {
     const active = new Set<string>();
-    const guard = () => { if (this.disposed || !current()) throw new Error('Native scene frame expired or target was replaced'); };
+    const deadline = new WorkerNativeSceneDeadline(stack.frame.expireAfterMs, clock, () => !this.disposed && current());
+    const guard = deadline.assertCurrent;
     await this.assets.prepare(stack, guard);
     const visit = async (frame: WorkerGpuFrameStackContractV1): Promise<void> => {
       for (const binding of frame.bindings) {
@@ -81,6 +84,7 @@ export class WorkerGpuNativeSceneOwner {
         const entry = await this.acquire(key);
         guard();
         entry.payload = null;
+        entry.preparingPayload = payload;
         await entry.audio.prepare(payload.layers, guard);
         entry.camera = { ...payload.camera, viewMatrix: new Float32Array(payload.camera.viewMatrix), projectionMatrix: new Float32Array(payload.camera.projectionMatrix) };
         entry.layers = payload.layers.map(layer => {
@@ -120,15 +124,20 @@ export class WorkerGpuNativeSceneOwner {
           while (!ready) {
             guard();
             const encoder = this.device.createCommandEncoder();
+            const sessionKey = `${layer.clipId}|${layer.flock.consumer}`;
+            const beforeStep = entry.simulation.entries.get(sessionKey)?.session.step ?? 0;
             const plan = entry.simulation.prepare(this.device, encoder, layer, { realtime: false });
             if (!plan) throw new Error(entry.statuses.get(layer.clipId)?.message ?? 'Worker Flock simulation could not prepare');
             this.device.queue.submit([encoder.finish()]);
             await this.device.queue.onSubmittedWorkDone();
-            ready = entry.simulation.entries.get(`${layer.clipId}|${layer.flock.consumer}`)?.caughtUp === true;
+            const session = entry.simulation.entries.get(sessionKey);
+            deadline.completed(beforeStep, session?.session.step ?? 0);
+            ready = session?.caughtUp === true;
           }
         }
         guard();
         entry.payload = payload;
+        entry.preparingPayload = null;
       }
     };
     await visit(stack);
@@ -149,7 +158,7 @@ export class WorkerGpuNativeSceneOwner {
   }
 
   /** Snapshot only prepared occurrences belonging to this exact frame. */
-  flockStatusSnapshot(stack: WorkerGpuFrameStackContractV1): WorkerFlockStatusSnapshot {
+  flockStatusSnapshot(stack: WorkerGpuFrameStackContractV1, includePreparing = false): WorkerFlockStatusSnapshot {
     const occurrences: WorkerFlockStatusSnapshot['occurrences'][number][] = [];
     const visit = (frame: WorkerGpuFrameStackContractV1) => {
       const statuses: FlockRuntimeStatus[] = [];
@@ -158,7 +167,7 @@ export class WorkerGpuNativeSceneOwner {
         if (binding.payload.kind === 'nested-stack') { visit(binding.payload.stack); continue; }
         if (binding.payload.kind !== 'native-scene') continue;
         const entry = this.scenes.get(this.key(frame, binding.layerId));
-        if (!entry || entry.payload !== binding.payload) continue;
+        if (!entry || (entry.payload !== binding.payload && (!includePreparing || entry.preparingPayload !== binding.payload))) continue;
         for (const layer of binding.payload.layers) {
           if (layer.kind !== 'flock') continue;
           const consumer = frame.frame.intent === 'export' ? 'export' : 'preview';
@@ -167,7 +176,7 @@ export class WorkerGpuNativeSceneOwner {
           // Main UI publications are throttled. A frame result must describe this
           // exact session, including a fast backward seek within that interval.
           statuses.push(buildFlockRuntimeStatus({ clipId: layer.clipId,
-            state: session.stale ? 'stale' : session.caughtUp ? 'ready' : 'computing',
+            state: session.stale ? 'stale' : session.caughtUp && entry.payload === binding.payload ? 'ready' : 'computing',
             program: session.program, entry: session,
             diagnostics: [...session.program.diagnostics, ...session.runtimeDiagnostics],
             job: entry.simulation.jobs.get(layer.clipId) }));

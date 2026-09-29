@@ -73,6 +73,26 @@ export async function renderNativeFrameStackProbe(surface: WorkerGpuTargetSurfac
           readback: { readbackId: `native-readback-${frame}`, targetId: stack.frame.targetId, compositionId: stack.frame.compositionId,
             timelineTime: time, frameIndex: stack.frame.frameIndex, width: 256, height: 256, format: 'rgba8unorm', colorSpace: 'srgb' } };
       assertWorkerGpuPresentFrameStackCommand(command);
+      if (frame === 0) {
+        let clock = Date.now();
+        const requestId = `${command.commandId}-deadline`;
+        const expires = clock + 1000;
+        const expired = { ...command, commandId: requestId,
+          admission: { ...command.admission, requestId, nowMs: clock },
+          stack: { ...stack, frame: { ...stack.frame, requestId, submitByMs: clock, expireAfterMs: expires } } };
+        const queue = surface.device.queue;
+        const completion = queue.onSubmittedWorkDone.bind(queue);
+        queue.onSubmittedWorkDone = async () => { await completion(); clock = expires; };
+        try {
+          const pending = await presentGpuFrameStack(surface, { clock: () => clock, webCodecsFrames: new Map(), command: expired });
+          if (pending.ok || pending.readback || !pending.nativeSceneCatchUp?.completedSteps
+            || pending.flockStatus?.occurrences[0]?.statuses[0]?.state !== 'computing') {
+            throw new Error(`Expired native scene lost its retained progress: ${JSON.stringify(pending.diagnostics)}`);
+          }
+        } finally { queue.onSubmittedWorkDone = completion; }
+        // The normal request below has a fresh deadline and must reproduce the
+        // exact reference image using the retained session, never an expired frame.
+      }
       const result = await presentGpuFrameStack(surface, { clock: Date.now, webCodecsFrames: new Map(), command });
       if (!result.ok || !result.readback) throw new Error(`Native frame-stack failed: ${JSON.stringify(result.diagnostics)}`);
       const statuses = result.flockStatus?.occurrences[0]?.statuses;

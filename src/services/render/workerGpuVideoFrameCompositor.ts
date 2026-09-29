@@ -40,6 +40,7 @@ import type {
 import { assertWorkerGpuFrameStackContract, closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
 import { hasWorkerGpuNativeScene, WorkerGpuNativeSceneOwner } from './WorkerGpuNativeSceneOwner';
 import type { WorkerFlockStatusSnapshot } from './workerFlockStatus';
+import { WorkerNativeSceneDeadlineError, type WorkerNativeSceneCatchUp } from './workerNativeSceneCatchUp';
 import {
   createWorkerGpuPresentDiagnostics as createPresentDiagnostics,
   destroyWorkerGpuResource,
@@ -219,7 +220,8 @@ export async function presentGpuFrameStack(
     readonly webCodecsFrames: ReadonlyMap<string, WorkerGpuFrameStackWebCodecsFrame>;
     readonly isSurfaceCurrent?: () => boolean;
   },
-): Promise<WorkerGpuPresentResult & { readonly readback: WorkerGpuFrameStackReadbackResult | null; readonly flockStatus?: WorkerFlockStatusSnapshot }> {
+): Promise<WorkerGpuPresentResult & { readonly readback: WorkerGpuFrameStackReadbackResult | null;
+  readonly flockStatus?: WorkerFlockStatusSnapshot; readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp }> {
   const { command } = options;
   const nextSequence = surface.frameSequence + 1;
   const presentedFrameId = `${command.stack.frame.targetId}:${command.commandId}:gpu-frame-stack:${nextSequence}`;
@@ -228,6 +230,7 @@ export async function presentGpuFrameStack(
   let renderPassEnded = false;
   let commandSubmitted = false;
   let readbackBuffer: GPUBuffer | null = null;
+  let nativeScenes: WorkerGpuNativeSceneOwner | undefined;
   try {
     if (
       command.stack.dimensions.width !== surface.canvas.width
@@ -240,11 +243,10 @@ export async function presentGpuFrameStack(
     if (options.isSurfaceCurrent && !options.isSurfaceCurrent()) {
       throw new Error('Worker GPU target surface changed before frame-stack encoding');
     }
-    const nativeScenes = hasWorkerGpuNativeScene(command.stack)
+    nativeScenes = hasWorkerGpuNativeScene(command.stack)
       ? resources.nativeSceneOwner ??= new WorkerGpuNativeSceneOwner(surface.device)
       : resources.nativeSceneOwner;
-    await nativeScenes?.prepare(command.stack, () => (!options.isSurfaceCurrent || options.isSurfaceCurrent())
-      && options.clock() < command.stack.frame.expireAfterMs);
+    await nativeScenes?.prepare(command.stack, () => !options.isSurfaceCurrent || options.isSurfaceCurrent(), options.clock);
     executorInvocationStarted = true;
     execution = encodeWorkerGpuFrameStack({
       device: surface.device,
@@ -383,6 +385,10 @@ export async function presentGpuFrameStack(
         error: errorMessage(error),
       }),
       readback: null,
+      ...(error instanceof WorkerNativeSceneDeadlineError && error.completedSteps > 0 ? {
+        nativeSceneCatchUp: { completedSteps: error.completedSteps },
+        flockStatus: nativeScenes?.flockStatusSnapshot(command.stack, true),
+      } : {}),
     };
   }
 }

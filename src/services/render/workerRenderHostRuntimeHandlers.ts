@@ -7,6 +7,7 @@ import type {
 } from '../../engine/render/contracts/workerRenderGraph';
 import type { RuntimeJobHandler, RuntimeJobHandlerRegistration } from '../../runtime/worker';
 import type { WorkerFlockStatusSnapshot } from './workerFlockStatus';
+import type { WorkerNativeSceneCatchUp } from './workerNativeSceneCatchUp';
 import {
   RenderCacheRegistry,
   type RenderCacheRegistrySnapshot,
@@ -98,6 +99,7 @@ export interface WorkerRenderHostRuntimeJobInput {
 }
 
 export interface WorkerRenderHostRuntimeJobOutput {
+  readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp;
   readonly flockStatus?: WorkerFlockStatusSnapshot;
   readonly accepted: boolean;
   readonly commandType: WorkerRenderHostRuntimeCommand['type'];
@@ -207,6 +209,7 @@ interface WorkerGpuWebCodecsStreamSession {
 }
 
 interface AcceptedRenderCommand {
+  readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp;
   readonly flockStatus?: WorkerFlockStatusSnapshot;
   readonly statusEvents: readonly WorkerRenderStatusEvent[];
   readonly presentedFrameId: string | null;
@@ -2094,10 +2097,13 @@ async function presentWorkerGpuFrameStack(
     });
     const presentedFrameId = result.diagnostics.presentedFrameId;
     if (!result.ok || !presentedFrameId) {
-      return frameStackErrorResult(
+      const failed = frameStackErrorResult(
         command,
         result.diagnostics.error ?? 'Worker GPU frame-stack presentation failed',
       );
+      if (!result.nativeSceneCatchUp) return failed;
+      return { ...failed, nativeSceneCatchUp: result.nativeSceneCatchUp, flockStatus: result.flockStatus,
+        statusEvents: failed.statusEvents.map(event => event.type === 'error' ? { ...event, recoverable: true } : event) };
     }
     state.cache.touch(targetCacheId(targetId), nowMs);
     state.cache.touch(targetSurfaceCacheId(targetId), nowMs);
@@ -2715,6 +2721,7 @@ export const workerRenderHostRuntimeHandler: RuntimeJobHandler<
       webCodecs: accepted.webCodecs ?? null,
       readback: accepted.readback ?? null,
       flockStatus: accepted.flockStatus,
+      nativeSceneCatchUp: accepted.nativeSceneCatchUp,
     },
   };
 };

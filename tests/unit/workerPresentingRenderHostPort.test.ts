@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+// Match application bootstrap order before importing the concrete host factory.
+import '../../src/services/render/renderHostPort';
 import {
   clearWorkerFirstCounterSourcesForTests,
   getWorkerFirstCounterSourceSnapshot,
@@ -507,6 +509,46 @@ describe('worker presenting render host port', () => {
     } else {
       Reflect.deleteProperty(HTMLCanvasElement.prototype, 'transferControlToOffscreen');
     }
+  });
+
+  it.each([false, true])('continues native scene catch-up with a fresh frame, newer seek=%s', async superseded => {
+    const animation = installAnimationFrameQueue();
+    const bridge = createBridge();
+    let finish!: (value: WorkerRenderHostRuntimeJobOutput) => void;
+    vi.mocked(bridge.presentGpuFrameStack).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    installWorkerCanvasSupport({ width: 64, height: 64 } as OffscreenCanvas);
+    const host = createWorkerPresentingRenderHostPort({ fallback: createFallback(), createBridge: () => bridge,
+      strictWorkerOnly: true, presentationStrategy: 'worker-webgpu-present', getSelectionTelemetry: () => ({
+        selectedId: 'worker-primary', selectedRole: 'primary', workerPrimaryRequested: true,
+        workerPrimaryRegistered: true, workerPrimaryAvailable: true, blockers: [], reason: 'test',
+      }) });
+    const canvas = document.createElement('canvas'); canvas.width = 64; canvas.height = 64;
+    const layers: Parameters<RenderHostPort['render']>[0] = [{ id: 'solid', name: 'solid', visible: true,
+      opacity: 1, blendMode: 'normal', source: { type: 'solid', color: '#000000' }, effects: [],
+      position: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1 }, rotation: 0 }];
+    let time = 5;
+    const render = () => host.render(layers, { compositionId: 'catch-up-comp', timelineTimeSeconds: time });
+    try {
+      host.registerTargetCanvas('preview', canvas);
+      await vi.waitFor(() => expect(bridge.attachTargetSurface).toHaveBeenCalledOnce());
+      host.startRenderLoop(render);
+      animation.flushNextFrame();
+      await vi.waitFor(() => expect(bridge.presentGpuFrameStack).toHaveBeenCalledOnce());
+      const first = vi.mocked(bridge.presentGpuFrameStack).mock.calls[0][0];
+      if (superseded) { time = 0.25; render(); }
+      finish(output({ commandType: 'gpu.presentFrameStack', presentedFrameId: null,
+        nativeSceneCatchUp: { completedSteps: 11 } }));
+      await vi.waitFor(() => {
+        animation.flushNextFrame();
+        expect(bridge.presentGpuFrameStack).toHaveBeenCalledTimes(2);
+      });
+      const second = vi.mocked(bridge.presentGpuFrameStack).mock.calls[1][0];
+      expect(second.commandId).not.toBe(first.commandId);
+      expect(second.stack).not.toBe(first.stack);
+      expect(second.stack.frame.timelineTime).toBe(superseded ? 0.25 : 5);
+      expect(second.stack.frame.expireAfterMs).toBeGreaterThanOrEqual(first.stack.frame.expireAfterMs);
+      expect(host.getTelemetry().diagnostics.nativeSceneCatchUpCount).toBe(superseded ? 0 : 1);
+    } finally { host.stopRenderLoopForDiagnostics(); animation.restore(); }
   });
 
   it('reports worker-presenting telemetry', () => {

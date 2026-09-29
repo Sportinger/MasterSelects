@@ -101,6 +101,7 @@ import { projectWorkerGpuFrameStack } from './workerGpuFrameStackProjector';
 import { projectMainNativeScene } from './workerGpuNativeSceneMainProjection';
 import { WorkerFlockStatusMirror } from './workerFlockStatus';
 import { flockRuntime } from '../../engine/flock/runtime/flockRuntimeApi';
+import { canResumeWorkerNativeScene } from './workerNativeSceneCatchUp';
 import { closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
 import { workerGpuOperatorProgramPresentationKey } from './workerGpuOperatorPipeline';
 
@@ -324,6 +325,7 @@ class WorkerPresentingRenderHostPortCore {
   private gpuOnlyVideoSourceLoadFailureCount = 0;
   private gpuOnlyFrameStackCount = 0;
   private gpuOnlyFrameStackFailureCount = 0;
+  private nativeSceneCatchUpCount = 0;
   private coalescedGpuFrameCount = 0;
   private readonly inFlightGpuPresentationTargets = new Set<string>();
   private readonly pendingGpuPresentationsByTarget = new Map<string, WorkerGpuPresentationRequest[]>();
@@ -1682,10 +1684,11 @@ class WorkerPresentingRenderHostPortCore {
     }
     this.lastGpuOnlyVideoFrameStats = this.runtimeOutputStats(output);
     const presented = this.runtimeOutputPresentedRequest(output, requestId);
-    if (targetId === 'preview' && presented
-      && this.latestPresentationSequenceByTarget.get(targetId) === sequence
+    const current = this.latestPresentationSequenceByTarget.get(targetId) === sequence
       && this.currentTargetSurfaceGeneration(targetId) === record.targetSurfaceGeneration
-      && this.attachedWorkerTargetIds.has(targetId)) {
+      && this.attachedWorkerTargetIds.has(targetId);
+    const catchUp = canResumeWorkerNativeScene(output.nativeSceneCatchUp, current && this.isGpuOnlyPresentation);
+    if (targetId === 'preview' && current && (presented || catchUp)) {
       this.flockStatuses.accept(output.flockStatus);
       flockRuntime.setStatusSource(this.readFlockStatuses);
     }
@@ -1694,7 +1697,12 @@ class WorkerPresentingRenderHostPortCore {
       targetMoved,
       source: 'worker-gpu-only:frame-stack',
     });
-    if (!presented) {
+    if (catchUp) {
+      this.nativeSceneCatchUpCount += 1;
+      // Rebuild from current editor state with fresh resources and a new deadline.
+      // A newer seek/graph already queued above wins instead of reviving this frame.
+      this.requestRender();
+    } else if (!presented) {
       this.presentationFailures += 1;
       this.gpuOnlyFrameStackFailureCount += 1;
     } else {
@@ -3179,6 +3187,7 @@ class WorkerPresentingRenderHostPortCore {
       gpuOnlyVideoSourceLoadCount: this.gpuOnlyVideoSourceLoadCount,
       gpuOnlyVideoSourceLoadFailureCount: this.gpuOnlyVideoSourceLoadFailureCount,
       gpuOnlyFrameStackCount: this.gpuOnlyFrameStackCount,
+      nativeSceneCatchUpCount: this.nativeSceneCatchUpCount,
       gpuOnlyFrameStackFailureCount: this.gpuOnlyFrameStackFailureCount,
       gpuOnlyUnsupportedRenderEffectFallbackCount: this.workerGpuMediaSources.unsupportedRenderEffectFallbackCount,
       gpuOnlyUnsupportedRenderEffectFallbacks: this.workerGpuMediaSources.lastUnsupportedRenderEffectFallbacks,

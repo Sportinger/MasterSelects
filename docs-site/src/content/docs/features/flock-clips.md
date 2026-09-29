@@ -405,6 +405,11 @@ nested occurrences remain separate under render-host diagnostics (`flockStatus`)
 Changing composition or detaching a target cannot expose a stale Main status as
 Worker progress. Precompute, particle sampling and cache mutation still await
 Worker command routing; requests do not operate on the dormant Main backend.
+If simulation catch-up exceeds a frame deadline, the Worker reports its retained
+completed steps and a computing status. The host requests a fresh frame from the
+current editor state; expired frame resources are never reused. A newer seek or
+replaced target suppresses continuation of the old request. Errors without
+completed progress stop instead of triggering an unbounded retry loop.
 Other 3D layer kinds, scene effectors, gizmos and complete
 cache control routing remain outstanding. The default editor preview
 remains on the main renderer; this is not yet the full Worker migration.

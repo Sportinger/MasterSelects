@@ -46,6 +46,8 @@ Development can explicitly boot the Worker preview with
 `/editor?renderHost=worker-gpu-only`; production ignores this URL override.
 The Worker preview reports its own Flock simulation, memory and checkpoint status
 to the inspector; nested occurrences remain separate in render-host diagnostics.
+Long Worker seeks resume retained simulation progress with fresh frame deadlines;
+newer requests take priority and stalled work is not retried indefinitely.
 Fluid pressure uses a multigrid-preconditioned conjugate-gradient solver on both
 CPU and GPU, with residual-based convergence and solid domain walls.
 The fluid node exposes particle separation, spacing and deterministic position
