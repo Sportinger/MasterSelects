@@ -6,6 +6,15 @@ export interface WorkerFlockStatusSnapshot {
   readonly compositionId: string;
   readonly capabilities: FlockHostCapabilities | null;
   readonly gpuTimings?: FlockGpuTimingSnapshot & { capturedAt: number };
+  readonly frameTiming?: {
+    requestId: string;
+    ageAtWorkerMs: number;
+    resourcesMs: number;
+    prepareMs: number;
+    encodeMs: number;
+    submitWaitMs: number;
+    totalMs: number;
+  };
   readonly occurrences: readonly {
     readonly occurrenceNamespace: string;
     readonly compositionId: string;

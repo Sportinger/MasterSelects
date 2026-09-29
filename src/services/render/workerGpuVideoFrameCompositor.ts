@@ -231,6 +231,10 @@ export async function presentGpuFrameStack(
   let commandSubmitted = false;
   let readbackBuffer: GPUBuffer | null = null;
   let nativeScenes: WorkerGpuNativeSceneOwner | undefined;
+  const started = performance.now();
+  const frameTiming = { requestId: command.commandId,
+    ageAtWorkerMs: options.clock() - command.stack.frame.submitByMs,
+    resourcesMs: 0, prepareMs: 0, encodeMs: 0, submitWaitMs: 0, totalMs: 0 };
   try {
     if (
       command.stack.dimensions.width !== surface.canvas.width
@@ -240,6 +244,7 @@ export async function presentGpuFrameStack(
     }
     assertWorkerGpuFrameStackContract(command.stack, { ...command.admission, nowMs: options.clock() });
     const resources = await getWorkerGpuCompositorResources(surface);
+    frameTiming.resourcesMs = performance.now() - started;
     if (options.isSurfaceCurrent && !options.isSurfaceCurrent()) {
       throw new Error('Worker GPU target surface changed before frame-stack encoding');
     }
@@ -247,6 +252,7 @@ export async function presentGpuFrameStack(
       ? resources.nativeSceneOwner ??= new WorkerGpuNativeSceneOwner(surface.device)
       : resources.nativeSceneOwner;
     await nativeScenes?.prepare(command.stack, () => !options.isSurfaceCurrent || options.isSurfaceCurrent(), options.clock);
+    frameTiming.prepareMs = performance.now() - started - frameTiming.resourcesMs;
     executorInvocationStarted = true;
     execution = encodeWorkerGpuFrameStack({
       device: surface.device,
@@ -336,8 +342,11 @@ export async function presentGpuFrameStack(
       );
     }
     const submission = execution.submit();
+    const submittedAt = performance.now();
+    frameTiming.encodeMs = submittedAt - started - frameTiming.resourcesMs - frameTiming.prepareMs;
     commandSubmitted = true;
     await submission;
+    frameTiming.submitWaitMs = performance.now() - submittedAt;
     const readback = command.readback && readbackBuffer && readbackLayout
       ? await mapWorkerGpuFrameStackReadback(readbackBuffer, command.readback, readbackLayout)
       : null;
@@ -360,8 +369,9 @@ export async function presentGpuFrameStack(
         error: null,
       }),
       readback,
-      flockStatus: nativeScenes?.flockStatusSnapshot(command.stack)
-        ?? { compositionId: command.stack.frame.compositionId, occurrences: [], capabilities: null },
+      flockStatus: { ...(nativeScenes?.flockStatusSnapshot(command.stack)
+        ?? { compositionId: command.stack.frame.compositionId, occurrences: [], capabilities: null }),
+        frameTiming: { ...frameTiming, totalMs: performance.now() - started } },
     };
   } catch (error) {
     if (!executorInvocationStarted) {

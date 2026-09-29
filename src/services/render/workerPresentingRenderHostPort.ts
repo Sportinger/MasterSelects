@@ -1684,11 +1684,13 @@ class WorkerPresentingRenderHostPortCore {
     }
     this.lastGpuOnlyVideoFrameStats = this.runtimeOutputStats(output);
     const presented = this.runtimeOutputPresentedRequest(output, requestId);
-    const current = this.latestPresentationSequenceByTarget.get(targetId) === sequence
-      && this.currentTargetSurfaceGeneration(targetId) === record.targetSurfaceGeneration
+    const currentSurface = this.currentTargetSurfaceGeneration(targetId) === record.targetSurfaceGeneration
       && this.attachedWorkerTargetIds.has(targetId);
+    const current = currentSurface && this.latestPresentationSequenceByTarget.get(targetId) === sequence;
     const catchUp = canResumeWorkerNativeScene(output.nativeSceneCatchUp, current && this.isGpuOnlyPresentation);
-    if (targetId === 'preview' && current && (presented || catchUp)) {
+    // Playback queues newer requests while this frame is rendering. A frame
+    // actually presented on the current surface still owns the visible status.
+    if (targetId === 'preview' && currentSurface && (presented || catchUp)) {
       this.flockStatuses.accept(output.flockStatus);
       flockRuntime.setStatusSource(this.readFlockStatuses);
     }

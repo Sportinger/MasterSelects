@@ -415,6 +415,11 @@ extra wait or pixel readback is added. A missing Worker snapshot never substitut
 stale Main measurements. Worker devices request `timestamp-query` when supported
 and the adapter's `maxStorageBufferBindingSize` / `maxBufferSize`. Unsupported
 timestamps remain disabled; raised limits do not themselves allocate GPU memory.
+Render-host `flockStatus.frameTiming` separates Worker frame age, resource setup,
+simulation preparation, command encoding and submission wait in wall-clock
+milliseconds. These include scheduling and waiting, unlike GPU pass timestamps.
+Presented-frame status remains current during playback even when the next frame
+is already queued; partial catch-up status still requires the newest request.
 If simulation catch-up exceeds a frame deadline, the Worker reports its retained
 completed steps and a computing status. The host requests a fresh frame from the
 current editor state; expired frame resources are never reused. A newer seek or

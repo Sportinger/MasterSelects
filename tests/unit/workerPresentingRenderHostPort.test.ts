@@ -511,11 +511,17 @@ describe('worker presenting render host port', () => {
     }
   });
 
-  it.each([false, true])('continues native scene catch-up with a fresh frame, newer seek=%s', async superseded => {
+  it.each([
+    { superseded: false, presented: false },
+    { superseded: true, presented: false },
+    { superseded: true, presented: true },
+  ])('continues native scene catch-up or reports the presented frame: %j', async ({ superseded, presented }) => {
     const animation = installAnimationFrameQueue();
     const bridge = createBridge();
     let finish!: (value: WorkerRenderHostRuntimeJobOutput) => void;
     vi.mocked(bridge.presentGpuFrameStack).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    // Keep the next request pending so the first frame's visible status can be inspected.
+    if (presented) vi.mocked(bridge.presentGpuFrameStack).mockImplementationOnce(() => new Promise(() => {}));
     installWorkerCanvasSupport({ width: 64, height: 64 } as OffscreenCanvas);
     const host = createWorkerPresentingRenderHostPort({ fallback: createFallback(), createBridge: () => bridge,
       strictWorkerOnly: true, presentationStrategy: 'worker-webgpu-present', getSelectionTelemetry: () => ({
@@ -536,8 +542,14 @@ describe('worker presenting render host port', () => {
       await vi.waitFor(() => expect(bridge.presentGpuFrameStack).toHaveBeenCalledOnce());
       const first = vi.mocked(bridge.presentGpuFrameStack).mock.calls[0][0];
       if (superseded) { time = 0.25; render(); }
-      finish(output({ commandType: 'gpu.presentFrameStack', presentedFrameId: null,
-        nativeSceneCatchUp: { completedSteps: 11 } }));
+      const flockStatus = { compositionId: 'catch-up-comp', capabilities: null, occurrences: [],
+        frameTiming: { requestId: first.commandId, ageAtWorkerMs: 2, resourcesMs: 0,
+          prepareMs: 50, encodeMs: 2, submitWaitMs: 30, totalMs: 82 } };
+      finish(output({ commandType: 'gpu.presentFrameStack', presentedFrameId: presented ? 'visible-frame' : null,
+        flockStatus,
+        statusEvents: presented ? [{ type: 'frame-presented', requestId: first.commandId,
+          targetId: 'preview', timelineTime: 5 }] : [],
+        ...(!presented ? { nativeSceneCatchUp: { completedSteps: 11 } } : {}) }));
       await vi.waitFor(() => {
         animation.flushNextFrame();
         expect(bridge.presentGpuFrameStack).toHaveBeenCalledTimes(2);
@@ -548,6 +560,7 @@ describe('worker presenting render host port', () => {
       expect(second.stack.frame.timelineTime).toBe(superseded ? 0.25 : 5);
       expect(second.stack.frame.expireAfterMs).toBeGreaterThanOrEqual(first.stack.frame.expireAfterMs);
       expect(host.getTelemetry().diagnostics.nativeSceneCatchUpCount).toBe(superseded ? 0 : 1);
+      if (presented) expect(host.getTelemetry().diagnostics.flockStatus).toEqual(flockStatus);
     } finally { host.stopRenderLoopForDiagnostics(); animation.restore(); }
   });
 
