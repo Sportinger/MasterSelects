@@ -1,6 +1,6 @@
 import { useMediaStore } from '../../mediaStore';
 import { flags } from '../../../engine/featureFlags';
-import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { describeUnsupportedProviderPlan, isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
 import { getCodecProviderDescriptor } from '../../../services/mediaRuntime/codec/codecProviderDescriptors';
 
 export function startVideoThumbnailGeneration(file: File, mediaFileId: string, naturalDuration: number): void {
@@ -13,7 +13,7 @@ export function startVideoThumbnailGeneration(file: File, mediaFileId: string, n
     if (providerPlan.backend === 'unsupported') {
       thumbnailCacheService.reportUnsupported(
         mediaFileId,
-        'Timeline thumbnails are unavailable because ProRes RAW is not supported.',
+        `Timeline thumbnails are unavailable because ${describeUnsupportedProviderPlan(providerPlan)} is not supported.`,
       );
       return;
     }

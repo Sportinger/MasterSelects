@@ -39,7 +39,7 @@ import {
 } from './sourceMonitor/sourceMonitorTimecode';
 import { flags } from '../../engine/featureFlags';
 import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../services/mediaRuntime/providerSelection';
-import { TurboResSourceMonitorCanvas } from './sourceMonitor/TurboResSourceMonitorCanvas';
+import { CodecSourceMonitorCanvas } from './sourceMonitor/CodecSourceMonitorCanvas';
 import { usePreviewTransportPortal } from './PreviewTransportPortalContext';
 
 const SOURCE_MONITOR_MAX_ZOOM = 128;
@@ -437,7 +437,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
       >
         {isVideo ? (
           useTurboResVideo ? (
-            <TurboResSourceMonitorCanvas
+            <CodecSourceMonitorCanvas
               key={file.id}
               ref={turboResMonitorRef}
               file={file}

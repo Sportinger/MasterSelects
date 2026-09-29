@@ -5,7 +5,7 @@ import {
   useState,
 } from 'react';
 import type { MediaFile } from '../../../stores/mediaStore';
-import type { TurboResSourceMonitorHandle } from './TurboResSourceMonitorCanvas';
+import type { CodecSourceMonitorHandle } from './CodecSourceMonitorCanvas';
 import {
   clampTime,
   DEFAULT_STILL_DURATION,
@@ -35,7 +35,7 @@ export function useSourceMonitorTransport({
   useTurboResVideo,
 }: SourceMonitorTransportOptions) {
   const mediaRef = useRef<HTMLMediaElement | null>(null);
-  const turboResMonitorRef = useRef<TurboResSourceMonitorHandle | null>(null);
+  const turboResMonitorRef = useRef<CodecSourceMonitorHandle | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(
     normalizeDuration(file.duration, isImage ? DEFAULT_STILL_DURATION : 0),

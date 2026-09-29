@@ -10,7 +10,7 @@ import {
   getExportSourceKey,
 } from './sourceSharing';
 import { flags } from '../../featureFlags';
-import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { describeUnsupportedProviderPlan, isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
 import { ensureRuntimeFrameProvider } from '../../../services/mediaRuntime/runtimePlayback';
 import { isLiveInputClip, requireLiveInputExportVideo } from '../liveInputExport';
 
@@ -97,7 +97,7 @@ export async function initializePreciseMode(
       turboResEnabled: flags.turboResProRes,
     });
     if (providerPlan.backend === 'unsupported') {
-      throw new Error(`Export does not support ProRes RAW for clip "${clip.name}".`);
+      throw new Error(`Export does not support ${describeUnsupportedProviderPlan(providerPlan)} for clip "${clip.name}".`);
     }
     if (isCodecProviderPlan(providerPlan)) {
       clipStates.set(clip.id, {

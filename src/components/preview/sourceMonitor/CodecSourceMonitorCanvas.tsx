@@ -18,16 +18,16 @@ import { mediaRuntimeRegistry } from '../../../services/mediaRuntime/registry';
 import { ensureRuntimeFrameProvider } from '../../../services/mediaRuntime/runtimePlayback';
 import type { RuntimeFrameProvider } from '../../../services/mediaRuntime/types';
 
-export interface TurboResSourceMonitorHandle {
+export interface CodecSourceMonitorHandle {
   seek(timeSeconds: number): void;
   play(startSeconds: number, endSeconds: number): void;
   pause(): void;
 }
 
-interface TurboResSourceMonitorCanvasProps {
+interface CodecSourceMonitorCanvasProps {
   file: MediaFile;
   sourceFile: File;
-  /** Session-provider codec identity: classic ProRes or HAP. */
+  /** Session-provider codec identity: ProRes, HAP, or another codec-provider backend. */
   fourCC: TurboResProResFourCC | HapVideoFourCC;
   style?: CSSProperties;
   onTimeChange(timeSeconds: number): void;
@@ -45,10 +45,10 @@ function getCanvasSize(file: MediaFile): { width: number; height: number } {
   };
 }
 
-export const TurboResSourceMonitorCanvas = forwardRef<
-  TurboResSourceMonitorHandle,
-  TurboResSourceMonitorCanvasProps
->(function TurboResSourceMonitorCanvas(props, ref) {
+export const CodecSourceMonitorCanvas = forwardRef<
+  CodecSourceMonitorHandle,
+  CodecSourceMonitorCanvasProps
+>(function CodecSourceMonitorCanvas(props, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const providerRef = useRef<RuntimeFrameProvider | null>(null);
   const currentTimeRef = useRef(0);
@@ -199,10 +199,10 @@ export const TurboResSourceMonitorCanvas = forwardRef<
     <>
       <canvas
         ref={canvasRef}
-        className="source-monitor-video source-monitor-turbores-canvas"
+        className="source-monitor-video source-monitor-codec-canvas"
         style={props.style}
         onClick={props.onTogglePlayback}
-        aria-label={`ProRes source preview: ${props.file.name}`}
+        aria-label={`Source preview: ${props.file.name}`}
       />
       {error && <div className="source-monitor-provider-error" role="status">{error}</div>}
     </>

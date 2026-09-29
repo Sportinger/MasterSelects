@@ -5,7 +5,7 @@ import { releaseReservedExportFrameProvider, reserveExportFrameProvider } from '
 import type { WebCodecsPlayer } from '../../WebCodecsPlayer';
 import type { RuntimeFrameProvider } from '../../../services/mediaRuntime/types';
 import { flags } from '../../featureFlags';
-import { isCodecProviderBackend, isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { describeUnsupportedProviderPlan, isCodecProviderBackend, isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
 import { ensureRuntimeFrameProvider } from '../../../services/mediaRuntime/runtimePlayback';
 import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import {
@@ -76,7 +76,7 @@ export async function initializeFastMode(
       turboResEnabled: flags.turboResProRes,
     });
     if (providerPlan.backend === 'unsupported') {
-      throw new Error(`Export does not support ProRes RAW for clip "${clip.name}".`);
+      throw new Error(`Export does not support ${describeUnsupportedProviderPlan(providerPlan)} for clip "${clip.name}".`);
     }
 
     const clipStartInExport = Math.max(0, startTime - clip.startTime);

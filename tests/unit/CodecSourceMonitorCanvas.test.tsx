@@ -28,12 +28,12 @@ vi.mock('../../src/services/mediaRuntime/runtimePlayback', () => ({
 }));
 
 import {
-  TurboResSourceMonitorCanvas,
-  type TurboResSourceMonitorHandle,
-} from '../../src/components/preview/sourceMonitor/TurboResSourceMonitorCanvas';
+  CodecSourceMonitorCanvas,
+  type CodecSourceMonitorHandle,
+} from '../../src/components/preview/sourceMonitor/CodecSourceMonitorCanvas';
 import type { MediaFile } from '../../src/stores/mediaStore/types';
 
-describe('TurboResSourceMonitorCanvas', () => {
+describe('CodecSourceMonitorCanvas', () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
@@ -69,7 +69,7 @@ describe('TurboResSourceMonitorCanvas', () => {
     } as unknown as CanvasRenderingContext2D);
     vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(17);
     vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => undefined);
-    const ref = createRef<TurboResSourceMonitorHandle>();
+    const ref = createRef<CodecSourceMonitorHandle>();
     const onTimeChange = vi.fn();
     const onPlayingChange = vi.fn();
     const onTogglePlayback = vi.fn();
@@ -83,7 +83,7 @@ describe('TurboResSourceMonitorCanvas', () => {
     } as MediaFile;
 
     const result = render(
-      <TurboResSourceMonitorCanvas
+      <CodecSourceMonitorCanvas
         ref={ref}
         file={file}
         sourceFile={sourceFile}

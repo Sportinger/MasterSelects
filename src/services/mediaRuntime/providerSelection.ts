@@ -28,6 +28,15 @@ export function isCodecProviderPlan(plan: RuntimeFrameProviderPlan): plan is Cod
   return isCodecProviderBackend(plan.backend);
 }
 
+/** Human name of the unsupported source, for "<feature> does not support X" messages. */
+export function describeUnsupportedProviderPlan(
+  plan: Extract<RuntimeFrameProviderPlan, { backend: 'unsupported' }>,
+): string {
+  switch (plan.reason) {
+    case 'prores-raw': return 'ProRes RAW';
+  }
+}
+
 export function selectRuntimeFrameProviderPlan(options: {
   videoCodecId: string | undefined;
   turboResEnabled: boolean;
