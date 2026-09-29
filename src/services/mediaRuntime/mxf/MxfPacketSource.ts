@@ -27,6 +27,18 @@ export interface MxfPacketSourceMetadata extends CodecPacketSourceMetadata {
   codecId: string;
 }
 
+const metadataCache = new WeakMap<Blob, Promise<MxfMetadata>>();
+
+function readMetadataCached(source: MxfByteSource, cacheKey: Blob | undefined): Promise<MxfMetadata> {
+  if (!cacheKey) return readMxfMetadata(source);
+  const cached = metadataCache.get(cacheKey);
+  if (cached) return cached;
+  const promise = readMxfMetadata(source);
+  metadataCache.set(cacheKey, promise);
+  promise.catch(() => metadataCache.delete(cacheKey));
+  return promise;
+}
+
 export class MxfPacketSource {
   readonly metadata: MxfPacketSourceMetadata;
   readonly mxf: MxfMetadata;
@@ -54,12 +66,16 @@ export class MxfPacketSource {
   }
 
   static async create(file: Blob, expectedCodecId?: string): Promise<MxfPacketSource> {
-    return MxfPacketSource.createFromSource(createFileByteSource(file), expectedCodecId);
+    return MxfPacketSource.createFromSource(createFileByteSource(file), expectedCodecId, file);
   }
 
-  static async createFromSource(raw: MxfByteSource, expectedCodecId?: string): Promise<MxfPacketSource> {
+  /**
+   * @param cacheKey Parsed metadata is shared per file for the session (several providers
+   *   open the same camera file: preview, source monitor, thumbnails, proxy).
+   */
+  static async createFromSource(raw: MxfByteSource, expectedCodecId?: string, cacheKey?: Blob): Promise<MxfPacketSource> {
     const source = createCachedByteSource(raw, 64 * 1024);
-    const mxf = await readMxfMetadata(source);
+    const mxf = await readMetadataCached(source, cacheKey);
     const video = mxf.video;
     if (!video?.codecId) {
       throw new Error('MXF file has no supported picture essence');

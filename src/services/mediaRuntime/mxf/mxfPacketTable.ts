@@ -76,9 +76,14 @@ export class MxfPacketTable {
       this.displayToStored[i] = i;
     }
     // Index entry x carries the temporal offset of display unit x: it is stored at x + offset.
-    for (let x = 0; x < this.frameCount; x += 1) {
-      const stored = x + (this.entryAt(x)?.temporalOffset ?? 0);
-      if (stored >= 0 && stored < this.frameCount) {
+    // One pass over the segments (never a per-frame segment search: long camera files have
+    // ~250k edit units in ~1000 segments and this runs on the main thread).
+    for (const segment of this.segments) {
+      for (let j = 0; j < segment.entries.length; j += 1) {
+        const x = segment.startPosition + j;
+        const offset = segment.entries[j]!.temporalOffset;
+        const stored = x + offset;
+        if (offset === 0 || x >= this.frameCount || stored < 0 || stored >= this.frameCount) continue;
         this.storedToDisplay[stored] = x;
         this.displayToStored[x] = stored;
       }
@@ -190,12 +195,21 @@ export class MxfPacketTable {
     return Math.max(0, Math.min(this.frameCount - 1, Math.floor(index)));
   }
 
+  /** Binary search: last segment whose start position is at or before `index`. */
   private segmentFor(index: number): MxfIndexSegment | null {
-    for (let i = this.segments.length - 1; i >= 0; i -= 1) {
-      const segment = this.segments[i]!;
-      if (index >= segment.startPosition) return segment;
+    let low = 0;
+    let high = this.segments.length - 1;
+    let found = -1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (this.segments[mid]!.startPosition <= index) {
+        found = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
     }
-    return null;
+    return found >= 0 ? this.segments[found]! : null;
   }
 
   private entryAt(index: number) {
