@@ -490,7 +490,16 @@ composition pixels, so the strand pass mirrors local Y into it.
   pieces, depending on how many pixels it spans at the nearest point of the layer.
   Curves stay round without resampling them, and distant views keep one piece per
   segment.
-- **Not yet supported:** shadows and a dedicated generator clip.
+- **Self-shadowing:** fibers shadow each other through deep opacity maps. From the
+  shadowing light, a depth pass records the nearest fiber per texel. An opacity pass
+  then adds every fiber's coverage into four layers behind it (1024², additive,
+  deterministic). The main pass reads the opacity in front of each fragment, with the
+  nearest depth filtered bilinearly so thin fibers do not band.
+  - Without light clips the key light casts an orthographic shadow at strength 0.8.
+  - With light clips, the point or panel light brightest at the layer casts, if its
+    clip has **Casts Shadows** on (at its **Shadow Strength**).
+- **Not yet supported:** shadows between strands and other layers, and a dedicated
+  generator clip.
 
 The cloth simulation runs on the
 CPU of the rendering thread (the Worker render host in the default mode); a long

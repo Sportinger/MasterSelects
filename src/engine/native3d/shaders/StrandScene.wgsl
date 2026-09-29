@@ -4,11 +4,16 @@
 // The world-space width decides the projected pixel width; fibers thinner than one pixel keep one
 // pixel of geometry and a deterministic hashed coverage instead, so dense yarns need no sorting,
 // export reproduces the preview and zero-width strands draw nothing.
+// Self-shadowing uses deep opacity maps (Kim & Neumann 2001, Yuksel & Keyser 2008): the same vertex
+// stage renders the fibers from the shadowing light into a depth map and then additively into four
+// opacity layers behind that depth; the main pass reads the opacity in front of each fragment.
 // Flyaway channels are extra instances per yarn: in a hashed window per curve cell one stray fiber
 // arcs off the yarn surface and returns (loop) or ends at its peak (free end); elsewhere it is hidden.
 
 const TAU: f32 = 6.28318530718;
 const PI: f32 = 3.14159265359;
+/** A fiber must lie this many opacity layers behind another before it is shadowed by it, so fibers never shadow themselves. */
+const SHADOW_BIAS: f32 = 0.35;
 /** Flyaway windows keep this fraction of their cell free at both ends, so neighbouring cells never overlap. */
 const FLYAWAY_MARGIN: f32 = 0.15;
 
@@ -25,6 +30,9 @@ struct StrandUniforms {
   fly: vec4f,     // x: flyaway cell length per channel, y: flyaway length, z: lift (yarn radii), w: free-end fraction
   ambient: vec4f, // rgb: ambient from environment lights, w: direct scene lights (-1: none, use the key light)
   lights: array<StrandLight, 4>,
+  shadowMatrix: mat4x4f, // view-projection of the shadowing light (scene space)
+  shadow: vec4f,         // x: 0 none, 1 key light, 2 + n scene light n; y: opacity layer spacing; z: opacity per fiber; w: strength
+  shadowRange: vec4f,    // x: near, y: far, z: 1 perspective, 0 orthographic
 };
 
 /** A point (kind 1) or panel (kind 2) scene light, packed like MeshPass lights. */
@@ -46,6 +54,10 @@ struct Flyaway {
 @group(0) @binding(1) var<storage, read> points: array<vec4f>;
 // First point index per segment; bit 31/30: the strand continues before/after the segment.
 @group(0) @binding(2) var<storage, read> segments: array<u32>;
+// Nearest fiber depth and four cumulative opacity layers seen from the shadowing light.
+@group(0) @binding(3) var shadowDepth: texture_depth_2d;
+@group(0) @binding(4) var shadowOpacity: texture_2d<f32>;
+@group(0) @binding(5) var shadowSampler: sampler;
 
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -205,6 +217,61 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   return out;
 }
 
+/** Distance along the shadowing light for a depth value of its projection. */
+fn shadowLinearDepth(depth: f32) -> f32 {
+  let near = u.shadowRange.x;
+  let far = u.shadowRange.y;
+  return select(near + depth * (far - near), near * far / (far - depth * (far - near)), u.shadowRange.z > 0.5);
+}
+
+/** Light reaching scene position `p` from the shadowing light through the fibers in front of it. */
+fn shadowTransmittance(p: vec3f) -> f32 {
+  let clip = u.shadowMatrix * vec4f(p, 1.0);
+  if (clip.w <= 1e-5) {
+    return 1.0;
+  }
+  let ndc = clip.xyz / clip.w;
+  let uv = vec2f(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5);
+  if (any(uv < vec2f(0.0)) || any(uv > vec2f(1.0)) || ndc.z > 1.0) {
+    return 1.0;
+  }
+  // Nearest fiber depth, bilinear over the four surrounding texels that hold a fiber: thin fibers
+  // would otherwise make it jump between texels and band the shadow along every strand.
+  let size = vec2i(textureDimensions(shadowDepth));
+  let position = uv * vec2f(size) - 0.5;
+  let origin = vec2i(floor(position));
+  let f = position - floor(position);
+  var weight = 0.0;
+  var depth = 0.0;
+  for (var corner = 0; corner < 4; corner++) {
+    let offset = vec2i(corner & 1, corner >> 1);
+    let sample = textureLoad(shadowDepth, clamp(origin + offset, vec2i(0), size - vec2i(1)), 0);
+    let w = select(1.0 - f.x, f.x, offset.x == 1) * select(1.0 - f.y, f.y, offset.y == 1) * select(0.0, 1.0, sample < 0.99999);
+    weight += w;
+    depth += w * shadowLinearDepth(sample);
+  }
+  if (weight <= 1e-4) {
+    return 1.0;
+  }
+  let layer = clamp((shadowLinearDepth(ndc.z) - depth / weight) / u.shadow.y - SHADOW_BIAS, 0.0, 4.0);
+  let o = textureSampleLevel(shadowOpacity, shadowSampler, uv, 0.0);
+  var cumulative = array<f32, 5>(0.0, o.x, o.y, o.z, o.w);
+  let index = min(u32(layer), 3u);
+  let opacity = mix(cumulative[index], cumulative[index + 1u], layer - f32(index));
+  return mix(1.0, exp(-opacity), u.shadow.w);
+}
+
+/**
+ * Opacity pass: a fiber fragment adds its coverage to every layer whose far edge lies behind it,
+ * so layer k holds the opacity up to k + 1 layer spacings behind the nearest fiber.
+ */
+@fragment
+fn strandOpacityFragment(in: VertexOutput) -> @location(0) vec4f {
+  let nearest = shadowLinearDepth(textureLoad(shadowDepth, vec2i(in.position.xy), 0));
+  let layer = (shadowLinearDepth(in.position.z) - nearest) / u.shadow.y;
+  return step(vec4f(layer), vec4f(1.0, 2.0, 3.0, 4.0)) * in.coverage * u.shadow.z;
+}
+
 /** Kajiya-Kay style highlight around a tangent tilted by `shift` along the fiber normal. */
 fn specularLobe(tangent: vec3f, normal: vec3f, halfway: vec3f, shift: f32, exponent: f32) -> f32 {
   let shifted = normalize(tangent + normal * shift);
@@ -248,12 +315,15 @@ fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
   let tube = smoothstep(1.5, 4.0, in.pixels);
   // Ambient darkens toward the silhouette of wide fibers, like occlusion between neighbours.
   let occlusion = mix(1.0, mix(0.55, 1.0, profile), tube);
+  let position = u.camera.xyz - in.toCamera;
+  let shadowed = i32(u.shadow.x + 0.5);
   if (u.ambient.w < 0.0) {
-    let keyLit = u.light.w * u.color.rgb * occlusion + (1.0 - u.light.w) * shadeFiber(tangent, normal, view, normalize(u.light.xyz), tube);
+    let visibility = select(1.0, shadowTransmittance(position), shadowed == 1);
+    let keyLit = u.light.w * u.color.rgb * occlusion
+      + (1.0 - u.light.w) * visibility * shadeFiber(tangent, normal, view, normalize(u.light.xyz), tube);
     return vec4f(keyLit, 1.0);
   }
   // Scene lights, with the MeshPass falloff and panel direction.
-  let position = u.camera.xyz - in.toCamera;
   var rgb = u.ambient.rgb * u.color.rgb * occlusion;
   let count = i32(u.ambient.w + 0.5);
   for (var index = 0; index < 4; index++) {
@@ -268,7 +338,8 @@ fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
     if (light.positionKind.w > 1.5) {
       attenuation *= max(dot(-direction, normalize(light.directionDiameter.xyz)), 0.0);
     }
-    rgb += light.colorIntensity.rgb * light.colorIntensity.a * attenuation * shadeFiber(tangent, normal, view, direction, tube);
+    let visibility = select(1.0, shadowTransmittance(position), shadowed == index + 2);
+    rgb += light.colorIntensity.rgb * light.colorIntensity.a * attenuation * visibility * shadeFiber(tangent, normal, view, direction, tube);
   }
   return vec4f(min(rgb, vec3f(8.0)), 1.0);
 }
