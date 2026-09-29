@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { getEffectOperator } from './operatorRegistry';
 import { editEffectGraph } from './effectGraphEditing';
+import { usesLiteralNodeParameters } from './effectGraph';
 
 /** Graph value nodes that can publish their value as a keyframeable effect parameter. */
 const EXPOSABLE_VALUE_OPERATORS = new Set(['values.number', 'values.integer']);
@@ -82,8 +83,8 @@ export function applyGraphValueExposure(graph: EffectOperatorGraph, params: Reco
   if (!node.exposed) return {};
   const previous = node.exposed;
   delete node.exposed;
-  // Non-image graphs bind every added node parameter; only the marker is removed.
-  if (graph.domain !== 'image') return {};
+  // Graphs that bind every added node parameter keep the binding; only the marker is removed.
+  if (graph.domain === 'audio' || !usesLiteralNodeParameters(graph.domain)) return {};
   const current = params[key];
   node.constants = { ...node.constants, value: typeof current === 'number' && Number.isFinite(current) ? current : 1 };
   const { value: _binding, ...bindings } = node.bindings;

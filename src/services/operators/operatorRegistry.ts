@@ -10,6 +10,7 @@ import { AUDIO_OPERATORS } from './audioOperators';
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { VORONOI_OPERATORS } from './voronoiOperators';
 import { PARTICLE_DISINTEGRATE_OPERATORS } from './particleDisintegrateOperators';
+import { CURVE_OPERATORS } from './geometry/curveOperators';
 import { IMAGE_COMPOSITIONS, SPACE_COMPOSITIONS } from './operatorCompositionRegistry';
 
 const port = (id: string, type: OperatorSignal, required = false): OperatorPort => ({ id, label: id[0].toUpperCase() + id.slice(1), type, required });
@@ -32,6 +33,7 @@ export const EFFECT_OPERATORS: readonly OperatorDefinition[] = [
   ...ANALOG_SIGNAL_OPERATORS,
   ...VORONOI_OPERATORS,
   ...PARTICLE_DISINTEGRATE_OPERATORS,
+  ...CURVE_OPERATORS,
   WIND_OPERATOR,
   { ...stage('values.number', 'Value', [], [port('value', 'number')], [number('value', 'Value', 1, -30, 30)]), family: 'values.numeric', variant: 'float', addable: true },
   { ...stage('values.oscillator', 'Oscillator', [], [port('value', 'number')], [number('amplitude', 'Amplitude', 1, 0, 30), number('frequency', 'Frequency', 1, 0, 10), number('offset', 'Offset', 0, -30, 30)]), addable: true },

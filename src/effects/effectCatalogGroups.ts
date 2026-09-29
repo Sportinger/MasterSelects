@@ -17,7 +17,7 @@ export const EFFECT_GROUPS = [
   { id: 'keying', label: 'Keying', effects: ['chroma-key'] },
   { id: 'time', label: 'Time', effects: ['slit-scan', 'time-stack', 'kinetic-trace'] },
   { id: 'tracking', label: 'Tracking & Overlays', effects: ['face-cables', 'hand-particles', 'hud-tracker', 'cctv', 'subject', 'tracked-scene', 'stardust', 'rain-reveal'] },
-  { id: 'scene', label: '3D & Particles', effects: ['voxel-relief', 'splat-exploration', 'bricks', 'pixel-particle-disintegrate', 'flocking'] },
+  { id: 'scene', label: '3D & Particles', effects: ['voxel-relief', 'splat-exploration', 'bricks', 'pixel-particle-disintegrate', 'flocking', 'weave'] },
 ] as const;
 export type EffectGroupId = typeof EFFECT_GROUPS[number]['id'];
 
@@ -44,4 +44,5 @@ export function effectEngine(effectId: string): string | undefined { return ENGI
 export function effectEngineMembers(engine: string): readonly string[] { return ENGINES[engine] ?? []; }
 
 /** Kept for saved projects and reachable as a style of its engine, but not offered as a new effect. */
-export const EFFECTS_HIDDEN_FROM_CATALOG: ReadonlySet<string> = new Set(['rom1']);
+// Weave stays out of pickers until its strand renderer lands; its graph and nodes already work.
+export const EFFECTS_HIDDEN_FROM_CATALOG: ReadonlySet<string> = new Set(['rom1', 'weave']);

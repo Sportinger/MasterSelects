@@ -77,6 +77,8 @@ import { compileComputeImageGraph } from './computeImageGraph';
 import { VORONOI_OPERATORS } from './voronoiOperators';
 import { compileParticleDisintegrateGraph, particleDisintegrateOperatorGraph, validateParticleDisintegrateGraph } from './particleDisintegrateGraph';
 import { isParticleDisintegrateOperator } from './particleDisintegrateOperators';
+import { isCurveOperator } from './geometry/curveOperators';
+import { assertWeaveGraph, geometryOwnerOperators, WEAVE_EFFECT_TYPE, weaveOperatorGraph } from './geometry/weaveGraph';
 
 const PARTICLE_DISINTEGRATE = 'pixel-particle-disintegrate';
 
@@ -88,7 +90,7 @@ export function isImageGraphEffectType(type: string): type is 'time-stack' | 'sl
   return isLocalImageEffectType(type) || CONTEXTUAL_IMAGE_EFFECTS.has(type);
 }
 export const isComputeImageEffectType = (type: string) => type === 'voronoi' || type === 'pixel-sort' || type === 'quadtree-zoom' || type === 'contour';
-export function hasEffectOperatorGraph(type: string): boolean { return type === 'splat-exploration' || type === 'audio-math' || type === 'face-cables' || type === 'voxel-relief' || type === PARTICLE_DISINTEGRATE || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
+export function hasEffectOperatorGraph(type: string): boolean { return type === 'splat-exploration' || type === 'audio-math' || type === 'face-cables' || type === 'voxel-relief' || type === PARTICLE_DISINTEGRATE || type === WEAVE_EFFECT_TYPE || isComputeImageEffectType(type) || isImageGraphEffectType(type) || type === 'analog-signal-lab'; }
 type EffectGraphOwner = { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph };
 
 export function effectOperatorCompileParams(effect: Pick<EffectGraphOwner, 'params' | 'operatorGraph'>): Record<string, unknown> {
@@ -248,6 +250,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
   const params = effectOperatorCompileParams(effect);
   if (effect.type === 'voxel-relief') return voxelOperatorGraph(params);
   if (effect.type === PARTICLE_DISINTEGRATE) return particleDisintegrateOperatorGraph(params);
+  if (effect.type === WEAVE_EFFECT_TYPE) return weaveOperatorGraph(params);
   if (effect.type === 'face-cables') return cableOperatorGraph(params);
   throw new Error('This effect has no operator graph.');
 }
@@ -288,6 +291,7 @@ export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: Ef
     compileParticleDisintegrateGraph(graph, params);
   }
   else if (effect.type === 'face-cables') compileCableOperatorGraph(next);
+  else if (effect.type === WEAVE_EFFECT_TYPE) assertWeaveGraph(graph, params);
   else if (isImageGraphEffectType(effect.type)) compileImageOperatorGraph(graph, effectOperatorParams({ type: effect.type, params }), effectOperatorCompileContext(effect));
   else if (effect.type === 'analog-signal-lab') compileAnalogSignalGraph(graph, params);
   else if (isComputeImageEffectType(effect.type)) compileComputeImageGraph(graph, effectOperatorParams({ type: effect.type, params }), effectOperatorCompileContext(effect));
@@ -316,6 +320,7 @@ export function addableEffectOperators(type: string) {
     return [...shared, ...IMAGE_OPERATORS.filter(operator => operator.addable), ...IMAGE_COMPOSITIONS];
   }
   if (type === PARTICLE_DISINTEGRATE) return EFFECT_OPERATORS.filter(operator => operator.addable && isParticleDisintegrateOperator(operator.id));
+  if (type === WEAVE_EFFECT_TYPE) return geometryOwnerOperators();
   return EFFECT_OPERATORS.filter(operator => operator.addable && (type === 'voxel-relief' ? isVoxelOperator(operator.id)
     // Shared particle forces live with the scene operators but still drive cable physics.
     : type === 'face-cables' && operator.consumers?.includes('Cable physics') ? true
@@ -323,7 +328,8 @@ export function addableEffectOperators(type: string) {
       && !AUDIO_OPERATORS.includes(operator) && !IMAGE_OPERATORS.includes(operator)
       && !SCENE_OPERATORS.includes(operator) && !VOXEL_OPERATORS.includes(operator) && !SCALAR_FIELD_OPERATORS.includes(operator)
       // Analog signal stages, Voronoi field passes and particle stages belong to their own effect graphs.
-      && !ANALOG_SIGNAL_OPERATORS.includes(operator) && !VORONOI_OPERATORS.includes(operator) && !isParticleDisintegrateOperator(operator.id)));
+      && !ANALOG_SIGNAL_OPERATORS.includes(operator) && !VORONOI_OPERATORS.includes(operator) && !isParticleDisintegrateOperator(operator.id)
+      && !isCurveOperator(operator.id)));
 }
 
 export function effectOperatorParams(effect: EffectGraphOwner): Record<string, unknown> {
@@ -356,6 +362,7 @@ export function canRemoveEffectOperator(type: string, nodeId: string, operatorId
   if (isComputeImageEffectType(type)) return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
   if (type === 'analog-signal-lab') return !['frame', 'output'].includes(nodeId) && !!getEffectOperator(operatorId)?.addable;
   if (type === PARTICLE_DISINTEGRATE) return !['image.frame', 'simulation.image-particles', 'render.pixel-particles'].includes(operatorId);
+  if (type === WEAVE_EFFECT_TYPE) return operatorId !== 'scene.output';
   return type === 'voxel-relief' ? operatorId !== 'render.voxel' && operatorId !== 'image.frame'
     : nodeId !== 'wind' && !!getEffectOperator(operatorId)?.addable;
 }

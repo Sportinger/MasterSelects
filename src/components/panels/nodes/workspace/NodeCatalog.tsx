@@ -9,7 +9,7 @@ import { ResolveInspectorSection, ResolveInspectorRow } from '../../properties/r
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
 import './NodeCatalog.css';
 
-const DOMAINS = ['Image', '3D', 'Splat', 'Audio', 'Flock', 'Clip effects'];
+const DOMAINS = ['Image', '3D', 'Curves', 'Splat', 'Audio', 'Flock', 'Clip effects'];
 const CATEGORY_ORDER: readonly string[] = [...NODE_CATEGORIES.map(category => category.label), ...EFFECT_GROUPS.map(group => group.label)];
 const rank = (category: string) => { const index = CATEGORY_ORDER.indexOf(category); return index < 0 ? CATEGORY_ORDER.length : index; };
 

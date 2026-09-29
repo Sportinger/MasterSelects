@@ -2,3 +2,4 @@
 
 export { memoryLeak } from './memoryLeak';
 export { flocking } from './flocking';
+export { weave } from './weave';

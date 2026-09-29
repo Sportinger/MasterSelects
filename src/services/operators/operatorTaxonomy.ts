@@ -34,6 +34,7 @@ export type NodeVisibility = 'public' | 'advanced' | 'internal';
 const EXACT: Record<string, NodeCategoryId> = {
   'image.frame': 'inputs', 'image.normalized-uv': 'inputs', 'image.resolution': 'inputs', 'image.named-input': 'inputs',
   'media.source': 'inputs', 'audio.input': 'inputs', 'splat.source': 'inputs', 'geometry.source': 'inputs',
+  'geometry.position': 'inputs', 'geometry.curve-info': 'inputs',
   'image.timeline-time': 'values', 'math.constant': 'values', 'signal.sine-gain.scalar': 'values',
   'convert.degrees-to-radians.scalar': 'math',
   'convert.rgb-to-hsv': 'color', 'convert.hsv-to-rgb': 'color', 'image.mask-overlay': 'color', 'image.luminance': 'color',

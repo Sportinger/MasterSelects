@@ -6,7 +6,8 @@ import { startBatch, endBatch } from '../../stores/historyStore';
 import { assertExclusiveTimelineMutationAllowed } from '../../stores/timeline/exclusiveMutationLease';
 import { renderHostPort } from '../render/renderHostPort';
 import { effectOperatorGraph, validateEffectOwnerGraph, addableEffectOperators, canRemoveEffectOperator, isImageGraphEffectType } from './effectGraphOwner';
-import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled } from './effectGraph';
+import { EFFECT_GRAPH_PARAM, connectEffectGraph, operatorEnabled, usesLiteralNodeParameters } from './effectGraph';
+import { WEAVE_EFFECT_TYPE } from './geometry/weaveGraph';
 import { prepareEditableOperatorGraph } from './editableOperatorGraph';
 import { getEffectOperator } from './operatorRegistry';
 import type { AnimatableProperty } from '../../types/animationProperties';
@@ -158,7 +159,8 @@ function moveTopLevelEffectNode(clipId: string, effectId: string, nodeId: string
 
 export function createEffectGraphActions(clipId: string, effectId: string) {
   const ownerType = (domain: EffectOperatorGraph['domain']) => domain === 'voxel' ? 'voxel-relief' : domain === 'particles' ? 'pixel-particle-disintegrate'
-    : domain === 'scene' ? 'splat-exploration' : domain === 'audio' ? 'audio-math' : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab' : 'face-cables';
+    : domain === 'scene' ? 'splat-exploration' : domain === 'audio' ? 'audio-math' : domain === 'image' ? 'invert' : domain === 'analog-signal' ? 'analog-signal-lab'
+    : domain === 'geometry' ? WEAVE_EFFECT_TYPE : 'face-cables';
   return {
     moveNode: (nodeId: string, layout: { x: number; y: number }) => {
       if (!moveTopLevelEffectNode(clipId, effectId, nodeId, layout)) editEffectGraph(clipId, effectId, 'Move node', graph => { graph.layout[nodeId] = layout; },
@@ -215,7 +217,7 @@ export function createEffectGraphActions(clipId: string, effectId: string) {
         const node = { id, operator: operator.id, operatorVersion: operator.version,
           bindings: {} as Record<string, string | [string, string, string]>, constants: {} as Record<string, OperatorValue> };
         for (const p of operator.parameters) {
-          if (graph.domain === 'image' || graph.domain === 'audio') { node.constants[p.id] = p.default; continue; }
+          if (usesLiteralNodeParameters(graph.domain)) { node.constants[p.id] = p.default; continue; }
           const key = `${id}_${p.id}`;
           if (Array.isArray(p.default)) {
             node.bindings[p.id] = ['x', 'y', 'z'].map(axis => `${key}_${axis}`) as [string, string, string];

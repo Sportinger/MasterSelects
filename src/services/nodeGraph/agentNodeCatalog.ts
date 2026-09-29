@@ -136,7 +136,7 @@ function shortPurpose(description: string): string {
  * Plain-text inventory for provider turns: one line per addable node, grouped
  * by context. Ports, parameters and ranges stay behind getNodeDefinitions.
  */
-const CONTEXT_ORDER = ['Image', '3D', 'Splat', 'Audio', 'Flock', 'Clip effects', 'Audio effects', 'Controls', 'Color Grade', 'Clip'];
+const CONTEXT_ORDER = ['Image', '3D', 'Curves', 'Splat', 'Audio', 'Flock', 'Clip effects', 'Audio effects', 'Controls', 'Color Grade', 'Clip'];
 const CATEGORY_ORDER: readonly string[] = [...NODE_CATEGORIES.map(category => category.label), ...EFFECT_GROUPS.map(group => group.label)];
 const rank = (order: readonly string[], value: string) => { const index = order.indexOf(value); return index < 0 ? order.length : index; };
 const GROUP_IDS = new Set(EFFECT_OPERATORS.filter(operator => operator.composition).map(operator => operator.id));

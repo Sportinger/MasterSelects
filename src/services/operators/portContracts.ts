@@ -32,6 +32,7 @@ export const SIGNAL_FORMAT_LABELS: Record<string, string> = {
   'force-vector': 'Directional force · XYZ',
   'drag-scalar': 'Damping coefficient · scalar',
   'rope-curves': 'Cable polylines · XYZ',
+  'strand-curves': 'Strand curves · XYZ per point',
   'scene-object': 'Renderable object / scene contribution',
   scalar: 'Finite scalar number',
 };
@@ -64,7 +65,7 @@ export const OPERATOR_SIGNAL_CONTRACTS: Record<OperatorSignal, NodePortContract>
   surface: contract('Collider', 'A contact surface for simulation; it does not carry a rendered material.', 'mesh-collider'),
   force: contract('Force', 'A directional force evaluated by the connected simulation.', 'force-vector'),
   drag: contract('Drag', 'Velocity damping applied by the connected simulation.', 'drag-scalar'),
-  curves: contract('Curves', 'Ordered spatial points produced by the cable simulation.', 'rope-curves'),
+  curves: contract('Curves', 'Ordered spatial points: cable polylines or strand curves. Formats are not interchangeable.', 'rope-curves'),
   scene: contract('Scene', 'Geometry and appearance in a scene. A transform preserves this signal type.', 'scene-object'),
   number: contract('Number', 'A scalar value; it can drive a compatible numeric input.', 'scalar'),
   boolean: contract('Boolean', 'A strict true-or-false condition.', 'boolean'),

@@ -13,17 +13,20 @@ import type { OperatorDefinition } from '../../types/operatorGraph';
 export const EFFECT_GRAPH_PARAM = 'operatorGraph';
 
 /** Nodes upstream of the image output. Everything else is not evaluated and may stay unconnected. */
-export function loadBearingNodes(graph: Pick<EffectOperatorGraph, 'nodes' | 'edges'>): Set<string> {
+export function loadBearingNodes(graph: Pick<EffectOperatorGraph, 'nodes' | 'edges'>, outputOperator = 'image.output'): Set<string> {
   const feeding = new Set<string>();
   const visit = (id: string) => {
     if (feeding.has(id)) return;
     feeding.add(id);
     for (const edge of graph.edges) if (edge.to === id) visit(edge.from);
   };
-  for (const node of graph.nodes) if (node.operator === 'image.output') visit(node.id);
+  for (const node of graph.nodes) if (node.operator === outputOperator) visit(node.id);
   return feeding;
 }
 export type OperatorParameters = Record<string, unknown>;
+
+/** Graphs whose added nodes keep literal constants; other owners bind every node parameter to an effect parameter. */
+export const usesLiteralNodeParameters = (domain: EffectOperatorGraph['domain']) => domain === 'image' || domain === 'audio' || domain === 'geometry';
 
 export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {
   const limits = effectGraphLimits(graph?.domain);
@@ -65,8 +68,8 @@ export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete 
       || duplicateInput || ((!check.ok && !repairableVariantMismatch) || (check.ok && check.replacesEdgeId))) errors.push(`Invalid connection: ${edge.id}.`);
     occupied.add(`${edge.toNodeId}:${edge.toPortId}`); edgeIds.add(edge.id);
   }
-  // Image graphs compile only what feeds their output: loose, free-standing nodes may stay unwired.
-  const feeding = graph.domain === 'image' ? loadBearingNodes(graph) : undefined;
+  // Image and geometry graphs compile only what feeds their output: loose, free-standing nodes may stay unwired.
+  const feeding = graph.domain === 'image' ? loadBearingNodes(graph) : graph.domain === 'geometry' ? loadBearingNodes(graph, 'scene.output') : undefined;
   for (const n of graph.nodes) for (const p of getEffectOperator(n.operator)?.inputs ?? []) {
     if (feeding && !feeding.has(n.id)) continue;
     if (!allowIncomplete && p.required && !occupied.has(`${n.id}:${p.id}`)) errors.push(`${getEffectOperator(n.operator)!.label}: connect ${p.label}.`);

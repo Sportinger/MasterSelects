@@ -41,7 +41,7 @@ const familyOf = (id: string) => id.replace(/\.(scalar|field|rgb|vec[234])$/, ''
 /** Graph owners that decide which nodes can be added; a node's domains are where it is actually offered. */
 const DOMAIN_OWNERS: ReadonlyArray<[string, readonly string[]]> = [
   ['Image', ['invert', 'analog-signal-lab', 'voronoi']], ['3D', ['voxel-relief', 'face-cables']],
-  ['Splat', ['splat-exploration']], ['Audio', ['audio-math']],
+  ['Splat', ['splat-exploration']], ['Audio', ['audio-math']], ['Curves', ['weave']],
 ];
 let domainIndex: Map<string, string[]> | undefined;
 function operatorDomains(operator: (typeof EFFECT_OPERATORS)[number]): string[] {

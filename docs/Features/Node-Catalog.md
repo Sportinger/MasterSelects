@@ -364,6 +364,30 @@ plane and Face Cables shaders. Definitions are stored under `clip.nodeGraph.scen
 Face Cables definitions and groups remain in `effect.params.operatorGraph`.
 Only definitions and portable bake data are saved, never GPU/runtime handles.
 
+## Curve graphs (Weave, in development)
+
+The **Weave** effect owns an operator graph with domain `geometry`. Curves flow
+between general curve nodes; number and vector inputs of a modifier are evaluated
+once per curve point, exactly as image math is evaluated once per pixel. Both
+executors lower the same registered Math, Vector and Convert operators through the
+shared pointwise table (`src/services/operators/fields/`), so a Multiply or Sine
+node is one node in every graph rather than a per-domain copy.
+
+| Node | Contract |
+|---|---|
+| Curve Line | Points, Length, Axis → one centered curve |
+| Strand Array | Curves → curves repeated Count times along Axis |
+| Set Position | Curves + optional Position / Offset (Vector 3, per point) → curves |
+| Position, Curve Info | Per-point position, Curve Param (0–1), point/strand index and counts |
+| Strand Render | Curves → scene (renderer pending) |
+
+The default graph builds an alternating over/under wave from ordinary Value,
+Multiply, Sine, Fraction and Add nodes in a **Wave Offset** group. Curve ports show
+a CPU wireframe preview (curve and point counts). Value nodes use literals and can
+be exposed to the Effects tab like image Value nodes. The effect is hidden from
+the effect picker until strands render in the 3D scene; the plan is in
+`docs/ongoing/Strands-Weave-Plan.md`.
+
 ## Extending the system
 
 1. Search the live catalog and these registries before adding a new operator.

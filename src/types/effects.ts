@@ -24,6 +24,7 @@ export type EffectType =
   | 'audio-math'
   | 'face-cables'
   | 'flocking'
+  | 'weave'
   | 'surface-overlay'
   | 'terrain-overlay'
   | 'hue-shift'

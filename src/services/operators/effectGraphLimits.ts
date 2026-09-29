@@ -13,5 +13,5 @@ export const IMAGE_SCOPED_INSTRUCTION_LIMIT = 2048;
 export function effectGraphLimits(domain: EffectOperatorGraph['domain'] | undefined): EffectGraphLimits {
   return domain === 'image' || domain === 'compute-image' ? IMAGE_EFFECT_GRAPH_LIMITS
     : domain === 'analog-signal' ? ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS
-    : domain === 'scene' ? SCENE_EFFECT_GRAPH_LIMITS : LEGACY_EFFECT_GRAPH_LIMITS;
+    : domain === 'scene' || domain === 'geometry' ? SCENE_EFFECT_GRAPH_LIMITS : LEGACY_EFFECT_GRAPH_LIMITS;
 }

@@ -38,8 +38,8 @@ export function splitLayerEffects(
     invert: false,
   };
 
-  // Flocking draws in the 3D scene; it never changes the clip's own pixels.
-  effects = effects?.filter(effect => effect.type !== 'flocking');
+  // Flocking and Weave draw in the 3D scene; they never change the clip's own pixels.
+  effects = effects?.filter(effect => effect.type !== 'flocking' && effect.type !== 'weave');
   if (skipEffects || !effects || effects.length === 0) {
     return { inlineEffects };
   }
