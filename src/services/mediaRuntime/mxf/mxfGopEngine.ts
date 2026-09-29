@@ -29,13 +29,23 @@ export interface MxfGopEngineStats {
   decodeQueueSize: number;
   readyFrameCount: number;
   decoderResets: number;
+  /** Why the engine restarted at a key frame (diagnostics). */
+  restartReasons: Record<string, number>;
+  requests: number;
+  readyHits: number;
+  packetsFed: number;
+  flushes: number;
+  stalls: number;
 }
 
 /**
- * Decoded frames kept ahead of the current target. Hardware decoders own only a
- * few output surfaces (4K on D3D11: often 4-5); frames we keep alive stall them.
+ * Decoded frames kept for upcoming requests. Frames beyond this are dropped, and
+ * a later request for a dropped frame forces a key-frame restart, so the cap must
+ * stay above READY_AHEAD plus the decoder's reorder depth.
  */
-const MAX_READY_FRAMES = 3;
+const MAX_READY_FRAMES = 10;
+/** After serving a request the engine keeps decoding until this many frames are ready. */
+const READY_AHEAD = 6;
 /** Re-check interval while waiting for decoder capacity (never wait unbounded). */
 const CAPACITY_WAIT_MS = 100;
 /** Capacity waits without progress before held frames are released to unstall the decoder. */
@@ -65,7 +75,16 @@ export class MxfGopEngine {
   private pending: PendingTarget | null = null;
   private decoderError: Error | null = null;
   private resetCount = 0;
+  private readonly restartReasons: Record<string, number> = {};
+  private requests = 0;
+  private readyHits = 0;
+  private packetsFed = 0;
+  private flushes = 0;
+  private stalls = 0;
   private closed = false;
+  /** Incremented on every restart; packets read for an older generation are dropped. */
+  private generation = 0;
+  private pumpActive = false;
   /** Requests are served one at a time; callers may still issue them concurrently. */
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -90,6 +109,12 @@ export class MxfGopEngine {
       decodeQueueSize: this.decoder?.queueSize ?? 0,
       readyFrameCount: this.readyFrames.size,
       decoderResets: this.resetCount,
+      restartReasons: { ...this.restartReasons },
+      requests: this.requests,
+      readyHits: this.readyHits,
+      packetsFed: this.packetsFed,
+      flushes: this.flushes,
+      stalls: this.stalls,
     };
   }
 
@@ -115,8 +140,12 @@ export class MxfGopEngine {
     const decoder = this.decoder;
     if (this.closed || !decoder) throw new Error(`${this.label} decoder is unavailable`);
 
+    this.requests += 1;
     const ready = this.takeReadyFrame(target);
-    if (ready) return ready;
+    if (ready) {
+      this.readyHits += 1;
+      return ready;
+    }
 
     const targetStored = this.source.displayToStoredIndex(target);
     const keyStored = this.source.keyframeStoredIndexFor(target);
@@ -129,17 +158,21 @@ export class MxfGopEngine {
       && target > this.lastEmittedDisplay
       && (keyStored <= this.nextStored || feedDistance <= MAX_DECODE_THROUGH)
       && feedDistance <= MAX_FORWARD_FEED;
-    if (!canContinue) this.restartAt(keyStored, decoder);
+    if (!canContinue) {
+      const reason = this.decoderError ? 'error'
+        : this.nextStored < 0 ? 'not-started'
+          : target <= this.lastEmittedDisplay ? 'behind-output'
+            : feedDistance > MAX_FORWARD_FEED ? 'far-ahead'
+              : 'next-gop';
+      this.restartReasons[reason] = (this.restartReasons[reason] ?? 0) + 1;
+      this.restartAt(keyStored, decoder);
+    }
 
     const framePromise = new Promise<VideoFrame>((resolve, reject) => {
       this.pending = { displayIndex: target, resolve, reject };
     });
     void framePromise.catch(() => undefined);
-    try {
-      await this.feedUntilResolved(decoder);
-    } catch (error) {
-      this.failPending(normalizeError(error));
-    }
+    this.ensurePump();
     return framePromise;
   }
 
@@ -147,6 +180,7 @@ export class MxfGopEngine {
     for (const frame of this.readyFrames.values()) closeVideoFrame(frame);
     this.readyFrames.clear();
     decoder.reset();
+    this.generation += 1;
     this.decoderError = null;
     this.nextStored = keyStored;
     this.lastEmittedDisplay = -1;
@@ -205,18 +239,43 @@ export class MxfGopEngine {
   }
 
   private async drainToEnd(decoder: GopDecoder): Promise<void> {
+    this.flushes += 1;
     await decoder.flush();
     this.nextStored = -1;
     if (this.pending) throw new Error(`${this.label} frame ${this.pending.displayIndex} was not produced`);
   }
 
-  private async feedUntilResolved(decoder: GopDecoder): Promise<void> {
-    const frameCount = this.source.frameCount;
+  /**
+   * One feeding loop per engine. It serves the pending request and then keeps the
+   * ready window filled, so forward playback finds frames already decoded.
+   */
+  private ensurePump(): void {
+    if (this.pumpActive || this.closed) return;
+    this.pumpActive = true;
+    void this.pump()
+      .catch((error) => this.failPending(normalizeError(error)))
+      .finally(() => {
+        this.pumpActive = false;
+        if (this.pending && !this.closed) this.ensurePump();
+      });
+  }
+
+  private wantsMoreFrames(decoder: GopDecoder): boolean {
+    if (this.pending) return true;
+    return this.nextStored >= 0 && this.readyFrames.size + decoder.queueSize < READY_AHEAD;
+  }
+
+  private async pump(): Promise<void> {
     let fedPastTarget = 0;
     let stalledWaits = 0;
-    while (this.pending && !this.closed) {
-      if (this.decoderError) throw this.decoderError;
-      if (this.nextStored >= frameCount) {
+    while (!this.closed && this.decoder && this.wantsMoreFrames(this.decoder)) {
+      const decoder = this.decoder;
+      if (this.decoderError) {
+        if (this.pending) throw this.decoderError;
+        return;
+      }
+      if (this.nextStored < 0) return;
+      if (this.nextStored >= this.source.frameCount) {
         await this.drainToEnd(decoder);
         return;
       }
@@ -226,23 +285,35 @@ export class MxfGopEngine {
           new Promise<boolean>((resolve) => setTimeout(() => resolve(false), CAPACITY_WAIT_MS)),
         ]);
         stalledWaits = progressed ? 0 : stalledWaits + 1;
+        if (!progressed) this.stalls += 1;
         if (stalledWaits >= STALL_WAITS_BEFORE_RELEASE) {
-          // The decoder is starved of output surfaces: give back the frames we hold.
+          // Starved of output surfaces. Without a request waiting, just stop filling;
+          // with one, give back the frames we hold so the decoder can continue.
+          if (!this.pending) return;
           for (const frame of this.readyFrames.values()) closeVideoFrame(frame);
           this.readyFrames.clear();
           stalledWaits = 0;
         }
         continue;
       }
-      const packet = await this.source.getPacketByStoredIndex(this.nextStored);
-      if (!packet) throw new Error(`${this.label} packet ${this.nextStored} is missing`);
-      decoder.decode(packet);
+      const generation = this.generation;
+      const index = this.nextStored;
       this.nextStored += 1;
-      if (this.pending && packet.displayIndex >= this.pending.displayIndex) fedPastTarget += 1;
-      // Reordering never needs more than a GOP of look-ahead; then force the output out.
-      if (fedPastTarget > MAX_FORWARD_FEED) {
-        await this.drainToEnd(decoder);
-        return;
+      const packet = await this.source.getPacketByStoredIndex(index);
+      // A restart while reading moved the decoder elsewhere: this packet is stale.
+      if (generation !== this.generation || this.closed) continue;
+      if (!packet) throw new Error(`${this.label} packet ${index} is missing`);
+      decoder.decode(packet);
+      this.packetsFed += 1;
+      if (this.pending && packet.displayIndex >= this.pending.displayIndex) {
+        fedPastTarget += 1;
+        // Reordering never needs more than a GOP of look-ahead; then force the output out.
+        if (fedPastTarget > MAX_FORWARD_FEED) {
+          await this.drainToEnd(decoder);
+          return;
+        }
+      } else {
+        fedPastTarget = 0;
       }
       // Let output callbacks run before feeding more.
       await Promise.resolve();

@@ -24,7 +24,10 @@ class MxfAvcWorkerFrameSource implements GopFrameSource {
   }>();
   private nextId = 1;
   private closed = false;
-  private lastStats: MxfGopEngineStats = { decodeQueueSize: 0, readyFrameCount: 0, decoderResets: 0 };
+  private lastStats: MxfGopEngineStats = {
+    decodeQueueSize: 0, readyFrameCount: 0, decoderResets: 0, restartReasons: {},
+    requests: 0, readyHits: 0, packetsFed: 0, flushes: 0, stalls: 0,
+  };
   codec = '';
 
   private constructor() {
