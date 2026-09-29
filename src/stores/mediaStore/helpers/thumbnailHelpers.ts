@@ -7,8 +7,7 @@ import { Logger } from '../../../services/logger';
 import { createThumbnailMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 import { flags } from '../../../engine/featureFlags';
 import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
-import { decodeTurboResOneFrame } from '../../../services/mediaRuntime/prores/turboResOneFrame';
-import { decodeHapOneFrame } from '../../../services/mediaRuntime/hap/hapOneFrame';
+import { getCodecProviderDescriptor } from '../../../services/mediaRuntime/codec/codecProviderDescriptors';
 
 const log = Logger.create('Thumbnail');
 
@@ -38,11 +37,8 @@ export async function createThumbnail(
       });
       if (isCodecProviderPlan(providerPlan)) {
         const targetTime = getVideoThumbnailTargetTime(videoMetadata?.duration ?? 0);
-        const oneFramePromise = providerPlan.backend === 'turbores'
-          ? decodeTurboResOneFrame(file, providerPlan.fourCC, targetTime, {
-            providerOptions: { allowedOutputFormats: ['I420'] },
-          })
-          : decodeHapOneFrame(file, providerPlan.fourCC, targetTime);
+        const oneFramePromise = getCodecProviderDescriptor(providerPlan.backend)
+          .decodeOneFrame(file, providerPlan, targetTime);
         void oneFramePromise
           .then(async (frame) => {
             try {

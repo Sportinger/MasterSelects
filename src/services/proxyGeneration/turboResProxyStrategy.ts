@@ -1,14 +1,11 @@
 import type { SceneCutAnalysis } from '../../types/sceneCutAnalysis';
 import { readIsobmffMetadata } from '../mediaMetadata/isobmffMetadata';
 import {
-  createTurboResFrameProvider,
-  type TurboResFrameProvider,
-} from '../mediaRuntime/prores/TurboResFrameProvider';
+  getCodecProviderDescriptor,
+  type CodecRuntimeFrameProvider,
+} from '../mediaRuntime/codec/codecProviderDescriptors';
+import type { CodecProviderPlan } from '../mediaRuntime/providerSelection';
 import type { TurboResProResFourCC } from '../mediaRuntime/prores/turboResCodecIdentity';
-import {
-  createHapFrameProvider,
-  type HapFrameProvider,
-} from '../mediaRuntime/hap/HapFrameProvider';
 import type { HapVideoFourCC } from '../hap/hapCodecIdentity';
 import { ProxySceneCutAnalyzer } from '../sceneCutDetection/proxySceneCutAnalyzer';
 import { JPEG_QUALITY, PROXY_FPS, PROXY_MAX_WIDTH } from './constants';
@@ -78,24 +75,20 @@ export async function generateTurboResProxy(params: {
   const sceneCutsOnly = options.sceneCutsOnly === true;
   let sceneAnalyzer: ProxySceneCutAnalyzer | null = null;
   let sceneCutError: Error | null = null;
-  let provider: TurboResFrameProvider | HapFrameProvider | null = null;
+  let provider: CodecRuntimeFrameProvider | null = null;
   let encodeWorker: ProxyFrameEncodeWorkerClient | null = null;
   const pendingEncodes = new Set<Promise<void>>();
 
   try {
-    provider = params.backend === 'hap'
-      ? await createHapFrameProvider({
-        sourceId: `proxy:${params.mediaFileId}`,
-        file: params.file,
-        fourCC: params.fourCC as HapVideoFourCC,
-        policy: 'background',
-      })
-      : await createTurboResFrameProvider({
-        sourceId: `proxy:${params.mediaFileId}`,
-        file: params.file,
-        fourCC: params.fourCC as TurboResProResFourCC,
-        policy: 'background',
-      });
+    const plan = (params.backend === 'hap'
+      ? { backend: 'hap', fourCC: params.fourCC as HapVideoFourCC }
+      : { backend: 'turbores', fourCC: params.fourCC as TurboResProResFourCC }) as CodecProviderPlan;
+    provider = await getCodecProviderDescriptor(plan.backend).create({
+      sourceId: `proxy:${params.mediaFileId}`,
+      file: params.file,
+      plan,
+      policy: 'background',
+    });
     if (!provider?.seekExact) throw new Error('Codec proxy provider failed to initialize');
     if (analyzeSceneCuts) {
       try { sceneAnalyzer = new ProxySceneCutAnalyzer(); }

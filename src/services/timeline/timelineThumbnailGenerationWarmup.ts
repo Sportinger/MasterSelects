@@ -16,8 +16,7 @@ import {
 } from './timelineWarmupTimers';
 import { flags } from '../../engine/featureFlags';
 import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../mediaRuntime/providerSelection';
-import { createTurboResFrameProvider } from '../mediaRuntime/prores/TurboResFrameProvider';
-import { createHapFrameProvider } from '../mediaRuntime/hap/HapFrameProvider';
+import { getCodecProviderDescriptor } from '../mediaRuntime/codec/codecProviderDescriptors';
 
 const DEFAULT_VISIBLE_THUMBNAIL_GENERATION_DELAY_MS = 250;
 const DEFAULT_MAX_CONCURRENT_THUMBNAIL_GENERATIONS = 2;
@@ -128,20 +127,13 @@ function getDefaultDeps(): TimelineThumbnailGenerationWarmupDeps {
         return;
       }
 
-      const provider = providerPlan.backend === 'turbores'
-        ? await createTurboResFrameProvider({
-          sourceId: `timeline-thumbnails:${mediaFileId}`,
-          file: mediaFile.file,
-          fourCC: providerPlan.fourCC,
-          policy: 'background',
-          allowedOutputFormats: ['I420'],
-        })
-        : await createHapFrameProvider({
-          sourceId: `timeline-thumbnails:${mediaFileId}`,
-          file: mediaFile.file,
-          fourCC: providerPlan.fourCC,
-          policy: 'background',
-        });
+      const provider = await getCodecProviderDescriptor(providerPlan.backend).create({
+        sourceId: `timeline-thumbnails:${mediaFileId}`,
+        file: mediaFile.file,
+        plan: providerPlan,
+        policy: 'background',
+        outputProfile: 'sdr',
+      });
       if (!provider) {
         thumbnailCacheService.reportUnsupported(
           mediaFileId,

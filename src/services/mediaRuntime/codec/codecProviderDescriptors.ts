@@ -14,18 +14,27 @@ import { createTurboResFrameProvider } from '../prores/TurboResFrameProvider';
 import { createHapFrameProvider } from '../hap/HapFrameProvider';
 import { estimateTurboResResources, planTurboResRuntimePolicy } from '../prores/turboResResourceEstimate';
 import { estimateHapResources } from '../hap/hapResourceEstimate';
+import { decodeTurboResOneFrame } from '../prores/turboResOneFrame';
+import { decodeHapOneFrame } from '../hap/hapOneFrame';
 
 export interface CodecProviderCreateParams {
   sourceId: string;
   file: File;
   plan: CodecProviderPlan;
   policy: DecodeSessionPolicy;
-  onFrame: () => void;
-  onError: (error: Error) => void;
+  /**
+   * 'sdr' asks for an 8-bit-safe output (thumbnails/Canvas2D consumers render
+   * high-bit-depth VideoFrames black on some Chromium/Windows combinations).
+   */
+  outputProfile?: 'native' | 'sdr';
+  onFrame?: () => void;
+  onError?: (error: Error) => void;
 }
 
 export type CodecRuntimeFrameProvider = RuntimeFrameProvider & {
   seek(timeSeconds: number): void;
+  seekExact(timeSeconds: number): Promise<void>;
+  destroyAsync(): Promise<void>;
 };
 
 export interface CodecProviderDescriptor {
@@ -39,6 +48,8 @@ export interface CodecProviderDescriptor {
   estimateHeapBytes(runtime: MediaSourceRuntime, policy: DecodeSessionPolicy): number;
   resourceTags(runtime: MediaSourceRuntime, policy: DecodeSessionPolicy): string[];
   create(params: CodecProviderCreateParams): Promise<CodecRuntimeFrameProvider | null>;
+  /** Decodes one owned VideoFrame (thumbnails, probes). */
+  decodeOneFrame(file: File, plan: CodecProviderPlan, timeSeconds: number): Promise<VideoFrame>;
 }
 
 const turboResDescriptor: CodecProviderDescriptor = {
@@ -72,8 +83,15 @@ const turboResDescriptor: CodecProviderDescriptor = {
       file: params.file,
       fourCC: params.plan.fourCC,
       policy: params.policy,
+      ...(params.outputProfile === 'sdr' ? { allowedOutputFormats: ['I420' as PixelFormat] } : {}),
       onFrame: params.onFrame,
       onError: params.onError,
+    });
+  },
+  decodeOneFrame: (file, plan, timeSeconds) => {
+    if (plan.backend !== 'turbores') return Promise.reject(new Error('Descriptor/plan mismatch'));
+    return decodeTurboResOneFrame(file, plan.fourCC, timeSeconds, {
+      providerOptions: { allowedOutputFormats: ['I420'] },
     });
   },
 };
@@ -99,6 +117,10 @@ const hapDescriptor: CodecProviderDescriptor = {
       onFrame: params.onFrame,
       onError: params.onError,
     });
+  },
+  decodeOneFrame: (file, plan, timeSeconds) => {
+    if (plan.backend !== 'hap') return Promise.reject(new Error('Descriptor/plan mismatch'));
+    return decodeHapOneFrame(file, plan.fourCC, timeSeconds);
   },
 };
 

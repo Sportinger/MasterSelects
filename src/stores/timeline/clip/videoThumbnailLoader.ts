@@ -1,8 +1,7 @@
 import { useMediaStore } from '../../mediaStore';
 import { flags } from '../../../engine/featureFlags';
-import { selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
-import { createTurboResFrameProvider } from '../../../services/mediaRuntime/prores/TurboResFrameProvider';
-import { createHapFrameProvider } from '../../../services/mediaRuntime/hap/HapFrameProvider';
+import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { getCodecProviderDescriptor } from '../../../services/mediaRuntime/codec/codecProviderDescriptors';
 
 export function startVideoThumbnailGeneration(file: File, mediaFileId: string, naturalDuration: number): void {
   import('../../../services/thumbnailCacheService').then(({ thumbnailCacheService }) => {
@@ -18,47 +17,19 @@ export function startVideoThumbnailGeneration(file: File, mediaFileId: string, n
       );
       return;
     }
-    if (providerPlan.backend === 'turbores') {
-      void createTurboResFrameProvider({
+    if (isCodecProviderPlan(providerPlan)) {
+      const descriptor = getCodecProviderDescriptor(providerPlan.backend);
+      void descriptor.create({
         sourceId: `timeline-thumbnails:${mediaFileId}`,
         file,
-        fourCC: providerPlan.fourCC,
+        plan: providerPlan,
         policy: 'background',
-        // Canvas2D can accept high-bit-depth VideoFrames but render them black
-        // on some Chromium/Windows combinations. Timeline JPEGs only need SDR.
-        allowedOutputFormats: ['I420'],
+        outputProfile: 'sdr',
       }).then(async (provider) => {
         if (!provider) {
           thumbnailCacheService.reportUnsupported(
             mediaFileId,
-            'TurboRes could not initialize timeline thumbnail decoding.',
-          );
-          return;
-        }
-        try {
-          await thumbnailCacheService.generateForFrameProvider(
-            mediaFileId,
-            provider,
-            naturalDuration,
-            mediaFile?.fileHash,
-          );
-        } finally {
-          await provider.destroyAsync();
-        }
-      });
-      return;
-    }
-    if (providerPlan.backend === 'hap') {
-      void createHapFrameProvider({
-        sourceId: `timeline-thumbnails:${mediaFileId}`,
-        file,
-        fourCC: providerPlan.fourCC,
-        policy: 'background',
-      }).then(async (provider) => {
-        if (!provider) {
-          thumbnailCacheService.reportUnsupported(
-            mediaFileId,
-            'HAP could not initialize timeline thumbnail decoding.',
+            `${descriptor.logName} could not initialize timeline thumbnail decoding.`,
           );
           return;
         }
