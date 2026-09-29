@@ -32,10 +32,17 @@ MXF path. ProRes keeps its real FourCC (`apch`, …) and therefore the TurboRes 
 | IMX / D-10 (MPEG-2 4:2:2 Intra) | `mxf:mpeg2-intra` | libavcodec WASM | metadata ✓, decoder pending |
 | XDCAM HD422 (MPEG-2 Long GOP) | `mxf:mpeg2-lgop` | libavcodec WASM + GOP provider | metadata ✓, decoder pending |
 | XAVC-I / AVC-Intra | `mxf:avc-intra` | WebCodecs (`mxf-avc` backend) | ✓ decoder wired |
-| XAVC Long GOP | `mxf:avc-lgop` | WebCodecs, decode from previous key frame (`mxf-avc`) | ✓ decoder wired; audio pending |
+| XAVC Long GOP | `mxf:avc-lgop` | WebCodecs, decode from previous key frame (`mxf-avc`) | ✓ decoder wired (verified parse of a 38-min Sony XAVC 4K file) |
 | JPEG 2000, unknown | `mxf:unsupported:<reason>` | – | explicit "not supported" |
 
-MXF audio (PCM) is not decoded yet (plan phase 6); MXF clips are picture-only until then.
+## Audio
+
+Frame-wrapped PCM (SMPTE 382 BWF/AES3 sound elements, e.g. Sony's four mono tracks) is streamed
+edit unit by edit unit into the 16-bit WAV audio proxy (`mxfPcmWav.ts`); index slices locate the
+sound elements after the picture so each edit unit costs one small read. Mapping v1: A1 → left,
+A2 → right (a single mono track is doubled, a stereo track is used as is). Playback, scrubbing and
+export use the regular audio-proxy path. Not yet: D-10 AES3-in-picture audio, clip-wrapped
+(OP-Atom) audio files, choosing other track pairs.
 
 Until a codec's decoder exists, its plan is `{ backend: 'unsupported', reason:
 'mxf-decoder-unavailable' }`, so the editor reports it instead of showing a black
