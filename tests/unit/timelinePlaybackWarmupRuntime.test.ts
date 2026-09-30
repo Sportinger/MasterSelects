@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getRuntimeFrameProvider } from '../../src/services/mediaRuntime/runtimePlayback';
+import { getRuntimeFrameProvider, isProviderBackedRuntimeSource } from '../../src/services/mediaRuntime/runtimePlayback';
 import { getTimelinePlaybackWarmupVideo } from '../../src/services/timeline/timelinePlaybackWarmupRuntime';
 import type { TimelineClip } from '../../src/types';
 
@@ -9,6 +9,7 @@ const renderHostMock = vi.hoisted(() => ({
 
 vi.mock('../../src/services/mediaRuntime/runtimePlayback', () => ({
   getRuntimeFrameProvider: vi.fn(),
+  isProviderBackedRuntimeSource: vi.fn(() => false),
 }));
 
 vi.mock('../../src/services/render/renderHostPort', () => ({
@@ -42,6 +43,13 @@ describe('timeline playback warmup runtime', () => {
     const source = createVideoSource();
 
     expect(getTimelinePlaybackWarmupVideo(source)).toBe(source.videoElement);
+  });
+
+  it('skips html warmup for codec-provider sources whose element cannot open the container', () => {
+    const source = createVideoSource();
+    vi.mocked(isProviderBackedRuntimeSource).mockReturnValueOnce(true);
+
+    expect(getTimelinePlaybackWarmupVideo(source)).toBeNull();
   });
 
   it('skips html warmup when runtime playback has a full frame provider', () => {

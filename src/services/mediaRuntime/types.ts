@@ -64,6 +64,12 @@ export type RuntimeFrameProviderBackend = 'webcodecs' | 'worker-webcodecs' | Cod
 
 export interface RuntimeFrameProvider {
   readonly backend?: RuntimeFrameProviderBackend;
+  /**
+   * Clones of this provider's frames the source runtime may keep for cache hits
+   * (default 12). Hardware decoders hand out frames from a small surface pool:
+   * every retained clone pins one, and an exhausted pool stops the decoder.
+   */
+  readonly frameCacheLimit?: number;
   currentTime: number;
   isPlaying: boolean;
   isFullMode(): boolean;
@@ -174,6 +180,8 @@ export interface MediaSourceRuntime {
     frame: RuntimeFrame,
     options?: {
       timestamp?: number;
+      /** Upper bound of cached clones for this source (see RuntimeFrameProvider.frameCacheLimit). */
+      limit?: number;
     }
   ): FrameHandle | null;
   getFrameSync(request: FrameRequest): FrameHandle | null;

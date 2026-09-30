@@ -173,6 +173,7 @@ Live routing uses `audioRoutingManager` when EQ, pan, above-unity gain, Aux send
 - Detailed waveform display uses a perceptual display scale: the RMS/loudness body is the primary readable shape, the peak envelope is a quieter underlay, and high-crest peaks are drawn as selective transient spikes instead of a continuous outer peak trace. Worker-rendered clip waveforms preserve available stereo/multichannel lanes and match the main-thread fallback styling instead of collapsing artifact-backed stereo data to a mono canvas.
 - Nested composition clips generate waveforms from the mixed-down buffer when available.
 - Large files are skipped: audio-only files above 4 GB and video files above 500 MB.
+- Long PCM WAV sources (more than ~20 minutes of stereo decode, e.g. full-length multitrack stems) are never decoded whole: the waveform comes from a streamed, peak-preserving 3 kHz decimation in `src/workers/longWavPeaksWorker.ts` that reports progress and a growing preview, the file gets no audio proxy (the browser plays the WAV directly), and it skips the whole-file scrub/varispeed buffer.
 - Legacy waveform display normalizes bounded peak data for display. Projects with only an aggregate mono waveform use it as a fallback.
 
 ## Timeline Audio Editing

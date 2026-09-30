@@ -9,7 +9,9 @@ import { isHapCodecId } from '../hap/hapCodecIdentity';
 import { MediaAudioRangeReader } from '../../engine/audio/exportPipeline/MediaAudioRangeReader';
 import { readIsobmffMetadata } from '../mediaMetadata/isobmffMetadata';
 import { isMxfFile } from '../mediaMetadata/mxf/mxfMediaMetadata';
-import { buildMxfPcmWavBlob, MxfAudioUnavailableError } from '../mediaRuntime/mxf/mxfPcmWav';
+import { MxfAudioUnavailableError } from '../mediaRuntime/mxf/mxfPcmWav';
+import { buildMxfAudioProxyWav } from '../mediaRuntime/mxf/mxfAudioProxyClient';
+import { readLongPcmWavInfo } from './longPcmWav';
 
 const log = Logger.create('AudioProxy');
 
@@ -90,8 +92,8 @@ async function prebuildMxfAudioProxy(
   if (!sourceFile || !await isMxfFile(sourceFile)) return null;
   callbacks.onUpdate?.({ status: 'generating', progress: 2, storageKey });
   try {
-    // Neither Mediabunny nor decodeAudioData read MXF: stream the PCM elements straight to WAV.
-    return await buildMxfPcmWavBlob(sourceFile, {
+    // Neither Mediabunny nor decodeAudioData read MXF: a worker streams the PCM elements to WAV.
+    return await buildMxfAudioProxyWav(sourceFile, {
       onProgress: (fraction) => callbacks.onUpdate?.({
         status: 'generating',
         progress: Math.round(2 + fraction * 86),
@@ -159,6 +161,12 @@ export async function ensureAudioProxyForMediaFile(
     callbacks.onUpdate?.({ status: 'generating', progress: 18, storageKey });
 
     let wavBlob: Blob | null = prebuiltWav;
+
+    // Long PCM WAV plays directly from the source; a proxy would need a whole-file decode.
+    if (!wavBlob && await readLongPcmWavInfo(sourceFile)) {
+      callbacks.onUpdate?.({ status: 'none', progress: 0, storageKey });
+      return;
+    }
 
     if (!wavBlob) {
       let audioBuffer: AudioBuffer;

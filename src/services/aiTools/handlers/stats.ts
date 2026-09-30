@@ -46,6 +46,8 @@ import {
   getLastRenderCapabilityProbe,
 } from '../../render/renderCapabilityProbe';
 import { derivePlaybackStatus } from '../../playbackDebug/status';
+import { mediaRuntimeRegistry } from '../../mediaRuntime/registry';
+import { isCodecProviderBackend } from '../../mediaRuntime/providerSelection';
 import type { ToolResult } from '../types';
 import type { TimelineRuntimeCoordinatorBridgeStats } from '../../timeline/runtimeCoordinatorTypes';
 import type { IndependentRenderSchedulerRuntimeSnapshot } from '../../renderScheduler';
@@ -71,6 +73,24 @@ function serializeProjectLoadProgress(progress: ReturnType<typeof useMediaStore.
     itemsTotal: progress?.itemsTotal,
     blocking: progress?.blocking ?? false,
   };
+}
+
+/** Debug info of every admitted codec provider (TurboRes, HAP, MXF): queue, latency, engine counters. */
+function collectCodecProviderDebug(providerRuntime: WorkerFirstProviderRuntimeSnapshot) {
+  return providerRuntime.providers.flatMap((record) => {
+    if (!isCodecProviderBackend(record.providerKind)) return [];
+    const provider = mediaRuntimeRegistry.getSession(record.sourceId, record.sessionKey)?.frameProvider;
+    if (!provider) return [];
+    return [{
+      sourceId: record.sourceId,
+      sessionKey: record.sessionKey,
+      policyId: record.policyId,
+      backend: provider.backend,
+      isPlaying: provider.isPlaying,
+      currentTime: round(provider.currentTime),
+      debug: provider.getDebugInfo?.() ?? null,
+    }];
+  });
 }
 
 function roundOptional(v: number | undefined): number | undefined {
@@ -389,6 +409,7 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
   };
 
   snapshot.playback = serializePlayback(playback);
+  snapshot.codecProviders = collectCodecProviderDebug(providerRuntime);
 
   if (s.webCodecsInfo) {
     snapshot.webCodecs = s.webCodecsInfo;

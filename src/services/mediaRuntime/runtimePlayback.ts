@@ -12,6 +12,7 @@ import {
 import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from './providerSelection';
 import { buildRuntimeMetadataFromMediaFile } from './clipBindings';
 import { getCodecProviderDescriptor } from './codec/codecProviderDescriptors';
+import { requestCodecSourceAudioProxy } from './codecSourceAudioProxy';
 import { Logger } from '../logger';
 import {
   reserveRuntimeProviderResources,
@@ -603,6 +604,7 @@ export async function ensureRuntimeFrameProvider(
         }
         log.info(`${descriptor.logName} provider ready`, { sourceId: binding.sourceId, ...descriptor.describePlan(codecPlan) });
         if (!attachOwnedRuntimeProvider(runtime, binding, codecProvider, reservation)) return null;
+        if (policy === 'interactive') requestCodecSourceAudioProxy(runtime.descriptor.mediaFileId);
         if (Number.isFinite(initialTime) && initialTime !== undefined) {
           codecProvider.seek(initialTime);
         }

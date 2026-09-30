@@ -19,6 +19,15 @@ Goal: import, preview, scrub, and export MXF files entirely in the browser throu
   by timestamp, keeps up to six upcoming frames and continues forward without a reset (playback,
   export, proxy). Decoders plug in as `GopDecoder`: WebCodecs for H.264, a streaming libavcodec
   worker for MPEG-2. Reverse playback restarts at the key frame for each frame (slow at 4K).
+- **Reads.** Every `File` slice read carries a fixed browser cost of several milliseconds. Random
+  access reads one content package; sequential access (playback, export, GOP decoding) reads runs
+  of up to 24 consecutive packages / 12 MB in one request and prefetches the next run halfway through.
+- **Decoder surfaces.** Chrome's hardware H.264 decoder has about ten output surfaces at 4K and the
+  decoder keeps several as references; a surface stays pinned while any clone of its frame lives.
+  Long-GOP providers therefore declare `frameCacheLimit = 0`, so the source runtime hands out the
+  current frame without caching clones (12 cached clones stalled 4K XAVC-L playback at ~7 fps).
+- **Playback start.** Codec-provider sources skip the `<video>` element warm-up; the element cannot
+  open MXF and used to hold every play for the full one-second warm-up timeout.
 - **Codec provider backends.** Every codec backend is a descriptor in
   `src/services/mediaRuntime/codec/codecProviderDescriptors.ts` on top of
   `CodecFrameProviderBase` (latest-wins queue, epochs, prefetch, exact seek). Playback, thumbnails,
@@ -49,11 +58,28 @@ WebCodecs, interlaced ProRes.
 ## Audio
 
 Frame-wrapped PCM (SMPTE 382 BWF/AES3 sound elements, e.g. Sony's four mono tracks) is streamed
-edit unit by edit unit into the 16-bit WAV audio proxy (`mxfPcmWav.ts`); index slices locate the
-sound elements after the picture so each edit unit costs one small read. Mapping v1: A1 → left,
+edit unit by edit unit into the 16-bit WAV audio proxy (`mxfPcmWav.ts`) inside
+`src/workers/mxfAudioProxyWorker.ts` (48 reads in flight, no main-thread work, no background-tab
+timer throttling); index slices locate the sound elements after the picture so each edit unit
+costs one small read. An 83-minute 4K file yields a ~960 MB WAV. The extraction runs only for media
+whose audio is on the timeline (`codecSourceAudioProxy.ts`): adding a clip or starting its
+interactive provider requests it (also for clips restored with a project), and after a 5-second
+grace period it starts only if an audio clip still uses the media, once per session. Camera clips
+placed as picture only never start an extraction. Mapping v1: A1 → left,
 A2 → right (a single mono track is doubled, a stereo track is used as is). Playback, scrubbing and
 export use the regular audio-proxy path. D-10 (IMX) AES3 sound elements (4-byte header, 8 channel slots, 24-bit audio in bits 4–27)
 are read the same way. Not yet: clip-wrapped (OP-Atom) audio files, choosing other track pairs.
+
+Long sources never become a whole-file decoded `AudioBuffer` (scrub/varispeed buffer): sources over
+~20 minutes, MXF originals and originals over 512 MB are skipped and play through the proxy element
+instead. Reading the original MXF into memory for that buffer crashed the tab (Out of Memory).
+
+## Diagnostics
+
+`getStats.codecProviders` lists every admitted codec provider with its debug info: decode latency,
+prefetched/discarded frames and, for long GOP, `readyHits`, `stalls`, `decoderResets`,
+`restartReasons` with the `recentRestarts` context, `readWaitAvgMs`/`readWaitMaxMs` and
+`runReads`/`singleReads`.
 
 Until a codec's decoder exists, its plan is `{ backend: 'unsupported', reason:
 'mxf-decoder-unavailable' }`, so the editor reports it instead of showing a black

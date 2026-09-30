@@ -65,6 +65,30 @@ describe('MxfPacketSource vs ffprobe -show_packets', () => {
     expect((await source.getPacketAt(99))?.displayIndex).toBe(3);
   });
 
+  for (const name of ['h264_422_lgop10', 'mpeg2_422_pcm', 'dnxhr_hq_op1a']) {
+    it(`${name}: sequential run reads return the same bytes as single reads with fewer requests`, async () => {
+      const { bytes } = load(name);
+      const reads: number[] = [];
+      const counting = createMemoryByteSource(bytes);
+      const sequential = await MxfPacketSource.createFromSource({
+        size: counting.size,
+        read: (offset, length) => { reads.push(length); return counting.read(offset, length); },
+      });
+      const random = await MxfPacketSource.createFromSource(createMemoryByteSource(bytes));
+      reads.length = 0;
+      const count = sequential.frameCount;
+      const inOrder = [];
+      for (let i = 0; i < count; i += 1) inOrder.push(await sequential.getPacketByStoredIndex(i));
+      for (let i = count - 1; i >= 0; i -= 1) {
+        const single = await random.getPacketByStoredIndex(i);
+        expect({ i, data: [...inOrder[i]!.data], key: inOrder[i]!.isKeyframe, display: inOrder[i]!.displayIndex })
+          .toEqual({ i, data: [...single!.data], key: single!.isKeyframe, display: single!.displayIndex });
+      }
+      expect(sequential.readStats.runReads).toBeGreaterThan(0);
+      expect(reads.length).toBeLessThan(count);
+    });
+  }
+
   it('rejects a codec mismatch', async () => {
     const { bytes } = load('dnxhr_hq_op1a');
     await expect(MxfPacketSource.createFromSource(createMemoryByteSource(bytes), 'apch')).rejects.toThrow(/expected apch/);

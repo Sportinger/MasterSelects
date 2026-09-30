@@ -36,7 +36,25 @@ export interface MxfGopEngineStats {
   packetsFed: number;
   flushes: number;
   stalls: number;
+  /** Mean / worst time the feeding loop waited for a packet read (ms). */
+  readWaitAvgMs?: number;
+  readWaitMaxMs?: number;
+  /** Reads issued by the packet source: runs cover many edit units, singles one. */
+  runReads?: number;
+  singleReads?: number;
+  /** Last restarts with the state that caused them (diagnostics). */
+  recentRestarts?: RestartRecord[];
 }
+
+interface RestartRecord {
+  reason: string;
+  target: number;
+  lastEmitted: number;
+  nextStoredDisplay: number;
+  ready: number[];
+}
+
+const MAX_RESTART_RECORDS = 8;
 
 /**
  * Frame budget (zero-copy): decoder outputs are GPU surfaces from a fixed pool
@@ -95,6 +113,10 @@ export class MxfGopEngine {
   private packetsFed = 0;
   private flushes = 0;
   private stalls = 0;
+  private readWaitTotalMs = 0;
+  private readWaitMaxMs = 0;
+  private readWaits = 0;
+  private readonly recentRestarts: RestartRecord[] = [];
   private closed = false;
   /** Incremented on every restart; packets read for an older generation are dropped. */
   private generation = 0;
@@ -132,6 +154,10 @@ export class MxfGopEngine {
       packetsFed: this.packetsFed,
       flushes: this.flushes,
       stalls: this.stalls,
+      readWaitAvgMs: this.readWaits > 0 ? Math.round((this.readWaitTotalMs / this.readWaits) * 10) / 10 : 0,
+      readWaitMaxMs: Math.round(this.readWaitMaxMs),
+      ...this.source.readStats,
+      recentRestarts: [...this.recentRestarts],
     };
   }
 
@@ -182,6 +208,14 @@ export class MxfGopEngine {
             : feedDistance > MAX_FORWARD_FEED ? 'far-ahead'
               : 'next-gop';
       this.restartReasons[reason] = (this.restartReasons[reason] ?? 0) + 1;
+      this.recentRestarts.push({
+        reason,
+        target,
+        lastEmitted: this.lastEmittedDisplay,
+        nextStoredDisplay: this.nextStored >= 0 ? this.source.storedToDisplayIndex(this.nextStored) : -1,
+        ready: [...this.readyFrames.keys()],
+      });
+      if (this.recentRestarts.length > MAX_RESTART_RECORDS) this.recentRestarts.shift();
       this.restartAt(keyStored, decoder);
     }
 
@@ -340,7 +374,12 @@ export class MxfGopEngine {
       const generation = this.generation;
       const index = this.nextStored;
       this.nextStored += 1;
+      const readStartedAt = performance.now();
       const packet = await this.source.getPacketByStoredIndex(index);
+      const readWaitMs = performance.now() - readStartedAt;
+      this.readWaitTotalMs += readWaitMs;
+      this.readWaitMaxMs = Math.max(this.readWaitMaxMs, readWaitMs);
+      this.readWaits += 1;
       // A restart while reading moved the decoder elsewhere: this packet is stale.
       if (generation !== this.generation || this.closed) continue;
       if (!packet) throw new Error(`${this.label} packet ${index} is missing`);

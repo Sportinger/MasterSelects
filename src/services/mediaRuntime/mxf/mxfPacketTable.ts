@@ -24,6 +24,18 @@ export interface MxfResolvedUnit {
   isKeyframe: boolean;
 }
 
+export interface MxfPictureRead {
+  unit: MxfResolvedUnit;
+  data: Uint8Array;
+}
+
+/** Consecutive content packages [from, to) and their file bounds (bounds[k] = start of from + k). */
+export interface MxfRunPlan {
+  from: number;
+  to: number;
+  bounds: number[];
+}
+
 const KLV_PROBE_SIZE = 32;
 /** Upper bound for reading a whole content package at once (4K intra units are a few MB). */
 const MAX_CONTENT_PACKAGE_READ = 32 * 1024 * 1024;
@@ -254,7 +266,7 @@ export class MxfPacketTable {
   async readPictureElement(
     storedIndex: number,
     read: (offset: number, length: number) => Promise<Uint8Array>,
-  ): Promise<{ unit: MxfResolvedUnit; data: Uint8Array }> {
+  ): Promise<MxfPictureRead> {
     const index = this.clampIndex(storedIndex);
     const cached = this.resolved.get(index);
     if (cached) return { unit: cached, data: await read(cached.valueOffset, cached.size) };
@@ -263,29 +275,72 @@ export class MxfPacketTable {
       const end = this.fileOffsetForStream(this.streamOffset(index + 1));
       if (end > start && end - start <= MAX_CONTENT_PACKAGE_READ) {
         const bytes = await read(start, end - start);
-        const trackNumber = this.meta.video!.trackNumber;
-        let at = 0;
-        while (at + 17 <= bytes.length) {
-          const klv = parseKlvHeader(bytes, at, start);
-          if (!klv || klv.end > start + bytes.length) break;
-          if (isEssenceElementKey(klv.key) && (trackNumber === 0 || elementTrackNumber(klv.key) === trackNumber)) {
-            const unit: MxfResolvedUnit = {
-              storedIndex: index,
-              displayIndex: this.storedToDisplay[index]!,
-              isKeyframe: this.isKeyframe(index),
-              position: start + at,
-              valueOffset: klv.valueOffset,
-              size: klv.length,
-            };
-            this.resolved.set(index, unit);
-            return { unit, data: bytes.subarray(klv.valueOffset - start, klv.end - start) };
-          }
-          at = klv.end - start;
-        }
+        const found = this.findPictureInPackage(index, bytes, 0, bytes.length, start);
+        if (found) return found;
       }
     }
     const unit = await this.resolve(index);
     return { unit, data: await read(unit.valueOffset, unit.size) };
+  }
+
+  /**
+   * Plans one read covering consecutive frame-wrapped content packages from
+   * `storedIndex` (bounds come from the index alone). Null when the essence has
+   * no per-unit package bounds or a single package already exceeds `maxBytes`.
+   */
+  planRun(storedIndex: number, maxUnits: number, maxBytes: number): MxfRunPlan | null {
+    if (this.scannedUnits || this.clipValueOffset !== null) return null;
+    const from = this.clampIndex(storedIndex);
+    const bounds = [this.fileOffsetForStream(this.streamOffset(from))];
+    for (let index = from; index + 1 < this.frameCount && bounds.length <= maxUnits; index += 1) {
+      const end = this.fileOffsetForStream(this.streamOffset(index + 1));
+      if (end <= bounds[bounds.length - 1]! || end - bounds[0]! > maxBytes) break;
+      bounds.push(end);
+    }
+    return bounds.length >= 2 ? { from, to: from + bounds.length - 1, bounds } : null;
+  }
+
+  /** Reads a planned run with one request; packages whose element is not found end the run early. */
+  async readRun(plan: MxfRunPlan, read: (offset: number, length: number) => Promise<Uint8Array>): Promise<MxfPictureRead[]> {
+    const start = plan.bounds[0]!;
+    const bytes = await read(start, plan.bounds[plan.bounds.length - 1]! - start);
+    const units: MxfPictureRead[] = [];
+    for (let k = 0; k + 1 < plan.bounds.length; k += 1) {
+      const found = this.findPictureInPackage(plan.from + k, bytes, plan.bounds[k]! - start, plan.bounds[k + 1]! - start, start);
+      if (!found) break;
+      units.push(found);
+    }
+    return units;
+  }
+
+  /** Finds the picture element inside one content package held in `bytes[from, to)`. */
+  private findPictureInPackage(
+    index: number,
+    bytes: Uint8Array,
+    from: number,
+    to: number,
+    baseOffset: number,
+  ): MxfPictureRead | null {
+    const trackNumber = this.meta.video!.trackNumber;
+    let at = from;
+    while (at + 17 <= to) {
+      const klv = parseKlvHeader(bytes, at, baseOffset);
+      if (!klv || klv.end > baseOffset + to) return null;
+      if (isEssenceElementKey(klv.key) && (trackNumber === 0 || elementTrackNumber(klv.key) === trackNumber)) {
+        const unit: MxfResolvedUnit = {
+          storedIndex: index,
+          displayIndex: this.storedToDisplay[index]!,
+          isKeyframe: this.isKeyframe(index),
+          position: baseOffset + at,
+          valueOffset: klv.valueOffset,
+          size: klv.length,
+        };
+        this.resolved.set(index, unit);
+        return { unit, data: bytes.subarray(klv.valueOffset - baseOffset, klv.end - baseOffset) };
+      }
+      at = klv.end - baseOffset;
+    }
+    return null;
   }
 
   private async resolveUncached(index: number): Promise<MxfResolvedUnit> {

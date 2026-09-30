@@ -28,6 +28,7 @@ vi.mock('../../src/stores/mediaStore', () => ({
 
 vi.mock('../../src/services/mediaRuntime/runtimePlayback', () => ({
   getRuntimeFrameProvider: (...args: unknown[]) => getRuntimeFrameProvider(...args),
+  isProviderBackedRuntimeSource: () => false,
 }));
 
 vi.mock('../../src/services/layerBuilder/reverseWorkerWebCodecsRuntime', () => ({

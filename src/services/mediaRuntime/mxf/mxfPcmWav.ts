@@ -97,6 +97,8 @@ function wavHeader(sampleRate: number, channels: number, sampleFrames: number): 
 export interface MxfPcmWavOptions {
   onProgress?: (fraction: number) => void;
   isCancelled?: () => boolean;
+  /** Edit units read in parallel (the audio proxy worker keeps more reads in flight). */
+  readConcurrency?: number;
   /** Stop after this many edit units (benchmarks). */
   maxEditUnits?: number;
 }
@@ -117,6 +119,7 @@ export async function buildMxfPcmWavBlobFromSource(source: MxfPacketSource, opti
     const sampleRate = source.mxf.audio[0]!.sampleRate || 48_000;
     const fps = source.metadata.fps;
     const frameCount = Math.min(source.frameCount, options.maxEditUnits ?? Number.POSITIVE_INFINITY);
+    const readBatch = Math.max(1, Math.floor(options.readConcurrency ?? READ_BATCH));
     const blobs: Blob[] = [];
     let parts: ArrayBuffer[] = [];
     let partBytes = 0;
@@ -138,9 +141,9 @@ export async function buildMxfPcmWavBlobFromSource(source: MxfPacketSource, opti
       if (partBytes >= BLOB_FOLD_BYTES) foldParts();
     };
 
-    for (let batchStart = 0; batchStart < frameCount; batchStart += READ_BATCH) {
+    for (let batchStart = 0; batchStart < frameCount; batchStart += readBatch) {
       if (options.isCancelled?.()) throw new Error('MXF audio extraction cancelled');
-      const indices = Array.from({ length: Math.min(READ_BATCH, frameCount - batchStart) }, (_, i) => batchStart + i);
+      const indices = Array.from({ length: Math.min(readBatch, frameCount - batchStart) }, (_, i) => batchStart + i);
       const regions = await Promise.all(indices.map(async (index) => {
         const span = await source.contentPackageSpan(index);
         if (!span) throw new MxfAudioUnavailableError('Clip-wrapped MXF audio is not supported yet');
@@ -181,7 +184,7 @@ export async function buildMxfPcmWavBlobFromSource(source: MxfPacketSource, opti
       }
       options.onProgress?.(Math.min(1, (batchStart + indices.length) / frameCount));
       // Keep playback and UI responsive during long extractions.
-      if ((batchStart / READ_BATCH) % 8 === 7) await yieldToEventLoop();
+      if ((batchStart / readBatch) % 8 === 7) await yieldToEventLoop();
     }
     flush();
     foldParts();

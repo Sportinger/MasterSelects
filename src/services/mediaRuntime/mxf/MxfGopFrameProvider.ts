@@ -31,6 +31,11 @@ const MAX_DECODED_THUMBNAILS = 600;
 export abstract class MxfGopFrameProvider<
   TOptions extends MxfGopFrameProviderOptions,
 > extends CodecFrameProviderBase<MxfPacket, TOptions> {
+  /**
+   * No cached clones: hardware long-GOP decoding has ~10 output surfaces at 4K and
+   * the decoder already holds ~5 as references; runtime cache clones stalled it.
+   */
+  readonly frameCacheLimit = 0;
   protected source: MxfPacketSource | null = null;
   private frames: GopFrameSource | null = null;
 

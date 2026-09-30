@@ -1,5 +1,5 @@
 import type { TimelineClip } from '../../types';
-import { getRuntimeFrameProvider } from '../mediaRuntime/runtimePlayback';
+import { getRuntimeFrameProvider, isProviderBackedRuntimeSource } from '../mediaRuntime/runtimePlayback';
 import { renderHostPort } from '../render/renderHostPort';
 import { flags } from '../../engine/featureFlags';
 
@@ -18,6 +18,11 @@ export function getTimelinePlaybackWarmupVideo(
     return null;
   }
   if (isWorkerGpuOnlyPlayback() && flags.useFullWebCodecsPlayback) {
+    return null;
+  }
+  // Codec-provider sources (MXF, ProRes, HAP) never play through their element:
+  // it cannot open the container and would hold playback start for the full timeout.
+  if (isProviderBackedRuntimeSource(source)) {
     return null;
   }
 

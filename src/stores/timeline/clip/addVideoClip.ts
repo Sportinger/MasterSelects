@@ -21,6 +21,7 @@ import { loadCachedProjectAnalysisForVideo } from './videoCachedAnalysisLoader';
 import { startVideoThumbnailGeneration } from './videoThumbnailLoader';
 import { flags } from '../../../engine/featureFlags';
 import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../services/mediaRuntime/providerSelection';
+import { requestCodecSourceAudioProxy } from '../../../services/mediaRuntime/codecSourceAudioProxy';
 import { releaseClipTreeRuntimeBindings } from '../../../services/mediaRuntime/clipBindings';
 export { createVideoClipPlaceholders } from './videoClipPlaceholders';
 export type { AddVideoClipParams, AddVideoClipResult } from './videoClipPlaceholders';
@@ -276,7 +277,8 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       turboResEnabled: flags.turboResProRes,
     });
     if (isCodecProviderPlan(providerPlan) && mediaFileId) {
-      void importedMediaStore.generateAudioProxy(mediaFileId);
+      // Starts only while the linked audio clip stays on the timeline (see codecSourceAudioProxy).
+      requestCodecSourceAudioProxy(mediaFileId);
     }
   } else if (linkedAudioClipId && nativeDecoder) {
     log.debug('Skipping audio decoding for NativeDecoder file (audio clip kept)', { file: file.name });

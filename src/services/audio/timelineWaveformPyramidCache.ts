@@ -7,6 +7,11 @@ import type { TimelineWaveformPyramid } from '../../components/timeline/utils/wa
 import { Logger } from '../logger';
 import { AudioArtifactStore } from './AudioArtifactStore';
 import { AudioDecodeService } from './AudioDecodeService';
+import { readLongPcmWavInfo, readLongWavFingerprintBytes } from './longPcmWav';
+import { buildPeakDecimatedAudioBuffer } from './longWavPeaksClient';
+
+/** Share of the 0–70 preview progress range spent streaming a long WAV. */
+const LONG_WAV_READ_PROGRESS = 60;
 import { generateSourceWaveformPreview } from './sourceWaveformPreview';
 import { sourceWaveformAnalysisCacheForFile, rememberSourceWaveformAnalysis } from './sourceWaveformAnalysisCache';
 import type { AudioAnalysisArtifact, AudioArtifactRef, AudioChannelLayout } from './audioArtifactTypes';
@@ -466,6 +471,22 @@ async function generateTimelineWaveformAnalysisForFileUncached(
   });
   try {
     throwIfAborted(options.signal);
+    // Hour-long PCM stems: streamed peak decimation in a worker instead of a multi-GB whole-file decode.
+    const longWav = await readLongPcmWavInfo(file);
+    if (longWav) {
+      const peaks = await buildPeakDecimatedAudioBuffer(file, longWav, {
+        signal: options.signal,
+        onProgress: (fraction, preview) => options.onProgress?.(Math.round(fraction * LONG_WAV_READ_PROGRESS), preview),
+      });
+      // Reading dominated; the analysis of the small peak source fills the rest of the preview range.
+      return await generateTimelineWaveformAnalysisFromBuffer(file, await readLongWavFingerprintBytes(file), peaks, {
+        ...options,
+        onProgress: options.onProgress && ((progress, partial) => options.onProgress!(
+          progress >= 100 ? 100 : LONG_WAV_READ_PROGRESS + Math.round((Math.min(70, progress) / 70) * (70 - LONG_WAV_READ_PROGRESS)),
+          partial,
+        )),
+      });
+    }
     const arrayBuffer = await file.arrayBuffer();
     throwIfAborted(options.signal);
 

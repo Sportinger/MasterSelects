@@ -10,11 +10,19 @@ import {
 } from '../project/mediaSourceResolver';
 import { useMediaStore } from '../../stores/mediaStore';
 import { estimateAudioBufferBytes } from './runtimeResources';
+import { estimateDecodedSourceAudioBytes, MAX_DECODED_SOURCE_AUDIO_BYTES } from '../audio/fullSourceDecodeBudget';
 
 const log = Logger.create('ProxyFrameCache');
 
 export const MAX_AUDIO_BUFFER_CACHE_BYTES = 1536 * 1024 * 1024;
 export const MAX_AUDIO_BUFFER_CACHE_ENTRIES = 16;
+/**
+ * Original media is only read whole up to this size. Camera files are tens of GB;
+ * reading one into an ArrayBuffer takes the tab down before decoding can fail.
+ */
+export const MAX_RAW_SOURCE_AUDIO_READ_BYTES = 512 * 1024 * 1024;
+/** Upper common context rate; the estimate must not need an AudioContext. */
+const DECODE_ESTIMATE_SAMPLE_RATE = 48_000;
 const AUDIO_BUFFER_RETRY_COOLDOWN_MS = 3000;
 const SCRUB_AUDIO_WARM_BACKOFF_MS = 5000;
 
@@ -31,6 +39,8 @@ export interface AudioBufferLoadState {
   warmBackoffLogged: Set<string>;
   // Track files with no audio
   failed: Set<string>;
+  // Sources too long for a full decode (logged once per file)
+  oversized: Set<string>;
 }
 
 export function createAudioBufferLoadState(): AudioBufferLoadState {
@@ -40,7 +50,29 @@ export function createAudioBufferLoadState(): AudioBufferLoadState {
     nextAllowedWarmAt: new Map(),
     warmBackoffLogged: new Set(),
     failed: new Set(),
+    oversized: new Set(),
   };
+}
+
+/**
+ * Whether the original media may be read whole for decodeAudioData. MXF is never
+ * decodable there (audio comes from its WAV proxy); oversized files are skipped.
+ */
+function canReadRawSourceAudio(mediaFile: StoreMediaFile | undefined, byteSize: number | undefined): boolean {
+  const name = mediaFile?.name?.toLowerCase() ?? '';
+  if (mediaFile?.container?.toUpperCase() === 'MXF' || name.endsWith('.mxf')) return false;
+  const size = byteSize ?? mediaFile?.file?.size ?? mediaFile?.fileSize;
+  return !(typeof size === 'number' && size > MAX_RAW_SOURCE_AUDIO_READ_BYTES);
+}
+
+/** Reads a fetched response only when its advertised size fits the raw-read limit. */
+async function readResponseWithinLimit(response: Response): Promise<ArrayBuffer | null> {
+  const length = Number(response.headers.get('content-length'));
+  if (Number.isFinite(length) && length > MAX_RAW_SOURCE_AUDIO_READ_BYTES) {
+    void response.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  return response.arrayBuffer();
 }
 
 export function hasUsableAudioProxy(
@@ -136,6 +168,12 @@ async function resolveAudioArrayBuffer(
     }
   }
 
+  // Original media below: never an MXF or a file too large to hold in memory.
+  if (!arrayBuffer && !canReadRawSourceAudio(mediaFile, undefined)) {
+    log.debug(`Skipping whole-file audio read for ${mediaFileId} (MXF or larger than the raw read limit)`);
+    return null;
+  }
+
   // Try 3: Project-local RAW media file
   if (!arrayBuffer) {
     const projectHandle = await getStoredProjectFileHandle(mediaFileId);
@@ -143,7 +181,7 @@ async function resolveAudioArrayBuffer(
       log.debug(`Loading from project RAW handle: ${mediaFileId}`);
       try {
         const file = await projectHandle.getFile();
-        arrayBuffer = await file.arrayBuffer();
+        if (canReadRawSourceAudio(mediaFile, file.size)) arrayBuffer = await file.arrayBuffer();
       } catch (e) {
         log.warn('Failed to read project RAW handle', e);
       }
@@ -161,6 +199,7 @@ async function resolveAudioArrayBuffer(
       try {
         const result = await projectFileService.getFileFromRaw(candidatePath);
         if (result) {
+          if (!canReadRawSourceAudio(mediaFile, result.file.size)) break;
           arrayBuffer = await result.file.arrayBuffer();
           break;
         }
@@ -175,7 +214,7 @@ async function resolveAudioArrayBuffer(
     log.debug(`Loading from video URL: ${mediaFileId}`);
     try {
       const response = await fetch(mediaFile.url);
-      arrayBuffer = await response.arrayBuffer();
+      arrayBuffer = await readResponseWithinLimit(response);
     } catch (e) {
       log.warn('Failed to fetch video URL', e);
     }
@@ -188,7 +227,7 @@ async function resolveAudioArrayBuffer(
       log.debug(`Loading from file handle: ${mediaFileId}`);
       try {
         const file = await fileHandle.getFile();
-        arrayBuffer = await file.arrayBuffer();
+        if (canReadRawSourceAudio(mediaFile, file.size)) arrayBuffer = await file.arrayBuffer();
       } catch (e) {
         log.warn('Failed to read file handle', e);
       }
@@ -196,7 +235,7 @@ async function resolveAudioArrayBuffer(
   }
 
   // Try 6: Direct File object from media store (e.g. YouTube downloads)
-  if (!arrayBuffer && mediaFile?.file) {
+  if (!arrayBuffer && mediaFile?.file && canReadRawSourceAudio(mediaFile, mediaFile.file.size)) {
     log.debug(`Loading from File object: ${mediaFileId}`);
     try {
       arrayBuffer = await mediaFile.file.arrayBuffer();
@@ -210,7 +249,7 @@ async function resolveAudioArrayBuffer(
     log.debug(`Loading from video element src: ${mediaFileId}`);
     try {
       const response = await fetch(videoElementSrc);
-      arrayBuffer = await response.arrayBuffer();
+      arrayBuffer = await readResponseWithinLimit(response);
     } catch (e) {
       log.warn('Failed to fetch video element src', e);
     }
@@ -249,6 +288,20 @@ export async function loadAudioBufferForScrub(args: {
   // Check if already loading
   if (state.loading.has(mediaFileId)) {
     return null; // Loading in progress
+  }
+
+  // Long sources never become a whole-file AudioBuffer (element/proxy playback instead).
+  const decodedBytes = estimateDecodedSourceAudioBytes(mediaFile?.duration, DECODE_ESTIMATE_SAMPLE_RATE);
+  if (decodedBytes > MAX_DECODED_SOURCE_AUDIO_BYTES) {
+    if (!state.oversized.has(mediaFileId)) {
+      state.oversized.add(mediaFileId);
+      log.debug('Skipping full-source audio decode for a long source', {
+        mediaFileId,
+        durationSeconds: mediaFile?.duration,
+        estimatedDecodedMB: Math.round(decodedBytes / (1024 * 1024)),
+      });
+    }
+    return null;
   }
 
   // Cooldown for "source not found" - retry after 3 seconds (source may become available)

@@ -236,8 +236,14 @@ class BasicMediaSourceRuntime implements MediaSourceRuntime {
     frame: RuntimeFrame,
     options?: {
       timestamp?: number;
+      limit?: number;
     }
   ): FrameHandle | null {
+    const limit = Math.max(0, Math.floor(options?.limit ?? MAX_SOURCE_FRAME_CACHE_ENTRIES));
+    if (limit === 0) {
+      this.trimFrameCache(0);
+      return null;
+    }
     const clonedFrame = cloneRuntimeFrame(frame);
     if (!clonedFrame) {
       return null;
@@ -258,8 +264,19 @@ class BasicMediaSourceRuntime implements MediaSourceRuntime {
       ownsFrame: true,
     });
     this.frameCache.set(key, cachedHandle);
+    this.trimFrameCache(limit);
 
-    while (this.frameCache.size > MAX_SOURCE_FRAME_CACHE_ENTRIES) {
+    return createFrameHandle({
+      sourceId: this.sourceId,
+      timestamp: cachedHandle.timestamp,
+      frameNumber: cachedHandle.frameNumber,
+      frame: cachedHandle.frame,
+    });
+  }
+
+  /** Releases the oldest cached clones until at most `limit` remain. */
+  private trimFrameCache(limit: number): void {
+    while (this.frameCache.size > limit) {
       const oldestKey = this.frameCache.keys().next().value;
       if (!oldestKey) {
         break;
@@ -268,13 +285,6 @@ class BasicMediaSourceRuntime implements MediaSourceRuntime {
       oldest?.release();
       this.frameCache.delete(oldestKey);
     }
-
-    return createFrameHandle({
-      sourceId: this.sourceId,
-      timestamp: cachedHandle.timestamp,
-      frameNumber: cachedHandle.frameNumber,
-      frame: cachedHandle.frame,
-    });
   }
 
   private getCachedFrame(
@@ -411,7 +421,7 @@ class BasicMediaSourceRuntime implements MediaSourceRuntime {
       }
 
       return (
-        this.cacheFrame(request, currentFrame, { timestamp }) ??
+        this.cacheFrame(request, currentFrame, { timestamp, limit: session.frameProvider.frameCacheLimit }) ??
         createFrameHandle({
           sourceId: this.sourceId,
           timestamp,
@@ -436,7 +446,7 @@ class BasicMediaSourceRuntime implements MediaSourceRuntime {
       const timestamp = this.getFrameTimestampMicros(session, request, currentFrame);
       session.currentFrameTimestamp = timestamp;
       if (this.isFrameTimestampNearRequest(session, request, timestamp)) {
-        this.cacheFrame(request, currentFrame, { timestamp });
+        this.cacheFrame(request, currentFrame, { timestamp, limit: frameProvider?.frameCacheLimit });
         return createFrameHandle({
           sourceId: this.sourceId,
           timestamp,

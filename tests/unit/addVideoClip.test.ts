@@ -40,12 +40,17 @@ vi.mock('../../src/services/audio/timelineWaveformPyramidCache', () => ({
   mapSourceWaveformPyramidProgress: vi.fn((value: number) => value),
 }));
 
+vi.mock('../../src/services/mediaRuntime/codecSourceAudioProxy', () => ({
+  requestCodecSourceAudioProxy: vi.fn(),
+}));
+
 vi.mock('../../src/services/project/ProjectFileService', () => ({
   projectFileService: {
     isProjectOpen: vi.fn(() => false),
   },
 }));
 import { useMediaStore } from '../../src/stores/mediaStore';
+import { requestCodecSourceAudioProxy } from '../../src/services/mediaRuntime/codecSourceAudioProxy';
 import {
   createAudioClipPlaceholder,
   loadAudioMedia,
@@ -88,7 +93,7 @@ describe('direct video/audio add runtime sources', () => {
     flags.turboResProRes = false;
   });
 
-  it('starts an independent audio proxy for an enabled ProRes clip with audio', async () => {
+  it('requests an independent audio proxy for an enabled ProRes clip with audio', async () => {
     flags.turboResProRes = true;
     const generateAudioProxy = vi.fn(async () => undefined);
     vi.mocked(useMediaStore.getState).mockReturnValue({
@@ -116,7 +121,9 @@ describe('direct video/audio add runtime sources', () => {
       setClips: vi.fn(),
     });
 
-    expect(generateAudioProxy).toHaveBeenCalledWith('media-prores');
+    // The request starts the extraction only while the linked audio clip stays (codecSourceAudioProxy).
+    expect(requestCodecSourceAudioProxy).toHaveBeenCalledWith('media-prores');
+    expect(generateAudioProxy).not.toHaveBeenCalled();
     flags.turboResProRes = false;
   });
 
