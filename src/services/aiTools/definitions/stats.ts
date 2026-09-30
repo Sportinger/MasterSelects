@@ -5,10 +5,69 @@ export const statsToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'openLocalProject',
-      description: 'Open a saved project folder by absolute disk path using the Native Helper and hydrate the editor. Dev bridge only. Refuses unsaved changes or an active export. Project switching is not timeline-undoable. Requires explicit confirmation.',
+      description: 'Open a saved project folder by absolute disk path and hydrate the editor. Folders below a granted workspace root (grantWorkspaceRoot) open directly in the browser; other folders need the Native Helper. Dev bridge only. Refuses unsaved changes or an active export. Project switching is not timeline-undoable. Requires explicit confirmation.',
       parameters: {
         type: 'object',
-        properties: { directory: { type: 'string', description: 'Absolute project folder, e.g. C:/Users/admin/Documents/MS/My Project. Not a .msproj file.' } },
+        properties: {
+          directory: { type: 'string', description: 'Absolute project folder, e.g. C:/Users/admin/Documents/MS/My Project. Not a .msproj file.' },
+          discardUnsavedChanges: { type: 'boolean', description: 'Drop unsaved changes of the current project (workspace-root route only). Defaults to false.' },
+        },
+        required: ['directory'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'grantWorkspaceRoot',
+      description: 'Ask the user once for access to a disk folder (e.g. "D:/"). Shows an in-app button; the user clicks it and picks exactly that folder. The grant is stored, so later calls return immediately and createLocalProject, openLocalProject and importLocalFiles work for every path below it without prompts. If the browser dropped the permission (restart), calling this again shows a one-click re-grant. Blocks until the user answers or timeoutMs passes. Dev bridge only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          path: { type: 'string', description: 'Absolute folder to grant, e.g. "D:/" or "D:/Shows". Use forward slashes.' },
+          mode: { type: 'string', enum: ['read', 'readwrite'], description: 'Access mode. Defaults to readwrite (needed for projects).' },
+          timeoutMs: { type: 'number', minimum: 5000, maximum: 600000, description: 'How long to wait for the user. Defaults to 300000. Pass a matching bridge timeoutMs.' },
+          verifyEntries: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Names of files/folders that exist directly inside the folder; the picked folder must contain them. Required for drive roots like "D:/", because browsers name every drive root "\\".',
+          },
+        },
+        required: ['path'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'listWorkspaceRoots',
+      description: 'List granted workspace folders and whether their permission is currently granted or needs a re-grant ("prompt"). Dev bridge only.',
+      parameters: {
+        type: 'object',
+        properties: { mode: { type: 'string', enum: ['read', 'readwrite'], description: 'Permission mode to report. Defaults to readwrite.' } },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'saveProject',
+      description: 'Save the open project to disk (same as Ctrl+S). Call after building or changing a timeline through the bridge.',
+      parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'createLocalProject',
+      description: 'Create a new empty project at an absolute folder path below a granted workspace root, without a picker, and open it. The last path segment becomes the project name; missing parent folders are created. Refuses when the folder already holds a project, during an export, or with unsaved changes unless discardUnsavedChanges is true. Not timeline-undoable. Dev bridge only.',
+      parameters: {
+        type: 'object',
+        properties: {
+          directory: { type: 'string', description: 'Absolute path of the new project folder, e.g. "D:/Shows/My Show".' },
+          discardUnsavedChanges: { type: 'boolean', description: 'Drop unsaved changes of the current project. Defaults to false.' },
+        },
         required: ['directory'],
       },
     },

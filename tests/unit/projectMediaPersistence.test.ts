@@ -304,6 +304,43 @@ describe('project media persistence', () => {
     });
   });
 
+  it('waits for nested store restoration before a manual save captures the timeline', async () => {
+    const { saveCurrentProject, withProjectStoreSyncGuard } = await import('../../src/services/project/projectSave');
+    let releaseOuter!: () => void;
+    let releaseInner!: () => void;
+    const outer = withProjectStoreSyncGuard(() => new Promise<void>(resolve => { releaseOuter = resolve; }));
+    const inner = withProjectStoreSyncGuard(() => new Promise<void>(resolve => { releaseInner = resolve; }));
+    const saving = saveCurrentProject({ source: 'manual' });
+    expect(mocks.saveProject).not.toHaveBeenCalled();
+    releaseOuter();
+    await outer;
+    expect(mocks.updateMedia).not.toHaveBeenCalled();
+    releaseInner();
+    await inner;
+    await expect(saving).resolves.toBe(true);
+    expect(mocks.saveProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not redirect a waiting manual save to a different project', async () => {
+    const { saveCurrentProject, withProjectStoreSyncGuard } = await import('../../src/services/project/projectSave');
+    let release!: () => void;
+    const restoring = withProjectStoreSyncGuard(() => new Promise<void>(resolve => { release = resolve; }));
+    const saving = saveCurrentProject({ source: 'manual' });
+    mocks.getProjectData.mockReturnValue({ ...mocks.getProjectData(), name: 'Other project' });
+    release();
+    await restoring;
+    await expect(saving).resolves.toBe(false);
+    expect(mocks.saveProject).not.toHaveBeenCalled();
+  });
+
+  it('continues to skip interval saves during restoration', async () => {
+    const { saveCurrentProject, withProjectStoreSyncGuard } = await import('../../src/services/project/projectSave');
+    await withProjectStoreSyncGuard(async () => {
+      await expect(saveCurrentProject({ source: 'autosave' })).resolves.toBe(false);
+      expect(mocks.saveProject).not.toHaveBeenCalled();
+    });
+  });
+
   afterEach(() => {
     flashBoardMediaBridge.hydrateMetadata({});
     revokeAllMediaObjectUrls();

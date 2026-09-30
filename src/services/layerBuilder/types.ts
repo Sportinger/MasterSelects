@@ -76,6 +76,8 @@ export interface FrameContext {
   videoTracks: TimelineTrack[];
   audioTracks: TimelineTrack[];
   visibleVideoTrackIds: Set<string>;
+  /** Visible tracks minus those hidden beneath a lasting opaque full-frame track (render/decode only). */
+  renderVisibleVideoTrackIds?: Set<string>;
   unmutedAudioTrackIds: Set<string>;
   anyVideoSolo: boolean;
   anyAudioSolo: boolean;

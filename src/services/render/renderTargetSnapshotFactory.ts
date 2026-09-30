@@ -47,6 +47,8 @@ function mapSource(source: RenderSource): RenderTargetSource {
         compositionId: source.compositionId,
         layerIndex: source.layerIndex,
       };
+    case 'multicam-angle':
+      return { type: 'multicam-angle', compositionId: source.compositionId, angleIndex: source.angleIndex };
     case 'slot':
       return { type: 'slot', slotIndex: source.slotIndex };
   }

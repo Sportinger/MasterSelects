@@ -29,7 +29,7 @@ import { ColorCurvesPanel } from './ColorCurvesPanel';
 
 type ColorToolMode =
   | 'primaries'
-  | 'hdr'
+  | 'exposure'
   | 'rgb-mixer'
   | 'motion-effects'
   | 'curves'
@@ -51,7 +51,7 @@ interface ColorToolDefinition {
 
 const COLOR_TOOLS: ColorToolDefinition[] = [
   { id: 'primaries', label: 'Primaries', icon: IconColorSwatch, available: true },
-  { id: 'hdr', label: 'HDR Wheels', icon: IconSunHigh, available: false },
+  { id: 'exposure', label: 'Exposure', icon: IconSunHigh, available: true },
   { id: 'rgb-mixer', label: 'RGB Mixer', icon: IconAdjustmentsHorizontal, available: false },
   { id: 'motion-effects', label: 'Motion Effects', icon: IconActivity, available: false },
   { id: 'curves', label: 'Custom Curves', icon: IconChartLine, available: true },
@@ -203,14 +203,19 @@ export function ColorToolDock({ auxMode, clipId, clipName, onAuxModeChange }: Co
       </nav>
 
       <div className="color-tool-dock-content">
-        {activeTool === 'primaries' && (
+        {(activeTool === 'primaries' || activeTool === 'exposure') && (
           <section className="color-workspace-wheels">
             <header className="color-workspace-surface-header">
-              <strong>Primaries · Color Wheels</strong>
+              <strong>{activeTool === 'primaries' ? 'Primaries · Color Wheels' : 'Exposure · Levels'}</strong>
               <span>{clipName}</span>
             </header>
             <div className="color-workspace-wheels-content">
-              <ColorEditor clipId={clipId} controlSet="wheels" surface="controls" />
+              <ColorEditor
+                clipId={clipId}
+                controlSet={activeTool === 'primaries' ? 'wheels' : 'exposure'}
+                key={activeTool}
+                surface="controls"
+              />
             </div>
           </section>
         )}

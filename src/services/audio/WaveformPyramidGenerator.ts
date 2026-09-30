@@ -1,6 +1,5 @@
-import type { JsonValue, SignalMetadata } from '../../signals';
+import type { SignalMetadata } from '../../signals';
 import {
-  createAudioAnalysisManifestRefFromArtifact,
   createAudioAnalysisCacheKey,
   type AudioAnalysisManifestRef,
 } from './audioAnalysisManifestKeys';
@@ -14,7 +13,6 @@ import type {
 } from './audioArtifactTypes';
 import {
   DEFAULT_WAVEFORM_PYRAMID_BUCKET_SIZES,
-  createWaveformPyramidManifest,
   type WaveformStatistic,
   type WaveformPyramidData,
   type WaveformPyramidManifest,
@@ -27,9 +25,8 @@ import {
 } from './waveformPyramid/pyramidAssembly';
 import {
   WAVEFORM_PACKED_PAYLOAD_MIME_TYPE,
-  deterministicHashId,
-  storeWaveformPyramidPayloads,
 } from './waveformPyramid/payloadEncoding';
+import { persistWaveformPyramid } from './waveformPyramid/pyramidPersistence';
 import type { WaveformPyramidAnalysisContext } from './waveformPyramid/waveformPyramidAnalysisTypes';
 
 export const WAVEFORM_PYRAMID_GENERATOR_VERSION = 'masterselects.waveform-pyramid-generator@1.0.0';
@@ -94,6 +91,7 @@ export interface WaveformPyramidStoreRequest {
   mediaFileId: string;
   sourceFingerprint: string;
   pyramid: WaveformPyramidData;
+  packedPayload?: ArrayBuffer;
   clipAudioStateHash?: string;
   channelLayout?: AudioChannelLayout;
   bucketSizes?: readonly number[];
@@ -108,12 +106,10 @@ export interface WaveformPyramidGenerationResult {
   analysisRef: AudioAnalysisManifestRef;
   artifact: AudioAnalysisArtifact;
   manifest: WaveformPyramidManifest;
+  pyramid: WaveformPyramidData;
   payloadRefs: AudioArtifactRef[];
   warnings: AudioAnalysisWarning[];
 }
-
-const DEFAULT_DECODER_ID = 'audio-buffer';
-const DEFAULT_DECODER_VERSION = '1.0.0';
 
 export class WaveformPyramidGeneratorError extends Error {
   readonly code: WaveformPyramidGeneratorErrorCode;
@@ -177,11 +173,6 @@ function throwIfCancelled(signal: AbortSignal | undefined, jobId: string): void 
 
 function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
-}
-
-function toTimestamp(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isFinite(parsed) ? parsed : Date.now();
 }
 
 function finiteNumber(value: number): boolean {
@@ -406,7 +397,7 @@ export class WaveformPyramidGenerator {
       });
       throwIfCancelled(options.signal, jobId);
 
-      const levelStats = await generateWaveformLevelStats({
+      const analyzed = await generateWaveformLevelStats({
         buffer: request.buffer,
         bucketSizes,
         context,
@@ -414,80 +405,14 @@ export class WaveformPyramidGenerator {
         emitProgress: this.emitProgress,
         throwIfCancelled,
       });
-      const pyramid = createPyramidDataFromLevelStats(request.buffer.sampleRate, request.buffer.duration, levelStats);
-      const stored = await storeWaveformPyramidPayloads({
+      const pyramid = createPyramidDataFromLevelStats(request.buffer.sampleRate, request.buffer.duration, analyzed.levels);
+      return await persistWaveformPyramid({
         artifactStore: this.artifactStore,
-        request,
-        analyzerVersion,
-        generatedAt,
-        context,
-        pyramid,
-        now: this.now,
-        emitProgress: this.emitProgress,
-        throwIfCancelled,
+        request: { ...request, pyramid },
+        packedPayload: analyzed.packedPayload,
+        analyzerVersion, generatedAt, channelLayout, context,
+        now: this.now, emitProgress: this.emitProgress, throwIfCancelled,
       });
-      const manifest = createWaveformPyramidManifest({
-        mediaFileId: request.mediaFileId,
-        sourceFingerprint: request.sourceFingerprint,
-        clipAudioStateHash: request.clipAudioStateHash,
-        sampleRate: request.buffer.sampleRate,
-        channelLayout,
-        duration: request.buffer.duration,
-        levels: stored.levels,
-        payloadLayout: 'packed-pyramid',
-        packedPayload: stored.packedPayload,
-      });
-      const artifactId = await deterministicHashId(`audio:${analysisKind}`, cacheKey);
-
-      this.emitProgress(context, {
-        phase: 'storing-manifest',
-        percent: 98,
-        timestamp: this.now(),
-        message: 'Storing waveform pyramid manifest',
-      });
-      throwIfCancelled(options.signal, jobId);
-
-      const artifactResult = await this.artifactStore.putAnalysisArtifact({
-        id: artifactId,
-        kind: analysisKind,
-        mediaFileId: request.mediaFileId,
-        sourceFingerprint: request.sourceFingerprint,
-        clipAudioStateHash: request.clipAudioStateHash,
-        decoderId: request.decoderId ?? DEFAULT_DECODER_ID,
-        decoderVersion: request.decoderVersion ?? DEFAULT_DECODER_VERSION,
-        analyzerVersion,
-        sampleRate: request.buffer.sampleRate,
-        channelLayout,
-        duration: request.buffer.duration,
-        payloadRefs: stored.payloadRefs,
-        createdAt: toTimestamp(generatedAt),
-        stale: false,
-        warnings: stored.warnings.length > 0 ? stored.warnings : undefined,
-        metadata: {
-          ...(request.metadata ?? {}),
-          analysisKind,
-          cacheKey,
-          waveformManifest: manifest as unknown as JsonValue,
-        },
-      });
-      const analysisRef = createAudioAnalysisManifestRefFromArtifact(artifactResult.artifact);
-
-      this.emitProgress(context, {
-        phase: 'complete',
-        percent: 100,
-        timestamp: this.now(),
-        message: 'Waveform pyramid generation complete',
-      });
-
-      return {
-        jobId,
-        cacheKey,
-        analysisRef,
-        artifact: artifactResult.artifact,
-        manifest,
-        payloadRefs: stored.payloadRefs,
-        warnings: stored.warnings,
-      };
     } catch (error) {
       if (isCancellationError(error) || options.signal?.aborted) {
         const cancellation = isCancellationError(error)
@@ -577,79 +502,13 @@ export class WaveformPyramidGenerator {
       });
       throwIfCancelled(options.signal, jobId);
 
-      const stored = await storeWaveformPyramidPayloads({
+      return await persistWaveformPyramid({
         artifactStore: this.artifactStore,
         request,
-        analyzerVersion,
-        generatedAt,
-        context,
-        pyramid: request.pyramid,
-        now: this.now,
-        emitProgress: this.emitProgress,
-        throwIfCancelled,
+        packedPayload: request.packedPayload,
+        analyzerVersion, generatedAt, channelLayout, context,
+        now: this.now, emitProgress: this.emitProgress, throwIfCancelled,
       });
-      const manifest = createWaveformPyramidManifest({
-        mediaFileId: request.mediaFileId,
-        sourceFingerprint: request.sourceFingerprint,
-        clipAudioStateHash: request.clipAudioStateHash,
-        sampleRate: request.pyramid.sampleRate,
-        channelLayout,
-        duration: request.pyramid.duration,
-        levels: stored.levels,
-        payloadLayout: 'packed-pyramid',
-        packedPayload: stored.packedPayload,
-      });
-      const artifactId = await deterministicHashId(`audio:${analysisKind}`, cacheKey);
-
-      this.emitProgress(context, {
-        phase: 'storing-manifest',
-        percent: 98,
-        timestamp: this.now(),
-        message: 'Storing waveform pyramid manifest',
-      });
-      throwIfCancelled(options.signal, jobId);
-
-      const artifactResult = await this.artifactStore.putAnalysisArtifact({
-        id: artifactId,
-        kind: analysisKind,
-        mediaFileId: request.mediaFileId,
-        sourceFingerprint: request.sourceFingerprint,
-        clipAudioStateHash: request.clipAudioStateHash,
-        decoderId: request.decoderId ?? DEFAULT_DECODER_ID,
-        decoderVersion: request.decoderVersion ?? DEFAULT_DECODER_VERSION,
-        analyzerVersion,
-        sampleRate: request.pyramid.sampleRate,
-        channelLayout,
-        duration: request.pyramid.duration,
-        payloadRefs: stored.payloadRefs,
-        createdAt: toTimestamp(generatedAt),
-        stale: false,
-        warnings: stored.warnings.length > 0 ? stored.warnings : undefined,
-        metadata: {
-          ...(request.metadata ?? {}),
-          analysisKind,
-          cacheKey,
-          waveformManifest: manifest as unknown as JsonValue,
-        },
-      });
-      const analysisRef = createAudioAnalysisManifestRefFromArtifact(artifactResult.artifact);
-
-      this.emitProgress(context, {
-        phase: 'complete',
-        percent: 100,
-        timestamp: this.now(),
-        message: 'Waveform pyramid storage complete',
-      });
-
-      return {
-        jobId,
-        cacheKey,
-        analysisRef,
-        artifact: artifactResult.artifact,
-        manifest,
-        payloadRefs: stored.payloadRefs,
-        warnings: stored.warnings,
-      };
     } catch (error) {
       if (isCancellationError(error) || options.signal?.aborted) {
         throw isCancellationError(error)

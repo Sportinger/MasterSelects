@@ -25,6 +25,14 @@ const GROUP_SHORTCUT_ACTIONS = new Set([
   'tool.navigationGroup',
 ]);
 
+/** Keys 1..4 (the Multi Preview slot keys) pick multicam cameras top to bottom. */
+const MULTICAM_ANGLE_ACTIONS = [
+  'preview.slot1',
+  'preview.slot2',
+  'preview.slot3',
+  'preview.slot4',
+] as const;
+
 const MASK_CONTEXT_SHORTCUT_ACTIONS = [
   'mask.pen',
   'mask.edit',
@@ -167,6 +175,16 @@ export function useTimelineKeyboard({
         } else {
           play();
         }
+        return;
+      }
+
+      // Multicam edit: 1..4 cut to that camera while playing, switch the segment while paused.
+      const multicamAngle = activeComposition?.multicam?.active
+        ? MULTICAM_ANGLE_ACTIONS.findIndex((action) => registry.matches(action, e))
+        : -1;
+      if (multicamAngle >= 0) {
+        if (!claimShortcut(e, MULTICAM_ANGLE_ACTIONS[multicamAngle]!)) return;
+        useTimelineStore.getState().switchMulticamAngle(multicamAngle);
         return;
       }
 

@@ -76,7 +76,6 @@ export function PropertiesPanel() {
   const selectedClipIds = useTimelineStore(state => state.selectedClipIds);
   const primarySelectedClipId = useTimelineStore(state => state.primarySelectedClipId);
   const propertiesSelection = useTimelineStore(state => state.propertiesSelection);
-  const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
   const slotGridActive = useSlotGridPanelStore(selectIsSlotGridPanelActive);
   const masterAudioState = useTimelineStore(state => state.masterAudioState);
@@ -109,6 +108,9 @@ export function PropertiesPanel() {
     ? propertiesSelection.clipId
     : propertiesSelection ? null : fallbackSelectedClipId;
   const selectedClip = clips.find(c => c.id === selectedClipId);
+  // Only a selected clip reads the playhead: every playback tick re-rendered the whole
+  // panel (~8 ms) even while it showed "Select a clip".
+  const playheadPosition = useTimelineStore(state => (selectedClip ? state.playheadPosition : 0));
   const selectedMediaArtifacts = useMediaStore(state => {
     const mediaFileId = selectedClip ? getClipMediaFileId(selectedClip) : undefined;
     return mediaFileId ? state.files.find(file => file.id === mediaFileId) : undefined;

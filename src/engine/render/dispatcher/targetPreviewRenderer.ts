@@ -20,6 +20,7 @@ import { Logger } from '../../../services/logger';
 import { resolveNestedPreviewRenderScale } from '../NestedCompRenderer';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { EffectRenderClockContext } from '../../../effects/_shared/byteTexture';
+import { MulticamPreviewPresentationState } from './multicamPreviewPresentation';
 
 const log = Logger.create('TargetPreviewRenderer');
 
@@ -58,6 +59,7 @@ export class TargetPreviewRenderer {
   private readonly getEffectiveTimelineTime: () => number;
   private readonly getIsDraggingPlayhead: () => boolean;
   private readonly targetBuffers = new Map<string, TargetBuffers>();
+  private readonly multicamPresentation = new MulticamPreviewPresentationState();
 
   constructor(
     deps: RenderDeps,
@@ -118,6 +120,7 @@ export class TargetPreviewRenderer {
 
   releaseTarget(canvasId: string): void {
     this.releaseTargetBuffers(canvasId);
+    this.multicamPresentation.release(canvasId, true);
   }
 
   renderToPreviewCanvas(
@@ -129,30 +132,47 @@ export class TargetPreviewRenderer {
     if (d.isRecovering()) return;
 
     const device = d.getDevice();
-    const canvasContext = d.targetCanvases.get(canvasId)?.context;
+    const canvasTarget = d.targetCanvases.get(canvasId);
+    const canvasContext = canvasTarget?.context;
     if (!device || !canvasContext || !d.compositorPipeline || !d.outputPipeline || !d.sampler || !d.renderTargetManager) return;
 
-    d.compositorPipeline.beginFrame();
-    const layerData = this.layerCollector.collect(layers);
     const targets = useRenderTargetStore.getState().targets;
     const target = targets.get(canvasId);
     const viewportOverride = target?.viewportOverride;
     const baseResolution = d.renderTargetManager.getResolution();
     const maxTextureSize = device.limits.maxTextureDimension2D;
-    const width = Math.max(1, Math.min(maxTextureSize, Math.round(viewportOverride?.width ?? baseResolution.width)));
-    const height = Math.max(1, Math.min(maxTextureSize, Math.round(viewportOverride?.height ?? baseResolution.height)));
     const mediaState = useMediaStore.getState();
     const compositionId = frameContext?.compositionId ?? mediaState.activeCompositionId;
     const composition = compositionId
       ? mediaState.compositions.find((candidate) => candidate.id === compositionId)
       : undefined;
+    const showGrid = target?.showTransparencyGrid ?? false;
+    const multicamFrame = target?.source?.type === 'multicam-angle' && canvasTarget
+      ? this.multicamPresentation.prepare(
+          canvasId,
+          canvasTarget.canvas,
+          { width: composition?.width ?? baseResolution.width, height: composition?.height ?? baseResolution.height },
+          layers,
+          showGrid,
+          device,
+          canvasContext,
+        )
+      : null;
+    if (!multicamFrame) this.multicamPresentation.release(canvasId, true);
+    if (multicamFrame?.unchanged) return;
+    const width = multicamFrame?.width
+      ?? Math.max(1, Math.min(maxTextureSize, Math.round(viewportOverride?.width ?? baseResolution.width)));
+    const height = multicamFrame?.height
+      ?? Math.max(1, Math.min(maxTextureSize, Math.round(viewportOverride?.height ?? baseResolution.height)));
+    d.compositorPipeline.beginFrame();
+    const layerData = this.layerCollector.collect(layers);
     // Layer scales are defined against COMPOSITION pixels even in editor
     // viewports: keeping the panel size as reference inflated sourcePixelScale
     // by comp/panel (e.g. ~4.8x in a 400px panel), blowing 3D footprints far
     // past the editor camera. camera.viewport stays the panel size.
     const referenceWidth = composition?.width ?? width;
     const referenceHeight = composition?.height ?? height;
-    const usesLocalBuffers = Boolean(viewportOverride);
+    const usesLocalBuffers = Boolean(viewportOverride) || Boolean(multicamFrame);
     if (!usesLocalBuffers) this.releaseTargetBuffers(canvasId);
     const localBuffers = usesLocalBuffers
       ? this.getTargetBuffers(canvasId, device, width, height)
@@ -176,13 +196,11 @@ export class TargetPreviewRenderer {
       effectRenderClock,
     );
 
-    const showGrid = target?.showTransparencyGrid ?? false;
-
     d.outputPipeline.updateResolution(width, height);
 
     if (layerData.length === 0) {
       if (this.getIsDraggingPlayhead()) {
-        this.recordMainPreviewFrame('target-empty-hold');
+        if (!multicamFrame) this.recordMainPreviewFrame('target-empty-hold');
         return;
       }
       const commandEncoder = device.createCommandEncoder();
@@ -191,7 +209,7 @@ export class TargetPreviewRenderer {
         const blackView = blackTex.createView();
         const blackBindGroup = d.outputPipeline.createOutputBindGroup(d.sampler, blackView, showGrid ? 'grid' : 'normal');
         d.outputPipeline.renderToCanvas(commandEncoder, canvasContext, blackBindGroup);
-        this.recordMainPreviewFrame('target-empty');
+        if (!multicamFrame) this.recordMainPreviewFrame('target-empty');
       }
       device.queue.submit([commandEncoder.finish()]);
       return;
@@ -310,8 +328,9 @@ export class TargetPreviewRenderer {
         showGrid ? 'grid' : 'normal',
       );
       d.outputPipeline.renderToCanvas(commandEncoder, canvasContext, outputBindGroup);
-      this.recordMainPreviewFrame('target-canvas', layerData);
+      if (!multicamFrame) this.recordMainPreviewFrame('target-canvas', layerData);
       device.queue.submit([commandEncoder.finish()]);
+      if (multicamFrame) this.multicamPresentation.recordPresented(canvasId, multicamFrame);
       return;
     }
 
@@ -376,8 +395,9 @@ export class TargetPreviewRenderer {
 
     const outputBindGroup = d.outputPipeline!.createOutputBindGroup(d.sampler!, readView, showGrid ? 'grid' : 'normal');
     d.outputPipeline!.renderToCanvas(commandEncoder, canvasContext, outputBindGroup);
-    this.recordMainPreviewFrame('target-canvas', layerData);
+    if (!multicamFrame) this.recordMainPreviewFrame('target-canvas', layerData);
 
     device.queue.submit([commandEncoder.finish()]);
+    if (multicamFrame) this.multicamPresentation.recordPresented(canvasId, multicamFrame);
   }
 }

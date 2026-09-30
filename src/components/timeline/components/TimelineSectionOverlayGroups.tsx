@@ -4,6 +4,8 @@ import { TimelineToolOverlayLayer } from '../tools/TimelineToolOverlayLayer';
 import { AIActionOverlays } from './AIActionOverlays';
 import { ParentChildLinksOverlay } from './ParentChildLinksOverlay';
 import { TransitionOverlays } from './TransitionOverlays';
+import { LinkedSelectionOutline } from './LinkedSelectionOutline';
+import type { ClipTrimState } from '../types';
 
 type TransitionOverlaysProps = ComponentProps<typeof TransitionOverlays>;
 type TimelineToolOverlayLayerProps = ComponentProps<typeof TimelineToolOverlayLayer>;
@@ -12,6 +14,7 @@ type ParentChildLinksOverlayProps = ComponentProps<typeof ParentChildLinksOverla
 interface TimelineSectionOverlayGroupsProps {
   activeJunction: TransitionOverlaysProps['activeJunction'];
   clipDrag: ParentChildLinksOverlayProps['clipDrag'];
+  clipTrim: ClipTrimState | null;
   clips: TimelineClip[];
   duration: number;
   getExpandedTrackHeight: TransitionOverlaysProps['getExpandedTrackHeight'];
@@ -31,6 +34,7 @@ interface TimelineSectionOverlayGroupsProps {
 export function TimelineSectionOverlayGroups({
   activeJunction,
   clipDrag,
+  clipTrim,
   clips,
   duration,
   getExpandedTrackHeight,
@@ -50,6 +54,8 @@ export function TimelineSectionOverlayGroups({
 
   return (
     <>
+      <LinkedSelectionOutline clips={clips} tracks={tracks} clipDrag={clipDrag} clipTrim={clipTrim}
+        timeToPixel={timeToPixel} getTrackHeight={getTrackHeight} getTrackBaseHeight={getTrackBaseHeight} />
       <TransitionOverlays
         activeJunction={activeJunction}
         clips={clips}

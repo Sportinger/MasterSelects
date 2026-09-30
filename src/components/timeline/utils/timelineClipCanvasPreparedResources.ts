@@ -151,16 +151,27 @@ export function createTimelineClipCanvasWorkerPreparedResourcesByClipId(
       1,
       input.timeToPixel(resourceClip.startTime + resourceClip.duration) - input.timeToPixel(resourceClip.startTime),
     );
-    const waveform = input.waveformsEnabled
+    const absoluteX = input.timeToPixel(resourceClip.startTime);
+    const visibleAbsLeft = Math.max(absoluteX, input.canvasOffsetX, input.scrollX - input.renderOverscanPx);
+    const visibleAbsRight = Math.min(
+      absoluteX + clipWidth,
+      input.canvasOffsetX + input.cssWidth,
+      input.scrollX + input.viewportWidth + input.renderOverscanPx,
+    );
+    // Worker eligibility uses the full backing canvas, including its overscan.
+    const hasVisibleAudio = absoluteX + clipWidth > input.canvasOffsetX
+      && absoluteX < input.canvasOffsetX + input.cssWidth;
+    const waveform = input.waveformsEnabled && hasVisibleAudio
       ? createTimelineClipCanvasWorkerWaveformResource(
         resourceClip,
         input.waveformPyramids,
         input.audioDisplayMode,
         input.height,
         input.timeToPixel,
+        clip,
       )
       : undefined;
-    const spectrogram = input.waveformsEnabled
+    const spectrogram = input.waveformsEnabled && hasVisibleAudio
       ? createTimelineClipCanvasWorkerSpectrogramResource(
         resourceClip,
         input.spectrogramTileSets,
@@ -175,13 +186,6 @@ export function createTimelineClipCanvasWorkerPreparedResourcesByClipId(
       clipWidth: Math.max(1, Math.round(clipWidth)),
       showFaceRanges: input.showFaceRanges,
     });
-    const absoluteX = input.timeToPixel(resourceClip.startTime);
-    const visibleAbsLeft = Math.max(absoluteX, input.canvasOffsetX, input.scrollX - input.renderOverscanPx);
-    const visibleAbsRight = Math.min(
-      absoluteX + clipWidth,
-      input.canvasOffsetX + input.cssWidth,
-      input.scrollX + input.viewportWidth + input.renderOverscanPx,
-    );
     const visibleStartRatio = Math.max(0, Math.min(1, (visibleAbsLeft - absoluteX) / clipWidth));
     const visibleEndRatio = Math.max(visibleStartRatio, Math.min(1, (visibleAbsRight - absoluteX) / clipWidth));
     const midiPreview = createTimelineClipCanvasWorkerMidiPreviewResource(

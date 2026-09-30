@@ -76,6 +76,9 @@ export type {
 
 export interface TimelineClipCanvasWorkerEligibilityInput {
   clips: readonly TimelineClipCanvasWorkerPaintClipInput[];
+  canvasOffsetX?: number;
+  cssWidth?: number;
+  timeToPixel?: (time: number) => number;
   waveformsEnabled?: boolean;
   audioDisplayMode?: 'compact' | 'detailed' | 'spectral';
   preparedResourcesByClipId?: ReadonlyMap<string, TimelineClipCanvasWorkerPreparedClipResources>;
@@ -383,6 +386,13 @@ export function getTimelineClipCanvasWorkerEligibility(
 
   for (const clip of input.clips) {
     const preparedResources = input.preparedResourcesByClipId?.get(clip.id);
+    if (input.timeToPixel && input.canvasOffsetX !== undefined && input.cssWidth !== undefined) {
+      const trim = preparedResources?.trimVisuals;
+      const left = trim?.body.x ?? input.timeToPixel(clip.startTime) - input.canvasOffsetX;
+      const width = trim?.body.width ?? input.timeToPixel(clip.startTime + clip.duration) - input.timeToPixel(clip.startTime);
+      const ghostVisible = trim?.sourceExtensionGhosts?.some(ghost => ghost.x + ghost.width > 0 && ghost.x < input.cssWidth!);
+      if (!ghostVisible && (left + width <= 0 || left >= input.cssWidth)) continue;
+    }
     const hasPassiveDecorationsForClip = input.passiveDecorationClipIds
       ? input.passiveDecorationClipIds.has(clip.id)
       : Boolean(input.hasPassiveDecorations);

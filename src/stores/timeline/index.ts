@@ -25,6 +25,7 @@ import { createSplatEffectorClipSlice } from './splatEffectorClipSlice';
 import { createClipEffectSlice } from './clipEffectSlice';
 import { createColorCorrectionSlice } from './colorCorrectionSlice';
 import { createLinkedGroupSlice } from './linkedGroupSlice';
+import { createMulticamSlice } from './multicamSlice';
 import { createDownloadClipSlice } from './downloadClipSlice';
 import { createAudioEditSlice } from './audioEditSlice';
 import { createStemSeparationSlice } from './stemSeparationSlice';
@@ -103,6 +104,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const clipEffectActions = createClipEffectSlice(set, get);
     const colorCorrectionActions = createColorCorrectionSlice(set, get);
     const linkedGroupActions = createLinkedGroupSlice(set, get);
+    const multicamActions = createMulticamSlice(set, get);
     const downloadClipActions = createDownloadClipSlice(set, get);
     const audioEditActions = createAudioEditSlice(set, get);
     const stemSeparationActions = createStemSeparationSlice(set, get);
@@ -421,6 +423,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...clipEffectActions,
       ...colorCorrectionActions,
       ...linkedGroupActions,
+      ...multicamActions,
       ...downloadClipActions,
       ...audioEditActions,
       ...stemSeparationActions,

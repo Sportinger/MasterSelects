@@ -88,7 +88,7 @@ describe('two-tier scrub cache', () => {
     cache.cachePlaybackFrame(video);
     expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(1);
     callback(0, { mediaTime: 1.25 } as VideoFrameCallbackMetadata);
-    expect(capture).toHaveBeenCalledWith(video, 1.25);
+    expect(capture).toHaveBeenCalledWith(video, 1.25, { offMainThread: true });
     expect(video.requestVideoFrameCallback).toHaveBeenCalledTimes(2);
     Object.assign(video, { paused: true });
     listeners.get('pause')?.();

@@ -26,6 +26,7 @@ import { ColorNodeList } from './ColorNodeList';
 import { ColorToolbar } from './ColorToolbar';
 import { ColorVersionRow } from './ColorVersionRow';
 import { PrimaryColorControls } from './PrimaryColorControls';
+import { ResolveExposureControls } from './ResolveExposureControls';
 import { WheelColorControls } from './WheelColorControls';
 import {
   getControlSections,
@@ -43,7 +44,7 @@ interface ColorEditorProps {
   clipId: string;
   workspace?: boolean;
   surface?: 'full' | 'nodes' | 'controls';
-  controlSet?: 'auto' | 'primary' | 'wheels';
+  controlSet?: 'auto' | 'primary' | 'wheels' | 'exposure';
   onExitWorkspace?: (viewMode: ColorViewMode) => void;
 }
 
@@ -398,7 +399,20 @@ export function ColorEditor({
               {drivenChannels.length > 0 && <p className="effect-info" role={sourceError ? 'alert' : undefined}>
                 {sourceError || `Node-controlled: ${drivenChannels.map(def => def.label).join(', ')}. Edit sources in Properties / Effects or Nodes.`}
               </p>}
-              {useWheelControls
+              {controlSet === 'exposure'
+                ? (
+                  <ResolveExposureControls
+                    clipId={clipId}
+                    node={selectedNode}
+                    isParamDriven={isParamDriven}
+                    createProperty={createProperty}
+                    getParamValue={getAnimatedParamValue}
+                    setParam={setParam}
+                    onBatchStart={handleBatchStart}
+                    onBatchEnd={handleBatchEnd}
+                  />
+                )
+                : useWheelControls
                 ? (
                   <WheelColorControls
                     clipId={clipId}

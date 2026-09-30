@@ -117,6 +117,16 @@ export class VideoSyncWarmupCoordinator {
 
   pruneUpcomingPreplays(ctx: FrameContext, isInteractivePreview: boolean): void {
     for (const [video, state] of this.deps.warmups.listUpcomingPreplays()) {
+      if (state.nestedSince !== undefined) {
+        // Nested pre-rolls are handed over by the nested sync; only drop stale ones here.
+        const stale = !ctx.isPlaying || isInteractivePreview || performance.now() - state.nestedSince > 2000;
+        if (stale) {
+          if (!video.paused) video.pause();
+          if (video.playbackRate !== 1) video.playbackRate = 1;
+          this.deps.warmups.deleteUpcomingPreplay(video);
+        }
+        continue;
+      }
       const clip = ctx.clips.find((candidate) => candidate.id === state.clipId);
       const lead = clip ? clip.startTime - ctx.playheadPosition : Number.POSITIVE_INFINITY;
       const isActive = !!clip &&

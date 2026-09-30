@@ -88,7 +88,11 @@ export function resolveRuntimeLayerBuilderVideoSource(params: {
       ? undefined
       : params.selectPausedVisualProvider(clip.source, runtimeProvider, targetTime, {
           preferFreshRuntime: keepScrubRuntimeActive,
-        });
+        })
+        // A codec provider is the only decoder of its media (MXF has no HTML
+        // fallback): keep the layer while it seeks, so the preview holds its last
+        // picture instead of clearing to black.
+        ?? (forceTurboResRuntimeFrame && runtimeProvider ? runtimeProvider : undefined);
   const presentedVisualProvider = reverseWorkerRuntimeSource && !presentReverseRuntimeFrame
     ? undefined
     : visualProvider;

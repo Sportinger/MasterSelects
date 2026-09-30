@@ -288,6 +288,10 @@ The active composition and clip selection (including the focused Properties clip
 
 ## Save Status
 
+Manual Save waits for an in-progress project or timeline synchronization before
+capturing the complete state. Interval autosave continues to skip partially
+restored state. A waiting save is cancelled if another project is opened.
+
 The toolbar shows an uncreated project, unsaved changes, an active write, a failed save, or the last successful save time for the current session. Failures remain visible until a successful retry; clicking the status invokes Save. Newly edited state remains unsaved even when an earlier in-flight write succeeds.
 
 Local development builds do not display the browser's unsaved-work confirmation

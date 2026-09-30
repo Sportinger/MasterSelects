@@ -14,6 +14,15 @@ import type { TimelineClipCanvasWorkerPreparedClipResources } from './timelineCl
 
 const MAX_RENDERED_WAVEFORM_CHANNELS = 2;
 
+type PreparedWaveform = NonNullable<TimelineClipCanvasWorkerPreparedClipResources['waveform']>;
+// Numeric source data survives fresh paint projections and source-ref enrichment.
+// Keep only a few display/trim variants; workers clone columns before transfer.
+const MAX_PREPARED_VARIANTS = 8;
+const preparedWaveforms = new WeakMap<object, Array<{
+  dependencies: readonly unknown[];
+  resource: PreparedWaveform;
+}>>();
+
 export type TimelineClipCanvasWaveformPyramidMap = ReadonlyMap<string, TimelineWaveformPyramid | null>;
 
 export interface TimelineClipCanvasWaveformResourceClipInput {
@@ -66,6 +75,7 @@ export function createTimelineClipCanvasWorkerWaveformResource(
   mode: TimelineAudioDisplayMode | undefined,
   height: number,
   timeToPixel: (time: number) => number,
+  cacheKey?: object,
 ): TimelineClipCanvasWorkerPreparedClipResources['waveform'] | undefined {
   if (!isTimelineClipCanvasAudioClip(clip) || mode === 'spectral') return undefined;
 
@@ -83,6 +93,16 @@ export function createTimelineClipCanvasWorkerWaveformResource(
   const outPoint = Math.max(inPoint + 0.001, Math.min(naturalDuration, clip.outPoint ?? inPoint + clip.duration));
   const workerMode = mode === 'compact' ? 'compact' : 'detailed';
   const pixelsPerSecond = Math.max(1, timeToPixel(1) - timeToPixel(0));
+  const dependencies = [
+    clip.waveform, clip.waveformChannels, pyramid, workerMode, height < 42, width,
+    naturalDuration, inPoint, outPoint, pixelsPerSecond,
+  ];
+  const sourceKey = pyramid ?? clip.waveformChannels ?? clip.waveform ?? cacheKey;
+  const variants = sourceKey ? preparedWaveforms.get(sourceKey) : undefined;
+  const cached = variants?.find(entry => dependencies.every((value, index) => Object.is(value, entry.dependencies[index])));
+  if (cached) {
+    return cached.resource;
+  }
   const channelIndexes = resolveTimelineClipCanvasWaveformChannelIndexes(pyramid, clip.waveformChannels, height);
   const channels: number[][] = [];
   let columnCount = 0;
@@ -124,11 +144,18 @@ export function createTimelineClipCanvasWorkerWaveformResource(
   if (channels.length === 0 || columnCount === 0) return undefined;
 
   channels.forEach((channelColumns) => columns.push(...channelColumns));
-  return {
+  const resource: PreparedWaveform = {
     kind: 'waveform',
     columns,
     columnCount,
     channelCount: channels.length,
     mode: workerMode,
   };
+  if (sourceKey) {
+    const next = variants ?? [];
+    if (next.length >= MAX_PREPARED_VARIANTS) next.shift();
+    next.push({ dependencies, resource });
+    preparedWaveforms.set(sourceKey, next);
+  }
+  return resource;
 }

@@ -9,6 +9,9 @@ import type { TextClipProperties } from '../../types/text';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { ClipTransform } from '../../types/timelineCore';
 import { useEngineStore, type GaussianSplatLoadProgressEntry } from '../../stores/engineStore';
+import { useTimelineStore } from '../../stores/timeline';
+import { renderHostPort } from '../../services/render/renderHostPort';
+import { resolvePreviewRenderQuality } from '../../hooks/engine/useEngineResolutionSync';
 import type { MediaFile } from '../../stores/mediaStore';
 import type { PreviewQuality } from '../../stores/settingsStore';
 import type { SceneCameraConfig, SceneViewport } from '../../engine/scene/types';
@@ -222,6 +225,21 @@ export function PreviewCanvasMount({
   onOpenStats,
 }: PreviewCanvasMountProps) {
   const rotoState = useSyncExternalStore(rotoPreview.subscribe, rotoPreview.snapshot);
+  // The main renderer's output pass scales to any canvas size: back the canvas at
+  // the render resolution instead of comp size, so a 4K comp played at 1080p does
+  // not write a 4K swapchain every frame. Worker hosts own a transferred canvas.
+  const previewInMotion = useTimelineStore((state) => state.isPlaying || state.isDraggingPlayhead);
+  const canvasBacking = renderHostPort.getTelemetry().mode === 'main'
+    ? (() => {
+        const quality = resolvePreviewRenderQuality(
+          effectiveResolution.width, effectiveResolution.height, previewQuality, previewInMotion,
+        );
+        return {
+          width: Math.max(1, Math.round(effectiveResolution.width * quality)),
+          height: Math.max(1, Math.round(effectiveResolution.height * quality)),
+        };
+      })()
+    : effectiveResolution;
   const rotoActive = !!rotoState && rotoState.compositionId === displayedCompId && rotoState.clipId === selectedClip?.id;
   const layerEditTouchBridge = useTouchMouseBridge<HTMLCanvasElement>();
   const preview3DMediaDrop = usePreview3DMediaDrop({
@@ -270,8 +288,8 @@ export function PreviewCanvasMount({
             <>
               <canvas
                 ref={canvasRef}
-                width={effectiveResolution.width}
-                height={effectiveResolution.height}
+                width={canvasBacking.width}
+                height={canvasBacking.height}
                 className="preview-canvas"
                 data-testid="preview-canvas"
                 data-live-feedback-composition-id={liveFeedbackCompositionId ?? undefined}

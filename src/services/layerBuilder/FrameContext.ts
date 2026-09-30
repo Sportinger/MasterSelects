@@ -11,6 +11,7 @@ import { getPlayheadPosition } from './PlayheadState';
 import type { Composition, MediaFile } from '../../stores/mediaStore/types';
 import { getTrackAudioMuted, getTrackAudioSolo, hasAnyAudibleSolo } from '../audio/audioGraphRouteSettings';
 import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
+import { computeRenderVisibleVideoTrackIds } from './occlusionCulling';
 import {
   applyMotionParentTransformToClipTransform,
   createTimelineMotionParentEvaluation,
@@ -216,6 +217,7 @@ export function createFrameContext(playheadPositionOverride?: number): FrameCont
   let _videoTracks: TimelineTrack[] | null = null;
   let _audioTracks: TimelineTrack[] | null = null;
   let _visibleVideoTrackIds: Set<string> | null = null;
+  let _renderVisibleVideoTrackIds: Set<string> | null = null;
   let _unmutedAudioTrackIds: Set<string> | null = null;
   let _anyVideoSolo: boolean | null = null;
   let _anyAudioSolo: boolean | null = null;
@@ -305,6 +307,16 @@ export function createFrameContext(playheadPositionOverride?: number): FrameCont
         }
       }
       return _visibleVideoTrackIds;
+    },
+
+    get renderVisibleVideoTrackIds(): Set<string> {
+      if (_renderVisibleVideoTrackIds === null) {
+        const frame = activeComposition?.width && activeComposition.height
+          ? { width: activeComposition.width, height: activeComposition.height }
+          : null;
+        _renderVisibleVideoTrackIds = computeRenderVisibleVideoTrackIds(this, frame);
+      }
+      return _renderVisibleVideoTrackIds;
     },
 
     get unmutedAudioTrackIds(): Set<string> {
@@ -402,6 +414,15 @@ export function getMediaFileForClip(ctx: FrameContext, clip: TimelineClip): Medi
  */
 export function isVideoTrackVisible(ctx: FrameContext, trackId: string): boolean {
   return ctx.visibleVideoTrackIds.has(trackId);
+}
+
+/**
+ * Check if a video track can contribute pixels to the rendered frame: visible
+ * and not hidden beneath a lasting full-frame opaque track (occlusion culling).
+ * Audio decisions must keep using isVideoTrackVisible.
+ */
+export function isVideoTrackRenderVisible(ctx: FrameContext, trackId: string): boolean {
+  return (ctx.renderVisibleVideoTrackIds ?? ctx.visibleVideoTrackIds).has(trackId);
 }
 
 /**

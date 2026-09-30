@@ -327,7 +327,10 @@ export async function loadAudioBufferForScrub(args: {
 
     // Decode to AudioBuffer
     const audioContext = getAudioContext();
-    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0)); // Clone to avoid detached buffer
+    // Every resolver branch returns newly owned bytes. Let the decoder consume
+    // them directly; copying a five-minute WAV blocks the UI and doubles its
+    // temporary encoded-audio allocation when several tracks warm together.
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
 
     const retained = cacheDecodedAudioBuffer(mediaFileId, audioBuffer);
     if (!retained) {

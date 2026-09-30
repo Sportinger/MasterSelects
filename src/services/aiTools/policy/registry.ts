@@ -601,6 +601,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
 
   // ── MUTATING LOW ──────────────────────────────────────────────────────
   ['createTrack', mutatingLow()],
+  ['renameTrack', mutatingLow()],
   ['setTrackVisibility', mutatingLow()],
   ['setTrackMuted', mutatingLow()],
   ['createMediaFolder', mutatingLow()],

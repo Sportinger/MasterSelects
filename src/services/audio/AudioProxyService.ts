@@ -1,4 +1,3 @@
-import { withProjectArtifactWriteBatch } from '../project/projectArtifactWriteBatch';
 import type { MediaFile, ProxyStatus } from '../../stores/mediaStore/types';
 import { encodeAudioBufferToWavBlob } from '../../engine/audio/AudioFileEncoder';
 import { projectFileService } from '../projectFileService';
@@ -86,7 +85,7 @@ async function prebuildMxfAudioProxy(
 ): Promise<Blob | null | 'handled'> {
   if (projectFileService.isProjectOpen() && !callbacks.force
     && await projectFileService.hasProxyAudio(storageKey)) {
-    return null; // the batch path reports 'ready'
+    return null; // the generation path reports 'ready'
   }
   const sourceFile = await resolveSourceFile(mediaFile);
   if (!sourceFile || !await isMxfFile(sourceFile)) return null;
@@ -129,14 +128,14 @@ export async function ensureAudioProxyForMediaFile(
 
   let readyUpdate: AudioProxyGenerationUpdate | undefined;
   const job = (async () => {
-    // MXF PCM extraction reads the whole camera file (minutes for long clips). It runs
-    // before the artifact write batch so project saves are not held back meanwhile.
+    // Source extraction and encoding run before the finished proxy is stored.
+    // Neither may hold the project's artifact write batch and block a save.
     const prebuilt = await prebuildMxfAudioProxy(mediaFile, storageKey, callbacks);
     if (prebuilt === 'handled') return;
-    await withProjectArtifactWriteBatch(() => generateAudioProxyInBatch(prebuilt));
+    await generateAudioProxy(prebuilt);
   })();
 
-  async function generateAudioProxyInBatch(prebuiltWav: Blob | null): Promise<void> {
+  async function generateAudioProxy(prebuiltWav: Blob | null): Promise<void> {
     callbacks.onUpdate?.({ status: 'generating', progress: 2, storageKey });
 
     if (projectFileService.isProjectOpen() && !callbacks.force) {

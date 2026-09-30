@@ -1,0 +1,71 @@
+.color-workspace-wheels .color-inspector:has(.resolve-exposure) {
+  padding: 0;
+  overflow: auto;
+}
+
+.resolve-exposure {
+  height: 100%;
+  min-height: 0;
+  background: #28282e;
+  color: #e6e7e9;
+}
+
+.resolve-exposure-row {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  border-bottom: 1px solid #101115;
+  background: #2f3036;
+}
+
+.resolve-exposure-row .resolve-primary-parameter {
+  min-height: 35px;
+  grid-template-columns: 18px minmax(0, 1fr) 58px;
+  justify-content: stretch;
+  gap: 0 7px;
+  padding-inline: 10px 12px;
+}
+
+.resolve-exposure-row .resolve-primary-parameter > .midi-parameter-label {
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
+.resolve-exposure-row .resolve-primary-parameter .draggable-number-anchor {
+  width: 58px;
+  min-width: 58px;
+}
+
+.resolve-exposure-row .resolve-primary-parameter .draggable-number,
+.resolve-exposure-row .resolve-primary-parameter .draggable-number-input {
+  font-size: 14px;
+}
+
+.resolve-exposure-row .resolve-primary-parameter > i {
+  grid-column: 3;
+}
+
+.resolve-primary-parameter-keyframe {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.resolve-primary-parameter-keyframe .keyframe-toggle.recording,
+.resolve-primary-parameter-keyframe .keyframe-toggle.has-keyframes {
+  color: var(--accent, #38bdf8);
+}
+
+@container color-controls (max-width: 668px) {
+  .resolve-exposure-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container color-controls (max-width: 300px) {
+  .resolve-exposure-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

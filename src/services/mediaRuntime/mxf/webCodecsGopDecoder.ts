@@ -46,6 +46,15 @@ export class WebCodecsGopDecoder implements GopDecoder {
     this.decoder.configure(this.config);
   }
 
+  restartAtKey(): Promise<void> {
+    if (this.decoder.state !== 'configured') {
+      this.reset();
+      return Promise.resolve();
+    }
+    // After flush() the decoder requires a key chunk, which is where the engine resumes.
+    return this.decoder.flush();
+  }
+
   close(): void {
     if (this.decoder.state !== 'closed') this.decoder.close();
   }

@@ -1,5 +1,12 @@
 let projectStoreSyncDepth = 0;
 let projectStoreDirtyMarkSuppressionDepth = 0;
+const syncWaiters = new Set<() => void>();
+
+/** Wake after the outermost restore/save synchronization releases its guard. */
+export function waitForProjectStoreSync(): Promise<void> {
+  if (!isProjectStoreSyncInProgress()) return Promise.resolve();
+  return new Promise(resolve => { syncWaiters.add(resolve); });
+}
 
 export interface ProjectStoreSyncGuardOptions {
   suppressDirtyMarks?: boolean;
@@ -38,5 +45,9 @@ export async function withProjectStoreSyncGuard<T>(
       projectStoreDirtyMarkSuppressionDepth = Math.max(0, projectStoreDirtyMarkSuppressionDepth - 1);
     }
     projectStoreSyncDepth = Math.max(0, projectStoreSyncDepth - 1);
+    if (projectStoreSyncDepth === 0) {
+      for (const resolve of syncWaiters) resolve();
+      syncWaiters.clear();
+    }
   }
 }

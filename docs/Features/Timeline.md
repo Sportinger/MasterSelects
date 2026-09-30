@@ -16,6 +16,12 @@ Section resize observations update only the element that changed, so an audio or
 
 Track rows mount within the vertical viewport with overscan, while stable interaction callbacks and selective header subscriptions avoid rebuilding unrelated rows during scrubbing. Property selection and video warmup queries reuse indexed timeline data. Large native HUDs remain ordinary editable clips and nested compositions.
 
+Scrolling prepares waveform columns only for clips intersecting the canvas viewport and its overscan, and worker eligibility checks the same canvas bounds. Columns are cached by their immutable source data, so new UI clip projections and resizing within the same channel layout can reuse them; the cache retains a bounded set of trim/display variants per source. Trims, zoom, channel layout, source analysis and waveform edits invalidate those columns. Dashed nested-composition outlines generate paths only across the canvas window, keeping long camera compositions responsive at high timeline zoom without adding borders at viewport edges.
+
+The main-thread waveform painter also reuses unchanged waveform rasters during selection, hover, and other UI redraws. Its runtime-only LRU is capped at 32 MB and 512 entries; eviction immediately releases backing pixels. Canvases stay below 4096 pixels per dimension, with the existing Linux/Mesa software canvas policy and direct painting fallback for oversized or unsupported surfaces.
+
+Cached waveforms appear immediately; missing source analysis loads progressively. A canvas that has already painted on the main thread retains that backend as more waveforms arrive, preserving the visible image instead of replacing it for a worker startup. Canvases eligible for worker rendering on mount still use the worker.
+
 Dense keyframe rows share an immutable per-clip segment index: drawing rotation-path badges no longer filters and sorts the full solve for every diamond. Selection, outgoing rotation modes and the last keyframe's incoming easing target keep their existing behavior. Individual keyframe elements still have a mount/paint cost when all are visible.
 
 Generated graphics without audio do not allocate silent composition mixdowns or media decoders. Generated-canvas, motion and mask resources have explicit cleanup and bounded reuse. These changes reduce idle work and memory pressure; decoding and compositing many simultaneously visible layers still have a real cost.
@@ -336,6 +342,9 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 ### Multicam
 - Sync via Audio is available for selected audio/video pairs.
 - Linked group movement preserves offsets so sync timing stays intact.
+- Multicam cut mode (the **Multicam** toggle in the Multi Preview) treats every video track with plain camera clips (speed 1, not reversed) as one camera angle, top track = key 1. The first activation rebuilds the program: at every moment only the topmost camera with material keeps a clip, the other camera tracks are cut out, and all clips of the composition, including the synchronized audio, join one linked group. The camera sources are stored on the composition, so a cut-out range can be refilled from the original material later.
+- With cut mode on, keys `1`-`4` switch cameras. During playback a key cuts at the playhead; the new camera runs until the next existing cut. While paused a key switches the whole segment under the playhead and keeps its boundaries. A camera fills only the part of the range where it has material, and pressing the key of the camera already on air does nothing. Every switch is one undo step.
+- Program pieces are ordinary clips that keep the camera clip's transform, effects, and masks, so trimming, grading, and export work unchanged. Turning the toggle off keeps the edit and gives the number keys back to their normal shortcuts; turning it on again continues on the same program without rebuilding it.
 
 ### Pick Whip Parenting
 - Clips and tracks support parent-child relationships.
@@ -492,3 +501,5 @@ The main hooks are `useClipDrag`, `useClipTrim`, `useClipFade`, `useTimelineKeyb
 - [Slot Grid](./Slot-Grid.md)
 - [Preview](./Preview.md)
 - [Audio](./Audio.md)
+
+Linked clip selections use a shared outline that follows the outer contour of the selected clip surfaces, including staggered edges and gaps. Individual selections retain their normal clip outline. Video and audio sections draw their respective portions independently.

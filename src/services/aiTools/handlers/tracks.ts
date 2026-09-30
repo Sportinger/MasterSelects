@@ -14,12 +14,14 @@ export async function handleCreateTrack(
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const type = args.type as 'video' | 'audio';
+  const name = typeof args.name === 'string' ? args.name.trim() : '';
   const mutationSnapshot = captureMutationEntitySnapshot(
     'track',
     useTimelineStore.getState().tracks,
   );
   const trackId = timelineStore.addTrack(type);
-  const track = timelineStore.tracks.find(t => t.id === trackId);
+  if (name) useTimelineStore.getState().renameTrack(trackId, name);
+  const track = useTimelineStore.getState().tracks.find(t => t.id === trackId);
 
   return {
     success: true,
@@ -27,6 +29,35 @@ export async function handleCreateTrack(
       trackId,
       trackName: track?.name,
       trackType: type,
+      ...describeMutationEntities(
+        mutationSnapshot,
+        useTimelineStore.getState().tracks,
+      ),
+    },
+  };
+}
+
+export async function handleRenameTrack(
+  args: Record<string, unknown>,
+  timelineStore: TimelineStore
+): Promise<ToolResult> {
+  const trackId = args.trackId as string;
+  const name = typeof args.name === 'string' ? args.name.trim() : '';
+  if (!name) return { success: false, error: 'Track name must not be empty' };
+  if (!timelineStore.tracks.some(t => t.id === trackId)) {
+    return { success: false, error: `Track not found: ${trackId}` };
+  }
+
+  const mutationSnapshot = captureMutationEntitySnapshot(
+    'track',
+    useTimelineStore.getState().tracks,
+  );
+  useTimelineStore.getState().renameTrack(trackId, name);
+  return {
+    success: true,
+    data: {
+      trackId,
+      trackName: name,
       ...describeMutationEntities(
         mutationSnapshot,
         useTimelineStore.getState().tracks,

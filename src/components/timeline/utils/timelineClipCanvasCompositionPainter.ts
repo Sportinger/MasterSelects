@@ -3,6 +3,7 @@ import { hasTimelineClipCanvasCompositionDecorations } from './timelineClipCanva
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
 import { drawTimelineClipCanvasAudioWaveform } from './timelineClipCanvasWaveformPainter';
 import { drawTimelineClipCanvasCompositionSegmentThumbnails } from './timelineClipCanvasCompositionSegmentsPainter';
+import { drawTimelineClipCanvasCompositionOutline } from './timelineClipCanvasCompositionOutline';
 
 interface DrawTimelineClipCanvasCompositionDecorationsProps {
   maxThumbSlots: number;
@@ -10,25 +11,8 @@ interface DrawTimelineClipCanvasCompositionDecorationsProps {
   thumbSlotPx: number;
   thumbnailHeight: number;
   thumbnailsEnabled?: boolean;
-}
-
-function drawCanvasCompositionOutline(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  top: number,
-  w: number,
-  h: number,
-): void {
-  if (w < 2 || h < 2) return;
-  ctx.save();
-  ctx.strokeStyle = 'rgba(251, 146, 60, 0.9)';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 4]);
-  ctx.beginPath();
-  ctx.roundRect(x + 1, top + 1, Math.max(0, w - 2), Math.max(0, h - 2), Math.min(4, h / 4));
-  ctx.stroke();
-  ctx.setLineDash([]);
-  ctx.restore();
+  visibleLeft?: number;
+  visibleRight?: number;
 }
 
 function drawCanvasNestedBoundaries(
@@ -139,7 +123,11 @@ export function drawTimelineClipCanvasCompositionDecorations(
   ctx.restore();
 
   if (clip.isComposition || clip.compositionId) {
-    drawCanvasCompositionOutline(ctx, x, top, w, h);
+    drawTimelineClipCanvasCompositionOutline({
+      ctx, x, top, width: w, height: h,
+      visibleLeft: props.visibleLeft ?? x,
+      visibleRight: props.visibleRight ?? x + w,
+    });
   }
 
   return thumbnailDrawCount;

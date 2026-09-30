@@ -216,6 +216,7 @@ function createCanvasContextMock(): CanvasRenderingContext2D {
     lineTo: vi.fn(),
     quadraticCurveTo: vi.fn(),
     arc: vi.fn(),
+    arcTo: vi.fn(),
     setLineDash: vi.fn(),
     createLinearGradient: vi.fn(() => ({ addColorStop: vi.fn() })),
   } as unknown as CanvasRenderingContext2D;
@@ -849,21 +850,15 @@ describe('TimelineClipCanvas worker runtime', () => {
     expect(container.querySelector('[data-clip-type="composition"]')).toBeNull();
     expect(cacheBitmap.close).not.toHaveBeenCalled();
 
+    const initialCanvas = container.querySelector('canvas');
     act(() => useTimelineStore.setState({ thumbnailsEnabled: false }));
-    await waitFor(() => expect(workers).toHaveLength(1));
-    const worker = workers[0];
-    await act(async () => worker.emit({ type: 'ready' }));
-    const draw = worker.postedMessages.filter((message) => message.type === 'draw').at(-1);
-    expect(draw?.paintPayloads?.thumbnailStrips).toEqual([]);
-    const composition = draw?.paintPayloads?.compositionVisuals?.[0]?.resource;
-    expect(composition?.outline).toBe(true);
-    expect(Array.from(composition?.nestedBoundaries ?? [])).toEqual([0.25, 0.75]);
-    expect(composition?.segmentRects?.length).toBeGreaterThan(0);
-    expect(composition?.segmentThumbnailStrip).toBeUndefined();
+    expect(workers).toHaveLength(0);
+    expect(container.querySelector('canvas')).toBe(initialCanvas);
     expect(container.querySelector('[data-clip-type="composition"]')).not.toBeNull();
 
     act(() => useTimelineStore.setState({ thumbnailsEnabled: true }));
-    expect(worker.terminate).toHaveBeenCalled();
+    expect(workers).toHaveLength(0);
+    expect(container.querySelector('canvas')).toBe(initialCanvas);
     expect(container.querySelector('[data-clip-type="composition"]')).toBeNull();
     expect(cacheBitmap.close).not.toHaveBeenCalled();
   });

@@ -79,6 +79,8 @@ type LocalFileImportStage =
   | 'fetchLocalFileBlob'
   | 'createFile'
   | 'mediaStore.importFile'
+  | 'workspaceFileHandle'
+  | 'mediaStore.importFilesWithHandles'
   | 'timelinePlacement';
 
 export function resolveLocalImportAppendPoint(targetTrackId: string): number {
@@ -114,13 +116,24 @@ export async function handleImportLocalFiles(
   activateDockPanel('media');
   flashPreviewCanvas('import');
 
-  const results: Array<{ id: string; name: string; type: string; duration?: number; path: string; blobSize?: number }> = [];
+  const results: Array<{ id: string; name: string; type: string; duration?: number; path: string; blobSize?: number; fileSize?: number }> = [];
   const errors: Array<{ path: string; error: string; stage?: LocalFileImportStage }> = [];
 
-  // Validate all paths through file access broker
+  // Paths below a user-granted workspace root are read through their FSA handle:
+  // disk-backed Files of any size, and the handle keeps the media linked on reload.
+  const workspacePaths = new Set<string>();
+  const workspaceRoots = await import('../../../workspaceRoots').catch(() => null);
+  if (workspaceRoots) {
+    for (const filePath of paths) {
+      if (await workspaceRoots.isWorkspacePath(filePath)) workspacePaths.add(filePath);
+    }
+  }
+
+  // Validate all other paths through file access broker
   const hasRoots = getAllowedRoots().length > 0;
   if (hasRoots) {
     for (const filePath of paths) {
+      if (workspacePaths.has(filePath)) continue;
       const validation = validateFilePath(filePath);
       if (!validation.allowed) {
         errors.push({ path: filePath, error: `Access denied: ${validation.reason}` });
@@ -137,7 +150,7 @@ export async function handleImportLocalFiles(
 
   for (const filePath of paths) {
     // Skip paths that failed validation
-    if (hasRoots) {
+    if (hasRoots && !workspacePaths.has(filePath)) {
       const validation = validateFilePath(filePath);
       if (!validation.allowed) {
         continue; // Already recorded in errors above
@@ -145,6 +158,33 @@ export async function handleImportLocalFiles(
     }
 
     let importStage: LocalFileImportStage = 'fetchLocalFileBlob';
+    if (workspaceRoots && workspacePaths.has(filePath)) {
+      try {
+        importStage = 'workspaceFileHandle';
+        const handle = await workspaceRoots.resolveWorkspaceFile(filePath);
+        const file = await handle.getFile();
+        importStage = 'mediaStore.importFilesWithHandles';
+        const [importedItem] = await mediaStore.importFilesWithHandles([
+          { file, handle, absolutePath: normalizeLocalPath(filePath) },
+        ]);
+        if (!importedItem) throw new Error('Import produced no media item');
+        results.push({
+          id: importedItem.id,
+          name: importedItem.name,
+          type: importedItem.type,
+          duration: importedItem.type === 'signal' ? undefined : importedItem.duration,
+          path: filePath,
+          fileSize: file.size,
+        });
+        log.info(`Imported via workspace root: ${importedItem.name} (${importedItem.type})`);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        log.error(`Failed to import: ${filePath}`, { stage: importStage, error: err });
+        errors.push({ path: filePath, error: msg, stage: importStage });
+      }
+      continue;
+    }
+
     try {
       const normalizedPath = normalizeLocalPath(filePath);
       log.info(`Fetching: ${normalizedPath}`);

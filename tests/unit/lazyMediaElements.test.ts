@@ -342,6 +342,23 @@ describe('lazy timeline media elements', () => {
     expect(replacementClipArrayIterations).toBe(2);
   });
 
+  it('attaches no HTML video element to MXF clips, which only decode through their provider', () => {
+    const videoTrack = makeTrack('video', 'track-v1');
+    const videoClip = makeClip('clip-v1', videoTrack, 'video', 'media-v1');
+    const ctx = makeContext({
+      clips: [videoClip],
+      tracks: [videoTrack],
+      mediaFiles: [
+        { id: 'media-v1', name: videoClip.name, type: 'video', url: 'blob:video', duration: 10, videoCodecId: 'mxf:avc-lgop' },
+      ],
+    });
+
+    hydrateTimelineMediaWindow(ctx);
+
+    expect(getLazyTimelineVideoElementForClip(videoClip)).toBeNull();
+    expect(videoClip.source?.videoElement).toBeUndefined();
+  });
+
   it('keeps imported WebM duration when lazy metadata reports a short fragment', () => {
     const videoTrack = makeTrack('video', 'track-v1');
     const videoClip = makeClip('clip-v1', videoTrack, 'video', 'media-v1');

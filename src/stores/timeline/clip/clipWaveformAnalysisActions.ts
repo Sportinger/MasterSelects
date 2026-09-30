@@ -12,6 +12,7 @@ import { hasTimelineWaveformData } from '../../../utils/audioWaveformPresence';
 import type { GenerateClipAudioAnalysisOptions } from '../types';
 import { updateDerivedTimelineClips } from '../revisionMiddleware';
 import type { ClipActionContext } from './clipActionContext';
+import { reportDerivedWaveformProgress, discardDerivedWaveformProgress } from './derivedWaveformProgress';
 import {
   clearAudioAnalysisJobUpdate,
   createAudioAnalysisJobUpdate,
@@ -36,12 +37,19 @@ export async function generateWaveformForClipAction(
   options: GenerateClipAudioAnalysisOptions = {},
 ): Promise<void> {
   const { get, set } = context;
+  let activeJobId: string | undefined;
   const updateClips = (updater: Parameters<typeof updateDerivedTimelineClips>[0]): void => {
+    const currentUpdater: typeof updater = clips => {
+      if (activeJobId && clips.find(current => current.id === clipId)?.audioAnalysisJob?.jobId !== activeJobId) return clips;
+      return updater(clips);
+    };
     if (options.derivedOnly) {
-      updateDerivedTimelineClips(updater);
+      updateDerivedTimelineClips(currentUpdater);
       return;
     }
-    set({ clips: updater(get().clips) });
+    const current = get().clips;
+    const next = currentUpdater(current);
+    if (next !== current) set({ clips: next });
   };
   const clip = get().clips.find(c => c.id === clipId);
   if (!clip || clip.waveformGenerating) return;
@@ -49,16 +57,22 @@ export async function generateWaveformForClipAction(
   if (options.derivedOnly && clip.isComposition) return;
   const includePyramid = options.previewOnly !== true;
 
-  updateClips(clips => updateClipById(clips, clipId, createAudioAnalysisJobUpdate({
+  const jobUpdate = createAudioAnalysisJobUpdate({
       kind: 'waveform-pyramid',
       label: includePyramid ? 'Waveform' : 'Waveform Preview',
       artifactKinds: includePyramid ? ['waveform-pyramid'] : [],
       processed: false,
-    })));
+    });
+  const jobId = jobUpdate.audioAnalysisJob!.jobId;
+  updateClips(clips => updateClipById(clips, clipId, jobUpdate));
+  activeJobId = jobId;
   log.debug('Starting waveform generation', { clip: clip.name, includePyramid });
 
   try {
     await clipAudioAnalysisJobService.run({ clipId, kind: 'waveform-pyramid' }, async ({ signal }) => {
+      if (options.derivedOnly && get().clips.find(current => current.id === clipId)?.audioAnalysisJob?.jobId !== jobId) {
+        throw new DOMException('Waveform clip is no longer active', 'AbortError');
+      }
       updateClips(clips => updateAudioAnalysisJobProgress(clips, clipId, 1, 'preparing', 'Preparing waveform'));
       let waveform: number[];
       let waveformChannels: number[][] | undefined;
@@ -78,7 +92,7 @@ export async function generateWaveformForClipAction(
               mixdownGenerating: false,
             }));
         } else if (clip.mixdownBuffer) {
-          waveform = generateWaveformFromBuffer(clip.mixdownBuffer, 50);
+          waveform = await generateWaveformFromBuffer(clip.mixdownBuffer, 50);
         } else {
           waveform = new Array(Math.max(1, Math.floor(clip.duration * 50))).fill(0);
         }
@@ -100,8 +114,17 @@ export async function generateWaveformForClipAction(
           mediaFileId: clip.mediaFileId ?? clip.source?.mediaFileId,
           includePyramid,
           reuseCompleted: options.derivedOnly === true && options.force !== true,
+          reusePersisted: options.force !== true,
+          includePartialPreview: options.derivedOnly !== true,
+          background: options.derivedOnly === true,
+          isCurrent: () => get().clips.find(current => current.id === clipId)?.audioAnalysisJob?.jobId === jobId,
           signal,
           onProgress: (progress, partialWaveform) => {
+            if (options.derivedOnly) {
+              reportDerivedWaveformProgress(clipId, { jobId,
+                progress: includePyramid ? mapSourceWaveformPreviewProgress(progress) : progress, phase: 'analyzing' });
+              return;
+            }
             updateClips(clips => updateAudioAnalysisJobProgress(
                 updateClipById(clips, clipId, { waveform: partialWaveform }),
                 clipId,
@@ -110,6 +133,11 @@ export async function generateWaveformForClipAction(
               ));
           },
           onPyramidProgress: (progress) => {
+            if (options.derivedOnly) {
+              reportDerivedWaveformProgress(clipId, { jobId, progress: mapSourceWaveformPyramidProgress(progress),
+                phase: progress.phase.startsWith('storing') ? 'storing' : 'analyzing', message: progress.message });
+              return;
+            }
             updateClips(clips => updateAudioAnalysisJobProgress(
                 clips,
                 clipId,
@@ -124,6 +152,7 @@ export async function generateWaveformForClipAction(
         audioAnalysisRefs = analysis.audioAnalysisRefs;
       }
 
+      discardDerivedWaveformProgress(clipId, jobId);
       if (signal.aborted) throw signal.reason;
       const currentClip = get().clips.find(c => c.id === clipId);
       updateClips(clips => updateClipById(clips, clipId, {
@@ -159,5 +188,7 @@ export async function generateWaveformForClipAction(
     }));
     // Background callers must distinguish a failed analysis from completion.
     if (options.derivedOnly && !isAudioAnalysisCancellation(e)) throw e;
+  } finally {
+    discardDerivedWaveformProgress(clipId, jobId);
   }
 }

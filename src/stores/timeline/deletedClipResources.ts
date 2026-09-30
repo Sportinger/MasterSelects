@@ -9,9 +9,13 @@ import {
 import { blobUrlManager } from './helpers/blobUrlManager';
 import { releaseClipTreeRuntimeBindings } from '../../services/mediaRuntime/clipBindings';
 
-export function cleanupDeletedClipResources(deletedClips: readonly TimelineClip[]): void {
+export function cleanupDeletedClipResources(
+  deletedClips: readonly TimelineClip[],
+  /** Multicam cuts remove video-only pieces during playback and must not stop the audio. */
+  options: { stopAudioPlayback?: boolean } = {},
+): void {
   if (deletedClips.length === 0) return;
-  stopTimelineAudioPlayback();
+  if (options.stopAudioPlayback !== false) stopTimelineAudioPlayback();
 
   for (const clip of deletedClips) {
     releaseClipTreeRuntimeBindings(clip);

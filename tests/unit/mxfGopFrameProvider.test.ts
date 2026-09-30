@@ -107,14 +107,24 @@ class FakeHardwareDecoder implements GopDecoder {
   }
 }
 
+/** A decoder that restarts at a key frame by flushing instead of being re-created. */
+class FlushRestartDecoder extends FakeHardwareDecoder {
+  async restartAtKey(): Promise<void> {
+    await this.flush();
+  }
+}
+
 class TestGopProvider extends MxfGopFrameProvider<MxfGopFrameProviderOptions> {
   readonly backend = 'mxf-avc' as const;
   protected readonly label = 'Test GOP';
   protected readonly packetLabel = 'test packet';
   static surfaces = 4;
+  static flushRestart = false;
   protected async createFrameSource(source: MxfPacketSource): Promise<GopFrameSource> {
     const engine = new MxfGopEngine(source, this.label);
-    await engine.attachDecoder(async (callbacks: GopDecoderCallbacks) => new FakeHardwareDecoder(callbacks, TestGopProvider.surfaces));
+    await engine.attachDecoder(async (callbacks: GopDecoderCallbacks) => TestGopProvider.flushRestart
+      ? new FlushRestartDecoder(callbacks, TestGopProvider.surfaces)
+      : new FakeHardwareDecoder(callbacks, TestGopProvider.surfaces));
     return engine;
   }
   protected describeDecoder() {
@@ -218,6 +228,50 @@ describe('MxfGopFrameProvider (long GOP reorder, key-frame restart)', () => {
       expect(frameIndex(provider)).toBe(index);
     }
     expect(provider.getDebugInfo().decoderResets).toBe(1);
+    await provider.destroyAsync();
+    expect(liveFrames).toBe(0);
+  });
+
+  it('restarts at key frames by flushing, dropping frames queued before the jump', async () => {
+    TestGopProvider.surfaces = 4;
+    TestGopProvider.flushRestart = true;
+    const provider = new TestGopProvider({
+      sourceId: 'synthetic',
+      file: new File([], 'x.mxf'),
+      codecId: 'mxf:avc-lgop',
+      packetSourceFactory: async () => createSyntheticSource(120),
+    });
+    await provider.load();
+    // Scrub-like jumps backwards and far ahead, each needing a key-frame restart.
+    for (const index of [50, 10, 90, 30, 31, 5, 100, 60]) {
+      await provider.seekExact(index / FPS + 0.001);
+      expect(frameIndex(provider)).toBe(index);
+    }
+    const debug = provider.getDebugInfo() as { decoderResets: number; keyRestarts?: number };
+    expect(debug.keyRestarts).toBeGreaterThan(0);
+    TestGopProvider.flushRestart = false;
+    await provider.destroyAsync();
+    expect(liveFrames).toBe(0);
+  });
+
+  it('releases decoded-ahead frames that forward playback skipped, so they do not pin decoder surfaces', async () => {
+    // Few free surfaces, like a 4K hardware decoder whose references hold the rest.
+    TestGopProvider.surfaces = 5;
+    const provider = new TestGopProvider({
+      sourceId: 'synthetic',
+      file: new File([], 'x.mxf'),
+      codecId: 'mxf:avc-lgop',
+      packetSourceFactory: async () => createSyntheticSource(120),
+    });
+    await provider.load();
+    // A consumer that falls behind skips frames: 1, 4, 7, ... never asks for the frames decoded ahead.
+    for (let index = 1; index < 100; index += 3) {
+      await provider.seekExact(index / FPS + 0.001);
+      expect(frameIndex(provider)).toBe(index);
+      // The current frame plus what was decoded ahead of it; nothing the playback passed.
+      expect(liveFrames).toBeLessThanOrEqual(3);
+    }
+    expect(provider.getDebugInfo().stalls).toBe(0);
     await provider.destroyAsync();
     expect(liveFrames).toBe(0);
   });

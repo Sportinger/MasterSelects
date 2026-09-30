@@ -321,7 +321,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
           ? AUDIO_STARTUP_SYNC_INTERVAL
           : AUDIO_SYNC_INTERVAL;
         if (currentTime - lastAudioSync >= audioSyncInterval) {
-          layerBuilder.syncAudioElements();
+          const __ta = performance.now(); layerBuilder.syncAudioElements(); performance.measure('mc:audio', { start: __ta }); // TEMP-MC-PROFILE
           lastAudioSync = currentTime;
         }
 
@@ -339,7 +339,7 @@ export function usePlaybackLoop({ isPlaying }: UsePlaybackLoopProps) {
             )
           : AUDIO_ONLY_STATE_UPDATE_INTERVAL;
         if (currentTime - lastStateUpdate >= stateUpdateInterval) {
-          useTimelineStore.setState({ playheadPosition: newPosition });
+          const __ts = performance.now(); useTimelineStore.setState({ playheadPosition: newPosition }); performance.measure('mc:state', { start: __ts }); queueMicrotask(() => performance.measure('mc:react', { start: __ts })); // TEMP-MC-PROFILE
           lastStateUpdate = currentTime;
         }
       } catch (e) {

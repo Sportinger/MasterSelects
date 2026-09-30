@@ -47,6 +47,7 @@ import {
 } from '../../render/renderCapabilityProbe';
 import { derivePlaybackStatus } from '../../playbackDebug/status';
 import { mediaRuntimeRegistry } from '../../mediaRuntime/registry';
+import { getMulticamAngleDebugSnapshot } from '../../multicam/multicamAngleRuntime';
 import { isCodecProviderBackend } from '../../mediaRuntime/providerSelection';
 import type { ToolResult } from '../types';
 import type { TimelineRuntimeCoordinatorBridgeStats } from '../../timeline/runtimeCoordinatorTypes';
@@ -410,6 +411,8 @@ function collectSnapshot(playbackWindowMs = DEFAULT_PLAYBACK_WINDOW_MS) {
 
   snapshot.playback = serializePlayback(playback);
   snapshot.codecProviders = collectCodecProviderDebug(providerRuntime);
+  const multicamAngles = getMulticamAngleDebugSnapshot();
+  if (multicamAngles.length > 0) snapshot.multicamAngles = multicamAngles;
 
   if (s.webCodecsInfo) {
     snapshot.webCodecs = s.webCodecsInfo;

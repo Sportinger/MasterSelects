@@ -221,7 +221,7 @@ class CompositionAudioMixerService {
     onProgress?.({ phase: 'waveform', percent: 90, message: 'Generating waveform...' });
 
     // Generate waveform from mixed buffer
-    const waveform = generateWaveformFromBuffer(mixedBuffer, 50);
+    const waveform = await generateWaveformFromBuffer(mixedBuffer, 50);
 
     onProgress?.({ phase: 'complete', percent: 100, message: 'Complete' });
 

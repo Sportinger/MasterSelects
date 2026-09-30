@@ -16,8 +16,33 @@ export const trackToolDefinitions: ToolDefinition[] = [
             enum: ['video', 'audio'],
             description: 'Type of track to create',
           },
+          name: {
+            type: 'string',
+            description: 'Optional track name, e.g. "Cam Jonas" or "SUMME VOC"',
+          },
         },
         required: ['type'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'renameTrack',
+      description: 'Rename a video or audio track.',
+      parameters: {
+        type: 'object',
+        properties: {
+          trackId: {
+            type: 'string',
+            description: 'The ID of the track to rename',
+          },
+          name: {
+            type: 'string',
+            description: 'New track name',
+          },
+        },
+        required: ['trackId', 'name'],
       },
     },
   },

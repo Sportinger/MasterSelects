@@ -49,6 +49,7 @@ import {
 
 import {
   handleCreateTrack,
+  handleRenameTrack,
   handleDeleteTrack,
   handleSetTrackVisibility,
   handleSetTrackMuted,
@@ -238,6 +239,7 @@ import {
   handleStartMediaGeneration,
 } from './mediaGeneration';
 import { handleOpenLocalProject } from './localProject';
+import { handleCreateLocalProject, handleGrantWorkspaceRoot, handleListWorkspaceRoots, handleSaveProject } from './workspaceRoots';
 import {
   handleListDocuments, handleSearchDocuments, handleReadDocument,
   handleGetDocumentLinks, handleCreateProjectDocument, handleEditDocumentBlock,
@@ -278,6 +280,10 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   profileAppInteraction: handleProfileAppInteraction,
   clickAppControl: handleClickAppControl,
   openLocalProject: handleOpenLocalProject,
+  grantWorkspaceRoot: handleGrantWorkspaceRoot,
+  listWorkspaceRoots: handleListWorkspaceRoots,
+  createLocalProject: handleCreateLocalProject,
+  saveProject: handleSaveProject,
   fillAppControl: handleFillAppControl,
   probeSameOriginRequest: handleProbeSameOriginRequest,
   inspectMediaGenerationModel: handleInspectMediaGenerationModel,
@@ -647,6 +653,7 @@ export {
   handleAddClipSegment,
   // Tracks
   handleCreateTrack,
+  handleRenameTrack,
   handleDeleteTrack,
   handleSetTrackVisibility,
   handleSetTrackMuted,

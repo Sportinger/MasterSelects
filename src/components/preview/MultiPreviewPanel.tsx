@@ -10,6 +10,9 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useSettingsStore, type PreviewQuality } from '../../stores/settingsStore';
 import { useDockStore } from '../../stores/dockStore';
+import { useShallow } from 'zustand/react/shallow';
+import { useTimelineStore } from '../../stores/timeline';
+import { getProgramAngleIndex } from '../../services/multicam/multicamPlan';
 import { StatsOverlay } from './StatsOverlay';
 import { MultiPreviewSlot } from './MultiPreviewSlot';
 import type { MultiPreviewPanelData } from '../../types/dock';
@@ -56,6 +59,22 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
     [visibleCompositions, data.sourceCompositionId]
   );
   const isAutoMode = sourceComp !== undefined;
+
+  // Multicam cut mode works on the active composition: slots show its cameras,
+  // the camera on air at the playhead gets a red frame.
+  const activeCompositionId = useMediaStore((s) => s.activeCompositionId);
+  const activeMulticam = useMemo(
+    () => compositions.find((c) => c.id === activeCompositionId)?.multicam ?? null,
+    [compositions, activeCompositionId]
+  );
+  const multicamOn = Boolean(activeCompositionId && activeMulticam?.active);
+  const onAirAngle = useTimelineStore((s) => (
+    multicamOn && activeMulticam ? getProgramAngleIndex(activeMulticam, s.clips, s.playheadPosition) : -1
+  ));
+  // Camera labels follow track renames.
+  const angleLabels = useTimelineStore(useShallow((s) => (activeMulticam?.angles ?? []).map((angle) => (
+    s.tracks.find((track) => track.id === angle.trackId)?.name ?? angle.label
+  ))));
 
   // Highlight slots on 1/2/3/4 key press (via shortcut registry)
   useEffect(() => {
@@ -166,6 +185,21 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
           )}
         </div>
 
+        {/* Multicam cut mode toggle */}
+        <button
+          type="button"
+          className={`multi-preview-multicam-toggle ${multicamOn ? 'active' : ''}`}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => useTimelineStore.getState().setMulticamActive(!multicamOn)}
+          disabled={!activeCompositionId}
+          aria-pressed={multicamOn}
+          title={multicamOn
+            ? 'Multicam cut mode on: keys 1-4 cut to that camera (playing) or switch the segment (paused)'
+            : 'Multicam cut mode: one camera per video track, keys 1-4 switch cameras'}
+        >
+          Multicam
+        </button>
+
         {/* Transparency toggle */}
         <button
           className={`preview-transparency-toggle ${data.showTransparencyGrid ? 'active' : ''}`}
@@ -231,6 +265,10 @@ export function MultiPreviewPanel({ panelId, data }: MultiPreviewPanelProps) {
               showTransparencyGrid={data.showTransparencyGrid}
               onCompositionChange={(compId) => handleSlotCompositionChange(index, compId)}
               highlighted={highlightedSlot === index}
+              multicamAngle={multicamOn && activeCompositionId && activeMulticam?.angles[index]
+                ? { compositionId: activeCompositionId, angleIndex: index, label: angleLabels[index] ?? activeMulticam.angles[index].label }
+                : null}
+              onAir={multicamOn && onAirAngle === index}
               autoSource={
                 isAutoMode && sourceComp
                   ? { compositionId: sourceComp.id, layerIndex: index }

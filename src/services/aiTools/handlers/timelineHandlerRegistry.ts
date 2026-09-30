@@ -26,6 +26,7 @@ import {
 } from './clips';
 import {
   handleCreateTrack,
+  handleRenameTrack,
   handleDeleteTrack,
   handleSetTrackMuted,
   handleSetTrackVisibility,
@@ -181,6 +182,7 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   selectClips: handleSelectClips,
   clearSelection: handleClearSelection,
   createTrack: handleCreateTrack,
+  renameTrack: handleRenameTrack,
   deleteTrack: handleDeleteTrack,
   setTrackVisibility: handleSetTrackVisibility,
   setTrackMuted: handleSetTrackMuted,

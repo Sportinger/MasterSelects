@@ -1,33 +1,46 @@
 import { projectFileService } from '../projectFileService';
 import type { TimelineWaveformAnalysisResult } from './timelineWaveformPyramidCache';
 
-type SourceResults = WeakMap<File, Map<string, TimelineWaveformAnalysisResult>>;
-const unscopedProject = {};
-const resultsByProject = new WeakMap<object, SourceResults>();
-let nativeProjectPath: string | null = null;
-let nativeProjectScope = {};
+type SourceResults = Map<string, Map<string, TimelineWaveformAnalysisResult>>;
+const runtime: {
+  unscopedProject: object; resultsByProject: WeakMap<object, SourceResults>;
+  nativeProjectPath: string | null; nativeProjectScope: object;
+} = import.meta.hot?.data?.sourceCache ?? {
+  unscopedProject: {}, resultsByProject: new WeakMap(), nativeProjectPath: null, nativeProjectScope: {},
+};
+if (import.meta.hot) {
+  import.meta.hot.dispose(data => { data.sourceCache = runtime; });
+  import.meta.hot.accept();
+}
+
+export function getSourceWaveformProjectScope(): object {
+  const path = projectFileService.getProjectPath();
+  if (path !== runtime.nativeProjectPath) { runtime.nativeProjectPath = path; runtime.nativeProjectScope = {}; }
+  return projectFileService.getProjectPackageSession()
+    ?? projectFileService.getProjectHandle() ?? (path ? runtime.nativeProjectScope : runtime.unscopedProject);
+}
 
 function sourceResults(): SourceResults {
-  const path = projectFileService.getProjectPath();
-  if (path !== nativeProjectPath) { nativeProjectPath = path; nativeProjectScope = {}; }
-  const scope = projectFileService.getProjectPackageSession()
-    ?? projectFileService.getProjectHandle() ?? (path ? nativeProjectScope : unscopedProject);
-  let results = resultsByProject.get(scope);
+  const scope = getSourceWaveformProjectScope();
+  let results = runtime.resultsByProject.get(scope);
   if (!results) {
-    results = new WeakMap();
-    resultsByProject.set(scope, results);
+    results = new Map();
+    runtime.resultsByProject.set(scope, results);
   }
   return results;
 }
 
 /** Reuse completed source work for split clips; never retain decoded PCM. */
-export function sourceWaveformAnalysisCacheForFile(file: File): Map<string, TimelineWaveformAnalysisResult> {
+export function sourceWaveformAnalysisCacheForFile(file: File, mediaFileId?: string): Map<string, TimelineWaveformAnalysisResult> {
   const sources = sourceResults();
-  let results = sources.get(file);
+  const sourceKey = JSON.stringify([mediaFileId, file.name, file.size, file.lastModified, file.type]);
+  let results = sources.get(sourceKey);
   if (!results) {
     results = new Map();
-    sources.set(file, results);
   }
+  sources.delete(sourceKey);
+  sources.set(sourceKey, results);
+  if (sources.size > 64) sources.delete(sources.keys().next().value!);
   return results;
 }
 

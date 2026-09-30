@@ -10,6 +10,7 @@ import {
 } from '../layerCollector/htmlVideoPausedFrameGuard';
 import type { RenderDeps } from '../RenderDispatcher';
 import { collectCanvasElementLayer } from '../layerCollector/staticSourceCollectors';
+import { readRuntimeFrameForSource } from '../../../services/mediaRuntime/runtimePlayback';
 
 const MAX_DRAG_FALLBACK_DRIFT_SECONDS = 0.35;
 const MAX_DRAG_LIVE_IMPORT_DRIFT_SECONDS = 0.35;
@@ -45,6 +46,33 @@ export class TargetPreviewLayerCollector {
           layerData.push(canvasLayer);
           continue;
         }
+      }
+
+      // Provider-decoded video (MXF, ProRes, HAP, worker WebCodecs) or a supplied
+      // VideoFrame (multicam camera views): the current decoded frame.
+      if (
+        !layer.source.videoElement
+        && (layer.source.videoFrame || layer.source.webCodecsPlayer || layer.source.runtimeSessionKey)
+      ) {
+        const frame = layer.source.videoFrame
+          ?? layer.source.webCodecsPlayer?.getCurrentFrame?.()
+          ?? readRuntimeFrameForSource(layer.source)?.frameHandle?.frame
+          ?? null;
+        const externalTexture = frame && 'displayWidth' in frame ? d.textureManager?.importVideoTexture(frame) : null;
+        if (frame && 'displayWidth' in frame && externalTexture) {
+          layerData.push({
+            layer,
+            isVideo: true,
+            externalTexture,
+            textureView: null,
+            sourceWidth: frame.displayWidth,
+            sourceHeight: frame.displayHeight,
+            displayedMediaTime: frame.timestamp / 1e6,
+            targetMediaTime: layer.source.mediaTime,
+            previewPath: 'provider-frame',
+          });
+        }
+        continue;
       }
 
       if (layer.source.videoElement) {

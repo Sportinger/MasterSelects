@@ -1,6 +1,8 @@
 export type VideoSyncUpcomingPreplayState = {
   clipId: string;
   startTime: number;
+  /** Clip inside a nested composition: its comp's sync owns the hand-over. */
+  nestedSince?: number;
 };
 
 export class VideoSyncWarmupState {

@@ -24,7 +24,13 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 | **3D** | Combine footage, models, lights, cameras, Gaussian splats, and particle effects. |
 | **AI** | Ask the in-app agent to edit the timeline or generate media. Nodes and cables appear beside Preview as individual AI instructions arrive. AI Studio keeps Chat and Generation free of a floating credit banner. |
 
-Large timelines limit background analysis updates, reuse source waveforms across split clips, and read linked analysis binaries on demand. Packaged artifacts use a shared source index to reduce UI stalls. See [Audio Intelligence](docs/Features/Audio-Intelligence.md).
+Waveform previews, pyramid analysis, and cache unpacking run in dedicated workers. Large timelines reuse saved source waveforms after refresh, share results across split clips, and limit background analysis updates. Decoding and waveform generation do not hold the project save barrier. See [Audio Intelligence](docs/Features/Audio-Intelligence.md).
+
+Timeline scrolling reuses prepared waveform columns and bounds dashed composition outlines to the visible canvas. See [Timeline](docs/Features/Timeline.md).
+
+Large audio timelines prepare waveform columns within the canvas viewport and reuse source data across UI updates. Progressively loaded waveforms preserve the existing canvas display. Long WAV files decode without another complete encoded-audio copy on the UI thread. See [Audio](docs/Features/Audio.md).
+
+Multicam camera tiles adapt their render resolution to the panel and reuse unchanged video frames. The main preview retains its selected quality and original source decoding. See [Preview](docs/Features/Preview.md#multi-preview).
 
 ### Node graphs
 
@@ -114,6 +120,8 @@ The codebase includes [agent instructions](AGENTS.md), [feature documentation](d
 
 Open [masterselects.com](https://www.masterselects.com/), import a clip, and drag it onto the timeline. Press **Space** to play, **C** to cut, and **Ctrl/Cmd+S** to save. More controls are in the [keyboard shortcuts](docs/Features/Keyboard-Shortcuts.md).
 
+Manual Save waits for project and timeline synchronization to finish before saving the complete state.
+
 Chrome or Edge on desktop is a good starting point. Editing and rendering run locally in the browser; hosted AI and media generation use external services and may require credits. Local AI features may download models on first use. MasterSelects is under active development, so keep backups of important projects.
 
 ## Run locally
@@ -140,3 +148,5 @@ Focused pull requests, reproducible bug reports, and documentation improvements 
 ## License
 
 MasterSelects is licensed under **AGPL-3.0-only**. Commercial use is permitted under its terms. Videos and other ordinary media made with the editor do not inherit its license. See [LICENSE](LICENSE), [LICENSING.md](LICENSING.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
+
+Linked clips selected together now share a contour outline in the timeline, following their outer edges instead of highlighting every clip individually.

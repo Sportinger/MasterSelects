@@ -65,7 +65,10 @@ export const TIMELINE_RUNTIME_POLICY_DESCRIPTORS = [
     allowedResourceKinds: INTERACTIVE_RESOURCE_KINDS,
     defaultBudget: {
       maxResources: 72,
-      maxSessions: 16,
+      // Every clip binding in the warm window is a session (16 audio stems plus
+      // multicam cut pieces passed 16), and a budget over its limit refuses every
+      // new decoder, e.g. the scrub decoder. Decoders keep their own limits below.
+      maxSessions: 64,
       maxFrameProviders: 8,
       maxHtmlMediaElements: 24,
       maxNativeDecoders: 4,

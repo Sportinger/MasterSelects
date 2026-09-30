@@ -305,6 +305,8 @@ export function drawTimelineClipCanvasMainThread(
         thumbSlotPx: thumbnailSlotPx,
         thumbnailHeight: visualPreviewHeight,
         thumbnailsEnabled,
+        visibleLeft: 0,
+        visibleRight: cssWidth,
       },
     );
     if (compositionThumbnailDrawCount > 0) {

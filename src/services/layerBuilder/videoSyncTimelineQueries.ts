@@ -5,7 +5,9 @@ export { canClipOwnVideoSyncMedia } from './videoSyncMediaAdmission';
 export function isVisibleVideoTrackClip(ctx: FrameContext, clip: TimelineClip): boolean {
   if (!clip.trackId) return false;
 
-  const visibleIds = (ctx as Partial<FrameContext>).visibleVideoTrackIds;
+  // Render visibility: clips hidden beneath a lasting opaque track are not played.
+  const visibleIds = (ctx as Partial<FrameContext>).renderVisibleVideoTrackIds
+    ?? (ctx as Partial<FrameContext>).visibleVideoTrackIds;
   if (visibleIds) {
     return visibleIds.has(clip.trackId);
   }

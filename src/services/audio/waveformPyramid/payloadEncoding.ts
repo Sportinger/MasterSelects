@@ -35,6 +35,7 @@ export async function storeWaveformPyramidPayloads(input: {
   generatedAt: string;
   context: WaveformPyramidAnalysisContext;
   pyramid: WaveformPyramidData;
+  packedPayload?: ArrayBuffer;
   now: () => string;
   emitProgress: (context: WaveformPyramidAnalysisContext, update: {
     phase: 'storing-payloads';
@@ -58,7 +59,7 @@ export async function storeWaveformPyramidPayloads(input: {
   input.throwIfCancelled(input.context.signal, input.context.jobId);
 
   const packedPayload = await input.artifactStore.putPayload(
-    encodeWaveformPyramidPackedPayload(input.pyramid),
+    input.packedPayload ?? encodeWaveformPyramidPackedPayload(input.pyramid),
     {
       mediaFileId: input.request.mediaFileId,
       kind: input.request.kind ?? 'waveform-pyramid',

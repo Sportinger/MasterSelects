@@ -216,6 +216,7 @@ export interface ProjectComposition {
   transitionComp?: TransitionCompositionLink;
   captionComp?: CaptionCompositionLink;
   annotations?: SourceAnnotation[];
+  multicam?: import('../../../types/multicam').CompositionMulticam;
 
   // Tracks and clips
   tracks: ProjectTrack[];

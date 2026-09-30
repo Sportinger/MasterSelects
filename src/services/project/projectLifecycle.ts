@@ -231,10 +231,28 @@ export type BlankProjectCreationResult = 'created' | 'not-created' | 'save-faile
  * cancelling the system folder picker leaves the current project untouched.
  */
 export async function createBlankProject(name: string): Promise<BlankProjectCreationResult> {
+  return createBlankProjectWith(name, () => projectFileService.createProject(name));
+}
+
+/**
+ * Same as createBlankProject, inside a parent folder the app can already
+ * access (e.g. a workspace root grant), so no picker is shown.
+ */
+export async function createBlankProjectInFolder(
+  parent: FileSystemDirectoryHandle,
+  name: string,
+): Promise<BlankProjectCreationResult> {
+  return createBlankProjectWith(name, () => projectFileService.createProjectInFolder(parent, name));
+}
+
+async function createBlankProjectWith(
+  name: string,
+  createFolder: () => Promise<boolean>,
+): Promise<BlankProjectCreationResult> {
   const startedAt = Date.now();
   let failureStage: ProductAnalyticsProjectFailureStage = 'create';
   try {
-    const folderCreated = await projectFileService.createProject(name);
+    const folderCreated = await createFolder();
     if (!folderCreated) {
       trackProjectActionFailure('create', startedAt, 'cancelled', 'cancelled', 'selection');
       return 'not-created';

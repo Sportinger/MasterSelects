@@ -63,10 +63,29 @@ Folder-backed projects read linked analysis binaries on demand when opening a
 timeline. Ordinary saves retain unread binary references; standalone package
 encoding embeds their contents.
 
-Long waveform previews yield between bounded PCM chunks and limit progress
-updates. Split clips reuse completed source waveform analysis within the same
-project. Undo comparisons inspect changed clips and media items instead of
-serializing the complete timeline on every background progress update.
+Waveform previews, pyramid statistics, derived edit statistics, and packed
+waveform encoding/decoding run in dedicated module workers. PCM and cached
+statistics are transferred in bounded blocks without detaching playback data.
+Workers terminate on completion, cancellation, or failure. Runtime owners and
+queues survive development hot reloads.
+
+Unchanged sources reuse persisted waveform manifests before reading or decoding
+their audio again. Source ID, file name, size, modification time, and analyzer
+identity validate reuse; missing or stale results are regenerated. Explicit
+regeneration bypasses both completed and persisted results. Split clips share
+completed previews and resident pyramid arrays even when the browser returns
+different `File` objects; concurrent cache reads share one payload load.
+
+Background source analysis runs one cold source at a time, while cache worker
+jobs and derived edit jobs use separate bounded queues. Background progress
+publishes small, throttled updates; complete previews are published once. Undo
+comparisons inspect changed clips and media items instead of serializing the
+complete timeline on every background progress update.
+
+Source decoding, proxy extraction/encoding, and waveform calculation run outside
+the project artifact write batch. Only the finished waveform payload and its
+manifest are batched together, so a manual save does not wait for the complete
+analysis job.
 
 ## Analysis UI
 

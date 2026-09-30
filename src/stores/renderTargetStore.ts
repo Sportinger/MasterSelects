@@ -240,7 +240,7 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
         if (target.source.type === 'composition' && target.source.compositionId !== activeCompId) {
           result.push(target);
         }
-        if (target.source.type === 'layer' || target.source.type === 'layer-index' || target.source.type === 'slot') {
+        if (target.source.type === 'layer' || target.source.type === 'layer-index' || target.source.type === 'multicam-angle' || target.source.type === 'slot') {
           result.push(target);
         }
       }
@@ -259,6 +259,8 @@ export const useRenderTargetStore = create<RenderTargetState & RenderTargetActio
           return source.compositionId;
         case 'layer-index':
           return source.compositionId ?? useMediaStore.getState().activeCompositionId;
+        case 'multicam-angle':
+          return source.compositionId;
         case 'slot': {
           // Resolve slot to composition via activeLayerSlots
           // activeLayerSlots: Record<number, string | null> where key=layerIndex, value=compositionId

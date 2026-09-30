@@ -234,6 +234,15 @@ export interface LinkedGroupActions {
   syncClipsViaAudio: (clipIds: string[], masterClipId?: string) => Promise<import('../../../services/audioSync').TimelineAudioSyncReport | null>;
 }
 
+export interface MulticamActions {
+  /** Turns the active composition into a multicam edit (one video track per camera). */
+  enableMulticam: () => boolean;
+  /** Multi Preview toggle: builds the multicam edit on first use, then turns cut mode on/off. */
+  setMulticamActive: (active: boolean) => boolean;
+  /** Shows camera `angleIndex`: a cut at the playhead while playing, the whole segment while paused. */
+  switchMulticamAngle: (angleIndex: number, mode?: import('../../../services/multicam/multicamPlan').MulticamSwitchMode) => boolean;
+}
+
 export interface DownloadClipActions {
   addPendingDownloadClip: (trackId: string, startTime: number, videoId: string, title: string, thumbnail: string, estimatedDuration?: number) => string;
   updateDownloadProgress: (clipId: string, progress: number, speed?: string) => void;
@@ -315,4 +324,5 @@ export type ClipActions =
   ClipEffectActions &
   ColorCorrectionActions &
   LinkedGroupActions &
+  MulticamActions &
   DownloadClipActions;

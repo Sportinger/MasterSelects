@@ -13,6 +13,7 @@ export type RenderTargetSource =
   | { readonly type: 'composition'; readonly compositionId: string }
   | { readonly type: 'layer'; readonly compositionId: string; readonly layerIds: readonly string[] }
   | { readonly type: 'layer-index'; readonly compositionId: string | null; readonly layerIndex: number }
+  | { readonly type: 'multicam-angle'; readonly compositionId: string; readonly angleIndex: number }
   | { readonly type: 'slot'; readonly slotIndex: number };
 
 export type RenderTargetDestinationType = 'canvas' | 'window' | 'tab';

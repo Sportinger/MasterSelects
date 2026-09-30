@@ -167,6 +167,7 @@ MasterSelects registers 17 dockable editor panel types, plus the Slot Grid overl
 
 - 4-slot grid for showing multiple compositions at once
 - Can auto-distribute the active composition's layers or use custom per-slot assignments
+- **Multicam** toggle: live camera angles per slot, red frame on the camera on air, keys `1`-`4` cut between cameras
 - Per-panel transparency grid toggle
 
 ### Timeline Panel

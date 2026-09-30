@@ -5,7 +5,6 @@ import { ParallelDecodeManager } from '../../ParallelDecodeManager';
 import type { ClipPreparationModeResult, ExportClipState } from '../ClipPreparation';
 import { getClipMediaFileId } from './admission';
 import { type ClipFileDataCache, loadClipFileData } from './sourceResolution';
-import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
 import type { NestedVideoClip } from './nestedVideoClips';
 
 const log = Logger.create('ClipPreparation');
@@ -20,7 +19,7 @@ export async function initializeParallelDecoding(
   nestedClips: NestedVideoClip[],
   clipStates: Map<string, ExportClipState>,
   fps: number,
-  exportRunId: string | undefined,
+  _exportRunId: string | undefined,
   endPrepare: () => void,
   _fileDataCache: ClipFileDataCache
 ): Promise<ClipPreparationModeResult> {
@@ -145,27 +144,24 @@ export async function initializeParallelDecoding(
 
     endPrefetch();
 
+    // The parallel manager owns the bounded decoder window. These entries
+    // describe the full edit; they must not allocate a runtime session for
+    // every future clip (including each nested instance of the same source).
     for (const clip of clips) {
-      const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
       clipStates.set(clip.id, {
         clipId: clip.id,
         webCodecsPlayer: null,
         lastSampleIndex: 0,
         isSequential: false,
-        runtimeOwnerId,
-        runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId, null, exportRunId),
       });
     }
 
     for (const { clip } of nestedClips) {
-      const runtimeOwnerId = getExportRuntimeOwnerId(clip.id);
       clipStates.set(clip.id, {
         clipId: clip.id,
         webCodecsPlayer: null,
         lastSampleIndex: 0,
         isSequential: false,
-        runtimeOwnerId,
-        runtimeSource: createExportRuntimeSource(clip, runtimeOwnerId, null, exportRunId),
       });
     }
 

@@ -66,6 +66,9 @@ export type VideoSyncNestedCompositionCoordinatorDeps = {
   safeSeekTime: (video: HTMLVideoElement, time: number) => number;
   activateFreeRunVideo: (video: HTMLVideoElement) => void;
   stopFreeRunVideo: (video: HTMLVideoElement) => void;
+  /** Upcoming nested clips pre-rolling before their cut must not be paused (see nested warm-up). */
+  isUpcomingPreplay?: (video: HTMLVideoElement) => boolean;
+  clearUpcomingPreplay?: (video: HTMLVideoElement) => void;
   getPreviewContinuationVideoElement: (
     clip: TimelineClip,
     targetTime: number,
@@ -114,6 +117,8 @@ export class VideoSyncNestedCompositionCoordinator {
       const isActive = compTime >= nestedClip.startTime && compTime < nestedClip.startTime + nestedClip.duration;
 
       if (!isActive) {
+        if (ctx.isPlaying && !isInteractivePreview && this.deps.isUpcomingPreplay?.(nestedVideo)) continue;
+        this.deps.clearUpcomingPreplay?.(nestedVideo);
         this.deps.stopFreeRunVideo(nestedVideo);
         if (!nestedVideo.paused) {
           nestedVideo.pause();
@@ -121,6 +126,8 @@ export class VideoSyncNestedCompositionCoordinator {
         scrubSettleState.resolve(nestedClip.id);
         continue;
       }
+      // Reached its cut: normal sync takes over (and restores the playback rate).
+      this.deps.clearUpcomingPreplay?.(nestedVideo);
 
       const timing = getNestedClipSourceTiming(nestedClip, compTime - nestedClip.startTime);
       const nestedClipTime = timing.sourceTime;

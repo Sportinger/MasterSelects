@@ -17,6 +17,12 @@ export interface GopDecoder {
   flush(): Promise<void>;
   /** Drops decoder state; the next packet must be a key frame. */
   reset(): void;
+  /**
+   * Restarts at a key frame without tearing the decoder down (a hardware decoder
+   * re-created by reset + configure took 120-480 ms to its first 4K output). Frames
+   * already queued are still emitted, which the engine drops; resolves once they are.
+   */
+  restartAtKey?(): Promise<void>;
   close(): void;
 }
 
@@ -29,6 +35,8 @@ export interface MxfGopEngineStats {
   decodeQueueSize: number;
   readyFrameCount: number;
   decoderResets: number;
+  /** Restarts that flushed to a key frame instead of re-creating the decoder. */
+  keyRestarts?: number;
   /** Why the engine restarted at a key frame (diagnostics). */
   restartReasons: Record<string, number>;
   requests: number;
@@ -52,6 +60,15 @@ interface RestartRecord {
   lastEmitted: number;
   nextStoredDisplay: number;
   ready: number[];
+  /** Synchronous decoder reset + configure (ms). */
+  resetMs?: number;
+  /** Restart to the first packet handed to the decoder (packet reads) (ms). */
+  firstFeedMs?: number;
+  /** Restart to the first decoder output / to the requested frame (ms). */
+  firstOutputMs?: number;
+  targetMs?: number;
+  /** Packets fed from the restart to the requested frame. */
+  fed?: number;
 }
 
 const MAX_RESTART_RECORDS = 8;
@@ -117,12 +134,18 @@ export class MxfGopEngine {
   private readWaitMaxMs = 0;
   private readWaits = 0;
   private readonly recentRestarts: RestartRecord[] = [];
+  private openRestart: { record: RestartRecord; startedAt: number; fedAtStart: number } | null = null;
   private closed = false;
   /** Incremented on every restart; packets read for an older generation are dropped. */
   private generation = 0;
   private pumpActive = false;
   /** Packets fed minus frames output since the last reset: frames still inside the decoder. */
   private inDecoder = 0;
+  /** Display indices fed and not yet output in the current generation. */
+  private readonly inFlight = new Set<number>();
+  /** Per key-frame restart without reset: frames from before it, dropped on output. */
+  private readonly staleOutputs: Set<number>[] = [];
+  private keyRestarts = 0;
   private outputWaiters: (() => void)[] = [];
   /** Requests are served one at a time; callers may still issue them concurrently. */
   private queue: Promise<unknown> = Promise.resolve();
@@ -148,6 +171,7 @@ export class MxfGopEngine {
       decodeQueueSize: this.decoder?.queueSize ?? 0,
       readyFrameCount: this.readyFrames.size,
       decoderResets: this.resetCount,
+      keyRestarts: this.keyRestarts,
       restartReasons: { ...this.restartReasons },
       requests: this.requests,
       readyHits: this.readyHits,
@@ -208,15 +232,19 @@ export class MxfGopEngine {
             : feedDistance > MAX_FORWARD_FEED ? 'far-ahead'
               : 'next-gop';
       this.restartReasons[reason] = (this.restartReasons[reason] ?? 0) + 1;
-      this.recentRestarts.push({
+      const record: RestartRecord = {
         reason,
         target,
         lastEmitted: this.lastEmittedDisplay,
         nextStoredDisplay: this.nextStored >= 0 ? this.source.storedToDisplayIndex(this.nextStored) : -1,
         ready: [...this.readyFrames.keys()],
-      });
+      };
+      this.recentRestarts.push(record);
       if (this.recentRestarts.length > MAX_RESTART_RECORDS) this.recentRestarts.shift();
+      const startedAt = performance.now();
       this.restartAt(keyStored, decoder);
+      record.resetMs = Math.round(performance.now() - startedAt);
+      this.openRestart = { record, startedAt, fedAtStart: this.packetsFed };
     }
 
     const framePromise = new Promise<VideoFrame>((resolve, reject) => {
@@ -230,9 +258,24 @@ export class MxfGopEngine {
   private restartAt(keyStored: number, decoder: GopDecoder): void {
     for (const frame of this.readyFrames.values()) closeVideoFrame(frame);
     this.readyFrames.clear();
-    decoder.reset();
+    if (decoder.restartAtKey && !this.decoderError && this.nextStored >= 0) {
+      // Queued frames stay counted in inDecoder until they come out (and are dropped).
+      const stale = new Set(this.inFlight);
+      this.staleOutputs.push(stale);
+      this.keyRestarts += 1;
+      void decoder.restartAtKey().catch(() => undefined).finally(() => {
+        const index = this.staleOutputs.indexOf(stale);
+        if (index >= 0) this.staleOutputs.splice(index, 1);
+        // Frames the decoder never emitted are no longer inside it.
+        this.inDecoder = Math.max(0, this.inDecoder - stale.size);
+      });
+    } else {
+      decoder.reset();
+      this.staleOutputs.length = 0;
+      this.inDecoder = 0;
+    }
+    this.inFlight.clear();
     this.generation += 1;
-    this.inDecoder = 0;
     for (const wake of this.outputWaiters.splice(0)) wake();
     this.decoderError = null;
     this.nextStored = keyStored;
@@ -252,10 +295,27 @@ export class MxfGopEngine {
     const display = this.displayIndexOf(frame);
     this.inDecoder = Math.max(0, this.inDecoder - 1);
     for (const wake of this.outputWaiters.splice(0)) wake();
+    // Oldest restart first: frames come out in feed order.
+    const stale = this.staleOutputs.find((set) => set.has(display));
+    if (stale) {
+      stale.delete(display);
+      closeVideoFrame(frame);
+      return;
+    }
+    this.inFlight.delete(display);
     this.lastEmittedDisplay = Math.max(this.lastEmittedDisplay, display);
     const pending = this.pending;
+    const restart = this.openRestart;
+    if (restart && restart.record.firstOutputMs === undefined) {
+      restart.record.firstOutputMs = Math.round(performance.now() - restart.startedAt);
+    }
     if (pending && display === pending.displayIndex) {
       this.pending = null;
+      if (restart) {
+        restart.record.targetMs = Math.round(performance.now() - restart.startedAt);
+        restart.record.fed = this.packetsFed - restart.fedAtStart;
+        this.openRestart = null;
+      }
       pending.resolve(frame);
       return;
     }
@@ -275,9 +335,10 @@ export class MxfGopEngine {
 
   private takeReadyFrame(display: number): VideoFrame | null {
     const frame = this.readyFrames.get(display) ?? null;
-    if (!frame) return null;
-    this.readyFrames.delete(display);
-    // Frames before the target are no longer useful for forward playback.
+    if (frame) this.readyFrames.delete(display);
+    // Frames before the target are no longer useful for forward playback. Also when
+    // the target was not decoded ahead: a consumer that skipped frames otherwise left
+    // them pinning hardware surfaces until the decoder stalled.
     for (const [index, stale] of this.readyFrames) {
       if (index < display) {
         closeVideoFrame(stale);
@@ -297,6 +358,7 @@ export class MxfGopEngine {
     this.flushes += 1;
     await decoder.flush();
     this.inDecoder = 0;
+    this.inFlight.clear();
     this.nextStored = -1;
     if (this.pending) throw new Error(`${this.label} frame ${this.pending.displayIndex} was not produced`);
   }
@@ -383,7 +445,12 @@ export class MxfGopEngine {
       // A restart while reading moved the decoder elsewhere: this packet is stale.
       if (generation !== this.generation || this.closed) continue;
       if (!packet) throw new Error(`${this.label} packet ${index} is missing`);
+      const restart = this.openRestart;
+      if (restart && restart.record.firstFeedMs === undefined) {
+        restart.record.firstFeedMs = Math.round(performance.now() - restart.startedAt);
+      }
       decoder.decode(packet);
+      this.inFlight.add(packet.displayIndex);
       this.packetsFed += 1;
       this.inDecoder += 1;
       if (this.pending && packet.displayIndex >= this.pending.displayIndex) {

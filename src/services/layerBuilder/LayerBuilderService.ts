@@ -2,7 +2,7 @@ import { sharedSceneOutputLayer } from './sharedSceneOutputLayer';
 // LayerBuilderService orchestrates layer building and delegates audio/video synchronization.
 import type { TimelineClip, Layer, VideoBakeRegion } from '../../types';
 import type { FrameContext } from './types';
-import { createFrameContext, getMediaFileForClip, isVideoTrackVisible } from './FrameContext';
+import { createFrameContext, getMediaFileForClip, isVideoTrackRenderVisible } from './FrameContext';
 import { LayerCache } from './LayerCache';
 import { TransformCache } from './TransformCache';
 import { VideoSyncManager } from './VideoSyncManager';
@@ -326,7 +326,7 @@ export class LayerBuilderService {
     this.videoSyncManager.computeHandoffs(ctx);
 
     ctx.videoTracks.forEach((track, layerIndex) => {
-      if (!isVideoTrackVisible(ctx, track.id)) {
+      if (!isVideoTrackRenderVisible(ctx, track.id)) {
         return;
       }
 

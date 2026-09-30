@@ -466,6 +466,7 @@ export function convertProjectCompositionToStore(
       transitionComp: pc.transitionComp ? structuredClone(pc.transitionComp) : undefined,
       captionComp: pc.captionComp ? structuredClone(pc.captionComp) : undefined,
       annotations: pc.annotations ? structuredClone(pc.annotations) : undefined,
+      multicam: pc.multicam ? structuredClone(pc.multicam) : undefined,
       timelineData,
     };
   });

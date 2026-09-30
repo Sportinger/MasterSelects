@@ -151,3 +151,62 @@
   font-size: 10px;
   backdrop-filter: blur(4px);
 }
+
+/* Multicam cut mode: camera number and name stay visible for the 1..n keys */
+.multi-preview-slot-dropdown-wrapper.multicam-angle-label {
+  opacity: 1;
+}
+
+/* The camera on air at the playhead, framed above the canvas */
+.multi-preview-slot.multicam-on-air::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border: 3px solid var(--danger);
+  pointer-events: none;
+}
+
+.multi-preview-slot.multicam-on-air .multi-preview-slot-label {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.multi-preview-multicam-toggle {
+  height: 22px;
+  padding: 0 8px;
+  background: var(--preview-overlay-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(4px);
+}
+
+.multi-preview-multicam-toggle:hover:not(:disabled) {
+  background: var(--preview-overlay-bg-hover);
+  color: var(--text-primary);
+  border-color: var(--gray-300);
+}
+
+.multi-preview-multicam-toggle.active,
+.multi-preview-multicam-toggle.active:hover:not(:disabled) {
+  background: var(--danger-subtle);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.multi-preview-multicam-toggle:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.multi-preview-multicam-toggle:focus {
+  outline: none;
+}
+
+.multi-preview-multicam-toggle:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}

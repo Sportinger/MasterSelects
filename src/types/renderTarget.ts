@@ -6,12 +6,14 @@ import type { SceneCameraConfig } from '../engine/scene/types';
 
 // === Source Types ===
 
-export type RenderSourceType = 'activeComp' | 'composition' | 'layer' | 'layer-index' | 'slot' | 'program';
+export type RenderSourceType = 'activeComp' | 'composition' | 'layer' | 'layer-index' | 'multicam-angle' | 'slot' | 'program';
 
 export interface RenderSourceActiveComp { type: 'activeComp' }
 export interface RenderSourceComposition { type: 'composition'; compositionId: string }
 export interface RenderSourceLayer { type: 'layer'; compositionId: string; layerIds: string[] }
 export interface RenderSourceLayerIndex { type: 'layer-index'; compositionId: string | null; layerIndex: number }
+/** One camera of a multicam composition, live even where its track is cut out of the program. */
+export interface RenderSourceMulticamAngle { type: 'multicam-angle'; compositionId: string; angleIndex: number }
 export interface RenderSourceSlot { type: 'slot'; slotIndex: number }
 export interface RenderSourceProgram { type: 'program' }  // main mix output
 
@@ -20,6 +22,7 @@ export type RenderSource =
   | RenderSourceComposition
   | RenderSourceLayer
   | RenderSourceLayerIndex
+  | RenderSourceMulticamAngle
   | RenderSourceSlot
   | RenderSourceProgram;
 

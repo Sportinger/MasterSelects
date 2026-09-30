@@ -11,10 +11,7 @@ import {
   type PointerEvent,
 } from 'react';
 
-import { PRIMARY_COLOR_PARAM_DEFS } from '../../../types/colorCorrection';
-import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 import { DraggableNumber, KeyframeToggle, MultiKeyframeToggle } from '../properties/shared';
-import { MIDIParameterLabel } from '../properties/MIDIParameterLabel';
 import {
   WHEEL_CONTROL_CONFIGS,
   clampNumber,
@@ -24,19 +21,11 @@ import {
 } from './colorEditorMath';
 import type { ColorEditorParamDefinition } from './colorEditorTypes';
 import type { WheelColorControlsProps } from './WheelColorControls';
+import { ResolveParameterControl, type ResolveParameterConfig } from './ResolveParameterControl';
+import { trackResolveControl } from './trackResolveControl';
 import './ResolveWheelColorControls.css';
 
 type ResolveWheelProps = Omit<WheelColorControlsProps, 'resolveLayout'>;
-
-interface ResolveParameterConfig {
-  key?: string;
-  label: string;
-  decimals: number;
-  scale?: number;
-  offset?: number;
-  staticValue?: number;
-  tone: string;
-}
 
 const TOP_CONTROLS: ResolveParameterConfig[] = [
   { key: 'temperature', label: 'Temp', decimals: 1, scale: 100, tone: 'temperature' },
@@ -64,24 +53,6 @@ const RESOLVE_GAMMA_INTERACTION_RANGE = (RESOLVE_GAMMA_RAW_MAX - 1) * 300 / RESO
 const RESOLVE_OFFSET_SIGNAL_LIMIT = 0.25;
 const RESOLVE_OFFSET_DISPLAY_NEUTRAL = 25;
 const RESOLVE_OFFSET_DISPLAY_SCALE = 100;
-
-function getPrimaryParamDef(key: string): ColorEditorParamDefinition {
-  const definition = PRIMARY_COLOR_PARAM_DEFS.find(candidate => candidate.key === key);
-  if (!definition) throw new Error(`Missing primary color parameter definition for ${key}`);
-  return definition;
-}
-
-function trackResolveControl(controlId: string, inputMethod: 'drag' | 'keyboard' | 'reset' | 'type') {
-  trackEditorControlCommitted({
-    area: 'color',
-    controlId,
-    controlKind: 'number',
-    inputMethod,
-    interaction: inputMethod === 'reset' ? 'reset' : 'change',
-    itemId: controlId,
-    itemKind: 'property',
-  });
-}
 
 interface ResolveLumaSliderProps {
   defaultValue: number;
@@ -344,77 +315,6 @@ function ResolveMasterWheel({
         <span aria-hidden="true" className="resolve-wheel-grid" />
         <span className="color-wheel-puck" />
       </div>
-    </div>
-  );
-}
-
-function ResolveParameterControl({
-  isParamDriven = () => false,
-  clipId,
-  config,
-  node,
-  createProperty,
-  getParamValue,
-  setParam,
-  onBatchStart,
-  onBatchEnd,
-}: Pick<ResolveWheelProps,
-  'clipId' | 'node' | 'createProperty' | 'getParamValue' | 'setParam' | 'onBatchStart' | 'onBatchEnd' | 'isParamDriven'
-> & { config: ResolveParameterConfig }) {
-  if (!config.key) {
-    return (
-      <div className={`resolve-primary-parameter is-${config.tone} is-static`} title="Control adapter pending">
-        <span>{config.label}</span>
-        <output>{config.staticValue?.toFixed(config.decimals)}</output>
-        <i aria-hidden="true" />
-      </div>
-    );
-  }
-
-  const definition = getPrimaryParamDef(config.key);
-  const rawValue = getParamValue(node, definition.key, definition.defaultValue);
-  const scale = config.scale ?? 1;
-  const offset = config.offset ?? 0;
-  const displayValue = rawValue * scale + offset;
-  const displayDefault = definition.defaultValue * scale + offset;
-  const displayMin = definition.min * scale + offset;
-  const displayMax = definition.max * scale + offset;
-  const property = createProperty(node.id, definition.key);
-
-  return (
-    <div className={`resolve-primary-parameter is-${config.tone}`} inert={isParamDriven(definition.key)} aria-disabled={isParamDriven(definition.key)}>
-      <MIDIParameterLabel
-        as="span"
-        target={{
-          clipId,
-          property,
-          label: `Color ${config.label}`,
-          currentValue: rawValue,
-          min: definition.min,
-          max: definition.max,
-        }}
-      >
-        {config.label}
-      </MIDIParameterLabel>
-      <DraggableNumber
-        ariaLabel={config.label}
-        value={displayValue}
-        onChange={nextValue => setParam(
-          node.id,
-          definition.key,
-          clampNumber((nextValue - offset) / scale, definition.min, definition.max),
-        )}
-        defaultValue={displayDefault}
-        sensitivity={Math.max(0.05, (displayMax - displayMin) / 100)}
-        decimals={config.decimals}
-        min={Math.min(displayMin, displayMax)}
-        max={Math.max(displayMin, displayMax)}
-        persistenceKey={`color.resolve.${clipId}.${node.id}.${definition.key}`}
-        onDragStart={onBatchStart}
-        onDragEnd={onBatchEnd}
-        onCommit={method => trackResolveControl(definition.key, method)}
-      />
-      <i aria-hidden="true" />
     </div>
   );
 }

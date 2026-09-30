@@ -6,9 +6,10 @@ import {
   type WaveformPyramidData,
   type WaveformStatistic,
 } from '../waveformPyramidManifest';
-import { aggregateChannelStats, calculateChannelStats, normalizeBucketSizes } from './bucketMath';
+import { normalizeBucketSizes } from './bucketMath';
+import { analyzeWaveformInWorker } from './WaveformWorkerClient';
+import type { WaveformWorkerResult } from './waveformWorkerProtocol';
 import type {
-  WaveformChannelStats,
   WaveformLevelStats,
   WaveformPyramidAnalysisContext,
 } from './waveformPyramidAnalysisTypes';
@@ -68,67 +69,17 @@ export async function generateWaveformLevelStats(input: {
     message: string;
   }) => void;
   throwIfCancelled: (signal: AbortSignal | undefined, jobId: string) => void;
-}): Promise<WaveformLevelStats[]> {
-  const workUnits = input.bucketSizes.length * input.buffer.numberOfChannels;
-  let completedUnits = 0;
-  const levels: WaveformLevelStats[] = input.bucketSizes.map(samplesPerBucket => ({
-    samplesPerBucket,
-    bucketDuration: samplesPerBucket / input.buffer.sampleRate,
-    bucketCount: Math.ceil(input.buffer.length / samplesPerBucket),
-    channels: [],
-  }));
-
-  for (let channelIndex = 0; channelIndex < input.buffer.numberOfChannels; channelIndex += 1) {
-    const channelData = input.buffer.getChannelData(channelIndex);
-    let previousStats: WaveformChannelStats | null = null;
-    let previousSamplesPerBucket = 0;
-
-    for (let levelIndex = 0; levelIndex < levels.length; levelIndex += 1) {
-      const level = levels[levelIndex];
-      const samplesPerBucket = level.samplesPerBucket;
-      input.emitProgress(input.context, {
-        phase: 'analyzing',
-        percent: 5 + (completedUnits / workUnits) * 70,
-        timestamp: input.now(),
-        levelIndex,
-        channelIndex,
-        samplesPerBucket,
-        message: 'Analyzing waveform buckets',
-      });
-      input.throwIfCancelled(input.context.signal, input.context.jobId);
-
-      let channelStats: WaveformChannelStats;
-
-      if (
-        previousStats !== null
-        && previousSamplesPerBucket > 0
-        && samplesPerBucket % previousSamplesPerBucket === 0
-      ) {
-        channelStats = await aggregateChannelStats(
-          previousStats,
-          previousSamplesPerBucket,
-          input.buffer.length,
-          samplesPerBucket,
-          input.context,
-          input.throwIfCancelled,
-        );
-      } else {
-        channelStats = await calculateChannelStats(
-          channelData,
-          input.buffer.length,
-          samplesPerBucket,
-          channelIndex,
-          input.context,
-          input.throwIfCancelled,
-        );
-      }
-
-      level.channels.push(channelStats);
-      previousStats = channelStats;
-      previousSamplesPerBucket = samplesPerBucket;
-      completedUnits += 1;
-    }
-  }
-
-  return levels;
+}): Promise<WaveformWorkerResult> {
+  input.throwIfCancelled(input.context.signal, input.context.jobId);
+  const result = await analyzeWaveformInWorker(input.buffer, {
+    bucketSizes: input.bucketSizes,
+    signal: input.context.signal,
+    onAnalysisProgress: progress => input.emitProgress(input.context, {
+      phase: 'analyzing', percent: progress.percent, timestamp: input.now(),
+      levelIndex: progress.levelIndex, channelIndex: progress.channelIndex,
+      samplesPerBucket: progress.samplesPerBucket, message: 'Analyzing waveform buckets',
+    }),
+  });
+  input.throwIfCancelled(input.context.signal, input.context.jobId);
+  return result;
 }

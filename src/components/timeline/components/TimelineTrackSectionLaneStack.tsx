@@ -277,6 +277,7 @@ export function TimelineTrackSectionLaneStack({
       <TimelineSectionOverlayGroups
         activeJunction={activeJunction}
         clipDrag={clipDrag}
+        clipTrim={clipTrim}
         clips={clips}
         duration={duration}
         getExpandedTrackHeight={sectionState.getSectionTrackHeightById}

@@ -78,6 +78,7 @@ absolute-speed handling is not used as the primary playback path.
 - `preservesPitch` is applied from the clip setting, defaulting to on.
 - Scrubbing is snippet-based and throttled; it is not continuous time-stretched scrub audio.
 - Current drift is corrected when the element gets too far from the expected time.
+- Audio decoding consumes freshly owned bytes from file/fetch reads directly. Warming several long WAV files no longer creates another complete encoded-audio copy on the UI thread.
 - Same-source sequential audio clips can hand off to the previous element, and upcoming clips may be pre-buffered before they hit the playhead.
 - Nested composition mixdown audio and proxy audio are synced through the same runtime path.
 - Audio-only nested compositions remain part of the mixdown even without a linked video half. Linked video/audio pairs contribute once; nested clips use the shared clip renderer for trim, reverse, speed, automation, and audio processing.

@@ -257,6 +257,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       transitionComp: comp.transitionComp ? structuredClone(comp.transitionComp) : undefined,
       captionComp: comp.captionComp ? structuredClone(comp.captionComp) : undefined,
       annotations: comp.annotations ? structuredClone(comp.annotations) : undefined,
+      multicam: comp.multicam ? structuredClone(comp.multicam) : undefined,
       tracks,
       clips,
       videoBakeRegions: timelineData?.videoBakeRegions

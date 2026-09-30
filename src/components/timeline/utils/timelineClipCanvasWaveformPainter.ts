@@ -14,6 +14,7 @@ import {
 } from './timelineClipCanvasWaveformEnvelopePath';
 import { resolveTimelineClipCanvasWaveformChannelIndexes } from './timelineClipCanvasWaveformResource';
 import { drawTransientPeakSpikes } from './timelineClipCanvasWaveformSpikes';
+import { drawCachedTimelineWaveformRaster, getWaveformRasterObjectId } from './timelineClipCanvasWaveformRasterCache';
 
 function drawCanvasWaveformCenterLine(
   ctx: CanvasRenderingContext2D,
@@ -71,6 +72,27 @@ function drawCompactCanvasWaveform(
 }
 
 export function drawTimelineClipCanvasAudioWaveform(
+  ctx: CanvasRenderingContext2D,
+  clip: TimelinePaintSourceClip,
+  pyramid: TimelineWaveformPyramid | null,
+  x: number, top: number, w: number, h: number,
+  mode: TimelineAudioDisplayMode, pixelsPerSecond: number, resolveStyle = false,
+): void {
+  const source = pyramid ?? clip.waveformChannels ?? clip.waveform;
+  if (source && w >= 2 && drawCachedTimelineWaveformRaster({
+    ctx, source, x, top, width: w, height: h,
+    dependencies: [
+      getWaveformRasterObjectId(pyramid), getWaveformRasterObjectId(clip.waveform),
+      getWaveformRasterObjectId(clip.waveformChannels), clip.inPoint, clip.outPoint,
+      clip.source?.naturalDuration, clip.duration, mode, pixelsPerSecond, resolveStyle,
+      clip.waveformGenerating, clip.waveformProgress,
+    ],
+    paint: rasterCtx => paintTimelineClipCanvasAudioWaveform(rasterCtx, clip, pyramid, 0, 0, w, h, mode, pixelsPerSecond, resolveStyle),
+  })) return;
+  paintTimelineClipCanvasAudioWaveform(ctx, clip, pyramid, x, top, w, h, mode, pixelsPerSecond, resolveStyle);
+}
+
+function paintTimelineClipCanvasAudioWaveform(
   ctx: CanvasRenderingContext2D,
   clip: TimelinePaintSourceClip,
   pyramid: TimelineWaveformPyramid | null,

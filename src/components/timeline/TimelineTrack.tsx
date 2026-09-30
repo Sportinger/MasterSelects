@@ -9,6 +9,7 @@ import {
 } from '../../types/vectorAnimation';
 import { useTimelineStore } from '../../stores/timeline';
 import { TimelineClipCanvas } from './TimelineClipCanvas';
+import { getIndividualSelectionIds } from './utils/linkedSelectionGroups';
 import {
   ClipInteractionShell,
   type ClipInteractionShellGeometry,
@@ -189,6 +190,9 @@ function TimelineTrackComponent({
     return Array.from(uniqueClips.values());
   }, [clips, track.id]);
   const clipFadeClipId = clipFade?.clipId ?? null;
+  const individualSelectionIds = useMemo(
+    () => getIndividualSelectionIds(clips, selectedClipIds), [clips, selectedClipIds],
+  );
   const clipRowRef = useRef<HTMLDivElement>(null);
   const clipRenameId = useTimelineStore((state) => state.clipRenameId);
   const [measuredViewportWidth, setMeasuredViewportWidth] = useState(TRACK_VIEWPORT_FALLBACK_PX);
@@ -556,7 +560,7 @@ function TimelineTrackComponent({
           height={baseHeight}
           contentWidth={canvasContentWidth}
           timeToPixel={timeToPixel}
-          selectedClipIds={selectedClipIds}
+          selectedClipIds={individualSelectionIds}
           hoveredClipId={hoveredClipId}
           trackColor={trackColor ?? 'rgba(120, 160, 200, 1)'}
           scrollX={scrollX}

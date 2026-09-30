@@ -341,8 +341,20 @@ export abstract class CodecFrameProviderBase<
   private currentFrameIsUsable(): boolean {
     if (!this.currentFrame || this.currentFrameTimeSeconds === null) return false;
     if (this.pendingTime === null) return true;
+    // A playhead drag retargets every few ms, so a newer scrub request is nearly
+    // always outstanding: hiding the decoded picture until the drag rested left
+    // the preview black while scrubbing. Exact seeks stay strict.
+    if ((this.pendingRequest ?? this.activeRequest)?.mode === 'scrub') return true;
     if (this.currentPacket && this.packetContainsTime(this.currentPacket, this.pendingTime)) return true;
     const fps = this.getFrameRate() || 30;
+    const pending = this.pendingRequest ?? this.activeRequest;
+    if (pending?.mode === 'advance' && pending.epoch === this.requestEpoch
+      && this.isPlaying && this.pendingTime >= this.currentFrameTimeSeconds) {
+      // Match the main collector's bounded playback window. Several concurrent
+      // decoders can finish after four frames; a recent forward picture is still
+      // useful while the newest one decodes. Seeks and backwards jumps stay strict.
+      return this.pendingTime - this.currentFrameTimeSeconds <= Math.max(0.12, Math.min(0.35, 8 / fps));
+    }
     const tolerance = Math.max(0.06, Math.min(0.18, 4 / fps));
     return Math.abs(this.currentFrameTimeSeconds - this.pendingTime) <= tolerance;
   }
@@ -437,6 +449,44 @@ export abstract class CodecFrameProviderBase<
     const outputFrame = await this.decodePacket(packet);
     const newerRequestWaiting = this.pendingRequest !== null
       && this.pendingRequest.sequence > request.sequence;
+    if (
+      newerRequestWaiting
+      && request.mode === 'scrub'
+      && this.pendingRequest?.mode === 'scrub'
+      && !this.destroyed
+      && request.epoch === this.requestEpoch
+    ) {
+      // Dragging: a picture for an older target is still newer than the one on
+      // screen. Show it; the pending target keeps currentTime/pendingTime.
+      closeVideoFrame(this.currentFrame);
+      this.currentFrame = outputFrame;
+      this.currentPacket = packet;
+      this.currentFrameTimeSeconds = packet.timestamp;
+      this.options.onFrame?.();
+      return;
+    }
+    if (
+      newerRequestWaiting
+      && request.mode === 'advance'
+      && this.pendingRequest?.mode === 'advance'
+      && this.pendingRequest.epoch === request.epoch
+      && this.pendingRequest.timeSeconds >= request.timeSeconds
+      && (this.currentFrameTimeSeconds === null || packet.timestamp > this.currentFrameTimeSeconds)
+      && !this.destroyed
+      && request.epoch === this.requestEpoch
+    ) {
+      // When decoding takes longer than a playback tick, another forward target
+      // is always waiting. Discarding every completed picture then starves the
+      // preview forever. Present progress without rewinding the desired target,
+      // and immediately continue with the newest request instead of prefetching.
+      closeVideoFrame(this.currentFrame);
+      this.currentFrame = outputFrame;
+      this.currentPacket = packet;
+      this.currentFrameTimeSeconds = packet.timestamp;
+      this.lastDecodeError = null;
+      this.options.onFrame?.();
+      return;
+    }
     if (this.destroyed || request.epoch !== this.requestEpoch || newerRequestWaiting) {
       this.discardedFrameCount += 1;
       closeVideoFrame(outputFrame);

@@ -3,26 +3,53 @@ import { validateFilePath } from '../../security/fileAccessBroker';
 
 let opening = false;
 
+type ProjectFileServiceInstance = typeof import('../../projectFileService')['projectFileService'];
+
+async function openWorkspaceProject(directory: string, projectFileService: ProjectFileServiceInstance): Promise<ToolResult> {
+  const { resolveWorkspaceDirectory } = await import('../../workspaceRoots');
+  const handle = await resolveWorkspaceDirectory(directory, { mode: 'readwrite' });
+  const previousBackend = projectFileService.activeBackend;
+  projectFileService.activateFsaBackend();
+  const loaded = await projectFileService.loadProject(handle);
+  if (!loaded) {
+    if (previousBackend === 'native') projectFileService.activateNativeBackend();
+    return { success: false, error: 'The project folder could not be loaded. Check that it contains a MasterSelects project.' };
+  }
+  const { loadProjectToStores } = await import('../../project/projectLoad');
+  await loadProjectToStores();
+  return { success: true, data: { directory, backend: 'fsa', via: 'workspaceRoot' } };
+}
+
 /** Explicit dev operation; project changes are never part of a timeline undo batch. */
 export async function handleOpenLocalProject(args: Record<string, unknown>): Promise<ToolResult> {
   if (opening) return { success: false, error: 'Another project is currently opening.' };
   const directory = typeof args.directory === 'string' ? args.directory.trim().replace(/\\/g, '/').replace(/\/+$/, '') : '';
-  const validation = validateFilePath(directory);
-  if (!validation.allowed) return { success: false, error: `Project folder access denied: ${validation.reason}` };
   if (/\.msproj$/i.test(directory)) return { success: false, error: 'Supply the project folder, not the .msproj file.' };
+  // Folders below a user-granted workspace root open through FSA, without the Native Helper.
+  const viaWorkspace = await import('../../workspaceRoots')
+    .then((module) => module.isWorkspacePath(directory))
+    .catch(() => false);
+  if (!viaWorkspace) {
+    const validation = validateFilePath(directory);
+    if (!validation.allowed) return { success: false, error: `Project folder access denied: ${validation.reason}` };
+  }
   opening = true;
   try {
     const [{ projectFileService }, { useTimelineStore }] = await Promise.all([
       import('../../projectFileService'), import('../../../stores/timeline'),
     ]);
     if (useTimelineStore.getState().isExporting) return { success: false, error: 'Wait for the current export to finish.' };
-    if (projectFileService.hasUnsavedChanges()) return { success: false, error: 'Save the current project before opening another project.' };
+    if (projectFileService.hasUnsavedChanges() && args.discardUnsavedChanges !== true) {
+      return { success: false, error: 'Save the current project before opening another project, or pass discardUnsavedChanges: true.' };
+    }
+    if (viaWorkspace) return await openWorkspaceProject(directory, projectFileService);
     const { NativeHelperClient } = await import('../../nativeHelper');
     if (!NativeHelperClient.isConnected() && !await NativeHelperClient.connect()) {
       return { success: false, error: 'Opening a project by disk path requires the Native Helper. Alternatively open its folder with File > Open Project.' };
     }
     // Connection may take time; reject edits/export started during that wait.
-    if (useTimelineStore.getState().isExporting || projectFileService.hasUnsavedChanges()) {
+    if (useTimelineStore.getState().isExporting
+      || (projectFileService.hasUnsavedChanges() && args.discardUnsavedChanges !== true)) {
       return { success: false, error: 'The current project changed while connecting. Save it and retry after export finishes.' };
     }
     const previousBackend = projectFileService.activeBackend;

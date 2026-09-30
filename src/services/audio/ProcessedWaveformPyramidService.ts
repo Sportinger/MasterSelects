@@ -8,13 +8,13 @@ import { AudioEffectRenderer, type EffectRenderProgress } from '../../engine/aud
 import { AudioExtractor, audioExtractor } from '../../engine/audio/AudioExtractor';
 import { TimeStretchProcessor, type TimeStretchProgress } from '../../engine/audio/TimeStretchProcessor';
 import { Logger } from '../logger';
+import { generateSourceWaveformPreview } from './sourceWaveformPreview';
 import { ClipAudioRenderService, type ClipAudioRenderProgress } from './ClipAudioRenderService';
 import type { AudioArtifactStore } from './AudioArtifactStore';
 import type { AudioAnalysisArtifact } from './audioArtifactTypes';
 import {
   createCurrentAudioArtifactStore,
   primeTimelineWaveformPyramidCache,
-  readTimelineWaveformPyramid,
 } from './timelineWaveformPyramidCache';
 import type { TimelineWaveformPyramid } from '../../components/timeline/utils/waveformLod';
 import {
@@ -103,34 +103,13 @@ function emitProgress(
   onProgress?.(progress);
 }
 
-function clampAbs01(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(1, Math.abs(value)));
-}
-
-function generateLegacyWaveformFromBuffer(
-  audioBuffer: AudioBuffer,
-  samplesPerSecond = DEFAULT_LEGACY_SAMPLES_PER_SECOND,
-): number[] {
-  const channelData = audioBuffer.getChannelData(0);
-  const sampleCount = Math.max(200, Math.min(10000, Math.floor(audioBuffer.duration * samplesPerSecond)));
-  const blockSize = Math.max(1, Math.floor(channelData.length / sampleCount));
-  const samples: number[] = [];
-
-  for (let index = 0; index < sampleCount; index += 1) {
-    const start = index * blockSize;
-    const end = Math.min(start + blockSize, channelData.length);
-    let peak = 0;
-
-    for (let sampleIndex = start; sampleIndex < end; sampleIndex += 1) {
-      peak = Math.max(peak, Math.abs(channelData[sampleIndex] ?? 0));
-    }
-
-    samples.push(peak);
-  }
-
-  const max = Math.max(0, ...samples);
-  return max > 0 ? samples.map(sample => clampAbs01(sample / max)) : samples;
+async function generateLegacyWaveformFromBuffer(audioBuffer: AudioBuffer, signal?: AbortSignal): Promise<number[]> {
+  const preview = await generateSourceWaveformPreview({
+    sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration, length: audioBuffer.length,
+    numberOfChannels: 1,
+    copyFromChannel: (destination, _channel, offset) => audioBuffer.copyFromChannel(destination, 0, offset),
+  }, DEFAULT_LEGACY_SAMPLES_PER_SECOND, undefined, 10000, signal);
+  return preview.waveform;
 }
 
 export class ProcessedWaveformPyramidService {
@@ -218,7 +197,7 @@ export class ProcessedWaveformPyramidService {
         message: waveform.message,
       }),
     });
-    const pyramid = await readTimelineWaveformPyramid(generated.manifest, this.artifactStore);
+    const pyramid = generated.pyramid;
 
     primeTimelineWaveformPyramidCache([
       generated.artifact.id,
@@ -241,7 +220,7 @@ export class ProcessedWaveformPyramidService {
 
     return {
       clipAudioStateHash,
-      waveform: generateLegacyWaveformFromBuffer(processedBuffer),
+      waveform: await generateLegacyWaveformFromBuffer(processedBuffer, signal),
       pyramid,
       audioAnalysisRefs: {
         processedWaveformPyramidId: generated.artifact.manifestRef.artifactId,

@@ -281,6 +281,9 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
   }, [chromeScrollX, chromeViewportWidth, clips, geometryProps, mediaFileStatusById, timeToPixel, workerThumbnailPreparation.visibleBitmapClipIds]);
   const workerEligibility = useMemo(() => getTimelineClipCanvasWorkerEligibility({
     clips: workerPaintClips,
+    canvasOffsetX,
+    cssWidth,
+    timeToPixel,
     waveformsEnabled,
     audioDisplayMode,
     preparedResourcesByClipId: workerPreparedResourcesByClipId,
@@ -289,7 +292,8 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     hasPassiveDecorations,
     hasClipTrim: Boolean(clipTrim),
     activeTrimClipId: clipTrim?.clipId ?? null,
-  }), [audioDisplayMode, clipTrim, hasPassiveDecorations, passiveDecorationClipIds, waveformsEnabled, workerPaintClips, workerPreparedResourcesByClipId, workerThumbnailPreparation.handledClipIds]);
+  }), [audioDisplayMode, canvasOffsetX, cssWidth, timeToPixel, clipTrim, hasPassiveDecorations, passiveDecorationClipIds, waveformsEnabled, workerPaintClips, workerPreparedResourcesByClipId, workerThumbnailPreparation.handledClipIds]);
+  // Keep the painted canvas while progressively loaded audio resources arrive.
   const {
     workerMode,
     workerCanvasGeneration,

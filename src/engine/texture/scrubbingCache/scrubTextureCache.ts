@@ -103,10 +103,15 @@ export class ScrubTextureCache {
   private capturePlaybackImage(video: HTMLVideoElement, time: number): void {
     // One conversion in flight: slow readback skips frames instead of queuing work.
     if (video.seeking || this.pendingCaptures.size > 0 || this.pendingUploads.size > 0) return;
-    this.cacheFrameAtTime(video, time);
+    // Playback runs this for every decoded frame: keep the CPU readback in the worker.
+    this.cacheFrameAtTime(video, time, { offMainThread: true });
   }
 
-  cacheFrameAtTime(video: HTMLVideoElement, time: number): void {
+  /**
+   * `offMainThread` always stages an ImageBitmap: it goes to the GPU directly and
+   * its RAM copy is read back in the capture worker instead of on the main thread.
+   */
+  cacheFrameAtTime(video: HTMLVideoElement, time: number, options: { offMainThread?: boolean } = {}): void {
     if (video.videoWidth === 0 || video.readyState < 2) return;
 
     const target = this.computeSize(video.videoWidth, video.videoHeight);
@@ -114,7 +119,7 @@ export class ScrubTextureCache {
 
     const shouldCreateBitmap =
       typeof createImageBitmap === 'function' &&
-      (needsDownscale || shouldStageHtmlVideoFrame(video));
+      (options.offMainThread === true || needsDownscale || shouldStageHtmlVideoFrame(video));
 
     if (!shouldCreateBitmap) {
       this.addFrameFromSource(video, video.src, time, video.videoWidth, video.videoHeight);
@@ -137,10 +142,13 @@ export class ScrubTextureCache {
       : undefined;
     void createImageBitmap(video, bitmapOptions)
       .then((bitmap) => {
+        if (generation !== this.generation || this.lost) { bitmap.close(); return; }
+        if (options.offMainThread) {
+          this.addBackgroundFrame(bitmap, videoSrc, time, true); // takes ownership
+          return;
+        }
         try {
-          if (generation === this.generation && !this.lost) {
-            this.addFrameFromSource(bitmap, videoSrc, time, bitmap.width, bitmap.height);
-          }
+          this.addFrameFromSource(bitmap, videoSrc, time, bitmap.width, bitmap.height);
         } finally { bitmap.close(); }
       })
       .catch(() => { /* frame unavailable - skip */ })

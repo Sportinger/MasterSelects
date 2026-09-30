@@ -166,6 +166,39 @@ describe('TurboResFrameProvider', () => {
     expect(harness.sourceDispose).toHaveBeenCalledOnce();
   });
 
+  it('keeps the last picture visible while a newer scrub target decodes, but not for exact seeks', async () => {
+    vi.stubGlobal('VideoFrame', class VideoFrame {
+      timestamp: number;
+      constructor(_data: BufferSource, init: VideoFrameBufferInit) { this.timestamp = init.timestamp; }
+      close() {}
+    });
+    const harness = createHarness();
+    await harness.provider.load();
+    harness.provider.scrubSeek(1);
+    await vi.waitFor(() => expect(harness.provider.isDecodePending()).toBe(false));
+
+    // A drag moved on while target 5 decodes: the old picture stays, and 5 is shown
+    // on arrival instead of being discarded for the newer target 6.
+    const scrubPacket = deferred<TurboResPacket | null>();
+    vi.mocked(harness.source.getPacketAt).mockImplementationOnce(() => scrubPacket.promise);
+    harness.provider.scrubSeek(5);
+    harness.provider.scrubSeek(6);
+    expect(harness.provider.getCurrentFrame()?.timestamp).toBe(1_000_000);
+    scrubPacket.resolve(packet(5));
+    await vi.waitFor(() => expect(harness.provider.isDecodePending()).toBe(false));
+    expect(harness.onFrame).toHaveBeenCalledTimes(3);
+    expect(harness.provider.getDebugInfo()).toMatchObject({ decodedFrameCount: 3, discardedFrameCount: 0 });
+    expect(harness.provider.getCurrentFrame()?.timestamp).toBe(6_000_000);
+
+    const exactPacket = deferred<TurboResPacket | null>();
+    vi.mocked(harness.source.getPacketAt).mockImplementationOnce(() => exactPacket.promise);
+    harness.provider.seek(7);
+    expect(harness.provider.getCurrentFrame()).toBeNull();
+    exactPacket.resolve(packet(7));
+    await vi.waitFor(() => expect(harness.provider.getCurrentFrame()?.timestamp).toBe(7_000_000));
+    await harness.provider.destroyAsync();
+  });
+
   it('waits for an in-flight decode before releasing resources on destroy', async () => {
     vi.stubGlobal('VideoFrame', class VideoFrame {
       constructor(_data: BufferSource, _init: VideoFrameBufferInit) {}

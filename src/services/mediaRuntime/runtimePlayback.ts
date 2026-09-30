@@ -13,6 +13,8 @@ import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from './providerS
 import { buildRuntimeMetadataFromMediaFile } from './clipBindings';
 import { getCodecProviderDescriptor } from './codec/codecProviderDescriptors';
 import { requestCodecSourceAudioProxy } from './codecSourceAudioProxy';
+import { createCodecProviderRenderCallbacks, runtimeProviderRenderCallbacks, type EnsureRuntimeFrameProviderOptions } from './runtimeProviderRenderWake';
+export type { EnsureRuntimeFrameProviderOptions } from './runtimeProviderRenderWake';
 import { Logger } from '../logger';
 import {
   reserveRuntimeProviderResources,
@@ -81,12 +83,6 @@ function refreshRuntimeMetadataFromMediaStore(runtime: MediaSourceRuntime): void
   if (!mediaFileId) return;
   const mediaFile = useMediaStore.getState().files.find((file) => file.id === mediaFileId);
   if (mediaFile) runtime.updateMetadata(buildRuntimeMetadataFromMediaFile(mediaFile));
-}
-
-export interface EnsureRuntimeFrameProviderOptions {
-  readonly preferWorkerWebCodecs?: boolean;
-  readonly onFrame?: () => void;
-  readonly onError?: (error: Error) => void;
 }
 
 function attachOwnedRuntimeProvider(
@@ -583,15 +579,10 @@ export async function ensureRuntimeFrameProvider(
           file,
           plan: codecPlan,
           policy,
-          onFrame: () => {
-            options.onFrame?.();
-            renderHostPort.requestNewFrameRender();
-          },
-          onError: (error) => {
-            options.onError?.(error);
-            log.warn(`${descriptor.logName} provider error`, { sourceId: binding.sourceId, message: error.message });
-            renderHostPort.requestRender();
-          },
+          ...createCodecProviderRenderCallbacks(
+            { sourceId: binding.sourceId, sessionKey: binding.sessionKey, policy,
+              mediaFileId: runtime.descriptor.mediaFileId }, descriptor.logName, options,
+          ),
         });
         if (!codecProvider) {
           log.warn(`${descriptor.logName} provider failed to initialize`, {
@@ -616,12 +607,7 @@ export async function ensureRuntimeFrameProvider(
         const workerProvider = await createWorkerWebCodecsFrameProvider({
           sourceId: `${binding.sourceId}:${binding.sessionKey}`,
           file,
-          onFrame: () => {
-            renderHostPort.requestNewFrameRender();
-          },
-          onError: () => {
-            renderHostPort.requestRender();
-          },
+          ...runtimeProviderRenderCallbacks,
         });
 
         if (workerProvider) {
@@ -637,12 +623,7 @@ export async function ensureRuntimeFrameProvider(
       const player = new WebCodecsPlayer({
         loop: false,
         useSimpleMode: false,
-        onFrame: () => {
-          renderHostPort.requestNewFrameRender();
-        },
-        onError: () => {
-          renderHostPort.requestRender();
-        },
+        ...runtimeProviderRenderCallbacks,
       });
 
       try {

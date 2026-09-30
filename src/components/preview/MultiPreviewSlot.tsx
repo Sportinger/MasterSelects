@@ -19,6 +19,10 @@ interface MultiPreviewSlotProps {
   highlighted?: boolean;
   // Auto-distribute mode: render the Nth layer of a composition
   autoSource?: { compositionId: string; layerIndex: number } | null;
+  // Multicam cut mode: render camera N of the active composition (live even where it is cut out)
+  multicamAngle?: { compositionId: string; angleIndex: number; label: string } | null;
+  // This camera is on air at the playhead (red frame)
+  onAir?: boolean;
 }
 
 export function MultiPreviewSlot({
@@ -29,6 +33,8 @@ export function MultiPreviewSlot({
   onCompositionChange,
   highlighted = false,
   autoSource = null,
+  multicamAngle = null,
+  onAir = false,
 }: MultiPreviewSlotProps) {
   const { isEngineReady } = useEngine();
   const compositions = useMediaStore((s) => s.compositions);
@@ -53,6 +59,8 @@ export function MultiPreviewSlot({
   const displayedComp = compositions.find((c) => c.id === displayedCompId);
   const autoSourceCompositionId = autoSource?.compositionId;
   const autoSourceLayerIndex = autoSource?.layerIndex;
+  const multicamCompositionId = multicamAngle?.compositionId;
+  const multicamAngleIndex = multicamAngle?.angleIndex;
 
   const effectiveResolution = displayedComp
     ? { width: displayedComp.width, height: displayedComp.height }
@@ -69,7 +77,9 @@ export function MultiPreviewSlot({
     const customCompositionVisible = compositionId
       ? visibleCompositionIds.has(compositionId)
       : false;
-    const source = autoSourceVisible && autoSourceCompositionId !== undefined && autoSourceLayerIndex !== undefined
+    const source = multicamCompositionId !== undefined && multicamAngleIndex !== undefined
+      ? { type: 'multicam-angle' as const, compositionId: multicamCompositionId, angleIndex: multicamAngleIndex }
+      : autoSourceVisible && autoSourceCompositionId !== undefined && autoSourceLayerIndex !== undefined
       ? { type: 'layer-index' as const, compositionId: autoSourceCompositionId, layerIndex: autoSourceLayerIndex }
       : compositionId && customCompositionVisible
         ? { type: 'composition' as const, compositionId }
@@ -104,7 +114,7 @@ export function MultiPreviewSlot({
       useRenderTargetStore.getState().unregisterTarget(targetId);
       renderHostPort.unregisterTargetCanvas(targetId);
     };
-  }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid, autoSourceCompositionId, autoSourceLayerIndex, visibleCompositionIds]);
+  }, [isEngineReady, targetId, compositionId, slotIndex, showTransparencyGrid, autoSourceCompositionId, autoSourceLayerIndex, multicamCompositionId, multicamAngleIndex, visibleCompositionIds]);
 
   // Sync transparency grid flag without full re-registration
   useEffect(() => {
@@ -167,9 +177,13 @@ export function MultiPreviewSlot({
   );
 
   return (
-    <div className={`multi-preview-slot ${highlighted ? 'highlighted' : ''}`} ref={containerRef}>
+    <div className={`multi-preview-slot ${highlighted ? 'highlighted' : ''} ${onAir ? 'multicam-on-air' : ''}`} ref={containerRef}>
       {/* Hover-visible composition dropdown (custom mode only) */}
-      {autoSource ? (
+      {multicamAngle ? (
+        <div className="multi-preview-slot-dropdown-wrapper multicam-angle-label">
+          <span className="multi-preview-slot-label">{multicamAngle.angleIndex + 1} · {multicamAngle.label}</span>
+        </div>
+      ) : autoSource ? (
         <div className="multi-preview-slot-dropdown-wrapper">
           <span className="multi-preview-slot-label">Layer {autoSource.layerIndex + 1}</span>
         </div>

@@ -15,6 +15,12 @@ import { renderHostPort } from './render/renderHostPort';
 import type { RenderSurfaceFrameContext } from './render/renderHostTypes';
 import { getPlayheadPosition } from './layerBuilder/PlayheadState';
 import { isRenderTargetRenderable } from '../utils/renderTargetVisibility';
+import {
+  getMulticamAngleLayer,
+  isMulticamAngleLayerReady,
+  releaseMulticamAngles,
+  syncMulticamAngles,
+} from './multicam/multicamAngleRuntime';
 
 interface NestedCompInfo {
   clipId: string;
@@ -42,7 +48,8 @@ export interface IndependentRenderSchedulerRuntimeJob {
     | 'active-layer-filter'
     | 'nested-texture-copy'
     | 'composition-render'
-    | 'composition-not-ready';
+    | 'composition-not-ready'
+    | 'multicam-angle';
 }
 
 export interface IndependentRenderSchedulerRuntimeCounters {
@@ -99,6 +106,8 @@ class RenderSchedulerService {
   // Cache nested composition info to avoid recalculating every frame
   private nestedCompCache: Map<string, NestedCompInfo | null> = new Map();
   private nestedCompCacheTime = 0;
+  /** Whether multicam angle decoders are held for camera slots. */
+  private multicamAnglesLive = false;
   private readonly CACHE_INVALIDATION_MS = 100;
 
   // Reuse the main loop's pre-built layers for the active composition
@@ -304,7 +313,7 @@ class RenderSchedulerService {
         this.lastFrameTime = now;
         if (!renderHostPort.getIsExporting()) {
           try {
-            this.renderAllTargets();
+            const __tr = performance.now(); this.renderAllTargets(); performance.measure('mc:targets', { start: __tr }); // TEMP-MC-PROFILE
           } catch (error) {
             log.error('Independent render target pass failed; scheduler will continue', error);
           }
@@ -346,10 +355,16 @@ class RenderSchedulerService {
 
     // Per-frame evaluation cache: evaluate each composition only once
     const evalCache = new Map<string, { layers: Layer[]; time: number }>();
+    const multicamTime = this.syncMulticamAngleViews(activeCompId);
 
     for (const targetId of this.registeredTargets) {
       const target = store.targets.get(targetId);
       if (!target || !isRenderTargetRenderable(target)) continue;
+
+      if (target.source.type === 'multicam-angle') {
+        this.renderMulticamAngleTarget(targetId, target.source.compositionId, target.source.angleIndex, multicamTime);
+        continue;
+      }
 
       // Resolve source to compositionId
       const compId = store.resolveSourceToCompId(target.source);
@@ -491,6 +506,42 @@ class RenderSchedulerService {
         reason: 'composition-render',
       });
     }
+  }
+
+  /**
+   * Multicam camera views: advances every angle decoder of the active multicam
+   * composition while a camera slot is shown. Returns the timeline time, or null.
+   */
+  private syncMulticamAngleViews(activeCompId: string | null): number | null {
+    const targets = useRenderTargetStore.getState().targets;
+    const hasAngleTargets = [...this.registeredTargets].some((id) => targets.get(id)?.source.type === 'multicam-angle');
+    const multicam = useMediaStore.getState().compositions.find((comp) => comp.id === activeCompId)?.multicam;
+    if (!activeCompId || !hasAngleTargets || !multicam?.active) {
+      if (this.multicamAnglesLive) releaseMulticamAngles();
+      this.multicamAnglesLive = false;
+      return null;
+    }
+    const timeline = useTimelineStore.getState();
+    const time = this.getMainPlayheadTime();
+    syncMulticamAngles({
+      compositionId: activeCompId,
+      multicam,
+      time,
+      isPlaying: timeline.isPlaying,
+      isDragging: timeline.isDraggingPlayhead,
+      programClips: timeline.clips,
+    });
+    this.multicamAnglesLive = true;
+    return time;
+  }
+
+  private renderMulticamAngleTarget(targetId: string, compositionId: string, angleIndex: number, time: number | null): void {
+    const multicam = useMediaStore.getState().compositions.find((comp) => comp.id === compositionId)?.multicam;
+    const layer = multicam && time !== null ? getMulticamAngleLayer(compositionId, multicam, angleIndex, time) : null;
+    // A decoder still catching up keeps the slot on its last picture.
+    if (layer && !isMulticamAngleLayerReady(layer)) return;
+    renderHostPort.renderToPreviewCanvas(targetId, layer ? [layer] : [], { compositionId, timelineTimeSeconds: time ?? 0 });
+    this.recordRuntimeJob({ targetId, compositionId, state: 'completed', reason: 'multicam-angle' });
   }
 
   private recordRuntimeJob(input: Omit<IndependentRenderSchedulerRuntimeJob, 'jobId' | 'queuedAtMs' | 'startedAtMs' | 'finishedAtMs'>): void {

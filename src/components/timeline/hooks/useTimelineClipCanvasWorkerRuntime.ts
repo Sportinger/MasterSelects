@@ -93,11 +93,15 @@ export function useTimelineClipCanvasWorkerRuntime(
   const [workerRuntimeFallback, setWorkerRuntimeFallback] = useState<TimelineClipCanvasWorkerRuntimeFallback | null>(null);
   const workerRuntimeFallbackReason = workerRuntimeFallback?.key === workerRuntimeKey ? workerRuntimeFallback.reason : null;
   const [workerCanvasGeneration, bumpWorkerCanvasGeneration] = useReducer((value: number) => value + 1, 0);
-  const workerMode = rawWorkerMode && workerRuntimeFallbackReason === null;
   const workerRef = useRef<Worker | null>(null);
   const workerReadyRef = useRef(false);
   const workerTransferredCanvasRef = useRef(false);
   const mainThreadCanvasContextInitializedRef = useRef(false);
+  // Once this canvas has a 2D context, keep its rendered pixels and backend.
+  // Promoting it when the last waveform arrives requires replacing the canvas,
+  // which clears every waveform while the worker starts (or times out).
+  const workerMode = rawWorkerMode && workerRuntimeFallbackReason === null &&
+    !mainThreadCanvasContextInitializedRef.current;
   const workerDrawRequestIdRef = useRef(0);
   const pendingWorkerDrawRef = useRef<PendingTimelineClipCanvasWorkerDraw | null>(null);
 
@@ -193,12 +197,6 @@ export function useTimelineClipCanvasWorkerRuntime(
     if (!workerMode) return;
     const canvas = canvasRef.current;
     if (!canvas || workerRef.current) return;
-    if (mainThreadCanvasContextInitializedRef.current) {
-      mainThreadCanvasContextInitializedRef.current = false;
-      bumpWorkerCanvasGeneration();
-      return;
-    }
-
     let disposed = false;
     let readyTimeoutId: number | null = null;
     const worker = new Worker(new URL('../workers/timelineClipCanvas.worker.ts', import.meta.url), { type: 'module' });

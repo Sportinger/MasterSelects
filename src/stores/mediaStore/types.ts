@@ -336,6 +336,8 @@ export interface Composition extends MediaItem {
   transitionComp?: TransitionCompositionLink;
   captionComp?: import('../../types/caption').CaptionCompositionLink;
   annotations?: SourceAnnotation[];
+  /** Multicam edit: camera tracks and their full-length sources. */
+  multicam?: import('../../types/multicam').CompositionMulticam;
 }
 
 // Folder for organization

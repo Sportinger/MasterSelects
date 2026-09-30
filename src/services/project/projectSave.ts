@@ -53,6 +53,7 @@ import {
   isProjectStoreSyncInProgress,
   withProjectStoreDirtyMarkSuppressed,
   withProjectStoreSyncGuard,
+  waitForProjectStoreSync,
 } from './projectStoreSyncGuard';
 import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
 import {
@@ -519,9 +520,17 @@ export async function saveCurrentProject(options: SaveCurrentProjectOptions = {}
     return false;
   }
 
-  if (isProjectStoreSyncInProgress()) {
-    log.warn('Skipped project save while project stores are being synchronized');
-    return false;
+  const project = projectFileService.getProjectData();
+  while (isProjectStoreSyncInProgress()) {
+    if (options.source !== 'manual') {
+      log.warn('Skipped project save while project stores are being synchronized');
+      return false;
+    }
+    await waitForProjectStoreSync();
+    if (!projectFileService.isProjectOpen() || projectFileService.getProjectData() !== project) {
+      log.warn('Cancelled waiting project save because the project changed');
+      return false;
+    }
   }
 
   if (options.source === 'manual') {

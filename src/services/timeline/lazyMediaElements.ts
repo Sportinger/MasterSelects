@@ -493,6 +493,9 @@ function attachVideoElement(ctx: FrameContext, clip: TimelineClip, now: number):
     (hasNativeDecoderForTimelineClip(clip) && !clip.freeRun)
   ) return;
   if (!shouldAttachFreshLazyElement(ctx, clip, 'video')) return;
+  // HTMLVideoElement cannot open MXF; its decoder provider is the only path. A dead
+  // element made paused seeks wait on a scrub settle that never completed.
+  if (getMediaFileForLazyClip(ctx, clip)?.videoCodecId?.startsWith('mxf:')) return;
   if (!canAttachLazyMedia(ctx, clip, 'video')) return;
 
   const source = getLazySource(ctx, clip, 'video');
@@ -1120,16 +1123,18 @@ export function hydrateTimelineMediaWindow(ctx: FrameContext): void {
 
   const now = ctx.now;
   const desired = new Set<string>();
+  // Occlusion culling: tracks beneath a lasting opaque full-frame track get no video element.
+  const renderVisibleVideoTrackIds = ctx.renderVisibleVideoTrackIds ?? ctx.visibleVideoTrackIds;
   const hydrateVideo = renderHostPort.getTelemetry().mode !== 'worker-gpu-only' ||
     !flags.useFullWebCodecsPlayback ||
-    ctx.clipsAtTime.some((clip) => ctx.visibleVideoTrackIds.has(clip.trackId) && clipTreeNeedsLiveVideoElement(clip));
+    ctx.clipsAtTime.some((clip) => renderVisibleVideoTrackIds.has(clip.trackId) && clipTreeNeedsLiveVideoElement(clip));
   const videoStart = ctx.playheadPosition - VIDEO_LOOKBEHIND_SECONDS;
   const videoEnd = ctx.playheadPosition + (ctx.isPlaying ? VIDEO_LOOKAHEAD_SECONDS : 0.8);
   const audioStart = ctx.playheadPosition - AUDIO_LOOKBEHIND_SECONDS;
   const audioEnd = ctx.playheadPosition + (ctx.isPlaying ? AUDIO_LOOKAHEAD_SECONDS : 0.4);
 
   if (hydrateVideo) {
-    for (const clip of collectDesiredClips(ctx, 'video', ctx.visibleVideoTrackIds, videoStart, videoEnd)) {
+    for (const clip of collectDesiredClips(ctx, 'video', renderVisibleVideoTrackIds, videoStart, videoEnd)) {
       markDesired(desired, 'video', clip, now);
       attachVideoElement(ctx, clip, now);
     }

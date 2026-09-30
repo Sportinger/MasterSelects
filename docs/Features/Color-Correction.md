@@ -106,6 +106,13 @@ fields collect at the top and the wheels form two columns; at 340 pixels or
 narrower the wheels form one column. The portrait surface scrolls vertically,
 and its minimum dock width is 168 pixels so numeric readouts are never clipped.
 
+The sun icon opens the **Exposure** surface for the selected corrector:
+**Exposure** in stops (-4 to +4), **Black Point** (0-50) and **White Point**
+(50-100) on the 0-100 signal scale. Each field has its own keyframe stopwatch,
+MIDI learn on the label, and the usual drag, type, and reset interactions. The
+fields form three columns, two at 668 pixels or narrower, and one at 300 pixels
+or narrower.
+
 ### Color Tab Layout
 
 The toolbar provides List/Nodes switching, grade bypass, reset all color keyframes, Add Primary, Add Wheels, Reset, and Disconnect for a selected edge. The list shows editable nodes with enable, reset, and delete controls; the selected node's inspector provides its parameter controls.

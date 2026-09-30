@@ -57,7 +57,7 @@ export interface AIToolExecutionOptions {
 export const MODIFYING_TOOLS = new Set([
   'createImageNodeGraph', 'editOperatorGraph',
   'splitClip', 'splitClipEvenly', 'splitClipAtTimes', 'reorderClips', 'deleteClip', 'deleteClips', 'moveClip', 'trimClip',
-  'createTrack', 'deleteTrack', 'setTrackVisibility', 'setTrackMuted',
+  'createTrack', 'renameTrack', 'deleteTrack', 'setTrackVisibility', 'setTrackMuted',
   'cutRangesFromClip',
   // Media tools
   'createMediaFolder', 'renameMediaItem', 'deleteMediaItem', 'moveMediaItems',

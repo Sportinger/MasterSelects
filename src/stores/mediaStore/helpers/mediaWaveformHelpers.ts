@@ -82,29 +82,29 @@ export function startMediaFileWaveformGeneration(
   });
 
   const job = (async () => {
+    let lastProgress = -1;
+    let lastProgressAt = 0;
+    const reportProgress = (progress: number): void => {
+      const rounded = Math.round(progress);
+      if (rounded === lastProgress || (rounded < 99 && performance.now() - lastProgressAt < 500)) return;
+      const current = resolveMediaFile?.(mediaFile.id);
+      if (current && hasReadyWaveform(current)) return;
+      lastProgress = rounded;
+      lastProgressAt = performance.now();
+      updateMediaFile(mediaFile.id, { waveformProgress: rounded, waveformStatus: 'generating' });
+    };
     try {
       const analysis = await generateTimelineWaveformAnalysisForFile(file, {
         mediaFileId: mediaFile.id,
         includePyramid: true,
+        background: true,
+        reuseCompleted: options.force !== true,
+        reusePersisted: options.force !== true,
+        includePartialPreview: false,
         samplesPerSecond: SOURCE_WAVEFORM_PREVIEW_SAMPLES_PER_SECOND,
         maxPreviewSamples: SOURCE_WAVEFORM_MAX_PREVIEW_SAMPLES,
-        onProgress: (progress, partialWaveform) => {
-          const current = resolveMediaFile?.(mediaFile.id);
-          if (current && hasReadyWaveform(current)) return;
-          updateMediaFile(mediaFile.id, {
-            waveform: partialWaveform,
-            waveformProgress: mapSourceWaveformPreviewProgress(progress),
-            waveformStatus: 'generating',
-          });
-        },
-        onPyramidProgress: (progress) => {
-          const current = resolveMediaFile?.(mediaFile.id);
-          if (current && hasReadyWaveform(current)) return;
-          updateMediaFile(mediaFile.id, {
-            waveformProgress: mapSourceWaveformPyramidProgress(progress),
-            waveformStatus: 'generating',
-          });
-        },
+        onProgress: progress => reportProgress(mapSourceWaveformPreviewProgress(progress)),
+        onPyramidProgress: progress => reportProgress(mapSourceWaveformPyramidProgress(progress)),
       });
 
       updateMediaFile(mediaFile.id, {
