@@ -13,7 +13,7 @@ import type { Effect } from '../../src/types/effects';
  * main passes between two timestamped empty passes.
  */
 const WIDTH = 1920, HEIGHT = 1080, FPS = 30, SECONDS = 8, STATIC_REPEATS = 30;
-type Mode = 'hashed' | 'coverage4x';
+type Mode = 'hashed' | 'coverage4x' | 'analytic';
 
 function camera(): SceneCamera {
   const distance = getSharedSceneDefaultCameraDistance(50);
@@ -51,7 +51,7 @@ async function measure() {
     const source = buildStrandsLayerSources(clip, time, [])[0]?.source.strands;
     const compileMs = performance.now() - compileStart;
     if (!source?.program.render) throw new Error(`No strand program at ${time}s`);
-    if (mode === 'coverage4x') source.program.render.antialiasing = 'coverage4x';
+    if (mode !== 'hashed') source.program.render.antialiasing = mode;
     const layer: SceneStrandLayer = { kind: 'strands', layerId: clipId, clipId, opacity: 1, blendMode: 'normal',
       sourceWidth: WIDTH, sourceHeight: HEIGHT, worldMatrix: identity, strands: source };
     const temporary: GPUBuffer[] = [];
@@ -104,7 +104,7 @@ async function measure() {
         .map(sample => `${round(sample.time)}: ${round(sample.compileMs + sample.prepareMs)}`).join(', ') });
   };
   try {
-    for (const mode of ['hashed', 'coverage4x'] as const) {
+    for (const mode of ['hashed', 'coverage4x', 'analytic'] as const) {
       const pass = new StrandPass();
       // A fresh clip id per mode restarts the cloth from its pre-roll, like opening the project.
       const clipId = `perf-${mode}`;

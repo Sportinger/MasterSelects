@@ -59,7 +59,7 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
     [curves('curves', true)], [{ id: 'scene', label: 'Scene', type: 'scene' }],
     [number('width', 'Width', 0.004, 0, 1, 0.0005), { id: 'color', label: 'Color', type: 'color', default: '#e8e2d6', animatable: true },
       { id: 'antialiasing', label: 'Antialiasing', type: 'select', default: 'hashed', animatable: false,
-        options: [{ value: 'hashed', label: 'Hashed' }, { value: 'coverage4x', label: '4x Coverage' }] }],
+        options: [{ value: 'hashed', label: 'Hashed' }, { value: 'coverage4x', label: '4x Coverage' }, { value: 'analytic', label: 'Analytic' }] }],
     { bypass: 'mute' }),
 ];
 

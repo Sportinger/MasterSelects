@@ -71,8 +71,10 @@ export class FlockRadixSort {
 
   get output(): GPUBuffer { return this.buffers[this.passes % 2]; }
 
-  encode(encoder: GPUCommandEncoder): GPUBuffer {
-    const pass = encoder.beginComputePass({ label: 'flock-fluid-sort', timestampWrites: flockGpuTimings(this.device).writes(encoder, 'fluidSort') });
+  /** `timingLabel`: Flock GPU timing sample to record into, or null for other users of the sort. */
+  encode(encoder: GPUCommandEncoder, timingLabel: string | null = 'fluidSort'): GPUBuffer {
+    const pass = encoder.beginComputePass({ label: timingLabel ? 'flock-fluid-sort' : 'radix-sort',
+      timestampWrites: timingLabel ? flockGpuTimings(this.device).writes(encoder, timingLabel) : undefined });
     for (let digit = 0; digit < this.passes; digit++) {
       pass.setBindGroup(0, this.groups[digit % 2], [digit * this.stride]);
       for (const entry of ['histogram', 'scanHistogram', 'scatter'] as Entry[]) {

@@ -305,31 +305,30 @@ fn shadeFiber(tangent: vec3f, normal: vec3f, view: vec3f, light: vec3f, tube: f3
   return u.color.rgb * (diffuse + 0.3 * trt + 0.35 * tt) + vec3f(0.22 * r);
 }
 
-@fragment
-fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
-  if (u.twist.w < 0.5 && in.coverage < 1.0 && hash3(u32(in.position.x), u32(in.position.y), in.segment) >= in.coverage) {
-    discard;
-  }
-  let tangent = normalize(in.tangent);
-  let view = normalize(in.toCamera);
+/**
+ * Lit color of a fiber at one point of its ribbon. `across` runs from -1 to 1 over the ribbon width,
+ * `widthAxis` is the world direction of its +1 side and `pixels` the projected fiber width.
+ */
+fn shadeStrandPoint(tangentIn: vec3f, toCamera: vec3f, acrossIn: f32, widthAxis: vec3f, pixels: f32) -> vec3f {
+  let tangent = normalize(tangentIn);
+  let view = normalize(toCamera);
   // Cylinder normal across the ribbon: the width axis at the edges, facing the viewer in the middle.
-  let across = clamp(in.across, -1.0, 1.0);
+  let across = clamp(acrossIn, -1.0, 1.0);
   let facingRaw = view - tangent * dot(view, tangent);
   let facing = select(view, normalize(facingRaw), dot(facingRaw, facingRaw) > 1e-12);
-  let widthRaw = in.widthAxis - tangent * dot(in.widthAxis, tangent);
+  let widthRaw = widthAxis - tangent * dot(widthAxis, tangent);
   let width = select(cross(tangent, facing), normalize(widthRaw), dot(widthRaw, widthRaw) > 1e-12);
   let profile = sqrt(max(0.0, 1.0 - across * across));
   let normal = normalize(width * across + facing * profile);
-  let tube = smoothstep(1.5, 4.0, in.pixels);
+  let tube = smoothstep(1.5, 4.0, pixels);
   // Ambient darkens toward the silhouette of wide fibers, like occlusion between neighbours.
   let occlusion = mix(1.0, mix(0.55, 1.0, profile), tube);
-  let position = u.camera.xyz - in.toCamera;
+  let position = u.camera.xyz - toCamera;
   let shadowed = i32(u.shadow.x + 0.5);
   if (u.ambient.w < 0.0) {
     let visibility = select(1.0, shadowTransmittance(position), shadowed == 1);
-    let keyLit = u.light.w * u.color.rgb * occlusion
+    return u.light.w * u.color.rgb * occlusion
       + (1.0 - u.light.w) * visibility * shadeFiber(tangent, normal, view, normalize(u.light.xyz), tube);
-    return vec4f(keyLit, select(1.0, in.coverage, u.twist.w > 0.5));
   }
   // Scene lights, with the MeshPass falloff and panel direction.
   var rgb = u.ambient.rgb * u.color.rgb * occlusion;
@@ -349,5 +348,14 @@ fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
     let visibility = select(1.0, shadowTransmittance(position), shadowed == index + 2);
     rgb += light.colorIntensity.rgb * light.colorIntensity.a * attenuation * visibility * shadeFiber(tangent, normal, view, direction, tube);
   }
-  return vec4f(min(rgb, vec3f(8.0)), select(1.0, in.coverage, u.twist.w > 0.5));
+  return min(rgb, vec3f(8.0));
+}
+
+@fragment
+fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
+  if (u.twist.w < 0.5 && in.coverage < 1.0 && hash3(u32(in.position.x), u32(in.position.y), in.segment) >= in.coverage) {
+    discard;
+  }
+  // 4x coverage turns alpha into the sample mask; hashed rendering is opaque per fragment.
+  return vec4f(shadeStrandPoint(in.tangent, in.toCamera, in.across, in.widthAxis, in.pixels), select(1.0, in.coverage, u.twist.w > 0.5));
 }

@@ -3,7 +3,7 @@ import { createDefaultWeaveGraph, createWaveStrandsGraph, geometryParameterReade
 import { compileGeometryGraph, type GeometryProgram } from '../../src/services/operators/geometry/geometryProgram';
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
 import { buildStrandsLayerSources } from '../../src/services/operators/geometry/strandsLayerSource';
-import { cameraPositionFromView, parseStrandColor, SEGMENT_HAS_NEXT, SEGMENT_HAS_PREVIOUS, strandSceneMatrix, strandSegmentStarts, strandSubdivisions, worldMatrixScale } from '../../src/engine/native3d/passes/StrandPass';
+import { cameraPositionFromView, parseStrandColor, SEGMENT_HAS_NEXT, SEGMENT_HAS_PREVIOUS, strandDepthRange, strandSceneMatrix, strandSegmentStarts, strandSubdivisions, worldMatrixScale } from '../../src/engine/native3d/passes/StrandPass';
 import { collectScene3DLayers } from '../../src/engine/scene/SceneLayerCollector';
 import { canRenderNativeScene } from '../../src/engine/native3d/sceneRenderer/drawPlan';
 import { validateWorkerGpuFrameStackContract } from '../../src/services/render/workerGpuFrameStackContract';
@@ -67,6 +67,10 @@ describe('Weave strand rendering', () => {
     expect(quality.render?.antialiasing).toBe('coverage4x');
     expect(isGeometryProgram(structuredClone(quality))).toBe(true);
     expect(isGeometryProgram({ ...quality, render: { ...quality.render, antialiasing: 'unknown' } })).toBe(false);
+    graph.nodes.find(node => node.id === 'render')!.constants!.antialiasing = 'analytic';
+    const analytic = compileGeometryGraph(graph, geometryParameterReader({}));
+    expect(analytic.render?.antialiasing).toBe('analytic');
+    expect(isGeometryProgram(structuredClone(analytic))).toBe(true);
     const { stack, admission, payload } = nativeSceneFixture();
     const base = payload.layers[0];
     (payload.layers as unknown[]).push({ layerId: 'quality-strands', clipId: base.clipId,
@@ -80,6 +84,20 @@ describe('Weave strand rendering', () => {
     const effects = [weave({ operatorGraph: JSON.parse(JSON.stringify(graph)) })];
     expect(buildStrandsLayerSources({ id: 'clip', effects }, 5, [])[0].source.strands.program.render?.antialiasing)
       .toBe('coverage4x');
+  });
+
+  it('spreads the analytic depth key over the depth range a layer can reach', () => {
+    const view = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -5, 1]);
+    const near = 1, far = 100;
+    // WebGPU perspective: depth 0 at the near plane, 1 at the far plane.
+    const projection = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, far / (near - far), -1, 0, 0, near * far / (near - far), 0]);
+    const ndc = (distance: number) => (far / (near - far) * -distance + near * far / (near - far)) / distance;
+    const world = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    const [low, high] = strandDepthRange(world, 1, { viewMatrix: view, projectionMatrix: projection });
+    expect(low).toBeCloseTo(ndc(4), 6);
+    expect(high).toBeCloseTo(ndc(6), 6);
+    // Bounds reaching behind the camera start at the near plane.
+    expect(strandDepthRange(world, 10, { viewMatrix: view, projectionMatrix: projection })[0]).toBe(0);
   });
 
   it('prepares draw data for ribbons', () => {

@@ -1,5 +1,3 @@
-import strandShader from '../shaders/StrandScene.wgsl?raw';
-import shadowSample from '../shaders/StrandShadowSample.wgsl?raw';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
 import type { SceneCamera, SceneLayer3DData, SceneLightLayer, SceneStrandLayer } from '../../scene/types';
 import { evaluateGeometryProgram } from '../../../services/operators/geometry/geometryEvaluation';
@@ -8,12 +6,15 @@ import { packStrandLights, STRAND_LIGHT_FLOATS } from './strandLights';
 import { STRAND_SHADOW_MAP_SIZE, strandShadowView, type StrandShadowView } from './strandShadowLight';
 import { StrandShadowMaps, type StrandShadowTargets } from './strandShadowMaps';
 import { StrandCoverageTargets } from './StrandCoverageTargets';
+import { StrandComputeRaster } from './strandRaster/StrandComputeRaster';
+import { STRAND_SCENE_SHADER } from './strandShaders';
 import { multiplyMat4 } from '../../scene/SceneTransformUtils';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('StrandPass');
-/** The strand shader with the deep opacity lookup it shares with lit meshes. */
-export const STRAND_SCENE_SHADER = `${shadowSample}\n${strandShader}`;
+export { STRAND_SCENE_SHADER };
+/** `twist.w` of the strand uniforms: how a layer is antialiased. */
+const ANTIALIASING_MODE = { hashed: 0, coverage4x: 1, analytic: 2 } as const;
 /** Fixed layout up to the flyaway vector, then the packed scene lights, the shadowing light and its mesh occluders. */
 const LIGHTS_OFFSET = 76;
 const SHADOW_OFFSET = LIGHTS_OFFSET + STRAND_LIGHT_FLOATS;
@@ -58,6 +59,22 @@ export function strandSubdivisions(segmentLength: number, extent: number, world:
   return Math.max(1, Math.min(MAX_SUBDIVISIONS, Math.ceil(pixels / PIXELS_PER_PIECE)));
 }
 export interface PreparedStrandLayer { layer: SceneStrandLayer; buffers: StrandBuffers }
+
+/**
+ * NDC depth range of a layer bounded by a sphere of `radius` (scene units) around its origin, for
+ * this camera; the analytic raster spreads its depth key over it.
+ */
+export function strandDepthRange(world: Float32Array, radius: number, camera: Pick<SceneCamera, 'viewMatrix' | 'projectionMatrix'>): [number, number] {
+  const v = camera.viewMatrix, p = camera.projectionMatrix;
+  // View-space depth of the layer origin; the camera looks down -Z.
+  const z = v[2] * world[12] + v[6] * world[13] + v[10] * world[14] + v[14];
+  const ndc = (viewZ: number) => {
+    const clipW = p[11] * viewZ + p[15];
+    return clipW > 1e-6 ? (p[10] * viewZ + p[14]) / clipW : 0;
+  };
+  const near = Math.max(0, Math.min(1, ndc(z + radius))), far = Math.max(0, Math.min(1, ndc(z - radius)));
+  return near < far ? [near, far] : [0, 1];
+}
 
 function normalize3(value: [number, number, number]): [number, number, number] {
   const length = Math.hypot(...value) || 1;
@@ -111,6 +128,8 @@ interface StrandDraw {
   shadow: StrandShadowView | null;
   /** Distance between deep opacity layers (scene units), about one yarn. */
   spacing: number;
+  /** Bounding sphere radius around the layer origin, yarn included (scene units). */
+  radius: number;
 }
 
 /** Draws opaque meshes into `depth` as seen through `view` and `projection` (a shadowing light). */
@@ -154,6 +173,7 @@ export class StrandPass {
   private readonly cache = new Map<string, StrandBuffers>();
   private readonly shadows = new StrandShadowMaps();
   private readonly coverage = new StrandCoverageTargets();
+  private readonly raster = new StrandComputeRaster();
 
   collect(layers: SceneLayer3DData[]): SceneStrandLayer[] {
     return layers.filter((layer): layer is SceneStrandLayer => layer.kind === 'strands');
@@ -163,14 +183,16 @@ export class StrandPass {
     if (this.device === device && this.pipeline) return;
     this.dispose();
     this.device = device;
+    // The analytic raster's compute kernels bind the same group as the render passes.
+    const all = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
     this.layout = device.createBindGroupLayout({ label: 'native-strands', entries: [
-      { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
-      { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-      { binding: 2, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },
-      { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
-      { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
-      { binding: 5, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
-      { binding: 6, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
+      { binding: 0, visibility: all, buffer: { type: 'uniform' } },
+      { binding: 1, visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 2, visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'depth' } },
+      { binding: 4, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
+      { binding: 5, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
+      { binding: 6, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'depth' } },
     ] });
     const module = device.createShaderModule({ code: STRAND_SCENE_SHADER, label: 'native-strands' });
     void module.getCompilationInfo?.().then(info => {
@@ -245,7 +267,7 @@ export class StrandPass {
     data.set([render.width * scale, 0, 0, Math.max(0, Math.min(1, layer.opacity))], 56);
     data.set([...KEY_LIGHT, AMBIENT], 60);
     data.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist, profile.fiberTwist] : [1, 1, 0, 0, 0], 64);
-    data[71] = render.antialiasing === 'coverage4x' ? 1 : 0;
+    data[71] = ANTIALIASING_MODE[render.antialiasing ?? 'hashed'];
     const flyaways = profile && render.flyaways, channels = flyaways ? FLYAWAY_CHANNELS : 0;
     if (flyaways) {
       data[69] = flyaways.seed;
@@ -255,14 +277,15 @@ export class StrandPass {
     // The shadow frames the layer's bounds, padded by the yarn around its curves.
     const center: [number, number, number] = [layer.worldMatrix[12], layer.worldMatrix[13], layer.worldMatrix[14]];
     const pad = (profile ? profile.radius * (1 + (flyaways ? flyaways.lift : 0)) : render.width) * scale;
-    const shadow = strandShadowView(lights, KEY_LIGHT, center, buffers.extent * scale + pad);
+    const radius = buffers.extent * scale + pad;
+    const shadow = strandShadowView(lights, KEY_LIGHT, center, radius);
     const spacing = Math.max(profile ? profile.radius * 2 : render.width * 8, 1e-5) * scale;
     if (shadow) {
       data.set(multiplyMat4(shadow.projection, shadow.view), SHADOW_OFFSET);
       data.set([shadow.lightIndex < 0 ? 1 : shadow.lightIndex + 2, spacing, OPACITY_PER_FIBER, shadow.strength], SHADOW_OFFSET + 16);
       data.set([shadow.near, shadow.far, shadow.perspective ? 1 : 0, 0], SHADOW_OFFSET + 20);
     }
-    return { layer, buffers, base: data, instances: (profile ? profile.plies * profile.fibers : 1) + channels, shadow, spacing };
+    return { layer, buffers, base: data, instances: (profile ? profile.plies * profile.fibers : 1) + channels, shadow, spacing, radius };
   }
 
   private bindGroup(device: GPUDevice, uniforms: Float32Array, buffers: StrandBuffers, depth: GPUTextureView, opacity: GPUTextureView,
@@ -336,27 +359,42 @@ export class StrandPass {
     const { draws, targets } = frame;
     if (!draws.length) return true;
     if (!this.pipeline || !this.layout || !this.depthPipeline || !this.opacityPipeline) return false;
-    const cameraPosition = cameraPositionFromView(camera.viewMatrix);
-    const multisampled = draws.some(draw => draw.base[71] > 0.5);
+    const cameraPosition = cameraPositionFromView(camera.viewMatrix), { width, height } = camera.viewport;
+    const limit = StrandComputeRaster.pieceLimit(device);
+    const plans = draws.map((draw, index) => {
+      const subdivisions = strandSubdivisions(draw.buffers.segmentLength, draw.buffers.extent, draw.layer.worldMatrix, cameraPosition, camera);
+      const uniforms = writeViewer(draw.base, camera.viewMatrix, camera.projectionMatrix, cameraPosition, width, height, subdivisions);
+      const bindGroup = this.bindGroup(device, uniforms, draw.buffers, targets[index].depth, targets[index].opacity, temporaryBuffers,
+        `native-strands-${draw.layer.layerId}`, targets[index].occluders);
+      return { draw, subdivisions, bindGroup, pieces: draw.buffers.segmentCount * subdivisions * draw.instances };
+    });
+    // Analytic layers too large for the device's buffers are drawn with 4x coverage instead.
+    const analytic = plans.filter(plan => plan.draw.base[71] === ANTIALIASING_MODE.analytic && plan.pieces <= limit);
+    const ribbons = plans.filter(plan => !analytic.includes(plan));
+    if (analytic.length < plans.filter(plan => plan.draw.base[71] === ANTIALIASING_MODE.analytic).length) {
+      log.warn('Analytic strand layer exceeds device limits; drawing it with 4x coverage', { limit });
+    }
+    const multisampled = ribbons.some(plan => plan.draw.base[71] !== ANTIALIASING_MODE.hashed);
     const drawLayers = (pass: GPURenderPassEncoder) => {
       pass.setPipeline(multisampled ? this.coveragePipeline! : this.pipeline!);
-      draws.forEach((draw, index) => {
-        const subdivisions = strandSubdivisions(draw.buffers.segmentLength, draw.buffers.extent, draw.layer.worldMatrix, cameraPosition, camera);
-        const uniforms = writeViewer(draw.base, camera.viewMatrix, camera.projectionMatrix, cameraPosition,
-          camera.viewport.width, camera.viewport.height, subdivisions);
-        pass.setBindGroup(0, this.bindGroup(device, uniforms, draw.buffers, targets[index].depth, targets[index].opacity, temporaryBuffers,
-          `native-strands-${draw.layer.layerId}`, targets[index].occluders));
-        pass.draw(draw.buffers.segmentCount * 6 * subdivisions, draw.instances);
-      });
+      for (const plan of ribbons) {
+        pass.setBindGroup(0, plan.bindGroup);
+        pass.draw(plan.draw.buffers.segmentCount * 6 * plan.subdivisions, plan.draw.instances);
+      }
     };
     if (multisampled) {
-      this.coverage.render(device, commandEncoder, sceneView, sceneDepthView, camera.viewport.width, camera.viewport.height, drawLayers);
-    } else {
+      this.coverage.render(device, commandEncoder, sceneView, sceneDepthView, width, height, drawLayers);
+    } else if (ribbons.length) {
       const pass = commandEncoder.beginRenderPass({ label: 'native-scene-strands-pass',
         colorAttachments: [{ view: sceneView, loadOp: 'load', storeOp: 'store' }],
         depthStencilAttachment: { view: sceneDepthView, depthLoadOp: 'load', depthStoreOp: 'store' } });
       drawLayers(pass);
       pass.end();
+    }
+    for (const plan of analytic) {
+      this.raster.render(device, commandEncoder, this.layout, sceneView, sceneDepthView, width, height, { bindGroup: plan.bindGroup,
+        pieces: plan.pieces, subdivisions: plan.subdivisions, instances: plan.draw.instances,
+        depthRange: strandDepthRange(plan.draw.layer.worldMatrix, plan.draw.radius, camera) }, temporaryBuffers);
     }
     return true;
   }
@@ -366,6 +404,7 @@ export class StrandPass {
     this.cache.clear();
     this.shadows.dispose();
     this.coverage.dispose();
+    this.raster.dispose();
     this.pipeline = null;
     this.coveragePipeline = null;
     this.depthPipeline = null;
