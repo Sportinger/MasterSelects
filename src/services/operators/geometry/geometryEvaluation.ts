@@ -1,37 +1,13 @@
-import { pointwiseOperation, type PointwiseValue } from '../fields/pointwiseOperations';
-import { weavePatternPointCount, type GeometryField, type GeometryProgram, type GeometryStage } from './geometryProgram';
+import { weavePatternPointCount, type GeometryProgram, type GeometryStage } from './geometryProgram';
 import { warpOver } from './weaveOperators';
 import { bindToCloth, clothGridAt } from './clothSurface';
+import { evaluateFieldColumn } from './curveFieldColumns';
 
 /**
  * Polylines as flat XYZ positions; strand `i` owns points `starts[i]` … `starts[i] + counts[i] - 1`.
  * `radius` is an optional per-point yarn radius scale written by Yarn Profile (absent means 1).
  */
 export interface CurveSet { positions: Float32Array; starts: Uint32Array; counts: Uint32Array; radius?: Float32Array }
-interface CurvePointContext { position: [number, number, number]; u: number; point: number; strand: number; points: number; strands: number }
-
-/** Evaluates one field for one point. This is the CPU reference of the GPU curve kernels. */
-export function evaluateGeometryField(field: GeometryField, context: CurvePointContext): PointwiseValue {
-  const values: PointwiseValue[] = [];
-  for (const item of field.instructions) {
-    const args = item.inputs.map(input => values[input]);
-    switch (item.operation) {
-      case 'constant': values.push(item.value ?? 0); break;
-      case 'position': values.push(context.position); break;
-      case 'curve-u': values.push(context.u); break;
-      case 'point-index': values.push(context.point); break;
-      case 'strand-index': values.push(context.strand); break;
-      case 'point-count': values.push(context.points); break;
-      case 'strand-count': values.push(context.strands); break;
-      default: {
-        const operation = pointwiseOperation(item.operation);
-        if (!operation) throw new Error(`Unsupported curve field operation: ${item.operation}`);
-        values.push(operation.evaluate(args, item.value));
-      }
-    }
-  }
-  return values[field.output];
-}
 
 /** Cosine crimp between crossings at t = k + 0.5; ends hold their outer crossing height. */
 function crimpHeight(t: number, crossings: number, lift: (crossing: number) => number): number {
@@ -63,20 +39,12 @@ function weavePattern(stage: Extract<GeometryStage, { kind: 'weave-pattern' }>):
   return { positions, starts, counts };
 }
 
-function forEachPoint(curves: CurveSet, visit: (index: number, context: CurvePointContext) => void) {
-  const { positions, starts, counts } = curves;
-  for (let strand = 0; strand < counts.length; strand++) {
-    const points = counts[strand];
-    for (let point = 0; point < points; point++) {
-      const index = starts[strand] + point, base = index * 3;
-      visit(index, { position: [positions[base], positions[base + 1], positions[base + 2]],
-        u: points > 1 ? point / (points - 1) : 0, point, strand, points, strands: counts.length });
-    }
-  }
-}
-
-/** Curves before the first Surface Bind do not change with time; results are kept per stage content. */
-const PREFIX_LIMIT = 4;
+/**
+ * Stages before the first Surface Bind do not depend on cloth time. Each of their results is kept
+ * under the content of all stages up to it, so a change late in that chain (an animated Yarn
+ * Profile radius) reuses the earlier curves, and field columns keyed by those curves stay valid.
+ */
+const PREFIX_LIMIT = 8;
 const prefixes = new Map<string, CurveSet>();
 
 /**
@@ -85,14 +53,19 @@ const prefixes = new Map<string, CurveSet>();
  */
 export function evaluateGeometryProgram(program: GeometryProgram): CurveSet {
   const split = program.stages.findIndex(stage => stage.kind === 'surface-bind');
-  if (split <= 0) return evaluateStages(program.stages);
-  const key = JSON.stringify(program.stages.slice(0, split));
-  let prefix = prefixes.get(key);
-  if (prefix) prefixes.delete(key);
-  else prefix = evaluateStages(program.stages.slice(0, split));
-  prefixes.set(key, prefix);
+  const cached = split < 0 ? program.stages.length : split;
+  let curves: CurveSet | undefined, key = '';
+  for (let index = 0; index < cached; index++) {
+    key += `${JSON.stringify(program.stages[index])}
+`;
+    let next = prefixes.get(key);
+    if (next) prefixes.delete(key);
+    else next = evaluateStages([program.stages[index]], curves);
+    prefixes.set(key, next);
+    curves = next;
+  }
   while (prefixes.size > PREFIX_LIMIT) prefixes.delete(prefixes.keys().next().value!);
-  return evaluateStages(program.stages.slice(split), prefix);
+  return evaluateStages(program.stages.slice(cached), curves);
 }
 
 /** Stages never modify their input curves, so a cached prefix can be shared. */
@@ -123,18 +96,25 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet): C
       }
       curves = next;
     } else if (stage.kind === 'set-position') {
-      const next = new Float32Array(curves.positions.length);
-      forEachPoint(curves, (index, context) => {
-        const target = stage.position ? evaluateGeometryField(stage.position, context) as number[] : context.position;
-        const offset = stage.offset ? evaluateGeometryField(stage.offset, context) as number[] : undefined;
-        for (let component = 0; component < 3; component++) next[index * 3 + component] = target[component] + (offset?.[component] ?? 0);
-      });
+      const { positions, starts, counts } = curves, next = new Float32Array(positions.length);
+      const target = stage.position && evaluateFieldColumn(stage.position, curves);
+      const offset = stage.offset && evaluateFieldColumn(stage.offset, curves);
+      for (let strand = 0; strand < counts.length; strand++) {
+        for (let index = starts[strand], end = index + counts[strand]; index < end; index++) {
+          const moved = target ? target(index) as number[] : undefined, shift = offset ? offset(index) as number[] : undefined;
+          for (let component = 0; component < 3; component++) {
+            next[index * 3 + component] = (moved ? moved[component] : positions[index * 3 + component]) + (shift?.[component] ?? 0);
+          }
+        }
+      }
       curves = { ...curves, positions: next };
     } else if (stage.kind === 'surface-bind') {
       curves = { ...curves, positions: bindToCloth(curves.positions, clothGridAt(stage.cloth, stage.time), stage.height) };
     } else if (stage.radius) {
-      const field = stage.radius, radius = new Float32Array(curves.positions.length / 3);
-      forEachPoint(curves, (index, context) => { radius[index] = Math.max(0, Number(evaluateGeometryField(field, context))); });
+      const { starts, counts } = curves, field = evaluateFieldColumn(stage.radius, curves), radius = new Float32Array(curves.positions.length / 3);
+      for (let strand = 0; strand < counts.length; strand++) {
+        for (let index = starts[strand], end = index + counts[strand]; index < end; index++) radius[index] = Math.max(0, Number(field(index)));
+      }
       curves = { ...curves, radius };
     }
   }
