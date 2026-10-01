@@ -1,6 +1,7 @@
 import { pointwiseOperation, type PointwiseValueType } from '../fields/pointwiseOperations';
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
-import { CURVE_CONTEXT_OPERATIONS, weavePatternPointCount, type GeometryField, type GeometryProgram } from './geometryProgram';
+import { CURVE_CONTEXT_OPERATIONS, knotCurveCount, knotPointCount, weavePatternPointCount, type GeometryField, type GeometryProgram } from './geometryProgram';
+import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES } from './knotCurves';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { isClothSpec } from './clothProgram';
 
@@ -45,6 +46,24 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
       if ((stage.warps as number) * (stage.wefts as number) * (stage.resolution as number) > CURVE_POINT_LIMIT) return false;
       points = weavePatternPointCount(stage as { warps: number; wefts: number; resolution: number });
       strands = (stage.warps as number) + (stage.wefts as number);
+    } else if (stage.kind === 'knot') {
+      if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', 'shape', 'p', 'q', 'size', 'depth', 'points'])
+        || ![stage.shape, stage.p, stage.q, stage.points].every(Number.isInteger) || (stage.shape as number) < 0
+        || (stage.shape as number) >= KNOT_SHAPES.length || (stage.points as number) < 16 || (stage.points as number) > CURVE_POINT_LIMIT
+        || ![stage.size, stage.depth].every(finite)
+        || (KNOT_SHAPES[stage.shape as number] === 'torus' && !isCoprimeTorusKnot(stage.p as number, stage.q as number))) return false;
+      points = knotPointCount(stage as { shape: number; points: number }); strands = knotCurveCount(stage.shape as number);
+    } else if (stage.kind === 'celtic-knot') {
+      if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', 'columns', 'rows', 'size', 'height', 'resolution', 'roundness'])
+        || ![stage.columns, stage.rows, stage.resolution].every(Number.isInteger) || (stage.columns as number) < 1 || (stage.rows as number) < 1
+        || (stage.columns as number) * (stage.rows as number) > 4096 || (stage.resolution as number) < 2 || (stage.resolution as number) > 64
+        || ![stage.size, stage.height, stage.roundness].every(finite)) return false;
+      const loops = celticLoops(stage.columns as number, stage.rows as number);
+      points = loops.reduce((sum, loop) => sum + loop.length * (stage.resolution as number) + 1, 0); strands = loops.length;
+    } else if (stage.kind === 'thread-along') {
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'progress', 'value', 'stagger', 'lift', 'liftLength', 'settle'])
+        || (stage.progress !== undefined && !isField(stage.progress))
+        || ![stage.value, stage.stagger, stage.lift, stage.liftLength, stage.settle].every(finite)) return false;
     } else if (stage.kind === 'yarn-profile') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'radius']) || (stage.radius !== undefined && !isField(stage.radius))) return false;
     } else if (stage.kind === 'strand-array') {

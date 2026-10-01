@@ -68,15 +68,15 @@ describe('Weave cloth', () => {
   it('compiles, transports and evaluates the default waving weave', () => {
     const graph = createDefaultWeaveGraph();
     const program = compile(graph, 1.25);
-    expect(program.stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'yarn-profile', 'surface-bind']);
+    expect(program.stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'set-position', 'thread-along', 'yarn-profile', 'surface-bind']);
     expect(isGeometryProgram(structuredClone(program))).toBe(true);
     const tampered = structuredClone(program) as any;
-    tampered.stages[2].cloth.columns = 4096;
+    tampered.stages[4].cloth.columns = 4096;
     expect(isGeometryProgram(tampered)).toBe(false);
     const waving = evaluateGeometryProgram(program).positions;
     expect(Math.max(...Array.from(waving.filter((_, index) => index % 3 === 2), Math.abs))).toBeGreaterThan(0.1);
     graph.groups!.find(group => group.id === 'wind-cloth')!.bypassed = true;
-    expect(compile(graph, 1.25).stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'yarn-profile']);
+    expect(compile(graph, 1.25).stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'set-position', 'thread-along', 'yarn-profile']);
   });
 
   it('runs cloth in the source time of the host clip', () => {

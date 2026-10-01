@@ -6,10 +6,10 @@ import { isGeometryProgram } from '../../src/services/operators/geometry/geometr
 import { warpOver } from '../../src/services/operators/geometry/weaveOperators';
 import { packStrandPoints, STRAND_POINT_FLOATS } from '../../src/engine/native3d/passes/strandFrames';
 
-/** The flat sheet: Wind Cloth bypassed, so positions are the analytic draft. */
+/** The flat, regular sheet: Wind Cloth and Handmade bypassed, so positions are the analytic draft. */
 const flatWeave = () => {
   const graph = createDefaultWeaveGraph();
-  graph.groups!.find(group => group.id === 'wind-cloth')!.bypassed = true;
+  for (const group of graph.groups!) if (group.id === 'wind-cloth' || group.id === 'handmade') group.bypassed = true;
   return graph;
 };
 /** Long after the weave-in, so every yarn is fully grown. */

@@ -2,6 +2,8 @@ import { weavePatternPointCount, type GeometryProgram, type GeometryStage } from
 import { warpOver } from './weaveOperators';
 import { bindToCloth, clothGridAt } from './clothSurface';
 import { evaluateFieldColumn } from './curveFieldColumns';
+import { celticKnotCurves, knotCurves } from './knotCurves';
+import { threadAlong } from './threadAlong';
 
 /**
  * Polylines as flat XYZ positions; strand `i` owns points `starts[i]` … `starts[i] + counts[i] - 1`.
@@ -78,6 +80,12 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet): C
       curves = { positions, starts: Uint32Array.of(0), counts: Uint32Array.of(stage.points) };
     } else if (stage.kind === 'weave-pattern') {
       curves = weavePattern(stage);
+    } else if (stage.kind === 'knot') {
+      curves = knotCurves(stage);
+    } else if (stage.kind === 'celtic-knot') {
+      curves = celticKnotCurves(stage);
+    } else if (stage.kind === 'thread-along') {
+      curves = threadAlong(stage, curves);
     } else if (stage.kind === 'strand-array') {
       const { positions, starts, counts, radius } = curves;
       const pointTotal = positions.length / 3, strandTotal = counts.length;
@@ -113,7 +121,10 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet): C
     } else if (stage.radius) {
       const { starts, counts } = curves, field = evaluateFieldColumn(stage.radius, curves), radius = new Float32Array(curves.positions.length / 3);
       for (let strand = 0; strand < counts.length; strand++) {
-        for (let index = starts[strand], end = index + counts[strand]; index < end; index++) radius[index] = Math.max(0, Number(field(index)));
+        // Multiplies an incoming radius scale, such as Thread Along hiding the curve ahead of its tip.
+        for (let index = starts[strand], end = index + counts[strand]; index < end; index++) {
+          radius[index] = Math.max(0, Number(field(index))) * (curves.radius ? curves.radius[index] : 1);
+        }
       }
       curves = { ...curves, radius };
     }

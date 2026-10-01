@@ -41,7 +41,7 @@ describe('Weave reveal fields', () => {
   it('grows the default weave from its center with a swollen front', () => {
     expect(validateWeaveGraph(createDefaultWeaveGraph())).toEqual([]);
     expect(exposedGraphValues(createDefaultWeaveGraph())).toMatchObject([{ nodeId: 'reveal', key: 'reveal_value', label: 'Reveal', min: 0, max: 1 },
-      { nodeId: 'weave', key: 'weave_value', label: 'Weave Speed' }]);
+      { nodeId: 'weave', key: 'weave_value', label: 'Weave Speed' }, { nodeId: 'hand-amount', key: 'irregularity_value', label: 'Irregularity', min: 0, max: 3 }]);
     const full = radiusAt(1).radius!;
     expect(Math.min(...full)).toBe(1);
     const hidden = radiusAt(0).radius!;

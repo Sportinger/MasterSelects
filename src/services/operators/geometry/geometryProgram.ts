@@ -6,6 +6,7 @@ import { pointwiseOperation, type PointwiseValueType } from '../fields/pointwise
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { compileClothSpec, type ClothSpec } from './clothProgram';
+import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES, type CelticKnotSpec, type KnotSpec } from './knotCurves';
 
 /** Context values a curve-point field can read, in addition to shared pointwise operations. */
 export const CURVE_CONTEXT_OPERATIONS = ['position', 'curve-u', 'point-index', 'strand-index', 'point-count', 'strand-count'] as const;
@@ -21,7 +22,11 @@ export type GeometryStage =
   | { kind: 'curve-line'; nodeId: string; points: number; length: number; axis: CurveAxis }
   | { kind: 'weave-pattern'; nodeId: string; pattern: number; warps: number; wefts: number; width: number; height: number;
       crimp: number; resolution: number }
+  | ({ kind: 'knot'; nodeId: string } & KnotSpec)
+  | ({ kind: 'celtic-knot'; nodeId: string } & CelticKnotSpec)
   | { kind: 'strand-array'; nodeId: string; count: number; spacing: number; axis: CurveAxis }
+  /** See threadAlong.ts; `value` is the Progress parameter used when no field is connected. */
+  | { kind: 'thread-along'; nodeId: string; progress?: GeometryField; value: number; stagger: number; lift: number; liftLength: number; settle: number }
   | { kind: 'set-position'; nodeId: string; position?: GeometryField; offset?: GeometryField }
   | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField }
   /** Curves on the cloth simulated by `cloth` at source time `time` (seconds). */
@@ -43,8 +48,14 @@ export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStr
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
-const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern']);
-const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind']);
+const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot']);
+const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
+  'geometry.thread-along']);
+/** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
+export const knotCurveCount = (shape: number) => KNOT_SHAPES[shape] === 'reef' ? 2 : 1;
+/** Points of a knot generator, matching knotCurves: the reef resamples 14 spline intervals per rope. */
+export const knotPointCount = (stage: { shape: number; points: number }) => KNOT_SHAPES[stage.shape] === 'reef'
+  ? 2 * (14 * Math.max(1, Math.round(stage.points / 14)) + 1) : stage.points + 1;
 /** Every warp crosses every weft; each thread has `resolution` points per crossing plus its end. */
 export const weavePatternPointCount = (stage: { warps: number; wefts: number; resolution: number }) =>
   stage.warps * (stage.wefts * stage.resolution + 1) + stage.wefts * (stage.warps * stage.resolution + 1);
@@ -167,6 +178,21 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     } else if (node.operator === 'geometry.curve-line') {
       stages.push({ kind: 'curve-line', nodeId: node.id, points: Math.round(finite(read(node, 'points'), 'Curve points')),
         length: finite(read(node, 'length'), 'Curve length'), axis: axisIndex(read(node, 'axis')) });
+    } else if (node.operator === 'geometry.knot') {
+      const shape = KNOT_SHAPES.indexOf(String(read(node, 'shape')) as typeof KNOT_SHAPES[number]);
+      stages.push({ kind: 'knot', nodeId: node.id, shape: Math.max(0, shape), p: Math.round(finite(read(node, 'p'), 'Torus P')),
+        q: Math.round(finite(read(node, 'q'), 'Torus Q')), size: finite(read(node, 'size'), 'Knot size'),
+        depth: finite(read(node, 'depth'), 'Knot depth'), points: Math.round(finite(read(node, 'points'), 'Knot points')) });
+    } else if (node.operator === 'geometry.celtic-knot') {
+      stages.push({ kind: 'celtic-knot', nodeId: node.id, columns: Math.round(finite(read(node, 'columns'), 'Columns')),
+        rows: Math.round(finite(read(node, 'rows'), 'Rows')), size: finite(read(node, 'size'), 'Cell size'),
+        height: finite(read(node, 'height'), 'Crossing height'), resolution: Math.round(finite(read(node, 'resolution'), 'Points per step')),
+        roundness: finite(read(node, 'roundness'), 'Roundness') });
+    } else if (node.operator === 'geometry.thread-along') {
+      const progress = compileField(node, 'progress', 'scalar');
+      stages.push({ kind: 'thread-along', nodeId: node.id, ...(progress ? { progress } : {}), value: finite(read(node, 'progress'), 'Progress'),
+        stagger: finite(read(node, 'stagger'), 'Stagger'), lift: finite(read(node, 'lift'), 'Lift'),
+        liftLength: finite(read(node, 'liftLength'), 'Lift length'), settle: finite(read(node, 'settle'), 'Settle') });
     } else if (node.operator === 'geometry.strand-array') {
       stages.push({ kind: 'strand-array', nodeId: node.id, count: Math.round(finite(read(node, 'count'), 'Strand count')),
         spacing: finite(read(node, 'spacing'), 'Strand spacing'), axis: axisIndex(read(node, 'axis')) });
@@ -183,6 +209,15 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     } else if (stage.kind === 'weave-pattern') {
       if (stage.warps < 1 || stage.wefts < 1 || stage.resolution < 2) throw new Error('Weave Pattern needs threads in both directions.');
       pointCount = weavePatternPointCount(stage); strandCount = stage.warps + stage.wefts;
+    } else if (stage.kind === 'knot') {
+      if (stage.points < 16) throw new Error('A knot needs at least 16 points.');
+      if (KNOT_SHAPES[stage.shape] === 'torus' && !isCoprimeTorusKnot(stage.p, stage.q)) throw new Error('A torus knot needs P and Q without a common divisor.');
+      pointCount = knotPointCount(stage); strandCount = knotCurveCount(stage.shape);
+    } else if (stage.kind === 'celtic-knot') {
+      if (stage.columns < 1 || stage.rows < 1 || stage.resolution < 2) throw new Error('Celtic Knot needs at least one cell and two points per step.');
+      if (stage.columns * stage.rows > 4096) throw new Error('Celtic Knot allows at most 4096 cells.');
+      const loops = celticLoops(stage.columns, stage.rows);
+      pointCount = loops.reduce((sum, loop) => sum + loop.length * stage.resolution + 1, 0); strandCount = loops.length;
     } else if (stage.kind === 'strand-array') {
       if (stage.count < 1) throw new Error('Strand Array needs a count of at least one.');
       pointCount *= stage.count; strandCount *= stage.count;

@@ -82,6 +82,7 @@ export function createWaveStrandsGraph(): EffectOperatorGraph {
 const FABRIC_NODES: Spec[] = [
   ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 24, wefts: 16, width: 2.4, height: 1.6, crimp: 0.03, resolution: 16 }],
   ['yarn', 'geometry.yarn-profile', 1320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
+  ['yarn-radius', 'math.multiply.scalar', 1320, 300],
   ['render', 'render.strands', 2280, 80, { width: 0.0035, color: '#e8e2d6' }],
   ['output', 'scene.output', 2600, 80],
   ['flyaways', 'geometry.flyaways', 1640, 80, { density: 3, length: 0.08, lift: 2.5, hair: 0.35, seed: 0 }],
@@ -104,46 +105,82 @@ const REVEAL_NODES: Spec[] = [
   ['reveal-ramp', 'field.ramp', 1040, 460, { x0: -0.12, y0: 1, x1: 0, y1: 1.6, x2: 0.1, y2: 0 }],
 ];
 /**
- * Weave In: every thread grows along its length in turn, warps first, with a swollen tip. Progress
- * is min(clip time × Weave Speed / 4 s, 1); thread k of n starts at progress 1.5·k/n / 2.6 and is
- * complete before progress 1, so a finished weave compiles to the same program every frame.
+ * Weave In: every thread is pulled in along its path by a lifted tip (Thread Along), warps first.
+ * Progress is min(clip time × Weave Speed / 4 s, 1), so a finished weave compiles to the same
+ * program every frame; bypassing the group shows the finished weave at once.
  */
 const WEAVE_IN_NODES: Spec[] = [
   ['weave-clock', 'geometry.clip-time', 0, 860], ['weave', 'values.number', 0, 1000], ['weave-rate', 'values.number', 0, 1140, { value: 0.25 }],
   ['weave-scaled', 'math.multiply.scalar', 260, 900], ['weave-progress-raw', 'math.multiply.scalar', 520, 900],
   ['weave-one', 'values.number', 520, 1060, { value: 1 }], ['weave-progress', 'math.min.scalar', 780, 900],
-  ['weave-spread', 'values.number', 780, 1060, { value: 2.6 }], ['weave-front', 'math.multiply.scalar', 1040, 900],
-  ['weave-info', 'geometry.curve-info', 260, 1240], ['weave-order', 'math.divide-ieee.scalar', 520, 1240],
-  ['weave-lag', 'values.number', 520, 1380, { value: 1.5 }], ['weave-delay', 'math.multiply.scalar', 780, 1240],
-  ['weave-local', 'math.subtract.scalar', 1300, 1000], ['weave-along', 'math.subtract.scalar', 1560, 1000],
-  ['weave-tip', 'field.ramp', 1820, 1000, { x0: -0.04, y0: 0, x1: 0, y1: 1.4, x2: 0.06, y2: 1 }],
-  ['weave-mix', 'math.multiply.scalar', 1080, 700],
+  ['thread', 'geometry.thread-along', 1000, 80, { stagger: 0.6, lift: 0.06, liftLength: 0.2, settle: 1.2 }],
+];
+/**
+ * Handmade: Irregularity scales a meander of each thread along its length (uneven spacing),
+ * a per-thread tension that varies the crimp, and slubs that thicken the yarn in places;
+ * 1 is the default look, 0 a machine-perfect weave.
+ */
+const HANDMADE_NODES: Spec[] = [
+  ['hand-amount', 'values.number', 0, 1400, { value: 1 }],
+  ['hand-wobble-scale', 'values.number', 0, 1540, { value: 0.008 }], ['hand-tension-scale', 'values.number', 0, 1680, { value: 0.35 }],
+  ['hand-wobble-amplitude', 'math.multiply.scalar', 260, 1440], ['hand-tension-amplitude', 'math.multiply.scalar', 260, 1680],
+  ['hand-wobble-x', 'field.noise', 520, 1400, { frequency: 1, amplitude: 0.008, octaves: 2, seed: 11 }],
+  ['hand-wobble-y', 'field.noise', 520, 1600, { frequency: 1, amplitude: 0.008, octaves: 2, seed: 12 }],
+  ['hand-meander-scale', 'values.number', 0, 2560, { value: 3 }], ['hand-meander', 'math.multiply.scalar', 260, 2560],
+  ['hand-meander-vector', 'vector.combine.vec3', 520, 2560],
+  ['hand-info', 'geometry.curve-info', 0, 1840], ['hand-golden', 'values.number', 0, 2000, { value: 0.618 }],
+  ['hand-zero', 'values.number', 0, 2140, { value: 0 }], ['hand-along-scale', 'values.number', 0, 2280, { value: 9 }],
+  ['hand-one', 'values.number', 0, 2420, { value: 1 }],
+  ['hand-thread-key', 'math.multiply.scalar', 260, 1880], ['hand-thread-vector', 'vector.combine.vec3', 520, 1880],
+  ['hand-tension', 'field.noise', 780, 1800, { frequency: 1, amplitude: 0.6, octaves: 1, seed: 13 }],
+  ['hand-position', 'geometry.position', 780, 2000], ['hand-split', 'vector.split.vec3', 1000, 2000],
+  ['hand-crimp', 'math.multiply.scalar', 1000, 1800], ['hand-offset', 'vector.combine.vec3', 1000, 1500],
+  ['hand-set', 'geometry.set-position', 560, 80],
+  ['hand-along', 'math.multiply.scalar', 260, 2280], ['hand-slub-vector', 'vector.combine.vec3', 520, 2200],
+  ['hand-slub-noise', 'field.noise', 780, 2200, { frequency: 1, amplitude: 1, octaves: 2, seed: 14 }],
+  ['hand-slub', 'field.ramp', 1000, 2200, { x0: 0.3, y0: 0, x1: 0.55, y1: 0.15, x2: 0.8, y2: 0.4 }],
+  ['hand-slub-amount', 'math.multiply.scalar', 1240, 2200], ['hand-swell', 'math.add.scalar', 1240, 2000],
 ];
 const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: string]> = [
-  ['pattern', 'curves', 'yarn', 'curves'], ['yarn', 'curves', 'flyaways', 'curves'], ['flyaways', 'curves', 'bind', 'curves'],
+  ['pattern', 'curves', 'hand-set', 'curves'], ['hand-set', 'curves', 'thread', 'curves'], ['thread', 'curves', 'yarn', 'curves'],
+  ['yarn', 'curves', 'flyaways', 'curves'], ['flyaways', 'curves', 'bind', 'curves'],
   ['bind', 'curves', 'render', 'curves'], ['render', 'scene', 'output', 'scene'],
   ['wind', 'force', 'cloth', 'forces'], ['swirl', 'force', 'cloth', 'forces'], ['cloth', 'surface', 'bind', 'surface'],
   ['reveal', 'value', 'reveal-radius', 'a'], ['reach', 'value', 'reveal-radius', 'b'], ['reveal-radius', 'value', 'reveal-shape', 'size'],
   ['reveal-shape', 'value', 'reveal-edge', 'a'], ['reveal-noise', 'value', 'reveal-edge', 'b'], ['reveal-edge', 'value', 'reveal-ramp', 'value'],
-  ['reveal-ramp', 'value', 'weave-mix', 'a'], ['weave-tip', 'value', 'weave-mix', 'b'], ['weave-mix', 'value', 'yarn', 'radius'],
+  ['reveal-ramp', 'value', 'yarn-radius', 'a'], ['hand-swell', 'value', 'yarn-radius', 'b'], ['yarn-radius', 'value', 'yarn', 'radius'],
   ['weave-clock', 'value', 'weave-scaled', 'a'], ['weave', 'value', 'weave-scaled', 'b'],
   ['weave-scaled', 'value', 'weave-progress-raw', 'a'], ['weave-rate', 'value', 'weave-progress-raw', 'b'],
   ['weave-progress-raw', 'value', 'weave-progress', 'a'], ['weave-one', 'value', 'weave-progress', 'b'],
-  ['weave-progress', 'value', 'weave-front', 'a'], ['weave-spread', 'value', 'weave-front', 'b'],
-  ['weave-info', 'strand', 'weave-order', 'a'], ['weave-info', 'strands', 'weave-order', 'b'],
-  ['weave-order', 'value', 'weave-delay', 'a'], ['weave-lag', 'value', 'weave-delay', 'b'],
-  ['weave-front', 'value', 'weave-local', 'a'], ['weave-delay', 'value', 'weave-local', 'b'],
-  ['weave-local', 'value', 'weave-along', 'a'], ['weave-info', 'u', 'weave-along', 'b'], ['weave-along', 'value', 'weave-tip', 'value'],
+  ['weave-progress', 'value', 'thread', 'progress'],
+  ['hand-amount', 'value', 'hand-wobble-amplitude', 'a'], ['hand-wobble-scale', 'value', 'hand-wobble-amplitude', 'b'],
+  ['hand-amount', 'value', 'hand-tension-amplitude', 'a'], ['hand-tension-scale', 'value', 'hand-tension-amplitude', 'b'],
+  ['hand-wobble-amplitude', 'value', 'hand-wobble-x', 'amplitude'], ['hand-wobble-amplitude', 'value', 'hand-wobble-y', 'amplitude'],
+  ['hand-info', 'u', 'hand-meander', 'a'], ['hand-meander-scale', 'value', 'hand-meander', 'b'],
+  ['hand-meander', 'value', 'hand-meander-vector', 'x'], ['hand-thread-key', 'value', 'hand-meander-vector', 'y'], ['hand-zero', 'value', 'hand-meander-vector', 'z'],
+  ['hand-meander-vector', 'value', 'hand-wobble-x', 'position'], ['hand-meander-vector', 'value', 'hand-wobble-y', 'position'],
+  ['hand-info', 'strand', 'hand-thread-key', 'a'], ['hand-golden', 'value', 'hand-thread-key', 'b'],
+  ['hand-thread-key', 'value', 'hand-thread-vector', 'x'], ['hand-zero', 'value', 'hand-thread-vector', 'y'], ['hand-zero', 'value', 'hand-thread-vector', 'z'],
+  ['hand-thread-vector', 'value', 'hand-tension', 'position'], ['hand-tension-amplitude', 'value', 'hand-tension', 'amplitude'],
+  ['hand-position', 'position', 'hand-split', 'value'], ['hand-split', 'z', 'hand-crimp', 'a'], ['hand-tension', 'value', 'hand-crimp', 'b'],
+  ['hand-wobble-x', 'value', 'hand-offset', 'x'], ['hand-wobble-y', 'value', 'hand-offset', 'y'], ['hand-crimp', 'value', 'hand-offset', 'z'],
+  ['hand-offset', 'value', 'hand-set', 'offset'],
+  ['hand-info', 'u', 'hand-along', 'a'], ['hand-along-scale', 'value', 'hand-along', 'b'],
+  ['hand-along', 'value', 'hand-slub-vector', 'x'], ['hand-thread-key', 'value', 'hand-slub-vector', 'y'], ['hand-zero', 'value', 'hand-slub-vector', 'z'],
+  ['hand-slub-vector', 'value', 'hand-slub-noise', 'position'], ['hand-slub-noise', 'value', 'hand-slub', 'value'],
+  ['hand-slub', 'value', 'hand-slub-amount', 'a'], ['hand-amount', 'value', 'hand-slub-amount', 'b'],
+  ['hand-slub-amount', 'value', 'hand-swell', 'a'], ['hand-one', 'value', 'hand-swell', 'b'],
 ];
 
 /**
- * Default Weave graph: a plain-woven sheet of fuzzy three-ply yarns whose threads weave in over the
- * first four seconds of the clip and billow in the wind. Reveal (1 = fully grown) and Weave Speed are
- * keyframeable in the Effects tab; bypassing Weave In shows the finished weave at once, Yarn the bare
+ * Default Weave graph: a plain-woven sheet of fuzzy three-ply yarns with handmade irregularity
+ * whose threads are pulled in over the first four seconds of the clip and billow in the wind.
+ * Reveal (1 = fully grown), Weave Speed and Irregularity are keyframeable in the Effects tab;
+ * bypassing Weave In shows the finished weave at once, Handmade a regular one, Yarn the bare
  * curves, Reveal by Shape the full sheet and Wind Cloth a flat one.
  */
 export function createDefaultWeaveGraph(): EffectOperatorGraph {
-  const specs = [...FABRIC_NODES, ...REVEAL_NODES, ...WEAVE_IN_NODES, ...CLOTH_NODES];
+  const specs = [...FABRIC_NODES, ...REVEAL_NODES, ...WEAVE_IN_NODES, ...HANDMADE_NODES, ...CLOTH_NODES];
   const nodes: BoundOperatorNode[] = specs.map(([id, operator, , , constants]) =>
     ({ id, operator, operatorVersion: 1, bindings: {}, ...(constants ? { constants: { ...constants } } : {}) }));
   const reveal = nodes.find(node => node.id === 'reveal')!;
@@ -152,12 +189,16 @@ export function createDefaultWeaveGraph(): EffectOperatorGraph {
   const weave = nodes.find(node => node.id === 'weave')!;
   weave.bindings = { value: 'weave_value' };
   weave.exposed = { label: 'Weave Speed', min: 0, max: 10, step: 0.05 };
+  const irregularity = nodes.find(node => node.id === 'hand-amount')!;
+  irregularity.bindings = { value: 'irregularity_value' };
+  irregularity.exposed = { label: 'Irregularity', min: 0, max: 3, step: 0.01 };
   return { version: 1, schemaVersion: 1, domain: 'geometry', nodes,
     edges: FABRIC_LINKS.map(([from, output, to, input]) => ({ id: `${from}-${output}-${to}-${input}`, from, output, to, input })),
     layout: Object.fromEntries(specs.map(([id, , x, y]) => [id, { x, y }])),
     groups: [{ id: 'reveal-by-shape', label: 'Reveal by Shape', color: '#5f9ea0', nodeIds: REVEAL_NODES.map(([id]) => id) },
       { id: 'weave-in', label: 'Weave In', color: '#b07fc8', nodeIds: WEAVE_IN_NODES.map(([id]) => id) },
-      { id: 'yarn', label: 'Yarn', color: '#c8a45a', nodeIds: ['yarn', 'flyaways'] },
+      { id: 'handmade', label: 'Handmade', color: '#7fae6a', nodeIds: HANDMADE_NODES.map(([id]) => id) },
+      { id: 'yarn', label: 'Yarn', color: '#c8a45a', nodeIds: ['yarn', 'yarn-radius', 'flyaways'] },
       { id: 'wind-cloth', label: 'Wind Cloth', color: '#6f8fc8', nodeIds: CLOTH_NODES.map(([id]) => id) }] };
 }
 

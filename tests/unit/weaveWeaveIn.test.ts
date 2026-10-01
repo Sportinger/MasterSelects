@@ -5,17 +5,19 @@ import { evaluateGeometryProgram } from '../../src/services/operators/geometry/g
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
+/** Flat and regular: Wind Cloth and Handmade bypassed, so radius and height come from Weave In alone. */
 const flat = () => {
   const graph = createDefaultWeaveGraph();
-  graph.groups!.find(group => group.id === 'wind-cloth')!.bypassed = true;
+  for (const group of graph.groups!) if (group.id === 'wind-cloth' || group.id === 'handmade') group.bypassed = true;
   return graph;
 };
+const maxHeight = (positions: Float32Array) => Math.max(...Array.from(positions.filter((_, index) => index % 3 === 2), Math.abs));
 const compileAt = (graph: EffectOperatorGraph, simulationTime: number, params: Record<string, unknown> = {}) =>
   compileGeometryGraph(graph, geometryParameterReader(params), undefined, { simulationTime });
 const visibleShare = (radius: Float32Array) => radius.filter(value => value > 0).length / radius.length;
 
 describe('Weave In', () => {
-  it('weaves the threads in over the first four seconds of the clip', () => {
+  it('pulls the threads in over the first four seconds of the clip', () => {
     const graph = flat();
     expect(validateWeaveGraph(graph)).toEqual([]);
     const at = (time: number) => evaluateGeometryProgram(compileAt(graph, time)).radius!;
@@ -27,8 +29,10 @@ describe('Weave In', () => {
     const done = at(4);
     expect(Math.min(...done)).toBe(1);
     expect(Math.max(...done)).toBe(1);
-    // A growing thread carries a swollen tip.
-    expect(Math.max(...at(1))).toBeGreaterThan(1.2);
+    // A thread being pulled in lifts its tip off the sheet; the woven sheet lies flat again (crimp 0.03).
+    const pulling = evaluateGeometryProgram(compileAt(graph, 1));
+    expect(maxHeight(pulling.positions)).toBeGreaterThan(0.08);
+    expect(maxHeight(evaluateGeometryProgram(compileAt(graph, 30)).positions)).toBeLessThan(0.035);
   });
 
   it('follows Weave Speed and settles into one program once woven', () => {

@@ -2,6 +2,7 @@ import type { OperatorDefinition, OperatorParameter, OperatorPort } from '../../
 import { WEAVE_OPERATORS } from './weaveOperators';
 import { FIELD_OPERATORS } from './fieldOperators';
 import { CLOTH_OPERATORS } from './clothOperators';
+import { KNOT_OPERATORS } from './knotOperators';
 
 /**
  * General curve geometry operators. Curves flow between generators and modifiers;
@@ -52,6 +53,13 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
       number('lift', 'Lift', 2.5, 0, 50, 0.1), number('hair', 'Free Ends', 0.35, 0, 1, 0.01),
       number('seed', 'Seed', 0, 0, 9999, 1, false)],
     { bypass: 'passthrough' }),
+  operator('geometry.thread-along', 'Thread Along', 'Pulls each curve in along its own path behind a tip that arcs up by Lift and settles behind it; ahead of the tip the curve is hidden. Progress runs from 0 to 1 (per point when connected); Stagger starts later curves later.',
+    [curves('curves', true), { id: 'progress', label: 'Progress', type: 'number' }], [curves()],
+    [number('progress', 'Progress', 1, 0, 1, 0.001), number('stagger', 'Stagger', 0.5, 0, 0.99, 0.01),
+      number('lift', 'Lift', 0.06, 0, 10, 0.001), number('liftLength', 'Lift Length', 0.2, 0.001, 100, 0.001),
+      number('settle', 'Settle', 1.2, 0, 20, 0.01)],
+    { bypass: 'passthrough' }),
+  ...KNOT_OPERATORS,
   ...WEAVE_OPERATORS,
   ...FIELD_OPERATORS,
   ...CLOTH_OPERATORS,

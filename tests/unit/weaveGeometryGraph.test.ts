@@ -20,7 +20,7 @@ describe('Weave geometry graph', () => {
     expect(validateWeaveGraph(graph)).toEqual([]);
     expect(() => assertWeaveGraph(graph, {})).not.toThrow();
     expect(effectOperatorGraph(weaveEffect()).nodes.map(node => node.id)).toEqual(graph.nodes.map(node => node.id));
-    expect(graph.nodes.slice(0, 4).map(node => node.operator)).toEqual(['weave.pattern', 'geometry.yarn-profile', 'render.strands', 'scene.output']);
+    expect(graph.nodes.slice(0, 5).map(node => node.operator)).toEqual(['weave.pattern', 'geometry.yarn-profile', 'math.multiply.scalar', 'render.strands', 'scene.output']);
     expect(graph.groups?.[0]).toMatchObject({ id: 'reveal-by-shape', label: 'Reveal by Shape' });
     const wave = createWaveStrandsGraph();
     expect(validateWeaveGraph(wave)).toEqual([]);
