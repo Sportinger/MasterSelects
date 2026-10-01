@@ -21,6 +21,21 @@ export interface ThreadAlongStage {
   lift: number;
   liftLength: number;
   settle: number;
+  /**
+   * Unit direction for Ahead = Trail: the part ahead of the tip stays visible and streams from the
+   * lifted tip along this direction, keeping its length, like thread still coming off the spool.
+   */
+  trail?: readonly [number, number, number];
+}
+
+/** Rest position at arc length `arc` along strand points `start` … `start + count - 1`. */
+function pointAt(positions: Float32Array, start: number, count: number, arcs: Float64Array, arc: number): [number, number, number] {
+  let k = 1;
+  while (k < count - 1 && arcs[k] < arc) k++;
+  const span = arcs[k] - arcs[k - 1], f = span > 0 ? Math.min(1, Math.max(0, (arc - arcs[k - 1]) / span)) : 0;
+  const a = (start + k - 1) * 3, b = a + 3;
+  return [positions[a] + (positions[b] - positions[a]) * f, positions[a + 1] + (positions[b + 1] - positions[a + 1]) * f,
+    positions[a + 2] + (positions[b + 2] - positions[a + 2]) * f];
 }
 
 export function threadAlong(stage: ThreadAlongStage, curves: CurveSet): CurveSet {
@@ -29,20 +44,30 @@ export function threadAlong(stage: ThreadAlongStage, curves: CurveSet): CurveSet
   const progressAt = stage.progress ? evaluateFieldColumn(stage.progress, curves) : () => stage.value;
   const stagger = Math.min(0.99, Math.max(0, stage.stagger)), liftLength = Math.max(1e-6, stage.liftLength);
   const strands = counts.length;
+  let longest = 1;
+  for (const count of counts) longest = Math.max(longest, count);
+  const arcs = new Float64Array(longest);
   for (let strand = 0; strand < strands; strand++) {
     const start = starts[strand], count = counts[strand];
-    let total = 0;
     for (let point = 1; point < count; point++) {
       const a = (start + point - 1) * 3, b = a + 3;
-      total += Math.hypot(positions[b] - positions[a], positions[b + 1] - positions[a + 1], positions[b + 2] - positions[a + 2]);
+      arcs[point] = arcs[point - 1] + Math.hypot(positions[b] - positions[a], positions[b + 1] - positions[a + 1], positions[b + 2] - positions[a + 2]);
     }
-    let arc = 0;
+    const total = count > 1 ? arcs[count - 1] : 0;
+    let tip: [number, number, number] | null = null;
     for (let point = 0; point < count; point++) {
-      const index = start + point, base = index * 3;
-      if (point > 0) arc += Math.hypot(positions[base] - positions[base - 3], positions[base + 1] - positions[base - 2], positions[base + 2] - positions[base - 1]);
+      const index = start + point, base = index * 3, arc = arcs[point];
       const raw = Number(progressAt(index));
       const progress = Math.min(1, Math.max(0, ((Number.isFinite(raw) ? raw : 0) - stagger * strand / strands) / (1 - stagger)));
       const behind = progress * (total + SETTLE_LENGTHS * liftLength) - arc;
+      if (stage.trail && behind < 0) {
+        // Trailing: the thread ahead of the tip leaves the lifted tip along the trail direction.
+        tip ??= pointAt(positions, start, count, arcs, progress * (total + SETTLE_LENGTHS * liftLength));
+        for (let axis = 0; axis < 3; axis++) next[base + axis] = tip[axis] + stage.trail[axis] * -behind;
+        next[base + 2] += stage.lift;
+        radius[index] = curves.radius ? curves.radius[index] : 1;
+        continue;
+      }
       radius[index] = progress > 0 && behind >= 0 ? (curves.radius ? curves.radius[index] : 1) : 0;
       // Hidden points ahead of the tip continue its rise along the same slope, so the tip's spline stays smooth.
       const x = Math.max(-1, behind / liftLength);

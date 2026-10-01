@@ -12,6 +12,8 @@ type ThreadAlongStage = Extract<GeometryStage, { kind: 'thread-along' }>;
 
 /** Thread Along progress that is the same for every point: the parameter, or a field folded to a constant. */
 function uniformProgress(stage: ThreadAlongStage): number | null {
+  // Trailing threads leave the rest sheet; that mode runs on the CPU.
+  if (stage.trail) return null;
   if (!stage.progress) return stage.value;
   const { instructions, output } = stage.progress;
   return instructions.length === 1 && instructions[output].operation === 'constant' ? instructions[output].value ?? 0 : null;

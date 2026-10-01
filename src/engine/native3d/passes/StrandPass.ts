@@ -24,17 +24,10 @@ const OPACITY_PER_FIBER = 0.3;
 /** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
 export const FLYAWAY_CHANNELS = 4;
 /**
- * The shared scene is displayed with +Y down (like composition pixels) and +Z toward the camera.
- * Geometry graphs are authored Y-up (gravity pulls to -Y, the top edge is +Y), so strands mirror
- * their local Y into the scene.
+ * Key light in scene space when no light clip is present: upper left, toward the camera. The shared
+ * scene is +Y up and +Z toward the camera, like the Y-up geometry graphs (gravity pulls to -Y).
  */
-export function strandSceneMatrix(world: Float32Array): Float32Array {
-  const matrix = Float32Array.from(world);
-  for (let row = 4; row < 8; row++) matrix[row] = -matrix[row];
-  return matrix;
-}
-/** Key light in scene space when no light clip is present: upper left, toward the camera. */
-const KEY_LIGHT = normalize3([-0.4, -0.7, 0.6]);
+const KEY_LIGHT = normalize3([-0.4, 0.7, 0.6]);
 const AMBIENT = 0.35;
 
 /** Spline pieces per segment in close-ups; one piece covers about this many pixels. */
@@ -207,7 +200,7 @@ export class StrandPass {
   private layerUniforms(layer: SceneStrandLayer, buffers: StrandBuffers, lights: readonly SceneLightLayer[]): StrandDraw {
     const render = layer.strands.program.render!, profile = render.profile, scale = worldMatrixScale(layer.worldMatrix);
     const data = new Float32Array(UNIFORM_FLOATS);
-    data.set(strandSceneMatrix(layer.worldMatrix), 0);
+    data.set(layer.worldMatrix, 0);
     data.set(parseStrandColor(render.color), 52);
     data.set([render.width * scale, 0, 0, Math.max(0, Math.min(1, layer.opacity))], 56);
     data.set([...KEY_LIGHT, AMBIENT], 60);

@@ -8,6 +8,7 @@ import { WEAVE_PATTERNS } from './weaveOperators';
 import { compileClothSpec, type ClothSpec } from './clothProgram';
 import { compileRodSpec, type RodSpec } from './rodProgram';
 import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES, type CelticKnotSpec, type KnotSpec } from './knotCurves';
+import { knitPointCount, type KnitSpec } from './knitCurves';
 
 /** Context values a curve-point field can read, in addition to shared pointwise operations. */
 export const CURVE_CONTEXT_OPERATIONS = ['position', 'curve-u', 'point-index', 'strand-index', 'point-count', 'strand-count'] as const;
@@ -25,9 +26,11 @@ export type GeometryStage =
       crimp: number; resolution: number }
   | ({ kind: 'knot'; nodeId: string } & KnotSpec)
   | ({ kind: 'celtic-knot'; nodeId: string } & CelticKnotSpec)
+  | ({ kind: 'knit'; nodeId: string } & KnitSpec)
   | { kind: 'strand-array'; nodeId: string; count: number; spacing: number; axis: CurveAxis }
-  /** See threadAlong.ts; `value` is the Progress parameter used when no field is connected. */
-  | { kind: 'thread-along'; nodeId: string; progress?: GeometryField; value: number; stagger: number; lift: number; liftLength: number; settle: number }
+  /** See threadAlong.ts; `value` is the Progress parameter used when no field is connected; `trail` (unit) when Ahead is Trail. */
+  | { kind: 'thread-along'; nodeId: string; progress?: GeometryField; value: number; stagger: number; lift: number; liftLength: number; settle: number;
+      trail?: [number, number, number] }
   | { kind: 'set-position'; nodeId: string; position?: GeometryField; offset?: GeometryField }
   | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField }
   /** Curves on the cloth simulated by `cloth` at source time `time` (seconds). */
@@ -51,7 +54,7 @@ export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStr
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
-const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot']);
+const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit']);
 const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
   'geometry.thread-along', 'geometry.rod-simulation']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
@@ -195,11 +198,21 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         rows: Math.round(finite(read(node, 'rows'), 'Rows')), size: finite(read(node, 'size'), 'Cell size'),
         height: finite(read(node, 'height'), 'Crossing height'), resolution: Math.round(finite(read(node, 'resolution'), 'Points per step')),
         roundness: finite(read(node, 'roundness'), 'Roundness') });
+    } else if (node.operator === 'geometry.knit') {
+      stages.push({ kind: 'knit', nodeId: node.id, stitches: Math.round(finite(read(node, 'stitches'), 'Stitches')),
+        rows: Math.round(finite(read(node, 'rows'), 'Rows')), width: finite(read(node, 'width'), 'Stitch width'),
+        height: finite(read(node, 'height'), 'Loop height'), spacing: finite(read(node, 'spacing'), 'Row spacing'),
+        depth: finite(read(node, 'depth'), 'Depth'), lean: finite(read(node, 'lean'), 'Lean'),
+        resolution: Math.round(finite(read(node, 'resolution'), 'Points per stitch')) });
     } else if (node.operator === 'geometry.thread-along') {
       const progress = compileField(node, 'progress', 'scalar');
+      const direction = read(node, 'trail');
+      const trail = read(node, 'ahead') === 'trail' && Array.isArray(direction) && direction.length === 3 ? direction.map(value => finite(value, 'Trail direction')) : null;
+      const reach = trail ? Math.hypot(trail[0], trail[1], trail[2]) : 0;
       stages.push({ kind: 'thread-along', nodeId: node.id, ...(progress ? { progress } : {}), value: finite(read(node, 'progress'), 'Progress'),
         stagger: finite(read(node, 'stagger'), 'Stagger'), lift: finite(read(node, 'lift'), 'Lift'),
-        liftLength: finite(read(node, 'liftLength'), 'Lift length'), settle: finite(read(node, 'settle'), 'Settle') });
+        liftLength: finite(read(node, 'liftLength'), 'Lift length'), settle: finite(read(node, 'settle'), 'Settle'),
+        ...(trail ? { trail: (reach > 0 ? trail.map(value => value / reach) : [0, 1, 0]) as [number, number, number] } : {}) });
     } else if (node.operator === 'geometry.strand-array') {
       stages.push({ kind: 'strand-array', nodeId: node.id, count: Math.round(finite(read(node, 'count'), 'Strand count')),
         spacing: finite(read(node, 'spacing'), 'Strand spacing'), axis: axisIndex(read(node, 'axis')) });
@@ -231,6 +244,9 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       if (stage.columns * stage.rows > 4096) throw new Error('Celtic Knot allows at most 4096 cells.');
       const loops = celticLoops(stage.columns, stage.rows);
       pointCount = loops.reduce((sum, loop) => sum + loop.length * stage.resolution + 1, 0); strandCount = loops.length;
+    } else if (stage.kind === 'knit') {
+      if (stage.stitches < 1 || stage.rows < 1 || stage.resolution < 4) throw new Error('Knit needs at least one stitch, one row and four points per stitch.');
+      pointCount = knitPointCount(stage); strandCount = stage.rows;
     } else if (stage.kind === 'strand-array') {
       if (stage.count < 1) throw new Error('Strand Array needs a count of at least one.');
       pointCount *= stage.count; strandCount *= stage.count;

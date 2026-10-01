@@ -13,11 +13,10 @@ import type { EffectOperatorGraph, OperatorValue } from '../../src/types/operato
 const WIDTH = 512, HEIGHT = 288;
 const identity = Float32Array.from([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
-/** A camera given in geometry coordinates (Y up); the shared scene is displayed with +Y down. */
-function camera(at: [number, number, number], aim: [number, number, number] = [0, 0, 0]): SceneCamera {
-  const eye: [number, number, number] = [at[0], -at[1], at[2]], target: [number, number, number] = [aim[0], -aim[1], aim[2]];
-  return { viewMatrix: lookAt(...eye, ...target, 0, -1, 0), projectionMatrix: perspective(50 * Math.PI / 180, WIDTH / HEIGHT, 0.05, 100),
-    cameraPosition: { x: eye[0], y: eye[1], z: eye[2] }, cameraTarget: { x: target[0], y: target[1], z: target[2] }, cameraUp: { x: 0, y: -1, z: 0 },
+/** A camera in scene coordinates, which are Y-up like the geometry graphs. */
+function camera(eye: [number, number, number], target: [number, number, number] = [0, 0, 0]): SceneCamera {
+  return { viewMatrix: lookAt(...eye, ...target, 0, 1, 0), projectionMatrix: perspective(50 * Math.PI / 180, WIDTH / HEIGHT, 0.05, 100),
+    cameraPosition: { x: eye[0], y: eye[1], z: eye[2] }, cameraTarget: { x: target[0], y: target[1], z: target[2] }, cameraUp: { x: 0, y: 1, z: 0 },
     viewport: { width: WIDTH, height: HEIGHT }, projection: 'perspective', fov: 50, near: 0.05, far: 100 };
 }
 

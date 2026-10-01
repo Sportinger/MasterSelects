@@ -3,6 +3,7 @@ import { warpOver } from './weaveOperators';
 import { bindToCloth, clothGridAt } from './clothSurface';
 import { evaluateFieldColumn } from './curveFieldColumns';
 import { celticKnotCurves, knotCurves } from './knotCurves';
+import { knitCurves } from './knitCurves';
 import { threadAlong } from './threadAlong';
 import { simulateRodCurves } from './rodCurves';
 
@@ -85,6 +86,8 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet, ke
       curves = knotCurves(stage);
     } else if (stage.kind === 'celtic-knot') {
       curves = celticKnotCurves(stage);
+    } else if (stage.kind === 'knit') {
+      curves = knitCurves(stage);
     } else if (stage.kind === 'thread-along') {
       curves = threadAlong(stage, curves);
     } else if (stage.kind === 'strand-array') {

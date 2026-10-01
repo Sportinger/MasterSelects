@@ -21,4 +21,10 @@ export const KNOT_OPERATORS: readonly OperatorDefinition[] = [
     number('size', 'Cell Size', 0.3, 0, 100), number('height', 'Height', 0.03, 0, 10),
     number('resolution', 'Points per Step', 10, 2, 64, 1, false), number('roundness', 'Roundness', 0.6, 0, 2, 0.01),
   ]),
+  generator('geometry.knit', 'knit', 'Knit', 'Creates knitted (stockinette) fabric: one curve per row, its yarn running in loops whose heads reach through the loops of the row above. Lean widens the loops; Depth moves heads and sinkers in front of the legs.', [
+    number('stitches', 'Stitches', 16, 1, 512, 1, false), number('rows', 'Rows', 12, 1, 512, 1, false),
+    number('width', 'Stitch Width', 0.12, 0.001, 100), number('height', 'Loop Height', 0.09, 0, 100),
+    number('spacing', 'Row Spacing', 0.108, 0, 100), number('depth', 'Depth', 0.03, 0, 10),
+    number('lean', 'Lean', 1.5, 0, 4, 0.01), number('resolution', 'Points per Stitch', 24, 4, 128, 1, false),
+  ]),
 ];

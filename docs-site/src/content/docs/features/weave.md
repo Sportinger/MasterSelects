@@ -35,7 +35,7 @@ regular weave, *Yarn* the bare curves, *Reveal by Shape* the whole sheet and
 keyframes stay intact.
 
 All of this is built from general nodes. Weave Pattern is the only weave-specific
-node; Knot, Celtic Knot, Thread Along, Yarn Profile, Flyaways, Cloth Sheet, Surface
+node; Knot, Celtic Knot, Knit, Thread Along, Yarn Profile, Flyaways, Cloth Sheet, Surface
 Bind, Rod Simulation, Noise, Shape Distance, Ramp and the shared Math/Vector nodes
 work for any curves.
 
@@ -51,9 +51,21 @@ under along both ropes.
 around at the border (**Roundness**) and alternate over and under like a plain
 weave. **Height** lifts the crossings.
 
-Both feed Yarn Profile, Flyaways, Thread Along, Rod Simulation or any other curve
+**Knit** creates weft-knit (stockinette) fabric: one curve per row whose loops reach
+through the loops of the row below, head in front, legs behind (**Stitches**, **Rows**,
+**Width** and **Height** of a stitch, row **Spacing**, loop **Depth**, **Lean**).
+With the defaults a yarn up to about a quarter of the stitch width (Yarn Profile
+radius 0.015) fits between the loops without touching.
+
+All three feed Yarn Profile, Flyaways, Thread Along, Rod Simulation or any other curve
 modifier. Closed curves repeat their first point at the end; the yarn twist meets at
 that seam.
+
+For a fabric that knits itself, wire Knit → Thread Along with **Ahead: Trail**:
+the rows form one after another (Stagger) while the unused rest of each thread
+streams in from the **Trail** direction instead of being hidden. Thread Along moves
+the threads along their paths without collisions, so a trailing thread can pass
+through finished loops.
 
 ## Rope simulation
 
@@ -159,7 +171,7 @@ the CPU reference, checks determinism across scrubbing and times both.
 
 The in-app agent edits Weave graphs with the generic `getOperatorGraph` and
 `editOperatorGraph` tools, like every effect-owned operator graph: it can add
-Knot, Celtic Knot, Thread Along, Rod Simulation and the shared field nodes, wire
+Knot, Celtic Knot, Knit, Thread Along, Rod Simulation and the shared field nodes, wire
 them and expose values. There is no Weave-specific toolset.
 
 ## Limits

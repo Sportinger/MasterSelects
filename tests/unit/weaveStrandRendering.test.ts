@@ -3,7 +3,7 @@ import { createDefaultWeaveGraph, createWaveStrandsGraph, geometryParameterReade
 import { compileGeometryGraph, type GeometryProgram } from '../../src/services/operators/geometry/geometryProgram';
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
 import { buildStrandsLayerSources } from '../../src/services/operators/geometry/strandsLayerSource';
-import { cameraPositionFromView, parseStrandColor, SEGMENT_HAS_NEXT, SEGMENT_HAS_PREVIOUS, strandDepthRange, strandSceneMatrix, strandSegmentStarts, strandSubdivisions, worldMatrixScale } from '../../src/engine/native3d/passes/StrandPass';
+import { cameraPositionFromView, parseStrandColor, SEGMENT_HAS_NEXT, SEGMENT_HAS_PREVIOUS, strandDepthRange, strandSegmentStarts, strandSubdivisions, worldMatrixScale } from '../../src/engine/native3d/passes/StrandPass';
 import { collectScene3DLayers } from '../../src/engine/scene/SceneLayerCollector';
 import { canRenderNativeScene } from '../../src/engine/native3d/sceneRenderer/drawPlan';
 import { validateWorkerGpuFrameStackContract } from '../../src/services/render/workerGpuFrameStackContract';
@@ -110,14 +110,6 @@ describe('Weave strand rendering', () => {
     const view = Float32Array.of(1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, -5, 1);
     expect(cameraPositionFromView(view)).toEqual([-0, -0, 5]);
     expect(worldMatrixScale(Float32Array.of(2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 1))).toBe(2);
-  });
-
-  it('mirrors Y-up strand geometry into the Y-down scene', () => {
-    const world = Float32Array.from([2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 5, 6, 7, 1]);
-    // Local +Y (the top edge, against gravity) lands on scene -Y, which the scene draws upward.
-    expect(Array.from(strandSceneMatrix(world))).toEqual([2, 0, 0, 0, -0, -3, -0, -0, 0, 0, 4, 0, 5, 6, 7, 1]);
-    expect(worldMatrixScale(strandSceneMatrix(world))).toBeCloseTo(3, 9);
-    expect(Array.from(world)).toEqual([2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 4, 0, 5, 6, 7, 1]);
   });
 
   it('splits segments into spline pieces only when they span many pixels', () => {

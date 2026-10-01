@@ -388,7 +388,8 @@ node is one node in every graph rather than a per-domain copy.
 | Weave Pattern | Draft (plain, twill 2/2 and 2/1, satin 5, basket), warp/weft counts, size, crimp → interlaced curves |
 | Knot | Shape (trefoil, figure-eight, reef knot of two ropes, (P, Q) torus knot), Size, Depth, Points → closed knot curves whose crossings pass over and under |
 | Celtic Knot | Columns, Rows, Cell Size, Height, Points per Step, Roundness → Celtic plait loops alternating over and under like a plain weave |
-| Thread Along | Curves (+ optional per-point Progress) → curves pulled in behind a lifted tip that settles with a damped swing; hidden ahead of the tip (Progress, Stagger, Lift, Lift Length, Settle) |
+| Knit | Stitches, Rows, stitch Width and Height, row Spacing, Depth, Lean, Points per Stitch → weft-knit rows whose loops interlock with the row below |
+| Thread Along | Curves (+ optional per-point Progress) → curves pulled in behind a lifted tip that settles with a damped swing; ahead of the tip hidden or trailing straight from the tip (Progress, Stagger, Lift, Lift Length, Settle, Ahead, Trail) |
 | Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color, Antialiasing) |
 
 The default Weave graph is Weave Pattern → Set Position (Handmade) → Thread Along →
@@ -424,6 +425,9 @@ thread rises **Lift** along +Z (the rest sheet's normal) and settles as
 lift · e^(−Settle·x) · cos(πx/2), with x in lift lengths behind the tip, so the
 swing has died down when the thread is complete. Ahead of the tip the thread is
 hidden through its radius scale (Yarn Profile multiplies an incoming radius scale).
+With **Ahead: Trail** it stays visible instead and runs straight from the lifted tip
+in the **Trail** direction, keeping its length, as if pulled in from a spool;
+trailing threads are evaluated on the CPU.
 **Stagger** spreads the threads' starts over the progress range in curve order:
 warps first, then the wefts row by row. Progress is *Clip Time* × **Weave Speed**
 (exposed, 1 = four seconds), capped at 1 by Min, wired into Thread Along's Progress
@@ -440,7 +444,10 @@ an alternating six-crossing diagram of two ropes with both ends of each rope on 
 side. The Celtic plait traces 45° billiard paths over a lattice of `2·Columns` ×
 `2·Rows` half cells; crossings sit on interior points with an odd coordinate sum,
 and like a plain weave the rising thread lies on top at even x. Over and under
-therefore alternate along every thread, across border loops too.
+therefore alternate along every thread, across border loops too. *Knit* follows the
+stockinette yarn path x = (t + Lean·sin 2t)·Width/2π, y = Height·cos t,
+z = Depth·cos 2t per stitch: below twice the loop height of row spacing each head
+lies in front of the legs of the row above and behind its sinker loops.
 
 Add and Multiply read 0 and 1 through an unconnected operand in curve graphs. A
 bypassed field group that feeds one of them therefore leaves the other factor
@@ -522,8 +529,7 @@ hashed coverage instead of blending, so dense strands need no sorting and export
 reproduces the preview; width 0 draws nothing. Visibility is decided per segment,
 so a thread that ends inside a segment tapers to nothing instead of stretching a
 sliver across the frame. Curve graphs are authored Y-up: +Y is the top edge and the
-opposite of gravity, and +Z faces the viewer. The shared scene draws +Y downward like
-composition pixels, so the strand pass mirrors local Y into it.
+opposite of gravity, and +Z faces the viewer, the same axes as the shared 3D scene.
 
 **Antialiasing.** Strand Render offers **Hashed** (the default, including older
 graphs) and **4x Coverage**. The latter draws every fiber without stochastic
