@@ -38,7 +38,7 @@ async function check() {
       await readback.mapAsync(GPUMapMode.READ);
       const gpu = new Float32Array(readback.getMappedRange().slice(0));
       readback.unmap(); readback.destroy(); temporary.forEach(buffer => buffer.destroy());
-      let position = 0, arc = 0, normal = 1, tangent = 1, mismatches = 0;
+      let position = 0, arc = 0, normal = 1, tangent = 1, radius = 0, mismatches = 0;
       for (let point = 0; point < reference.length / STRAND_POINT_FLOATS; point++) {
         const base = point * STRAND_POINT_FLOATS;
         const at = (data: Float32Array, offset: number) => [data[base + offset], data[base + offset + 1], data[base + offset + 2]];
@@ -48,22 +48,27 @@ async function check() {
         arc = Math.max(arc, Math.abs(gpu[base + 3] - reference[base + 3]));
         normal = Math.min(normal, dot(4));
         tangent = Math.min(tangent, dot(8));
-        if (gpu[base + 7] !== reference[base + 7] || gpu[base + 11] !== reference[base + 11]) mismatches++;
+        // The radius fields run in f32 on the GPU; hidden points (radius 0) must stay hidden exactly.
+        radius = Math.max(radius, Math.abs(gpu[base + 7] - reference[base + 7]));
+        if ((gpu[base + 7] === 0) !== (reference[base + 7] === 0) || gpu[base + 11] !== reference[base + 11]) mismatches++;
       }
-      results[`t${time}`] = { points: reference.length / STRAND_POINT_FLOATS, maxPosition: position, maxArc: arc, minNormalDot: normal, minTangentDot: tangent, mismatches };
-      if (position > 2e-4 || arc > 2e-3 || normal < 0.999 || tangent < 0.9999 || mismatches) throw new Error(`GPU bind differs at ${time}s: ${JSON.stringify(results[`t${time}`])}`);
+      results[`t${time}`] = { points: reference.length / STRAND_POINT_FLOATS, maxPosition: position, maxArc: arc, minNormalDot: normal, minTangentDot: tangent, maxRadius: radius, mismatches };
+      if (position > 2e-4 || arc > 2e-3 || normal < 0.999 || tangent < 0.9999 || radius > 1e-4 || mismatches) throw new Error(`GPU bind differs at ${time}s: ${JSON.stringify(results[`t${time}`])}`);
     }
-    // CPU cost per animated frame (woven, wind only): GPU bind against the old CPU path.
-    const frames = Array.from({ length: 90 }, (_, index) => programAt(5 + index / 30));
-    const time = (run: (program: SceneStrandLayer['strands']['program'], index: number) => void) => {
-      const samples = frames.map((program, index) => { const start = performance.now(); run(program, index); return performance.now() - start; });
-      return samples.toSorted((a, b) => a - b)[Math.floor(samples.length / 2)];
-    };
+    // CPU cost per animated frame while threads are pulled in (0.5–3.5 s) and once woven (5–8 s, wind only):
+    // the GPU path against the CPU reference path. Medians and 95th percentiles in ms.
     const gpuPath = new StrandBufferCache(), retired: GPUBuffer[] = [];
-    results.cpuMsPerFrame = {
-      gpuBind: time(program => { gpuPath.prepare(device, layerFor(program, 'timed'), retired); }),
-      cpuBind: time(program => { packStrandPoints(evaluateGeometryProgram(program)); }),
+    const time = (frames: SceneStrandLayer['strands']['program'][], run: (program: SceneStrandLayer['strands']['program']) => void) => {
+      const samples = frames.map(program => { const start = performance.now(); run(program); return performance.now() - start; }).toSorted((a, b) => a - b);
+      return { median: +samples[Math.floor(samples.length / 2)].toFixed(2), p95: +samples[Math.floor(samples.length * 0.95)].toFixed(2) };
     };
+    for (const [phase, from] of [['weaveIn', 0.5], ['woven', 5]] as const) {
+      const frames = Array.from({ length: 90 }, (_, index) => programAt(from + index / 30));
+      results[`cpuMsPerFrame.${phase}`] = {
+        gpuPath: time(frames, program => { gpuPath.prepare(device, layerFor(program, `timed-${phase}`), retired); }),
+        cpuPath: time(frames, program => { packStrandPoints(evaluateGeometryProgram(program)); }),
+      };
+    }
     await device.queue.onSubmittedWorkDone();
     retired.forEach(buffer => buffer.destroy()); gpuPath.dispose();
     if (errors.length) throw new Error(errors.join('\n'));

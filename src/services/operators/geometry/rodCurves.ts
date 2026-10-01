@@ -4,7 +4,7 @@ import { evaluateFieldColumn } from './curveFieldColumns';
 import { buildRodRest, rodCurvePositions, type RodRest } from './rodRest';
 import { ROD_STEP_RATE, RodSimulation } from './rodSolver';
 
-type RodStage = Extract<GeometryStage, { kind: 'rod-simulation' }>;
+export type RodStage = Extract<GeometryStage, { kind: 'rod-simulation' }>;
 
 /** Checkpointed simulations per render thread, least recently used first. */
 const SIMULATION_LIMIT = 4;
@@ -22,21 +22,32 @@ export function simulateRodCurves(stage: RodStage, curves: CurveSet, inputKey: s
   let entry = simulations.get(key);
   if (entry) simulations.delete(key);
   else {
-    const pins = stage.pins && evaluateFieldColumn(stage.pins, curves);
-    // Segment Length 0 spaces nodes one radius apart: finer rods add contact work, not detail (it stays on the points).
-    const rest = buildRodRest(curves, stage.rod.segmentLength || stage.rod.radius, stage.rod.pin, pins ? index => Number(pins(index)) : undefined);
+    const rest = rodRestFor(stage, curves);
     entry = { rest, simulation: new RodSimulation(stage.rod, rest) };
   }
   simulations.set(key, entry);
   while (simulations.size > SIMULATION_LIMIT) simulations.delete(simulations.keys().next().value!);
-  const exact = Math.max(0, ((Number.isFinite(time) ? time : 0) + stage.rod.preroll) * ROD_STEP_RATE);
-  const step = Math.floor(exact + 1e-7), alpha = exact - step;
+  const { step, alpha } = rodStepAt(stage);
   const nodes = Float64Array.from(entry.simulation.positionsAt(step));
   if (alpha > 1e-6) {
     const next = entry.simulation.positionsAt(step + 1);
     for (let index = 0; index < nodes.length; index++) nodes[index] += (next[index] - nodes[index]) * alpha;
   }
   return { ...curves, positions: rodCurvePositions(entry.rest, nodes, curves) };
+}
+
+/** The rods of a Rod Simulation stage over its incoming curves (shared with the GPU solver). */
+export function rodRestFor(stage: RodStage, curves: CurveSet): RodRest {
+  const pins = stage.pins && evaluateFieldColumn(stage.pins, curves);
+  // Segment Length 0 spaces nodes one radius apart: finer rods add contact work, not detail (it stays on the points).
+  return buildRodRest(curves, stage.rod.segmentLength || stage.rod.radius, stage.rod.pin, pins ? index => Number(pins(index)) : undefined);
+}
+
+/** Simulation time of a frame as a fixed step and the blend toward the next one (pre-roll included). */
+export function rodStepAt(stage: RodStage): { step: number; alpha: number } {
+  const exact = Math.max(0, ((Number.isFinite(stage.time) ? stage.time : 0) + stage.rod.preroll) * ROD_STEP_RATE);
+  const step = Math.floor(exact + 1e-7);
+  return { step, alpha: exact - step };
 }
 
 /** Catch-up cost is bounded by checkpoints; this only drops the cached states. */

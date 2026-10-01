@@ -8,7 +8,8 @@ export interface RodSegments {
 }
 
 /** Segments of one rod closer than this many radii of arc length touch at rest and never collide. */
-const SELF_GAP = 2.2;
+export const ROD_SELF_GAP = 2.2;
+const SELF_GAP = ROD_SELF_GAP;
 /**
  * Candidate pairs are gathered with this extra distance (radii) and kept until some node has moved
  * REBUILD radii since: two nodes then close at most half the skin, the other half covers what the
@@ -17,7 +18,10 @@ const SELF_GAP = 2.2;
 const SKIN = 1;
 const REBUILD = 0.25;
 /** Sliding friction relative to static friction. */
-const KINETIC = 0.8;
+export const ROD_KINETIC = 0.8;
+const KINETIC = ROD_KINETIC;
+/** Hash grid cell: midpoints of touching segments (stretched up to a quarter) lie within one cell of each other. */
+export const rodCellSize = (longest: number, radius: number) => longest * 1.25 + radius * (2 + SKIN);
 
 /** Closest points of segments p1q1 and p2q2 (Ericson, Real-Time Collision Detection 5.1.9). */
 function closestParameters(d1: number[], d2: number[], r: number[], out: number[]) {
@@ -65,6 +69,8 @@ export class RodContacts {
   private readonly d2 = [0, 0, 0];
   private readonly r = [0, 0, 0];
   private readonly st = [0, 0];
+  private delta: Float64Array | null = null;
+  private hits: Uint16Array | null = null;
   /** Node positions the candidate list was built from. */
   private built: Float64Array | null = null;
 
@@ -73,8 +79,7 @@ export class RodContacts {
     const count = segments.a.length;
     let longest = 0;
     for (let c = 0; c < count; c++) longest = Math.max(longest, segments.rest[c]);
-    // Midpoints of touching segments lie within one cell of each other, even when slightly stretched.
-    this.cell = longest * 1.25 + radius * (2 + SKIN);
+    this.cell = rodCellSize(longest, radius);
     let size = 1;
     while (size < count * 2) size *= 2;
     this.mask = size - 1;
@@ -174,12 +179,16 @@ export class RodContacts {
   }
 
   /**
-   * Pushes overlapping capsules apart along their closest points, then removes the tangential
-   * motion of the substep at the contact up to `friction` × penetration (static) or slides
-   * with KINETIC × friction. `x` holds the positions at the start of the substep.
+   * One averaged Jacobi pass over the candidates (the scheme the GPU solver runs per segment):
+   * every overlapping pair pushes its capsules apart along their closest points and removes the
+   * tangential motion of the substep at the contact up to `friction` × penetration (static) or
+   * slides with KINETIC × friction; each node then moves by the mean of its corrections. `x` holds
+   * the positions at the start of the substep.
    */
   solve(p: Float64Array, x: Float64Array, w: Float64Array, friction: number) {
     const { a, b, rest } = this.segments, { d1, d2, r, st } = this, contact = 2 * this.radius;
+    const delta = this.delta ??= new Float64Array(p.length), hits = this.hits ??= new Uint16Array(p.length / 3);
+    delta.fill(0); hits.fill(0);
     for (let k = 0; k < this.pairCount; k++) {
       const c = this.pairsA[k], d = this.pairsB[k];
       const a0 = a[c] * 3, a1 = b[c] * 3, b0 = a[d] * 3, b1 = b[d] * 3;
@@ -206,22 +215,30 @@ export class RodContacts {
       const weight = wa0 * (1 - s) + wa1 * s + wb0 * (1 - t) + wb1 * t;
       if (weight <= 0) continue;
       const lambda = -error / weight;
-      this.apply(p, a0, a1, b0, b1, wa0, wa1, wb0, wb1, nx * lambda, ny * lambda, nz * lambda);
-      if (friction <= 0) continue;
-      // Tangential motion of the contact point on c relative to the one on d during this substep.
-      let tx = 0, ty = 0, tz = 0;
-      for (let axis = 0; axis < 3; axis++) {
-        const move = (1 - s) * (p[a0 + axis] - x[a0 + axis]) + s * (p[a1 + axis] - x[a1 + axis])
-          - (1 - t) * (p[b0 + axis] - x[b0 + axis]) - t * (p[b1 + axis] - x[b1 + axis]);
-        if (axis === 0) tx = move; else if (axis === 1) ty = move; else tz = move;
+      let fx = nx * lambda, fy = ny * lambda, fz = nz * lambda;
+      if (friction > 0) {
+        // Tangential motion of the contact point on c relative to the one on d during this substep.
+        let tx = 0, ty = 0, tz = 0;
+        for (let axis = 0; axis < 3; axis++) {
+          const move = (1 - s) * (p[a0 + axis] - x[a0 + axis]) + s * (p[a1 + axis] - x[a1 + axis])
+            - (1 - t) * (p[b0 + axis] - x[b0 + axis]) - t * (p[b1 + axis] - x[b1 + axis]);
+          if (axis === 0) tx = move; else if (axis === 1) ty = move; else tz = move;
+        }
+        const along = tx * nx + ty * ny + tz * nz;
+        tx -= along * nx; ty -= along * ny; tz -= along * nz;
+        const slide = Math.sqrt(tx * tx + ty * ty + tz * tz), depth = -error;
+        if (slide >= 1e-15) {
+          const scale = -(slide < friction * depth ? 1 : Math.min(1, KINETIC * friction * depth / slide)) / weight;
+          fx += tx * scale; fy += ty * scale; fz += tz * scale;
+        }
       }
-      const along = tx * nx + ty * ny + tz * nz;
-      tx -= along * nx; ty -= along * ny; tz -= along * nz;
-      const slide = Math.sqrt(tx * tx + ty * ty + tz * tz), depth = -error;
-      if (slide < 1e-15) continue;
-      const share = slide < friction * depth ? 1 : Math.min(1, KINETIC * friction * depth / slide);
-      const scale = -share / weight;
-      this.apply(p, a0, a1, b0, b1, wa0, wa1, wb0, wb1, tx * scale, ty * scale, tz * scale);
+      this.apply(delta, a0, a1, b0, b1, wa0, wa1, wb0, wb1, fx, fy, fz);
+      hits[a[c]]++; hits[b[c]]++; hits[a[d]]++; hits[b[d]]++;
+    }
+    for (let node = 0; node < hits.length; node++) {
+      if (!hits[node]) continue;
+      const base = node * 3, share = 1 / hits[node];
+      p[base] += delta[base] * share; p[base + 1] += delta[base + 1] * share; p[base + 2] += delta[base + 2] * share;
     }
   }
 

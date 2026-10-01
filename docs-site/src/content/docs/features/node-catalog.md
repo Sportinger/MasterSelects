@@ -471,8 +471,10 @@ height becomes offset along the cloth normal, so crimp follows the fabric. Curve
 before the first Surface Bind are cached per stage, and per-point field expressions
 whose inputs did not change are reused, so a new frame only advances the cloth. When
 Surface Bind is the last stage, the renderer binds the cached rest curves on the GPU
-and builds the rotation-minimizing frames there; the CPU reference
-(`bindToCloth`, `packStrandPoints`) serves previews and other chains. With the
+and builds the rotation-minimizing frames there; a Thread Along with one progress for
+all points and the Yarn Profiles right before the bind run there too (radius fields
+compiled to WGSL, constants passed as data). The CPU reference (`threadAlong`,
+`bindToCloth`, `packStrandPoints`) serves previews and other chains. With the
 default 40 × 27 grid and 6 substeps, one second of simulation costs about 70 ms of
 CPU; an animated frame of the default weave costs about 5 ms of CPU. The
 Cloth Sheet's preview shows the simulated grid. The default *Wind Cloth* group holds
@@ -493,7 +495,10 @@ curve starts, both ends or the points of a Pin field above 0.5; **Pull** moves t
 outward along their end tangent over Pull Time, which tightens knots. The input
 curves are the rest state (rings stay closed) and the output keeps every input
 point: **Segment Length** (0 = one radius) only sets the rod resolution, and finer
-detail rides along. A Rod Simulation must come before Surface Bind.
+detail rides along. Stretch and bend constraints are solved colour by colour and
+contacts as one averaged Jacobi pass; followed only by Yarn Profiles, the renderer runs
+this scheme on the GPU (`RodGpuSimulation`, f32, deterministic per device) and the
+CPU solver serves previews. A Rod Simulation must come before Surface Bind.
 
 **Groups.** Geometry groups can be bypassed from their **Byp** header button or
 their Effects tab section. A curves output passes the group's incoming curves

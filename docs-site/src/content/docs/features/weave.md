@@ -78,12 +78,20 @@ Finer curve detail rides along on the original points, so the output keeps every
 input point and attribute. A simulation holds up to 16,384 rod nodes and 4,096
 curves; denser input is coarsened automatically.
 
-The solver is XPBD in small steps (60 steps per second, **Substeps** each) in double
-precision and a fixed order. Rods carry no frames: with a straight rest shape and
-position-only pins, twist does not move the centre line. Contact candidates come
-from a hashed grid kept as a Verlet list, and no node moves more than half a radius
-per substep, so ropes cannot pass through each other. A Rod Simulation must come
-before Surface Bind; animating its input curves restarts it.
+The solver is XPBD in small steps (60 steps per second, **Substeps** each). Stretch
+and bend constraints are solved colour by colour (constraints of one colour share no
+node) and contacts as one averaged Jacobi pass, so the same scheme runs in parallel on
+the GPU. Rods carry no frames: with a straight rest shape and position-only pins,
+twist does not move the centre line. Contact candidates come from a hashed grid, and
+no node moves more than half a radius per substep, so ropes cannot pass through each
+other.
+
+When only Yarn Profiles follow it, the renderer simulates on the GPU in f32 and writes
+the strand points itself, including the Yarn Profile radius fields; node previews and
+other chains use the CPU reference in double precision. Both are deterministic on one
+device (scrubbing resumes from exact checkpoints) and stay within about 2 % of a radius
+of each other over seconds of simulation. A Rod Simulation must come before Surface
+Bind; animating its input curves restarts it.
 
 ## Time
 
@@ -125,23 +133,27 @@ receive shadows.
 
 Curves before the first Surface Bind are cached; within them, field expressions
 that did not change are reused per point. Each frame of animated cloth advances the
-simulation on the CPU and binds the cached rest curves to the cloth on the GPU,
-including the rotation-minimizing yarn frames. On the reference machine an animated
-frame of the default weave costs about 5 ms of CPU for the strands; a paused frame
-reuses everything. GPU times are in the table above.
+simulation on the CPU; the GPU pulls the threads in (Thread Along with one progress
+for all points), evaluates the Yarn Profile radius fields (compiled to WGSL, their
+values passed as data, so an animated Reveal or Irregularity keeps the pipeline) and
+binds the cached rest curves to the cloth, including the rotation-minimizing yarn
+frames. On the reference machine a frame of the default weave costs about 6 ms of CPU
+for the strands, while threads are pulled in and afterwards (before: about 140 ms
+while pulling in); a paused frame reuses everything. GPU times are in the table above.
 
-Rod Simulation runs on the CPU. Per simulated step (1/60 s, 16 substeps) a
-tightening reef knot of two ropes costs about 0.8 ms and 16 falling threads (864 rod
-nodes) about 6 ms; 64 threads take about 80 ms, too slow for playback. In the
-browser, 30 fps playback of the reef knot costs about 3.4 ms per frame and a dropped
-3 × 2 Celtic knot about 6 ms.
+Rod Simulation on the GPU costs about 2.4 ms per simulated step (1/60 s, 16
+substeps) for a tightening reef knot, 3.5 ms for 16 falling threads, 4.2 ms for 64
+and 4.3 ms for 256 threads (9,728 rod nodes); the CPU reference needs 1.7, 10.6 and
+38 ms for the first three. Small knots are bound by the fixed number of passes per
+substep, large scenes hardly cost more.
 
 The browser checks `tests/browser/weave-*-gpu-check.html` verify the coverage
 modes, the analytic raster, the shadow exchange and the GPU Surface Bind against
 the CPU reference; `tests/browser/weave-perf-check.html` measures the default
 weave at 1080p, `tests/browser/weave-look-check.html` renders the looks and
-knots, and `tests/browser/weave-rod-check.html` renders and times knots tightening
-and falling onto a floor.
+knots, `tests/browser/weave-rod-check.html` renders knots tightening and falling onto
+a floor, and `tests/browser/weave-rod-gpu-check.html` compares the GPU rod solver with
+the CPU reference, checks determinism across scrubbing and times both.
 
 ## AI agent
 
@@ -155,6 +167,6 @@ them and expose values. There is no Weave-specific toolset.
 - 65,536 curves and 1,048,576 curve points per graph; up to 256 fibers per yarn.
 - Speed keyframes do not drive the cloth clock yet.
 - One strand layer passes its shadow to meshes; light linking is not available.
-- Rod Simulation runs on the CPU: thousands of threads (a whole weave) are too
-  slow for playback; a GPU solver is future work.
+- Rod Simulation holds up to 16,384 rod nodes; a whole weave of rods needs coarse
+  Segment Lengths.
 - The cloth does not collide with itself or with rods.

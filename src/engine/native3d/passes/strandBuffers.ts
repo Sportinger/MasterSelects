@@ -1,9 +1,11 @@
 import type { SceneStrandLayer } from '../../scene/types';
 import { evaluateGeometryProgram, type CurveSet } from '../../../services/operators/geometry/geometryEvaluation';
 import { clothGridAt } from '../../../services/operators/geometry/clothSurface';
-import type { GeometryStage } from '../../../services/operators/geometry/geometryProgram';
+import { rodRestFor, rodStepAt } from '../../../services/operators/geometry/rodCurves';
 import { packStrandPoints, STRAND_POINT_FLOATS } from './strandFrames';
 import { StrandSurfaceBinder, type StrandRestCurves } from './StrandSurfaceBinder';
+import { rodChain, surfaceBindChain, type RodChain } from './strandGpuChains';
+import { RodGpuSimulation } from '../rods/RodGpuSimulation';
 
 /** Segment flags above the 30-bit point index: the strand continues before / after the segment. */
 export const SEGMENT_HAS_PREVIOUS = 0x80000000;
@@ -31,7 +33,8 @@ export function strandSegmentStarts(starts: Uint32Array, counts: Uint32Array): U
 /**
  * Curve buffers of one strand layer. `signature` is the full program the points were built from;
  * `topology` the part that fixes points and segments. For cloth, the points are rebound on the GPU
- * every frame from `rest`, so only the cloth time changes the signature.
+ * every frame from `rest`, so only the cloth time changes the signature; for rods, `rods` simulates
+ * on the GPU and writes the points.
  * `segmentLength`: mean local length of a curve segment; `extent`: largest local distance of a point from the origin.
  */
 export interface StrandBuffers {
@@ -43,37 +46,49 @@ export interface StrandBuffers {
   segmentLength: number;
   extent: number;
   rest?: StrandRestCurves & { extent: number; lift: number };
+  rods?: RodGpuSimulation;
 }
 
-type SurfaceBindStage = Extract<GeometryStage, { kind: 'surface-bind' }>;
-
-/** Strand curve buffers per layer: evaluated on the CPU, with cloth bound on the GPU each frame. */
+/** Strand curve buffers per layer: evaluated on the CPU, with cloth bound and rods simulated on the GPU each frame. */
 export class StrandBufferCache {
   private readonly cache = new Map<string, StrandBuffers>();
   private readonly binder = new StrandSurfaceBinder();
+  /** Rod topologies the GPU could not take (device limits); they stay on the CPU. */
+  private readonly rodFailures = new Set<string>();
 
   /** Up to date buffers for `layer`, or null when it has nothing to draw; replaced buffers retire with this frame. */
   prepare(device: GPUDevice, layer: SceneStrandLayer, temporaryBuffers: GPUBuffer[]): StrandBuffers | null {
     const program = layer.strands.program;
     const signature = JSON.stringify(program.stages);
-    // A final Surface Bind runs on the GPU from the unbound rest curves.
-    const last = program.stages[program.stages.length - 1];
-    const bind = last?.kind === 'surface-bind' && program.stages.length > 1 ? last as SurfaceBindStage : null;
-    const stages = bind ? program.stages.slice(0, -1) : program.stages;
-    const topology = bind ? JSON.stringify(stages) : signature;
+    // A final Surface Bind (and a Thread Along before it) or a Rod Simulation runs on the GPU from the rest curves.
+    const chain = surfaceBindChain(program.stages);
+    const candidate = chain ? null : rodChain(program.stages);
+    const rods = candidate && !this.rodFailures.has(candidate.topology) ? candidate : null;
+    const stages = chain ? chain.restStages : rods ? rods.restStages : program.stages;
+    const topology = chain ? JSON.stringify(stages) : rods ? rods.topology : signature;
     let buffers = this.cache.get(layer.layerId);
     if (!buffers || buffers.topology !== topology) {
       if (buffers) this.retire(buffers, temporaryBuffers);
-      buffers = this.build(device, layer.layerId, evaluateGeometryProgram({ ...program, stages }), signature, topology, !!bind);
+      const curves = evaluateGeometryProgram({ ...program, stages });
+      buffers = (rods && this.buildRods(device, layer.layerId, curves, rods))
+        ?? this.build(device, layer.layerId, rods ? evaluateGeometryProgram(program) : curves, signature, rods ? signature : topology, !!chain);
     }
-    if (bind && buffers.signature !== signature) {
-      const grid = clothGridAt(bind.cloth, bind.time);
-      this.binder.bind(device, buffers.rest!, grid, bind.height, buffers.positions, temporaryBuffers);
+    if (rods && buffers.rods && buffers.signature !== signature) {
+      const { step, alpha } = rodStepAt(rods.rod);
+      buffers.rods.writeOutput(buffers.positions, rods.fields, buffers.rods.prepare(step, alpha), temporaryBuffers);
+      buffers.extent = buffers.rods.extent;
+      buffers.signature = signature;
+    }
+    if (chain && buffers.signature !== signature) {
+      const { bind, thread, fields } = chain, grid = clothGridAt(bind.cloth, bind.time);
+      this.binder.bind(device, buffers.rest!, grid, bind.height, buffers.positions, temporaryBuffers, thread, fields);
       let reach = 0;
       for (let index = 0; index < grid.positions.length; index += 3) {
         reach = Math.max(reach, Math.hypot(grid.positions[index], grid.positions[index + 1], grid.positions[index + 2]));
       }
-      buffers.extent = Math.max(buffers.rest!.extent, reach) + buffers.rest!.lift * Math.abs(bind.height);
+      // Thread Along lifts by at most lift · (1 + settle) ahead of its tip.
+      const lift = buffers.rest!.lift + (thread ? Math.abs(thread.lift) * (1 + Math.max(0, thread.settle)) : 0);
+      buffers.extent = Math.max(buffers.rest!.extent, reach) + lift * Math.abs(bind.height);
       buffers.signature = signature;
     }
     this.cache.delete(layer.layerId);
@@ -114,15 +129,42 @@ export class StrandBufferCache {
       ...(gpuBind ? { rest: { ...this.binder.upload(device, curves, `native-strands-rest-${layerId}`), extent, lift } } : {}) };
   }
 
+  /**
+   * Buffers whose points the GPU rod simulation writes every frame; null when the device cannot
+   * hold it, after which the topology is simulated on the CPU.
+   */
+  private buildRods(device: GPUDevice, layerId: string, curves: CurveSet, chain: RodChain): StrandBuffers | null {
+    let rods: RodGpuSimulation;
+    try { rods = new RodGpuSimulation(device, chain.rod.rod, rodRestFor(chain.rod, curves), curves, `native-strands-rods-${layerId}`); }
+    catch { this.rodFailures.add(chain.topology); return null; }
+    const segments = strandSegmentStarts(curves.starts, curves.counts), { positions } = curves;
+    let length = 0;
+    for (const packed of segments) {
+      const index = (packed & 0x3fffffff) * 3;
+      length += Math.hypot(positions[index + 3] - positions[index], positions[index + 4] - positions[index + 1], positions[index + 5] - positions[index + 2]);
+    }
+    const points = device.createBuffer({ size: Math.max(16, (positions.length / 3) * STRAND_POINT_FLOATS * 4),
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, label: `native-strands-points-${layerId}` });
+    const segmentBuffer = device.createBuffer({ size: Math.max(16, segments.byteLength), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      label: `native-strands-segments-${layerId}` });
+    if (segments.byteLength) device.queue.writeBuffer(segmentBuffer, 0, segments.buffer, segments.byteOffset, segments.byteLength);
+    return { signature: '', topology: chain.topology, positions: points, segments: segmentBuffer, segmentCount: segments.length,
+      segmentLength: segments.length ? length / segments.length : 0, extent: rods.extent, rods };
+  }
+
   private retire(buffers: StrandBuffers, temporaryBuffers: GPUBuffer[]): void {
     temporaryBuffers.push(buffers.positions, buffers.segments);
-    if (buffers.rest) temporaryBuffers.push(buffers.rest.rest, buffers.rest.ranges);
+    if (buffers.rest) temporaryBuffers.push(buffers.rest.rest, buffers.rest.ranges, buffers.rest.arcs);
+    buffers.rods?.retire(temporaryBuffers);
   }
 
   dispose(): void {
     for (const buffers of this.cache.values()) {
       buffers.positions.destroy(); buffers.segments.destroy();
-      buffers.rest?.rest.destroy(); buffers.rest?.ranges.destroy();
+      buffers.rest?.rest.destroy(); buffers.rest?.ranges.destroy(); buffers.rest?.arcs.destroy();
+      const retired: GPUBuffer[] = [];
+      buffers.rods?.retire(retired);
+      retired.forEach(buffer => buffer.destroy());
     }
     this.cache.clear();
     this.binder.dispose();

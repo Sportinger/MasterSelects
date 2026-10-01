@@ -1,6 +1,7 @@
 import type { RodSpec } from './rodProgram';
 import type { RodRest } from './rodRest';
-import { RodContacts, type RodSegments } from './rodContacts';
+import { RodContacts } from './rodContacts';
+import { buildRodTopology, type RodTopology } from './rodTopology';
 import { airVelocity, windVelocity } from './simulationForces';
 
 /** Fixed simulation steps per second of source time; substeps subdivide each step. */
@@ -10,27 +11,28 @@ const CHECKPOINT_LIMIT = 120;
 /** Simulation never runs past ten minutes of source time; later frames hold that state. */
 export const ROD_STEP_LIMIT = ROD_STEP_RATE * 600;
 /** Air drag of a thin rod (per second), across its axis only. */
-const AIR_DRAG = 1;
+export const ROD_AIR_DRAG = 1;
 /** No node travels more than this share of the radius per substep, so rods cannot pass through each other. */
-const MAX_TRAVEL = 0.5;
+export const ROD_MAX_TRAVEL = 0.5;
 
 /**
  * Stiffness 0..1 to material moduli for a rod of unit linear density: stretch EA from 10 (rubber
  * band) to 1e7 (nearly inextensible), bend EI from 1e-4 (limp thread) to 10 (wire).
  */
-const stretchModulus = (stiffness: number) => 10 ** (1 + 6 * stiffness);
-const bendModulus = (stiffness: number) => 10 ** (-4 + 5 * stiffness);
-const ease = (value: number) => value <= 0 ? 0 : value >= 1 ? 1 : value * value * (3 - 2 * value);
-
-interface Bends { prev: Uint32Array; mid: Uint32Array; next: Uint32Array; inverse1: Float64Array; inverse2: Float64Array; compliance: Float64Array }
+export const rodStretchModulus = (stiffness: number) => 10 ** (1 + 6 * stiffness);
+export const rodBendModulus = (stiffness: number) => 10 ** (-4 + 5 * stiffness);
+export const rodPullEase = (value: number) => value <= 0 ? 0 : value >= 1 ? 1 : value * value * (3 - 2 * value);
+/** Inverse mass of a node: pinned nodes are kinematic, a lone node weighs one diameter. */
+export const rodInverseMass = (mass: number, pinned: boolean, radius: number) => pinned ? 0 : 1 / (mass > 0 ? mass : 2 * radius);
 
 /**
  * Elastic rods with XPBD in small steps (Macklin et al. 2019): stretch along each segment, isotropic
- * bending toward straight and capsule contacts with friction, one Gauss-Seidel pass per substep in
- * a fixed order, double precision, no randomness. With a straight rest shape and position-only
- * pins, twist does not move the centre line (Bergou et al. 2008), so the rods carry no frames.
- * The same rest, spec and step always give the same state, whether reached by playback or from a
- * checkpoint.
+ * bending toward straight and capsule contacts with friction, one pass per substep, double
+ * precision, no randomness. Stretch and bend constraints are solved colour by colour
+ * (rodTopology.ts), contacts as one averaged Jacobi pass, so the GPU solver (RodGpuSolver.ts) runs
+ * the same scheme in parallel. With a straight rest shape and position-only pins, twist does not
+ * move the centre line (Bergou et al. 2008), so the rods carry no frames. The same rest, spec and
+ * step always give the same state, whether reached by playback or from a checkpoint.
  */
 export class RodSimulation {
   private readonly spec: RodSpec;
@@ -39,12 +41,9 @@ export class RodSimulation {
   private readonly velocities: Float64Array;
   private readonly predicted: Float64Array;
   private readonly inverseMass: Float64Array;
-  /** Node neighbours along the rod (themselves at open ends), for the axis of air drag. */
-  private readonly before: Uint32Array;
-  private readonly after: Uint32Array;
-  private readonly segments: RodSegments;
+  private readonly topology: RodTopology;
   private readonly stretchCompliance: Float64Array;
-  private readonly bends: Bends;
+  private readonly bendCompliance: Float64Array;
   private readonly contacts: RodContacts;
   private readonly air = new Float64Array(3);
   private readonly checkpoints = new Map<number, Float64Array>();
@@ -57,67 +56,15 @@ export class RodSimulation {
     this.positions = Float64Array.from(rest.positions);
     this.velocities = new Float64Array(count * 3);
     this.predicted = new Float64Array(count * 3);
-    this.before = new Uint32Array(count); this.after = new Uint32Array(count);
-    this.segments = this.buildSegments();
-    const { a, b, rest: lengths } = this.segments, modulus = stretchModulus(spec.stretch);
-    this.stretchCompliance = lengths.map(length => length / modulus);
-    // Each node carries the rod length around it (unit linear density); a lone node one diameter.
-    const mass = new Float64Array(count);
-    for (let c = 0; c < a.length; c++) { mass[a[c]] += lengths[c] / 2; mass[b[c]] += lengths[c] / 2; }
-    this.inverseMass = mass.map((value, node) => rest.pinned[node] ? 0 : 1 / (value > 0 ? value : 2 * spec.radius));
-    this.bends = this.buildBends();
-    this.contacts = new RodContacts(this.segments, spec.radius);
+    this.topology = buildRodTopology(rest);
+    const stretch = rodStretchModulus(spec.stretch), bend = rodBendModulus(spec.bend);
+    this.stretchCompliance = this.topology.segments.rest.map(length => length / stretch);
+    // C = e2/l2 - e1/l1 is about the curvature times the node's length, so E = EI/2 · |C|² / l.
+    this.bendCompliance = this.topology.bends.length.map(length => length / bend);
+    this.inverseMass = this.topology.mass.map((value, node) => rodInverseMass(value, rest.pinned[node] === 1, spec.radius));
+    this.contacts = new RodContacts(this.topology.segments, spec.radius);
     this.contacts.update(this.positions);
     this.checkpoints.set(0, this.snapshot());
-  }
-
-  private buildSegments(): RodSegments {
-    const { starts, counts, closed, positions } = this.rest;
-    let total = 0;
-    for (let rod = 0; rod < counts.length; rod++) total += closed[rod] ? counts[rod] : Math.max(0, counts[rod] - 1);
-    const segments: RodSegments = { a: new Uint32Array(total), b: new Uint32Array(total), rest: new Float64Array(total),
-      rod: new Uint32Array(total), arc: new Float64Array(total), rodLength: new Float64Array(counts.length), rodClosed: Uint8Array.from(closed) };
-    let c = 0;
-    for (let rod = 0; rod < counts.length; rod++) {
-      const start = starts[rod], count = counts[rod], ring = closed[rod] === 1, links = ring ? count : Math.max(0, count - 1);
-      for (let node = 0; node < count; node++) {
-        this.before[start + node] = start + (ring ? (node - 1 + count) % count : Math.max(0, node - 1));
-        this.after[start + node] = start + (ring ? (node + 1) % count : Math.min(count - 1, node + 1));
-      }
-      let arc = 0;
-      for (let link = 0; link < links; link++, c++) {
-        const i = start + link, j = start + (link + 1) % count;
-        const length = Math.hypot(positions[j * 3] - positions[i * 3], positions[j * 3 + 1] - positions[i * 3 + 1], positions[j * 3 + 2] - positions[i * 3 + 2]);
-        segments.a[c] = i; segments.b[c] = j; segments.rest[c] = length; segments.rod[c] = rod;
-        segments.arc[c] = arc + length / 2; arc += length;
-      }
-      segments.rodLength[rod] = arc;
-    }
-    return segments;
-  }
-
-  /** One bend per interior node (every node of a ring) between its two segments. */
-  private buildBends(): Bends {
-    const { starts, counts, closed } = this.rest, { rest: lengths } = this.segments, modulus = bendModulus(this.spec.bend);
-    const triples: number[][] = [];
-    let first = 0;
-    for (let rod = 0; rod < counts.length; rod++) {
-      const start = starts[rod], count = counts[rod], ring = closed[rod] === 1, links = ring ? count : Math.max(0, count - 1);
-      for (let node = ring ? 0 : 1; node < (ring ? count : count - 1); node++) {
-        const left = first + (ring ? (node - 1 + count) % count : node - 1), right = first + node;
-        triples.push([this.before[start + node], start + node, this.after[start + node], lengths[left], lengths[right]]);
-      }
-      first += links;
-    }
-    const bends: Bends = { prev: new Uint32Array(triples.length), mid: new Uint32Array(triples.length), next: new Uint32Array(triples.length),
-      inverse1: new Float64Array(triples.length), inverse2: new Float64Array(triples.length), compliance: new Float64Array(triples.length) };
-    triples.forEach(([prev, mid, next, l1, l2], index) => {
-      bends.prev[index] = prev; bends.mid[index] = mid; bends.next[index] = next;
-      bends.inverse1[index] = l1 > 0 ? 1 / l1 : 0; bends.inverse2[index] = l2 > 0 ? 1 / l2 : 0;
-      // C = e2/l2 - e1/l1 is about the curvature times the node's length, so E = EI/2 · |C|² / l.
-      bends.compliance[index] = (l1 + l2) / 2 / modulus;
-    });
-    return bends;
   }
 
   /** Positions, velocities and the positions the contact candidates were built from. */
@@ -162,13 +109,13 @@ export class RodSimulation {
   }
 
   private advance() {
-    const { spec, positions, velocities, predicted, inverseMass, rest, before, after, air } = this;
+    const { spec, positions, velocities, predicted, inverseMass, rest, air } = this, { before, after } = this.topology;
     const time = this.step / ROD_STEP_RATE - spec.preroll, wind = windVelocity(spec, time);
     const dt = 1 / (ROD_STEP_RATE * spec.substeps), damping = Math.exp(-(spec.damping + spec.drag) * dt);
-    const pull = 1 - Math.exp(-AIR_DRAG * dt), limit = MAX_TRAVEL * spec.radius / dt, count = inverseMass.length;
+    const pull = 1 - Math.exp(-ROD_AIR_DRAG * dt), limit = ROD_MAX_TRAVEL * spec.radius / dt, count = inverseMass.length;
     for (let substep = 0; substep < spec.substeps; substep++) {
       // Pins follow their pull from source time 0; the rest moves under gravity, air and damping.
-      const reach = spec.pull * ease((time + (substep + 1) * dt) / spec.pullTime);
+      const reach = spec.pull * rodPullEase((time + (substep + 1) * dt) / spec.pullTime);
       for (let node = 0; node < count; node++) {
         const base = node * 3;
         if (inverseMass[node] === 0) {
@@ -205,8 +152,8 @@ export class RodSimulation {
   }
 
   private solveStretch(dt: number) {
-    const { predicted: p, inverseMass: w, stretchCompliance } = this, { a, b, rest } = this.segments, inverseDt2 = 1 / (dt * dt);
-    for (let c = 0; c < a.length; c++) {
+    const { predicted: p, inverseMass: w, stretchCompliance } = this, { a, b, rest } = this.topology.segments, inverseDt2 = 1 / (dt * dt);
+    for (const color of this.topology.stretchColors) for (const c of color) {
       const i = a[c], j = b[c], wi = w[i], wj = w[j], weight = wi + wj;
       if (weight === 0) continue;
       const dx = p[j * 3] - p[i * 3], dy = p[j * 3 + 1] - p[i * 3 + 1], dz = p[j * 3 + 2] - p[i * 3 + 2];
@@ -220,8 +167,9 @@ export class RodSimulation {
 
   /** Vector bend C = (x_next - x_mid) / l2 - (x_mid - x_prev) / l1, zero on a straight rod at rest length. */
   private solveBend(dt: number) {
-    const { predicted: p, inverseMass: w } = this, { prev, mid, next, inverse1, inverse2, compliance } = this.bends, inverseDt2 = 1 / (dt * dt);
-    for (let k = 0; k < prev.length; k++) {
+    const { predicted: p, inverseMass: w, bendCompliance: compliance } = this, { prev, mid, next, inverse1, inverse2 } = this.topology.bends;
+    const inverseDt2 = 1 / (dt * dt);
+    for (const color of this.topology.bendColors) for (const k of color) {
       const i = prev[k] * 3, m = mid[k] * 3, j = next[k] * 3, g1 = inverse1[k], g2 = inverse2[k], gm = g1 + g2;
       const wi = w[prev[k]], wm = w[mid[k]], wj = w[next[k]];
       const weight = wi * g1 * g1 + wm * gm * gm + wj * g2 * g2;
