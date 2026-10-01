@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { strandShadowView } from '../../src/engine/native3d/passes/strandShadowLight';
 import type { SceneLightLayer } from '../../src/engine/scene/types';
 import type { LightClipSettings } from '../../src/types/light';
+import { meshLightIndex } from '../../src/engine/native3d/passes/meshPass/strandShadowReceiver';
 
 const light = (settings: Partial<LightClipSettings>, translation: [number, number, number]): SceneLightLayer => ({
   kind: 'light', layerId: 'light', clipId: 'light', opacity: 1, blendMode: 'normal',
@@ -30,7 +31,24 @@ describe('strand shadow light', () => {
     expect(view.far).toBeCloseTo(5, 6);
     const clip = apply(view.projection, apply(view.view, [0, 0, 0]));
     expect(Math.abs(clip[0] / clip[3])).toBeLessThan(1e-6);
+    // Meshes cast from the same light, with the near plane pulled toward it and the same far plane.
+    expect(view.lightLayerId).toBe('light');
+    expect(view.casters!.near).toBeLessThan(view.near);
+    expect(view.casters!.far).toBe(view.far);
+    const blocker = apply(view.casters!.projection, apply(view.view, [3, 0, 0]));
+    expect(blocker[2] / blocker[3]).toBeGreaterThan(0);
+    expect(blocker[2] / blocker[3]).toBeLessThan(1);
+    expect(strandShadowView([], [0, 0, 1], [0, 0, 0], 1)!.casters).toBeUndefined();
     expect(strandShadowView([light({ castsShadows: false }, [0, 0, 5])], [0, 0, 1], [0, 0, 0], 1)).toBeNull();
     expect(strandShadowView([light({ kind: 'environment' }, [0, 0, 0])], [0, 0, 1], [0, 0, 0], 1)).toBeNull();
+  });
+
+  it('finds the shadowing light among the lights meshes pack', () => {
+    const named = (layerId: string, settings: Partial<LightClipSettings>) => ({ ...light(settings, [0, 0, 1]), layerId }) as SceneLightLayer;
+    const lights = [named('sky', { kind: 'environment' }), named('off', { intensity: 0 }), named('key', {}), named('fill', {})];
+    expect(meshLightIndex(lights, 'key')).toBe(0);
+    expect(meshLightIndex(lights, 'fill')).toBe(1);
+    expect(meshLightIndex(lights, 'sky')).toBe(-1);
+    expect(meshLightIndex(lights, 'off')).toBe(-1);
   });
 });

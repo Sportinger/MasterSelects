@@ -27,9 +27,20 @@ struct VertexOutput {
   @location(2) worldPosition: vec3f,
 }
 
+/** A strand layer's deep opacity shadow; StrandShadowSample.wgsl is prepended by the pipeline. */
+struct MeshStrandShadow {
+  matrix: mat4x4f,
+  params: vec4f, // x: index of the shadowing light among `lights` (-1: none), y: opacity layer spacing, w: strength
+  range: vec4f,
+}
+
 @group(0) @binding(0) var<uniform> uniforms: MeshUniforms;
 @group(0) @binding(1) var meshSampler: sampler;
 @group(0) @binding(2) var baseColorTexture: texture_2d<f32>;
+@group(1) @binding(0) var<uniform> strandShadow: MeshStrandShadow;
+@group(1) @binding(1) var strandShadowDepth: texture_depth_2d;
+@group(1) @binding(2) var strandShadowOpacity: texture_2d<f32>;
+@group(1) @binding(3) var strandShadowSampler: sampler;
 
 @vertex
 fn vertexMain(input: VertexInput) -> VertexOutput {
@@ -77,6 +88,11 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     if (light.positionKind.w > 1.5) {
       let panelDirection = normalize(light.directionDiameter.xyz);
       attenuation = attenuation * max(dot(-dirToLight, panelDirection), 0.0);
+    }
+
+    if (f32(i) == strandShadow.params.x) {
+      attenuation = attenuation * strandShadowTransmittance(input.worldPosition, strandShadow.matrix, strandShadow.params.y,
+        strandShadow.params.w, strandShadow.range, 0.0, strandShadowDepth, strandShadowOpacity, strandShadowSampler);
     }
 
     let diffuse = max(dot(normal, dirToLight), 0.0);

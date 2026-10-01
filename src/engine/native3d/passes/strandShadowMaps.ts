@@ -5,14 +5,16 @@ const OPACITY_FORMAT: GPUTextureFormat = 'rgba16float';
 /** Layers with shadow maps kept across frames, least recently used first. */
 const MAP_LIMIT = 6;
 
-export interface StrandShadowTargets { depth: GPUTextureView; opacity: GPUTextureView }
+/** `occluders`: nearest opaque mesh seen from a scene light, when meshes cast onto the strands. */
+export interface StrandShadowTargets { depth: GPUTextureView; opacity: GPUTextureView; occluders?: GPUTextureView }
+interface ShadowEntry { depth: GPUTexture; opacity: GPUTexture; occluders?: GPUTexture; views: StrandShadowTargets }
 
 /**
  * Light depth and deep opacity textures per strand layer, plus 1 × 1 stand-ins bound while a map is
  * itself the render target or a layer has no shadow.
  */
 export class StrandShadowMaps {
-  private readonly maps = new Map<string, { depth: GPUTexture; opacity: GPUTexture; views: StrandShadowTargets }>();
+  private readonly maps = new Map<string, ShadowEntry>();
   private fallback: StrandShadowTargets | null = null;
   private fallbackTextures: GPUTexture[] = [];
   private sampler: GPUSampler | null = null;
@@ -36,6 +38,19 @@ export class StrandShadowMaps {
   }
 
   targets(device: GPUDevice, layerId: string): StrandShadowTargets {
+    return this.entry(device, layerId).views;
+  }
+
+  /** Mesh occluder depth of a layer's shadowing light; created when meshes first cast onto it. */
+  occluders(device: GPUDevice, layerId: string): GPUTextureView {
+    const entry = this.entry(device, layerId);
+    entry.occluders ??= device.createTexture({ label: `native-strands-shadow-occluders-${layerId}`,
+      size: [STRAND_SHADOW_MAP_SIZE, STRAND_SHADOW_MAP_SIZE], format: DEPTH_FORMAT,
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT });
+    return entry.occluders.createView();
+  }
+
+  private entry(device: GPUDevice, layerId: string): ShadowEntry {
     let entry = this.maps.get(layerId);
     if (entry) this.maps.delete(layerId);
     else {
@@ -49,13 +64,13 @@ export class StrandShadowMaps {
     while (this.maps.size > MAP_LIMIT) {
       const [oldest, retired] = this.maps.entries().next().value!;
       this.maps.delete(oldest);
-      retired.depth.destroy(); retired.opacity.destroy();
+      retired.depth.destroy(); retired.opacity.destroy(); retired.occluders?.destroy();
     }
-    return entry.views;
+    return entry;
   }
 
   dispose(): void {
-    for (const entry of this.maps.values()) { entry.depth.destroy(); entry.opacity.destroy(); }
+    for (const entry of this.maps.values()) { entry.depth.destroy(); entry.opacity.destroy(); entry.occluders?.destroy(); }
     this.maps.clear();
     for (const texture of this.fallbackTextures) texture.destroy();
     this.fallbackTextures = [];

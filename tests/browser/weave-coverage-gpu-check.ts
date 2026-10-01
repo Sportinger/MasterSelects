@@ -1,5 +1,5 @@
 import { StrandCoverageTargets } from '../../src/engine/native3d/passes/StrandCoverageTargets';
-import strandShader from '../../src/engine/native3d/shaders/StrandScene.wgsl?raw';
+import { STRAND_SCENE_SHADER } from '../../src/engine/native3d/passes/StrandPass';
 import type { SceneCamera, SceneStrandLayer } from '../../src/engine/scene/types';
 
 /** Exact GPU checks of depth seeding, coverage resolve, opacity and resource reuse. */
@@ -9,7 +9,7 @@ async function check() {
   const device = await adapter.requestDevice();
   const errors: string[] = [];
   device.addEventListener('uncapturederror', event => errors.push(event.error.message));
-  const strandModule = device.createShaderModule({ code: strandShader });
+  const strandModule = device.createShaderModule({ code: STRAND_SCENE_SHADER });
   const diagnostics = await strandModule.getCompilationInfo();
   const shaderErrors = diagnostics.messages.filter(message => message.type === 'error');
   if (shaderErrors.length) throw new Error(shaderErrors.map(message => message.message).join('\n'));
@@ -156,7 +156,8 @@ async function checkStrands(device: GPUDevice) {
       depthStencilAttachment: { view: depth.createView(), depthClearValue: hidden ? 0.01 : 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
     clear.end();
     const prepared = renderer.prepare(device, [layer], temporary);
-    if (!renderer.render(device, encoder, color.createView(), depth.createView(), prepared, camera, temporary)) {
+    const shadows = renderer.prepareShadows(device, encoder, prepared, temporary);
+    if (!renderer.render(device, encoder, color.createView(), depth.createView(), shadows, camera, temporary)) {
       throw new Error('Strand pass refused the frame');
     }
     encoder.copyTextureToBuffer({ texture: color }, { buffer: readback, bytesPerRow: width * 4 }, [width, height]);

@@ -19,6 +19,8 @@ import { createMeshPipelineResources } from './meshPass/pipelineResources';
 import { resolveMeshMaterialPlan } from './meshPass/materials';
 import { buildMeshMatrixPlan } from './meshPass/transforms';
 import { buildMeshUniformData } from './meshPass/uniforms';
+import { MeshStrandShadowBinding } from './meshPass/strandShadowReceiver';
+import type { StrandShadowReceiver } from './StrandPass';
 
 export type SceneMeshLayer = ScenePrimitiveLayer | SceneText3DLayer | SceneModelLayer;
 export type SceneNativeMeshLayer = ScenePrimitiveLayer | SceneText3DLayer | SceneModelLayer;
@@ -49,7 +51,10 @@ export class MeshPass {
   private meshPipelineOpaque: GPURenderPipeline | null = null;
   private meshPipelineTransparent: GPURenderPipeline | null = null;
   private meshPipelineWireframe: GPURenderPipeline | null = null;
+  private meshPipelineCaster: GPURenderPipeline | null = null;
   private meshBindGroupLayout: GPUBindGroupLayout | null = null;
+  private strandShadowLayout: GPUBindGroupLayout | null = null;
+  private readonly strandShadow = new MeshStrandShadowBinding();
   private primitiveCache = new Map<ScenePrimitiveLayer['meshType'], PrimitiveGpuResources>();
   private textCache = new Map<string, PrimitiveGpuResources>();
   private modelCache = new Map<string, PrimitiveGpuResources[]>();
@@ -103,7 +108,9 @@ export class MeshPass {
     this.meshPipelineOpaque = resources.opaquePipeline;
     this.meshPipelineTransparent = resources.transparentPipeline;
     this.meshPipelineWireframe = resources.wireframePipeline;
+    this.meshPipelineCaster = resources.casterPipeline;
     this.meshBindGroupLayout = resources.bindGroupLayout;
+    this.strandShadowLayout = resources.strandShadowLayout;
     this.meshSampler = resources.sampler;
     this.ensureDefaultTexture(device);
   }
@@ -120,6 +127,7 @@ export class MeshPass {
     modelRuntimeCache: ModelRuntimeCache,
     temporaryBuffers: GPUBuffer[],
     transparent: boolean,
+    strandShadow?: StrandShadowReceiver | null,
   ): boolean {
     if (layers.length === 0) {
       return true;
@@ -129,6 +137,7 @@ export class MeshPass {
       !this.meshPipelineTransparent ||
       !this.meshPipelineWireframe ||
       !this.meshBindGroupLayout ||
+      !this.strandShadowLayout ||
       !this.meshSampler ||
       !this.defaultTextureView
     ) {
@@ -152,6 +161,7 @@ export class MeshPass {
       },
       label: transparent ? 'native-scene-mesh-transparent-pass' : 'native-scene-mesh-opaque-pass',
     });
+    renderPass.setBindGroup(1, this.strandShadow.bindGroup(device, this.strandShadowLayout, strandShadow, lights, temporaryBuffers));
 
     for (const layer of layers) {
       const resourcesList = this.getOrCreateResources(device, layer, modelRuntimeCache);
@@ -220,11 +230,57 @@ export class MeshPass {
     return true;
   }
 
+  /**
+   * Draws opaque meshes into a strand layer's occluder depth, seen from its shadowing light, so the
+   * meshes shadow the strands. Wireframes do not cast.
+   */
+  renderShadowCasters(
+    device: GPUDevice,
+    commandEncoder: GPUCommandEncoder,
+    depthView: GPUTextureView,
+    light: { viewMatrix: Float32Array; projectionMatrix: Float32Array },
+    layers: SceneNativeMeshLayer[],
+    effectors: SceneSplatEffectorRuntimeData[],
+    modelRuntimeCache: ModelRuntimeCache,
+    temporaryBuffers: GPUBuffer[],
+  ): void {
+    const casters = layers.filter((layer) => layer.wireframe !== true);
+    if (!casters.length || !this.meshPipelineCaster || !this.meshBindGroupLayout || !this.meshSampler || !this.defaultTextureView) {
+      return;
+    }
+    const pass = commandEncoder.beginRenderPass({ label: 'native-scene-mesh-shadow-casters', colorAttachments: [],
+      depthStencilAttachment: { view: depthView, depthLoadOp: 'load', depthStoreOp: 'store' } });
+    pass.setPipeline(this.meshPipelineCaster);
+    for (const layer of casters) {
+      const resourcesList = this.getOrCreateResources(device, layer, modelRuntimeCache) ?? [];
+      const { modelMatrix, mvp } = buildMeshMatrixPlan(layer, light, effectors);
+      for (const [resourceIndex, resources] of resourcesList.entries()) {
+        const uniformBuffer = device.createBuffer({ size: MESH_UNIFORM_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+          label: `native-scene-mesh-caster-uniform-${layer.layerId}-${resourceIndex}` });
+        temporaryBuffers.push(uniformBuffer);
+        const uniformData = buildMeshUniformData(mvp, modelMatrix, [1, 1, 1, 1], 1, true);
+        device.queue.writeBuffer(uniformBuffer, 0, uniformData.buffer, uniformData.byteOffset, uniformData.byteLength);
+        pass.setBindGroup(0, device.createBindGroup({ layout: this.meshBindGroupLayout, entries: [
+          { binding: 0, resource: { buffer: uniformBuffer } },
+          { binding: 1, resource: this.meshSampler },
+          { binding: 2, resource: this.defaultTextureView },
+        ], label: `native-scene-mesh-caster-${layer.layerId}-${resourceIndex}` }));
+        pass.setVertexBuffer(0, resources.vertexBuffer);
+        pass.setIndexBuffer(resources.indexBuffer, 'uint32');
+        pass.drawIndexed(resources.indexCount);
+      }
+    }
+    pass.end();
+  }
+
   dispose(): void {
     this.meshPipelineOpaque = null;
     this.meshPipelineTransparent = null;
     this.meshPipelineWireframe = null;
+    this.meshPipelineCaster = null;
     this.meshBindGroupLayout = null;
+    this.strandShadowLayout = null;
+    this.strandShadow.dispose();
     this.meshSampler = null;
     for (const resources of this.primitiveCache.values()) {
       this.destroyResources(resources);

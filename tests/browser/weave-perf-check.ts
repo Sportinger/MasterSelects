@@ -64,7 +64,8 @@ async function measure() {
     const prepareStart = performance.now();
     const prepared = pass.prepare(device, [layer], temporary);
     const prepareMs = performance.now() - prepareStart;
-    if (!pass.render(device, encoder, color.createView(), depth.createView(), prepared, view, temporary)) throw new Error('Strand pass refused the frame');
+    const shadows = pass.prepareShadows(device, encoder, prepared, temporary);
+    if (!pass.render(device, encoder, color.createView(), depth.createView(), shadows, view, temporary)) throw new Error('Strand pass refused the frame');
     marker(querySet ? { querySet, endOfPassWriteIndex: 1 } : undefined);
     if (querySet) { encoder.resolveQuerySet(querySet, 0, 2, resolve, 0); encoder.copyBufferToBuffer(resolve, 0, readback, 0, 16); }
     const submitted = performance.now();

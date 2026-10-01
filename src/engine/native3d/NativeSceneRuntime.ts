@@ -367,6 +367,11 @@ export class NativeSceneRuntime {
     // Flock simulations advance (compute) before any scene render pass is opened.
     const flockPlans = this.flockPass.prepare(device, commandEncoder, flockLayers, realtimePlayback);
     const strandPlans = this.strandPass.prepare(device, strandLayers, temporaryBuffers);
+    // Strand shadow maps come before the opaque passes: lit meshes receive them, and opaque meshes
+    // seen from a scene light cast into them.
+    const strandShadows = this.strandPass.prepareShadows(device, commandEncoder, strandPlans, temporaryBuffers, lightLayers,
+      (encoder, depth, viewMatrix, projectionMatrix) => this.meshPass.renderShadowCasters(device, encoder, depth,
+        { viewMatrix, projectionMatrix }, opaqueMeshes, effectors, this.modelRuntimeCache, temporaryBuffers));
 
     // Shared native scene pass graph, phase 1:
     //   1. Opaque depth-writing geometry -> scene color + shared depth
@@ -404,6 +409,7 @@ export class NativeSceneRuntime {
       this.modelRuntimeCache,
       temporaryBuffers,
       false,
+      strandShadows.receiver,
     )) {
       return null;
     }
@@ -420,7 +426,7 @@ export class NativeSceneRuntime {
     });
     if (!this.voxelPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, readyVoxels, camera, temporaryBuffers)) return null;
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'opaque', temporaryBuffers)) return null;
-    if (!this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandPlans, camera, temporaryBuffers, lightLayers)) return null;
+    if (!this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandShadows, camera, temporaryBuffers)) return null;
 
     for (const layer of sortedLayers) {
       const renderSettings = layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
@@ -510,6 +516,7 @@ export class NativeSceneRuntime {
       this.modelRuntimeCache,
       temporaryBuffers,
       true,
+      strandShadows.receiver,
     )) {
       return null;
     }

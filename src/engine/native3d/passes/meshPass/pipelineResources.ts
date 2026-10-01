@@ -1,10 +1,20 @@
-import shaderSource from '../../shaders/MeshPass.wgsl?raw';
+import meshShader from '../../shaders/MeshPass.wgsl?raw';
+import strandShadowSample from '../../shaders/StrandShadowSample.wgsl?raw';
+import { createMeshStrandShadowLayout } from './strandShadowReceiver';
+
+const shaderSource = `${strandShadowSample}
+${meshShader}`;
+/** Depth format of strand shadow maps, which opaque meshes also render into as shadow casters. */
+const CASTER_DEPTH_FORMAT: GPUTextureFormat = 'depth32float';
 
 export interface MeshPipelineResources {
   opaquePipeline: GPURenderPipeline;
   transparentPipeline: GPURenderPipeline;
   wireframePipeline: GPURenderPipeline;
+  /** Depth only, as seen from a light that shadows strands. */
+  casterPipeline: GPURenderPipeline;
   bindGroupLayout: GPUBindGroupLayout;
+  strandShadowLayout: GPUBindGroupLayout;
   sampler: GPUSampler;
 }
 
@@ -46,8 +56,9 @@ export function createMeshPipelineResources(
     label: 'native-scene-mesh-shader',
   });
 
+  const strandShadowLayout = createMeshStrandShadowLayout(device);
   const pipelineLayout = device.createPipelineLayout({
-    bindGroupLayouts: [bindGroupLayout],
+    bindGroupLayouts: [bindGroupLayout, strandShadowLayout],
     label: 'native-scene-mesh-pipeline-layout',
   });
 
@@ -158,11 +169,21 @@ export function createMeshPipelineResources(
     label: 'native-scene-mesh-wireframe-pipeline',
   });
 
+  const casterPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout], label: 'native-scene-mesh-caster-layout' }),
+    vertex,
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
+    depthStencil: { format: CASTER_DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less' },
+    label: 'native-scene-mesh-shadow-caster-pipeline',
+  });
+
   return {
     opaquePipeline,
     transparentPipeline,
     wireframePipeline,
+    casterPipeline,
     bindGroupLayout,
+    strandShadowLayout,
     sampler,
   };
 }

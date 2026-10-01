@@ -1,4 +1,5 @@
-import shader from '../shaders/StrandScene.wgsl?raw';
+import strandShader from '../shaders/StrandScene.wgsl?raw';
+import shadowSample from '../shaders/StrandShadowSample.wgsl?raw';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
 import type { SceneCamera, SceneLayer3DData, SceneLightLayer, SceneStrandLayer } from '../../scene/types';
 import { evaluateGeometryProgram } from '../../../services/operators/geometry/geometryEvaluation';
@@ -11,10 +12,13 @@ import { multiplyMat4 } from '../../scene/SceneTransformUtils';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('StrandPass');
-/** Fixed layout up to the flyaway vector, then the packed scene lights, then the shadowing light. */
+/** The strand shader with the deep opacity lookup it shares with lit meshes. */
+export const STRAND_SCENE_SHADER = `${shadowSample}\n${strandShader}`;
+/** Fixed layout up to the flyaway vector, then the packed scene lights, the shadowing light and its mesh occluders. */
 const LIGHTS_OFFSET = 76;
 const SHADOW_OFFSET = LIGHTS_OFFSET + STRAND_LIGHT_FLOATS;
-const UNIFORM_FLOATS = SHADOW_OFFSET + 24;
+const OCCLUDER_OFFSET = SHADOW_OFFSET + 24;
+const UNIFORM_FLOATS = OCCLUDER_OFFSET + 20;
 /** Deep opacity one fully covering fiber adds; about one yarn in front leaves a third of the light. */
 const OPACITY_PER_FIBER = 0.3;
 /** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
@@ -105,6 +109,29 @@ interface StrandDraw {
   base: Float32Array;
   instances: number;
   shadow: StrandShadowView | null;
+  /** Distance between deep opacity layers (scene units), about one yarn. */
+  spacing: number;
+}
+
+/** Draws opaque meshes into `depth` as seen through `view` and `projection` (a shadowing light). */
+export type StrandShadowCasters = (encoder: GPUCommandEncoder, depth: GPUTextureView, view: Float32Array, projection: Float32Array) => void;
+
+/** What lit meshes need to receive a strand layer's shadow: the casting light and this frame's maps. */
+export interface StrandShadowReceiver {
+  lightLayerId: string;
+  depth: GPUTextureView;
+  opacity: GPUTextureView;
+  sampler: GPUSampler;
+  /** Light view-projection (16), then (unused, layer spacing, unused, strength), then (near, far, 1 perspective, 0). */
+  uniforms: Float32Array;
+}
+
+/** A frame's strand draws with their shadow maps, rendered before the opaque scene passes. */
+export interface StrandShadowFrame {
+  draws: StrandDraw[];
+  targets: StrandShadowTargets[];
+  /** The first strand layer shadowed by a scene light; meshes lit by that light receive its shadow. */
+  receiver: StrandShadowReceiver | null;
 }
 
 /** Writes the camera a pass renders from: view, projection, eye, viewport and spline pieces. */
@@ -143,8 +170,9 @@ export class StrandPass {
       { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
       { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
       { binding: 5, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+      { binding: 6, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
     ] });
-    const module = device.createShaderModule({ code: shader, label: 'native-strands' });
+    const module = device.createShaderModule({ code: STRAND_SCENE_SHADER, label: 'native-strands' });
     void module.getCompilationInfo?.().then(info => {
       const errors = info.messages.filter(message => message.type === 'error');
       if (errors.length) log.error('Strand shader compilation failed', errors.map(message => `${message.lineNum}:${message.linePos} ${message.message}`));
@@ -228,17 +256,17 @@ export class StrandPass {
     const center: [number, number, number] = [layer.worldMatrix[12], layer.worldMatrix[13], layer.worldMatrix[14]];
     const pad = (profile ? profile.radius * (1 + (flyaways ? flyaways.lift : 0)) : render.width) * scale;
     const shadow = strandShadowView(lights, KEY_LIGHT, center, buffers.extent * scale + pad);
+    const spacing = Math.max(profile ? profile.radius * 2 : render.width * 8, 1e-5) * scale;
     if (shadow) {
-      const spacing = Math.max(profile ? profile.radius * 2 : render.width * 8, 1e-5) * scale;
       data.set(multiplyMat4(shadow.projection, shadow.view), SHADOW_OFFSET);
       data.set([shadow.lightIndex < 0 ? 1 : shadow.lightIndex + 2, spacing, OPACITY_PER_FIBER, shadow.strength], SHADOW_OFFSET + 16);
       data.set([shadow.near, shadow.far, shadow.perspective ? 1 : 0, 0], SHADOW_OFFSET + 20);
     }
-    return { layer, buffers, base: data, instances: (profile ? profile.plies * profile.fibers : 1) + channels, shadow };
+    return { layer, buffers, base: data, instances: (profile ? profile.plies * profile.fibers : 1) + channels, shadow, spacing };
   }
 
   private bindGroup(device: GPUDevice, uniforms: Float32Array, buffers: StrandBuffers, depth: GPUTextureView, opacity: GPUTextureView,
-    temporaryBuffers: GPUBuffer[], label: string): GPUBindGroup {
+    temporaryBuffers: GPUBuffer[], label: string, occluders = this.shadows.empty(device).depth): GPUBindGroup {
     const buffer = device.createBuffer({ size: uniforms.byteLength, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label });
     temporaryBuffers.push(buffer);
     device.queue.writeBuffer(buffer, 0, uniforms.buffer as ArrayBuffer, uniforms.byteOffset, uniforms.byteLength);
@@ -249,11 +277,13 @@ export class StrandPass {
       { binding: 3, resource: depth },
       { binding: 4, resource: opacity },
       { binding: 5, resource: this.shadows.shadowSampler(device) },
+      { binding: 6, resource: occluders },
     ] });
   }
 
-  /** Light depth, then deep opacity layers behind it, both seen from the shadowing light. */
-  private renderShadow(device: GPUDevice, commandEncoder: GPUCommandEncoder, draw: StrandDraw, temporaryBuffers: GPUBuffer[]): StrandShadowTargets {
+  /** Light depth, then deep opacity layers behind it, both seen from the shadowing light; then its mesh occluders. */
+  private renderShadow(device: GPUDevice, commandEncoder: GPUCommandEncoder, draw: StrandDraw, temporaryBuffers: GPUBuffer[],
+    casters?: StrandShadowCasters): StrandShadowTargets {
     const shadow = draw.shadow!, targets = this.shadows.targets(device, draw.layer.layerId), empty = this.shadows.empty(device);
     const uniforms = writeViewer(Float32Array.from(draw.base), shadow.view, shadow.projection, shadow.eye,
       STRAND_SHADOW_MAP_SIZE, STRAND_SHADOW_MAP_SIZE, 1);
@@ -272,17 +302,41 @@ export class StrandPass {
       `native-strands-shadow-opacity-${draw.layer.layerId}`));
     opacityPass.draw(vertices, draw.instances);
     opacityPass.end();
-    return targets;
+    if (!casters || !shadow.casters) return targets;
+    const occluders = this.shadows.occluders(device, draw.layer.layerId);
+    const clear = commandEncoder.beginRenderPass({ label: 'native-strands-shadow-occluders-clear', colorAttachments: [],
+      depthStencilAttachment: { view: occluders, depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } });
+    clear.end();
+    casters(commandEncoder, occluders, shadow.view, shadow.casters.projection);
+    draw.base.set(multiplyMat4(shadow.casters.projection, shadow.view), OCCLUDER_OFFSET);
+    draw.base.set([1, shadow.casters.near, shadow.casters.far, draw.spacing], OCCLUDER_OFFSET + 16);
+    return { ...targets, occluders };
+  }
+
+  /**
+   * Evaluates the layers' uniforms and renders their shadow maps. Runs before the opaque scene
+   * passes, so lit meshes can receive the strands' shadow; `casters` draws opaque meshes from a
+   * scene light so they shadow the strands in turn.
+   */
+  prepareShadows(device: GPUDevice, commandEncoder: GPUCommandEncoder, prepared: PreparedStrandLayer[], temporaryBuffers: GPUBuffer[],
+    lights: readonly SceneLightLayer[] = [], casters?: StrandShadowCasters): StrandShadowFrame {
+    if (!prepared.length || !this.layout) return { draws: [], targets: [], receiver: null };
+    const empty = this.shadows.empty(device);
+    const draws = prepared.map(({ layer, buffers }) => this.layerUniforms(layer, buffers, lights));
+    const targets = draws.map(draw => draw.shadow ? this.renderShadow(device, commandEncoder, draw, temporaryBuffers, casters) : empty);
+    const index = draws.findIndex(draw => draw.shadow?.lightLayerId);
+    const caster = draws[index];
+    const receiver = caster ? { lightLayerId: caster.shadow!.lightLayerId!, depth: targets[index].depth, opacity: targets[index].opacity,
+      sampler: this.shadows.shadowSampler(device), uniforms: Float32Array.from(caster.base.subarray(SHADOW_OFFSET, SHADOW_OFFSET + 24)) } : null;
+    return { draws, targets, receiver };
   }
 
   render(device: GPUDevice, commandEncoder: GPUCommandEncoder, sceneView: GPUTextureView, sceneDepthView: GPUTextureView,
-    prepared: PreparedStrandLayer[], camera: SceneCamera, temporaryBuffers: GPUBuffer[], lights: readonly SceneLightLayer[] = []): boolean {
-    if (!prepared.length) return true;
+    frame: StrandShadowFrame, camera: SceneCamera, temporaryBuffers: GPUBuffer[]): boolean {
+    const { draws, targets } = frame;
+    if (!draws.length) return true;
     if (!this.pipeline || !this.layout || !this.depthPipeline || !this.opacityPipeline) return false;
-    const cameraPosition = cameraPositionFromView(camera.viewMatrix), empty = this.shadows.empty(device);
-    const draws = prepared.map(({ layer, buffers }) => this.layerUniforms(layer, buffers, lights));
-    // Shadow maps are rendered first: render passes cannot nest.
-    const targets = draws.map(draw => draw.shadow ? this.renderShadow(device, commandEncoder, draw, temporaryBuffers) : empty);
+    const cameraPosition = cameraPositionFromView(camera.viewMatrix);
     const multisampled = draws.some(draw => draw.base[71] > 0.5);
     const drawLayers = (pass: GPURenderPassEncoder) => {
       pass.setPipeline(multisampled ? this.coveragePipeline! : this.pipeline!);
@@ -291,7 +345,7 @@ export class StrandPass {
         const uniforms = writeViewer(draw.base, camera.viewMatrix, camera.projectionMatrix, cameraPosition,
           camera.viewport.width, camera.viewport.height, subdivisions);
         pass.setBindGroup(0, this.bindGroup(device, uniforms, draw.buffers, targets[index].depth, targets[index].opacity, temporaryBuffers,
-          `native-strands-${draw.layer.layerId}`));
+          `native-strands-${draw.layer.layerId}`, targets[index].occluders));
         pass.draw(draw.buffers.segmentCount * 6 * subdivisions, draw.instances);
       });
     };

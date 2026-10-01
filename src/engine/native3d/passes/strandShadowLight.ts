@@ -20,6 +20,13 @@ export interface StrandShadowView {
   near: number;
   far: number;
   strength: number;
+  /** Scene light layer that casts, so lit meshes can receive the strands' shadow; absent for the key light. */
+  lightLayerId?: string;
+  /**
+   * Projection for opaque meshes seen from a scene light: same view and far plane, but the near
+   * plane close to the light, so meshes between the light and the strands still cast.
+   */
+  casters?: { projection: Float32Array; near: number; far: number };
 }
 
 const upFor = (eye: Vector3, target: Vector3): Vector3 => {
@@ -60,6 +67,8 @@ export function strandShadowView(lights: readonly SceneLightLayer[], keyLight: V
   const distance = Math.max(Math.hypot(eye[0] - center[0], eye[1] - center[1], eye[2] - center[2]), 1e-3);
   const fov = 2 * Math.asin(Math.min(0.97, radius / distance)) * 1.05;
   const near = Math.max(distance - radius, distance * 0.02, 1e-3), far = distance + radius;
+  const casterNear = Math.max(distance * 0.02, 1e-3);
   return { lightIndex: best.index, view: cameraAt(eye, center), projection: perspective(fov, 1, near, far), eye,
-    perspective: true, near, far, strength: Math.max(0, Math.min(1, best.light.lightSettings.shadowStrength)) };
+    perspective: true, near, far, strength: Math.max(0, Math.min(1, best.light.lightSettings.shadowStrength)),
+    lightLayerId: best.light.layerId, casters: { projection: perspective(fov, 1, casterNear, far), near: casterNear, far } };
 }
