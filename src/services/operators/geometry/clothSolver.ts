@@ -1,5 +1,5 @@
-import { periodicWindModulation, windForce } from '../wind';
 import type { ClothSpec } from './clothProgram';
+import { airVelocity, windVelocity } from './simulationForces';
 
 /** Fixed simulation steps per second of source time; substeps subdivide each step. */
 export const CLOTH_STEP_RATE = 60;
@@ -175,17 +175,8 @@ export class ClothSimulation {
 
   /** Air velocity per vertex for one step: gusting winds plus animated turbulence at the vertex. */
   private updateAir(time: number) {
-    const { spec, positions, air } = this, wind = [0, 0, 0];
-    const modulation = periodicWindModulation(time);
-    for (const item of spec.winds) windForce(item.direction, item.strength, item.gust, modulation).forEach((value, axis) => { wind[axis] += value; });
-    for (let base = 0; base < air.length; base += 3) {
-      let ax = wind[0], ay = wind[1], az = wind[2];
-      for (const field of spec.turbulence) {
-        const f = field.frequency, s = field.strength, x = positions[base], y = positions[base + 1], z = positions[base + 2];
-        ax += s * Math.sin(f * y + 1.3 * time); ay += s * Math.sin(f * z + 1.7 * time + 1); az += s * Math.sin(f * x + 1.1 * time + 2);
-      }
-      air[base] = ax; air[base + 1] = ay; air[base + 2] = az;
-    }
+    const { spec, positions, air } = this, wind = windVelocity(spec, time);
+    for (let base = 0; base < air.length; base += 3) airVelocity(spec, wind, time, positions[base], positions[base + 1], positions[base + 2], air, base);
   }
 
   /** Vertex normals from central differences of the grid, oriented like the rest plane (+Z). */

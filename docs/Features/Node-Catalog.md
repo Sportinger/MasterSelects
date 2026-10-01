@@ -384,6 +384,7 @@ node is one node in every graph rather than a per-domain copy.
 | Flyaways | Curves → curves whose Yarn Profile lets single fibers stray: loops arc off and return, free ends stick out (Density, Length, Lift, Free Ends, Seed) |
 | Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll) |
 | Surface Bind | Curves + Cloth → curves placed on the cloth: X/Y of the flat rest sheet find the spot, Z becomes height along its normal |
+| Rod Simulation | Curves (+ per-point Pin) + Forces + Drag → the curves simulated as elastic rods with thickness, self- and mutual contact with friction and an optional floor (Radius, Segment Length, Stretch/Bend Stiffness, Friction, Damping, Substeps, Pre-roll, Pin, Pull, Pull Time, Floor, Floor Height) |
 | Weave Pattern | Draft (plain, twill 2/2 and 2/1, satin 5, basket), warp/weft counts, size, crimp → interlaced curves |
 | Knot | Shape (trefoil, figure-eight, reef knot of two ropes, (P, Q) torus knot), Size, Depth, Points → closed knot curves whose crossings pass over and under |
 | Celtic Knot | Columns, Rows, Cell Size, Height, Points per Step, Roundness → Celtic plait loops alternating over and under like a plain weave |
@@ -473,6 +474,23 @@ default 40 × 27 grid and 6 substeps, one second of simulation costs about 70 ms
 CPU; an animated frame of the default weave costs about 5 ms of CPU. The
 Cloth Sheet's preview shows the simulated grid. The default *Wind Cloth* group holds
 the sheet at its corners like a sail. Bypassing it leaves the weave flat.
+
+**Rod Simulation.** Any curves become rods of a given **Radius**, simulated with
+XPBD in small steps on the same clock, step rate and checkpoints as Cloth Sheet.
+Stretch links run along each segment; bending is the vector difference of
+neighbouring edge directions (rest straight, compliance scaled by length, so the
+stiffness does not depend on resolution). With a straight rest shape and
+position-only pins, twist does not move the centre line, so the rods carry no frames.
+Segments collide as capsules against each other and against non-neighbouring parts
+of their own rod; candidates come from a hashed grid sorted by counting sort and
+kept as a Verlet list until a node has moved a quarter radius, and positional
+friction removes the sliding of each substep up to Friction × penetration. Node
+speed is capped at half a radius per substep, so rods do not tunnel. Pins hold
+curve starts, both ends or the points of a Pin field above 0.5; **Pull** moves them
+outward along their end tangent over Pull Time, which tightens knots. The input
+curves are the rest state (rings stay closed) and the output keeps every input
+point: **Segment Length** (0 = one radius) only sets the rod resolution, and finer
+detail rides along. A Rod Simulation must come before Surface Bind.
 
 **Groups.** Geometry groups can be bypassed from their **Byp** header button or
 their Effects tab section. A curves output passes the group's incoming curves

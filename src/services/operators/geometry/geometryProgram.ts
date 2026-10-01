@@ -6,6 +6,7 @@ import { pointwiseOperation, type PointwiseValueType } from '../fields/pointwise
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { compileClothSpec, type ClothSpec } from './clothProgram';
+import { compileRodSpec, type RodSpec } from './rodProgram';
 import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES, type CelticKnotSpec, type KnotSpec } from './knotCurves';
 
 /** Context values a curve-point field can read, in addition to shared pointwise operations. */
@@ -30,7 +31,9 @@ export type GeometryStage =
   | { kind: 'set-position'; nodeId: string; position?: GeometryField; offset?: GeometryField }
   | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField }
   /** Curves on the cloth simulated by `cloth` at source time `time` (seconds). */
-  | { kind: 'surface-bind'; nodeId: string; height: number; cloth: ClothSpec; time: number };
+  | { kind: 'surface-bind'; nodeId: string; height: number; cloth: ClothSpec; time: number }
+  /** The incoming curves simulated as rods from their rest state, at source time `time` (seconds). See rodSolver.ts. */
+  | { kind: 'rod-simulation'; nodeId: string; rod: RodSpec; pins?: GeometryField; time: number };
 /** Render-time yarn: plies around the curve and fibers around each ply, twisted along curve length. */
 export interface YarnProfile { plies: number; fibers: number; radius: number; plyTwist: number; fiberTwist: number }
 /**
@@ -50,7 +53,7 @@ export type GeometryParameterReader = (node: BoundOperatorNode, parameter: strin
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot']);
 const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
-  'geometry.thread-along']);
+  'geometry.thread-along', 'geometry.rod-simulation']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
 export const knotCurveCount = (shape: number) => KNOT_SHAPES[shape] === 'reef' ? 2 : 1;
 /** Points of a knot generator, matching knotCurves: the reef resamples 14 spline intervals per rope. */
@@ -171,6 +174,10 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       // A muted sheet leaves the curves on the flat rest sheet.
       if (!cloth.bypassed) stages.push({ kind: 'surface-bind', nodeId: node.id, height: finite(read(node, 'height'), 'Height scale'),
         cloth: compileClothSpec(graph, cloth, read), time: Number.isFinite(context.simulationTime) ? context.simulationTime! : 0 });
+    } else if (node.operator === 'geometry.rod-simulation') {
+      const pins = compileField(node, 'pin', 'scalar');
+      stages.push({ kind: 'rod-simulation', nodeId: node.id, rod: compileRodSpec(graph, node, read), ...(pins ? { pins } : {}),
+        time: Number.isFinite(context.simulationTime) ? context.simulationTime! : 0 });
     } else if (node.operator === 'geometry.flyaways') {
       flyaways = { density: Math.max(0, finite(read(node, 'density'), 'Flyaway density')),
         length: Math.max(0.001, finite(read(node, 'length'), 'Flyaway length')), lift: Math.max(0, finite(read(node, 'lift'), 'Flyaway lift')),
@@ -201,6 +208,12 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       stages.push({ kind: 'set-position', nodeId: node.id, ...(position ? { position } : {}), ...(offset ? { offset } : {}) });
     }
   }
+  // A simulation's input is its rest state; after a cloth bind or another simulation it would change every frame.
+  stages.forEach((stage, index) => {
+    if (stage.kind === 'rod-simulation' && stages.slice(0, index).some(item => item.kind === 'surface-bind' || item.kind === 'rod-simulation')) {
+      throw new Error('Rod Simulation must come before Surface Bind and any other Rod Simulation.');
+    }
+  });
   let pointCount = 0, strandCount = 0;
   for (const stage of stages) {
     if (stage.kind === 'curve-line') {

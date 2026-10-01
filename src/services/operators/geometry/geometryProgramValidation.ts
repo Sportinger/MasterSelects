@@ -4,6 +4,7 @@ import { CURVE_CONTEXT_OPERATIONS, knotCurveCount, knotPointCount, weavePatternP
 import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES } from './knotCurves';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { isClothSpec } from './clothProgram';
+import { isRodSpec } from './rodProgram';
 
 const FIELD_INSTRUCTION_LIMIT = 256;
 const STAGE_LIMIT = 64;
@@ -30,7 +31,7 @@ function isField(value: unknown): value is GeometryField {
 export function isGeometryProgram(value: unknown): value is GeometryProgram {
   if (!record(value) || !exactKeys(value, ['stages', 'render', 'pointCount', 'strandCount']) || !Array.isArray(value.stages)
     || !value.stages.length || value.stages.length > STAGE_LIMIT) return false;
-  let points = 0, strands = 0;
+  let points = 0, strands = 0, simulated = false;
   for (const [index, stage] of (value.stages as unknown[]).entries()) {
     if (!record(stage) || typeof stage.nodeId !== 'string') return false;
     if (stage.kind === 'curve-line') {
@@ -73,6 +74,11 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     } else if (stage.kind === 'surface-bind') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'height', 'cloth', 'time']) || !finite(stage.height) || !finite(stage.time)
         || !isClothSpec(stage.cloth)) return false;
+      simulated = true;
+    } else if (stage.kind === 'rod-simulation') {
+      if (index === 0 || simulated || !exactKeys(stage, ['kind', 'nodeId', 'rod', 'pins', 'time']) || !finite(stage.time) || !isRodSpec(stage.rod)
+        || (stage.pins !== undefined && !isField(stage.pins))) return false;
+      simulated = true;
     } else if (stage.kind === 'set-position') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'position', 'offset'])
         || (stage.position !== undefined && !isField(stage.position)) || (stage.offset !== undefined && !isField(stage.offset))) return false;

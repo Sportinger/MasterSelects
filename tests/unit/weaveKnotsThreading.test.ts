@@ -102,7 +102,7 @@ describe('Weave knots and threading', () => {
   });
 
   it('compiles, validates and evaluates knot and threading graphs', () => {
-    const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'geometry', nodes: [
+    const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'geometry', layout: {}, nodes: [
       { id: 'knot', operator: 'geometry.knot', operatorVersion: 1, bindings: {}, constants: { shape: 'reef', points: 140 } },
       { id: 'thread', operator: 'geometry.thread-along', operatorVersion: 1, bindings: {}, constants: { progress: 0.4 } },
       { id: 'yarn', operator: 'geometry.yarn-profile', operatorVersion: 1, bindings: {} },

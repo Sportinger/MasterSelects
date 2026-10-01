@@ -21,7 +21,7 @@ function camera(distance: number, tilt = 0): SceneCamera {
     viewport: { width: WIDTH, height: HEIGHT }, projection: 'perspective', fov: 50, near: 0.05, far: 100 };
 }
 
-const knotGraph = (generator: string, constants: Record<string, unknown>): EffectOperatorGraph => ({ version: 1, schemaVersion: 1, domain: 'geometry',
+const knotGraph = (generator: string, constants: Record<string, unknown>): EffectOperatorGraph => ({ version: 1, schemaVersion: 1, domain: 'geometry', layout: {},
   nodes: [
     { id: 'source', operator: generator, operatorVersion: 1, bindings: {}, constants: constants as never },
     { id: 'yarn', operator: 'geometry.yarn-profile', operatorVersion: 1, bindings: {}, constants: { plies: 3, fibers: 5, radius: 0.022 } },

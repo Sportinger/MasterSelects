@@ -8,8 +8,8 @@ import { compileGeometryGraph, type GeometryParameterReader } from './geometryPr
 
 export const WEAVE_EFFECT_TYPE = 'weave';
 const FIELD_SIGNALS = new Set(['number', 'boolean', 'vec2', 'vec3', 'vec4']);
-/** Shared force nodes a Cloth Sheet reads (the same identities cables and particles use). */
-const CLOTH_FORCE_OPERATORS = ['forces.wind', 'forces.gravity', 'forces.turbulence', 'forces.drag'];
+/** Shared force nodes Cloth Sheet and Rod Simulation read (the same identities cables and particles use). */
+const SIMULATION_FORCE_OPERATORS = ['forces.wind', 'forces.gravity', 'forces.turbulence', 'forces.drag'];
 
 /** Pure per-element operators run per curve point; this is the shared family contract, not a Weave copy. */
 const isCurveFieldOperator = (operator: OperatorDefinition) => !operator.composition
@@ -20,7 +20,7 @@ let ownerOperators: OperatorDefinition[] | undefined;
 /** Nodes a geometry graph offers: curve operators, values and every shared pointwise math/vector operator. */
 export function geometryOwnerOperators(): OperatorDefinition[] {
   return ownerOperators ??= EFFECT_OPERATORS.filter(operator => operator.addable && (isCurveOperator(operator.id)
-    || ['values.number', 'values.integer', 'image.timeline-time', ...CLOTH_FORCE_OPERATORS].includes(operator.id) || isCurveFieldOperator(operator)));
+    || ['values.number', 'values.integer', 'image.timeline-time', ...SIMULATION_FORCE_OPERATORS].includes(operator.id) || isCurveFieldOperator(operator)));
 }
 
 /** Reads literal node values, effect-bound values and their keyframes at `time`. */
