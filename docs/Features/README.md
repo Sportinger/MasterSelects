@@ -27,6 +27,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | **AI Generation Workspaces** | The compact Media generator remains available, while AI Studio adds parallel tabs, Media-drop references, local prompt dictation, fitted result tiles, Source Monitor opening, and timeline drag-out |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, splat effectors, and local browser training |
 | **Flock Clips** | Node-graph-defined GPU swarms with instanced animals, neighbor links, curved trails and technical glyphs in the shared 3D scene |
+| **Weave** | Woven fabric, yarns, ropes and knots from general curve nodes, drawn as lit fibers in the shared 3D scene |
 | **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
 | **Audio** | Timeline-native workstation audio with artifact-backed analysis, spectral editing, local music-to-MIDI, mixer, recording, and export parity |
 | **Screen Capture** | Browser-picker screen/window/tab recording with audio mixing, durable recovery, and optional timeline placement; the WebCodecs crop/scale tier is currently disabled |
@@ -81,6 +82,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Motion Design](./Motion-Design.md) | Motion layer schema, property registry, rectangle/ellipse shape editing, GPU renderer, and persistence/export plumbing |
 | [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Flock Clips](./Flock-Clips.md) | GPU particle swarms defined by an editable node graph: presets, Properties/Node Workspace editing, source-time keyframes, deterministic seek, precompute cache, links/trails/glyphs, and export |
+| [Weave](./Weave.md) | Curve-node fabric, knots and threading, fiber rendering (Hashed, 4x Coverage, Analytic), shadows and cloth |
 | [Browser 3D Scan](./3D-Scan.md) | Browser-local Camera Solve, FPS-aligned camera/stabilization tracks, project-backed COLMAP data, sparse previews, and capability-gated Brush WebGPU training |
 | [Vector Animation](./Vector-Animation.md) | Lottie/Rive import, runtime playback, bounce modes, state-machine keyframes, Rive data binding, and export behavior |
 | [Audio](./Audio.md) | Playback sync, clip audio state, waveform/spectral display, recording, and export |
