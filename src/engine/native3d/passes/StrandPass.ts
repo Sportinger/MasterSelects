@@ -1,7 +1,6 @@
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
 import type { SceneCamera, SceneLayer3DData, SceneLightLayer, SceneStrandLayer } from '../../scene/types';
-import { evaluateGeometryProgram } from '../../../services/operators/geometry/geometryEvaluation';
-import { packStrandPoints } from './strandFrames';
+import { StrandBufferCache, type StrandBuffers } from './strandBuffers';
 import { packStrandLights, STRAND_LIGHT_FLOATS } from './strandLights';
 import { STRAND_SHADOW_MAP_SIZE, strandShadowView, type StrandShadowView } from './strandShadowLight';
 import { StrandShadowMaps, type StrandShadowTargets } from './strandShadowMaps';
@@ -24,8 +23,6 @@ const UNIFORM_FLOATS = OCCLUDER_OFFSET + 20;
 const OPACITY_PER_FIBER = 0.3;
 /** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
 export const FLYAWAY_CHANNELS = 4;
-/** Evaluated curve buffers kept across frames and render targets, least recently used first. */
-const CACHE_LIMIT = 24;
 /**
  * The shared scene is displayed with +Y down (like composition pixels) and +Z toward the camera.
  * Geometry graphs are authored Y-up (gravity pulls to -Y, the top edge is +Y), so strands mirror
@@ -40,8 +37,6 @@ export function strandSceneMatrix(world: Float32Array): Float32Array {
 const KEY_LIGHT = normalize3([-0.4, -0.7, 0.6]);
 const AMBIENT = 0.35;
 
-/** `segmentLength`: mean local length of a curve segment; `extent`: largest local distance of a point from the origin. */
-interface StrandBuffers { signature: string; positions: GPUBuffer; segments: GPUBuffer; segmentCount: number; segmentLength: number; extent: number }
 /** Spline pieces per segment in close-ups; one piece covers about this many pixels. */
 const MAX_SUBDIVISIONS = 8;
 const PIXELS_PER_PIECE = 5;
@@ -98,26 +93,7 @@ export function worldMatrixScale(world: Float32Array): number {
   return (Math.hypot(world[0], world[1], world[2]) + Math.hypot(world[4], world[5], world[6]) + Math.hypot(world[8], world[9], world[10])) / 3;
 }
 
-/** Segment flags above the 30-bit point index: the strand continues before / after the segment. */
-export const SEGMENT_HAS_PREVIOUS = 0x80000000;
-export const SEGMENT_HAS_NEXT = 0x40000000;
-
-/**
- * First point of every drawable segment (consecutive points inside one strand), flagged when the
- * strand continues, so ribbons can share a joint direction with their neighbours.
- */
-export function strandSegmentStarts(starts: Uint32Array, counts: Uint32Array): Uint32Array {
-  let total = 0;
-  for (const count of counts) total += Math.max(0, count - 1);
-  const segments = new Uint32Array(total);
-  let cursor = 0;
-  for (let strand = 0; strand < counts.length; strand++) {
-    for (let point = 0; point + 1 < counts[strand]; point++) {
-      segments[cursor++] = (starts[strand] + point) | (point > 0 ? SEGMENT_HAS_PREVIOUS : 0) | (point + 2 < counts[strand] ? SEGMENT_HAS_NEXT : 0);
-    }
-  }
-  return segments;
-}
+export { SEGMENT_HAS_NEXT, SEGMENT_HAS_PREVIOUS, strandSegmentStarts } from './strandBuffers';
 
 interface StrandDraw {
   layer: SceneStrandLayer;
@@ -170,7 +146,7 @@ export class StrandPass {
   private depthPipeline: GPURenderPipeline | null = null;
   private opacityPipeline: GPURenderPipeline | null = null;
   private layout: GPUBindGroupLayout | null = null;
-  private readonly cache = new Map<string, StrandBuffers>();
+  private readonly buffers = new StrandBufferCache();
   private readonly shadows = new StrandShadowMaps();
   private readonly coverage = new StrandCoverageTargets();
   private readonly raster = new StrandComputeRaster();
@@ -216,45 +192,14 @@ export class StrandPass {
       fragment: { module, entryPoint: 'strandOpacityFragment', targets: [{ format: StrandShadowMaps.opacityFormat, blend: { color: add, alpha: add } }] } });
   }
 
-  /** Evaluates changed curve programs and uploads them; replaced buffers retire with this frame. */
+  /** Evaluates changed curve programs and uploads them (cloth is bound on the GPU); replaced buffers retire with this frame. */
   prepare(device: GPUDevice, layers: SceneStrandLayer[], temporaryBuffers: GPUBuffer[]): PreparedStrandLayer[] {
     if (!layers.length) return [];
     this.initialize(device);
     return layers.flatMap(layer => {
-      const program = layer.strands.program;
-      if (!program.render) return [];
-      const signature = JSON.stringify(program.stages);
-      let buffers = this.cache.get(layer.layerId);
-      if (!buffers || buffers.signature !== signature) {
-        if (buffers) temporaryBuffers.push(buffers.positions, buffers.segments);
-        const curves = evaluateGeometryProgram(program);
-        const segments = strandSegmentStarts(curves.starts, curves.counts);
-        const points = packStrandPoints(curves);
-        const upload = (data: Float32Array | Uint32Array, label: string) => {
-          const buffer = device.createBuffer({ size: Math.max(16, Math.ceil(data.byteLength / 4) * 4),
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label });
-          if (data.byteLength) device.queue.writeBuffer(buffer, 0, data.buffer, data.byteOffset, data.byteLength);
-          return buffer;
-        };
-        let length = 0, extent = 0;
-        const { positions } = curves;
-        for (const packed of segments) {
-          const index = (packed & 0x3fffffff) * 3;
-          length += Math.hypot(positions[index + 3] - positions[index], positions[index + 4] - positions[index + 1], positions[index + 5] - positions[index + 2]);
-        }
-        for (let index = 0; index < positions.length; index += 3) extent = Math.max(extent, Math.hypot(positions[index], positions[index + 1], positions[index + 2]));
-        buffers = { signature, segmentCount: segments.length, segmentLength: segments.length ? length / segments.length : 0, extent,
-          positions: upload(points, `native-strands-points-${layer.layerId}`),
-          segments: upload(segments, `native-strands-segments-${layer.layerId}`) };
-      }
-      this.cache.delete(layer.layerId);
-      this.cache.set(layer.layerId, buffers);
-      while (this.cache.size > CACHE_LIMIT) {
-        const [oldest, retired] = this.cache.entries().next().value!;
-        this.cache.delete(oldest);
-        temporaryBuffers.push(retired.positions, retired.segments);
-      }
-      return buffers.segmentCount ? [{ layer, buffers }] : [];
+      if (!layer.strands.program.render) return [];
+      const buffers = this.buffers.prepare(device, layer, temporaryBuffers);
+      return buffers ? [{ layer, buffers }] : [];
     });
   }
 
@@ -400,8 +345,7 @@ export class StrandPass {
   }
 
   dispose(): void {
-    for (const buffers of this.cache.values()) { buffers.positions.destroy(); buffers.segments.destroy(); }
-    this.cache.clear();
+    this.buffers.dispose();
     this.shadows.dispose();
     this.coverage.dispose();
     this.raster.dispose();
