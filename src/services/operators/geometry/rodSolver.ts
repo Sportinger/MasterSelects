@@ -90,6 +90,15 @@ export class RodSimulation {
     this.contacts.restore(state.subarray(size * 2));
   }
 
+  /** The step positionsAt(`target`) resumes from, and how many steps it then simulates. */
+  catchUp(target: number): { from: number; steps: number } {
+    target = Math.max(0, Math.min(ROD_STEP_LIMIT, Math.floor(target)));
+    let best = 0;
+    for (const step of this.checkpoints.keys()) if (step <= target && step > best) best = step;
+    const from = target < this.step || best > this.step ? best : this.step;
+    return { from, steps: target - from };
+  }
+
   /** Node positions after `target` steps: advances, or resumes from the latest checkpoint before it. */
   positionsAt(target: number): Float64Array {
     target = Math.max(0, Math.min(ROD_STEP_LIMIT, Math.floor(target)));

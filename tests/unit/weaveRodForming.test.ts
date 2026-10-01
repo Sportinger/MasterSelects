@@ -9,6 +9,7 @@ import { compileGeometryGraph } from '../../src/services/operators/geometry/geom
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
 import { geometryParameterReader } from '../../src/services/operators/geometry/weaveGraph';
 import { rodChain } from '../../src/engine/native3d/passes/strandGpuChains';
+import { RodSimulationDeferred } from '../../src/services/operators/geometry/rodCurves';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const RADIUS = 0.03;
@@ -172,5 +173,30 @@ describe('Rod Simulation forming and unravelling', () => {
     expect(program.stages[2].kind === 'rod-simulation' && program.stages[2].pullStart).toBeTruthy();
     expect(isGeometryProgram(structuredClone(program))).toBe(true);
     expect(evaluateGeometryProgram(program).positions.length / 3).toBe(program.pointCount);
+  });
+  it('defers rod simulations beyond a work budget without simulating', () => {
+    const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'geometry', layout: {}, nodes: [
+      { id: 'knit', operator: 'geometry.knit', operatorVersion: 1, bindings: {}, constants: { stitches: 2, rows: 2, depth: 0.031 } },
+      { id: 'rod', operator: 'geometry.rod-simulation', operatorVersion: 1, bindings: {}, constants: { radius: 0.014, pin: 'ends', pull: 0.2, preroll: 0 } },
+      { id: 'render', operator: 'render.strands', operatorVersion: 1, bindings: {} },
+      { id: 'output', operator: 'scene.output', operatorVersion: 1, bindings: {} },
+    ], edges: [
+      { id: 'a', from: 'knit', output: 'curves', to: 'rod', input: 'curves' },
+      { id: 'c', from: 'rod', output: 'curves', to: 'render', input: 'curves' },
+      { id: 'd', from: 'render', output: 'scene', to: 'output', input: 'scene' },
+    ] };
+    const at = (time: number) => compileGeometryGraph(graph, geometryParameterReader({}), undefined, { simulationTime: time });
+    const rest = evaluateGeometryProgram(at(0));
+    // 1.5 s from scratch is far beyond the budget: the rest curves come back, quickly.
+    const started = performance.now();
+    let deferred: unknown;
+    try { evaluateGeometryProgram(at(1.5), { rodBudget: 40_000 }); } catch (error) { deferred = error; }
+    expect(deferred).toBeInstanceOf(RodSimulationDeferred);
+    expect((deferred as RodSimulationDeferred).curves.positions.length / 3).toBe(at(1.5).pointCount);
+    expect(performance.now() - started).toBeLessThan(200);
+    // Once the simulation stands close by, the next frames fit the budget.
+    const full = evaluateGeometryProgram(at(1.5)).positions;
+    expect(evaluateGeometryProgram(at(1.5 + 1 / 60), { rodBudget: 40_000 }).positions.length).toBe(full.length);
+    expect(rest.positions.length).toBe(full.length);
   });
 });

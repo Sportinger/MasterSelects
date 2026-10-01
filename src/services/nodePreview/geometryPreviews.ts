@@ -5,6 +5,7 @@ import { getEffectOperator } from '../operators/operatorRegistry';
 import { effectOperatorGraph, effectOperatorParams } from '../operators/effectGraphOwner';
 import { compileGeometryGraph } from '../operators/geometry/geometryProgram';
 import { evaluateGeometryProgram, type CurveSet } from '../operators/geometry/geometryEvaluation';
+import { RodSimulationDeferred } from '../operators/geometry/rodCurves';
 import { geometryParameterReader } from '../operators/geometry/weaveGraph';
 import { compileClothSpec } from '../operators/geometry/clothProgram';
 import { clothGridAt, type ClothGrid } from '../operators/geometry/clothSurface';
@@ -12,6 +13,12 @@ import { applyOperatorGroupBypasses } from '../operators/operatorGroupBypass';
 import type { PreviewFrame, PreviewRequest } from './previewTypes';
 
 const MAX_DRAWN_POINTS = 4000;
+/**
+ * Rod work (nodes × substeps) one preview may spend on the main thread, about a quarter second.
+ * Simulations that need more to reach the playhead show their rest curves; the viewer simulates
+ * them on the GPU.
+ */
+const PREVIEW_ROD_BUDGET = 300_000;
 
 /** Wireframe of the curves at one node: every strand, decimated to a bounded number of drawn points. */
 export function curveWireframe(curves: CurveSet): { points: number[]; edges: number[] } {
@@ -88,9 +95,15 @@ export function geometryPreview(request: PreviewRequest, effect: Effect, keys: K
       drawing: { kind: 'text', lines: ['Evaluated once per curve point', 'where a modifier reads it'] } };
     const program = compileGeometryGraph(graph, reader, target,
       { time: request.time, simulationTime });
-    const wireframe = curveWireframe(evaluateGeometryProgram(program));
-    return { ...base, status: 'live', label: `${program.strandCount.toLocaleString('en-US')} curves · ${program.pointCount.toLocaleString('en-US')} points`,
-      drawing: { kind: 'points', dimensions: 3, ...wireframe } };
+    let curves: CurveSet, label = `${program.strandCount.toLocaleString('en-US')} curves · ${program.pointCount.toLocaleString('en-US')} points`;
+    try {
+      curves = evaluateGeometryProgram(program, { rodBudget: PREVIEW_ROD_BUDGET });
+    } catch (error) {
+      if (!(error instanceof RodSimulationDeferred)) throw error;
+      curves = error.curves;
+      label = 'Rest curves · the viewer simulates the rods';
+    }
+    return { ...base, status: 'live', label, drawing: { kind: 'points', dimensions: 3, ...curveWireframe(curves) } };
   } catch (error) {
     return { ...base, status: 'error', label: error instanceof Error ? error.message : String(error) };
   }

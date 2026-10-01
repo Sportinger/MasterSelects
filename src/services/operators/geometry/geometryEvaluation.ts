@@ -55,8 +55,9 @@ const prefixes = new Map<string, CurveSet>();
 /**
  * Runs the curve stages on the CPU. Modifiers read Position and fields on the incoming points.
  * With cloth or rods, only the simulated stage and later ones are evaluated again for a new frame.
+ * `rodBudget` bounds the rod simulation work of this call (see simulateRodCurves).
  */
-export function evaluateGeometryProgram(program: GeometryProgram): CurveSet {
+export function evaluateGeometryProgram(program: GeometryProgram, options: { rodBudget?: number } = {}): CurveSet {
   const split = program.stages.findIndex(stage => stage.kind === 'surface-bind' || stage.kind === 'rod-simulation');
   const cached = split < 0 ? program.stages.length : split;
   let curves: CurveSet | undefined, key = '';
@@ -70,11 +71,11 @@ export function evaluateGeometryProgram(program: GeometryProgram): CurveSet {
     curves = next;
   }
   while (prefixes.size > PREFIX_LIMIT) prefixes.delete(prefixes.keys().next().value!);
-  return evaluateStages(program.stages.slice(cached), curves, key);
+  return evaluateStages(program.stages.slice(cached), curves, key, options.rodBudget);
 }
 
 /** Stages never modify their input curves, so a cached prefix can be shared. `key` names the initial curves. */
-function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet, key = ''): CurveSet {
+function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet, key = '', rodBudget = Infinity): CurveSet {
   let curves: CurveSet = initial ?? { positions: new Float32Array(0), starts: new Uint32Array(0), counts: new Uint32Array(0) };
   for (const stage of stages) {
     if (stage.kind === 'curve-line') {
@@ -127,7 +128,7 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet, ke
       curves = { ...curves, positions: bindToCloth(curves.positions, clothGridAt(stage.cloth, stage.time), stage.height) };
     } else if (stage.kind === 'rod-simulation') {
       // Compilation places a rod stage first among the uncached stages, so `key` names its rest curves.
-      curves = simulateRodCurves(stage, curves, key);
+      curves = simulateRodCurves(stage, curves, key, rodBudget);
     } else if (stage.radius) {
       const { starts, counts } = curves, field = evaluateFieldColumn(stage.radius, curves), radius = new Float32Array(curves.positions.length / 3);
       for (let strand = 0; strand < counts.length; strand++) {

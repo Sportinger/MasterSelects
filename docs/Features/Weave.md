@@ -114,6 +114,10 @@ Pin None, Radius just below half the loop clearance, Turbulence for waving loose
 ends) with Form Time = Shape Distance from the centre × seconds per unit + delay:
 the middle forms first and the fabric grows outward.
 
+Node previews run rods on the CPU only while reaching the playhead costs about a quarter
+second (small knots and ropes); larger simulations show their rest curves in the node
+previews, labelled *Rest curves*, while the viewer simulates them on the GPU.
+
 **Segment Length** sets the spacing of the simulated rod nodes; 0 uses one radius.
 Finer curve detail rides along on the original points, so the output keeps every
 input point and attribute. A simulation holds up to 16,384 rod nodes and 4,096
