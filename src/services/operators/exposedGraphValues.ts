@@ -5,39 +5,18 @@ import { startBatch, endBatch } from '../../stores/historyStore';
 import { getEffectOperator } from './operatorRegistry';
 import { editEffectGraph } from './effectGraphEditing';
 import { usesLiteralNodeParameters } from './effectGraph';
+import { exposedGraphValues, exposedValueKey, type ExposedGraphValue } from './exposedGraphValueList';
+
+export { exposedGraphValues, exposedValueKey, type ExposedGraphValue };
 
 /** Graph value nodes that can publish their value as a keyframeable effect parameter. */
 const EXPOSABLE_VALUE_OPERATORS = new Set(['values.number', 'values.integer']);
-const DEFAULT_RANGE = { min: -30, max: 30, step: 0.01 };
-
-export interface ExposedGraphValue {
-  nodeId: string;
-  /** Effect param key; the animatable property is `effect.<effectId>.<key>`. */
-  key: string;
-  label: string;
-  min: number; max: number; step: number;
-  integer: boolean;
-}
-
-/** Stable effect param key owned by an exposed value node. */
-export const exposedValueKey = (nodeId: string) => `${nodeId}_value`;
 
 /** Audio graphs execute local constants only; bound values would not reach the processor. */
 export function canExposeGraphValue(graph: EffectOperatorGraph, node: BoundOperatorNode): boolean {
   if (graph.domain === 'audio' || !EXPOSABLE_VALUE_OPERATORS.has(node.operator)) return false;
   const binding = node.bindings.value;
   return binding === undefined || binding === exposedValueKey(node.id);
-}
-
-export function exposedGraphValues(graph: EffectOperatorGraph | undefined): ExposedGraphValue[] {
-  return (graph?.nodes ?? []).flatMap(node => {
-    const binding = node.bindings.value;
-    if (!node.exposed || typeof binding !== 'string') return [];
-    const integer = node.operator === 'values.integer';
-    return [{ nodeId: node.id, key: binding, label: node.exposed.label,
-      min: node.exposed.min ?? DEFAULT_RANGE.min, max: node.exposed.max ?? DEFAULT_RANGE.max,
-      step: node.exposed.step ?? (integer ? 1 : DEFAULT_RANGE.step), integer }];
-  });
 }
 
 export interface ExposedGraphValueSection { groupId?: string; label: string; values: ExposedGraphValue[] }

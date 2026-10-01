@@ -6,6 +6,8 @@ import { effectOperatorGraph, effectOperatorParams } from '../effectGraphOwner';
 import { compileGeometryGraph, type GeometryProgram } from './geometryProgram';
 import { geometryParameterReader, WEAVE_EFFECT_TYPE } from './weaveGraph';
 import { createFlockClipTimeMap } from '../../flock/time/flockTimeMapper';
+import { applyParameterSourcesToEffects } from '../../parameterSources/parameterSourceRendering';
+import type { ParameterSourceClip } from '../../parameterSources/parameterSourceTargets';
 
 /**
  * Runtime-only strand payload: a geometry program sampled at the frame time.
@@ -43,10 +45,15 @@ export const renderingWeaveEffects = (clip: Pick<TimelineClip, 'effects'>): Effe
  * Strand sources of a clip's enabled Weave effects at clip-local `time`. Graphs
  * that cannot be lowered, or whose Strand Render is muted, contribute no layer.
  */
-export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effects'> & { startTime?: number } & ClipTiming, time: number,
+export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effects'> & Partial<Pick<TimelineClip, 'nodeGraph' | 'colorCorrection'>>
+  & { startTime?: number } & ClipTiming, time: number,
   keyframes: readonly Keyframe[] | undefined): Array<{ effectId: string; source: { type: 'strands'; strands: StrandsLayerSourceData } }> {
   const clipTime = Number.isFinite(time) ? time : 0, simulationTime = weaveSimulationTime(clip, clipTime);
-  return renderingWeaveEffects(clip).flatMap(effect => {
+  // Parameter sources drive exposed graph values (Reveal, Weave Speed, …) like any effect parameter.
+  const effects = clip.nodeGraph?.parameterSources
+    ? applyParameterSourcesToEffects({ ...clip, startTime: clip.startTime ?? 0 } as ParameterSourceClip, keyframes ?? [], clipTime, renderingWeaveEffects(clip))
+    : renderingWeaveEffects(clip);
+  return effects.flatMap(effect => {
     try {
       // Keyframes use clip time; Time nodes read the composition clock like image graphs.
       const program = compileGeometryGraph(weaveGraphOf(effect),

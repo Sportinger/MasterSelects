@@ -44,7 +44,7 @@ Streamed records execute from text deltas, so the model does not receive their i
 
 ### Exposing Value nodes
 
-A `Value` node (`values.number` / `values.integer`) can be published to the clip's **Effects** tab. Select the node and enable **Effects tab** in its inspector; an optional **Exposed name** labels the row. The effect then shows a **Graph values** section with a keyframeable row per exposed node, and its keyframes drive the node output through the effect parameter `<nodeId>_value` (animatable property `effect.<effectId>.<nodeId>_value`). Turning the toggle off in an image graph writes the current base value back into the node as a literal and removes that parameter's keyframes; the edit is undoable. Audio graphs and values already owned by a built-in effect parameter cannot be exposed.
+A `Value` node (`values.number` / `values.integer`) can be published to the clip's **Effects** tab. Select the node and enable **Effects tab** in its inspector; an optional **Exposed name** labels the row. The effect then shows a keyframeable row per exposed node. Rows appear in a section named after the node group that directly contains the node, and that section carries the group's bypass switch when the group has one. Ungrouped rows appear under **Graph values**. Each row's keyframes drive the node output through the effect parameter `<nodeId>_value` (animatable property `effect.<effectId>.<nodeId>_value`). Turning the toggle off in an image graph writes the current base value back into the node as a literal and removes that parameter's keyframes; the edit is undoable. Audio graphs and values already owned by a built-in effect parameter cannot be exposed.
 
 The agent uses `editOperatorGraph` with `action: "expose"`, `nodeId`, `exposed: true|false` and an optional `label`, or passes `exposed: true` (and optional `label`) when adding a Value node. `slider` on an exposed node sets the Effects tab row range. `getOperatorGraph` returns the node's `exposed` field.
 
@@ -366,6 +366,204 @@ ports, independent of node order/layout. The resulting plan reaches both native
 plane and Face Cables shaders. Definitions are stored under `clip.nodeGraph.scene`;
 Face Cables definitions and groups remain in `effect.params.operatorGraph`.
 Only definitions and portable bake data are saved, never GPU/runtime handles.
+
+## Curve graphs (Weave)
+
+The **Weave** effect owns an operator graph with domain `geometry`. Curves flow
+between general curve nodes; number and vector inputs of a modifier are evaluated
+once per curve point, exactly as image math is evaluated once per pixel. Both
+executors lower the same registered Math, Vector and Convert operators through the
+shared pointwise table (`src/services/operators/fields/`), so a Multiply or Sine
+node is one node in every graph rather than a per-domain copy.
+
+| Node | Contract |
+|---|---|
+| Curve Line | Points, Length, Axis → one centered curve |
+| Strand Array | Curves → curves repeated Count times along Axis |
+| Set Position | Curves + optional Position / Offset (Vector 3, per point) → curves |
+| Position, Curve Info | Per-point position, Curve Param (0–1), point/strand index and counts |
+| Clip Time | Seconds of the host clip's source time (0 at its start, continuing across splits); the clock cloth runs on |
+| Yarn Profile | Curves (+ optional per-point Radius Scale) → curves drawn as plies and fibers twisted along curve length |
+| Flyaways | Curves → curves whose Yarn Profile lets single fibers stray: loops arc off and return, free ends stick out (Density, Length, Lift, Free Ends, Seed) |
+| Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll) |
+| Surface Bind | Curves + Cloth → curves placed on the cloth: X/Y of the flat rest sheet find the spot, Z becomes height along its normal |
+| Weave Pattern | Draft (plain, twill 2/2 and 2/1, satin 5, basket), warp/weft counts, size, crimp → interlaced curves |
+| Knot | Shape (trefoil, figure-eight, reef knot of two ropes, (P, Q) torus knot), Size, Depth, Points → closed knot curves whose crossings pass over and under |
+| Celtic Knot | Columns, Rows, Cell Size, Height, Points per Step, Roundness → Celtic plait loops alternating over and under like a plain weave |
+| Thread Along | Curves (+ optional per-point Progress) → curves pulled in behind a lifted tip that settles with a damped swing; hidden ahead of the tip (Progress, Stagger, Lift, Lift Length, Settle) |
+| Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color, Antialiasing) |
+
+The default Weave graph is Weave Pattern → Set Position (Handmade) → Thread Along →
+Yarn Profile → Flyaways → Surface Bind → Strand Render: a plain weave of fuzzy
+three-ply yarns with handmade irregularity whose threads are pulled in over the
+first four seconds of the clip and then billow in the wind (see [Weave](/features/weave/)).
+Weave Pattern is the only weave-specific node; crimp is
+analytic (cosine transitions between crossings, with the draft deciding which
+thread lies in front). Yarn Profile is general: plies circle the curve and fibers
+circle each ply, with both angles driven by arc length along rotation-minimizing
+frames, so radius changes never spin the twist (the Houdini sweep issue). Its
+Radius Scale input is a per-point field: a scale of zero also thins the fibers to
+nothing, values above one swell them.
+
+**Flyaways.** Flyaways add stray fibers at render time, with no extra geometry.
+Along each yarn, every curve cell holds one hashed window per flyaway channel.
+Inside that window one fiber leaves the outer fiber ring and rises Lift yarn radii
+above it. A loop returns to the yarn; a Free Ends share stops at the peak. Density
+counts flyaways per unit of curve length. Flyaways follow the Radius Scale field,
+so a reveal hides and grows them with the yarn. They need a Yarn Profile to leave
+from.
+
+**Reveal.** The default graph grows the sheet from its center: *Shape Distance*
+(sphere, cube or plane; an unconnected Position reads the curve point) plus
+*Noise* (fractal lattice noise, the same deterministic noise Flock uses) feed a
+three-key *Ramp* whose front key swells the yarns before they settle. The group
+*Reveal by Shape* exposes **Reveal** (0–1) in the Effects tab; keyframe it to
+animate the growth.
+
+**Weave In.** *Thread Along* pulls every thread in along its own path. Progress
+moves a tip from the start to four lift lengths past the end; behind the tip the
+thread rises **Lift** along +Z (the rest sheet's normal) and settles as
+lift · e^(−Settle·x) · cos(πx/2), with x in lift lengths behind the tip, so the
+swing has died down when the thread is complete. Ahead of the tip the thread is
+hidden through its radius scale (Yarn Profile multiplies an incoming radius scale).
+**Stagger** spreads the threads' starts over the progress range in curve order:
+warps first, then the wefts row by row. Progress is *Clip Time* × **Weave Speed**
+(exposed, 1 = four seconds), capped at 1 by Min, wired into Thread Along's Progress
+input. Bypass the group for a finished weave from the first frame.
+
+**Handmade.** General nodes only: a Noise of (Curve Param × 3, strand key) moves
+each thread across itself, so spacing varies per thread; a Noise of the strand key
+scales its crimp (tension); and a Ramp of a third Noise adds slubs to the radius
+scale. **Irregularity** (exposed, 1 = default look, 0 = machine-perfect) scales all
+three.
+
+**Knots.** *Knot* and *Celtic Knot* are general curve generators. The reef knot is
+an alternating six-crossing diagram of two ropes with both ends of each rope on one
+side. The Celtic plait traces 45° billiard paths over a lattice of `2·Columns` ×
+`2·Rows` half cells; crossings sit on interior points with an odd coordinate sum,
+and like a plain weave the rising thread lies on top at even x. Over and under
+therefore alternate along every thread, across border loops too.
+
+Add and Multiply read 0 and 1 through an unconnected operand in curve graphs. A
+bypassed field group that feeds one of them therefore leaves the other factor
+unchanged. Scalar operations on constants are folded while lowering, and unused
+instructions are dropped. A clock that has settled, such as the capped weave
+progress, therefore compiles to the same program every frame, and the
+time-independent curves stay cached.
+
+**Wind Cloth.** *Cloth Sheet* simulates a regular grid with XPBD: a fixed number of
+substeps per step, one pass per substep, stretch/shear/bend links and double
+precision. Stretch and shear links barely resist compression, so the fabric buckles
+instead of chattering. Forces are the shared Wind, Gravity, Turbulence and Drag
+nodes that cables and particles use. Wind acts as air speed across the sheet with
+strong air drag, so the cloth follows gusts smoothly. The cloth reads the parameter
+values of these nodes; wiring into their inputs is rejected rather than ignored.
+The clock is the **source time of the host clip**, as with Flock: split and trimmed
+clips continue the motion instead of restarting it. Speed keyframes are not followed
+yet. Time runs at 60 fixed steps per second, and **Pre-roll** starts the simulation
+before the clip. Exact double-precision states are checkpointed every half second.
+Scrubbing therefore resumes from the nearest checkpoint, and every path to a frame
+gives bit-identical positions on the same device. After ten minutes of source time
+the sheet holds still. *Surface Bind* maps the flat rest sheet onto the simulated
+grid with bicubic (Catmull-Rom) interpolation and extrapolates past the edges. Curve
+height becomes offset along the cloth normal, so crimp follows the fabric. Curves
+before the first Surface Bind are cached per stage, and per-point field expressions
+whose inputs did not change are reused, so a new frame only advances the cloth. When
+Surface Bind is the last stage, the renderer binds the cached rest curves on the GPU
+and builds the rotation-minimizing frames there; the CPU reference
+(`bindToCloth`, `packStrandPoints`) serves previews and other chains. With the
+default 40 × 27 grid and 6 substeps, one second of simulation costs about 70 ms of
+CPU; an animated frame of the default weave costs about 5 ms of CPU. The
+Cloth Sheet's preview shows the simulated grid. The default *Wind Cloth* group holds
+the sheet at its corners like a sail. Bypassing it leaves the weave flat.
+
+**Groups.** Geometry groups can be bypassed from their **Byp** header button or
+their Effects tab section. A curves output passes the group's incoming curves
+through: bypassing *Yarn* draws the bare woven curves. A field output (number or
+vector) without a unique incoming source of its type is disconnected, and its
+consumer falls back to its default. Bypassing *Reveal by Shape* therefore leaves
+the Radius Scale at 1 and shows the whole sheet. Bypass changes only the compiled
+view: the saved wiring, values and keyframes stay intact. These field nodes are general per-element operators; *Time*
+reads the composition clock, as in image graphs. An example graph
+of general nodes only (`createWaveStrandsGraph`) builds an alternating wave from
+Value, Multiply, Sine, Fraction and Add nodes. Curve ports show
+a CPU wireframe preview (curve and point counts). Value nodes use literals and can
+be exposed to the Effects tab like image Value nodes.
+
+**Rendering.** *Effects → 3D & Particles → Weave* works on any clip; the strands
+are drawn as an extra 3D layer above the clip with the clip's transform, in
+preview, export and nested compositions, on the main thread or in the Worker
+render host. The layer carries the geometry program sampled at the frame time
+(plain data); the renderer evaluates the curves on its own thread, caches them
+until the program changes and expands every segment into a camera-facing ribbon
+in the vertex shader. Width is in world units and follows the layer scale. A
+strand narrower than one pixel keeps one pixel of geometry with a deterministic
+hashed coverage instead of blending, so dense strands need no sorting and export
+reproduces the preview; width 0 draws nothing. Visibility is decided per segment,
+so a thread that ends inside a segment tapers to nothing instead of stretching a
+sliver across the frame. Curve graphs are authored Y-up: +Y is the top edge and the
+opposite of gravity, and +Z faces the viewer. The shared scene draws +Y downward like
+composition pixels, so the strand pass mirrors local Y into it.
+
+**Antialiasing.** Strand Render offers **Hashed** (the default, including older
+graphs) and **4x Coverage**. The latter draws every fiber without stochastic
+fiber thinning or pixel rejection, using four-sample alpha-to-coverage in a
+strand-only color/depth target. The target starts with the existing scene depth,
+so opaque meshes and planes in front still hide the strands. Covered samples
+are resolved once as premultiplied color, preserving layer opacity. Preview,
+export, nested compositions and both render hosts use the selected mode.
+This costs additional GPU memory (about 32 bytes per viewport pixel) and draws
+more fibers. Coverage has only four samples: extremely thin fibers can still
+lose coverage, and sample masks are device-dependent. Later scene passes use
+single-sample depth; the resolve writes the nearest strand depth when at least
+two samples are covered, otherwise retaining the incoming scene depth.
+**Analytic** rasterizes the strands with a tile compute pass: each fiber piece
+(segment × spline piece × fiber) is projected, counted per 16 × 16 pixel tile and
+written to fixed slots after a prefix sum; a stable radix sort orders the
+(tile, depth) keys, and one workgroup per tile blends its pieces front to back with
+exact pixel coverage (box-filtered across and along each piece, so neighbouring
+pieces of one fiber add up at their joints) until 1 % transmittance remains. Shading
+uses the same function as the fragment shader. The result is deterministic on a
+device and composited into the scene color and depth; a layer exceeding the
+device's buffer limits falls back to 4x Coverage.
+
+**Shading.** Every fiber is lit as a round tube.
+- **Wide fibers** (a few pixels or more, as in close-ups): wrapped Lambert diffuse on a
+  cylinder normal reconstructed across the ribbon. **Thin fibers** fall back to
+  Kajiya-Kay.
+- **Highlights:** two shifted highlights after Marschner/Karis, a white R and a TRT
+  in the fiber color, plus forward scattering when a light is behind the fiber.
+- **Light clips** light the strands like native meshes. Point and panel lights use the
+  same falloff and panel direction, up to four direct lights; environment lights add
+  ambient color. Without a light clip a fixed upper-left key light applies.
+- **Smooth curves:** in close-ups each segment is split into up to eight Catmull-Rom
+  pieces, depending on how many pixels it spans at the nearest point of the layer.
+  Curves stay round without resampling them, and distant views keep one piece per
+  segment.
+- **Level of detail:** where a segment's fibers are thinner than a pixel, only a hashed
+  share of them is drawn, each with proportionally more coverage (stochastic
+  simplification, Cook et al. 2007). Distant yarns keep their density with fewer
+  fragments. The choice is made per segment and strand, so zooming lets fibers fade in
+  and out one by one.
+- **Self-shadowing:** fibers shadow each other through deep opacity maps. From the
+  shadowing light, a depth pass records the nearest fiber per texel. An opacity pass
+  then adds every fiber's coverage into four layers behind it (1024², additive,
+  deterministic). The main pass reads the opacity in front of each fragment, with the
+  nearest depth filtered bilinearly so thin fibers do not band.
+  - Without light clips the key light casts an orthographic shadow at strength 0.8.
+  - With light clips, the point or panel light brightest at the layer casts, if its
+    clip has **Casts Shadows** on (at its **Shadow Strength**).
+- **Shadow exchange with meshes:** strand shadow maps are rendered before the opaque
+  passes. With a shadow-casting scene light, lit meshes receive the strands' deep
+  opacity shadow, and opaque meshes drawn from the same light into an occluder depth
+  shadow the strands (2 × 2 percentage-closer filter). One strand layer passes its
+  shadow to meshes; unlit planes do not receive shadows, and the key light without
+  light clips does not exchange shadows.
+- **Not yet supported:** a dedicated generator clip.
+
+The cloth simulation runs on the
+CPU of the rendering thread (the Worker render host in the default mode); a long
+jump into an unsimulated range blocks that thread while it catches up.
 
 ## Extending the system
 

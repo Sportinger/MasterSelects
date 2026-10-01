@@ -3,6 +3,7 @@ import { isColorGradeNode, parseColorProperty, RUNTIME_COLOR_PARAM_DEFS } from '
 import { HUE_SHIFT_PARAMS } from '../../effects/color/remainingColorParams';
 import { GAUSSIAN_BLUR_PARAMS } from '../../effects/blur/gaussian/params';
 import { slitScanParams } from '../../effects/time/slit-scan/parameters';
+import { graphParameterTargets } from './graphParameterTargets';
 
 export interface ParameterSourceTarget {
   path: string;
@@ -45,6 +46,7 @@ export function parameterSourceTargets(clip: ParameterSourceClip): ParameterSour
       }
       continue;
     }
+    targets.push(...graphParameterTargets(effect));
     const entry = effect.type === 'hue-shift' ? { name: 'shift', def: HUE_SHIFT_PARAMS.shift, unit: 'turns' }
       : effect.type === 'gaussian-blur' ? { name: 'radius', def: GAUSSIAN_BLUR_PARAMS.radius, unit: 'pixels' } : undefined;
     if (!entry) continue;

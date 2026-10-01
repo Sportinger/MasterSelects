@@ -385,11 +385,16 @@ node is one node in every graph rather than a per-domain copy.
 | Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll) |
 | Surface Bind | Curves + Cloth → curves placed on the cloth: X/Y of the flat rest sheet find the spot, Z becomes height along its normal |
 | Weave Pattern | Draft (plain, twill 2/2 and 2/1, satin 5, basket), warp/weft counts, size, crimp → interlaced curves |
-| Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color) |
+| Knot | Shape (trefoil, figure-eight, reef knot of two ropes, (P, Q) torus knot), Size, Depth, Points → closed knot curves whose crossings pass over and under |
+| Celtic Knot | Columns, Rows, Cell Size, Height, Points per Step, Roundness → Celtic plait loops alternating over and under like a plain weave |
+| Thread Along | Curves (+ optional per-point Progress) → curves pulled in behind a lifted tip that settles with a damped swing; hidden ahead of the tip (Progress, Stagger, Lift, Lift Length, Settle) |
+| Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color, Antialiasing) |
 
-The default Weave graph is Weave Pattern → Yarn Profile → Flyaways → Surface Bind →
-Strand Render: a plain weave of fuzzy three-ply yarns that weaves itself in over the
-first four seconds of the clip and then billows in the wind. Weave Pattern is the only weave-specific node; crimp is
+The default Weave graph is Weave Pattern → Set Position (Handmade) → Thread Along →
+Yarn Profile → Flyaways → Surface Bind → Strand Render: a plain weave of fuzzy
+three-ply yarns with handmade irregularity whose threads are pulled in over the
+first four seconds of the clip and then billow in the wind (see [Weave](./Weave.md)).
+Weave Pattern is the only weave-specific node; crimp is
 analytic (cosine transitions between crossings, with the draft deciding which
 thread lies in front). Yarn Profile is general: plies circle the curve and fibers
 circle each ply, with both angles driven by arc length along rotation-minimizing
@@ -412,13 +417,29 @@ three-key *Ramp* whose front key swells the yarns before they settle. The group
 *Reveal by Shape* exposes **Reveal** (0–1) in the Effects tab; keyframe it to
 animate the growth.
 
-**Weave In.** The group grows every thread along its length in turn, with a swollen
-tip. Warps rise from the bottom edge from left to right, then the wefts weave in
-row by row, like a loom. It uses only general nodes: *Clip Time* × **Weave Speed**
-(exposed, keyframeable, 1 = four seconds) gives the progress, capped at 1 by Min.
-Curve Info's strand index staggers the start, and a Ramp of (progress − Curve
-Param) shapes the tip. Its result multiplies the reveal radius. Bypass the group
-for a finished weave from the first frame.
+**Weave In.** *Thread Along* pulls every thread in along its own path. Progress
+moves a tip from the start to four lift lengths past the end; behind the tip the
+thread rises **Lift** along +Z (the rest sheet's normal) and settles as
+lift · e^(−Settle·x) · cos(πx/2), with x in lift lengths behind the tip, so the
+swing has died down when the thread is complete. Ahead of the tip the thread is
+hidden through its radius scale (Yarn Profile multiplies an incoming radius scale).
+**Stagger** spreads the threads' starts over the progress range in curve order:
+warps first, then the wefts row by row. Progress is *Clip Time* × **Weave Speed**
+(exposed, 1 = four seconds), capped at 1 by Min, wired into Thread Along's Progress
+input. Bypass the group for a finished weave from the first frame.
+
+**Handmade.** General nodes only: a Noise of (Curve Param × 3, strand key) moves
+each thread across itself, so spacing varies per thread; a Noise of the strand key
+scales its crimp (tension); and a Ramp of a third Noise adds slubs to the radius
+scale. **Irregularity** (exposed, 1 = default look, 0 = machine-perfect) scales all
+three.
+
+**Knots.** *Knot* and *Celtic Knot* are general curve generators. The reef knot is
+an alternating six-crossing diagram of two ropes with both ends of each rope on one
+side. The Celtic plait traces 45° billiard paths over a lattice of `2·Columns` ×
+`2·Rows` half cells; crossings sit on interior points with an odd coordinate sum,
+and like a plain weave the rising thread lies on top at even x. Over and under
+therefore alternate along every thread, across border loops too.
 
 Add and Multiply read 0 and 1 through an unconnected operand in curve graphs. A
 bypassed field group that feeds one of them therefore leaves the other factor
@@ -443,9 +464,13 @@ gives bit-identical positions on the same device. After ten minutes of source ti
 the sheet holds still. *Surface Bind* maps the flat rest sheet onto the simulated
 grid with bicubic (Catmull-Rom) interpolation and extrapolates past the edges. Curve
 height becomes offset along the cloth normal, so crimp follows the fabric. Curves
-before the first Surface Bind do not depend on time and are cached, so a new frame
-only advances the cloth and re-binds. With the default 40 × 27 grid and 6 substeps,
-one second of simulation costs about 70 ms of CPU, and a frame about 6 ms. The
+before the first Surface Bind are cached per stage, and per-point field expressions
+whose inputs did not change are reused, so a new frame only advances the cloth. When
+Surface Bind is the last stage, the renderer binds the cached rest curves on the GPU
+and builds the rotation-minimizing frames there; the CPU reference
+(`bindToCloth`, `packStrandPoints`) serves previews and other chains. With the
+default 40 × 27 grid and 6 substeps, one second of simulation costs about 70 ms of
+CPU; an animated frame of the default weave costs about 5 ms of CPU. The
 Cloth Sheet's preview shows the simulated grid. The default *Wind Cloth* group holds
 the sheet at its corners like a sail. Bypassing it leaves the weave flat.
 
@@ -477,6 +502,28 @@ sliver across the frame. Curve graphs are authored Y-up: +Y is the top edge and 
 opposite of gravity, and +Z faces the viewer. The shared scene draws +Y downward like
 composition pixels, so the strand pass mirrors local Y into it.
 
+**Antialiasing.** Strand Render offers **Hashed** (the default, including older
+graphs) and **4x Coverage**. The latter draws every fiber without stochastic
+fiber thinning or pixel rejection, using four-sample alpha-to-coverage in a
+strand-only color/depth target. The target starts with the existing scene depth,
+so opaque meshes and planes in front still hide the strands. Covered samples
+are resolved once as premultiplied color, preserving layer opacity. Preview,
+export, nested compositions and both render hosts use the selected mode.
+This costs additional GPU memory (about 32 bytes per viewport pixel) and draws
+more fibers. Coverage has only four samples: extremely thin fibers can still
+lose coverage, and sample masks are device-dependent. Later scene passes use
+single-sample depth; the resolve writes the nearest strand depth when at least
+two samples are covered, otherwise retaining the incoming scene depth.
+**Analytic** rasterizes the strands with a tile compute pass: each fiber piece
+(segment × spline piece × fiber) is projected, counted per 16 × 16 pixel tile and
+written to fixed slots after a prefix sum; a stable radix sort orders the
+(tile, depth) keys, and one workgroup per tile blends its pieces front to back with
+exact pixel coverage (box-filtered across and along each piece, so neighbouring
+pieces of one fiber add up at their joints) until 1 % transmittance remains. Shading
+uses the same function as the fragment shader. The result is deterministic on a
+device and composited into the scene color and depth; a layer exceeding the
+device's buffer limits falls back to 4x Coverage.
+
 **Shading.** Every fiber is lit as a round tube.
 - **Wide fibers** (a few pixels or more, as in close-ups): wrapped Lambert diffuse on a
   cylinder normal reconstructed across the ribbon. **Thin fibers** fall back to
@@ -503,8 +550,13 @@ composition pixels, so the strand pass mirrors local Y into it.
   - Without light clips the key light casts an orthographic shadow at strength 0.8.
   - With light clips, the point or panel light brightest at the layer casts, if its
     clip has **Casts Shadows** on (at its **Shadow Strength**).
-- **Not yet supported:** shadows between strands and other layers, and a dedicated
-  generator clip.
+- **Shadow exchange with meshes:** strand shadow maps are rendered before the opaque
+  passes. With a shadow-casting scene light, lit meshes receive the strands' deep
+  opacity shadow, and opaque meshes drawn from the same light into an occluder depth
+  shadow the strands (2 × 2 percentage-closer filter). One strand layer passes its
+  shadow to meshes; unlit planes do not receive shadows, and the key light without
+  light clips does not exchange shadows.
+- **Not yet supported:** a dedicated generator clip.
 
 The cloth simulation runs on the
 CPU of the rendering thread (the Worker render host in the default mode); a long
