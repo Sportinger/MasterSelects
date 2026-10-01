@@ -348,7 +348,11 @@ export function ExportPanel() {
       patch.customFps = composition.frameRate;
       patch.useCustomFps = true;
     }
-    if (Object.keys(patch).length > 0) setEffectiveExportSettings(patch);
+    if (Object.keys(patch).length === 0) return;
+    // An automatic follow-up, not a user edit: a read-only project session rejects it, and that
+    // must not take the panel down. The next change of the composition retries it.
+    try { setEffectiveExportSettings(patch); }
+    catch (error) { log.warn('Export settings were not matched to the composition', error); }
   }, [
     actualFps,
     actualHeight,
