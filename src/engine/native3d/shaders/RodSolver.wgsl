@@ -4,7 +4,8 @@
 // iteration orders and a stable sort make every step deterministic on one device.
 //
 // `topology` (read-only) holds, in vec4u words with floats bit-cast:
-//   per node    3 words: (rest xyz, inverse mass), (pull direction xyz, 0), (before, after, left segment, right segment)
+//   per node    3 words: (rest xyz, inverse mass), (pull direction xyz, time), (before, after, left segment, right segment)
+//               where time is the form time of free nodes and the pull start of pinned ones
 //   per segment 2 words: (node a, node b, rod, ring), (rest length, arc of midpoint, rod length, stretch compliance)
 //   per bend    2 words: (prev, mid, next, 0), (1 / l1, 1 / l2, compliance, 0)
 //   colour lists of segment and bend indices, four per word.
@@ -33,15 +34,19 @@ struct RodParams {
   bendBase: u32,
   colorBase: u32,
   turbulence: array<vec4f, 8>,  // (strength, frequency, 0, 0)
+  formEase: f32,      // seconds a node takes to be drawn onto its rest position
+  formTravel: f32,    // largest forming move per substep
+  pull: f32,          // distance pinned nodes travel along their pull direction
+  pullTime: f32,      // seconds the pull takes from each node's pull start
 };
 
 struct PassParams {
   time: f32,          // simulation time at the start of the step (air and turbulence)
-  reach: f32,         // pull distance of pinned nodes at the end of this substep
+  pad0: f32,
   stamp: u32,         // marks cell ranges written in this substep
   colorOffset: u32,   // colour list entry and count of a stretch or bend pass
   colorCount: u32,
-  pad0: u32,
+  substepEnd: f32,    // simulation time at the end of this substep (forming)
   pad1: u32,
   pad2: u32,
   wind: vec4f,
@@ -65,6 +70,11 @@ fn predictedIndex(node: u32) -> u32 { return 2u * rod.nodes + node; }
 fn deltaIndex(segment: u32) -> u32 { return 3u * rod.nodes + 2u * segment; }
 fn restNode(node: u32) -> vec4f { return bitcast<vec4f>(topology[node * 3u]); }
 fn pullDirection(node: u32) -> vec3f { return bitcast<vec4f>(topology[node * 3u + 1u]).xyz; }
+fn nodeTime(node: u32) -> f32 { return bitcast<vec4f>(topology[node * 3u + 1u]).w; }
+fn ease(value: f32) -> f32 {
+  let s = clamp(value, 0.0, 1.0);
+  return s * s * (3.0 - 2.0 * s);
+}
 fn nodeLinks(node: u32) -> vec4u { return topology[node * 3u + 2u]; }
 fn segmentNodes(segment: u32) -> vec4u { return topology[rod.segmentBase + segment * 2u]; }
 fn segmentData(segment: u32) -> vec4f { return bitcast<vec4f>(topology[rod.segmentBase + segment * 2u + 1u]); }
@@ -73,7 +83,7 @@ fn colorEntry(index: u32) -> u32 {
   return word[index % 4u];
 }
 
-/** Gravity, air across the rod axis and damping, then a speed limit; pins follow their pull. */
+/** Gravity, air across the rod axis and damping, then a speed limit and forming; pins follow their pull. */
 @compute @workgroup_size(256)
 fn predict(@builtin(global_invocation_id) gid: vec3u) {
   let node = gid.x;
@@ -83,7 +93,8 @@ fn predict(@builtin(global_invocation_id) gid: vec3u) {
   let x = position(node);
   let rest = restNode(node);
   if (rest.w == 0.0) {
-    state[predictedIndex(node)] = vec4f(rest.xyz + pullDirection(node) * step.reach, 0.0);
+    let reach = rod.pull * ease((step.substepEnd - nodeTime(node)) / rod.pullTime);
+    state[predictedIndex(node)] = vec4f(rest.xyz + pullDirection(node) * reach, 0.0);
     return;
   }
   let links = nodeLinks(node);
@@ -106,7 +117,18 @@ fn predict(@builtin(global_invocation_id) gid: vec3u) {
     v *= rod.limit / speed;
   }
   state[velocityIndex(node)] = vec4f(v, 0.0);
-  state[predictedIndex(node)] = vec4f(x.xyz + v * rod.dt, 0.0);
+  var p = x.xyz + v * rod.dt;
+  // Forming: past its form time the node moves toward its rest position, eased in, capped per substep (CPU: solveForm).
+  let since = step.substepEnd - nodeTime(node);
+  if (since > 0.0) {
+    var toward = (rest.xyz - p) * ease(since / rod.formEase);
+    let size = sqrt(dot(toward, toward));
+    if (size > rod.formTravel) {
+      toward *= rod.formTravel / size;
+    }
+    p += toward;
+  }
+  state[predictedIndex(node)] = vec4f(p, 0.0);
 }
 
 /** Stretch constraints of one colour (CPU: RodSimulation.solveStretch). */

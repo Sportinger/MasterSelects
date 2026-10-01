@@ -11,7 +11,7 @@ import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const RADIUS = 0.03;
 const spec = (extra: Partial<RodSpec> = {}): RodSpec => ({ nodeId: 'rod', radius: RADIUS, segmentLength: 0, stretch: 0.9, bend: 0.5,
-  friction: 0.5, damping: 0.5, substeps: 16, preroll: 0, pin: 2, pull: 0, pullTime: 2, floor: false, floorHeight: 0,
+  friction: 0.5, damping: 0.5, substeps: 16, preroll: 0, pin: 2, pull: 0, pullTime: 2, floor: false, floorHeight: 0, start: 0, formEase: 0.5,
   gravity: 0, drag: 0, winds: [], turbulence: [], ...extra });
 
 function lines(...paths: Array<(t: number) => [number, number, number]>): CurveSet {

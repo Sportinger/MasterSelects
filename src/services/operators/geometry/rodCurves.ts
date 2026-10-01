@@ -38,9 +38,12 @@ export function simulateRodCurves(stage: RodStage, curves: CurveSet, inputKey: s
 
 /** The rods of a Rod Simulation stage over its incoming curves (shared with the GPU solver). */
 export function rodRestFor(stage: RodStage, curves: CurveSet): RodRest {
-  const pins = stage.pins && evaluateFieldColumn(stage.pins, curves);
+  const pins = stage.pins && evaluateFieldColumn(stage.pins, curves), form = stage.form && evaluateFieldColumn(stage.form, curves);
+  const pullStart = stage.pullStart && evaluateFieldColumn(stage.pullStart, curves);
   // Segment Length 0 spaces nodes one radius apart: finer rods add contact work, not detail (it stays on the points).
-  return buildRodRest(curves, stage.rod.segmentLength || stage.rod.radius, stage.rod.pin, pins ? index => Number(pins(index)) : undefined);
+  return buildRodRest(curves, stage.rod.segmentLength || stage.rod.radius, stage.rod.pin, { pinValue: pins ? index => Number(pins(index)) : undefined,
+    formValue: form ? index => Number(form(index)) : undefined, pullStartValue: pullStart ? index => Number(pullStart(index)) : undefined,
+    straight: stage.rod.start === 1 });
 }
 
 /** Simulation time of a frame as a fixed step and the blend toward the next one (pre-roll included). */

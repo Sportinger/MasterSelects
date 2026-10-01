@@ -35,7 +35,7 @@ regular weave, *Yarn* the bare curves, *Reveal by Shape* the whole sheet and
 keyframes stay intact.
 
 All of this is built from general nodes. Weave Pattern is the only weave-specific
-node; Knot, Celtic Knot, Knit, Thread Along, Yarn Profile, Flyaways, Cloth Sheet, Surface
+node; Knot, Celtic Knot, Knit, Extend, Thread Along, Yarn Profile, Flyaways, Cloth Sheet, Surface
 Bind, Rod Simulation, Noise, Shape Distance, Ramp and the shared Math/Vector nodes
 work for any curves.
 
@@ -80,10 +80,39 @@ The incoming curves are the rest state at the start of the simulation; curves th
 repeat their first point become rings. **Pin** holds the starts or both ends of open
 curves, and a connected **Pin** field holds the points where it exceeds 0.5.
 **Pull** moves the pinned points outward along the tangent of their nearer end over
-**Pull Time** seconds from the clip start. That tightens a knot: Knot (reef knot) →
+**Pull Time** seconds from each point's **Pull Start** (a per-point field, 0 when
+unconnected). That tightens a knot: Knot (reef knot) →
 Rod Simulation → Yarn Profile draws two ropes locking together. Pulling further
 than the knot allows stretches the ropes, sooner with higher friction, because the
 knot jams earlier.
+
+**Unravelling, played backwards.** A fabric that knits itself without any thread
+passing through another is its unravelling played in reverse. **Extend** continues
+every row straight beyond the fabric edge (say 4 units, out of frame); Rod
+Simulation pins those far **ends** and pulls them outward by half the slack of a row
+(a row is much longer than the fabric is wide). Pull Start from Curve Info (Strand
+Index × −0.7 s + 7.7 s for twelve rows) pulls the top row first and each row below
+0.7 s later, the way a sweater unravels: once a row is out, the loops of the row
+below are free. Set **Bend Stiffness** to 0 and leave out turbulence so the rows
+that are not pulled yet keep their loops (yarn bends toward straight otherwise).
+Then reverse the clip (clip speed, Reverse): straight threads are pulled in from
+outside the frame, row by row, and through the loops of the row below. The
+simulation runs forward in source time, so playing backwards resumes from the
+checkpoints and costs more per frame than forward playback.
+
+**Forming.** With **Start: Straight**, every open curve begins as a straight thread
+of its own length, laid along the line from its first to its last point through its
+centre, so a knit or weave starts out as parallel fibres. A connected **Form Time**
+field gives each point the second at which it is drawn onto its place in the
+incoming curves; over **Form Ease** seconds the pull fades in. The pull is a motion
+in the prediction, capped at a quarter radius per substep, so collisions, stretch and
+bending still act on it: threads fold into the fabric and slide through its loops
+while their loose ends are pulled in, instead of passing through each other. Folding
+threads may press about a fifth of a radius into each other, as with all contacts
+of this solver. A self-knitting fabric is Knit → Rod Simulation (Start Straight,
+Pin None, Radius just below half the loop clearance, Turbulence for waving loose
+ends) with Form Time = Shape Distance from the centre × seconds per unit + delay:
+the middle forms first and the fabric grows outward.
 
 **Segment Length** sets the spacing of the simulated rod nodes; 0 uses one radius.
 Finer curve detail rides along on the original points, so the output keeps every

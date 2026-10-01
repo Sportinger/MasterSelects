@@ -1,17 +1,20 @@
 import { RodGpuSimulation } from '../../src/engine/native3d/rods/RodGpuSimulation';
 import { knotCurves, KNOT_SHAPES } from '../../src/services/operators/geometry/knotCurves';
-import { buildRodRest, type RodRest } from '../../src/services/operators/geometry/rodRest';
+import { knitCurves } from '../../src/services/operators/geometry/knitCurves';
+import { extendCurves } from '../../src/services/operators/geometry/extendCurves';
+import { buildRodRest, type RodRest, type RodRestOptions } from '../../src/services/operators/geometry/rodRest';
 import { RodSimulation } from '../../src/services/operators/geometry/rodSolver';
 import type { RodSpec } from '../../src/services/operators/geometry/rodProgram';
 import type { CurveSet } from '../../src/services/operators/geometry/geometryEvaluation';
 
 /**
  * GPU rod solver against the CPU reference (same scheme, f32 against f64), determinism of the GPU
- * state across scrubbing, contact separation on the GPU, and the GPU cost per step.
+ * state across scrubbing, contact separation on the GPU, forming straight threads into a knit, and
+ * the GPU cost per step.
  */
 const RADIUS = 0.03;
 const spec = (extra: Partial<RodSpec> = {}): RodSpec => ({ nodeId: 'rod', radius: RADIUS, segmentLength: 0, stretch: 0.9, bend: 0.5,
-  friction: 0.3, damping: 0.5, substeps: 16, preroll: 0, pin: 2, pull: 0, pullTime: 2, floor: false, floorHeight: 0,
+  friction: 0.3, damping: 0.5, substeps: 16, preroll: 0, pin: 2, pull: 0, pullTime: 2, floor: false, floorHeight: 0, start: 0, formEase: 0.5,
   gravity: 0, drag: 0, winds: [], turbulence: [], ...extra });
 
 function threads(count: number, points = 61, length = 1.6): CurveSet {
@@ -85,21 +88,31 @@ async function check() {
   const results: Record<string, unknown> = {};
   const failures: string[] = [];
   const reef = knotCurves({ shape: KNOT_SHAPES.indexOf('reef'), p: 2, q: 3, size: 0.6, depth: 0.12, points: 720 });
-  const cases: Array<[string, CurveSet, Partial<RodSpec>, number]> = [
+  // A knit with room for rods of RADIUS; its points form three seconds per unit of distance from the centre.
+  const knit = knitCurves({ stitches: 3, rows: 2, width: 0.264, height: 0.198, spacing: 0.2376, depth: 0.066, lean: 1.5, resolution: 32 });
+  const forming: RodRestOptions = { straight: true, formValue: index => 0.2 + 3 * Math.hypot(knit.positions[index * 3], knit.positions[index * 3 + 1]) };
+  // The knit with tails, unravelled row by row from the top (1.2 s apart).
+  const tails = extendCurves({ length: 1, points: 16 }, knit), rowOf = (index: number) => tails.counts.findIndex((count, strand) => index < tails.starts[strand] + count);
+  const unravel: RodRestOptions = { pullStartValue: index => (1 - rowOf(index)) * 1.2 };
+  const cases: Array<[string, CurveSet, Partial<RodSpec>, number, RodRestOptions?]> = [
     ['reefKnot', reef, { pull: 0.3 }, 2],
     ['fallingThreads', threads(4), { pin: 0, floor: true, gravity: 9.8, friction: 0.6, winds: [{ direction: [1, 0, 0], strength: 0.4, gust: 0.3 }],
       turbulence: [{ strength: 0.2, frequency: 2 }] }, 0],
+    ['formingKnit', knit, { start: 1, formEase: 0.3, friction: 0.1 }, 0, forming],
+    ['unravellingKnit', tails, { pull: 1.55, pullTime: 1.6, friction: 0.1, damping: 1 }, 2, unravel],
   ];
-  for (const [name, curves, extra, pin] of cases) {
+  for (const [name, curves, extra, pin, options] of cases) {
     const rodSpec = spec({ ...extra, pin });
-    const rest = buildRodRest(curves, RADIUS, pin);
+    const rest = buildRodRest(curves, RADIUS, pin, options);
     const cpu = new RodSimulation(rodSpec, rest), gpu = new RodGpuSimulation(device, rodSpec, rest, curves, `check-${name}`);
     const steps: Record<string, unknown> = {};
     let closest = Infinity;
-    for (const step of [1, 10, 60, 120, 180]) {
+    // Forming threads are watched every few steps while they fold; the others at a few times.
+    const watched = options ? Array.from({ length: 60 }, (_, k) => 3 * (k + 1)) : [1, 10, 60, 120, 180];
+    for (const step of watched) {
       gpu.prepare(step, 0);
       const nodes = await gpu.readNodes();
-      steps[step] = compare(nodes, cpu.positionsAt(step));
+      if ([1, 10, 60, 120, 180].includes(step)) steps[step] = compare(nodes, cpu.positionsAt(step));
       // The generated rest shape may overlap slightly where the ropes pass close; the first steps separate it.
       if (step >= 10) closest = Math.min(closest, closestApproach(rest, nodes));
     }
@@ -110,10 +123,17 @@ async function check() {
     fresh.prepare(180, 0);
     const replayed = await fresh.readNodes();
     const identical = (a: Float32Array, b: Float32Array) => a.length === b.length && a.every((value, index) => Object.is(value, b[index]));
+    let formError = 0;
+    for (let node = 0; options?.formValue && node < rest.form.length; node++) {
+      formError = Math.max(formError, Math.hypot(atEnd[node * 4] - rest.positions[node * 3], atEnd[node * 4 + 1] - rest.positions[node * 3 + 1],
+        atEnd[node * 4 + 2] - rest.positions[node * 3 + 2]));
+    }
     results[name] = { nodes: rest.positions.length / 3, gpuAgainstCpu: steps, closestApproach: +closest.toFixed(4),
-      scrubIdentical: identical(atEnd, scrubbed), freshIdentical: identical(atEnd, replayed) };
+      scrubIdentical: identical(atEnd, scrubbed), freshIdentical: identical(atEnd, replayed), ...(options?.formValue ? { formError: +formError.toFixed(5) } : {}) };
     if (!identical(atEnd, scrubbed) || !identical(atEnd, replayed)) failures.push(`${name}: GPU state differs after scrubbing or replay`);
-    if (closest < 0.9 * 2 * RADIUS) failures.push(`${name}: segments approach to ${closest}`);
+    // Soft contacts let folding threads press a fifth of a radius into each other; resting rods keep 90 %.
+    if (closest < (options?.formValue ? 1.5 : 0.9 * 2) * RADIUS) failures.push(`${name}: segments approach to ${closest}`);
+    if (formError > 0.25 * RADIUS) failures.push(`${name}: formed nodes miss their places by ${formError}`);
     const retired: GPUBuffer[] = [];
     gpu.retire(retired); fresh.retire(retired);
     await device.queue.onSubmittedWorkDone();

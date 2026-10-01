@@ -9,6 +9,7 @@ import { compileClothSpec, type ClothSpec } from './clothProgram';
 import { compileRodSpec, type RodSpec } from './rodProgram';
 import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES, type CelticKnotSpec, type KnotSpec } from './knotCurves';
 import { knitPointCount, type KnitSpec } from './knitCurves';
+import type { ExtendSpec } from './extendCurves';
 
 /** Context values a curve-point field can read, in addition to shared pointwise operations. */
 export const CURVE_CONTEXT_OPERATIONS = ['position', 'curve-u', 'point-index', 'strand-index', 'point-count', 'strand-count'] as const;
@@ -28,6 +29,7 @@ export type GeometryStage =
   | ({ kind: 'celtic-knot'; nodeId: string } & CelticKnotSpec)
   | ({ kind: 'knit'; nodeId: string } & KnitSpec)
   | { kind: 'strand-array'; nodeId: string; count: number; spacing: number; axis: CurveAxis }
+  | ({ kind: 'extend'; nodeId: string } & ExtendSpec)
   /** See threadAlong.ts; `value` is the Progress parameter used when no field is connected; `trail` (unit) when Ahead is Trail. */
   | { kind: 'thread-along'; nodeId: string; progress?: GeometryField; value: number; stagger: number; lift: number; liftLength: number; settle: number;
       trail?: [number, number, number] }
@@ -36,7 +38,7 @@ export type GeometryStage =
   /** Curves on the cloth simulated by `cloth` at source time `time` (seconds). */
   | { kind: 'surface-bind'; nodeId: string; height: number; cloth: ClothSpec; time: number }
   /** The incoming curves simulated as rods from their rest state, at source time `time` (seconds). See rodSolver.ts. */
-  | { kind: 'rod-simulation'; nodeId: string; rod: RodSpec; pins?: GeometryField; time: number };
+  | { kind: 'rod-simulation'; nodeId: string; rod: RodSpec; pins?: GeometryField; pullStart?: GeometryField; form?: GeometryField; time: number };
 /** Render-time yarn: plies around the curve and fibers around each ply, twisted along curve length. */
 export interface YarnProfile { plies: number; fibers: number; radius: number; plyTwist: number; fiberTwist: number }
 /**
@@ -56,7 +58,7 @@ export type GeometryParameterReader = (node: BoundOperatorNode, parameter: strin
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit']);
 const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
-  'geometry.thread-along', 'geometry.rod-simulation']);
+  'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
 export const knotCurveCount = (shape: number) => KNOT_SHAPES[shape] === 'reef' ? 2 : 1;
 /** Points of a knot generator, matching knotCurves: the reef resamples 14 spline intervals per rope. */
@@ -178,8 +180,9 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       if (!cloth.bypassed) stages.push({ kind: 'surface-bind', nodeId: node.id, height: finite(read(node, 'height'), 'Height scale'),
         cloth: compileClothSpec(graph, cloth, read), time: Number.isFinite(context.simulationTime) ? context.simulationTime! : 0 });
     } else if (node.operator === 'geometry.rod-simulation') {
-      const pins = compileField(node, 'pin', 'scalar');
+      const pins = compileField(node, 'pin', 'scalar'), pullStart = compileField(node, 'pullStart', 'scalar'), form = compileField(node, 'form', 'scalar');
       stages.push({ kind: 'rod-simulation', nodeId: node.id, rod: compileRodSpec(graph, node, read), ...(pins ? { pins } : {}),
+        ...(pullStart ? { pullStart } : {}), ...(form ? { form } : {}),
         time: Number.isFinite(context.simulationTime) ? context.simulationTime! : 0 });
     } else if (node.operator === 'geometry.flyaways') {
       flyaways = { density: Math.max(0, finite(read(node, 'density'), 'Flyaway density')),
@@ -213,6 +216,9 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         stagger: finite(read(node, 'stagger'), 'Stagger'), lift: finite(read(node, 'lift'), 'Lift'),
         liftLength: finite(read(node, 'liftLength'), 'Lift length'), settle: finite(read(node, 'settle'), 'Settle'),
         ...(trail ? { trail: (reach > 0 ? trail.map(value => value / reach) : [0, 1, 0]) as [number, number, number] } : {}) });
+    } else if (node.operator === 'geometry.extend') {
+      stages.push({ kind: 'extend', nodeId: node.id, length: Math.max(0, finite(read(node, 'length'), 'Extend length')),
+        points: Math.round(finite(read(node, 'points'), 'Points per end')) });
     } else if (node.operator === 'geometry.strand-array') {
       stages.push({ kind: 'strand-array', nodeId: node.id, count: Math.round(finite(read(node, 'count'), 'Strand count')),
         spacing: finite(read(node, 'spacing'), 'Strand spacing'), axis: axisIndex(read(node, 'axis')) });
@@ -247,6 +253,9 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     } else if (stage.kind === 'knit') {
       if (stage.stitches < 1 || stage.rows < 1 || stage.resolution < 4) throw new Error('Knit needs at least one stitch, one row and four points per stitch.');
       pointCount = knitPointCount(stage); strandCount = stage.rows;
+    } else if (stage.kind === 'extend') {
+      if (stage.points < 1 || stage.points > 4096) throw new Error('Extend needs 1 to 4096 points per end.');
+      pointCount += 2 * stage.points * strandCount;
     } else if (stage.kind === 'strand-array') {
       if (stage.count < 1) throw new Error('Strand Array needs a count of at least one.');
       pointCount *= stage.count; strandCount *= stage.count;

@@ -4,6 +4,7 @@ import { bindToCloth, clothGridAt } from './clothSurface';
 import { evaluateFieldColumn } from './curveFieldColumns';
 import { celticKnotCurves, knotCurves } from './knotCurves';
 import { knitCurves } from './knitCurves';
+import { extendCurves } from './extendCurves';
 import { threadAlong } from './threadAlong';
 import { simulateRodCurves } from './rodCurves';
 
@@ -90,6 +91,8 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet, ke
       curves = knitCurves(stage);
     } else if (stage.kind === 'thread-along') {
       curves = threadAlong(stage, curves);
+    } else if (stage.kind === 'extend') {
+      curves = extendCurves(stage, curves);
     } else if (stage.kind === 'strand-array') {
       const { positions, starts, counts, radius } = curves;
       const pointTotal = positions.length / 3, strandTotal = counts.length;

@@ -22,6 +22,13 @@ export const ROD_MAX_TRAVEL = 0.5;
 export const rodStretchModulus = (stiffness: number) => 10 ** (1 + 6 * stiffness);
 export const rodBendModulus = (stiffness: number) => 10 ** (-4 + 5 * stiffness);
 export const rodPullEase = (value: number) => value <= 0 ? 0 : value >= 1 ? 1 : value * value * (3 - 2 * value);
+/**
+ * Forming moves a node by at most this share of the radius per substep: half the travel limit, so
+ * contacts keep up even where a thread has to slide past others to reach its place.
+ */
+export const ROD_FORM_TRAVEL = 0.25;
+/** Share of its remaining way a forming node moves onto its rest position, `since` seconds after its form time. */
+export const rodFormWeight = (since: number, ease: number) => since <= 0 ? 0 : rodPullEase(since / ease);
 /** Inverse mass of a node: pinned nodes are kinematic, a lone node weighs one diameter. */
 export const rodInverseMass = (mass: number, pinned: boolean, radius: number) => pinned ? 0 : 1 / (mass > 0 ? mass : 2 * radius);
 
@@ -31,8 +38,10 @@ export const rodInverseMass = (mass: number, pinned: boolean, radius: number) =>
  * precision, no randomness. Stretch and bend constraints are solved colour by colour
  * (rodTopology.ts), contacts as one averaged Jacobi pass, so the GPU solver (RodGpuSolver.ts) runs
  * the same scheme in parallel. With a straight rest shape and position-only pins, twist does not
- * move the centre line (Bergou et al. 2008), so the rods carry no frames. The same rest, spec and
- * step always give the same state, whether reached by playback or from a checkpoint.
+ * move the centre line (Bergou et al. 2008), so the rods carry no frames. Forming nodes are drawn
+ * toward their rest positions in the prediction, by at most the travel limit per substep, so
+ * contacts still keep the threads apart while they fold into their curves. The same rest, spec and step always
+ * give the same state, whether reached by playback or from a checkpoint.
  */
 export class RodSimulation {
   private readonly spec: RodSpec;
@@ -53,7 +62,7 @@ export class RodSimulation {
   constructor(spec: RodSpec, rest: RodRest) {
     this.spec = spec; this.rest = rest;
     const count = rest.positions.length / 3;
-    this.positions = Float64Array.from(rest.positions);
+    this.positions = Float64Array.from(rest.start);
     this.velocities = new Float64Array(count * 3);
     this.predicted = new Float64Array(count * 3);
     this.topology = buildRodTopology(rest);
@@ -114,11 +123,12 @@ export class RodSimulation {
     const dt = 1 / (ROD_STEP_RATE * spec.substeps), damping = Math.exp(-(spec.damping + spec.drag) * dt);
     const pull = 1 - Math.exp(-ROD_AIR_DRAG * dt), limit = ROD_MAX_TRAVEL * spec.radius / dt, count = inverseMass.length;
     for (let substep = 0; substep < spec.substeps; substep++) {
-      // Pins follow their pull from source time 0; the rest moves under gravity, air and damping.
-      const reach = spec.pull * rodPullEase((time + (substep + 1) * dt) / spec.pullTime);
+      // Pins follow their pull from their pull start; the rest moves under gravity, air and damping.
+      const end = time + (substep + 1) * dt;
       for (let node = 0; node < count; node++) {
         const base = node * 3;
         if (inverseMass[node] === 0) {
+          const reach = spec.pull * rodPullEase((end - rest.pullStart[node]) / spec.pullTime);
           for (let axis = 0; axis < 3; axis++) predicted[base + axis] = rest.positions[base + axis] + rest.pull[base + axis] * reach;
           continue;
         }
@@ -139,6 +149,7 @@ export class RodSimulation {
         velocities[base] = vx; velocities[base + 1] = vy; velocities[base + 2] = vz;
         predicted[base] = positions[base] + vx * dt; predicted[base + 1] = positions[base + 1] + vy * dt; predicted[base + 2] = positions[base + 2] + vz * dt;
       }
+      this.solveForm(end);
       this.contacts.update(predicted);
       this.solveStretch(dt);
       this.solveBend(dt);
@@ -179,6 +190,21 @@ export class RodSimulation {
         const constraint = (p[j + axis] - p[m + axis]) * g2 - (p[m + axis] - p[i + axis]) * g1, lambda = constraint * scale;
         p[i + axis] += wi * g1 * lambda; p[m + axis] -= wm * gm * lambda; p[j + axis] += wj * g2 * lambda;
       }
+    }
+  }
+
+  /** Predicted nodes past their form time move toward their rest position, eased in and capped per substep. */
+  private solveForm(time: number) {
+    const { predicted: p, inverseMass: w, rest, spec } = this, travel = ROD_FORM_TRAVEL * spec.radius;
+    for (let node = 0; node < w.length; node++) {
+      const weight = rodFormWeight(time - rest.form[node], spec.formEase);
+      if (w[node] === 0 || weight === 0) continue;
+      const base = node * 3;
+      let dx = (rest.positions[base] - p[base]) * weight, dy = (rest.positions[base + 1] - p[base + 1]) * weight;
+      let dz = (rest.positions[base + 2] - p[base + 2]) * weight;
+      const size = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      if (size > travel) { const scale = travel / size; dx *= scale; dy *= scale; dz *= scale; }
+      p[base] += dx; p[base + 1] += dy; p[base + 2] += dz;
     }
   }
 

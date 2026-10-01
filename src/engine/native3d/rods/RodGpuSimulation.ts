@@ -7,15 +7,17 @@ import type { RodSpec } from '../../../services/operators/geometry/rodProgram';
 import type { RodRest } from '../../../services/operators/geometry/rodRest';
 import { buildRodTopology, type RodTopology } from '../../../services/operators/geometry/rodTopology';
 import { ROD_KINETIC, ROD_SELF_GAP, rodCellSize } from '../../../services/operators/geometry/rodContacts';
-import { ROD_AIR_DRAG, ROD_MAX_TRAVEL, ROD_STEP_LIMIT, ROD_STEP_RATE, rodBendModulus, rodInverseMass, rodPullEase,
+import { ROD_AIR_DRAG, ROD_FORM_TRAVEL, ROD_MAX_TRAVEL, ROD_STEP_LIMIT, ROD_STEP_RATE, rodBendModulus, rodInverseMass,
   rodStretchModulus } from '../../../services/operators/geometry/rodSolver';
 import { windVelocity } from '../../../services/operators/geometry/simulationForces';
 import { strandRadiusFieldCode, type StrandFieldCode } from '../passes/strandFieldShader';
 import { StrandFramesPass } from '../passes/StrandFramesPass';
 
-const PARAMS_BYTES = 208;
+const PARAMS_BYTES = 224;
 const PASS_BYTES = 48;
 const NO_SEGMENT = 0xffffffff;
+/** Form time of nodes that are never formed: WGSL may assume finite floats. */
+const NEVER = 3e38;
 const CHECKPOINT_INTERVAL = 30;
 /** GPU memory bound: when full, every other checkpoint is dropped and the spacing doubles. */
 const CHECKPOINT_LIMIT = 40;
@@ -122,7 +124,9 @@ export class RodGpuSimulation {
       const word = node * 12;
       inverseMass[node] = rodInverseMass(mass[node], rest.pinned[node] === 1, spec.radius);
       f.set([rest.positions[node * 3], rest.positions[node * 3 + 1], rest.positions[node * 3 + 2], inverseMass[node]], word);
-      f.set([rest.pull[node * 3], rest.pull[node * 3 + 1], rest.pull[node * 3 + 2], 0], word + 4);
+      // Pinned nodes never form: their slot holds the pull start instead.
+      const time = rest.pinned[node] === 1 ? rest.pullStart[node] : Number.isFinite(rest.form[node]) ? rest.form[node] : NEVER;
+      f.set([rest.pull[node * 3], rest.pull[node * 3 + 1], rest.pull[node * 3 + 2], time], word + 4);
       u.set([before[node], after[node], nodeSegments[node * 2] < 0 ? NO_SEGMENT : nodeSegments[node * 2],
         nodeSegments[node * 2 + 1] < 0 ? NO_SEGMENT : nodeSegments[node * 2 + 1]], word + 8);
     }
@@ -149,7 +153,7 @@ export class RodGpuSimulation {
     // State: positions (xyz, inverse mass), velocities, predicted positions, two contact sums per segment.
     this.state = create((3 * nodes + 2 * segmentCount) * 16, storage, 'state');
     const initial = new Float32Array(nodes * 4);
-    for (let node = 0; node < nodes; node++) initial.set([rest.positions[node * 3], rest.positions[node * 3 + 1], rest.positions[node * 3 + 2], inverseMass[node]], node * 4);
+    for (let node = 0; node < nodes; node++) initial.set([rest.start[node * 3], rest.start[node * 3 + 1], rest.start[node * 3 + 2], inverseMass[node]], node * 4);
     device.queue.writeBuffer(this.state, 0, initial);
     this.earlier = create(nodes * 16, storage, 'earlier');
     let size = 1;
@@ -171,6 +175,7 @@ export class RodGpuSimulation {
     pf.set([rodCellSize(longest, spec.radius), ROD_SELF_GAP, ROD_KINETIC], 14);
     pu.set([segmentBase, bendBase, colorBase], 17);
     spec.turbulence.slice(0, 8).forEach((field, index) => pf.set([field.strength, field.frequency, 0, 0], 20 + index * 4));
+    pf.set([spec.formEase, ROD_FORM_TRAVEL * spec.radius, spec.pull, spec.pullTime], 52);
     this.params = create(PARAMS_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 'params');
     device.queue.writeBuffer(this.params, 0, data);
     const stride = Math.max(256, device.limits.minUniformBufferOffsetAlignment);
@@ -202,7 +207,10 @@ export class RodGpuSimulation {
     };
     this.pointRods = upload(rods, 'point-rods'); this.pointGeometry = upload(geometry, 'point-geometry'); this.ranges = upload(ranges, 'ranges');
     let reach = 0;
-    for (let index = 0; index < rest.positions.length; index += 3) reach = Math.max(reach, Math.hypot(rest.positions[index], rest.positions[index + 1], rest.positions[index + 2]));
+    for (let index = 0; index < rest.positions.length; index += 3) {
+      reach = Math.max(reach, Math.hypot(rest.positions[index], rest.positions[index + 1], rest.positions[index + 2]),
+        Math.hypot(rest.start[index], rest.start[index + 1], rest.start[index + 2]));
+    }
     this.extent = reach + Math.abs(spec.pull) + 4 * spec.radius;
     this.checkpoints.set(0, this.snapshot());
   }
@@ -252,11 +260,11 @@ export class RodGpuSimulation {
     const time = this.step / ROD_STEP_RATE - spec.preroll, wind = windVelocity(spec, time), dt = 1 / (ROD_STEP_RATE * spec.substeps);
     const data = new ArrayBuffer(spec.substeps * slots * stride), u = new Uint32Array(data), f = new Float32Array(data);
     for (let substep = 0; substep < spec.substeps; substep++) {
-      const reach = spec.pull * rodPullEase((time + (substep + 1) * dt) / spec.pullTime), stamp = ++this.stamp >>> 0;
+      const stamp = ++this.stamp >>> 0;
       for (let slot = 0; slot < slots; slot++) {
         const word = (substep * slots + slot) * stride / 4, color = slot ? this.slots[slot - 1] : null;
-        f[word] = time; f[word + 1] = reach; u[word + 2] = stamp;
-        u[word + 3] = color?.offset ?? 0; u[word + 4] = color?.count ?? 0;
+        f[word] = time; u[word + 2] = stamp;
+        u[word + 3] = color?.offset ?? 0; u[word + 4] = color?.count ?? 0; f[word + 5] = time + (substep + 1) * dt;
         f.set([wind[0], wind[1], wind[2], 0], word + 8);
       }
     }

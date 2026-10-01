@@ -1,19 +1,21 @@
 import type { BoundOperatorNode, EffectOperatorGraph } from '../../../types/operatorGraph';
 import type { GeometryParameterReader } from './geometryProgram';
-import { ROD_PINS, ROD_SUBSTEP_LIMIT } from './rodOperators';
+import { ROD_PINS, ROD_STARTS, ROD_SUBSTEP_LIMIT } from './rodOperators';
 import { compileSimulationForces, isSimulationForces, SIMULATION_FORCE_KEYS, type SimulationForces } from './simulationForces';
 
 /**
  * Everything a rod simulation depends on apart from its rest curves and time. Stiffness values run
  * from 0 to 1 (see rodSolver.ts); `segmentLength` 0 spaces rod nodes one radius apart; `pin` indexes
  * ROD_PINS; `pull` is the distance pinned ends travel outward over `pullTime` seconds from source time 0.
+ * `start` indexes ROD_STARTS; `formEase` is how long a point takes to be drawn onto its incoming curve.
  */
 export interface RodSpec extends SimulationForces {
   nodeId: string; radius: number; segmentLength: number; stretch: number; bend: number; friction: number; damping: number;
   substeps: number; preroll: number; pin: number; pull: number; pullTime: number; floor: boolean; floorHeight: number;
+  start: number; formEase: number;
 }
 const ROD_KEYS = ['nodeId', 'radius', 'segmentLength', 'stretch', 'bend', 'friction', 'damping', 'substeps', 'preroll', 'pin', 'pull',
-  'pullTime', 'floor', 'floorHeight', ...SIMULATION_FORCE_KEYS];
+  'pullTime', 'floor', 'floorHeight', 'start', 'formEase', ...SIMULATION_FORCE_KEYS];
 
 const finite = (value: unknown, label: string) => {
   const number = Number(value);
@@ -35,6 +37,8 @@ export function compileRodSpec(graph: EffectOperatorGraph, rod: BoundOperatorNod
     pin: Math.max(0, ROD_PINS.indexOf(String(read(rod, 'pin')) as typeof ROD_PINS[number])),
     pull: clamp(finite(read(rod, 'pull'), 'Pull'), -100, 100), pullTime: clamp(finite(read(rod, 'pullTime'), 'Pull time'), 0.01, 60),
     floor: read(rod, 'floor') === 'floor', floorHeight: clamp(finite(read(rod, 'floorHeight'), 'Floor height'), -1000, 1000),
+    start: Math.max(0, ROD_STARTS.indexOf(String(read(rod, 'start')) as typeof ROD_STARTS[number])),
+    formEase: clamp(finite(read(rod, 'formEase'), 'Form ease'), 0.01, 30),
     ...compileSimulationForces(graph, rod, read),
   };
 }
@@ -49,5 +53,6 @@ export function isRodSpec(value: unknown): value is RodSpec {
     && within(value.friction, 0, 2) && within(value.damping, 0, 20) && Number.isInteger(value.substeps) && within(value.substeps, 1, ROD_SUBSTEP_LIMIT)
     && within(value.preroll, 0, 30) && Number.isInteger(value.pin) && within(value.pin, 0, ROD_PINS.length - 1)
     && within(value.pull, -100, 100) && within(value.pullTime, 0.01, 60) && typeof value.floor === 'boolean'
-    && within(value.floorHeight, -1000, 1000) && isSimulationForces(value);
+    && within(value.floorHeight, -1000, 1000) && Number.isInteger(value.start) && within(value.start, 0, ROD_STARTS.length - 1)
+    && within(value.formEase, 0.01, 30) && isSimulationForces(value);
 }

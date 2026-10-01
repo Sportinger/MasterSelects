@@ -384,7 +384,8 @@ node is one node in every graph rather than a per-domain copy.
 | Flyaways | Curves → curves whose Yarn Profile lets single fibers stray: loops arc off and return, free ends stick out (Density, Length, Lift, Free Ends, Seed) |
 | Cloth Sheet | Forces (Wind, Gravity, Turbulence) + Drag → a simulated cloth grid (Columns, Rows, Width, Height, Pin, Stretch/Bend Stiffness, Damping, Substeps, Pre-roll) |
 | Surface Bind | Curves + Cloth → curves placed on the cloth: X/Y of the flat rest sheet find the spot, Z becomes height along its normal |
-| Rod Simulation | Curves (+ per-point Pin) + Forces + Drag → the curves simulated as elastic rods with thickness, self- and mutual contact with friction and an optional floor (Radius, Segment Length, Stretch/Bend Stiffness, Friction, Damping, Substeps, Pre-roll, Pin, Pull, Pull Time, Floor, Floor Height) |
+| Extend | Curves → every curve continued straight beyond both ends along its end tangent (Length, Points per End) |
+| Rod Simulation | Curves (+ per-point Pin, Pull Start and Form Time) + Forces + Drag → the curves simulated as elastic rods with thickness, self- and mutual contact with friction and an optional floor; optionally starting as straight threads that are formed into the curves (Radius, Segment Length, Stretch/Bend Stiffness, Friction, Damping, Substeps, Pre-roll, Pin, Pull, Pull Time, Floor, Floor Height, Start, Form Ease) |
 | Weave Pattern | Draft (plain, twill 2/2 and 2/1, satin 5, basket), warp/weft counts, size, crimp → interlaced curves |
 | Knot | Shape (trefoil, figure-eight, reef knot of two ropes, (P, Q) torus knot), Size, Depth, Points → closed knot curves whose crossings pass over and under |
 | Celtic Knot | Columns, Rows, Cell Size, Height, Points per Step, Roundness → Celtic plait loops alternating over and under like a plain weave |
@@ -448,6 +449,9 @@ therefore alternate along every thread, across border loops too. *Knit* follows 
 stockinette yarn path x = (t + Lean·sin 2t)·Width/2π, y = Height·cos t,
 z = Depth·cos 2t per stitch: below twice the loop height of row spacing each head
 lies in front of the legs of the row above and behind its sinker loops.
+*Extend* adds Points per End straight points beyond each end, along the
+second-order end tangent 3·p0 − 4·p1 + p2, so a curve that ends on a turning point
+(a knit loop head) continues level instead of along its tilted last segment.
 
 Add and Multiply read 0 and 1 through an unconnected operand in curve graphs. A
 bypassed field group that feeds one of them therefore leaves the other factor
@@ -496,7 +500,15 @@ kept as a Verlet list until a node has moved a quarter radius, and positional
 friction removes the sliding of each substep up to Friction × penetration. Node
 speed is capped at half a radius per substep, so rods do not tunnel. Pins hold
 curve starts, both ends or the points of a Pin field above 0.5; **Pull** moves them
-outward along their end tangent over Pull Time, which tightens knots. The input
+outward along their end tangent over Pull Time from each node's **Pull Start**
+(interpolated from a per-point field, default 0), which tightens knots or, with
+Extend tails and row-wise start times, unravels a fabric row by row. **Start:
+Straight** lays every open rod along its chord through its centroid with its own
+segment lengths; from its **Form Time** (a per-point field, seconds of source time,
+interpolated along the rod) each node is moved toward its place in the input during
+the prediction, eased in over **Form Ease** (smoothstep) and capped at a quarter
+radius per substep, so the contacts and constraints that follow still separate the
+threads while they fold. The input
 curves are the rest state (rings stay closed) and the output keeps every input
 point: **Segment Length** (0 = one radius) only sets the rod resolution, and finer
 detail rides along. Stretch and bend constraints are solved colour by colour and

@@ -73,6 +73,10 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
         || (stage.progress !== undefined && !isField(stage.progress))
         || (stage.trail !== undefined && !(Array.isArray(stage.trail) && stage.trail.length === 3 && stage.trail.every(finite)))
         || ![stage.value, stage.stagger, stage.lift, stage.liftLength, stage.settle].every(finite)) return false;
+    } else if (stage.kind === 'extend') {
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'length', 'points']) || !finite(stage.length) || (stage.length as number) < 0
+        || !Number.isInteger(stage.points) || (stage.points as number) < 1 || (stage.points as number) > 4096) return false;
+      points += 2 * (stage.points as number) * strands;
     } else if (stage.kind === 'yarn-profile') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'radius']) || (stage.radius !== undefined && !isField(stage.radius))) return false;
     } else if (stage.kind === 'strand-array') {
@@ -84,8 +88,8 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
         || !isClothSpec(stage.cloth)) return false;
       simulated = true;
     } else if (stage.kind === 'rod-simulation') {
-      if (index === 0 || simulated || !exactKeys(stage, ['kind', 'nodeId', 'rod', 'pins', 'time']) || !finite(stage.time) || !isRodSpec(stage.rod)
-        || (stage.pins !== undefined && !isField(stage.pins))) return false;
+      if (index === 0 || simulated || !exactKeys(stage, ['kind', 'nodeId', 'rod', 'pins', 'pullStart', 'form', 'time']) || !finite(stage.time)
+        || !isRodSpec(stage.rod) || [stage.pins, stage.pullStart, stage.form].some(field => field !== undefined && !isField(field))) return false;
       simulated = true;
     } else if (stage.kind === 'set-position') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'position', 'offset'])

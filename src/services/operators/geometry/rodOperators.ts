@@ -2,6 +2,8 @@ import type { OperatorDefinition, OperatorParameter, OperatorPort } from '../../
 
 /** Curve points a Rod Simulation holds in place: none, the first point of each curve, or both ends. */
 export const ROD_PINS = ['none', 'start', 'ends'] as const;
+/** Where the rods begin: in the incoming curves, or laid out straight (open curves) to be formed into them. */
+export const ROD_STARTS = ['rest', 'straight'] as const;
 /** Upper bound of simulated rod nodes per Rod Simulation; denser input is coarsened to fit. */
 export const ROD_NODE_LIMIT = 16_384;
 /** Every curve keeps at least two nodes (three on rings), so the curve count is bounded too. */
@@ -18,9 +20,10 @@ const number = (id: string, label: string, value: number, min: number, max: numb
  */
 export const ROD_OPERATORS: readonly OperatorDefinition[] = [
   { id: 'geometry.rod-simulation', version: 1, label: 'Rod Simulation',
-    description: 'Simulates the incoming curves as elastic rods with thickness in the source time of their clip: they bend, barely stretch, collide with each other and themselves with friction, and can rest on a floor. Pin holds curve ends or the points where Pin is above 0.5; Pull draws pinned ends outward over Pull Time to tighten knots. Segment Length sets the rod resolution (0 = one radius); finer curve detail rides along.',
-    inputs: [curves(true), { id: 'pin', label: 'Pin', type: 'number' }, { id: 'forces', label: 'Forces', type: 'force', repeated: true },
-      { id: 'drag', label: 'Drag', type: 'drag', repeated: true }],
+    description: 'Simulates the incoming curves as elastic rods with thickness in the source time of their clip: they bend, barely stretch, collide with each other and themselves with friction, and can rest on a floor. Pin holds curve ends or the points where Pin is above 0.5; Pull draws pinned ends outward over Pull Time from the Pull Start (seconds) of each point, to tighten knots or unravel a fabric. Start Straight lays every open curve out as a straight thread of its length; from its Form Time (seconds) on, each point is drawn onto its place in the incoming curves over Form Ease, so threads fold into a fabric while their loose ends are pulled in. Segment Length sets the rod resolution (0 = one radius); finer curve detail rides along.',
+    inputs: [curves(true), { id: 'pin', label: 'Pin', type: 'number' }, { id: 'pullStart', label: 'Pull Start', type: 'number' },
+      { id: 'form', label: 'Form Time', type: 'number' },
+      { id: 'forces', label: 'Forces', type: 'force', repeated: true }, { id: 'drag', label: 'Drag', type: 'drag', repeated: true }],
     outputs: [curves()],
     parameters: [number('radius', 'Radius', 0.03, 0.0005, 10, 0.001), number('segmentLength', 'Segment Length', 0, 0, 100, 0.001),
       number('stretch', 'Stretch Stiffness', 0.9, 0, 1), number('bend', 'Bend Stiffness', 0.5, 0, 1),
@@ -31,7 +34,10 @@ export const ROD_OPERATORS: readonly OperatorDefinition[] = [
       number('pull', 'Pull', 0, -100, 100, 0.001), number('pullTime', 'Pull Time', 2, 0.01, 60, 0.1),
       { id: 'floor', label: 'Floor', type: 'select', default: 'none', animatable: false, options: [{ value: 'none', label: 'None' },
         { value: 'floor', label: 'Floor plane' }] },
-      number('floorHeight', 'Floor Height', -1, -1000, 1000, 0.01)],
+      number('floorHeight', 'Floor Height', -1, -1000, 1000, 0.01),
+      { id: 'start', label: 'Start', type: 'select', default: 'rest', animatable: false, options: [{ value: 'rest', label: 'Incoming curves' },
+        { value: 'straight', label: 'Straight' }] },
+      number('formEase', 'Form Ease', 0.5, 0.01, 30, 0.01)],
     invalidates: 'simulation', runtime: 'builtin', state: 'simulation', bypass: 'passthrough', addable: true,
     implementation: 'shared', consumers: ['Weave'] },
 ];
