@@ -6,6 +6,7 @@ import { packStrandPoints } from './strandFrames';
 import { packStrandLights, STRAND_LIGHT_FLOATS } from './strandLights';
 import { STRAND_SHADOW_MAP_SIZE, strandShadowView, type StrandShadowView } from './strandShadowLight';
 import { StrandShadowMaps, type StrandShadowTargets } from './strandShadowMaps';
+import { StrandCoverageTargets } from './StrandCoverageTargets';
 import { multiplyMat4 } from '../../scene/SceneTransformUtils';
 import { Logger } from '../../../services/logger';
 
@@ -119,11 +120,13 @@ function writeViewer(data: Float32Array, view: Float32Array, projection: Float32
 export class StrandPass {
   private device: GPUDevice | null = null;
   private pipeline: GPURenderPipeline | null = null;
+  private coveragePipeline: GPURenderPipeline | null = null;
   private depthPipeline: GPURenderPipeline | null = null;
   private opacityPipeline: GPURenderPipeline | null = null;
   private layout: GPUBindGroupLayout | null = null;
   private readonly cache = new Map<string, StrandBuffers>();
   private readonly shadows = new StrandShadowMaps();
+  private readonly coverage = new StrandCoverageTargets();
 
   collect(layers: SceneLayer3DData[]): SceneStrandLayer[] {
     return layers.filter((layer): layer is SceneStrandLayer => layer.kind === 'strands');
@@ -152,6 +155,10 @@ export class StrandPass {
     this.pipeline = device.createRenderPipeline({ label: 'native-strands', layout, vertex, primitive,
       fragment: { module, entryPoint: 'strandFragment', targets: [{ format: SCENE_COLOR_FORMAT }] },
       depthStencil: { format: SCENE_DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less-equal' } });
+    this.coveragePipeline = device.createRenderPipeline({ label: 'native-strands-coverage4x', layout, vertex, primitive,
+      fragment: { module, entryPoint: 'strandFragment', targets: [{ format: SCENE_COLOR_FORMAT }] },
+      depthStencil: { format: SCENE_DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less-equal' },
+      multisample: { count: 4, alphaToCoverageEnabled: true } });
     this.depthPipeline = device.createRenderPipeline({ label: 'native-strands-shadow-depth', layout, vertex, primitive,
       depthStencil: { format: StrandShadowMaps.depthFormat, depthWriteEnabled: true, depthCompare: 'less' } });
     const add: GPUBlendComponent = { srcFactor: 'one', dstFactor: 'one', operation: 'add' };
@@ -210,6 +217,7 @@ export class StrandPass {
     data.set([render.width * scale, 0, 0, Math.max(0, Math.min(1, layer.opacity))], 56);
     data.set([...KEY_LIGHT, AMBIENT], 60);
     data.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist, profile.fiberTwist] : [1, 1, 0, 0, 0], 64);
+    data[71] = render.antialiasing === 'coverage4x' ? 1 : 0;
     const flyaways = profile && render.flyaways, channels = flyaways ? FLYAWAY_CHANNELS : 0;
     if (flyaways) {
       data[69] = flyaways.seed;
@@ -275,19 +283,27 @@ export class StrandPass {
     const draws = prepared.map(({ layer, buffers }) => this.layerUniforms(layer, buffers, lights));
     // Shadow maps are rendered first: render passes cannot nest.
     const targets = draws.map(draw => draw.shadow ? this.renderShadow(device, commandEncoder, draw, temporaryBuffers) : empty);
-    const pass = commandEncoder.beginRenderPass({ label: 'native-scene-strands-pass',
-      colorAttachments: [{ view: sceneView, loadOp: 'load', storeOp: 'store' }],
-      depthStencilAttachment: { view: sceneDepthView, depthLoadOp: 'load', depthStoreOp: 'store' } });
-    pass.setPipeline(this.pipeline);
-    draws.forEach((draw, index) => {
-      const subdivisions = strandSubdivisions(draw.buffers.segmentLength, draw.buffers.extent, draw.layer.worldMatrix, cameraPosition, camera);
-      const uniforms = writeViewer(draw.base, camera.viewMatrix, camera.projectionMatrix, cameraPosition,
-        camera.viewport.width, camera.viewport.height, subdivisions);
-      pass.setBindGroup(0, this.bindGroup(device, uniforms, draw.buffers, targets[index].depth, targets[index].opacity, temporaryBuffers,
-        `native-strands-${draw.layer.layerId}`));
-      pass.draw(draw.buffers.segmentCount * 6 * subdivisions, draw.instances);
-    });
-    pass.end();
+    const multisampled = draws.some(draw => draw.base[71] > 0.5);
+    const drawLayers = (pass: GPURenderPassEncoder) => {
+      pass.setPipeline(multisampled ? this.coveragePipeline! : this.pipeline!);
+      draws.forEach((draw, index) => {
+        const subdivisions = strandSubdivisions(draw.buffers.segmentLength, draw.buffers.extent, draw.layer.worldMatrix, cameraPosition, camera);
+        const uniforms = writeViewer(draw.base, camera.viewMatrix, camera.projectionMatrix, cameraPosition,
+          camera.viewport.width, camera.viewport.height, subdivisions);
+        pass.setBindGroup(0, this.bindGroup(device, uniforms, draw.buffers, targets[index].depth, targets[index].opacity, temporaryBuffers,
+          `native-strands-${draw.layer.layerId}`));
+        pass.draw(draw.buffers.segmentCount * 6 * subdivisions, draw.instances);
+      });
+    };
+    if (multisampled) {
+      this.coverage.render(device, commandEncoder, sceneView, sceneDepthView, camera.viewport.width, camera.viewport.height, drawLayers);
+    } else {
+      const pass = commandEncoder.beginRenderPass({ label: 'native-scene-strands-pass',
+        colorAttachments: [{ view: sceneView, loadOp: 'load', storeOp: 'store' }],
+        depthStencilAttachment: { view: sceneDepthView, depthLoadOp: 'load', depthStoreOp: 'store' } });
+      drawLayers(pass);
+      pass.end();
+    }
     return true;
   }
 
@@ -295,7 +311,9 @@ export class StrandPass {
     for (const buffers of this.cache.values()) { buffers.positions.destroy(); buffers.segments.destroy(); }
     this.cache.clear();
     this.shadows.dispose();
+    this.coverage.dispose();
     this.pipeline = null;
+    this.coveragePipeline = null;
     this.depthPipeline = null;
     this.opacityPipeline = null;
     this.layout = null;

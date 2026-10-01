@@ -26,7 +26,7 @@ struct StrandUniforms {
   params: vec4f,  // x: world fiber width, yz: viewport pixels, w: layer opacity
   light: vec4f,   // xyz: key light direction (world, toward the light), w: ambient
   yarn: vec4f,    // x: plies, y: fibers per ply, z: yarn radius (local), w: ply twist (turns per unit length)
-  twist: vec4f,   // x: fiber twist (turns per unit length), y: flyaway seed, z: spline subdivisions per segment
+  twist: vec4f,   // x: fiber twist, y: flyaway seed, z: spline subdivisions, w: 1 for 4x coverage
   fly: vec4f,     // x: flyaway cell length per channel, y: flyaway length, z: lift (yarn radii), w: free-end fraction
   ambient: vec4f, // rgb: ambient from environment lights, w: direct scene lights (-1: none, use the key light)
   lights: array<StrandLight, 4>,
@@ -195,7 +195,7 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   // made per segment and per strand, never per vertex.
   let midClip = viewProjection * vec4f(0.5 * (a + b), 1.0);
   let segmentPixels = u.params.x * max(scaleA, scaleB) * abs(u.projection[1][1]) * 0.5 * u.params.z / max(midClip.w, 1e-5);
-  let keep = clamp(segmentPixels, 1.0 / f32(yarnFibers + 4u), 1.0);
+  let keep = select(clamp(segmentPixels, 1.0 / f32(yarnFibers + 4u), 1.0), 1.0, u.twist.w > 0.5);
   if (keep < 1.0 && hash3(u32(points[first * 3u + 2u].w), fiber, 0x5f3759dfu) >= keep) {
     return out;
   }
@@ -309,7 +309,7 @@ fn shadeFiber(tangent: vec3f, normal: vec3f, view: vec3f, light: vec3f, tube: f3
 
 @fragment
 fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
-  if (in.coverage < 1.0 && hash3(u32(in.position.x), u32(in.position.y), in.segment) >= in.coverage) {
+  if (u.twist.w < 0.5 && in.coverage < 1.0 && hash3(u32(in.position.x), u32(in.position.y), in.segment) >= in.coverage) {
     discard;
   }
   let tangent = normalize(in.tangent);
@@ -331,7 +331,7 @@ fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
     let visibility = select(1.0, shadowTransmittance(position), shadowed == 1);
     let keyLit = u.light.w * u.color.rgb * occlusion
       + (1.0 - u.light.w) * visibility * shadeFiber(tangent, normal, view, normalize(u.light.xyz), tube);
-    return vec4f(keyLit, 1.0);
+    return vec4f(keyLit, select(1.0, in.coverage, u.twist.w > 0.5));
   }
   // Scene lights, with the MeshPass falloff and panel direction.
   var rgb = u.ambient.rgb * u.color.rgb * occlusion;
@@ -351,5 +351,5 @@ fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
     let visibility = select(1.0, shadowTransmittance(position), shadowed == index + 2);
     rgb += light.colorIntensity.rgb * light.colorIntensity.a * attenuation * visibility * shadeFiber(tangent, normal, view, direction, tube);
   }
-  return vec4f(min(rgb, vec3f(8.0)), 1.0);
+  return vec4f(min(rgb, vec3f(8.0)), select(1.0, in.coverage, u.twist.w > 0.5));
 }

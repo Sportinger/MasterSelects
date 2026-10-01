@@ -57,7 +57,9 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
   ...CLOTH_OPERATORS,
   operator('render.strands', 'Strand Render', 'Draws the connected curves as thin strands in the shared 3D scene.',
     [curves('curves', true)], [{ id: 'scene', label: 'Scene', type: 'scene' }],
-    [number('width', 'Width', 0.004, 0, 1, 0.0005), { id: 'color', label: 'Color', type: 'color', default: '#e8e2d6', animatable: true }],
+    [number('width', 'Width', 0.004, 0, 1, 0.0005), { id: 'color', label: 'Color', type: 'color', default: '#e8e2d6', animatable: true },
+      { id: 'antialiasing', label: 'Antialiasing', type: 'select', default: 'hashed', animatable: false,
+        options: [{ value: 'hashed', label: 'Hashed' }, { value: 'coverage4x', label: '4x Coverage' }] }],
     { bypass: 'mute' }),
 ];
 

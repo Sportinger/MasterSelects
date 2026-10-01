@@ -62,7 +62,7 @@ export function createSceneTargets(
   const depthTexture = device.createTexture({
     size: { width, height },
     format: SCENE_DEPTH_FORMAT,
-    usage: GPUTextureUsage.RENDER_ATTACHMENT,
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
   });
   const depthView = depthTexture.createView();
 

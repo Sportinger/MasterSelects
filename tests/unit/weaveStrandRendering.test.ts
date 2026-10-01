@@ -59,6 +59,29 @@ describe('Weave strand rendering', () => {
     expect(validateWorkerGpuFrameStackContract(structuredClone(stack), admission).ok).toBe(false);
   });
 
+  it('keeps old graphs on hashed rendering and transports an explicit coverage choice', () => {
+    const graph = createWaveStrandsGraph();
+    expect(program().render?.antialiasing).toBeUndefined();
+    graph.nodes.find(node => node.id === 'render')!.constants!.antialiasing = 'coverage4x';
+    const quality = compileGeometryGraph(graph, geometryParameterReader({}));
+    expect(quality.render?.antialiasing).toBe('coverage4x');
+    expect(isGeometryProgram(structuredClone(quality))).toBe(true);
+    expect(isGeometryProgram({ ...quality, render: { ...quality.render, antialiasing: 'unknown' } })).toBe(false);
+    const { stack, admission, payload } = nativeSceneFixture();
+    const base = payload.layers[0];
+    (payload.layers as unknown[]).push({ layerId: 'quality-strands', clipId: base.clipId,
+      worldMatrix: [...base.worldMatrix], opacity: 1, kind: 'strands', effectId: 'fx-weave', program: quality });
+    expect(validateWorkerGpuFrameStackContract(structuredClone(stack), admission).ok).toBe(true);
+  });
+
+  it('preserves the coverage choice through stored effect graphs and frame sampling', () => {
+    const graph = createDefaultWeaveGraph();
+    graph.nodes.find(node => node.id === 'render')!.constants!.antialiasing = 'coverage4x';
+    const effects = [weave({ operatorGraph: JSON.parse(JSON.stringify(graph)) })];
+    expect(buildStrandsLayerSources({ id: 'clip', effects }, 5, [])[0].source.strands.program.render?.antialiasing)
+      .toBe('coverage4x');
+  });
+
   it('prepares draw data for ribbons', () => {
     const P = SEGMENT_HAS_PREVIOUS, N = SEGMENT_HAS_NEXT;
     expect(Array.from(strandSegmentStarts(Uint32Array.of(0, 4), Uint32Array.of(4, 3))))
