@@ -26,7 +26,7 @@ export type TrackOverlapPolicy = 'trim' | 'avoid' | 'stack';
  * sound. Visual tracks retain the existing 'trim' behavior.
  */
 export function getTrackOverlapPolicy(track: TimelineTrack | undefined): TrackOverlapPolicy {
-  if (track?.type === 'midi') return 'stack';
+  if (track?.type === 'midi' || track?.type === 'score') return 'stack';
   if (track?.type === 'audio') return 'avoid';
   return 'trim';
 }

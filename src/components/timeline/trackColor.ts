@@ -11,11 +11,15 @@ const DEFAULT_AUDIO_TRACK_COLOR = '#2d3b4d';
 // clip body lost it when #228 moved clips from the `.timeline-clip.midi` DOM rule
 // to the canvas renderer, which fills from this resolver).
 const MIDI_TRACK_COLOR = '#3a4050';
+// Score tracks (issue #366) get a warm parchment-leaning identity tint so they
+// read as notation, distinct from MIDI purple and audio blue.
+const SCORE_TRACK_COLOR = '#4a4433';
 export const TIMELINE_TRACK_COLOR_HIDDEN = 'transparent';
 
 const RESOLVE_VIDEO_TRACK_COLORS = ['rgba(66, 109, 136, 0.94)', 'rgba(223, 109, 11, 0.94)'] as const;
 const RESOLVE_AUDIO_TRACK_COLORS = ['rgba(223, 109, 11, 0.94)', 'rgba(67, 135, 99, 0.94)', 'rgba(67, 135, 99, 0.94)'] as const;
 const RESOLVE_MIDI_TRACK_COLOR = 'rgba(106, 91, 142, 0.94)';
+const RESOLVE_SCORE_TRACK_COLOR = 'rgba(142, 118, 91, 0.94)';
 
 export function getTrackLabelColor(track: Pick<TimelineTrack, 'labelColor'> | null | undefined): LabelColor {
   return track?.labelColor ?? 'none';
@@ -31,6 +35,10 @@ export function getTimelineTrackColor(
 
   if (track.type === 'midi') {
     return MIDI_TRACK_COLOR;
+  }
+
+  if (track.type === 'score') {
+    return SCORE_TRACK_COLOR;
   }
 
   if (track.type === 'video') {
@@ -64,5 +72,6 @@ export function getResolveTimelineTrackColor(
     return RESOLVE_AUDIO_TRACK_COLORS[Math.min(trackIndex, RESOLVE_AUDIO_TRACK_COLORS.length - 1)];
   }
   if (track.type === 'midi') return RESOLVE_MIDI_TRACK_COLOR;
+  if (track.type === 'score') return RESOLVE_SCORE_TRACK_COLOR;
   return COLORLESS_TRACK_COLOR;
 }

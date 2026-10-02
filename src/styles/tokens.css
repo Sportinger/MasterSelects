@@ -159,6 +159,11 @@
      docs/Features/Timeline.md "Track and Clip Colors". */
   --midi-color: #3a4050;
 
+  /* Score identity — warm parchment tint for score (notation) tracks, mirrored
+     as SCORE_TRACK_COLOR in src/components/timeline/trackColor.ts (canvas clip
+     bodies cannot read CSS vars). Keep the two in sync. */
+  --score-color: #4a4433;
+
   /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
      SPACING SCALE (4px base grid)
      â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */

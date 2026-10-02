@@ -11,7 +11,7 @@ import type { MidiInstrument } from '../../../types/midiClip';
 import type { LabelColor } from '../../mediaStore/types';
 
 export interface TrackActions {
-  addTrack: (type: 'video' | 'audio' | 'midi') => string;
+  addTrack: (type: 'video' | 'audio' | 'midi' | 'score') => string;
   removeTrack: (id: string) => void;
   reorderTrack: (trackId: string, targetTrackId: string, placeBelow: boolean) => void;
   renameTrack: (id: string, name: string) => void;
@@ -49,7 +49,7 @@ export interface TrackActions {
   clearStaleRuntimeAudioMeters: (maxAgeMs?: number, now?: number) => void;
   setTrackLocked: (id: string, locked: boolean) => void;
   setTrackHeight: (id: string, height: number) => void;
-  scaleTracksOfType: (type: 'video' | 'audio' | 'midi', delta: number, baselineHeight?: number) => void;
+  scaleTracksOfType: (type: 'video' | 'audio' | 'midi' | 'score', delta: number, baselineHeight?: number) => void;
   setTargetTrack: (trackId: string | null) => void;
   clearTargetTracks: () => void;
   setTrackParent: (trackId: string, parentTrackId: string | null) => void;

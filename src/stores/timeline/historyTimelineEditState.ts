@@ -124,6 +124,7 @@ export interface HistoryTimelineClipEditState {
   transitionOverlay?: TimelineClip['transitionOverlay'];
   midiData?: TimelineClip['midiData'];
   automation?: TimelineClip['automation'];
+  scoreData?: TimelineClip['scoreData'];
   vectorAnimationSettings?: SerializableClip['vectorAnimationSettings'];
   mathScene?: TimelineClip['mathScene'];
   motion?: TimelineClip['motion'];
@@ -406,6 +407,7 @@ export function createHistoryTimelineRuntimeRef(clip: TimelineClip): HistoryTime
     sourceType === 'text' ||
     sourceType === 'solid' ||
     sourceType === 'midi' ||
+    sourceType === 'score' ||
     sourceType === 'storyboard'
   ) {
     return {
@@ -605,6 +607,7 @@ export function toHistoryTimelineClipEditState(
     transitionOverlay: clip.transitionOverlay ?? clip.source?.transitionOverlay,
     midiData: clip.midiData,
     automation: clip.automation,
+    scoreData: clip.scoreData,
     vectorAnimationSettings: clip.source?.vectorAnimationSettings,
     mathScene: clip.mathScene,
     motion: clip.motion ? normalizeMotionLayerDefinition(clip.motion) : undefined,

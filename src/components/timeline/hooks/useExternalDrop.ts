@@ -268,7 +268,7 @@ export function useExternalDrop({
     const previewHasAudio = hasAudio ?? dragMetadataCacheRef.current?.hasAudio;
     const resolvedStartTime = resolveTrackStartTime(trackId, desiredStartTime, previewDuration);
 
-    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi') return null;
+    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi' || targetTrack.type === 'score') return null;
     if (!canDropExternalMediaPreviewOnTrack(targetTrack.type, { isAudio, isVideo })) return null;
 
     const replaceTarget = replaceMode
@@ -556,8 +556,8 @@ export function useExternalDrop({
       const dropCommand = planExternalDropCommand(e.dataTransfer);
       const documentDrop = readDocumentDrop(e.dataTransfer);
       if (!documentDrop.valid) return;
-      if (targetTrack?.type === 'midi') {
-        log.debug('External drops cannot be routed to MIDI tracks', {
+      if (targetTrack?.type === 'midi' || targetTrack?.type === 'score') {
+        log.debug('External drops cannot be routed to MIDI or score tracks', {
           commandKind: dropCommand.kind,
           trackId,
         });

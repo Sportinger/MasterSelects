@@ -70,7 +70,7 @@ export interface TimelineEmptyContextMenuModel {
 export interface CreateTimelineEmptyContextMenuModelInput {
   time: number;
   trackId: string;
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   canPasteClips?: boolean;
 }
 

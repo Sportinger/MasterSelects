@@ -323,6 +323,7 @@ export const ProjectClipFields = {
   "sourceType": { class: 'content', owner: 'timeline' },
   "midiData": { class: 'content', owner: 'timeline' },
   "automation": { class: 'content', owner: 'timeline' },
+  "scoreData": { class: 'content', owner: 'timeline' },
   "naturalDuration": { class: 'content', owner: 'timeline' },
   "liveInputId": { class: 'content', owner: 'timeline' },
   "linkedClipId": { class: 'content', owner: 'timeline' },

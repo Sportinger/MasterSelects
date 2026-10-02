@@ -177,6 +177,7 @@ function mergeRestoredSourceData(
 
 function isSelfContainedGeneratedClip(clip: HistoryTimelineClipEditState): boolean {
   return clip.sourceType === 'camera' ||
+    clip.sourceType === 'score' ||
     (clip.sourceType === 'flock' && Boolean(clip.flock)) || (
     clip.sourceType === 'model' && Boolean(clip.meshType)
   );
@@ -264,6 +265,7 @@ function createRestoredClip(
       transitionOverlay: clonePlain(clip.transitionOverlay),
       midiData: clonePlain(clip.midiData),
       automation: clonePlain(clip.automation),
+      scoreData: clonePlain(clip.scoreData),
       mathScene: clonePlain(clip.mathScene),
       motion: clip.motion
         ? normalizeMotionLayerDefinitionForLoad(clip.motion)

@@ -21,6 +21,7 @@ import type {
   MidiClipProvenance,
   MidiNote,
 } from '../../../types/midiClip';
+import type { ScoreData } from '../../../types/scoreClip';
 import type {
   MotionColor,
   MotionLayerDefinition,
@@ -47,6 +48,18 @@ export interface SolidClipActions {
 
 export interface MidiClipActions {
   addMidiClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  addScoreClip: (trackId: string, startTime: number, duration?: number) => string | null;
+  /**
+   * Replace a score clip's notation data (issue #366). The score editor mutates
+   * its own ScoreModel and commits whole-score snapshots through this action.
+   * `captureHistory:false` during live drags; the final commit captures one
+   * snapshot with `description` as the undo label (mirrors updateMidiNote).
+   */
+  updateScoreData: (
+    clipId: string,
+    scoreData: ScoreData,
+    options?: { captureHistory?: boolean; description?: string },
+  ) => void;
   renameMidiClip: (clipId: string, name: string) => void;
   clipRenameId: string | null;
   setClipRenameId: (clipId: string | null) => void;

@@ -11,6 +11,7 @@ import { buildHostedAgentFastV2EditorToolCatalog } from './fastV2EditorToolCatal
 import { buildAgentNodeCatalogContext } from '../../nodeGraph/agentNodeCatalog';
 import {
   fingerprintPublicTimelineStateV1,
+  isPublicTimelineFingerprintTrackTypeV1,
 } from '../wp1Spike/publicOperationContracts';
 import {
   HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST,
@@ -243,7 +244,11 @@ export async function buildHostedAgentFastV2BrowserRequest(
       startTime: clip.startTime,
       trackId: clip.trackId,
     })),
-    tracks: snapshot.tracks.map((track) => ({ id: track.id, type: track.type })),
+    // Track types outside the pinned v1 fingerprint contract (e.g. 'score')
+    // are excluded; their clips are fingerprint-ineligible anyway.
+    tracks: snapshot.tracks
+      .filter((track) => isPublicTimelineFingerprintTrackTypeV1(track.type))
+      .map((track) => ({ id: track.id, type: track.type as 'audio' | 'midi' | 'video' })),
   });
   return parseHostedAgentFastV2StartRequest({
     clientInstanceId: input.clientInstanceId,

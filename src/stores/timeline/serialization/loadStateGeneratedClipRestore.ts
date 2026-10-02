@@ -218,6 +218,32 @@ export async function createLoadStateGeneratedClip(params: {
     return meshClip;
   }
 
+  if (serializedClip.sourceType === 'score') {
+    log.debug('Restored score clip', {
+      clip: serializedClip.name,
+      measureCount: serializedClip.scoreData?.measures.length ?? 0,
+    });
+    return {
+      id: serializedClip.id,
+      trackId: serializedClip.trackId,
+      name: serializedClip.name || 'Score Clip',
+      file: new File([], 'score-clip.dat', { type: 'application/octet-stream' }),
+      startTime: serializedClip.startTime,
+      duration: serializedClip.duration,
+      inPoint: serializedClip.inPoint,
+      outPoint: serializedClip.outPoint,
+      source: {
+        type: 'score',
+        naturalDuration: serializedClip.naturalDuration ?? serializedClip.duration,
+      },
+      transform: serializedClip.transform,
+      effects: serializedClip.effects || [],
+      scoreData: serializedClip.scoreData ? structuredClone(serializedClip.scoreData) : undefined,
+      parentClipId: serializedClip.parentClipId,
+      isLoading: false,
+    };
+  }
+
   if (serializedClip.sourceType === 'midi') {
     log.debug('Restored MIDI clip', {
       clip: serializedClip.name,

@@ -157,11 +157,11 @@ export interface SavedDockTimelineLayout {
   trackHeaderWidth?: number;
   timelineSplitRatio?: number | null;
   trackHeights?: Record<string, number>;
-  trackTypeHeights?: Partial<Record<'video' | 'audio' | 'midi', number>>;
+  trackTypeHeights?: Partial<Record<'video' | 'audio' | 'midi' | 'score', number>>;
   trackVisibility?: Record<string, boolean>;
-  trackTypeVisibility?: Partial<Record<'video' | 'audio' | 'midi', boolean>>;
-  trackTypeCounts?: Partial<Record<'video' | 'audio' | 'midi', number>>;
-  trackTypeLayouts?: Partial<Record<'video' | 'audio' | 'midi', SavedDockTimelineTrackSlotLayout[]>>;
+  trackTypeVisibility?: Partial<Record<'video' | 'audio' | 'midi' | 'score', boolean>>;
+  trackTypeCounts?: Partial<Record<'video' | 'audio' | 'midi' | 'score', number>>;
+  trackTypeLayouts?: Partial<Record<'video' | 'audio' | 'midi' | 'score', SavedDockTimelineTrackSlotLayout[]>>;
 }
 
 export interface SavedDockTimelineTrackSlotLayout {

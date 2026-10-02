@@ -34,11 +34,13 @@ export function getTrackAudioSolo(track: TimelineTrack): boolean {
 /**
  * Tracks that produce audible output. MIDI tracks (issue #182) play through the
  * synth, so for mute/solo they form one group with audio tracks: soloing a MIDI
- * track must silence audio tracks and vice versa (issue #260). Video solo stays
- * a separate, visual-only group.
+ * track must silence audio tracks and vice versa (issue #260). Score tracks
+ * (issue #366) join the same group so their header M/S buttons behave like the
+ * other musical lanes, even though they emit no audio yet. Video solo stays a
+ * separate, visual-only group.
  */
 export function isAudibleTrack(track: Pick<TimelineTrack, 'type'>): boolean {
-  return track.type === 'audio' || track.type === 'midi';
+  return track.type === 'audio' || track.type === 'midi' || track.type === 'score';
 }
 
 /** True when any audible (audio or MIDI) track is soloed. */

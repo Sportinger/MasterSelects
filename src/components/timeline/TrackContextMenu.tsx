@@ -10,6 +10,7 @@ import { LABEL_COLORS, getLabelHex } from '../panels/media/labelColors';
 import { handleSubmenuHover, handleSubmenuLeave } from '../panels/media/submenuPosition';
 import { getTrackLabelColor, getTimelineTrackColor } from './trackColor';
 import {
+  createAddTrackCommands,
   createTrackColorSwatchCommands,
   createTrackContextMenuModel,
   executeTrackColorSwatchCommand,
@@ -21,9 +22,10 @@ import {
 export interface TrackContextMenuState {
   x: number;
   y: number;
-  trackId: string;
-  trackType: 'video' | 'audio' | 'midi';
-  trackName: string;
+  /** null = opened on empty header-column space: add-track commands only. */
+  trackId: string | null;
+  trackType: 'video' | 'audio' | 'midi' | 'score' | null;
+  trackName: string | null;
 }
 
 interface TrackContextMenuProps {
@@ -71,17 +73,54 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
 
   if (!menu) return null;
 
+  // Empty header-column variant: no target track, so only "add track" entries.
+  if (menu.trackId === null) {
+    const addCommands = createAddTrackCommands();
+    const runAddCommand = (command: TrackContextMenuCommand) => {
+      const executed = executeTrackContextMenuCommand(command, {
+        addTrack: (trackType) => useTimelineStore.getState().addTrack(trackType),
+        duplicateTrack: () => {},
+        deleteTrack: () => {},
+      });
+      if (executed) onClose();
+    };
+    return createPortal(
+      <div
+        ref={menuRef}
+        className="timeline-context-menu"
+        style={{
+          position: 'fixed',
+          left: adjustedPosition?.x ?? menu.x,
+          top: adjustedPosition?.y ?? menu.y,
+          zIndex: 10000,
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {addCommands.map(command => (
+          <div key={command.key} className="context-menu-item" onClick={() => runAddCommand(command)}>
+            {command.label}
+          </div>
+        ))}
+      </div>,
+      document.body
+    );
+  }
+
   const store = useTimelineStore.getState();
-  const track = store.tracks.find(t => t.id === menu.trackId);
-  const trackClipCount = store.clips.filter(c => c.trackId === menu.trackId).length;
-  const trackCount = store.tracks.filter(t => t.type === menu.trackType).length;
+  const menuTrackId = menu.trackId;
+  // The row handler always sets type+name alongside the id.
+  const menuTrackType = menu.trackType ?? 'video';
+  const menuTrackName = menu.trackName ?? '';
+  const track = store.tracks.find(t => t.id === menuTrackId);
+  const trackClipCount = store.clips.filter(c => c.trackId === menuTrackId).length;
+  const trackCount = store.tracks.filter(t => t.type === menuTrackType).length;
   const currentColor = getTrackLabelColor(track);
   const currentColorHex = currentColor === 'none'
     ? (track ? getTimelineTrackColor(track) : 'var(--bg-tertiary)')
     : getLabelHex(currentColor);
 
   const contextMenuModel = createTrackContextMenuModel({
-    trackName: menu.trackName,
+    trackName: menuTrackName,
     trackTypeCount: trackCount,
     trackClipCount,
   });
@@ -89,8 +128,8 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
   const runTrackCommand = (command: TrackContextMenuCommand) => {
     const executed = executeTrackContextMenuCommand(command, {
       addTrack: (trackType) => useTimelineStore.getState().addTrack(trackType),
-      duplicateTrack: () => useTimelineStore.getState().addTrack(menu.trackType),
-      deleteTrack: () => useTimelineStore.getState().removeTrack(menu.trackId),
+      duplicateTrack: () => useTimelineStore.getState().addTrack(menuTrackType),
+      deleteTrack: () => useTimelineStore.getState().removeTrack(menuTrackId),
     });
     if (executed) {
       onClose();
@@ -98,7 +137,7 @@ export function TrackContextMenu({ menu, onClose }: TrackContextMenuProps) {
   };
   const runColorCommand = (command: TrackColorSwatchCommand) => {
     const executed = executeTrackColorSwatchCommand(command, {
-      setTrackColor: (color: LabelColor) => useTimelineStore.getState().setTrackLabelColor(menu.trackId, color),
+      setTrackColor: (color: LabelColor) => useTimelineStore.getState().setTrackLabelColor(menuTrackId, color),
     });
     if (executed) {
       onClose();

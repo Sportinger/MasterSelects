@@ -22,7 +22,7 @@ import type {
   SliceCreator,
 } from './types';
 import { DEFAULT_TRANSFORM } from './constants';
-import { generateMidiClipId, generateMidiNoteId, generateTrackId } from './helpers/idGenerator';
+import { generateMidiClipId, generateMidiNoteId, generateScoreClipId, generateTrackId } from './helpers/idGenerator';
 import { captureSnapshot } from '../historyStore';
 import { Logger } from '../../services/logger';
 import {
@@ -256,6 +256,61 @@ export const createMidiClipSlice: SliceCreator<MidiClipActions> = (set, get) => 
 
     log.debug('Created MIDI clip', { clipId, trackId, startTime: safeStart, duration: safeDuration });
     return clipId;
+  },
+
+  addScoreClip: (trackId, startTime, duration = 4) => {
+    const { clips, tracks, updateDuration, invalidateCache } = get();
+    const track = tracks.find(t => t.id === trackId);
+
+    if (!track || track.type !== 'score') {
+      log.warn('Score clips can only be added to score tracks', { trackId, trackType: track?.type });
+      return null;
+    }
+
+    const safeStart = Math.max(0, startTime);
+    const safeDuration = Math.max(MIN_MIDI_CLIP_DURATION, duration);
+    const clipId = generateScoreClipId();
+
+    const scoreClip: TimelineClip = {
+      id: clipId,
+      trackId,
+      name: 'Score Clip',
+      // Score clips have no media file; use a placeholder like other data-only clips.
+      file: new File([], 'score-clip.dat', { type: 'application/octet-stream' }),
+      startTime: safeStart,
+      duration: safeDuration,
+      inPoint: 0,
+      outPoint: safeDuration,
+      source: { type: 'score', naturalDuration: safeDuration },
+      transform: { ...DEFAULT_TRANSFORM },
+      effects: [],
+      isLoading: false,
+    };
+
+    set({ clips: [...clips, scoreClip] });
+    updateDuration();
+    invalidateCache();
+
+    log.debug('Created score clip', { clipId, trackId, startTime: safeStart, duration: safeDuration });
+    return clipId;
+  },
+
+  updateScoreData: (clipId, scoreData, options) => {
+    const { clips, invalidateCache } = get();
+    const clip = clips.find(c => c.id === clipId);
+    if (!clip || clip.source?.type !== 'score') {
+      log.warn('Cannot update score data: not a score clip', { clipId });
+      return;
+    }
+
+    // Deep-clone so the durable store never aliases the editor's live ScoreModel.
+    const cloned = structuredClone(scoreData);
+    set({ clips: clips.map(c => (c.id === clipId ? { ...c, scoreData: cloned } : c)) });
+    invalidateCache();
+    // Live drags pass captureHistory:false; the final commit captures one snapshot.
+    if (options?.captureHistory !== false) {
+      captureSnapshot(options?.description ?? 'Edit score');
+    }
   },
 
   clipRenameId: null,

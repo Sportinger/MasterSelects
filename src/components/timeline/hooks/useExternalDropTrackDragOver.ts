@@ -61,7 +61,7 @@ export function useExternalDropTrackDragOver({
     const desiredStartTime = getDesiredStartTime(event.clientX);
     const preview = resolveImmediateDragPreview(event);
     const targetTrack = tracks.find((track) => track.id === trackId);
-    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi') {
+    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi' || targetTrack.type === 'score') {
       event.dataTransfer.dropEffect = 'none';
       setExternalDrag(null);
       return;

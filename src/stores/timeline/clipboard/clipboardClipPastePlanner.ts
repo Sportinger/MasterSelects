@@ -133,6 +133,7 @@ export function createPastedClipboardClipsPlan(
       transitionOverlay: clipData.transitionOverlay ? structuredClone(clipData.transitionOverlay) : undefined,
       mathScene: clipData.mathScene ? structuredClone(clipData.mathScene) : undefined,
       flock: flockCopy?.definition,
+      scoreData: clipData.scoreData ? structuredClone(clipData.scoreData) : undefined,
       motion: clipData.motion ? normalizeMotionLayerDefinition(clipData.motion) : undefined,
       thumbnails: clipData.thumbnails ? [...clipData.thumbnails] : undefined,
       waveform: clipData.waveform ? [...clipData.waveform] : undefined,

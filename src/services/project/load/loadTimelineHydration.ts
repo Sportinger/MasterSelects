@@ -274,6 +274,7 @@ export function convertProjectCompositionToStore(
         naturalDuration: c.naturalDuration,
         midiData: c.midiData ? structuredClone(c.midiData) : undefined,
         automation: c.automation ? structuredClone(c.automation) : undefined,
+        scoreData: c.scoreData ? structuredClone(c.scoreData) : undefined,
         thumbnails: c.thumbnails,
         linkedClipId: c.linkedClipId,
         linkedGroupId: c.linkedGroupId,

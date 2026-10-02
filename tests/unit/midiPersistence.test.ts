@@ -91,3 +91,46 @@ describe('MIDI persistence round-trip', () => {
     expect(restored).toMatchObject({ kind: 'gm', program: 0, isDrum: true });
   });
 });
+
+describe('Score persistence round-trip (issue #366)', () => {
+  beforeEach(() => {
+    resetTimeline();
+  });
+
+  it('preserves a score track and its clip through serialize/load', async () => {
+    const store = useTimelineStore.getState();
+    const trackId = store.addTrack('score');
+    const clipId = store.addScoreClip(trackId, 2, 6);
+    if (!clipId) throw new Error('Failed to create score clip');
+
+    // Score tracks default to the Wavetable Synth (GM) — issue #366 phase 4
+    const created = useTimelineStore.getState().tracks.find(t => t.id === trackId);
+    expect(created?.midiInstrument?.kind).toBe('gm');
+
+    const serialized = useTimelineStore.getState().getSerializableState();
+    const serializedClip = serialized.clips.find(c => c.id === clipId);
+    expect(serialized.tracks.find(t => t.id === trackId)?.type).toBe('score');
+    expect(serializedClip?.sourceType).toBe('score');
+
+    resetTimeline();
+    await useTimelineStore.getState().loadState(serialized);
+
+    const restored = useTimelineStore.getState();
+    const restoredTrack = restored.tracks.find(t => t.id === trackId);
+    const restoredClip = restored.clips.find(c => c.id === clipId);
+
+    expect(restoredTrack?.type).toBe('score');
+    expect(restoredClip?.source?.type).toBe('score');
+    expect(restoredClip?.startTime).toBeCloseTo(2);
+    expect(restoredClip?.duration).toBeCloseTo(6);
+  });
+
+  it('refuses score clips on non-score tracks', () => {
+    const store = useTimelineStore.getState();
+    const audioTrackId = store.addTrack('audio');
+    expect(store.addScoreClip(audioTrackId, 0, 4)).toBeNull();
+    const midiTrackId = store.addTrack('midi');
+    expect(store.addMidiClip(midiTrackId, 0, 4)).not.toBeNull();
+    expect(store.addScoreClip(midiTrackId, 0, 4)).toBeNull();
+  });
+});

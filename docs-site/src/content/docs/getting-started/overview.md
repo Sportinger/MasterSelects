@@ -50,6 +50,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Transition Compositions](/features/transition-compositions/) | Mapped-v3 transition source layout, templates, parity, and explicit legacy upgrades |
 | [Timeline Rulers](/features/timeline-rulers/) | Stacked multi-ruler lanes (time/timecode/frames/bars/tempo) via the **Rulers** checklist, TempoMap-driven bars+beats, and per-composition persistence (#257) |
 | [Tempo And Metronome](/features/tempo-and-metronome/) | Editable tempo track with BPM/meter flags and ramps, tempo-driven grid and snapping, MIDI content that follows tempo, and a metronome click (#299) |
+| [Score Tracks](/features/score-tracks/) | Audio-section score tracks with pencil-drawn score clips and a detached score-editor window — scorewriter infrastructure (#366) |
 | [Annotations](/features/annotations/) | Timed notes on compositions and source media: Annotations panel, ruler bars with drag/trim/keyboard nudge, clip linking, reader popover, project persistence |
 | [Consumer Contract](/features/consumer-contract/) | Checkout consent (Terms, Withdrawal Policy, immediate performance), contract confirmation email, online withdrawal form, and the §312k cancellation button |
 | [Slot Grid](/features/slot-grid/) | 12x4 live grid overlay, slot clip trimming, layer triggering, and deck warmup behavior |

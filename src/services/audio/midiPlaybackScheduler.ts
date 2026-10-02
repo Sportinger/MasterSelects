@@ -153,8 +153,13 @@ class MidiPlaybackScheduler {
     void this.context.resume?.().catch(() => {});
     const resolved = instrument ?? createDefaultMidiInstrument();
 
+    // Score tracks preview through their track bus too (issue #366 phase 4) —
+    // without this they fell back to a bare synth wired straight to the
+    // destination, bypassing volume/pan/EQ/FX/master.
     const track = trackId
-      ? useTimelineStore.getState().tracks.find((t) => t.id === trackId && t.type === 'midi')
+      ? useTimelineStore.getState().tracks.find(
+          (t) => t.id === trackId && (t.type === 'midi' || t.type === 'score'),
+        )
       : undefined;
     if (track) {
       const bus = this.getOrCreateBus(track.id, resolved);

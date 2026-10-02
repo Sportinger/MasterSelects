@@ -40,7 +40,7 @@ function clampTrackHeight(value: number): number {
   return Math.max(MIN_TRACK_HEIGHT, Math.min(MAX_TRACK_HEIGHT, value));
 }
 
-type TimelineTrackCreationType = 'video' | 'audio' | 'midi';
+type TimelineTrackCreationType = 'video' | 'audio' | 'midi' | 'score';
 
 function createTrackId(type: TimelineTrackCreationType): string {
   return `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -51,7 +51,8 @@ export function createTimelineTrackForType(
   tracks: readonly TimelineTrack[],
 ): TimelineTrack {
   const typeCount = tracks.filter(t => t.type === type).length + 1;
-  const typeLabel = type === 'video' ? 'Video' : type === 'midi' ? 'MIDI' : 'Audio';
+  const typeLabel =
+    type === 'video' ? 'Video' : type === 'midi' ? 'MIDI' : type === 'score' ? 'Score' : 'Audio';
   return {
     id: createTrackId(type),
     name: `${typeLabel} ${typeCount}`,
@@ -60,7 +61,9 @@ export function createTimelineTrackForType(
     muted: false,
     visible: true,
     solo: false,
-    ...(type === 'midi' ? { midiInstrument: createDefaultMidiInstrument() } : {}),
+    // MIDI and score tracks render notes through an instrument; both default
+    // to the Wavetable Synth (GM piano) — issue #366 phase 4 for score.
+    ...(type === 'midi' || type === 'score' ? { midiInstrument: createDefaultMidiInstrument() } : {}),
   };
 }
 
@@ -656,7 +659,7 @@ export const createTrackSlice: SliceCreator<TrackActions> = (set, get) => ({
     const { tracks } = get();
     set({
       tracks: tracks.map(track => {
-        if (track.id !== trackId || track.type !== 'midi') return track;
+        if (track.id !== trackId || (track.type !== 'midi' && track.type !== 'score')) return track;
         const current: MidiInstrument = track.midiInstrument ?? createDefaultMidiInstrument();
 
         // Changing the instrument *kind* swaps to a clean default for that kind

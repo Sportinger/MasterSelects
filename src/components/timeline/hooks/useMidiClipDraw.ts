@@ -1,7 +1,8 @@
 // useMidiClipDraw — pencil-tool drawing of MIDI clip regions (issue #182).
 //
 // When the `midi-draw` tool is active, click-dragging on empty space of a MIDI
-// track lane paints a new MIDI clip spanning the dragged time range. Free
+// track lane paints a new MIDI clip spanning the dragged time range. Score
+// tracks (issue #366) reuse the same pencil gesture to paint score clips. Free
 // placement, no grid snapping (per the locked-in plan decision). A plain click
 // (no drag) creates a default-length clip at the click position.
 //
@@ -69,7 +70,7 @@ export function useMidiClipDraw({
       if (!laneEl || !trackId) return;
 
       const track = tracks.find((t) => t.id === trackId);
-      if (!track || track.type !== 'midi' || track.locked) return;
+      if (!track || (track.type !== 'midi' && track.type !== 'score') || track.locked) return;
 
       // Measure time against the clip row's left edge (time-zero origin), not the
       // outer track stack — the stack includes the header column, which otherwise
@@ -124,7 +125,11 @@ export function useMidiClipDraw({
         duration = Math.max(0.05, endTime - startTime);
       }
 
-      const clipId = useTimelineStore.getState().addMidiClip(draw.trackId, startTime, duration);
+      const store = useTimelineStore.getState();
+      const track = store.tracks.find((t) => t.id === draw.trackId);
+      const clipId = track?.type === 'score'
+        ? store.addScoreClip(draw.trackId, startTime, duration)
+        : store.addMidiClip(draw.trackId, startTime, duration);
       if (clipId) {
         useTimelineStore.getState().selectClip(clipId, false);
       }

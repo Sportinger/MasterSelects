@@ -69,7 +69,7 @@ function TimelineHeaderComponent({
   const trackVolumeUnit = Math.max(0, Math.min(1, (trackVolumeDb + 60) / 78));
   const isAudioTrack = track.type === 'audio';
   const isMidiTrack = track.type === 'midi';
-  const isMixerTrack = isAudioTrack || isMidiTrack;
+  const isMixerTrack = isAudioTrack || isMidiTrack || track.type === 'score'; // score: MIDI strip without instrument
   const audioHeaderDensity = isMixerTrack
     ? getAudioTrackHeaderDensity(baseHeight)
     : null;
@@ -93,7 +93,7 @@ function TimelineHeaderComponent({
     useTimelineHeaderResolvePresentation({
       showTimelineTrackColor, targetTrackId, track, tracks, trackTypeIndex,
     });
-  const isMidiDefaultTint = isMidiTrack && (!track.labelColor || track.labelColor === 'none');
+  const defaultTintClass = (isMidiTrack || track.type === 'score') && (!track.labelColor || track.labelColor === 'none') ? `${track.type}-default-tint` : '';
   const trackHeaderStyle = {
     height: dynamicHeight,
     '--track-color': trackColor,
@@ -177,7 +177,7 @@ function TimelineHeaderComponent({
 
   return (
     <div
-      className={`track-header ${track.type} ${isMixerTrack ? 'mixer' : ''} ${isMidiDefaultTint ? 'midi-default-tint' : ''} ${isDimmed ? 'dimmed' : ''} ${
+      className={`track-header ${track.type} ${isMixerTrack ? 'mixer' : ''} ${defaultTintClass} ${isDimmed ? 'dimmed' : ''} ${
         isExpanded ? 'expanded' : ''
       } ${track.locked ? 'locked' : ''} ${
         isMutedTrack ? 'track-muted' : ''
@@ -225,7 +225,7 @@ function TimelineHeaderComponent({
         {showAudioSummaryMeter && <TimelineHeaderAudioSummaryMeter />}
         <div className="track-header-main">
           <span className="resolve-track-index" aria-hidden="true">{resolveTrackCode}</span>
-          {isMixerTrack && <TimelineHeaderMixerTypeBadge isMidiTrack={isMidiTrack} />}
+          {isMixerTrack && <TimelineHeaderMixerTypeBadge trackType={track.type === 'video' ? 'audio' : track.type} />}
           {(track.type === 'video' || isMixerTrack) && (
             <span
               className={`track-expand-arrow ${isExpanded ? 'expanded' : ''} ${

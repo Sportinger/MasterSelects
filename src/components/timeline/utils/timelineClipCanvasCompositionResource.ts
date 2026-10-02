@@ -65,7 +65,7 @@ export function getTimelineClipCanvasCompositionSegmentThumbnailSlotUrls(
 export interface TimelineClipCanvasCompositionResourceClipInput {
   isComposition?: boolean;
   compositionId?: string;
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   source?: {
     type?: string | null;
   } | null;

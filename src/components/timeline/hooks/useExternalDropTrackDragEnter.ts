@@ -51,7 +51,7 @@ export function useExternalDropTrackDragEnter({
     }
 
     const targetTrack = tracks.find((track) => track.id === trackId);
-    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi') {
+    if (!targetTrack || targetTrack.locked || targetTrack.type === 'midi' || targetTrack.type === 'score') {
       event.dataTransfer.dropEffect = 'none';
       setExternalDrag(null);
       return;

@@ -38,6 +38,7 @@ import { KernelOperationRoundTripV1 } from '../kernelClient/wp1Spike/operationRo
 import {
   canonicalPublicTimelineStateV1,
   fingerprintPublicTimelineStateV1,
+  isPublicTimelineFingerprintTrackTypeV1,
 } from '../kernelClient/wp1Spike/publicOperationContracts';
 import { resolveClipTranscriptWords } from '../transcription/clipTranscriptResolver';
 import {
@@ -340,12 +341,10 @@ function createKernelOperationRoundTrip(
     dependencies: {
       dispatch: createWp1EditorOperationDispatcher(executeAIToolCalls),
       getCommittedStateFingerprint: async () => {
-        const { clips, tracks } = useTimelineStore.getState();
-        return fingerprintPublicTimelineStateV1({ clips, tracks });
+        return fingerprintPublicTimelineStateV1(currentFingerprintContractTimelineState());
       },
       getPreparedStateFingerprint: async () => {
-        const { clips, tracks } = useTimelineStore.getState();
-        return fingerprintPublicTimelineStateV1({ clips, tracks });
+        return fingerprintPublicTimelineStateV1(currentFingerprintContractTimelineState());
       },
       getTimelineRevision,
       transaction: createWp1AgentTransactionAdapter(),
@@ -549,14 +548,28 @@ async function runHostedFastV2Session(input: {
   }
 }
 
+// The pinned v1 fingerprint contract only understands audio/midi/video tracks.
+// Editor-only track types (e.g. 'score') are excluded here; their clips are
+// fingerprint-ineligible, so the digest matches a timeline without them.
+function currentFingerprintContractTimelineState() {
+  const { clips, tracks } = useTimelineStore.getState();
+  return {
+    clips,
+    tracks: tracks.filter(
+      (track): track is typeof track & { type: 'audio' | 'midi' | 'video' } =>
+        isPublicTimelineFingerprintTrackTypeV1(track.type),
+    ),
+  };
+}
+
 function currentFastV2ReloadTimelineCheckpoint(): {
   timelineRevision: number;
   timelineStateCanonical: string;
 } {
-  const { clips, timelineRevision, tracks } = useTimelineStore.getState();
+  const { timelineRevision } = useTimelineStore.getState();
   return {
     timelineRevision,
-    timelineStateCanonical: JSON.stringify(canonicalPublicTimelineStateV1({ clips, tracks })),
+    timelineStateCanonical: JSON.stringify(canonicalPublicTimelineStateV1(currentFingerprintContractTimelineState())),
   };
 }
 

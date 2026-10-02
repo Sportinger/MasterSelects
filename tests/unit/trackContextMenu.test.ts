@@ -18,6 +18,7 @@ describe('track context menu model', () => {
       { key: 'add-video-track', label: '+ Add Video Track', kind: 'add-track', trackType: 'video' },
       { key: 'add-audio-track', label: '+ Add Audio Track', kind: 'add-track', trackType: 'audio' },
       { key: 'add-midi-track', label: '+ Add MIDI Track', kind: 'add-track', trackType: 'midi' },
+      { key: 'add-score-track', label: '+ Add Score Track', kind: 'add-track', trackType: 'score' },
     ]);
     expect(model.duplicateCommand).toEqual({
       key: 'duplicate-track',
@@ -75,11 +76,13 @@ describe('track context menu model', () => {
 
     expect(executeTrackContextMenuCommand(model.addTrackCommands[0], handlers)).toBe(true);
     expect(executeTrackContextMenuCommand(model.addTrackCommands[1], handlers)).toBe(true);
+    expect(executeTrackContextMenuCommand(model.addTrackCommands[3], handlers)).toBe(true);
     expect(executeTrackContextMenuCommand(model.duplicateCommand, handlers)).toBe(true);
     expect(executeTrackContextMenuCommand(model.deleteCommand, handlers)).toBe(true);
 
     expect(addTrack).toHaveBeenNthCalledWith(1, 'video');
     expect(addTrack).toHaveBeenNthCalledWith(2, 'audio');
+    expect(addTrack).toHaveBeenNthCalledWith(3, 'score');
     expect(duplicateTrack).toHaveBeenCalledTimes(1);
     expect(deleteTrack).toHaveBeenCalledTimes(1);
   });

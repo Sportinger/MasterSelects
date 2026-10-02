@@ -30,7 +30,7 @@ export interface ClipboardClipData {
   trackingBinding?: import('../../../types/trackingBinding').TrackingBinding;
   id: string;
   trackId: string;
-  trackType: 'video' | 'audio' | 'midi';
+  trackType: 'video' | 'audio' | 'midi' | 'score';
   name: string;
   mediaFileId?: string;
   liveInputId?: string;
@@ -67,6 +67,8 @@ export interface ClipboardClipData {
   transitionOverlay?: TransitionOverlayClipDefinition;
   mathScene?: MathSceneDefinition;
   flock?: import('../../../types/flock').FlockDefinition;
+  // Score clip notation data (issue #366)
+  scoreData?: import('../../../types/scoreClip').ScoreData;
   motion?: MotionLayerDefinition;
   vectorAnimationSettings?: VectorAnimationClipSettings;
   cameraSettings?: SceneCameraSettings;

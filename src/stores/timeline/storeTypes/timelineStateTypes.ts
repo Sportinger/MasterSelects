@@ -68,7 +68,7 @@ export interface TimelineState {
   selectedClipIds: Set<string>;
   primarySelectedClipId: string | null;
   propertiesSelection: TimelinePropertiesSelection;
-  targetTrackIdByType: Partial<Record<'video' | 'audio' | 'midi', string>>;
+  targetTrackIdByType: Partial<Record<'video' | 'audio' | 'midi' | 'score', string>>;
   layers: Layer[];
   selectedLayerId: string | null;
   inPoint: number | null;

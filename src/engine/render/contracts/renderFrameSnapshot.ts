@@ -84,7 +84,7 @@ export interface RenderTimelineClipSource {
 export interface RenderTimelineTrackSnapshot {
   readonly id: string;
   readonly name: string;
-  readonly type: 'video' | 'audio' | 'midi';
+  readonly type: 'video' | 'audio' | 'midi' | 'score';
   readonly height: number;
   readonly labelColor?: RenderLabelColor;
   readonly muted: boolean;

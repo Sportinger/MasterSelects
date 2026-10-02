@@ -26,7 +26,7 @@ const preparedWaveforms = new WeakMap<object, Array<{
 export type TimelineClipCanvasWaveformPyramidMap = ReadonlyMap<string, TimelineWaveformPyramid | null>;
 
 export interface TimelineClipCanvasWaveformResourceClipInput {
-  trackType?: 'video' | 'audio' | 'midi';
+  trackType?: 'video' | 'audio' | 'midi' | 'score';
   startTime: number;
   duration: number;
   inPoint?: number;
