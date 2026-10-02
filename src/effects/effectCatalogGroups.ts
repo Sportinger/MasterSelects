@@ -7,7 +7,7 @@ export const EFFECT_GROUPS = [
   { id: 'color', label: 'Color & Tone', effects: ['brightness', 'contrast', 'exposure', 'levels', 'saturation', 'vibrance', 'temperature', 'hue-shift', 'invert', 'posterize', 'threshold'] },
   { id: 'blur', label: 'Blur & Sharpen', effects: ['box-blur', 'gaussian-blur', 'motion-blur', 'radial-blur', 'zoom-blur', 'sharpen'] },
   { id: 'stylize', label: 'Light & Stylize', effects: ['glow', 'vignette', 'edge-detect', 'acuarela', 'rom1'] },
-  { id: 'distort', label: 'Lens & Distort', effects: ['fisheye', 'bulge', 'twirl', 'wave', 'kaleidoscope', 'mirror', 'rgb-split', 'crystal', 'glass-dispersion', 'film-prism', 'holo'] },
+  { id: 'distort', label: 'Lens & Distort', effects: ['lens-correction', 'guided-perspective', 'fisheye', 'bulge', 'twirl', 'wave', 'kaleidoscope', 'mirror', 'rgb-split', 'crystal', 'glass-dispersion', 'film-prism', 'holo'] },
   { id: 'pixel', label: 'Pixel & Mosaic', effects: ['pixelate', 'block-mosaic', 'blockify', 'quadtree-zoom', 'scatter-mosaic', 'pixel-poster', 'pixel-sort', 'voronoi'] },
   { id: 'print', label: 'Print & Halftone', effects: ['halftone', 'pattern-halftone', 'dither', 'dither-studio', 'riso', 'riso-glow', 'paper-print', 'tone-geometry'] },
   { id: 'lines', label: 'Lines & Engraving', effects: ['crosshatch', 'vector-tiling', 'contour', 'contour-map', 'outline', 'wave-lines', 'drift-lines'] },

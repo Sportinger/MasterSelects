@@ -143,7 +143,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
     if (existingFlocking) return existingFlocking.id;
     const effect: Effect = {
       id: generateEffectId(),
-      name: effectType === FLOCKING_EFFECT_TYPE ? 'Flocking' : effectType,
+      name: effectType === FLOCKING_EFFECT_TYPE ? 'Flocking' : effectType === 'lens-correction' ? 'Lens Correction' : effectType === 'guided-perspective' ? 'Guided Perspective' : effectType,
       type: effectType as EffectType,
       enabled: true,
       params: { ...getDefaultEffectParams(effectType), ...(effectType === 'slit-scan' ? {

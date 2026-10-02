@@ -1,3 +1,4 @@
+import { getRenderableImageBlob } from '../../../services/rawImage/rawImageDecode';
 // Media info extraction helpers
 
 import { CONTAINER_MAP, MEDIA_INFO_TIMEOUT } from '../constants';
@@ -270,6 +271,7 @@ export async function getMediaInfo(
     return getVideoMediaInfo(file, container);
   }
 
+  const imageBlob = type === 'image' ? await getRenderableImageBlob(file) : undefined;
   return new Promise((resolve) => {
     const timeout = setTimeout(() => {
       log.warn('Timeout:', file.name);
@@ -283,8 +285,7 @@ export async function getMediaInfo(
 
     if (type === 'image') {
       const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.src = url;
+      const url = URL.createObjectURL(imageBlob!);
       img.onload = () => {
         resolve({ width: img.width, height: img.height, container, fileSize });
         cleanup(url);
@@ -293,6 +294,7 @@ export async function getMediaInfo(
         resolve({ container, fileSize });
         cleanup(url);
       };
+      img.src = url;
     } else if (type === 'audio') {
       const audio = document.createElement('audio');
       const url = URL.createObjectURL(file);

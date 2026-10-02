@@ -1,3 +1,4 @@
+import { getRenderableImageBlob } from '../../../services/rawImage/rawImageDecode';
 // Thumbnail creation and deduplication
 
 import { THUMBNAIL_TIMEOUT } from '../constants';
@@ -24,9 +25,9 @@ export async function createThumbnail(
   type: 'video' | 'image',
   videoMetadata?: { videoCodecId?: string; duration?: number },
 ): Promise<string | undefined> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     if (type === 'image') {
-      void createImageThumbnail(file).then(resolve);
+      void createImageThumbnail(file).then(resolve, reject);
       return;
     }
 
@@ -162,9 +163,10 @@ function createVideoThumbnail(file: File): Promise<string | undefined> {
 }
 
 async function createImageThumbnail(file: File): Promise<string | undefined> {
+  const imageBlob = await getRenderableImageBlob(file);
   if (typeof createImageBitmap === 'function') {
     try {
-      const bitmap = await createImageBitmap(file);
+      const bitmap = await createImageBitmap(imageBlob);
       try {
         return await drawThumbnailFromSource(bitmap, bitmap.width, bitmap.height);
       } finally {
@@ -177,7 +179,7 @@ async function createImageThumbnail(file: File): Promise<string | undefined> {
 
   return new Promise((resolve) => {
     const image = new Image();
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(imageBlob);
 
     const timeout = setTimeout(() => {
       log.warn('Image thumbnail timeout:', file.name);

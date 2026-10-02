@@ -2,6 +2,8 @@
 // Renders UI controls based on effect parameter definitions
 
 import React, { Suspense } from 'react';
+import { LensCorrectionControls } from '../components/panels/properties/LensCorrectionControls';
+import { GuidedPerspectiveControls } from '../components/panels/properties/GuidedPerspectiveControls';
 import { EFFECT_REGISTRY } from './index';
 import type { EffectParam } from './types';
 import { EXTRA_CONTROLS_REGISTRY } from './extraControlsRegistry';
@@ -30,6 +32,8 @@ export function EffectControls({
 }: EffectControlsComponentProps) {
   const effect = EFFECT_REGISTRY.get(effectType);
   if (!effect) return null;
+  if (effectType === 'lens-correction') return <LensCorrectionControls effectId={effectType} params={params} onChange={onChange} clipId={clipId} />;
+  if (effectType === 'guided-perspective') return <GuidedPerspectiveControls effectId={effectType} params={params} onChange={onChange} clipId={clipId} />;
 
   // Check if effect has custom controls
   if (effect.customControls) {

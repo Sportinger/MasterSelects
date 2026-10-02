@@ -7,7 +7,7 @@ import { renderHostPort } from '../render/renderHostPort';
 import { flags } from '../../engine/featureFlags';
 import {
   createMediaObjectUrl,
-  createPrimaryMediaObjectUrl,
+  createRenderablePrimaryMediaObjectUrl,
   getLazyMediaElementObjectUrlKey,
   mediaObjectUrlManager,
 } from '../project/mediaObjectUrlManager';
@@ -220,10 +220,10 @@ function ensureNativeReferenceResolved(mediaFile: MediaFile, sourceUrl: string):
   if (nativeReferenceResolutions.has(resolutionKey)) return;
 
   const resolution = getNativeReferencedFile(sourceUrl, mediaFile.name)
-    .then((file) => {
+    .then(async (file) => {
       if (!file) return;
 
-      const url = createPrimaryMediaObjectUrl(mediaFile.id, file);
+      const url = await createRenderablePrimaryMediaObjectUrl(mediaFile.id, file);
       useMediaStore.setState((state) => ({
         files: state.files.map((entry) => (
           entry.id === mediaFile.id

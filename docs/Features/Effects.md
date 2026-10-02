@@ -1643,3 +1643,68 @@ evaluates them throughout the simulation for playback and export. Segment count,
 connections, attachment locks, color and rendering style remain static settings.
 
 Bypassing an effect automatically collapses its inspector entry and node group. Re-enabling keeps it collapsed; it can still be expanded manually. Adding effects from the Effects panel also updates the connected node layout.
+
+## Lens Correction
+
+**Lens Correction** appears under **Lens & Distort** and works on photos and
+video, including imported Canon CR2 images. Its collapsible inspector uses the
+shared slider, numeric entry, reset, and keyframe controls.
+
+The **Lens profile** dropdown starts in **Manual**. The first measured profile is
+**Canon EF 24–105mm f/4L IS USM** (the original EF lens, not the II or RF variants).
+Selecting it copies focal length and aperture from imported CR2 metadata when
+available. The inspector also displays the detected lens. Set these values
+manually for other media. Sensor Crop defaults to 1 for full-frame EOS cameras;
+use 1.6 for Canon APS-C. Focus Distance defaults to 1000 m (approximately infinity)
+because dependable focus-distance metadata is not available.
+
+Profile corrections use the bundled Lensfun full-frame PTLens distortion,
+poly3 lateral chromatic-aberration, and PA vignetting calibrations. Coefficients
+are linearly interpolated across focal length and aperture, and inverse focus
+distance; endpoints are clamped. Vignette compensation operates in linear sRGB.
+This is an independent implementation using measured Lensfun data, not Adobe
+Camera Raw/LCP compatibility or a claim of matching Photoshop's output. Profile
+selection and numeric settings persist in project data and participate in undo;
+numeric controls support keyframes. Manual adjustments below are added on top.
+
+- **Geometry:** Remove Distortion controls radial barrel/pincushion correction;
+  negative values sample inward to correct barrel distortion, positive values
+  correct pincushion distortion. Fine Distortion adds a fourth-order adjustment.
+  Scale zooms to crop uncovered borders; Optical Center X/Y moves the lens center.
+- **Chromatic aberration:** Red/Cyan Fringe and Blue/Yellow Fringe independently
+  scale the red and blue channels around the optical center.
+- **Vignette:** Positive Amount lifts dark corners, negative Amount darkens them;
+  Midpoint controls where the falloff starts.
+
+The default is an identity transform. Uncovered borders are transparent, and
+corrections are nondestructive, saved with the effect, and applied during export.
+Selecting a profile is explicit; automatic matching and other lens variants are
+not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed
+in [Third-party notices](../../THIRD_PARTY_NOTICES.md#lensfun-lens-calibration-data).
+
+## Guided Perspective
+
+**Guided Perspective**, under **Lens & Distort**, corrects converging lines caused
+by camera perspective. Add it after **Lens Correction**, then choose **Edit guides**.
+The still-image guide editor includes preceding enabled Lens Correction effects,
+so guides are drawn on the optically corrected photo.
+
+Select **Vertical** and draw at least two guides along different parallel edges
+that should be vertical, or choose **Horizontal** for horizontal scene edges.
+Both direction buttons are directly visible and show their guide counts. Use up
+to eight guides per direction; a homogeneous least-squares vanishing-point fit
+combines all lines in each group. Use parallel edges from one scene direction,
+not unrelated edges from different walls. Drag endpoint handles to refine
+the lines; focused endpoints also move with arrow keys, with Shift for larger
+steps. Delete selected guide and Clear guides remove draft lines. Apply correction
+commits one undoable change; Cancel leaves the effect unchanged.
+
+The effect derives a projective transform from the guide vanishing points and fits
+the entire photo with uniform scale. **Scale** can crop transparent borders;
+**Strength** blends back toward the original geometry. Both support keyframes.
+Guides and correction persist in the project and render during export. Duplicate,
+short, incomplete, and unstable guide pairs are rejected with an explanation.
+Drawing guides currently supports still images, including CR2. The guide photo
+does not include other preceding geometry effects, so place this effect directly
+after Lens Correction. Perspective correction does not remove curved lens
+distortion or independently straighten several surfaces with different planes.

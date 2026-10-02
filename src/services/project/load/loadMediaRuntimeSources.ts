@@ -11,7 +11,7 @@ import { readProjectMediaSourceFile } from '../mediaSourceRoots';
 import { isRestoredMediaSourceCompatible } from '../mediaSourceValidation';
 import {
   createMediaObjectUrl,
-  createPrimaryMediaObjectUrl,
+  createRenderablePrimaryMediaObjectUrl,
   getGaussianSplatSequenceFrameObjectUrlKey,
   getModelSequenceFrameObjectUrlKey,
 } from '../mediaObjectUrlManager';
@@ -225,7 +225,7 @@ export async function hydrateProjectMediaRuntimeSources(
         if (!candidate.size || (!trustSavedLocation && !await isRestoredMediaSourceCompatible(pm, candidate, storedProjectHandle))) throw new Error('Stored project media does not match');
         file = candidate;
         handle = storedProjectHandle;
-        url = createPrimaryMediaObjectUrl(pm.id, file);
+        url = await createRenderablePrimaryMediaObjectUrl(pm.id, file);
         resolvedProjectPath = resolvedProjectPath || 'Raw/' + storedProjectHandle.name;
         // The project handle is already durable; reopening only needs the primary runtime binding.
         fileSystemService.storeFileHandle(pm.id, storedProjectHandle);
@@ -254,7 +254,7 @@ export async function hydrateProjectMediaRuntimeSources(
 
         file = result.file;
         handle = result.handle;
-        url = createPrimaryMediaObjectUrl(pm.id, file);
+        url = await createRenderablePrimaryMediaObjectUrl(pm.id, file);
         resolvedProjectPath = candidatePath;
         const projectHandle = result.handle;
         if (projectHandle) await cacheProjectFileHandle(pm.id, projectHandle, true);
@@ -274,7 +274,7 @@ export async function hydrateProjectMediaRuntimeSources(
     if (restored?.file.size && (trustSavedLocation || await isRestoredMediaSourceCompatible(pm, restored.file, restored.handle))) {
       file = restored.file;
       handle = restored.handle;
-      url = createPrimaryMediaObjectUrl(pm.id, file);
+      url = await createRenderablePrimaryMediaObjectUrl(pm.id, file);
       // Remember external originals too: next reopen goes straight to this handle,
       // without first searching nonexistent Raw paths in the converted folder.
       await cacheProjectFileHandle(pm.id, handle, true);
@@ -305,7 +305,7 @@ export async function hydrateProjectMediaRuntimeSources(
           const candidate = await handle.getFile();
           if (candidate.size && (trustSavedLocation || await isRestoredMediaSourceCompatible(pm, candidate, handle))) {
             file = candidate;
-            url = createPrimaryMediaObjectUrl(pm.id, file);
+            url = await createRenderablePrimaryMediaObjectUrl(pm.id, file);
             log.info('Restored file from handle:', pm.name);
           }
         } else {

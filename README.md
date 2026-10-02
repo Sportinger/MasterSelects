@@ -32,6 +32,14 @@ Large audio timelines prepare waveform columns within the canvas viewport and re
 
 Multicam camera tiles adapt their render resolution to the panel and reuse unchanged video frames. The main preview retains its selected quality and original source decoding. During scrubbing, the program camera shares the main preview's source while other cameras catch up on release. Playback clock updates stay local to the timeline's time display and playhead; inactive preview overlays do not subscribe to the running clock. See [Preview](docs/Features/Preview.md#multi-preview).
 
+Canon CR2 photos import at full resolution through browser-local RAW development,
+with the original files preserved. Source Monitor fits the complete photo and
+provides Fit view to reset zoom and pan. Lens Correction includes a Canon EF
+24–105 mm f/4L IS USM profile dropdown, CR2 exposure metadata, and manual
+distortion, chromatic aberration, and vignette controls. Guided Perspective
+straightens photographed edges with up to eight guides per direction. See
+[Media Panel](docs/Features/Media-Panel.md) and [Effects](docs/Features/Effects.md#lens-correction).
+
 ### Node graphs
 
 Flock includes Terracotta and Lilac Sculpture presets: dense, low-gravity

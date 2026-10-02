@@ -1,3 +1,5 @@
+import { isRawImageFile } from '../rawImage/rawImageDecode';
+import { createRenderablePrimaryMediaObjectUrl } from '../project/mediaObjectUrlManager';
 import type {
   GaussianSplatSequenceData,
   ModelSequenceData,
@@ -155,7 +157,9 @@ export async function resolveLoadStateMediaRuntimeReference(params: {
 
   let loadFile = mediaFile.file;
   let fileUrl = loadFile
-    ? (deferObjectUrlRestore ? mediaFile.url : createObjectUrl(loadFile))
+    ? (sourceType === 'image' && isRawImageFile(loadFile)
+      ? await createRenderablePrimaryMediaObjectUrl(mediaFile.id, loadFile)
+      : (deferObjectUrlRestore ? mediaFile.url : createObjectUrl(loadFile)))
     : mediaFile.url;
 
   if (
@@ -169,7 +173,9 @@ export async function resolveLoadStateMediaRuntimeReference(params: {
       loadFile = referencedFile;
       fileUrl = isVectorAnimationSourceType(sourceType)
         ? fileUrl
-        : createPrimaryObjectUrl(mediaFile.id, referencedFile);
+        : sourceType === 'image' && isRawImageFile(referencedFile)
+          ? await createRenderablePrimaryMediaObjectUrl(mediaFile.id, referencedFile)
+          : createPrimaryObjectUrl(mediaFile.id, referencedFile);
 
       return {
         deferMediaElementRestore,

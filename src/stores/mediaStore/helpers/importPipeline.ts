@@ -17,7 +17,7 @@ import { Logger } from '../../../services/logger';
 import { prepareLottieAsset } from '../../../services/vectorAnimation/lottieMetadata';
 import { prepareRiveAsset } from '../../../services/vectorAnimation/riveMetadata';
 import { readGaussianSplatFileStats } from './gaussianSplatStats';
-import { createPrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
+import { createRenderablePrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 import { resolveProjectMediaSourceLocation } from '../../../services/project/mediaSourceRoots';
 
 const log = Logger.create('Import');
@@ -182,7 +182,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
     parentId: parentId ?? null,
     createdAt: Date.now(),
     file: canonicalFile,
-    url: createPrimaryMediaObjectUrl(id, canonicalFile),
+    url: await createRenderablePrimaryMediaObjectUrl(id, canonicalFile),
     thumbnailUrl,
     fileHash,
     hasFileHandle: !!copyResult || !!handle,

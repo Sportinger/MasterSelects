@@ -290,6 +290,8 @@ describe('SourceMonitor edit commands', () => {
       await Promise.resolve();
     });
     expect(transformNumbers(image).scale).toBe(128);
+    fireEvent.click(screen.getByRole('button', { name: 'Fit full source image' }));
+    expect(image.style.transform).toBe('translate(0px, 0px) scale(1)');
   });
 
   it('pans still source preview with the middle mouse button', async () => {

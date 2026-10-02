@@ -8,7 +8,7 @@ import {
 import { fileSystemService } from '../../fileSystemService';
 import { projectDB } from '../../projectDB';
 import { projectFileService, type ProjectFile } from '../../projectFileService';
-import { createPrimaryMediaObjectUrl } from '../mediaObjectUrlManager';
+import { createRenderablePrimaryMediaObjectUrl } from '../mediaObjectUrlManager';
 import {
   applyRelinkMatch,
   createRelinkCandidateMapFromHandles,
@@ -201,7 +201,7 @@ async function autoRelinkFromRawFolder(): Promise<void> {
         if (permission === 'granted') {
           const fileObj = await fileHandle.getFile();
           if (!await isRestoredMediaSourceCompatible(file, fileObj)) continue;
-          const url = createPrimaryMediaObjectUrl(file.id, fileObj);
+          const url = await createRenderablePrimaryMediaObjectUrl(file.id, fileObj);
           const sourceReplacementPatch = await createMediaSourceReplacementPatch(fileObj);
 
           fileSystemService.storeFileHandle(file.id, fileHandle);

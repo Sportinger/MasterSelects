@@ -20,6 +20,8 @@ export interface Effect {
 }
 
 export type EffectType =
+  | 'lens-correction'
+  | 'guided-perspective'
   | 'slit-scan'
   | 'audio-math'
   | 'face-cables'

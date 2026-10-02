@@ -403,6 +403,7 @@ export function SourceMonitor({ file, autoplayRequestId = 0, onClose }: SourceMo
       onSetOutPoint={setSourceMonitorOutPoint}
       onStartTimelineDrag={startTimelineDrag}
       onStop={stopSource}
+      onFitSource={() => setSourceViewportState(getDefaultSourceViewport(file.id))}
       onToggleCrop={imageCrop.toggleImageCrop}
       outPoint={outPoint}
       pendingPlacementMode={pendingPlacementMode}

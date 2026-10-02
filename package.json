@@ -69,6 +69,7 @@
     "codex:usage:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/stop-codex-usage-watch.ps1"
   },
   "dependencies": {
+    "@colorhythm/libraw-wasm": "1.1.1",
     "@ffmpeg/core": "^0.12.6",
     "@ffmpeg/ffmpeg": "^0.12.6",
     "@ffmpeg/util": "^0.12.2",

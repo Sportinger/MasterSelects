@@ -8,7 +8,7 @@ import {
   createThumbnail,
 } from '../../helpers/thumbnailHelpers';
 import {
-  createPrimaryMediaObjectUrl,
+  createRenderablePrimaryMediaObjectUrl,
   revokeMediaFileObjectUrls,
 } from '../../../../services/project/mediaObjectUrlManager';
 import type { FileManageActions } from '../fileManageSlice';
@@ -44,7 +44,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
 
     const sourceIsCurrent = () => binding.isCurrent() && baseGet().files.find(file => file.id === id)?.file === mediaFile.file;
     const refreshThumbnail = options?.refreshThumbnail ?? true;
-    const url = createPrimaryMediaObjectUrl(id, mediaFile.file, { revokeExisting: false });
+    const url = await createRenderablePrimaryMediaObjectUrl(id, mediaFile.file, { revokeExisting: false });
     let thumbnailUrl = mediaFile.thumbnailUrl;
 
     if (refreshThumbnail) {
@@ -150,7 +150,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
     const sourceReplacementPatch = await createMediaSourceReplacementPatch(file);
     if (!sourceIsCurrent()) return false;
     revokeMediaFileUrls(mediaFile);
-    const url = createPrimaryMediaObjectUrl(id, file);
+    const url = await createRenderablePrimaryMediaObjectUrl(id, file);
 
     // Update store
     set((state) => ({

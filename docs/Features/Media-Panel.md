@@ -35,6 +35,23 @@ Dragging an existing Text, Camera, or Mesh media item onto the timeline preserve
 
 ## Importing Media
 
+The Source Monitor fits the complete still image into its viewport, preserving
+its original aspect ratio even when the composition is 16:9. **Fit view** resets
+source zoom and pan; the separate placement **Fit** command targets the timeline.
+
+Canon `.CR2` photos import through the normal file picker or drag and drop. The
+browser develops the full-resolution sensor image in a dedicated LibRaw WASM
+worker, applies the as-shot camera white balance, and creates an 8-bit sRGB PNG
+for thumbnails, source preview, timeline rendering, and export. Originals remain
+unchanged and are retained for project save/relink; reopening develops the RAW
+again. Decoding is serialized and its runtime PNG cache is limited to 128 MiB.
+This is a fixed RAW development, without interactive RAW exposure/white-balance
+controls or a 16-bit RAW grading pipeline. Other camera RAW extensions are not
+yet advertised. See [Lens Correction](Effects.md#lens-correction) for the Canon
+EF 24–105 mm profile dropdown and manual
+optical corrections.
+
+
 ### Supported Formats
 
 | Type | Formats |

@@ -8,6 +8,7 @@
 import type { MediaFile, MediaSliceCreator, MediaState } from '../types';
 import { generateId } from '../helpers/importPipeline';
 import {
+  mediaObjectUrlManager,
   createMediaObjectUrl,
   createPrimaryMediaObjectUrl,
   getGaussianSplatSequenceFrameObjectUrlKey,
@@ -82,7 +83,7 @@ function duplicateItemById(
     const url =
       modelSequence?.frames[0]?.modelUrl ??
       gaussianSplatSequence?.frames[0]?.splatUrl ??
-      (file.file ? createPrimaryMediaObjectUrl(newId, file.file) : file.url);
+      (mediaObjectUrlManager.clonePrimary(file.id, newId) ?? (file.file ? createPrimaryMediaObjectUrl(newId, file.file) : file.url));
     const cloned: MediaFile = {
       ...file,
       id: newId,

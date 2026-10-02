@@ -1,3 +1,4 @@
+import { getRenderableImageBlob } from '../rawImage/rawImageDecode';
 type ManagedMediaObjectUrlKey = string;
 
 const PRIMARY_MEDIA_OBJECT_URL_KEY = 'primary';
@@ -60,6 +61,7 @@ export function collectMediaFileObjectUrls(file: MediaObjectUrlFile): Set<string
 }
 
 class MediaObjectUrlManager {
+  private primaryBlobs = new Map<string, Blob>();
   private urlsByMediaId = new Map<string, Map<ManagedMediaObjectUrlKey, string>>();
 
   create(
@@ -73,6 +75,7 @@ class MediaObjectUrlManager {
     } else {
       this.urlsByMediaId.get(mediaId)?.delete(key);
     }
+    if (key === PRIMARY_MEDIA_OBJECT_URL_KEY) this.primaryBlobs.set(mediaId, file);
     const url = URL.createObjectURL(file);
     let urls = this.urlsByMediaId.get(mediaId);
     if (!urls) {
@@ -81,6 +84,11 @@ class MediaObjectUrlManager {
     }
     urls.set(key, url);
     return url;
+  }
+
+  clonePrimary(sourceId: string, targetId: string): string | undefined {
+    const blob = this.primaryBlobs.get(sourceId);
+    return blob ? this.create(targetId, PRIMARY_MEDIA_OBJECT_URL_KEY, blob) : undefined;
   }
 
   get(mediaId: string, key: ManagedMediaObjectUrlKey): string | undefined {
@@ -95,6 +103,7 @@ class MediaObjectUrlManager {
     }
 
     URL.revokeObjectURL(url);
+    if (key === PRIMARY_MEDIA_OBJECT_URL_KEY) this.primaryBlobs.delete(mediaId);
     urls.delete(key);
     if (urls.size === 0) {
       this.urlsByMediaId.delete(mediaId);
@@ -115,6 +124,7 @@ class MediaObjectUrlManager {
         continue;
       }
       URL.revokeObjectURL(url);
+      if (key === PRIMARY_MEDIA_OBJECT_URL_KEY) this.primaryBlobs.delete(mediaId);
       revoked.add(url);
       urls.delete(key);
     }
@@ -163,6 +173,15 @@ export function createPrimaryMediaObjectUrl(
   options?: { revokeExisting?: boolean },
 ): string {
   return createMediaObjectUrl(mediaId, getPrimaryMediaObjectUrlKey(), file, options);
+}
+
+/** Prepare camera RAW images before granting the normal primary URL ownership. */
+export async function createRenderablePrimaryMediaObjectUrl(
+  mediaId: string,
+  file: File,
+  options?: { revokeExisting?: boolean },
+): Promise<string> {
+  return createPrimaryMediaObjectUrl(mediaId, await getRenderableImageBlob(file), options);
 }
 
 export function createThumbnailMediaObjectUrl(

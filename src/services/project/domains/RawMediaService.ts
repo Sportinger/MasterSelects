@@ -1,3 +1,4 @@
+import { getRenderableImageBlob } from '../../rawImage/rawImageDecode';
 // Raw folder operations and media import service
 
 import { Logger } from '../../logger';
@@ -293,7 +294,7 @@ export class RawMediaService {
         media.src = url;
       });
     } else if (type === 'image') {
-      const url = URL.createObjectURL(file);
+      const url = URL.createObjectURL(await getRenderableImageBlob(file));
       const img = new Image();
 
       await new Promise<void>((resolve) => {

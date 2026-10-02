@@ -17,7 +17,7 @@ import { projectDB } from '../../services/projectDB';
 import { projectFileService } from '../../services/projectFileService';
 import { Logger } from '../../services/logger';
 import {
-  createPrimaryMediaObjectUrl,
+  createRenderablePrimaryMediaObjectUrl,
   createThumbnailMediaObjectUrl,
   revokeMediaFileObjectUrls,
 } from '../../services/project/mediaObjectUrlManager';
@@ -53,7 +53,7 @@ export async function restoreLegacyStartupMediaState(
             const result = await projectFileService.getFileFromRaw(mediaFile.projectPath);
             if (result) {
               file = result.file;
-              url = createPrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
+              url = await createRenderablePrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
               const projectHandle = result.handle;
               if (projectHandle) {
                 fileSystemService.storeFileHandle(mediaFile.id, projectHandle);
@@ -73,14 +73,14 @@ export async function restoreLegacyStartupMediaState(
               const permission = await (handle as FileSystemFileHandle).queryPermission({ mode: 'read' });
               if (permission === 'granted') {
                 file = await (handle as FileSystemFileHandle).getFile();
-                url = createPrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
+                url = await createRenderablePrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
                 fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
                 log.debug('Restored file from handle:', stored.name);
               } else {
                 const newPermission = await (handle as FileSystemFileHandle).requestPermission({ mode: 'read' });
                 if (newPermission === 'granted') {
                   file = await (handle as FileSystemFileHandle).getFile();
-                  url = createPrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
+                  url = await createRenderablePrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
                   fileSystemService.storeFileHandle(mediaFile.id, handle as FileSystemFileHandle);
                   log.debug(`Restored file from handle (after permission): ${stored.name}`);
                 }

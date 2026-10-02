@@ -7,7 +7,7 @@ import { releaseClipSourceRuntime } from '../mediaRuntime/clipBindings';
 import { fileSystemService } from '../fileSystemService';
 import { projectDB } from '../projectDB';
 import { projectFileService } from '../projectFileService';
-import { createPrimaryMediaObjectUrl } from './mediaObjectUrlManager';
+import { createRenderablePrimaryMediaObjectUrl } from './mediaObjectUrlManager';
 import { updateTimelineClips } from '../../stores/mediaStore/slices/fileManageSlice';
 import { getMediaInfo } from '../../stores/mediaStore/helpers/mediaInfoHelpers';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
@@ -164,7 +164,7 @@ async function activateRuntimeFile(
   const playbackMetadata = media.type === 'video'
     ? await readLinkedVideoPlaybackMetadata(file)
     : {};
-  const url = createPrimaryMediaObjectUrl(media.id, file);
+  const url = await createRenderablePrimaryMediaObjectUrl(media.id, file);
   useMediaStore.setState((state) => ({
     files: state.files.map((candidate) => candidate.id === media.id
       ? {

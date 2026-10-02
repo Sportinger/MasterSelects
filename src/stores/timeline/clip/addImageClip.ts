@@ -1,3 +1,4 @@
+import { getRenderableImageBlob, isRawImageFile } from '../../../services/rawImage/rawImageDecode';
 // Image clip addition - extracted from addClip
 // Handles image file loading and thumbnail generation
 
@@ -56,7 +57,9 @@ export async function loadImageMedia(params: LoadImageMediaParams): Promise<void
   if (!isCurrent()) return;
   const mediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
 
-  const imageUrl = blobUrlManager.create(clip.id, clip.file, 'image');
+  const imageBlob = isRawImageFile(clip.file) ? await getRenderableImageBlob(clip.file) : clip.file;
+  if (!isCurrent()) return;
+  const imageUrl = blobUrlManager.create(clip.id, imageBlob, 'image');
   const img = await new Promise<HTMLImageElement>((resolve) => {
     startTimelineImageHydration({
       url: imageUrl,

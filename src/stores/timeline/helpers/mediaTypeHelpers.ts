@@ -7,7 +7,7 @@ import { isMxfFile, isMxfFileName } from '../../../services/mediaMetadata/mxf/mx
 
 export const AUDIO_EXTENSIONS = ['wav', 'mp3', 'ogg', 'flac', 'aac', 'm4a', 'wma', 'aiff', 'opus'] as const;
 export const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'wmv', 'm4v', 'flv'] as const;
-export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] as const;
+export const IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'cr2'] as const;
 export const MODEL_EXTENSIONS = ['obj', 'fbx', 'gltf', 'glb'] as const;
 export const VECTOR_ANIMATION_EXTENSIONS = ['lottie', 'riv'] as const;
 

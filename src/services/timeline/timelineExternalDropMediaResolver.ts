@@ -6,7 +6,7 @@ import {
 } from '../../stores/mediaStore/helpers/importResult';
 import { useMediaStore } from '../../stores/mediaStore';
 import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
-import { createPrimaryMediaObjectUrl } from '../project/mediaObjectUrlManager';
+import { createRenderablePrimaryMediaObjectUrl } from '../project/mediaObjectUrlManager';
 import { Logger } from '../logger';
 import { isLinkedMediaDeferred, requestLinkedMedia } from '../project/linkedMediaDemand';
 
@@ -190,7 +190,7 @@ export async function resolveMediaFileForTimelineDrop(mediaFile: MediaFile): Pro
 
     const referencedPath = NativeHelperClient.parseFileReferenceUrl(nativeReferenceUrl) ?? mediaFile.absolutePath;
     setTimelineDroppedFilePath(file, referencedPath ?? undefined);
-    const url = createPrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
+    const url = await createRenderablePrimaryMediaObjectUrl(mediaFile.id, file, { revokeExisting: false });
 
     useMediaStore.setState((state) => ({
       files: state.files.map((currentFile) =>

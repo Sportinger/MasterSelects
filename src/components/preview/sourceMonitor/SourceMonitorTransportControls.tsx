@@ -1,5 +1,6 @@
 import {
   IconCrop,
+  IconArrowsMaximize,
   IconFlag,
   IconPlayerPauseFilled,
   IconPlayerPlayFilled,
@@ -33,6 +34,7 @@ interface SourceMonitorTransportControlsProps {
   onSetOutPoint: (time: number) => void;
   onStartTimelineDrag: (kind: SourceTimelineDragKind, event: PointerEvent) => void;
   onStop: () => void;
+  onFitSource?: () => void;
   onToggleCrop: () => void;
   outPoint: number | null;
   pendingPlacementMode: TimelinePlacementMode | null;
@@ -65,6 +67,7 @@ export function SourceMonitorTransportControls({
   onSetOutPoint,
   onStartTimelineDrag,
   onStop,
+  onFitSource,
   onToggleCrop,
   outPoint,
   pendingPlacementMode,
@@ -78,7 +81,7 @@ export function SourceMonitorTransportControls({
   timelineTicks,
 }: SourceMonitorTransportControlsProps) {
   return (
-    <div className={`source-monitor-toolbar${external ? ' source-monitor-toolbar-external' : ''}${!showTimingControls ? ' source-monitor-toolbar-commands-only' : ''}`}>
+    <div onPointerUp={event => { if (event.target instanceof Element) event.target.closest('button')?.blur(); }} className={`source-monitor-toolbar${external ? ' source-monitor-toolbar-external' : ''}${!showTimingControls ? ' source-monitor-toolbar-commands-only' : ''}`}>
       {showTimingControls && (
         <div className="source-monitor-timeline-strip">
           <div
@@ -142,6 +145,12 @@ export function SourceMonitorTransportControls({
         )}
 
         <div className="source-monitor-center-controls">
+          {isImage && !cropMode && onFitSource && (
+            <button type="button" className="btn btn-sm source-monitor-crop-btn"
+              onClick={onFitSource} title="Fit full source image" aria-label="Fit full source image">
+              <IconArrowsMaximize size={14} aria-hidden="true" /><span>Fit view</span>
+            </button>
+          )}
           {isImage && (
             <button
               className={`btn btn-sm source-monitor-crop-btn ${cropMode ? 'btn-active' : ''}`}

@@ -210,6 +210,8 @@ export function InspectorSelect<T extends string>({
 
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (disabled) return;
+    // Inspector navigation must not reach timeline playback/seek shortcuts.
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter', ' ', 'Escape'].includes(event.key)) event.stopPropagation();
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (!open) {
@@ -230,10 +232,13 @@ export function InspectorSelect<T extends string>({
       setActiveValue(enabledOptions.at(-1)?.value);
       return;
     }
-    if ((event.key === 'Enter' || event.key === ' ') && open) {
+    if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
-      const activeOption = enabledOptions.find(option => option.value === activeValue);
-      if (activeOption) choose(activeOption);
+      if (!open) { setOpen(true); setActiveValue(selectedOption?.value); }
+      else {
+        const activeOption = enabledOptions.find(option => option.value === activeValue);
+        if (activeOption) choose(activeOption);
+      }
       return;
     }
     if (event.key === 'Escape' && open) {

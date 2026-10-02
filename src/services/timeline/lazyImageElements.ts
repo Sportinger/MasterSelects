@@ -1,3 +1,4 @@
+import { getRenderableImageBlob, isRawImageFile } from '../rawImage/rawImageDecode';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore/types';
 import type { FrameContext } from '../layerBuilder/types';
@@ -293,7 +294,23 @@ function createImageRecord(ctx: LazyImageLookupContext, clip: TimelineClip): Laz
     notifyStatusCallbacks(record);
     renderHostPort.requestRender();
   };
-  image.src = source.url;
+  if (plannedSource.file && isRawImageFile(plannedSource.file)) {
+    // Decode asynchronously while this record reports loading; discarded records never acquire a URL.
+    void getRenderableImageBlob(plannedSource.file).then(blob => {
+      if (lazyImageRecords.get(getRecordKey(clip.id)) !== record) return;
+      if (record.objectUrl) URL.revokeObjectURL(record.objectUrl);
+      record.objectUrl = URL.createObjectURL(blob);
+      record.sourceUrl = record.objectUrl;
+      image.src = record.objectUrl;
+    }).catch(error => {
+      if (lazyImageRecords.get(getRecordKey(clip.id)) !== record) return;
+      log.warn('RAW image decoding failed', error);
+      record.status = 'error'; reportLazyImageRecord(record); notifyStatusCallbacks(record);
+      renderHostPort.requestRender();
+    });
+  } else {
+    image.src = source.url;
+  }
 
   lazyImageRecords.set(getRecordKey(clip.id), record);
   reportLazyImageRecord(record);

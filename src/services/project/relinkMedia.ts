@@ -19,7 +19,7 @@ import {
 import {
   collectMediaFileObjectUrls,
   createMediaObjectUrl,
-  createPrimaryMediaObjectUrl,
+  createRenderablePrimaryMediaObjectUrl,
   getGaussianSplatSequenceFrameObjectUrlKey,
   getModelSequenceFrameObjectUrlKey,
   revokeMediaFileObjectUrls,
@@ -272,7 +272,7 @@ async function applySingleRelink(
     fileHash: await readMediaSourceFingerprint(candidateFile),
   }, restored.file);
   if (copiedMismatch) throw new Error(copiedMismatch);
-  const url = createPrimaryMediaObjectUrl(mediaFile.id, restored.file, { revokeExisting: false });
+  const url = await createRenderablePrimaryMediaObjectUrl(mediaFile.id, restored.file, { revokeExisting: false });
   const sourceReplacementPatch = await createMediaSourceReplacementPatch(restored.file);
 
   await invalidateRelinkSourceReplacementCaches(mediaFile);

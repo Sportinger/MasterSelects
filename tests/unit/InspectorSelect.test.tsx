@@ -16,6 +16,22 @@ afterEach(() => {
 });
 
 describe('InspectorSelect pointer interaction', () => {
+  it('opens and selects with Space without triggering parent playback shortcuts', () => {
+    const onChange = vi.fn();
+    const playbackShortcut = vi.fn();
+    render(<div onKeyDown={playbackShortcut}><InspectorSelect ariaLabel="Lens profile"
+      onChange={onChange} options={[...OPTIONS]} value="normal" /></div>);
+    const trigger = screen.getByRole('combobox', { name: 'Lens profile' });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: ' ' });
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    fireEvent.keyDown(trigger, { key: ' ' });
+    expect(onChange).toHaveBeenCalledWith('multiply');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+    expect(playbackShortcut).not.toHaveBeenCalled();
+  });
   it('keeps the menu open through pointer focus handoff and selects by mouse click', () => {
     const onChange = vi.fn();
     document.addEventListener('pointerdown', handoffPointerFocus, true);

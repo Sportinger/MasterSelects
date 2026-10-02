@@ -22,7 +22,7 @@ function reportImportFailure(error: unknown): void {
   alert(`Could not complete the media import.${details ? `\n\n${details}` : ''}`);
 }
 
-const DESKTOP_MEDIA_INPUT_ACCEPT = 'video/*,image/*,audio/*,.mp4,.mov,.m4v,.webm,.mkv,.mp3,.wav,.m4a,.jpg,.jpeg,.png,.heic';
+const DESKTOP_MEDIA_INPUT_ACCEPT = 'video/*,image/*,audio/*,.mp4,.mov,.m4v,.webm,.mkv,.mp3,.wav,.m4a,.jpg,.jpeg,.png,.heic,.cr2';
 
 function isIPadLikeDevice(): boolean {
   return typeof navigator !== 'undefined'

@@ -1,5 +1,7 @@
 import { EffectStyleRow } from './EffectStyleRow';
 import { TimeStackControls } from './TimeStackControls';
+import { LensCorrectionControls } from './LensCorrectionControls';
+import { GuidedPerspectiveControls } from './GuidedPerspectiveControls';
 import { SlitScanControls } from './SlitScanControls';
 import { EffectSectionBypass } from './resolveInspector/EffectSectionBypass';
 import { ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
@@ -249,6 +251,8 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   }
 
   if (effect.type === 'time-stack') return <TimeStackControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
+  if (effect.type === 'lens-correction') return <LensCorrectionControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
+  if (effect.type === 'guided-perspective') return <GuidedPerspectiveControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
 
   if (effect.type === 'slit-scan') return <SlitScanControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} operatorGraph={effect.operatorGraph} onChange={onChange} clipId={clipId} />;
 

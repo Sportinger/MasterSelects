@@ -79,3 +79,24 @@ when DNxHD/DNxHR or MPEG-2 Intra essence from an MXF file is decoded.
 
 VexFlow is used as an unmodified npm dependency to render music notation in
 the score editor. Its source code is available from the project link above.
+
+## LibRaw WASM (Canon CR2 image decoding)
+
+- Binding: [@colorhythm/libraw-wasm](https://github.com/colorhythm/libraw-wasm), version 1.1.1; MIT.
+- Decoder: [LibRaw](https://www.libraw.org/), dual LGPL-2.1 / CDDL-1.0; used under LGPL-2.1.
+- The unmodified npm dependency supplies the WebAssembly decoder and retains
+  upstream copyright and license texts. Copies are also provided under
+  [licenses/libraw](licenses/libraw/) for distributions of the bundled decoder.
+- Corresponding source and build scripts: the binding's linked upstream repository
+  and its pinned `LibRaw` submodule. This browser decoder does not upload images.
+
+## Lensfun lens calibration data
+
+- Attribution: Lensfun contributors (original database by Tom Niemann).
+- Source: [Canon SLR database, revision bbd4332](https://github.com/lensfun/lensfun/blob/bbd4332a9ec566fd9aa548c9e0d8ced238c56261/data/db/slr-canon.xml).
+- License: [CC BY-SA 3.0](licenses/lensfun/COPYING.CC_BY-SA_3.0).
+- The full-frame Canon EF 24-105mm f/4L IS USM entry was extracted and converted
+  from XML to JSON in `src/effects/distort/lens-correction/canonEf24_105.json`.
+  This adapted dataset remains licensed under CC BY-SA 3.0.
+- No Lensfun library code is bundled. MasterSelects implements coefficient
+  interpolation and GPU correction independently from the published models.

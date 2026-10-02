@@ -1,3 +1,4 @@
+import { createRenderablePrimaryMediaObjectUrl } from '../../mediaObjectUrlManager';
 import type { ProjectFile } from '../../types/project.types';
 import type { MediaState } from '../../../../stores/mediaStore/types';
 import type { RepositorySession } from '../RepositorySession';
@@ -191,7 +192,9 @@ async function connect(item: ProjectMedia, current: () => boolean, stage: (file:
     const blob = await session.client.readBlob({ hash: identity.contentHash, length: identity.byteLength });
     if (blob && blob.size === identity.byteLength && current()) {
       const file = new File([blob], item.name, { type: blob.type });
-      stage({ ...existing, file, url: URL.createObjectURL(file) }); return true;
+      const url = await createRenderablePrimaryMediaObjectUrl(item.id, file);
+      if (!current()) return false;
+      stage({ ...existing, file, url }); return true;
     }
   }
   const [hydrated] = await convertProjectMediaToStore([item], { hydrateFiles: true, deferCacheChecks: true, trustSavedLocation });

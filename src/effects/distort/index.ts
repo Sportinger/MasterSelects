@@ -8,3 +8,6 @@ export { twirl } from './twirl';
 export { wave } from './wave';
 export { bulge } from './bulge';
 export { fisheye } from './fisheye';
+
+export { lensCorrection } from './lens-correction';
+export { guidedPerspective } from './guided-perspective';
