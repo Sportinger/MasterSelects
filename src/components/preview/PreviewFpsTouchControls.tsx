@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import './PreviewFpsTouchControls.css';
 
@@ -167,7 +168,7 @@ export function PreviewFpsTouchControls({
       positionY: transform.position.y + delta.y,
       positionZ: transform.position.z + delta.z,
     });
-    movementFrameRef.current = window.requestAnimationFrame(tickMovementRef.current);
+    movementFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(tickMovementRef.current));
   }, [
     applyNavigationCameraValues,
     cameraClip,
@@ -185,7 +186,7 @@ export function PreviewFpsTouchControls({
 
   const startMovementLoop = useCallback(() => {
     if (movementFrameRef.current !== null) return;
-    movementFrameRef.current = window.requestAnimationFrame(tickMovementRef.current);
+    movementFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(tickMovementRef.current));
   }, []);
 
   const stopLookLoop = useCallback(() => {
@@ -235,7 +236,7 @@ export function PreviewFpsTouchControls({
       rotationX: pitch,
       rotationY: yaw,
     });
-    lookFrameRef.current = window.requestAnimationFrame(tickLookRef.current);
+    lookFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(tickLookRef.current));
   }, [
     applyNavigationCameraValues,
     cameraClip,
@@ -251,7 +252,7 @@ export function PreviewFpsTouchControls({
 
   const startLookLoop = useCallback(() => {
     if (lookFrameRef.current !== null) return;
-    lookFrameRef.current = window.requestAnimationFrame(tickLookRef.current);
+    lookFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(tickLookRef.current));
   }, []);
 
   const handleMovePointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {

@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication } from '../project/repository/artifacts/RepositoryDomainPublication';
 import type { LandmarkSeries } from './types';
 import { gzipSync, gunzipSync, strFromU8, strToU8 } from 'fflate';
 
@@ -34,7 +35,14 @@ async function decompress(blob: Blob): Promise<LandmarkSeries> {
 }
 
 export async function saveLandmarkSidecar(series: LandmarkSeries, signal?: AbortSignal): Promise<void> {
+  const repository = captureRepositoryDomainPublication();
   signal?.throwIfAborted();
+  if (repository) {
+    const blob = await compress(series);
+    signal?.throwIfAborted();
+    await repository.writeFile('ANALYSIS', `landmarks-${series.clipId}.tracking.json.gz`, blob);
+    return;
+  }
   if (typeof caches === 'undefined') return;
   const cache = await caches.open(SIDECAR_CACHE);
   const blob = await compress(series);
@@ -43,6 +51,11 @@ export async function saveLandmarkSidecar(series: LandmarkSeries, signal?: Abort
 }
 
 export async function loadLandmarkSidecar(clipId: string): Promise<LandmarkSeries | null> {
+  const repository = captureRepositoryDomainPublication();
+  if (repository) {
+    const file = await repository.readFile('ANALYSIS', `landmarks-${clipId}.tracking.json.gz`);
+    return file ? decompress(file) : null;
+  }
   if (typeof caches === 'undefined') return null;
   const response = await (await caches.open(SIDECAR_CACHE)).match(sidecarUrl(clipId));
   return response ? decompress(await response.blob()) : null;

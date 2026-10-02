@@ -1,3 +1,5 @@
+import { toolResultFromGuidedSession, batchToolResultFromGuidedSession, toolResultsFromGuidedSessionGroup, createMissingGroupedToolResult, formatGroupedToolLabel, getToolCallResultKey } from './guidedToolResults';
+import { getEditorRepositorySession } from '../project/repository/transaction/editorMutationRuntime';
 // AI Tools Service - Modular architecture
 // Provides tools for AI chat to control timeline editing
 // Uses OpenAI function calling format
@@ -33,7 +35,7 @@ import { checkToolAccess } from './policy';
 import type { CallerContext } from './policy';
 import { beginAIToolAudit, completeAIToolAudit } from './audit';
 import {
-  abortAgentTransaction, attachGroupedPartialFailure, beginAgentTransaction,
+  abortAgentTransaction, attachGroupedPartialFailure, beginAgentTransaction, pinAgentTransactionOptions, getPinnedAgentTransaction, bindAgentTransactionStore, runWithAgentTransaction,
   commitAgentTransaction, completeAgentToolAudit, completeOrDeferAgentToolAudit,
   createAgentTransactionRollbackReason, createGroupedPartialFailureInfo, createGroupedRollbackReason, type AgentToolAuditCompletion,
 } from './agentTransaction';
@@ -44,6 +46,17 @@ import {
 const SELF_MANAGED_HISTORY_TOOLS = new Set([
   'commitTimelineVariantOption',
 ]);
+
+// These handlers rebuild the whole project through many awaited store actions
+// (reset, imports, composition switches). A repository agent transaction only
+// authorizes synchronous work, so each step commits as its own revision instead.
+const PROJECT_REBUILD_TOOLS = new Set([
+  'createStressTestProjectFixture',
+]);
+
+function opensStandaloneAgentTransaction(toolName: string): boolean {
+  return MODIFYING_TOOLS.has(toolName) && !PROJECT_REBUILD_TOOLS.has(toolName);
+}
 
 function startOwnedHistoryBatch(label: string): number | null {
   const batch = startBatch(label);
@@ -159,15 +172,22 @@ async function executeAIToolWithDeferredAudit(
     return result;
   }
 
+  const standaloneTransaction = getEditorRepositorySession() && !getPinnedAgentTransaction(options) && opensStandaloneAgentTransaction(toolName)
+    ? beginAgentTransaction(`AI: ${toolName}`) : null;
+  options = pinAgentTransactionOptions(options, standaloneTransaction);
   const useGuidedExecution = shouldUseGuidedAIToolExecution(callerContext, options);
   setAIExecutionActive(true, useGuidedExecution ? getGuidedLegacyFeedback(options) : getLegacyFeedback(options));
   try {
     const result = useGuidedExecution
       ? await executeGuidedAITool(toolName, args, callerContext, options)
       : await _executeAIToolInternal(toolName, args, callerContext, options);
+    if (standaloneTransaction) {
+      if (result.success) commitAgentTransaction(standaloneTransaction); else abortAgentTransaction(standaloneTransaction);
+    }
     completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, result }, deferAuditCompletion);
     return result;
   } catch (error) {
+    if (standaloneTransaction) abortAgentTransaction(standaloneTransaction);
     completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, error }, deferAuditCompletion);
     throw error;
   } finally {
@@ -233,6 +253,7 @@ export async function executeAIToolCalls(
   }
 
   const transaction = beginTransactionForToolCalls(allowedCalls, options);
+  options = pinAgentTransactionOptions(options, transaction);
   try {
     setAIExecutionActive(true, getGuidedLegacyFeedback(options));
     const guidedResults = await executeGuidedAIToolCallGroup(allowedCalls, callerContext, {
@@ -300,7 +321,7 @@ async function _executeAIToolInternal(
 
   // Special-case: executeBatch wraps all sub-actions in a single undo group
   if (toolName === 'executeBatch') {
-    const ownedBatchId = options.suppressHistory
+    const ownedBatchId = (options.suppressHistory || getPinnedAgentTransaction(options))
       ? null
       : startOwnedHistoryBatch('AI: batch');
     let batchSucceeded = false;
@@ -320,13 +341,15 @@ async function _executeAIToolInternal(
     }
   }
 
-  const timelineStore = useTimelineStore.getState();
-  const mediaStore = useMediaStore.getState();
+  const transaction = getPinnedAgentTransaction(options);
+  const timelineStore = bindAgentTransactionStore(useTimelineStore.getState(), transaction);
+  const mediaStore = bindAgentTransactionStore(useMediaStore.getState(), transaction);
 
   // Track history for modifying operations
   const isModifying = MODIFYING_TOOLS.has(toolName)
     && !SELF_MANAGED_HISTORY_TOOLS.has(toolName)
-    && !options.suppressHistory;
+    && !options.suppressHistory && !getPinnedAgentTransaction(options)
+    && !(getEditorRepositorySession() && PROJECT_REBUILD_TOOLS.has(toolName));
   const ownedBatchId = isModifying
     ? startOwnedHistoryBatch(`AI: ${toolName}`)
     : null;
@@ -342,14 +365,8 @@ async function _executeAIToolInternal(
     if (options.signal?.aborted) {
       return createCancelledToolResult(toolName);
     }
-    const result = await executeToolInternal(
-      toolName,
-      args,
-      timelineStore,
-      mediaStore,
-      callerContext,
-      options.signal,
-    );
+    const invoke = () => executeToolInternal(toolName, args, timelineStore, mediaStore, callerContext, options.signal);
+    const result = await (transaction ? runWithAgentTransaction(transaction, invoke) : invoke());
     mutationSucceeded = result.success;
     return result;
   } catch (error) {
@@ -392,7 +409,7 @@ async function executeGuidedAITool(
   }
   const dependentBatchExecution = inlineBatchExecution
     && containsBatchResultReference(args.actions);
-  const shouldManageGuidedHistory = !options.suppressHistory
+  const shouldManageGuidedHistory = !options.suppressHistory && !getPinnedAgentTransaction(options)
     && (inlineBatchExecution || MODIFYING_TOOLS.has(toolName));
   const compiled = compileGuidedToolCall({
     tool: toolName,
@@ -407,7 +424,7 @@ async function executeGuidedAITool(
     defaultLegacyFeedback: getGuidedLegacyFeedback(options),
     executeTool: (tool, toolArgs, nestedCallerContext, nestedOptions) => (
       _executeAIToolInternal(tool, toolArgs, nestedCallerContext, {
-        ...nestedOptions,
+        ...pinAgentTransactionOptions(nestedOptions ?? {}, getPinnedAgentTransaction(options)),
         suppressHistory: shouldManageGuidedHistory
           || options.suppressHistory
           || nestedOptions?.suppressHistory,
@@ -466,7 +483,7 @@ async function executeGuidedAIToolCallGroup(
     defaultLegacyFeedback: getGuidedLegacyFeedback(options),
     executeTool: (tool, toolArgs, nestedCallerContext, nestedOptions) => (
       _executeAIToolInternal(tool, toolArgs, nestedCallerContext, {
-        ...nestedOptions,
+        ...pinAgentTransactionOptions(nestedOptions ?? {}, getPinnedAgentTransaction(options)),
         suppressHistory: options.suppressHistory || nestedOptions?.suppressHistory,
       })
     ),
@@ -510,6 +527,7 @@ async function executeAIToolCallsDirect(
   const auditCompletions: AgentToolAuditCompletion[] = [];
   const results: AIToolCallExecutionResult[] = [];
   const transaction = beginTransactionForToolCalls(toolCalls, options);
+  options = pinAgentTransactionOptions(options, transaction);
   try {
     for (let index = 0; index < toolCalls.length; index++) {
       const toolCall = toolCalls[index];
@@ -628,157 +646,4 @@ function getLegacyFeedback(options: AIToolExecutionOptions): GuidedLegacyFeedbac
 
 function getGuidedVisualizationMode(options: AIToolExecutionOptions): GuidedVisualizationMode | undefined {
   return options.guidedVisualizationMode ?? useSettingsStore.getState().guidedActionReplayVisualizationMode;
-}
-
-function toolResultFromGuidedSession(
-  toolName: string,
-  result: GuidedSessionResult,
-): ToolResult {
-  if (result.toolResults.length > 1) {
-    const succeeded = result.toolResults.filter((entry) => entry.success).length;
-    const failed = result.toolResults.length - succeeded;
-    return {
-      success: result.status === 'completed' && failed === 0,
-      ...(result.status === 'completed' && failed === 0 ? {} : { error: result.error ?? `Guided AI execution ${result.status}` }),
-      data: {
-        guidedSessionId: result.sessionId,
-        tool: toolName,
-        totalActions: result.toolResults.length,
-        succeeded,
-        failed,
-        results: result.toolResults,
-        status: result.status,
-      },
-    };
-  }
-
-  const primaryToolResult = result.toolResults[0];
-  if (primaryToolResult) {
-    if (result.status === 'completed') return primaryToolResult;
-    return {
-      success: false,
-      error: result.error ?? `Guided AI execution ${result.status}`,
-      data: {
-        guidedSessionId: result.sessionId,
-        status: result.status,
-        tool: toolName,
-        toolResult: primaryToolResult,
-      },
-    };
-  }
-
-  if (result.status === 'completed') {
-    return {
-      success: true,
-      data: {
-        guidedSessionId: result.sessionId,
-        tool: toolName,
-      },
-    };
-  }
-
-  return {
-    success: false,
-    error: result.error ?? `Guided AI execution ${result.status}`,
-    data: {
-      cancelled: result.status === 'cancelled',
-      guidedSessionId: result.sessionId,
-      skipped: result.status === 'skipped',
-      status: result.status,
-      tool: toolName,
-    },
-  };
-}
-
-function batchToolResultFromGuidedSession(
-  args: Record<string, unknown>,
-  result: GuidedSessionResult,
-): ToolResult {
-  const actions = Array.isArray(args.actions) ? args.actions : [];
-  const results = actions.map((action, index) => {
-    const tool = isToolActionRecord(action) ? action.tool : `action-${index}`;
-    const toolResult = result.toolResults[index];
-    return {
-      tool,
-      success: toolResult?.success ?? false,
-      data: toolResult?.data,
-      error: toolResult?.error,
-    };
-  });
-  const succeeded = results.filter((entry) => entry.success).length;
-  const failed = results.length - succeeded;
-  const completed = result.status === 'completed';
-
-  return {
-    success: completed && failed === 0,
-    ...(completed ? {} : { error: result.error ?? `Guided AI execution ${result.status}` }),
-    data: {
-      guidedSessionId: result.sessionId,
-      totalActions: actions.length,
-      succeeded,
-      failed,
-      results,
-      status: result.status,
-    },
-  };
-}
-
-function toolResultsFromGuidedSessionGroup(
-  toolCalls: AIToolCallExecution[],
-  result: GuidedSessionResult,
-): AIToolCallExecutionResult[] {
-  return toolCalls.map((toolCall, index) => ({
-    id: toolCall.id,
-    tool: toolCall.tool,
-    result: result.toolResults[index] ?? createMissingGroupedToolResult(toolCall.tool, result),
-  }));
-}
-
-function createMissingGroupedToolResult(
-  toolName: string,
-  result?: GuidedSessionResult,
-): ToolResult {
-  if (result?.status === 'completed') {
-    return {
-      success: true,
-      data: {
-        guidedSessionId: result.sessionId,
-        tool: toolName,
-      },
-    };
-  }
-
-  return {
-    success: false,
-    error: result?.error ?? `Guided AI execution ${result?.status ?? 'did not return a tool result'}`,
-    data: {
-      cancelled: result?.status === 'cancelled',
-      guidedSessionId: result?.sessionId,
-      skipped: result?.status === 'skipped',
-      status: result?.status,
-      tool: toolName,
-    },
-  };
-}
-
-function formatGroupedToolLabel(toolCalls: AIToolCallExecution[]): string {
-  const names = Array.from(new Set(toolCalls.map((toolCall) => toolCall.tool)));
-  if (names.length === 1) {
-    return `${names[0]} x${toolCalls.length}`;
-  }
-  if (names.length <= 3) {
-    return names.join(', ');
-  }
-  return `${toolCalls.length} tools`;
-}
-
-function getToolCallResultKey(toolCall: Pick<AIToolCallExecution, 'id' | 'tool'>): string {
-  return toolCall.id ? `id:${toolCall.id}` : `tool:${toolCall.tool}`;
-}
-
-function isToolActionRecord(value: unknown): value is { tool: string } {
-  return !!value
-    && typeof value === 'object'
-    && 'tool' in value
-    && typeof (value as { tool?: unknown }).tool === 'string';
 }

@@ -75,6 +75,7 @@ export interface LoadAudioMediaParams {
   mediaFileId?: string;
   waveformsEnabled: boolean;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
+  isCurrent?: () => boolean;
 }
 
 /**
@@ -82,6 +83,9 @@ export interface LoadAudioMediaParams {
  */
 export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void> {
   const { clip, file, mediaFileId, waveformsEnabled, updateClip } = params;
+
+  const isCurrent = params.isCurrent ?? (() => true);
+  if (!isCurrent()) return;
 
   // Create and load audio element
   const audio = createAudioElement(file);
@@ -92,6 +96,7 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
     audio.onerror = () => resolve();
   });
 
+  if (!isCurrent()) { releaseTemporaryMediaElement(audio); return; }
   const naturalDuration = audio.duration || clip.duration;
 
   // Check if this is a large file (audio-only has higher threshold)
@@ -122,6 +127,7 @@ export async function loadAudioMedia(params: LoadAudioMediaParams): Promise<void
   }
 
   // Sync to media store
+  if (!isCurrent()) return;
   const mediaStore = useMediaStore.getState();
   if (!mediaStore.getFileByName(file.name)) {
     mediaStore.importFile(file);

@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../../services/project/repository/transaction/storeMutationBoundary';
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 
@@ -9,7 +10,7 @@ import { withExclusiveHistorySnapshotMutationLease } from '../timeline/exclusive
 export type FlashBoardStore = FlashBoardStoreState & UiSliceActions;
 
 export const useFlashBoardStore = create<FlashBoardStore>()(
-  subscribeWithSelector(withExclusiveHistorySnapshotMutationLease((set) => {
+  subscribeWithSelector(withRepositoryStoreMutation('flashboard', withExclusiveHistorySnapshotMutationLease((set) => {
     const initialWorkspace = createDefaultFlashBoardAIWorkspace();
     return {
       activeGenerationRecords: [],
@@ -23,7 +24,7 @@ export const useFlashBoardStore = create<FlashBoardStore>()(
 
       ...createUiSlice(set),
     };
-  }))
+  })))
 );
 
 export * from './types';

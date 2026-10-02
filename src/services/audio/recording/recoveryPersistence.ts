@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication } from '../../project/repository/artifacts/RepositoryDomainPublication';
 import { artifactService } from '../../project/domains/ArtifactService';
 import type {
   AudioRecordedAsset,
@@ -14,8 +15,10 @@ type AudioRecordingRecoveryChunkRef = Awaited<ReturnType<AudioRecordingRecoveryB
 export const RECOVERY_STORAGE_KEY = 'masterselects.audioRecording.recovery.v1';
 
 export class ArtifactAudioRecordingRecoveryBlobStore implements AudioRecordingRecoveryBlobStore {
+  private readonly store = artifactService.createIndexedDBStore();
+  private readonly repository = captureRepositoryDomainPublication();
   async putAsset(asset: AudioRecordedAsset): Promise<AudioRecordingRecoveryAssetRef> {
-    const result = await artifactService.putIndexedDBArtifact(asset.blob, {
+    const result = await this.store.putArtifact(asset.blob, {
       mimeType: asset.mimeType || asset.blob.type || 'audio/wav',
       encoding: 'raw',
       producer: {
@@ -55,12 +58,12 @@ export class ArtifactAudioRecordingRecoveryBlobStore implements AudioRecordingRe
   }
 
   async getAsset(assetRef: Parameters<AudioRecordingRecoveryBlobStore['getAsset']>[0]): Promise<Blob | null> {
-    const stored = await artifactService.getIndexedDBArtifact(assetRef.artifactId);
+    const stored = await this.store.getArtifact(assetRef.artifactId);
     return stored?.blob ?? null;
   }
 
   async putChunk(chunk: AudioRecordingRecoveryChunkInput): Promise<AudioRecordingRecoveryChunkRef> {
-    const result = await artifactService.putIndexedDBArtifact(chunk.blob, {
+    const result = await this.store.putArtifact(chunk.blob, {
       mimeType: chunk.mimeType || chunk.blob.type || 'application/octet-stream',
       encoding: 'raw',
       producer: {
@@ -107,12 +110,13 @@ export class ArtifactAudioRecordingRecoveryBlobStore implements AudioRecordingRe
   }
 
   async getChunk(chunkRef: Parameters<AudioRecordingRecoveryBlobStore['getChunk']>[0]): Promise<Blob | null> {
-    const stored = await artifactService.getIndexedDBArtifact(chunkRef.artifactId);
+    const stored = await this.store.getArtifact(chunkRef.artifactId);
     return stored?.blob ?? null;
   }
 
   async deleteRef(artifactId: string): Promise<void> {
-    await artifactService.createIndexedDBStore().deleteArtifact(artifactId);
+    if (this.repository) return;
+    await this.store.deleteArtifact(artifactId);
   }
 }
 
@@ -161,6 +165,11 @@ export function writeRecoveryEntries(
   storage: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | undefined,
   entries: AudioRecordingRecoveryEntry[],
 ): void {
+  const repository = captureRepositoryDomainPublication();
+  if (repository) {
+    void repository.appendJournal('audio-recording:recovery', JSON.parse(JSON.stringify(entries)))
+      .catch(error => console.error('Recording recovery journal publication failed', error));
+  }
   if (!storage) return;
   if (entries.length === 0) {
     storage.removeItem(RECOVERY_STORAGE_KEY);

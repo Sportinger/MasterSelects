@@ -2,6 +2,7 @@ import type { SerializableClip, TimelineClip, TimelineStore } from '../types';
 import { Logger } from '../../../services/logger';
 import { projectFileService } from '../../../services/projectFileService';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
+import { isLinkedMediaDeferred } from '../../../services/project/linkedMediaDemand';
 import {
   createLoadStateDeferredMediaRestorePatch,
   createLoadStateImageRestorePatch,
@@ -165,7 +166,8 @@ export async function restoreLoadStateMediaClip(params: {
     return 'handled';
   }
 
-  const needsReload = mediaNeedsRelink(mediaFile);
+  const deferred = isLinkedMediaDeferred(mediaFile.id);
+  const needsReload = deferred || mediaNeedsRelink(mediaFile);
   if (needsReload) {
     log.debug('Clip needs reload (file permission required)', { clip: serializedClip.name });
   }
@@ -189,7 +191,7 @@ export async function restoreLoadStateMediaClip(params: {
         mediaFileId: mediaFile.id,
         filePath: mediaFile.absolutePath ?? mediaFile.filePath,
       });
-  pushRestoredClip(clip);
+  pushRestoredClip(deferred ? { ...clip, needsReload: false, isLoading: false } : clip);
   loadCachedProjectMediaArtifacts({ clip, serializedClip });
 
   if (needsReload) {

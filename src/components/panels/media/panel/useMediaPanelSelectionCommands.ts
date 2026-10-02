@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react';
 import { Logger } from '../../../../services/logger';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
+import { isLinkedMediaDeferred, requestLinkedMedia } from '../../../../services/project/linkedMediaDemand';
+import { useMediaStore as liveMediaStore } from '../../../../stores/mediaStore';
 import { thumbnailCacheService } from '../../../../services/thumbnailCacheService';
 import type { Composition, MediaFile, ProjectItem, useMediaStore } from '../../../../stores/mediaStore';
 import type { MediaPanelContextMenu } from '../context/types';
@@ -307,6 +309,10 @@ export function useMediaPanelSelectionCommands({
   }, [addToSelection, removeFromSelection, selectedIds, setSelectedMediaBoardAnnotationId, setSelection]);
 
   const handleItemDoubleClick = useCallback(async (item: ProjectItem) => {
+    if (isLinkedMediaDeferred(item.id)) {
+      if (!await requestLinkedMedia(item.id)) return;
+      item = liveMediaStore.getState().files.find(file => file.id === item.id) ?? item;
+    }
     if ('isExpanded' in item) {
       if (viewMode === 'icons') {
         setGridFolderId(item.id);

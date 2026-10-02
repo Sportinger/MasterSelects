@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../../services/project/repository/transaction/storeMutationBoundary';
 import { create } from 'zustand';
 import {
   reconcileStoryboardGenerationRecord,
@@ -47,7 +48,7 @@ export interface StoryboardStoreActions {
 
 export type StoryboardStore = StoryboardProjectState & StoryboardStoreActions;
 
-export const useStoryboardStore = create<StoryboardStore>(withExclusiveHistorySnapshotMutationLease((set) => ({
+export const useStoryboardStore = create<StoryboardStore>(withRepositoryStoreMutation('storyboard', withExclusiveHistorySnapshotMutationLease((set) => ({
   ...createEmptyStoryboardStoreProjectState(),
 
   createGenerationBriefRevision(input) {
@@ -145,7 +146,7 @@ export const useStoryboardStore = create<StoryboardStore>(withExclusiveHistorySn
       candidateState,
     ));
   },
-})));
+}))));
 
 export function getStoryboardProjectSnapshot(): StoryboardProjectState {
   return cloneStoryboardStoreProjectState(

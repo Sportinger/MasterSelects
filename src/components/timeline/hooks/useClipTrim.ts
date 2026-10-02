@@ -11,6 +11,7 @@ import { computeTrimTiming, trimOriginalsFromClip } from '../utils/clipTrimTimin
 import { createTimelineMouseMoveScheduler } from '../utils/clipDragMouseMoveScheduler';
 import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
 import { isFrameLockedClip, quantizeTimeToFrame } from '../../../utils/timelineFrameQuantization';
+import { readTimelinePlaybackPosition } from './useTimelineEditorPlaybackState';
 
 const EPSILON = 0.0001;
 // Pixel radius within which a trim edge snaps to a clip edge / playhead / marker.
@@ -366,7 +367,7 @@ export function useClipTrim({
       const trimSnapTimes = getTrimSnapTimes(
         clipMap,
         clipId,
-        playheadPositionRef.current,
+        readTimelinePlaybackPosition(playheadPositionRef.current),
         markers,
       );
       const trimSnapThreshold = Math.abs(pixelToTime(TRIM_SNAP_PIXELS));

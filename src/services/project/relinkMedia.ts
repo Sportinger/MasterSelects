@@ -1,4 +1,5 @@
 import { fileSystemService } from '../fileSystemService';
+import { isLinkedMediaDeferred } from './linkedMediaDemand';
 import { projectDB } from '../projectDB';
 import { projectFileService } from './ProjectFileService';
 import {
@@ -188,7 +189,7 @@ export function isNativeProjectLinkedMedia(mediaFile: MediaFile): boolean {
 }
 
 export function mediaNeedsRelink(mediaFile: MediaFile): boolean {
-  return !mediaFile.liveInput && !mediaFile.file && !isNativeProjectLinkedMedia(mediaFile);
+  return !mediaFile.liveInput && !mediaFile.file && !isLinkedMediaDeferred(mediaFile.id) && !isNativeProjectLinkedMedia(mediaFile);
 }
 
 function replaceMediaFile(mediaFileId: string, nextFile: Partial<MediaFile>): void {

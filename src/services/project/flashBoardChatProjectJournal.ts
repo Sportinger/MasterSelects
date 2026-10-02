@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication } from './repository/artifacts/RepositoryDomainPublication';
 import type { FlashBoardChatMessage } from '../../stores/flashboardStore/types';
 import { Logger } from '../logger';
 import { fileStorageService } from './core/FileStorageService';
@@ -126,6 +127,9 @@ function enqueueTargetWrite(
 export function persistFlashBoardChatJournal(
   messages: readonly FlashBoardChatMessage[],
 ): Promise<boolean> {
+  const repository = captureRepositoryDomainPublication();
+  if (repository) return repository.appendJournal('flashboard:conversation',
+    JSON.parse(JSON.stringify(messages.map(serializeFlashBoardChatMessage)))).then(() => true);
   const target = captureProjectTarget();
   if (!target) return Promise.resolve(false);
 
@@ -186,6 +190,11 @@ function latestJournal(
 export async function readFlashBoardChatJournal(
   projectCreatedAt: string,
 ): Promise<FlashBoardChatMessage[] | null> {
+  const repository = captureRepositoryDomainPublication();
+  if (repository) {
+    const messages = await repository.readJournal('flashboard:conversation');
+    return Array.isArray(messages) ? normalizeFlashBoardChatMessages(messages as unknown as ProjectFlashBoardChatMessage[]) : null;
+  }
   const target = captureProjectTarget();
   if (!target || target.projectCreatedAt !== projectCreatedAt) return null;
 

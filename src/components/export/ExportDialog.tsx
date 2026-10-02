@@ -1,3 +1,4 @@
+import { prepareTimelineLinkedMedia } from '../../services/project/repository/transaction/editorLinkedMediaConnection';
 // Export Dialog for frame-by-frame video export
 // After Effects-style precise rendering
 
@@ -104,6 +105,7 @@ export function ExportDialog({ onClose }: ExportDialogProps) {
     startExport(startTime, endTime);
 
     try {
+      await prepareTimelineLinkedMedia();
       const blob = await exp.export((p) => {
         setProgress(p);
         setExportProgress(p.percent, p.currentTime);

@@ -101,7 +101,13 @@ export function resolveNativeLiveInputPreviewId({
  * element than through repeated video-to-canvas-to-WebGPU copies. The WebGPU
  * preview remains mounted underneath and is used whenever compositing matters.
  */
-export function NativeLiveInputPreview({
+export function NativeLiveInputPreview(props: NativeLiveInputPreviewProps) {
+  const hasLiveInput = useMemo(() => props.clips.some(clip => !!clip.source?.liveInputId), [props.clips]);
+  if (!props.enabled || isMobileAppleWebKit() || !hasLiveInput) return null;
+  return <ActiveNativeLiveInputPreview {...props} />;
+}
+
+function ActiveNativeLiveInputPreview({
   canvasSize,
   clips,
   enabled,

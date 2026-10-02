@@ -34,7 +34,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | **Live Inputs** | Parallel screen, camera/capture-device, and composition-feedback sources as timeline clips |
 | **Storyboard And MIDI** | Timeline storyboard scene cards and MIDI tracks/clips with tempo-aware editing and export support |
 | **Multicam And Batch Export** | Audio-synced multicam assembly and queued source-media batch export |
-| **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
+| **Project Storage** | Continuous repository saves, durable branching history, immutable artifacts, relink and independent backups |
 | **Native Helper** | Firefox storage backend, yt-dlp download flow, and local media-analysis jobs |
 | **Security And Debugging** | Token-gated bridges, allowed-root file policy, playback monitors, logger tooling |
 
@@ -93,7 +93,8 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
 | [Media Panel](./Media-Panel.md) | Import flow, RAW-copy promotion, folders, compositions, and relinking |
 | [Media Discovery](./Media-Discovery.md) | Open-media catalogs, meme templates, source attribution, and local Native Helper web downloads |
-| [Project Persistence](./Project-Persistence.md) | Save/load model, IndexedDB handle cache, manual saves, timed autosave, incremental linked artifacts, relink, and project roots |
+| [Project Persistence](./Project-Persistence.md) | Continuous saving, project handoff, storage backends, media relinking, archives and recovery |
+| [Project Repository and Durable History](./Project-Repository.md) | Immutable revisions, branching undo, worker publication, workspace views, journals and artifact retention |
 | [Signal IR](./Signal-IR.md) | Contract layer for universal media signals, capability-gated runtime providers, and the Wasm/WIT ABI |
 | [Media Downloads](./Download-Panel.md) | yt-dlp-backed downloads, platform mapping, and cookie retry behavior |
 | [Native Helper](./Native-Helper.md) | Local HTTP/WebSocket APIs, auth startup token, and helper-backed flows |

@@ -1,3 +1,4 @@
+import { bindEditorAsyncStore, captureEditorAsyncMutation } from '../../../../services/project/repository/transaction/editorAsyncMutation';
 import type { MediaSliceCreator, MediaState } from '../../types';
 import { fileSystemService } from '../../../../services/fileSystemService';
 import { projectDB } from '../../../../services/projectDB';
@@ -30,8 +31,10 @@ function isBlobUrl(value?: string): value is string {
 export const createMediaReloadActions: MediaSliceCreator<Pick<
   FileManageActions,
   'refreshFileUrls' | 'reloadFile' | 'reloadAllFiles'
->> = (set, get) => ({
+>> = (baseSet, baseGet) => ({
   refreshFileUrls: async (id: string, options?: { refreshThumbnail?: boolean }) => {
+    const binding = captureEditorAsyncMutation('Reload media');
+    const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
     const mediaFile = get().files.find((f) => f.id === id);
     if (!mediaFile) return false;
 
@@ -39,6 +42,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
       return (get() as MediaState & FileManageActions).reloadFile(id);
     }
 
+    const sourceIsCurrent = () => binding.isCurrent() && baseGet().files.find(file => file.id === id)?.file === mediaFile.file;
     const refreshThumbnail = options?.refreshThumbnail ?? true;
     const url = createPrimaryMediaObjectUrl(id, mediaFile.file, { revokeExisting: false });
     let thumbnailUrl = mediaFile.thumbnailUrl;
@@ -54,6 +58,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
       }
     }
 
+    if (!sourceIsCurrent()) { URL.revokeObjectURL(url); if (thumbnailUrl !== mediaFile.thumbnailUrl && isBlobUrl(thumbnailUrl)) URL.revokeObjectURL(thumbnailUrl); return false; }
     set((state) => ({
       files: state.files.map((file) =>
         file.id === id
@@ -78,9 +83,12 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
    * Reload a single file - tries RAW folder first, then falls back to file handle.
    */
   reloadFile: async (id: string) => {
+    const binding = captureEditorAsyncMutation('Reload media');
+    const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
     const mediaFile = get().files.find(f => f.id === id);
     if (!mediaFile) return false;
 
+    const sourceIsCurrent = () => binding.isCurrent() && baseGet().files.find(file => file.id === id)?.file === mediaFile.file;
     let file: File | undefined;
     let handle: FileSystemFileHandle | undefined;
 
@@ -124,22 +132,25 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
       return false;
     }
 
+    if (!sourceIsCurrent()) return false;
     // Store handle if we got one
     if (handle) {
       fileSystemService.storeFileHandle(id, handle);
       await projectDB.storeHandle(`media_${id}`, handle);
     }
 
-    revokeMediaFileUrls(mediaFile);
+    if (!sourceIsCurrent()) return false;
     await invalidateMediaSourceReplacementCaches(
       id,
       mediaFile,
       collectActiveTimelineClipsForMediaFileId(id),
     );
 
-    // Create new URL
-    const url = createPrimaryMediaObjectUrl(id, file);
+    if (!sourceIsCurrent()) return false;
     const sourceReplacementPatch = await createMediaSourceReplacementPatch(file);
+    if (!sourceIsCurrent()) return false;
+    revokeMediaFileUrls(mediaFile);
+    const url = createPrimaryMediaObjectUrl(id, file);
 
     // Update store
     set((state) => ({
@@ -163,75 +174,13 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
    * SIMPLIFIED: Batch reload from RAW folder - no user prompts needed!
    */
   reloadAllFiles: async () => {
-    const filesToReload = get().files.filter(f => !f.file);
-    if (filesToReload.length === 0) {
-      log.debug('No files need reloading');
-      return 0;
+    const binding = captureEditorAsyncMutation('Reload missing media');
+    const files = baseGet().files.filter(file => !file.file);
+    let total = 0;
+    for (const file of files) {
+      if (!binding.isCurrent()) return total;
+      if (await (baseGet() as MediaState & FileManageActions).reloadFile(file.id)) total++;
     }
-
-    log.info(`Reloading ${filesToReload.length} files...`);
-    let totalReloaded = 0;
-
-    for (const mediaFileToReload of filesToReload) {
-      // Inline reload logic to avoid calling get().reloadFile()
-      let file: File | undefined;
-      let handle: FileSystemFileHandle | undefined;
-
-      // Try 1: Get from project RAW folder
-      if (mediaFileToReload.projectPath && projectFileService.isProjectOpen()) {
-        const result = await projectFileService.getFileFromRaw(mediaFileToReload.projectPath);
-        if (result && await isRestoredMediaSourceCompatible(mediaFileToReload, result.file)) {
-          file = result.file;
-          handle = result.handle;
-        }
-      }
-
-      // Try 2: Fallback to stored file handle
-      if (!file) {
-        const storedHandle = await projectDB.getStoredHandle(`media_${mediaFileToReload.id}`);
-        if (storedHandle && 'getFile' in storedHandle) {
-          try {
-            const permission = await (storedHandle as FileSystemFileHandle).queryPermission({ mode: 'read' });
-            if (permission === 'granted') {
-              file = await (storedHandle as FileSystemFileHandle).getFile();
-              handle = storedHandle as FileSystemFileHandle;
-            }
-          } catch {
-            // Ignore
-          }
-        }
-      }
-
-      if (!file || !await isRestoredMediaSourceCompatible(mediaFileToReload, file)) continue;
-
-      if (handle) {
-        fileSystemService.storeFileHandle(mediaFileToReload.id, handle);
-        await projectDB.storeHandle(`media_${mediaFileToReload.id}`, handle);
-      }
-
-      revokeMediaFileUrls(mediaFileToReload);
-      await invalidateMediaSourceReplacementCaches(
-        mediaFileToReload.id,
-        mediaFileToReload,
-        collectActiveTimelineClipsForMediaFileId(mediaFileToReload.id),
-      );
-      const url = createPrimaryMediaObjectUrl(mediaFileToReload.id, file);
-      const sourceReplacementPatch = await createMediaSourceReplacementPatch(file);
-
-      set((state) => ({
-        files: state.files.map((f) =>
-          f.id === mediaFileToReload.id ? { ...f, ...sourceReplacementPatch, file, url, hasFileHandle: true } : f
-        ),
-      }));
-
-      await updateTimelineClips(mediaFileToReload.id, file, {
-        invalidateCaches: false,
-        fileHash: sourceReplacementPatch.fileHash,
-      });
-      totalReloaded++;
-    }
-
-    log.info(`Complete: ${totalReloaded} files reloaded`);
-    return totalReloaded;
+    return total;
   },
 });

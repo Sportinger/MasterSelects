@@ -13,6 +13,8 @@ export interface GopDecoder {
   decode(packet: MxfPacket): void;
   /** Resolves when the decoder can take another packet. */
   waitForCapacity(): Promise<void>;
+  /** Waits for a future input-consumed event, even when there is free capacity. */
+  waitForInputProgress?(): Promise<void>;
   /** Emits every buffered frame; afterwards the next packet must be a key frame. */
   flush(): Promise<void>;
   /** Drops decoder state; the next packet must be a key frame. */
@@ -400,12 +402,24 @@ export class MxfGopEngine {
         await this.drainToEnd(decoder);
         return;
       }
-      if (this.inDecoder >= MAX_IN_DECODER) {
+      // A consumed packet may still be held for reordering. Use vacant ready
+      // slots for a pending seek's preroll instead of waiting 300 ms for output
+      // which cannot arrive until another packet is supplied. Count actual
+      // outstanding packets, including frames from an unfinished key restart.
+      const outstanding = this.inFlight.size
+        + this.staleOutputs.reduce((count, frames) => count + frames.size, 0);
+      const canFeedPreroll = this.pending !== null && decoder.queueSize === 0
+        && outstanding + this.readyFrames.size < MAX_IN_DECODER + MAX_READY_FRAMES;
+      if (this.inDecoder >= MAX_IN_DECODER && !canFeedPreroll) {
         // Enough in flight for reordering: wait for the next output instead of overfeeding.
-        const progressed = await Promise.race([
+        const progressSignals = [
           new Promise<boolean>((resolve) => this.outputWaiters.push(() => resolve(true))),
           new Promise<boolean>((resolve) => setTimeout(() => resolve(false), CAPACITY_WAIT_MS)),
-        ]);
+        ];
+        if (this.pending && decoder.queueSize > 0 && decoder.waitForInputProgress) {
+          progressSignals.push(decoder.waitForInputProgress().then(() => true));
+        }
+        const progressed = await Promise.race(progressSignals);
         if (!progressed) {
           this.stalls += 1;
           stalledWaits += 1;

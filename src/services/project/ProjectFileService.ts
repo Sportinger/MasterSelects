@@ -1,7 +1,6 @@
-// Project File Service Facade
-// Delegates to domain services while maintaining the original API for backward compatibility
-// Supports two backends: FSA (Chrome) and Native Helper (Firefox)
-
+import { repositoryFileHandle, repositoryFileNames, scanRepositoryFiles, copyRepositoryRaw, repositoryDownloadFolder } from './repository/lifecycle/repositoryFiles';
+import { captureRepositoryDomainPublication } from './repository/artifacts/RepositoryDomainPublication';
+import { getActiveRepositorySession, getActiveRepositoryDirectory } from './repository/lifecycle/editorRepositoryLifecycle';
 import { Logger } from '../logger';
 import { FileStorageService, fileStorageService } from './core/FileStorageService';
 import { NativeFileStorageService, nativeFileStorageService } from './core/NativeFileStorageService';
@@ -51,18 +50,13 @@ import {
   pickNativeFolder,
 } from './fileService/nativeBackend';
 import { isAndroidAutoRestoreProjectHandle } from './androidProjectAutoRestore';
-
 export type {
   DeleteMediaFileArtifactsOptions,
   DeleteMediaFileArtifactsResult,
 } from './fileService/artifactCleanup';
-
 const log = Logger.create('ProjectFileService');
-
 export type ProjectBackend = 'fsa' | 'native';
-
 class ProjectFileService {
-  // Domain services
   private readonly coreService: ProjectCoreService;
   private readonly fileStorage: FileStorageService;
   private readonly analysisService: AnalysisService;
@@ -70,12 +64,9 @@ class ProjectFileService {
   private readonly cacheService: CacheService;
   private readonly proxyStorageService: ProxyStorageService;
   private readonly rawMediaService: RawMediaService;
-
-  // Native Helper backend (lazy-initialized)
   private nativeCoreService: NativeProjectCoreService | null = null;
   private nativeFileStorage: NativeFileStorageService | null = null;
   private _activeBackend: ProjectBackend = 'fsa';
-
   constructor() {
     this.fileStorage = fileStorageService;
     this.coreService = new ProjectCoreService(this.fileStorage);
@@ -85,7 +76,6 @@ class ProjectFileService {
     this.proxyStorageService = new ProxyStorageService();
     this.rawMediaService = new RawMediaService(this.fileStorage);
   }
-
   private get fileRoutingContext(): FileStorageRoutingContext {
     return {
       activeBackend: this._activeBackend,
@@ -95,7 +85,6 @@ class ProjectFileService {
       nativeFileStorage: this.nativeFileStorage,
     };
   }
-
   private get rawMediaRoutingContext(): rawMediaRouting.RawMediaRoutingContext {
     return {
       activeBackend: this._activeBackend,
@@ -107,7 +96,6 @@ class ProjectFileService {
       ensureNativeBackendReady: () => this.ensureNativeBackendReady(),
     };
   }
-
   private get artifactStorageContext(): artifactStorageDelegates.ArtifactStorageContext {
     return {
       activeBackend: this._activeBackend,
@@ -123,7 +111,6 @@ class ProjectFileService {
       deleteEntry: (subFolder, entryName, options) => this.deleteEntry(subFolder as keyof typeof PROJECT_FOLDERS, entryName, options),
     };
   }
-
   private get artifactCleanupContext(): MediaArtifactCleanupContext {
     return {
       activeBackend: this._activeBackend,
@@ -139,7 +126,6 @@ class ProjectFileService {
       deleteProxy: (mediaId) => this.deleteProxy(mediaId),
     };
   }
-
   private ensureNativeBackend(): NativeProjectCoreService {
     if (!this.nativeCoreService) {
       this.nativeCoreService = new NativeProjectCoreService();
@@ -148,18 +134,13 @@ class ProjectFileService {
     this._activeBackend = 'native';
     return this.nativeCoreService;
   }
-
   private async ensureNativeBackendReady(): Promise<NativeProjectCoreService | null> {
-    // ensureNativeBackend() pins the backend before the helper is proven
-    // reachable, so an unreachable helper would otherwise leave every later
-    // call routed to a dead backend.
     const previousBackend = this._activeBackend;
     const nativeCore = this.ensureNativeBackend();
     const abandonNativeBackend = (): null => {
       this._activeBackend = previousBackend;
       return null;
     };
-
     if (!NativeHelperClient.isConnected()) {
       const connected = await NativeHelperClient.connect();
       if (!connected) {
@@ -167,23 +148,18 @@ class ProjectFileService {
         return abandonNativeBackend();
       }
     }
-
     const hasFsCommands = await NativeHelperClient.hasFsCommands();
     if (!hasFsCommands) {
       log.error('Native Helper does not support project file-system commands');
       return abandonNativeBackend();
     }
-
     return nativeCore;
   }
 
-  // ============================================
-  // BACKEND SELECTION
-  // ============================================
 
   /** Get the currently active backend */
   get activeBackend(): ProjectBackend {
-    return this._activeBackend;
+    const session = getActiveRepositorySession(); return session ? session.location.kind === 'native' ? 'native' : 'fsa' : this._activeBackend;
   }
 
   /**
@@ -229,9 +205,6 @@ class ProjectFileService {
     return this.nativeFileStorage;
   }
 
-  // ============================================
-  // CORE SERVICE DELEGATION (routes to FSA or Native)
-  // ============================================
 
   /** Helper to get the active core service */
   private get core(): ProjectCoreService | NativeProjectCoreService {
@@ -243,22 +216,17 @@ class ProjectFileService {
 
   isSupported(): boolean {
     if (this._activeBackend === 'native' || !this.isFsaAvailable) {
-      // Browser storage still counts: WebKit has no picker but does have OPFS.
       return (this.nativeCoreService?.isSupported() ?? false) || this.coreService.isSupported();
     }
     return this.coreService.isSupported();
   }
 
   getProjectHandle(): FileSystemDirectoryHandle | null {
-    // Only FSA backend has a handle
-    if (this._activeBackend === 'fsa' && this.isFsaAvailable) {
-      return this.coreService.getProjectHandle();
-    }
-    return null;
+    return getActiveRepositoryDirectory() ?? this.coreService.getProjectHandle();
   }
 
-  /** Get project path (native backend) or null */
   getProjectPath(): string | null {
+    const session = getActiveRepositorySession(); if (session) return session.location.kind === 'native' ? session.location.path : null;
     if (this._activeBackend === 'native' && this.nativeCoreService) {
       return this.nativeCoreService.getProjectPath();
     }
@@ -270,6 +238,7 @@ class ProjectFileService {
   }
 
   getProjectPackageSession(): ProjectPackageSession | null {
+    if (getActiveRepositorySession()) return null;
     if (this._activeBackend === 'native') {
       const path = this.nativeCoreService?.getProjectPath();
       return path ? getNativeProjectPackageSession(path) : null;
@@ -302,7 +271,7 @@ class ProjectFileService {
     return this.core.requestPendingPermission();
   }
 
-  async createProject(name: string): Promise<boolean> {
+  async createProject(name: string, preserveCurrent = false): Promise<boolean> {
     if (this._activeBackend === 'native' || !this.isFsaAvailable) {
       const nativeCore = await this.ensureNativeBackendReady();
       if (nativeCore) {
@@ -313,16 +282,14 @@ class ProjectFileService {
         );
 
         if (!parentPath) return false;
-        return nativeCore.createProjectAtPath(parentPath, name);
+        return nativeCore.createProjectAtPath(parentPath, name, preserveCurrent);
       }
-      // No helper: fall through to browser storage instead of failing.
     }
 
-    return this.core.createProject(name);
+    return this.core.createProject(name, preserveCurrent);
   }
 
   async createProjectInFolder(handle: FileSystemDirectoryHandle, name: string): Promise<boolean> {
-    // Only FSA supports this
     return this.coreService.createProjectInFolder(handle, name);
   }
 
@@ -371,7 +338,6 @@ class ProjectFileService {
         ? nativeCore.loadProject(normalizeNativePath(handleOrPath))
         : false;
     }
-    // FSA handle
     return this.coreService.loadProject(handleOrPath);
   }
 
@@ -379,8 +345,8 @@ class ProjectFileService {
     return this.core.saveProject();
   }
 
-  closeProject(): void {
-    this.core.closeProject();
+  async closeProject(): Promise<void> {
+    await this.core.closeProject();
   }
 
   async createBackup(): Promise<boolean> {
@@ -425,15 +391,13 @@ class ProjectFileService {
     this.core.updateFolders(folders);
   }
 
-  // ============================================
-  // FILE STORAGE DELEGATION (routes to FSA or Native)
-  // ============================================
 
   async getFileHandle(
     subFolder: keyof typeof PROJECT_FOLDERS,
     fileName: string,
     create = false
   ): Promise<FileSystemFileHandle | null> {
+    if (captureRepositoryDomainPublication()) return repositoryFileHandle(subFolder, fileName, create);
     return getRoutedFileHandle(this.fileRoutingContext, subFolder, fileName, create);
   }
 
@@ -442,28 +406,32 @@ class ProjectFileService {
     fileName: string,
     content: Blob | string
   ): Promise<boolean> {
-    return writeRoutedFile(this.fileRoutingContext, subFolder, fileName, content);
+    const host = captureRepositoryDomainPublication();
+    return host ? host.writeFile(subFolder, fileName, content) : writeRoutedFile(this.fileRoutingContext, subFolder, fileName, content);
   }
 
   async readFile(
     subFolder: keyof typeof PROJECT_FOLDERS,
     fileName: string
   ): Promise<File | null> {
-    return readRoutedFile(this.fileRoutingContext, subFolder, fileName);
+    const host = captureRepositoryDomainPublication();
+    return host ? host.readFile(subFolder, fileName) : readRoutedFile(this.fileRoutingContext, subFolder, fileName);
   }
 
   async fileExists(
     subFolder: keyof typeof PROJECT_FOLDERS,
     fileName: string
   ): Promise<boolean> {
-    return routedFileExists(this.fileRoutingContext, subFolder, fileName);
+    const host = captureRepositoryDomainPublication();
+    return host ? Boolean(await host.readFile(subFolder, fileName)) : routedFileExists(this.fileRoutingContext, subFolder, fileName);
   }
 
   async deleteFile(
     subFolder: keyof typeof PROJECT_FOLDERS,
     fileName: string
   ): Promise<boolean> {
-    return deleteRoutedFile(this.fileRoutingContext, subFolder, fileName);
+    const host = captureRepositoryDomainPublication();
+    return host ? host.deleteFile(subFolder, fileName) : deleteRoutedFile(this.fileRoutingContext, subFolder, fileName);
   }
 
   async deleteEntry(
@@ -471,47 +439,56 @@ class ProjectFileService {
     entryName: string,
     options?: { recursive?: boolean }
   ): Promise<boolean> {
+    const host = captureRepositoryDomainPublication();
+    if (host) { const names = repositoryFileNames(subFolder).filter(name => name === entryName || options?.recursive && name.startsWith(entryName + '/'));
+      for (const name of names) if (!await host.deleteFile(subFolder, name)) return false; return names.length > 0; }
     return deleteRoutedEntry(this.fileRoutingContext, subFolder, entryName, options);
   }
 
   async listFiles(subFolder: keyof typeof PROJECT_FOLDERS): Promise<string[]> {
-    return listRoutedFiles(this.fileRoutingContext, subFolder);
+    return captureRepositoryDomainPublication() ? repositoryFileNames(subFolder) : listRoutedFiles(this.fileRoutingContext, subFolder);
   }
 
-  // ============================================
-  // RAW MEDIA SERVICE DELEGATION
-  // ============================================
 
   async copyToRawFolder(file: File, fileName?: string): Promise<{ handle?: FileSystemFileHandle; relativePath: string; alreadyExisted: boolean } | null> {
+    if (captureRepositoryDomainPublication()) return copyRepositoryRaw(file, fileName);
     return rawMediaRouting.copyToRawFolder(this.rawMediaRoutingContext, file, fileName);
   }
 
   async getFileFromRaw(relativePath: string): Promise<{ file: File; handle?: FileSystemFileHandle } | null> {
+    const host = captureRepositoryDomainPublication();
+    if (host) { const name = relativePath.startsWith(PROJECT_FOLDERS.RAW + '/') ? relativePath.slice(PROJECT_FOLDERS.RAW.length + 1) : relativePath;
+      const file = await host.readFile('RAW', name); return file ? { file } : null; }
     return rawMediaRouting.getFileFromRaw(this.rawMediaRoutingContext, relativePath);
   }
 
   async deleteRawFile(relativePath: string | undefined): Promise<boolean> {
+    const host = captureRepositoryDomainPublication();
+    if (host && relativePath) return host.deleteFile('RAW', relativePath.replace(/^Raw\//, ''));
     return rawMediaRouting.deleteRawFile(this.rawMediaRoutingContext, relativePath);
   }
 
   resolveRawFilePath(relativePath: string | undefined): string | null {
+    if (captureRepositoryDomainPublication()) return null;
     return rawMediaRouting.resolveRawFilePath(this.rawMediaRoutingContext, relativePath);
   }
 
   resolveRawFileUrl(relativePath: string | undefined): string | null {
+    if (captureRepositoryDomainPublication()) return null;
     return rawMediaRouting.resolveRawFileUrl(this.rawMediaRoutingContext, relativePath);
   }
 
   async hasFileInRaw(fileName: string): Promise<boolean> {
-    return rawMediaRouting.hasFileInRaw(this.rawMediaRoutingContext, fileName);
+    const host = captureRepositoryDomainPublication();
+    return host ? Boolean(await host.readFile('RAW', fileName)) : rawMediaRouting.hasFileInRaw(this.rawMediaRoutingContext, fileName);
   }
 
   async scanRawFolder(): Promise<Map<string, FileSystemFileHandle>> {
-    return rawMediaRouting.scanRawFolder(this.rawMediaRoutingContext);
+    return captureRepositoryDomainPublication() ? scanRepositoryFiles('RAW') : rawMediaRouting.scanRawFolder(this.rawMediaRoutingContext);
   }
 
   async scanProjectFolder(): Promise<Map<string, FileSystemFileHandle>> {
-    return rawMediaRouting.scanProjectFolder(this.rawMediaRoutingContext);
+    return captureRepositoryDomainPublication() ? scanRepositoryFiles() : rawMediaRouting.scanProjectFolder(this.rawMediaRoutingContext);
   }
 
   async pickAndScanFolder(title = 'Search folder for media'): Promise<{
@@ -527,20 +504,24 @@ class ProjectFileService {
   }
 
   async saveDownload(blob: Blob, title: string, platform: string): Promise<File | null> {
+    const host = captureRepositoryDomainPublication();
+    if (host) { const name = repositoryDownloadFolder(platform) + '/' + RawMediaService.getDownloadFileName(title, RawMediaService.getDownloadExtension(blob));
+      return await host.writeFile('DOWNLOADS', name, blob) ? host.readFile('DOWNLOADS', name) : null; }
     return rawMediaRouting.saveDownload(this.rawMediaRoutingContext, blob, title, platform);
   }
 
   async checkDownloadExists(title: string, platform: string): Promise<boolean> {
+    if (captureRepositoryDomainPublication()) return Boolean(await this.getDownloadFile(title, platform));
     return rawMediaRouting.checkDownloadExists(this.rawMediaRoutingContext, title, platform);
   }
 
   async getDownloadFile(title: string, platform: string): Promise<File | null> {
+    const host = captureRepositoryDomainPublication();
+    if (host) { const stem = RawMediaService.sanitizeDownloadName(title) || 'download';
+      for (const name of repositoryFileNames('DOWNLOADS')) if (name.startsWith(repositoryDownloadFolder(platform) + '/' + stem + '.')) return host.readFile('DOWNLOADS', name); return null; }
     return rawMediaRouting.getDownloadFile(this.rawMediaRoutingContext, title, platform);
   }
 
-  // ============================================
-  // CACHE SERVICE DELEGATION
-  // ============================================
 
   async saveThumbnail(fileHash: string, blob: Blob): Promise<boolean> {
     return artifactStorageDelegates.saveThumbnail(this.artifactStorageContext, fileHash, blob);
@@ -582,9 +563,6 @@ class ProjectFileService {
     return artifactStorageDelegates.deleteWaveform(this.artifactStorageContext, mediaId);
   }
 
-  // ============================================
-  // PROXY STORAGE SERVICE DELEGATION
-  // ============================================
 
   async saveProxyFrame(mediaId: string, frameIndex: number, blob: Blob): Promise<boolean> {
     return artifactStorageDelegates.saveProxyFrame(this.artifactStorageContext, mediaId, frameIndex, blob);
@@ -638,9 +616,6 @@ class ProjectFileService {
     return artifactStorageDelegates.deleteProxy(this.artifactStorageContext, mediaId);
   }
 
-  // ============================================
-  // ANALYSIS SERVICE DELEGATION
-  // ============================================
 
   async saveAnalysis(
     mediaId: string,
@@ -695,9 +670,6 @@ class ProjectFileService {
     return artifactStorageDelegates.deleteAnalysisRange(this.artifactStorageContext, mediaId, inPoint, outPoint);
   }
 
-  // ============================================
-  // TRANSCRIPT SERVICE DELEGATION
-  // ============================================
 
   async saveTranscript(mediaId: string, transcript: unknown, transcribedRanges?: [number, number][]): Promise<boolean> {
     return artifactStorageDelegates.saveTranscript(this.artifactStorageContext, mediaId, transcript, transcribedRanges);
@@ -724,5 +696,5 @@ class ProjectFileService {
   }
 }
 
-// Singleton instance
-export const projectFileService = new ProjectFileService();
+export const projectFileService = (import.meta.hot?.data?.projectFileService as ProjectFileService | undefined) ?? new ProjectFileService();
+if (import.meta.hot) { import.meta.hot.dispose(data => { data.projectFileService = projectFileService; }); import.meta.hot.accept(); }

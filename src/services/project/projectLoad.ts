@@ -1,3 +1,4 @@
+import { getActiveRepositorySession } from './repository/lifecycle/editorRepositoryLifecycle';
 // Project Load - load project file data into stores + background restoration
 
 import { Logger } from '../logger';
@@ -111,6 +112,8 @@ function normalizeLoadedProjectCompositionState(): void {
 }
 
 export async function loadProjectToStores(): Promise<void> {
+  // Repository opens already completed atomic domain/runtime activation.
+  if (getActiveRepositorySession()) { completeProjectLoadProgress(); return; }
   let backgroundProjectData: ProjectFile | null = null;
   let backgroundHydrateFiles = true;
 

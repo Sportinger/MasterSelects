@@ -1,3 +1,4 @@
+import { bindEditorAsyncStore, captureEditorAsyncMutation, discardUnpublishedMedia, type EditorAsyncMutation } from '../../../../services/project/repository/transaction/editorAsyncMutation';
 import { withProjectArtifactWriteBatch } from '../../../../services/project/projectArtifactWriteBatch';
 import type { FileImportResult, MediaFile, MediaSliceCreator, MediaState } from '../../types';
 import { processGaussianSplatSequenceImport } from '../../helpers/gaussianSplatSequenceImport';
@@ -47,9 +48,11 @@ async function commitPremiereProjects(
   get: MediaSliceGet,
   files: File[],
   analytics: MediaImportAnalyticsContext,
+  binding: EditorAsyncMutation,
   parentId?: string | null,
 ): Promise<void> {
   for (const file of files) {
+    binding.assertCurrent();
     const updateProgress = (progress: PremiereProjectImportProgress) => {
       set({
         projectLoadProgress: {
@@ -68,7 +71,8 @@ async function commitPremiereProjects(
         onProgress: updateProgress,
         selectSequences: (summary) => requestPremiereSequenceSelection(file.name, summary),
       });
-      set((state) => {
+      if (!binding.isCurrent()) { result.mediaFiles.forEach(file => discardUnpublishedMedia(file)); throw new DOMException('Premiere import project changed', 'AbortError'); }
+      binding.run(() => set((state) => {
         const existingFolderIds = new Set(state.folders.map((folder) => folder.id));
         const existingFileIds = new Set(state.files.map((media) => media.id));
         const existingCompositionIds = new Set(state.compositions.map((composition) => composition.id));
@@ -90,7 +94,7 @@ async function commitPremiereProjects(
             ? state.expandedFolderIds
             : [...state.expandedFolderIds, result.folder.id],
         };
-      });
+      }));
       log.info(`Imported Premiere project: ${file.name}`, {
         compositions: result.compositions.length,
         missingMedia: result.mediaFiles.length,
@@ -157,12 +161,15 @@ async function importSignalEntries(
   entries: ResolvedSignalImportEntry[],
   imported: FileImportResult[],
   analytics: MediaImportAnalyticsContext,
+  binding: EditorAsyncMutation,
   parentId?: string | null,
 ): Promise<void> {
   for (const entry of entries) {
+    binding.assertCurrent();
     try {
       const signalAsset = await runSignalImport(entry, parentId);
-      commitSignalAsset(set, signalAsset);
+      binding.assertCurrent();
+      binding.run(() => commitSignalAsset(set, signalAsset));
       imported.push(signalAsset);
     } catch (err) {
       log.error(`Signal import failed: ${entry.file.name}`, err);
@@ -177,9 +184,11 @@ async function importModelSequences(
   sequences: ReturnType<typeof splitModelSequenceEntries>['modelSequences'],
   imported: FileImportResult[],
   analytics: MediaImportAnalyticsContext,
+  binding: EditorAsyncMutation,
   options: { parentId?: string | null; includeParentId: boolean },
 ): Promise<void> {
   for (const sequence of sequences) {
+    binding.assertCurrent();
     const sequenceId = sequence.entries[0]!.id;
     try {
       let lastProgress = -1;
@@ -194,13 +203,14 @@ async function importModelSequences(
           set((state) => updatePlaceholderImportProgress(state, sequenceId, normalized));
         },
       });
+      if (!binding.isCurrent() || get().files.find(candidate => candidate.id === sequenceId)?.file !== sequence.entries[0]?.file) { discardUnpublishedMedia(result); throw new DOMException('Sequence import target changed', 'AbortError'); }
       finalizeImportedMediaFile(set, get, sequenceId, result);
       imported.push(result);
     } catch (err) {
       log.error(`Sequence import failed: ${sequence.displayName}`, err);
       analytics.trackFailure(err, 'sequence_processing', sequence.entries.length);
       set((state) => ({
-        files: state.files.filter((f) => f.id !== sequenceId),
+        files: state.files.filter((f) => f.id !== sequenceId || f.file !== sequence.entries[0]?.file),
       }));
     }
   }
@@ -212,9 +222,11 @@ async function importGaussianSplatSequences(
   sequences: ReturnType<typeof splitModelSequenceEntries>['gaussianSplatSequences'],
   imported: FileImportResult[],
   analytics: MediaImportAnalyticsContext,
+  binding: EditorAsyncMutation,
   options: { parentId?: string | null; includeParentId: boolean },
 ): Promise<void> {
   for (const sequence of sequences) {
+    binding.assertCurrent();
     const sequenceId = sequence.entries[0]!.id;
     try {
       let lastProgress = -1;
@@ -229,13 +241,14 @@ async function importGaussianSplatSequences(
           set((state) => updatePlaceholderImportProgress(state, sequenceId, normalized));
         },
       });
+      if (!binding.isCurrent() || get().files.find(candidate => candidate.id === sequenceId)?.file !== sequence.entries[0]?.file) { discardUnpublishedMedia(result); throw new DOMException('Sequence import target changed', 'AbortError'); }
       finalizeImportedMediaFile(set, get, sequenceId, result);
       imported.push(result);
     } catch (err) {
       log.error(`Sequence import failed: ${sequence.displayName}`, err);
       analytics.trackFailure(err, 'sequence_processing', sequence.entries.length);
       set((state) => ({
-        files: state.files.filter((f) => f.id !== sequenceId),
+        files: state.files.filter((f) => f.id !== sequenceId || f.file !== sequence.entries[0]?.file),
       }));
     }
   }
@@ -247,10 +260,12 @@ async function importPlainSinglesInBatches(
   singles: ResolvedLegacyImportEntry[],
   imported: FileImportResult[],
   analytics: MediaImportAnalyticsContext,
+  binding: EditorAsyncMutation,
   parentId?: string | null,
 ): Promise<void> {
   const batchSize = 3;
   for (let i = 0; i < singles.length; i += batchSize) {
+    binding.assertCurrent();
     const batch = singles.slice(i, i + batchSize);
     const results = await Promise.all(
       batch.map(async ({ file, id, type }) => {
@@ -262,13 +277,14 @@ async function importPlainSinglesInBatches(
             generateThumbnail: false,
             typeOverride: type,
           });
+          if (!binding.isCurrent() || get().files.find(candidate => candidate.id === id)?.file !== file) { discardUnpublishedMedia(result.mediaFile); throw new DOMException('Media import target changed', 'AbortError'); }
           finalizeImportedMediaFile(set, get, id, result.mediaFile);
           return result.mediaFile;
         } catch (err) {
           log.error(`Import failed: ${file.name}`, err);
           analytics.trackFailure(err, 'media_processing');
           set((state) => ({
-            files: state.files.filter((f) => f.id !== id),
+            files: state.files.filter((f) => f.id !== id || f.file !== file),
           }));
           return null;
         }
@@ -284,17 +300,21 @@ async function importHandleSingles(
   singles: ResolvedLegacyImportEntry[],
   imported: FileImportResult[],
   analytics: MediaImportAnalyticsContext,
+  binding: EditorAsyncMutation,
   options: { parentId?: string | null; includeParentId: boolean; includeAbsolutePath: boolean },
 ): Promise<void> {
   for (const { file, handle, absolutePath, id, type } of singles) {
+    binding.assertCurrent();
     if (handle) {
       await analytics.withStage('handle_storage', async () => {
+        binding.assertCurrent();
         fileSystemService.storeFileHandle(id, handle);
         await projectDB.storeHandle(`media_${id}`, handle);
         log.debug('Stored file handle for ID:', id);
       });
     }
 
+    binding.assertCurrent();
     try {
       const importResult = await processImport({
         file,
@@ -305,13 +325,14 @@ async function importHandleSingles(
         generateThumbnail: false,
         typeOverride: type,
       });
+      if (!binding.isCurrent() || get().files.find(candidate => candidate.id === id)?.file !== file) { discardUnpublishedMedia(importResult.mediaFile); throw new DOMException('Media import target changed', 'AbortError'); }
       finalizeImportedMediaFile(set, get, id, importResult.mediaFile);
       imported.push(importResult.mediaFile);
     } catch (err) {
       log.error(`Import failed: ${file.name}`, err);
       analytics.trackFailure(err, 'media_processing');
       set((state) => ({
-        files: state.files.filter((f) => f.id !== id),
+        files: state.files.filter((f) => f.id !== id || f.file !== file),
       }));
     }
   }
@@ -323,6 +344,7 @@ async function importGroupedLegacyEntries(
   groups: ReturnType<typeof splitResolvedEntries>,
   imported: FileImportResult[],
   analytics: MediaImportAnalyticsContext,
+  binding: EditorAsyncMutation,
   options: {
     parentId?: string | null;
     includeParentId: boolean;
@@ -330,11 +352,11 @@ async function importGroupedLegacyEntries(
     includeAbsolutePath?: boolean;
   },
 ): Promise<void> {
-  await importModelSequences(set, get, groups.modelSequences, imported, analytics, options);
-  await importGaussianSplatSequences(set, get, groups.gaussianSplatSequences, imported, analytics, options);
+  await importModelSequences(set, get, groups.modelSequences, imported, analytics, binding, options);
+  await importGaussianSplatSequences(set, get, groups.gaussianSplatSequences, imported, analytics, binding, options);
 
   if (options.handleSingles) {
-    await importHandleSingles(set, get, groups.singles, imported, analytics, {
+    await importHandleSingles(set, get, groups.singles, imported, analytics, binding, {
       parentId: options.parentId,
       includeParentId: options.includeParentId,
       includeAbsolutePath: options.includeAbsolutePath === true,
@@ -342,14 +364,16 @@ async function importGroupedLegacyEntries(
     return;
   }
 
-  await importPlainSinglesInBatches(set, get, groups.singles, imported, analytics, options.parentId);
+  await importPlainSinglesInBatches(set, get, groups.singles, imported, analytics, binding, options.parentId);
 }
 
 export const createBatchFileImportActions: MediaSliceCreator<Pick<
   FileImportActions,
   'importFiles' | 'importFilesWithPicker' | 'importFilesWithHandles'
->> = (set, get) => ({
+>> = (baseSet, baseGet) => ({
   importFiles: async (files: FileList | File[], parentId?: string | null) => {
+    const binding = captureEditorAsyncMutation('Import media batch');
+    const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
     const fileArray = Array.from(files);
     return withProjectArtifactWriteBatch(() => withMediaImportAnalytics(fileArray, 'input_or_drop', async (analytics) => {
       const premiereProjects = fileArray.filter(isPremiereProjectFile);
@@ -359,23 +383,27 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
       const entries = await analytics.withStage('planning', async () => (
         Promise.all(regularFiles.map(async (file) => resolveImportEntry(file)))
       ));
+      binding.assertCurrent();
       const groups = splitResolvedEntries(entries);
 
       addLegacyPlaceholders(set, groups, parentId);
-      await importSignalEntries(set, groups.signalEntries, imported, analytics, parentId);
-      await importGroupedLegacyEntries(set, get, groups, imported, analytics, {
+      await importSignalEntries(set, groups.signalEntries, imported, analytics, binding, parentId);
+      await importGroupedLegacyEntries(set, get, groups, imported, analytics, binding, {
         parentId,
         includeParentId: true,
         handleSingles: false,
       });
-      await commitPremiereProjects(set, get, premiereProjects, analytics, parentId);
+      await commitPremiereProjects(set, get, premiereProjects, analytics, binding, parentId);
 
       return imported;
     }));
   },
 
   importFilesWithPicker: async () => {
+    const binding = captureEditorAsyncMutation('Import media batch');
+    const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
     const result = await fileSystemService.pickFiles();
+    binding.assertCurrent();
     if (!result || result.length === 0) {
       trackMediaImportPickerCancelled();
       return [];
@@ -391,21 +419,24 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
           resolveImportEntry(file, { handle })
         )))
       ));
+      binding.assertCurrent();
       const groups = splitResolvedEntries(entries);
 
       addLegacyPlaceholders(set, groups);
-      await importSignalEntries(set, groups.signalEntries, imported, analytics);
-      await importGroupedLegacyEntries(set, get, groups, imported, analytics, {
+      await importSignalEntries(set, groups.signalEntries, imported, analytics, binding);
+      await importGroupedLegacyEntries(set, get, groups, imported, analytics, binding, {
         includeParentId: false,
         handleSingles: true,
       });
-      await commitPremiereProjects(set, get, premiereProjects, analytics);
+      await commitPremiereProjects(set, get, premiereProjects, analytics, binding);
 
       return imported;
     }));
   },
 
   importFilesWithHandles: async (filesWithHandles, parentId?: string | null) => {
+    const binding = captureEditorAsyncMutation('Import media batch');
+    const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
     const selectedFiles = filesWithHandles.map(({ file }) => file);
     return withProjectArtifactWriteBatch(() => withMediaImportAnalytics(selectedFiles, 'handles', async (analytics) => {
       const imported: FileImportResult[] = [];
@@ -419,17 +450,18 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
           resolveImportEntry(file, { handle, absolutePath })
         )))
       ));
+      binding.assertCurrent();
       const groups = splitResolvedEntries(entries);
 
       addLegacyPlaceholders(set, groups, parentId);
-      await importSignalEntries(set, groups.signalEntries, imported, analytics, parentId);
-      await importGroupedLegacyEntries(set, get, groups, imported, analytics, {
+      await importSignalEntries(set, groups.signalEntries, imported, analytics, binding, parentId);
+      await importGroupedLegacyEntries(set, get, groups, imported, analytics, binding, {
         parentId,
         includeParentId: true,
         handleSingles: true,
         includeAbsolutePath: true,
       });
-      await commitPremiereProjects(set, get, premiereProjects, analytics, parentId);
+      await commitPremiereProjects(set, get, premiereProjects, analytics, binding, parentId);
 
       return imported;
     }));

@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import type { TimelineGridPlan } from '../utils/timelineGrid';
 import { useTimelineClipMediaLookup } from './useTimelineClipMediaLookup';
 import { useTimelineKeyframeDiamondsRenderer } from './useTimelineKeyframeDiamondsRenderer';
@@ -71,6 +72,9 @@ export function useTimelineTrackSectionSurfaceController({
   });
 
   const getMediaFileForClip = useTimelineClipMediaLookup(mediaFiles);
+  const onBakeRegion = useCallback((regionId: BakeRegionId) => {
+    void bakeCompositionVideoBakeRegion(regionId);
+  }, [bakeCompositionVideoBakeRegion]);
 
   return useTimelineTrackSectionRenderers({
     ...trackSectionParams,
@@ -84,9 +88,7 @@ export function useTimelineTrackSectionSurfaceController({
     gridMode: gridPlan.mode,
     hoveredKeyframeRow,
     marqueeActive: Boolean(marquee),
-    onBakeRegion: (regionId) => {
-      void bakeCompositionVideoBakeRegion(regionId);
-    },
+    onBakeRegion,
     onKeyframeRowHover: handleKeyframeRowHover,
     onMoveKeyframe,
     onSelectKeyframe,

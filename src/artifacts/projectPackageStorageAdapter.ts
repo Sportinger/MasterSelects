@@ -5,11 +5,13 @@ import {
   buildArtifactManifestProjectRelativePath,
   buildArtifactProjectRelativePath,
   getHashFromArtifactId,
+  getManifestHashFromArtifactId,
+  artifactManifestFileName,
+  isArtifactManifestFileName,
 } from './ids';
 import {
   ARTIFACT_BINARY_FILE_NAME,
   ARTIFACT_HASH_ALGORITHM,
-  ARTIFACT_MANIFEST_FILE_NAME,
   type ArtifactManifest,
   type ArtifactStorageAdapter,
   type ArtifactStorageLocation,
@@ -46,7 +48,7 @@ export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdap
     const base = this.getArtifactEntryBase(manifest.hash);
     const saved = await this.session.writeEntries([
       { folder: 'CACHE_ARTIFACTS', fileName: `${base}/${ARTIFACT_BINARY_FILE_NAME}`, content: blob },
-      { folder: 'CACHE_ARTIFACTS', fileName: `${base}/${ARTIFACT_MANIFEST_FILE_NAME}`, content: JSON.stringify(manifest, null, 2) },
+      { folder: 'CACHE_ARTIFACTS', fileName: `${base}/${artifactManifestFileName(manifest)}`, content: JSON.stringify(manifest, null, 2) },
     ]);
     if (!saved) throw new Error(`Unable to save packaged artifact ${manifest.artifactId}`);
   }
@@ -54,7 +56,7 @@ export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdap
   async saveArtifactManifest(manifest: ArtifactManifest): Promise<void> {
     const saved = await this.session.writeEntry(
       'CACHE_ARTIFACTS',
-      `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_MANIFEST_FILE_NAME}`,
+      `${this.getArtifactEntryBase(manifest.hash)}/${artifactManifestFileName(manifest)}`,
       JSON.stringify(manifest, null, 2),
     );
     if (!saved) throw new Error(`Unable to save packaged artifact manifest ${manifest.artifactId}`);
@@ -63,7 +65,8 @@ export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdap
   async getArtifactManifest(artifactId: string): Promise<ArtifactManifest | null> {
     const hash = getHashFromArtifactId(artifactId);
     if (!hash) return null;
-    const manifest = this.readManifest(`${this.getArtifactEntryBase(hash)}/${ARTIFACT_MANIFEST_FILE_NAME}`);
+    const manifestHash = getManifestHashFromArtifactId(artifactId);
+    const manifest = this.readManifest(`${this.getArtifactEntryBase(hash)}/${artifactManifestFileName({ ...(manifestHash ? { manifestHash } : {}) })}`);
     return manifest?.artifactId === artifactId ? manifest : null;
   }
 
@@ -80,7 +83,7 @@ export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdap
     if (!manifest) return;
     await this.session.deleteEntry(
       'CACHE_ARTIFACTS',
-      `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_MANIFEST_FILE_NAME}`,
+      `${this.getArtifactEntryBase(manifest.hash)}/${artifactManifestFileName(manifest)}`,
     );
   }
 
@@ -130,7 +133,7 @@ export class ProjectPackageArtifactStorageAdapter implements ArtifactStorageAdap
     const bySource = new Map<string, ArtifactManifest[]>();
     const entries: PackageArtifactIndex['entries'] = new Map();
     for (const path of this.session.listEntryPaths('CACHE_ARTIFACTS')) {
-      if (!path.endsWith(`/${ARTIFACT_MANIFEST_FILE_NAME}`)) continue;
+      if (!isArtifactManifestFileName(path.split('/').at(-1)!)) continue;
       const bytes = this.session.getEntries().get(`${PROJECT_FOLDERS.CACHE_ARTIFACTS}/${path}`);
       if (!bytes) continue;
       const previous = cached?.entries.get(path);

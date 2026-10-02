@@ -52,6 +52,7 @@ export interface LoadVideoMediaParams {
   waveformsEnabled: boolean;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
   setClips: (updater: (clips: TimelineClip[]) => TimelineClip[]) => void;
+  isCurrent?: () => boolean;
 }
 
 /**
@@ -69,6 +70,9 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
     updateClip,
     setClips,
   } = params;
+
+  const isCurrent = params.isCurrent ?? (() => true);
+  if (!isCurrent()) return;
 
   // Use native decoder when Turbo Mode is on and helper is connected
   // FFmpeg can decode all formats (H.264, ProRes, DNxHD, etc.) with HW acceleration
@@ -100,6 +104,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       if (!isAbsolute) {
         log.debug('No absolute path found, asking native helper to locate', { filename: file.name });
         const located = await NativeHelperClient.locateFile(file.name);
+        if (!isCurrent()) return;
         if (located) {
           filePath = located;
           log.debug('Native helper located file', { filePath });
@@ -113,6 +118,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         throw new Error(`Could not resolve file path for "${file.name}"`);
       }
       nativeDecoder = await NativeDecoder.open(filePath);
+      if (!isCurrent()) { await nativeDecoder.close().catch(() => undefined); return; }
       naturalDuration = authoritativeNaturalDuration ?? nativeDecoder.duration;
 
       log.debug('Native Helper ready', { width: nativeDecoder.width, height: nativeDecoder.height, fps: nativeDecoder.fps });
@@ -120,6 +126,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       // Decode initial frame so preview isn't black
       await nativeDecoder.seekToFrame(0);
 
+      if (!isCurrent()) { await nativeDecoder.close().catch(() => undefined); return; }
       const registered = registerNativeDecoderForTimelineClip({
         clipId,
         mediaFileId,
@@ -147,6 +154,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         updateClip(audioClipId, { duration: naturalDuration, outPoint: naturalDuration });
       }
     } catch (err) {
+      if (!isCurrent()) { if (nativeDecoder) await nativeDecoder.close().catch(() => undefined); return; }
       log.warn('Native Helper failed, falling back to browser', err);
       nativeDecoder = null;
     }
@@ -199,6 +207,8 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
         waitForVideoMetadata(video, 8000),
       ]);
 
+      if (!isCurrent()) { releaseTemporaryMediaElement(video); return; }
+
       // Prefer the duration already established by media import. WebM recordings
       // can expose a short initial duration through HTMLVideoElement metadata.
       if (authoritativeNaturalDuration && Number.isFinite(authoritativeNaturalDuration) && authoritativeNaturalDuration > 0) {
@@ -240,6 +250,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
       } else {
         const pendingAudioClipId = linkedAudioClipId;
         detectVideoAudio(file).then(videoHasAudio => {
+          if (!isCurrent()) return;
           if (!videoHasAudio) {
             log.debug('Video has no audio tracks', { file: file.name });
             if (pendingAudioClipId) {
@@ -266,6 +277,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
     log.debug('Skipping thumbnails for NativeDecoder file', { file: file.name });
   }
 
+  if (!isCurrent()) return;
   loadCachedProjectAnalysisForVideo(clipId, file.name, mediaFileId, setClips);
 
   // Load audio for linked clip (skip for NativeDecoder - browser can't decode ProRes/DNxHD audio)
@@ -289,6 +301,7 @@ export async function loadVideoMedia(params: LoadVideoMediaParams): Promise<void
   }
 
   // Sync to media store
+  if (!isCurrent()) return;
   const mediaStore = useMediaStore.getState();
   if (!mediaStore.getFileByName(file.name)) {
     mediaStore.importFile(file);

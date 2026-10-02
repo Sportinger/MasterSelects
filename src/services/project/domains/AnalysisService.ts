@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication, type RepositoryDomainPublication } from '../repository/artifacts/RepositoryDomainPublication';
 // Analysis data persistence service
 // Handles range-based analysis caching
 
@@ -50,9 +51,10 @@ export class AnalysisService {
    */
   private async getAnalysisRecord(
     projectHandle: FileSystemDirectoryHandle,
-    mediaId: string
+    mediaId: string,
+    repository: RepositoryDomainPublication | null = captureRepositoryDomainPublication(),
   ): Promise<StoredAnalysisFile | null> {
-    const file = await this.fileStorage.readFile(projectHandle, 'ANALYSIS', `${mediaId}.json`);
+    const file = repository ? await repository.readFile( 'ANALYSIS', `${mediaId}.json`) : await this.fileStorage.readFile(projectHandle, 'ANALYSIS', `${mediaId}.json`);
     if (!file) return null;
 
     try {
@@ -75,10 +77,11 @@ export class AnalysisService {
     sampleInterval: number,
     faceAnalysis?: unknown,
   ): Promise<boolean> {
+    const repository = captureRepositoryDomainPublication();
     const rangeKey = this.getAnalysisRangeKey(inPoint, outPoint);
 
     // Get existing record or create new
-    const existing = await this.getAnalysisRecord(projectHandle, mediaId);
+    const existing = await this.getAnalysisRecord(projectHandle, mediaId, repository);
     const record: StoredAnalysisFile = existing || {
       schemaVersion: 2,
       mediaFileId: mediaId,
@@ -95,7 +98,7 @@ export class AnalysisService {
     };
 
     const json = JSON.stringify(record, null, 2);
-    return this.fileStorage.writeFile(projectHandle, 'ANALYSIS', `${mediaId}.json`, json);
+    return (repository?.writeFile.bind(repository) ?? this.fileStorage.writeFile.bind(this.fileStorage, projectHandle))('ANALYSIS', `${mediaId}.json`, json);
   }
 
   /**
@@ -191,7 +194,8 @@ export class AnalysisService {
     mediaId: string,
     segments: unknown[],
   ): Promise<boolean> {
-    const existing = await this.getAnalysisRecord(projectHandle, mediaId);
+    const repository = captureRepositoryDomainPublication();
+    const existing = await this.getAnalysisRecord(projectHandle, mediaId, repository);
     const record: StoredAnalysisFile = existing || {
       schemaVersion: 3,
       mediaFileId: mediaId,
@@ -202,8 +206,7 @@ export class AnalysisService {
       segments,
       createdAt: Date.now(),
     };
-    return this.fileStorage.writeFile(
-      projectHandle,
+    return (repository?.writeFile.bind(repository) ?? this.fileStorage.writeFile.bind(this.fileStorage, projectHandle))(
       'ANALYSIS',
       `${mediaId}.json`,
       JSON.stringify(record, null, 2),
@@ -222,15 +225,15 @@ export class AnalysisService {
     projectHandle: FileSystemDirectoryHandle,
     mediaId: string,
   ): Promise<boolean> {
-    const record = await this.getAnalysisRecord(projectHandle, mediaId);
+    const repository = captureRepositoryDomainPublication();
+    const record = await this.getAnalysisRecord(projectHandle, mediaId, repository);
     if (!record?.sceneDescriptions) return true;
     delete record.sceneDescriptions;
     if (Object.keys(record.analyses).length === 0) {
       return this.deleteAnalysis(projectHandle, mediaId);
     }
     record.schemaVersion = 3;
-    return this.fileStorage.writeFile(
-      projectHandle,
+    return (repository?.writeFile.bind(repository) ?? this.fileStorage.writeFile.bind(this.fileStorage, projectHandle))(
       'ANALYSIS',
       `${mediaId}.json`,
       JSON.stringify(record, null, 2),
@@ -244,7 +247,8 @@ export class AnalysisService {
     projectHandle: FileSystemDirectoryHandle,
     mediaId: string
   ): Promise<boolean> {
-    return this.fileStorage.deleteFile(projectHandle, 'ANALYSIS', `${mediaId}.json`);
+    const repository = captureRepositoryDomainPublication();
+    return (repository?.deleteFile.bind(repository) ?? this.fileStorage.deleteFile.bind(this.fileStorage, projectHandle))( 'ANALYSIS', `${mediaId}.json`);
   }
 
   async deleteAnalysisRange(
@@ -253,14 +257,14 @@ export class AnalysisService {
     inPoint: number,
     outPoint: number,
   ): Promise<boolean> {
-    const record = await this.getAnalysisRecord(projectHandle, mediaId);
+    const repository = captureRepositoryDomainPublication();
+    const record = await this.getAnalysisRecord(projectHandle, mediaId, repository);
     if (!record) return true;
     delete record.analyses[this.getAnalysisRangeKey(inPoint, outPoint)];
     if (Object.keys(record.analyses).length === 0) {
       return this.deleteAnalysis(projectHandle, mediaId);
     }
-    return this.fileStorage.writeFile(
-      projectHandle,
+    return (repository?.writeFile.bind(repository) ?? this.fileStorage.writeFile.bind(this.fileStorage, projectHandle))(
       'ANALYSIS',
       `${mediaId}.json`,
       JSON.stringify(record, null, 2),

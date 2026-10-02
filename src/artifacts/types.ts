@@ -22,6 +22,10 @@ export interface ArtifactStorageLocation extends SignalArtifactStorage {
 }
 
 export interface ArtifactManifest extends SignalArtifact {
+  /** New immutable manifest identity; absent only on imported legacy manifests. */
+  manifestHash?: string;
+  blobId?: string;
+  retention?: 'required' | 'reproducible-cache' | 'temporary';
   schemaVersion: typeof SIGNAL_SCHEMA_VERSION;
   hashAlgorithm: ArtifactHashAlgorithm;
   encoding: SignalArtifactEncoding;
@@ -35,6 +39,8 @@ export interface PutArtifactOptions {
   sourceRefs?: string[];
   metadata?: SignalMetadata;
   createdAt?: string;
+  retention?: 'required' | 'reproducible-cache' | 'temporary';
+  signal?: AbortSignal;
 }
 
 export interface PutArtifactResult {
@@ -48,7 +54,7 @@ export interface StoredArtifact {
 }
 
 export interface ArtifactManifestIndex {
-  saveArtifactManifest(manifest: ArtifactManifest): Promise<void>;
+  saveArtifactManifest(manifest: ArtifactManifest, signal?: AbortSignal): Promise<void>;
   getArtifactManifest(artifactId: string): Promise<ArtifactManifest | null>;
   listArtifactManifests(): Promise<ArtifactManifest[]>;
   listArtifactManifestsBySource(sourceRef: string): Promise<ArtifactManifest[]>;
@@ -57,7 +63,7 @@ export interface ArtifactManifestIndex {
 
 export interface ArtifactStorageAdapter extends ArtifactManifestIndex {
   createStorageLocation(hash: string): ArtifactStorageLocation;
-  writeArtifact(manifest: ArtifactManifest, blob: Blob): Promise<void>;
+  writeArtifact(manifest: ArtifactManifest, blob: Blob, signal?: AbortSignal): Promise<void>;
   readArtifactBlob(manifest: ArtifactManifest): Promise<Blob | null>;
   hasArtifactBlob(manifest: ArtifactManifest): Promise<boolean>;
   deleteArtifactBlob(manifest: ArtifactManifest): Promise<boolean>;

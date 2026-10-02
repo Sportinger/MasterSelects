@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 // Mask utility functions: throttle, path generation, coordinate conversion
 
 import type { MaskVertex } from '../../types';
@@ -17,14 +18,14 @@ export function throttle<T extends (...args: any[]) => void>(fn: T, interval: nu
     } else {
       pendingArgs = args;
       if (!rafId) {
-        rafId = requestAnimationFrame(() => {
+        rafId = requestAnimationFrame(bindEditorGestureCallback(() => {
           rafId = null;
           if (pendingArgs) {
             lastCall = performance.now();
             fn(...pendingArgs);
             pendingArgs = null;
           }
-        });
+        }));
       }
     }
   };

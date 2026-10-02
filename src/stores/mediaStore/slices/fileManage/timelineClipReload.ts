@@ -1,3 +1,4 @@
+import { captureEditorAsyncMutation } from '../../../../services/project/repository/transaction/editorAsyncMutation';
 import { thumbnailCacheService } from '../../../../services/thumbnailCacheService';
 import { readLottieMetadata } from '../../../../services/vectorAnimation/lottieMetadata';
 import { readRiveMetadata } from '../../../../services/vectorAnimation/riveMetadata';
@@ -36,7 +37,19 @@ export async function updateTimelineClips(
 ): Promise<void> {
   const generateThumbnails = options.generateThumbnails !== false;
   const shouldInvalidateCaches = options.invalidateCaches !== false;
-  const timelineStore = useTimelineStore.getState();
+  const originalTimeline = useTimelineStore.getState(), timelineSessionId = originalTimeline.timelineSessionId;
+  const binding = captureEditorAsyncMutation('Reload timeline source', () => useTimelineStore.getState().timelineSessionId === timelineSessionId && useMediaStore.getState().files.find(entry => entry.id === mediaFileId)?.file === file);
+  const timelineStore = new Proxy(originalTimeline, { get(target, key, receiver) {
+    const value = Reflect.get(target, key, receiver);
+    if (key !== 'updateClip') return value;
+    return (id: string, patch: Parameters<typeof originalTimeline.updateClip>[1]) => {
+      if (!binding.isCurrent()) return;
+      const current = useTimelineStore.getState().clips.find(clip => clip.id === id);
+      const original = originalTimeline.clips.find(clip => clip.id === id);
+      if (!current || current.file !== original?.file || current.source !== original?.source) return;
+      binding.run(() => originalTimeline.updateClip(id, patch));
+    };
+  } });
   const mediaFile = useMediaStore.getState().files.find((entry) => entry.id === mediaFileId);
   const fileHash = options.fileHash ?? mediaFile?.fileHash;
   const clips = timelineStore.clips.filter(
@@ -59,6 +72,7 @@ export async function updateTimelineClips(
     await invalidateMediaSourceReplacementCaches(mediaFileId, mediaFile, clips);
   }
 
+  if (!binding.isCurrent()) return;
   let sharedFileUrl: string | undefined;
   const getSharedFileUrl = () => {
     sharedFileUrl ??= mediaFile?.url || createPrimaryMediaObjectUrl(mediaFileId, file);
@@ -66,6 +80,7 @@ export async function updateTimelineClips(
   };
 
   for (const clip of clips) {
+    if (!binding.isCurrent()) return;
     const trackType = timelineStore.tracks.find((track) => track.id === clip.trackId)?.type;
     const sourceType = trackType === 'audio' ? 'audio' : clip.source?.type;
 
@@ -91,6 +106,7 @@ export async function updateTimelineClips(
     } else if (sourceType === 'audio') {
       const naturalDuration = clip.source?.naturalDuration || mediaFile?.duration || clip.duration;
       if (mediaFile?.type === 'video' && mediaFile.hasAudio === false) {
+        if (!binding.isCurrent()) return;
         timelineStore.updateClip(clip.id, {
           file: undefined,
           needsReload: true,
@@ -137,6 +153,7 @@ export async function updateTimelineClips(
           ? await readLottieMetadata(file)
           : await readRiveMetadata(file);
 
+        if (!binding.isCurrent()) return;
         timelineStore.updateClip(clip.id, {
           ...createSourceReplacementClipAudioPatch(clip),
           file,
@@ -151,6 +168,7 @@ export async function updateTimelineClips(
         });
       } catch (error) {
         log.warn('Failed to reload vector animation for clip', { clipName: clip.name, sourceType, error });
+        if (!binding.isCurrent()) return;
         timelineStore.updateClip(clip.id, {
           needsReload: false,
           isLoading: false,

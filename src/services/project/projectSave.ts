@@ -1,3 +1,4 @@
+import { flushEditorWorkspace, getActiveRepositorySession } from './repository/lifecycle/editorRepositoryLifecycle';
 import { convertCompositions } from './projectCompositionSerialization';
 // Project Save — sync stores to project file format
 
@@ -27,11 +28,10 @@ import type {
 } from '../../stores/flashboardStore/types';
 import { getExportStoreData, useExportStore } from '../../stores/exportStore';
 import { useMIDIStore } from '../../stores/midiStore';
-import { recordHistoryEvent, serializeHistoryStateForProject } from '../../stores/historyStore';
+
 import { buildProjectAudioStateIndex } from '../audio/projectAudioState';
 import { createCurrentAudioArtifactStore } from '../audio/timelineWaveformPyramidCache';
 import { flashBoardMediaBridge } from '../flashboard/FlashBoardMediaBridge';
-import { syncTransitionCompositionTimelineToParent } from '../../stores/mediaStore/slices/composition/transitionCompositionSync';
 import type {
   ProjectFlashBoardAIWorkspace,
   ProjectFlashBoardComposerState,
@@ -51,24 +51,19 @@ import {
 } from './projectMediaSerialization';
 import {
   isProjectStoreSyncInProgress,
-  withProjectStoreDirtyMarkSuppressed,
   withProjectStoreSyncGuard,
   waitForProjectStoreSync,
 } from './projectStoreSyncGuard';
-import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
+
 import {
   getStoryboardProjectSnapshot,
-  reconcileStoryboardTimelineClips,
 } from '../../stores/storyboardStore';
 import { getSeedancePreproductionProjectState } from '../../stores/seedancePreproductionStore';
 import { useTrackingStore } from '../../stores/trackingStore';
 import { useDocumentsStore } from '../../stores/documentsStore';
-import { writeDocumentsManifest } from '../documents/documentArtifacts';
-import { cloneTrackingAssets, ensureLegacyTrackingAssets } from '../planarTracking/trackingAssets';
-import {
-  collectLegacyMediaArtifactSeeds,
-  persistLegacyMediaArtifactSeeds,
-} from './load/loadMediaArtifactMigration';
+
+import { cloneTrackingAssets } from '../planarTracking/trackingAssets';
+
 import type {
   ProjectMediaBoardGroupOffsets,
   ProjectMediaBoardNodeLayout,
@@ -273,41 +268,10 @@ export async function syncStoresToProject(): Promise<void> {
     const mediaState = useMediaStore.getState();
     const timelineStore = useTimelineStore.getState();
 
-    // Source artifacts used to live on timeline clips. Persist every legacy
-    // copy before serializing the active timeline or stripping clip copies.
-    // A failed migration aborts the save so the only surviving copy cannot be
-    // overwritten by a smaller project.json.
-    const legacyArtifactSeeds = collectLegacyMediaArtifactSeeds({
-      media: mediaState.files,
-      compositions: mediaState.compositions.map(composition => ({
-        clips: composition.id === mediaState.activeCompositionId
-          ? timelineStore.clips
-          : composition.timelineData?.clips ?? [],
-      })),
-    });
-    await persistLegacyMediaArtifactSeeds(legacyArtifactSeeds);
-
-    // Save current timeline to active composition first
-    if (mediaState.activeCompositionId) {
-      const activeCompositionId = mediaState.activeCompositionId;
-      const timelineData = timelineStore.getSerializableState();
-      withProjectStoreDirtyMarkSuppressed(() => {
-        useMediaStore.setState((state) => ({
-          compositions: syncTransitionCompositionTimelineToParent(
-            state.compositions.map((c) =>
-              c.id === activeCompositionId
-                ? { ...c, duration: timelineData.duration, timelineData }
-                : c
-            ),
-            activeCompositionId,
-            timelineData,
-          ),
-        }));
-      });
-    }
-
-    // Get fresh state after update
-    const freshState = useMediaStore.getState();
+    // Capture a coherent DTO for workspace only; synchronization does not mutate content stores.
+    const timelineData = timelineStore.getSerializableState();
+    const freshState = { ...mediaState, compositions: mediaState.compositions.map(composition =>
+      composition.id === mediaState.activeCompositionId ? { ...composition, duration: timelineData.duration, timelineData } : composition) };
     const projectData = projectFileService.getProjectData();
 
     if (projectData && shouldBlockDestructiveStoreSync(projectData, freshState)) {
@@ -322,14 +286,11 @@ export async function syncStoresToProject(): Promise<void> {
       return;
     }
 
-    ensureLegacyTrackingAssets();
 
     // Update project file data
     const projectMedia = convertMediaFiles(freshState.files);
     const projectCompositions = convertCompositions(freshState.compositions);
-    projectFileService.updateMedia(projectMedia);
-    projectFileService.updateCompositions(projectCompositions);
-    projectFileService.updateFolders(convertFolders(freshState.folders));
+    if (projectData) { projectData.media = projectMedia; projectData.compositions = projectCompositions; projectData.folders = convertFolders(freshState.folders); }
 
     // Update active state
     if (projectData) {
@@ -472,7 +433,7 @@ export async function syncStoresToProject(): Promise<void> {
           parameterBindings: midiState.parameterBindings,
         },
         exportState: getExportStoreData(useExportStore.getState()),
-        history: serializeHistoryStateForProject(),
+
       };
 
       // Save generated media items
@@ -493,18 +454,10 @@ export async function syncStoresToProject(): Promise<void> {
         getFlashBoardAIWorkspaces(),
         getActiveFlashBoardAIWorkspaceId(),
       );
-      withProjectStoreDirtyMarkSuppressed(() => {
-        reconcileStoryboardTimelineClips(useTimelineStore.getState().clips);
-      });
       projectData.storyboard = getStoryboardProjectSnapshot();
       projectData.seedancePreproduction = getSeedancePreproductionProjectState();
-      projectData.documents = await writeDocumentsManifest(
-        useDocumentsStore.getState().serialize(), projectData.documents,
-      );
-
-      if (!await persistFlashBoardChatJournal(getFlashBoardChatMessages())) {
-        log.warn(' Chat journal could not be mirrored to the project folder');
-      }
+      projectData.documents = useDocumentsStore.getState().serialize();
+      await flushEditorWorkspace(projectData);
     }
 
     log.info(' Synced stores to project');
@@ -515,31 +468,24 @@ export async function syncStoresToProject(): Promise<void> {
  * Save current project
  */
 export async function saveCurrentProject(options: SaveCurrentProjectOptions = {}): Promise<boolean> {
+  if (getActiveRepositorySession() && !getActiveRepositorySession()!.opening.writable) return false;
   if (!projectFileService.isProjectOpen()) {
     log.error(' No project open');
     return false;
   }
 
-  const project = projectFileService.getProjectData();
+  const session = getActiveRepositorySession();
   while (isProjectStoreSyncInProgress()) {
     if (options.source !== 'manual') {
       log.warn('Skipped project save while project stores are being synchronized');
       return false;
     }
     await waitForProjectStoreSync();
-    if (!projectFileService.isProjectOpen() || projectFileService.getProjectData() !== project) {
+    if (!projectFileService.isProjectOpen() || getActiveRepositorySession() !== session) {
       log.warn('Cancelled waiting project save because the project changed');
       return false;
     }
   }
 
-  if (options.source === 'manual') {
-    recordHistoryEvent(
-      'manual-save',
-      options.label ?? 'Manual save'
-    );
-  }
-
-  await syncStoresToProject();
   return await projectFileService.saveProject();
 }

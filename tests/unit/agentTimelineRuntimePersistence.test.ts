@@ -49,6 +49,52 @@ function sceneCutMedia(source: Blob): MediaFile {
 }
 
 describe('AgentTimelineRuntimePersistence', () => {
+  it('does not analyze or republish an unopened source represented by an empty clip placeholder', async () => {
+    const media = { ...sceneCutMedia(new Blob(['source'])), file: undefined };
+    const placeholder = { id: 'future-clip', file: new File([], 'saved.mp4'), needsReload: false,
+      source: { mediaFileId: media.id }, outPoint: 10 } as TimelineClip;
+    const getSourceIdentity = vi.fn(async () => identity());
+    const listAudioArtifacts = vi.fn(async () => []);
+    const createStorage = vi.fn(() => new AgentTimelineArtifactStorage({
+      artifacts: new ArtifactStore(new MemoryArtifactStorageAdapter()), pointers: new Pointers(),
+    }));
+    const publisher = new AgentTimelineRuntimePersistence({
+      readSnapshot: () => ({ files: [media], clips: [placeholder] }), subscribe: () => () => {},
+      getSourceIdentity, listAudioArtifacts, createStorage, now: () => NOW, debounceMs: 60000,
+    });
+    publisher.request(media.id);
+    await publisher.publish(media.id, 1);
+    publisher.dispose();
+    expect(getSourceIdentity).not.toHaveBeenCalled();
+    expect(listAudioArtifacts).not.toHaveBeenCalled();
+    expect(createStorage).not.toHaveBeenCalled();
+  });
+  it('does not create new analysis versions for a recreated embedded File on reload', async () => {
+    let clock = NOW;
+    const artifacts = new ArtifactStore(new MemoryArtifactStorageAdapter(), () => clock);
+    const pointers = new Pointers();
+    const publishPointer = vi.spyOn(pointers, 'set');
+    const storage = new AgentTimelineArtifactStorage({ artifacts, pointers, now: () => clock });
+    let media = sceneCutMedia(new File(['source bytes'], 'saved.mp4', { lastModified: 1000 }));
+    const dependencies: AgentTimelineRuntimePersistenceDependencies = {
+      readSnapshot: () => ({ files: [media], clips: [] }), subscribe: () => () => {},
+      getSourceIdentity: async () => identity(), listAudioArtifacts: async () => [],
+      createStorage: () => storage, now: () => clock, debounceMs: 60000,
+    };
+    const first = new AgentTimelineRuntimePersistence(dependencies);
+    first.request(media.id);
+    await first.publish(media.id, 1);
+    first.dispose();
+    const before = (await artifacts.listArtifacts()).length;
+    clock = '2026-07-28T12:00:00.000Z';
+    media = sceneCutMedia(new File(['source bytes'], 'saved.mp4', { lastModified: 1000000 }));
+    const reopened = new AgentTimelineRuntimePersistence(dependencies);
+    reopened.request(media.id);
+    await reopened.publish(media.id, 1);
+    reopened.dispose();
+    expect(publishPointer).toHaveBeenCalledTimes(1);
+    expect((await artifacts.listArtifacts()).length).toBe(before);
+  });
   it('schedules only sources with changed analysis, ignoring clip edits and progress', async () => {
     vi.useFakeTimers();
     const source = new Blob(['source'], { type: 'video/mp4' });
@@ -90,7 +136,7 @@ describe('AgentTimelineRuntimePersistence', () => {
       snapshot = { ...snapshot, projectScope: 'project-b' };
       listener();
       await vi.advanceTimersByTimeAsync(350);
-      expect(listAudioArtifacts.mock.calls.map(call => call[0])).toEqual(['media-a', 'media-b']);
+      await vi.waitFor(() => expect(listAudioArtifacts.mock.calls.map(call => call[0]).toSorted()).toEqual(['media-a', 'media-b']));
     } finally {
       publisher.dispose();
       vi.useRealTimers();

@@ -59,6 +59,61 @@ function createLoop() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('RenderLoop watchdog', () => {
+  it('presents asynchronously decoded playback frames without postponing the next clock sample', () => {
+    const callbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    }));
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const onRender = vi.fn();
+    const loop = new RenderLoop({
+      recordRafGap: vi.fn(),
+      resetPerSecondCounters: vi.fn(),
+      setTargetFps: vi.fn(),
+    } as unknown as ConstructorParameters<typeof RenderLoop>[0], {
+      isRecovering: () => false,
+      isExporting: () => false,
+      onRender,
+    });
+    const tick = (timestamp: number) => {
+      const callback = callbacks.shift();
+      expect(callback).toBeDefined();
+      callback!(timestamp);
+    };
+    try {
+      loop.start();
+      loop.setIsPlaying(true);
+      loop.setVisualTargetFps(25);
+      tick(1000);
+      tick(1008);
+      expect(onRender).toHaveBeenCalledTimes(1);
+
+      loop.requestNewFrameRender();
+      tick(1010);
+      expect(onRender).toHaveBeenCalledTimes(1);
+      tick(1016);
+      expect(onRender).toHaveBeenCalledTimes(2);
+      expect(onRender).toHaveBeenLastCalledWith({ newFrameReady: true });
+
+      // The early presentation must leave the original 1020ms deadline intact.
+      tick(1033);
+      expect(onRender).toHaveBeenCalledTimes(3);
+      expect(onRender).toHaveBeenLastCalledWith({ newFrameReady: false });
+      tick(1036);
+      expect(onRender).toHaveBeenCalledTimes(3);
+      // Keep coalescing notifications on a 120Hz display at the 60Hz ceiling.
+      for (let frame = 1; frame <= 12; frame += 1) {
+        loop.requestNewFrameRender();
+        tick(1033 + frame * (1000 / 120));
+      }
+      expect(onRender).toHaveBeenCalledTimes(9);
+    } finally {
+      loop.stop();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('samples playback above the visual target while counting only accepted renders', () => {
     const rafCallbacks: FrameRequestCallback[] = [];
     const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {

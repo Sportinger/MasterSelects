@@ -45,6 +45,8 @@ export interface AgentTimelineStorageWrite {
 }
 
 export interface AgentTimelineArtifactPutOptions {
+  /** Stable analysis-generation time, so reopening does not create new manifest versions. */
+  createdAt?: string;
   mimeType: 'application/json';
   encoding: 'json';
   sourceRefs: readonly string[];

@@ -1,5 +1,6 @@
-import { startProjectAutosaveTimer } from '../../services/project/projectAutosaveTimer';
-import { createProjectSaveInteractionGate } from '../../services/project/projectSaveInteractionGate';
+import { RepositoryArchiveDialog } from './toolbar/RepositoryArchiveDialog';
+import { LegacyImportTargetHost } from './toolbar/LegacyImportDialog';
+import { MediaReconnectHost } from './toolbar/MediaReconnectOverlay';
 // Toolbar component - After Effects style menu bar
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -33,7 +34,6 @@ import {
 import { useMediaStore } from '../../stores/mediaStore';
 import {
   loadProjectToStores,
-  saveCurrentProject,
   setProjectLoadProgress,
   setupAutoSync,
 } from '../../services/projectSync';
@@ -111,20 +111,13 @@ export function Toolbar({
 
   const {
     isSettingsOpen, openSettings, closeSettings,
-    saveMode,
-    autosaveEnabled, setAutosaveEnabled,
-    autosaveInterval, setAutosaveInterval,
   } = useSettingsStore(useShallow(s => ({
     isSettingsOpen: s.isSettingsOpen,
     openSettings: s.openSettings,
     closeSettings: s.closeSettings,
-    saveMode: s.saveMode,
-    autosaveEnabled: s.autosaveEnabled,
-    setAutosaveEnabled: s.setAutosaveEnabled,
-    autosaveInterval: s.autosaveInterval,
-    setAutosaveInterval: s.setAutosaveInterval,
   })));
 
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [projectName, setProjectName] = useState('Untitled Project');
   const [isProjectOpen, setIsProjectOpen] = useState(false);
@@ -141,7 +134,6 @@ export function Toolbar({
   const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>([]);
   const [capturePhase, setCapturePhase] = useState(() => screenCaptureService.getSnapshot().phase);
   const menuBarRef = useRef<HTMLDivElement>(null);
-  const autosaveTimerRef = useRef<(() => void) | null>(null);
   const {
     markMessagesSeen: markDevChatMessagesSeen,
     unreadCount: devChatUnreadCount,
@@ -258,47 +250,6 @@ export function Toolbar({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openMenu]);
 
-  useEffect(() => {
-    if (autosaveTimerRef.current) {
-      autosaveTimerRef.current();
-      autosaveTimerRef.current = null;
-    }
-
-    if (saveMode === 'interval' && autosaveEnabled && isProjectOpen) {
-      const intervalMs = autosaveInterval * 60 * 1000;
-      log.info(`Interval save enabled with ${autosaveInterval} minute interval`);
-
-      const gestures = createProjectSaveInteractionGate(window, () => undefined);
-      const stopTimer = startProjectAutosaveTimer({
-        intervalMs,
-        isBusy: () => gestures.isActive() || gestures.remainingQuietMs() > 0
-          || Boolean(projectFileService.getProjectPackageSession?.()?.isBatchingWrites)
-          || useMediaStore.getState().files.some(file => file.isImporting || file.audioProxyStatus === 'generating'),
-        save: async () => {
-        if (projectFileService.isProjectOpen() && projectFileService.hasUnsavedChanges()) {
-          log.info('Interval save: Creating backup and saving project...');
-          setShowSavedToast(false);
-          try {
-            await projectFileService.createBackup();
-            const saved = await saveCurrentProject();
-            if (saved) setShowSavedToast(true);
-            else log.warn('Interval save did not complete; project remains unsaved');
-          } catch (error) {
-            log.error('Interval save failed', error);
-          }
-        }
-        },
-      });
-      autosaveTimerRef.current = () => { stopTimer(); gestures.dispose(); };
-    }
-
-    return () => {
-      if (autosaveTimerRef.current) {
-        autosaveTimerRef.current();
-      }
-    };
-  }, [saveMode, autosaveEnabled, autosaveInterval, isProjectOpen]);
-
   const closeMenu = useCallback(() => setOpenMenu(null), []);
 
   const handleMenuClick = useCallback((menuId: MenuId) => {
@@ -396,8 +347,7 @@ export function Toolbar({
 
       <div className="menu-bar" ref={menuBarRef}>
         <FileMenu
-          autosaveEnabled={autosaveEnabled}
-          autosaveInterval={autosaveInterval}
+          onExportArchive={() => { closeMenu(); setShowArchiveDialog(true); }}
           hasUnsavedChanges={projectFileService.hasUnsavedChanges.bind(projectFileService)}
           isLoading={isLoading}
           isProjectOpen={isProjectOpen}
@@ -412,8 +362,6 @@ export function Toolbar({
           onSaveAs={projectActions.handleSaveAs}
           openMenu={openMenu}
           recentProjects={recentProjects}
-          setAutosaveEnabled={setAutosaveEnabled}
-          setAutosaveInterval={setAutosaveInterval}
           shortcutLabels={shortcutLabels}
         />
 
@@ -497,6 +445,9 @@ export function Toolbar({
       </div>
 
       {isSettingsOpen && <SettingsDialog onClose={closeSettings} />}
+      {showArchiveDialog && <RepositoryArchiveDialog onClose={() => setShowArchiveDialog(false)} />}
+      <LegacyImportTargetHost />
+      <MediaReconnectHost />
       {projectNameDialog && (
         <ProjectNameDialog
           {...projectNameDialog}

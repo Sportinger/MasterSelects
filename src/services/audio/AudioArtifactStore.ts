@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication } from '../project/repository/artifacts/RepositoryDomainPublication';
 import { blobToArrayBuffer, type ArtifactInput, type ArtifactManifest, type ArtifactStore } from '../../artifacts';
 import type { SignalArtifactEncoding, SignalMetadata } from '../../signals';
 import {
@@ -78,6 +79,7 @@ async function blobText(blob: Blob): Promise<string> {
 
 export class AudioArtifactStore {
   private readonly artifactStore: ArtifactStore;
+  private readonly repository = captureRepositoryDomainPublication();
 
   constructor(artifactStore: ArtifactStore) {
     this.artifactStore = artifactStore;
@@ -88,6 +90,7 @@ export class AudioArtifactStore {
     options: AudioArtifactPayloadOptions,
   ): Promise<AudioArtifactRef> {
     const result = await this.artifactStore.putArtifact(input, {
+      retention: options.kind === 'waveform-pyramid' ? 'reproducible-cache' : 'required',
       mimeType: options.mimeType ?? DEFAULT_PAYLOAD_MIME_TYPE,
       encoding: options.encoding ?? DEFAULT_PAYLOAD_ENCODING,
       producer: {
@@ -125,13 +128,14 @@ export class AudioArtifactStore {
     };
 
     const result = await this.artifactStore.putArtifact(jsonBlob(persisted, AUDIO_ARTIFACT_MANIFEST_MIME_TYPE), {
+      retention: input.kind === 'waveform-pyramid' ? 'reproducible-cache' : 'required',
       mimeType: AUDIO_ARTIFACT_MANIFEST_MIME_TYPE,
       encoding: 'json',
       producer: {
         providerId: AUDIO_ARTIFACT_PROVIDER_ID,
         providerVersion: input.analyzerVersion,
       },
-      sourceRefs: manifestSourceRefs(input.kind, input.mediaFileId),
+      sourceRefs: manifestSourceRefs(input.kind, input.mediaFileId, input.payloadRefs.map(ref => ref.artifactId)),
       metadata: metadataWithAudioFields(input.metadata, {
         audioArtifactRole: 'manifest',
         audioAnalysisKind: input.kind,
@@ -143,6 +147,9 @@ export class AudioArtifactStore {
       }),
     });
 
+    if (this.repository && input.kind !== 'waveform-pyramid') {
+      await this.repository.publishResult('audio-artifact', `media:${input.mediaFileId}`, input.sourceFingerprint, result.manifest);
+    }
     return {
       artifact: {
         ...persisted,

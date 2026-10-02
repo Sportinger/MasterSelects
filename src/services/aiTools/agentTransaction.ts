@@ -1,3 +1,6 @@
+import { getEditorRepositorySession, beginEditorTransaction, commitEditorTransaction, cancelEditorTransaction,
+  ownsEditorTransaction, runEditorTransaction } from '../project/repository/transaction/editorMutationRuntime';
+import type { TransactionToken } from '../project/repository/transaction/ProjectTransactionCoordinator';
 import {
   cancelHistoryBatch,
   endBatch,
@@ -26,6 +29,7 @@ export interface AgentTransaction {
   alreadyBatching: boolean;
   historyBatchId: number | null;
   abortNoop: boolean;
+  repositoryToken?: TransactionToken;
 }
 
 export interface AgentTransactionCommitResult {
@@ -57,6 +61,12 @@ const openTransactionIds = new Set<string>();
 
 export function beginAgentTransaction(label: string): AgentTransaction {
   const transactionId = `agent-tx-${++transactionCounter}`;
+  if (getEditorRepositorySession()) {
+    const repositoryToken = beginEditorTransaction(label, 'agent');
+    openTransactionIds.add(transactionId);
+    return { transactionId, label, stateRevisionBefore: getTimelineRevision(), alreadyBatching: false,
+      historyBatchId: transactionCounter, abortNoop: false, repositoryToken };
+  }
   const batchStart = startBatch(label);
   const alreadyBatching = !batchStart.opened;
 
@@ -72,6 +82,7 @@ export function beginAgentTransaction(label: string): AgentTransaction {
 }
 
 function hasHistoryBatchOwnership(transaction: AgentTransaction): boolean {
+  if (transaction.repositoryToken) return ownsEditorTransaction(transaction.repositoryToken);
   const currentBatchId = useHistoryStore.getState().batchId;
   if (currentBatchId === transaction.historyBatchId) {
     return true;
@@ -86,6 +97,7 @@ function hasHistoryBatchOwnership(transaction: AgentTransaction): boolean {
 }
 
 export function hasAgentTransactionOwnership(transaction: AgentTransaction): boolean {
+  if (transaction.repositoryToken) return ownsEditorTransaction(transaction.repositoryToken);
   return useHistoryStore.getState().batchId === transaction.historyBatchId;
 }
 
@@ -93,6 +105,7 @@ export function commitAgentTransaction(
   transaction: AgentTransaction,
 ): AgentTransactionCommitResult {
   try {
+    if (transaction.repositoryToken) { if (ownsEditorTransaction(transaction.repositoryToken)) commitEditorTransaction(transaction.repositoryToken); return {stateRevisionAfter:getTimelineRevision()}; }
     if (!hasHistoryBatchOwnership(transaction)) {
       return {
         stateRevisionAfter: getTimelineRevision(),
@@ -111,6 +124,7 @@ export function commitAgentTransaction(
 
 export function abortAgentTransaction(transaction: AgentTransaction): void {
   try {
+    if (transaction.repositoryToken) { if (ownsEditorTransaction(transaction.repositoryToken)) cancelEditorTransaction(transaction.repositoryToken); return; }
     if (!hasHistoryBatchOwnership(transaction)) {
       return;
     }
@@ -144,7 +158,7 @@ export function createGroupedPartialFailureInfo(
   }
 
   const transactionOwnershipLost = transaction !== null
-    && useHistoryStore.getState().batchId !== transaction.historyBatchId;
+    && !hasAgentTransactionOwnership(transaction);
   const rolledBack = transaction !== null
     && transaction.historyBatchId !== null
     && !transaction.abortNoop
@@ -268,4 +282,27 @@ function createRolledBackAuditResult(
 
 export function isAgentTransactionOpen(): boolean {
   return openTransactionIds.size > 0;
+}
+
+/** Atomic tool execution must enter only the transaction that initiated it. */
+export function runWithAgentTransaction<T>(transaction: AgentTransaction, action: () => T): T {
+  return transaction.repositoryToken ? runEditorTransaction(transaction.repositoryToken, action) : action();
+}
+
+const repositoryAgentTransaction = Symbol('repository-agent-transaction');
+export function pinAgentTransactionOptions<T extends object>(options: T, transaction: AgentTransaction | null): T {
+  if (!transaction) return options;
+  const result = { ...options };
+  Object.defineProperty(result, repositoryAgentTransaction, { value: transaction, enumerable: true });
+  return result;
+}
+export function getPinnedAgentTransaction(options: object): AgentTransaction | null {
+  return (options as { [repositoryAgentTransaction]?: AgentTransaction })[repositoryAgentTransaction] ?? null;
+}
+export function bindAgentTransactionStore<T extends object>(state: T, transaction: AgentTransaction | null): T {
+  if (!transaction?.repositoryToken) return state;
+  return new Proxy(state, { get(target, key, receiver) {
+    const value = Reflect.get(target, key, receiver);
+    return typeof value === 'function' ? (...args: unknown[]) => runWithAgentTransaction(transaction, () => value.apply(target, args)) : value;
+  } });
 }

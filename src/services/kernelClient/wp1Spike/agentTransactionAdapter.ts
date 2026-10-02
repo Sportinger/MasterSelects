@@ -3,6 +3,7 @@ import {
   beginAgentTransaction,
   commitAgentTransaction,
   hasAgentTransactionOwnership,
+  runWithAgentTransaction,
   type AgentTransaction,
 } from '../../aiTools/agentTransaction';
 import {
@@ -92,7 +93,7 @@ export function createWp1AgentTransactionAdapter(): BoundaryTransactionV1 {
     },
     run: (handle, action) => runWithExclusiveTimelineMutationLease(
       agentTransactionHandle(handle).lease,
-      action,
+      () => runWithAgentTransaction(agentTransactionHandle(handle).transaction, action),
     ),
   };
 }

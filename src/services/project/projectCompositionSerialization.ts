@@ -1,5 +1,6 @@
+import { canonicalProjectKeyframe } from './projectKeyframeCodec';
 import type { Composition } from '../../stores/mediaStore';
-import type { ClipVideoState, Effect, SerializableClip, SerializableMarker, TimelineClip, VideoBakeRegion } from '../../types';
+import type { ClipVideoState, Effect, Keyframe, SerializableClip, SerializableMarker, TimelineClip, VideoBakeRegion } from '../../types';
 import type { ProjectComposition, ProjectTrack, ProjectClip, ProjectMarker } from '../projectFileService';
 import { clonePlanarTracks } from '../planarTracking/clonePlanarTracks';
 import { cloneTerrainAnchorConnector, cloneTerrainAttachment, cloneTerrainScreenAnchor } from '../../types/terrainAttachment';
@@ -63,15 +64,10 @@ function shouldPersistClipWaveform(clip: ProjectSaveClip): boolean {
 // ============================================
 
 /**
- * Convert compositions to ProjectComposition format
+ * Convert one track without traversing its composition.
  */
-export function convertCompositions(compositions: Composition[]): ProjectComposition[] {
-  return compositions.map((comp) => {
-    const timelineData = comp.timelineData;
-    const duration = timelineData?.duration ?? comp.duration;
-
-    // Convert tracks
-    const tracks: ProjectTrack[] = ((timelineData?.tracks || []) as ProjectSaveTrack[]).map((t) => ({
+export function convertProjectTrack(t: ProjectSaveTrack): ProjectTrack {
+  return {
       id: t.id,
       name: t.name,
       type: t.type,
@@ -85,10 +81,11 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       // MIDI track instrument (issue #182/#193) — persist so the synth + GM program
       // survive a hard refresh / project reload, not just the in-memory loadState path.
       midiInstrument: t.midiInstrument ? structuredClone(t.midiInstrument) : undefined,
-    }));
+    };
+}
 
-    // Convert clips
-    const clips: ProjectClip[] = ((timelineData?.clips || []) as ProjectSaveClip[]).map((c) => ({
+export function convertProjectClip(c: ProjectSaveClip): ProjectClip {
+  return {
       id: c.id,
       trackId: c.trackId,
       name: c.name || '',
@@ -182,7 +179,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
         rotation: m.rotation ?? 0,
       })),
       keyframes: (c.keyframes || []).map((keyframe) => ({
-        ...keyframe,
+        ...canonicalProjectKeyframe(keyframe),
         property: serializeMaskKeyframeProperty(keyframe.property, c.masks),
       })),
       volume: c.volume ?? 1,
@@ -223,7 +220,23 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       vectorAnimationSettings: c.source?.vectorAnimationSettings || c.vectorAnimationSettings || undefined,
       // Transcript, visual analysis, face analysis, and scene descriptions are
       // media-scoped artifacts. They must never be duplicated into compositions.
-    }));
+    };
+}
+
+export function convertRuntimeProjectClip(clip: TimelineClip, keyframes: readonly Keyframe[]): ProjectClip {
+  return convertProjectClip({ ...clip, keyframes: [...keyframes], sourceType: clip.source?.type ?? 'video' } as ProjectSaveClip);
+}
+
+export function convertCompositions(compositions: Composition[]): ProjectComposition[] {
+  return compositions.map((comp) => {
+    const timelineData = comp.timelineData;
+    const duration = timelineData?.duration ?? comp.duration;
+
+    // Convert tracks
+    const tracks: ProjectTrack[] = ((timelineData?.tracks || []) as ProjectSaveTrack[]).map(convertProjectTrack);
+
+    // Convert clips
+    const clips: ProjectClip[] = ((timelineData?.clips || []) as ProjectSaveClip[]).map(convertProjectClip);
 
     const markers: ProjectMarker[] = ((timelineData?.markers || []) as SerializableMarker[]).map((marker) => ({
       id: marker.id,

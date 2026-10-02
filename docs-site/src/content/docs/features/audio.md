@@ -80,6 +80,7 @@ absolute-speed handling is not used as the primary playback path.
 - `preservesPitch` is applied from the clip setting, defaulting to on.
 - Scrubbing is snippet-based and throttled; it is not continuous time-stretched scrub audio.
 - Current drift is corrected when the element gets too far from the expected time.
+- Audio decoding consumes freshly owned bytes from file/fetch reads directly. Warming several long WAV files no longer creates another complete encoded-audio copy on the UI thread.
 - Same-source sequential audio clips can hand off to the previous element, and upcoming clips may be pre-buffered before they hit the playhead.
 - Nested composition mixdown audio and proxy audio are synced through the same runtime path.
 - Audio-only nested compositions remain part of the mixdown even without a linked video half. Linked video/audio pairs contribute once; nested clips use the shared clip renderer for trim, reverse, speed, automation, and audio processing.
@@ -175,6 +176,7 @@ Live routing uses `audioRoutingManager` when EQ, pan, above-unity gain, Aux send
 - Detailed waveform display uses a perceptual display scale: the RMS/loudness body is the primary readable shape, the peak envelope is a quieter underlay, and high-crest peaks are drawn as selective transient spikes instead of a continuous outer peak trace. Worker-rendered clip waveforms preserve available stereo/multichannel lanes and match the main-thread fallback styling instead of collapsing artifact-backed stereo data to a mono canvas.
 - Nested composition clips generate waveforms from the mixed-down buffer when available.
 - Large files are skipped: audio-only files above 4 GB and video files above 500 MB.
+- Long PCM WAV sources (more than ~20 minutes of stereo decode, e.g. full-length multitrack stems) are never decoded whole: the waveform comes from a streamed, peak-preserving 3 kHz decimation in `src/workers/longWavPeaksWorker.ts` that reports progress and a growing preview, the file gets no audio proxy (the browser plays the WAV directly), and it skips the whole-file scrub/varispeed buffer.
 - Legacy waveform display normalizes bounded peak data for display. Projects with only an aggregate mono waveform use it as a fallback.
 
 ## Timeline Audio Editing

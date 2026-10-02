@@ -14,6 +14,8 @@ Section resize observations update only the element that changed, so an audio or
 
 ## Large compositions
 
+Switching open composition tabs in a repository project restores only the target timeline from the installed content projection. Connected media and other panels retain their state; navigation does not reopen project journals or rebind the full media library. Each composition keeps its own playhead, zoom, and horizontal scroll position. Revision checkout still restores the complete project.
+
 Track rows mount within the vertical viewport with overscan, while stable interaction callbacks and selective header subscriptions avoid rebuilding unrelated rows during scrubbing. Property selection and video warmup queries reuse indexed timeline data. Large native HUDs remain ordinary editable clips and nested compositions.
 
 Scrolling prepares waveform columns only for clips intersecting the canvas viewport and its overscan, and worker eligibility checks the same canvas bounds. Columns are cached by their immutable source data, so new UI clip projections and resizing within the same channel layout can reuse them; the cache retains a bounded set of trim/display variants per source. Trims, zoom, channel layout, source analysis and waveform edits invalidate those columns. Dashed nested-composition outlines generate paths only across the canvas window, keeping long camera compositions responsive at high timeline zoom without adding borders at viewport edges.
@@ -410,6 +412,7 @@ The toolbar and wheel gestures drive playback and navigation:
 - The toolbar also exposes a dedicated slot-grid toggle button that flips between timeline bars and the 12x4 grid icon.
 - The Navigation/Marking tool flyout exposes Marker, In Point, and Out Point commands for the current playhead position.
 - During playback, the playhead position is applied as a direct compositor transform on every animation frame. Its triangular head and theme-defined line shadow remain visible instead of being clipped to the two-pixel line box.
+- The running clock updates the time display and playhead without rebuilding the timeline's editing controls, track headers, waveforms, or clip rows. Auto-scroll follows the clock directly; editing shortcuts and pointer actions sample the current playback position when invoked. During scrubbing, the playhead follows pointer positions directly while layer updates are combined into one update per animation frame. Marker hover updates pause during the drag so mouse movement does not rebuild the editor. Pausing, releasing the playhead, and content edits refresh the editing view.
 
 The timeline navigator below the tracks provides the same scroll and zoom control in a dedicated bar. Releasing its scroll thumb or zoom handles never falls through to the track's click-to-jump action.
 

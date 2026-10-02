@@ -1,0 +1,16 @@
+@layer overlays {
+  .repository-archive-dialog { display:flex; flex-direction:column; gap:12px; padding:24px; }
+  .repository-archive-dialog h2 { margin:0; font-size:18px; }
+  .repository-archive-dialog label { display:flex; align-items:center; gap:8px; font-size:12px; }
+  .repository-archive-dialog select, .repository-archive-dialog button { border:1px solid var(--border-color); border-radius:4px; background:var(--bg-tertiary); color:var(--text-primary); padding:6px 8px; }
+  .repository-archive-dialog p { margin:0; color:var(--text-secondary); font-size:12px; }
+  .repository-archive-dialog [role=alert] { color:var(--error); }
+  .repository-archive-dialog :focus:not(:focus-visible) { outline:none; box-shadow:none; }
+  .repository-archive-dialog :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .repository-archive-actions { display:flex; justify-content:flex-end; gap:8px; }
+}
+
+@layer overlays {
+  /* Conversion is requested from the start-up project chooser, which sits above ordinary dialogs. */
+  .project-name-dialog-backdrop.legacy-import-backdrop { z-index: 10030; }
+}

@@ -175,6 +175,10 @@ impl Session {
     ) -> Response {
         let path = std::path::Path::new(path);
 
+        if self.state.is_repository_protected_path(path) {
+            return Response::error(id, error_codes::PERMISSION_DENIED, "Repository paths require the repository protocol");
+        }
+
         if !path.is_absolute() {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
@@ -254,6 +258,10 @@ impl Session {
 
     pub(super) fn handle_create_dir(&self, id: &str, path: &str, recursive: bool) -> Response {
         let path = std::path::Path::new(path);
+
+        if self.state.is_repository_protected_path(path) {
+            return Response::error(id, error_codes::PERMISSION_DENIED, "Repository paths require the repository protocol");
+        }
 
         if !path.is_absolute() {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
@@ -358,6 +366,10 @@ impl Session {
     pub(super) fn handle_delete(&self, id: &str, path: &str, recursive: bool) -> Response {
         let path = std::path::Path::new(path);
 
+        if self.state.is_repository_protected_path(path) {
+            return Response::error(id, error_codes::PERMISSION_DENIED, "Repository paths require the repository protocol");
+        }
+
         if !path.is_absolute() {
             return Response::error(id, error_codes::INVALID_PATH, "Path must be absolute");
         }
@@ -434,6 +446,10 @@ impl Session {
     pub(super) fn handle_rename(&self, id: &str, old_path: &str, new_path: &str) -> Response {
         let old = std::path::Path::new(old_path);
         let new = std::path::Path::new(new_path);
+
+        if self.state.is_repository_protected_path(old) || self.state.is_repository_protected_path(new) {
+            return Response::error(id, error_codes::PERMISSION_DENIED, "Repository paths require the repository protocol");
+        }
 
         if !old.is_absolute() || !new.is_absolute() {
             return Response::error(id, error_codes::INVALID_PATH, "Paths must be absolute");

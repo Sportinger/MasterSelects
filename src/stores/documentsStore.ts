@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../services/project/repository/transaction/storeMutationBoundary';
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import type {
@@ -62,7 +63,7 @@ function mutateDocument(state: DocumentsState, id: string, update: (doc: Project
 }
 
 function createDocumentsStore() {
-  return create<DocumentsState>()(subscribeWithSelector((set, get) => ({
+  return create<DocumentsState>()(subscribeWithSelector(withRepositoryStoreMutation('documents', (set, get) => ({
   documents: [],
   activeDocumentId: null,
   navigationRequest: null,
@@ -318,7 +319,7 @@ function createDocumentsStore() {
   snapshot: () => ({ schemaVersion: 2, documents: get().documents,
     activeDocumentId: get().activeDocumentId }),
   reset: () => set({ documents: [], activeDocumentId: null, navigationRequest: null }),
-  })));
+  }))));
 }
 
 type DocumentsStoreApi = ReturnType<typeof createDocumentsStore>;

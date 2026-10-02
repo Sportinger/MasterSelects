@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type React from 'react';
 
@@ -190,7 +191,7 @@ export function usePreviewEffectOrbit({
     }
     wheel.current += difference * 0.25;
     writeParam(wheel.clipId, wheel.effectId, wheel.paramName, wheel.current);
-    wheelFrameRef.current = window.requestAnimationFrame(() => wheelAnimationStepRef.current());
+    wheelFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(() => wheelAnimationStepRef.current()));
   }, [finishWheel, resolveFreshTarget, writeParam]);
 
   useEffect(() => {
@@ -269,12 +270,12 @@ export function usePreviewEffectOrbit({
       }
     }
     if (wheelTimerRef.current !== null) window.clearTimeout(wheelTimerRef.current);
-    wheelTimerRef.current = window.setTimeout(() => {
+    wheelTimerRef.current = window.setTimeout(bindEditorGestureCallback(() => {
       wheelTimerRef.current = null;
       finishWheel(true);
-    }, 180);
+    }), 180);
     if (wheelFrameRef.current === null) {
-      wheelFrameRef.current = window.requestAnimationFrame(animateWheel);
+      wheelFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(animateWheel));
     }
     return true;
   }, [animateWheel, canvasRef, canvasSize.height, canvasSize.width, finishWheel, resolveFreshTarget, writeParam]);

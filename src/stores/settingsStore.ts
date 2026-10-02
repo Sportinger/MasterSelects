@@ -1,7 +1,6 @@
 // Settings store for app configuration
 // Global settings persisted in browser localStorage
 // The optional YouTube integration credential is encrypted in IndexedDB.
-
 import { create } from 'zustand';
 import { subscribeWithSelector, persist } from 'zustand/middleware';
 import { youtubeCredentialManager } from '../services/youtubeCredentialManager';
@@ -33,7 +32,6 @@ import type {
   TimelineZoomAnchor,
   TranscriptionProvider,
 } from './settings/settingsOptions';
-
 // Compatibility re-export: option catalog moved to ./settings/settingsOptions.
 // Surface kept identical to the pre-split module (clamp helpers stay internal).
 export type {
@@ -53,10 +51,8 @@ export {
   MAX_SHORTCUT_DISPLAY_SCALE,
   MIN_SHORTCUT_DISPLAY_SCALE,
 } from './settings/settingsOptions';
-
 const log = Logger.create('SettingsStore');
 const SETTINGS_PERSIST_VERSION = 3;
-
 export type SettingsCategoryId =
   | 'general'
   | 'import'
@@ -67,7 +63,6 @@ export type SettingsCategoryId =
   | 'transcription'
   | 'nativeHelper'
   | 'integrations';
-
 // Piano-roll controller-lane area (#249). Forward-compatible: `lanes` is an
 // ordered list of lane-type ids (see pianoRollLaneTypes.ts) so future CC /
 // pitchbend lanes persist without a schema change. Velocity is the only entry
@@ -291,7 +286,7 @@ export const useSettingsStore = create<SettingsState>()(
       transcriptionProvider: 'hybrid',
       previewQuality: 1, // Full quality by default
       showTransparencyGrid: false, // Don't show checkerboard by default
-      saveMode: 'interval' as SaveMode, // Timed autosave by default; actions only mark changes unsaved
+      saveMode: 'continuous' as SaveMode,
       autosaveEnabled: true, // Legacy compat (interval mode uses this)
       autosaveInterval: 5, // 5 minutes default interval (only used in interval mode)
       turboModeEnabled: true, // Connect to native helper by default (downloads)
@@ -362,12 +357,12 @@ export const useSettingsStore = create<SettingsState>()(
         set({ showTransparencyGrid: show });
       },
 
-      setSaveMode: (mode) => {
-        set({ saveMode: mode === 'manual' ? 'manual' : 'interval', autosaveEnabled: mode !== 'manual' });
+      setSaveMode: (_mode) => {
+        set({ saveMode: 'continuous', autosaveEnabled: true });
       },
 
-      setAutosaveEnabled: (enabled) => {
-        set({ autosaveEnabled: enabled, saveMode: enabled ? 'interval' : 'manual' });
+      setAutosaveEnabled: (_enabled) => {
+        set({ autosaveEnabled: true, saveMode: 'continuous' });
       },
 
       setAutosaveInterval: (interval) => {
@@ -693,7 +688,7 @@ export const useSettingsStore = create<SettingsState>()(
       },
       onRehydrateStorage: () => (state) => {
         if (state) {
-          if (state.saveMode === 'continuous') state.saveMode = state.autosaveEnabled ? 'interval' : 'manual';
+          state.saveMode = 'continuous'; state.autosaveEnabled = true;
           // Sync feature flags with persisted setting on app start
           flags.useFullWebCodecsPlayback = state.webCodecsEnabled;
           flags.disableHtmlPreviewFallback = state.webCodecsEnabled;

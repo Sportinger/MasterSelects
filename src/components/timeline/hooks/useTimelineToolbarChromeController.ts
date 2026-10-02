@@ -125,6 +125,7 @@ export function useTimelineToolbarChromeController({
 
   const timelineToolbarProps: TimelineToolbarProps = {
     duration,
+    frameRate: Number.isFinite(frameRate) && frameRate > 0 ? frameRate : 30,
     formatTime,
     hasInOutDisplayRange,
     inOutDisplayDuration,

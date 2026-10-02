@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../services/project/repository/transaction/storeMutationBoundary';
 import { create } from 'zustand';
 
 import {
@@ -23,7 +24,7 @@ interface SeedancePreproductionActions {
 export type SeedancePreproductionStore = SeedancePreproductionProjectState
   & SeedancePreproductionActions;
 
-export const useSeedancePreproductionStore = create<SeedancePreproductionStore>((set) => ({
+export const useSeedancePreproductionStore = create<SeedancePreproductionStore>(withRepositoryStoreMutation('seedance', (set) => ({
   ...createEmptySeedancePreproductionState(),
   hydrate: (state) => set(JSON.parse(JSON.stringify(state)) as SeedancePreproductionProjectState),
   patchRun: (runId, patch) => set((state) => {
@@ -65,7 +66,7 @@ export const useSeedancePreproductionStore = create<SeedancePreproductionStore>(
       ? undefined
       : JSON.parse(JSON.stringify(sourceBundle)) as SeedanceSourceBundleReference,
   }),
-}));
+})));
 
 export function getSeedancePreproductionProjectState(): SeedancePreproductionProjectState {
   const state = useSeedancePreproductionStore.getState();

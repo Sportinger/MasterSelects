@@ -9,6 +9,7 @@ import { Logger } from '../../services/logger';
 const log = Logger.create('RelinkDialog');
 import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
 import { projectFileService } from '../../services/projectFileService';
+import { runEditorBatch } from '../../services/project/repository/transaction/editorMutationRuntime';
 import {
   applyRelinkMatch,
   createRelinkCandidateMapFromFiles,
@@ -430,10 +431,12 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
     const rejected = new Set<string>();
     const appliedIds = new Set<string>();
     const errors: string[] = [];
-    for (const status of fileStatuses) {
-      if (status.status === 'found' && status.match) {
+    const found = fileStatuses.filter(status => status.status === 'found' && status.match);
+    // All relinks form one undoable revision and one save instead of one commit per file.
+    await runEditorBatch(`Relink ${found.length} media`, async () => {
+      for (const status of found) {
         try {
-          const applied = await applyRelinkMatch(status.id, status.match);
+          const applied = await applyRelinkMatch(status.id, status.match!);
           if (!applied) throw new Error(`Could not reconnect “${status.name}”. Choose its original media file.`);
           appliedIds.add(status.id);
           log.info(`Applied: ${status.name}`);
@@ -442,7 +445,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
           errors.push(error instanceof Error ? error.message : `Could not reconnect “${status.name}”.`);
         }
       }
-    }
+    });
 
     if (rejected.size > 0) {
       setFileStatuses(previous => previous.filter(status => !appliedIds.has(status.id)).map(status => rejected.has(status.id)

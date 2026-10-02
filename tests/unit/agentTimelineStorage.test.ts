@@ -86,6 +86,21 @@ describe('Agent Timeline artifact storage', () => {
     expect(pointers.operations).toEqual(['pointer', 'pointer']);
   });
 
+  it('reuses immutable manifests after reload even when the wall clock has advanced', async () => {
+    let clock = '2026-07-27T12:00:01.000Z';
+    const artifacts = new ArtifactStore(new MemoryArtifactStorageAdapter(), () => clock);
+    const pointers = new MemoryPointers();
+    const firstStorage = createStorage(pointers, artifacts).storage;
+    const first = await firstStorage.write(write());
+    const before = (await artifacts.listArtifacts()).length;
+    clock = '2026-07-28T12:00:01.000Z';
+    const reopened = createStorage(pointers, artifacts).storage;
+    const second = await reopened.write(write());
+    expect(second.pointer).toEqual(first.pointer);
+    expect(pointers.operations).toEqual(['pointer']);
+    expect((await artifacts.listArtifacts()).length).toBe(before);
+  });
+
   it('publishes shard and index artifacts before the manifest pointer, then round-trips validated data', async () => {
     const artifactStore = new ArtifactStore(new MemoryArtifactStorageAdapter());
     const pointers = new MemoryPointers();
@@ -103,7 +118,7 @@ describe('Agent Timeline artifact storage', () => {
     expect(operations).toEqual(['artifact', 'artifact', 'artifact']);
     expect(pointers.operations).toEqual(['pointer']);
     expect(saved.manifest.channels.cuts.status).toBe('complete');
-    expect(saved.manifest.channels.cuts.artifacts[0].artifactRef).toMatch(/^sha256:/);
+    expect(saved.manifest.channels.cuts.artifacts[0].artifactRef).toMatch(/^artifact:sha256:[a-f0-9]{64}:manifest:[a-f0-9]{64}$/);
 
     const loaded = await storage.read({ mediaFileId: 'media-1', sourceIdentity });
     expect(loaded.status).toBe('ready');

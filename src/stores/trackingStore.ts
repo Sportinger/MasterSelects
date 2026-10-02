@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../services/project/repository/transaction/storeMutationBoundary';
 import { create } from 'zustand';
 import { subscribeWithSelector } from 'zustand/middleware';
 import { clonePlanarTracks } from '../services/planarTracking/clonePlanarTracks';
@@ -61,7 +62,7 @@ export function cloneTrackingAssets(assets: readonly TrackingAsset[] | undefined
   return normalizeTrackingAssets(assets);
 }
 
-export const useTrackingStore = create<TrackingStore>()(subscribeWithSelector((set) => ({
+export const useTrackingStore = create<TrackingStore>()(subscribeWithSelector(withRepositoryStoreMutation('tracking', (set) => ({
   ...initialState(),
   upsertAsset: (asset) => set((state) => {
     const current = state.assets.find((candidate) => candidate.id === asset.id);
@@ -115,7 +116,7 @@ export const useTrackingStore = create<TrackingStore>()(subscribeWithSelector((s
     };
   }),
   reset: () => set(initialState()),
-})));
+}))));
 
 export function getTrackingStoreSnapshot(): TrackingStoreState {
   const state = useTrackingStore.getState();

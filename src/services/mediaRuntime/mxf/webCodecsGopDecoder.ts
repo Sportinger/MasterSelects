@@ -33,6 +33,10 @@ export class WebCodecsGopDecoder implements GopDecoder {
     return new Promise((resolve) => this.decoder.addEventListener('dequeue', () => resolve(), { once: true }));
   }
 
+  waitForInputProgress(): Promise<void> {
+    return this.waitForCapacity();
+  }
+
   flush(): Promise<void> {
     return this.decoder.flush();
   }
@@ -81,6 +85,8 @@ export async function createAvcDecoderConfig(source: MxfPacketSource): Promise<V
     codedWidth: meta.codedWidth || meta.width,
     codedHeight: meta.codedHeight || meta.height,
     optimizeForLatency: true,
+    // Avoid hardware decoder contention during concurrent MXF camera seeks.
+    hardwareAcceleration: 'prefer-software',
   };
   const support = await VideoDecoder.isConfigSupported(config);
   if (!support.supported) throw new Error(`Browser cannot decode ${codec} (${meta.width}x${meta.height})`);

@@ -10,6 +10,8 @@ import type {
   DirEntry,
   MatAnyoneStatusResponse,
   MatAnyoneMatteResult,
+  RepositoryCommand,
+  OkResponse,
 } from './protocol';
 
 import type {
@@ -421,6 +423,19 @@ class NativeHelperClientImpl {
 
   async writeFileBinary(path: string, data: Blob | ArrayBuffer | Uint8Array): Promise<boolean> {
     return fileCommands.writeFileBinary(this.commandHost, path, data, log);
+  }
+
+  async repositoryCommand(command: Omit<RepositoryCommand, 'id'>): Promise<OkResponse> {
+    return fileCommands.repositoryCommand(this.commandHost, command);
+  }
+
+  async readRepositoryBlob(path: string, signal?: AbortSignal): Promise<Blob | null> {
+    const response = await this.commandHost.fetchWithAuth(
+      `${this.commandHost.getHttpBaseUrl()}/file?path=${encodeURIComponent(path)}`, { signal },
+    );
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error(`Native repository read failed (${response.status})`);
+    return response.blob();
   }
 
 

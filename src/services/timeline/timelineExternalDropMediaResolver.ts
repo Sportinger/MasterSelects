@@ -8,6 +8,7 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
 import { createPrimaryMediaObjectUrl } from '../project/mediaObjectUrlManager';
 import { Logger } from '../logger';
+import { isLinkedMediaDeferred, requestLinkedMedia } from '../project/linkedMediaDemand';
 
 const log = Logger.create('TimelineExternalDropMediaResolver');
 const TIMELINE_DROP_IMPORT_PLACEHOLDER_TIMEOUT_MS = 750;
@@ -159,6 +160,10 @@ export async function resolveTimelineDropMediaFile(params: {
 }
 
 export async function resolveMediaFileForTimelineDrop(mediaFile: MediaFile): Promise<File | null> {
+  if (isLinkedMediaDeferred(mediaFile.id)) {
+    if (!await requestLinkedMedia(mediaFile.id)) return null;
+    mediaFile = useMediaStore.getState().files.find(file => file.id === mediaFile.id) ?? mediaFile;
+  }
   if (mediaFile.file) {
     return mediaFile.file;
   }

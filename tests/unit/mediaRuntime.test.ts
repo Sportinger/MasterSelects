@@ -905,6 +905,21 @@ describe('media runtime bindings', () => {
     ).toBeNull();
   });
 
+  it('reuses the warm MXF long-GOP transport session for scrubbing and release', () => {
+    const file = new File(['video'], 'camera.mxf');
+    setMediaFiles([{ id: 'mxf-scrub', file, name: 'camera.mxf', duration: 90, videoCodecId: 'mxf:avc-lgop' }]);
+    const source = bindSourceRuntimeToClip({
+      clipId: 'mxf-clip', source: { type: 'video', mediaFileId: 'mxf-scrub' }, file, mediaFileId: 'mxf-scrub',
+    });
+    const playback = getPreviewRuntimeSource(source, 'camera-track', true);
+    const scrub = getScrubRuntimeSource(source, 'camera-track', true);
+    expect(scrub?.runtimeSessionKey).toBe(playback?.runtimeSessionKey);
+    expect(scrub?.runtimeSessionKey).toBe('interactive-track:camera-track:media:mxf-scrub');
+    expect(getScrubRuntimeSource(source, 'camera-track', true, 'nested')?.runtimeSessionKey)
+      .toBe(getPreviewRuntimeSource(source, 'camera-track', true, 'nested')?.runtimeSessionKey);
+    expect(getScrubRuntimeSource(source, 'camera-track', false)?.runtimeSessionKey).toBe(source?.runtimeSessionKey);
+  });
+
   it('creates a TurboRes provider for an enabled classic ProRes runtime', async () => {
     const file = new File(['prores'], 'camera.mov', { type: 'video/quicktime', lastModified: 82 });
     setMediaFiles([{

@@ -171,31 +171,13 @@ export function useLayerSync({
       return;
     }
 
-    // Try to use RAM Preview cache for instant scrubbing
-    // This provides instant access to pre-rendered frames
-    if (ramPreviewRange) {
-      const inRange = playheadPosition >= ramPreviewRange.start && playheadPosition <= ramPreviewRange.end;
-      if (inRange) {
-        const hit = renderHostPort.renderCachedFrame(playheadPosition);
-        if (hit) {
-          return; // Cache hit - instant render, no video seek needed
-        }
-        // Cache miss within range - will fall through to regular render
-      }
-    } else {
-      // No RAM preview range, but still try the cache in case frames were cached during playback
-      const hit = renderHostPort.renderCachedFrame(playheadPosition);
-      if (hit) {
-        return;
-      }
-    }
-
     // Debounce heavy layer sync via requestAnimationFrame.
     // During rapid scrubbing, multiple playheadPosition changes within a single frame
     // are batched — only the last scheduled sync actually executes.
     let runLayerSync: FrameRequestCallback = () => undefined;
+    let active = true;
     const scheduleLayerSync = () => {
-      if (pendingRafRef.current !== null) {
+      if (!active || pendingRafRef.current !== null) {
         return;
       }
 
@@ -204,6 +186,14 @@ export function useLayerSync({
 
     runLayerSync = () => {
     pendingRafRef.current = null;
+    const currentState = useTimelineStore.getState();
+    if (!active || currentState.isPlaying || currentState.isRamPreviewing) return;
+    const playheadPosition = currentState.playheadPosition;
+    // Cache hits must not detach the scrub listener: the next pointer target
+    // can miss the cache or cross into another clip while React stays idle.
+    const canUseCachedFrame = !ramPreviewRange
+      || (playheadPosition >= ramPreviewRange.start && playheadPosition <= ramPreviewRange.end);
+    if (canUseCachedFrame && renderHostPort.renderCachedFrame(playheadPosition)) return;
     const imageLookupContext = createLayerSyncImageLookupContext(scheduleLayerSync);
 
     const clipsAtTime = getClipsAtTime(playheadPosition);
@@ -568,7 +558,16 @@ export function useLayerSync({
 
     }; // end runLayerSync
 
-    pendingRafRef.current = requestAnimationFrame(runLayerSync);
+    scheduleLayerSync();
+    const unsubscribe = useTimelineStore.subscribe(state => state.playheadPosition, scheduleLayerSync);
+    return () => {
+      active = false;
+      unsubscribe();
+      if (pendingRafRef.current !== null) {
+        cancelAnimationFrame(pendingRafRef.current);
+        pendingRafRef.current = null;
+      }
+    };
   }, [
     playheadPosition,
     clips,

@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 // Mask vertex/handle dragging with document-level listeners
 
 import { useCallback, useId, useRef } from 'react';
@@ -552,12 +553,12 @@ export function useMaskVertexDrag(
       latestMoveEvent = moveEvent;
       if (moveFrame !== null) return;
 
-      moveFrame = window.requestAnimationFrame(() => {
+      moveFrame = window.requestAnimationFrame(bindEditorGestureCallback(() => {
         moveFrame = null;
         if (latestMoveEvent) {
           applyMouseMove(latestMoveEvent);
         }
-      });
+      }));
     };
 
     const handleMouseUp = () => {

@@ -1,3 +1,4 @@
+import { bindEditorAsyncStore, captureEditorAsyncMutation, discardUnpublishedMedia } from '../../../../services/project/repository/transaction/editorAsyncMutation';
 import { withProjectArtifactWriteBatch } from '../../../../services/project/projectArtifactWriteBatch';
 import type { MediaSliceCreator, MediaState } from '../../types';
 import { generateId, processImport } from '../../helpers/importPipeline';
@@ -21,10 +22,13 @@ function importMetadata(options?: ImportFileOptions) {
 }
 
 export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportActions, 'importFile'>> = (
-  set,
-  get,
+  baseSet,
+  baseGet,
 ) => ({
-  importFile: async (file: File, parentId?: string | null, options?: ImportFileOptions) => withProjectArtifactWriteBatch(async () => {
+  importFile: async (file: File, parentId?: string | null, options?: ImportFileOptions) => {
+    const binding = captureEditorAsyncMutation('Import media');
+    const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
+    return withProjectArtifactWriteBatch(async () => {
     const existing = get().files.find((f) =>
       f.name === file.name && f.fileSize === file.size && !f.isImporting
     );
@@ -48,6 +52,10 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
             forceCopyToProject: true,
             typeOverride: existing.type,
           });
+          if (!binding.isCurrent() || baseGet().files.find(candidate => candidate.id === existing.id)?.file !== existing.file) {
+            discardUnpublishedMedia(result.mediaFile, existing);
+            throw new DOMException('Media repair target changed', 'AbortError');
+          }
           const repairedMediaFile = {
             ...existing,
             ...result.mediaFile,
@@ -66,7 +74,7 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
         } catch (error) {
           set((state) => ({
             files: state.files.map((candidate) => (
-              candidate.id === existing.id
+              candidate.id === existing.id && candidate.file === existing.file
                 ? { ...candidate, isImporting: false }
                 : candidate
             )),
@@ -92,6 +100,7 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
 
     const id = generateId();
     const resolved = await resolveImportEntry(file, { id });
+    binding.assertCurrent();
 
     if (resolved.route === 'signal') {
       const existingSignal = get().signalAssets.find((item) =>
@@ -104,7 +113,8 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
 
       log.info(`Starting Signal import: ${file.name} provider: ${resolved.plan.provider.id} size: ${file.size}`);
       const signalAsset = await runSignalImport(resolved, parentId);
-      commitSignalAsset(set, signalAsset);
+      binding.assertCurrent();
+      binding.run(() => commitSignalAsset(set, signalAsset));
       log.info('Signal import complete:', signalAsset.name);
       return signalAsset;
     }
@@ -126,6 +136,10 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
         projectFileName: options?.projectFileName,
         typeOverride: type,
       });
+      if (!binding.isCurrent() || baseGet().files.find(candidate => candidate.id === id)?.file !== file) {
+        discardUnpublishedMedia(result.mediaFile);
+        throw new DOMException('Media import target changed', 'AbortError');
+      }
       const mediaFile = { ...result.mediaFile, ...importMetadata(options) };
       finalizeImportedMediaFile(set, get, id, mediaFile);
       log.info('Complete:', mediaFile.name);
@@ -133,9 +147,10 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
     } catch (err) {
       log.error(`Import failed: ${file.name}`, err);
       set((state) => ({
-        files: state.files.filter((f) => f.id !== id),
+        files: state.files.filter((f) => f.id !== id || f.file !== file),
       }));
       throw err;
     }
-  }),
+    });
+  },
 });

@@ -108,10 +108,6 @@ export function CaptionWordPreviewEditor({
   overlayRef,
   viewZoom,
 }: CaptionWordPreviewEditorProps) {
-  const clips = useTimelineStore(state => state.clips);
-  const layers = useTimelineStore(state => state.layers);
-  const tracks = useTimelineStore(state => state.tracks);
-  const playheadPosition = useTimelineStore(state => state.playheadPosition);
   const isPlaying = useTimelineStore(state => state.isPlaying);
   const playbackWarmup = useTimelineStore(state => state.playbackWarmup);
   const selectClip = useTimelineStore(state => state.selectClip);
@@ -141,6 +137,8 @@ export function CaptionWordPreviewEditor({
   const openEditorAt = useCallback((event: MouseEvent): boolean => {
     const container = canvasWrapperRef.current?.closest<HTMLElement>('.preview-container');
     if (!editorEnabled || editor || !container) return false;
+    // Hit-testing is an input event, so read its exact current frame on demand.
+    const { clips, layers, tracks, playheadPosition } = useTimelineStore.getState();
     const containerBounds = container.getBoundingClientRect();
     const containerPoint = {
       x: event.clientX - containerBounds.left,
@@ -212,15 +210,11 @@ export function CaptionWordPreviewEditor({
   }, [
     canvasInContainer,
     canvasSize,
-    clips,
     canvasWrapperRef,
     editor,
     editorEnabled,
     effectiveResolution,
-    layers,
-    playheadPosition,
     selectClip,
-    tracks,
     viewZoom,
   ]);
 

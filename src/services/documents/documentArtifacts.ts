@@ -2,7 +2,8 @@ import { projectFileService } from '../projectFileService';
 import type { DocumentsProjectManifest, DocumentsProjectState, ProjectDocument } from '../../types/documents';
 
 function isManifest(value: DocumentsProjectState | DocumentsProjectManifest | undefined): value is DocumentsProjectManifest {
-  return value?.schemaVersion === 2 || value?.schemaVersion === 3;
+  return Boolean(value && 'artifacts' in value && Array.isArray(value.artifacts)
+    && (value.schemaVersion === 2 || value.schemaVersion === 3));
 }
 
 function decodeBase64(value: string): Uint8Array<ArrayBuffer> {

@@ -56,7 +56,6 @@ export interface TimelineSectionHeadersProps {
   onTrackPickWhipDragEnd: TimelineHeaderProps['onTrackPickWhipDragEnd'];
   onTrackPickWhipDragStart: TimelineHeaderProps['onTrackPickWhipDragStart'];
   onTrackResizeStart: NonNullable<TimelineHeaderProps['onResizeStart']>;
-  playheadPosition: number;
   sectionCollapsed: boolean;
   sectionKind: TrackSectionKind;
   sectionPhaseClass: string;
@@ -74,11 +73,9 @@ export interface TimelineSectionHeadersProps {
   trackHasKeyframes: (trackId: string) => boolean;
 }
 
-type TimelineSectionHeadersContentProps = Omit<TimelineSectionHeadersProps, 'playheadPosition'>;
-
 const EMPTY_PROPERTY_CLIP_KEYFRAMES: TimelineHeaderPropertySelection['keyframes'] = [];
 
-const TimelineSectionHeadersContent = memo(function TimelineSectionHeadersContent({
+export const TimelineSectionHeaders = memo(function TimelineSectionHeaders({
   activeTrackResizeId,
   addKeyframe,
   anyViewAudioSolo,
@@ -121,7 +118,7 @@ const TimelineSectionHeadersContent = memo(function TimelineSectionHeadersConten
   timelineViewTracks,
   toggleTrackExpanded,
   trackHasKeyframes,
-}: TimelineSectionHeadersContentProps) {
+}: TimelineSectionHeadersProps) {
   const selectedClipByTrack = useMemo(() => {
     const selectedByTrack = new Map<string, TimelineClip>();
     if (sectionCollapsed || isCompositionTrackMorphing || selectedClipIds.size === 0) {
@@ -241,11 +238,3 @@ const TimelineSectionHeadersContent = memo(function TimelineSectionHeadersConten
     </div>
   );
 });
-
-export function TimelineSectionHeaders({
-  playheadPosition,
-  ...stableProps
-}: TimelineSectionHeadersProps) {
-  void playheadPosition;
-  return <TimelineSectionHeadersContent {...stableProps} />;
-}

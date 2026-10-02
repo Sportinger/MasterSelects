@@ -251,6 +251,13 @@ export async function addRecentFsaProject(
   await persistEntries(upsertEntry(entries, nextEntry));
 }
 
+export async function addRecentOpfsProject(path: string, projectData: ProjectFile | null): Promise<void> {
+  const entries = getRecentProjects();
+  const existing = entries.find(entry => entry.backend === 'opfs' && entry.path === path);
+  await persistEntries(upsertEntry(entries, { id: existing?.id ?? createRecentId(), backend: 'opfs', path,
+    name: projectData?.name ?? getNameFromPath(path), updatedAt: projectData?.updatedAt, lastOpenedAt: Date.now() }));
+}
+
 export async function addRecentNativeProject(
   path: string,
   projectData: ProjectFile | null,

@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../../services/project/repository/transaction/storeMutationBoundary';
 // Zustand store for dock layout state management
 
 import { create } from 'zustand';
@@ -62,7 +63,7 @@ export {
 };
 
 export const useDockStore = create<DockStoreState>()(
-  subscribeWithSelector(
+  subscribeWithSelector(withRepositoryStoreMutation('dock',
     withExclusiveHistorySnapshotMutationLease(
       persist(
         (set, get) => ({
@@ -155,5 +156,5 @@ export const useDockStore = create<DockStoreState>()(
         }
       )
     )
-  )
+  ))
 );

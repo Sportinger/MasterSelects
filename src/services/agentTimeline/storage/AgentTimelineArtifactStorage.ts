@@ -17,10 +17,11 @@ import {
 import type { AgentTimelineArtifactStorageDependencies } from './artifactStoreBoundary';
 import { assertNotAborted, DEFAULT_AGENT_TIMELINE_MAX_READ_BYTES, isRecord, jsonBytes, readBoundedJson } from './storageJson';
 
-const JSON_OPTIONS = (sourceRefs: readonly string[]) => ({
+const JSON_OPTIONS = (sourceRefs: readonly string[], createdAt: string) => ({
   mimeType: 'application/json' as const,
   encoding: 'json' as const,
   sourceRefs,
+  createdAt,
 });
 const EMPTY_MEDIA_TYPE_FALLBACK = 'application/octet-stream';
 
@@ -177,7 +178,7 @@ export class AgentTimelineArtifactStorage {
         mediaFileId, sourceIdentityHash: sourceIdentity.hash, events: write.events,
       };
       const bytes = jsonBytes(document);
-      const result = await this.dependencies.artifacts.putArtifact(bytes, JSON_OPTIONS(refs));
+      const result = await this.dependencies.artifacts.putArtifact(bytes, JSON_OPTIONS(refs, inputManifest.generatedAt));
       assertNotAborted(signal);
       const { stateHash, ...descriptorFields } = write.descriptor;
       const descriptor = write.descriptor.timeDomain === 'source'
@@ -222,9 +223,9 @@ export class AgentTimelineArtifactStorage {
       .map((shard) => [shard.shardId, shard]));
     for (const shard of shards) byId.set(shard.shardId, shard);
     const shardIndex = createArtifactShardIntervalIndex([...byId.values()]);
-    const indexResult = await this.dependencies.artifacts.putArtifact(jsonBytes(shardIndex), JSON_OPTIONS(refs));
+    const indexResult = await this.dependencies.artifacts.putArtifact(jsonBytes(shardIndex), JSON_OPTIONS([...refs, ...[...byId.values()].map(shard => shard.artifactRef)], inputManifest.generatedAt));
     assertNotAborted(signal);
-    const manifestResult = await this.dependencies.artifacts.putArtifact(jsonBytes(manifest), JSON_OPTIONS(refs));
+    const manifestResult = await this.dependencies.artifacts.putArtifact(jsonBytes(manifest), JSON_OPTIONS([...refs, indexResult.manifest.artifactId], inputManifest.generatedAt));
     assertNotAborted(signal);
     const pointer: AgentTimelineManifestPointer = {
       type: 'agent-timeline-manifest-pointer',

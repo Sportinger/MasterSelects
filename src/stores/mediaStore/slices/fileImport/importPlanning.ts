@@ -82,9 +82,7 @@ export async function resolveImportEntry(
   };
 }
 
-async function persistSignalImportArtifacts(
-  result: SignalUniversalImportResult,
-): Promise<{ asset: SignalUniversalImportResult['asset']; artifacts: SignalArtifact[] }> {
+function captureSignalArtifactStore() {
   const projectHandle = (
     projectFileService as typeof projectFileService & {
       getProjectHandle?: () => FileSystemDirectoryHandle | null;
@@ -96,11 +94,17 @@ async function persistSignalImportArtifacts(
     }
   ).getProjectPackageSession?.() ?? null;
 
-  const store = packageSession
+  return packageSession
     ? artifactService.createPackageStore(packageSession)
     : projectHandle
     ? artifactService.createStore(projectHandle)
     : artifactService.createIndexedDBStore();
+}
+
+async function persistSignalImportArtifacts(
+  result: SignalUniversalImportResult,
+  store: ReturnType<typeof captureSignalArtifactStore>,
+): Promise<{ asset: SignalUniversalImportResult['asset']; artifacts: SignalArtifact[] }> {
   const artifactsByOriginalId = new Map<string, SignalArtifact>();
 
   try {
@@ -116,7 +120,7 @@ async function persistSignalImportArtifacts(
       artifactsByOriginalId.set(payload.artifactId, stored.manifest);
     }
   } catch (error) {
-    const target = packageSession ? '.msproj package' : projectHandle ? 'project cache' : 'IndexedDB';
+    const target = 'original import storage';
     log.warn(`Signal artifact persistence to ${target} failed; keeping transient memory artifact refs.`, error);
     return {
       asset: result.asset,
@@ -135,6 +139,7 @@ export async function runSignalImport(
   entry: ResolvedSignalImportEntry,
   parentId?: string | null,
 ): Promise<SignalAssetItem> {
+  const store = captureSignalArtifactStore();
   const result = await universalImportOrchestrator.importPlannedFile(entry.plan, {
     absolutePath: entry.absolutePath,
   });
@@ -143,7 +148,7 @@ export async function runSignalImport(
     throw new Error(`Signal importer resolved "${entry.file.name}" as a legacy media route.`);
   }
 
-  const persisted = await persistSignalImportArtifacts(result);
+  const persisted = await persistSignalImportArtifacts(result, store);
   return createSignalAssetItem(persisted.asset, {
     parentId,
     diagnostics: result.diagnostics,

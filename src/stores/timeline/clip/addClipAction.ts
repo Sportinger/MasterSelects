@@ -1,3 +1,4 @@
+import { bindEditorAsyncStore, captureEditorAsyncMutation } from '../../../services/project/repository/transaction/editorAsyncMutation';
 import type { TimelineTrack } from '../../../types';
 import type { AddClipOptions } from '../types';
 import { Logger } from '../../../services/logger';
@@ -41,8 +42,12 @@ export async function applyAddClipAction(
   mediaTypeOverride?: string,
   options?: AddClipOptions,
 ): Promise<string | undefined> {
+  const original = context, timelineSessionId = context.get().timelineSessionId;
+  const binding = captureEditorAsyncMutation('Add timeline clip', () => original.get().timelineSessionId === timelineSessionId);
+  context = bindEditorAsyncStore(original.set, original.get, binding);
   const { get, set } = context;
   const mediaType = (mediaTypeOverride as Awaited<ReturnType<typeof classifyMediaType>> | 'gaussian-avatar' | 'gaussian-splat') || await classifyMediaType(file);
+  binding.assertCurrent();
   const estimatedDuration = providedDuration ?? 5;
   log.debug('Adding clip', { mediaType, file: file.name });
 
@@ -52,7 +57,7 @@ export async function applyAddClipAction(
     : trackId;
   if (!resolvedTrackId) return undefined;
   trackId = resolvedTrackId;
-  const { tracks, clips, updateDuration, thumbnailsEnabled, waveformsEnabled, invalidateCache } = get();
+  const { tracks, updateDuration, thumbnailsEnabled, waveformsEnabled, invalidateCache } = get();
   const targetTrack = tracks.find(t => t.id === trackId);
   if (!targetTrack) {
     log.warn('Track not found', { trackId });
@@ -72,11 +77,13 @@ export async function applyAddClipAction(
     return undefined;
   }
 
-  const { setClips, updateClip } = createClipRuntimeUpdateActions(context);
+  const { setClips, updateClip } = createClipRuntimeUpdateActions(context, { binding, file });
   const sourceMediaFile = await loadSourceMediaFile(mediaFileId);
+  binding.assertCurrent();
   const activeCompositionDimensions = options?.visualScaleMode && hasVisualMediaType(mediaType)
     ? await loadActiveCompositionDimensions()
     : undefined;
+  binding.assertCurrent();
   const initialVisualTransform = resolveInitialVisualTransform(
     options,
     sourceMediaFile,
@@ -158,8 +165,10 @@ export async function applyAddClipAction(
       waveformsEnabled,
       updateClip,
       setClips,
+      isCurrent: () => binding.isCurrent() && original.get().clips.find(clip => clip.id === clipId)?.file === file,
     });
 
+    binding.assertCurrent();
     invalidateCache();
     queueMediaSourceArtifactProjection(mediaFileId);
     return clipId;
@@ -173,10 +182,11 @@ export async function applyAddClipAction(
       audioClip.transcript = sourceTranscript;
       audioClip.transcriptStatus = 'ready';
     }
-    set({ clips: [...clips, audioClip] });
+    set({ clips: [...get().clips, audioClip] });
     updateDuration();
 
-    await loadAudioMedia({ clip: audioClip, file, mediaFileId, waveformsEnabled, updateClip });
+    await loadAudioMedia({ clip: audioClip, file, mediaFileId, waveformsEnabled, updateClip, isCurrent: () => binding.isCurrent() && original.get().clips.find(candidate => candidate.id === audioClip.id)?.file === file });
+    binding.assertCurrent();
     invalidateCache();
     queueMediaSourceArtifactProjection(mediaFileId);
     return audioClip.id;
@@ -184,6 +194,7 @@ export async function applyAddClipAction(
 
   if (mediaType === 'lottie') {
     const metadata = sourceMediaFile?.vectorAnimation ?? await readLottieMetadata(file);
+    binding.assertCurrent();
     const clip = applyAddClipOptions(createLottieClipPlaceholder({
       trackId,
       file,
@@ -192,15 +203,17 @@ export async function applyAddClipAction(
       mediaFileId,
       metadata,
     }), options);
-    set({ clips: [...clips, clip] });
+    set({ clips: [...get().clips, clip] });
     updateDuration();
     await loadLottieMedia({ clip, file, mediaFileId, metadata, updateClip });
+    binding.assertCurrent();
     invalidateCache();
     return clip.id;
   }
 
   if (mediaType === 'rive') {
     const metadata = sourceMediaFile?.vectorAnimation ?? await readRiveMetadata(file);
+    binding.assertCurrent();
     const clip = applyAddClipOptions(createRiveClipPlaceholder({
       trackId,
       file,
@@ -209,9 +222,10 @@ export async function applyAddClipAction(
       mediaFileId,
       metadata,
     }), options);
-    set({ clips: [...clips, clip] });
+    set({ clips: [...get().clips, clip] });
     updateDuration();
     await loadRiveMedia({ clip, file, mediaFileId, metadata, updateClip });
+    binding.assertCurrent();
     invalidateCache();
     return clip.id;
   }
@@ -221,9 +235,10 @@ export async function applyAddClipAction(
       ...createImageClipPlaceholder({ trackId, file, startTime, estimatedDuration, mediaFileId }),
       transform: initialVisualTransform,
     }, options);
-    set({ clips: [...clips, clip] });
+    set({ clips: [...get().clips, clip] });
     updateDuration();
-    await loadImageMedia({ clip, updateClip });
+    await loadImageMedia({ clip, updateClip, isCurrent: () => binding.isCurrent() && original.get().clips.find(candidate => candidate.id === clip.id)?.file === file });
+    binding.assertCurrent();
     invalidateCache();
     return clip.id;
   }
@@ -243,9 +258,10 @@ export async function applyAddClipAction(
       modelFileName: sourceMediaFile?.name ?? file.name,
     }), options);
     clip.mediaFileId = mediaFileId;
-    set({ clips: [...clips, clip] });
+    set({ clips: [...get().clips, clip] });
     updateDuration();
     loadModelMedia({ clip, updateClip });
+    binding.assertCurrent();
     invalidateCache();
     return clip.id;
   }
@@ -278,9 +294,10 @@ export async function applyAddClipAction(
         sourceMediaFile?.url,
     }), options);
     clip.mediaFileId = mediaFileId;
-    set({ clips: [...clips, clip] });
+    set({ clips: [...get().clips, clip] });
     updateDuration();
     loadGaussianSplatMedia({ clip, updateClip });
+    binding.assertCurrent();
     invalidateCache();
     return clip.id;
   }

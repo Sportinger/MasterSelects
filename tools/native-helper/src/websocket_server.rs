@@ -72,6 +72,7 @@ fn get_command_id(cmd: &Command) -> &str {
         | Command::Delete { id, .. }
         | Command::Exists { id, .. }
         | Command::Rename { id, .. }
+        | Command::Repository { id, .. }
         | Command::GrantPath { id, .. }
         | Command::PickFolder { id, .. }
         | Command::MatAnyoneStatus { id }

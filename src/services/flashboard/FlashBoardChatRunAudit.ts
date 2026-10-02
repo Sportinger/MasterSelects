@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication, type RepositoryDomainPublication } from '../project/repository/artifacts/RepositoryDomainPublication';
 import { APP_VERSION } from '../../version';
 import { useMediaStore } from '../../stores/mediaStore';
 import { hasHostedAgentReloadSnapshot } from '../kernelClient/hostedAgent/reloadResume';
@@ -73,6 +74,8 @@ const runtime: ChatRunRuntime = previousRuntime?.schemaVersion === 2 ? previousR
 runtime.activeRunIds ??= new Set<string>();
 runtimeGlobal.__MASTERSELECTS_CHAT_RUN_AUDIT__ = runtime;
 
+const repositoryRunTargets = new Map<string, RepositoryDomainPublication>();
+
 export function beginFlashBoardChatRun(
   request: FlashBoardChatRequest,
 ): FlashBoardChatRunRecord {
@@ -96,6 +99,8 @@ export function beginFlashBoardChatRun(
     temperature: request.temperature,
     toolExecutionMode: request.toolExecutionMode ?? 'normal',
   };
+  const repository = captureRepositoryDomainPublication();
+  if (repository) repositoryRunTargets.set(record.runId, repository);
   runtime.activeRunIds.add(record.runId);
   remember(record);
   enqueuePersist(record);
@@ -159,6 +164,8 @@ export async function reactivateFlashBoardChatRunByIdempotencyKey(
     candidate.idempotencyKey === idempotencyKey
   )) ?? runs.find((candidate) => candidate.idempotencyKey === idempotencyKey) ?? null;
   if (!record || record.status !== 'running') return null;
+  const repository = captureRepositoryDomainPublication();
+  if (repository) repositoryRunTargets.set(record.runId, repository);
   runtime.activeRunIds.add(record.runId);
   remember(record);
   return record;
@@ -223,6 +230,16 @@ function reconcileOrphanedRunningRecord(
 }
 
 function enqueuePersist(record: FlashBoardChatRunRecord): void {
+  const repository = repositoryRunTargets.get(record.runId);
+  if (repository) {
+    const immutable = JSON.parse(JSON.stringify(record));
+    const previous = runtime.persistenceQueue ?? Promise.resolve();
+    runtime.persistenceQueue = previous.then(() => repository.appendJournal(`chat-run:${record.runId}`, immutable));
+    // Keep rejection visible to diagnostics while allowing the next audit to persist.
+    void runtime.persistenceQueue.catch(error => console.error('Repository chat audit publication failed', error));
+    if (record.status !== 'running') repositoryRunTargets.delete(record.runId);
+    return;
+  }
   const previous = runtime.persistenceQueue ?? Promise.resolve();
   runtime.persistenceQueue = previous
     .then(() => persist(record))

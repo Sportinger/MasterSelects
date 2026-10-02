@@ -2,7 +2,7 @@
 // Stripped-down canvas that renders a single composition independently
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { useEngine } from '../../hooks/useEngine';
+import { useEngineStore } from '../../stores/engineStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVisibility';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
@@ -36,7 +36,7 @@ export function MultiPreviewSlot({
   multicamAngle = null,
   onAir = false,
 }: MultiPreviewSlotProps) {
-  const { isEngineReady } = useEngine();
+  const isEngineReady = useEngineStore((state) => state.isEngineReady);
   const compositions = useMediaStore((s) => s.compositions);
   const visibleCompositions = useMemo(() => compositions.filter(isUserVisibleComposition), [compositions]);
   const visibleCompositionIds = useMemo(() => new Set(visibleCompositions.map((composition) => composition.id)), [visibleCompositions]);

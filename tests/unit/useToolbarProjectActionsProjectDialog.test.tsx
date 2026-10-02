@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   createNewProject: vi.fn(async () => true),
+  openExistingProject: vi.fn(async () => false),
+  setProjectLoadProgress: vi.fn(),
+  failProjectLoadProgress: vi.fn(),
   projectFileService: {
     createProject: vi.fn(async () => true),
     getProjectData: vi.fn(() => null as { name: string } | null),
@@ -24,11 +27,13 @@ vi.mock('../../src/services/projectFileService', () => ({
 vi.mock('../../src/services/projectSync', () => ({
   createNewProject: mocks.createNewProject,
   loadProjectToStores: vi.fn(),
-  openExistingProject: vi.fn(),
+  openExistingProject: mocks.openExistingProject,
   saveCurrentProject: mocks.saveCurrentProject,
-  setProjectLoadProgress: vi.fn(),
+  setProjectLoadProgress: mocks.setProjectLoadProgress,
   syncStoresToProject: mocks.syncStoresToProject,
 }));
+
+vi.mock('../../src/services/project/load/loadProgress', () => ({ failProjectLoadProgress: mocks.failProjectLoadProgress }));
 
 import { useToolbarProjectActions } from '../../src/components/common/toolbar/useToolbarProjectActions';
 import { useTrackingStore } from '../../src/stores/trackingStore';
@@ -74,6 +79,7 @@ describe('toolbar project-name dialog routing', () => {
     mocks.projectFileService.saveProject.mockResolvedValue(true);
     mocks.projectFileService.getProjectHandle.mockReturnValue(null);
     mocks.saveCurrentProject.mockResolvedValue(true);
+    mocks.openExistingProject.mockResolvedValue(false);
   });
   afterEach(() => vi.restoreAllMocks());
 
@@ -186,7 +192,7 @@ describe('toolbar project-name dialog routing', () => {
     });
   });
 
-  it('creates, resets, syncs, and saves a project whose name contains spaces', async () => {
+  it('delegates project creation and confirms its repository with a name containing spaces', async () => {
     const { result, callbacks } = renderProjectActions();
     let submitError: string | null = 'not submitted';
 
@@ -196,31 +202,32 @@ describe('toolbar project-name dialog routing', () => {
 
     expect(submitError).toBeNull();
     expect(mocks.projectFileService.createProject).toHaveBeenCalledWith('My New Project');
-    expect(callbacks.resetMediaProject).toHaveBeenCalledWith('My New Project');
-    expect(mocks.syncStoresToProject).toHaveBeenCalledTimes(1);
+    expect(callbacks.resetMediaProject).not.toHaveBeenCalled();
+    expect(mocks.syncStoresToProject).not.toHaveBeenCalled();
+    expect(mocks.projectFileService.createProject.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.projectFileService.saveProject.mock.invocationCallOrder[0]);
     expect(mocks.projectFileService.saveProject).toHaveBeenCalledTimes(1);
     expect(callbacks.setProjectName).toHaveBeenCalledWith('My New Project');
     expect(callbacks.setIsProjectOpen).toHaveBeenCalledWith(true);
   });
 
-  it('drops previous tracking and terrain before syncing the first blank-project save', async () => {
+  it('waits for repository activation before confirming a blank project', async () => {
     seedPreviousProjectTracking();
     const { result, callbacks } = renderProjectActions();
-    const trackingAtReset: unknown[] = [];
-    const trackingAtSync: unknown[] = [];
-    callbacks.resetMediaProject.mockImplementation(() => {
-      trackingAtReset.push(useTrackingStore.getState().assets);
+    const trackingAtConfirmation: unknown[] = [];
+    // The repository service activates and resets domains before its promise resolves.
+    mocks.projectFileService.createProject.mockImplementationOnce(async () => {
+      useTrackingStore.getState().reset(); return true;
     });
-    mocks.syncStoresToProject.mockImplementationOnce(async () => {
-      trackingAtSync.push(useTrackingStore.getState().assets);
+    mocks.projectFileService.saveProject.mockImplementationOnce(async () => {
+      trackingAtConfirmation.push(useTrackingStore.getState().assets); return true;
     });
-
     await act(async () => {
       expect(await result.current.handleProjectNameSubmit('new', 'Empty Project')).toBeNull();
     });
-
-    expect(trackingAtReset).toEqual([[]]);
-    expect(trackingAtSync).toEqual([[]]);
+    expect(trackingAtConfirmation).toEqual([[]]);
+    expect(callbacks.resetMediaProject).not.toHaveBeenCalled();
+    expect(mocks.syncStoresToProject).not.toHaveBeenCalled();
     expect(useTrackingStore.getState().selectedAssetId).toBeNull();
   });
 
@@ -290,4 +297,26 @@ describe('toolbar project-name dialog routing', () => {
     expect(callbacks.setProjectName).not.toHaveBeenCalled();
     expect(callbacks.setShowSavedToast).not.toHaveBeenCalled();
   });
+  it('releases the Open loading state after an import failure and preserves its useful error', async () => {
+    const error = new Error('Legacy tracking entry is missing clipId');
+    mocks.openExistingProject.mockRejectedValue(error);
+    const { result, callbacks } = renderProjectActions();
+    await act(async () => { await result.current.handleOpen(); });
+    expect(callbacks.setIsLoading.mock.calls).toEqual([[true], [false]]);
+    expect(callbacks.closeMenu).toHaveBeenCalledOnce();
+    expect(mocks.failProjectLoadProgress).toHaveBeenCalledWith(error);
+    expect(mocks.setProjectLoadProgress).not.toHaveBeenCalledWith(null);
+    expect(callbacks.setProjectName).not.toHaveBeenCalled();
+    expect(callbacks.setIsProjectOpen).not.toHaveBeenCalled();
+  });
+  it('releases the Open loading state and clears progress after picker cancellation', async () => {
+    mocks.openExistingProject.mockResolvedValue(false);
+    const { result, callbacks } = renderProjectActions();
+    await act(async () => { await result.current.handleOpen(); });
+    expect(callbacks.setIsLoading).toHaveBeenLastCalledWith(false);
+    expect(callbacks.closeMenu).toHaveBeenCalledOnce();
+    expect(mocks.setProjectLoadProgress).toHaveBeenCalledWith(null);
+    expect(mocks.failProjectLoadProgress).not.toHaveBeenCalled();
+  });
+
 });

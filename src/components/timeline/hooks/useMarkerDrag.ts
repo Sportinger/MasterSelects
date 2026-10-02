@@ -4,6 +4,7 @@
 import { useState, useCallback, useEffect, type RefObject } from 'react';
 import type { TimelineMarker } from '../../../stores/timeline/types';
 import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
+import { readTimelinePlaybackPosition } from './useTimelineEditorPlaybackState';
 
 interface TimelineMarkerDragState {
   markerId: string;
@@ -101,7 +102,7 @@ export function useMarkerDrag({
     e.preventDefault();
     setMarkerCreateDrag({
       isDragging: true,
-      currentTime: playheadPosition,
+      currentTime: readTimelinePlaybackPosition(playheadPosition),
       isOverTimeline: false,
       dropAnimating: false,
     });
@@ -125,7 +126,7 @@ export function useMarkerDrag({
       if (shouldSnap) {
         const snapTimes = getSnapTargetTimes();
         // Also snap to playhead
-        snapTimes.push(playheadPosition);
+        snapTimes.push(readTimelinePlaybackPosition(playheadPosition));
         // Snap to in/out points if set
         if (inPoint !== null) snapTimes.push(inPoint);
         if (outPoint !== null) snapTimes.push(outPoint);
@@ -186,7 +187,7 @@ export function useMarkerDrag({
       const shouldSnap = isTimelineSnappingActive(snappingEnabled, e);
       if (shouldSnap) {
         const snapTimes = getSnapTargetTimes();
-        snapTimes.push(playheadPosition);
+        snapTimes.push(readTimelinePlaybackPosition(playheadPosition));
         if (inPoint !== null) snapTimes.push(inPoint);
         if (outPoint !== null) snapTimes.push(outPoint);
 

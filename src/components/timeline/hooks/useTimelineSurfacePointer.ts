@@ -4,6 +4,7 @@ import type {
   RefObject,
 } from 'react';
 import { MIN_ZOOM, MAX_ZOOM } from '../../../stores/timeline/constants';
+import { useTimelineStore } from '../../../stores/timeline';
 import { TIMELINE_END_PADDING_PX } from '../utils/timelineHostConstants';
 import type { TimelineSurfaceDragState } from '../utils/timelineHostTypes';
 import {
@@ -134,7 +135,10 @@ export function useTimelineSurfacePointer({
       event.preventDefault();
     }
 
-    if (isClipInteractionActive) {
+    // Pointer hover only controls marker-line opacity. Scrubbing already owns
+    // the playhead DOM, so do not rerender the full Timeline for that hover.
+    // Read the live flag: the pointer can move before drag-start React commits.
+    if (isClipInteractionActive || useTimelineStore.getState().isDraggingPlayhead) {
       return;
     }
 

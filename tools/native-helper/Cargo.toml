@@ -32,6 +32,7 @@ dirs = "5"
 rand = "0.8.6"
 uuid = { version = "1", features = ["v4"] }
 base64 = "0.22"
+fs2 = "0.4"
 
 # HTTP client (model downloads, API calls)
 ureq = "2.12.1"
@@ -57,6 +58,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging", "Win32_UI_Shell",
     "Win32_System_Console", "Win32_System_Threading",
+    "Win32_Storage_FileSystem",
 ] }
 # System tray icon (Tauri-maintained)
 tray-icon = "0.19"

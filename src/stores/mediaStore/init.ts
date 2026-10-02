@@ -1,3 +1,4 @@
+import { getEditorRepositorySession } from '../../services/project/repository/transaction/editorMutationRuntime';
 // MediaStore initialization and auto-save
 // NOTE: This module is imported by index.ts for side effects
 // We use a lazy getter to avoid circular dependencies
@@ -154,6 +155,7 @@ const getMediaStore = (): MediaStore | null => {
  * Save current timeline to active composition.
  */
 function saveTimelineToActiveComposition(options: SaveTimelineToActiveCompositionOptions = {}): void {
+  if (getEditorRepositorySession()) return;
   if ((globalThis as MediaStoreGlobal).__TIMELINE_CANVAS_SMOKE_ACTIVE__) {
     log.debug('Skipped timeline-to-composition save during timeline canvas smoke');
     return;

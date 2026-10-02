@@ -41,6 +41,7 @@ duplicate their connected source graphs and curves independently.
 - `getInterpolatedColorCorrection(...)`, nested layer construction and export use the shared pure parameter-source/color evaluator. Keyframes are sampled before the effective grade is compiled; driven values are not overwritten by a second keyframe pass.
 - Color mutations generally replace the clip through `updateColorCorrection(...)` and invalidate the layer cache. `setColorWorkspaceViewport(...)` updates the stored UI viewport without calling `invalidateCache()`.
 - `ColorPipeline` keeps uniform buffers by layer key and uses `queue.writeBuffer(...)`, but creates a bind group for every `applyGrade(...)` call.
+- Primary **Shadows** and **Highlights** reshape luma and rescale RGB by the luma ratio, so colours keep their hue and saturation instead of being greyed. Shadows is a bump below mid grey: black stays at zero and mid grey and above stay untouched. Negative Highlights rolls off above mid grey with a soft shoulder (at -100 even overexposed values stay below white); positive Highlights expands that range. The GPU shader, the worker software path and grade thumbnails share `src/engine/color/shadowHighlightTone.ts`.
 - The `workspaceViewport` field and optional workspace mode belong to `ColorEditor`.
 
 ---
@@ -106,6 +107,13 @@ panels show the horizontal wheel strip; at 668 pixels or narrower the scalar
 fields collect at the top and the wheels form two columns; at 340 pixels or
 narrower the wheels form one column. The portrait surface scrolls vertically,
 and its minimum dock width is 168 pixels so numeric readouts are never clipped.
+
+The sun icon opens the **Exposure** surface for the selected corrector:
+**Exposure** in stops (-4 to +4), **Black Point** (0-50) and **White Point**
+(50-100) on the 0-100 signal scale. Each field has its own keyframe stopwatch,
+MIDI learn on the label, and the usual drag, type, and reset interactions. The
+fields form three columns, two at 668 pixels or narrower, and one at 300 pixels
+or narrower.
 
 ### Color Tab Layout
 

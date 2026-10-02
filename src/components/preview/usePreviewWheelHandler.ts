@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react';
 import type React from 'react';
 
@@ -193,9 +194,9 @@ export function usePreviewWheelHandler({
       sceneDollyAnimationRef.current = null;
       return;
     }
-    sceneDollyFrameRef.current = window.requestAnimationFrame(
-      nextTime => sceneDollyAnimationStepRef.current(nextTime),
-    );
+    sceneDollyFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(
+      (nextTime: number) => sceneDollyAnimationStepRef.current(nextTime),
+    ));
   }, [
     applyNavigationCameraValues,
     editCameraClipIdRef,
@@ -344,9 +345,9 @@ export function usePreviewWheelHandler({
             };
         scheduleGaussianWheelBatchEnd();
         if (sceneDollyFrameRef.current === null) {
-          sceneDollyFrameRef.current = window.requestAnimationFrame(
-            time => sceneDollyAnimationStepRef.current(time),
-          );
+          sceneDollyFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(
+            (time: number) => sceneDollyAnimationStepRef.current(time),
+          ));
         }
       }
       return;

@@ -6,9 +6,18 @@ import { getLayerSourceSize } from './maskOverlay/maskOverlayProjectionPlans';
 import { trackingPreviewTransform } from '../../services/planarTracking/trackingPreviewTransform';
 import './FaceAnalysisOverlay.css';
 
-export function PreciseFaceOverlay({ canvasWidth, canvasHeight, displayWidth, displayHeight }: {
+interface PreciseFaceOverlayProps {
   canvasWidth: number; canvasHeight: number; displayWidth: number; displayHeight: number;
-}) {
+}
+
+export function PreciseFaceOverlay(props: PreciseFaceOverlayProps) {
+  const selected = useTimelineStore(state => state.selectedClipIds.values().next().value);
+  const enabled = useLandmarkTrackingStore(state => selected !== undefined && !!state.faceOverlay[selected]);
+  if (!enabled) return null;
+  return <ActivePreciseFaceOverlay {...props} />;
+}
+
+function ActivePreciseFaceOverlay({ canvasWidth, canvasHeight, displayWidth, displayHeight }: PreciseFaceOverlayProps) {
   const timeline = useTimelineStore();
   const tracking = useLandmarkTrackingStore();
   const selected = [...timeline.selectedClipIds][0];

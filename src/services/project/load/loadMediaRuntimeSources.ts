@@ -209,6 +209,7 @@ async function hydrateGaussianSplatSequence(
 export async function hydrateProjectMediaRuntimeSources(
   pm: ProjectMediaFile,
   hydrateFiles: boolean,
+  trustSavedLocation = false,
 ): Promise<ProjectMediaRuntimeSources> {
   let resolvedProjectPath = pm.projectPath;
   let handle: FileSystemFileHandle | undefined;
@@ -221,12 +222,13 @@ export async function hydrateProjectMediaRuntimeSources(
     if (storedProjectHandle) {
       try {
         const candidate = await storedProjectHandle.getFile();
-        if (!await isRestoredMediaSourceCompatible(pm, candidate)) throw new Error('Stored project media does not match');
+        if (!candidate.size || (!trustSavedLocation && !await isRestoredMediaSourceCompatible(pm, candidate, storedProjectHandle))) throw new Error('Stored project media does not match');
         file = candidate;
         handle = storedProjectHandle;
         url = createPrimaryMediaObjectUrl(pm.id, file);
         resolvedProjectPath = resolvedProjectPath || 'Raw/' + storedProjectHandle.name;
-        await cacheProjectFileHandle(pm.id, storedProjectHandle, true);
+        // The project handle is already durable; reopening only needs the primary runtime binding.
+        fileSystemService.storeFileHandle(pm.id, storedProjectHandle);
         log.info('Restored file from project RAW handle:', pm.name);
       } catch (e) {
         log.warn('Could not access project RAW handle: ' + pm.name, e);
@@ -238,16 +240,17 @@ export async function hydrateProjectMediaRuntimeSources(
   const gaussianSplatSequence = await hydrateGaussianSplatSequence(pm, hydrateFiles);
 
   if (hydrateFiles && !file && projectFileService.isProjectOpen()) {
-    for (const candidatePath of getProjectRawPathCandidates({
+    const candidates = trustSavedLocation ? (pm.projectPath ? [pm.projectPath] : []) : getProjectRawPathCandidates({
       mediaFileId: pm.id,
       projectPath: pm.projectPath,
       filePath: pm.sourcePath,
       name: pm.name,
-    })) {
+    });
+    for (const candidatePath of candidates) {
       try {
         const result = await projectFileService.getFileFromRaw(candidatePath);
         if (!result) continue;
-        if (!await isRestoredMediaSourceCompatible(pm, result.file)) continue;
+        if (!result.file.size || (!trustSavedLocation && !await isRestoredMediaSourceCompatible(pm, result.file, result.handle))) continue;
 
         file = result.file;
         handle = result.handle;
@@ -268,11 +271,13 @@ export async function hydrateProjectMediaRuntimeSources(
       pm.sourceRootId,
       pm.sourceRelativePath ?? pm.sourcePath,
     );
-    if (restored && await isRestoredMediaSourceCompatible(pm, restored.file)) {
+    if (restored?.file.size && (trustSavedLocation || await isRestoredMediaSourceCompatible(pm, restored.file, restored.handle))) {
       file = restored.file;
       handle = restored.handle;
       url = createPrimaryMediaObjectUrl(pm.id, file);
-      fileSystemService.storeFileHandle(pm.id, handle);
+      // Remember external originals too: next reopen goes straight to this handle,
+      // without first searching nonexistent Raw paths in the converted folder.
+      await cacheProjectFileHandle(pm.id, handle, true);
       log.info('Restored file from media source root:', pm.name);
     }
   }
@@ -298,7 +303,7 @@ export async function hydrateProjectMediaRuntimeSources(
         const permission = await handle.queryPermission({ mode: 'read' });
         if (permission === 'granted') {
           const candidate = await handle.getFile();
-          if (await isRestoredMediaSourceCompatible(pm, candidate)) {
+          if (candidate.size && (trustSavedLocation || await isRestoredMediaSourceCompatible(pm, candidate, handle))) {
             file = candidate;
             url = createPrimaryMediaObjectUrl(pm.id, file);
             log.info('Restored file from handle:', pm.name);

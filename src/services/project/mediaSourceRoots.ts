@@ -124,6 +124,11 @@ export async function registerProjectMediaSourceRoot(
   return persistRootDescriptor({ ...root, name: handle.name }, roots);
 }
 
+/** Stores a root handle for a descriptor written by another project, e.g. a legacy import. */
+export async function storeProjectMediaSourceRootHandle(rootId: string, handle: FileSystemDirectoryHandle): Promise<void> {
+  await projectDB.storeHandle(handleKey(rootId), handle);
+}
+
 export async function getProjectMediaSourceRootStates(): Promise<ProjectMediaSourceRootState[]> {
   return Promise.all(currentRoots().map(async (root) => {
     const handle = await storedRootHandle(root.id);

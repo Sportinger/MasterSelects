@@ -515,7 +515,8 @@ class RenderSchedulerService {
   private syncMulticamAngleViews(activeCompId: string | null): number | null {
     const targets = useRenderTargetStore.getState().targets;
     const hasAngleTargets = [...this.registeredTargets].some((id) => targets.get(id)?.source.type === 'multicam-angle');
-    const multicam = useMediaStore.getState().compositions.find((comp) => comp.id === activeCompId)?.multicam;
+    const composition = useMediaStore.getState().compositions.find((comp) => comp.id === activeCompId);
+    const multicam = composition?.multicam;
     if (!activeCompId || !hasAngleTargets || !multicam?.active) {
       if (this.multicamAnglesLive) releaseMulticamAngles();
       this.multicamAnglesLive = false;
@@ -523,6 +524,7 @@ class RenderSchedulerService {
     }
     const timeline = useTimelineStore.getState();
     const time = this.getMainPlayheadTime();
+    const programFrame = this.activeCompFrame;
     syncMulticamAngles({
       compositionId: activeCompId,
       multicam,
@@ -530,6 +532,10 @@ class RenderSchedulerService {
       isPlaying: timeline.isPlaying,
       isDragging: timeline.isDraggingPlayhead,
       programClips: timeline.clips,
+      frameDurationSeconds: 1 / (composition?.frameRate || 30),
+      programLayers: programFrame?.frameContext.compositionId === activeCompId
+        && Math.abs(programFrame.frameContext.timelineTimeSeconds - time) < 0.0001
+        ? programFrame.layers : undefined,
     });
     this.multicamAnglesLive = true;
     return time;

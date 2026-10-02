@@ -19,7 +19,18 @@ import { ObjectTrackingOverlay } from './ObjectTrackingOverlay';
 
 const defaultQuad:SurfaceQuad=[{x:.3,y:.3},{x:.7,y:.3},{x:.7,y:.7},{x:.3,y:.7}];
 
-export function TrackingPreviewOverlay({displayedCompId,width,height,resolution}: {displayedCompId:string|null;width:number;height:number;resolution:{width:number;height:number}}) {
+interface TrackingPreviewOverlayProps {
+  displayedCompId: string | null; width: number; height: number; resolution: { width: number; height: number };
+}
+
+export function TrackingPreviewOverlay(props: TrackingPreviewOverlayProps) {
+  const active = useTrackingEditorStore(state => state.active);
+  const compositionId = useMediaStore(state => state.activeCompositionId);
+  if (!active || props.displayedCompId !== compositionId || props.width <= 0 || props.height <= 0) return null;
+  return <ActiveTrackingPreviewOverlay {...props} />;
+}
+
+function ActiveTrackingPreviewOverlay({displayedCompId,width,height,resolution}: TrackingPreviewOverlayProps) {
   const editor=useTrackingEditorStore();
   const live=useSyncExternalStore(trackingLivePreview.subscribe,trackingLivePreview.snapshot);
   const clips=useTimelineStore(s=>s.clips);

@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../services/project/repository/transaction/storeMutationBoundary';
 import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import type {
@@ -51,7 +52,7 @@ const initialTransportBindings: MIDITransportBindings = {
 export const useMIDIStore = create<MIDIStoreState>()(
   subscribeWithSelector(
     persist(
-      (set) => ({
+      withRepositoryStoreMutation('midi', (set) => ({
         isSupported: false,
         isEnabled: false,
         connectionStatus: 'idle',
@@ -135,7 +136,8 @@ export const useMIDIStore = create<MIDIStoreState>()(
             learnTarget: null,
             activeMappingIds: {},
           }),
-      }),
+      })),
+
       {
         name: 'masterselects-midi',
         partialize: (state) => ({

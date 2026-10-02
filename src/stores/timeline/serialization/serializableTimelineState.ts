@@ -16,7 +16,7 @@ import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { normalizeMotionLayerDefinition } from '../../../services/motionDesign/contracts/replicatorTimelineAdapter';
 import { useMediaStore } from '../../mediaStore';
 import { getDataOnlyTimelineSource } from '../sourceRuntimeSanitizer';
-import { serializeVideoBakeRegion } from '../videoBakeSlice';
+import { serializeVideoBakeRegion } from '../videoBakeRegionCodec';
 type SerializableTimelineStateInput = Pick<
   TimelineState,
   | 'tracks'

@@ -220,17 +220,7 @@ function resolveClipRegionTimelineRange(
   return normalizeRange(region.startTime, region.endTime, clip.startTime, clip.startTime + clip.duration);
 }
 
-function withoutRegionStatusRuntimeFields(region: VideoBakeRegion): VideoBakeRegion {
-  const { bakedAt: _bakedAt, error: _error, progress: _progress, ...rest } = region;
-  return rest;
-}
-
-export function serializeVideoBakeRegion(region: VideoBakeRegion): VideoBakeRegion {
-  return {
-    ...withoutRegionStatusRuntimeFields(region),
-    status: 'marked',
-  };
-}
+export { serializeVideoBakeRegion } from './videoBakeRegionCodec';
 
 export const createVideoBakeSlice: SliceCreator<VideoBakeActions> = (set, get) => ({
   setVideoBakeRegionSelection: (selection) => {

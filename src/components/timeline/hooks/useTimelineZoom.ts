@@ -14,6 +14,7 @@ import { isEditableValueTouchSessionActive } from '../../../services/input/edita
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TrackSectionKind } from '../utils/timelineHostTypes';
 import { useAltWheelBrowserFocusGuard } from '../../../hooks/useAltWheelBrowserFocusGuard';
+import { readTimelinePlaybackPosition } from './useTimelineEditorPlaybackState';
 
 const ZOOM_WHEEL_BASE_MULTIPLIER = 1.08;
 const ZOOM_WHEEL_REFERENCE_DELTA_PX = 100;
@@ -611,7 +612,7 @@ export function useTimelineZoom({
           });
         } else {
           // Calculate playhead position in pixels with new zoom
-          const playheadPixel = playheadPosition * newZoom;
+          const playheadPixel = readTimelinePlaybackPosition(playheadPosition) * newZoom;
 
           // Calculate scrollX to center playhead in viewport, clamped to valid range
           newScrollX = Math.max(0, Math.min(maxScrollX, playheadPixel - viewportWidth / 2));

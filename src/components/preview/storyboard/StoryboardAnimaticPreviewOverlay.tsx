@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { renderStoryboardAnimaticPreviewFrame } from '../../../services/storyboard/animatic/previewAdapter';
 import { resolveStoryboardCandidateAwareAnimaticFramePayload } from '../../../services/storyboard/animaticCandidates';
+import { isStoryboardTimelineClip } from '../../../services/storyboard/core/sceneCardOperations';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useStoryboardStore } from '../../../stores/storyboardStore';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -14,7 +15,14 @@ export interface StoryboardAnimaticPreviewOverlayProps {
   readonly displayHeight: number;
 }
 
-export function StoryboardAnimaticPreviewOverlay({
+export function StoryboardAnimaticPreviewOverlay(props: StoryboardAnimaticPreviewOverlayProps) {
+  const clips = useTimelineStore(state => state.clips);
+  const hasStoryboard = useMemo(() => clips.some(isStoryboardTimelineClip), [clips]);
+  if (!hasStoryboard) return null;
+  return <ActiveStoryboardAnimaticPreviewOverlay {...props} />;
+}
+
+function ActiveStoryboardAnimaticPreviewOverlay({
   displayedCompositionId,
   width,
   height,

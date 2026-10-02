@@ -1,3 +1,4 @@
+import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
 // Project Lifecycle — create, open, close, auto-sync
 
 import { Logger } from '../logger';
@@ -26,7 +27,6 @@ import {
   syncStoresToProject,
 } from './projectSave';
 import { loadProjectToStores } from './projectLoad';
-import { persistFlashBoardChatJournal } from './flashBoardChatProjectJournal';
 import { setupTimelineSelectionReloadRecovery } from './timelineSelectionRecovery';
 import {
   resetStoryboardProjectState,
@@ -190,7 +190,7 @@ export async function createNewProject(name: string): Promise<boolean> {
   let failureStage: ProductAnalyticsProjectFailureStage = 'create';
   try {
     // Create project folder on filesystem first
-    const success = await projectFileService.createProject(name);
+    const success = await projectFileService.createProject(name, true);
     if (!success) {
       trackProjectActionFailure('create', startedAt, 'cancelled', 'cancelled', 'selection');
       return false;
@@ -246,7 +246,7 @@ export async function createBlankProjectInFolder(
 }
 
 async function createBlankProjectWith(
-  name: string,
+  _name: string,
   createFolder: () => Promise<boolean>,
 ): Promise<BlankProjectCreationResult> {
   const startedAt = Date.now();
@@ -258,17 +258,6 @@ async function createBlankProjectWith(
       return 'not-created';
     }
 
-    resetFlashBoardActiveGenerationState();
-    resetStoryboardProjectState();
-    useSeedancePreproductionStore.getState().reset();
-    useDocumentsStore.getState().reset();
-    useExportStore.getState().reset();
-    useTrackingStore.getState().reset();
-    useMediaStore.getState().newProject();
-    useMediaStore.getState().setProjectName(name);
-
-    failureStage = 'sync';
-    await syncStoresToProject();
     failureStage = 'save';
     const saved = await projectFileService.saveProject();
     if (saved) {
@@ -365,11 +354,11 @@ export async function openStoredProject(name: string): Promise<boolean> {
 /**
  * Close current project
  */
-export function closeCurrentProject(): void {
+export async function closeCurrentProject(): Promise<void> {
   productAnalytics.track('project_closed', {
     backend: projectFileService.activeBackend,
   });
-  projectFileService.closeProject();
+  await projectFileService.closeProject();
   resetFlashBoardActiveGenerationState();
   resetStoryboardProjectState();
   useSeedancePreproductionStore.getState().reset();
@@ -382,17 +371,17 @@ export function closeCurrentProject(): void {
 
 /**
  * Mark project as dirty when stores change.
- * Disk writes belong exclusively to explicit Save and the configured interval.
+ * Canonical domain transactions persist continuously; explicit Save waits for a receipt.
  */
 export function setupAutoSync(): void {
   teardownAutoSync();
+  void ensureEditorScratchRepository().catch(error => log.error('Scratch recovery could not be opened', error));
   registerAutoSyncDisposer(setupTimelineSelectionReloadRecovery());
   registerAutoSyncDisposer(preserveUnsavedProjectOnChunkFailure(hasUnsavedWorkspace));
   // Source edits force dev full reloads; keep timed-save projects from losing pending work.
   registerAutoSyncDisposer(saveProjectBeforeDevFullReload({
     shouldSave: () => projectFileService.isProjectOpen()
-      && projectFileService.hasUnsavedChanges()
-      && useSettingsStore.getState().saveMode !== 'manual',
+      && projectFileService.hasUnsavedChanges(),
     save: () => saveCurrentProject(),
     onResult: result => log.info(`Dev full reload save: ${result}`),
   }));
@@ -472,7 +461,6 @@ export function setupAutoSync(): void {
   }));
   registerAutoSyncDisposer(subscribeFlashBoardChatMessages(() => {
     markProjectDirty();
-    void persistFlashBoardChatJournal(getFlashBoardChatMessages());
   }));
   registerAutoSyncDisposer(useStoryboardStore.subscribe((state, previous) => {
     if (

@@ -47,7 +47,9 @@ export class ProjectDBArtifactStorageAdapter implements ArtifactStorageAdapter {
     return (await this.readArtifactBlob(manifest)) !== null;
   }
 
-  async deleteArtifactBlob(manifest: ArtifactManifest): Promise<boolean> {
-    return projectDB.deleteArtifactBlob(manifest.hash);
+  async deleteArtifactBlob(_manifest: ArtifactManifest): Promise<boolean> {
+    // This blob cache is shared by all projects and historical versions. Local
+    // adapter deletion has no global ownership proof and cannot reclaim it.
+    return false;
   }
 }

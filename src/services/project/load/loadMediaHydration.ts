@@ -26,6 +26,7 @@ const log = Logger.create('ProjectSync');
 type ConvertProjectMediaOptions = {
   hydrateFiles?: boolean;
   deferCacheChecks?: boolean;
+  trustSavedLocation?: boolean;
   onProgress?: (done: number, total: number, name: string) => void;
 };
 
@@ -69,7 +70,7 @@ export async function convertProjectMediaToStore(
       continue;
     }
 
-    const runtimeSources = await hydrateProjectMediaRuntimeSources(pm, hydrateFiles);
+    const runtimeSources = await hydrateProjectMediaRuntimeSources(pm, hydrateFiles, options.trustSavedLocation);
 
     let transcriptStatus: TranscriptStatus = 'none';
     let transcript: TranscriptWord[] | undefined;

@@ -1,3 +1,4 @@
+import { readEditorContentPublication } from '../project/repository/transaction/editorPublication';
 import { isAutomaticCutFade } from '../audio/automaticCutDeClick';
 // AudioSyncHandler - Unified audio synchronization for all audio sources
 // Consolidates 4 similar 80-line blocks into one reusable handler
@@ -101,6 +102,7 @@ export class AudioSyncHandler {
     ctx: FrameContext,
     state: AudioSyncState
   ): void {
+    if (readEditorContentPublication().blocked) { target.element.pause(); return; }
     const {
       element,
       clip,
@@ -641,7 +643,9 @@ export function finalizeAudioSync(state: AudioSyncState, isPlaying: boolean): vo
  * Resume audio context if needed (browser autoplay policy)
  */
 export async function resumeAudioContextIfNeeded(isPlaying: boolean, isDraggingPlayhead: boolean): Promise<void> {
-  if (isPlaying && !isDraggingPlayhead) {
+  const publication = readEditorContentPublication();
+  if (!publication.blocked && isPlaying && !isDraggingPlayhead) {
     await audioManager.resume().catch(() => {});
+    if (readEditorContentPublication().blocked || readEditorContentPublication().generation !== publication.generation) audioRoutingManager.pauseAllRoutedMedia();
   }
 }

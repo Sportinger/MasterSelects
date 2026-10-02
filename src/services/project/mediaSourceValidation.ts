@@ -1,5 +1,7 @@
 import { calculateFileHash } from '../../stores/mediaStore/helpers/fileHashHelpers';
 import { Logger } from '../logger';
+import { cacheMediaSourceDuration, mediaSourceDurationCacheKey, readCachedMediaSourceDuration } from './mediaSourceDurationCache';
+import { canReuseMediaSourceValidation, rememberMediaSourceValidation } from './mediaSourceRestoreCache';
 
 const log = Logger.create('MediaSourceValidation');
 const fingerprints = new WeakMap<File, Promise<string>>();
@@ -58,7 +60,16 @@ export async function getMediaSourceMismatch(
   }
 
   if ((expected.type === 'video' || expected.type === 'audio') && positive(expected.duration)) {
-    const duration = await readDuration(file, expected.type);
+    // Reuse actual parsed duration only for an unchanged, freshly fingerprinted original.
+    // Explicit relinks and legacy sources without a size/fingerprint still probe the container.
+    const cacheKey = mode === 'restore' && (fingerprintMatches || !hasFingerprint) && expected.fileSize === file.size
+      ? mediaSourceDurationCacheKey(file, actualHash, expected.type) : null;
+    // Without a saved fingerprint, only a matching validated physical handle may reuse duration.
+    let duration = fingerprintMatches ? readCachedMediaSourceDuration(cacheKey) : undefined;
+    if (duration === undefined) {
+      duration = await readDuration(file, expected.type);
+      cacheMediaSourceDuration(cacheKey, duration);
+    }
     if (positive(duration)) {
       // Container/edit-list and older metadata readers may differ slightly.
       const tolerance = Math.max(0.5, expected.duration * 0.01);
@@ -73,10 +84,12 @@ export async function getMediaSourceMismatch(
 }
 
 /** Rejected candidates stay offline, with their persisted identity untouched. */
-export async function isRestoredMediaSourceCompatible(expected: ExpectedMediaSource, file: File): Promise<boolean> {
+export async function isRestoredMediaSourceCompatible(expected: ExpectedMediaSource, file: File,
+  handle?: FileSystemFileHandle): Promise<boolean> {
   try {
+    if (await canReuseMediaSourceValidation(expected, file, handle)) return true;
     const mismatch = await getMediaSourceMismatch(expected, file);
-    if (!mismatch) return true;
+    if (!mismatch) { await rememberMediaSourceValidation(expected, file, handle); return true; }
     log.warn('Rejected mismatched media source', { name: expected.name, candidate: file.name, reason: mismatch });
   } catch (error) {
     log.warn('Could not verify restored media source', { name: expected.name, candidate: file.name, error });

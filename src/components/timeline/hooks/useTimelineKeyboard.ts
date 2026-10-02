@@ -16,6 +16,7 @@ import { isUserVisibleComposition } from '../../../stores/mediaStore/composition
 import type { TimelineEditOperationActions } from '../../../stores/timeline/types';
 import { TIMELINE_TOOL_DEFINITIONS } from '../tools/registry';
 import { runTimelineToolCommand } from '../tools/timelineToolCommands';
+import { readTimelinePlaybackPosition } from './useTimelineEditorPlaybackState';
 
 const GROUP_SHORTCUT_ACTIONS = new Set([
   'tool.selectionGroup',
@@ -239,7 +240,7 @@ export function useTimelineKeyboard({
       if (registry.matches('edit.addMarker', e)) {
         if (!claimShortcut(e, 'edit.addMarker')) return;
         if (addMarker) {
-          addMarker(playheadPosition);
+          addMarker(readTimelinePlaybackPosition(getFreshPlayheadPosition(playheadPosition)));
         }
         return;
       }

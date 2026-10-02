@@ -1,6 +1,7 @@
 // Animation loop with idle detection and frame rate limiting
 
 import { Logger } from '../../services/logger';
+import { readEditorContentPublication } from '../../services/project/repository/transaction/editorPublication';
 import type { PerformanceStats } from '../stats/PerformanceStats';
 
 const log = Logger.create('RenderLoop');
@@ -41,7 +42,7 @@ export class RenderLoop {
   private isScrubbing = false;
   private timelineVisualDemand = true;
   private continuousRender = false;
-  private newFrameReady = false; // Set by RVFC to bypass scrub limiter
+  private newFrameReady = false; // Fresh program frames bypass the sampling deadline
   private lastRenderTime = 0;
   private playbackTargetFps = 60;
   // The browser clock samples at least twice per visual frame. A source-rate
@@ -184,8 +185,15 @@ export class RenderLoop {
         const previousRenderTime = this.lastRenderTime;
         const timeSinceLastRender = timestamp - previousRenderTime;
         if (playbackRenderActive) {
+          // Decoder notifications may beat the sampling clock, but must not turn
+          // a high-refresh display into unbounded compositing work.
+          if (previousRenderTime > 0 && timeSinceLastRender < this.VIDEO_FRAME_TIME) {
+            this.animationId = requestAnimationFrame(loop);
+            return;
+          }
           if (
-            this.playbackNextRenderTime > 0
+            !this.newFrameReady
+            && this.playbackNextRenderTime > 0
             && timestamp + this.FRAME_TIME_TOLERANCE < this.playbackNextRenderTime
           ) {
             this.animationId = requestAnimationFrame(loop);
@@ -216,11 +224,11 @@ export class RenderLoop {
           if (this.playbackNextRenderTime <= 0) {
             this.playbackNextRenderTime = timestamp + this.playbackFrameInterval;
           } else {
-            do {
+            // An asynchronous decoded frame may arrive before the next sampling
+            // deadline. Present it now without pushing that future deadline out.
+            while (this.playbackNextRenderTime <= timestamp + this.FRAME_TIME_TOLERANCE) {
               this.playbackNextRenderTime += this.playbackFrameInterval;
-            } while (
-              this.playbackNextRenderTime <= timestamp + this.FRAME_TIME_TOLERANCE
-            );
+            }
           }
         }
         this.lastRenderTime = timestamp;
@@ -232,7 +240,7 @@ export class RenderLoop {
       // Call render callback (unless exporting). Clear the fresh-frame signal
       // before entering the callback so a provider that publishes while this
       // frame is being assembled schedules one more presentation tick.
-      if (!this.callbacks.isExporting()) {
+      if (!this.callbacks.isExporting() && !readEditorContentPublication().blocked) {
         try {
           const frameReason = { newFrameReady: this.newFrameReady };
           this.newFrameReady = false;

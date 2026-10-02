@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 
@@ -268,7 +269,7 @@ export function usePreviewSceneNavigation({
       positionZ: freshTransform.position.z + positionDelta.z,
     });
 
-    gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovementRef.current);
+    gaussianKeyboardFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(tickGaussianKeyboardMovementRef.current));
   }, [
     applyNavigationCameraValues,
     containerRef,
@@ -293,7 +294,7 @@ export function usePreviewSceneNavigation({
 
   const startGaussianKeyboardMovement = useCallback(() => {
     if (gaussianKeyboardFrameRef.current !== null) return;
-    gaussianKeyboardFrameRef.current = window.requestAnimationFrame(tickGaussianKeyboardMovement);
+    gaussianKeyboardFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(tickGaussianKeyboardMovement));
   }, [gaussianKeyboardFrameRef, tickGaussianKeyboardMovement]);
 
   const handleSceneNavKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {

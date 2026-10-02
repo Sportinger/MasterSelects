@@ -21,6 +21,8 @@ export function buildArtifactId(hash: string): string {
 
 export function getHashFromArtifactId(artifactId: string): string | null {
   const prefix = `${ARTIFACT_HASH_ALGORITHM}:`;
+  const versioned = /^artifact:sha256:([a-f0-9]{64}):manifest:([a-f0-9]{64})$/i.exec(artifactId);
+  if (versioned) return versioned[1].toLowerCase();
   if (!artifactId.startsWith(prefix)) {
     return null;
   }
@@ -35,6 +37,7 @@ export function normalizeArtifactId(ref: string): string {
     return buildArtifactId(normalizedRef);
   }
 
+  if (getManifestHashFromArtifactId(normalizedRef)) return normalizedRef;
   return ref;
 }
 
@@ -58,4 +61,24 @@ export function buildArtifactProjectRelativePath(
 
 export function buildArtifactManifestProjectRelativePath(hash: string): string {
   return buildArtifactProjectRelativePath(hash, ARTIFACT_MANIFEST_FILE_NAME);
+}
+
+export function buildVersionedArtifactId(blobHash: string, manifestHash: string): string {
+  const blob = blobHash.replace(/^sha256:/, '').toLowerCase();
+  const manifest = manifestHash.replace(/^sha256:/, '').toLowerCase();
+  if (!isSha256Hash(blob) || !isSha256Hash(manifest)) throw new Error('Invalid artifact version hashes');
+  return `artifact:sha256:${blob}:manifest:${manifest}`;
+}
+export function getManifestHashFromArtifactId(id: string): string | null {
+  const match = /^artifact:sha256:[a-f0-9]{64}:manifest:([a-f0-9]{64})$/i.exec(id);
+  return match ? `sha256:${match[1].toLowerCase()}` : null;
+}
+export function artifactManifestFileName(manifest: { manifestHash?: string }): string {
+  if (!manifest.manifestHash) return ARTIFACT_MANIFEST_FILE_NAME;
+  const hash = manifest.manifestHash.replace(/^sha256:/, '');
+  if (!isSha256Hash(hash)) throw new Error('Invalid immutable manifest hash');
+  return `manifest.${hash}.json`;
+}
+export function isArtifactManifestFileName(name: string): boolean {
+  return name === ARTIFACT_MANIFEST_FILE_NAME || /^manifest\.[a-f0-9]{64}\.json$/.test(name);
 }

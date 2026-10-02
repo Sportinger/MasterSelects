@@ -1,26 +1,34 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
-import { rotoPreview } from '../../services/roto/rotoPreview';
+import { rotoPreview, type RotoPreviewState } from '../../services/roto/rotoPreview';
 import { refineRotoEdges } from '../../services/roto/rotoEdges';
 import { rotoPreviewProjection, sampleRotoMask } from '../../services/roto/rotoPreviewProjection';
 import { surfaceSourceTime } from '../../services/planarTracking/surfaceEffects';
 import { getLayerSourceSize } from './maskOverlay/maskOverlayProjectionPlans';
 import './RotoPreviewOverlay.css';
 
-export function RotoPreviewOverlay({ displayedCompId, width, height, resolution }: {
+interface RotoPreviewOverlayProps {
   displayedCompId: string | null; width: number; height: number; resolution: { width: number; height: number };
-}) {
+}
+
+export function RotoPreviewOverlay(props: RotoPreviewOverlayProps) {
   const state = useSyncExternalStore(rotoPreview.subscribe, rotoPreview.snapshot);
-  const timeline = useTimelineStore();
   const composition = useMediaStore(s => s.activeCompositionId);
+  // A closed inspector does not need a timeline subscription on every playback tick.
+  if (!state || state.compositionId !== props.displayedCompId || composition !== props.displayedCompId
+    || props.width <= 0 || props.height <= 0) return null;
+  return <ActiveRotoPreviewOverlay {...props} state={state} />;
+}
+
+function ActiveRotoPreviewOverlay({ width, height, resolution, state }: RotoPreviewOverlayProps & { state: RotoPreviewState }) {
+  const timeline = useTimelineStore();
   const canvas = useRef<HTMLCanvasElement>(null), pointer = useRef<{ id: number; x: number; y: number } | undefined>(undefined);
   const [cursor, setCursor] = useState({ x: .5, y: .5 }), [keyboard, setKeyboard] = useState(false);
   const clip = timeline.clips.find(c => c.id === state?.clipId);
   const layer = timeline.layers.find(l => l?.sourceClipId === clip?.id);
   const localTime = timeline.playheadPosition - (clip?.startTime ?? 0);
-  const visible = !!state && state.compositionId === displayedCompId && composition === displayedCompId
-    && !!clip && timeline.selectedClipIds.has(clip.id) && localTime >= 0 && localTime < clip.duration
+  const visible = !!clip && timeline.selectedClipIds.has(clip.id) && localTime >= 0 && localTime < clip.duration
     && !!layer?.visible && width > 0 && height > 0;
   const sourceTime = clip ? surfaceSourceTime(clip, localTime, timeline.getClipKeyframes(clip.id).filter(k => k.property === 'speed')) : 0;
   const mask = state ? sampleRotoMask(state.session.masks.values(), sourceTime) : undefined;

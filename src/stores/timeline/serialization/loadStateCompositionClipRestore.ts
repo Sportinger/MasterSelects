@@ -5,6 +5,7 @@ import { Logger } from '../../../services/logger';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../../transitions';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
+import { isLinkedMediaDeferred } from '../../../services/project/linkedMediaDemand';
 import type { useMediaStore } from '../../mediaStore';
 import {
   calculateNestedClipBoundaries,
@@ -124,7 +125,7 @@ export async function restoreLoadStateCompositionClip(params: {
         },
       },
       mediaRelink: {
-        getNeedsReload: ({ mediaFile }) => mediaNeedsRelink(mediaFile),
+        getNeedsReload: ({ mediaFile }) => isLinkedMediaDeferred(mediaFile.id) || mediaNeedsRelink(mediaFile),
         createMissingRuntimeSource: createLoadStateMissingNestedRuntimeSource,
       },
     },

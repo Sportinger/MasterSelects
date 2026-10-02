@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication } from '../repository/artifacts/RepositoryDomainPublication';
 import {
   ArtifactStore,
   FileSystemArtifactStorageAdapter,
@@ -21,6 +22,8 @@ export class ArtifactService {
   }
 
   createStore(projectHandle: FileSystemDirectoryHandle): ArtifactStore {
+    const repository = captureRepositoryDomainPublication();
+    if (repository) return repository.artifacts;
     return new ArtifactStore(
       new FileSystemArtifactStorageAdapter(
         projectHandle,
@@ -31,10 +34,14 @@ export class ArtifactService {
   }
 
   createIndexedDBStore(): ArtifactStore {
+    const repository = captureRepositoryDomainPublication();
+    if (repository) return repository.artifacts;
     return new ArtifactStore(new ProjectDBArtifactStorageAdapter());
   }
 
   createPackageStore(session: ProjectPackageSession): ArtifactStore {
+    const repository = captureRepositoryDomainPublication();
+    if (repository) return repository.artifacts;
     return new ArtifactStore(new ProjectPackageArtifactStorageAdapter(session));
   }
 

@@ -16,6 +16,10 @@ import {
 import {
   buildArtifactManifestProjectRelativePath,
   buildArtifactProjectRelativePath,
+  artifactManifestFileName,
+  isArtifactManifestFileName,
+  getHashFromArtifactId,
+  getManifestHashFromArtifactId,
 } from './ids';
 import { isArtifactManifest } from './guards';
 
@@ -28,16 +32,14 @@ type IterableDirectoryHandle = FileSystemDirectoryHandle & {
 export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter {
   private readonly projectHandle: FileSystemDirectoryHandle;
   private readonly fileStorage: FileStorageService;
-  private readonly index: ArtifactManifestIndex | null;
 
   constructor(
     projectHandle: FileSystemDirectoryHandle,
     fileStorage: FileStorageService = fileStorageService,
-    index: ArtifactManifestIndex | null = null,
+    _index: ArtifactManifestIndex | null = null,
   ) {
     this.projectHandle = projectHandle;
     this.fileStorage = fileStorage;
-    this.index = index;
   }
 
   createStorageLocation(hash: string): ArtifactStorageLocation {
@@ -54,10 +56,9 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
       const entryBase = this.getArtifactEntryBase(manifest.hash);
       const saved = await packageSession.writeEntries([
         { folder: 'CACHE_ARTIFACTS', fileName: `${entryBase}/${ARTIFACT_BINARY_FILE_NAME}`, content: blob },
-        { folder: 'CACHE_ARTIFACTS', fileName: `${entryBase}/${ARTIFACT_MANIFEST_FILE_NAME}`, content: JSON.stringify(manifest, null, 2) },
+        { folder: 'CACHE_ARTIFACTS', fileName: `${entryBase}/${artifactManifestFileName(manifest)}`, content: JSON.stringify(manifest, null, 2) },
       ]);
       if (!saved) throw new Error(`Unable to save packaged artifact ${manifest.artifactId}`);
-      await this.index?.saveArtifactManifest(manifest);
       return;
     }
 
@@ -67,8 +68,7 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
     }
 
     await this.writeFile(directory, ARTIFACT_BINARY_FILE_NAME, blob);
-    await this.writeFile(directory, ARTIFACT_MANIFEST_FILE_NAME, JSON.stringify(manifest, null, 2));
-    await this.index?.saveArtifactManifest(manifest);
+    await this.writeFile(directory, artifactManifestFileName(manifest), JSON.stringify(manifest, null, 2));
   }
 
   async saveArtifactManifest(manifest: ArtifactManifest): Promise<void> {
@@ -76,11 +76,10 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
     if (packageSession) {
       const saved = await packageSession.writeEntry(
         'CACHE_ARTIFACTS',
-        `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_MANIFEST_FILE_NAME}`,
+        `${this.getArtifactEntryBase(manifest.hash)}/${artifactManifestFileName(manifest)}`,
         JSON.stringify(manifest, null, 2),
       );
       if (!saved) throw new Error(`Unable to save packaged artifact manifest ${manifest.artifactId}`);
-      await this.index?.saveArtifactManifest(manifest);
       return;
     }
 
@@ -89,34 +88,35 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
       throw new Error(`Unable to create artifact directory for ${manifest.artifactId}`);
     }
 
-    await this.writeFile(directory, ARTIFACT_MANIFEST_FILE_NAME, JSON.stringify(manifest, null, 2));
-    await this.index?.saveArtifactManifest(manifest);
+    await this.writeFile(directory, artifactManifestFileName(manifest), JSON.stringify(manifest, null, 2));
   }
 
   async getArtifactManifest(artifactId: string): Promise<ArtifactManifest | null> {
-    const indexedManifest = await this.index?.getArtifactManifest(artifactId);
-    if (indexedManifest) {
-      return indexedManifest;
+    // An origin-global cache is never authority for this project handle.
+    const hash = getHashFromArtifactId(artifactId);
+    if (hash) {
+      const manifestHash = getManifestHashFromArtifactId(artifactId);
+      const fileName = artifactManifestFileName({ ...(manifestHash ? { manifestHash } : {}) });
+      const packageSession = getFsaProjectPackageSession(this.projectHandle);
+      if (packageSession) {
+        const bytes = packageSession.readEntry('CACHE_ARTIFACTS', `${this.getArtifactEntryBase(hash)}/${fileName}`);
+        if (!bytes) return null;
+        try { const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes)); return isArtifactManifest(parsed) && parsed.artifactId === artifactId ? parsed : null; } catch { return null; }
+      }
+      const directory = await this.getArtifactDirectory(hash, false);
+      const manifest = directory ? await this.readManifest(directory, fileName) : null;
+      return manifest?.artifactId === artifactId ? manifest : null;
     }
-
     const manifests = await this.scanManifests();
     return manifests.find((manifest) => manifest.artifactId === artifactId) ?? null;
   }
 
   async listArtifactManifests(): Promise<ArtifactManifest[]> {
-    const indexedManifests = await this.index?.listArtifactManifests();
-    if (indexedManifests && indexedManifests.length > 0) {
-      return indexedManifests;
-    }
 
     return this.scanManifests();
   }
 
   async listArtifactManifestsBySource(sourceRef: string): Promise<ArtifactManifest[]> {
-    const indexedManifests = await this.index?.listArtifactManifestsBySource(sourceRef);
-    if (indexedManifests && indexedManifests.length > 0) {
-      return indexedManifests;
-    }
 
     const manifests = await this.scanManifests();
     return manifests.filter((manifest) => manifest.sourceRefs.includes(sourceRef));
@@ -132,16 +132,15 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
     if (packageSession) {
       await packageSession.deleteEntry(
         'CACHE_ARTIFACTS',
-        `${this.getArtifactEntryBase(manifest.hash)}/${ARTIFACT_MANIFEST_FILE_NAME}`,
+        `${this.getArtifactEntryBase(manifest.hash)}/${artifactManifestFileName(manifest)}`,
       );
     } else try {
       const directory = await this.getArtifactDirectory(manifest.hash, false);
-      await directory?.removeEntry(ARTIFACT_MANIFEST_FILE_NAME);
+      await directory?.removeEntry(artifactManifestFileName(manifest));
     } catch {
       // The full artifact directory may already be gone after blob deletion.
     }
 
-    await this.index?.deleteArtifactManifest(artifactId);
   }
 
   async readArtifactBlob(manifest: ArtifactManifest): Promise<Blob | null> {
@@ -220,9 +219,9 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
     await writable.close();
   }
 
-  private async readManifest(directory: FileSystemDirectoryHandle): Promise<ArtifactManifest | null> {
+  private async readManifest(directory: FileSystemDirectoryHandle, fileName = ARTIFACT_MANIFEST_FILE_NAME): Promise<ArtifactManifest | null> {
     try {
-      const fileHandle = await directory.getFileHandle(ARTIFACT_MANIFEST_FILE_NAME);
+      const fileHandle = await directory.getFileHandle(fileName);
       const file = await fileHandle.getFile();
       const parsed = JSON.parse(await file.text()) as unknown;
       return isArtifactManifest(parsed) ? parsed : null;
@@ -236,7 +235,7 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
     if (packageSession) {
       const manifests: ArtifactManifest[] = [];
       for (const path of packageSession.listEntryPaths('CACHE_ARTIFACTS')) {
-        if (!path.endsWith(`/${ARTIFACT_MANIFEST_FILE_NAME}`)) continue;
+        if (!isArtifactManifestFileName(path.split('/').at(-1)!)) continue;
         const bytes = packageSession.readEntry('CACHE_ARTIFACTS', path);
         if (!bytes) continue;
         try {
@@ -269,9 +268,10 @@ export class FileSystemArtifactStorageAdapter implements ArtifactStorageAdapter 
           continue;
         }
 
-        const manifest = await this.readManifest(hashEntry);
-        if (manifest) {
-          manifests.push(manifest);
+        for await (const fileEntry of (hashEntry as IterableDirectoryHandle).values()) {
+          if (fileEntry.kind !== 'file' || !isArtifactManifestFileName(fileEntry.name)) continue;
+          const manifest = await this.readManifest(hashEntry, fileEntry.name);
+          if (manifest) manifests.push(manifest);
         }
       }
     }

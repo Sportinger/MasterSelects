@@ -57,7 +57,7 @@ import {
   readWavPcmAudioRange,
 } from './exportPipeline/WavPcmRangeReader';
 import { MediaAudioRangeReader } from './exportPipeline/MediaAudioRangeReader';
-import { projectFileService } from '../../services/projectFileService';
+import { projectFileService } from '../../services/project/ProjectFileService';
 import { getAudioProxyStorageKey } from '../../services/audio/AudioProxyService';
 import { readAudioExportMediaFiles } from '../../services/export/audioExportMediaStoreAdapter';
 

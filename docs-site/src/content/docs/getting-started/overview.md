@@ -27,13 +27,14 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | **AI Generation Workspaces** | The compact Media generator remains available, while AI Studio adds parallel tabs, Media-drop references, local prompt dictation, fitted result tiles, Source Monitor opening, and timeline drag-out |
 | **3D Layers** | Shared-scene 3D layers, camera clips, Gaussian splats, splat effectors, and local browser training |
 | **Flock Clips** | Node-graph-defined GPU swarms with instanced animals, neighbor links, curved trails and technical glyphs in the shared 3D scene |
+| **Weave** | Woven fabric, yarns, ropes and knots from general curve nodes, drawn as lit fibers in the shared 3D scene |
 | **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
 | **Audio** | Timeline-native workstation audio with artifact-backed analysis, spectral editing, local music-to-MIDI, mixer, recording, and export parity |
 | **Screen Capture** | Browser-picker screen/window/tab recording with audio mixing, durable recovery, and optional timeline placement; the WebCodecs crop/scale tier is currently disabled |
 | **Live Inputs** | Parallel screen, camera/capture-device, and composition-feedback sources as timeline clips |
 | **Storyboard And MIDI** | Timeline storyboard scene cards and MIDI tracks/clips with tempo-aware editing and export support |
 | **Multicam And Batch Export** | Audio-synced multicam assembly and queued source-media batch export |
-| **Project Storage** | `project.json` source of truth, RAW-copy-first media flow, autosave, relink, backups |
+| **Project Storage** | Continuous repository saves, durable branching history, immutable artifacts, relink and independent backups |
 | **Native Helper** | Firefox storage backend, yt-dlp download flow, and local media-analysis jobs |
 | **Security And Debugging** | Token-gated bridges, allowed-root file policy, playback monitors, logger tooling |
 
@@ -69,6 +70,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Linux / Mesa GPU](/features/linux-mesa-gpu/) | **Read before touching any canvas/GPU code** — Mesa silent-failure modes and the rules/gates that prevent "blank on Linux" regressions |
 | [Media Runtime](/features/media-runtime/) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
 | [ProRes Browser Decode](/features/prores-browser-decode/) | Experimental TurboRes-backed progressive ProRes 422 import, preview, Source Monitor, proxy, audio, export, and lifecycle gates |
+| [MXF Browser Decode](/features/mxf-browser-decode/) | In development (flag `mxfBrowserDecode`): TypeScript MXF demux and metadata, per-essence decode via WebCodecs, TurboRes, or an LGPL libavcodec WASM build |
 | [Effects](/features/effects/) | 98-effect registry, live media thumbnails, fisheye lens correction, glyph/compute/tracking runtimes, physical PAL/RF/VHS emulation, split compare, and timeline transitions |
 | [Slit Scan 3D](/features/slit-scan-3d/) | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
 | [Memory Leak](/features/memory-leak/) | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
@@ -80,6 +82,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Motion Design](/features/motion-design/) | Motion layer schema, property registry, rectangle/ellipse shape editing, GPU renderer, and persistence/export plumbing |
 | [3D Layers](/features/3d-layers/) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Flock Clips](/features/flock-clips/) | GPU particle swarms defined by an editable node graph: presets, Properties/Node Workspace editing, source-time keyframes, deterministic seek, precompute cache, links/trails/glyphs, and export |
+| [Weave](/features/weave/) | Curve-node fabric, knots and threading, fiber rendering (Hashed, 4x Coverage, Analytic), shadows and cloth |
 | [Browser 3D Scan](/features/3d-scan/) | Browser-local Camera Solve, FPS-aligned camera/stabilization tracks, project-backed COLMAP data, sparse previews, and capability-gated Brush WebGPU training |
 | [Vector Animation](/features/vector-animation/) | Lottie/Rive import, runtime playback, bounce modes, state-machine keyframes, Rive data binding, and export behavior |
 | [Audio](/features/audio/) | Playback sync, clip audio state, waveform/spectral display, recording, and export |
@@ -90,7 +93,8 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Proxy System](/features/proxy-system/) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
 | [Media Panel](/features/media-panel/) | Import flow, RAW-copy promotion, folders, compositions, and relinking |
 | [Media Discovery](/features/media-discovery/) | Open-media catalogs, meme templates, source attribution, and local Native Helper web downloads |
-| [Project Persistence](/features/project-persistence/) | Save/load model, IndexedDB handle cache, manual saves, timed autosave, incremental linked artifacts, relink, and project roots |
+| [Project Persistence](/features/project-persistence/) | Continuous saving, project handoff, storage backends, media relinking, archives and recovery |
+| [Project Repository and Durable History](/features/project-repository/) | Immutable revisions, branching undo, worker publication, workspace views, journals and artifact retention |
 | [Signal IR](/features/signal-ir/) | Contract layer for universal media signals, capability-gated runtime providers, and the Wasm/WIT ABI |
 | [Media Downloads](/features/download-panel/) | yt-dlp-backed downloads, platform mapping, and cookie retry behavior |
 | [Native Helper](/features/native-helper/) | Local HTTP/WebSocket APIs, auth startup token, and helper-backed flows |

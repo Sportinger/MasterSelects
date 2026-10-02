@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback, ensureEditorInputGesture } from '../../../services/project/repository/transaction/editorGestureOwnership';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 
@@ -70,17 +71,18 @@ export function useTimelineTrackResize({
     };
 
     const handlePointerMove = (event: PointerEvent) => {
+      ensureEditorInputGesture('Resize track');
       trackResizePendingClientYRef.current = event.clientY;
       if (trackResizeFrameRef.current !== null) return;
 
-      trackResizeFrameRef.current = window.requestAnimationFrame(() => {
+      trackResizeFrameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(() => {
         trackResizeFrameRef.current = null;
         const pendingClientY = trackResizePendingClientYRef.current;
         trackResizePendingClientYRef.current = null;
         if (pendingClientY !== null) {
           applyTrackResize(pendingClientY);
         }
-      });
+      }));
     };
 
     const handlePointerUp = (event: PointerEvent) => {

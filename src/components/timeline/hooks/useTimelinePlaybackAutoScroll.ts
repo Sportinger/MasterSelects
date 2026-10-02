@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
+import { useTimelineStore } from '../../../stores/timeline';
+import { readTimelinePlaybackPosition } from './useTimelineEditorPlaybackState';
 
 interface UseTimelinePlaybackAutoScrollProps {
   duration: number;
@@ -37,37 +39,29 @@ export function useTimelinePlaybackAutoScroll({
   }, [timelineRef]);
   useEffect(() => {
     if (!isPlaying || isDraggingPlayhead) return;
+    let currentScrollX = scrollX;
+    const followPosition = (position: number) => {
+      // The viewport changes on resize, not on playback. Never measure layout
+      // after a clock update, which would flush pending UI work synchronously.
+      const viewportWidth = widthRef.current;
+      if (!viewportWidth || viewportWidth <= 0) return;
 
-    // Reading layout after each playhead update forces all pending UI work to
-    // finish synchronously. The viewport changes on resize, not on playback.
-    const viewportWidth = widthRef.current;
-    if (!viewportWidth || viewportWidth <= 0) return;
-
-    const endPadding = 100;
-    const playheadPixel = timeToPixel(playheadPosition);
-    const viewportStart = scrollX;
-    const viewportEnd = scrollX + viewportWidth;
-    const maxScrollX = Math.max(0, duration * zoom - viewportWidth + endPadding);
-
-    if (playheadPixel > viewportEnd) {
-      const nextScrollX = Math.max(
-        0,
-        Math.min(maxScrollX, playheadPixel)
-      );
-      if (nextScrollX !== scrollX) {
-        setScrollX(nextScrollX);
+      const playheadPixel = timeToPixel(position);
+      if (playheadPixel < currentScrollX || playheadPixel > currentScrollX + viewportWidth) {
+        const maxScrollX = Math.max(0, duration * zoom - viewportWidth + 100);
+        const nextScrollX = Math.max(0, Math.min(maxScrollX, playheadPixel));
+        if (nextScrollX !== currentScrollX) {
+          currentScrollX = nextScrollX;
+          setScrollX(nextScrollX);
+        }
       }
-      return;
-    }
-
-    if (playheadPixel < viewportStart) {
-      const nextScrollX = Math.max(
-        0,
-        Math.min(maxScrollX, playheadPixel)
-      );
-      if (nextScrollX !== scrollX) {
-        setScrollX(nextScrollX);
-      }
-    }
+    };
+    followPosition(readTimelinePlaybackPosition(playheadPosition));
+    // Only an actual viewport crossing wakes React. Ordinary clock updates
+    // and loop/reverse movement are handled without rendering the Timeline.
+    return useTimelineStore.subscribe(state => state.playheadPosition, position => {
+      const state = useTimelineStore.getState();
+      if (state.isPlaying && !state.isDraggingPlayhead) followPosition(position);
+    });
   }, [isPlaying, isDraggingPlayhead, playheadPosition, scrollX, zoom, duration, setScrollX, timeToPixel, timelineRef]);
 }

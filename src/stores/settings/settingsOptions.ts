@@ -63,4 +63,4 @@ export function clampShortcutDisplayScale(value: number): number {
 export type AutosaveInterval = 1 | 2 | 5 | 10;
 
 // Save mode: continuous saves on every change (debounced), interval saves on a timer
-export type SaveMode = 'manual' | 'interval' | 'continuous'; // continuous is accepted only for legacy migration
+export type SaveMode = 'continuous';

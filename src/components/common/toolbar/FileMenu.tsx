@@ -1,14 +1,7 @@
-import type { AutosaveInterval } from '../../../stores/settingsStore';
+import { getActiveRepositorySession } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import type { RecentProjectEntry } from '../../../services/projectFileService';
 import { clearAllCacheAndReload } from './cacheActions';
 import type { ToolbarMenuController, ToolbarShortcutLabels } from './menuTypes';
-
-const AUTOSAVE_INTERVALS: { value: AutosaveInterval; label: string }[] = [
-  { value: 1, label: '1 minute' },
-  { value: 2, label: '2 minutes' },
-  { value: 5, label: '5 minutes' },
-  { value: 10, label: '10 minutes' },
-];
 
 function formatRecentProjectDate(timestamp: number): string {
   if (!Number.isFinite(timestamp)) {
@@ -24,13 +17,9 @@ function formatRecentProjectDate(timestamp: number): string {
 }
 
 interface FileMenuProps extends ToolbarMenuController {
-  autosaveEnabled: boolean;
-  autosaveInterval: AutosaveInterval;
   isLoading: boolean;
   isProjectOpen: boolean;
   recentProjects: RecentProjectEntry[];
-  setAutosaveEnabled: (enabled: boolean) => void;
-  setAutosaveInterval: (interval: AutosaveInterval) => void;
   shortcutLabels: ToolbarShortcutLabels;
   hasUnsavedChanges: () => boolean;
   onClearRecentProjects: () => void;
@@ -40,11 +29,10 @@ interface FileMenuProps extends ToolbarMenuController {
   onRename: () => void;
   onSave: () => void;
   onSaveAs: () => void;
+  onExportArchive: () => void;
 }
 
 export function FileMenu({
-  autosaveEnabled,
-  autosaveInterval,
   hasUnsavedChanges,
   isLoading,
   isProjectOpen,
@@ -57,14 +45,14 @@ export function FileMenu({
   onRename,
   onSave,
   onSaveAs,
+  onExportArchive,
   openMenu,
   recentProjects,
-  setAutosaveEnabled,
-  setAutosaveInterval,
   shortcutLabels,
 }: FileMenuProps) {
+  const readonly = getActiveRepositorySession()?.opening.writable === false;
   return (
-    <div className="menu-item">
+    <div className="menu-item" onPointerUp={event => { if (event.target instanceof HTMLElement) event.target.blur(); }}>
       <button
         className={`menu-trigger ${openMenu === 'file' ? 'active' : ''}`}
         onClick={() => onMenuClick('file')}
@@ -107,7 +95,7 @@ export function FileMenu({
                           <span className="menu-recent-meta">{meta}</span>
                         </span>
                         <span className="menu-recent-kind">
-                          {project.backend === 'native' ? 'Native' : 'Browser'}
+                          {project.backend === 'native' ? 'Native' : project.backend === 'opfs' ? 'Browser local' : 'Folder'}
                         </span>
                       </button>
                     );
@@ -121,15 +109,16 @@ export function FileMenu({
             </div>
           </div>
           <div className="menu-separator" />
-          <button className="menu-option" onClick={() => onSave()} disabled={isLoading || !isProjectOpen}>
-            <span>Save</span>
+          <button className="menu-option" onClick={() => onSave()} disabled={isLoading || !isProjectOpen || readonly}>
+            <span>Save now</span>
             <span className="shortcut">{shortcutLabels.save}</span>
           </button>
           <button className="menu-option" onClick={onSaveAs} disabled={isLoading}>
-            <span>Save As...</span>
+            <span>Duplicate project...</span>
             <span className="shortcut">{shortcutLabels.saveAs}</span>
           </button>
-          <button className="menu-option" onClick={onRename} disabled={isLoading || !isProjectOpen}>
+          <button className="menu-option" onClick={onExportArchive} disabled={isLoading || !isProjectOpen}><span>Export .msproj archive...</span></button>
+          <button className="menu-option" onClick={onRename} disabled={isLoading || !isProjectOpen || readonly}>
             <span>Rename Project...</span>
           </button>
           {isProjectOpen && (
@@ -138,37 +127,11 @@ export function FileMenu({
               <div className="menu-submenu">
                 <span className="menu-label">Project Info</span>
                 <span className="menu-info">
-                  {hasUnsavedChanges() ? '\u25cf Unsaved changes' : '\u2713 All changes saved'}
+                  {readonly ? 'Read-only browsing' : hasUnsavedChanges() ? '\u25cf Saving accepted changes' : '\u2713 Content confirmed'}
                 </span>
               </div>
             </>
           )}
-          <div className="menu-separator" />
-          <div className="menu-item-with-submenu">
-            <button className="menu-option">
-              <span>Autosave</span>
-            </button>
-            <div className="menu-nested-submenu">
-              <button
-                className={`menu-option ${autosaveEnabled ? 'checked' : ''}`}
-                onClick={() => { setAutosaveEnabled(!autosaveEnabled); }}
-              >
-                <span>{autosaveEnabled ? '\u2713 ' : '   '}Enable Autosave</span>
-              </button>
-              <div className="menu-separator" />
-              <span className="menu-sublabel">Interval</span>
-              {AUTOSAVE_INTERVALS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  className={`menu-option ${autosaveInterval === value ? 'checked' : ''}`}
-                  onClick={() => { setAutosaveInterval(value); }}
-                  disabled={!autosaveEnabled}
-                >
-                  <span>{autosaveInterval === value ? '\u2713 ' : '   '}{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
           <div className="menu-separator" />
           <button className="menu-option" onClick={clearAllCacheAndReload}>
             <span>Clear All Cache & Reload</span>

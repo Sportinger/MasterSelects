@@ -10,9 +10,11 @@ import type { TimelineControlsProps } from '../types';
 import { useLegacyTransitionCompositionUpgrade } from '../hooks/useLegacyTransitionCompositionUpgrade';
 import { useTimelineOverLayout } from '../hooks/useTimelineOverLayout';
 import type { TimelineCurveMode } from '../../../stores/timeline/viewPreferences';
+import { TimelineCurrentTimeValue } from './TimelineCurrentTimeValue';
 
 interface TimelineToolbarChromeProps {
   duration: number;
+  frameRate?: number;
   formatTime: (seconds: number) => string;
   hasInOutDisplayRange: boolean;
   inOutDisplayDuration: number;
@@ -140,6 +142,7 @@ function TimelineToolbarOverflowMenu({
 
 export function TimelineToolbarChrome({
   duration,
+  frameRate,
   formatTime,
   hasInOutDisplayRange,
   inOutDisplayDuration,
@@ -195,7 +198,17 @@ export function TimelineToolbarChrome({
                 ? 'Current time from In point - double-click to show frames'
                 : 'Current composition time - double-click to show frames'}
           >
-            {timelineTimeDisplayMode === 'frames' ? timelineCurrentFrame : formatTime(timelineRulerCurrentTime)}
+            <TimelineCurrentTimeValue
+              displayMode={timelineTimeDisplayMode}
+              fallbackFrame={timelineCurrentFrame}
+              fallbackTime={timelineRulerCurrentTime}
+              formatTime={formatTime}
+              frameRate={frameRate ?? Number(timelineFpsValue)}
+              inPoint={timelineControlsProps.inPoint}
+              rangeActive={hasInOutDisplayRange}
+              rangeDuration={inOutDisplayDuration}
+              totalFrames={timelineTotalFrames}
+            />
           </span>
           <span className="timeline-ruler-separator-wrap" aria-hidden="true">
             <span className="timeline-ruler-time-separator">/</span>

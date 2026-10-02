@@ -1,3 +1,4 @@
+import { getEditorRepositorySession } from '../project/repository/transaction/editorRepositorySession';
 import type {
   AudioRecordingRecoveryAssetRef,
   AudioRecordingRecoveryChunkRef,
@@ -212,7 +213,9 @@ export class AudioRecordingService {
   private readonly backend: AudioRecordingCaptureBackend;
   private readonly encodeToWav: boolean;
   private readonly storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
-  private readonly recoveryBlobStore: AudioRecordingRecoveryBlobStore;
+  private readonly recoveryBlobStore?: AudioRecordingRecoveryBlobStore;
+  private readonly recordingRepositories = new Map<string, ReturnType<typeof getEditorRepositorySession>>();
+  private readonly recordingBlobStores = new Map<string, AudioRecordingRecoveryBlobStore>();
   private readonly storageManager?: AudioRecordingStorageManager;
   private readonly now: () => number;
   private readonly subscribers = new Set<AudioRecordingSubscriber>();
@@ -227,7 +230,7 @@ export class AudioRecordingService {
     this.backend = options.backend ?? createDefaultAudioRecordingCaptureBackend();
     this.encodeToWav = options.encodeToWav ?? true;
     this.storage = options.recoveryStorage ?? getStorageFromGlobal();
-    this.recoveryBlobStore = options.recoveryBlobStore ?? new ArtifactAudioRecordingRecoveryBlobStore();
+    this.recoveryBlobStore = options.recoveryBlobStore;
     this.storageManager = options.storageManager ?? getRecordingStorageManagerFromGlobal();
     this.now = options.now ?? (() => Date.now());
   }
@@ -257,8 +260,11 @@ export class AudioRecordingService {
       throw new Error('Arm at least one audio track before recording.');
     }
 
+    const pinnedBlobStore = this.recoveryBlobStore ?? new ArtifactAudioRecordingRecoveryBlobStore();
     const startedAt = options.startedAt ?? this.now();
     const sessionId = options.sessionId ?? createRecordingSessionId(startedAt);
+    this.recordingBlobStores.set(sessionId, pinnedBlobStore);
+    this.recordingRepositories.set(sessionId, getEditorRepositorySession());
     const targetTrackIds = getRecordingTargetTrackIds(options.targets);
     const inputDeviceIds = getRecordingInputDeviceIds(options.targets);
     const captureGroups = groupTargetsByInput(options.targets);
@@ -444,6 +450,7 @@ export class AudioRecordingService {
     result: AudioRecordingStopResult,
     deps: AudioRecordingCommitDependencies = {},
   ): Promise<AudioRecordingCommitResult> {
+    if (this.recordingRepositories.has(result.sessionId) && this.recordingRepositories.get(result.sessionId) !== getEditorRepositorySession()) throw new Error('Recording belongs to another project session.');
     if (this.committedSessionIds.has(result.sessionId)) {
       return { sessionId: result.sessionId, clips: [] };
     }
@@ -470,7 +477,8 @@ export class AudioRecordingService {
   }
 
   private async deleteRecoveryArtifacts(entry: AudioRecordingRecoveryEntry): Promise<void> {
-    await deleteRecoveryEntryArtifacts(entry, this.recoveryBlobStore);
+    await deleteRecoveryEntryArtifacts(entry, this.recordingBlobStores.get(entry.sessionId) ?? this.recoveryBlobStore ?? new ArtifactAudioRecordingRecoveryBlobStore());
+    this.recordingBlobStores.delete(entry.sessionId); this.recordingRepositories.delete(entry.sessionId);
   }
 
   async commitRecoveryEntry(
@@ -497,13 +505,13 @@ export class AudioRecordingService {
   }
 
   private async restoreRecoveryAssets(entry: AudioRecordingRecoveryEntry): Promise<AudioRecordedAsset[]> {
-    return restoreAudioRecordingRecoveryAssets(entry, this.recoveryBlobStore);
+    return restoreAudioRecordingRecoveryAssets(entry, this.recordingBlobStores.get(entry.sessionId) ?? this.recoveryBlobStore ?? new ArtifactAudioRecordingRecoveryBlobStore());
   }
 
   private async persistRecoveryAssets(
     assets: readonly AudioRecordedAsset[],
   ): Promise<AudioRecordingRecoveryAssetRef[] | undefined> {
-    return persistAudioRecordingRecoveryAssets(assets, this.recoveryBlobStore);
+    return persistAudioRecordingRecoveryAssets(assets, this.recordingBlobStores.get(assets[0]?.sessionId ?? '') ?? this.recoveryBlobStore ?? new ArtifactAudioRecordingRecoveryBlobStore());
   }
 
   private shouldWaitForPunchIn(session: ActiveRecordingSession): boolean {
@@ -569,9 +577,10 @@ export class AudioRecordingService {
   }
 
   private createRecoveryChunkSink(session: ActiveRecordingSession): AudioRecordingChunkSink {
+    const blobStore = this.recordingBlobStores.get(session.sessionId) ?? this.recoveryBlobStore ?? new ArtifactAudioRecordingRecoveryBlobStore();
     return {
       writeChunk: async (chunk) => {
-        const ref = await this.recoveryBlobStore.putChunk(chunk);
+        const ref = await blobStore.putChunk(chunk);
         this.appendRecoveryChunk(session.sessionId, ref);
         return ref;
       },

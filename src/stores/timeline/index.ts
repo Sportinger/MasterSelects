@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../../services/project/repository/transaction/storeMutationBoundary';
 // Timeline store - combines all slices into a single Zustand store
 
 import { create } from 'zustand';
@@ -85,7 +86,7 @@ export { setClipStemSeparationRunner } from './stemSeparationSlice';
 export * from './selectors';
 
 export const useTimelineStore = create<TimelineStore>()(
-  subscribeWithSelector(withTimelineRevision((set, get) => {
+  subscribeWithSelector(withRepositoryStoreMutation('timeline', withTimelineRevision((set, get) => {
     // Create all slices
     const trackActions = createTrackSlice(set, get);
     const clipActions = createClipSlice(set, get);
@@ -452,7 +453,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...initialState,
       ...actions,
     };
-  }))
+  })))
 );
 
 (globalThis as typeof globalThis & {

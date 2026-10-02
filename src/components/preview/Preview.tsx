@@ -1,3 +1,5 @@
+import { getEditorRepositorySession } from '../../services/project/repository/transaction/editorRepositorySession';
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 // Preview canvas component with After Effects-style editing overlay
 import './Preview.css';
 import './PreviewEditMode.css';
@@ -323,13 +325,13 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
   }, [panelId]);
 
   const startSceneNavHistoryBatch = useCallback((label: string) => {
-    if (editCameraModeActive || sceneNavHistoryBatchActiveRef.current) return;
+    if (editCameraModeActive || (sceneNavHistoryBatchActiveRef.current && !getEditorRepositorySession())) return;
     startBatch(label);
     sceneNavHistoryBatchActiveRef.current = true;
   }, [editCameraModeActive, sceneNavHistoryBatchActiveRef]);
 
   const endSceneNavHistoryBatch = useCallback(() => {
-    if (!sceneNavHistoryBatchActiveRef.current) return;
+    if (!sceneNavHistoryBatchActiveRef.current && !getEditorRepositorySession()) return;
     sceneNavHistoryBatchActiveRef.current = false;
     endBatch();
   }, []);
@@ -347,10 +349,10 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     } else {
       window.clearTimeout(gaussianWheelBatchTimerRef.current);
     }
-    gaussianWheelBatchTimerRef.current = window.setTimeout(() => {
+    gaussianWheelBatchTimerRef.current = window.setTimeout(bindEditorGestureCallback(() => {
       gaussianWheelBatchTimerRef.current = null;
       endSceneNavHistoryBatch();
-    }, 180);
+    }), 180);
   }, [endSceneNavHistoryBatch, startSceneNavHistoryBatch]);
 
   const finishGaussianKeyboardBatch = useCallback(() => {

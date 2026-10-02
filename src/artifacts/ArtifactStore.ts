@@ -1,6 +1,6 @@
-import { SIGNAL_SCHEMA_VERSION, type SignalArtifactProducer, type SignalMetadata } from '../signals';
-import { buildArtifactId, normalizeArtifactId } from './ids';
-import { artifactInputToBlob, blobToArrayBuffer, sha256ArrayBuffer } from './hash';
+import { SIGNAL_SCHEMA_VERSION, type SignalArtifactProducer } from '../signals';
+import { buildArtifactId, buildVersionedArtifactId, artifactManifestFileName, normalizeArtifactId } from './ids';
+import { artifactInputToBlob, sha256Blob } from './hash';
 import {
   ARTIFACT_HASH_ALGORITHM,
   type ArtifactInput,
@@ -11,25 +11,14 @@ import {
   type StoredArtifact,
 } from './types';
 
+import { frozenJson } from '../services/project/repository/segments/canonical';
+import { hashArtifactManifest } from '../services/project/repository/artifacts/manifestIdentity';
+
 const DEFAULT_MIME_TYPE = 'application/octet-stream';
 const DEFAULT_PRODUCER_ID = 'masterselects.core.artifact-store';
 
 function uniqueStrings(values: string[]): string[] {
-  return [...new Set(values.filter((value) => value.trim().length > 0))];
-}
-
-function mergeMetadata(
-  current: SignalMetadata | undefined,
-  incoming: SignalMetadata | undefined,
-): SignalMetadata | undefined {
-  if (!current && !incoming) {
-    return undefined;
-  }
-
-  return {
-    ...(current ?? {}),
-    ...(incoming ?? {}),
-  };
+  return [...new Set(values.filter((value) => value.trim().length > 0))].toSorted();
 }
 
 function buildProducer(producer?: Partial<SignalArtifactProducer>): SignalArtifactProducer {
@@ -59,15 +48,17 @@ export class ArtifactStore {
   ): Promise<PutArtifactResult> {
     const mimeType = options.mimeType ?? (input instanceof Blob ? input.type : '') ?? DEFAULT_MIME_TYPE;
     const blob = await artifactInputToBlob(input, mimeType || DEFAULT_MIME_TYPE);
-    const hash = await sha256ArrayBuffer(await blobToArrayBuffer(blob));
+    const hash = await sha256Blob(blob, options.signal);
     const artifactId = buildArtifactId(hash);
     const existingManifest = await this.adapter.getArtifactManifest(artifactId);
 
-    const nextManifest: ArtifactManifest = {
+    let nextManifest: ArtifactManifest = {
       schemaVersion: SIGNAL_SCHEMA_VERSION,
       artifactId,
       hash,
       hashAlgorithm: ARTIFACT_HASH_ALGORITHM,
+      blobId: artifactId,
+      retention: options.retention ?? 'required',
       size: blob.size,
       mimeType: mimeType || DEFAULT_MIME_TYPE,
       encoding: options.encoding ?? 'raw',
@@ -78,16 +69,21 @@ export class ArtifactStore {
       metadata: options.metadata,
     };
 
-    if (existingManifest && await this.adapter.hasArtifactBlob(existingManifest)) {
-      const mergedManifest = this.mergeManifests(existingManifest, nextManifest);
-      await this.adapter.saveArtifactManifest(mergedManifest);
-      return {
-        manifest: mergedManifest,
-        deduplicated: true,
-      };
+    // The logical description has a separate immutable identity from shared bytes.
+    const manifestHash = await hashArtifactManifest(nextManifest);
+    nextManifest = { ...nextManifest, artifactId: buildVersionedArtifactId(hash, manifestHash), manifestHash };
+    if (nextManifest.storage.manifestProjectRelativePath) {
+      nextManifest.storage = { ...nextManifest.storage, manifestProjectRelativePath: nextManifest.storage.manifestProjectRelativePath.replace(/[^/]+$/, artifactManifestFileName(nextManifest)) };
+    }
+    nextManifest = frozenJson(nextManifest);
+    const version = await this.adapter.getArtifactManifest(nextManifest.artifactId);
+    if (version && await this.adapter.hasArtifactBlob(version)) return { manifest: version, deduplicated: true };
+    if (await this.adapter.hasArtifactBlob(existingManifest ?? nextManifest)) {
+      await this.adapter.saveArtifactManifest(nextManifest, options.signal);
+      return { manifest: nextManifest, deduplicated: true };
     }
 
-    await this.adapter.writeArtifact(nextManifest, blob);
+    await this.adapter.writeArtifact(nextManifest, blob, options.signal);
     return {
       manifest: nextManifest,
       deduplicated: false,
@@ -134,22 +130,12 @@ export class ArtifactStore {
       return false;
     }
 
-    const deletedBlob = await this.adapter.deleteArtifactBlob(manifest);
+    // Version deletion cannot remove bytes still used by another immutable version.
+    const versions = await this.adapter.listArtifactManifests();
+    const shared = versions.some(version => version.artifactId !== artifactId && version.hash === manifest.hash);
+    const deletedBlob = shared ? false : await this.adapter.deleteArtifactBlob(manifest);
     await this.adapter.deleteArtifactManifest(artifactId);
     return deletedBlob;
   }
 
-  private mergeManifests(
-    existingManifest: ArtifactManifest,
-    nextManifest: ArtifactManifest,
-  ): ArtifactManifest {
-    return {
-      ...existingManifest,
-      sourceRefs: uniqueStrings([
-        ...existingManifest.sourceRefs,
-        ...nextManifest.sourceRefs,
-      ]),
-      metadata: mergeMetadata(existingManifest.metadata, nextManifest.metadata),
-    };
-  }
 }

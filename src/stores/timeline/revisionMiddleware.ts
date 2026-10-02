@@ -1,3 +1,4 @@
+import { withRepositoryHydration } from '../../services/project/repository/transaction/storeMutationBoundary';
 import { synchronizeSharedSceneGraphs } from './sharedSceneGraphSynchronization';
 import type { StateCreator, StoreApi } from 'zustand';
 
@@ -218,7 +219,8 @@ export const withTimelineRevision = (
     const clips = updater(currentState.clips);
     if (Object.is(clips, currentState.clips)) return;
     assertDerivedClipUpdate(currentState.clips, clips);
-    set({ clips });
+    // The fail-closed derived-field validator already proves there is no authored edit.
+    withRepositoryHydration(() => set({ clips }));
   };
 
   return initializer(revisionSetState, get, store);

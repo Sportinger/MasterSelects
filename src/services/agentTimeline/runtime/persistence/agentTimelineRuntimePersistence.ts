@@ -61,8 +61,9 @@ function sourceId(clip: TimelineClip): string | undefined {
 }
 
 function runtimeSource(media: MediaFile | undefined, clips: readonly TimelineClip[]): Blob | undefined {
-  return media?.file
-    ?? clips.map(clip => clip.source?.file ?? (clip.needsReload ? undefined : clip.file)).find(Boolean);
+  // Unopened saved clips contain empty runtime placeholders, not source bytes.
+  return [media?.file, ...clips.map(clip => clip.source?.file ?? (clip.needsReload ? undefined : clip.file))]
+    .find((source): source is File => source !== undefined && source.size > 0);
 }
 
 function sourceDuration(media: MediaFile | undefined, clips: readonly TimelineClip[]): number | undefined {
@@ -93,7 +94,8 @@ function validCoverage(ranges: readonly [number, number][] | undefined, duration
 
 function generatedAt(input: PublishInput, audio: readonly AudioAnalysisArtifact[], now: string): string {
   const timestamp = [
-    (input.source as File).lastModified,
+    // Embedded sources become new File objects on reload; their runtime mtime is not a generation time.
+    input.media?.createdAt ?? (input.source as File).lastModified,
     input.media?.sceneCutAnalysis?.completedAt,
     ...audio.map(artifact => artifact.createdAt),
   ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0)
@@ -376,7 +378,7 @@ type PersistenceGlobal = typeof globalThis & {
 
 const persistenceGlobal = globalThis as PersistenceGlobal;
 export const agentTimelineRuntimePersistence = AgentTimelineRuntimePersistence.restore(
-  import.meta.hot?.data.persistence ?? persistenceGlobal.__MASTERSELECTS_AGENT_TIMELINE_RUNTIME_PERSISTENCE__,
+  import.meta.hot?.data?.persistence ?? persistenceGlobal.__MASTERSELECTS_AGENT_TIMELINE_RUNTIME_PERSISTENCE__,
 );
 persistenceGlobal.__MASTERSELECTS_AGENT_TIMELINE_RUNTIME_PERSISTENCE__ = agentTimelineRuntimePersistence;
 

@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback, ensureEditorInputGesture } from '../../../../services/project/repository/transaction/editorGestureOwnership';
 import { useEffect, useRef } from 'react';
 import type { AudioEqBand } from '../../../../engine/audio/eq/AudioEqTypes';
 
@@ -21,6 +22,7 @@ export function useBandDragCommits(
   const pendingRef = useRef<{ bandId: string; patch: Partial<AudioEqBand> } | null>(null);
   const frameRef = useRef<number | null>(null);
   const commitRef = useRef<() => void>(() => {});
+  const ownedCommitRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     commitRef.current = () => {
@@ -43,20 +45,22 @@ export function useBandDragCommits(
   }, []);
 
   const scheduleBandDragCommit = (bandId: string, patch: Partial<AudioEqBand>) => {
+    ensureEditorInputGesture('Adjust equalizer band');
+    ownedCommitRef.current = bindEditorGestureCallback(() => commitRef.current());
     const pending = pendingRef.current;
     pendingRef.current = pending && pending.bandId === bandId
       ? { bandId, patch: { ...pending.patch, ...patch } }
       : { bandId, patch };
 
     if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
-      commitRef.current();
+      ownedCommitRef.current();
       return;
     }
     if (frameRef.current !== null) return;
-    frameRef.current = window.requestAnimationFrame(() => {
+    frameRef.current = window.requestAnimationFrame(bindEditorGestureCallback(() => {
       frameRef.current = null;
-      commitRef.current();
-    });
+      ownedCommitRef.current();
+    }));
   };
 
   const flushBandDragCommit = () => {
@@ -68,7 +72,7 @@ export function useBandDragCommits(
       window.cancelAnimationFrame(frameRef.current);
       frameRef.current = null;
     }
-    commitRef.current();
+    ownedCommitRef.current();
   };
 
   return { scheduleBandDragCommit, flushBandDragCommit };

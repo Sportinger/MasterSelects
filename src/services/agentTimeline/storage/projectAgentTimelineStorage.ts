@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication } from '../../project/repository/artifacts/RepositoryDomainPublication';
 import type { ArtifactStore } from '../../../artifacts';
 import { projectFileService } from '../../project/ProjectFileService';
 import { artifactService } from '../../project/domains/ArtifactService';
@@ -18,6 +19,7 @@ function artifactStoreAdapter(store: ArtifactStore): AgentTimelineArtifactStore 
         mimeType: options.mimeType,
         encoding: options.encoding,
         sourceRefs: [...options.sourceRefs],
+        createdAt: options.createdAt,
       });
       return {
         manifest: {
@@ -67,11 +69,14 @@ async function sha256Hex(value: string): Promise<string> {
 }
 
 export class ProjectFileManifestPointerStore implements AgentTimelineManifestPointerStore {
+  private readonly repository = captureRepositoryDomainPublication();
+
   private async fileName(pointerKey: string): Promise<string> {
     return `${POINTER_FILE_PREFIX}${await sha256Hex(pointerKey)}.json`;
   }
 
   async get(pointerKey: string): Promise<AgentTimelineManifestPointer | null> {
+    if (this.repository) return await this.repository.readJournal(`agent-timeline:${pointerKey}`) as unknown as AgentTimelineManifestPointer | null;
     const file = await projectFileService.readFile('ANALYSIS', await this.fileName(pointerKey));
     if (!file) return null;
     if (file.size > MAX_POINTER_BYTES) {
@@ -84,6 +89,10 @@ export class ProjectFileManifestPointerStore implements AgentTimelineManifestPoi
     const json = JSON.stringify(pointer);
     if (new TextEncoder().encode(json).byteLength > MAX_POINTER_BYTES) {
       throw new Error('Agent Timeline manifest pointer exceeds its bounded size.');
+    }
+    if (this.repository) {
+      await this.repository.appendJournal(`agent-timeline:${pointerKey}`, JSON.parse(json));
+      return;
     }
     const written = await projectFileService.writeFile(
       'ANALYSIS',
@@ -142,7 +151,7 @@ export function createProjectAgentTimelineStorage(): AgentTimelineArtifactStorag
     ? `${project.createdAt}:${project.name}`
     : projectFileService.getProjectPath() ?? 'unattached';
   const artifacts = createProjectAgentTimelineArtifactStore();
-  const pointers = projectHandle || packageSession
+  const pointers = captureRepositoryDomainPublication() || projectHandle || packageSession
     ? new ProjectFileManifestPointerStore()
     : new BrowserManifestPointerStore(globalThis.localStorage, projectNamespace);
   return new AgentTimelineArtifactStorage({ artifacts, pointers });

@@ -2,7 +2,7 @@ import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../stores/timeline/types';
 import type { MediaFile } from '../../../stores/mediaStore/types';
 import { fileSystemService } from '../../../services/fileSystemService';
-import { projectFileService } from '../../../services/projectFileService';
+import { projectFileService } from '../../../services/project/ProjectFileService';
 import {
   getProjectRawPathCandidates,
   getStoredProjectFileHandle,

@@ -16,6 +16,7 @@ import {
 import './TimelineControls.css';
 import type { TimelineControlsProps } from './types';
 import { useTimelineStore } from '../../stores/timeline';
+import { readTimelinePlaybackPosition } from './hooks/useTimelineEditorPlaybackState';
 import { useAnnotationStore } from '../../stores/annotationStore';
 import { AudioEffectStackControl } from '../panels/properties/AudioEffectStackControl';
 import { AudioLevelMeter } from './components/AudioLevelMeter';
@@ -115,12 +116,16 @@ function TimelineControlsComponent({
   const recordingStorageWarnings = recordingState.storageWarnings ?? [];
   const recordingStorageWarning = recordingStorageWarnings.find(warning => warning.severity === 'warning')
     ?? recordingStorageWarnings[0];
+  const liveRecordingPosition = useTimelineStore(state => (
+    armedAudioTracks.length > 0 && state.isPlaying ? state.playheadPosition : null
+  ));
+  const recordingPosition = liveRecordingPosition ?? playheadPosition;
   const recordingRange = useMemo(() => resolveTimelineRecordingRange({
-    playheadPosition,
+    playheadPosition: recordingPosition,
     inPoint,
     outPoint,
     duration,
-  }), [duration, inPoint, outPoint, playheadPosition]);
+  }), [duration, inPoint, outPoint, recordingPosition]);
   const recordingElapsed = recordingState.startedAt
     ? Math.max(0, ((recordingState.phase === 'recording' ? Date.now() : (recordingState.lastCompletedAt ?? Date.now())) - recordingState.startedAt) / 1000)
     : 0;
@@ -213,7 +218,7 @@ function TimelineControlsComponent({
       await toggleTimelineAudioRecording({
         isRecording,
         armedAudioTracks,
-        playheadPosition,
+        playheadPosition: readTimelinePlaybackPosition(playheadPosition),
         inPoint,
         outPoint,
         duration,

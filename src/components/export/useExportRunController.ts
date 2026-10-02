@@ -1,3 +1,4 @@
+import { withTimelineLinkedMedia } from '../../services/project/repository/transaction/editorLinkedMediaConnection';
 import { useCallback, useRef } from 'react';
 import { ExportSubmissionGate } from './ExportSubmissionGate';
 import { Logger } from '../../services/logger';
@@ -201,7 +202,7 @@ export function useExportRunController({
     startExport(startTime, endTime);
 
     try {
-      const result = await runWebCodecsExport({
+      const result = await withTimelineLinkedMedia(runWebCodecsExport, {
         width: actualWidth, height: actualHeight, fps: exportFps, startTime, endTime,
         videoCodec, containerFormat, bitrate, rateControl, stackedAlpha,
         includeAudio, audioSampleRate, audioBitrate, normalizeAudio,
@@ -283,7 +284,7 @@ export function useExportRunController({
     startExport(startTime, endTime);
 
     try {
-      const result = await runBrowserGifExport({
+      const result = await withTimelineLinkedMedia(runBrowserGifExport, {
         width: actualWidth, height: actualHeight, fps: exportFps, startTime, endTime,
         exportMode: encoder === 'webcodecs' ? 'fast' : 'precise',
         filename, gifColors, gifDither, gifLoop, gifLoopCount, gifPaletteMode, gifOptimize,
@@ -339,7 +340,7 @@ export function useExportRunController({
     startExport(startTime, endTime);
 
     try {
-      const result = await runHapExport({
+      const result = await withTimelineLinkedMedia(runHapExport, {
         width: actualWidth, height: actualHeight, fps: exportFps, startTime, endTime,
         exportMode: 'precise',
         filename, hapFormat, includeAlpha: preserveNativeAlpha,
@@ -406,7 +407,7 @@ export function useExportRunController({
     startExport(startTime, endTime);
 
     try {
-      const result = await runFfmpegDirectExport({
+      const result = await withTimelineLinkedMedia(runFfmpegDirectExport, {
         width: actualWidth, height: actualHeight, fps: exportFps, startTime, endTime,
         filename, visualMode, includeAudio, audioSampleRate, audioBitrate, normalizeAudio,
         includeAlpha: preserveNativeAlpha,
@@ -471,7 +472,7 @@ export function useExportRunController({
     let timelineExportStarted = false;
 
     try {
-      const result = await runAudioOnlyExport({
+      const result = await withTimelineLinkedMedia(runAudioOnlyExport, {
         width: actualWidth, height: actualHeight, fps: actualFps, startTime, endTime,
         filename, encoder, videoCodec, containerFormat, bitrate,
         audioOnlyFormat, audioSampleRate, audioBitrate, normalizeAudio,
@@ -552,7 +553,7 @@ export function useExportRunController({
     });
 
     try {
-      const result = await runStillImageExport({
+      const result = await withTimelineLinkedMedia(runStillImageExport, {
         width: actualWidth, height: actualHeight, fps: exportFps, exportTime,
         filename, imageFormat, imageQuality, selectedImageFormat,
         renderSessionRef: exportRenderSessionRef,
@@ -602,7 +603,7 @@ export function useExportRunController({
     let timelineExportStarted = false;
 
     try {
-      const result = await runImageSequenceExport({
+      const result = await withTimelineLinkedMedia(runImageSequenceExport, {
         width: actualWidth, height: actualHeight, fps: exportFps, startTime, endTime,
         exportMode: encoder === 'webcodecs' ? 'fast' : 'precise',
         filename, imageFormat, imageQuality, selectedImageFormat,

@@ -28,15 +28,6 @@ const PAUSED_SEEK_TOLERANCE = 0.02;
 /** A playing <video> is re-synced only past this drift (seconds). */
 const PLAYING_DRIFT_TOLERANCE = 0.15;
 /**
- * While the playhead is dragged the angles hold their picture until it rests
- * this long (ms): every long-GOP seek decodes from the key frame, and angle
- * seeks per mouse move starved the program's scrub decoder.
- */
-const SCRUB_SETTLE_MS = 120;
-
-const scrubState = { time: Number.NaN, movedAt: 0 };
-
-/**
  * The latest picture a <video> presented, as a VideoFrame. The view then renders
  * like a decoder frame and keeps its last picture while the element seeks.
  */
@@ -88,7 +79,7 @@ class ElementFrameTap {
 }
 
 type AngleSourceRuntime =
-  | { kind: 'provider'; ownerId: string; runtimeSourceId: string; source: TimelineClip['source'] }
+  | { kind: 'provider'; ownerId: string; runtimeSourceId: string; source: TimelineClip['source']; programSource?: Layer['source'] }
   | { kind: 'element'; element: HTMLVideoElement; url: string; frames: ElementFrameTap };
 
 const runtimes = new Map<string, AngleSourceRuntime>();
@@ -178,8 +169,9 @@ function driveElement(element: HTMLVideoElement, sourceTime: number, isPlaying: 
 
 /**
  * Advances every angle to `time`. While playing, a codec angle that is the
- * program at `time` is driven by the timeline sync already (same session) and
- * is left alone; paused, both ask for the same frame.
+ * program at `time` is driven by the timeline sync. Its current source is
+ * borrowed, including the dedicated scrub session, without seeking a second
+ * decoder. Off-air cameras hold for the entire drag and settle on release.
  */
 export function syncMulticamAngles(params: {
   compositionId: string;
@@ -188,14 +180,11 @@ export function syncMulticamAngles(params: {
   isPlaying: boolean;
   isDragging: boolean;
   programClips: readonly TimelineClip[];
+  /** Main-loop layers at this exact timeline time; undefined while it catches up. */
+  programLayers?: readonly Layer[];
+  frameDurationSeconds?: number;
 }): void {
-  const { compositionId, multicam, time, isPlaying, isDragging, programClips } = params;
-  const now = performance.now();
-  if (time !== scrubState.time) {
-    scrubState.time = time;
-    scrubState.movedAt = now;
-  }
-  const holdForScrub = isDragging && now - scrubState.movedAt < SCRUB_SETTLE_MS;
+  const { compositionId, multicam, time, isPlaying, isDragging, programClips, programLayers } = params;
   const live = new Set<string>();
   multicam.angles.forEach((angle, angleIndex) => {
     const resolved = resolveAngleSourceAt(angle, time);
@@ -203,14 +192,40 @@ export function syncMulticamAngles(params: {
     const runtime = getRuntime(compositionId, angleIndex, angle, resolved.source);
     if (!runtime) return;
     live.add(runtimeKey(compositionId, angleIndex, resolved.source));
-    if (holdForScrub) return;
     if (runtime.kind === 'element') {
+      // Pause before holding: otherwise an off-air HTML camera keeps decoding
+      // the old playback position throughout the drag.
+      if ((!isPlaying || isDragging) && !runtime.element.paused) runtime.element.pause();
+      if (isDragging) return;
       driveElement(runtime.element, resolved.sourceTime, isPlaying);
       return;
     }
-    const isProgram = isPlaying && programClips.some((clip) => clip.trackId === angle.trackId
+    runtime.programSource = undefined;
+    const programClip = programClips.find((clip) => clip.trackId === angle.trackId
+      && clip.source?.type === 'video'
+      && (clip.source.runtimeSourceId === runtime.runtimeSourceId
+        || (clip.source.mediaFileId ?? clip.mediaFileId) === resolved.source.mediaFileId)
       && time >= clip.startTime && time < clip.startTime + clip.duration);
-    if (!isProgram) driveProvider(runtime, resolved.sourceTime, isPlaying);
+    const programLayer = programClip && programLayers?.find((layer) => (
+      layer.sourceClipId === programClip.id && layer.visible && layer.opacity !== 0
+      && !layer.transitionRender && layer.source?.type === 'video'
+      && layer.source.runtimeSourceId === runtime.runtimeSourceId
+      && typeof layer.source.mediaTime === 'number'
+      // Main preview samples the composition's frame grid; the pointer time
+      // remains continuous. Sub-frame differences must not start another seek.
+      && Math.abs((layer.source.targetMediaTime ?? layer.source.mediaTime) - resolved.sourceTime)
+        <= (params.frameDurationSeconds ?? 1 / 30) + 0.0001
+    ));
+    if (programLayer) runtime.programSource = programLayer.source;
+    if (isDragging) {
+      const provider = getRuntimeFrameProvider(runtime.source);
+      if (provider?.isPlaying) provider.pause();
+      return;
+    }
+    // A delayed main render must not cause its camera's second decoder to seek
+    // first. An evaluated but incompatible source (e.g. retiming) stays independent.
+    if (programLayer || (programClip && programLayers === undefined)) return;
+    driveProvider(runtime, resolved.sourceTime, isPlaying);
   });
   // Sources the playhead has left (e.g. Jonas1 after the switch to Jonas2) give their decoders back.
   for (const [key, runtime] of runtimes) {
@@ -256,9 +271,11 @@ export function getMulticamAngleLayer(
     ...base,
     source: {
       type: 'video',
-      webCodecsPlayer: getRuntimeFrameProvider(runtime.source) ?? undefined,
-      runtimeSourceId: runtime.source?.runtimeSourceId,
-      runtimeSessionKey: runtime.source?.runtimeSessionKey,
+      videoFrame: runtime.programSource?.videoFrame,
+      webCodecsPlayer: runtime.programSource?.webCodecsPlayer
+        ?? getRuntimeFrameProvider(runtime.programSource ?? runtime.source) ?? undefined,
+      runtimeSourceId: (runtime.programSource ?? runtime.source)?.runtimeSourceId,
+      runtimeSessionKey: (runtime.programSource ?? runtime.source)?.runtimeSessionKey,
     },
   } as Layer;
 }
@@ -285,6 +302,7 @@ export function getMulticamAngleDebugSnapshot() {
     const provider = getRuntimeFrameProvider(runtime.source);
     return {
       key, kind: runtime.kind, sessionKey: runtime.source?.runtimeSessionKey ?? null,
+      programSessionKey: runtime.programSource?.runtimeSessionKey ?? null,
       hasProvider: Boolean(provider), currentTime: provider?.currentTime ?? null,
       hasFrame: Boolean(provider?.getCurrentFrame?.()),
     };
@@ -296,4 +314,3 @@ export function releaseMulticamAngles(): void {
   for (const runtime of runtimes.values()) releaseRuntime(runtime);
   runtimes.clear();
 }
-

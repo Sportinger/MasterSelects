@@ -26,11 +26,11 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 
 Waveform previews, pyramid analysis, and cache unpacking run in dedicated workers. Large timelines reuse saved source waveforms after refresh, share results across split clips, and limit background analysis updates. Decoding and waveform generation do not hold the project save barrier. See [Audio Intelligence](docs/Features/Audio-Intelligence.md).
 
-Timeline scrolling reuses prepared waveform columns and bounds dashed composition outlines to the visible canvas. See [Timeline](docs/Features/Timeline.md).
+Timeline scrolling reuses prepared waveform columns and bounds dashed composition outlines to the visible canvas. Open composition tabs restore only their timeline, retain connected media, and remember independent playhead and zoom positions. See [Timeline](docs/Features/Timeline.md).
 
 Large audio timelines prepare waveform columns within the canvas viewport and reuse source data across UI updates. Progressively loaded waveforms preserve the existing canvas display. Long WAV files decode without another complete encoded-audio copy on the UI thread. See [Audio](docs/Features/Audio.md).
 
-Multicam camera tiles adapt their render resolution to the panel and reuse unchanged video frames. The main preview retains its selected quality and original source decoding. See [Preview](docs/Features/Preview.md#multi-preview).
+Multicam camera tiles adapt their render resolution to the panel and reuse unchanged video frames. The main preview retains its selected quality and original source decoding. During scrubbing, the program camera shares the main preview's source while other cameras catch up on release. Playback clock updates stay local to the timeline's time display and playhead; inactive preview overlays do not subscribe to the running clock. See [Preview](docs/Features/Preview.md#multi-preview).
 
 ### Node graphs
 
@@ -122,7 +122,8 @@ The codebase includes [agent instructions](AGENTS.md), [feature documentation](d
 
 Open [masterselects.com](https://www.masterselects.com/), import a clip, and drag it onto the timeline. Press **Space** to play, **C** to cut, and **Ctrl/Cmd+S** to save. More controls are in the [keyboard shortcuts](docs/Features/Keyboard-Shortcuts.md).
 
-Manual Save waits for project and timeline synchronization to finish before saving the complete state.
+Projects [save continuously](docs/Features/Project-Persistence.md), with durable branching history. **Ctrl/Cmd+S** waits for pending content, history navigation and workspace changes to reach storage; named versions are separate from Save.
+Filesystem saves page through one bounded filename snapshot per fresh history-folder check, avoiding repeated physical scans as history grows.
 
 Chrome or Edge on desktop is a good starting point. Editing and rendering run locally in the browser; hosted AI and media generation use external services and may require credits. Local AI features may download models on first use. MasterSelects is under active development, so keep backups of important projects.
 
@@ -152,3 +153,5 @@ Focused pull requests, reproducible bug reports, and documentation improvements 
 MasterSelects is licensed under **AGPL-3.0-only**. Commercial use is permitted under its terms. Videos and other ordinary media made with the editor do not inherit its license. See [LICENSE](LICENSE), [LICENSING.md](LICENSING.md), and [third-party notices](THIRD_PARTY_NOTICES.md).
 
 Linked clips selected together now share a contour outline in the timeline, following their outer edges instead of highlighting every clip individually.
+
+Projects assume saved media locations are available and open sources only when needed for preview, playback, editing or export. Unused media are not scanned on reload; only failed source access requests relinking. See [project persistence](docs/Features/Project-Repository.md).

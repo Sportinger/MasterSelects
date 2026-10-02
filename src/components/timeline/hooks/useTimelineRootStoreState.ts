@@ -4,7 +4,6 @@ import { useTimelineStore } from '../../../stores/timeline';
 import {
   selectCoreData,
   selectKeyframeState,
-  selectPlaybackState,
   selectPreviewExportState,
   selectUISettings,
   selectViewState,
@@ -13,6 +12,7 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { useDockStore } from '../../../stores/dockStore';
 import { isMobileLayoutId } from '../../dock/mobileLayoutOrientation';
 import { getTimelineToolCursor } from '../tools/pointer/timelineToolPointerDispatcher';
+import { useTimelineEditorPlaybackState } from './useTimelineEditorPlaybackState';
 
 export const MOBILE_TIMELINE_TRACK_HEADER_WIDTH = 76;
 
@@ -27,7 +27,7 @@ export function resolveTimelineTrackHeaderWidth(
 
 export function useTimelineRootStoreState() {
   const coreData = useTimelineStore(useShallow(selectCoreData));
-  const playbackState = useTimelineStore(useShallow(selectPlaybackState));
+  const playbackState = useTimelineEditorPlaybackState();
   const viewState = useTimelineStore(useShallow(selectViewState));
   const uiSettings = useTimelineStore(useShallow(selectUISettings));
   const previewExportState = useTimelineStore(useShallow(selectPreviewExportState));

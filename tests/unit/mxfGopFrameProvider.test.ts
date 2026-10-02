@@ -195,6 +195,53 @@ function frameIndex(provider: TestGopProvider): number {
 }
 
 describe('MxfGopFrameProvider (long GOP reorder, key-frame restart)', () => {
+  it('feeds pending seek preroll when input is consumed without output, without a 300 ms wait', async () => {
+    vi.useFakeTimers();
+    const engine = new MxfGopEngine(createSyntheticSource(120), 'preroll');
+    let queued = 0;
+    let consumed = 0;
+    const progress: Array<() => void> = [];
+    await engine.attachDecoder(async callbacks => ({
+      get queueSize() { return queued; },
+      decode() {
+        queued++;
+        setTimeout(() => {
+          queued--;
+          consumed++;
+          for (const wake of progress.splice(0)) wake();
+          if (consumed === 6) callbacks.output(new FakeVideoFrame(0) as unknown as VideoFrame);
+        }, 0);
+      },
+      waitForCapacity: () => new Promise(resolve => progress.push(resolve)),
+      waitForInputProgress: () => new Promise(resolve => progress.push(resolve)),
+      flush: async () => undefined, reset() {}, close() {},
+    }));
+    const ready = vi.fn();
+    const framePromise = engine.decodeFrame(0).then(frame => { ready(); return frame; });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(ready).toHaveBeenCalledOnce();
+    expect(engine.stats.stalls).toBe(0);
+    (await framePromise).close();
+    engine.close();
+  });
+
+  it('bounds consumed-but-unproduced preroll instead of feeding an entire GOP', async () => {
+    vi.useFakeTimers();
+    const engine = new MxfGopEngine(createSyntheticSource(120), 'bounded-preroll');
+    let fed = 0;
+    await engine.attachDecoder(async () => ({
+      queueSize: 0,
+      decode() { fed++; },
+      waitForCapacity: () => new Promise(() => undefined),
+      flush: async () => undefined, reset() {}, close() {},
+    }));
+    const pending = engine.decodeFrame(0).catch(() => undefined);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(fed).toBe(9);
+    engine.close();
+    await pending;
+  });
+
   beforeEach(() => {
     liveFrames = 0;
   });

@@ -1,3 +1,5 @@
+import { getEditorHistoryAvailability, subscribeEditorHistoryAvailability } from '../services/project/repository/transaction/editorHistory';
+import { getEditorRepositorySession } from '../services/project/repository/transaction/editorMutationRuntime';
 import { createCompositionHistorySignature } from './historyContentSignatures';
 import { mediaFilesHistoryMatch, timelineClipsHistoryMatch, timelineMasksHistoryMatch } from './historyContentComparison';
 export { createCompositionHistorySignature, createTimelineClipsHistorySignature, createMediaFilesHistorySignature } from './historyContentSignatures';
@@ -48,6 +50,7 @@ const MASK_HISTORY_CAPTURE_IDLE_MS = 1000;
 function isHistoryCaptureSuppressed(): boolean {
   const historyState = useHistoryStore.getState();
   return (
+    !!getEditorRepositorySession() ||
     isHistoryDisabledForDebug() ||
     isProjectStoreSyncInProgress() ||
     historyState.isApplying ||
@@ -166,6 +169,8 @@ export function createDockLayoutHistorySignature(layout: DockLayout): string {
 }
 
 export function useGlobalHistory() {
+  const [repositoryAvailability, setRepositoryAvailability] = useState(getEditorHistoryAvailability);
+  useEffect(() => subscribeEditorHistoryAvailability(() => setRepositoryAvailability(getEditorHistoryAvailability())), []);
   const initialized = useRef(false);
   const lastCaptureTime = useRef(0);
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -187,10 +192,9 @@ export function useGlobalHistory() {
   }, []);
 
   const applyHistoryOperation = useCallback((operation: TouchHistoryOperation) => {
-    const result = operation === 'undo' ? undo() : redo();
-    if (result && result.operation !== 'restore-branch') {
-      showHistoryNotice({ operation: result.operation, label: result.label });
-    }
+    void Promise.resolve(operation === 'undo' ? undo() : redo()).then(result => {
+      if (result && result.operation !== 'restore-branch') showHistoryNotice({ operation: result.operation, label: result.label });
+    });
   }, [showHistoryNotice]);
 
   useHistoryDoubleTap(applyHistoryOperation);
@@ -569,11 +573,11 @@ export function useGlobalHistory() {
     redo,
     historyNotice,
     clearHistoryNotice,
-    canUndo: useHistoryStore((state) => !isHistoryDisabledForDebug() && Boolean(
+    canUndo: useHistoryStore((state) => !isHistoryDisabledForDebug() && (getEditorRepositorySession() ? repositoryAvailability.canUndo : Boolean(
       state.activeNodeId && state.nodes[state.activeNodeId]?.parentId
-    )),
-    canRedo: useHistoryStore((state) => !isHistoryDisabledForDebug() && Boolean(
+    ))),
+    canRedo: useHistoryStore((state) => !isHistoryDisabledForDebug() && (getEditorRepositorySession() ? repositoryAvailability.canRedo : Boolean(
       state.activeNodeId && Object.values(state.nodes).some((node) => node.parentId === state.activeNodeId)
-    )),
+    ))),
   };
 }

@@ -1,6 +1,7 @@
 //! Per-connection session management
 
 mod file_commands;
+mod repository_commands;
 mod matanyone_commands;
 
 use std::path::{Path, PathBuf};
@@ -119,6 +120,17 @@ impl AppState {
         }
     }
 
+    /// Legacy writers must never bypass repository leases or immutability.
+    pub fn is_repository_protected_path(&self, path: &Path) -> bool {
+        let canonical = path.canonicalize().unwrap_or_else(|_| {
+            path.parent().and_then(|parent| parent.canonicalize().ok())
+                .map(|parent| parent.join(path.file_name().unwrap_or_default()))
+                .unwrap_or_else(|| path.to_path_buf())
+        });
+        path.components().chain(canonical.components()).any(|part| part.as_os_str().to_string_lossy().eq_ignore_ascii_case(".masterselects"))
+            || canonical.join(".masterselects").exists()
+    }
+
     pub fn is_path_allowed(&self, path: &Path) -> bool {
         let granted = self.granted_paths.read().unwrap_or_else(|e| e.into_inner());
         let mut scoped_prefixes = granted.clone();
@@ -133,6 +145,7 @@ impl AppState {
 pub struct Session {
     state: Arc<AppState>,
     authenticated: bool,
+    repository: repository_commands::RepositorySession,
 }
 
 impl Session {
@@ -142,6 +155,7 @@ impl Session {
         Self {
             state,
             authenticated,
+            repository: repository_commands::RepositorySession::default(),
         }
     }
 
@@ -167,6 +181,9 @@ impl Session {
         }
 
         match cmd {
+            Command::Repository { id, action, root, path, lease, upload, data, offset, length, limit, cursor, replace, publish, expected_previous } => {
+                Some(self.handle_repository(&id, &action, &root, path.as_deref(), lease.as_deref(), upload.as_deref(), data.as_deref(), offset, length, limit, cursor.as_deref(), replace, publish, expected_previous))
+            },
             Command::Auth { id, token } => Some(self.handle_auth(&id, &token)),
 
             Command::Info { id } => Some(self.handle_info(&id).await),

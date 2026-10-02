@@ -1,6 +1,6 @@
+import { captureRepositoryDomainPublication } from '../repository/artifacts/RepositoryDomainPublication';
 import { getHashFromArtifactId, normalizeArtifactId } from '../../../artifacts/ids';
 import { Logger } from '../../logger';
-import { projectDB } from '../../projectDB';
 import { artifactService } from '../domains/ArtifactService';
 
 const log = Logger.create('ProjectFileService');
@@ -22,6 +22,8 @@ export interface DeleteMediaFileArtifactsResult {
 
 export interface MediaArtifactCleanupContext {
   activeBackend: ProjectFileStorageBackend;
+  /** Repository history owns result retention; removing a media row is not GC. */
+  repositoryMode?: boolean;
   getProjectHandle: () => FileSystemDirectoryHandle | null;
   deleteEntry: (subFolder: string, entryName: string, options?: { recursive?: boolean }) => Promise<boolean>;
   deleteRawFile: (relativePath: string | undefined) => Promise<boolean>;
@@ -35,6 +37,7 @@ export interface MediaArtifactCleanupContext {
 }
 
 export async function deleteAudioArtifact(context: MediaArtifactCleanupContext, ref: string): Promise<boolean> {
+  if (context.repositoryMode || captureRepositoryDomainPublication()) return false;
   const artifactId = normalizeArtifactId(ref);
   const hash = getHashFromArtifactId(artifactId);
   let deleted = false;
@@ -52,20 +55,8 @@ export async function deleteAudioArtifact(context: MediaArtifactCleanupContext, 
     }
   }
 
-  try {
-    deleted = await artifactService.createIndexedDBStore().deleteArtifact(artifactId) || deleted;
-  } catch (error) {
-    log.debug('IndexedDB artifact delete skipped', { artifactId, error });
-  }
-
-  if (hash) {
-    try {
-      await projectDB.deleteArtifactManifest(artifactId);
-      await projectDB.deleteArtifactBlob(hash);
-    } catch (error) {
-      log.debug('Artifact manifest/blob cleanup skipped', { artifactId, error });
-    }
-  }
+  // Origin-global artifact caches are shared across repositories, branches and
+  // scratch sessions. A project-local removal is not a global ownership proof.
 
   return deleted;
 }
@@ -74,6 +65,7 @@ export async function deleteMediaFileArtifacts(
   context: MediaArtifactCleanupContext,
   options: DeleteMediaFileArtifactsOptions,
 ): Promise<DeleteMediaFileArtifactsResult> {
+  if (context.repositoryMode || captureRepositoryDomainPublication()) return { deleted: [], failed: [] };
   const deleted: string[] = [];
   const failed: string[] = [];
   const uniqueProxyKeys = [...new Set([

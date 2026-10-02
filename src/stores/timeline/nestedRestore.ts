@@ -12,7 +12,7 @@ import { mathSceneRenderer } from '../../services/mathScene/MathSceneRenderer';
 import { cloneClipNodeGraph } from '../../services/nodeGraph';
 import { normalizeTransitionInstanceParams } from '../../transitions';
 import { normalizeMotionLayerDefinitionForLoad } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
-import { serializeVideoBakeRegion } from './videoBakeSlice';
+import { serializeVideoBakeRegion } from './videoBakeRegionCodec';
 import { normalizeRestoredFlockDefinition, restoredFlockDefinitionOf } from './serialization/flockDefinitionRestore';
 import { blobUrlManager } from './helpers/blobUrlManager';
 import type { RestoredRuntimePatch } from './vectorRuntimeRestore';

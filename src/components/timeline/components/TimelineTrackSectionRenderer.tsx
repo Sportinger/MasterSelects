@@ -1,4 +1,5 @@
-import type { ComponentProps } from 'react';
+import { memo, type ComponentProps } from 'react';
+import { shallow } from 'zustand/shallow';
 import { buildTimelineTrackSectionRenderState } from '../utils/timelineTrackSectionRenderState';
 import { TimelineTrackSectionFrame } from './TimelineTrackSectionFrame';
 import { TimelineTrackSectionHeaderStack } from './TimelineTrackSectionHeaderStack';
@@ -39,7 +40,7 @@ interface TimelineTrackSectionRendererProps {
   renderStateProps: TrackSectionRenderStateProps;
 }
 
-export function TimelineTrackSectionRenderer({
+export const TimelineTrackSectionRenderer = memo(function TimelineTrackSectionRenderer({
   frameProps,
   headerProps,
   laneProps,
@@ -74,4 +75,12 @@ export function TimelineTrackSectionRenderer({
       sectionViewportRef={sectionState.sectionViewportRef}
     />
   );
-}
+}, (previous, next) => (
+  // The Timeline host also renders the transport clock. Its freshly assembled
+  // prop groups must not redraw unchanged tracks, waveforms, and overlays.
+  // Compare every value, including callbacks, so editing never uses stale input.
+  shallow(previous.frameProps, next.frameProps)
+  && shallow(previous.headerProps, next.headerProps)
+  && shallow(previous.laneProps, next.laneProps)
+  && shallow(previous.renderStateProps, next.renderStateProps)
+));

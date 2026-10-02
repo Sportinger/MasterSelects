@@ -1,3 +1,4 @@
+import { readEditorContentPublication } from '../project/repository/transaction/editorPublication';
 import { flags } from '../../engine/featureFlags';
 import { MainFallbackRenderHostPort } from './mainFallbackRenderHostPort';
 import { prefersSoftwareTimelineCanvas } from '../../utils/canvasPlatform';
@@ -284,6 +285,14 @@ export function getRenderHostSelectionTelemetry(): RenderHostSelectionTelemetry 
 
 const renderHostPortProxy = new Proxy({} as RenderHostPortWithReferenceResolution, {
   get(_target, propertyKey: keyof RenderHostPortWithReferenceResolution) {
+    if (propertyKey === 'render' || propertyKey === 'renderToPreviewCanvas' || propertyKey === 'cacheActiveCompOutput') {
+      return (...args: unknown[]) => {
+        if (readEditorContentPublication().blocked) return;
+        const method = instance[propertyKey] as (...args: unknown[]) => unknown;
+        return method.apply(instance, args);
+      };
+    }
+    if (propertyKey === 'renderCachedFrame') return (time: number) => !readEditorContentPublication().blocked && instance.renderCachedFrame(time);
     if (propertyKey === 'getTelemetry') {
       return () => ({
         ...instance.getTelemetry(),

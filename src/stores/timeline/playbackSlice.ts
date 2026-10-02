@@ -1,3 +1,4 @@
+import { readEditorContentPublication } from '../../services/project/repository/transaction/editorPublication';
 // Playback-related actions slice
 
 import type { PlaybackActions, SliceCreator } from './types';
@@ -85,6 +86,9 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
   },
 
   play: async () => {
+    const publication = readEditorContentPublication();
+    const repositoryTimelineSession = get().timelineSessionId;
+    if (publication.blocked) return;
     const {
       clips,
       tracks,
@@ -195,6 +199,8 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       }
     }
 
+    if (readEditorContentPublication().blocked || readEditorContentPublication().generation !== publication.generation
+      || get().timelineSessionId !== repositoryTimelineSession) return;
     startInternalPosition(playbackStartPosition, effectivePlaybackSpeed);
     set({ playbackWarmup: null, isPlaying: true });
     if (!wasPlaying) {

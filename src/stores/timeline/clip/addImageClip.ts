@@ -44,6 +44,7 @@ export function createImageClipPlaceholder(params: AddImageClipParams): Timeline
 export interface LoadImageMediaParams {
   clip: TimelineClip;
   updateClip: (id: string, updates: Partial<TimelineClip>) => void;
+  isCurrent?: () => boolean;
 }
 
 /**
@@ -51,6 +52,8 @@ export interface LoadImageMediaParams {
  */
 export async function loadImageMedia(params: LoadImageMediaParams): Promise<void> {
   const { clip, updateClip } = params;
+  const isCurrent = params.isCurrent ?? (() => true);
+  if (!isCurrent()) return;
   const mediaFileId = clip.source?.mediaFileId ?? clip.mediaFileId;
 
   const imageUrl = blobUrlManager.create(clip.id, clip.file, 'image');
@@ -61,6 +64,8 @@ export async function loadImageMedia(params: LoadImageMediaParams): Promise<void
       onError: (_event, image) => resolve(image),
     });
   });
+
+  if (!isCurrent()) { URL.revokeObjectURL(imageUrl); img.removeAttribute('src'); return; }
 
   // Generate thumbnail
   const thumbnail = generateImageThumbnail(img);
@@ -73,6 +78,7 @@ export async function loadImageMedia(params: LoadImageMediaParams): Promise<void
   });
 
   // Sync to media store
+  if (!isCurrent()) return;
   const mediaStore = useMediaStore.getState();
   if (!mediaStore.getFileByName(clip.file.name)) {
     mediaStore.importFile(clip.file);

@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { isEditableValueTouchSessionActive } from '../../services/input/editableValueTouchSession';
@@ -169,7 +170,7 @@ export function usePreviewPinchZoom({
 
       stopPinchEvent(event);
       if (gestureFrame === null) {
-        gestureFrame = requestAnimationFrame(flushPinchGesture);
+        gestureFrame = requestAnimationFrame(bindEditorGestureCallback(flushPinchGesture));
       }
     };
 

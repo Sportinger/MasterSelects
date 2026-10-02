@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 import { useCallback, useId, useRef } from 'react';
 import { startBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
@@ -101,10 +102,10 @@ export function useMaskBoundsResize(
     const handleMouseMove = (moveEvent: MouseEvent) => {
       latestMoveEvent = moveEvent;
       if (moveFrame !== null) return;
-      moveFrame = window.requestAnimationFrame(() => {
+      moveFrame = window.requestAnimationFrame(bindEditorGestureCallback(() => {
         moveFrame = null;
         if (latestMoveEvent) applyMouseMove(latestMoveEvent);
-      });
+      }));
     };
 
     const handleMouseUp = (upEvent?: MouseEvent) => {

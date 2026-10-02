@@ -348,7 +348,16 @@ export interface MuscriptorUninstallCommand {
   id: string;
 }
 
+export interface RepositoryCommand {
+  cmd: 'repository'; id: string;
+  action: 'info' | 'acquire' | 'assert' | 'release' | 'list' | 'stat' | 'read' | 'begin' | 'chunk' | 'finish' | 'abort' | 'remove';
+  root: string; path?: string; lease?: string; upload?: string; data?: string;
+  offset?: number; length?: number; limit?: number; cursor?: string;
+  replace?: boolean; publish?: boolean; expected_previous?: { commitId: string; hash: string } | null;
+}
+
 export type Command =
+  | RepositoryCommand
   | AuthCommand
   | OpenCommand
   | DecodeCommand

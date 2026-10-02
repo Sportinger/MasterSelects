@@ -1,4 +1,4 @@
-import type { ComponentProps } from 'react';
+import { useCallback, type ComponentProps } from 'react';
 import { TimelineTrackSectionRenderer } from '../components/TimelineTrackSectionRenderer';
 import type { TrackSectionKind } from '../utils/timelineHostTypes';
 type RendererProps = ComponentProps<typeof TimelineTrackSectionRenderer>;
@@ -103,7 +103,6 @@ export function useTimelineTrackSectionRenderers({
   onUnbakeRegion,
   onUpdateBezierHandle,
   pixelToTime,
-  playheadPosition,
   renderKeyframeDiamonds,
   scrollX,
   selectedClipIds,
@@ -137,6 +136,14 @@ export function useTimelineTrackSectionRenderers({
   waveformsEnabled,
   zoom,
 }: UseTimelineTrackSectionRenderersParams) {
+  const onAudioSectionWheel = useCallback<FrameProps['onSectionWheel']>(
+    event => onSectionWheel(event, 'audio'),
+    [onSectionWheel],
+  );
+  const onVideoSectionWheel = useCallback<FrameProps['onSectionWheel']>(
+    event => onSectionWheel(event, 'video'),
+    [onSectionWheel],
+  );
   const renderTrackSection = (sectionKind: TrackSectionKind) => (
     <TimelineTrackSectionRenderer
       frameProps={{
@@ -149,7 +156,7 @@ export function useTimelineTrackSectionRenderers({
         isExporting,
         marqueeActive,
         onSectionTracksMouseDown,
-        onSectionWheel: (event) => onSectionWheel(event, sectionKind),
+        onSectionWheel: sectionKind === 'audio' ? onAudioSectionWheel : onVideoSectionWheel,
         scrollX,
         timeGridOpacity,
         zoom,
@@ -181,7 +188,6 @@ export function useTimelineTrackSectionRenderers({
         onTrackPickWhipDragEnd,
         onTrackPickWhipDragStart,
         onTrackResizeStart,
-        playheadPosition,
         selectedClipIds,
         setContextMenu,
         setEmptyContextMenu,

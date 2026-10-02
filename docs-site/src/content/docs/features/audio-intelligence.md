@@ -54,6 +54,41 @@ artifact references on the loudness, onset, VAD, and speech-marker derived
 events. Missing coverage remains missing rather than being interpreted as an
 empty result.
 
+Background Agent Timeline persistence observes completed source-analysis
+changes rather than playback, selection, clip placement, or progress updates.
+Only affected media sources are refreshed. Packaged artifacts use direct
+content-addressed lookup and a shared source index; unrelated package sidecar
+writes do not invalidate it.
+
+Folder-backed projects read linked analysis binaries on demand when opening a
+`.msproj`, rather than hydrating the complete binary cache before restoring the
+timeline. Ordinary saves retain unread binary references; standalone package
+encoding embeds their contents.
+
+Waveform previews, pyramid statistics, derived edit statistics, and packed
+waveform encoding/decoding run in dedicated module workers. PCM and cached
+statistics are transferred in bounded blocks without detaching playback data.
+Workers terminate on completion, cancellation, or failure. Runtime owners and
+queues survive development hot reloads.
+
+Unchanged sources reuse persisted waveform manifests before reading or decoding
+their audio again. Source ID, file name, size, modification time, and analyzer
+identity validate reuse; missing or stale results are regenerated. Explicit
+regeneration bypasses both completed and persisted results. Split clips share
+completed previews and resident pyramid arrays even when the browser returns
+different `File` objects; concurrent cache reads share one payload load.
+
+Background source analysis runs one cold source at a time, while cache worker
+jobs and derived edit jobs use separate bounded queues. Background progress
+publishes small, throttled updates; complete previews are published once. Undo
+comparisons inspect changed clips and media items instead of serializing the
+complete timeline on every background progress update.
+
+Source decoding, proxy extraction/encoding, and waveform calculation run outside
+the project artifact write batch. Only the finished waveform payload and its
+manifest are batched together, so a manual save does not wait for the complete
+analysis job.
+
 ## Analysis UI
 
 The Analysis overview has an **Audio** sparkline lane for loaded loudness and

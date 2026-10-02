@@ -1,3 +1,5 @@
+import { getEditorRepositorySession } from '../../../../services/project/repository/transaction/editorMutationRuntime';
+import { activateEditorComposition } from '../../../../services/project/repository/transaction/editorProjectionActivation';
 import type { Composition, MediaState } from '../../types';
 import { compositionRenderer } from '../../../../services/compositionRenderer';
 import { playheadState } from '../../../../services/layerBuilder';
@@ -29,6 +31,13 @@ export async function doSetActiveComposition(
   compositions: Composition[],
   options?: CompositionSwitchOptions,
 ): Promise<void> {
+  if (getEditorRepositorySession()) {
+    await activateEditorComposition(newId);
+    const timeline = useTimelineStore.getState();
+    if (options?.playFromStart || options?.playFromTime !== undefined) timeline.setPlayheadPosition(resolvePlayStartTime(options));
+    if (options?.playFromStart) await timeline.play();
+    return;
+  }
   const timelineStore = useTimelineStore.getState();
   const skipAnimation = options?.skipAnimation ?? false;
 

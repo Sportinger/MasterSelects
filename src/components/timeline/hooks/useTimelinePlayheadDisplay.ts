@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useLayoutEffect, useRef } from 'react';
 import type { CSSProperties, RefObject } from 'react';
 import { getPlayheadPosition } from '../../../services/layerBuilder';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -33,8 +33,10 @@ export function useTimelinePlayheadDisplay({
     ? getPlayheadPosition(playheadPosition)
     : playheadPosition;
   const playheadLeft = timeToPixel(visualPlayheadPosition) - scrollX + trackHeaderWidth;
-  const playheadInlineStyle = isPlaying && !isDraggingPlayhead ? undefined : { left: playheadLeft };
-  const showPlayhead = playheadLeft >= trackHeaderWidth;
+  const playheadInlineStyle = isPlaying || isDraggingPlayhead ? undefined : { left: playheadLeft };
+  // Keep the live element mounted when it is outside the viewport; its RAF
+  // updates visibility as playback/looping crosses the header without React.
+  const showPlayhead = isPlaying || isDraggingPlayhead || playheadLeft >= trackHeaderWidth;
   const playheadMetricsRef = useRef({
     timeToPixel,
     scrollX,
@@ -42,7 +44,7 @@ export function useTimelinePlayheadDisplay({
     playheadLeft,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     playheadMetricsRef.current = {
       timeToPixel,
       scrollX,
@@ -51,15 +53,16 @@ export function useTimelinePlayheadDisplay({
     };
   }, [playheadLeft, scrollX, timeToPixel, trackHeaderWidth]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const playhead = playheadRef.current;
     if (!playhead) return;
 
-    if (!isPlaying || isDraggingPlayhead) {
+    if (!isPlaying && !isDraggingPlayhead) {
       playhead.style.left = `${playheadMetricsRef.current.playheadLeft}px`;
       playhead.classList.remove('playhead-live-transform');
       playhead.style.transform = '';
       playhead.style.willChange = '';
+      playhead.style.visibility = '';
       playhead.style.removeProperty('--timeline-switch-base-x');
       delete playhead.dataset.liveLeft;
       delete playhead.dataset.liveBaseLeft;
@@ -67,19 +70,21 @@ export function useTimelinePlayheadDisplay({
     }
 
     let rafId = 0;
+    let previousPosition = Number.NaN;
     playhead.classList.add('playhead-live-transform');
     playhead.style.transform = '';
     playhead.style.willChange = 'transform';
 
-    const updateLivePlayhead = () => {
+    const drawPlayhead = () => {
       const timelineState = useTimelineStore.getState();
       const storePosition = timelineState.playheadPosition;
-      const livePosition = getPlayheadPosition(storePosition);
+      const livePosition = timelineState.isDraggingPlayhead ? storePosition : getPlayheadPosition(storePosition);
       const metrics = playheadMetricsRef.current;
       const nextLeft = metrics.timeToPixel(livePosition) - metrics.scrollX + metrics.trackHeaderWidth;
       const previousLeft = Number.parseFloat(playhead.dataset.liveLeft ?? '');
       const left = (
-        timelineState.playbackSpeed >= 0 &&
+        !timelineState.isDraggingPlayhead && timelineState.playbackSpeed >= 0 &&
+        livePosition >= previousPosition - 0.005 &&
         Number.isFinite(previousLeft) &&
         nextLeft < previousLeft &&
         previousLeft - nextLeft <= 2
@@ -87,7 +92,9 @@ export function useTimelinePlayheadDisplay({
         ? previousLeft
         : nextLeft;
       playhead.dataset.liveLeft = String(left);
+      previousPosition = livePosition;
       const baseLeft = metrics.trackHeaderWidth;
+      playhead.style.visibility = left >= baseLeft ? '' : 'hidden';
       const previousBaseLeft = Number.parseFloat(playhead.dataset.liveBaseLeft ?? '');
       if (!Number.isFinite(previousBaseLeft) || Math.abs(previousBaseLeft - baseLeft) > 0.01) {
         playhead.dataset.liveBaseLeft = String(baseLeft);
@@ -99,21 +106,32 @@ export function useTimelinePlayheadDisplay({
       // live transform inline as well. Some Chromium compositing paths keep the
       // CSS-variable-backed transform at its fallback value during playback.
       playhead.style.transform = `translate3d(${transformX}px, 0, 0)`;
-      rafId = requestAnimationFrame(updateLivePlayhead);
     };
 
-    updateLivePlayhead();
+    const updateLivePlayhead = () => {
+      drawPlayhead();
+      rafId = requestAnimationFrame(updateLivePlayhead);
+    };
+    // Drag coordinates reach the DOM in the pointer's store update, before
+    // React commits or the video decoder can finish the requested seek.
+    const unsubscribe = isDraggingPlayhead
+      ? useTimelineStore.subscribe(state => state.playheadPosition, drawPlayhead)
+      : undefined;
+    if (isDraggingPlayhead) drawPlayhead();
+    else updateLivePlayhead();
 
     return () => {
       cancelAnimationFrame(rafId);
+      unsubscribe?.();
       delete playhead.dataset.liveLeft;
       delete playhead.dataset.liveBaseLeft;
       playhead.classList.remove('playhead-live-transform');
       playhead.style.transform = '';
       playhead.style.willChange = '';
+      playhead.style.visibility = '';
       playhead.style.removeProperty('--timeline-switch-base-x');
     };
-  }, [isPlaying, isDraggingPlayhead, playheadRef]);
+  }, [isPlaying, isDraggingPlayhead, playheadRef, scrollX, timeToPixel, trackHeaderWidth]);
 
   return {
     playheadInlineStyle,

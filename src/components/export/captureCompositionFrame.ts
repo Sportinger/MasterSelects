@@ -2,6 +2,7 @@ import { ExportRenderSessionImpl } from '../../engine/export/ExportRenderSession
 import { useMediaStore } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { runStillImageExport } from './runners/stillImageExportRunner';
+import { prepareTimelineLinkedMedia } from '../../services/project/repository/transaction/editorLinkedMediaConnection';
 
 export function getCompositionFrameFilename(clipName: string | undefined, time: number): string {
   const baseName = (clipName ?? 'current-frame')
@@ -25,6 +26,7 @@ export async function captureCompositionFrameJpegBlob(time: number): Promise<Blo
   timeline.startExport(time, time + 1 / Math.max(fps, 1));
 
   try {
+    await prepareTimelineLinkedMedia();
     const result = await runStillImageExport({
       width, height, fps, exportTime: time,
       filename: 'current-frame', imageFormat: 'jpg', imageQuality: 0.92,

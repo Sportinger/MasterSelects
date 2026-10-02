@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Logger } from '../../../services/logger';
+import { failProjectLoadProgress } from '../../../services/project/load/loadProgress';
 import { reportProjectSaveFailure } from '../../../services/project/projectSaveStatus';
 import {
   projectFileService,
@@ -12,14 +13,12 @@ import {
   openExistingProject,
   saveCurrentProject,
   setProjectLoadProgress,
-  syncStoresToProject,
 } from '../../../services/projectSync';
 import type {
   ProjectNameDialogMode,
   ProjectNameDialogRequest,
 } from '../ProjectNameDialog';
-import { resetStoryboardProjectState } from '../../../stores/storyboardStore';
-import { useTrackingStore } from '../../../stores/trackingStore';
+
 import {
   markAndroidProjectAutoRestoreReady,
   prepareAndroidProjectAutoRestore,
@@ -45,7 +44,6 @@ export function useToolbarProjectActions({
   closeMenu,
   openProjectNameDialog,
   projectName,
-  resetMediaProject,
   setIsLoading,
   setIsProjectOpen,
   setNeedsPermission,
@@ -102,11 +100,6 @@ export function useToolbarProjectActions({
   ]);
 
   const handleOpen = useCallback(async () => {
-    if (projectFileService.hasUnsavedChanges()) {
-      if (!confirm('You have unsaved changes. Open a different project?')) {
-        return;
-      }
-    }
     setIsLoading(true);
     setProjectLoadProgress({
       phase: 'opening',
@@ -114,27 +107,28 @@ export function useToolbarProjectActions({
       message: 'Opening project',
       blocking: true,
     });
-    const success = await openExistingProject();
-    if (!success) {
-      setProjectLoadProgress(null);
-    }
-    if (success) {
+    try {
+      const success = await openExistingProject();
+      if (!success) {
+        setProjectLoadProgress(null);
+        return;
+      }
       const data = projectFileService.getProjectData();
       if (data) {
         setProjectName(data.name);
         setIsProjectOpen(true);
       }
+    } catch (error) {
+      log.error('Failed to open project', error);
+      // Keep the import error visible; clearing progress would discard its detail.
+      failProjectLoadProgress(error);
+    } finally {
+      setIsLoading(false);
+      closeMenu();
     }
-    setIsLoading(false);
-    closeMenu();
   }, [closeMenu, setIsLoading, setIsProjectOpen, setProjectName]);
 
   const handleOpenRecent = useCallback(async (projectId: string) => {
-    if (projectFileService.hasUnsavedChanges()) {
-      if (!confirm('You have unsaved changes. Open a different project?')) {
-        return;
-      }
-    }
 
     setIsLoading(true);
     setProjectLoadProgress({
@@ -216,15 +210,9 @@ export function useToolbarProjectActions({
           return 'No project folder was selected, or the folder could not be created.';
         }
 
-        // Tracking assets belong to the previous project, including large terrain
-        // meshes. Clear them before media reset/sync can seed the first save.
-        useTrackingStore.getState().reset();
-        resetMediaProject(name);
-        resetStoryboardProjectState();
-        await syncStoresToProject();
         const saved = await projectFileService.saveProject();
         if (!saved) {
-          return 'The project folder was created, but the .msproj package could not be saved.';
+          return 'The project folder was created, but the repository could not be confirmed.';
         }
       } else {
         const created = await createNewProject(name);
@@ -245,7 +233,6 @@ export function useToolbarProjectActions({
       setIsLoading(false);
     }
   }, [
-    resetMediaProject,
     setIsLoading,
     setIsProjectOpen,
     setNeedsPermission,

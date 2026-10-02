@@ -6,6 +6,14 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum Command {
+    Repository { id: String, action: String, root: String,
+        #[serde(default)] path: Option<String>, #[serde(default)] lease: Option<String>,
+        #[serde(default)] upload: Option<String>, #[serde(default)] data: Option<String>,
+        #[serde(default)] offset: Option<u64>, #[serde(default)] length: Option<usize>,
+        #[serde(default)] limit: Option<usize>, #[serde(default)] cursor: Option<String>,
+        #[serde(default)] replace: bool, #[serde(default)] publish: bool,
+        #[serde(default)] expected_previous: Option<serde_json::Value>,
+    },
     /// Authenticate with token
     Auth { id: String, token: String },
 
@@ -421,6 +429,7 @@ impl Command {
             Self::Auth { .. } => "auth",
             Self::Info { .. } => "info",
             Self::Ping { .. } => "ping",
+            Self::Repository { .. } => "repository",
             Self::RtmpStart { .. } => "rtmp_start",
             Self::RtmpStop { .. } => "rtmp_stop",
             Self::DownloadYoutube { .. } => "download_youtube",

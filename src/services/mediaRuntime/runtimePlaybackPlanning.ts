@@ -25,6 +25,12 @@ export type RuntimeBackedSource = Pick<
 
 export const INTERACTIVE_PLAYBACK_SESSION_PREFIX = 'interactive-track:';
 export const INTERACTIVE_SCRUB_SESSION_PREFIX = 'interactive-scrub:';
+/** MXF long-GOP transport has one cursor: paused scrubs reuse its warm decoder. */
+export function getInteractiveScrubSessionPrefix(videoCodecId: string | undefined): string {
+  return videoCodecId === 'mxf:avc-lgop'
+    ? INTERACTIVE_PLAYBACK_SESSION_PREFIX
+    : INTERACTIVE_SCRUB_SESSION_PREFIX;
+}
 export const PLAYBACK_RUNTIME_POLICY_IDS: readonly DecodeSessionPolicy[] = [
   'interactive',
   'background',

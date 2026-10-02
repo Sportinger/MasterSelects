@@ -353,3 +353,10 @@ export async function getDownloadedFile(
     });
   });
 }
+
+/** Bounded repository RPC: never routes through the whole-file legacy fallback. */
+export async function repositoryCommand(host: NativeHelperCommandHost, command: Omit<import('./protocol').RepositoryCommand, 'id'>): Promise<import('./protocol').OkResponse> {
+  const response = await host.send({ ...command, id: host.nextId() });
+  if (response.ok !== true) throw new Error(getErrorMessage(response, 'Native repository command failed'));
+  return response;
+}

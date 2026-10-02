@@ -24,7 +24,6 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { getSplitCompareSettings } from '../../stores/splitCompareStore';
 import { reportRenderTime } from '../../services/performanceMonitor';
 import { Logger } from '../../services/logger';
-import { scrubSettleState } from '../../services/scrubSettleState';
 import { exportGpuPhaseDiagnostics } from '../../services/export/exportGpuPhaseDiagnostics';
 import { flags } from '../featureFlags';
 import type { NativeSceneRenderer } from '../native3d/NativeSceneRenderer';
@@ -54,7 +53,7 @@ import { GaussianSequenceFacet, type GaussianSplatSceneLoadRequest } from './dis
 import { GaussianSplatSceneLoader } from './dispatcher/gaussianSplatSceneLoader';
 import { SharedScene3DProcessor } from './dispatcher/sharedScene3DProcessor';
 import { TargetPreviewRenderer } from './dispatcher/targetPreviewRenderer';
-import { renderHeldCompositeFrame } from './dispatcher/heldCompositeRenderer';
+import { PreviewCompositeHold } from './dispatcher/previewCompositeHold';
 import { resolveRenderReferenceSize } from './renderReferenceSize';
 
 export type { RenderDispatcherDebugSnapshot } from './dispatcher/dispatcherDebugSnapshot';
@@ -146,7 +145,7 @@ export class RenderDispatcher {
   private readonly cachedFrameRenderer: CachedFrameRenderer;
   private readonly emptyFrameRenderer: EmptyFrameRenderer;
   private readonly targetPreviewRenderer: TargetPreviewRenderer;
-  private lastCompositeView: GPUTextureView | null = null;
+  private readonly previewCompositeHold: PreviewCompositeHold;
   private lastPreviewTimelineTimeSeconds: number | null = null;
   private renderTimeOverride: number | null = null;
 
@@ -214,6 +213,8 @@ export class RenderDispatcher {
     // Facets route through the dispatcher delegate so the long-standing
     // public spy/suppress point (recordMainPreviewFrame) keeps working.
     const recordMainPreviewFrame = this.recordMainPreviewFrame.bind(this);
+    this.previewCompositeHold = new PreviewCompositeHold(this.deps, this.outputRouter, this.telemetry,
+      (...args) => this.recordMainPreviewFrame(...args));
     this.cachedFrameRenderer = new CachedFrameRenderer(this.deps, this.outputRouter, recordMainPreviewFrame);
     this.emptyFrameRenderer = new EmptyFrameRenderer(this.deps, this.outputRouter, recordMainPreviewFrame);
     this.targetPreviewRenderer = new TargetPreviewRenderer(
@@ -375,95 +376,17 @@ export class RenderDispatcher {
     d.performanceStats.setWebCodecsInfo(d.layerCollector.getWebCodecsInfo());
     d.renderLoop?.setHasActiveVideo(d.layerCollector.hasActiveVideo());
 
-    // Handle empty layers
+    // Handle empty layers without losing a valid composite to a delayed playback tick.
     if (layerData.length === 0) {
-      const previewFallback = this.telemetry.getPreviewFallbackFromLayers(layers);
-      const hasVisibleInputLayer = this.telemetry.hasVisiblePreviewInputLayer(layers);
-      const lastPreviewDisplayedTimeMs = this.telemetry.getLastPreviewDisplayedTimeMs();
-      // During playback, if we just had content, hold the last frame on screen
-      // instead of flashing black. This only applies when an input layer exists
-      // for the current time but collection produced no texture/frame, which
-      // handles transient decoder stalls on Windows/Linux where readyState drops
-      // briefly. Real timeline gaps must render empty instead of retaining the
-      // previous clip's last frame.
-      const isDragging = timelineState.isDraggingPlayhead;
-      const isScrubSettling =
-        !isPlaying &&
-        !isDragging &&
-        !!previewFallback.clipId &&
-        scrubSettleState.isPending(previewFallback.clipId);
-      const emptyScrubHoldDriftMs =
-        typeof previewFallback.targetTimeMs === 'number' &&
-        typeof lastPreviewDisplayedTimeMs === 'number'
-          ? Math.abs(previewFallback.targetTimeMs - lastPreviewDisplayedTimeMs)
-          : undefined;
-      // During interactive scrubs, a stale visible frame is preferable to a
-      // black clear while the browser decoder catches up to a long-GOP seek.
-      const canHoldEmptyScrubFrame =
-        (isDragging || isScrubSettling) &&
-        this.lastRenderHadContent;
-      const canHoldPausedEmptyFrame =
-        !isPlaying &&
-        !isDragging &&
-        !isScrubSettling &&
-        !isExporting &&
-        this.telemetry.shouldHoldLastFrameOnEmptyPlayback(
-          this.lastRenderHadContent,
-          previewFallback.targetTimeMs,
-        );
-      const hasContinuousTimelineTime =
-        this.lastPreviewTimelineTimeSeconds === null ||
-        Math.abs(frameTimelineTime - this.lastPreviewTimelineTimeSeconds) < 0.25;
-      const canHoldPlayingEmptyFrame =
-        isPlaying &&
-        this.lastRenderHadContent &&
-        hasContinuousTimelineTime &&
-        (this.lastPreviewTimelineTimeSeconds !== null ||
-          this.telemetry.shouldHoldLastFrameOnEmptyPlayback(
-            this.lastRenderHadContent,
-            previewFallback.targetTimeMs,
-          ));
-      const shouldHoldEmptyFrame =
-        hasVisibleInputLayer &&
-        (
-          canHoldPlayingEmptyFrame ||
-          canHoldEmptyScrubFrame ||
-          canHoldPausedEmptyFrame
-        );
-
-      if (shouldHoldEmptyFrame) {
-        const heldCompositeRendered = this.renderHeldCompositeFrame(device);
-        // Don't render anything â€” canvas retains previous frame automatically.
-        // Log once so the stall is visible in telemetry.
-        log.debug('Holding last frame during empty preview frame', {
-          isPlaying,
-          isDragging,
-          driftMs: emptyScrubHoldDriftMs,
-          heldCompositeRendered,
-        });
-        this.recordMainPreviewFrame(
-          isDragging || isScrubSettling
-            ? 'empty-hold'
-            : isPlaying
-              ? 'playback-stall-hold'
-              : 'paused-empty-hold',
-          undefined,
-          {
-            ...previewFallback,
-            displayedTimeMs: lastPreviewDisplayedTimeMs,
-          }
-        );
-        this.lastPreviewTimelineTimeSeconds = frameTimelineTime;
-        d.performanceStats.setLayerCount(0);
-        return;
-      }
-      this.lastRenderHadContent = false;
-      this.lastCompositeView = null;
-      this.lastPreviewTimelineTimeSeconds = null;
-      this.renderEmptyFrame(device);
-      d.nestedCompRenderer?.cleanupPendingTextures();
-      this.recordMainPreviewFrame('empty', undefined, previewFallback);
-      d.performanceStats.setLayerCount(0);
+      const held = this.previewCompositeHold.renderEmpty({
+        device, layers, frameContext, frameTimelineTime, isPlaying, isExporting,
+        isDragging: timelineState.isDraggingPlayhead,
+        lastRenderHadContent: this.lastRenderHadContent,
+        lastPreviewTimelineTimeSeconds: this.lastPreviewTimelineTimeSeconds,
+        renderEmptyFrame: () => this.renderEmptyFrame(device),
+      });
+      this.lastRenderHadContent = held;
+      this.lastPreviewTimelineTimeSeconds = held ? frameTimelineTime : null;
       return;
     }
     this.lastRenderHadContent = true;
@@ -584,7 +507,7 @@ export class RenderDispatcher {
       throw new Error('Export frame deferred because a nested composition was not ready');
     }
     if (hasDeferredNestedComp && layerData.length === 0 && !isExporting) {
-      const heldCompositeRendered = this.renderHeldCompositeFrame(device);
+      const heldCompositeRendered = this.previewCompositeHold.renderHeld(device);
       if (heldCompositeRendered) {
         this.recordMainPreviewFrame('nested-stall-hold', undefined, {
           ...this.telemetry.getPreviewFallbackFromLayers(layers),
@@ -709,7 +632,9 @@ export class RenderDispatcher {
       }
       submitTime = performance.now() - t3;
     }
-    this.lastCompositeView = result.finalView;
+    this.previewCompositeHold.recordComposite(result.finalView, layers, frameContext,
+      !isExporting && !skipCanvas && !hasDeferredNestedComp
+      && layerData.length === layers.filter(layer => layer.visible && layer.source && layer.opacity !== 0).length);
 
     // The main render pass owns occurrence-cache cleanup. Running this for empty
     // nested sets as well releases wrappers removed since the previous frame.
@@ -727,19 +652,6 @@ export class RenderDispatcher {
     d.performanceStats.setLayerCount(result.layerCount);
     d.performanceStats.updateStats();
     reportRenderTime(totalTime);
-  }
-
-  private renderHeldCompositeFrame(device: GPUDevice): boolean {
-    const d = this.deps;
-    const rendered = renderHeldCompositeFrame({
-      device,
-      sourceView: this.lastCompositeView,
-      sampler: d.sampler,
-      outputRouter: this.outputRouter,
-      skipOutput: d.exportCanvasManager.shouldSkipPreviewOutput(),
-    });
-    if (!rendered) this.lastCompositeView = null;
-    return rendered;
   }
 
   getGaussianSplatSceneBounds(clipId: string): { min: [number, number, number]; max: [number, number, number] } | undefined {

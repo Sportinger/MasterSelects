@@ -1,3 +1,4 @@
+import { captureRepositoryDomainPublication, type RepositoryDomainPublication } from '../repository/artifacts/RepositoryDomainPublication';
 // Transcript persistence service
 
 import { FileStorageService } from '../core/FileStorageService';
@@ -29,12 +30,13 @@ export class TranscriptService {
     transcript: unknown,
     transcribedRanges?: [number, number][]
   ): Promise<boolean> {
+    const repository = captureRepositoryDomainPublication();
     const incoming: StoredTranscript = Array.isArray(transcript)
       ? { words: transcript }
       : { ...(transcript as StoredTranscript) };
     let resolvedRanges = transcribedRanges;
     if (resolvedRanges === undefined) {
-      const stored = await this.getTranscript(projectHandle, mediaId);
+      const stored = await this.getTranscript(projectHandle, mediaId, repository);
       resolvedRanges = stored?.transcribedRanges ?? incoming.transcribedRanges;
     }
     const data: StoredTranscript = resolvedRanges === undefined
@@ -42,18 +44,19 @@ export class TranscriptService {
       : { ...incoming, transcribedRanges: resolvedRanges };
 
     const json = JSON.stringify(data, null, 2);
-    return this.fileStorage.writeFile(projectHandle, 'TRANSCRIPTS', `${mediaId}.json`, json);
+    return (repository?.writeFile.bind(repository) ?? this.fileStorage.writeFile.bind(this.fileStorage, projectHandle))('TRANSCRIPTS', `${mediaId}.json`, json);
   }
 
   /**
    * Get transcript for a media file
-   * Returns { words, transcribedRanges } — handles both old (array) and new (object) formats
+   * Returns { words, transcribedRanges } â€” handles both old (array) and new (object) formats
    */
   async getTranscript(
     projectHandle: FileSystemDirectoryHandle,
-    mediaId: string
+    mediaId: string,
+    repository: RepositoryDomainPublication | null = captureRepositoryDomainPublication(),
   ): Promise<StoredTranscript | null> {
-    const file = await this.fileStorage.readFile(projectHandle, 'TRANSCRIPTS', `${mediaId}.json`);
+    const file = repository ? await repository.readFile( 'TRANSCRIPTS', `${mediaId}.json`) : await this.fileStorage.readFile(projectHandle, 'TRANSCRIPTS', `${mediaId}.json`);
     if (!file) return null;
 
     try {
@@ -90,6 +93,7 @@ export class TranscriptService {
     projectHandle: FileSystemDirectoryHandle,
     mediaId: string
   ): Promise<boolean> {
-    return this.fileStorage.deleteFile(projectHandle, 'TRANSCRIPTS', `${mediaId}.json`);
+    const repository = captureRepositoryDomainPublication();
+    return (repository?.deleteFile.bind(repository) ?? this.fileStorage.deleteFile.bind(this.fileStorage, projectHandle))( 'TRANSCRIPTS', `${mediaId}.json`);
   }
 }

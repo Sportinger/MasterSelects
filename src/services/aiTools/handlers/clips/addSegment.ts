@@ -11,6 +11,7 @@ import {
 import type { ClipAudioEditOperation } from '../../../../types';
 import { clearProcessedAudioAnalysisRefs } from '../../../../stores/timeline/helpers/audioAnalysisStateHelpers';
 import { createAudioEditOperationId } from '../../../../stores/timeline/audioEdit/audioEditHelpers';
+import { isLinkedMediaDeferred, requestLinkedMedia } from '../../../project/linkedMediaDemand';
 import {
   createAutomaticCutDeClickOperation,
   DEFAULT_AUTOMATIC_DE_CLICK_FADE_SECONDS,
@@ -79,16 +80,21 @@ export async function handleAddClipSegment(
   }
 
   const mediaStore = useMediaStore.getState();
-  const timelineStore = useTimelineStore.getState();
 
   // Find media file
-  const mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
+  let mediaFile = mediaStore.files.find(f => f.id === mediaFileId);
   if (!mediaFile) {
     return { success: false, error: `Media file not found: ${mediaFileId}` };
   }
+  if (!mediaFile.file && isLinkedMediaDeferred(mediaFileId)) {
+    await requestLinkedMedia(mediaFileId);
+    mediaFile = useMediaStore.getState().files.find(f => f.id === mediaFileId);
+  }
+  if (!mediaFile) return { success: false, error: `Media file not found: ${mediaFileId}` };
   if (!mediaFile.file) {
     return { success: false, error: `File object not available for media: ${mediaFileId}. Try re-importing the file.` };
   }
+  const timelineStore = useTimelineStore.getState();
 
   // A null track id is the deterministic runtime binding used by private
   // kernel edit programs after creating and opening a destination composition.

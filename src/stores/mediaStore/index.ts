@@ -1,3 +1,4 @@
+import { withRepositoryStoreMutation } from '../../services/project/repository/transaction/storeMutationBoundary';
 // MediaStore - main coordinator
 
 import { create } from 'zustand';
@@ -117,7 +118,7 @@ type MediaStoreState = MediaState &
   };
 
 export const useMediaStore = create<MediaStoreState>()(
-  subscribeWithSelector(withExclusiveHistorySnapshotMutationLease((set, get) => ({
+  subscribeWithSelector(withRepositoryStoreMutation('media', withExclusiveHistorySnapshotMutationLease((set, get) => ({
     // Initial state
     files: [],
     compositions: [DEFAULT_COMPOSITION],
@@ -562,7 +563,7 @@ export const useMediaStore = create<MediaStoreState>()(
     ...createDuplicateSlice(set, get),
     ...createProxySlice(set, get),
     ...createProjectSlice(set, get),
-  })))
+  }))))
 );
 
 // Register store globally for init.ts to access (avoids circular dependency)

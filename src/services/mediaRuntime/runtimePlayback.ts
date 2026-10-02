@@ -22,7 +22,7 @@ import {
 } from './runtimeProviderReservation';
 import {
   INTERACTIVE_PLAYBACK_SESSION_PREFIX,
-  INTERACTIVE_SCRUB_SESSION_PREFIX,
+  getInteractiveScrubSessionPrefix,
   PLAYBACK_RUNTIME_POLICY_IDS,
   buildPolicyRuntimeSessionKey,
   getPendingProviderLoadKey,
@@ -340,10 +340,11 @@ export function getScrubRuntimeSessionKey(
     return source.runtimeSessionKey;
   }
 
+  const prefix = getInteractiveScrubSessionPrefix(mediaRuntimeRegistry.getRuntime(source.runtimeSourceId)?.metadata.videoCodecId);
   if (sessionScope) {
-    return `${INTERACTIVE_SCRUB_SESSION_PREFIX}${sessionScope}:${trackId}:${source.runtimeSourceId}`;
+    return `${prefix}${sessionScope}:${trackId}:${source.runtimeSourceId}`;
   }
-  return `${INTERACTIVE_SCRUB_SESSION_PREFIX}${trackId}:${source.runtimeSourceId}`;
+  return `${prefix}${trackId}:${source.runtimeSourceId}`;
 }
 
 export function getPreviewRuntimeSource<

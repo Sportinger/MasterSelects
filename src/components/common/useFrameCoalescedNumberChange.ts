@@ -1,3 +1,4 @@
+import { bindEditorGestureCallback, ensureEditorInputGesture } from '../../services/project/repository/transaction/editorGestureOwnership';
 import { useCallback, useEffect, useRef } from 'react';
 
 /** Keep only the newest drag sample until the next paint. Flush before ending
@@ -17,7 +18,8 @@ export function useFrameCoalescedNumberChange(onChange: (value: number) => void)
   const enqueue = useCallback((value: number) => {
     // Capture the target at input time, not when the queued frame runs: a
     // selection change must never redirect an old drag into another clip.
-    pending.current = { value, commit: callback.current };
+    ensureEditorInputGesture('Adjust value');
+    pending.current = { value, commit: bindEditorGestureCallback(callback.current) };
     frame.current ??= requestAnimationFrame(flush);
   }, [flush]);
   useEffect(() => flush, [flush]);

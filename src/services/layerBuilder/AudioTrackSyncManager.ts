@@ -1,3 +1,4 @@
+import { readEditorContentPublication } from '../project/repository/transaction/editorPublication';
 // AudioTrackSyncManager - Handles audio element synchronization with playhead
 // Extracted from LayerBuilderService for separation of concerns
 
@@ -151,6 +152,7 @@ export class AudioTrackSyncManager {
    * Sync audio elements to current playhead
    */
   syncAudioElements(): void {
+    if (readEditorContentPublication().blocked) { this.stopAllAudioPlayback(); return; }
     const ctx = createFrameContext();
     const timelineState = useTimelineStore.getState();
     for (const retainedAudio of this.audioHandoffs.getRetainedAudioElements()) {

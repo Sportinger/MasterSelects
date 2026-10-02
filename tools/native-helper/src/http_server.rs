@@ -254,6 +254,10 @@ async fn handle_upload(
         return Err(warp::reject::not_found());
     }
 
+    if state.is_repository_protected_path(&path) {
+        return Err(warp::reject::not_found());
+    }
+
     if !state.is_path_allowed(&path) {
         warn!("HTTP upload: Rejected path: {}", path.display());
         return Err(warp::reject::not_found());

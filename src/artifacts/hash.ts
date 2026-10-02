@@ -1,3 +1,4 @@
+import { StreamHash } from '../services/project/repository/segments/streamHash';
 import { ARTIFACT_HASH_ALGORITHM, type ArtifactInput } from './types';
 
 type Sha256Input = ArrayBuffer | ArrayBufferView;
@@ -65,9 +66,20 @@ export async function sha256ArrayBuffer(buffer: Sha256Input): Promise<string> {
 
 export async function sha256ArtifactInput(input: ArtifactInput): Promise<string> {
   const blob = await artifactInputToBlob(input);
-  return sha256ArrayBuffer(await blobToArrayBuffer(blob));
+  return sha256Blob(blob);
 }
 
 export function getArtifactHashAlgorithm(): typeof ARTIFACT_HASH_ALGORITHM {
   return ARTIFACT_HASH_ALGORITHM;
+}
+
+/** Full SHA-256 over bounded slices; never materializes the whole original. */
+export async function sha256Blob(blob: Blob, signal?: AbortSignal): Promise<string> {
+  const hash = new StreamHash();
+  for (let offset = 0; offset < blob.size; offset += 256 * 1024) {
+    signal?.throwIfAborted();
+    hash.update(new Uint8Array(await blobToArrayBuffer(blob.slice(offset, offset + 256 * 1024))));
+  }
+  signal?.throwIfAborted();
+  return hash.digest().slice(7);
 }
