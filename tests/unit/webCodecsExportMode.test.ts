@@ -108,7 +108,8 @@ describe('WebCodecsExportMode decoder recovery', () => {
     expect(currentFrame?.timestamp).toBeCloseTo(5_000_000, -3);
   });
 
-  it('keeps the initial decoded export window small', async () => {
+  it.each(['prefer-hardware', 'no-preference', 'prefer-software'] as const)(
+    'keeps the initial decoded export window small with %s decoding', async (hardwareAcceleration) => {
     const samples = createSamples(300);
     let currentFrame: VideoFrame | null = null;
     const decoder = createDecoder(timestamp => {
@@ -123,7 +124,7 @@ describe('WebCodecsExportMode decoder recovery', () => {
       getSampleIndex: () => 0,
       setSampleIndex: vi.fn(),
       getVideoTrackTimescale: () => 30,
-      getCodecConfig: () => ({ codec: 'avc1.test' }),
+      getCodecConfig: () => ({ codec: 'avc1.test', hardwareAcceleration }),
       getFrameRate: () => 30,
       getCurrentFrame: () => currentFrame,
       setCurrentFrame: frame => {
@@ -141,7 +142,7 @@ describe('WebCodecsExportMode decoder recovery', () => {
     ).exportFrameBuffer.size;
     expect(bufferedFrames).toBeLessThanOrEqual(8);
     expect(decoder.configure).toHaveBeenLastCalledWith(expect.objectContaining({
-      hardwareAcceleration: 'prefer-hardware',
+      hardwareAcceleration,
     }));
   });
 

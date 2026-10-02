@@ -109,7 +109,8 @@ export function loadMp4ForWebCodecs(
         codec,
         codedWidth: videoTrack.video.width,
         codedHeight: videoTrack.video.height,
-        hardwareAcceleration: callbacks.hardwareAcceleration ?? 'prefer-hardware',
+        // Let the browser choose an available decoder unless the caller requires one.
+        hardwareAcceleration: callbacks.hardwareAcceleration ?? 'no-preference',
         optimizeForLatency: true,
         description,
       };

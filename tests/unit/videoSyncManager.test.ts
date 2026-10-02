@@ -2235,6 +2235,38 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     expect(testEngine.cacheFrameAtTime).toHaveBeenCalledWith(video, 1);
   });
 
+  it('does not cache an advanced warmup frame under the requested seek time', async () => {
+    vi.useFakeTimers();
+
+    const manager = createManager();
+    let onFrame: (() => void) | undefined;
+    const video = {
+      currentTime: 11,
+      readyState: 4,
+      preload: 'auto',
+      muted: true,
+      play: vi.fn().mockResolvedValue(undefined),
+      pause: vi.fn(),
+      requestVideoFrameCallback: vi.fn((callback: () => void) => {
+        onFrame = callback;
+        return 1;
+      }),
+    };
+
+    manager.startTargetedWarmup('clip-warm', video, 11);
+    await Promise.resolve();
+    expect(onFrame).toBeTypeOf('function');
+
+    video.currentTime = 11.2;
+    onFrame!();
+    await Promise.resolve();
+
+    expect(manager.isVideoWarmingUp(video)).toBe(false);
+    expect(testEngine.cacheFrameAtTime).toHaveBeenCalledWith(video, 11.2);
+    expect(testEngine.cacheFrameAtTime).not.toHaveBeenCalledWith(video, 11);
+    expect(testEngine.markVideoGpuReady).toHaveBeenCalledWith(video);
+  });
+
   it('does not mark a warmup GPU-ready when neither capture path produced a frame', async () => {
     vi.useFakeTimers();
     testEngine.preCacheVideoFrame.mockResolvedValueOnce(false);

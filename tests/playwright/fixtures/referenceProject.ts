@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
-import { copyFile, link, mkdir, readFile } from 'node:fs/promises'
+import { copyFile, link, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import type { TestInfo } from '@playwright/test'
 import type { BridgeClient } from './bridgeClient'
+import { prepareReferenceVideoSeekIndex } from './referenceVideoSeekIndex'
 import type {
   ReferenceMediaFixture,
   ReferenceMediaFile,
@@ -265,7 +266,11 @@ export class ReferenceProjectFixture {
       const target = path.resolve(workingDirectory, mediaLink.target)
       assertPathWithinProject(target, workingDirectory, mediaLink.target)
       await mkdir(path.dirname(target), { recursive: true })
-      await linkOrCopy(source, target)
+      if (mediaLink.role === 'longform-landscape') {
+        await writeFile(target, prepareReferenceVideoSeekIndex(await readFile(source)))
+      } else {
+        await linkOrCopy(source, target)
+      }
     }
 
     const loaded = await this.bridge.debugActionData<{
@@ -274,7 +279,7 @@ export class ReferenceProjectFixture {
       project: projectSnapshot,
       mediaSources: template.mediaLinks.map((mediaLink) => ({
         projectMediaId: mediaLink.projectMediaId,
-        path: this.mediaForRole(mediaLink.role).absolutePath,
+        path: path.resolve(workingDirectory, mediaLink.target),
       })),
     }, { timeoutMs: 120_000, fetchTimeoutMs: 130_000 })
 

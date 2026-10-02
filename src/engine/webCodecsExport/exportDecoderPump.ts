@@ -188,10 +188,8 @@ export class ExportDecoderPump {
     if (decoder.state === 'configured') {
       decoder.reset();
     }
-    decoder.configure({
-      ...codecConfig,
-      hardwareAcceleration: 'prefer-hardware',
-    });
+    // Reuse the configuration that passed the player's support check.
+    decoder.configure(codecConfig);
   }
 
   async decodeSampleWindow(

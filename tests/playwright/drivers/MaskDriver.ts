@@ -12,6 +12,9 @@ export class MaskDriver {
   }
 
   async open(): Promise<void> {
+    const properties = this.page.getByRole('tab', { name: 'Properties', exact: true })
+    await properties.click()
+    await expect(properties).toHaveAttribute('aria-selected', 'true')
     await this.page.getByRole('button', { name: /^Masks\b/ }).click()
     await expect(this.region).toBeVisible()
     await expect(this.toolbar).toBeVisible()

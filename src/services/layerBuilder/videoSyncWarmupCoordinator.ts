@@ -442,7 +442,9 @@ export class VideoSyncWarmupCoordinator {
       }
 
       renderHostPort.markVideoFramePresented(video, presentedTime, clipId);
-      renderHostPort.cacheFrameAtTime(video, safeTargetTime);
+      // Playback can advance while warming the decoder. Cache the captured
+      // frame at its actual time, so it cannot masquerade as the seek target.
+      renderHostPort.cacheFrameAtTime(video, presentedTime);
       renderHostPort.markVideoGpuReady(video);
       scrubSettleState.resolve(clipId);
       this.deps.warmups.completeAttempt(video);

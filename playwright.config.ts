@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test'
+import { fileURLToPath } from 'node:url'
 import { moduleGrepForGate } from './tests/playwright/config/moduleGates'
 import { resolveRuntimeProfile } from './tests/playwright/config/runtimeProfile'
 
@@ -11,6 +12,7 @@ const gateGrep = runtime.activeGate === 'all'
 
 export default defineConfig({
   testDir: './tests/playwright',
+  globalSetup: fileURLToPath(new URL('./tests/playwright/config/warmDevServer.ts', import.meta.url)),
   testMatch: '**/*.spec.ts',
   testIgnore: ['**/built-editor-shell.spec.ts', '**/beta/**'],
   outputDir: 'test-results/playwright/artifacts',

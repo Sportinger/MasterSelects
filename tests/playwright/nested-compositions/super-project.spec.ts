@@ -89,7 +89,8 @@ const VISIBLE_LOAD_PAUSE_MS = 900
 const VISIBLE_PLAYBACK_MS = 1_600
 const VISIBLE_SCRUB_PAUSE_MS = 650
 
-test.describe.configure({ timeout: 240_000 })
+// Allow the 90s project load and 180s precise export budgets, plus UI checks.
+test.describe.configure({ timeout: 300_000 })
 
 test(
   'saved Super Project fixture preserves both nested split levels and animation state @module:nested-compositions',
@@ -112,6 +113,20 @@ test(
     })
 
     await test.step('verify the fixed media and 1920x1080 composition contracts', async () => {
+      const { main, level2 } = project.compositions
+      const splitTime = main.splitTime!
+      // The active automatic timeline follows the frame-aligned split tail,
+      // preserving its saved padding. Inactive compositions keep their duration.
+      const mainDuration = Math.round(splitTime * main.frameRate) / main.frameRate
+        + Math.floor((level2.duration - splitTime) * main.frameRate + 1e-9) / main.frameRate
+        + (main.duration - level2.duration)
+
+      // The media summary is synchronized after the active timeline restores.
+      await expect.poll(async () => {
+        const media = await bridge.toolData<MediaItemsResult>('getMediaItems')
+        return media.compositions.find((composition) => composition.id === main.id)?.duration
+      }).toBe(mainDuration)
+
       const media = await bridge.toolData<MediaItemsResult>('getMediaItems')
       expect(media.files.map((file) => file.name).sort()).toEqual([
         'Betaflight  FPV Freestyle.mp4',
@@ -127,7 +142,7 @@ test(
         expect(actual?.width).toBe(1920)
         expect(actual?.height).toBe(1080)
         expect(actual?.frameRate).toBe(expected.frameRate)
-        expect(actual?.duration).toBe(expected.duration)
+        expect(actual?.duration).toBe(expected.id === main.id ? mainDuration : expected.duration)
       }
     })
 

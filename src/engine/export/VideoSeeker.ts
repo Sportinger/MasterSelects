@@ -390,7 +390,9 @@ async function ensureVideoReadyForExport(video: HTMLVideoElement, targetTime: nu
     );
   }
 
-  if (video.readyState < 2 && !video.seeking) {
+  // A slow seek can outlast the initial seek event budget. It still needs
+  // a decoded frame before the exporter can consume this video.
+  if (video.readyState < 2 || video.seeking) {
     await waitForVideoCondition(
       video,
       ['loadeddata', 'canplay', 'canplaythrough', 'seeked', 'error'],
