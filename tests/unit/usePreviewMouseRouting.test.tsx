@@ -123,6 +123,20 @@ function setupMouseRouting(options: {
 }
 
 describe('preview camera mouse routing', () => {
+  it.each(['draw','right-click','middle','alt','space'] as const)('routes guide %s without editing the scene or clip',kind=>{
+    const routing=setupMouseRouting({viewNavigationEnabled:true});
+    const guide=document.createElement('div'), stage=document.createElement('div');
+    guide.className='perspective-guide-editor'; guide.appendChild(stage);
+    if(kind==='space')stage.dataset.guidePan='true';
+    const event=createMouseEvent(stage,kind==='middle'?1:kind==='right-click'?2:0);
+    Object.assign(event,{altKey:kind==='alt'});
+    routing.result.current.handleMouseDown(event);
+    if(['middle','alt','space'].includes(kind))expect(routing.setIsPanning).toHaveBeenCalledWith(true);
+    else expect(routing.setIsPanning).not.toHaveBeenCalled();
+    expect(routing.startSceneNavHistoryBatch).not.toHaveBeenCalled();
+    expect(routing.setIsGaussianOrbiting).not.toHaveBeenCalled();
+    expect(routing.setIsGaussianFpsLooking).not.toHaveBeenCalled();
+  });
   beforeEach(() => {
     useEngineStore.setState({ sceneNavOrbitTarget: null });
   });

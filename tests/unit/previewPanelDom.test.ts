@@ -14,4 +14,12 @@ describe('isPreviewCanvasInteractionTarget', () => {
     expect(isPreviewCanvasInteractionTarget(editOverlay, canvas, canvasWrapper, editOverlay)).toBe(true);
     expect(isPreviewCanvasInteractionTarget(controls, canvas, canvasWrapper, editOverlay)).toBe(false);
   });
+  it('includes the inline guide canvas for the existing Preview zoom and pinch handler', () => {
+    const wrapper = document.createElement('div'), editor = document.createElement('div');
+    editor.className = 'perspective-preview-editor';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    editor.appendChild(svg); wrapper.appendChild(editor);
+    expect(isPreviewCanvasInteractionTarget(svg, null, wrapper, null)).toBe(true);
+    expect(isPreviewCanvasInteractionTarget(wrapper, null, wrapper, null)).toBe(true);
+  });
 });

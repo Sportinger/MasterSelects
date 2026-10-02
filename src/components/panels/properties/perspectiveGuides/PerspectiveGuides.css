@@ -1,34 +1,41 @@
 @layer features {
-  .perspective-action { border: 1px solid var(--border-strong); border-radius: 4px; padding: 5px 9px; background: var(--bg-tertiary, #292929); color: var(--text-primary); cursor: pointer; }
-  .perspective-action:hover { background: var(--bg-hover, #383838); }
+  .perspective-action {
+    border: 1px solid var(--border-strong); border-radius: 4px; padding: 4px 7px;
+    background: var(--bg-tertiary); color: var(--text-primary); cursor: pointer;
+    font: inherit; white-space: nowrap; -webkit-tap-highlight-color: transparent;
+  }
+  .perspective-action:hover { background: var(--bg-hover); }
   .perspective-action:disabled { opacity: .45; cursor: default; }
   .perspective-action:focus { outline: none; }
   .perspective-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .perspective-action { -webkit-tap-highlight-color: transparent; }
   .perspective-action.primary { background: var(--accent); color: white; }
-  .perspective-guide-directions { display: flex; gap: 4px; }
-  .perspective-guide-directions .perspective-action[aria-pressed="true"] { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 25%, var(--bg-tertiary, #292929)); }
-}
-@layer overlays {
-  .perspective-guide-layer { position: fixed; inset: 0; z-index: 10030; display: grid; place-items: center; background: #000a; }
-  .perspective-guide-dialog { width: min(1180px, calc(100vw - 32px)); max-height: calc(100vh - 24px); overflow: auto; padding: 16px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--bg-secondary, #222); color: var(--text-primary); outline: none; }
-  .perspective-guide-dialog header, .perspective-guide-dialog footer, .perspective-guide-tools { display: flex; gap: 10px; align-items: center; }
-  .perspective-guide-dialog header { justify-content: space-between; }
-  .perspective-guide-dialog h2 { margin: 0; font-size: 16px; }
-  .perspective-guide-dialog p { margin: 8px 0; font-size: 12px; color: var(--text-secondary); }
-  .perspective-guide-tools { flex-wrap: wrap; margin-bottom: 12px; }
-  .perspective-guide-tools > .resolve-inspector-row { width: 330px; }
-  .perspective-guide-stage { height: 64vh; display: grid; place-items: center; background: #111; overflow: hidden; }
-  .perspective-guide-image { position: relative; max-height: 100%; }
-  .perspective-guide-image > img { display: block; width: 100%; height: 100%; user-select: none; }
-  .perspective-guide-image > svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
-  .perspective-guide-line { stroke: #38b9ff; fill: #38b9ff; }
-  .perspective-guide-line.horizontal { stroke: #ffcd4c; fill: #ffcd4c; }
-  .perspective-guide-line > line { stroke-width: 2; vector-effect: non-scaling-stroke; cursor: pointer; }
-  .perspective-guide-line.selected > line { stroke-width: 3; }
-  .perspective-guide-line > circle { stroke: #151515; stroke-width: 2; cursor: grab; outline: none; -webkit-tap-highlight-color: transparent; }
-  .perspective-guide-line > circle:focus-visible { stroke: white; stroke-width: 4; }
-  .perspective-guide-dialog footer { margin-top: 12px; flex-wrap: wrap; font-size: 12px; }
-  .perspective-guide-dialog footer > span { margin-right: auto; flex: 1 1 260px; color: var(--text-secondary); }
-  @media (max-width: 650px) { .perspective-guide-dialog { padding: 10px; } .perspective-guide-stage { height: 54vh; } }
+  .perspective-action[aria-pressed="true"] {
+    border-color: var(--accent); background: color-mix(in srgb, var(--accent) 25%, var(--bg-tertiary));
+  }
+  .perspective-preview-editor { position: absolute; inset: 0; z-index: 45; color: var(--text-primary); }
+  .perspective-guide-editor { display: flex; flex-direction: column; height: 100%; min-height: 0; outline: none; font-size: 12px; }
+  .perspective-guide-tools { display: flex; gap: 4px; align-items: center; font-size: 11px; }
+  .perspective-guide-transport-slot:empty { display: none; }
+  .perspective-guide-transport-slot { grid-column: 1; grid-row: 1; justify-self: start; }
+  .preview-transport-row:has(.perspective-guide-transport-slot:not(:empty)) {
+    grid-template-columns: auto minmax(max-content, 1fr) auto; gap: 8px; overflow-x: auto;
+  }
+  .preview-transport-row:has(.perspective-guide-transport-slot:not(:empty)) > .preview-transport-buttons,
+  .preview-transport-row:has(.perspective-guide-transport-slot:not(:empty)) > output { grid-row: 1; }
+  .preview-transport .perspective-action { width: auto; padding: 0 7px; font-size: 11px; }
+  .perspective-guide-status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .perspective-guide-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: var(--bg-canvas, #111); touch-action: none; cursor: crosshair; }
+  .perspective-guide-stage[data-guide-pan="true"], .perspective-guide-stage[data-guide-pan="true"] svg { cursor: grab; }
+  .perspective-guide-stage > p { position: absolute; inset: 40% 8px auto; text-align: center; color: var(--text-secondary); }
+  .perspective-guide-image { position: absolute; background: #111; }
+  .perspective-guide-image > svg { display: block; width: 100%; height: 100%; touch-action: none; cursor: crosshair; overflow: hidden; }
+  .perspective-guide-image image { pointer-events: none; user-select: none; }
+  .perspective-guide-line { stroke: #48b8ff; fill: #48b8ff; }
+  .perspective-guide-line.horizontal { stroke: #ffd15b; fill: #ffd15b; }
+  .perspective-guide-line line { vector-effect: non-scaling-stroke; }
+  .perspective-guide-visible { stroke-width: 2px; pointer-events: none; }
+  .perspective-guide-hit { stroke: transparent; stroke-width: 14px; pointer-events: stroke; cursor: move; }
+  .perspective-guide-line.selected .perspective-guide-visible { stroke-width: 3px; }
+  .perspective-guide-line circle { vector-effect: non-scaling-stroke; stroke: #151515; stroke-width: 2px; cursor: grab; outline: none; -webkit-tap-highlight-color: transparent; }
+  .perspective-guide-line circle:focus-visible { stroke: white; stroke-width: 4px; }
 }

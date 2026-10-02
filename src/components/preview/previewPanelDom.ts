@@ -14,6 +14,10 @@ export function isPreviewCanvasInteractionTarget(
   );
 }
 
+export function isPerspectiveGuideTarget(target: EventTarget | null): target is Element {
+  return target instanceof Element && !!target.closest('.perspective-guide-editor');
+}
+
 export function getPreviewPanelIdFromElement(element: Element | null): string | null {
   return element?.closest<HTMLElement>(PREVIEW_CONTAINER_SELECTOR)?.dataset.previewPanelId ?? null;
 }

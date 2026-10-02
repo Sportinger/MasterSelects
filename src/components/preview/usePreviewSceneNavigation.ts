@@ -298,6 +298,7 @@ export function usePreviewSceneNavigation({
   }, [gaussianKeyboardFrameRef, tickGaussianKeyboardMovement]);
 
   const handleSceneNavKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest('.perspective-preview-editor')) return;
     if (!sceneNavEnabled || !navigationSceneNavClip) return;
     if (event.altKey || event.ctrlKey || event.metaKey) return;
     if (!isCameraNavMoveCode(event.code)) return;
@@ -322,6 +323,7 @@ export function usePreviewSceneNavigation({
   ]);
 
   const handleSceneNavKeyUp = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest('.perspective-preview-editor')) return;
     if (!isCameraNavMoveCode(event.code)) return;
 
     event.preventDefault();

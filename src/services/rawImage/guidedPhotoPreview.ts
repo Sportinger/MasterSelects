@@ -8,14 +8,14 @@ import { prefersSoftwareTimelineCanvas } from '../../utils/canvasPlatform';
 import { renderSoftwareGuidePhoto } from './lensPhotoSoftware';
 
 /** Bounded still-image guide canvas uses exactly the preceding lens shader. */
-export async function createGuidedPhotoPreview(file: File, lensEffects: Effect[]): Promise<{ blob: Blob; aspect: number; sourceWidth: number; sourceHeight: number }> {
+export async function createGuidedPhotoPreview(file: File, lensEffects: Effect[], maxDimension = 1600): Promise<{ blob: Blob; aspect: number; sourceWidth: number; sourceHeight: number }> {
   if (lensEffects.some(effect => !['lens-correction', 'guided-perspective'].includes(effect.type))) {
     throw new Error('Photo capture supports Lens Correction and Guided Perspective. Place other effects after AI Edge Fill.');
   }
   let bitmap = await createImageBitmap(await getRenderableImageBlob(file));
   const aspect = bitmap.width / bitmap.height;
   const dimensions = { sourceWidth: bitmap.width, sourceHeight: bitmap.height };
-  const resize = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
+  const resize = Math.min(1, Math.min(4096, Math.max(256, maxDimension)) / Math.max(bitmap.width, bitmap.height));
   if (resize < 1) {
     const smaller = await createImageBitmap(bitmap, { resizeWidth: Math.round(bitmap.width * resize), resizeHeight: Math.round(bitmap.height * resize), resizeQuality: 'high' });
     bitmap.close(); bitmap = smaller;

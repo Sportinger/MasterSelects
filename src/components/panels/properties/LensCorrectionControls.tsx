@@ -26,7 +26,7 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
   }, [file]);
   const p = normalizeLensCorrection(params);
   const profile = params.profile === CANON_24_105_PROFILE ? CANON_24_105_PROFILE : 'manual';
-  const change = (key: string, value: number | string) => onChange({ ...params,
+  const change = (key: string, value: number | boolean | string) => onChange({ ...params,
     ...(metadata ? { sourceAspect: metadata.width / metadata.height } : {}), [key]: value });
   const selectProfile = (value: string) => {
     const current = latest.current;
@@ -39,7 +39,7 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
     });
   };
   const rows = (group: string) => Object.entries(LENS_CORRECTION_PARAMS)
-    .filter(([, def]) => def.type === 'number' && !def.hidden && def.group === group)
+    .filter(([key, def]) => def.type === 'number' && !def.hidden && def.group === group && !(key === 'scale' && params.fitFullImage === true))
     .map(([key, def]) => <ResolveInspectorNumberRow key={key} label={def.label}
       value={p[key]} defaultValue={def.default as number} min={def.min!} max={def.max!}
       hardMin={def.min!} hardMax={def.max!} step={def.step!} sensitivity={(def.max! - def.min!) / 100}
@@ -60,6 +60,13 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
     </ResolveInspectorSection>
     {['geometry', 'chromatic aberration', 'vignette'].map(group => <ResolveInspectorSection
       key={group} title={group === 'geometry' ? 'Geometry' : group === 'vignette' ? 'Vignette' : 'Chromatic aberration'}
-      indicator="none" defaultOpen={group === 'geometry'}>{rows(group)}</ResolveInspectorSection>)}
+      indicator={group === 'vignette' ? 'active' : 'none'} defaultOpen={group === 'geometry'}
+      enabled={group === 'vignette' ? params.vignetteEnabled !== false : undefined}
+      onEnabledChange={group === 'vignette' ? enabled => change('vignetteEnabled', enabled) : undefined}
+    >{group === 'geometry' && <ResolveInspectorRow label="Framing"><InspectorSelect ariaLabel="Lens correction framing"
+      value={params.fitFullImage === true ? 'fit' : 'original'}
+      options={[{value:'original',label:'Original size'},{value:'fit',label:'Fit entire photo'}]}
+      onChange={value=>change('fitFullImage',value==='fit')} /></ResolveInspectorRow>}
+      {rows(group)}</ResolveInspectorSection>)}
   </div>;
 }

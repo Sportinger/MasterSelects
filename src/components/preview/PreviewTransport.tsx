@@ -288,6 +288,7 @@ export function PreviewTransport({
             />
 
             <div className="preview-transport-row">
+              <div className="perspective-guide-transport-slot" />
               <div className="preview-transport-buttons">
                 <button
                   aria-label={inPoint !== null ? 'Clear In point' : 'Set In point at playhead'}

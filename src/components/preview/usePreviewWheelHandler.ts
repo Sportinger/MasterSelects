@@ -1,6 +1,7 @@
 import { bindEditorGestureCallback } from '../../services/project/repository/transaction/editorGestureOwnership';
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react';
 import type React from 'react';
+import { isPerspectiveGuideTarget } from './previewPanelDom';
 
 import { resolveOrbitCameraFrame } from '../../engine/gaussian/core/SplatCameraUtils';
 import { renderHostPort } from '../../services/render/renderHostPort';
@@ -272,16 +273,17 @@ export function usePreviewWheelHandler({
   ]);
 
   return useCallback((event: PreviewWheelEvent) => {
+    const guideTarget = isPerspectiveGuideTarget(event.target);
     if (isSourceMonitorTarget(event.target)) {
       stopSceneDollyAnimation();
       return;
     }
-    if (zoomEditCameraOrthoView(event)) {
+    if (!guideTarget && zoomEditCameraOrthoView(event)) {
       stopSceneDollyAnimation();
       return;
     }
 
-    if (sceneNavEnabled && navigationSceneNavClip && isCanvasInteractionTarget(event.target)) {
+    if (!guideTarget && sceneNavEnabled && navigationSceneNavClip && isCanvasInteractionTarget(event.target)) {
       const engineState = useEngineStore.getState();
       const shouldAdjustFpsSpeed = (
         gaussianKeyboardMoveCodesRef.current.size > 0 ||
@@ -353,7 +355,7 @@ export function usePreviewWheelHandler({
       return;
     }
 
-    if (!event.altKey && effectOrbitActive && isCanvasInteractionTarget(event.target)) {
+    if (!guideTarget && !event.altKey && effectOrbitActive && isCanvasInteractionTarget(event.target)) {
       stopSceneDollyAnimation();
       event.preventDefault();
       handleEffectOrbitWheel(event);

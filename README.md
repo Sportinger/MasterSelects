@@ -36,8 +36,10 @@ Canon CR2 photos import at full resolution through browser-local RAW development
 with the original files preserved. Source Monitor fits the complete photo and
 provides Fit view to reset zoom and pan. Lens Correction includes a Canon EF
 24–105 mm f/4L IS USM profile dropdown, CR2 exposure metadata, and manual
-distortion, chromatic aberration, and vignette controls. Guided Perspective
-straightens photographed edges with up to eight guides per direction.
+distortion, chromatic aberration, independently bypassable vignette controls,
+and automatic framing to show the complete corrected photo. Guided Perspective
+straightens photographed edges with up to eight guides per direction, edited
+directly in Preview with zoom, pan and right-click removal.
 AI Edge Fill then fills transparent borders on still images with an explicitly
 started Kie.ai / Nano Banana Pro generation (1K, 2K or 4K), retaining original
 opaque pixels and storing the fill in the project. See

@@ -44,6 +44,7 @@ import { usePreview3DMediaDrop } from './usePreview3DMediaDrop';
 import { FlockGuidanceOverlay } from './flock/FlockGuidanceOverlay';
 import { rendersFlock } from '../../services/flock/flockEffect';
 import { PreviewScenePreparationOverlay } from './PreviewScenePreparationOverlay';
+import { PerspectiveGuidePreviewHost } from './PerspectiveGuidePreviewHost';
 
 interface PreviewCanvasMountProps {
   activeSharedSceneOverlayContent: boolean;
@@ -277,6 +278,9 @@ export function PreviewCanvasMount({
           onDragOver={preview3DMediaDrop.handleDragOver}
           onDrop={preview3DMediaDrop.handleDrop}
         >
+          <PerspectiveGuidePreviewHost wrapper={canvasWrapperRef} compositionId={displayedCompId}
+            selectedClip={selectedClip} viewZoom={viewZoom}
+            enabled={isEditableSource && !isExporting && !sourceMonitorActive} />
           {engineInitFailed ? (
             <PreviewEngineFailureNotice error={engineInitError} />
           ) : !isEngineReady ? (

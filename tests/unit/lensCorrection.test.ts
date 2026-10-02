@@ -2,8 +2,49 @@ import { describe, it, expect } from 'vitest';
 import { lensCorrection, normalizeLensCorrection } from '../../src/effects/distort/lens-correction';
 import { getEffect, getDefaultParams, effectGroup } from '../../src/effects';
 import { CANON_24_105_PROFILE, lensProfileUniforms } from '../../src/effects/distort/lens-correction/lensProfile';
+import { lensOutputRadius } from '../../src/effects/distort/lens-correction/lensFrameFit';
 
 describe('Lens Correction', () => {
+  it('keeps legacy framing and fits barrel-distorted corners rather than zooming into them', () => {
+    expect(lensCorrection.packUniforms({distortion:-10,scale:125},6000,4000)![2]).toBeCloseTo(1.25);
+    const fitted=lensCorrection.packUniforms({distortion:-10,scale:125,fitFullImage:true},6000,4000)!;
+    // At a centered source corner, r - 0.1 r^3 = 1 gives r ~= 1.1535.
+    expect(fitted[2]).toBeCloseTo(.867,2);
+    expect(lensCorrection.packUniforms({fitFullImage:true},6000,4000)![2]).toBe(1);
+    expect(lensCorrection.packUniforms({distortion:-10,fitFullImage:false},6000,4000)![2]).toBe(1);
+  });
+  it.each([
+    [24,1.5,.5,.5,1], [105,2/3,.37,.61,1], [35,1.5,.25,.75,1.6],
+  ])('keeps the full corrected source perimeter visible at %s mm with offset optical centers', (focal,aspect,centerX,centerY,cropFactor) => {
+    const params={profile:CANON_24_105_PROFILE,focalLength:focal,sourceAspect:aspect,centerX,centerY,cropFactor,
+      distortion:-3,fineDistortion:1,fitFullImage:true};
+    const p=lensCorrection.packUniforms(params,6000,4000)!;
+    const geometry={aspect:p[3],centerX:p[4],centerY:p[5],cropFactor:p[10],distortion:p[0],fineDistortion:p[1],profile:[...p.slice(12,16)]};
+    const radiusScale=2/Math.hypot(p[3],1);
+    for(let step=0;step<=1024;step++)for(const [u,v] of [[step/1024,0],[step/1024,1],[0,step/1024],[1,step/1024]]) {
+      const radius=Math.hypot((u-p[4])*p[3]*radiusScale,(v-p[5])*radiusScale);
+      const outputRadius=lensOutputRadius(radius,geometry), ratio=radius>0?outputRadius/radius:1;
+      const x=p[4]+(u-p[4])*ratio*p[2], y=p[5]+(v-p[5])*ratio*p[2];
+      expect(x).toBeGreaterThanOrEqual(-1e-5);expect(x).toBeLessThanOrEqual(1.00001);
+      expect(y).toBeGreaterThanOrEqual(-1e-5);expect(y).toBeLessThanOrEqual(1.00001);
+      // Independently evaluate the shader's polynomial at the inverted radius.
+      const r=outputRadius*1.80277564/p[10];
+      const mapped=outputRadius*Math.max(.05,(1+p[15]*(p[12]*r**3+p[13]*r**2+p[14]*r))*(1+p[0]*outputRadius**2+p[1]*outputRadius**4));
+      expect(mapped).toBeCloseTo(radius,6);
+    }
+  });
+  it('bypasses profile and manual vignetting together while retaining geometry and stored settings', () => {
+    const params={profile:CANON_24_105_PROFILE,focalLength:24,aperture:4,distortion:12,redFringe:2,vignette:35};
+    const enabled=lensCorrection.packUniforms(params,6000,4000)!;
+    const bypassed=lensCorrection.packUniforms({...params,vignetteEnabled:false},6000,4000)!;
+    expect(bypassed[8]).toBe(0); expect([...bypassed.slice(20)]).toEqual([0,0,0,0]);
+    for(const i of [0,1,2,3,4,5,6,7,9,10,12,13,14,15,16,17,18,19])expect(bypassed[i]).toBe(enabled[i]);
+    expect(enabled[8]).toBeCloseTo(.35); expect(enabled[23]).toBe(1);
+    expect(params.vignette).toBe(35);
+    expect(lensCorrection.packUniforms({...params,vignetteEnabled:true},6000,4000)).toEqual(enabled);
+    const manual=lensCorrection.packUniforms({vignette:50,vignetteEnabled:false},6000,4000)!;
+    expect(manual[8]).toBe(0); expect(manual[23]).toBe(0);
+  });
   it('is available in Lens & Distort with neutral defaults and keyframeable controls', () => {
     expect(getEffect('lens-correction')).toBe(lensCorrection);
     expect(effectGroup('lens-correction').label).toBe('Lens & Distort');

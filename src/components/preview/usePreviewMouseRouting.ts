@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 import type React from 'react';
+import { isPerspectiveGuideTarget } from './previewPanelDom';
 
 import { renderHostPort } from '../../services/render/renderHostPort';
 import type { SceneVector3 } from '../../engine/scene/types';
@@ -203,6 +204,15 @@ export function usePreviewMouseRouting({
   }, [canvasSize.height, editCameraOrthoPanStartRef, isEditCameraOrthoPanning, setEditCameraOrthoFrame, setIsEditCameraOrthoPanning]);
 
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
+    if (isPerspectiveGuideTarget(event.target)) {
+      // Drawing belongs to the guide overlay; pan uses the existing Preview view.
+      if (event.button === 1 || (event.button === 0 && (event.altKey || event.target.closest('[data-guide-pan="true"]')))) {
+        event.preventDefault();
+        setIsPanning(true);
+        panStartRef.current = { x: event.clientX, y: event.clientY, panX: viewPan.x, panY: viewPan.y };
+      }
+      return;
+    }
     if (isCanvasInteractionTarget(event.target)) {
       containerRef.current?.focus({ preventScroll: true });
     }

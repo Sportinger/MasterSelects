@@ -1684,22 +1684,44 @@ Selecting a profile is explicit; automatic matching and other lens variants are
 not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed
 in Third-party notices.
 
+The **Vignette** section of Lens Correction has its own enable switch. Bypassing
+it disables both calibrated profile vignetting and manual Vignette Amount while
+retaining their settings. Distortion and chromatic-aberration correction continue
+unchanged. This applies equally to Preview, guide photos, AI Edge Fill captures and export.
+
+Under **Geometry → Framing**, **Fit entire photo** automatically fits the corrected
+source perimeter into the image texture instead of cropping it. Free areas remain
+transparent (black against an opaque viewer/export background), and the composition
+dimensions stay unchanged. The existing manual Scale setting is retained for
+**Original size**; automatic fitting caps it so increasing Scale cannot crop the photo.
+The fit follows distortion, focal length, sensor crop and optical center adjustments.
+
 ## Guided Perspective
 
 **Guided Perspective**, under **Lens & Distort**, corrects converging lines caused
 by camera perspective. Add it after **Lens Correction**, then choose **Edit guides**.
-The still-image guide editor includes preceding enabled Lens Correction effects,
-so guides are drawn on the optically corrected photo.
+The guide editor opens directly in Preview. It includes preceding enabled Lens
+Correction effects and preserves the clip's 2D position, scale, anchor and rotation,
+so guides stay aligned with the optically corrected photo. The guide photo is shown
+before perspective correction; later effects are hidden while drawing.
+
+Only **Vertical**, **Horizontal**, **Apply**, **Cancel** and **Clear guides** are
+added to the existing playback bar. The Preview keeps its normal layout and view
+controls. Use the existing wheel, trackpad or two-finger pinch to zoom around the
+pointer. Hold Alt or Space and drag, or use the middle mouse button to pan. The
+Preview's existing Fit view action resets zoom and pan without changing clip transforms.
 
 Select **Vertical** and draw at least two guides along different parallel edges
 that should be vertical, or choose **Horizontal** for horizontal scene edges.
 Both direction buttons are directly visible and show their guide counts. Use up
 to eight guides per direction; a homogeneous least-squares vanishing-point fit
 combines all lines in each group. Use parallel edges from one scene direction,
-not unrelated edges from different walls. Drag endpoint handles to refine
+not unrelated edges from different walls. Drag a whole guide or its endpoint handles to refine
 the lines; focused endpoints also move with arrow keys, with Shift for larger
-steps. Delete selected guide and Clear guides remove draft lines. Apply correction
-commits one undoable change; Cancel leaves the effect unchanged.
+steps. Right-click a line or endpoint to remove that guide directly. Delete or
+Backspace removes the selected guide; Clear guides removes all draft lines. Apply
+commits one undoable change; Cancel or Escape leaves the effect unchanged. Switching
+the selected clip or composition cancels the draft session.
 
 The effect derives a projective transform from the guide vanishing points and fits
 the entire photo with uniform scale. **Scale** can crop transparent borders;

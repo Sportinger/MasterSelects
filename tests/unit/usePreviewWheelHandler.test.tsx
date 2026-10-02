@@ -132,10 +132,11 @@ describe('preview wheel scene dolly', () => {
     expect(scheduleGaussianWheelBatchEnd.mock.calls.length).toBeGreaterThan(2);
   });
 
-  it('zooms a normal Preview panel around the pointer', () => {
+  it.each([false,true])('zooms the existing Preview view around the pointer (guide overlay: %s)', guideOverlay => {
     const container = document.createElement('div');
     const canvas = document.createElement('canvas');
     container.append(canvas);
+    if(guideOverlay)container.className='perspective-guide-editor';
     container.getBoundingClientRect = vi.fn(() => ({
       left: 0,
       top: 0,
@@ -162,7 +163,7 @@ describe('preview wheel scene dolly', () => {
       editCameraOrthoViewActive: false,
       editCameraSettingsRef: { current: { fov: 60, near: 0.1, far: 1000 } },
       effectiveResolution: { width: 1920, height: 1080 },
-      effectOrbitActive: false,
+      effectOrbitActive: guideOverlay,
       gaussianFpsLookStart: { current: { clipId: null, x: 0, y: 0 } },
       gaussianKeyboardMoveCodesRef: { current: new Set() },
       getFreshSceneNavTransform: () => null,
