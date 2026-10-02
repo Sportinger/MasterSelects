@@ -4,7 +4,7 @@
  * adapter, and the recent console/log breadcrumbs that led up to the failure.
  */
 
-import { APP_BUILD_ID } from '../appBuild';
+import { APP_BUILD_ID, APP_RELEASE_ID, APP_SOURCE_DIRTY, APP_SOURCE_REVISION } from '../appBuild';
 import {
   getRecentRuntimeDiagnosticEntries,
   getRuntimeGpuInfo,
@@ -54,7 +54,10 @@ export interface DiagnosticContext {
   pageUrl?: string;
   performanceNow?: number;
   referrer?: string;
+  releaseId?: string;
   screen?: { height: number; width: number };
+  sourceDirty?: boolean;
+  sourceRevision?: string;
   storageMb?: { quotaMb?: number; usageMb?: number };
   timezone?: string;
   uptimeMs: number;
@@ -137,15 +140,25 @@ export function collectDiagnosticBreadcrumbs(limit = BREADCRUMB_LIMIT): Diagnost
   }));
 }
 
+function referrerOrigin(referrer: string): string | undefined {
+  if (!referrer) return undefined;
+  try { return new URL(referrer).origin.slice(0, 300); } catch { return undefined; }
+}
+
 export function collectDiagnosticContext(): DiagnosticContext {
   const context: DiagnosticContext = { buildId: APP_BUILD_ID, uptimeMs: Date.now() - BOOT_AT_MS };
+  if (APP_SOURCE_REVISION) context.sourceRevision = APP_SOURCE_REVISION;
+  if (APP_SOURCE_DIRTY !== null) context.sourceDirty = APP_SOURCE_DIRTY;
+  if (APP_RELEASE_ID) context.releaseId = APP_RELEASE_ID;
   if (typeof navigator === 'undefined' || typeof window === 'undefined') return context;
 
   const nav = navigator as NavigatorWithExtras;
   const perf = (typeof performance !== 'undefined' ? performance : undefined) as PerformanceWithMemory | undefined;
 
-  context.pageUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`.slice(0, 500);
-  context.referrer = document.referrer ? document.referrer.slice(0, 300) : undefined;
+  // Path and referring site only: query strings and fragments carry ad-click
+  // and campaign identifiers (fbclid, utm_*) that diagnostics do not need.
+  context.pageUrl = window.location.pathname.slice(0, 500);
+  context.referrer = referrerOrigin(document.referrer);
   context.userAgent = nav.userAgent?.slice(0, 400);
   if (nav.userAgentData) {
     context.userAgentData = {

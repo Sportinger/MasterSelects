@@ -183,7 +183,7 @@ describe('app diagnostics route', () => {
     expect(row[COLUMN.stack]).toContain('useClipDrag');
     expect(row[COLUMN.fingerprint]).toBe('a1b2c3d4e5f60718');
     expect(row[COLUMN.repeatCount]).toBe(4);
-    expect(row[COLUMN.pagePath]).toBe('/editor?project=demo');
+    expect(row[COLUMN.pagePath]).toBe('/editor');
     expect(row[COLUMN.sessionId]).toBe('session:9f8e7d6c-5b4a-4c3d-8e2f-1a0b9c8d7e6f');
     expect(row[COLUMN.deviceId]).toBe('device:4c5f6f4e-1d3a-4d8f-9c2c-1a2b3c4d5e6f');
     expect(row[COLUMN.userAgent]).toContain('Firefox/142.0');
@@ -191,6 +191,22 @@ describe('app diagnostics route', () => {
     const context = JSON.parse(String(row[COLUMN.contextJson])) as { breadcrumbs: unknown[]; context: { viewport: unknown } };
     expect(context.breadcrumbs).toHaveLength(2);
     expect(context.context.viewport).toEqual({ dpr: 2, height: 900, width: 1440 });
+  });
+
+  it('keeps the build commit but drops campaign query strings and referrer paths from older clients', async () => {
+    const inserted: unknown[][] = [];
+    const revision = 'a'.repeat(40);
+    await onRequest(makeContext({ body: { events: [validRuntimeEvent({
+      context: { pageUrl: '/editor?utm_source=ig&fbclid=PAZX#x', referrer: 'https://l.facebook.com/l.php?u=https%3A%2F%2Fx', uptimeMs: 1,
+        sourceRevision: revision, sourceDirty: false, releaseId: `masterselects-3.1.9-${revision}` },
+      pagePath: '/editor?utm_source=ig&fbclid=PAZX',
+    })] } }, inserted));
+    const row = inserted[0] ?? [];
+    expect(row[COLUMN.pagePath]).toBe('/editor');
+    const stored = JSON.stringify(row);
+    expect(stored).not.toContain('fbclid');
+    expect(stored).not.toContain('l.php');
+    expect(stored).toContain(revision);
   });
 
   it('truncates oversized content and sanitizes identifiers instead of dropping the event', async () => {

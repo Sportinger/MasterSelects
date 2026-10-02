@@ -135,9 +135,16 @@ function safeRepeatCount(value: unknown): number {
     : 1;
 }
 
+// Path only, also for older clients: query strings and fragments carry ad-click
+// and campaign identifiers (fbclid, utm_*) that diagnostics never need.
 function safePagePath(value: unknown): string | null {
   if (typeof value !== 'string' || !value.startsWith('/')) return null;
-  return value.slice(0, MAX_PAGE_PATH_LENGTH);
+  return value.split(/[?#]/, 1)[0].slice(0, MAX_PAGE_PATH_LENGTH);
+}
+
+function referrerOrigin(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value) return undefined;
+  try { return new URL(value).origin; } catch { return undefined; }
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -149,7 +156,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * parts first when the combined blob exceeds the storage budget.
  */
 function buildContextJson(context: unknown, breadcrumbs: unknown): string | null {
-  const safeContext = isPlainObject(context) ? context : null;
+  const safeContext = isPlainObject(context)
+    ? { ...context, pageUrl: safePagePath(context.pageUrl) ?? undefined, referrer: referrerOrigin(context.referrer) }
+    : null;
   const safeBreadcrumbs = Array.isArray(breadcrumbs) ? breadcrumbs.slice(-40) : null;
   if (!safeContext && !safeBreadcrumbs) return null;
 

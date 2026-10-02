@@ -2,6 +2,7 @@ import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import { APP_VERSION } from './src/version'
 import { gzipSync } from 'node:zlib'
+import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'path'
 import {
@@ -9,6 +10,20 @@ import {
   bridgeToken,
   createDevBridgePlugin,
 } from './tools/devBridge/vitePlugin.ts'
+
+// Commit and local-change state of the built source; production error reports
+// carry it. Untracked files are ignored: an unimported scratch file does not
+// change the bundle. Null outside a git checkout.
+function readSourceState(): { revision: string | null; dirty: boolean | null } {
+  try {
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    const revision = git('rev-parse', 'HEAD');
+    if (!/^[a-f0-9]{40}$/.test(revision)) return { revision: null, dirty: null };
+    return { revision, dirty: git('status', '--porcelain', '--untracked-files=no').length > 0 };
+  } catch {
+    return { revision: null, dirty: null };
+  }
+}
 
 function splatTransformWebpWasmPathFix(): Plugin {
   return {
@@ -277,6 +292,8 @@ function compressOversizedSam2OrtWasm(): Plugin {
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
   const isDevServer = command === 'serve';
+  // The dev server's working tree changes constantly; only builds record their source.
+  const sourceState = isDevServer ? { revision: null, dirty: null } : readSourceState();
   const enableDevBridge = isDevServer && mode !== 'test';
   const freezeE2eSourceSnapshot = process.env.MASTERSELECTS_E2E_FREEZE_SOURCE === '1';
   const directCodexKernelToken = process.env.MASTERSELECTS_DIRECT_CODEX_KERNEL_TOKEN?.trim();
@@ -381,6 +398,8 @@ export default defineConfig(({ command, mode }) => {
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
       __APP_BUILD_ID__: JSON.stringify(isDevServer ? 'development' : new Date().toISOString()),
+      __APP_SOURCE_REVISION__: JSON.stringify(sourceState.revision),
+      __APP_SOURCE_DIRTY__: JSON.stringify(sourceState.dirty),
       __DEV_BRIDGE_TOKEN__: JSON.stringify(isDevServer ? bridgeToken : ''),
       __DEV_ALLOWED_FILE_ROOTS__: JSON.stringify(isDevServer ? allowedFileRoots : []),
     },

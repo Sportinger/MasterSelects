@@ -369,3 +369,23 @@ Version bump + changelog (ONLY on explicit release request): `src/version.ts`
 
 Build warnings about mp4box, chunk sizes, and dynamic imports are
 pre-existing — not errors.
+
+## 11. Production errors and developer messages
+
+Production error groups and auto-repair jobs share one status on the
+operations host (error groups: `open`, `investigating`, `fixed` with a commit,
+`ignored`; jobs: `resolved`, `dismissed`). Set it yourself with the operations
+status CLI (`status-cli.mjs`, documented in the operations repository's
+`docs/AUTO-REPAIR.md`):
+
+- Mark an error group `investigating` before you start on it, so the
+  auto-repair loop does not take it at the same time.
+- After fixing a production error or finishing an auto-repair job locally,
+  set it `fixed` / `resolved` with the commit and a short note.
+- Mark groups that do not come from MasterSelects code `ignored`.
+
+For an important question or a problem only the developer can solve,
+`notify-cli.mjs` sends a one-way Telegram message. Production builds report
+their source commit with every diagnostic (`sourceRevision`, and `releaseId` for
+builds without local changes); diagnostics keep page paths only, never query
+strings.

@@ -125,7 +125,8 @@ function stripHeavyFields(event: QueuedDiagnosticEvent): QueuedDiagnosticEvent {
   return {
     ...event,
     breadcrumbs: undefined,
-    context: event.context ? { uptimeMs: event.context.uptimeMs, pageUrl: event.context.pageUrl, buildId: event.context.buildId } : undefined,
+    context: event.context ? { uptimeMs: event.context.uptimeMs, pageUrl: event.context.pageUrl, buildId: event.context.buildId,
+      sourceRevision: event.context.sourceRevision, sourceDirty: event.context.sourceDirty, releaseId: event.context.releaseId } : undefined,
     stack: clip(event.stack, 1_500),
   };
 }
@@ -252,9 +253,8 @@ class DiagnosticReporter {
       deviceId: getDiagnosticDeviceId(),
       id: eventId(),
       occurredAt: new Date().toISOString(),
-      pagePath: typeof window !== 'undefined'
-        ? `${window.location.pathname}${window.location.search}`.slice(0, 300)
-        : undefined,
+      // Path only; campaign and ad-click query parameters are not diagnostics.
+      pagePath: typeof window !== 'undefined' ? window.location.pathname.slice(0, 300) : undefined,
       platform: runtime.platform,
       sessionId: getDiagnosticSessionId(),
     });

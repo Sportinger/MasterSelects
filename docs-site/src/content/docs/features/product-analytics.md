@@ -50,7 +50,9 @@ before any other module evaluates. Sources:
 
 Every runtime event carries message, error name, stack, `filename:line:column`,
 a cross-build fingerprint (normalized message plus top frame, with chunk hashes,
-line numbers, URLs, and IDs removed), a repeat count, page path, session ID
+line numbers, URLs, and IDs removed), a repeat count, page path (path only;
+query strings and fragments are dropped by the client and again by the server,
+the referrer is reduced to its origin), session ID
 (`sessionStorage`), device ID (`localStorage`), app version,
 browser/platform/device class, a context object (user agent, viewport, screen,
 CPU and RAM hints, JS heap, connection, online/visibility, uptime, WebGPU
@@ -94,7 +96,7 @@ Historical product-analytics events do not retain user agents and are not
 retroactively filtered. Product-analytics and diagnostic session IDs are
 independent; their counts must not be divided to estimate a failure rate.
 
-Production builds embed an ISO timestamp build ID, sent with `app_opened` and runtime diagnostic context (including reduced payloads). Development builds use `development` and are excluded from release comparison. The comparison observes the latest two timestamp builds within 30 days, including builds with app opens but no errors; it shows distinct error sessions and occurrences per fingerprint. Different usage and observation periods mean a decrease or absence does not prove a fix. Legacy events without a timestamp build remain explicitly unassigned.
+Production builds embed an ISO timestamp build ID, sent with `app_opened` and runtime diagnostic context (including reduced payloads). They also embed the built git commit (`sourceRevision`), whether the tree had uncommitted tracked changes (`sourceDirty`), and for clean builds `releaseId` (`masterselects-<version>-<commit>`), so Fassandra maps each error to its public source; the dev server sends none of these. Development builds use `development` and are excluded from release comparison. The comparison observes the latest two timestamp builds within 30 days, including builds with app opens but no errors; it shows distinct error sessions and occurrences per fingerprint. Different usage and observation periods mean a decrease or absence does not prove a fix. Legacy events without a timestamp build remain explicitly unassigned.
 
 Export outcome aggregation joins starts and terminal events by analytics session and `run_id` over seven days, deduplicates repeated events, and uses the latest terminal outcome. Completed, cancelled, failed, and missing-outcome runs are separate; a missing outcome can mean an in-progress export or missing telemetry. Events without a run ID are counted separately and excluded from run-based success. The older completion/start event ratio remains an event ratio, not a measured failure rate.
 
