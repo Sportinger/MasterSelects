@@ -46,9 +46,16 @@ Any site that `yt-dlp` can fetch can be downloaded even if it is not listed in t
 
 ### URL Paste
 
-- Pasting one video URL in the Media panel prompt loads available helper recommendations before queueing
-- The prompt shows the source title/uploader, resolution choices, video codec, audio handling, and whether the helper merges streams
-- The prompt asks the Native Helper for format/info metadata for every URL; queue processing also tries YouTube oEmbed metadata before falling back to the helper
+- Pressing `Ctrl+V` with a copied video link while the Media panel is hovered opens a download dialog directly inside the Media panel; clipboard images and files still import first, and text that is not just a link is ignored
+- The dialog shows the thumbnail, title, channel, duration, and source platform; YouTube title and thumbnail appear immediately through oEmbed, before the Native Helper answers
+- Resolution choices come from the helper's `yt-dlp` recommendations (resolution, codec, frame rate, approximate size, and MP3 audio when available); the default is the sharpest video format up to 1080p
+- `Enter` or **Download** queues the selected format and opens the Media tray download queue if the tray is collapsed; `Escape`, **Cancel**, or a click outside closes the dialog
+- Without a connected helper, the dialog keeps the preview and offers **Open Native Helper**; formats load automatically once the helper connects
+- Copying Media panel items also writes their names to the system clipboard, so an older copied link cannot override pasting those items
+- Pasting one video URL in the Media panel Downloads prompt loads the same helper recommendations inline before queueing
+- Both surfaces hand the resolved title, thumbnail, and duration to the queue, so queue processing does not read the URL metadata a second time
+
+Downloads always run through the local Native Helper. Server-side fetching was evaluated on the hosted backend: YouTube refuses datacenter addresses with a sign-in/bot check, so the helper's residential connection is the supported path.
 
 ### YouTube Search Compatibility
 

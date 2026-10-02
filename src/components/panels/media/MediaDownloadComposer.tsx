@@ -1,22 +1,22 @@
-import { useCallback, useEffect, useMemo, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
+import { useCallback, useMemo, useState, type ClipboardEvent, type KeyboardEvent } from 'react';
 import { openNativeHelperDialog } from '../../common/nativeHelperDialog';
-import { NativeHelperClient, type FormatRecommendation, type VideoInfo } from '../../../services/nativeHelper';
+import type { FormatRecommendation } from '../../../services/nativeHelper';
 import {
   compactDownloadCodecLabel,
   downloadFormatAudioCodecLabel,
   downloadFormatQueueLabel,
   isAudioOnlyDownloadFormat,
+  pickDefaultDownloadFormat,
 } from '../../../services/mediaDiscovery/downloadFormats';
-import { isDownloadAvailable } from '../../../services/youtubeDownloader';
-import { parseDownloadUrls, useMediaDownloadStore } from '../../../stores/mediaDownloadStore';
+import { parseDownloadUrls } from '../../../services/mediaDiscovery/videoUrlDownloads';
+import { metadataFromVideoInfo, useMediaDownloadStore } from '../../../stores/mediaDownloadStore';
+import { useDownloadUrlPreview } from './urlDownload/useDownloadUrlPreview';
 
 const EMPTY_FORMAT_RECOMMENDATIONS: FormatRecommendation[] = [];
 
-interface FormatResolutionState {
-  url: string | null;
-  info: VideoInfo | null;
-  error: string | null;
-  selectedFormatId: string | null;
+interface FormatSelection {
+  url: string;
+  formatId: string;
 }
 
 interface MediaDownloadComposerProps {
@@ -35,13 +35,7 @@ export function MediaDownloadComposer({
   const enqueueDownloads = useMediaDownloadStore((state) => state.enqueueDownloads);
   const [internalInput, setInternalInput] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [helperConnected, setHelperConnected] = useState(isDownloadAvailable());
-  const [formatState, setFormatState] = useState<FormatResolutionState>({
-    url: null,
-    info: null,
-    error: null,
-    selectedFormatId: null,
-  });
+  const [formatSelection, setFormatSelection] = useState<FormatSelection | null>(null);
   const input = value ?? internalInput;
   const setInput = useCallback((nextValue: string) => {
     if (value === undefined) {
@@ -50,71 +44,28 @@ export function MediaDownloadComposer({
     onValueChange?.(nextValue);
   }, [onValueChange, value]);
 
-  useEffect(() => {
-    const unsubscribe = NativeHelperClient.onStatusChange((status) => {
-      setHelperConnected(status === 'connected');
-    });
-    return unsubscribe;
-  }, []);
-
   const urls = useMemo(() => parseDownloadUrls(input), [input]);
   const singleUrl = urls.length === 1 && urls[0] ? urls[0] : null;
-  const activeFormatState = formatState.url === singleUrl ? formatState : null;
-  const videoInfo = activeFormatState?.info ?? null;
-  const formatError = activeFormatState?.error ?? null;
-  const selectedFormatId = activeFormatState?.selectedFormatId ?? null;
-  const loadingFormats = Boolean(helperConnected && singleUrl && formatState.url !== singleUrl);
+  const {
+    helperConnected,
+    loadingFormats,
+    info: videoInfo,
+    formatError,
+  } = useDownloadUrlPreview(singleUrl);
   const recommendations = videoInfo?.recommendations ?? EMPTY_FORMAT_RECOMMENDATIONS;
   const selectedFormat = useMemo(() => (
-    recommendations.find((format) => format.id === selectedFormatId) ?? null
-  ), [recommendations, selectedFormatId]);
+    (formatSelection?.url === singleUrl
+      ? recommendations.find((format) => format.id === formatSelection.formatId)
+      : undefined)
+    ?? pickDefaultDownloadFormat(recommendations)
+  ), [formatSelection, recommendations, singleUrl]);
+  const selectedFormatId = selectedFormat?.id ?? null;
   const canQueue = helperConnected
     && urls.length === 1
     && !loadingFormats
     && !formatError
     && Boolean(videoInfo)
     && (recommendations.length === 0 || Boolean(selectedFormat));
-
-  useEffect(() => {
-    if (!helperConnected || !singleUrl || formatState.url === singleUrl) {
-      return undefined;
-    }
-
-    let canceled = false;
-
-    NativeHelperClient.listFormats(singleUrl)
-      .then((info) => {
-        if (canceled) return;
-        if (!info) {
-          setFormatState({
-            url: singleUrl,
-            info: null,
-            error: 'Could not read available formats for this URL.',
-            selectedFormatId: null,
-          });
-          return;
-        }
-        setFormatState({
-          url: singleUrl,
-          info,
-          error: null,
-          selectedFormatId: info.recommendations[0]?.id ?? null,
-        });
-      })
-      .catch((caughtError: unknown) => {
-        if (canceled) return;
-        setFormatState({
-          url: singleUrl,
-          info: null,
-          error: caughtError instanceof Error ? caughtError.message : 'Could not read available formats.',
-          selectedFormatId: null,
-        });
-      });
-
-    return () => {
-      canceled = true;
-    };
-  }, [formatState.url, helperConnected, singleUrl]);
 
   const queueUrls = useCallback(() => {
     if (!helperConnected) {
@@ -150,17 +101,13 @@ export function MediaDownloadComposer({
       url,
       formatId: selectedFormat?.id,
       formatLabel: selectedFormat ? downloadFormatQueueLabel(selectedFormat) : 'Helper default',
+      metadata: metadataFromVideoInfo(url, videoInfo),
     }]);
     if (ids.length > 0) {
       setInput('');
       onQueued?.(ids);
       setError(null);
-      setFormatState({
-        url: null,
-        info: null,
-        error: null,
-        selectedFormatId: null,
-      });
+      setFormatSelection(null);
     } else {
       setError('That URL is already queued.');
     }
@@ -219,12 +166,7 @@ export function MediaDownloadComposer({
                 onClick={() => {
                   setInput('');
                   setError(null);
-                  setFormatState({
-                    url: null,
-                    info: null,
-                    error: null,
-                    selectedFormatId: null,
-                  });
+                  setFormatSelection(null);
                 }}
                 title="Clear URLs"
               >
@@ -265,11 +207,7 @@ export function MediaDownloadComposer({
                         className={`media-download-format-option ${isSelected ? 'active' : ''}`}
                         type="button"
                         onClick={() => {
-                          setFormatState((current) => (
-                            current.url === singleUrl
-                              ? { ...current, selectedFormatId: format.id }
-                              : current
-                          ));
+                          if (singleUrl) setFormatSelection({ url: singleUrl, formatId: format.id });
                           setError(null);
                         }}
                         aria-pressed={isSelected}

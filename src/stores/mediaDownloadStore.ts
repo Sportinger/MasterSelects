@@ -6,6 +6,16 @@ import { useMediaStore, type MediaFile } from './mediaStore';
 import { requireMediaFileImportResult } from './mediaStore/helpers/importResult';
 import { useYouTubeStore } from './youtubeStore';
 import type { ExternalMediaOrigin, ExternalMediaProvider } from '../types/mediaMetadata';
+import {
+  createDownloadKey,
+  detectDownloadPlatform,
+  DOWNLOAD_PLATFORM_LABELS,
+  extractVideoId,
+  fetchYouTubePreviewMetadata,
+  type VideoUrlPreviewMetadata,
+} from '../services/mediaDiscovery/videoUrlDownloads';
+
+export { detectDownloadPlatform, extractVideoId, parseDownloadUrls } from '../services/mediaDiscovery/videoUrlDownloads';
 
 export type MediaDownloadJobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
 
@@ -15,6 +25,8 @@ export interface MediaDownloadJob {
   downloadKey: string;
   formatId?: string;
   formatLabel?: string;
+  /** True when title/thumbnail/channel/duration were supplied at enqueue time. */
+  metadataResolved?: boolean;
   title: string;
   thumbnail: string;
   channel: string;
@@ -35,17 +47,11 @@ export interface MediaDownloadRequest {
   url: string;
   formatId?: string;
   formatLabel?: string;
+  /** Metadata the caller already resolved (e.g. the paste dialog), skipping a second lookup. */
+  metadata?: ResolvedDownloadMetadata;
 }
 
-export interface ResolvedDownloadMetadata {
-  url: string;
-  downloadKey: string;
-  title: string;
-  thumbnail: string;
-  channel: string;
-  platform: string;
-  durationSeconds: number;
-}
+export type ResolvedDownloadMetadata = VideoUrlPreviewMetadata;
 
 interface MediaDownloadState {
   jobs: MediaDownloadJob[];
@@ -58,19 +64,6 @@ interface MediaDownloadState {
 const MAX_RUNNING_DOWNLOADS = 2;
 const pendingJobIds: string[] = [];
 let runningCount = 0;
-
-const PLATFORM_FOLDER_LABELS: Record<string, string> = {
-  youtube: 'YouTube',
-  tiktok: 'TikTok',
-  instagram: 'Instagram',
-  twitter: 'Twitter',
-  facebook: 'Facebook',
-  reddit: 'Reddit',
-  vimeo: 'Vimeo',
-  twitch: 'Twitch',
-  dailymotion: 'Dailymotion',
-  generic: 'Other',
-};
 
 const PLATFORM_ORIGIN_PROVIDERS: Record<string, ExternalMediaProvider> = {
   youtube: 'youtube',
@@ -85,75 +78,6 @@ const PLATFORM_ORIGIN_PROVIDERS: Record<string, ExternalMediaProvider> = {
   generic: 'web-download',
 };
 
-export function parseDownloadUrls(input: string): string[] {
-  const matches = input.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
-  const seen = new Set<string>();
-  const urls: string[] = [];
-
-  for (const match of matches) {
-    const url = match.replace(/[),.;]+$/g, '');
-    if (!isSupportedVideoUrl(url) || seen.has(url)) {
-      continue;
-    }
-    seen.add(url);
-    urls.push(url);
-  }
-
-  return urls;
-}
-
-export function extractVideoId(input: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/,
-    /^([a-zA-Z0-9_-]{11})$/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = input.match(pattern);
-    if (match?.[1]) return match[1];
-  }
-  return null;
-}
-
-export function detectDownloadPlatform(url: string): string {
-  try {
-    const hostname = new URL(url).hostname.toLowerCase();
-    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) return 'youtube';
-    if (hostname.includes('tiktok.com')) return 'tiktok';
-    if (hostname.includes('instagram.com')) return 'instagram';
-    if (hostname.includes('twitter.com') || hostname.includes('x.com')) return 'twitter';
-    if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) return 'facebook';
-    if (hostname.includes('reddit.com')) return 'reddit';
-    if (hostname.includes('vimeo.com')) return 'vimeo';
-    if (hostname.includes('twitch.tv')) return 'twitch';
-    if (hostname.includes('dailymotion.com')) return 'dailymotion';
-  } catch {
-    return 'generic';
-  }
-
-  return 'generic';
-}
-
-function isSupportedVideoUrl(input: string): boolean {
-  try {
-    const url = new URL(input);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch {
-    return false;
-  }
-}
-
-function createDownloadKey(url: string): string {
-  const videoId = extractVideoId(url);
-  if (videoId) return videoId;
-
-  let hash = 0;
-  for (let i = 0; i < url.length; i += 1) {
-    hash = ((hash << 5) - hash + url.charCodeAt(i)) | 0;
-  }
-  return `url-${Math.abs(hash).toString(36)}`;
-}
-
 function formatDuration(seconds: number): string {
   if (!seconds || !Number.isFinite(seconds)) return '?:??';
   const rounded = Math.max(0, Math.round(seconds));
@@ -166,28 +90,7 @@ function formatDuration(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-async function getYouTubeMetadata(url: string, videoId: string): Promise<ResolvedDownloadMetadata | null> {
-  try {
-    const response = await fetch(
-      `https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`,
-    );
-    if (!response.ok) return null;
-    const data = await response.json() as { title?: string; author_name?: string };
-    return {
-      url,
-      downloadKey: videoId,
-      title: data.title || 'Untitled',
-      thumbnail: `https://i.ytimg.com/vi/${videoId}/mqdefault.jpg`,
-      channel: data.author_name || 'Unknown',
-      platform: 'youtube',
-      durationSeconds: 0,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function metadataFromVideoInfo(url: string, info: VideoInfo): ResolvedDownloadMetadata {
+export function metadataFromVideoInfo(url: string, info: VideoInfo): ResolvedDownloadMetadata {
   return {
     url,
     downloadKey: createDownloadKey(url),
@@ -202,7 +105,7 @@ function metadataFromVideoInfo(url: string, info: VideoInfo): ResolvedDownloadMe
 async function resolveDownloadMetadata(url: string): Promise<ResolvedDownloadMetadata> {
   const videoId = extractVideoId(url);
   if (videoId) {
-    const youtubeMetadata = await getYouTubeMetadata(url, videoId);
+    const youtubeMetadata = await fetchYouTubePreviewMetadata(url, videoId);
     if (youtubeMetadata) return youtubeMetadata;
   }
 
@@ -225,7 +128,7 @@ function getOrCreateDownloadFolder(platform: string): string {
     downloadsFolder = mediaStore.createFolder('Downloads');
   }
 
-  const folderName = PLATFORM_FOLDER_LABELS[platform] ?? 'Other';
+  const folderName = DOWNLOAD_PLATFORM_LABELS[platform] ?? 'Other';
   let platformFolder = useMediaStore.getState().folders.find(
     (folder) => folder.name === folderName && folder.parentId === downloadsFolder.id,
   );
@@ -239,7 +142,7 @@ function getOrCreateDownloadFolder(platform: string): string {
 export function externalOriginForDownload(metadata: ResolvedDownloadMetadata): ExternalMediaOrigin {
   return {
     provider: PLATFORM_ORIGIN_PROVIDERS[metadata.platform] ?? 'web-download',
-    providerLabel: PLATFORM_FOLDER_LABELS[metadata.platform] ?? 'Web download',
+    providerLabel: DOWNLOAD_PLATFORM_LABELS[metadata.platform] ?? 'Web download',
     assetId: metadata.downloadKey,
     sourcePageUrl: metadata.url,
     originalUrl: metadata.url,
@@ -312,7 +215,17 @@ async function runDownloadJob(jobId: string): Promise<void> {
     if (!current) return;
     const requestedFormatId = current.formatId;
 
-    const metadata = await resolveDownloadMetadata(current.url);
+    const metadata: ResolvedDownloadMetadata = current.metadataResolved
+      ? {
+          url: current.url,
+          downloadKey: current.downloadKey,
+          title: current.title,
+          thumbnail: current.thumbnail,
+          channel: current.channel,
+          platform: current.platform,
+          durationSeconds: current.durationSeconds,
+        }
+      : await resolveDownloadMetadata(current.url);
     rememberDownloadForLegacyTools(metadata);
     updateJob(jobId, {
       downloadKey: metadata.downloadKey,
@@ -398,11 +311,12 @@ export const useMediaDownloadStore = create<MediaDownloadState>((set, get) => ({
       downloadKey: createDownloadKey(request.url),
       formatId: request.formatId,
       formatLabel: request.formatLabel,
-      title: 'Resolving download...',
-      thumbnail: '',
-      channel: '',
-      platform: detectDownloadPlatform(request.url),
-      durationSeconds: 0,
+      metadataResolved: Boolean(request.metadata),
+      title: request.metadata?.title ?? 'Resolving download...',
+      thumbnail: request.metadata?.thumbnail ?? '',
+      channel: request.metadata?.channel ?? '',
+      platform: request.metadata?.platform ?? detectDownloadPlatform(request.url),
+      durationSeconds: request.metadata?.durationSeconds ?? 0,
       status: 'queued',
       createdAt: now,
     }));

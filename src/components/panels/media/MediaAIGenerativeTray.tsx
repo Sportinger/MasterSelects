@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import { useDockStore } from '../../../stores/dockStore';
 import { useFlashBoardStore } from '../../../stores/flashboardStore';
+import { useMediaUrlDownloadDialogStore } from '../../../stores/mediaUrlDownloadDialogStore';
 import {
   subscribeLandingEntryRequests,
   takeLandingEntryRequest,
@@ -45,6 +46,17 @@ export function MediaAIGenerativeTray({
     setLandingRequest(null);
     onExpandedChange(true);
   }, [onExpandedChange]);
+
+  // The expanded tray shows the shared queue in every mode; only a collapsed
+  // tray has to open to reveal a download queued from the paste dialog.
+  useEffect(() => (
+    useMediaUrlDownloadDialogStore.subscribe(
+      (state) => state.downloadsRevealRequest,
+      () => {
+        if (!expanded) openTray('download');
+      },
+    )
+  ), [expanded, openTray]);
 
   const openStudio = useCallback(() => {
     activatePanelType('ai-studio');

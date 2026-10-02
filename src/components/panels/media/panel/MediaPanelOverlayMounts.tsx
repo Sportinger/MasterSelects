@@ -24,6 +24,7 @@ import {
   type MediaFloatingFeedbackItem,
 } from './MediaFloatingFeedbackPortal';
 import { MediaGenerationTrayMount } from './MediaGenerationTrayMount';
+import { MediaUrlDownloadDialogMount } from '../urlDownload/MediaUrlDownloadDialogMount';
 import type { MediaDeleteConfirmationRequest } from './useMediaPanelRenameDeleteCommands';
 import type { MediaPanelViewMode } from './types';
 
@@ -142,6 +143,7 @@ export function MediaPanelOverlayMounts({
       {isExternalDragOver && (
         <MediaDropOverlay />
       )}
+      <MediaUrlDownloadDialogMount />
 
       {contextMenu && (() => {
         const annotationContextMenu = renderMediaAnnotationContextMenuMount({

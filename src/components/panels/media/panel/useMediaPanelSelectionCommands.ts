@@ -13,6 +13,8 @@ import { useDockStore } from '../../../../stores/dockStore';
 import { isDockResizeActive } from '../../../dock/dockResizeDomState';
 import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
 import { isSyntheticTouchContextMenuEvent } from '../../../../hooks/useTouchContextMenu';
+import { useMediaUrlDownloadDialogStore } from '../../../../stores/mediaUrlDownloadDialogStore';
+import { copyTextToClipboard, findPastedDownloadUrl, readSystemClipboard } from './mediaPanelClipboard';
 
 import { useMediaPanelCreateComposition } from './useMediaPanelCreateComposition';
 export { getMediaCompositionSettings } from './useMediaPanelCreateComposition';
@@ -92,51 +94,6 @@ function isMediaPanelPasteTarget(root: HTMLDivElement | null, pointer: { x: numb
 
   const rect = root.getBoundingClientRect();
   return pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom;
-}
-
-function getClipboardImageExtension(type: string): string {
-  const subtype = type.split('/')[1]?.split('+')[0] || 'png';
-  return subtype === 'jpeg' ? 'jpg' : subtype;
-}
-
-async function readClipboardImageFiles(): Promise<File[]> {
-  if (!navigator.clipboard?.read) return [];
-
-  const clipboardItems = await navigator.clipboard.read();
-  const files: File[] = [];
-
-  for (const item of clipboardItems) {
-    for (const type of item.types) {
-      if (!type.startsWith('image/')) continue;
-      const blob = await item.getType(type);
-      const extension = getClipboardImageExtension(type);
-      files.push(new File([blob], `clipboard-${Date.now()}.${extension}`, {
-        type,
-        lastModified: Date.now(),
-      }));
-    }
-  }
-
-  return files;
-}
-
-async function copyTextToClipboard(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return;
-  } catch {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.opacity = '0';
-    document.body.appendChild(textarea);
-    try {
-      textarea.select();
-      document.execCommand('copy');
-    } finally {
-      document.body.removeChild(textarea);
-    }
-  }
 }
 
 async function regenerateTimelineSourceThumbnails(mediaFile: MediaFile): Promise<void> {
@@ -455,13 +412,28 @@ export function useMediaPanelSelectionCommands({
     closeContextMenu();
   }, [closeContextMenu]);
 
+  const copyMediaSelection = useCallback((ids: string[]) => {
+    copyMediaItems(ids);
+    // Overwrite a stale link on the system clipboard so the next paste pastes these items.
+    const names = ids.map((id) => liveMediaStore.getState().getItemById(id)?.name).filter(Boolean);
+    navigator.clipboard?.writeText(names.join('\n')).catch(() => undefined);
+  }, [copyMediaItems]);
+
+  const openPastedDownloadUrl = useCallback((text: string) => {
+    const url = findPastedDownloadUrl(text);
+    if (!url) return false;
+    closeContextMenu();
+    useMediaUrlDownloadDialogStore.getState().open(url);
+    return true;
+  }, [closeContextMenu]);
+
   const handleCopySelected = useCallback(() => {
     if (selectedIds.length > 0) {
-      copyMediaItems([...selectedIds]);
+      copyMediaSelection([...selectedIds]);
       showFloatingText('Copied');
     }
     closeContextMenu();
-  }, [closeContextMenu, copyMediaItems, selectedIds, showFloatingText]);
+  }, [closeContextMenu, copyMediaSelection, selectedIds, showFloatingText]);
 
   const handleDuplicateSelected = useCallback(() => {
     if (selectedIds.length > 0) {
@@ -511,7 +483,7 @@ export function useMediaPanelSelectionCommands({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.altKey) return;
+      if (e.altKey || useMediaUrlDownloadDialogStore.getState().url) return;
       const root = mediaPanelRootRef.current;
       if (!isMediaPanelPasteTarget(root, lastPointerRef.current)) return;
       const active = document.activeElement as HTMLElement | null;
@@ -533,14 +505,16 @@ export function useMediaPanelSelectionCommands({
         if (selectedIds.length === 0) return;
         e.preventDefault();
         e.stopImmediatePropagation();
-        copyMediaItems([...selectedIds]);
+        copyMediaSelection([...selectedIds]);
         showFloatingText('Copied');
       } else if (key === 'v') {
         if (timelineOwnsPaste) return;
         e.preventDefault();
         e.stopImmediatePropagation();
         void (async () => {
-          if (await importClipboardFiles(await readClipboardImageFiles())) return;
+          const clipboard = await readSystemClipboard();
+          if (await importClipboardFiles(clipboard.imageFiles)) return;
+          if (openPastedDownloadUrl(clipboard.text)) return;
           if (hasMediaClipboard()) pasteMediaPanelItems();
           else showFloatingText('No clipboard image');
         })().catch((error) => {
@@ -560,12 +534,13 @@ export function useMediaPanelSelectionCommands({
     document.addEventListener('keydown', handleKeyDown, { capture: true });
     return () => document.removeEventListener('keydown', handleKeyDown, { capture: true });
   }, [
-    copyMediaItems,
+    copyMediaSelection,
     duplicateMediaItems,
     handleDelete,
     hasMediaClipboard,
     hasTimelineSelection,
     importClipboardFiles,
+    openPastedDownloadUrl,
     pasteMediaPanelItems,
     selectedIds,
     showFloatingText,
@@ -574,6 +549,7 @@ export function useMediaPanelSelectionCommands({
 
   useEffect(() => {
     const handlePaste = (event: ClipboardEvent) => {
+      if (useMediaUrlDownloadDialogStore.getState().url) return;
       const root = mediaPanelRootRef.current;
       if (!isMediaPanelPasteTarget(root, lastPointerRef.current)) return;
       const active = document.activeElement as HTMLElement | null;
@@ -595,7 +571,8 @@ export function useMediaPanelSelectionCommands({
           if (pastedFiles.length > 0 && await importClipboardFiles(pastedFiles.map((record) => record.file))) return;
         }
 
-        if (await importClipboardFiles(await readClipboardImageFiles())) return;
+        if (openPastedDownloadUrl(clipboardData?.getData('text/plain') ?? '')) return;
+        if (await importClipboardFiles((await readSystemClipboard()).imageFiles)) return;
 
         pasteMediaPanelItems();
       })().catch((error) => {
@@ -608,6 +585,7 @@ export function useMediaPanelSelectionCommands({
     return () => document.removeEventListener('paste', handlePaste, { capture: true });
   }, [
     importClipboardFiles,
+    openPastedDownloadUrl,
     pasteMediaPanelItems,
     showFloatingText,
     timelineOwnsPaste,

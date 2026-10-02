@@ -80,6 +80,7 @@ Click the **+ Add** button for creating new items:
 #### Drag and Drop
 - Drag files directly from the OS file explorer into the Media Panel
 - Paste clipboard images or files with `Ctrl+V` while the Media Panel is hovered
+- Paste a copied video link (YouTube and other `yt-dlp` sites) with `Ctrl+V` to open the in-panel download dialog with thumbnail and resolution choices ([Media Downloads](./Download-Panel.md#url-paste))
 - Drag folders directly into the panel; nested folders are recreated inside the project
 - Multiple files supported
 - Attempts to acquire file handles via `getAsFileSystemHandle` for persistence

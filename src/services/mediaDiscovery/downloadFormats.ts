@@ -49,3 +49,25 @@ export function recommendedFormatsForKind(
   ));
   return matching.length > 0 ? matching : formats;
 }
+
+const DEFAULT_MAX_VIDEO_HEIGHT = 1080;
+
+function recommendationHeight(format: FormatRecommendation): number {
+  const height = Number.parseInt(format.resolution, 10);
+  return Number.isFinite(height) ? height : 0;
+}
+
+/**
+ * Editing-friendly default: the sharpest video stream up to 1080p, so a 4K
+ * VP9 download is an explicit choice. Falls back to the first recommendation.
+ */
+export function pickDefaultDownloadFormat(formats: readonly FormatRecommendation[]): FormatRecommendation | null {
+  let best: FormatRecommendation | null = null;
+  for (const format of formats) {
+    if (isAudioOnlyDownloadFormat(format)) continue;
+    const height = recommendationHeight(format);
+    if (height <= 0 || height > DEFAULT_MAX_VIDEO_HEIGHT) continue;
+    if (!best || height > recommendationHeight(best)) best = format;
+  }
+  return best ?? formats[0] ?? null;
+}
