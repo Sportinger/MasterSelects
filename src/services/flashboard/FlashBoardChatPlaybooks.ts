@@ -2,6 +2,7 @@ export type FlashBoardChatPlaybookId =
   | 'analysis'
   | 'face'
   | 'montage'
+  | 'multicam'
   | 'motion'
   | 'quality'
   | 'silence'
@@ -52,10 +53,20 @@ const PLAYBOOKS: FlashBoardChatPlaybook[] = [
     id: 'montage',
     matches: /\b(?:montage|random|shuffle|zusammenschnitt|highlight|best of|cuts?|clips?|segmente?)\b/i,
     text: `MONTAGE / MANY CUTS
-- Inspect sources and durations first. getMediaItems is one-folder-only; recurse into returned folders.
+- Inspect sources and durations first. getMediaItems lists every subfolder by default; follow nextOffset while hasMore is true.
 - Build source montages with <=25 addClipSegment actions per executeBatch. Use video sources, clamp source ranges, and place slices sequentially.
 - For split-and-shuffle, splitClipAtTimes first, re-read the timeline for new IDs, then reorderClips. Splitting alone does not create variety.
 - Video slices may create linked audio. Keep or remove it intentionally and report the choice.`,
+  },
+  {
+    id: 'multicam',
+    matches: /(?:multi-?camw*|multikameraw*|cameras?|kameras?|angles?|syncw*|synchronw*)/i,
+    text: `MULTICAM / SYNC
+- getMediaItems lists every subfolder; take the video and audio sources from fileCounts and files.
+- Place the audio recordings first, each on its own empty audio track, then each camera on its own video track: createTrack, then addClipSegment with the full source range at startTime 0. A camera's linked audio takes the next free audio track automatically, so do not create audio tracks for it. Re-read the timeline for the clip IDs.
+- syncClipsViaAudio with all placed clip IDs (video clips sync through their linked audio). The longest clip is the default master; name another only when the user does. If it returns a running jobId, wait with getAudioSyncStatus and report progress; do not restart it.
+- Report clips listed in failures: they were not moved, usually because they do not overlap the master recording.
+- Then setMulticamMode(enabled: true). Every video track with clips becomes one camera angle; keys 1..n switch cameras.`,
   },
   {
     id: 'transcript',
