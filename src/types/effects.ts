@@ -20,6 +20,7 @@ export interface Effect {
 }
 
 export type EffectType =
+  | 'ai-edge-fill'
   | 'lens-correction'
   | 'guided-perspective'
   | 'slit-scan'

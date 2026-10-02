@@ -13,6 +13,7 @@ import {
   previewToolDefinitions,
   storyboardToolDefinitions,
   documentToolDefinitions,
+  multicamToolDefinitions,
   captionToolDefinitions,
   textToolDefinitions,
   timelineToolDefinitions,
@@ -68,6 +69,7 @@ const CANDIDATE_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   ...maskToolDefinitions,
   ...storyboardToolDefinitions,
   ...documentToolDefinitions,
+  ...multicamToolDefinitions,
   ...flockToolDefinitions,
 ];
 

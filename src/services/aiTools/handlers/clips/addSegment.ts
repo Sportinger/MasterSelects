@@ -27,16 +27,38 @@ export function insertedClipAlreadyMatchesRequestedSegment(
     && Math.abs(clip.outPoint - outPoint) < 1e-6;
 }
 
+// Float noise from linked trims must not count as a collision.
+const OVERLAP_EPSILON_SECONDS = 1e-6;
+
+interface OccupyingClip { id: string; name?: string; trackId: string; startTime: number; duration: number }
+
+/** The first clip on `trackId` that overlaps [startTime, endTime), if any. */
+export function findOverlappingClip(
+  clips: readonly OccupyingClip[],
+  trackId: string,
+  startTime: number,
+  endTime: number,
+): OccupyingClip | undefined {
+  return clips.find((clip) => clip.trackId === trackId
+    && endTime > clip.startTime + OVERLAP_EPSILON_SECONDS
+    && startTime < clip.startTime + clip.duration - OVERLAP_EPSILON_SECONDS);
+}
+
 export function resolveAddClipSegmentTrackId(
   requestedTrackId: string | null,
   mediaType: string,
   tracks: readonly { id: string; type: string }[],
+  occupancy?: { clips: readonly OccupyingClip[]; startTime: number; endTime: number },
 ): string | undefined {
   if (requestedTrackId !== null) {
     return tracks.find((track) => track.id === requestedTrackId)?.id;
   }
   const preferredTrackType = mediaType === 'audio' ? 'audio' : 'video';
-  return tracks.find((track) => track.type === preferredTrackType)?.id;
+  const compatible = tracks.filter((track) => track.type === preferredTrackType);
+  const free = occupancy
+    ? compatible.find((track) => !findOverlappingClip(occupancy.clips, track.id, occupancy.startTime, occupancy.endTime))
+    : undefined;
+  return (free ?? compatible[0])?.id;
 }
 
 /**
@@ -99,17 +121,34 @@ export async function handleAddClipSegment(
   // A null track id is the deterministic runtime binding used by private
   // kernel edit programs after creating and opening a destination composition.
   const preferredTrackType = mediaFile.type === 'audio' ? 'audio' : 'video';
-  const trackId = resolveAddClipSegmentTrackId(
+  let trackId = resolveAddClipSegmentTrackId(
     requestedTrackId,
     mediaFile.type,
     timelineStore.tracks,
+    { clips: timelineStore.clips, startTime, endTime: startTime + duration },
   );
+  // An unbound placement never stacks: when every compatible track is taken, it gets a new one.
+  let createdTrackId: string | undefined;
+  if (requestedTrackId === null && trackId
+    && findOverlappingClip(timelineStore.clips, trackId, startTime, startTime + duration)) {
+    createdTrackId = useTimelineStore.getState().addTrack(preferredTrackType);
+    trackId = createdTrackId;
+  }
   if (!trackId) {
     return {
       success: false,
       error: requestedTrackId === null
         ? `No compatible ${preferredTrackType} track is available in the active composition`
         : `Track not found: ${requestedTrackId}`,
+    };
+  }
+
+  // Clips on one track never overlap; a stacked clip would play or hide unpredictably.
+  const occupying = findOverlappingClip(useTimelineStore.getState().clips, trackId, startTime, startTime + duration);
+  if (occupying) {
+    return {
+      success: false,
+      error: `Track ${trackId} already holds clip ${occupying.id}${occupying.name ? ` (${occupying.name})` : ''} from ${occupying.startTime.toFixed(3)}s to ${(occupying.startTime + occupying.duration).toFixed(3)}s. Use a free track (createTrack) or another startTime.`,
     };
   }
 
@@ -205,6 +244,7 @@ export async function handleAddClipSegment(
     success: true,
     data: {
       clipCount: createdClips.length,
+      ...(createdTrackId ? { createdTrackId } : {}),
       deClickFadesApplied,
       visualScaleMode: visualScaleMode ?? 'original',
       clips: createdClips.map(c => ({

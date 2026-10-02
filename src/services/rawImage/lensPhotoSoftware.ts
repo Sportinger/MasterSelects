@@ -1,5 +1,6 @@
 import type { Effect } from '../../types/effects';
 import { lensCorrection } from '../../effects/distort/lens-correction';
+import { guidedPerspective } from '../../effects/distort/guided-perspective';
 import { isFullscreenEffectDefinition } from '../../effects/types';
 
 /** Main-thread software fallback for guide photos on Mesa and unavailable GPU canvases. */
@@ -13,7 +14,9 @@ export async function renderSoftwareGuidePhoto(bitmap: ImageBitmap, effects: Eff
   const srgb = (v: number) => v <= .0031308 ? v * 12.92 : 1.055 * Math.max(0, v) ** (1 / 2.4) - .055;
   try {
     for (const effect of effects) {
-      const p = lensCorrection.packUniforms({ ...effect.params as Record<string, number | boolean | string>, sourceAspect: width / height }, width, height)!;
+      const definition = effect.type === 'guided-perspective' ? guidedPerspective : lensCorrection;
+      if (!isFullscreenEffectDefinition(definition)) throw new Error('Photo shader unavailable.');
+      const p = definition.packUniforms({ ...effect.params as Record<string, number | boolean | string>, sourceAspect: width / height }, width, height)!;
       const source = context.getImageData(0, 0, width, height).data;
       const output = context.createImageData(width, height);
       const inside = (u: number, v: number) => u >= 0 && u <= 1 && v >= 0 && v <= 1;
@@ -27,6 +30,18 @@ export async function renderSoftwareGuidePhoto(bitmap: ImageBitmap, effects: Eff
       const radiusScale = 2 / Math.hypot(p[3], 1);
       for (let y = 0; y < height; y++) {
         for (let x = 0; x < width; x++) {
+          if (effect.type === 'guided-perspective') {
+            const u = ((x + .5) / width - .5) / p[12] + .5;
+            const v = ((y + .5) / height - .5) / p[12] + .5;
+            const w = p[8] * u + p[9] * v + p[10];
+            const safeW = Math.sign(w || 1) * Math.max(Math.abs(w), .00001);
+            const sx = u * (1 - p[13]) + (p[0] * u + p[1] * v + p[2]) / safeW * p[13];
+            const sy = v * (1 - p[13]) + (p[4] * u + p[5] * v + p[6]) / safeW * p[13];
+            if (Math.abs(w) > .00001 && inside(sx, sy)) {
+              for (let c = 0; c < 4; c++) output.data[(y * width + x) * 4 + c] = Math.round(sample(sx, sy, c) * 255);
+            }
+            continue;
+          }
           const dx = ((x + .5) / width - p[4]) * p[3] * radiusScale / p[2];
           const dy = ((y + .5) / height - p[5]) * radiusScale / p[2];
           const r2 = dx * dx + dy * dy, r = Math.sqrt(r2), profileR = r * 1.80277564 / p[10];

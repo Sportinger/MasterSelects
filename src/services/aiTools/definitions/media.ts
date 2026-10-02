@@ -83,13 +83,28 @@ export const mediaToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'getMediaItems',
-      description: 'Get all items in the media panel: files (video, audio, image), compositions, and folders. Useful for understanding project structure.',
+      description: 'Get the items in the media panel: files (video, audio, image) with their folderPath, compositions, and folders. Includes every subfolder by default, so one call lists the whole project media. fileCounts gives totals per type; follow nextOffset while hasMore is true.',
       parameters: {
         type: 'object',
         properties: {
           folderId: {
             type: 'string',
-            description: 'Get items in a specific folder. Omit or null for root level items.',
+            description: 'Limit the listing to this folder (and its subfolders unless recursive is false). Omit for the whole media panel.',
+          },
+          recursive: {
+            type: 'boolean',
+            description: 'Include items in subfolders. Default: true. Set false for only the direct children of the folder.',
+          },
+          offset: {
+            type: 'integer',
+            minimum: 0,
+            description: 'Index of the first file to return. Default: 0.',
+          },
+          limit: {
+            type: 'integer',
+            minimum: 1,
+            maximum: 500,
+            description: 'Maximum files to return. Default: 200.',
           },
         },
         required: [],

@@ -152,6 +152,7 @@ import {
   handleUnexposeFlockParam,
   handleUpdateFlockNode,
 } from './flock';
+import { handleGetAudioSyncStatus, handleSetMulticamMode, handleSyncClipsViaAudio } from './multicam';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 type TimelineHandler = (
@@ -280,4 +281,7 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   scheduleFlockPrecompute: handleScheduleFlockPrecompute,
   cancelFlockPrecompute: handleCancelFlockPrecompute,
   sampleFlockParticles: handleSampleFlockParticles,
+  syncClipsViaAudio: handleSyncClipsViaAudio,
+  getAudioSyncStatus: async (args) => handleGetAudioSyncStatus(args),
+  setMulticamMode: handleSetMulticamMode,
 };

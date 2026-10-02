@@ -37,7 +37,10 @@ with the original files preserved. Source Monitor fits the complete photo and
 provides Fit view to reset zoom and pan. Lens Correction includes a Canon EF
 24–105 mm f/4L IS USM profile dropdown, CR2 exposure metadata, and manual
 distortion, chromatic aberration, and vignette controls. Guided Perspective
-straightens photographed edges with up to eight guides per direction. See
+straightens photographed edges with up to eight guides per direction.
+AI Edge Fill then fills transparent borders on still images with an explicitly
+started Kie.ai / Nano Banana Pro generation (1K, 2K or 4K), retaining original
+opaque pixels and storing the fill in the project. See
 [Media Panel](docs/Features/Media-Panel.md) and [Effects](docs/Features/Effects.md#lens-correction).
 
 ### Node graphs

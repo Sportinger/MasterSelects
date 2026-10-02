@@ -1,0 +1,10 @@
+@layer features {
+  .ai-edge-fill-prompt {
+    width: 100%; resize: vertical; min-height: 76px; box-sizing: border-box;
+    border: 1px solid var(--border-strong); border-radius: 3px; padding: 6px;
+    background: var(--bg-tertiary); color: var(--text-primary); font: inherit;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .ai-edge-fill-prompt:focus { outline: none; }
+  .ai-edge-fill-prompt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+}

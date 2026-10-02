@@ -559,6 +559,12 @@ export const createProxySlice: MediaSliceCreator<ProxyActions> = (set, get) => (
           },
         },
       );
+      // A camera too large for a direct waveform gets one from its finished proxy.
+      const finished = get().files.find((file) => file.id === mediaFileId);
+      if (finished?.type === 'video' && finished.hasProxyAudio && finished.waveformStatus !== 'ready') {
+        const { useMediaStore } = await import('..');
+        void useMediaStore.getState().generateMediaWaveform(mediaFileId);
+      }
     } catch (error) {
       log.warn('Audio proxy generation failed:', error);
       set((state) => ({

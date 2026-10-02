@@ -330,7 +330,7 @@ export const clipToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'addClipSegment',
-      description: 'Add a clip segment from the media pool to the timeline. Imports only a specific time range (inPoint to outPoint) from a media file. For video files, automatically creates linked audio. Much more efficient than importing the full clip and then splitting.',
+      description: 'Add a clip segment from the media pool to the timeline. Imports only a specific time range (inPoint to outPoint) from a media file. For video files, automatically creates linked audio on the first free audio track (a new one when none is free). Much more efficient than importing the full clip and then splitting.',
       parameters: {
         type: 'object',
         properties: {
@@ -340,7 +340,7 @@ export const clipToolDefinitions: ToolDefinition[] = [
           },
           trackId: {
             type: ['string', 'null'],
-            description: 'ID of the track to add the clip to, or null to select the first compatible active-composition track',
+            description: 'ID of the track to add the clip to, or null to use the first compatible active-composition track that is free for the range (a new track is created when none is free). An explicit track must be free for the whole range; overlapping clips are rejected.',
           },
           startTime: {
             type: 'number',

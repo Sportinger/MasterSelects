@@ -1,0 +1,54 @@
+<!doctype html><meta charset="utf-8"><title>AI Edge Fill GPU regression</title>
+<style>body{font:16px system-ui;background:#202020;color:#eee;padding:24px}button{padding:12px}pre{white-space:pre-wrap}</style>
+<h1>AI Edge Fill · GPU pixel regression</h1>
+<p>Open through the Vite server. Tests the actual WGSL: opaque source preservation, transparent border fill, partial alpha and canvas placement.</p>
+<button id="run">Run GPU checks</button><pre id="result">Ready</pre>
+<script type="module">
+import common from '/src/effects/_shared/commonShader.ts';
+import shader from '/src/effects/distort/ai-edge-fill/shader.wgsl?raw';
+const result = document.querySelector('#result');
+document.querySelector('#run').onclick = async () => {
+  result.textContent = 'Running…';
+  let device;
+  try {
+    const adapter = await navigator.gpu.requestAdapter(); device = await adapter.requestDevice();
+    const module = device.createShaderModule({code: common + '\n' + shader});
+    const pipeline = await device.createRenderPipelineAsync({layout:'auto', vertex:{module,entryPoint:'vertexMain'}, fragment:{module,entryPoint:'aiEdgeFillFragment',targets:[{format:'rgba8unorm'}]}});
+    const sampler=device.createSampler({magFilter:'nearest',minFilter:'nearest'});
+    const source = new Uint8Array(4*4*4);
+    for(let i=0;i<16;i++){source.set([30+i*3,80+i,120-i,i%4===0?0:i%4===1?128:255],i*4);}
+    const fill = new Uint8Array(4*4*4); for(let i=0;i<16;i++)fill.set([200,40,10,255],i*4);
+    const tex = (format,usage) => device.createTexture({size:[4,4],format,usage});
+    const input=tex('rgba8unorm',GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST);
+    const background=tex('r32uint',GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST);
+    device.queue.writeTexture({texture:input},source,{bytesPerRow:16},[4,4]);
+    device.queue.writeTexture({texture:background},fill,{bytesPerRow:16},[4,4]);
+    let checked=0, blendedHoles=0;
+    for(const [placement,seam] of [[false,0],[true,0],[true,.25]]) {
+      const uniforms=new Float32Array([1,1,placement?1:0,seam,placement?2:1,0,placement?-.5:0,0,0,1,0,0]);
+      const buffer=device.createBuffer({size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(buffer,0,uniforms);
+      const output=tex('rgba8unorm',GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC);
+      const read=device.createBuffer({size:256*4,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+      const bind=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:sampler},{binding:1,resource:input.createView()},{binding:2,resource:{buffer}},{binding:5,resource:background.createView()}]});
+      const encoder=device.createCommandEncoder(), pass=encoder.beginRenderPass({colorAttachments:[{view:output.createView(),loadOp:'clear',storeOp:'store'}]});
+      pass.setPipeline(pipeline);pass.setBindGroup(0,bind);pass.draw(6);pass.end();
+      encoder.copyTextureToBuffer({texture:output},{buffer:read,bytesPerRow:256},[4,4]);device.queue.submit([encoder.finish()]);
+      await read.mapAsync(GPUMapMode.READ);const pixels=new Uint8Array(read.getMappedRange());
+      for(let y=0;y<4;y++)for(let x=0;x<4;x++) {
+        const uv=(x+.5)/4, sx=placement?uv*2-.5:uv, inside=sx>=0&&sx<=1;
+        const at=(y*4+Math.max(0,Math.min(3,Math.floor(sx*4))))*4, alpha=inside?source[at+3]/255:0;
+        for(let c=0;c<4;c++){
+          const expected=c===3?255:Math.round((inside?source[at+c]:0)*alpha+fill[c]*(1-alpha));
+          const actual=pixels[y*256+x*4+c];
+          if(seam && alpha<1 && c<3){if(alpha===0 && Math.abs(actual-fill[c])>1)blendedHoles++;continue;}
+          if(Math.abs(actual-expected)>1)throw Error(`Pixel mismatch placement=${placement} xy=${x},${y} channel=${c}: ${actual} != ${expected}`);
+          checked++;
+        }
+      }
+      read.unmap();read.destroy();buffer.destroy();output.destroy();
+    }
+    if(!blendedHoles)throw Error('Seam blend did not affect any missing pixels.');
+    input.destroy();background.destroy();result.textContent=`PASS: ${checked} GPU channel checks. Original opaque pixels unchanged; every transparent canvas border filled; transformed photo stays in place. Seam blend changes only the added side.`;
+  } catch(error){result.textContent='FAIL: '+error.message;} finally {device?.destroy();}
+};
+</script>

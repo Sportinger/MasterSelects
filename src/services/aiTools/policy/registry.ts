@@ -1,4 +1,5 @@
 import { APP_CONTROL_POLICIES } from './appControlPolicies';
+import { MULTICAM_POLICIES } from './multicamPolicies';
 // AI Tool Policy Registry
 // Classifies every tool by risk level, read-only status, and caller permissions
 
@@ -594,6 +595,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['commitTimelineVariantOption', mutatingMedium()],
   ['archiveTimelineVariantSet', mutatingMedium()],
   ['addClipSegment', mutatingMedium()],
+  ...MULTICAM_POLICIES,
   ['sendAINodePrompt', {
     ...mutatingMedium(),
     sensitiveDataAccess: true,
@@ -624,8 +626,6 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   // searchVideos is the definition name for the same handler as searchYouTube
   ['searchVideos', mutatingLow()],
   ['listVideoFormats', mutatingLow()],
-
-  // ── GAUSSIAN SPLAT DEBUG ────────────────────────────────────────────
 ]);
 
 /**

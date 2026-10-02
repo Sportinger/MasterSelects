@@ -35,7 +35,7 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
         focalLength: Math.max(24, Math.min(105, metadata.focalLength || 24)),
         aperture: Math.max(4, Math.min(22, metadata.aperture || 4)),
         sourceAspect: metadata.width / metadata.height,
-      } : value === CANON_24_105_PROFILE ? { sourceAspect: 1.5 } : {}),
+      } : value === CANON_24_105_PROFILE ? { sourceAspect: 0 } : {}),
     });
   };
   const rows = (group: string) => Object.entries(LENS_CORRECTION_PARAMS)

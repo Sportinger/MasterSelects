@@ -92,7 +92,8 @@ export async function readLongPcmWavInfo(file: Blob): Promise<PcmWavInfo | null>
   return info && isLongPcmWav(info) ? info : null;
 }
 
-function readSample(view: DataView, at: number, info: PcmWavInfo): number {
+/** One PCM sample at byte offset `at`, scaled to -1..1. */
+export function readPcmSample(view: DataView, at: number, info: PcmWavInfo): number {
   if (info.format === 3) return view.getFloat32(at, true);
   switch (info.bitsPerSample) {
     case 16: return view.getInt16(at, true) / 32768;
@@ -150,7 +151,7 @@ export async function decimatePcmWavPeaks(
       for (let channel = 0; channel < info.channels; channel += 1) {
         let best = 0;
         for (let f = 0; f < factor; f += 1) {
-          const value = readSample(view, blockStart + f * info.blockAlign + channel * bytesPerSample, info);
+          const value = readPcmSample(view, blockStart + f * info.blockAlign + channel * bytesPerSample, info);
           if (Math.abs(value) > Math.abs(best)) best = value;
         }
         channels[channel]![outStart + o] = best;

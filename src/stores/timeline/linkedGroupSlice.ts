@@ -231,13 +231,17 @@ export const createLinkedGroupSlice: SliceCreator<LinkedGroupActions> = (set, ge
     log.debug('Linked clips', { clipIds: linkTargetClipIds, groupId: manualGroupId });
   },
 
-  syncClipsViaAudio: async (clipIds, masterClipId) => {
+  syncClipsViaAudio: async (clipIds, masterClipId, options = {}) => {
+    const reject = (reason: string, details?: unknown) => {
+      log.warn(reason, details);
+      options.onRejected?.(reason);
+      return null;
+    };
     const initialState = get();
     const targetClipIds = uniqueExistingClipIds(initialState.clips, clipIds);
     const audioClipIds = resolveAudioSyncClipIds(initialState.clips, targetClipIds);
     if (audioClipIds.length < 2) {
-      log.warn('Cannot sync via audio without at least two audible clips', { clipIds: targetClipIds });
-      return null;
+      return reject('Cannot sync via audio without at least two audible clips', { clipIds: targetClipIds });
     }
 
     const masterAudioClipId = masterClipId
@@ -259,10 +263,12 @@ export const createLinkedGroupSlice: SliceCreator<LinkedGroupActions> = (set, ge
     try {
       report = await audioSync.syncTimelineClipsViaAudio(audioInputs, {
         masterClipId: requestedMasterClipId,
+        minConfidence: options.minConfidence,
+        signal: options.signal,
+        onProgress: options.onProgress,
       });
     } catch (error) {
-      log.warn('Audio sync failed', error);
-      return null;
+      return reject(`Audio sync failed: ${error instanceof Error ? error.message : String(error)}`, error);
     }
 
     const syncedTargetCount = report.alignments.filter((alignment) => alignment.audioClipId !== report.masterAudioClipId).length;
@@ -273,8 +279,7 @@ export const createLinkedGroupSlice: SliceCreator<LinkedGroupActions> = (set, ge
 
     const currentState = get();
     if (hasAudioSyncGuardChanged(currentState.clips, syncGuard)) {
-      log.warn('Audio sync result was discarded because synced clips changed during analysis', { clipIds: [...syncGuard.keys()] });
-      return null;
+      return reject('Audio sync result was discarded because synced clips changed during analysis', { clipIds: [...syncGuard.keys()] });
     }
 
     const { clips, tracks, invalidateCache, updateDuration } = currentState;
@@ -309,8 +314,7 @@ export const createLinkedGroupSlice: SliceCreator<LinkedGroupActions> = (set, ge
     const cleanup = collectLinkCleanupTargets(clips, [...movedClipIds]);
     const lockedAffectedIds = new Set([...cleanup.affectedClipIds, ...movedClipIds]);
     if (hasLockedAffectedClip(clips, tracks, lockedAffectedIds)) {
-      log.warn('Cannot sync clips via audio with locked linked targets', { clipIds: [...lockedAffectedIds] });
-      return null;
+      return reject('Cannot sync clips via audio with locked linked targets', { clipIds: [...lockedAffectedIds] });
     }
 
     const groupId = generateManualLinkedGroupId();

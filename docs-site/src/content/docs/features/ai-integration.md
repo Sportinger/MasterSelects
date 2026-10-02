@@ -395,6 +395,7 @@ The exported tool groups are:
 - Node Workspace
 - Motion Design shapes, ordered appearances, gradients, and Grid Replicator
 - Flock clips (GPU swarm simulation graphs)
+- Multicam: audio sync and multicam cut mode
 
 The chat and bridge code call the shared dispatcher, so the same registry is used in-chat, through the Vite dev bridge, and through the Native Helper bridge. Approval behavior is enforced in the chat UI before execution, while the dispatcher policy is the actual execution gate.
 
@@ -411,6 +412,30 @@ The chat and bridge code call the shared dispatcher, so the same registry is use
   for ordered fills, strokes, and linear/radial gradients.
 - `updateMotionProperties` animates registry-backed shape, appearance, gradient,
   and Grid values; `configureMotionReplicator` owns the bounded Grid shortcut.
+
+### Media Listing And Multicam Tools
+
+- `getMediaItems` lists the whole media panel, subfolders included, with each
+  file's `folderPath` and per-type `fileCounts`; `folderId` narrows it to one
+  subtree, `recursive: false` restores the one-folder listing, and
+  `offset`/`limit` page large libraries (`hasMore`, `nextOffset`). A
+  project whose media sits in folders therefore never reads as an empty pool.
+- `addClipSegment` never stacks clips: an explicit target track must be free for
+  the range, and `trackId: null` takes the first free compatible track or creates
+  a new one.
+- `syncClipsViaAudio` runs the timeline's Sync via Audio on the given clips as
+  a background job (one undo step). The longest clip is the default master;
+  matches below `minConfidence` (default `medium`) are reported in
+  `failures` and left in place, so material that does not overlap the master
+  recording is not moved to a random position. It returns the result or, while
+  running, a `jobId` with phase, current clip, percent and ETA.
+- `getAudioSyncStatus` waits (up to `waitMs`) for that job and returns the
+  same progress or the aligned clips with their new start times. Jobs live for
+  the page session.
+- `setMulticamMode` builds or toggles multicam cut mode on the active
+  composition and lists the camera angles with their key numbers.
+- The in-app chat's multicam playbook places one camera per video track and
+  one recording per audio track, syncs, then enables multicam.
 
 ### Flock Clip Tools
 

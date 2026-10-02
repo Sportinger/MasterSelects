@@ -33,6 +33,30 @@ export function getAudioProxyStorageKey(mediaFile: Pick<MediaFile, 'id' | 'fileH
   return mediaFile.audioProxyStorageKey || mediaFile.fileHash || mediaFile.id;
 }
 
+/**
+ * The finished WAV audio proxy as a File. Project storage comes first: it is
+ * disk-backed (ranged reads stay cheap) and keeps stable name, size and
+ * modification time, so analyses saved for it are found again after reload.
+ */
+export async function readStoredAudioProxyFile(
+  mediaFile: Pick<MediaFile, 'id' | 'name' | 'fileHash' | 'audioProxyStorageKey' | 'audioProxyUrl'>,
+): Promise<File | null> {
+  const storageKey = getAudioProxyStorageKey(mediaFile);
+  if (projectFileService.isProjectOpen()) {
+    const stored = await projectFileService.getProxyAudio(storageKey).catch(() => null);
+    if (stored) return stored;
+  }
+  if (!mediaFile.audioProxyUrl) return null;
+  try {
+    const response = await fetch(mediaFile.audioProxyUrl);
+    if (!response.ok) return null;
+    return new File([await response.blob()], `${storageKey}.audio-proxy.wav`, { type: 'audio/wav', lastModified: 0 });
+  } catch (error) {
+    log.debug('Audio proxy URL is not readable', { mediaId: mediaFile.id, error });
+    return null;
+  }
+}
+
 export function shouldGenerateAudioProxy(mediaFile: Pick<MediaFile, 'type' | 'hasAudio' | 'audioCodec'>): boolean {
   if (mediaFile.type === 'audio') return true;
   if (mediaFile.type !== 'video') return false;

@@ -5,12 +5,13 @@ import type { Keyframe } from '../types/keyframes';
 import type { TimelineClip } from '../types/timeline';
 import { prepareClipAudioAnalysisInput } from './audio/ClipAudioAnalysisOrchestrator';
 import { Logger } from './logger';
+import { accumulatePeakBins, loadStreamedSyncSignal } from './audio/syncSignalSource';
+import { createAudioSyncMatcher } from './audio/audioSyncMatcher';
 import { audioAnalyzer, type AudioFingerprint } from './audioAnalyzer';
 import {
   DEFAULT_SAMPLE_RATE,
   DEFAULT_TARGET_EXCERPT_SECONDS,
   MIN_SYNC_SECONDS,
-  findAudioSyncOffset,
   type AudioSyncOffsetResult,
 } from './audioSyncOffset';
 
@@ -46,14 +47,32 @@ export interface TimelineAudioSyncReport {
   failures: TimelineAudioSyncFailure[];
 }
 
+export type AudioSyncConfidence = TimelineAudioSyncAlignment['confidence'];
+
+export interface TimelineAudioSyncProgress {
+  /** 0..100 over the whole sync. */
+  percent: number;
+  phase: 'proxy' | 'reading' | 'matching';
+  /** 1-based clip being read or matched. */
+  clipIndex: number;
+  clipCount: number;
+  clipName: string;
+  /** 0..1 within the current clip and phase. */
+  clipFraction: number;
+}
+
 export interface TimelineAudioSyncOptions {
   masterClipId?: string;
   sampleRate?: number;
   targetExcerptSeconds?: number;
   minPeakRatio?: number;
+  /** Matches below this confidence are reported as failures instead of being applied. */
+  minConfidence?: AudioSyncConfidence;
   signal?: AbortSignal;
-  onProgress?: (progress: number) => void;
+  onProgress?: (progress: number, detail?: TimelineAudioSyncProgress) => void;
 }
+
+const CONFIDENCE_RANK: Record<AudioSyncConfidence, number> = { low: 0, medium: 1, high: 2 };
 
 interface PreparedSyncClip {
   clip: TimelineClip;
@@ -61,6 +80,8 @@ interface PreparedSyncClip {
   sampleRate: number;
   sourceDurationSeconds: number;
   timelineSpeed: number;
+  /** Set when only an excerpt was read: its start, in seconds after the clip's inPoint. */
+  excerptStartSeconds?: number;
 }
 
 interface Excerpt {
@@ -156,31 +177,6 @@ function normalizeSeries(samples: Float32Array): Float32Array {
   return normalized;
 }
 
-function downsampleAudioBuffer(
-  buffer: AudioBuffer,
-  startSeconds: number,
-  durationSeconds: number,
-  sampleRate: number,
-): Float32Array {
-  const sourceStart = Math.max(0, Math.floor(startSeconds * buffer.sampleRate));
-  const sourceEnd = Math.min(buffer.length, Math.ceil((startSeconds + durationSeconds) * buffer.sampleRate));
-  const outputLength = Math.max(0, Math.floor(((sourceEnd - sourceStart) / buffer.sampleRate) * sampleRate));
-  const output = new Float32Array(outputLength);
-  if (outputLength === 0) return output;
-
-  const ratio = buffer.sampleRate / sampleRate;
-  const channelCount = Math.max(1, buffer.numberOfChannels);
-  for (let outputIndex = 0; outputIndex < outputLength; outputIndex += 1) {
-    const sourceIndex = Math.min(sourceEnd - 1, sourceStart + Math.floor(outputIndex * ratio));
-    let sample = 0;
-    for (let channel = 0; channel < channelCount; channel += 1) {
-      sample += buffer.getChannelData(channel)[sourceIndex] ?? 0;
-    }
-    output[outputIndex] = sample / channelCount;
-  }
-  return output;
-}
-
 function chooseActiveExcerpt(samples: Float32Array, sampleRate: number, maxSeconds: number): Excerpt {
   const windowLength = Math.max(1, Math.round(maxSeconds * sampleRate));
   if (samples.length <= windowLength) {
@@ -209,14 +205,52 @@ function chooseActiveExcerpt(samples: Float32Array, sampleRate: number, maxSecon
   };
 }
 
+function clipSourceSeconds(clip: TimelineClip, speed: number): number {
+  return clip.outPoint > clip.inPoint ? clip.outPoint - clip.inPoint : clip.duration * speed;
+}
+
+function assertAudible(samples: Float32Array, sampleRate: number): void {
+  if (samples.length < MIN_SYNC_SECONDS * sampleRate || rms(samples) < 1e-5) {
+    throw new Error('Audio is too short or silent for sync.');
+  }
+}
+
 async function prepareSyncClip(
   input: TimelineAudioSyncClipInput,
   sampleRate: number,
   signal?: AbortSignal,
+  onSourceProgress?: (phase: 'proxy' | 'reading', fraction: number) => void,
+  excerptSeconds?: number,
 ): Promise<PreparedSyncClip> {
   const { clip, keyframes = [] } = input;
   if (clip.reversed) {
     throw new Error('Reversed clips are not supported for audio sync.');
+  }
+
+  const speed = Math.abs(clip.speed ?? 1) || 1;
+  // Long stems and camera files stream; only short sources are decoded whole.
+  const streamedDuration = Math.max(MIN_SYNC_SECONDS, clipSourceSeconds(clip, speed));
+  const streamed = await loadStreamedSyncSignal({
+    clip,
+    startSeconds: clip.inPoint,
+    durationSeconds: streamedDuration,
+    sampleRate,
+    excerptSeconds,
+    signal,
+    onProgress: (progress) => onSourceProgress?.(progress.phase, progress.fraction),
+  });
+  if (streamed) {
+    assertAudible(streamed.samples, sampleRate);
+    return {
+      clip,
+      samples: streamed.samples,
+      sampleRate,
+      sourceDurationSeconds: streamedDuration,
+      timelineSpeed: speed,
+      ...(streamed.offsetSeconds > 0 || streamed.samples.length < Math.floor(streamedDuration * sampleRate)
+        ? { excerptStartSeconds: streamed.offsetSeconds }
+        : {}),
+    };
   }
 
   const prepared = await prepareClipAudioAnalysisInput({
@@ -229,18 +263,13 @@ async function prepareSyncClip(
     throw new Error('No readable audio source found.');
   }
 
-  const speed = Math.abs(clip.speed ?? 1) || 1;
   const sourceDurationSeconds = Math.max(
     MIN_SYNC_SECONDS,
-    Math.min(
-      prepared.sourceBuffer.duration - clip.inPoint,
-      clip.outPoint > clip.inPoint ? clip.outPoint - clip.inPoint : clip.duration * speed,
-    ),
+    Math.min(prepared.sourceBuffer.duration - clip.inPoint, clipSourceSeconds(clip, speed)),
   );
-  const samples = downsampleAudioBuffer(prepared.sourceBuffer, clip.inPoint, sourceDurationSeconds, sampleRate);
-  if (samples.length < MIN_SYNC_SECONDS * sampleRate || rms(samples) < 1e-5) {
-    throw new Error('Audio is too short or silent for sync.');
-  }
+  const samples = new Float32Array(Math.max(0, Math.floor(sourceDurationSeconds * sampleRate)));
+  accumulatePeakBins(prepared.sourceBuffer, 0, samples, clip.inPoint, sampleRate);
+  assertAudible(samples, sampleRate);
 
   return {
     clip,
@@ -295,19 +324,39 @@ class AudioSync {
       throw new Error('Select at least two clips with audio to sync.');
     }
 
+    const clipCount = uniqueInputs.length;
+    const report = (
+      phase: TimelineAudioSyncProgress['phase'],
+      clipIndex: number,
+      clipName: string,
+      clipFraction: number,
+    ) => {
+      const done = phase === 'matching'
+        ? 0.5 + ((clipIndex - 1 + clipFraction) / Math.max(1, clipCount - 1)) * 0.5
+        : ((clipIndex - 1 + clipFraction) / clipCount) * 0.5;
+      const percent = Math.min(100, Math.round(done * 100));
+      options.onProgress?.(percent, { percent, phase, clipIndex, clipCount, clipName, clipFraction });
+    };
+
     const failures: TimelineAudioSyncFailure[] = [];
     const preparedById = new Map<string, PreparedSyncClip>();
     for (let index = 0; index < uniqueInputs.length; index += 1) {
       const input = uniqueInputs[index];
+      report('reading', index + 1, input.clip.name, 0);
       try {
-        preparedById.set(input.clip.id, await prepareSyncClip(input, sampleRate, options.signal));
+        // The master is searched end to end; a target only needs its most active excerpt.
+        const excerptSeconds = input.clip.id === masterInput.clip.id ? undefined : targetExcerptSeconds;
+        preparedById.set(input.clip.id, await prepareSyncClip(input, sampleRate, options.signal, (phase, fraction) => {
+          report(phase, index + 1, input.clip.name, fraction);
+        }, excerptSeconds));
       } catch (error) {
+        if (options.signal?.aborted) throw error;
         failures.push({
           clipId: input.clip.id,
           reason: error instanceof Error ? error.message : String(error),
         });
       }
-      options.onProgress?.(Math.round(((index + 1) / (uniqueInputs.length * 2)) * 100));
+      report('reading', index + 1, input.clip.name, 1);
     }
 
     const master = preparedById.get(masterInput.clip.id);
@@ -325,33 +374,47 @@ class AudioSync {
       method: 'waveform',
     }];
 
+    const minimumRank = CONFIDENCE_RANK[options.minConfidence ?? 'low'];
     const targets = [...preparedById.values()].filter(candidate => candidate.clip.id !== master.clip.id);
-    for (let index = 0; index < targets.length; index += 1) {
-      const target = targets[index];
-      const excerpt = chooseActiveExcerpt(target.samples, sampleRate, targetExcerptSeconds);
-      const measured = findAudioSyncOffset(master.samples, excerpt.samples, sampleRate, {
-        minPeakRatio: options.minPeakRatio,
-      });
+    // Correlations against an hour-long master are large FFTs: they run in a worker.
+    const matcher = createAudioSyncMatcher(master.samples, sampleRate);
+    try {
+      for (let index = 0; index < targets.length; index += 1) {
+        const target = targets[index];
+        report('matching', index + 1, target.clip.name, 0);
+        if (options.signal?.aborted) throw new DOMException('Audio sync was cancelled.', 'AbortError');
+        const excerpt = target.excerptStartSeconds !== undefined
+          ? { samples: target.samples, startSeconds: target.excerptStartSeconds }
+          : chooseActiveExcerpt(target.samples, sampleRate, targetExcerptSeconds);
+        const measured = await matcher.match(excerpt.samples, { minPeakRatio: options.minPeakRatio });
 
-      if (!measured) {
-        failures.push({ clipId: target.clip.id, reason: 'No stable audio correlation peak found.' });
-      } else {
-        const masterMatchSeconds = measured.offsetSeconds;
-        const targetStartTime = master.clip.startTime
-          + masterMatchSeconds / master.timelineSpeed
-          - excerpt.startSeconds / target.timelineSpeed;
-        alignments.push({
-          clipId: target.clip.id,
-          audioClipId: target.clip.id,
-          offsetSeconds: measured.offsetSeconds - excerpt.startSeconds,
-          targetStartTime,
-          peakRatio: measured.peakRatio,
-          confidence: measured.confidence,
-          method: measured.method,
-        });
+        if (!measured) {
+          failures.push({ clipId: target.clip.id, reason: 'No stable audio correlation peak found.' });
+        } else if (CONFIDENCE_RANK[measured.confidence] < minimumRank) {
+          failures.push({
+            clipId: target.clip.id,
+            reason: `Only a ${measured.confidence}-confidence match (peak ratio ${measured.peakRatio?.toFixed(3) ?? 'n/a'}); the clip was left in place. It may not overlap the master recording.`,
+          });
+        } else {
+          const masterMatchSeconds = measured.offsetSeconds;
+          const targetStartTime = master.clip.startTime
+            + masterMatchSeconds / master.timelineSpeed
+            - excerpt.startSeconds / target.timelineSpeed;
+          alignments.push({
+            clipId: target.clip.id,
+            audioClipId: target.clip.id,
+            offsetSeconds: measured.offsetSeconds - excerpt.startSeconds,
+            targetStartTime,
+            peakRatio: measured.peakRatio,
+            confidence: measured.confidence,
+            method: measured.method,
+          });
+        }
+
+        report('matching', index + 1, target.clip.name, 1);
       }
-
-      options.onProgress?.(Math.round(50 + ((index + 1) / Math.max(1, targets.length)) * 50));
+    } finally {
+      matcher.dispose();
     }
 
     return {

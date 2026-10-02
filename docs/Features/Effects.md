@@ -13,7 +13,7 @@ normal compact effect inspector retains its design and shows the effective value
 and source. Other effects and structural settings are not implicitly enabled.
 
 - 37 blend modes are implemented in `src/shaders/composite.wgsl`.
-- 99 GPU effects are registered in `src/effects/`, including fullscreen
+- 100 GPU effects are registered in `src/effects/`, including fullscreen
   fragment effects, compute effects, glyph effects, tracking effects, and
   specialized render effects.
 - The populated clip-effect categories are `color`, `blur`, `distort`,
@@ -1708,3 +1708,44 @@ Drawing guides currently supports still images, including CR2. The guide photo
 does not include other preceding geometry effects, so place this effect directly
 after Lens Correction. Perspective correction does not remove curved lens
 distortion or independently straighten several surfaces with different planes.
+
+## AI Edge Fill
+
+**AI Edge Fill**, under **Lens & Distort**, fills transparent borders left by
+Lens Correction and Guided Perspective on still images, including CR2. Place it
+after those corrections and before other effects. Choose a generation size,
+adjust the editable prompt for the scene, and click **Generate fill**.
+
+Generation uploads a bounded, positioned full-composition photo reference and a
+white=missing binary mask to **Kie.ai / Nano Banana
+Pro**, using the existing hosted AI service and cloud credits. It is not a local
+model. The reference marks missing areas magenta; opaque black content in
+the actual photograph remains protected. The editable prompt explains both references.
+
+Only transparent pixels use the generated image. Existing opaque pixels retain
+their original resolution and color, even if the model changes them in its output.
+**Fill Opacity** controls the added areas and supports keyframes.
+**Seam Blend** (default 12 composition pixels) softly matches the neighboring
+original color on the added side only, supports keyframes, and can be set to zero.
+It reduces color seams, not arbitrary structural mistakes made by the model.
+Generations are
+1K, 2K or 4K; the saved fill is sampled at the composition/export resolution,
+so a larger original photo is supported without promising native generated detail
+at an unlimited resolution. Outputs that change the aspect ratio are rejected.
+
+The PNG is stored as a required project artifact. Rendering, playback and export
+reuse it without provider calls. Clear fill is undoable. A changed correction
+shows a regeneration warning; animated upstream geometry/placement and other preceding
+effects/operator graphs are rejected when generating. Captured 2D position,
+scale, rotation, source-pixel scale and aspect fit match the compositor. The
+effect expands its render footprint to the whole composition without changing
+authored transforms, so outer margins are filled too. Bypass restores the normal
+photo footprint. Generate before masks/color grading; tilted 3D planes and an
+enabled composition camera are not supported. Scene reconstruction remains
+probabilistic: the mask reference guides the model, rather than a native inpaint API.
+
+A submitted request retains its idempotency key; a started task retains its task
+ID. **Resume task** retries polling/download without submitting a new generation.
+Pending jobs are checkpointed in the original repository and results cannot be
+applied after a source, correction or project switch. **Discard pending task**
+allows a fresh request; it does not cancel/refund an already started provider job.

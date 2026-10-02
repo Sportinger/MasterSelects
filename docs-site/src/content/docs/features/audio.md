@@ -231,9 +231,11 @@ Audio extraction for playback and export uses browser `decodeAudioData`, not MP4
 
 ## Multicam And Analysis
 
+- Source waveforms of camera files too large to read directly (over 500 MB, e.g. MXF) are built from their finished WAV audio proxy through the streamed long-WAV path, persisted like any other source waveform, and handed to that camera's audio clips already on the timeline. A proxy that finishes later starts this automatically.
+
 - `audioAnalyzer` provides RMS level curves and downsampled fingerprints.
 - Agent Timeline audio classes have an offline, cheap-first foundation. It derives `speech`, `music`, `noise`, `ambience`, `applause`, or explicit `unknown` spans exclusively from persisted loudness/peak, frequency, onset, and transcript summaries; it neither decodes media nor loads/downloads a model. Same-class adjacent samples merge into explicit half-open time spans, with bounded heuristic confidence and provenance for both feature artifacts and classifier version.
-- `audioSync` uses normalized cross-correlation plus FFT-backed waveform/envelope correlation to compute offsets.
+- `audioSync` uses normalized cross-correlation plus FFT-backed waveform/envelope correlation to compute offsets. Every source becomes the same 1 kHz signal of signed per-bin peaks. Long sources are never decoded whole: long PCM WAV stems stream through the long-WAV peak worker, MP4/MOV audio is decoded in 60-second ranges, and MXF and other codec-provider cameras use their WAV audio proxy, which is extracted first when missing. Short sources keep the whole-buffer decode. Only the master is read end to end: every other clip reads just its most active 180-second excerpt, located in its saved waveform pyramid and fetched by byte range (WAV, audio proxies) or ranged decode (MP4/MOV), so an 80-minute stem costs seconds instead of a full read; without a saved waveform the whole clip is read and the excerpt chosen afterwards. The correlations against the master run in a worker, so the editor stays responsive during long syncs. Matches can be held to a minimum confidence; weaker ones are reported and not moved.
 - The Timeline clip context menu exposes Sync via Audio for selected clips with at least two audible sources; the command realigns the selected audio/video pairs and stores the result as a manual linked group.
 - The Timeline `MulticamDialog` uses the media-id offset path for manual multicam alignment.
 - Transcript-based sync exists separately when clip transcripts are available.

@@ -33,6 +33,7 @@ import {
 } from './terrainScreenAnchor';
 import type { EffectFrameHistoryContext } from '../../effects/EffectsPipeline';
 import type { EffectRenderClockContext } from '../../effects/_shared/byteTexture';
+import { prepareCanvasEdgeFill } from '../../effects/distort/ai-edge-fill/canvasPlacement';
 
 const log = Logger.create('Compositor');
 
@@ -218,7 +219,6 @@ export class Compositor {
       }
 
       const adjustmentEffects = resolveSurfaceFrameEffects(layer.effects, data.displayedMediaTime);
-      const visualAdjustmentEffects = adjustmentEffects.filter(effect => !effect.type.startsWith('audio-'));
 
       // Get uniform buffer
       const uniformBuffer = this.compositorPipeline.getOrCreateUniformBuffer(resourceLayerId);
@@ -251,6 +251,10 @@ export class Compositor {
         referenceWidth,
         referenceHeight,
       );
+      const canvasFill = prepareCanvasEdgeFill(layer, adjustmentEffects, sourceWidth, sourceHeight, referenceWidth, referenceHeight, Boolean(state.skipEffects));
+      const visualAdjustmentEffects = (canvasFill?.effects ?? adjustmentEffects).filter(effect => !effect.type.startsWith('audio-'))
+        .map(effect => layer.source?.type === 'image' && effect.type === 'lens-correction'
+          ? { ...effect, params: { ...effect.params, sourceAspect } } : effect);
 
       // Get mask texture (single lookup instead of two)
       const maskLookupId = layer.maskClipId || layer.id;
@@ -336,13 +340,13 @@ export class Compositor {
 
       // Update uniforms (includes inline effect params)
       this.compositorPipeline.updateLayerUniforms(
-        layer,
-        sourceAspect,
+        canvasFill?.layer ?? layer,
+        canvasFill ? outputAspect : sourceAspect,
         outputAspect,
         hasMask,
         uniformBuffer,
         inlineEffects,
-        sourcePixelScale,
+        canvasFill ? 1 : sourcePixelScale,
         effectSourceRotation === 0 ? undefined : 0,
       );
 

@@ -31,6 +31,31 @@ function getCachedMediaWaveform(mediaFileId: string | undefined): Pick<TimelineC
   };
 }
 
+/**
+ * Hands a source waveform that finished after its clips were placed (for
+ * example one built from a camera's audio proxy) to the timeline audio clips
+ * of that media which still have none.
+ */
+export function applyMediaWaveformToAudioClips(mediaFileId: string): void {
+  const cached = getCachedMediaWaveform(mediaFileId);
+  if (!cached) return;
+  updateDerivedTimelineClips(clips => clips.map((clip) => {
+    if (clip.source?.type !== 'audio' || (clip.source.mediaFileId ?? clip.mediaFileId) !== mediaFileId) return clip;
+    if (clip.waveform?.length || clip.audioState?.sourceAnalysisRefs?.waveformPyramidId) return clip;
+    return {
+      ...clip,
+      ...cached,
+      audioState: {
+        ...(clip.audioState ?? {}),
+        sourceAnalysisRefs: {
+          ...(clip.audioState?.sourceAnalysisRefs ?? {}),
+          ...(cached.audioState?.sourceAnalysisRefs ?? {}),
+        },
+      },
+    };
+  }));
+}
+
 export async function loadLinkedAudio(
   file: File,
   audioClipId: string,

@@ -26,6 +26,7 @@ import { workerFirstToolDefinitions } from './workerFirst';
 import { workerFirstRuntimeToolDefinitions } from './workerFirstRuntime';
 import { storyboardToolDefinitions } from './storyboard';
 import { documentToolDefinitions } from './documents';
+import { multicamToolDefinitions } from './multicam';
 
 // Combined tool definitions array (OpenAI function calling format)
 export const AI_TOOLS = [
@@ -55,6 +56,7 @@ export const AI_TOOLS = [
   ...operatorGraphToolDefinitions,
   ...storyboardToolDefinitions,
   ...documentToolDefinitions,
+  ...multicamToolDefinitions,
 ];
 
 // Re-export individual definition sets for selective use
@@ -85,4 +87,5 @@ export {
   operatorGraphToolDefinitions,
   storyboardToolDefinitions,
   documentToolDefinitions,
+  multicamToolDefinitions,
 };

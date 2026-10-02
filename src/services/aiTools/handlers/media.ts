@@ -6,8 +6,8 @@ export {
   handleGetMediaPreviewFrames,
   representativeMediaFrameTimes,
 } from './media/mediaPreviewFrames';
+export { handleGetMediaItems } from './media/mediaItemsListing';
 export {
-  handleGetMediaItems,
   handleGetMediaTranscript,
   handleCreateMediaFolder,
   handleRenameMediaItem,

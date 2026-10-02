@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  findOverlappingClip,
   handleAddClipSegment,
   insertedClipAlreadyMatchesRequestedSegment,
   resolveAddClipSegmentTrackId,
@@ -42,5 +43,21 @@ describe('addClipSegment preflight', () => {
     expect(resolveAddClipSegmentTrackId(null, 'audio', tracks)).toBe('audio-1');
     expect(resolveAddClipSegmentTrackId('video-2', 'video', tracks)).toBe('video-2');
     expect(resolveAddClipSegmentTrackId('missing', 'video', tracks)).toBeUndefined();
+  });
+});
+
+describe('addClipSegment track occupancy', () => {
+  const clips = [{ id: 'wav', name: 'Piano.wav', trackId: 'audio-1', startTime: 0, duration: 100 }];
+
+  it('finds a clip overlapping the requested range but not one that only touches it', () => {
+    expect(findOverlappingClip(clips, 'audio-1', 50, 60)?.id).toBe('wav');
+    expect(findOverlappingClip(clips, 'audio-1', 100, 160)).toBeUndefined();
+    expect(findOverlappingClip(clips, 'audio-2', 0, 10)).toBeUndefined();
+  });
+
+  it('binds a null track id to the first compatible track that is free for the range', () => {
+    const tracks = [{ id: 'audio-1', type: 'audio' }, { id: 'audio-2', type: 'audio' }];
+    expect(resolveAddClipSegmentTrackId(null, 'audio', tracks, { clips, startTime: 0, endTime: 10 })).toBe('audio-2');
+    expect(resolveAddClipSegmentTrackId(null, 'audio', tracks, { clips, startTime: 100, endTime: 110 })).toBe('audio-1');
   });
 });

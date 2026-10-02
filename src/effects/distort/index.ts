@@ -11,3 +11,4 @@ export { fisheye } from './fisheye';
 
 export { lensCorrection } from './lens-correction';
 export { guidedPerspective } from './guided-perspective';
+export { aiEdgeFill } from './ai-edge-fill';

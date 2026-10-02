@@ -244,7 +244,17 @@ export interface LinkedGroupActions {
   unlinkGroup: (clipId: string) => void;
   linkClips: (clipIds: string[]) => void;
   unlinkClips: (clipIds: string[]) => void;
-  syncClipsViaAudio: (clipIds: string[], masterClipId?: string) => Promise<import('../../../services/audioSync').TimelineAudioSyncReport | null>;
+  syncClipsViaAudio: (
+    clipIds: string[],
+    masterClipId?: string,
+    options?: {
+      minConfidence?: import('../../../services/audioSync').AudioSyncConfidence;
+      signal?: AbortSignal;
+      onProgress?: import('../../../services/audioSync').TimelineAudioSyncOptions['onProgress'];
+      /** Called with the reason whenever the sync resolves to null. */
+      onRejected?: (reason: string) => void;
+    },
+  ) => Promise<import('../../../services/audioSync').TimelineAudioSyncReport | null>;
 }
 
 export interface MulticamActions {

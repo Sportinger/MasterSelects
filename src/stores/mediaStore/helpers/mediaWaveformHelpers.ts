@@ -32,6 +32,11 @@ function hasReadyWaveform(mediaFile: MediaFile): boolean {
   return (mediaFile.waveform?.length ?? 0) > 0 && mediaFile.waveformStatus === 'ready';
 }
 
+/** Large camera files are not read for waveforms; their finished WAV audio proxy is. */
+function hasReadyAudioProxy(mediaFile: MediaFile): boolean {
+  return mediaFile.hasProxyAudio === true || mediaFile.audioProxyStatus === 'ready';
+}
+
 function getWaveformJobKey(mediaFile: MediaFile): string {
   const file = mediaFile.file;
   return [
@@ -40,6 +45,13 @@ function getWaveformJobKey(mediaFile: MediaFile): string {
     file?.size ?? mediaFile.fileSize ?? 0,
     file?.lastModified ?? 0,
   ].join(':');
+}
+
+async function readAudioProxyForWaveform(mediaFile: MediaFile): Promise<File> {
+  const { readStoredAudioProxyFile } = await import('../../../services/audio/AudioProxyService');
+  const proxy = await readStoredAudioProxyFile(mediaFile);
+  if (!proxy) throw new Error(`The audio proxy of ${mediaFile.name} is not readable.`);
+  return proxy;
 }
 
 export function shouldPrepareMediaWaveform(
@@ -68,7 +80,8 @@ export function startMediaFileWaveformGeneration(
   if (activeMediaWaveformJobs.has(jobKey)) return;
 
   const isAudioOnly = mediaFile.type === 'audio';
-  if (shouldSkipWaveform(file, isAudioOnly)) {
+  const fromAudioProxy = !isAudioOnly && shouldSkipWaveform(file, false) && hasReadyAudioProxy(mediaFile);
+  if (!fromAudioProxy && shouldSkipWaveform(file, isAudioOnly)) {
     updateMediaFile(mediaFile.id, {
       waveformStatus: 'skipped',
       waveformProgress: 0,
@@ -94,7 +107,8 @@ export function startMediaFileWaveformGeneration(
       updateMediaFile(mediaFile.id, { waveformProgress: rounded, waveformStatus: 'generating' });
     };
     try {
-      const analysis = await generateTimelineWaveformAnalysisForFile(file, {
+      const source = fromAudioProxy ? await readAudioProxyForWaveform(mediaFile) : file;
+      const analysis = await generateTimelineWaveformAnalysisForFile(source, {
         mediaFileId: mediaFile.id,
         includePyramid: true,
         background: true,
@@ -119,6 +133,10 @@ export function startMediaFileWaveformGeneration(
         waveformStatus: analysis.waveform.length > 0 ? 'ready' : 'error',
         waveformProgress: analysis.waveform.length > 0 ? 100 : 0,
       });
+      if (fromAudioProxy && analysis.waveform.length > 0) {
+        const { applyMediaWaveformToAudioClips } = await import('../../timeline/clip/videoLinkedAudioLoader');
+        applyMediaWaveformToAudioClips(mediaFile.id);
+      }
       log.debug('Prepared source waveform', {
         id: mediaFile.id,
         name: mediaFile.name,
