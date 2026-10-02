@@ -4,6 +4,7 @@ import { APP_VERSION } from './src/version'
 import { gzipSync } from 'node:zlib'
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'path'
+import { buildIdentity } from './tools/buildIdentity'
 import {
   allowedFileRoots,
   bridgeToken,
@@ -355,9 +356,13 @@ export default defineConfig(({ command, mode }) => {
   }
   const lanServer = isDevServer ? resolveLanServerConfig() : null;
   const devRootCaPath = isDevServer ? resolveDevRootCaPath() : null;
+  const build = buildIdentity({ version: APP_VERSION, development: isDevServer, cwd: __dirname });
 
   return {
     plugins: [
+      { name: 'masterselects-build-identity', generateBundle() {
+        this.emitFile({ type: 'asset', fileName: 'build-info.json', source: JSON.stringify(build) + '\n' });
+      } },
       react(),
       devHostedMediaDownloadPlugin(hostedApiProxyTarget),
       createDevBridgePlugin({ enableAiToolsBridge: enableDevBridge }),
@@ -380,7 +385,10 @@ export default defineConfig(({ command, mode }) => {
     },
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
-      __APP_BUILD_ID__: JSON.stringify(isDevServer ? 'development' : new Date().toISOString()),
+      __APP_BUILD_ID__: JSON.stringify(build.buildId),
+      __APP_SOURCE_REVISION__: JSON.stringify(build.sourceRevision),
+      __APP_SOURCE_DIRTY__: JSON.stringify(build.sourceDirty),
+      __APP_RELEASE_ID__: JSON.stringify(build.releaseId),
       __DEV_BRIDGE_TOKEN__: JSON.stringify(isDevServer ? bridgeToken : ''),
       __DEV_ALLOWED_FILE_ROOTS__: JSON.stringify(isDevServer ? allowedFileRoots : []),
     },

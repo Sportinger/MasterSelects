@@ -4,7 +4,7 @@
  * adapter, and the recent console/log breadcrumbs that led up to the failure.
  */
 
-import { APP_BUILD_ID } from '../appBuild';
+import { APP_BUILD_ID, APP_SOURCE_REVISION, APP_SOURCE_DIRTY, APP_RELEASE_ID } from '../appBuild';
 import {
   getRecentRuntimeDiagnosticEntries,
   getRuntimeGpuInfo,
@@ -43,6 +43,9 @@ export interface DiagnosticBreadcrumb {
 
 export interface DiagnosticContext {
   buildId?: string;
+  sourceRevision?: string | null;
+  sourceDirty?: boolean;
+  releaseId?: string | null;
   connection?: { downlink?: number; effectiveType?: string; rtt?: number; saveData?: boolean };
   deviceMemoryGb?: number;
   hardwareConcurrency?: number;
@@ -138,7 +141,8 @@ export function collectDiagnosticBreadcrumbs(limit = BREADCRUMB_LIMIT): Diagnost
 }
 
 export function collectDiagnosticContext(): DiagnosticContext {
-  const context: DiagnosticContext = { buildId: APP_BUILD_ID, uptimeMs: Date.now() - BOOT_AT_MS };
+  const context: DiagnosticContext = { buildId: APP_BUILD_ID, sourceRevision: APP_SOURCE_REVISION,
+    sourceDirty: APP_SOURCE_DIRTY, releaseId: APP_RELEASE_ID, uptimeMs: Date.now() - BOOT_AT_MS };
   if (typeof navigator === 'undefined' || typeof window === 'undefined') return context;
 
   const nav = navigator as NavigatorWithExtras;

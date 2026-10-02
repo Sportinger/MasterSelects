@@ -6,6 +6,14 @@ MasterSelects includes a Logger service plus several playback and health monitor
 
 ## Overview
 
+Runtime diagnostics and app-open analytics identify the application version,
+build timestamp, exact Git commit and release ID. Production builds emit the same
+identity in `build-info.json`. A release ID is assigned only to a clean Git checkout;
+development builds and locally modified sources are explicitly distinguishable.
+Older reports can lack these fields and must not be attributed to a later commit.
+The build timestamp remains available for comparing successive deployments.
+
+
 The Logger service (`src/services/logger.ts`) provides:
 
 | Feature | Description |

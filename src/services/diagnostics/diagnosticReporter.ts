@@ -125,7 +125,9 @@ function stripHeavyFields(event: QueuedDiagnosticEvent): QueuedDiagnosticEvent {
   return {
     ...event,
     breadcrumbs: undefined,
-    context: event.context ? { uptimeMs: event.context.uptimeMs, pageUrl: event.context.pageUrl, buildId: event.context.buildId } : undefined,
+    context: event.context ? { uptimeMs: event.context.uptimeMs, pageUrl: event.context.pageUrl,
+      buildId: event.context.buildId, sourceRevision: event.context.sourceRevision,
+      sourceDirty: event.context.sourceDirty, releaseId: event.context.releaseId } : undefined,
     stack: clip(event.stack, 1_500),
   };
 }

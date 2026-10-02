@@ -7,7 +7,7 @@ import {
   useState,
 } from 'react';
 import { LegalDialog } from './components/common/LegalDialog';
-import { APP_BUILD_ID } from './services/appBuild';
+import { APP_BUILD_ID, APP_SOURCE_REVISION, APP_SOURCE_DIRTY, APP_RELEASE_ID } from './services/appBuild';
 import { AppLoadingScreen } from './components/common/AppLoadingScreen';
 import { AccountDialogHost } from './components/common/AccountDialogHost';
 import { loadEditorAppModule, preloadEditorRuntime } from './editorEntryLoader';
@@ -83,6 +83,9 @@ export function RootApp({ initialExperience }: RootAppProps) {
     const query = new URLSearchParams(window.location.search);
     productAnalytics.track('app_opened', {
       build_id: APP_BUILD_ID,
+      source_revision: APP_SOURCE_REVISION,
+      source_dirty: APP_SOURCE_DIRTY,
+      release_id: APP_RELEASE_ID,
       ...readAcquisitionAttribution(query),
       device_class: runtime.deviceClass,
       experience: activeExperience,
