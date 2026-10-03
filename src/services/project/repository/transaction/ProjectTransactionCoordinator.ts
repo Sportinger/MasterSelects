@@ -8,8 +8,15 @@ export interface LogicalRevision {
   label: string; source: string; createdAt: number; changes: readonly LogicalEntityChange[];
 }
 export interface TransactionToken { readonly transactionId: string; readonly owner: symbol; readonly sessionEpoch: string; }
+export interface RevisionPublication { revision: LogicalRevision; redo: Readonly<Record<string, string>>; sequence: number; }
 export interface CoordinatorStorage {
   publishRevision(revision: LogicalRevision, workspaceId: string, redo: Readonly<Record<string, string>>, sequence: number): Promise<void>;
+  /**
+   * Group commit: durably publishes a leading run of consecutive revisions as one
+   * publication and returns how many were published (at least one). Each revision
+   * stays its own history step. Retrying the same list must produce the same batch.
+   */
+  publishRevisions?(items: readonly RevisionPublication[], workspaceId: string): Promise<number>;
   publishNavigation(revisionId: string, workspaceId: string, redo: Readonly<Record<string, string>>, sequence: number): Promise<void>;
   publishMetadata(key: string, value: JsonValue, sequence: number, dependencies?: { references?: RecordReference[]; blobs?: BlobReference[] }): Promise<void>;
   publishJournal(id: string, value: JsonValue, sequence: number, dependencies?: { references?: RecordReference[]; blobs?: BlobReference[] }): Promise<void>;
@@ -42,6 +49,16 @@ function equalEntity(a: EntityDTO | null, b: EntityDTO | null): boolean {
   return canonicalJson(a) === canonicalJson(b);
 }
 
+interface PendingOperation {
+  run: () => Promise<void>; bytes: number; started?: boolean; journal?: string;
+  revision?: RevisionPublication;
+  /** Revision group this operation was submitted in; a retry replays the identical group. */
+  group?: readonly number[];
+}
+/** Revisions published together at most, and their byte budget, when a backlog has built up. */
+const GROUP_COMMIT_MAX_REVISIONS = 32;
+const GROUP_COMMIT_MAX_BYTES = 4 * 1024 * 1024;
+
 /** Synchronous logical commit, ordered asynchronous confirmation and checkout. */
 export class ProjectTransactionCoordinator {
   readonly sessionEpoch = crypto.randomUUID();
@@ -56,7 +73,7 @@ export class ProjectTransactionCoordinator {
   private oldestPendingAt: number | null = null;
   private chain: Promise<void> = Promise.resolve();
   private failed: RepositoryError | null = null;
-  private pending = new Map<number, { run: () => Promise<void>; bytes: number; started?: boolean; journal?: string }>();
+  private pending = new Map<number, PendingOperation>();
   /** Journal publication per journal id that is queued but not yet started. */
   private queuedJournals = new Map<string, number>();
   private views: Record<string, number> = {};
@@ -144,7 +161,8 @@ export class ProjectTransactionCoordinator {
       this.localRevisions.set(revision.revisionId, revision);
       const sequence = ++this.sequence;
       const redo = Object.freeze({ ...this.redo });
-      this.enqueue(sequence, bytes, () => this.storage.publishRevision(revision, this.workspaceId, redo, sequence));
+      this.enqueue(sequence, bytes, () => this.storage.publishRevision(revision, this.workspaceId, redo, sequence), undefined,
+        { revision, redo, sequence });
     }
     this.finishTransaction(tx);
     this.notify();
@@ -162,19 +180,43 @@ export class ProjectTransactionCoordinator {
     for (const key of tx.before.keys()) if (this.entityOwners.get(key) === tx.token.owner) this.entityOwners.delete(key);
     this.transactions.delete(tx.token.owner);
   }
-  private enqueue(sequence: number, bytes: number, run: () => Promise<void>, journal?: string): void {
-    this.pending.set(sequence, { run, bytes, ...(journal === undefined ? {} : { journal }) });
+  private enqueue(sequence: number, bytes: number, run: () => Promise<void>, journal?: string, revision?: RevisionPublication): void {
+    this.pending.set(sequence, { run, bytes, ...(journal === undefined ? {} : { journal }), ...(revision ? { revision } : {}) });
     this.queuedBytes += bytes;
     this.oldestPendingAt ??= Date.now();
     this.chain = this.chain.then(async () => {
       const item = this.pending.get(sequence);
       if (this.failed || !item) return;
-      // The publication runs the latest value it holds; a journal snapshot may have replaced it while queued.
-      item.started = true;
-      try { await item.run(); this.confirm(sequence); }
+      try { await this.runPending(sequence, item); }
       catch (error) { this.failed = error instanceof RepositoryError ? error : new RepositoryError('io', String(error)); }
       this.notify();
     });
+  }
+  /** Runs one queued operation, or the backlog of consecutive revisions starting at it as one group commit. */
+  private async runPending(sequence: number, item: PendingOperation): Promise<void> {
+    const group = item.group ?? this.collectRevisionGroup(sequence);
+    if (!group || !this.storage.publishRevisions) {
+      // The publication runs the latest value it holds; a journal snapshot may have replaced it while queued.
+      item.started = true;
+      await item.run(); this.confirm(sequence); return;
+    }
+    const members = group.map(member => this.pending.get(member)!);
+    for (const member of members) { member.started = true; member.group = group; }
+    const published = await this.storage.publishRevisions(members.map(member => member.revision!), this.workspaceId);
+    for (const member of group.slice(0, published)) this.confirm(member);
+    // Revisions the storage did not take into this batch form a fresh group later.
+    for (const member of members.slice(published)) { member.group = undefined; member.started = false; }
+  }
+  private collectRevisionGroup(sequence: number): readonly number[] | null {
+    if (!this.storage.publishRevisions || !this.pending.get(sequence)?.revision) return null;
+    const group: number[] = []; let bytes = 0;
+    for (let next = sequence; group.length < GROUP_COMMIT_MAX_REVISIONS; next++) {
+      const candidate = this.pending.get(next);
+      if (!candidate?.revision || candidate.started || candidate.group) break;
+      if (group.length && bytes + candidate.bytes > GROUP_COMMIT_MAX_BYTES) break;
+      group.push(next); bytes += candidate.bytes;
+    }
+    return group.length > 1 ? group : null;
   }
   private confirm(sequence: number): void {
     const item = this.pending.get(sequence);
@@ -192,10 +234,11 @@ export class ProjectTransactionCoordinator {
     const through = this.sequence;
     const job = this.chain.then(async () => {
       this.storage.assertOwned(); this.failed = null;
-      for (const [sequence, item] of this.pending) {
+      for (const sequence of [...this.pending.keys()].toSorted((a, b) => a - b)) {
         if (sequence > through) break;
-        item.started = true;
-        try { await item.run(); this.confirm(sequence); }
+        const item = this.pending.get(sequence);
+        if (!item) continue; // confirmed as part of an earlier group in this retry
+        try { await this.runPending(sequence, item); }
         catch (error) { this.failed = error instanceof RepositoryError ? error : new RepositoryError('io', String(error)); break; }
       }
       this.notify();

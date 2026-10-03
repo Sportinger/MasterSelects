@@ -1,7 +1,10 @@
 import { RepositoryError, type EntityDTO, type JsonValue, type RecordReference, type RepositoryRecord } from '../contracts';
 import type { LogicalEntityChange } from './ProjectTransactionCoordinator';
 import type { DraftRecord } from '../storageWorkerProtocol';
-const identity = (reference: RecordReference) => `${reference.hash}:${reference.segmentId}:${reference.offset}:${reference.length}`;
+/** A published reference, or the local id of a record drafted earlier in the same publication batch. */
+export type StructuralPointer = RecordReference | string;
+const identity = (reference: StructuralPointer) => typeof reference === 'string' ? `local:${reference}`
+  : `${reference.hash}:${reference.segmentId}:${reference.offset}:${reference.length}`;
 function aggregate(key: string) { return key.split('/block/')[0]; }
 function dependencies(key: string, value: JsonValue): string[] {
   const found = new Set<string>(); const prefix = `${aggregate(key)}/block/`;
@@ -13,12 +16,13 @@ function dependencies(key: string, value: JsonValue): string[] {
   visit(value); return [...found];
 }
 export interface StructuralPublication {
-  records: DraftRecord[]; changes: JsonValue[]; beforeReferences: RecordReference[];
+  records: DraftRecord[]; changes: JsonValue[]; beforeReferences: StructuralPointer[];
   updates: Map<string, RecordReference | string | null>;
 }
 /** Refresh only immutable block ancestors. Editable membership IDs deliberately stay projection-bound. */
-export async function prepareStructuralPublication(requested: readonly LogicalEntityChange[], current: ReadonlyMap<string, RecordReference>,
-  groups: ReadonlyMap<string, ReadonlySet<string>>, read: (reference: RecordReference) => Promise<RepositoryRecord>): Promise<StructuralPublication> {
+export async function prepareStructuralPublication(requested: readonly LogicalEntityChange[], current: ReadonlyMap<string, StructuralPointer>,
+  groups: ReadonlyMap<string, ReadonlySet<string>>, read: (reference: StructuralPointer) => Promise<RepositoryRecord>,
+  idPrefix = ''): Promise<StructuralPublication> {
   const changes = new Map(requested.map(change => [change.entityKey, change]));
   const affected = new Set(requested.filter(change => change.entityKey.includes('/block/')).map(change => aggregate(change.entityKey)));
   const previous = new Map<string, EntityDTO>();
@@ -53,18 +57,19 @@ export async function prepareStructuralPublication(requested: readonly LogicalEn
       if (!reference) throw new RepositoryError('corrupt', `Missing structural block ${child}`);
       pointers.push(reference);
     }
-    const id = `entity-${records.length}`;
+    const id = `${idPrefix}entity-${records.length}`;
     const value = { ...change.after, references: pointers.map(ref => typeof ref === 'string' ? { $record: ref } : ref) };
     records.push({ id, kind: 'object', schemaVersion: 1, payload: value as unknown as JsonValue, references: pointers, blobs: change.after.blobs });
     updates.set(key, id); active.delete(key);
   };
   for (const key of changes.keys()) build(key);
-  const beforeReferences: RecordReference[] = [];
+  const beforeReferences: StructuralPointer[] = [];
   const encoded: JsonValue[] = [];
   for (const key of changes.keys()) {
     const before = current.get(key) ?? null; if (before) beforeReferences.push(before);
     const after = updates.get(key) ?? null;
-    encoded.push({ entityKey: key, before: before as unknown as JsonValue, after: typeof after === 'string' ? { $record: after } : after as unknown as JsonValue });
+    encoded.push({ entityKey: key, before: typeof before === 'string' ? { $record: before } : before as unknown as JsonValue,
+      after: typeof after === 'string' ? { $record: after } : after as unknown as JsonValue });
   }
   return { records, updates, changes: encoded, beforeReferences };
 }
