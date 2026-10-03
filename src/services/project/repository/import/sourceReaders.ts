@@ -2,8 +2,27 @@ import { RepositoryError } from '../contracts';
 import type { ReadOnlyProjectSource } from './legacySource';
 import { safePath } from '../archive/streamIO';
 
-/** These readers never request write permission, create folders, or use active project state. */
+/** Repository storage of an in-place conversion; never part of the legacy source. */
+const REPOSITORY_FOLDER = '.masterselects';
+/**
+ * These readers never request write permission, create folders, or use active project state.
+ * A listing from the first page walks the folder once and later pages read that sorted snapshot,
+ * so old projects with tens of thousands of proxy frames list in one pass instead of one per page.
+ */
 export function directorySource(root: FileSystemDirectoryHandle, sourceId: string, locationId: string): ReadOnlyProjectSource {
+  const snapshots = new Map<string, string[]>();
+  async function walk(prefix: string, signal?: AbortSignal): Promise<string[]> {
+    const paths: string[] = [];
+    async function visit(directory: FileSystemDirectoryHandle, base: string): Promise<void> {
+      for await (const [name, handle] of (directory as FileSystemDirectoryHandle & { entries(): AsyncIterableIterator<[string, FileSystemHandle]> }).entries()) {
+        signal?.throwIfAborted(); const path = base + name;
+        if (handle.kind === 'directory') {
+          if (base || name !== REPOSITORY_FOLDER) await visit(handle as FileSystemDirectoryHandle, path + '/');
+        } else if (path.startsWith(prefix)) paths.push(path);
+      }
+    }
+    await visit(root, ''); return paths.toSorted();
+  }
   async function file(path: string): Promise<File | null> {
     const parts = safePath(path).split('/'); let directory = root;
     try {
@@ -21,17 +40,13 @@ export function directorySource(root: FileSystemDirectoryHandle, sourceId: strin
     },
     async list(prefix, cursor, limit = 128, signal) {
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1024) throw new RepositoryError('budget', 'Invalid source page size');
-      let selected: string[] = [];
-      async function walk(directory: FileSystemDirectoryHandle, base: string): Promise<void> {
-        for await (const [name, handle] of (directory as FileSystemDirectoryHandle & { entries(): AsyncIterableIterator<[string, FileSystemHandle]> }).entries()) {
-          signal?.throwIfAborted(); const path = base + name;
-          if (handle.kind === 'directory') await walk(handle as FileSystemDirectoryHandle, path + '/');
-          else if (path.startsWith(prefix) && (!cursor || path > cursor)) {
-            selected.push(path); selected = selected.toSorted(); if (selected.length > limit + 1) selected.pop();
-          }
-        }
-      }
-      await walk(root, ''); const more = selected.length > limit; const paths = selected.slice(0, limit);
+      // A first page always walks afresh, so each complete listing still observes source changes.
+      let all = cursor ? snapshots.get(prefix) : undefined;
+      if (!all) { all = await walk(prefix, signal); snapshots.set(prefix, all); }
+      let start = 0;
+      if (cursor) { let high = all.length; while (start < high) { const middle = (start + high) >> 1; if (all[middle] <= cursor) start = middle + 1; else high = middle; } }
+      const paths = all.slice(start, start + limit); const more = start + limit < all.length;
+      if (!more) snapshots.delete(prefix);
       return { paths, nextCursor: more ? paths[paths.length - 1] : null };
     },
   };

@@ -54,6 +54,12 @@ export interface ProjectMediaSourceRoot {
   name: string;
 }
 
+/**
+ * Media source root that always resolves to the open project folder. Projects converted in place
+ * keep their old media there, so it needs no stored handle, extra permission or reconnection after moves.
+ */
+export const PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID = 'source-root:project-folder';
+
 export interface ProjectMIDIState {
   isEnabled?: boolean;
   transportBindings?: {

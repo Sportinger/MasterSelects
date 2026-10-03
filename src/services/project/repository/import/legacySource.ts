@@ -33,7 +33,11 @@ export interface LegacySourceBundle {
   linkedPath(path: string): Promise<string | null>;
   assertUnchanged(): Promise<void>;
 }
-export interface LegacyReadOptions { staging: RepositoryBackend; importId: string; signal?: AbortSignal; }
+export interface LegacyReadOptions {
+  staging: RepositoryBackend; importId: string; signal?: AbortSignal;
+  /** The repository is written into the old folder itself; only `project.msrepo.json` and `.masterselects/` are added. */
+  inPlace?: boolean;
+}
 /** A new-format repository archive was selected; it restores through the archive path instead. */
 export class RepositoryArchiveSourceError extends RepositoryError {
   constructor() { super('unsupported', 'Repository archives require repository restore, not legacy migration'); }
@@ -177,7 +181,7 @@ async function resolveTerrain(project: ProjectFile, source: ReadOnlyProjectSourc
 }
 
 export async function openLegacySource(source: ReadOnlyProjectSource, input: LegacyInput, options: LegacyReadOptions): Promise<LegacySourceBundle> {
-  if (source.locationId === options.staging.locationId) throw new RepositoryError('conflict', 'Legacy source and import target must be separate locations');
+  if (!options.inPlace && source.locationId === options.staging.locationId) throw new RepositoryError('conflict', 'Legacy source and import target must be separate locations');
   if (!/^[a-zA-Z0-9_-]+$/.test(options.importId)) throw new RepositoryError('corrupt', 'Invalid import ID');
   const signal = options.signal;
   let reader = directoryReader(source); let mediaFolder: string = PROJECT_FOLDERS.RAW; let extracted: { hash: string; length: number } | null = null;

@@ -1,6 +1,7 @@
 /**
- * Converting an old-format project needs a destination folder. Directory pickers require a fresh
- * user gesture, so the toolbar supplies a dialog that asks for it; the project service only awaits it.
+ * Old-format projects convert in place: the repository is added to the old folder without changing
+ * its files. Only a folder that an earlier version already converted into a separate project folder
+ * needs a decision, because converting it again would start from its pre-conversion state.
  */
 export type LegacyImportTargetResolver = (source: FileSystemDirectoryHandle) => Promise<FileSystemDirectoryHandle | null>;
 
@@ -11,12 +12,15 @@ export function setLegacyImportTargetResolver(next: LegacyImportTargetResolver):
   return () => { if (resolver === next) resolver = null; };
 }
 
+/** Returns the source itself to convert in place, a separately converted project folder, or null to cancel. */
 export async function requestLegacyImportTarget(source: FileSystemDirectoryHandle): Promise<FileSystemDirectoryHandle | null> {
-  if (!resolver) throw new Error('Old-format projects can only be converted from the editor window');
+  // Loaded lazily: the source-root registry depends on the project file service.
+  const { isSeparatelyConvertedLegacyFolder } = await import('./mediaSourceRoots');
+  if (!resolver || !await isSeparatelyConvertedLegacyFolder(source)) return source;
   return resolver(source);
 }
 
-/** Folder name for the converted copy, placed in the folder the user chose. */
+/** Folder name used by earlier versions for a separately converted copy. */
 export function convertedProjectFolderName(sourceName: string): string {
   return `${sourceName} (converted)`;
 }

@@ -56,7 +56,7 @@ export class ProjectCoreService {
   async loadProject(handle: FileSystemDirectoryHandle): Promise<boolean> {
     const location: RepositoryLocation = resolveProjectRootMode() === 'opfs' || isAndroidAutoRestoreProjectHandle(handle) ? { kind: 'opfs', path: handle.name } : { kind: 'fsa', handle };
     if (location.kind === 'fsa' && await isLegacyProjectLocation(location)) {
-      // Old-format folders stay untouched; the converted project lives in a folder the user chooses.
+      // Old files stay untouched; the repository is added in place unless an earlier separate conversion exists.
       const target = await requestLegacyImportTarget(handle); if (!target) return false;
       await openRepositoryProject(location, { legacyTarget: { kind: 'fsa', handle: target } }); await this.adoptSession(target); return true;
     }

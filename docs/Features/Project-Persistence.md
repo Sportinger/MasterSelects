@@ -19,9 +19,10 @@ unavailable, the chooser lists projects stored on the device. Recent entries
 reuse their remembered location and may need folder permission again.
 
 An existing repository is opened from its `project.msrepo.json` descriptor.
-Legacy `project.json` folders and `.msproj` packages are read through a separate
-import path. Import preserves the original source and creates the new
-repository separately; opening old work does not overwrite its source format.
+Legacy `project.json` folders and `.msproj` packages are converted in place on
+first open: the repository is added to the same folder through a separate,
+read-only import path, and the old files stay unchanged. Opening old work does
+not overwrite its source format.
 An incomplete or unreadable source is reported instead of being replaced with
 a new blank project.
 

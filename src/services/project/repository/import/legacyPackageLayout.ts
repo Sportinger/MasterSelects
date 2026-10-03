@@ -25,8 +25,10 @@ export function isLegacyLinkedPath(path: string): boolean {
  * unrelated files (backups next to the package, foreign folders) are neither read nor proven.
  */
 export type LegacySourceRole = 'imported' | 'linked' | 'ignored';
+/** Repository files of an in-place conversion share the old folder but are never legacy source. */
+const REPOSITORY_DESCRIPTOR = 'project.msrepo.json';
 export function legacySourceRole(physical: string, mediaFolder: string, packagePath: string | null): LegacySourceRole {
-  if (!physical.includes('/')) return physical === packagePath || packagePath === null && physical.endsWith('.json') ? 'imported' : 'ignored';
+  if (!physical.includes('/')) return physical === packagePath || packagePath === null && physical.endsWith('.json') && physical !== REPOSITORY_DESCRIPTOR ? 'imported' : 'ignored';
   const logical = legacyLogicalPath(physical, mediaFolder);
   return logical === null ? 'ignored' : isLegacyLinkedPath(logical) ? 'linked' : 'imported';
 }

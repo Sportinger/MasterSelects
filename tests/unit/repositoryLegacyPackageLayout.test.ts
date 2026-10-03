@@ -13,7 +13,9 @@ import { decodeProjectDomains } from '../../src/services/project/repository/doma
 import { blobPath } from '../../src/services/project/repository/persistence/blobStorage';
 import type { JsonValue } from '../../src/services/project/repository/contracts';
 import type { RepositoryLocation } from '../../src/services/project/repository/storageWorkerProtocol';
-import { assertLegacyImportComplete, prepareLegacyImport } from '../../src/services/project/repository/lifecycle/legacyImportPreparation';
+import { assertLegacyImportComplete, hasResumableInPlaceImport, prepareLegacyImport } from '../../src/services/project/repository/lifecycle/legacyImportPreparation';
+import { directorySource } from '../../src/services/project/repository/import/sourceReaders';
+import { PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID } from '../../src/services/project/types/project.types';
 
 /** Reassembles the imported workspace views (resolver fields live there, not in content). */
 async function readWorkspace(files: Map<string, Uint8Array>): Promise<JsonValue> {
@@ -85,6 +87,8 @@ describe('legacy package physical layout', () => {
     expect(legacySourceRole('Documents/doc.json', 'My Media', 'My.msproj')).toBe('imported');
     expect(legacySourceRole('Footage/huge.mov', 'Raw', null)).toBe('ignored');
     expect(legacySourceRole('project.json', 'Raw', null)).toBe('imported');
+    expect(legacySourceRole('project.msrepo.json', 'Raw', null)).toBe('ignored');
+    expect(legacySourceRole('.masterselects/commits/c.json', 'Raw', null)).toBe('ignored');
     expect(legacySourceRole('Raw/clip.mov', 'Raw', null)).toBe('linked');
     for (const path of ['Raw/Video/a.mp4', 'Cache/artifacts/sha256/ab/x/artifact.bin', 'Proxy/m/frame.webp', 'Renders/out.mp4', 'Documents/doc.json'])
       expect(legacyLogicalPath(legacyPhysicalCandidates(path, 'My Media')[0], 'My Media')).toBe(path);
@@ -151,7 +155,7 @@ describe('legacy conversion target folder', () => {
     const folder = (path: string) => { if (!folders.has(path)) folders.set(path, memory('folder:' + path)); return folders.get(path)!; };
     const backendFor = async (location: RepositoryLocation) => folder(location.kind === 'fsa' ? location.handle.name : location.path).backend;
     const source = memory('old-folder'); source.files.set('project.json', canonicalBytes(createRepositoryProject('Old')));
-    const request = (path: string) => ({ source: { ...source.backend, sourceId: 'old-folder' }, sourceHandle: null, target: { kind: 'opfs', path } as RepositoryLocation, workspaceId: 'workspace', backendFor });
+    const request = (path: string) => ({ source: { ...source.backend, sourceId: 'old-folder' }, sourceHandle: null, target: { kind: 'opfs', path } as RepositoryLocation, inPlace: false, workspaceId: 'workspace', backendFor });
     folder('occupied').files.set('notes.txt', new Uint8Array([1]));
     await expect(prepareLegacyImport(request('occupied'))).rejects.toMatchObject({ code: 'conflict' });
     const converted = await prepareLegacyImport(request('converted'));
@@ -161,9 +165,93 @@ describe('legacy conversion target folder', () => {
     expect(resumed.descriptor.repositoryId).toBe(converted.descriptor.repositoryId);
     const other = memory('other-old-folder'); other.files.set('project.json', canonicalBytes(createRepositoryProject('Other')));
     await expect(prepareLegacyImport({ ...request('converted'), source: { ...other.backend, sourceId: 'other-old-folder' } })).rejects.toMatchObject({ code: 'conflict' });
+    // A finished conversion opens as it is now, even after the old folder changed.
+    source.files.set('project.json', canonicalBytes(createRepositoryProject('Old, edited in an old build')));
+    await expect(prepareLegacyImport(request('converted'))).resolves.toMatchObject({ descriptor: converted.descriptor });
     const complete = [...folder('converted').files.keys()].find(path => path.endsWith('/complete.json'))!;
     folder('converted').files.delete(complete);
     await expect(assertLegacyImportComplete(folder('converted').backend)).rejects.toMatchObject({ code: 'conflict' });
     expect(source.writes).toEqual([]);
+  });
+});
+
+describe('in-place legacy conversion', () => {
+  const location: RepositoryLocation = { kind: 'opfs', path: 'Old Project' };
+  function oldFolder() {
+    const folder = memory('folder:Old Project');
+    const project = createRepositoryProject('Old Project');
+    project.media = [{ id: 'clip', name: 'clip.mp4', type: 'video', sourcePath: 'clip.mp4', projectPath: 'Raw/clip.mp4', hasProxy: false, folderId: null, importedAt: project.createdAt }];
+    folder.files.set('project.json', canonicalBytes(project));
+    folder.files.set('Raw/clip.mp4', new Uint8Array([1, 2, 3]));
+    folder.files.set('Proxy/clip/frame_000000.jpg', new Uint8Array([4]));
+    folder.files.set('Analysis/clip.json', canonicalBytes({ cuts: [] }));
+    const request = { source: { ...folder.backend, sourceId: 'folder:Old Project' }, sourceHandle: null, target: location, inPlace: true,
+      workspaceId: 'workspace', backendFor: async () => folder.backend };
+    return { folder, request };
+  }
+
+  it('adds the repository beside unchanged old files and links media through the project folder', async () => {
+    const { folder, request } = oldFolder();
+    const original = new Map([...folder.files].map(([path, bytes]) => [path, bytes.slice()]));
+    const converted = await prepareLegacyImport(request);
+    expect(converted.location).toEqual(location);
+    for (const [path, bytes] of original) expect(folder.files.get(path)).toEqual(bytes);
+    expect(folder.writes.every(path => path === 'project.msrepo.json' || path.startsWith('.masterselects/'))).toBe(true);
+    await expect(assertLegacyImportComplete(folder.backend)).resolves.toBeUndefined();
+    await expect(hasResumableInPlaceImport(folder.backend)).resolves.toBe(false);
+    const recovered = await recoverRepository(folder.backend, converted.descriptor);
+    const projection = await materializeProjection(folder.backend, recovered.heads.content, recovered.checkpoints);
+    const restored = decodeProjectDomains(projection.entities, await readWorkspace(folder.files));
+    expect(restored.mediaSourceRoots).toEqual([{ id: PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID, name: 'Old Project' }]);
+    expect(restored.media[0]).toMatchObject({ sourceRootId: PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID, sourceRelativePath: 'Raw/clip.mp4', projectPath: 'Raw/clip.mp4' });
+    // Linked media and caches are not copied into repository blobs.
+    expect(folder.files.has(blobPath(await hashBytes(new Uint8Array([1, 2, 3]))))).toBe(false);
+    await expect(prepareLegacyImport(request)).rejects.toMatchObject({ code: 'conflict' });
+  });
+
+  it('resumes an interrupted in-place conversion from the same folder', async () => {
+    const { folder, request } = oldFolder();
+    const first = await prepareLegacyImport(request);
+    const complete = [...folder.files.keys()].find(path => path.endsWith('/complete.json'))!;
+    folder.files.delete(complete);
+    await expect(hasResumableInPlaceImport(folder.backend)).resolves.toBe(true);
+    const resumed = await prepareLegacyImport(request);
+    expect(resumed.descriptor.repositoryId).toBe(first.descriptor.repositoryId);
+    await expect(hasResumableInPlaceImport(folder.backend)).resolves.toBe(false);
+  });
+});
+
+describe('legacy directory source listing', () => {
+  type Entry = { kind: 'file'; size: number } | { kind: 'directory'; children: Record<string, Entry> };
+  function handle(name: string, entry: Entry, walks: { count: number }): FileSystemHandle {
+    if (entry.kind === 'file') return { kind: 'file', name, async getFile() { return new File([new Uint8Array(entry.size)], name); } } as unknown as FileSystemHandle;
+    return { kind: 'directory', name,
+      async *entries() { if (name === 'root') walks.count++; for (const [child, value] of Object.entries(entry.children)) yield [child, handle(child, value, walks)]; },
+      async getDirectoryHandle(child: string) { const value = entry.children[child]; if (value?.kind !== 'directory') throw new DOMException('missing', 'NotFoundError'); return handle(child, value, walks); },
+      async getFileHandle(child: string) { const value = entry.children[child]; if (value?.kind !== 'file') throw new DOMException('missing', 'NotFoundError'); return handle(child, value, walks); },
+    } as unknown as FileSystemHandle;
+  }
+
+  it('pages one sorted walk per listing and skips the in-place repository folder', async () => {
+    const frames = Object.fromEntries(Array.from({ length: 300 }, (_, index) => [`frame_${String(index).padStart(6, '0')}.jpg`, { kind: 'file', size: 1 } as Entry]));
+    const tree: Entry = { kind: 'directory', children: {
+      'project.json': { kind: 'file', size: 2 },
+      Proxy: { kind: 'directory', children: { clip: { kind: 'directory', children: frames } } },
+      '.masterselects': { kind: 'directory', children: { commits: { kind: 'directory', children: { 'c.json': { kind: 'file', size: 1 } } } } },
+      Raw: { kind: 'directory', children: { '.masterselects': { kind: 'directory', children: { 'kept.bin': { kind: 'file', size: 1 } } } } },
+    } };
+    const walks = { count: 0 };
+    const source = directorySource(handle('root', tree, walks) as FileSystemDirectoryHandle, 'source', 'source');
+    const listed: string[] = []; let cursor: string | undefined; let pages = 0;
+    do { const page = await source.list('', cursor, 64); listed.push(...page.paths); cursor = page.nextCursor ?? undefined; pages++; } while (cursor);
+    expect(pages).toBe(5);
+    expect(walks.count).toBe(1);
+    expect(listed).toEqual(listed.toSorted());
+    expect(listed).toHaveLength(302);
+    expect(listed).toContain('Raw/.masterselects/kept.bin');
+    expect(listed.some(path => path.startsWith('.masterselects/'))).toBe(false);
+    // Every new listing walks again, so source changes stay observable.
+    await source.list('', undefined, 64);
+    expect(walks.count).toBe(2);
   });
 });

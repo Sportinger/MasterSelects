@@ -1,7 +1,7 @@
 import { Logger } from '../logger';
 import { projectDB } from '../projectDB';
 import { projectFileService } from '../projectFileService';
-import type { ProjectMediaSourceRoot } from './types/project.types';
+import { PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID, type ProjectMediaSourceRoot } from './types/project.types';
 
 const log = Logger.create('MediaSourceRoots');
 const HANDLE_KEY_PREFIX = 'media_source_root:';
@@ -43,6 +43,11 @@ function currentRoots(): ProjectMediaSourceRoot[] {
 }
 
 async function storedRootHandle(rootId: string): Promise<FileSystemDirectoryHandle | null> {
+  // The project folder root follows the open project; it is never stored under its shared id.
+  if (rootId === PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID) {
+    const projectHandle = typeof projectFileService.getProjectHandle === 'function' ? projectFileService.getProjectHandle() : null;
+    return projectHandle?.kind === 'directory' ? projectHandle : null;
+  }
   try {
     const handle = await projectDB.getStoredHandle(handleKey(rootId));
     return handle?.kind === 'directory' ? handle as FileSystemDirectoryHandle : null;
@@ -108,6 +113,10 @@ export async function registerProjectMediaSourceRoot(
   const roots = currentRoots();
   let matched = roots.find((root) => root.id === preferredRootId);
   let reusableByName: ProjectMediaSourceRoot | undefined;
+  if (matched?.id === PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID) {
+    const projectFolder = await storedRootHandle(matched.id);
+    if (!projectFolder || !await sameDirectory(projectFolder, handle)) matched = undefined;
+  }
 
   for (const root of matched ? [] : roots) {
     if (root.name.toLocaleLowerCase() !== handle.name.toLocaleLowerCase()) continue;
@@ -116,12 +125,25 @@ export async function registerProjectMediaSourceRoot(
       matched = root;
       break;
     }
-    if (!stored && !reusableByName) reusableByName = root;
+    if (!stored && !reusableByName && root.id !== PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID) reusableByName = root;
   }
 
   const root = matched ?? reusableByName ?? { id: createRootId(), name: handle.name };
-  await projectDB.storeHandle(handleKey(root.id), handle);
+  if (root.id !== PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID) await projectDB.storeHandle(handleKey(root.id), handle);
   return persistRootDescriptor({ ...root, name: handle.name }, roots);
+}
+
+/**
+ * Whether an old-format folder was already converted into a separate project folder. Those
+ * conversions registered the old folder as their `source-root:legacy-*` media source root.
+ */
+export async function isSeparatelyConvertedLegacyFolder(handle: FileSystemDirectoryHandle): Promise<boolean> {
+  const prefix = handleKey('source-root:legacy-');
+  for (const entry of await projectDB.getAllHandles()) {
+    if (!entry.key.startsWith(prefix) || entry.handle.kind !== 'directory') continue;
+    if (await sameDirectory(entry.handle as FileSystemDirectoryHandle, handle)) return true;
+  }
+  return false;
 }
 
 /** Stores a root handle for a descriptor written by another project, e.g. a legacy import. */

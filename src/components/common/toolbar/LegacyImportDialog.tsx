@@ -17,17 +17,17 @@ function LegacyImportDialog({ source, onDone }: { source: FileSystemDirectoryHan
     dialog.current?.querySelector<HTMLElement>('[data-primary]')?.focus();
     return () => { if (focus?.isConnected) focus.focus(); };
   }, []);
-  async function choose() {
+  async function openConverted() {
     setError(null); setBusy(true);
     try {
       const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
-      if (!picker) throw new Error('This browser cannot choose a folder for the converted project');
-      const parent = await picker({ id: 'ms-converted-project', mode: 'readwrite' });
-      // The original folder must stay byte-identical, so the copy may not live inside it.
-      if (await parent.isSameEntry(source) || await source.resolve(parent)) {
-        setError('Choose a folder outside the original project. The original stays unchanged.'); return;
+      if (!picker) throw new Error('This browser cannot choose a project folder');
+      const folder = await picker({ id: 'ms-converted-project', mode: 'readwrite' });
+      if (await folder.isSameEntry(source)) { onDone(source); return; }
+      try { await folder.getFileHandle('project.msrepo.json'); } catch {
+        setError(`“${folder.name}” is not a converted project. Choose the “${folderName}” folder.`); return;
       }
-      onDone(await parent.getDirectoryHandle(folderName, { create: true }));
+      onDone(folder);
     } catch (cause) {
       if (!(cause instanceof DOMException && cause.name === 'AbortError')) setError(cause instanceof Error ? cause.message : String(cause));
     } finally { setBusy(false); }
@@ -44,14 +44,14 @@ function LegacyImportDialog({ source, onDone }: { source: FileSystemDirectoryHan
         }
       }}>
       <div className="project-name-dialog-accent" />
-      <h2 id={titleId}>Convert old project</h2>
-      <p>“{source.name}” uses the previous project format. MasterSelects converts it into a new project folder.</p>
-      <p>The original project stays unchanged. Media files stay where they are and are linked from the new project, so keep the original folder available.</p>
-      <p>Choose where to create “{folderName}”.</p>
+      <h2 id={titleId}>Project already converted</h2>
+      <p>“{source.name}” was converted earlier into a separate project folder, usually “{folderName}”. Changes made there are not in this folder.</p>
+      <p>Open that project to keep working on it, or convert this folder in place from its original state. Its old files stay unchanged either way.</p>
       {error && <p role="alert">{error}</p>}
       <div className="repository-archive-actions">
         <button disabled={busy} onPointerUp={event => event.currentTarget.blur()} onClick={() => onDone(null)}>Cancel</button>
-        <button data-primary disabled={busy} onPointerUp={event => event.currentTarget.blur()} onClick={() => { void choose(); }}>Choose destination…</button>
+        <button disabled={busy} onPointerUp={event => event.currentTarget.blur()} onClick={() => onDone(source)}>Convert here</button>
+        <button data-primary disabled={busy} onPointerUp={event => event.currentTarget.blur()} onClick={() => { void openConverted(); }}>Open converted project…</button>
       </div>
     </div>
   </div>;

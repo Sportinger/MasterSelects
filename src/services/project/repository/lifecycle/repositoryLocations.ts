@@ -9,7 +9,7 @@ import { readJson, writeJson } from '../archive/streamIO';
 import { findCompletedBackup, completedBackupSource } from '../archive/backupCompletion';
 import { prepareArchive } from '../archive/selectiveArchive';
 import { newRepositoryDescriptor } from './RepositoryLifecycle';
-import { assertLegacyImportComplete, isLegacyProjectBackend, prepareLegacyImport } from './legacyImportPreparation';
+import { assertLegacyImportComplete, hasResumableInPlaceImport, isLegacyProjectBackend, prepareLegacyImport } from './legacyImportPreparation';
 import type { ReadOnlyProjectSource } from '../import/legacySource';
 import { directorySource } from '../import/sourceReaders';
 import { createEditorRepositoryActivation } from '../transaction/editorProjectionActivation';
@@ -47,8 +47,14 @@ export async function prepareNewRepository(location: RepositoryLocation, workspa
 }
 
 export interface RepositoryOpenOptions {
-  /** Folder for converting an old-format project; without it the conversion stays in browser storage. */
+  /** Separate folder for an old-format project; by default (or when it is the same folder) it converts in place. */
   legacyTarget?: RepositoryLocation;
+}
+async function sameLocation(left: RepositoryLocation, right: RepositoryLocation): Promise<boolean> {
+  if (left.kind === 'fsa' && right.kind === 'fsa') return left.handle.isSameEntry(right.handle);
+  if (left.kind !== right.kind || left.kind === 'fsa' || right.kind === 'fsa') return false;
+  const normalize = (path: string) => path.replaceAll('\\', '/').replace(/\/$/, '');
+  return normalize(left.path) === normalize(right.path);
 }
 /** Existing repository validation never invokes an old lifecycle loader or writes to its source. */
 export async function prepareRepositoryOpen(location: RepositoryLocation, workspaceId: string, onProgress?: (progress: RepositoryOpenProgress) => void, options: RepositoryOpenOptions = {}): Promise<PreparedRepository> {
@@ -59,7 +65,8 @@ export async function prepareRepositoryOpen(location: RepositoryLocation, worksp
   };
   await report('source');
   const backend = await backendForLocation(location);
-  if (await backend.stat('project.msrepo.json')) {
+  // An in-place conversion that stopped midway resumes from the same folder instead of opening half-built.
+  if (await backend.stat('project.msrepo.json') && !await hasResumableInPlaceImport(backend)) {
     const descriptor = await readJson<RepositoryDescriptor>(backend, 'project.msrepo.json', 65536);
     if (descriptor.format !== 'masterselects-repository' || descriptor.formatVersion !== 1) throw new RepositoryError('unsupported', 'Unsupported repository format');
     const completed = await findCompletedBackup(backend, descriptor);
@@ -84,8 +91,10 @@ export async function prepareRepositoryOpen(location: RepositoryLocation, worksp
     stat: path => backend.stat(path), read: (path, offset, length, signal) => backend.read(path, offset, length, signal),
     list: (prefix, cursor, limit, signal) => backend.list(prefix, cursor, limit, signal) };
   else source = directorySource(location.kind === 'fsa' ? location.handle : await directoryForOpfs(location.path), backend.locationId, backend.locationId);
-  // Legacy sources are read only; the converted repository goes to the chosen folder.
-  const imported = await prepareLegacyImport({ source, sourceHandle: location.kind === 'fsa' ? location.handle : null, target: options.legacyTarget ?? null,
+  // Old files are only read; the repository is added beside them unless a separate folder was chosen.
+  const target = options.legacyTarget ?? location;
+  const inPlace = target === location || await sameLocation(target, location);
+  const imported = await prepareLegacyImport({ source, sourceHandle: location.kind === 'fsa' ? location.handle : null, target: inPlace ? location : target, inPlace,
     workspaceId, backendFor: backendForLocation, onProgress: progress => onProgress?.(progress) });
   return { options: { descriptor: imported.descriptor, location: imported.location, workspaceId, activation: createEditorRepositoryActivation() } };
 }

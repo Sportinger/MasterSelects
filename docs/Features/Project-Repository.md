@@ -153,16 +153,23 @@ remain linked; a self-contained export must include every required source.
 ## Legacy import and transport
 
 Opening an old-format project (a `.msproj` package or an older folder with
-`project.json`) asks for a destination. MasterSelects creates
-`<name> (converted)` in the chosen folder, which must lie outside the original.
-Import reads the original as an explicit, read-only source and never opens it
-through a lifecycle path that upgrades or saves back into it. Project data,
-sidecars, documents and referenced artifacts are copied with their original
-bytes and provenance.
+`project.json`) converts it in place without further prompts. MasterSelects adds
+`project.msrepo.json` and `.masterselects/` to the same folder; every existing
+file, including `project.json` or the package, stays byte-identical. Import reads
+the old files as an explicit, read-only source and never saves back into them.
+Project data, sidecars, documents and referenced artifacts are copied into the
+repository with their original bytes and provenance. File System Access folders,
+browser storage and the Native Helper convert in place the same way.
 
-Media, proxies, renders and caches stay in the original folder. The converted
-project links them through a media source root and restores them with the
-saved source locations, so keep the original folder available.
+Media, proxies, renders and caches stay where they are. The converted project
+links them through the project-folder media source root, which always resolves
+to the open project folder: it needs no extra folder permission, and moving or
+copying the whole folder keeps the media linked.
+
+A folder that an earlier version converted into a separate `<name> (converted)`
+folder asks once: open that converted project, or convert this folder in place
+from its original state. Opening a finished conversion never imports it again,
+so edits made after the conversion do not conflict with it.
 Reopening rebinds audio, video and image clips as runtime data, including nested
 compositions and locked tracks; it does not create an edit or clear audio analysis.
 Saved sources are assumed available, including originals embedded in repository
@@ -188,9 +195,13 @@ The source-change proof hashes the package and sidecars completely but linked
 media only by path and size, so projects with hundreds of gigabytes of footage
 convert in seconds. Packages keep the old physical layout: raw media sit directly
 in the media folder, caches in its `.masterselects-cache` folder and documents
-at the project root. Converting the same original into the same folder resumes
-an interrupted conversion; opening a half-converted folder directly reports that
-the conversion did not finish.
+at the project root. An interrupted in-place conversion resumes
+automatically the next time the folder is opened. A separate conversion folder
+resumes when the same original is converted into it again; opening that
+half-converted folder directly reports that the conversion did not finish.
+Listing the old folder walks it once per pass, so tens of thousands of old proxy
+frames do not multiply the scan; the repository's own `.masterselects/` folder
+is never part of the legacy source.
 
 Older per-clip keyframes may include a redundant runtime `clipId`. Import
 checks that it matches the containing clip and keeps the authored curve fields.
