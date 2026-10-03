@@ -1,10 +1,15 @@
+import { useTimelineStore } from '../../stores/timeline';
+import { createClipSpeedSource, resolveClipSourceTime, videoFrameSourceTime, type SpeedSource } from '../../services/timeline/retime/clipRetime';
 export interface ParallelDecodeClipWindow {
+  clipId?: string;
   startTime: number;
   duration: number;
   inPoint: number;
   outPoint: number;
   reversed: boolean;
   speed: number;
+  timeRemap?: import('../../types/timeline').ClipTimeRemap;
+  source?: { type: 'video'; naturalDuration?: number };
   isNested?: boolean;
   mainTimelineStart?: number;
   mainTimelineDuration?: number;
@@ -25,7 +30,11 @@ export interface ParallelDecodePrefetchTarget {
   shouldBlock: boolean;
 }
 
-export function timelineToSourceTime(clipInfo: ParallelDecodeClipWindow, timelineTime: number): number {
+export function timelineToSourceTime(
+  clipInfo: ParallelDecodeClipWindow,
+  timelineTime: number,
+  speedSource?: SpeedSource,
+): number {
   let clipLocalTime: number;
 
   if (clipInfo.mainTimelineStart !== undefined) {
@@ -37,12 +46,14 @@ export function timelineToSourceTime(clipInfo: ParallelDecodeClipWindow, timelin
     clipLocalTime = timelineTime - clipInfo.startTime;
   }
 
-  const speedAdjusted = clipLocalTime * (clipInfo.speed || 1);
-  const sourceTime = clipInfo.reversed
-    ? clipInfo.outPoint - speedAdjusted
-    : clipInfo.inPoint + speedAdjusted;
-
-  return Math.max(clipInfo.inPoint, Math.min(sourceTime, clipInfo.outPoint - 0.001));
+  // Parallel preparation retains reduced records. Recover top-level authored timing
+  // for initial/lookahead requests; per-frame export overrides use its FrameContext.
+  const state = !speedSource && !clipInfo.isNested && clipInfo.clipId
+    ? useTimelineStore.getState() : undefined;
+  const clip = state?.clips.find(candidate => candidate.id === clipInfo.clipId) ?? clipInfo;
+  const source = speedSource ?? createClipSpeedSource(clip,
+    state?.clipKeyframes.get(clipInfo.clipId!) ?? []);
+  return videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, source));
 }
 
 export function isTimeInClipRange(clipInfo: ParallelDecodeClipWindow, timelineTime: number): boolean {

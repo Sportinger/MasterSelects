@@ -16,8 +16,8 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 
 | Workspace | Highlights |
 | --- | --- |
-| **Video** | Multitrack editing, nested compositions, proxies, multicam, and Premiere Pro sequence import. |
-| **Nodes** | Build and reuse effect, color, geometry, and 3D graphs with typed connections and live previews. Unconnected cards pack compactly, separately from expanded groups. Cables fade with overlapping group depth using cached coverage and reusable paths; obstacle routing prefers clear direct lanes and removes retraced segments. |
+| **Video** | Multitrack editing, nested compositions, proxies, multicam, and Premiere Pro sequence import. Speed, reverse and freeze frames share one retime contract across preview, scrubbing, export and audio. |
+| **Nodes** | Build and reuse effect, color, geometry, and 3D graphs with typed connections and live previews. Unconnected cards pack compactly, separately from expanded groups. Cables fade with overlapping group depth using cached coverage and reusable paths; obstacle routing prefers clear direct lanes and removes retraced segments. The composition graph shows media, clips, tracks, transitions and beat rules as one graph; each clip expands in place into its full processing graph. |
 | **Color & effects** | Grade footage, combine GPU effects and transitions, and animate masks and properties. |
 | **Audio** | Edit waveforms, mix tracks, record, apply effects, and separate stems. |
 | **Motion & tracking** | Animate text and shapes, create captions, and attach graphics to tracked footage. |
@@ -25,6 +25,8 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 | **AI** | Ask the in-app agent to edit the timeline or generate media. Nodes and cables appear beside Preview as individual AI instructions arrive. AI Studio keeps Chat and Generation free of a floating credit banner. |
 
 Waveform previews, pyramid analysis, and cache unpacking run in dedicated workers. Large timelines reuse saved source waveforms after refresh, share results across split clips, and limit background analysis updates. Decoding and waveform generation do not hold the project save barrier. See [Audio Intelligence](docs/Features/Audio-Intelligence.md).
+
+Beat rules distribute selected clips on analyzed beats or the tempo map and keep manual corrections as offsets; the in-app agent can read the composition graph and edit these rules. See [Node Workspace](docs/Features/Node-Workspace.md#composition-workspace).
 
 Timeline scrolling reuses prepared waveform columns and bounds dashed composition outlines to the visible canvas. Open composition tabs restore only their timeline, retain connected media, and remember independent playhead and zoom positions. See [Timeline](docs/Features/Timeline.md).
 

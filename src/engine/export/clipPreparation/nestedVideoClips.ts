@@ -1,3 +1,4 @@
+import { createClipSpeedSource, resolveClipSourceTime } from '../../../services/timeline/retime/clipRetime';
 import { MAX_NESTING_DEPTH } from '../../../stores/timeline/constants';
 import type { TimelineClip } from '../../../stores/timeline/types';
 
@@ -24,7 +25,7 @@ function canPruneComposition(clip: TimelineClip, range: NestedVideoExportRange):
     keyframes?: readonly { property: string }[];
   }).keyframes;
   return (clip.speed ?? 1) === 1 && !clip.reversed &&
-    !clip.transitionSourceMap && !clip.transitionSourceHold &&
+    clip.timeRemap?.kind !== 'freeze' && clip.timeRemap?.kind !== 'loop' && clip.timeRemap?.kind !== 'warp' && !clip.transitionSourceMap && !clip.transitionSourceHold &&
     !Number.isFinite(clip.transitionSourceTimeOverride) &&
     !clip.transitionIn && !clip.transitionOut &&
     !inlineKeyframes?.some((keyframe) => keyframe.property === 'speed') &&
@@ -52,11 +53,11 @@ export function collectNestedVideoClips(
     parentMainAtSourceZero: number,
     parentMainSecondsPerSourceSecond: number,
   ): { mainAtSourceZero: number; mainSecondsPerSourceSecond: number } => {
-    const rawSpeed = clip.speed ?? 1;
-    const speed = Math.max(0.0001, Math.abs(rawSpeed));
-    const reversed = Boolean(clip.reversed) !== (rawSpeed < 0);
-    const sourceAnchor = reversed ? clip.outPoint : clip.inPoint;
-    const direction = reversed ? -1 : 1;
+    const timing = resolveClipSourceTime(clip, 0);
+    const rawRate = createClipSpeedSource(clip).speedAt(0) * (clip.reversed ? -1 : 1);
+    const speed = Math.max(0.0001, Math.abs(rawRate));
+    const sourceAnchor = timing.sourceTime;
+    const direction = rawRate < 0 ? -1 : 1;
     return {
       mainAtSourceZero:
         parentMainAtSourceZero +
@@ -72,6 +73,7 @@ export function collectNestedVideoClips(
     mainSecondsPerSourceSecond: number,
     depth: number,
     visibleWindow: TimeWindow | undefined,
+    nonInvertibleAncestor: boolean,
   ): void => {
     if (depth >= MAX_NESTING_DEPTH || !parentClip.nestedClips) return;
 
@@ -117,16 +119,19 @@ export function collectNestedVideoClips(
           childMapping.mainAtSourceZero,
           childMapping.mainSecondsPerSourceSecond,
           depth + 1,
-          exportRange && !isTransitionParticipant && canPruneComposition(clip, exportRange)
+          exportRange && !nonInvertibleAncestor && !isTransitionParticipant && canPruneComposition(clip, exportRange)
             ? activeWindow : undefined,
+          nonInvertibleAncestor || clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp',
         );
       } else if (clip.source?.type === 'video' && !collectedClipIds.has(clip.id)) {
         collectedClipIds.add(clip.id);
         nestedVideoClips.push({
           clip,
           parentClip,
-          mainTimelineStart: Math.min(mappedStart, mappedEnd),
-          mainTimelineDuration: Math.abs(mappedEnd - mappedStart),
+          // Holds and loops have no affine inverse. Keep descendants admitted throughout
+          // the root output interval; per-frame export supplies exact source time.
+          mainTimelineStart: nonInvertibleAncestor ? compositionClip.startTime : Math.min(mappedStart, mappedEnd),
+          mainTimelineDuration: nonInvertibleAncestor ? compositionClip.duration : Math.abs(mappedEnd - mappedStart),
         });
       }
     }
@@ -146,6 +151,7 @@ export function collectNestedVideoClips(
     rootMapping.mainSecondsPerSourceSecond,
     0,
     exportRange && canPruneComposition(compositionClip, exportRange) ? rootWindow : undefined,
+    compositionClip.timeRemap?.kind === 'freeze' || compositionClip.timeRemap?.kind === 'loop' || compositionClip.timeRemap?.kind === 'warp',
   );
   return nestedVideoClips;
 }

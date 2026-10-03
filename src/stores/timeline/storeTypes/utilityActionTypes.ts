@@ -16,6 +16,7 @@ import type {
   TextBoundsPath,
   TimelineClip,
 } from '../../../types';
+import type { CompositionGraphState } from '../../../types/compositionGraph';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { LightClipSettings } from '../../../types/light';
 import type { SceneCameraSettings } from '../../mediaStore/types';
@@ -25,6 +26,13 @@ import type {
 } from '../editOperations/types';
 import type { AIActionOverlay, TimelineMarker } from './feedbackTypes';
 import type { TimelineVideoBakeRegionSelection } from './regionTypes';
+
+export interface CompositionGraphActions {
+  updateCompositionGraph: (
+    updater: (current: CompositionGraphState) => CompositionGraphState,
+    options?: { historyLabel?: string; skipHistory?: boolean },
+  ) => void;
+}
 
 export interface RamPreviewActions {
   toggleRamPreviewEnabled: () => void;

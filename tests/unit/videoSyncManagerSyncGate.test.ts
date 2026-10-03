@@ -229,13 +229,14 @@ describe('VideoSyncManager same-frame sync gate', () => {
       mediaFileByName: new Map(),
       compositionById: new Map(),
       hasKeyframes: () => false,
-      getInterpolatedSpeed: () => playbackSpeed,
+      getInterpolatedSpeed: () => 1,
       getSourceTimeForClip: () => 2,
     } as unknown as FrameContext);
 
     vi.mocked(getClipTimeInfo).mockReturnValue({
       clipTime: 2,
       speed: 1,
+      sourceRate: 1,
       absSpeed: 1,
     } as ReturnType<typeof getClipTimeInfo>);
     manager.syncFullWebCodecs(clip, createContext(1));
@@ -245,7 +246,9 @@ describe('VideoSyncManager same-frame sync gate', () => {
 
     vi.mocked(getClipTimeInfo).mockReturnValue({
       clipTime: 2,
-      speed: -1,
+      // Clip-local rate is independent of the timeline playback direction.
+      speed: 1,
+      sourceRate: 1,
       absSpeed: 1,
     } as ReturnType<typeof getClipTimeInfo>);
     provider.advanceToTime.mockClear();
@@ -263,5 +266,19 @@ describe('VideoSyncManager same-frame sync gate', () => {
     expect(provider.scrubSeek).not.toHaveBeenCalled();
     expect(provider.advanceToTime).not.toHaveBeenCalled();
     expect(provider.seek).not.toHaveBeenCalled();
+
+    // Reversing both the source clock and timeline produces forward decoding.
+    vi.mocked(ensureRuntimeFrameProvider).mockClear();
+    vi.mocked(getClipTimeInfo).mockReturnValue({
+      clipTime: 2,
+      speed: -1,
+      sourceRate: -1,
+      absSpeed: 1,
+    } as ReturnType<typeof getClipTimeInfo>);
+    provider.advanceReverseToTime.mockClear();
+    manager.syncFullWebCodecs(clip, createContext(-1));
+    expect(ensureRuntimeFrameProvider).not.toHaveBeenCalled();
+    expect(provider.advanceReverseToTime).not.toHaveBeenCalled();
+    expect(provider.advanceToTime).toHaveBeenCalledWith(2);
   });
 });

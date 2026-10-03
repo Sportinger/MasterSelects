@@ -15,8 +15,8 @@ export function createNodeLayoutTransition(before: NodeLayoutSnapshot, target: N
       if (proxy) return proxy.layout;
     }
   };
-  const closing = target.graph.groups?.some(group => group.collapsed
-    && before.graph.groups?.some(old => old.id === group.id && !old.collapsed));
+  const beforeGroups = new Map(before.graph.groups?.map(group => [group.id, group]));
+  const closing = target.graph.groups?.some(group => group.collapsed && beforeGroups.get(group.id)?.collapsed === false);
   const base = closing ? before : target;
   const paths = base.nodes.map(node => ({
     node: next.get(node.id) ?? node,

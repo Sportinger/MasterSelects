@@ -88,7 +88,14 @@ export class RepositoryLifecycle {
         this.error = error instanceof Error ? error.message : String(error);
         if (previous) {
           this.hooks.install(previous); this.active = previous;
-          await this.hooks.activate(previous, await readProjectWorkspace(previous)).catch(() => {});
+          try { await this.hooks.activate(previous, await readProjectWorkspace(previous)); }
+          catch (reactivation) {
+            // Never keep a writable owner whose editor state was not restored from it: later
+            // edits would persist foreign or placeholder content into that project.
+            this.hooks.install(null); this.active = null;
+            await previous.close().catch(() => {});
+            this.error = `Previous project could not be restored: ${reactivation instanceof Error ? reactivation.message : String(reactivation)}`;
+          }
         }
         throw error;
       } finally { this.switching = false; barrier.release(); this.notify(); }

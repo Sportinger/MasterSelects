@@ -1,3 +1,4 @@
+import { createClipSpeedSource, createStoreSpeedSource, isReverseVideoPlayback, resolveClipSourceTime, videoFrameSourceTime } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types';
 import { flags } from '../../engine/featureFlags';
 import { renderHostPort } from '../render/renderHostPort';
@@ -13,7 +14,6 @@ import {
 } from '../mediaRuntime/runtimePlayback';
 import type { RuntimeFrameProvider } from '../mediaRuntime/types';
 import { getClipTimeInfo, getMediaFileForClip } from './FrameContext';
-import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
 import type { FrameContext } from './types';
 import type { MediaFile } from '../../stores/mediaStore/types';
 
@@ -132,7 +132,15 @@ function reverseRuntimeProviderReadyAtTime(
   if (frameTime === null) {
     return true;
   }
-  return Math.abs(frameTime - clipTime) <= REVERSE_WORKER_PRIME_FRAME_TOLERANCE_SECONDS;
+  // A frame starting after the biased request is the next frame, even if it
+  // falls inside the old 80 ms readiness tolerance. Prefer the actual duration
+  // for variable-rate media, then the provider's nominal frame rate.
+  const durationUs = provider.getCurrentFrame?.()?.duration;
+  const frameRate = provider.getFrameRate?.();
+  const frameDuration = durationUs && durationUs > 0 ? durationUs / 1_000_000
+    : frameRate && frameRate > 0 ? 1 / frameRate
+    : REVERSE_WORKER_PRIME_FRAME_TOLERANCE_SECONDS;
+  return frameTime <= clipTime + 1e-9 && clipTime < frameTime + frameDuration;
 }
 
 async function waitForReverseRuntimeProviderReady(
@@ -199,36 +207,18 @@ function findMediaFileForClip(
     : undefined;
 }
 
-function calculateReversePrimeClipTime(input: {
+function calculateReversePrimeSample(input: {
   readonly clip: TimelineClip;
   readonly playheadPosition: number;
   readonly getSourceTimeForClip: (clipId: string, clipLocalTime: number) => number;
   readonly getInterpolatedSpeed?: (clipId: string, clipLocalTime: number) => number;
-}): number {
+}) {
   const { clip, playheadPosition, getSourceTimeForClip, getInterpolatedSpeed } = input;
   const clipLocalTime = playheadPosition - clip.startTime;
-  const mappedTime = resolveTransitionSourceMapTime(clip.transitionSourceMap, clipLocalTime);
-  if (mappedTime) return mappedTime.sourceTime;
-  const isTransitionHold = clip.transitionSourceHold === true;
-  const initialSpeed = isTransitionHold
-    ? 1
-    : getInterpolatedSpeed?.(clip.id, 0) ?? clip.speed ?? (clip.reversed ? -1 : 1);
-  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-  const sourceOverride = clip.transitionSourceTimeOverride;
-  const baseSourceTime = Number.isFinite(sourceOverride)
-    ? sourceOverride! - startPoint
-    : getSourceTimeForClip(clip.id, clipLocalTime);
-  return Number.isFinite(sourceOverride)
-    ? sourceOverride!
-    : Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + baseSourceTime));
-}
-
-function hasNegativeTransitionSourceRate(clip: TimelineClip, playheadPosition: number): boolean {
-  const mappedTime = resolveTransitionSourceMapTime(
-    clip.transitionSourceMap,
-    playheadPosition - clip.startTime,
-  );
-  return mappedTime ? mappedTime.sourceRate < 0 : false;
+  return resolveClipSourceTime(clip, clipLocalTime, createStoreSpeedSource(clip.id, {
+    getSourceTimeForClip,
+    getInterpolatedSpeed: getInterpolatedSpeed ?? ((_id, local) => createClipSpeedSource(clip).speedAt(local)),
+  }));
 }
 
 function bindReverseWorkerRuntimeSourceForPlaybackPrime(
@@ -281,21 +271,14 @@ export async function primeReverseWorkerRuntimeSourcesForPlayback(input: {
   for (const clip of input.clips) {
     if (seenClipIds.has(clip.id)) continue;
     seenClipIds.add(clip.id);
-    const reverseRequested =
-      input.playbackSpeed < 0 ||
-      clip.reversed === true ||
-      hasNegativeTransitionSourceRate(clip, input.playheadPosition);
+    const sample = calculateReversePrimeSample({ ...input, clip });
+    const reverseRequested = isReverseVideoPlayback(sample, input.playbackSpeed);
     if (!reverseRequested || clip.source?.type !== 'video') continue;
 
     const source = bindReverseWorkerRuntimeSourceForPlaybackPrime(clip, input.mediaFiles ?? []);
     if (!source?.runtimeSourceId || !source.runtimeSessionKey) continue;
 
-    const clipTime = calculateReversePrimeClipTime({
-      clip,
-      playheadPosition: input.playheadPosition,
-      getSourceTimeForClip: input.getSourceTimeForClip,
-      getInterpolatedSpeed: input.getInterpolatedSpeed,
-    });
+    const clipTime = videoFrameSourceTime(sample);
     recordCheck({
       clipId: clip.id,
       isPlaying: false,
@@ -362,7 +345,7 @@ export function isReverseWorkerWebCodecsCandidate(
     renderHostMode: mode,
   };
   const timeInfo = getClipTimeInfo(ctx, clip);
-  const reverseRequested = ctx.playbackSpeed < 0 || clip.reversed || timeInfo.speed < 0;
+  const reverseRequested = isReverseVideoPlayback(timeInfo, ctx.playbackSpeed);
   if (!flags.useFullWebCodecsPlayback) {
     recordCheck({ ...baseCheck, candidate: false, reason: 'webcodecs-disabled' });
     return false;

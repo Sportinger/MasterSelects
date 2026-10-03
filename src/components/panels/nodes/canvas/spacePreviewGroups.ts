@@ -1,5 +1,5 @@
 import type { NodeGraph, NodeGraphLayout, NodeGraphNode } from '../../../../types/nodeGraph';
-import { getNodeHeight, NODE_WIDTH } from './canvasGeometry';
+import { getNodeHeight, getNodeWidth } from './canvasGeometry';
 import { encloseNodeGroup, withGroupSize } from './groupBounds';
 import { PREVIEW_BLOCK_GAP, spacePreviewBlocks, spacePreviewNodes, type PreviewLayoutBlock } from './spacePreviewNodes';
 import { connectedFlowBlocks, flowGroupLayout } from './flowGroupLayout';
@@ -38,7 +38,7 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     const memberIds = [...new Set([...listedIds, ...nestedIds])];
     const blocks: GroupBlock[] = [...nested, ...memberIds.filter(nodeId => !nestedIds.has(nodeId)).map((nodeId): GroupBlock => {
       const node = nodes.get(nodeId)!;
-      return { id: `node:${nodeId}`, ...node.layout, width: NODE_WIDTH, height: getNodeHeight(node), nodeIds: [nodeId], group: false,
+      return { id: `node:${nodeId}`, ...node.layout, width: getNodeWidth(node), height: getNodeHeight(node), nodeIds: [nodeId], group: false,
         source: !node.inputs.length,
         boundary: node.binding?.kind === 'clip-source' ? 'input' : node.binding?.kind === 'clip-output' ? 'output' : undefined };
     })];
@@ -91,7 +91,7 @@ export function spacePreviewGroups(graph: NodeGraph, fixedIds: ReadonlySet<strin
     if (!group || !memberIds.length) return;
     const members = memberIds.map(nodeId => nodes.get(nodeId)!);
     const bounds = group.collapsed ? { left: Math.min(...members.map(node => node.layout.x)), top: Math.min(...members.map(node => node.layout.y)),
-      right: Math.max(...members.map(node => node.layout.x + NODE_WIDTH)), bottom: Math.max(...members.map(node => node.layout.y + getNodeHeight(node))) }
+      right: Math.max(...members.map(node => node.layout.x + getNodeWidth(node))), bottom: Math.max(...members.map(node => node.layout.y + getNodeHeight(node))) }
       : withGroupSize(encloseNodeGroup(members, childBounds), group.size);
     return { id: `group:${group.id}`, nodeIds: memberIds, group: true, flow: flow || nested.some(block => block.flow), growing: expanding.has(group.id) || nested.some(block => block.growing),
       x: bounds.left, y: bounds.top, width: bounds.right - bounds.left, height: bounds.bottom - bounds.top };

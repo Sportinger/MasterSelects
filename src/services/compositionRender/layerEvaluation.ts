@@ -1,16 +1,16 @@
+import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
+import { createClipSpeedSource, resolveClipSourceTime, videoFrameSourceTime } from '../timeline/retime/clipRetime';
 import type { Layer, LayerSource, NestedCompositionData } from '../../types/layers';
 import type { SerializableClip, TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
 import { isVectorAnimationSourceType, type VectorAnimationClipSettings } from '../../types/vectorAnimation';
 import type { Composition } from '../../stores/mediaStore/types';
-import { calculateSourceTime } from '../../utils/speedIntegration';
 import { getEffectiveScale } from '../../utils/transformScale';
 import { degreesToRadians, rotationDegreesToRadians } from '../../utils/rotationUnits';
 import { getInterpolatedMotionLayer } from '../../utils/motionInterpolation';
 import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
-import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
 import {
   getRuntimeFrameProvider,
   updateRuntimePlaybackTime,
@@ -159,30 +159,11 @@ export function buildEvaluatedClipLayer(params: {
     ? evaluateTransitionMappedAnimation(timelineClip, keyframes, timelineLocalTime)
     : undefined;
   if (mappedAnimation === null) return null;
-  const mappedTime = resolveTransitionSourceMapTime(
-    timelineClip.transitionSourceMap,
-    timelineLocalTime,
-  );
-  const sourceOverride = timelineClip.transitionSourceTimeOverride;
-  const isHold = mappedTime
-    ? mappedTime.isHold || mappedTime.sourceRate === 0
-    : timelineClip.transitionSourceHold === true;
-  const defaultSpeed = mappedTime
-    ? mappedTime.sourceRate
-    : isHold
-      ? 0
-      : clipAtTime.speed ?? (clipAtTime.reversed ? -1 : 1);
-  const sourceTime = Number.isFinite(sourceOverride)
-    ? sourceOverride! - (defaultSpeed >= 0 ? (clipAtTime.inPoint || 0) : (clipAtTime.outPoint || source.naturalDuration))
-    : calculateSourceTime([], timelineLocalTime, defaultSpeed);
-  const startPoint = defaultSpeed >= 0
-    ? (clipAtTime.inPoint || 0)
-    : (clipAtTime.outPoint || source.naturalDuration);
-  const clipTime = mappedTime
-    ? mappedTime.sourceTime
-    : Number.isFinite(sourceOverride)
-      ? Math.max(0, Math.min(source.naturalDuration, sourceOverride!))
-      : Math.max(0, Math.min(source.naturalDuration, startPoint + sourceTime));
+  const timing = resolveClipSourceTime(timelineClip, timelineLocalTime,
+    createClipSpeedSource(timelineClip, keyframes));
+  const isHold = timing.isHold;
+  const defaultSpeed = timing.sourceRate * (playbackOptions?.playbackRate ?? 1);
+  const clipTime = timing.sourceTime;
 
   const baseTransform = clipAtTime.transform || {
     position: { x: 0, y: 0, z: 0 },
@@ -202,7 +183,7 @@ export function buildEvaluatedClipLayer(params: {
 
   let layerSource: EvaluatedLayer['source'] = null;
   if (source.videoElement) {
-    layerSource = buildBackgroundVideoLayerSource(source, clipTime, {
+    layerSource = buildBackgroundVideoLayerSource(source, videoFrameSourceTime(timing), {
       ...playbackOptions,
       playbackRate: Math.abs(defaultSpeed),
       continuousPlayback: !isHold && defaultSpeed > 0,
@@ -267,6 +248,7 @@ export function buildEvaluatedClipLayer(params: {
 }
 
 export function evaluateNestedComposition(params: {
+  depth?: number;
   clip: TimelineClip;
   parentTime: number;
   parentCompId: string;
@@ -303,16 +285,18 @@ export function evaluateNestedComposition(params: {
     evaluateCompositionAtTime,
   } = params;
 
+  const depth = params.depth ?? 0;
+  if (depth >= MAX_NESTING_DEPTH) return null;
   const clipLocalTime = parentTime - clip.startTime;
   const keyframes = getCompositionClipKeyframes(clip, getClipKeyframes);
   const mappedAnimation = clip.transitionSourceMap?.version === 2
     ? evaluateTransitionMappedAnimation(clip, keyframes, clipLocalTime)
     : undefined;
   if (mappedAnimation === null) return null;
-  const nestedTime = resolveTransitionSourceMapTime(
-    clip.transitionSourceMap,
-    clipLocalTime,
-  )?.sourceTime ?? clipLocalTime + (clip.inPoint || 0);
+  const parentTiming = resolveClipSourceTime(clip, clipLocalTime, createClipSpeedSource(clip, keyframes));
+  const nestedTime = videoFrameSourceTime(parentTiming);
+  const nestedPlaybackOptions = { ...playbackOptions,
+    playbackRate: (playbackOptions?.playbackRate ?? 1) * parentTiming.sourceRate };
   const referencedComposition = clip.compositionId
     ? getComposition(clip.compositionId)
     : undefined;
@@ -387,7 +371,7 @@ export function evaluateNestedComposition(params: {
     const nestedLayers = evaluateCompositionAtTime(
       clip.compositionId,
       nestedTime,
-      { playbackOptions },
+      { playbackOptions: nestedPlaybackOptions },
     );
     if (nestedLayers.length === 0) {
       return null;
@@ -422,7 +406,7 @@ export function evaluateNestedComposition(params: {
       isActiveComposition: false,
       getVectorAnimationSettings,
       getClipKeyframes,
-      playbackOptions,
+      playbackOptions: nestedPlaybackOptions,
       getComposition,
       isCompositionReady,
       prepareComposition,
@@ -441,6 +425,13 @@ export function evaluateNestedComposition(params: {
     );
 
     if (!nestedClip) continue;
+    if (nestedClip.isComposition) {
+      const layer = evaluateNestedComposition({ ...params, clip: nestedClip,
+        parentTime: nestedTime, parentCompId: clip.compositionId || clip.id,
+        playbackOptions: nestedPlaybackOptions, depth: depth + 1 });
+      if (layer) nestedLayers.push(layer as Layer);
+      continue;
+    }
 
     const nestedLocalTime = nestedTime - nestedClip.startTime;
     const nestedKeyframes = getCompositionClipKeyframes(nestedClip, getClipKeyframes);
@@ -448,18 +439,12 @@ export function evaluateNestedComposition(params: {
       ? evaluateTransitionMappedAnimation(nestedClip, nestedKeyframes, nestedLocalTime)
       : undefined;
     if (nestedAnimation === null) continue;
-    const nestedMappedTime = resolveTransitionSourceMapTime(
-      nestedClip.transitionSourceMap,
-      nestedLocalTime,
-    );
-    const nestedSpeed = nestedMappedTime?.sourceRate ??
-      (nestedClip.speed ?? (nestedClip.reversed ? -1 : 1));
-    const nestedClipTime = nestedMappedTime?.sourceTime ?? (nestedClip.reversed
-      ? nestedClip.outPoint - nestedLocalTime
-      : nestedLocalTime + nestedClip.inPoint);
-    const nestedIsHold = nestedMappedTime
-      ? nestedMappedTime.isHold || nestedMappedTime.sourceRate === 0
-      : false;
+    const nestedTiming = resolveClipSourceTime(nestedClip, nestedLocalTime,
+      createClipSpeedSource(nestedClip, nestedKeyframes));
+    const nestedSpeed = nestedTiming.sourceRate * nestedPlaybackOptions.playbackRate;
+    const nestedClipTime = nestedClip.source?.type === 'video'
+      ? videoFrameSourceTime(nestedTiming) : nestedTiming.sourceTime;
+    const nestedIsHold = nestedTiming.isHold;
 
     const transform = nestedAnimation?.transform ?? (nestedClip.transform || {
       position: { x: 0, y: 0, z: 0 },

@@ -1,7 +1,10 @@
+import { startNodeMeasure, endNodeMeasure } from '../../../../services/nodeGraph/unified/nodeGraphPerformance';
 import type { RoutedCable } from './cableBranches';
 
 /** Give crossing cables between the same two cards distinct vertical lanes. */
 export function parallelAngularLanes(cables: readonly RoutedCable[]): RoutedCable[] {
+  const measurement = import.meta.env.DEV ? startNodeMeasure('routing-angular') : undefined;
+  try {
   const pairs = new Map<string, RoutedCable[]>();
   for (const cable of cables) {
     if (!cable.fromNode || !cable.toNode || cable.via || cable.to.x - cable.from.x < 24
@@ -38,4 +41,5 @@ export function parallelAngularLanes(cables: readonly RoutedCable[]): RoutedCabl
     return laneX === undefined ? cable : { ...cable, laneX,
       via: [{ x: laneX, y: cable.from.y }, { x: laneX, y: cable.to.y }] };
   });
+  } finally { if (import.meta.env.DEV) endNodeMeasure('routing-angular', measurement); }
 }

@@ -85,7 +85,7 @@ export interface TimelinePanelData {
 }
 
 export interface NodeWorkspacePanelData {
-  /** null/omitted follows the active selection; a clip ID pins this panel. */
+  /** null/omitted or '@timeline' locks the whole timeline view; '@active' follows the selection; a clip ID pins this panel. */
   nodeClipId?: string | null;
 }
 

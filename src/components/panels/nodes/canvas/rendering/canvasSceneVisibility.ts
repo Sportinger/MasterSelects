@@ -1,5 +1,7 @@
 import type { CanvasCable, CanvasPlug, CanvasScene, CanvasView, Rect } from './nodeCanvasTypes';
 import { canvasCableRoute } from './cableGeometry';
+import { cableRouteBounds } from '../cableRoute';
+import { BRANCH_GRIP, BRANCH_RADIUS } from '../cableBranches';
 
 const CELL_SIZE = 512;
 const MAX_ITEM_CELLS = 64;
@@ -8,10 +10,6 @@ const MAX_QUERY_CELLS = 4096;
 function validRect(rect: Rect): boolean {
   return Number.isFinite(rect.x) && Number.isFinite(rect.y) && Number.isFinite(rect.width) && Number.isFinite(rect.height)
     && rect.width >= 0 && rect.height >= 0;
-}
-
-function cableBounds(cable: CanvasCable): Rect {
-  return canvasCableRoute(cable).bounds;
 }
 
 function plugBounds(plug: CanvasPlug): Rect {
@@ -66,17 +64,28 @@ class RectIndex<T> {
 /** Scene-local spatial index: pan/zoom work scales with visible items, not the full graph. */
 export class CanvasSceneVisibility {
   private readonly nodes: RectIndex<CanvasScene['nodes'][number]>;
-  private readonly cables: RectIndex<CanvasCable>;
+  private readonly cables: RectIndex<{ cable: CanvasCable; bounds: Rect }>;
   private readonly groups: RectIndex<CanvasScene['groups'][number]>;
   private readonly plugs: RectIndex<CanvasPlug>;
-  private readonly branches: CanvasScene['branches'];
+  private readonly branches?: RectIndex<NonNullable<CanvasScene['branches']>[number]>;
 
   constructor(scene: CanvasScene) {
     this.nodes = new RectIndex(scene.nodes, node => node);
-    this.cables = new RectIndex(scene.cables, cableBounds);
+    // Index narrow route legs rather than the huge empty hull between endpoints.
+    this.cables = new RectIndex(scene.cables.flatMap(cable => {
+      const route = canvasCableRoute(cable).route;
+      let from = route.from;
+      return route.segments.map(segment => {
+        const bounds = cableRouteBounds({ from, segments: [segment] }); from = segment.to;
+        return { cable, bounds };
+      });
+    }), entry => entry.bounds);
     this.groups = new RectIndex(scene.groups, group => group);
     this.plugs = new RectIndex(scene.plugs, plugBounds);
-    this.branches = scene.branches;
+    this.branches = scene.branches ? new RectIndex(scene.branches, branch => ({
+      x: branch.x - BRANCH_RADIUS, y: branch.y - BRANCH_RADIUS,
+      width: BRANCH_GRIP + BRANCH_RADIUS * 2, height: BRANCH_RADIUS * 2,
+    })) : undefined;
   }
 
   visible(view: CanvasView, margin = 30): CanvasScene {
@@ -86,7 +95,7 @@ export class CanvasSceneVisibility {
     const zoom = view.zoom;
     const rect = { x: (-view.panX - margin) / zoom, y: (-view.panY - margin) / zoom,
       width: (view.width + margin * 2) / zoom, height: (view.height + margin * 2) / zoom };
-    return { nodes: this.nodes.query(rect), cables: this.cables.query(rect), groups: this.groups.query(rect), plugs: this.plugs.query(rect),
-      ...(this.branches ? { branches: this.branches } : {}) };
+    return { nodes: this.nodes.query(rect), cables: [...new Set(this.cables.query(rect).map(entry => entry.cable))], groups: this.groups.query(rect), plugs: this.plugs.query(rect),
+      ...(this.branches ? { branches: this.branches.query(rect) } : {}) };
   }
 }

@@ -363,6 +363,7 @@ function hydrateTransitionClip(
     sceneDescriptions: optionalClone(clip.sceneDescriptions),
     sceneDescriptionStatus: clip.sceneDescriptionStatus,
     reversed: clip.reversed,
+    timeRemap: optionalClone(clip.timeRemap),
     speed: clip.speed,
     preservesPitch: clip.preservesPitch,
     followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,

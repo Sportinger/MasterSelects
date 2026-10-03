@@ -48,11 +48,17 @@ describe('cable obstacle avoidance', () => {
     }
   });
 
-  it('leaves clear and backward links alone', () => {
-    const routes = routeAroundCards([], [{ id: 'clear', from: { x: 0, y: 0 }, to: { x: 800, y: 0 } },
-      { id: 'back', from: { x: 800, y: 0 }, to: { x: 0, y: 100 } }]);
-    expect(routes.has('clear')).toBe(false);
-    expect(routes.has('back')).toBe(false);
+  it('keeps clear and backward links on their direct lane without detours', () => {
+    // Since 71c142c9 a clear link stores its direct port-to-port lane (no grid dogleg) instead of no route.
+    const clearFrom = { x: 0, y: 0 }, clearTo = { x: 800, y: 0 };
+    const backFrom = { x: 800, y: 0 }, backTo = { x: 0, y: 100 };
+    const routes = routeAroundCards([], [{ id: 'clear', from: clearFrom, to: clearTo }, { id: 'back', from: backFrom, to: backTo }]);
+    const clear = routes.get('clear')!;
+    expect(clear.every(point => point.y === clearFrom.y && point.x >= clearFrom.x && point.x <= clearTo.x)).toBe(true);
+    // The return lane stays between both ports instead of dropping below them.
+    const back = routes.get('back')!;
+    expect(back.every(point => point.y >= backFrom.y && point.y <= backTo.y)).toBe(true);
+    expect(back.some(point => point.y > backFrom.y && point.y < backTo.y)).toBe(true);
   });
 
   it('routes a large column layout within an interactive budget', () => {

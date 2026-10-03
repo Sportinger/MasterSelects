@@ -1,15 +1,14 @@
 import { APP_CONTROL_POLICIES } from './appControlPolicies';
 import { MULTICAM_POLICIES } from './multicamPolicies';
+import { COMPOSITION_RULE_POLICIES } from './compositionRulePolicies';
 // AI Tool Policy Registry
 // Classifies every tool by risk level, read-only status, and caller permissions
-
 import type {
   CallerContext,
   ToolAccessOptions,
   ToolPolicyEntry,
 } from './types';
 import { isKernelEditorToolName } from '../editorToolCatalog';
-
 const allCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
 const localFileCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
 const bridgeTelemetryCallers: CallerContext[] = ['chat', 'devBridge', 'console', 'internal'];
@@ -596,6 +595,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['archiveTimelineVariantSet', mutatingMedium()],
   ['addClipSegment', mutatingMedium()],
   ...MULTICAM_POLICIES,
+  ...COMPOSITION_RULE_POLICIES,
   ['sendAINodePrompt', {
     ...mutatingMedium(),
     sensitiveDataAccess: true,

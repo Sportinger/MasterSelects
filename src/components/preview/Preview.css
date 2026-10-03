@@ -75,6 +75,38 @@
   grid-template-rows: minmax(0, 1fr) 0;
 }
 
+/* Collapsed transport: top overlays fly out to the sides; only the toggle stays.
+   `translate: none` while shown keeps fixed-position dropdowns unaffected. */
+.preview-container.has-transport > .preview-controls,
+.preview-container.has-transport .preview-top-right-overlays {
+  opacity: 1;
+  translate: none;
+  visibility: visible;
+  transition:
+    opacity 180ms ease,
+    translate 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    visibility 0s linear 0s;
+}
+
+.preview-container.transport-collapsed > .preview-controls,
+.preview-container.transport-collapsed .preview-top-right-overlays {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+  transition:
+    opacity 160ms ease,
+    translate 200ms cubic-bezier(0.4, 0, 1, 1),
+    visibility 0s linear 200ms;
+}
+
+.preview-container.transport-collapsed > .preview-controls {
+  translate: calc(-100% - 8px) 0;
+}
+
+.preview-container.transport-collapsed .preview-top-right-overlays {
+  translate: calc(100% + 8px) 0;
+}
+
 .preview-container.has-transport > .preview-canvas-wrapper {
   grid-row: 1;
   width: 100%;

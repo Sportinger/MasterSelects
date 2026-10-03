@@ -1,3 +1,5 @@
+import { getActiveCompositionFrameRate } from '../../../stores/timeline/editOperations/activeCompositionFrameRate';
+import { getClipEdgeSourceRate, isClipSourceReversed, trimClipSourceEdge } from '../../../services/timeline/retime/clipEdgeRetime';
 // Shared clip edge-trim timing math (issue #249).
 //
 // Extracted from useClipTrim so both the main-timeline trim handles and the
@@ -13,10 +15,6 @@ import {
   isInfiniteTimelineClipSource,
 } from './clipSourceTiming';
 import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
-import {
-  getClipSourceRate,
-  timelineDeltaToSourceDelta,
-} from '../../../utils/clipPlaybackTiming';
 
 export interface TrimOriginals {
   startTime: number;
@@ -38,18 +36,34 @@ export interface TrimTimingResult {
 // Works for any clip from its current state, so multi-select followers each clamp
 // independently ("only as much as each clip can").
 export function computeTrimTiming(
-  clip: Pick<TimelineClip, 'source' | 'speed'>,
+  clip: import('../../../utils/clipSourceTiming').TimelineClipSourceTimingLike &
+    Partial<Pick<TimelineClip, 'timeRemap' | 'speed' | 'reversed' | 'effects' | 'videoInspectorSections'>>,
   edge: 'left' | 'right',
   orig: TrimOriginals,
   deltaTime: number,
 ): TrimTimingResult {
+  if (clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp') {
+    const minimum = 1 / getActiveCompositionFrameRate();
+    const delta = edge === 'left'
+      ? Math.max(-orig.startTime, Math.min(orig.duration - minimum, deltaTime))
+      : Math.max(minimum - orig.duration, deltaTime);
+    const newStartTime = orig.startTime + (edge === 'left' ? delta : 0);
+    const newDuration = orig.duration + (edge === 'left' ? -delta : delta);
+    return { edge: edge === 'left' ? 'start' : 'end', newStartTime, newDuration,
+      newInPoint: orig.inPoint, newOutPoint: orig.outPoint,
+      targetTime: edge === 'left' ? newStartTime : newStartTime + newDuration };
+  }
   const originalWindow = {
     duration: orig.duration,
     inPoint: orig.inPoint,
     outPoint: orig.outPoint,
     speed: clip.speed,
+    reversed: clip.reversed,
+    effects: clip.effects,
+    videoInspectorSections: clip.videoInspectorSections,
   };
-  const sourceRate = getClipSourceRate(originalWindow);
+  const sourceRate = Math.max(0.0001, getClipEdgeSourceRate(originalWindow));
+  const reverse = isClipSourceReversed(originalWindow);
   const maxDuration = isInfiniteTimelineClipSource(clip)
     ? Number.MAX_SAFE_INTEGER
     : (clip.source?.naturalDuration || Math.max(orig.outPoint, orig.inPoint));
@@ -63,21 +77,23 @@ export function computeTrimTiming(
     const maxTrim = orig.duration - MIN_CLIP_DURATION;
     const minTrim = isInfiniteTimelineClipSource(clip)
       ? -orig.startTime
-      : Math.max(-orig.startTime, -orig.inPoint / sourceRate);
+      : Math.max(-orig.startTime, -(reverse ? maxDuration - orig.outPoint : orig.inPoint) / sourceRate);
     const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
-    const sourceDelta = timelineDeltaToSourceDelta(originalWindow, clampedDelta);
     appliedTimelineDelta = clampedDelta;
     newStartTime = orig.startTime + clampedDelta;
-    newInPoint = orig.inPoint + sourceDelta;
+    const window = trimClipSourceEdge(originalWindow, 'start', clampedDelta);
+    newInPoint = window.inPoint ?? orig.inPoint;
+    newOutPoint = window.outPoint ?? orig.outPoint;
   } else {
     const maxExtend = canLoopExtendTimelineVectorClip(clip)
       ? Number.MAX_SAFE_INTEGER
-      : (maxDuration - orig.outPoint) / sourceRate;
+      : (reverse ? orig.inPoint : maxDuration - orig.outPoint) / sourceRate;
     const minTrim = -(orig.duration - MIN_CLIP_DURATION);
     const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
-    const sourceDelta = timelineDeltaToSourceDelta(originalWindow, clampedDelta);
     appliedTimelineDelta = clampedDelta;
-    newOutPoint = orig.outPoint + sourceDelta;
+    const window = trimClipSourceEdge(originalWindow, 'end', clampedDelta);
+    newInPoint = window.inPoint ?? orig.inPoint;
+    newOutPoint = window.outPoint ?? orig.outPoint;
   }
 
   const resultEdge: 'start' | 'end' = edge === 'left' ? 'start' : 'end';
@@ -108,4 +124,23 @@ export function trimOriginalsFromClip(clip: TimelineClip): TrimOriginals {
     inPoint: clip.inPoint,
     outPoint: clip.outPoint,
   };
+}
+
+/** Selection/edge trim stops at the next occupied interval, never at its own
+ * retained source window. Ripple/overwrite callers intentionally skip this cap.
+ */
+export function clampTrimExtensionToNextClip(
+  clip: Pick<TimelineClip, 'id' | 'trackId' | 'startTime' | 'duration'>,
+  clips: Iterable<Pick<TimelineClip, 'id' | 'trackId' | 'startTime'>>,
+  delta: number,
+): number {
+  if (delta <= 0) return delta;
+  const originalEnd = clip.startTime + clip.duration;
+  let result = delta;
+  for (const candidate of clips) {
+    if (candidate.id !== clip.id && candidate.trackId === clip.trackId && candidate.startTime >= originalEnd - 1e-4) {
+      result = Math.min(result, Math.max(0, candidate.startTime - originalEnd));
+    }
+  }
+  return result;
 }

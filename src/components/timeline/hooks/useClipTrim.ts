@@ -7,7 +7,7 @@ import type { ClipTrimState } from '../types';
 import type { TimelineEditOperation, TimelineEditResult } from '../../../stores/timeline/editOperations/types';
 import type { TimelineToolId, TimelineToolPreview, TimelineToolPreviewGhostRange } from '../../../stores/timeline/types';
 import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
-import { computeTrimTiming, trimOriginalsFromClip } from '../utils/clipTrimTiming';
+import { clampTrimExtensionToNextClip, computeTrimTiming, trimOriginalsFromClip } from '../utils/clipTrimTiming';
 import { createTimelineMouseMoveScheduler } from '../utils/clipDragMouseMoveScheduler';
 import { isTimelineSnappingActive } from '../utils/timelineSnappingModifiers';
 import { isFrameLockedClip, quantizeTimeToFrame } from '../../../utils/timelineFrameQuantization';
@@ -230,7 +230,8 @@ function buildTrimToolPreview(
     const originalEnd = getClipEnd(clip);
     const isValid = timing.edge === 'start'
       ? timing.targetTime > originalStart + EPSILON && timing.targetTime < originalEnd - MIN_CLIP_DURATION
-      : timing.targetTime > originalStart + MIN_CLIP_DURATION && timing.targetTime < originalEnd - EPSILON;
+      : timing.targetTime > originalStart + MIN_CLIP_DURATION && (timing.targetTime < originalEnd - EPSILON ||
+        clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'warp');
     if (!isValid) {
       return {
         toolId: previewToolId,
@@ -239,7 +240,7 @@ function buildTrimToolPreview(
         clipId: clip.id,
         time: timing.targetTime,
         blocked: true,
-        message: 'Ripple trim must stay inside the clip.',
+        message: 'Ripple trim must keep a positive clip duration.',
       };
     }
 
@@ -375,20 +376,30 @@ export function useClipTrim({
         trim: ClipTrimState,
         rawDelta: number,
         trimClip: TimelineClip,
-      ): TrimDeltaResult => adjustTrimDelta(
-        trim,
-        rawDelta,
-        isFrameLockedClip(trimClip),
-        frameRate,
-        {
-          enabled: isTimelineSnappingActive(snappingEnabled, {
-            altKey: trim.altKey,
-            shiftKey: trim.shiftKey === true,
-          }),
-          times: trimSnapTimes,
-          threshold: trimSnapThreshold,
-        },
-      );
+      ): TrimDeltaResult => {
+        const adjusted = adjustTrimDelta(
+          trim,
+          rawDelta,
+          isFrameLockedClip(trimClip),
+          frameRate,
+          {
+            enabled: isTimelineSnappingActive(snappingEnabled, {
+              altKey: trim.altKey,
+              shiftKey: trim.shiftKey === true,
+            }),
+            times: trimSnapTimes,
+            threshold: trimSnapThreshold,
+          },
+        );
+        if (trim.edge !== 'right' || (activeTimelineToolId !== 'select' && activeTimelineToolId !== 'edge-trim')) return adjusted;
+        let delta = clampTrimExtensionToNextClip({ ...trimClip,
+          startTime: trim.originalStartTime, duration: trim.originalDuration }, clipMap.values(), adjusted.delta);
+        const linked = trimClip.linkedClipId ? clipMap.get(trimClip.linkedClipId) : undefined;
+        if (linked && shouldIncludeLinkedTrim(trimClip, selectedClipIds, trim.singleClip === true)) {
+          delta = clampTrimExtensionToNextClip(linked, clipMap.values(), delta);
+        }
+        return { delta, snapTime: delta === adjusted.delta ? adjusted.snapTime : null };
+      };
       const publishesToolPreview = activeTimelineToolId === 'ripple-trim' ||
         activeTimelineToolId === 'rolling-edit' ||
         activeTimelineToolId === 'rate-stretch';
@@ -531,6 +542,7 @@ export function useClipTrim({
               clipId: otherClip.id,
               inPoint: otherTiming.newInPoint,
               outPoint: otherTiming.newOutPoint,
+              ...(otherClip.timeRemap?.kind === 'freeze' || otherClip.timeRemap?.kind === 'loop' || otherClip.timeRemap?.kind === 'warp' ? { duration: otherTiming.newDuration } : {}),
               ...(commitTrim.edge === 'left' ? { startTime: otherTiming.newStartTime } : {}),
             });
           }
@@ -570,6 +582,7 @@ export function useClipTrim({
             clipId: clipToTrim.id,
             inPoint: newInPoint,
             outPoint: newOutPoint,
+            ...(clipToTrim.timeRemap?.kind === 'freeze' || clipToTrim.timeRemap?.kind === 'loop' || clipToTrim.timeRemap?.kind === 'warp' ? { duration: timing.newDuration } : {}),
             ...(trim.edge === 'left' ? { startTime: Math.max(0, newStartTime) } : {}),
             includeLinked,
             ...(extraClips.length > 0 ? { extraClips } : {}),

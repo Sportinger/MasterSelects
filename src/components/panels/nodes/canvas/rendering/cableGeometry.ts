@@ -9,12 +9,24 @@ export function makeCanvasCable(from: Point, to: Point, color: string, highlight
 interface CachedRoute { route: CableRoute; bounds: RouteBounds; middle: { point: Point; angle: number } }
 // Scene, glide and drag updates create new cable objects, so identity is a safe key.
 const routes = new WeakMap<CanvasCable, CachedRoute>();
+export interface CablePathTiming { duration: number; count: number; styles: Record<string, number> }
+let pathTiming: CablePathTiming | undefined;
+export function takeCablePathTiming(): CablePathTiming | undefined {
+  const value = pathTiming; pathTiming = undefined; return value;
+}
+
 export function canvasCableRoute(cable: CanvasCable): CachedRoute {
   let cached = routes.get(cable);
   if (!cached) {
+    const started = import.meta.env.DEV ? performance.now() : 0;
     const route = cableRoute(cable.from, cable.to, cable.style, cable.via);
     cached = { route, bounds: cableRouteBounds(route), middle: cableRouteMidpoint(route) };
     routes.set(cable, cached);
+    if (import.meta.env.DEV) {
+      pathTiming ??= { duration: 0, count: 0, styles: {} };
+      pathTiming.duration += performance.now() - started; pathTiming.count++;
+      const style = cable.style ?? 'curved'; pathTiming.styles[style] = (pathTiming.styles[style] ?? 0) + 1;
+    }
   }
   return cached;
 }

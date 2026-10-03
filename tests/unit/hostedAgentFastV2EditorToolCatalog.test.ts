@@ -40,6 +40,12 @@ describe('Fast V2 editor tool catalog', () => {
       'getMediaTranscript',
       'getTimelineTranscript',
       'splitClip',
+      'getCompositionGraph',
+      'startClipBeatAnalysis',
+      'createBeatRule',
+      'updateBeatRule',
+      'releaseBeatRuleMember',
+      'materializeBeatRule',
     ]));
     expect(names).not.toEqual(expect.arrayContaining([
       'createEditableTitleStack',

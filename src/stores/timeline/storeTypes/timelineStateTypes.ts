@@ -40,6 +40,7 @@ import type { TimelineMaskEditPreview } from '../maskEditPreview';
 
 export interface TimelineState {
   sharedSceneGraphs?: import('../../../types/sharedSceneGraph').SharedSceneGraphs;
+  compositionGraph?: import('../../../types/compositionGraph').CompositionGraphState;
   tracks: TimelineTrack[];
   clips: TimelineClip[];
   playheadPosition: number;

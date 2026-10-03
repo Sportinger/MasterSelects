@@ -32,7 +32,7 @@ import {
 } from './sourceLookup';
 import { buildTextLikeLayer, isTextLikeClipSource } from './textLayers';
 import { buildNestedVideoLayer } from './videoLayers';
-import { getMappedClipSourceTime } from './timing';
+import { createClipSpeedSource, resolveClipSourceTime, videoFrameSourceTime } from '../../../services/timeline/retime/clipRetime';
 import { buildMotionAdjustmentLayerFromBase } from '../../../services/layerBuilder/layerBuilderMotionAdjustment';
 import { bindTerrainLayer } from '../../../services/planarTracking/terrainLayerBindings';
 
@@ -51,16 +51,11 @@ function matchesLinkedClipId(clipId: string, baseId: string): boolean {
   return clipId === baseId || clipId.startsWith(`${baseId}:`);
 }
 
-function getNestedClipSourceTime(nestedClip: TimelineClip, nestedClipLocalTime: number): number {
-  const mappedSourceTime = getMappedClipSourceTime(nestedClip, nestedClipLocalTime);
-  if (mappedSourceTime !== undefined) return mappedSourceTime;
-
-  const sourceOverride = nestedClip.transitionSourceTimeOverride;
-  if (Number.isFinite(sourceOverride)) return sourceOverride!;
-  if (nestedClip.transitionSourceHold) return nestedClip.inPoint ?? 0;
-  return nestedClip.reversed
-    ? (nestedClip.outPoint ?? nestedClip.duration) - nestedClipLocalTime
-    : nestedClipLocalTime + (nestedClip.inPoint ?? 0);
+export function getNestedClipSourceTime(nestedClip: TimelineClip, nestedClipLocalTime: number): number {
+  const sample = resolveClipSourceTime(nestedClip, nestedClipLocalTime,
+    createClipSpeedSource(nestedClip, getClipKeyframes(nestedClip)));
+  return nestedClip.source?.type === 'video' || (nestedClip.isComposition && nestedClip.source?.type !== 'audio')
+    ? videoFrameSourceTime(sample) : sample.sourceTime;
 }
 
 function cloneTransform() {
@@ -356,8 +351,7 @@ function buildNestedLayerForExport(
   if (!baseLayer) return null;
 
   if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedTracks) {
-    const subCompTime = getMappedClipSourceTime(nestedClip, nestedClipLocalTime)
-      ?? nestedClipLocalTime + (nestedClip.inPoint || 0);
+    const subCompTime = getNestedClipSourceTime(nestedClip, nestedClipLocalTime);
     const subLayers = buildNestedLayersForExport(
       nestedClip,
       subCompTime,

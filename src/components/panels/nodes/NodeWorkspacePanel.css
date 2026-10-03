@@ -6,6 +6,29 @@
   color: var(--text-primary);
 }
 
+.node-workspace-context { display: flex; flex-direction: column; height: 100%; min-height: 0; }
+.node-workspace-context > .node-workspace-panel { flex: 1; height: auto; }
+.node-composition-breadcrumb { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; min-width: 0; overflow: hidden; padding: 3px 8px; color: var(--text-secondary); font-size: 11px; background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); }
+/* Long clip names truncate per crumb; the full path stays in each title. */
+.node-composition-breadcrumb > span { display: flex; align-items: center; min-width: 0; max-width: 15em; flex: 0 0 auto; white-space: nowrap; }
+.node-composition-breadcrumb > span:last-of-type { flex: 1 1 auto; max-width: none; }
+.node-composition-breadcrumb .node-composition-crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.node-composition-breadcrumb > span > [aria-hidden="true"] { padding: 0 4px; }
+/* The single-line row clips overflow; keep the keyboard ring inside it. */
+.node-composition-breadcrumb .node-composition-navigation-link:focus-visible { outline-offset: -2px; }
+.node-composition-breadcrumb [aria-current="page"] { color: var(--text-primary); }
+.node-composition-navigation-link { -webkit-tap-highlight-color: transparent; }
+.node-composition-navigation-link:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.node-composition-navigation-link:focus-visible { outline: 2px solid var(--accent-primary, #4a9eff); outline-offset: 2px; }
+/* A size container so the shared narrow Resolve inspector rules fit this column. */
+.node-workspace-inspector.node-composition-inspector { width: 310px; min-width: 240px; max-width: 45%; overflow-y: auto; overflow-x: hidden; container-type: inline-size; }
+.node-composition-hint { margin: 8px 12px; color: var(--text-secondary); font-size: 11px; line-height: 1.5; }
+.node-composition-mini-bar { position: absolute; left: 10px; right: 10px; top: 74px; height: 4px; background: var(--border-color); }
+.node-composition-mini-bar > span { position: absolute; height: 100%; min-width: 2px; background: var(--accent); }
+.node-workspace-context button { -webkit-tap-highlight-color: transparent; }
+.node-workspace-context button:focus:not(:focus-visible) { outline: none; }
+.node-workspace-context button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 .node-workspace-main {
   flex: 1;
   min-width: 0;

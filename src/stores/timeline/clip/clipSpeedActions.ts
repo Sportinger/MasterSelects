@@ -89,7 +89,7 @@ export function setClipSpeedAction(
     const hasForwardSpeed = speedKeyframes.some(keyframe => keyframe.value > 0);
     const hasReverseSpeed = speedKeyframes.some(keyframe => keyframe.value < 0);
     const changesDirection = hasForwardSpeed && hasReverseSpeed;
-    const duration = shouldWriteKeyframe
+    const duration = currentLeader.timeRemap?.kind === 'freeze' || currentLeader.timeRemap?.kind === 'loop' || currentLeader.timeRemap?.kind === 'warp' ? currentLeader.duration : shouldWriteKeyframe
       ? changesDirection
         // Direction-changing curves are non-monotonic, so source time has no
         // unique inverse. Preserve the authored clip length for those ramps.

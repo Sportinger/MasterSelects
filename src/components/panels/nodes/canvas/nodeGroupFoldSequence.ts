@@ -1,3 +1,4 @@
+import { startNodeMeasure, endNodeMeasure } from '../../../../services/nodeGraph/unified/nodeGraphPerformance';
 import type { NodeCanvasPlacement, NodeGraph } from '../../../../types/nodeGraph';
 import { reconcileCanvasPlacement } from './nodeCanvasPlacement';
 import { createNodeLayoutTransition, NODE_LAYOUT_DURATION, type NodeLayoutSnapshot } from './nodeLayoutTransition';
@@ -69,6 +70,8 @@ export function nodeGroupFoldSteps(before: NodeLayoutSnapshot, target: NodeLayou
  */
 export function createNodeGroupFoldKeyframes(before: NodeLayoutSnapshot, target: NodeLayoutSnapshot,
   placement?: NodeCanvasPlacement, project?: ProjectGroupStates) {
+  const measurement = import.meta.env.DEV ? startNodeMeasure('fold-bookkeeping') : undefined;
+  try {
   const schedule = foldSchedule(before, target);
   if (!placement || !project || !schedule.steps.length) {
     const transition = createNodeLayoutTransition(before, target);
@@ -97,6 +100,7 @@ export function createNodeGroupFoldKeyframes(before: NodeLayoutSnapshot, target:
       previous = step.snapshot;
       return keyframe;
     } };
+  } finally { if (import.meta.env.DEV) endNodeMeasure('fold-bookkeeping', measurement); }
 }
 
 export function createNodeGroupFoldSequence(before: NodeLayoutSnapshot, target: NodeLayoutSnapshot,

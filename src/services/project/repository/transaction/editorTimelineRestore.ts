@@ -23,7 +23,7 @@ export async function stageEditorTimeline(current: TimelineStore, media: MediaSt
     ...current, tracks: data?.tracks ?? [], clips: [], layers: [],
     clipKeyframes: new Map(), markers: data?.markers ?? [],
     duration: data?.duration ?? 60, durationLocked: data?.durationLocked ?? false,
-    masterAudioState: data?.masterAudioState, sharedSceneGraphs: data?.sharedSceneGraphs,
+    masterAudioState: data?.masterAudioState, sharedSceneGraphs: data?.sharedSceneGraphs, compositionGraph: data?.compositionGraph,
     ...createDefaultRulerLaneState(), tempoMap: data?.tempoMap ?? createDefaultRulerLaneState().tempoMap,
     rulerLanes: data?.rulerLanes ?? createDefaultRulerLaneState().rulerLanes,
     activeRulerLaneId: data?.activeRulerLaneId ?? createDefaultRulerLaneState().activeRulerLaneId,
@@ -84,7 +84,7 @@ export async function stageEditorTimeline(current: TimelineStore, media: MediaSt
   const selectedKeyframeIds = new Set([...current.selectedKeyframeIds].filter(id => keyframeIds.has(id)));
   const content: Partial<TimelineStore> = { clips: state.clips, tracks: state.tracks, layers: [],
     clipKeyframes: state.clipKeyframes, markers: state.markers, duration: state.duration, durationLocked: state.durationLocked,
-    masterAudioState: state.masterAudioState, sharedSceneGraphs: state.sharedSceneGraphs, tempoMap: state.tempoMap,
+    masterAudioState: state.masterAudioState, sharedSceneGraphs: state.sharedSceneGraphs, compositionGraph: state.compositionGraph, tempoMap: state.tempoMap,
     rulerLanes: state.rulerLanes, activeRulerLaneId: state.activeRulerLaneId, videoBakeRegions: state.videoBakeRegions,
     inPoint: data?.inPoint ?? null, outPoint: data?.outPoint ?? null, selectedClipIds, selectedKeyframeIds,
     primarySelectedClipId: current.primarySelectedClipId && clipIds.has(current.primarySelectedClipId) ? current.primarySelectedClipId : null,

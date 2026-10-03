@@ -52,11 +52,21 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
   const flowRef = useNodeFlowActivity();
   const clipPrefix = useId().replace(/:/g, '');
   const cableStyle = useSettingsStore(state => state.nodeCableStyle);
-  const routedById = new Map(routedCables?.map(cable => [cable.id, cable] as const));
-  const groupBounds = graph ? nodeGroupBounds(graph, frameNodes ?? [...nodesById.values()]) : new Map<string, NodeBounds>();
-  const occlusions = graph ? createEdgeGroupOcclusion(graph, groupBounds) : () => [];
+  // Genuine Canvas failure must remain usable even in a many-thousand-wire graph.
+  // Viewport visibility narrows the candidates; the cap also bounds a Fit overview.
+  const bounded = edges.length > 256;
+  const retainedIds = new Set([selectedEdgeId, hoveredEdgeId, connectionDraft?.reconnectEdgeId]);
+  const candidates = visibleEdgeIds ? edges.filter(edge => visibleEdgeIds.has(edge.id) || retainedIds.has(edge.id)) : edges;
+  const priority = bounded ? candidates.filter(edge => retainedIds.has(edge.id)) : [];
+  const shownEdges = bounded ? [...priority, ...candidates.filter(edge => !priority.includes(edge))].slice(0, 256) : candidates;
+  const shownIds = new Set(shownEdges.map(edge => edge.id));
+  const shownPlugs = plugs.filter(plug => shownIds.has(plug.edge.id) || plug.edge.id === connectionDraft?.reconnectEdgeId);
+  const style = bounded ? 'curved' : cableStyle;
+  const routedById = new Map(!bounded ? routedCables?.map(cable => [cable.id, cable] as const) : []);
+  const groupBounds = graph && !bounded ? nodeGroupBounds(graph, frameNodes ?? [...nodesById.values()]) : new Map<string, NodeBounds>();
+  const occlusions = graph && !bounded ? createEdgeGroupOcclusion(graph, groupBounds) : () => [];
   const endpoints = new Map<string, { input?: ConnectionPlug; output?: ConnectionPlug }>();
-  for (const plug of plugs) {
+  for (const plug of shownPlugs) {
     const pair = endpoints.get(plug.edge.id) ?? {};
     pair[plug.port.direction] = plug;
     endpoints.set(plug.edge.id, pair);
@@ -81,9 +91,9 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
     return shared.id;
   };
   // Resolve clips before rendering so the shared <defs> precede their users.
-  for (const edge of edges) {
+  for (const edge of shownEdges) {
     const pair = endpoints.get(edge.id);
-    if (!pair?.input || !pair.output || (visibleEdgeIds && !visibleEdgeIds.has(edge.id))) continue;
+    if (!pair?.input || !pair.output) continue;
     const covers = occlusions(edge);
     if (covers.length) visibleClip(covers);
   }
@@ -120,21 +130,20 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
           cable parts unclickable without one clip path computation per cable. */}
       <defs>{[...sharedClips.values()].map(({ id, d }) => <clipPath key={id} id={id} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={d} /></clipPath>)}</defs>
       <defs>{[...coveredClips.values()].flat().map(({ id, d }) => <clipPath key={id} id={id} clipPathUnits="userSpaceOnUse"><path clipRule="nonzero" d={d} /></clipPath>)}</defs>
-      {edges.map(edge => {
+      {shownEdges.map(edge => {
         const pair = endpoints.get(edge.id);
         if (!pair?.input || !pair.output || (connectionDraft?.reconnectEdgeId === edge.id && connectionDraft.moved)) return null;
-        if (visibleEdgeIds && !visibleEdgeIds.has(edge.id)) return null;
         const routed = routedById.get(edge.id);
         const via = routed && Math.abs(routed.from.x - pair.output.tip.x) < 0.5
           && Math.abs(routed.from.y - pair.output.tip.y) < 0.5
           && Math.abs(routed.to.x - pair.input.tip.x) < 0.5
           && Math.abs(routed.to.y - pair.input.tip.y) < 0.5 ? routed.via : undefined;
-        const route = cableRoute(pair.output.tip, pair.input.tip, cableStyle, via);
+        const route = cableRoute(pair.output.tip, pair.input.tip, style, via);
         const path = cableRouteSvg(route);
         const middle = via ? cableRouteMidpoint(route) : undefined;
         const arrowTransform = middle
           ? `translate(${middle.point.x} ${middle.point.y}) rotate(${middle.angle * 180 / Math.PI})`
-          : getConnectionArrowTransform(pair.output.tip, pair.input.tip, cableStyle);
+          : getConnectionArrowTransform(pair.output.tip, pair.input.tip, style);
         const port = nodesById.get(edge.fromNodeId)?.outputs.find(p => p.id === edge.fromPortId);
         const covers = occlusions(edge);
         const clip = covers.length ? visibleClip(covers) : '';
@@ -180,7 +189,7 @@ export const NodeGraphEdges = memo(function NodeGraphEdges({
         );
       })}
     </svg>
-    {!canvasRendered && <NodeGraphFlowSignals plugs={plugs} zoom={zoom} graph={graph} frameNodes={frameNodes} routedCables={routedCables}
+    {!canvasRendered && !bounded && <NodeGraphFlowSignals plugs={shownPlugs} zoom={zoom} graph={graph} frameNodes={frameNodes} routedCables={routedCables}
       hiddenEdgeId={connectionDraft?.moved ? connectionDraft.reconnectEdgeId : undefined} />}
     {draftPath && connectionDraft && <svg className="node-workspace-edges node-workspace-edge-drag-layer" width="1" height="1" aria-hidden="true"
       style={{ '--port-color': draftPort ? describeNodePort(draftPort).color : undefined } as CSSProperties}>

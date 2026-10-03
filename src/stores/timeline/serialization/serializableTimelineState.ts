@@ -37,6 +37,7 @@ type SerializableTimelineStateInput = Pick<
   | 'videoBakeRegions'
   | 'masterAudioState'
   | 'sharedSceneGraphs'
+  | 'compositionGraph'
 >;
 
 function createSerializableTrack(track: TimelineTrack): TimelineTrack {
@@ -140,6 +141,7 @@ function createSerializableClip(
     // Source analysis is persisted once per mediaFileId in Transcripts/ and Analysis/.
     // Timeline clips intentionally keep no durable copy.
     reversed: clip.reversed || undefined,
+    timeRemap: clip.timeRemap ? structuredClone(clip.timeRemap) : undefined,
     speed: clip.speed != null && clip.speed !== 1 ? clip.speed : undefined,
     preservesPitch: clip.preservesPitch === false ? false : undefined,
     followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed === false ? false : undefined,
@@ -182,6 +184,7 @@ export function createSerializableTimelineState(
 ): CompositionTimelineData {
   return {
     sharedSceneGraphs: state.sharedSceneGraphs,
+    compositionGraph: state.compositionGraph,
     tracks: state.tracks.map(createSerializableTrack),
     clips: state.clips.map(clip => createSerializableClip(clip, state.clipKeyframes)),
     playheadPosition: sanitizePlayheadPosition(state.playheadPosition, 0),

@@ -1,3 +1,4 @@
+import { createStoreSpeedSource, resolveClipSourceTime, videoFrameSourceTime } from '../../../services/timeline/retime/clipRetime';
 import type {
   ClipTransform,
   Effect,
@@ -111,10 +112,9 @@ export function syncLayerProxyFrame({
 }: SyncLayerProxyFrameParams): SyncLayerProxyFrameResult {
   const clipLocalTime = playheadPosition - clip.startTime;
   const keyframeLocalTime = clipLocalTime;
-  const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
-  const initialSpeed = getInterpolatedSpeed(clip.id, 0);
-  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-  const clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+  const clipTime = videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, createStoreSpeedSource(clip.id, {
+    getSourceTimeForClip, getInterpolatedSpeed,
+  })));
   const mediaStore = useMediaStore.getState();
   const mediaFile = mediaStore.files.find(
     (file) => file.name === clip.name || clip.mediaFileId === file.id,

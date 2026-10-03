@@ -34,8 +34,9 @@ describe('node canvas overscan presentation', () => {
   it('prepares previews outside the screen and acknowledges the logical view of each presented frame', () => {
     const initial = { panX: -400, panY: -200, zoom: 0.26 };
     const rendered = vi.fn();
+    // Preview controllers are created lazily per owner with a requested preview.
     const nodes = connectionFixture.nodes.map(node => node.id === 'Geometry'
-      ? { ...node, layout: { x: 5000, y: 270 } } : node);
+      ? { ...node, layout: { x: 5000, y: 270 }, preview: { enabled: true, requested: true, key: 'geometry' } } : node);
     const graph = { ...connectionFixture, nodes, groups: [{ id: 'wide', label: 'Wide group', color: '#55a6c4',
       collapsed: false, nodeIds: nodes.map(node => node.id), proxyId: 'proxy' }] };
     const props = { graph, nodes, plugs: [],

@@ -1,0 +1,14 @@
+.workspace-screen-menu .node-workspace-context-menu {
+  box-sizing: border-box;
+  width: min(320px, calc(100vw - 16px));
+  min-width: min(280px, calc(100vw - 16px));
+}
+
+.workspace-screen-menu .node-workspace-context-menu button {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.workspace-screen-menu .node-workspace-context-path {
+  white-space: normal;
+}

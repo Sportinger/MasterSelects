@@ -3,10 +3,6 @@
 import React, { memo, useCallback, useMemo, useRef, useEffect, useState } from 'react';
 import type { TimelineTrackProps } from './types';
 import type { Keyframe } from '../../types';
-import {
-  isVectorAnimationSourceType,
-  shouldLoopVectorAnimation,
-} from '../../types/vectorAnimation';
 import { useTimelineStore } from '../../stores/timeline';
 import { TimelineClipCanvas } from './TimelineClipCanvas';
 import { getIndividualSelectionIds } from './utils/linkedSelectionGroups';
@@ -30,10 +26,8 @@ import {
   reportTimelineCanvasDomDiagnostics,
   unregisterTimelineCanvasTrackDiagnostics,
 } from '../../services/timeline/timelineCanvasDiagnostics';
-import { MIN_CLIP_DURATION } from './timelineRenderConstants';
 import { resolveAudioVolumeAutomationCurveKeyframes } from './utils/audioAutomationCurve';
 import type { FadeCurveKeyframe } from './utils/fadeCurvePath';
-import { isInfiniteTimelineClipSource } from './utils/clipSourceTiming';
 import { isAudioSectionTrack } from './utils/trackSection';
 import {
   buildTimelineTrackClipGeometryMap,
@@ -44,12 +38,8 @@ import {
 import {
   type TimelinePaintFadeVisuals,
 } from '../../timeline';
-import { createWorkerDrawableClips } from './utils/timelineClipCanvasClipGeometry';
+import { createWorkerDrawableClips, getTimelineClipCanvasTrimExtent } from './utils/timelineClipCanvasClipGeometry';
 import { applyTimelineTrimFadePreview } from './utils/timelineTrimFadePreview';
-import {
-  getClipSourceRate,
-  timelineDeltaToSourceDelta,
-} from '../../utils/clipPlaybackTiming';
 
 const TRACK_VIEWPORT_FALLBACK_PX = 1600;
 const TRACK_RENDER_OVERSCAN_PX = 1200;
@@ -61,24 +51,6 @@ type ClipFadeVisualState = TimelinePaintFadeVisuals & {
   fadeInDuration: number;
   fadeOutDuration: number;
   curveKey: string;
-};
-
-const getCanvasClipSourceDuration = (clip: {
-  duration: number;
-  inPoint?: number;
-  outPoint?: number;
-  source?: { naturalDuration?: number } | null;
-}): number => {
-  const naturalDuration = clip.source?.naturalDuration;
-  if (Number.isFinite(naturalDuration) && naturalDuration && naturalDuration > 0) {
-    return naturalDuration;
-  }
-  return Math.max(
-    clip.outPoint ?? 0,
-    (clip.inPoint ?? 0) + clip.duration,
-    clip.duration,
-    0.1,
-  );
 };
 
 const getFadeCurveKey = (keyframes: readonly FadeCurveKeyframe[]): string => (
@@ -368,52 +340,12 @@ function TimelineTrackComponent({
     if (clipTrim) {
       const clip = canvasClips.find((candidate) => candidate.id === clipTrim.clipId);
       if (clip) {
-        const sourceType = clip.source?.type;
-        const sourceDuration = getCanvasClipSourceDuration(clip);
-        let previewEnd = clip.startTime + clip.duration;
-        let sourceExtensionEnd = previewEnd;
-        const originalWindow = {
-          duration: clipTrim.originalDuration,
-          inPoint: clipTrim.originalInPoint,
-          outPoint: clipTrim.originalOutPoint,
-          speed: clip.speed,
-        };
-        const sourceRate = getClipSourceRate(originalWindow);
-
-        if (clipTrim.edge === 'right') {
-          const maxExtend = isInfiniteTimelineClipSource(clip) ||
-            (
-              isVectorAnimationSourceType(sourceType) &&
-              shouldLoopVectorAnimation(clip.source?.vectorAnimationSettings)
-            )
-            ? Number.MAX_SAFE_INTEGER
-            : (sourceDuration - clipTrim.originalOutPoint) / sourceRate;
-          const minTrim = -(clipTrim.originalDuration - MIN_CLIP_DURATION);
-          const clampedDelta = Math.max(minTrim, Math.min(maxExtend, clipTrim.appliedDelta));
-          const previewDuration = Math.max(0.001, clipTrim.originalDuration + clampedDelta);
-          const previewOutPoint = clipTrim.originalOutPoint + timelineDeltaToSourceDelta(originalWindow, clampedDelta);
-          previewEnd = clipTrim.originalStartTime + previewDuration;
-          sourceExtensionEnd = previewEnd + Math.max(0, sourceDuration - previewOutPoint) / sourceRate;
-        } else {
-          const minTrim = isInfiniteTimelineClipSource(clip)
-            ? -clipTrim.originalStartTime
-            : Math.max(-clipTrim.originalStartTime, -clipTrim.originalInPoint / sourceRate);
-          const maxTrim = clipTrim.originalDuration - MIN_CLIP_DURATION;
-          const clampedDelta = Math.max(minTrim, Math.min(maxTrim, clipTrim.appliedDelta));
-          previewEnd = clipTrim.originalStartTime + clampedDelta + Math.max(0.001, clipTrim.originalDuration - clampedDelta);
-          sourceExtensionEnd = previewEnd;
-        }
-
-        if (Number.isFinite(previewEnd)) {
-          max = Math.max(max, timeToPixel(previewEnd));
-        }
-        if (Number.isFinite(sourceExtensionEnd)) {
-          max = Math.max(max, timeToPixel(sourceExtensionEnd));
-        }
+        const extent = getTimelineClipCanvasTrimExtent(clip, { clipTrim, trackId: track.id });
+        if (Number.isFinite(extent)) max = Math.max(max, timeToPixel(extent));
       }
     }
     return max;
-  }, [canvasClips, clipTrim, timeToPixel, trackContentWidth]);
+  }, [canvasClips, clipTrim, timeToPixel, trackContentWidth, track.id]);
   const timelineTrackGeometrySnapshot = useMemo(
     () => buildTimelineTrackHostGeometrySnapshot({
       track,

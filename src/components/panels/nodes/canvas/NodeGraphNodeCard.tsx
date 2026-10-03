@@ -1,3 +1,5 @@
+import { NodeSummarySegments } from './NodeSummarySegments';
+import { recordNodeCardRender } from './rendering/nodeCanvasProfile';
 import { memo, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
 import { NodeGraphPortView } from './NodeGraphPortView';
@@ -9,6 +11,7 @@ import { NodeControlInputPicker } from './NodeControlInputPicker';
 import { inlineNumericPorts } from '../previews/previewGeometry';
 import { requestNodeAnimation } from '../../../../services/nodeGraph/nodeWorkspaceNavigation';
 import type { ConnectionDraft } from './canvasGeometry';
+import './nodeSummarySegments.css';
 import {
   clamp,
   getAudioAnalysisBadges,
@@ -19,17 +22,20 @@ import {
   isNodeBypassable,
   isNodeBypassed,
   NODE_BYPASS_HITBOX,
-  NODE_WIDTH,
+  getNodeWidth,
 } from './canvasGeometry';
 
-interface NodeGraphNodeCardProps {
+export interface NodeGraphNodeCardProps {
   node: NodeGraphNode;
+  devProfile?: object;
   clipId?: string;
   canvasRendered?: boolean;
   selectedNodeId: string | null;
   isInSelection?: boolean;
   connectionDraft: ConnectionDraft | null;
   onSelectNode: (nodeId: string) => void;
+  onSelectSummarySegment?: (nodeId: string, segmentId: string, additive?: boolean) => void;
+  selectedSegmentClipIds?: ReadonlySet<string>;
   onStartNodeDrag: (event: ReactPointerEvent<HTMLDivElement>, node: NodeGraphNode) => void;
   onNodePointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onFinishNodeDrag: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -56,12 +62,15 @@ function getNodeHeaderLabel(node: NodeGraphNode): string {
 
 export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   node,
+  devProfile,
   clipId,
   canvasRendered = false,
   selectedNodeId,
   isInSelection = false,
   connectionDraft,
   onSelectNode,
+  onSelectSummarySegment,
+  selectedSegmentClipIds,
   onStartNodeDrag,
   onNodePointerMove,
   onFinishNodeDrag,
@@ -75,6 +84,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   active = true,
   onFocusChange,
 }: NodeGraphNodeCardProps) {
+  if (import.meta.env.DEV && devProfile) recordNodeCardRender(devProfile);
   const content = !canvasRendered || active;
   const [focusBox, setFocusBox] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const nodeHeight = getNodeHeight(node);
@@ -111,7 +121,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
       onFocusCapture={event => {
         if (!event.target.matches(':focus-visible')) { setFocusBox(null); return; }
         const card = event.currentTarget.getBoundingClientRect(), target = event.target.getBoundingClientRect();
-        const scale = card.width / NODE_WIDTH || 1;
+        const scale = card.width / getNodeWidth(node) || 1;
         setFocusBox({ left: (target.left - card.left) / scale, top: (target.top - card.top) / scale,
           width: target.width / scale, height: target.height / scale });
       }}
@@ -122,7 +132,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
       style={{
         left: node.layout.x,
         top: node.layout.y,
-        width: NODE_WIDTH,
+        width: getNodeWidth(node),
         height: nodeHeight,
       }}
       onClick={(event) => {
@@ -176,16 +186,19 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         {node.description ?? 'Built-in processing node'}
       </div></>}
       {node.binding?.kind === 'keyframe-node' && !canvasRendered && <KeyframeNodeCardPreview node={node} />}
+      {!canvasRendered && node.summary?.bar && <div className="node-composition-mini-bar" aria-hidden="true"><span style={{
+        left: `${clamp(node.summary.bar.start, 0, 1) * 100}%`, width: `${Math.max(0, clamp(node.summary.bar.end, 0, 1) - clamp(node.summary.bar.start, 0, 1)) * 100}%`,
+      }} /></div>}
       {!!node.animation?.channels.length && (canvasRendered
         ? <button type="button" className="node-animation-badge" style={{ top: getNodePortStartY(node) - 78 }}
             aria-label={`Edit animation for ${node.label}, ${node.animation.channels.length} curves`}
             onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
-            onClick={event => { event.stopPropagation(); requestNodeAnimation(node.animation!.clipId, node.id); if (event.detail > 0) event.currentTarget.blur(); }}>
-            <span>◇ Animation · {node.animation.channels.length} curves</span>
+            onClick={event => { event.stopPropagation(); requestNodeAnimation(node.animation!.clipId, node.workspaceOwner?.localId ?? node.id); if (event.detail > 0) event.currentTarget.blur(); }}>
+            <span>â—‡ Animation Â· {node.animation.channels.length} curves</span>
           </button>
-        : <NodeAnimationBadge node={node} top={getNodePortStartY(node) - 78} />)}
+        : <NodeAnimationBadge node={node.workspaceOwner ? { ...node, id: node.workspaceOwner.localId } : node} top={getNodePortStartY(node) - 78} />)}
       {!canvasRendered && nodeBadges.length > 0 && (
-        <div className="node-workspace-node-badges">
+        <div className="node-workspace-node-badges" style={node.summary?.timeAxis ? { position: 'absolute', top: 28, left: 290 } : undefined}>
           {nodeBadges.map((badge) => (
             <span
               key={`${badge.tone}:${badge.label}`}
@@ -214,6 +227,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         </div>
       </div></>}
     </div>
+    <NodeSummarySegments node={node} canvasRendered={canvasRendered} selectedClipIds={selectedSegmentClipIds} onSelect={onSelectSummarySegment} />
     {content && <><NodeControlInputPicker clipId={clipId} node={node} />
     {collapsedGroupId && onToggleGroup && <button type="button" className="node-workspace-node-expand"
       style={{ left: node.layout.x + 5, top: node.layout.y + 31 }} aria-label={`Expand ${node.label} group`} aria-expanded={false}

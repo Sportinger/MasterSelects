@@ -113,7 +113,21 @@ export type NodeGraphNodeBinding =
       kind: 'flock-node';
       nodeId: string;
       operator: string;
-    };
+    }
+  | CompositionNodeBinding;
+
+/** Level-0 composition projection bindings; stored state is layout only. */
+export type CompositionNodeBinding =
+  | { kind: 'composition-output' }
+  | { kind: 'composition-video-stack' }
+  | { kind: 'composition-audio-master' }
+  | { kind: 'composition-track'; trackId: string }
+  | { kind: 'composition-media'; mediaId: string }
+  | { kind: 'composition-clip'; clipId: string; nestedCompositionId?: string; /** Linked audio clip folded into this node (one node per linked pair). */ linkedClipId?: string }
+  | { kind: 'composition-transition'; transitionId: string; outgoingClipId: string; incomingClipId: string; compositionId?: string }
+  | { kind: 'composition-time-chain'; clipId: string; stage: 'slice' | 'speed' | 'place' }
+  | { kind: 'composition-beat-source'; ruleId: string }
+  | { kind: 'composition-rule'; ruleId: string };
 
 /** Node editor cable drawing: bezier (default), orthogonal hard corners, or compact routed curves. */
 export type NodeCableStyle = 'curved' | 'angular' | 'smart';
@@ -131,10 +145,23 @@ export interface NodeGraphControlInput {
 }
 
 export interface NodeGraphNode {
+  /** Transient workspace ownership; never persisted in a clip document. */
+  workspaceOwner?: { clipId: string; localId: string };
+  /** Unsaved composition placement, used by Arrange. */
+  defaultLayout?: NodeGraphLayout;
   /** Transient executable alternatives supplied by the owning graph, never saved. */
   connectionVariants?: readonly NodeConnectionVariant[];
   /** Projected viewer presentation; preferences are stored on the owning clip. */
   preview?: { enabled: boolean; requested: boolean; portId?: string; key: string; aspectRatio?: number };
+  /** Composition projection summary: badges (Speed, Reverse, Trim, Rule, Correction…) and a normalized mini bar. */
+  summary?: {
+    /** Shared timeline axis for a composition track, in graph units. */
+    timeAxis?: { width: number; duration: number; pixelsPerSecond: number };
+    badges?: readonly string[];
+    bar?: { start: number; end: number };
+    /** Source-time ranges normalized to 0..1; presentation only, never executable. */
+    segments?: readonly { id: string; clipId: string; start: number; end: number; label: string; lane?: number; nodeId?: string; transitionId?: string; badges?: readonly string[]; highlighted?: boolean; selected?: boolean }[];
+  };
   /** Transient catalog of scalar inputs that the user may expose on this node. */
   controlInputs?: readonly NodeGraphControlInput[];
   id: string;
@@ -171,13 +198,22 @@ export interface NodeGraphEdge {
 
 export type NodeGraphConnectionRequest = Pick<SignalGraphEdge, 'fromNodeId' | 'fromPortId' | 'toNodeId' | 'toPortId'>;
 
-export interface NodeGraphOwner {
-  kind: 'clip';
-  id: string;
-  name: string;
-}
+/**
+ * Graph owner. A composition id must never reach clip services: narrow on `kind`
+ * before using `id` as a clip id.
+ */
+export type NodeGraphOwner =
+  | { kind: 'clip'; id: string; name: string }
+  | { kind: 'composition'; id: string; name: string };
 
 export interface NodeGraph {
+  /** Shared canvas projection. Clip placement remains local in each clip document. */
+  workspace?: {
+    clips: Record<string, { graph: NodeGraph; origin: NodeGraphLayout; placement: NodeCanvasPlacement }>;
+    defaultNodes: Record<string, NodeGraphLayout>;
+    /** Transient expansion displacement; excluded when persisting composition anchors. */
+    compositionOffsets?: Record<string, NodeGraphLayout>;
+  };
   id: string;
   owner: NodeGraphOwner;
   nodes: NodeGraphNode[];
@@ -212,7 +248,7 @@ export interface NodeGraphDocument {
   views: NodeGraphView[];
 }
 
-export type ClipNodeGraphBacking = Exclude<NodeGraphNodeBinding, { kind: 'color-node' } | { kind: 'flock-node' } | { kind: 'effect-operator' } | { kind: 'scene-node' } | { kind: 'scene-operator' } | { kind: 'operator-group' }>;
+export type ClipNodeGraphBacking = Exclude<NodeGraphNodeBinding, { kind: 'color-node' } | { kind: 'flock-node' } | { kind: 'effect-operator' } | { kind: 'scene-node' } | { kind: 'scene-operator' } | { kind: 'operator-group' } | CompositionNodeBinding>;
 
 export interface ClipNodeGraphNodeState {
   id: string;

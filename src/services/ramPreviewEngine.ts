@@ -1,6 +1,6 @@
 import type { Layer, LayerSource, NestedCompositionData, TimelineClip, TimelineTrack } from '../types';
 import type { RenderSurfaceFrameContext } from './render/renderHostTypes';
-import { RAM_PREVIEW_FPS } from '../stores/timeline/constants';
+import { MAX_NESTING_DEPTH, RAM_PREVIEW_FPS } from '../stores/timeline/constants';
 import {
   getNestedRamPreviewClipTime,
   getRamPreviewClipTime,
@@ -465,7 +465,10 @@ export class RamPreviewEngine {
       const track = videoTracks.find(t => t.id === clip.trackId);
       if (!track?.visible) continue;
 
-      if (clip.source?.type === 'video' && clip.source.videoElement) {
+      if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
+        const layer = await this.buildNestedCompLayer(clip, time, deps, runtimeContext);
+        if (layer) layers.push(layer);
+      } else if (clip.source?.type === 'video' && clip.source.videoElement) {
         const layer = await this.buildVideoLayer(clip, time, deps, runtimeContext);
         if (layer) layers.push(layer);
       } else if (clip.source?.type === 'image') {
@@ -473,9 +476,6 @@ export class RamPreviewEngine {
         if (imageElement) {
           layers.push(this.buildImageLayer(clip, imageElement, runtimeContext));
         }
-      } else if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
-        const layer = await this.buildNestedCompLayer(clip, time, deps, runtimeContext);
-        if (layer) layers.push(layer);
       }
     }
 
@@ -488,11 +488,13 @@ export class RamPreviewEngine {
     clip: TimelineClip,
     time: number,
     deps: RamPreviewDeps,
-    runtimeContext: RamPreviewRuntimeContext | null
+    runtimeContext: RamPreviewRuntimeContext | null,
+    nested?: { sourceTime: number; layerId: string; nestedCompositionId: string },
   ): Promise<Layer | null> {
-    const clipTime = getRamPreviewClipTime(clip, time, deps);
+    const clipTime = nested?.sourceTime ?? getRamPreviewClipTime(clip, time, deps);
     const video = clip.source!.videoElement!;
-    const runtimeSource = this.getRamPreviewSource(clip);
+    const runtimeSource = this.getRamPreviewSource(clip, nested
+      ? `composition:${nested.nestedCompositionId}/nested:${clip.id}` : undefined);
     const plannedRuntimeProvider = peekRuntimeFrameProvider(runtimeSource);
     const sourceAdmission = this.reserveVideoSourceForRun(
       clip,
@@ -505,7 +507,7 @@ export class RamPreviewEngine {
         mediaFileId: runtimeSource?.mediaFileId ?? clip.source?.mediaFileId ?? clip.mediaFileId,
       },
       runtimeContext,
-      { sourceTime: clipTime }
+      { ...nested, sourceTime: clipTime }
     );
     if (sourceAdmission && !sourceAdmission.admitted) {
       return null;
@@ -521,7 +523,7 @@ export class RamPreviewEngine {
         video,
         targetTime: clipTime,
         runtimeProvider,
-        timeoutMs: 200,
+        timeoutMs: nested ? 150 : 200,
         runtimeSeekDelayMs: 50,
         isCancelled: deps.isCancelled,
       });
@@ -535,10 +537,10 @@ export class RamPreviewEngine {
         runtimeSourceId: runtimeSource?.runtimeSourceId,
         runtimeSessionKey: runtimeSource?.runtimeSessionKey,
       };
-      this.reportSourceForRun(runtimeContext, clip, layerSource, { sourceTime: clipTime });
+      this.reportSourceForRun(runtimeContext, clip, layerSource, { ...nested, sourceTime: clipTime });
       reported = true;
 
-      return clipToRamPreviewLayer(clip, layerSource);
+      return clipToRamPreviewLayer(clip, layerSource, nested?.layerId);
     } finally {
       if (!reported) {
         sourceAdmission?.release();
@@ -564,10 +566,13 @@ export class RamPreviewEngine {
     clip: TimelineClip,
     time: number,
     deps: RamPreviewDeps,
-    runtimeContext: RamPreviewRuntimeContext | null
+    runtimeContext: RamPreviewRuntimeContext | null,
+    depth = 0,
   ): Promise<Layer | null> {
-    const clipLocalTime = time - clip.startTime;
-    const clipTime = clipLocalTime + clip.inPoint;
+    if (depth >= MAX_NESTING_DEPTH || !clip.nestedClips) return null;
+    const clipTime = depth === 0
+      ? getRamPreviewClipTime(clip, time, deps)
+      : getNestedRamPreviewClipTime(time, clip);
 
     const nestedVideoTracks = clip.nestedTracks?.filter(t => t.type === 'video' && t.visible) || [];
     const nestedLayers: Layer[] = [];
@@ -580,79 +585,18 @@ export class RamPreviewEngine {
       );
       if (!nestedClip) continue;
 
-      const nestedClipTime = getNestedRamPreviewClipTime(clipTime, nestedClip);
-
-      if (nestedClip.source?.videoElement) {
-        const nestedVideo = nestedClip.source.videoElement;
-        const nestedLayerId = `nested-${nestedClip.id}`;
-        const nestedCompositionId = clip.compositionId || clip.id;
-        const nestedRuntimeSource = this.getRamPreviewSource(
-          nestedClip,
-          `composition:${nestedCompositionId}/nested:${nestedClip.id}`
-        );
-        const plannedRuntimeProvider = peekRuntimeFrameProvider(nestedRuntimeSource);
-        const sourceAdmission = this.reserveVideoSourceForRun(
-          nestedClip,
-          {
-            type: 'video',
-            videoElement: nestedVideo,
-            webCodecsPlayer: plannedRuntimeProvider ?? undefined,
-            runtimeSourceId: nestedRuntimeSource?.runtimeSourceId,
-            runtimeSessionKey: nestedRuntimeSource?.runtimeSessionKey,
-            mediaFileId: nestedRuntimeSource?.mediaFileId ?? nestedClip.source.mediaFileId ?? nestedClip.mediaFileId,
-          },
-          runtimeContext,
-          {
-            layerId: nestedLayerId,
-            sourceTime: nestedClipTime,
-            nestedCompositionId,
-          }
-        );
-        if (sourceAdmission && !sourceAdmission.admitted) {
-          return null;
-        }
-
-        let reported = false;
-        try {
-          const nestedRuntimeProvider =
-            getRuntimeFrameProvider(nestedRuntimeSource, 'ram-preview') ??
-            nestedClip.source.webCodecsPlayer ??
-            null;
-
-          const seekCompleted = await seekRamPreviewVideoFrame({
-            video: nestedVideo,
-            targetTime: nestedClipTime,
-            runtimeProvider: nestedRuntimeProvider,
-            timeoutMs: 150,
-            runtimeSeekDelayMs: 50,
-            isCancelled: deps.isCancelled,
-          });
-          if (!seekCompleted) return null;
-          updateRuntimePlaybackTime(
-            nestedRuntimeSource,
-            nestedClipTime,
-            'ram-preview'
-          );
-
-          const nestedLayerSource: LayerSource = {
-            type: 'video',
-            videoElement: nestedVideo,
-            webCodecsPlayer: nestedRuntimeProvider ?? undefined,
-            runtimeSourceId: nestedRuntimeSource?.runtimeSourceId,
-            runtimeSessionKey: nestedRuntimeSource?.runtimeSessionKey,
-          };
-          this.reportSourceForRun(runtimeContext, nestedClip, nestedLayerSource, {
-            layerId: nestedLayerId,
-            sourceTime: nestedClipTime,
-            nestedCompositionId,
-          });
-          reported = true;
-          nestedLayers.push(clipToRamPreviewLayer(nestedClip, nestedLayerSource, nestedLayerId));
-        } finally {
-          if (!reported) {
-            sourceAdmission?.release();
-          }
-        }
+      if (nestedClip.isComposition) {
+        const layer = await this.buildNestedCompLayer(nestedClip, clipTime, deps, runtimeContext, depth + 1);
+        if (layer) nestedLayers.push(layer);
+        else if (this.admissionDenied || deps.isCancelled()) return null;
+      } else if (nestedClip.source?.videoElement) {
+        const layer = await this.buildVideoLayer(nestedClip, clipTime, deps, runtimeContext, {
+          sourceTime: getNestedRamPreviewClipTime(clipTime, nestedClip),
+          layerId: `nested-${nestedClip.id}`,
+          nestedCompositionId: clip.compositionId || clip.id,
+        });
+        if (!layer) return null;
+        nestedLayers.push(layer);
       } else if (nestedClip.source?.type === 'image') {
         const nestedLayerId = `nested-${nestedClip.id}`;
         const nestedCompositionId = clip.compositionId || clip.id;
@@ -688,6 +632,9 @@ export class RamPreviewEngine {
       width: compWidth,
       height: compHeight,
       frameRate: frameRate ?? 30,
+      currentTime: clipTime,
+      sceneClips: clip.nestedClips,
+      sceneTracks: clip.nestedTracks,
     };
 
     return clipToRamPreviewLayer(clip, {

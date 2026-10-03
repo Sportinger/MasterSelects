@@ -34,6 +34,7 @@ export interface HistoryTimelineRestoreCurrentState {
   tempoMap?: HistoryTimelineEditState['timeline']['tempoMap'];
   masterAudioState?: HistoryTimelineEditState['timeline']['masterAudioState'];
   sharedSceneGraphs?: HistoryTimelineEditState['timeline']['sharedSceneGraphs'];
+  compositionGraph?: HistoryTimelineEditState['timeline']['compositionGraph'];
 }
 
 export interface HistoryTimelineRestoreState {
@@ -51,6 +52,7 @@ export interface HistoryTimelineRestoreState {
   tempoMap?: HistoryTimelineEditState['timeline']['tempoMap'];
   masterAudioState?: HistoryTimelineEditState['timeline']['masterAudioState'];
   sharedSceneGraphs?: HistoryTimelineEditState['timeline']['sharedSceneGraphs'];
+  compositionGraph?: HistoryTimelineEditState['timeline']['compositionGraph'];
 }
 
 export interface HistoryTimelineRestoreDiagnostics {
@@ -253,6 +255,7 @@ function createRestoredClip(
       faceAnalysisMessage: clip.faceAnalysisMessage,
       sceneDescriptionStatus: clip.sceneDescriptionStatus,
       reversed: clip.reversed,
+      timeRemap: clip.timeRemap ? structuredClone(clip.timeRemap) : undefined,
       speed: clip.speed,
       preservesPitch: clip.preservesPitch,
       followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
@@ -434,6 +437,7 @@ export function createHistoryTimelineRestoreState(
       // setState — so an `undefined` here would CLOBBER the live tempo map
       // rather than leave it alone. Fall back to the current one.
       sharedSceneGraphs: clonePlain(historyState.timeline.sharedSceneGraphs),
+      compositionGraph: clonePlain(historyState.timeline.compositionGraph),
       masterAudioState: clonePlain(historyState.timeline.masterAudioState),
     },
     diagnostics: {

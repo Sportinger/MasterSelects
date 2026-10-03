@@ -7,7 +7,7 @@ import { encodeCompositionClip, encodeCompositionTrack } from '../../domains/pro
 import { entityKey } from '../../domains/jsonBoundary';
 import { signalAssetItemToProjectMetadata } from '../../../../../stores/mediaStore/helpers/signalItems';
 import { changedItems, type DomainMutationPlan } from '../domainMutationAdapter';
-import { emptyPlan, existingAggregate, ensureRootField, membership, reference, replaceAggregate } from './aggregatePlan';
+import { assertListKnown, emptyPlan, existingAggregate, ensureRootField, membership, reference, replaceAggregate } from './aggregatePlan';
 import { encodedPatch } from './projectPatchCodec';
 import { granularizeStructuredPlan } from './structuredDomain';
 import { splitNestedDomain } from '../../domains/nestedOwnership';
@@ -59,9 +59,15 @@ export function prepareMediaMutation(before: MediaState, patch: Partial<MediaSta
       if (aggregate) aggregate.retainResultBindings = false;
     }
   }
-  if (before.files !== next.files && (before.files.length !== next.files.length || before.files.some((item, i) => item.id !== next.files[i]?.id))) membership(plan, entities, 'media', 'project', next.files.map(item => item.id));
+  if (before.files !== next.files && (before.files.length !== next.files.length || before.files.some((item, i) => item.id !== next.files[i]?.id))) {
+    assertListKnown(entities, entityKey('membership', 'project', 'media'), 'media', 'project', [...before.files, ...next.files].map(item => item.id));
+    membership(plan, entities, 'media', 'project', next.files.map(item => item.id));
+  }
   for (const change of changedItems(before.compositions, next.compositions)) compositionPlan(plan, entities, change.before, change.after, change.id);
-  if (before.compositions !== next.compositions && (before.compositions.length !== next.compositions.length || before.compositions.some((item, i) => item.id !== next.compositions[i]?.id))) membership(plan, entities, 'compositions', 'project', next.compositions.map(item => item.id), 'composition');
+  if (before.compositions !== next.compositions && (before.compositions.length !== next.compositions.length || before.compositions.some((item, i) => item.id !== next.compositions[i]?.id))) {
+    assertListKnown(entities, entityKey('membership', 'project', 'compositions'), 'composition', 'project', [...before.compositions, ...next.compositions].map(item => item.id));
+    membership(plan, entities, 'compositions', 'project', next.compositions.map(item => item.id), 'composition');
+  }
   for (const field of ['folders', ...GENERATED] as const) {
     if (before[field] === next[field]) continue;
     for (const change of changedItems(before[field] as { id: string }[], next[field] as { id: string }[])) {

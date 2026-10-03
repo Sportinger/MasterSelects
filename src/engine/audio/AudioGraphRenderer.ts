@@ -1,3 +1,4 @@
+import { resolveAudioPreviewRetime } from '../../services/timeline/retime/clipAudioRetime';
 import { applyVideoInspectorSpeedBypass } from '../../services/videoInspector/sectionBypass';
 import {
   AUDIO_GRAPH_SCHEMA_VERSION,
@@ -182,6 +183,9 @@ export class AudioGraphRenderer {
           });
         }
 
+        const preview = resolveAudioPreviewRetime(clip, 0);
+        if (preview.mutedReason) diagnostics.push({ severity: 'info',
+          code: 'audio-retime-preview-muted', message: preview.mutedReason, scope: 'clip', refId: clip.id });
         return this.normalizeClip(
           clip,
           trackOrder.get(clip.trackId) ?? Number.MAX_SAFE_INTEGER,

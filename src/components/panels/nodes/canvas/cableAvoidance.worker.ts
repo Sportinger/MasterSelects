@@ -3,7 +3,8 @@ import { routeAroundCards, type AvoidCable, type AvoidRect } from './cableAvoida
 /** Routes cables around cards off the main thread; replies are tagged with the request revision. */
 self.onmessage = (event: MessageEvent<{ revision: number; obstacles: AvoidRect[]; cables: AvoidCable[] }>) => {
   const { revision, obstacles, cables } = event.data;
+  const started = import.meta.env.DEV ? performance.now() : 0;
   let routes: Array<[string, Array<{ x: number; y: number }>]> = [];
   try { routes = [...routeAroundCards(obstacles, cables)]; } catch { /* keep direct routes */ }
-  self.postMessage({ revision, routes });
+  self.postMessage({ revision, routes, ...(import.meta.env.DEV ? { duration: performance.now() - started } : {}) });
 };

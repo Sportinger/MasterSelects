@@ -6,7 +6,10 @@ import { fitCanvasLabel, wrapCanvasLabel } from './canvasTextLayout';
 import type { CanvasBranch, CanvasCable, CanvasCurve, CanvasNode, CanvasScene, CanvasTheme, CanvasTransport, CanvasView, Rect } from './nodeCanvasTypes';
 import { CARD_SPRITE_PAD } from './nodeCardSprites';
 import { nodePopFrame } from './nodePopMotion';
-import { coveredCableOpacity, coveredGroupDepthClips, groupDepthAt, subtractOccludedRects } from '../edgeGroupOcclusion';
+import { queryCanvasCableCovers } from './cableOcclusion';
+import { paintCanvasCables } from './paintCanvasCables';
+import { recordPaintPhase } from './nodePaintProfile';
+import { coveredCableOpacity } from '../edgeGroupOcclusion';
 
 export type DrawContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 export function inView(rect: Rect, view: CanvasView, margin = 30): boolean {
@@ -15,11 +18,6 @@ export function inView(rect: Rect, view: CanvasView, margin = 30): boolean {
 }
 function cableVisible(cable: CanvasCable, view: CanvasView): boolean {
   return inView(canvasCableRoute(cable).bounds, view);
-}
-function intersectsCable(rect: Rect, cable: CanvasCable, margin: number): boolean {
-  const bounds = canvasCableRoute(cable).bounds;
-  return rect.x <= bounds.x + bounds.width + margin && rect.x + rect.width >= bounds.x - margin
-    && rect.y <= bounds.y + bounds.height + margin && rect.y + rect.height >= bounds.y - margin;
 }
 function begin(ctx: DrawContext, view: CanvasView) {
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -56,45 +54,6 @@ function drawCable(ctx: DrawContext, cable: CanvasCable, zoom: number, opacity?:
   ctx.save(); ctx.translate(middle.x, middle.y); ctx.rotate(angle); ctx.lineWidth = 1.3 * cableScreenScale(zoom) / zoom;
   ctx.beginPath(); ctx.moveTo(-3 / zoom, -3 / zoom); ctx.lineTo(0, 0); ctx.lineTo(-3 / zoom, 3 / zoom); ctx.stroke(); ctx.restore(); ctx.globalAlpha = 1;
 }
-/**
- * Settled cables that share colour, opacity, width and dash become one path and
- * one stroke, instead of one stroke per cable and per arrow head. Cables that
- * are still drawing in keep their individual progressive path.
- */
-function prepareCables(cables: readonly CanvasCable[], zoom: number) {
-  const progressive: CanvasCable[] = [];
-  const batches = new Map<string, { path: Path2D; color: string; alpha: number; fade: number; width: number; dash: number[] }>();
-  const batch = (color: string, alpha: number, fade: number, width: number, dash: number[]) => {
-    const key = `${color}|${alpha}|${fade}|${width}|${dash.join(',')}`;
-    let entry = batches.get(key);
-    if (!entry) { entry = { path: new Path2D(), color, alpha, fade, width, dash }; batches.set(key, entry); }
-    return entry.path;
-  };
-  for (const cable of cables) {
-    const appearance = cable.appearance ?? 1;
-    if (!cable.disappearing && appearance < 1) { progressive.push(cable); continue; }
-    const { route, middle: { point: middle, angle } } = canvasCableRoute(cable);
-    const fade = cable.disappearing ? appearance : 1;
-    const alpha = (cable.highlighted ? 1 : 0.55) * fade;
-    const dash = cable.draft ? [5 / zoom, 4 / zoom] : cable.baked ? [4 / zoom, 4 / zoom] : [];
-    const thin = cableScreenScale(zoom);
-    const curve = batch(cable.color, alpha, fade, (cable.highlighted ? 2 : 1.25) * thin / zoom, dash);
-    traceCableRoute(curve, route);
-    const cos = Math.cos(angle), sin = Math.sin(angle), size = 3 / zoom;
-    const arrow = batch(cable.color, alpha, fade, 1.3 * thin / zoom, []);
-    arrow.moveTo(middle.x + (-size * cos + size * sin), middle.y + (-size * sin - size * cos));
-    arrow.lineTo(middle.x, middle.y);
-    arrow.lineTo(middle.x + (-size * cos - size * sin), middle.y + (-size * sin + size * cos));
-  }
-  return (ctx: DrawContext, opacity?: number) => {
-    for (const cable of progressive) drawCable(ctx, cable, zoom, opacity);
-    for (const { path, color, alpha, fade, width, dash } of batches.values()) {
-      ctx.strokeStyle = color; ctx.globalAlpha = opacity === undefined ? alpha : opacity * fade;
-      ctx.lineWidth = width; ctx.setLineDash(dash); ctx.stroke(path);
-    }
-    ctx.setLineDash([]); ctx.globalAlpha = 1;
-  };
-}
 function curveShape(curve: CanvasCurve) {
   return curve.compactBadge ? { x: curve.x + 5, y: curve.y + 23, width: 108, height: 22 }
     : { x: curve.x + 4, y: curve.y + 22, width: curve.width - 8, height: 36 };
@@ -130,41 +89,13 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
   shapeSprite?: (key: string, bounds: Rect, paint: (ctx: OffscreenCanvasRenderingContext2D) => void) => { canvas: OffscreenCanvas; level: number } | undefined) {
   begin(ctx, view);
   if (drawGroups) paintGroupFrames(ctx, scene, view, theme);
-  const viewport = { x: -view.panX / view.zoom - 20, y: -view.panY / view.zoom - 20,
-    width: view.width / view.zoom + 40, height: view.height / view.zoom + 40 };
-  // Group backgrounds and headers stay in the DOM: their complete vector
-  // bounds follow the immediate viewport even while this bitmap catches up.
-  // Cables that pass behind the same groups share one clip per pass. Clipping
-  // each cable separately dominated raster time on large expanded graphs.
-  const occluded = new Map<Rect[], CanvasCable[]>(), open: CanvasCable[] = [];
-  const cableMargin = 6 / view.zoom;
-  for (const cable of scene.cables) if (cableVisible(cable, view)) {
-    if (!cable.occlusions?.some(rect => intersectsCable(rect, cable, cableMargin))) { open.push(cable); continue; }
-    const batch = occluded.get(cable.occlusions);
-    if (batch) batch.push(cable); else occluded.set(cable.occlusions, [cable]);
-  }
-  prepareCables(open, view.zoom)(ctx);
-  for (const [occlusions, cables] of occluded) {
-    // Construct curve/arrow paths once, then reuse them for all opacity passes.
-    const paint = prepareCables(cables, view.zoom);
-    const visible = subtractOccludedRects(viewport, occlusions);
-    if (visible.length) {
-      ctx.save(); ctx.beginPath();
-      for (const rect of visible) ctx.rect(rect.x, rect.y, rect.width, rect.height);
-      ctx.clip(); paint(ctx); ctx.restore();
-    }
-    for (const [depth, rects] of coveredGroupDepthClips(occlusions)) {
-      const onScreen = rects.filter(rect => inView(rect, view)
-        && cables.some(cable => intersectsCable(rect, cable, cableMargin)));
-      if (!onScreen.length) continue;
-      ctx.save(); ctx.beginPath();
-      for (const rect of onScreen) ctx.rect(rect.x, rect.y, rect.width, rect.height);
-      ctx.clip(); paint(ctx, coveredCableOpacity(depth)); ctx.restore();
-    }
-  }
+  paintCanvasCables(ctx, scene.cables, view);
+  const nodesStart = import.meta.env.DEV ? performance.now() : 0;
+  let nodeCount = 0;
   const titleBoost = overviewTitleBoost(view.zoom);
   for (const node of scene.nodes) {
     if (!inView(node, view)) continue;
+    if (import.meta.env.DEV) nodeCount++;
     ctx.save(); ctx.translate(node.x, node.y);
     const appearance = node.appearance ?? 1;
     const pop = node.pop !== undefined ? nodePopFrame(node.pop) : undefined;
@@ -187,6 +118,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     if (titleBoost > 1) drawOverviewTitle(ctx, node, theme, titleBoost);
     ctx.restore();
   }
+  if (import.meta.env.DEV) recordPaintPhase('paint-nodes', performance.now() - nodesStart, nodeCount);
   // Long fan-out stubs first, so their backing stroke cannot cover shorter grips.
   for (const plug of scene.plugs.toReversed()) {
     if (!inView({ x: Math.min(plug.tip.x, plug.center.x) - 8, y: plug.center.y - 8, width: Math.abs(plug.tip.x - plug.center.x) + 16, height: 16 }, view)) continue;
@@ -242,7 +174,7 @@ const widestWordRatio = new Map<string, number>();
  * lines) into the free space above the curve, symbol, and ports. */
 function drawOverviewTitle(ctx: DrawContext, node: CanvasNode, theme: CanvasTheme, boost: number) {
   const left = node.expandable ? 30 : 10, width = node.width - left - 10, target = 13 * boost;
-  const bottom = Math.min(node.height - 6, node.curve?.y ?? Infinity, node.mathSymbol ? node.mathSymbol.y - 26 : Infinity,
+  const bottom = Math.min(node.height - 6, node.summarySegments?.y ?? Infinity, node.curve?.y ?? Infinity, node.mathSymbol ? node.mathSymbol.y - 26 : Infinity,
     ...node.ports.map(port => port.y - 8));
   const band = Math.max(20, bottom - OVERVIEW_TITLE_TOP);
   // Pick the line count that allows the largest font; shrink words that overflow.
@@ -275,16 +207,23 @@ export function drawNodeCard(ctx: DrawContext, node: CanvasNode, theme: CanvasTh
     ctx.strokeStyle = theme.border; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, 27); ctx.lineTo(node.width, 27); ctx.stroke();
     text(ctx, node.kind.toUpperCase(), 8, 19, 95, theme.muted);
     text(ctx, node.runtime, node.width - 28, 19, 50, theme.muted, 9, 400, 'right');
-    text(ctx, '◉', node.width - 9, 19, 14, node.viewerEnabled ? theme.accent : theme.muted, 12, 400, 'right');
+    if (node.viewerEnabled !== undefined) text(ctx, '◉', node.width - 9, 19, 14, node.viewerEnabled ? theme.accent : theme.muted, 12, 400, 'right');
     if (node.bypassable) text(ctx, 'Byp', node.width - 84, 19, 25, node.bypassed ? theme.accent : theme.muted, 9);
     text(ctx, node.label, node.expandable ? 30 : 10, 46, node.width - (node.expandable ? 40 : 20), theme.text, 13, 600);
     text(ctx, node.description, 10, 63, node.width - 20, theme.muted, 10);
-    let badgeX = 10;
+    let badgeX = node.summarySegments?.timeline ? 300 : 10;
+    const badgeY = node.summarySegments?.timeline ? 33 : 83;
     for (const badge of node.badges) {
       const color = badge.tone === 'ready' ? '#75d6b0' : badge.tone === 'empty' ? '#e79687' : '#dbbe75';
       ctx.font = '9px system-ui'; const width = ctx.measureText(badge.label).width + 10;
-      box(ctx, badgeX, 83, width, 16); ctx.strokeStyle = color; ctx.lineWidth = 0.6; ctx.stroke(); text(ctx, badge.label, badgeX + 5, 94, width - 8, color, 9); badgeX += width + 4;
+      box(ctx, badgeX, badgeY, width, 16); ctx.strokeStyle = color; ctx.lineWidth = 0.6; ctx.stroke(); text(ctx, badge.label, badgeX + 5, badgeY + 11, width - 8, color, 9); badgeX += width + 4;
     }
+    if (node.summaryBar) {
+      const start = Math.max(0, Math.min(1, node.summaryBar.start)), end = Math.max(start, Math.min(1, node.summaryBar.end));
+      ctx.fillStyle = theme.border; ctx.fillRect(10, 74, node.width - 20, 4);
+      ctx.fillStyle = theme.accent; ctx.fillRect(10 + start * (node.width - 20), 74, Math.max(2, (end - start) * (node.width - 20)), 4);
+    }
+    if (node.summarySegments) drawSummarySegments(ctx, node.summarySegments, theme);
     if (node.curve) drawCurve(ctx, node.curve, theme);
     if (node.mathSymbol) text(ctx, node.mathSymbol.text, node.mathSymbol.x, node.mathSymbol.y, 64, theme.muted, 26, 500, 'center');
     for (const port of node.ports) {
@@ -318,7 +257,8 @@ export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasV
       const envelope = signalEnvelope(fraction);
       if (envelope <= 0) continue;
       const p = signalPosition(cable, fraction);
-      const depth = groupDepthAt(p, cable.occlusions ?? []);
+      if (!inView({ ...p, width: 0, height: 0 }, view)) continue;
+      const depth = queryCanvasCableCovers(cable, { ...p, width: 0, height: 0 }).length;
       ctx.globalAlpha = flowLevel * envelope * (depth ? coveredCableOpacity(depth) : 1);
       ctx.fillStyle = cable.color; ctx.beginPath();
       ctx.arc(p.x, p.y, radius * (0.35 + 0.65 * envelope) * (0.6 + 0.4 * flowLevel), 0, Math.PI * 2); ctx.fill();
@@ -349,5 +289,24 @@ export function paintOverlay(ctx: DrawContext, scene: CanvasScene, view: CanvasV
     ctx.strokeStyle = theme.accent; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x, r.y - 3); ctx.lineTo(x, r.y + r.height + 3); ctx.stroke();
     text(ctx, String(Number(value.toFixed(3))), curve.compactBadge ? curve.x + curve.width - 5 : curve.x, curve.y + (curve.compactBadge ? 39 : 13),
       curve.compactBadge ? 42 : 55, '#ac95e5', curve.compactBadge ? 11 : 15, 600, curve.compactBadge ? 'right' : 'left'); ctx.restore();
+  }
+}
+
+/** Shared worker and dense DOM-fallback segment pixels. Geometry remains exact timeline time. */
+export function drawSummarySegments(ctx: DrawContext, bar: NonNullable<CanvasNode['summarySegments']>, theme: CanvasTheme) {
+  ctx.fillStyle = theme.background; box(ctx, bar.x, bar.y, bar.width, bar.timeline ? bar.height : bar.lanes * 22 - 2, 2); ctx.fill();
+  for (const segment of bar.segments) {
+    // Timeline strips read like the timeline: clips are solid blocks, not border-colored hairlines.
+    ctx.fillStyle = segment.transitionId ? '#c59a55' : segment.highlighted ? '#3f8aa0' : bar.timeline ? '#2e5566' : theme.border;
+    box(ctx, segment.x, segment.y, Math.max(1, segment.width - (bar.timeline ? 1 : 0)), segment.height, 2); ctx.fill();
+    if (segment.selected) { ctx.strokeStyle = theme.accent; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.fillStyle = theme.accent;
+    if (!bar.timeline) ctx.fillRect(segment.rangeX, segment.y + 15, Math.min(segment.rangeWidth, bar.x + bar.width - segment.rangeX), 3);
+    if (segment.transitionId || (bar.timeline && segment.compact)) continue;
+    text(ctx, String(segment.index + 1), segment.x + segment.width / 2, segment.y + (bar.timeline ? 19 : 11), segment.width - 2, theme.text, bar.timeline ? 20 : 9, 500, 'center');
+    if (bar.timeline && segment.width >= 50 && segment.badges?.length) {
+      const labels = segment.badges.filter(label => label !== 'Trim').map(label => label === 'Linked audio' ? 'AV' : label.startsWith('Speed') ? 'S' : label === 'Reverse' ? 'R' : label === 'Correction' ? 'C' : label === 'Rule' ? 'Rule' : label);
+      text(ctx, labels.join(' / '), segment.x + 3, segment.y + 30, segment.width - 6, theme.text, 9);
+    }
   }
 }

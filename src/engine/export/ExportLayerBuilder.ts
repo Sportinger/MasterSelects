@@ -14,10 +14,11 @@ import {
   getCompositionSize,
   getExportImageElement,
 } from './layerBuilder/sourceLookup';
-import { getClipSourceWindowTime, getMappedClipSourceTime } from './layerBuilder/timing';
+import { getClipSourceWindowTime } from './layerBuilder/timing';
 import { buildBaseLayerProps } from './layerBuilder/baseLayers';
 import {
   buildNestedLayersForExport,
+  getNestedClipSourceTime,
   buildTransitionCompositionLayerForExport,
 } from './layerBuilder/nestedLayers';
 import { buildTextLikeLayer, isTextLikeClipSource } from './layerBuilder/textLayers';
@@ -161,8 +162,9 @@ function buildExportLayerForClip(
 
   // Handle nested compositions
   if (clip.isComposition && clip.nestedClips && clip.nestedClips.length > 0) {
-    const nestedTime = getMappedClipSourceTime(clip, clipLocalTime)
-      ?? clipLocalTime + (clip.inPoint || 0);
+    // Composition snapshots own their speed curves, just like recursive export
+    // seeking. The context integrator is only authoritative for top-level video.
+    const nestedTime = getNestedClipSourceTime(clip, clipLocalTime);
     const nestedLayers = buildNestedLayersForExport(
       clip,
       nestedTime,

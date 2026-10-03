@@ -310,6 +310,7 @@ export const ProjectClipFields = {
   "audioEnabled": { class: 'content', owner: 'timeline' },
   "videoState": { class: 'content', owner: 'timeline' },
   "audioState": { class: 'content', owner: 'timeline' },
+  "timeRemap": { class: 'content', owner: 'timeline' },
   "reversed": { class: 'content', owner: 'timeline' },
   "disabled": { class: 'content', owner: 'timeline' },
   "speed": { class: 'content', owner: 'timeline' },
@@ -377,6 +378,7 @@ export const ProjectClipVideoStateFields = {
 
 export const ProjectCompositionFields = {
   "sharedSceneGraphs": { class: 'content', owner: 'timeline' },
+  "compositionGraph": { class: 'content', owner: 'timeline' },
   "id": { class: 'content', owner: 'timeline' },
   "name": { class: 'content', owner: 'timeline' },
   "width": { class: 'content', owner: 'timeline' },

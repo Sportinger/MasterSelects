@@ -1,6 +1,7 @@
+import { providerHasTargetFrame, sameProviderSeekFrame, type FrameSelectionProvider } from './videoSyncFrameSelection';
 import { scrubSettleState } from '../scrubSettleState';
 
-export interface VideoSyncFrameProviderPolicyTarget {
+export interface VideoSyncFrameProviderPolicyTarget extends FrameSelectionProvider {
   currentTime: number;
   getPendingSeekTime?: () => number | null | undefined;
   hasFrame?: () => boolean;
@@ -25,7 +26,6 @@ export interface VideoSyncHtmlAudioFallbackTarget {
   src: string;
 }
 
-const PAUSED_PRECISE_SEEK_THRESHOLD = 0.015;
 const FRESH_RUNTIME_FRAME_TOLERANCE = 0.12;
 
 export function videoSyncProviderHasFrame(
@@ -60,6 +60,7 @@ export function selectPausedWebCodecsProvider<
     if (!videoSyncProviderHasFrame(provider)) {
       return Number.POSITIVE_INFINITY;
     }
+    if (providerHasTargetFrame(provider, targetTime)) return 0;
     const effectiveTime = provider.getPendingSeekTime?.() ?? provider.currentTime;
     return Number.isFinite(effectiveTime)
       ? Math.abs(effectiveTime - targetTime)
@@ -75,7 +76,7 @@ export function selectPausedWebCodecsProvider<
     runtimeIsFullMode &&
     runtimeHasFrame &&
     runtimeEffectiveTime !== undefined &&
-    Math.abs(runtimeEffectiveTime - targetTime) <= 0.05
+    providerHasTargetFrame(runtimeProvider!, targetTime)
   ) {
     return runtimeProvider ?? null;
   }
@@ -126,7 +127,7 @@ export function shouldSeekPausedWebCodecsProviderPolicy(
   }
 
   const pendingSeek = provider.getPendingSeekTime?.();
-  if (pendingSeek != null && Math.abs(pendingSeek - targetTime) <= PAUSED_PRECISE_SEEK_THRESHOLD) {
+  if (pendingSeek != null && sameProviderSeekFrame(provider, pendingSeek, targetTime)) {
     if (provider.isDecodePending?.()) {
       return false;
     }
@@ -141,7 +142,7 @@ export function shouldSeekPausedWebCodecsProviderPolicy(
 
     return (
       !videoSyncProviderHasFrame(provider) ||
-      Math.abs(provider.currentTime - targetTime) > PAUSED_PRECISE_SEEK_THRESHOLD
+      !providerHasTargetFrame(provider, targetTime)
     );
   }
 
@@ -149,11 +150,7 @@ export function shouldSeekPausedWebCodecsProviderPolicy(
     return false;
   }
 
-  const effectivePos = pendingSeek ?? provider.currentTime;
-  return (
-    !videoSyncProviderHasFrame(provider) ||
-    Math.abs(effectivePos - targetTime) > PAUSED_PRECISE_SEEK_THRESHOLD
-  );
+  return !videoSyncProviderHasFrame(provider) || !providerHasTargetFrame(provider, targetTime);
 }
 
 export function shouldFastSeekPausedWebCodecsProviderPolicy(

@@ -7,7 +7,7 @@ const connectionIds = (graph: NodeGraph) => new Set(graph.edges.map(edge =>
 
 /** Follow membership changes using the displayed bounds of animated group frames. */
 export function useNodeGrowthViewport(canvas: RefObject<HTMLDivElement | null>, graph: NodeGraph,
-  bounds: NodeBounds, animating: boolean, fit: (bounds: NodeBounds) => void, preserveFoldView = true) {
+  bounds: NodeBounds, animating: boolean, fit: (bounds: NodeBounds) => void, preserveFoldView = true, enabled = true) {
   const known = useRef({ graphId: graph.id, ids: new Set(graph.nodes.map(node => node.id)),
     links: connectionIds(graph), folds: new Map(graph.groups?.map(group => [group.id, !!group.collapsed])) });
   const pending = useRef(false);
@@ -33,6 +33,8 @@ export function useNodeGrowthViewport(canvas: RefObject<HTMLDivElement | null>, 
       || links.size !== known.current.links.size || [...links].some(id => !known.current.links.has(id))) pending.current = true;
     known.current = { graphId: graph.id, ids, links,
       folds: new Map(graph.groups?.map(group => [group.id, !!group.collapsed])) };
+    // Views that reveal nodes on selection (the timeline overview) keep the user's camera.
+    if (!enabled) { pending.current = false; return; }
     const element = canvas.current;
     if (!pending.current || !element || !element.clientWidth || !element.clientHeight) return;
     if (!animating) pending.current = false;
@@ -40,5 +42,5 @@ export function useNodeGrowthViewport(canvas: RefObject<HTMLDivElement | null>, 
     // Always use the available canvas after structural changes. Streamed cables
     // can reflow the graph after the last node has already arrived.
     fit(bounds);
-  }, [canvas, graph, bounds, animating, fit, preserveFoldView]);
+  }, [canvas, graph, bounds, animating, fit, preserveFoldView, enabled]);
 }

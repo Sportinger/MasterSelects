@@ -1,3 +1,4 @@
+import { rememberSourceFrameRate, videoHasTargetFrame } from './videoSyncFrameSelection';
 import type { TimelineClip } from '../../types';
 import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
@@ -41,6 +42,7 @@ export function syncReverseOrNonstandardPlayback({
   clearPlayingState?: boolean;
   deps: VideoSyncHtmlReversePlaybackDeps;
 }): void {
+  rememberSourceFrameRate(video, clip, ctx);
   if (!video.paused) video.pause();
   if (clearPlayingState) {
     deps.clipWasPlaying.delete(clip.id);
@@ -50,7 +52,7 @@ export function syncReverseOrNonstandardPlayback({
   } else if (deps.clipWasDragging.has(clip.id)) {
     deps.clipWasDragging.delete(clip.id);
     deps.htmlSeeks.clearPreciseSeekTimer(clip.id);
-    if (timeDiff > 0.001) {
+    if (!videoHasTargetFrame(video, clipTime)) {
       deps.beginOrQueueSettleSeek(clip.id, video, clipTime, undefined, 'scrub-stop');
       video.addEventListener('seeked', () => renderHostPort.requestNewFrameRender(), { once: true });
     } else {
@@ -58,7 +60,7 @@ export function syncReverseOrNonstandardPlayback({
     }
     return;
   }
-  if (timeDiff > seekThreshold) {
+  if (ctx.isPlaying || isInteractivePreview ? timeDiff > seekThreshold : !videoHasTargetFrame(video, clipTime)) {
     deps.throttledSeek(clip.id, video, clipTime, ctx);
   }
   if (!isInteractivePreview) {

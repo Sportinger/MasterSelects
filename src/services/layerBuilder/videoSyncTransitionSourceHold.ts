@@ -1,3 +1,4 @@
+import { videoHasTargetFrame } from './videoSyncFrameSelection';
 import type { TimelineClip } from '../../types';
 import {
   ensureRuntimeFrameProvider,
@@ -14,6 +15,7 @@ export function syncTransitionSourceHold({
   video,
   clipRuntimeProvider,
   isInteractivePreview,
+  isPlaying = false,
   playbackRuntimeSource,
   scrubRuntimeSource,
   clipTime,
@@ -23,6 +25,7 @@ export function syncTransitionSourceHold({
   video: HTMLVideoElement | null;
   clipRuntimeProvider: RuntimeFrameProvider | null | undefined;
   isInteractivePreview: boolean;
+  isPlaying?: boolean;
   playbackRuntimeSource: RuntimePlaybackSource;
   scrubRuntimeSource: RuntimePlaybackSource;
   clipTime: number;
@@ -47,6 +50,9 @@ export function syncTransitionSourceHold({
   }
   if (video && !video.paused) {
     video.pause();
+  }
+  if (video && !isPlaying && !isInteractivePreview && !video.seeking && !videoHasTargetFrame(video, clipTime)) {
+    video.currentTime = clipTime;
   }
   if (holdProvider?.isFullMode()) {
     syncPausedWebCodecsProvider(

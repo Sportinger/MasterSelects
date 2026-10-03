@@ -138,6 +138,7 @@ export function createRestoredMediaClip(params: {
     sceneDescriptionProgress: mediaFile.sceneDescriptionProgress,
     sceneDescriptionMessage: mediaFile.sceneDescriptionMessage,
     reversed: serializedClip.reversed,
+    timeRemap: serializedClip.timeRemap ? structuredClone(serializedClip.timeRemap) : undefined,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
     followsLinkedVideoSpeed: serializedClip.followsLinkedVideoSpeed,

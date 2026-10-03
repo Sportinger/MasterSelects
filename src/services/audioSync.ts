@@ -1,3 +1,4 @@
+import { createClipSpeedSource, resolveClipSourceTime } from './timeline/retime/clipRetime';
 // Audio Sync Service
 // Synchronizes selected clips using audio waveform correlation.
 
@@ -223,11 +224,12 @@ async function prepareSyncClip(
   excerptSeconds?: number,
 ): Promise<PreparedSyncClip> {
   const { clip, keyframes = [] } = input;
-  if (clip.reversed) {
-    throw new Error('Reversed clips are not supported for audio sync.');
+  const source = createClipSpeedSource(clip, keyframes);
+  const speed = resolveClipSourceTime(clip, 0, source).sourceRate;
+  if (speed <= 0 || keyframes.some(key => key.property === 'speed') || clip.transitionSourceMap ||
+    clip.transitionSourceHold || Number.isFinite(clip.transitionSourceTimeOverride)) {
+    throw new Error('Audio alignment requires constant forward source time; reverse, holds and speed automation are unsupported.');
   }
-
-  const speed = Math.abs(clip.speed ?? 1) || 1;
   // Long stems and camera files stream; only short sources are decoded whole.
   const streamedDuration = Math.max(MIN_SYNC_SECONDS, clipSourceSeconds(clip, speed));
   const streamed = await loadStreamedSyncSignal({

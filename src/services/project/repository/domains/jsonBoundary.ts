@@ -87,11 +87,22 @@ export function encodeAggregate(key: string, type: string, input: unknown, blobs
   return entities;
 }
 
-export function decodeAggregate(key: string, entities: ReadonlyMap<string, EntityDTO>): JsonValue {
+export interface DecodeAggregateOptions {
+  /**
+   * Project opening only: a missing membership list (a dangling reference written by an older
+   * build) decodes as empty instead of making the whole project unopenable. Callers report it.
+   */
+  onMissingMembership?: (entityId: string) => void;
+}
+export function decodeAggregate(key: string, entities: ReadonlyMap<string, EntityDTO>, options: DecodeAggregateOptions = {}): JsonValue {
   const active = new Set<string>();
   const read = (entityId: string): JsonValue => {
     if (active.has(entityId)) throw new TypeError(`Cyclic domain reference: ${entityId}`);
     const entity = entities.get(entityId);
+    if (!entity && options.onMissingMembership && entityId.startsWith('membership/')) {
+      options.onMissingMembership(entityId);
+      return [];
+    }
     if (!entity || entity.schemaVersion !== 1) throw new TypeError(`Missing/unsupported domain entity: ${entityId}`);
     active.add(entityId);
     try { return unpack(entity.value); } finally { active.delete(entityId); }

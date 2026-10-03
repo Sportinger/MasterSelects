@@ -1,3 +1,4 @@
+import { startNodeMeasure, endNodeMeasure } from '../../../../services/nodeGraph/unified/nodeGraphPerformance';
 import type { NodeCanvasPlacement, NodeGraph, NodeGraphLayout } from '../../../../types/nodeGraph';
 import { spacePreviewGroups } from './spacePreviewGroups';
 
@@ -19,6 +20,8 @@ export function groupPlacementMembers(placement: NodeCanvasPlacement, id: string
 
 /** Preserve saved anchors while reflowing dynamic groups and effect-chain changes. */
 export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvasPlacement): NodeCanvasPlacement {
+  const measurement = import.meta.env.DEV ? startNodeMeasure('placement-reconcile') : undefined;
+  try {
   const placement: NodeCanvasPlacement = { ...previous, nodes: { ...previous?.nodes }, groups: { ...previous?.groups }, pinned: { ...previous?.pinned }, displaced: { ...previous?.displaced } };
   const visible = new Set(graph.nodes.map(node => node.id));
   const currentGroups = new Set(graph.groups?.map(group => group.id));
@@ -108,6 +111,7 @@ export function reconcileCanvasPlacement(graph: NodeGraph, previous?: NodeCanvas
     placement.displaced![id] = { origin: before?.origin ?? origin, groups: [...new Set([...(before?.groups ?? []), ...expanding])] };
   }
   return placement;
+  } finally { if (import.meta.env.DEV) endNodeMeasure('placement-reconcile', measurement); }
 }
 
 export function moveCanvasPlacement(placement: NodeCanvasPlacement, moves: Array<{ nodeId: string; layout: NodeGraphLayout }>, groupId?: string): NodeCanvasPlacement {
@@ -161,5 +165,8 @@ export function resetCanvasPlacement(graph: NodeGraph, compactEffects = true): N
 
 /** Change only outer placement; preserve manual interior positions and wiring. */
 export function toggleCompactEffectPlacement(graph: NodeGraph, placement: NodeCanvasPlacement): NodeCanvasPlacement {
+  const measurement = import.meta.env.DEV ? startNodeMeasure('placement-compact') : undefined;
+  try {
   return reconcileCanvasPlacement(graph, { ...placement, compactEffects: placement.compactEffects === false, flowLayoutVersion: undefined });
+  } finally { if (import.meta.env.DEV) endNodeMeasure('placement-compact', measurement); }
 }

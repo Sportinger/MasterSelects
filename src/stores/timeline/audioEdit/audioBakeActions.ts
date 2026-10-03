@@ -12,7 +12,8 @@ import { generateClipId } from '../helpers/idGenerator';
 import { getClipMediaFileId, isAudioClip } from './audioEditHelpers';
 
 const log = Logger.create('TimelineAudioEdit');
-const clipAudioRenderer = new ClipAudioRenderService();
+let clipAudioRenderer: ClipAudioRenderService | undefined;
+const getClipAudioRenderer = () => clipAudioRenderer ??= new ClipAudioRenderService();
 const AUDIO_BAKE_MEDIA_FOLDER_NAME = 'Baked Audio';
 
 type AudioBakeActions = Pick<AudioEditActions, 'bakeClipAudioEditStack' | 'unbakeClipAudioEditStack'>;
@@ -81,7 +82,7 @@ async function renderClipEditStackOnly(
       effectStack: [],
     },
   };
-  return (await clipAudioRenderer.render({ clip: renderClip, sourceBuffer })).buffer;
+  return (await getClipAudioRenderer().render({ clip: renderClip, sourceBuffer })).buffer;
 }
 
 export const createAudioBakeActions: SliceCreator<AudioBakeActions> = (set, get) => ({

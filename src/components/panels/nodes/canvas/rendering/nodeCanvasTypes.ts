@@ -24,6 +24,10 @@ export interface CanvasNode extends Rect {
   pop?: number;
   color: string; selected: boolean; bypassed: boolean; bypassable: boolean;
   badges: Array<{ label: string; tone: string }>; ports: CanvasPort[];
+  summaryBar?: { start: number; end: number };
+  summarySegments?: Rect & { lanes: number; timeline?: boolean; segments: Array<Rect & {
+    index: number; compact: boolean; rangeX: number; rangeWidth: number; transitionId?: string; badges?: readonly string[]; highlighted?: boolean; selected?: boolean;
+  }> };
   curve?: CanvasCurve;
   viewerEnabled?: boolean;
   valueBesideOutput?: boolean;
@@ -38,6 +42,7 @@ export interface CanvasCable {
   /** Endpoint branch points; a pointer drag moves these ends with the point. */
   fromBranch?: string; toBranch?: string;
   occlusions?: Rect[];
+  occlusionPool?: { rects: Rect[]; excluded: number[] };
   baked?: boolean;
   from: Point; to: Point; color: string; highlighted: boolean; draft?: boolean;
   /** Omitted for the default bezier. */
@@ -67,8 +72,9 @@ export type CanvasMessage =
 
 /** Pixels and their coordinate system are presented together on the main thread. */
 export type CanvasWorkerReply =
+  | { type: 'initialized' }
   /** Unchanged layers are omitted; null clears a viewport-sized preview or animation layer. */
-  | { type: 'frame'; bitmap?: ImageBitmap; previews?: ImageBitmap | null; overlay?: ImageBitmap | null; revision?: number }
+  | { type: 'frame'; paintPhases?: import('./nodePaintProfile').PaintPhaseTiming[]; pathTiming?: import('./cableGeometry').CablePathTiming; paintDuration?: number; bitmap?: ImageBitmap; previews?: ImageBitmap | null; overlay?: ImageBitmap | null; revision?: number }
   | { type: 'failed' }
   | { type: 'previews-ready'; batchId: number; previewCount: number | undefined }
   | { type: 'previews-evicted'; keys: string[] }

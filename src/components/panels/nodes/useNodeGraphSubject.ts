@@ -1,7 +1,7 @@
 import { projectSceneGraphClip } from '../../../services/nodeGraph/sceneGraphOutputs';
 import { buildUnifiedClipGraph } from '../../../services/nodeGraph/unifiedClipGraph';
 import { usePreciseFaceTrack } from '../../../services/landmarkTracking/usePreciseFaceTrack';
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import type { NodeGraph, NodeGraphDocument, NodeGraphView, NodeGraphViewTheme } from '../../../services/nodeGraph';
 import {
   buildClipNodeGraphDocument,
@@ -48,10 +48,13 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general', pinne
     ? primarySelectedClipId
     : selectedClipIds.size > 0 ? [...selectedClipIds][0] : null);
 
-  const graphContext = useMemo(
-    () => resolveLinkedClipNodeGraphContext(clips, tracks, selectedClipId),
-    [clips, tracks, selectedClipId],
-  );
+  const resolved = resolveLinkedClipNodeGraphContext(clips, tracks, selectedClipId);
+  const contextRef = useRef(resolved);
+  const previous = contextRef.current;
+  if (!resolved || !previous || Object.keys(resolved).some(key => resolved[key as keyof typeof resolved] !== previous[key as keyof typeof previous])) contextRef.current = resolved;
+  const graphContext = contextRef.current;
+  const owner = graphContext?.ownerClip, linked = graphContext?.linkedClip;
+  const projectionClips = useMemo(() => owner ? linked ? [owner, linked] : [owner] : [], [owner, linked]);
   const faceTracking = usePreciseFaceTrack(graphContext?.ownerClip.id ?? '');
   const keyframes = useTimelineStore(state => state.clipKeyframes.get(graphContext?.ownerClip.id ?? '') ?? EMPTY_KEYFRAMES);
 
@@ -70,12 +73,12 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general', pinne
     // immutable subject, instead of again for every step of a 27-group animation.
     const preparedEffects = theme === 'general' ? new Map(graphClip.effects.filter(effect => hasEffectOperatorGraph(effect.type))
       .map(effect => [effect.id, buildEffectOperatorGraph(graphClip, effect)])) : undefined;
-    const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, clips, keyframes, faceTracking.createdAt, false, preparedEffects) : getNodeGraphView(document, theme);
+    const graph = theme === 'general' ? buildUnifiedClipGraph(document, graphClip, projectionClips, keyframes, faceTracking.createdAt, false, preparedEffects) : getNodeGraphView(document, theme);
     const projectGroupStates = theme === 'general' ? (collapsed: Record<string, boolean>) => {
       const groups = { ...graphClip.nodeGraph?.groups };
       for (const [id, value] of Object.entries(collapsed)) groups[id] = { ...groups[id], collapsed: value };
       return buildUnifiedClipGraph(document, { ...graphClip, nodeGraph: { ...graphClip.nodeGraph,
-        version: 1, nodes: graphClip.nodeGraph?.nodes ?? [], groups } }, clips, keyframes, faceTracking.createdAt, false, preparedEffects);
+        version: 1, nodes: graphClip.nodeGraph?.nodes ?? [], groups } }, projectionClips, keyframes, faceTracking.createdAt, false, preparedEffects);
     } : undefined;
     const view = document.views.find((candidate) => candidate.theme === theme) ?? document.views[0];
     const linkedSubtitle = graphContext.linkedClip && graphContext.linkedTrack
@@ -99,5 +102,5 @@ export function useNodeGraphSubject(theme: NodeGraphViewTheme = 'general', pinne
       view,
       availableViews: document.views,
     };
-  }, [graphContext, documents, theme, clips, faceTracking.ready, faceTracking.createdAt, keyframes]);
+  }, [graphContext, documents, theme, projectionClips, faceTracking.ready, faceTracking.createdAt, keyframes]);
 }

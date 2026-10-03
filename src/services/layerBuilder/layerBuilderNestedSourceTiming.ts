@@ -1,5 +1,5 @@
 import type { TimelineClip } from '../../types/timeline';
-import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
+import { resolveClipSourceTime, videoFrameSourceTime } from '../timeline/retime/clipRetime';
 
 export type NestedClipSourceTiming = {
   sourceTime: number;
@@ -11,33 +11,9 @@ export function getNestedClipSourceTiming(
   nestedClip: TimelineClip,
   nestedClipLocalTime: number,
 ): NestedClipSourceTiming {
-  const mappedTime = resolveTransitionSourceMapTime(
-    nestedClip.transitionSourceMap,
-    nestedClipLocalTime,
-  );
-  if (mappedTime) {
-    return {
-      sourceTime: mappedTime.sourceTime,
-      sourceRate: mappedTime.sourceRate,
-      isHold: mappedTime.isHold || mappedTime.sourceRate === 0,
-    };
-  }
-  const inPoint = nestedClip.inPoint ?? 0;
-  const outPoint = nestedClip.outPoint ?? nestedClip.duration;
-  const sourceOverride = nestedClip.transitionSourceTimeOverride;
-  const isHold = nestedClip.transitionSourceHold === true;
-  const sourceRate = isHold ? 0 : nestedClip.speed ?? (nestedClip.reversed ? -1 : 1);
-  return {
-    sourceTime: Number.isFinite(sourceOverride)
-      ? sourceOverride!
-      : isHold
-        ? inPoint
-        : nestedClip.reversed
-          ? outPoint - nestedClipLocalTime
-          : nestedClipLocalTime + inPoint,
-    sourceRate,
-    isHold,
-  };
+  const timing = resolveClipSourceTime(nestedClip, nestedClipLocalTime);
+  return nestedClip.source?.type === 'video' || (nestedClip.isComposition && nestedClip.source?.type !== 'audio')
+    ? { ...timing, sourceTime: videoFrameSourceTime(timing) } : timing;
 }
 
 export function getNestedClipSourceTime(nestedClip: TimelineClip, nestedClipLocalTime: number): number {

@@ -1,3 +1,5 @@
+import { rememberSourceFrameRate, videoHasTargetFrame } from './videoSyncFrameSelection';
+import { createStoreSpeedSource, resolveClipSourceTime } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types';
 import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
@@ -20,6 +22,7 @@ function getClipSourceKey(clip: TimelineClip): string {
 }
 
 export class VideoSyncHandoffManager {
+  private isPlaying = false;
   private lastTrackState = new Map<string, VideoSyncTrackState>();
   private activeHandoffs = new Map<string, HTMLVideoElement>();
   private handoffElements = new Set<HTMLVideoElement>();
@@ -78,6 +81,7 @@ export class VideoSyncHandoffManager {
       return;
     }
 
+    this.isPlaying = ctx.isPlaying;
     if (!ctx.isPlaying) {
       for (const clipId of [...this.activeHandoffs.keys()]) {
         const settle = scrubSettleState.get(clipId);
@@ -102,6 +106,7 @@ export class VideoSyncHandoffManager {
     for (const clip of visibleClips) {
       const clipVideo = getClipHtmlVideoElement(clip);
       if (!clipVideo || !clip.trackId) continue;
+      rememberSourceFrameRate(clipVideo, clip, ctx);
 
       const prev = this.lastTrackState.get(clip.trackId);
       if (!prev) continue;
@@ -129,25 +134,26 @@ export class VideoSyncHandoffManager {
         continue;
       }
 
-      const inOutGap = Math.abs(clip.inPoint - prev.outPoint);
+      const sourceStart = resolveClipSourceTime(clip, 0, createStoreSpeedSource(clip.id, ctx)).sourceTime;
+      const inOutGap = Math.abs(sourceStart - prev.outPoint);
       const isContinuousCut = inOutGap <= 0.1;
       if (!isContinuousCut) {
         log.debug('Handoff SKIP: non-continuous cut', {
           track: clip.trackId,
-          inPoint: clip.inPoint.toFixed(3),
+          inPoint: sourceStart.toFixed(3),
           prevOutPoint: prev.outPoint.toFixed(3),
           gap: inOutGap.toFixed(3),
         });
         continue;
       }
 
-      const elemDrift = Math.abs(prev.videoElement.currentTime - clip.inPoint);
+      const elemDrift = Math.abs(prev.videoElement.currentTime - sourceStart);
       log.info('Handoff START', {
         track: clip.trackId,
         prevClip: prev.clipId.slice(-6),
         newClip: clip.id.slice(-6),
         elementTime: prev.videoElement.currentTime.toFixed(3),
-        inPoint: clip.inPoint.toFixed(3),
+        inPoint: sourceStart.toFixed(3),
         drift: elemDrift.toFixed(3),
       });
       renderHostPort.markVideoFramePresented(prev.videoElement, prev.videoElement.currentTime, clip.id);
@@ -165,14 +171,14 @@ export class VideoSyncHandoffManager {
     options: PreviewContinuationOptions = {},
   ): HTMLVideoElement | null {
     const activeHandoff = this.activeHandoffs.get(clip.id);
-    if (activeHandoff) return activeHandoff;
+    if (activeHandoff && (this.isPlaying || videoHasTargetFrame(activeHandoff, targetTime))) return activeHandoff;
     const trackKey = options.trackKey ?? clip.trackId;
     return this.previewContinuations.get(
       clip,
       targetTime,
       ownVideo,
       trackKey ? this.lastTrackState.get(trackKey) : undefined,
-      options,
+      { ...options, isPlaying: this.isPlaying },
     );
   }
 
@@ -187,7 +193,7 @@ export class VideoSyncHandoffManager {
       fileId: getClipSourceKey(clip),
       file: clip.file,
       videoElement,
-      outPoint: clip.outPoint,
+      outPoint: resolveClipSourceTime(clip, clip.duration).sourceTime,
       continuityKey,
     });
   }
@@ -200,6 +206,7 @@ export class VideoSyncHandoffManager {
     for (const clip of visibleClips) {
       const clipVideo = getClipHtmlVideoElement(clip);
       if (!clipVideo || !clip.trackId) continue;
+      rememberSourceFrameRate(clipVideo, clip, ctx);
 
       const handoffElement = this.activeHandoffs.get(clip.id);
       const video = ctx.isPlaying && handoffElement ? handoffElement : clipVideo;
@@ -209,7 +216,7 @@ export class VideoSyncHandoffManager {
         fileId: getClipSourceKey(clip),
         file: clip.file,
         videoElement: video,
-        outPoint: clip.outPoint,
+        outPoint: resolveClipSourceTime(clip, clip.duration, createStoreSpeedSource(clip.id, ctx)).sourceTime,
       });
     }
   }

@@ -44,6 +44,7 @@ import { createRulerSlice } from './rulerSlice';
 import { createTempoSlice } from './tempoSlice';
 import { createTransitionSlice } from './transitionSlice';
 import { createNodeGraphSlice } from './nodeGraphSlice';
+import { createCompositionGraphSlice } from './compositionGraphSlice';
 import { createClipboardSlice } from './clipboardSlice';
 import { createAIActionFeedbackSlice } from './aiActionFeedbackSlice';
 import { createPositioningUtils } from './positioningUtils';
@@ -123,6 +124,7 @@ export const useTimelineStore = create<TimelineStore>()(
     const tempoActions = createTempoSlice(set, get);
     const transitionActions = createTransitionSlice(set, get);
     const nodeGraphActions = createNodeGraphSlice(set, get);
+    const compositionGraphActions = createCompositionGraphSlice(set, get);
     const clipboardActions = createClipboardSlice(set, get);
     const aiActionFeedbackActions = createAIActionFeedbackSlice(set, get);
 
@@ -444,6 +446,7 @@ export const useTimelineStore = create<TimelineStore>()(
       ...tempoActions,
       ...transitionActions,
       ...nodeGraphActions,
+      ...compositionGraphActions,
       ...clipboardActions,
       ...aiActionFeedbackActions,
       ...utils,

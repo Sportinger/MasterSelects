@@ -1,3 +1,4 @@
+import { workspaceClipOwner } from '../../../../services/nodeGraph/unified/workspaceIds';
 ﻿import './NodeGraphGroups.css';
 import { memo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import type { NodeGraph, NodeGraphNode, NodeGroupSize } from '../../../../types/nodeGraph';
@@ -29,10 +30,14 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, zoo
   const resizeDrag = useRef<{ id: string; pointerId: number; x: number; y: number } & NodeGroupSize | null>(null);
   // The output card follows the new right edge, so an empty effect keeps input left and output right.
   const commitResize = (group: Group, box: NodeBounds, size: NodeGroupSize) => {
+    const owner = workspaceClipOwner(group.id);
+    const entry = owner && graph.workspace?.clips[owner.clipId];
+    if (!entry && graph.owner.kind !== 'clip') return;
     const next = clampSize(size);
     const output = group.nodeIds.map(id => nodesById.get(id)).find(node => node?.operatorId === 'image.output');
-    resizeEmptyEffect(graph.owner.id, group.id, next, output ? { graphId: graph.id, nodeId: output.id,
-      layout: { x: box.left + next.width - 22 - NODE_WIDTH, y: output.layout.y } } : undefined);
+    resizeEmptyEffect(owner?.clipId ?? graph.owner.id, owner?.localId ?? group.id, next, output ? {
+      graphId: entry ? entry.graph.id : graph.id, nodeId: output.workspaceOwner?.localId ?? output.id,
+      layout: { x: box.left + next.width - 22 - NODE_WIDTH - (entry ? entry.origin.x : 0), y: output.layout.y - (entry ? entry.origin.y : 0) } } : undefined);
   };
   return <>{graph.groups?.map(group => {
     if (group.collapsed) return null;
@@ -58,9 +63,9 @@ export const NodeGraphGroups = memo(function NodeGraphGroups({ graph, nodes, zoo
         onPointerDown={event => onStartDrag?.(event, group.id)} onPointerMove={onPointerMove}
         onPointerUp={onFinishDrag} onPointerCancel={onFinishDrag} onLostPointerCapture={onFinishDrag}>
         <GroupControls group={group} count={count} bypassed={bypassed} locked={locks?.[group.id]?.locked !== false}
-          onToggle={onToggle} onFocus={onFocus} onToggleLock={onToggleLock} onToggleNodeBypass={onToggleNodeBypass} />
+          onToggle={onToggle} onFocus={onFocus} onToggleLock={graph.workspace && !workspaceClipOwner(group.id) ? undefined : onToggleLock} onToggleNodeBypass={onToggleNodeBypass} />
       </div>
-      {group.resizable && <button type="button" className="node-workspace-group-resize" aria-label={`Resize ${group.label}`}
+      {(graph.owner.kind === 'clip' || workspaceClipOwner(group.id)) && group.resizable && <button type="button" className="node-workspace-group-resize" aria-label={`Resize ${group.label}`}
         title="Drag to resize this empty effect (arrow keys with focus)"
         onPointerDown={event => {
           if (event.button !== 0) return;

@@ -1,3 +1,6 @@
+import { processedAudioPreviewRuntime } from '../audio/preview/ProcessedAudioPreviewBoundary';
+import { createStoreSpeedSource } from '../timeline/retime/clipRetime';
+import { resolveAudioPreviewRetime } from '../timeline/retime/clipAudioRetime';
 import { readEditorContentPublication } from '../project/repository/transaction/editorPublication';
 // AudioTrackSyncManager - Handles audio element synchronization with playhead
 // Extracted from LayerBuilderService for separation of concerns
@@ -67,10 +70,8 @@ function getClipAudioRouteSettings(
 }
 
 export class AudioTrackSyncManager {
-  // Sub-module
   private audioSyncHandler = new AudioSyncHandler();
 
-  // Audio sync throttling
   private lastAudioSyncTime = 0;
   private playbackStartFrames = 0;
 
@@ -131,6 +132,7 @@ export class AudioTrackSyncManager {
   }
 
   stopAllAudioPlayback(): void {
+    processedAudioPreviewRuntime.stopAll();
     clearMasterAudio();
     this.audioHandoffs.reset();
     audioRoutingManager.pauseAllRoutedMedia();
@@ -153,7 +155,7 @@ export class AudioTrackSyncManager {
    */
   syncAudioElements(): void {
     if (readEditorContentPublication().blocked) { this.stopAllAudioPlayback(); return; }
-    const ctx = createFrameContext();
+    let ctx = createFrameContext();
     const timelineState = useTimelineStore.getState();
     for (const retainedAudio of this.audioHandoffs.getRetainedAudioElements()) {
       keepLazyTimelineAudioElementAlive(retainedAudio, ctx.now);
@@ -223,8 +225,8 @@ export class AudioTrackSyncManager {
       );
     }
 
-    // Create sync state
     const state = createAudioSyncState();
+    ctx = processedAudioPreviewRuntime.sync(ctx, state, resolveAudioSyncMedia);
 
     const activeTransitionAudioClipIds = new Set<string>();
 
@@ -255,7 +257,6 @@ export class AudioTrackSyncManager {
     // Sync background layer audio elements
     layerPlaybackManager.syncAudioElements(ctx.playheadPosition, ctx.isPlaying);
 
-    // Finalize
     finalizeAudioSync(state, ctx.isPlaying);
     timelineState.clearStaleRuntimeAudioMeters(650, ctx.now);
   }
@@ -298,7 +299,8 @@ export class AudioTrackSyncManager {
       const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime, timeInfo.clipTime);
       const editPreviewVolume = getClipAudioEditPreviewVolumeMultiplier(clip, timeInfo.clipTime, regionGainPreview, ctx.isPlaying && !ctx.isDraggingPlayhead);
       const effectiveVolume = routeSettings.volume * editPreviewVolume;
-      const trackMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted || effectiveVolume <= 0.01;
+      const retime = resolveAudioPreviewRetime(clip, timeInfo.clipLocalTime, createStoreSpeedSource(clip.id, ctx));
+      const trackMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted || effectiveVolume <= 0.01 || Boolean(retime.mutedReason);
       const stemSeparation = clip.audioState?.stemSeparation;
       const audibleStemLayers = getAudibleStemLayers(stemSeparation);
       const shouldUseStemAudio = audibleStemLayers.length > 0;
@@ -308,7 +310,7 @@ export class AudioTrackSyncManager {
         this.idleStemRuntimeReleased = false;
       }
       const shouldPreferStemBufferMixer = Boolean(
-        stemSeparation &&
+        stemSeparation && !retime.mutedReason &&
         ctx.isPlaying &&
         !ctx.isDraggingPlayhead &&
         shouldUseStemAudio &&
@@ -368,7 +370,7 @@ export class AudioTrackSyncManager {
       const sourceAudioElement = sourceAudioProxy ?? compositionAudioElement ?? this.getClipAudioElement(clip);
       const sourceMediaFileId = needsSourceElement ? this.getClipSourceMediaFileId(clip) : undefined;
       const canUseSourceBufferMixer = Boolean(
-        sourceMediaFileId &&
+        sourceMediaFileId && !retime.mutedReason &&
         needsSourceElement &&
         ctx.isPlaying &&
         !ctx.isDraggingPlayhead &&
@@ -600,6 +602,7 @@ export class AudioTrackSyncManager {
    */
   private muteAllAudio(ctx: FrameContext): void {
     // Clear master audio since we're not using audio sync
+    processedAudioPreviewRuntime.stopAll();
     clearMasterAudio();
     this.audioHandoffs.reset();
 
@@ -626,7 +629,9 @@ export class AudioTrackSyncManager {
     if (!clip.linkedClipId) return undefined;
 
     const linkedClip = ctx.clipsAtTime.find(c => c.id === clip.linkedClipId);
-    return linkedClip && this.isAudioSourceClip(linkedClip) ? linkedClip : undefined;
+    return linkedClip && this.isAudioSourceClip(linkedClip) &&
+      !resolveAudioPreviewRetime(linkedClip, ctx.playheadPosition - linkedClip.startTime,
+        createStoreSpeedSource(linkedClip.id, ctx)).mutedReason ? linkedClip : undefined;
   }
 
   private getLinkedVideoClipAtPlayhead(ctx: FrameContext, clip: TimelineClip): TimelineClip | undefined {

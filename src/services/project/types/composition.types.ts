@@ -123,6 +123,7 @@ export interface ProjectClip {
   disabled: boolean;
 
   // Speed
+  timeRemap?: import('../../../types/timeline').ClipTimeRemap;
   speed?: number;
   videoInspectorSections?: import('../../../types/timeline').ClipVideoInspectorSections;
   preservesPitch?: boolean;
@@ -206,6 +207,7 @@ export interface ProjectClip {
 
 export interface ProjectComposition {
   sharedSceneGraphs?: import('../../../types/sharedSceneGraph').SharedSceneGraphs;
+  compositionGraph?: import('../../../types/compositionGraph').CompositionGraphState;
   id: string;
   name: string;
   width: number;

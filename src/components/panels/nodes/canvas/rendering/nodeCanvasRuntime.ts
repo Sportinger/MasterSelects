@@ -1,5 +1,9 @@
+import { startNodeMeasure, endNodeMeasure, nodeDurationMeasure } from '../../../../../services/nodeGraph/unified/nodeGraphPerformance';
 import { prefersSoftwareTimelineCanvas } from '../../../../../utils/canvasPlatform';
+import { takePaintPhases } from './nodePaintProfile';
+import { takeCablePathTiming } from './cableGeometry';
 import { NodeCanvasPainter } from './NodeCanvasPainter';
+import { probeSoftwareNodeCanvas } from './probeSoftwareNodeCanvas';
 import { dragUpdatesFirst } from './canvasNodeDrag';
 import type { CanvasMessage, CanvasView, CanvasWorkerReply } from './nodeCanvasTypes';
 import { releasePreviewFrame, type PreviewFrame } from '../../../../../services/nodePreview/previewTypes';
@@ -24,7 +28,6 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
   let base!: HTMLCanvasElement, overlay!: HTMLCanvasElement, previews!: HTMLCanvasElement;
   const pendingPreviews = new Map<string, PreviewFrame>();
   let previewBatch = 0, previewInFlight = false;
-  let previewWatchdog: ReturnType<typeof setTimeout> | undefined;
   let ready = false, lastDraw = -Infinity;
   let reportedViewRevision: number | undefined;
   let onPreviewsEvicted: ((keys: string[]) => void) | undefined;
@@ -46,7 +49,9 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
     if (disposed) return;
     try {
       for (const message of dragUpdatesFirst(pending.values())) {
+        const measurement = import.meta.env.DEV && (message.type === 'scene' || message.type === 'view') ? startNodeMeasure('renderer-dispatch') : undefined;
         if (worker) worker.postMessage(message); else painter?.update(message);
+        if (import.meta.env.DEV) endNodeMeasure('renderer-dispatch', measurement, { type: message.type });
       }
       let changed = pending.size > 0; pending.clear();
       if (pendingPreviews.size && !previewInFlight) {
@@ -56,12 +61,17 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
           try { worker.postMessage(message, frames.flatMap(value => value.bitmap ? [value.bitmap] : [])); }
           catch (error) { frames.forEach(releasePreviewFrame); throw error; }
           previewInFlight = true;
-          previewWatchdog = setTimeout(fallback, 2500);
+          // Backpressure is not a health deadline: a busy raster worker may
+          // acknowledge this batch after painting the preceding scene.
         } else painter?.update(message);
         changed = true;
       }
       if (painter && (changed || now - lastDraw >= 1000 / 30)) {
+        const paintStart = import.meta.env.DEV ? performance.now() : 0;
         if (painter.draw(now)) {
+          if (import.meta.env.DEV) for (const phase of takePaintPhases() ?? []) nodeDurationMeasure(phase.name, phase.duration, { backend: 'software', count: phase.count });
+          if (import.meta.env.DEV) { const timing = takeCablePathTiming(); if (timing) nodeDurationMeasure('routing-paths', timing.duration, timing); }
+          if (import.meta.env.DEV && painter.changed.base) nodeDurationMeasure('renderer-paint', performance.now() - paintStart, { backend: 'software' });
           const evicted = painter.takeEvictedPreviews();
           if (evicted.length) onPreviewsEvicted?.(evicted);
           markReady();
@@ -95,22 +105,22 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
     reportedViewRevision = undefined;
     worker?.terminate(); worker = undefined; clearTimeout(watchdog);
     previewInFlight = false; painter?.dispose();
-    clearTimeout(previewWatchdog);
     for (const value of pendingPreviews.values()) releasePreviewFrame(value);
     pendingPreviews.clear();
-    ready = false; onReady(false);
+    ready = false; // Keep canvas ownership during the software handoff.
     if (painter && !wasWorker) { // Even Canvas 2D failed: keep the accessible DOM renderer visible.
-      painter = undefined; host.replaceChildren(); host.dataset.renderer = 'dom'; return;
+      painter = undefined; host.replaceChildren(); host.dataset.renderer = 'dom'; onReady(false); return;
     }
     try {
       createSurfaces();
       const main = base.getContext('2d', { willReadFrequently: true }), animated = overlay.getContext('2d', { willReadFrequently: true });
       const preview = previews.getContext('2d', { willReadFrequently: true });
       if (!main || !animated || !preview) throw new Error('Canvas unavailable');
+      probeSoftwareNodeCanvas(main, animated, preview);
       painter = new NodeCanvasPainter(main, animated, preview, () => document.createElement('canvas').getContext('2d', { willReadFrequently: true }));
       for (const [type, message] of latest) pending.set(type, message);
       schedule();
-    } catch { host.replaceChildren(); host.dataset.renderer = 'dom'; }
+    } catch { painter = undefined; host.replaceChildren(); host.dataset.renderer = 'dom'; onReady(false); }
   };
   createSurfaces();
   try {
@@ -143,7 +153,12 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
           if (event.data.type === 'frame') { event.data.bitmap?.close(); event.data.previews?.close(); event.data.overlay?.close(); }
           return;
         }
+        if (event.data.type === 'initialized') clearTimeout(watchdog);
         if (event.data.type === 'frame') {
+          if (import.meta.env.DEV) for (const phase of event.data.paintPhases ?? []) nodeDurationMeasure(phase.name, phase.duration, { backend: 'worker', count: phase.count });
+          if (import.meta.env.DEV && event.data.pathTiming) nodeDurationMeasure('routing-paths', event.data.pathTiming.duration, event.data.pathTiming);
+          const presentation = import.meta.env.DEV ? startNodeMeasure('renderer-present') : undefined;
+          if (import.meta.env.DEV && event.data.paintDuration !== undefined) nodeDurationMeasure('renderer-paint', event.data.paintDuration, { backend: 'worker' });
           const { bitmap, previews: previewBitmap, overlay: animationBitmap, revision } = event.data;
           try {
             // Both operations happen before the browser's next paint. A bare
@@ -163,13 +178,13 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
             markReady();
             activeWorker.postMessage({ type: 'presented' } satisfies CanvasMessage);
           } catch { fallback(); }
-          finally { bitmap?.close(); previewBitmap?.close(); animationBitmap?.close(); }
+          finally { bitmap?.close(); previewBitmap?.close(); animationBitmap?.close(); if (import.meta.env.DEV) endNodeMeasure('renderer-present', presentation); }
         }
         if (event.data.type === 'failed') fallback();
         if (event.data.type === 'previews-evicted') onPreviewsEvicted?.(event.data.keys);
         if (event.data.type === 'motion') host.dataset.workerMotion = String(event.data.active);
         if (event.data.type === 'previews-ready') {
-          previewInFlight = false; clearTimeout(previewWatchdog);
+          previewInFlight = false;
           if (import.meta.env.DEV) host.dataset.previewCount = String(event.data.previewCount ?? 0);
           if (pendingPreviews.size) schedule();
         }
@@ -181,6 +196,8 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
         }
       };
       worker.postMessage({ type: 'init' } satisfies CanvasMessage);
+      // Only module/2D initialization has a deadline; paints and preview batches
+      // never do. Explicit worker errors/failed replies still recover immediately.
       watchdog = setTimeout(fallback, 5000);
     }
   } catch { fallback(); }
@@ -197,7 +214,6 @@ export function createNodeCanvasRuntime(host: HTMLElement, onReady: (ready: bool
     get software() { return !worker; },
     dispose() {
       disposed = true; worker?.terminate(); clearTimeout(watchdog);
-      clearTimeout(previewWatchdog);
       painter?.dispose(); for (const value of pendingPreviews.values()) releasePreviewFrame(value); pendingPreviews.clear();
       if (frame !== undefined) cancelAnimationFrame(frame);
       host.replaceChildren(); pending.clear(); latest.clear();

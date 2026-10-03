@@ -170,6 +170,8 @@ export function PreviewTransport({
     previousMasterVolumeDb.current = masterAudioVolumeDb;
     setMasterAudioVolumeDb(MUTED_MASTER_VOLUME_DB);
   };
+  // Collapsed transport keeps only the show/hide toggle visible.
+  const showViewerTools = playbackControlsVisible && !sourceMonitorActive && sceneObjectOverlayEnabled;
   const formattedTimecode = formatTimelineTimecode(playheadPosition, PREVIEW_FRAME_RATE);
   const resolveStyleTimecode = formattedTimecode.split(':').length === 3
     ? `00:${formattedTimecode}`
@@ -181,37 +183,6 @@ export function PreviewTransport({
       aria-label={sourceMonitorActive ? 'Source playback controls' : 'Preview playback controls'}
     >
       <div className="preview-transport-viewer-tools">
-        {!sourceMonitorActive && sceneObjectOverlayEnabled && (
-          <button
-            aria-label="Toggle transparency grid"
-            aria-pressed={showTransparencyGrid}
-            className={showTransparencyGrid ? 'active' : undefined}
-            onClick={onToggleTransparency}
-            title="Transparency grid"
-            type="button"
-          >
-            <svg aria-hidden="true" viewBox="0 0 16 16">
-              <path d="M1 1h4v4H1zm8 0h4v4H9zM5 5h4v4H5zm8 0h2v4h-2zM1 9h4v4H1zm8 0h4v4H9zM5 13h4v2H5zm8 0h2v2h-2z" />
-            </svg>
-          </button>
-        )}
-        {!sourceMonitorActive && sceneObjectOverlayEnabled && (
-          <label className="preview-transport-quality" title="Preview quality">
-            <span className="preview-transport-quality-text">
-              {previewQuality === 1 ? 'Full' : previewQuality === 0.5 ? 'Half' : 'Quarter'}
-            </span>
-            <select
-              aria-label="Preview quality"
-              onChange={event => setPreviewQuality(Number(event.target.value) as PreviewQuality)}
-              value={previewQuality}
-            >
-              <option value={1}>Full</option>
-              <option value={0.5}>Half</option>
-              <option value={0.25}>Quarter</option>
-            </select>
-            <IconChevronDown aria-hidden="true" />
-          </label>
-        )}
         {(sourceMonitorActive || sceneObjectOverlayEnabled) && (
           <button
             aria-label={playbackControlsVisible ? 'Hide playback controls' : 'Show playback controls'}
@@ -228,7 +199,38 @@ export function PreviewTransport({
             </svg>
           </button>
         )}
-        {!sourceMonitorActive && sceneObjectOverlayEnabled && (
+        {showViewerTools && (
+          <button
+            aria-label="Toggle transparency grid"
+            aria-pressed={showTransparencyGrid}
+            className={showTransparencyGrid ? 'active' : undefined}
+            onClick={onToggleTransparency}
+            title="Transparency grid"
+            type="button"
+          >
+            <svg aria-hidden="true" viewBox="0 0 16 16">
+              <path d="M1 1h4v4H1zm8 0h4v4H9zM5 5h4v4H5zm8 0h2v4h-2zM1 9h4v4H1zm8 0h4v4H9zM5 13h4v2H5zm8 0h2v2h-2z" />
+            </svg>
+          </button>
+        )}
+        {showViewerTools && (
+          <label className="preview-transport-quality" title="Preview quality">
+            <span className="preview-transport-quality-text">
+              {previewQuality === 1 ? 'Full' : previewQuality === 0.5 ? 'Half' : 'Quarter'}
+            </span>
+            <select
+              aria-label="Preview quality"
+              onChange={event => setPreviewQuality(Number(event.target.value) as PreviewQuality)}
+              value={previewQuality}
+            >
+              <option value={1}>Full</option>
+              <option value={0.5}>Half</option>
+              <option value={0.25}>Quarter</option>
+            </select>
+            <IconChevronDown aria-hidden="true" />
+          </label>
+        )}
+        {showViewerTools && (
           <button
             aria-label={masterAudioMuted ? 'Unmute all audio' : 'Mute all audio'}
             aria-pressed={masterAudioMuted}
@@ -242,7 +244,7 @@ export function PreviewTransport({
               : <IconVolume2 aria-hidden="true" />}
           </button>
         )}
-        {(sourceMonitorActive || sceneObjectOverlayEnabled) && dockPanelId && (
+        {playbackControlsVisible && (sourceMonitorActive || sceneObjectOverlayEnabled) && dockPanelId && (
           <button
             aria-label={isPanelMaximized ? 'Restore preview panel' : 'Maximize preview panel'}
             aria-pressed={isPanelMaximized}

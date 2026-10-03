@@ -211,6 +211,7 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 | Paste | `Ctrl+V` pastes keyframes if the clipboard has them, otherwise pastes clips. Empty-space right-click exposes Paste at the clicked time and layer. |
 | Delete | `Delete` / `Backspace` removes selected keyframes first, then clips. |
 | Reverse | Available from the clip context menu and via clip state. |
+| Freeze | Properties › Speed Change › Freeze, or clip context menu › Freeze frame at playhead. Holds the currently resolved source frame; linked audio is silent. |
 | Create Subcomposition | Clip context menu action that moves the selected timeline clips into a new composition and inserts that composition back into the current timeline. |
 | Blend mode | `+` / `-` cycles blend modes on selected clips. |
 
@@ -506,3 +507,127 @@ The main hooks are `useClipDrag`, `useClipTrim`, `useClipFade`, `useTimelineKeyb
 - [Audio](./Audio.md)
 
 Linked clip selections use a shared outline that follows the outer contour of the selected clip surfaces, including staggered edges and gaps. Individual selections retain their normal clip outline. Video and audio sections draw their respective portions independently.
+
+
+### Freeze retiming
+
+`setClipTimeRemap(clipId, { kind: 'freeze', sourceTime })` and
+`freezeClipAtPlayhead(clipId)` share one atomic timeline mutation. The latter samples
+the current retime contract at the playhead, so enabling Freeze retains the visible
+source time. `setClipTimeRemap(clipId, null)` removes it. Linked video/audio partners
+receive the same remap in one undo step, including when linked speed following is
+disabled. A locked affected track or export lock rejects the entire action.
+
+| Contract | Freeze behavior |
+|---|---|
+| Priority | Transition source map → finite transition override → transition hold → Freeze → signed speed integration. |
+| Output interval | Existing start and duration are retained (raised to one frame only if shorter). Edge trims change start/duration independently of in/out; right extension is not limited by media length. Minimum duration is one composition frame. |
+| Source clock | Constant source seconds, clamped to `[0, naturalDuration]`; if source duration is unavailable, `[0, outPoint]`. Nested clips use composition seconds. |
+| Speed / Reverse | Ignored while frozen, retained for unfreeze. Speed-section bypass does not disable Freeze. |
+| Animation | Keyframes retain clip-local time; Freeze does not pause clip effects or transform animation. |
+| Prefetch | A single source time, without direction changes or jumps. Transition mappings still take precedence. |
+| Audio | Explicit silence in live playback and offline/export rendering, including frozen composition audio; no pitch processing or effect tail. |
+| Persistence | Clip content, saved and restored through project, composition and history paths. Future remap kinds are preserved as opaque JSON and ignored by this version; new actions reject unsupported kinds. |
+
+The Properties source-time control edits the held frame. Timeline and composition
+graph cards show a **Freeze** badge; the Speed time-chain node exposes
+`freezeSourceTime`. Split pieces retain the same freeze and original source window. Nested export decoder admission is conservative across the root output interval when an ancestor is frozen; per-frame sampling still uses the exact held source time.
+Unfreezing keeps the authored output duration and restores ordinary speed/mirror
+sampling (which holds at source boundaries if that duration extends past them).
+
+### Loop retiming
+
+`setClipTimeRemap(clipId, { kind: 'loop', phase?: number })` repeats the trimmed
+source window. Phase is an additive offset in source seconds, defaulting to zero.
+Loop and Freeze occupy the same `timeRemap` field and replace each other. The
+Properties **Speed Change** section and clip context menu expose Loop; timeline
+and composition cards show a **Loop** badge and the Speed time-chain node exposes
+`loopPhase`. Linked partners change atomically through the same action and undo step.
+
+| Contract | Loop behavior |
+|---|---|
+| Priority | Transition source map → finite override → transition hold → Loop → ordinary speed. |
+| Source clock | Signed speed integration (including keyframe holds, inspector bypass and Slit Scan factor), plus phase, wraps into `[inPoint, outPoint)`. Reverse mirrors the wrapped result afterward. There is no source-bound clamp. |
+| Empty cycle | `outPoint <= inPoint` holds at `inPoint`; audio is silent. |
+| Output interval | Duration is independent of the source window. Right-edge trim operations can extend through multiple cycles; left trims retain the source window and advance phase. Minimum duration is one composition frame. |
+| Split | Each piece retains the source window and Loop. Phase advances by the integrated source offset; speed curves retain their out-of-window keys in each piece's local clock. |
+| Prefetch / inverse | Crossing a wrap requests the full source window. Constant-speed intervals without wraps use tight bounds; unknown curves conservatively request the full window. Loop has no unique inverse. |
+| Audio | Constant-speed clips repeat the trimmed, direction-correct, speed-processed cycle with phase. Preview uses the processed-buffer path and stays silent while preparing. Automated loops use exact source-time resampling; pitch preservation is currently limited to constant-speed loops. |
+| Persistence | Kind and phase are clip content, retained through project/composition save/load and undo/redo. Both participate in the processed-audio cache key. |
+
+Removing Loop with `setClipTimeRemap(clipId, null)` keeps the authored duration;
+ordinary playback holds at source bounds after its source window is exhausted.
+
+Loop edge drags forward the authored duration, and speed or source-window edits
+retain it. Nested Loop parents keep descendant video decoders admitted over the
+root output interval. Video frame selection wraps its backward boundary offset
+inside the Loop source window; ordinary backward clips clamp that offset at their
+in-point. These frame-selection bounds are runtime sample metadata and do not
+alter exact timing, audio samples, transition mappings, or persisted clip data.
+
+Select/Edge Trim right-edge gestures stop at the next clip on the affected track
+(including a linked partner's track). Without a neighbor, Loop and Freeze can
+extend beyond media length; normal clips retain their source limit. Ripple Trim
+can extend Loop/Freeze and shifts following clips by the added duration in the same
+edit. Canvas sizing uses the clip body's shared trim geometry, so an exhausted
+source window cannot hide a longer Loop/Freeze preview.
+
+### Warp retiming
+
+While Freeze or Warp is active, the Properties Speed controls (including keyframes,
+reset and linked-audio speed) are disabled: Speed and Reverse are retained but
+ignored. Loop keeps these controls available. The clip context menu marks the
+active retime mode; **Unfreeze clip** removes Freeze, and Reverse's tooltip explains
+when it is ignored.
+
+`setClipTimeRemap(clipId, { kind: 'warp', points: [{ time, source }, ...] })`
+authors source seconds against clip-local seconds. Warp, Freeze and Loop are
+mutually exclusive. The Properties **Speed Change** section has a Warp toggle,
+a compact Time/Source points editor, insert-at-playhead and remove actions;
+the clip context menu exposes **Warp clip** and the timeline shows **Warp**.
+Each edit goes through the existing atomic linked-pair action and one undo step.
+Dragging a numeric control uses the shared inspector gesture batch.
+
+Paused previews and settled scrubs compare source frame indices, using the media
+frame rate and decoded frame timestamps when available. A nearby timestamp in
+an adjacent frame is not accepted. Decoder direction follows the resolved source
+rate; retained Speed/Reverse settings do not redirect Warp playback. Active
+playback keeps its existing drift thresholds.
+
+| Contract | Warp behavior |
+|---|---|
+| Priority | Transition source map ? finite override ? transition hold ? Warp ? ordinary speed. |
+| Points | 2?256 finite pairs; local times are nonnegative and strictly increasing. Source values can change direction, remain flat, or form steep slopes, but there are no vertical jumps. Invalid edits are rejected; malformed persisted Warp arrays fall back safely to ordinary sampling. |
+| Source clock | Piecewise-linear interpolation; outside the first/last times hold the endpoint. Clamp the interpolated source to `[0, naturalDuration ?? outPoint]`. Clamped/flat/exterior samples have zero rate; other samples use the signed segment slope. Interior knots use the following segment. |
+| Speed / Reverse | Retained but ignored while warped, including speed-section bypass. Removing Warp restores their ordinary behavior and retains the authored duration. |
+| Output interval | Duration is independent of in/out, with a one-frame minimum. Right trim beyond the final point holds; left trim inserts the interpolated start, drops earlier points and rebases the remaining times. Future points beyond the clip end are retained on trim. |
+| Split | Each piece retains its source window and receives the points inside its interval plus interpolated boundaries, rebased to its own local time. Interpolate raw source values before clamping to preserve clamp crossings. Redundant exterior hold points may be omitted at the 256-point cap. |
+| Prefetch / inverse | Exact min/max over the requested interval includes interior points. No inverse. Nested video descendants remain conservatively admitted over the root interval. Backward video frame selection uses the existing left-frame bias bounded by the media domain. |
+| Audio | Signed source-time resampling for preview, mixdown and export; holds supply silence. Pitch is **not preserved**, even when Preserve Pitch is enabled. Preview uses the processed-buffer cache; all points participate in its key. |
+| Persistence | Points and independent duration survive opaque clip JSON, project/composition save/load and history. Linked partners receive separate copies of the same points in one mutation. |
+
+Enabling Warp samples the current contract at the composition frame rate. Affine
+and frozen mappings use two points; constant-speed boundary holds keep an exact
+clamp point. Speed curves use adaptive point placement against quarter-frame and
+authored-key probes, targeting a quarter source frame of error (a safety margin
+below the half-frame requirement). Loop wraps become steep segments between
+adjacent output-frame starts, one composition frame wide; reverse boundary
+selection is retained at those frame starts. These bridges intentionally replace
+the original instantaneous wrap between frames. If more than 256 points are
+needed, conversion is rejected before either linked clip or history is changed.
+The shared `toggleClipWarpAction` reads fresh keyframes and the active frame rate;
+Properties and the timeline context menu use that same mutation entry point.
+
+Adding a point samples the raw current Warp curve and preserves its shape,
+including out-of-domain portions whose clamped source image is held.
+
+Export acquisition now evaluates the contract source window over the **whole
+clip output interval**, since the mixer crops the export range after clip
+rendering. PCM proxies, direct media ranges and nested mixdowns forward their
+sample-aligned absolute origin (`sourceBufferStart`) through the export effect
+stage to `ClipAudioRenderService`. Loops retain a complete source cycle for
+constant-speed pitch processing; Warp reads include an interpolation guard
+sample. Freeze allocates silent source input without decoding media. The same
+origin is used for signed resampling and pitch-processed speed-curve segments.
+Processed preview also reads Warp bounds, and incomplete supplied ranges remain
+an explicit renderer error rather than silently missing audio.

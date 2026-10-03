@@ -1,3 +1,4 @@
+import { resolveClipSourceTime } from '../timeline/retime/clipRetime';
 import type { BlendMode, Layer, TimelineClip } from '../../types';
 import { resolveSceneEffectorsEnabled } from '../../engine/scene/SceneEffectorUtils';
 import { DEFAULT_TEXT_3D_PROPERTIES } from '../../stores/timeline/constants';
@@ -144,9 +145,7 @@ export function buildNestedLayerBuilder3dSourceLayer(
   ctx: FrameContext,
 ): Layer | null {
   if (nestedClip.source?.type === 'model') {
-    const nestedSourceTime = nestedClip.reversed
-      ? nestedClip.outPoint - nestedClipLocalTime
-      : nestedClipLocalTime + nestedClip.inPoint;
+    const nestedSourceTime = resolveClipSourceTime(nestedClip, nestedClipLocalTime).sourceTime;
     return {
       ...baseLayer,
       source: buildNestedModelSource(nestedClip, nestedSourceTime),

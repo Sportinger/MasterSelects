@@ -37,6 +37,7 @@ import {
 import { openMuscriptorDialog } from '../common/muscriptorSetup/dialogController';
 import type { TimelineContextMenuProps } from './timelineContextMenuTypes';
 import { ClipOriginContextMenuItem } from './ClipOriginContextMenuItem';
+import { TimelineRetimeContextMenuItems } from './TimelineRetimeContextMenuItems';
 
 const log = Logger.create('TimelineContextMenu');
 const COPY_PROMPT_TOAST_MS = 900;
@@ -612,16 +613,12 @@ export function TimelineContextMenu({
         </div>
       )}
 
-      {(isVideo || isAudio) && (
-        <div
-          className={`context-menu-item ${clip?.reversed ? 'checked' : ''} ${!canModifyTargets ? 'disabled' : ''}`}
-          onClick={() => runCommand({ kind: 'timeline', command: 'toggle-reverse', canExecute: canModifyTargets })}
-        >
-          {clip?.reversed ? '\u2713 ' : ''}Reverse
-        </div>
-      )}
+      {clip && (isVideo || isAudio || clip.isComposition) && <TimelineRetimeContextMenuItems
+        clip={clip} canModify={canModifyTargets} showReverse={isVideo || isAudio}
+        onReverse={() => runCommand({ kind: 'timeline', command: 'toggle-reverse', canExecute: canModifyTargets })}
+        onDone={() => setContextMenu(null)}
+      />}
       <ClipOriginContextMenuItem clip={clip} canModify={canModifyTargets} onDone={() => setContextMenu(null)} />
-
       <div
         className={`context-menu-item ${!canModifyTargets ? 'disabled' : ''}`}
         onClick={() => runCommand({ kind: 'timeline', command: 'create-subcomposition', canExecute: canModifyTargets })}

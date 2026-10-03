@@ -14,6 +14,7 @@ export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 2.4;
 export const NODE_WIDTH = 184;
+export const getNodeWidth = (node: NodeGraphNode) => node.summary?.timeAxis?.width ?? NODE_WIDTH;
 /** Matches the worker-painted `Byp` label while providing a forgiving pointer target. */
 export const NODE_BYPASS_HITBOX = { left: NODE_WIDTH - 92, top: 3, width: 42, height: 24 } as const;
 export const NODE_MIN_HEIGHT = 126;
@@ -155,6 +156,7 @@ export function getFlockNodeBadges(node: NodeGraphNode): NodeBadge[] {
 }
 
 export function getNodeBadges(node: NodeGraphNode): NodeBadge[] {
+  if (node.summary?.badges) return node.summary.badges.map(label => ({ label, title: label, tone: 'ready' }));
   if (node.binding?.kind === 'clip-stabilization') {
     const status = String(node.params?.status ?? 'Baked');
     return [{ label: status === 'Baked · settings not recorded' ? 'Legacy bake' : status,
@@ -169,10 +171,67 @@ export function getTemporalSourceBadges(node: NodeGraphNode): NodeBadge[] {
     title: "This effect reads other moments of the clip's original source video. This clip has no source video, so the effect is skipped and its input passes through unchanged." }] : [];
 }
 
+type SummarySegments = NonNullable<NonNullable<NodeGraphNode['summary']>['segments']>;
+const summarySegmentLayouts = new WeakMap<SummarySegments, ReturnType<typeof layoutNodeSummarySegments>>();
+
+/** One geometry for DOM hit targets and worker paint. Overflow pieces become numbered range tiles. */
+export function getNodeSummarySegments(node: NodeGraphNode) {
+  const source = node.summary?.segments;
+  if (!source || (!source.length && !node.summary?.timeAxis)) return undefined;
+  let layout = summarySegmentLayouts.get(source);
+  if (!layout) { layout = layoutNodeSummarySegments(source, node.summary?.timeAxis); summarySegmentLayouts.set(source, layout); }
+  return layout;
+}
+
+function layoutNodeSummarySegments(source: SummarySegments, axis?: NonNullable<NodeGraphNode['summary']>['timeAxis']) {
+  if (axis) {
+    const x = 10, y = 82, width = axis.width - 20;
+    const segments = source.map((segment, index) => {
+      const start = clamp(segment.start, 0, 1), end = clamp(segment.end, start, 1);
+      const rangeWidth = Math.max(0, (end - start) * width);
+      return { ...segment, index, compact: rangeWidth < 24, x: x + start * width,
+        y: y + (segment.transitionId ? 36 : 0), width: rangeWidth, height: segment.transitionId ? 12 : 32,
+        rangeX: x + start * width, rangeWidth };
+    });
+    return { x, y, width, height: 48, lanes: 1, timeline: true, segments };
+  }
+  const x = 10, y = 110, width = NODE_WIDTH - 20, pitch = 22, minHitWidth = 12;
+  const laneEnds: number[] = [];
+  let overflow = 0;
+  const placed = source.map((segment, index) => {
+    const start = clamp(segment.start, 0, 1), end = clamp(segment.end, start, 1);
+    const hitWidth = Math.max(minHitWidth, (end - start) * width);
+    const left = Math.min(start * width, width - hitWidth);
+    // Reserve the actual hit width, not just the source range: tiny adjacent cuts must not overlap.
+    let lane = laneEnds.findIndex(right => right + 2 <= left);
+    if (lane < 0 && laneEnds.length < 4) lane = laneEnds.length;
+    if (lane >= 0) {
+      laneEnds[lane] = left + hitWidth;
+      return { ...segment, index, compact: false, x: x + left, y: y + lane * pitch, width: hitWidth, height: 20,
+        rangeX: x + Math.min(start * width, width - 1), rangeWidth: Math.max(1, (end - start) * width) };
+    }
+    const tile = overflow++;
+    const tileWidth = (width - 4 * 3) / 5;
+    return { ...segment, index, compact: true, x: x + (tile % 5) * (tileWidth + 3), y: Math.floor(tile / 5) * pitch,
+      width: tileWidth, height: 20, rangeX: 0, rangeWidth: 0 };
+  });
+  const lanes = laneEnds.length;
+  for (const segment of placed) if (segment.compact) {
+    segment.y += y + lanes * pitch;
+    const start = clamp(segment.start, 0, 1), end = clamp(segment.end, start, 1);
+    segment.rangeX = segment.x + 2 + Math.min(start * (segment.width - 4), segment.width - 5);
+    segment.rangeWidth = Math.max(1, (end - start) * (segment.width - 4));
+  }
+  return { x, y, width, height: (lanes + Math.ceil(overflow / 5)) * pitch - 2, lanes, timeline: false, segments: placed };
+}
+
 export function getNodePortStartY(node: NodeGraphNode): number {
+  if (node.summary?.timeAxis) return 136;
   if (inlineNumericPorts(node)) return 72 + (node.animation?.channels.length ? 64 : 0);
   if (node.binding?.kind === 'keyframe-node') return 175;
-  return (getNodeBadges(node).length > 0 ? BADGED_PORT_START_Y : PORT_START_Y) + (node.animation?.channels.length ? 64 : 0);
+  const segments = getNodeSummarySegments(node);
+  return (segments ? segments.y + segments.height + 24
+    : getNodeBadges(node).length > 0 || node.summary?.bar ? BADGED_PORT_START_Y : PORT_START_Y) + (node.animation?.channels.length ? 64 : 0);
 }
 
 export function getNodeHeight(node: NodeGraphNode): number {
@@ -191,22 +250,29 @@ export function getGraphBounds(graph: NodeGraph): NodeBounds {
     return {
       left: Math.min(bounds.left, node.layout.x),
       top: Math.min(bounds.top, node.layout.y),
-      right: Math.max(bounds.right, node.layout.x + NODE_WIDTH),
+      right: Math.max(bounds.right, node.layout.x + getNodeWidth(node)),
       bottom: Math.max(bounds.bottom, node.layout.y + nodeHeight),
     };
   }, {
     left: graph.nodes[0].layout.x,
     top: graph.nodes[0].layout.y,
-    right: graph.nodes[0].layout.x + NODE_WIDTH,
+    right: graph.nodes[0].layout.x + getNodeWidth(graph.nodes[0]),
     bottom: graph.nodes[0].layout.y + getNodeHeight(graph.nodes[0]),
   });
 }
 
+const portIndices = new WeakMap<NodeGraphPort[], Map<string, number>>();
+export function getNodePortIndex(ports: NodeGraphPort[], id: string): number {
+  let indices = portIndices.get(ports);
+  if (!indices) { indices = new Map(); ports.forEach((port, index) => { if (!indices!.has(port.id)) indices!.set(port.id, index); }); portIndices.set(ports, indices); }
+  return indices.get(id) ?? -1;
+}
+
 export function getPortCenter(node: NodeGraphNode, portId: string, direction: 'input' | 'output'): NodeGraphPoint {
   const ports = direction === 'input' ? node.inputs : node.outputs;
-  const portIndex = Math.max(0, ports.findIndex((port) => port.id === portId));
+  const portIndex = Math.max(0, getNodePortIndex(ports, portId));
   return {
-    x: node.layout.x + (direction === 'input' ? PORT_DOT_CENTER_X : NODE_WIDTH - PORT_DOT_CENTER_X),
+    x: node.layout.x + (direction === 'input' ? PORT_DOT_CENTER_X : getNodeWidth(node) - PORT_DOT_CENTER_X),
     y: node.layout.y + getNodePortStartY(node) + (portIndex * nodePortRowHeight(node)) + PORT_DOT_CENTER_Y
       + (inlineNumericPorts(node) && direction === 'output' && node.inputs.length > 1 ? 42 : 0),
   };

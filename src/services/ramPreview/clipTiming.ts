@@ -1,3 +1,4 @@
+import { createStoreSpeedSource, resolveClipSourceTime, videoFrameSourceTime } from '../timeline/retime/clipRetime';
 import { FRAME_TOLERANCE } from '../../stores/timeline/constants';
 import type { TimelineClip } from '../../types/timeline';
 import { peekRuntimeFrameProvider } from '../mediaRuntime/runtimePlayback';
@@ -13,10 +14,7 @@ export function getRamPreviewClipTime(
   deps: RamPreviewTimeDeps
 ): number {
   const clipLocalTime = timelineTime - clip.startTime;
-  const sourceTime = deps.getSourceTimeForClip(clip.id, clipLocalTime);
-  const initialSpeed = deps.getInterpolatedSpeed(clip.id, 0);
-  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-  return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+  return videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, createStoreSpeedSource(clip.id, deps)));
 }
 
 export function getNestedRamPreviewClipTime(
@@ -24,9 +22,7 @@ export function getNestedRamPreviewClipTime(
   nestedClip: TimelineClip
 ): number {
   const nestedLocalTime = compositionTime - nestedClip.startTime;
-  return nestedClip.reversed
-    ? nestedClip.outPoint - nestedLocalTime
-    : nestedLocalTime + nestedClip.inPoint;
+  return videoFrameSourceTime(resolveClipSourceTime(nestedClip, nestedLocalTime));
 }
 
 export function verifyRamPreviewVideoPositions(

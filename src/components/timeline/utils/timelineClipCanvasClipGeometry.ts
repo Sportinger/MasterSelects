@@ -5,18 +5,17 @@
 
 import type { TimelineClipDragPreview } from '../../../stores/timeline/types';
 import type { TimelinePaintSourceClip } from '../../../timeline';
-import { MIN_CLIP_DURATION } from '../timelineRenderConstants';
+import type { TimelineClip } from '../../../types/timeline';
+import { getClipEdgeSourceRate, isClipSourceReversed } from '../../../services/timeline/retime/clipEdgeRetime';
 import type { ClipDragState, ClipTrimState } from '../types';
 import {
-  canLoopExtendTimelineVectorClip,
   getTimelineClipSourceDuration,
-  isInfiniteTimelineClipSource,
 } from './clipSourceTiming';
 import type { TimelineClipCanvasTrimGeometry } from './timelineClipCanvasTrimResource';
-import {
-  getClipSourceRate,
-  timelineDeltaToSourceDelta,
-} from '../../../utils/clipPlaybackTiming';
+import { computeTrimTiming } from './clipTrimTiming';
+
+type GeometryClip = TimelinePaintSourceClip & Partial<Pick<TimelineClip,
+  'speed' | 'timeRemap' | 'effects' | 'videoInspectorSections'>>;
 
 export interface TimelineClipCanvasGeometryInput {
   clipDrag?: ClipDragState | null;
@@ -35,7 +34,7 @@ export function isTimelineClipCanvasTrimPreviewClip(
 }
 
 export function resolveClipGeometry(
-  clip: TimelinePaintSourceClip,
+  clip: GeometryClip,
   props: TimelineClipCanvasGeometryInput,
 ): TimelineClipCanvasTrimGeometry {
   const { clipDrag, clipDragPreview, clipTrim, trackId } = props;
@@ -108,34 +107,16 @@ export function resolveClipGeometry(
     const originalDuration = isPrimaryTrimClip ? clipTrim.originalDuration : clip.duration;
     const originalInPoint = isPrimaryTrimClip ? clipTrim.originalInPoint : inPoint;
     const originalOutPoint = isPrimaryTrimClip ? clipTrim.originalOutPoint : outPoint;
-    const originalWindow = {
-      duration: originalDuration,
-      inPoint: originalInPoint,
-      outPoint: originalOutPoint,
-    };
-    const sourceRate = getClipSourceRate(originalWindow);
-    const isInfiniteClip = isInfiniteTimelineClipSource(clip);
-    if (clipTrim.edge === 'left') {
-      const maxTrim = originalDuration - MIN_CLIP_DURATION;
-      const minTrim = isInfiniteClip
-        ? -originalStartTime
-        : Math.max(-originalStartTime, -originalInPoint / sourceRate);
-      const clampedDelta = Math.max(minTrim, Math.min(maxTrim, deltaTime));
-      startTime = originalStartTime + clampedDelta;
-      duration = originalDuration - clampedDelta;
-      inPoint = originalInPoint + timelineDeltaToSourceDelta(originalWindow, clampedDelta);
-      outPoint = originalOutPoint;
-    } else {
-      const maxExtend = isInfiniteClip || canLoopExtendTimelineVectorClip(clip)
-        ? Number.MAX_SAFE_INTEGER
-        : (sourceDuration - originalOutPoint) / sourceRate;
-      const minTrim = -(originalDuration - MIN_CLIP_DURATION);
-      const clampedDelta = Math.max(minTrim, Math.min(maxExtend, deltaTime));
-      startTime = originalStartTime;
-      duration = originalDuration + clampedDelta;
-      inPoint = originalInPoint;
-      outPoint = originalOutPoint + timelineDeltaToSourceDelta(originalWindow, clampedDelta);
-    }
+    const timing = computeTrimTiming({ ...clip,
+      speed: clip.speed ?? (originalOutPoint - originalInPoint) / originalDuration,
+    }, clipTrim.edge, {
+      startTime: originalStartTime, duration: originalDuration,
+      inPoint: originalInPoint, outPoint: originalOutPoint,
+    }, deltaTime);
+    startTime = timing.newStartTime;
+    duration = timing.newDuration;
+    inPoint = timing.newInPoint;
+    outPoint = timing.newOutPoint;
   }
 
   return {
@@ -151,7 +132,21 @@ export function resolveClipGeometry(
   };
 }
 
-export function createWorkerDrawableClips<TClip extends TimelinePaintSourceClip>(
+/** Canvas allocation follows the exact same trim geometry as the clip body.
+ * Independent-duration clips have no finite source-handle extension to reserve.
+ */
+export function getTimelineClipCanvasTrimExtent(clip: GeometryClip, props: TimelineClipCanvasGeometryInput): number {
+  const geometry = resolveClipGeometry(clip, props);
+  const end = geometry.startTime + geometry.duration;
+  if (geometry.trimEdge !== 'right' || clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'freeze') return end;
+  const timing = { inPoint: geometry.inPoint, outPoint: geometry.outPoint,
+    reversed: clip.reversed, effects: clip.effects, videoInspectorSections: clip.videoInspectorSections,
+    speed: clip.speed ?? ((clip.outPoint ?? (clip.inPoint ?? 0) + clip.duration) - (clip.inPoint ?? 0)) / clip.duration };
+  const remaining = isClipSourceReversed(timing) ? geometry.inPoint : geometry.sourceDuration - geometry.outPoint;
+  return end + Math.max(0, remaining) / Math.max(0.0001, getClipEdgeSourceRate(timing));
+}
+
+export function createWorkerDrawableClips<TClip extends GeometryClip>(
   clips: readonly TClip[],
   props: TimelineClipCanvasGeometryInput,
 ): readonly TClip[] {

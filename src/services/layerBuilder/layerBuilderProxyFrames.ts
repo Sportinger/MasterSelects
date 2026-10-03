@@ -1,3 +1,5 @@
+import { createStoreSpeedSource, resolveClipSourceTime, videoFrameSourceTime, resolveClipSourceWindow } from '../timeline/retime/clipRetime';
+import { visitNestedClipsInWindow } from '../timeline/retime/nestedClipRetime';
 import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore/types';
 import { getExpectedProxyFrameCount } from '../../stores/mediaStore/helpers/proxyCompleteness';
@@ -224,33 +226,25 @@ export class LayerBuilderProxyFrames {
   private prewarmNestedCompFrames(nestedCompClip: TimelineClip, ctx: FrameContext): void {
     if (!nestedCompClip.nestedClips) return;
 
-    const nestedStartTime = nestedCompClip.inPoint || 0;
-
-    for (const nestedClip of nestedCompClip.nestedClips) {
-      if (!nestedClip.source?.videoElement) continue;
-
-      if (
-        nestedStartTime < nestedClip.startTime ||
-        nestedStartTime >= nestedClip.startTime + nestedClip.duration
-      ) {
-        continue;
-      }
+    const window = resolveClipSourceWindow(nestedCompClip, 0, Math.min(2, nestedCompClip.duration),
+      createStoreSpeedSource(nestedCompClip.id, ctx));
+    const reverse = window.sourceEnd < window.sourceStart;
+    visitNestedClipsInWindow(nestedCompClip,
+      reverse ? window.maxSourceTime : window.minSourceTime,
+      reverse ? window.minSourceTime : window.maxSourceTime, (nestedClip, localStart, localEnd) => {
+      if (nestedClip.source?.type !== 'video') return;
 
       const mediaFile = getMediaFileForClip(ctx, nestedClip);
-      if (!mediaFile?.proxyFps) continue;
-      if (mediaFile.proxyStatus !== 'ready' && mediaFile.proxyStatus !== 'generating') continue;
-
-      const nestedLocalTime = nestedStartTime - nestedClip.startTime;
-      const nestedClipTime = nestedClip.reversed
-        ? nestedClip.outPoint - nestedLocalTime
-        : nestedLocalTime + nestedClip.inPoint;
+      if (!mediaFile?.proxyFps) return;
+      if (mediaFile.proxyStatus !== 'ready' && mediaFile.proxyStatus !== 'generating') return;
 
       const proxyFps = mediaFile.proxyFps;
-      const frameIndex = Math.floor(nestedClipTime * proxyFps);
       const framesToPreload = Math.min(60, Math.ceil(proxyFps * 2));
       for (let i = 0; i < framesToPreload; i++) {
-        void proxyFrameCache.getFrame(mediaFile.id, (frameIndex + i) / proxyFps, proxyFps);
+        const local = localStart + (localEnd - localStart) * i / Math.max(1, framesToPreload - 1);
+        const sourceTime = videoFrameSourceTime(resolveClipSourceTime(nestedClip, local));
+        void proxyFrameCache.getFrame(mediaFile.id, sourceTime, proxyFps);
       }
-    }
+    });
   }
 }

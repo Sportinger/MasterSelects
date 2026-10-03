@@ -299,7 +299,7 @@ describe('ClipAudioRenderService', () => {
     expect(Array.from(result.buffer.getChannelData(0))).toEqual([0, 0]);
   });
 
-  it('normalizes speed keyframes before variable-speed rendering', async () => {
+  it('passes signed speed keyframes to the shared retime contract for variable-speed rendering', async () => {
     const sourceBuffer = createMockAudioBuffer([[0, 1, 0, -1]], 8);
     const renderedBuffer = createMockAudioBuffer([[0, 1]], 8);
     const timeStretchProcessor = {
@@ -326,14 +326,19 @@ describe('ClipAudioRenderService', () => {
 
     expect(timeStretchProcessor.processWithKeyframes).toHaveBeenCalledWith(
       sourceBuffer,
+      // Shared retime contract: signs are kept (negative speed plays backward), holds and zero speed are preserved.
       [
-        expect.objectContaining({ id: 'speed-a', value: 1.25 }),
-        expect.objectContaining({ id: 'speed-b', value: 0.01 }),
+        expect.objectContaining({ id: 'speed-a', value: -1.25 }),
+        expect.objectContaining({ id: 'speed-b', value: 0 }),
       ],
-      1,
+      -1.25,
       0.5,
       true,
       expect.any(Function),
+      expect.objectContaining({ duration: 0.5 }),
+      // No explicit retime source window; the buffer starts at source time 0.
+      undefined,
+      0,
     );
   });
 

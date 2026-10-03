@@ -12,6 +12,7 @@ export interface RenderExportClipAudioOptions {
   clips: TimelineClip[];
   buffers: Map<string, AudioBuffer>;
   preTrimmedClipIds?: ReadonlySet<string>;
+  sourceBufferStarts?: ReadonlyMap<string, number>;
   clipKeyframes: Map<string, Keyframe[]>;
   audioGraphPlan: AudioGraphRenderPlan;
   clipAudioRenderer: ClipAudioRenderService;
@@ -43,6 +44,7 @@ export async function renderExportClipAudioEffects(
       clip,
       sourceBuffer: buffer,
       sourceIsClipRange: options.preTrimmedClipIds?.has(clip.id) === true,
+      sourceBufferStart: options.sourceBufferStarts?.get(clip.id),
       keyframes,
       effectTailSeconds: clipTailSeconds,
       onProgress: progress => options.onProgress?.(

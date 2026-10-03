@@ -16,7 +16,7 @@ export function setAllNodePreviews(
   return { enabled, nodes };
 }
 
-export function useNodePreviewPreferences(clipId: string) {
+export function useNodePreviewPreferences(clipId: string | null) {
   const preferences = useTimelineStore(state => state.clips.find(clip => clip.id === clipId)?.nodeGraph?.previews ?? EMPTY);
   const clip = useTimelineStore(state => state.clips.find(value => value.id === clipId));
   const media = useMediaStore(state => state.files.find(value => value.id === (clip?.source?.mediaFileId ?? clip?.mediaFileId)));
@@ -24,6 +24,7 @@ export function useNodePreviewPreferences(clipId: string) {
   const width = source?.videoElement?.videoWidth || source?.imageElement?.naturalWidth || source?.textCanvas?.width || media?.width || 1920;
   const height = source?.videoElement?.videoHeight || source?.imageElement?.naturalHeight || source?.textCanvas?.height || media?.height || 1080;
   const change = useCallback((edit: (current: typeof EMPTY) => typeof EMPTY) => {
+    if (!clipId) return;
     const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(candidate => candidate.id === clipId);
     if (!clip) return;
     state.updateClip(clipId, { nodeGraph: { ...clip.nodeGraph, version: 1, nodes: clip.nodeGraph?.nodes ?? [], previews: edit(clip.nodeGraph?.previews ?? EMPTY) } });

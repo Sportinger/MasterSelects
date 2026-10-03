@@ -1,4 +1,4 @@
-import type { EntityDTO, JsonValue } from '../../contracts';
+import { RepositoryError, type EntityDTO, type JsonValue } from '../../contracts';
 import { encodeAggregate, entityKey } from '../../domains/jsonBoundary';
 import { PROJECT_ENTITY_KEY } from '../../domains/projectDomains';
 import type { DomainMutationPlan } from '../domainMutationAdapter';
@@ -31,6 +31,23 @@ export function membership(plan: DomainMutationPlan, entities: ReadonlyMap<strin
   owner: string, ids: readonly string[], itemDomain = domain): void {
   const key = entityKey('membership', owner, domain);
   replaceAggregate(plan, entities, key, 'domain-membership', ids.map(id => reference(entityKey(itemDomain, owner, id))));
+}
+/**
+ * A project-level list may only be rewritten by a store that knows every entry the repository
+ * lists: entries absent from the store state were never seen by this editor (placeholder or
+ * out-of-sync stores) and must not be dropped silently.
+ */
+export function assertListKnown(entities: ReadonlyMap<string, EntityDTO>, listKey: string, itemDomain: string, owner: string,
+  knownIds: Iterable<string>): void {
+  if (!entities.has(listKey)) return;
+  const known = new Set([...knownIds].map(id => entityKey(itemDomain, owner, id)));
+  const members = decodeOwnedAggregate(listKey, entities);
+  const unknown = Array.isArray(members) ? members.flatMap(member => {
+    const key = member && typeof member === 'object' && !Array.isArray(member) ? (member as { $repositoryEntity?: unknown }).$repositoryEntity : null;
+    return typeof key === 'string' && !known.has(key) ? [key] : [];
+  }) : [];
+  if (unknown.length) throw new RepositoryError('ownership',
+    `The editor is out of sync with the open project (${unknown.length} saved ${itemDomain} entr${unknown.length === 1 ? 'y' : 'ies'} unknown); reload the project before editing.`);
 }
 export function appendPlan(target: DomainMutationPlan, source: DomainMutationPlan): void {
   target.aggregates.push(...source.aggregates); target.views.push(...source.views); target.journals.push(...source.journals);

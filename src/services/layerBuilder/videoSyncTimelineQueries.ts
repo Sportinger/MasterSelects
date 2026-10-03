@@ -1,3 +1,4 @@
+import { createClipSpeedSource, createStoreSpeedSource, resolveClipSourceTime, videoFrameSourceTime } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types';
 import type { FrameContext } from './types';
 export { canClipOwnVideoSyncMedia } from './videoSyncMediaAdmission';
@@ -32,15 +33,11 @@ export function getVisibleVideoTrackClipsAtTime(ctx: FrameContext): TimelineClip
 }
 
 export function getClipStartTime(ctx: FrameContext, clip: TimelineClip): number {
-  const initialSpeed = ctx.getInterpolatedSpeed(clip.id, 0);
-  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-  let sourceTime = 0;
   try {
-    sourceTime = ctx.getSourceTimeForClip(clip.id, 0);
+    return videoFrameSourceTime(resolveClipSourceTime(clip, 0, createStoreSpeedSource(clip.id, ctx)));
   } catch {
-    sourceTime = 0;
+    return videoFrameSourceTime(resolveClipSourceTime(clip, 0, createClipSpeedSource(clip)));
   }
-  return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
 }
 
 export function getWarmupClipTime(ctx: FrameContext, clip: TimelineClip): number {
@@ -58,17 +55,11 @@ export function getClipSampleTimeNearPlayhead(ctx: FrameContext, clip: TimelineC
     Math.min(Math.max(ctx.playheadPosition, clip.startTime), clipEnd - 1 / 120),
   );
   const clipLocalTime = Math.max(0, sampleTimelineTime - clip.startTime);
-  const speed = ctx.getInterpolatedSpeed(clip.id, clipLocalTime);
-  const startPoint = speed >= 0 ? clip.inPoint : clip.outPoint;
-
-  let sourceTime = 0;
   try {
-    sourceTime = ctx.getSourceTimeForClip(clip.id, clipLocalTime);
+    return videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, createStoreSpeedSource(clip.id, ctx)));
   } catch {
-    sourceTime = 0;
+    return videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, createClipSpeedSource(clip)));
   }
-
-  return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
 }
 
 export function getActiveClipsAtTime(ctx: FrameContext, time: number): TimelineClip[] {

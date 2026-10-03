@@ -16,7 +16,7 @@ import { SoundTouch } from 'soundtouch-ts';
 
 const log = Logger.create('TimeStretchProcessor');
 import type { Keyframe } from '../../types';
-import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
+import { createClipSpeedSource, resolveClipSourceTime, type ClipRetimeTiming } from '../../services/timeline/retime/clipRetime';
 import { createBuffer } from './audioBufferFactory';
 
 export interface TimeStretchSettings {
@@ -46,7 +46,7 @@ export class TimeStretchProcessor {
   /**
    * Process audio with constant speed
    * @param buffer - Source AudioBuffer
-   * @param speed - Playback speed (0.1 to 10.0)
+   * @param speed - Positive playback magnitude (direction is resolved by the clip renderer)
    * @param preservePitch - Override pitch preservation setting
    * @returns Processed AudioBuffer
    */
@@ -57,23 +57,23 @@ export class TimeStretchProcessor {
   ): Promise<AudioBuffer> {
     const shouldPreservePitch = preservePitch ?? this.settings.preservePitch;
 
-    // Clamp speed to valid range
-    const clampedSpeed = Math.max(0.1, Math.min(10, speed));
+    // Never silently clamp: that would change duration relative to video.
+    if (!Number.isFinite(speed) || speed <= 0) throw new Error('Audio stretch speed must be positive.');
 
-    log.debug(`Processing constant speed: ${clampedSpeed}x, preservePitch: ${shouldPreservePitch}`);
+    log.debug(`Processing constant speed: ${speed}x, preservePitch: ${shouldPreservePitch}`);
 
     // If speed is 1.0, no processing needed
-    if (Math.abs(clampedSpeed - 1.0) < 0.001) {
+    if (Math.abs(speed - 1.0) < 0.001) {
       return buffer;
     }
 
     // If not preserving pitch, use simple resampling (faster)
     if (!shouldPreservePitch) {
-      return this.resampleForSpeed(buffer, clampedSpeed);
+      return this.resampleForSpeed(buffer, speed);
     }
 
     // Use SoundTouch for pitch-preserved time-stretching
-    return this.soundTouchProcess(buffer, clampedSpeed);
+    return this.soundTouchProcess(buffer, speed);
   }
 
   /**
@@ -92,146 +92,98 @@ export class TimeStretchProcessor {
     defaultSpeed: number,
     clipDuration: number,
     preservePitch?: boolean,
-    onProgress?: TimeStretchProgressCallback
+    onProgress?: TimeStretchProgressCallback,
+    timing?: ClipRetimeTiming,
+    signal?: AbortSignal,
+    sourceBufferStart?: number,
   ): Promise<AudioBuffer> {
     const shouldPreservePitch = preservePitch ?? this.settings.preservePitch;
 
-    // Filter speed keyframes
-    const speedKeyframes = keyframes
-      .filter(k => k.property === 'speed')
-      .sort((a, b) => a.time - b.time);
-
-    // If no speed keyframes, use constant speed
-    if (speedKeyframes.length === 0) {
-      return this.processConstantSpeed(buffer, defaultSpeed, shouldPreservePitch);
-    }
-
-    // If single keyframe, use constant speed
-    if (speedKeyframes.length === 1) {
-      return this.processConstantSpeed(buffer, speedKeyframes[0].value, shouldPreservePitch);
-    }
-
-    log.debug(`Processing with ${speedKeyframes.length} speed keyframes`);
-
-    // For variable speed, we need to process in segments
-    return this.processVariableSpeed(
-      buffer,
-      keyframes,
-      defaultSpeed,
-      clipDuration,
-      shouldPreservePitch,
-      onProgress
-    );
-  }
-
-  /**
-   * Process with variable speed using segmented approach
-   */
-  private async processVariableSpeed(
-    buffer: AudioBuffer,
-    keyframes: Keyframe[],
-    defaultSpeed: number,
-    clipDuration: number,
-    preservePitch: boolean,
-    onProgress?: TimeStretchProgressCallback
-  ): Promise<AudioBuffer> {
-    const sampleRate = buffer.sampleRate;
-    const channels = buffer.numberOfChannels;
-
-    // Calculate output duration based on speed integration
-    // For variable speed, output duration = timeline duration (clipDuration)
-    const outputSamples = Math.ceil(clipDuration * sampleRate);
-
-    // Create output buffer
-    const outputBuffer = createBuffer(channels, outputSamples, sampleRate);
-
-    // Segment size for processing (100ms segments)
-    const segmentDuration = 0.1; // seconds
-    const numSegments = Math.ceil(clipDuration / segmentDuration);
-
-    // Process each segment
-    for (let segIdx = 0; segIdx < numSegments; segIdx++) {
-      const segmentStart = segIdx * segmentDuration;
-      const segmentEnd = Math.min((segIdx + 1) * segmentDuration, clipDuration);
-
-      // Get average speed for this segment
-      const midTime = (segmentStart + segmentEnd) / 2;
-      const speed = this.getSpeedAtTime(keyframes, midTime, defaultSpeed);
-      const absSpeed = Math.abs(speed);
-
-      // Calculate source range for this segment
-      const sourceStart = this.integrateSpeed(keyframes, 0, segmentStart, defaultSpeed);
-      const sourceEnd = this.integrateSpeed(keyframes, 0, segmentEnd, defaultSpeed);
-
-      // Handle reverse playback
-      const actualSourceStart = Math.min(sourceStart, sourceEnd);
-      const actualSourceEnd = Math.max(sourceStart, sourceEnd);
-
-      // Extract source segment
-      const sourceSamples = this.extractSegment(
-        buffer,
-        Math.max(0, actualSourceStart),
-        Math.min(buffer.duration, actualSourceEnd)
-      );
-
-      if (sourceSamples.length === 0) continue;
-
-      // Process segment with current speed
-      let processedSegment: Float32Array[];
-      if (preservePitch && Math.abs(absSpeed - 1.0) > 0.01) {
-        processedSegment = await this.stretchSegment(sourceSamples, absSpeed, sampleRate, channels);
-      } else if (!preservePitch && Math.abs(absSpeed - 1.0) > 0.01) {
-        processedSegment = this.resampleSegment(sourceSamples, absSpeed, channels);
-      } else {
-        processedSegment = sourceSamples;
-      }
-
-      // If reverse, flip the segment
-      if (speed < 0) {
-        processedSegment = processedSegment.map(ch => {
-          const reversed = new Float32Array(ch.length);
-          for (let i = 0; i < ch.length; i++) {
-            reversed[i] = ch[ch.length - 1 - i];
-          }
-          return reversed;
-        });
-      }
-
-      // Copy to output buffer
-      const outputStartSample = Math.floor(segmentStart * sampleRate);
-      const outputEndSample = Math.floor(segmentEnd * sampleRate);
-      const targetLength = outputEndSample - outputStartSample;
-
-      for (let ch = 0; ch < channels; ch++) {
-        const outputData = outputBuffer.getChannelData(ch);
-        const segmentData = processedSegment[ch] || processedSegment[0];
-
-        // Resample segment to fit target length if needed
-        for (let i = 0; i < targetLength && outputStartSample + i < outputSamples; i++) {
-          const srcIdx = Math.floor(i * segmentData.length / targetLength);
-          if (srcIdx < segmentData.length) {
-            outputData[outputStartSample + i] = segmentData[srcIdx];
+    const clip = timing ?? { inPoint: 0, outPoint: buffer.duration, duration: clipDuration, speed: defaultSpeed };
+    const source = createClipSpeedSource(clip, keyframes);
+    const sampleAt = (time: number) => resolveClipSourceTime(clip, time, source);
+    const outputSamples = Math.max(1, Math.ceil(clipDuration * buffer.sampleRate));
+    const output = createBuffer(buffer.numberOfChannels, outputSamples, buffer.sampleRate);
+    const keys = keyframes.filter(key => key.property === 'speed');
+    const looped = clip.timeRemap?.kind === 'loop' && !clip.transitionSourceMap &&
+      !clip.transitionSourceHold && !Number.isFinite(clip.transitionSourceTimeOverride);
+    // Direction changes/freezes use exact signed resampling. Pitch preservation
+    // across a turn or freeze is intentionally unsupported, never abs-normalized.
+    const signs = new Set(keys.map(key => Math.sign(key.value)));
+    const exactResample = clip.timeRemap?.kind === 'warp' || !shouldPreservePitch || signs.size > 1 || signs.has(0) || looped ||
+      Boolean(clip.transitionSourceMap || clip.transitionSourceHold ||
+        Number.isFinite(clip.transitionSourceTimeOverride));
+    const inputs = Array.from({ length: buffer.numberOfChannels }, (_, ch) => buffer.getChannelData(ch));
+    const outputs = inputs.map((_, ch) => output.getChannelData(ch));
+    if (exactResample) {
+      const origin = sourceBufferStart ?? clip.inPoint;
+      const cycle = (clip.outPoint - clip.inPoint) * buffer.sampleRate;
+      const wrap = (position: number) => looped && cycle > 0
+        ? clip.inPoint * buffer.sampleRate + ((position - clip.inPoint * buffer.sampleRate) % cycle + cycle) % cycle : position;
+      for (let i = 0; i < outputSamples; i++) {
+        if (i % 16384 === 0) signal?.throwIfAborted();
+        const sample = sampleAt(i / buffer.sampleRate);
+        // A held video frame has no changing audio signal (silence, not DC).
+        if (!sample.isHold) {
+          const samplePosition = sample.sourceTime * buffer.sampleRate - (sample.sourceRate < 0 ? 1 : 0);
+          const position = wrap(samplePosition) - origin * buffer.sampleRate;
+          if (position >= 0 && position < buffer.length) {
+            const index = Math.floor(position);
+            const fraction = position - index;
+            for (let ch = 0; ch < inputs.length; ch++) {
+              const a = inputs[ch][index];
+              const next = looped ? Math.round(wrap((index + 1) + origin * buffer.sampleRate) - origin * buffer.sampleRate)
+                : Math.min(index + 1, buffer.length - 1);
+              const b = inputs[ch][next] ?? a;
+              outputs[ch][i] = a + (b - a) * fraction;
+            }
           }
         }
+        if (i % 16384 === 0) {
+          onProgress?.({ processedSamples: i, totalSamples: outputSamples,
+            percent: 100 * i / outputSamples, currentSpeed: sample.sourceRate });
+          await new Promise(resolve => setTimeout(resolve, 0));
+        }
       }
-
-      // Progress callback
-      if (onProgress) {
-        onProgress({
-          processedSamples: outputStartSample + targetLength,
-          totalSamples: outputSamples,
-          percent: Math.round(((segIdx + 1) / numSegments) * 100),
-          currentSpeed: speed,
-        });
-      }
-
-      // Yield to UI
-      if (segIdx % 10 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 0));
+    } else {
+      // Retain pitch-preserved segments, but derive every endpoint from the same
+      // contract as video. Keyframe boundaries also split segments (including holds).
+      const boundaries = new Set([0, clipDuration]);
+      for (let time = 0.1; time < clipDuration; time += 0.1) boundaries.add(time);
+      for (const key of keys) if (key.time > 0 && key.time < clipDuration) boundaries.add(key.time);
+      const times = [...boundaries].toSorted((a, b) => a - b);
+      for (let segment = 0; segment < times.length - 1; segment++) {
+        signal?.throwIfAborted();
+        const start = times[segment];
+        const end = times[segment + 1];
+        const a = sampleAt(start);
+        const b = sampleAt(end);
+        const speed = (b.sourceTime - a.sourceTime) / (end - start);
+        if (Math.abs(speed) < 1e-8) continue;
+        let samples = this.extractSegment(buffer,
+          Math.max(0, Math.min(a.sourceTime, b.sourceTime) - (sourceBufferStart ?? clip.inPoint)),
+          Math.min(buffer.duration, Math.max(a.sourceTime, b.sourceTime) - (sourceBufferStart ?? clip.inPoint)));
+        if (!samples.length) continue;
+        if (speed < 0) samples = samples.map(channel => channel.toReversed());
+        if (Math.abs(Math.abs(speed) - 1) > 0.001) {
+          samples = await this.stretchSegment(samples, Math.abs(speed), buffer.sampleRate, inputs.length);
+        }
+        const first = Math.round(start * buffer.sampleRate);
+        const last = Math.min(outputSamples, Math.round(end * buffer.sampleRate));
+        for (let ch = 0; ch < inputs.length; ch++) {
+          const data = samples[ch];
+          for (let i = first; i < last; i++) {
+            outputs[ch][i] = data[Math.floor((i - first) * data.length / (last - first))] ?? 0;
+          }
+        }
+        onProgress?.({ processedSamples: last, totalSamples: outputSamples,
+          percent: 100 * last / outputSamples, currentSpeed: speed });
+        if (segment % 10 === 0) await new Promise(resolve => setTimeout(resolve, 0));
       }
     }
-
-    return outputBuffer;
+    onProgress?.({ processedSamples: outputSamples, totalSamples: outputSamples, percent: 100,
+      currentSpeed: sampleAt(clipDuration).sourceRate });
+    return output;
   }
 
   /**
@@ -269,129 +221,35 @@ export class TimeStretchProcessor {
     sampleRate: number,
     channels: number
   ): Promise<Float32Array[]> {
-    const soundtouch = new SoundTouch(sampleRate);
-    soundtouch.tempo = speed;
-    soundtouch.pitch = 1.0; // Keep pitch
-
-    // Create interleaved input
     const length = segments[0].length;
-    const interleaved = new Float32Array(length * channels);
-    for (let i = 0; i < length; i++) {
-      for (let ch = 0; ch < channels; ch++) {
-        interleaved[i * channels + ch] = segments[ch]?.[i] || 0;
-      }
-    }
-
-    // Put samples into input buffer
-    soundtouch.inputBuffer.putSamples(interleaved);
-
-    // Process all input
-    soundtouch.process();
-
-    // Collect output
     const outputLength = Math.ceil(length / speed);
-    const outputInterleaved = new Float32Array(outputLength * channels);
-
-    let outputPos = 0;
-    const chunkSize = 4096;
-
-    while (soundtouch.outputBuffer.frameCount > 0) {
+    const output = Array.from({ length: channels }, () => new Float32Array(outputLength));
+    // SoundTouch consumes stereo frames. Pair channels (duplicate an odd final
+    // channel) and flush its lookahead with silence so short ramp segments and
+    // constant-speed outputs retain their declared duration and final samples.
+    const padding = Math.ceil(sampleRate * Math.max(0.25, 0.15 * speed));
+    for (let channel = 0; channel < channels; channel += 2) {
+      const soundtouch = new SoundTouch(sampleRate);
+      soundtouch.tempo = speed;
+      soundtouch.pitch = 1;
+      const interleaved = new Float32Array((length + padding) * 2);
+      const left = segments[channel];
+      const right = segments[channel + 1] ?? left;
+      for (let i = 0; i < length; i++) {
+        interleaved[2 * i] = left[i];
+        interleaved[2 * i + 1] = right[i];
+      }
+      soundtouch.inputBuffer.putSamples(interleaved);
       soundtouch.process();
-      const framesToReceive = Math.min(chunkSize, soundtouch.outputBuffer.frameCount);
-      if (framesToReceive <= 0) break;
-
-      const chunk = new Float32Array(framesToReceive * channels);
-      soundtouch.outputBuffer.receiveSamples(chunk, framesToReceive);
-
-      for (let i = 0; i < framesToReceive * channels && outputPos * channels + i < outputInterleaved.length; i++) {
-        outputInterleaved[outputPos * channels + i] = chunk[i];
+      const frames = Math.min(outputLength, soundtouch.outputBuffer.frameCount);
+      const processed = new Float32Array(frames * 2);
+      soundtouch.outputBuffer.receiveSamples(processed, frames);
+      for (let i = 0; i < frames; i++) {
+        output[channel][i] = processed[2 * i];
+        if (channel + 1 < channels) output[channel + 1][i] = processed[2 * i + 1];
       }
-      outputPos += framesToReceive;
     }
-
-    // De-interleave output
-    const actualLength = Math.min(outputPos, outputLength);
-    const output: Float32Array[] = [];
-    for (let ch = 0; ch < channels; ch++) {
-      const channelData = new Float32Array(actualLength);
-      for (let i = 0; i < actualLength; i++) {
-        channelData[i] = outputInterleaved[i * channels + ch] || 0;
-      }
-      output.push(channelData);
-    }
-
     return output;
-  }
-
-  /**
-   * Simple resampling (changes pitch with speed)
-   */
-  private resampleSegment(
-    segments: Float32Array[],
-    speed: number,
-    channels: number
-  ): Float32Array[] {
-    const inputLength = segments[0].length;
-    const outputLength = Math.ceil(inputLength / speed);
-
-    const output: Float32Array[] = [];
-    for (let ch = 0; ch < channels; ch++) {
-      const input = segments[ch] || segments[0];
-      const channelOutput = new Float32Array(outputLength);
-
-      for (let i = 0; i < outputLength; i++) {
-        const srcIdx = i * speed;
-        const srcIdxFloor = Math.floor(srcIdx);
-        const frac = srcIdx - srcIdxFloor;
-
-        // Linear interpolation
-        const s1 = input[srcIdxFloor] || 0;
-        const s2 = input[srcIdxFloor + 1] || s1;
-        channelOutput[i] = s1 + (s2 - s1) * frac;
-      }
-
-      output.push(channelOutput);
-    }
-
-    return output;
-  }
-
-  /**
-   * Get interpolated speed at a specific time
-   */
-  private getSpeedAtTime(keyframes: Keyframe[], time: number, defaultSpeed: number): number {
-    return interpolateKeyframes(keyframes, 'speed', time, defaultSpeed);
-  }
-
-  /**
-   * Integrate speed from startTime to endTime (source time consumed)
-   */
-  private integrateSpeed(
-    keyframes: Keyframe[],
-    startTime: number,
-    endTime: number,
-    defaultSpeed: number
-  ): number {
-    const speedKeyframes = keyframes.filter(k => k.property === 'speed');
-
-    if (speedKeyframes.length === 0) {
-      return (endTime - startTime) * defaultSpeed;
-    }
-
-    // Trapezoidal integration
-    const steps = 20;
-    const dt = (endTime - startTime) / steps;
-    let integral = 0;
-
-    for (let i = 0; i < steps; i++) {
-      const t0 = startTime + i * dt;
-      const t1 = startTime + (i + 1) * dt;
-      const s0 = this.getSpeedAtTime(keyframes, t0, defaultSpeed);
-      const s1 = this.getSpeedAtTime(keyframes, t1, defaultSpeed);
-      integral += (s0 + s1) / 2 * dt;
-    }
-
-    return integral;
   }
 
   /**
@@ -408,7 +266,7 @@ export class TimeStretchProcessor {
     const processed = await this.stretchSegment(segments, speed, buffer.sampleRate, channels);
 
     // Create output buffer
-    const outputLength = processed[0]?.length || 0;
+    const outputLength = Math.ceil(buffer.length / speed);
     const outputBuffer = createBuffer(channels, outputLength, buffer.sampleRate);
 
     for (let ch = 0; ch < channels; ch++) {
@@ -443,7 +301,7 @@ export class TimeStretchProcessor {
         const frac = srcIdx - srcIdxFloor;
 
         const s1 = input[srcIdxFloor] || 0;
-        const s2 = input[srcIdxFloor + 1] || s1;
+        const s2 = input[srcIdxFloor + 1] ?? s1;
         output[i] = s1 + (s2 - s1) * frac;
       }
     }

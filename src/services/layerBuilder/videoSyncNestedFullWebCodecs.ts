@@ -1,3 +1,5 @@
+import { isReverseVideoPlayback } from '../timeline/retime/clipRetime';
+import { rememberSourceFrameRate, videoHasTargetFrame } from './videoSyncFrameSelection';
 import type { TimelineClip } from '../../types/timeline';
 import {
   ensureRuntimeFrameProvider,
@@ -35,6 +37,8 @@ export function syncNestedFullWebCodecs(input: {
     timing,
     deps,
   } = input;
+  rememberSourceFrameRate(video, nestedClip, ctx);
+  rememberSourceFrameRate(clipRuntimeProvider, nestedClip, ctx);
   const playbackRuntimeSource = getPreviewRuntimeSource(nestedClip.source, nestedClip.trackId, false);
   const scrubRuntimeSource = getScrubRuntimeSource(nestedClip.source, nestedClip.trackId, false);
   if (timing.isHold) {
@@ -43,6 +47,7 @@ export function syncNestedFullWebCodecs(input: {
       video,
       clipRuntimeProvider,
       isInteractivePreview,
+      isPlaying: ctx.isPlaying,
       playbackRuntimeSource,
       scrubRuntimeSource,
       clipTime: nestedClipTime,
@@ -52,7 +57,7 @@ export function syncNestedFullWebCodecs(input: {
   }
 
   const isReversePlayback =
-    ctx.playbackSpeed < 0 || nestedClip.reversed || timing.sourceRate < 0;
+    isReverseVideoPlayback(timing, ctx.playbackSpeed);
   const effectiveAbsRate = Math.abs(timing.sourceRate) *
     (ctx.isPlaying ? Math.max(0.01, Math.abs(ctx.playbackSpeed || 1)) : 1);
   if (effectiveAbsRate > 0.01 && Math.abs(video.playbackRate - effectiveAbsRate) > 0.01) {
@@ -112,6 +117,7 @@ export function syncNestedFullWebCodecs(input: {
   }
 
   const scrubProvider = getRuntimeFrameProvider(pausedScrubRuntimeSource);
+  rememberSourceFrameRate(scrubProvider, nestedClip, ctx);
   const pausedProvider = deps.getPausedWebCodecsProvider(
     clipRuntimeProvider,
     scrubProvider,
@@ -130,7 +136,7 @@ export function syncNestedFullWebCodecs(input: {
     );
   }
 
-  if (!isInteractivePreview && timeDiff > 0.05) {
+  if (!isInteractivePreview && !video.seeking && !videoHasTargetFrame(video, nestedClipTime)) {
     video.currentTime = deps.safeSeekTime(video, nestedClipTime);
   }
 }

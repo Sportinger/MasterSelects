@@ -1,3 +1,4 @@
+import { samePresentedSourceFrame, videoHasTargetFrame } from './videoSyncFrameSelection';
 import { useTimelineStore } from '../../stores/timeline';
 import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
@@ -66,12 +67,7 @@ export class VideoSyncHtmlSeekCoordinator {
   ): void {
     scrubSettleState.begin(clipId, targetTime, VideoSyncHtmlSeekCoordinator.SCRUB_SETTLE_TIMEOUT_MS, reason);
 
-    const pendingTarget = this.deps.htmlSeeks.getPendingTarget(clipId);
-    const hasNearPendingTarget =
-      typeof pendingTarget === 'number' &&
-      Math.abs(pendingTarget - targetTime) <= 0.08;
-
-    if (video.seeking || this.deps.htmlSeeks.hasRvfcHandle(clipId) || hasNearPendingTarget) {
+    if (video.seeking || this.deps.htmlSeeks.hasRvfcHandle(clipId)) {
       this.deps.htmlSeeks.setQueuedTarget(clipId, targetTime);
       this.armSeekedFlush(clipId, video);
       vfPipelineMonitor.record('vf_settle_seek', {
@@ -115,6 +111,12 @@ export class VideoSyncHtmlSeekCoordinator {
     const effectiveDisplayedTime =
       typeof presentedTime === 'number' ? presentedTime : video.currentTime;
     const displayedDriftSeconds = Math.abs(effectiveDisplayedTime - time);
+
+    if (!ctx.isPlaying && !isInteractivePreview) {
+      if (!video.seeking && videoHasTargetFrame(video, time)) return;
+      this.beginOrQueueSettleSeek(clipId, video, time);
+      return;
+    }
 
     if (this.hasPendingDuplicateSeek(clipId, video, time)) {
       if (isInteractivePreview) {
@@ -183,7 +185,8 @@ export class VideoSyncHtmlSeekCoordinator {
 
           this.deps.htmlSeeks.replacePreciseSeekTimer(clipId, setTimeout(() => {
             const target = this.deps.htmlSeeks.getLatestTarget(clipId);
-            if (target !== undefined && Math.abs(video.currentTime - target) > 0.01) {
+            if (target !== undefined && (useTimelineStore.getState().isPlaying
+              ? Math.abs(video.currentTime - target) > 0.01 : !videoHasTargetFrame(video, target))) {
               this.deps.htmlSeeks.setPendingTarget(clipId, target, performance.now());
               video.currentTime = this.deps.safeSeekTime(video, target);
               this.armSeekedFlush(clipId, video);
@@ -250,7 +253,8 @@ export class VideoSyncHtmlSeekCoordinator {
         this.deps.htmlSeeks.setLatestTarget(clipId, time);
         this.deps.htmlSeeks.replacePreciseSeekTimer(clipId, setTimeout(() => {
           const target = this.deps.htmlSeeks.getLatestTarget(clipId);
-          if (target !== undefined && Math.abs(video.currentTime - target) > 0.01) {
+          if (target !== undefined && (useTimelineStore.getState().isPlaying
+              ? Math.abs(video.currentTime - target) > 0.01 : !videoHasTargetFrame(video, target))) {
             this.deps.htmlSeeks.setPendingTarget(clipId, target, performance.now());
             video.currentTime = this.deps.safeSeekTime(video, target);
             this.armSeekedFlush(clipId, video);
@@ -340,12 +344,14 @@ export class VideoSyncHtmlSeekCoordinator {
     }
 
     this.deps.htmlSeeks.clearQueuedTarget(clipId);
-    if (Math.abs(video.currentTime - queuedTarget) <= 0.01 && !video.seeking) {
+    const timelineState = useTimelineStore.getState();
+    const targetMatches = timelineState.isPlaying ? Math.abs(video.currentTime - queuedTarget) <= 0.01
+      : videoHasTargetFrame(video, queuedTarget);
+    if (targetMatches && !video.seeking) {
       this.deps.htmlSeeks.clearPendingTarget(clipId);
       return;
     }
 
-    const timelineState = useTimelineStore.getState();
     const isDragging = timelineState.isDraggingPlayhead || timelineState.clipDragPreview != null;
     const fastSeek = getFastSeek(video);
     const supportsFastSeek = fastSeek !== null;
@@ -399,7 +405,7 @@ export class VideoSyncHtmlSeekCoordinator {
     }
 
     if (!isDragging && source === 'rvfc') {
-      if (targetDrift <= 0.08) {
+      if (timelineState.isPlaying ? targetDrift <= 0.08 : samePresentedSourceFrame(video, effectiveTime, queuedTarget)) {
         scrubSettleState.resolve(clipId);
         vfPipelineMonitor.record('vf_settle_seek', {
           clipId,
@@ -411,7 +417,7 @@ export class VideoSyncHtmlSeekCoordinator {
         return;
       }
 
-      if (settle?.stage === 'settle' && targetDrift <= 0.35) {
+      if (timelineState.isPlaying && settle?.stage === 'settle' && targetDrift <= 0.35) {
         scrubSettleState.begin(
           clipId,
           queuedTarget,
@@ -441,7 +447,8 @@ export class VideoSyncHtmlSeekCoordinator {
 
       this.deps.htmlSeeks.replacePreciseSeekTimer(clipId, setTimeout(() => {
         const target = this.deps.htmlSeeks.getLatestTarget(clipId);
-        if (target !== undefined && Math.abs(video.currentTime - target) > 0.01) {
+        if (target !== undefined && (useTimelineStore.getState().isPlaying
+              ? Math.abs(video.currentTime - target) > 0.01 : !videoHasTargetFrame(video, target))) {
           this.deps.htmlSeeks.setPendingTarget(clipId, target, performance.now());
           video.currentTime = this.deps.safeSeekTime(video, target);
           this.armSeekedFlush(clipId, video);

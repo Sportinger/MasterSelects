@@ -49,7 +49,9 @@ describe('Fisheye dynamic hierarchy layout', () => {
   });
   it('arranges every expanded level without overlapping sibling frames or cards, then contracts the outer chain', () => {
     const clip = fixture(), all = project(clip, true);
-    expect(all.groups).toHaveLength(27);
+    // The effect wrapper plus every interior group of the current Fisheye graph (derived, not a frozen count).
+    expect(all.groups).toHaveLength((buildEffectOperatorGraph(clip, clip.effects[0]).groups?.length ?? 0) + 1);
+    expect(all.groups!.filter(group => group.id === 'effect:f')).toHaveLength(1);
     clip.nodeGraph = { version: 1, nodes: [], groups: Object.fromEntries(all.groups!.map(group => [group.id, { collapsed: false }])) };
     const expanded = project(clip), placement = arrangeFlowPlacement(expanded, reconcileCanvasPlacement(expanded));
     const nodes = expanded.nodes.map(node => ({ ...node, layout: placement.nodes[node.id] }));

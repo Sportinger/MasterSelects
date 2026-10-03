@@ -1,3 +1,4 @@
+import { ResolveWarpPointsEditor } from './ResolveWarpPointsEditor';
 import {
   CLIP_SPEED_MAX_PERCENT,
   CLIP_SPEED_MIN_PERCENT,
@@ -8,6 +9,7 @@ import type {
   ClipVideoInspectorSections,
   VideoInspectorSectionKey,
 } from '../../../../types/timeline';
+import { ResolveInspectorNumberRow } from '../resolveInspector/ResolveInspectorNumberRow';
 import { KeyframeToggle } from '../shared';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../sharedConstants';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
@@ -51,12 +53,13 @@ interface ResolveVisualInspectorSectionsProps {
   onSpeedChange: (percent: number) => void;
 }
 
-function ResetButton({ label, onClick }: { label: string; onClick: () => void }) {
+function ResetButton({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
     <ResolveInspectorIconButton
       ariaLabel={`Reset ${label}`}
       className="resolve-inspector-reset-button"
-      onClick={onClick}
+      disabled={disabled}
+      onClick={event => { if (event.detail > 0) event.currentTarget.blur(); onClick(); }}
       title={`Reset ${label} to defaults and delete keyframes`}
     >
       <ResolveResetIcon />
@@ -89,6 +92,19 @@ export function ResolveVisualInspectorSections({
   onResetSpeed,
   onSpeedChange,
 }: ResolveVisualInspectorSectionsProps) {
+  const retimeClip = useTimelineStore(state => state.clips.find(clip => clip.id === clipId));
+  const frozen = retimeClip?.timeRemap?.kind === 'freeze';
+  const warped = retimeClip?.timeRemap?.kind === 'warp';
+  const looped = retimeClip?.timeRemap?.kind === 'loop';
+  const speedIgnored = frozen || warped;
+  const speedHint = `Speed and Reverse are retained but ignored while ${frozen ? 'frozen' : 'warped'}.`;
+  const speedKeyframeControl = speedIgnored ? (
+    <ResolveInspectorIconButton ariaLabel="Add speed keyframe" disabled title={speedHint}>
+      <svg aria-hidden="true" viewBox="0 0 16 16"><circle cx="8" cy="9" r="5" /><path d="M6 1h4M8 1v3M8 6v3l2 1" /></svg>
+    </ResolveInspectorIconButton>
+  ) : <KeyframeToggle clipId={clipId} property="speed" value={speed} />;
+  const setTimeRemap = useTimelineStore(state => state.setClipTimeRemap);
+  const freezeAtPlayhead = useTimelineStore(state => state.freezeClipAtPlayhead);
   const cropMask = useTimelineStore(state => state.clips
     .find(clip => clip.id === clipId)
     ?.masks?.find(isResolveCropMask));
@@ -194,7 +210,12 @@ export function ResolveVisualInspectorSections({
   );
 
   return (
-    <div className="resolve-visual-inspector-sections">
+    <div className="resolve-visual-inspector-sections" onClick={event => {
+      if (event.detail > 0 && event.target instanceof Element) event.target.closest('button')?.blur();
+    }}>
+      <style>{`html:not(.pointer-focus) .resolve-visual-inspector-sections :is(button, input, [role="slider"]):focus-visible {
+        background: var(--surface-control-hover); color: var(--accent);
+      }`}</style>
       <ResolveInspectorSection
         enabled={isVideoInspectorSectionEnabled(sections, 'composite')}
         headerActions={(
@@ -263,26 +284,61 @@ export function ResolveVisualInspectorSections({
           enabled={isVideoInspectorSectionEnabled(sections, 'speedChange')}
           headerActions={(
             <>
-              <KeyframeToggle clipId={clipId} property="speed" value={speed} />
-              <ResetButton label="speed" onClick={onResetSpeed} />
+              {speedKeyframeControl}
+              <ResetButton label="speed" onClick={onResetSpeed} disabled={speedIgnored} />
             </>
           )}
-          onEnabledChange={enabled => onSectionEnabledChange('speedChange', enabled)}
+          onEnabledChange={speedIgnored ? undefined : enabled => onSectionEnabledChange('speedChange', enabled)}
           title="Speed Change"
         >
+          <ResolveInspectorRow label="Time Remap" title="Freeze, Loop or Warp source time.">
+            <ResolveInspectorIconButton active={frozen} ariaLabel="Freeze frame at playhead"
+              onClick={event => {
+                if (event.detail > 0) event.currentTarget.blur();
+                if (frozen) setTimeRemap(clipId, null); else freezeAtPlayhead(clipId);
+              }}>
+              <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M5 3v10M11 3v10" /></svg>
+            </ResolveInspectorIconButton>
+            <ResolveInspectorIconButton active={looped} ariaLabel="Loop clip" title="Loop clip"
+              onClick={event => {
+                if (event.detail > 0) event.currentTarget.blur();
+                setTimeRemap(clipId, looped ? null : { kind: 'loop' });
+              }}>
+              <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M12 5a5 5 0 1 0 1 5M12 2v4H8" /></svg>
+            </ResolveInspectorIconButton>
+            <ResolveInspectorIconButton active={warped} ariaLabel="Warp clip" title="Warp clip"
+              onClick={event => {
+                if (event.detail > 0) event.currentTarget.blur();
+                useTimelineStore.getState().toggleClipWarp(clipId);
+              }}>
+              <svg aria-hidden="true" viewBox="0 0 16 16"><path d="m2 12 4-8 4 6 4-7" /></svg>
+            </ResolveInspectorIconButton>
+          </ResolveInspectorRow>
+          {warped && <ResolveWarpPointsEditor clipId={clipId} />}
+          {retimeClip?.timeRemap?.kind === 'freeze' && <ResolveInspectorNumberRow
+            label="Frozen Source" suffix="s" value={retimeClip.timeRemap.sourceTime}
+            defaultValue={retimeClip.inPoint} min={0} hardMin={0}
+            max={retimeClip.source?.naturalDuration ?? retimeClip.outPoint}
+            hardMax={retimeClip.source?.naturalDuration ?? retimeClip.outPoint} step={0.001}
+            onChange={sourceTime => setTimeRemap(clipId, { kind: 'freeze', sourceTime })}
+            onDragStart={onBatchStart} onDragEnd={onBatchEnd}
+          />}
           <ResolveInspectorRow
-            actions={<KeyframeToggle clipId={clipId} property="speed" value={speed} />}
+            actions={speedKeyframeControl}
+            disabled={speedIgnored}
             label="Speed"
+            title={speedIgnored ? speedHint : undefined}
           >
             <div className="resolve-inspector-speed-value">
               <LabeledValue
                 ariaLabel="Speed"
+                disabled={speedIgnored}
                 className="resolve-inspector-field resolve-inspector-field--plain"
                 decimals={0}
                 defaultValue={100}
                 label=""
                 max={CLIP_SPEED_MAX_PERCENT}
-                midiTarget={createMidiTarget('speed', 'Speed', speed, -10, 10)}
+                midiTarget={speedIgnored ? null : createMidiTarget('speed', 'Speed', speed, -10, 10)}
                 min={CLIP_SPEED_MIN_PERCENT}
                 onChange={onSpeedChange}
                 onDragEnd={onBatchEnd}
@@ -295,13 +351,15 @@ export function ResolveVisualInspectorSections({
                 <ResolveInspectorIconButton
                   active={linkedAudioSpeedEnabled}
                   ariaLabel="Linked Audio"
-                  onClick={() => onLinkedAudioSpeedChange(!linkedAudioSpeedEnabled)}
+                  disabled={speedIgnored}
+                  onClick={event => { if (event.detail > 0) event.currentTarget.blur(); onLinkedAudioSpeedChange(!linkedAudioSpeedEnabled); }}
                 >
                   <ResolveLinkIcon />
                 </ResolveInspectorIconButton>
               )}
             </div>
           </ResolveInspectorRow>
+          {speedIgnored && <PendingSectionBody>{speedHint}</PendingSectionBody>}
         </ResolveInspectorSection>
       )}
 

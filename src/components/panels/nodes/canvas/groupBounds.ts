@@ -1,11 +1,12 @@
+import { startNodeMeasure, endNodeMeasure } from '../../../../services/nodeGraph/unified/nodeGraphPerformance';
 import type { NodeGraph, NodeGraphNode, NodeGroupSize } from '../../../../types/nodeGraph';
-import { getGraphBounds, getNodeHeight, NODE_WIDTH, type NodeBounds } from './canvasGeometry';
+import { getGraphBounds, getNodeHeight, getNodeWidth, type NodeBounds } from './canvasGeometry';
 
 export function encloseNodeGroup(members: NodeGraphNode[], children: NodeBounds[]): NodeBounds {
   return {
     left: Math.min(...members.map(n => n.layout.x - 22), ...children.map(b => b.left - 16)),
     top: Math.min(...members.map(n => n.layout.y - 48), ...children.map(b => b.top - 38)),
-    right: Math.max(...members.map(n => n.layout.x + NODE_WIDTH + 22), ...children.map(b => b.right + 16)),
+    right: Math.max(...members.map(n => n.layout.x + getNodeWidth(n) + 22), ...children.map(b => b.right + 16)),
     bottom: Math.max(...members.map(n => n.layout.y + getNodeHeight(n) + 22), ...children.map(b => b.bottom + 16)),
   };
 }
@@ -16,6 +17,8 @@ export function withGroupSize(box: NodeBounds, size?: NodeGroupSize): NodeBounds
 }
 
 export function nodeGroupBounds(graph: NodeGraph, nodes: NodeGraphNode[]): Map<string, NodeBounds> {
+  const measurement = import.meta.env.DEV ? startNodeMeasure('group-bounds') : undefined;
+  try {
   const bounds = new Map<string, NodeBounds>();
   const groups = new Map(graph.groups?.map(group => [group.id, group]));
   const nodesById = new Map(nodes.map(node => [node.id, node]));
@@ -31,11 +34,12 @@ export function nodeGroupBounds(graph: NodeGraph, nodes: NodeGraphNode[]): Map<s
     if (!members.length && !children.length) return;
     const value = group?.collapsed
       ? { left: Math.min(...members.map(n => n.layout.x)), top: Math.min(...members.map(n => n.layout.y)),
-        right: Math.max(...members.map(n => n.layout.x + NODE_WIDTH)), bottom: Math.max(...members.map(n => n.layout.y + getNodeHeight(n))) }
+        right: Math.max(...members.map(n => n.layout.x + getNodeWidth(n))), bottom: Math.max(...members.map(n => n.layout.y + getNodeHeight(n))) }
       : withGroupSize(encloseNodeGroup(members, children), group?.size);
     bounds.set(id, value); return value;
   };
   graph.groups?.forEach(g => measure(g.id)); return bounds;
+  } finally { if (import.meta.env.DEV) endNodeMeasure('group-bounds', measurement); }
 }
 export function annotatedGraphBounds(graph: NodeGraph, nodes: NodeGraphNode[], groups = nodeGroupBounds(graph, nodes)): NodeBounds {
   const all = [getGraphBounds({ ...graph, nodes }), ...groups.values()];

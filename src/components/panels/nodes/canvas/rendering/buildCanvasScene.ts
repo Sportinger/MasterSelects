@@ -1,3 +1,4 @@
+import { startNodeMeasure, endNodeMeasure } from '../../../../../services/nodeGraph/unified/nodeGraphPerformance';
 import type { NodeCableStyle, NodeGraph, NodeGraphNode } from '../../../../../types/nodeGraph';
 import type { AnimatableProperty } from '../../../../../types/animationProperties';
 import type { Keyframe } from '../../../../../types/keyframes';
@@ -7,7 +8,7 @@ import { keyframeNodeParameters } from '../../../../../services/nodeGraph/keyfra
 import { clipLocalToKeyframeTime, getKeyframeTimeBasis, type SourceOffsetResolver } from '../../../../../services/flock/time/flockKeyframeTime';
 import { interpolateKeyframes } from '../../../../../utils/keyframeInterpolation';
 import { keyframesForProperty } from '../../../../../utils/keyframePropertyIndex';
-import { getNodeBadges, getNodeHeight, getNodePortStartY, getPortCenter, isNodeBypassable, isNodeBypassed, NODE_WIDTH, type ConnectionDraft, type NodeBounds } from '../canvasGeometry';
+import { getNodeBadges, getNodeHeight, getNodePortStartY, getNodeSummarySegments, getPortCenter, isNodeBypassable, isNodeBypassed, getNodeWidth, type ConnectionDraft, type NodeBounds } from '../canvasGeometry';
 import { nodeGroupBounds } from '../groupBounds';
 import type { ConnectionPlug } from '../connectionPlugs';
 import type { RoutedCable } from '../cableBranches';
@@ -16,7 +17,7 @@ import type { CanvasBranch, CanvasCurve, CanvasScene } from './nodeCanvasTypes';
 import { makeCanvasCable } from './cableGeometry';
 import { inlineNumericPorts, isNumericValueNode, previewRect } from '../../previews/previewGeometry';
 import { previewOutput } from '../../../../../services/nodePreview/previewTypes';
-import { createEdgeGroupOcclusion } from '../edgeGroupOcclusion';
+import { createCanvasCableOcclusion } from './cableOcclusion';
 
 const COLORS: Record<string, string> = { source: '#54be8e', transform: '#5299eb', motion: '#5299eb', color: '#e0c24a', mask: '#be6fd5', effect: '#de8452', custom: '#5cbed6', analysis: '#70f6dc', output: '#97a9be' };
 const EMPTY: Keyframe[] = [];
@@ -66,9 +67,13 @@ function curveFor(node: NodeGraphNode, options: Options): CanvasCurve | undefine
 }
 
 export function buildCanvasScene(options: Options): CanvasScene {
+  const measurement = import.meta.env.DEV ? startNodeMeasure('scene-build') : undefined;
+  try {
   const { graph, nodes, plugs, draft, hoveredPort } = options;
+  const nodesById = new Map(nodes.map(node => [node.id, node]));
+  const collapsedProxies = new Set(graph.groups?.filter(group => group.collapsed).map(group => group.proxyId));
   const bounds = options.groupBounds ?? nodeGroupBounds(graph, options.groupFrameNodes ?? nodes);
-  const occlusions = createEdgeGroupOcclusion(graph, bounds);
+  const occlusions = createCanvasCableOcclusion(graph, bounds);
   const scene: CanvasScene = { graphId: graph.id, nodes: [], cables: [], groups: [], plugs: [], ...(options.glideMs ? { glideMs: options.glideMs } : {}) };
   for (const group of graph.groups ?? []) {
     if (group.collapsed) continue;
@@ -76,17 +81,18 @@ export function buildCanvasScene(options: Options): CanvasScene {
     if (b) scene.groups.push({ id: group.id, nodeIds: group.nodeIds, x: b.left, y: b.top, width: b.right - b.left, height: b.bottom - b.top,
       label: group.label, color: group.color ?? '#5cbed6', collapsed: !!group.collapsed,
       count: group.collapsed && group.bypassNodeId ? '' : `${group.nodeIds.length} nodes`,
-      bypassable: !!group.bypassNodeId, bypassed: group.bypassed ?? (nodes.find(node => node.id === group.bypassNodeId)?.params?.enabled === false) });
+      bypassable: !!group.bypassNodeId, bypassed: group.bypassed ?? (nodesById.get(group.bypassNodeId ?? '')?.params?.enabled === false) });
   }
-  scene.nodes = nodes.map(node => ({ id: node.id, x: node.layout.x, y: node.layout.y, width: NODE_WIDTH, height: getNodeHeight(node),
+  scene.nodes = nodes.map(node => ({ id: node.id, x: node.layout.x, y: node.layout.y, width: getNodeWidth(node), height: getNodeHeight(node),
     label: node.label, description: inlineNumericPorts(node) ? '' : node.description ?? 'Built-in processing node', kind: typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind,
     runtime: node.runtime, color: node.operatorId?.startsWith('values.') ? '#eeeeee' : COLORS[node.kind] ?? '#5cbed6', selected: node.id === options.selectedNodeId || options.selection.has(node.id),
     valueBesideOutput: isNumericValueNode(node),
-    expandable: graph.groups?.some(group => group.collapsed && group.proxyId === node.id),
+    expandable: collapsedProxies.has(node.id),
     viewerEnabled: node.preview?.requested,
     mathSymbol: inlineNumericPorts(node) ? { text: String(node.params?.mathSymbol ?? ''), x: 50, y: getNodePortStartY(node) + (node.inputs.length ? 56 : 8) + 22 } : undefined,
     preview: node.preview?.enabled ? { ...previewRect(getNodeHeight(node), node), key: node.preview.key, label: previewOutput(node, node.preview.portId)?.label ?? 'Values', text: inlineNumericPorts(node) } : undefined,
-    bypassed: isNodeBypassed(node), bypassable: !!options.canBypass && isNodeBypassable(node), badges: getNodeBadges(node), curve: curveFor(node, options),
+    bypassed: isNodeBypassed(node), bypassable: !!options.canBypass && isNodeBypassable(node), badges: getNodeBadges(node), summaryBar: node.summary?.bar,
+    summarySegments: getNodeSummarySegments(node), curve: curveFor(node, options),
     ports: [...node.inputs, ...node.outputs].map(port => {
       const info = describeNodePort(port), center = getPortCenter(node, port.id, port.direction)!;
       return { id: port.id, x: center.x - node.layout.x, y: center.y - node.layout.y, label: isNumericValueNode(node) ? '' : port.label, type: inlineNumericPorts(node) ? '' : info.typeLabel, color: info.color, input: port.direction === 'input',
@@ -108,9 +114,10 @@ export function buildCanvasScene(options: Options): CanvasScene {
   for (const cable of routed) {
     if (draft?.moved && draft.reconnectEdgeId === cable.id) continue;
     const highlighted = cable.id === options.selectedEdgeId || cable.id === options.hoveredEdgeId;
-    scene.cables.push({ ...makeCanvasCable(cable.from, cable.to, describeNodePort(cable.output.port).color, highlighted, false, options.cableStyle), id: cable.id,
+    const painted = { ...makeCanvasCable(cable.from, cable.to, describeNodePort(cable.output.port).color, highlighted, false, options.cableStyle), id: cable.id,
       fromNode: cable.fromNode, toNode: cable.toNode, fromBranch: cable.fromBranch, toBranch: cable.toBranch, ...(cable.via ? { via: [...cable.via] } : {}),
-      occlusions: cable.edge ? occlusions(cable.edge) : undefined, baked: cable.edge?.readOnly });
+      baked: cable.edge?.readOnly };
+    scene.cables.push({ ...painted, occlusionPool: cable.edge ? occlusions(cable.edge) : undefined });
   }
   if (options.branches?.length) scene.branches = options.branches;
   const preview = (nodeId: string, portId: string, direction: 'input' | 'output', ghost = false) => {
@@ -132,4 +139,5 @@ export function buildCanvasScene(options: Options): CanvasScene {
     if (!draft.target && end) scene.plugs.push({ center: draft.end, tip: end, input: draft.direction === 'output', color, highlighted: true });
   }
   return scene;
+  } finally { if (import.meta.env.DEV) endNodeMeasure('scene-build', measurement); }
 }

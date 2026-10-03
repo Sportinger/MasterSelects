@@ -38,7 +38,9 @@ it.each([1, -1])('uses the same accelerated time for normal playback, export and
   expect(actions.getInterpolatedSpeed('clip', 2)).toBe(4 * speed);
   expect(actions.getSourceTimeForClip('clip', 2)).toBe(8 * speed);
   expect(clock.duration).toBe(10);
-  expect(temporalSourceTime(clock, clock.localTime)).toBe(speed > 0 ? 13 : 7);
+  // Only backward video samples carry the 10-microsecond boundary bias.
+  if (speed > 0) expect(temporalSourceTime(clock, clock.localTime)).toBe(13);
+  else expect(temporalSourceTime(clock, clock.localTime)).toBeCloseTo(7, 4);
   expect(clip.duration).toBe(2.5);
   expect(clip.speed).toBe(speed);
 });

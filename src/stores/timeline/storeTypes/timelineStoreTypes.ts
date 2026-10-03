@@ -12,6 +12,7 @@ import type { TimelineState } from './timelineStateTypes';
 import type { TrackActions } from './trackActionTypes';
 import type {
   AIActionFeedbackActions,
+  CompositionGraphActions,
   ExportActions,
   KeyframeActions,
   LayerActions,
@@ -51,6 +52,7 @@ export interface TimelineStore extends
   TempoActions,
   TransitionActions,
   NodeGraphActions,
+  CompositionGraphActions,
   ClipboardActions,
   AIActionFeedbackActions,
   TimelineUtils {}

@@ -25,6 +25,13 @@
     opacity 220ms ease;
 }
 
+/* Preview transport toggle refits the dividers around the preview. */
+.dock-split.preview-fit-animating > .dock-split-child {
+  transition:
+    width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .dock-container.layout-switch-animating .dock-split-child {
   transition: opacity 180ms ease-in-out;
 }

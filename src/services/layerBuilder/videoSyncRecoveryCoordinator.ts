@@ -1,3 +1,5 @@
+import { useTimelineStore } from '../../stores/timeline';
+import { samePresentedSourceFrame, sameVideoSeekFrame, videoHasTargetFrame } from './videoSyncFrameSelection';
 import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
@@ -61,13 +63,15 @@ export class VideoSyncRecoveryCoordinator {
       return;
     }
 
-    if (Math.abs(settle.targetTime - targetTime) > 0.05) {
+    const playing = useTimelineStore.getState().isPlaying;
+    if (playing ? Math.abs(settle.targetTime - targetTime) > 0.05 : !sameVideoSeekFrame(video, settle.targetTime, targetTime)) {
       scrubSettleState.begin(clipId, targetTime, VideoSyncRecoveryCoordinator.SCRUB_SETTLE_TIMEOUT_MS);
       return;
     }
 
     const lastPresentedTime = renderHostPort.getLastPresentedVideoTime(video);
-    if (typeof lastPresentedTime === 'number' && Math.abs(lastPresentedTime - targetTime) <= 0.12) {
+    if (typeof lastPresentedTime === 'number' && (playing
+      ? Math.abs(lastPresentedTime - targetTime) <= 0.12 : samePresentedSourceFrame(video, lastPresentedTime, targetTime))) {
       scrubSettleState.resolve(clipId);
       return;
     }
@@ -97,7 +101,8 @@ export class VideoSyncRecoveryCoordinator {
       return;
     }
 
-    if (settle.stage === 'warmup' && video.readyState >= 2 && !video.seeking) {
+    if (settle.stage === 'warmup' && video.readyState >= 2 && !video.seeking &&
+        (playing || videoHasTargetFrame(video, targetTime))) {
       scrubSettleState.resolve(clipId);
     }
   }

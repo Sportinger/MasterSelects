@@ -13,6 +13,7 @@ export function useNodeLayoutTransition(graph: NodeGraph, nodes: NodeGraphNode[]
   const previousPlacement = useRef(placement);
   useLayoutEffect(() => {
     const target = { graph, nodes }, before = current.current;
+    if (before.graph === graph && before.nodes === nodes) { previousPlacement.current = placement; wasDragging.current = dragging; return; }
     const motion = matchMedia('(prefers-reduced-motion: reduce)');
     const transition = createNodeGroupFoldKeyframes(before, target, previousPlacement.current, project);
     previousPlacement.current = placement;

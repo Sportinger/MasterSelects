@@ -1,9 +1,9 @@
+import { createStoreSpeedSource, isReverseVideoPlayback, resolveClipSourceTime, videoFrameSourceTime } from '../../services/timeline/retime/clipRetime';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import { getTimelinePlaybackWarmupVideo } from '../../services/timeline/timelinePlaybackWarmupRuntime';
 import { hasWorkerGpuPlaybackStartVideoSource } from '../../services/timeline/workerGpuPlaybackStartWarmup';
 import { renderHostPort } from '../../services/render/renderHostPort';
-import { resolveTransitionSourceMapTime } from '../../services/timeline/transitionSourceMap';
-import { getNestedClipSourceTiming } from '../../services/layerBuilder/layerBuilderNestedSourceTiming';
+import { visitNestedClipsAtTime } from '../../services/timeline/retime/nestedClipRetime';
 import { createTimelineTransitionMediaDurationResolver } from '../../services/timeline/timelineTransitionMediaDurations';
 import {
   createTransitionSourceClip,
@@ -211,25 +211,10 @@ function getPlaybackWarmupTargetTime(
   getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number,
 ): number | undefined {
   const clipLocalTime = timelineTime - clip.startTime;
-  const mappedTime = resolveTransitionSourceMapTime(clip.transitionSourceMap, clipLocalTime);
-  if (mappedTime) return mappedTime.sourceTime;
-  if (Number.isFinite(clip.transitionSourceTimeOverride)) {
-    return clip.transitionSourceTimeOverride;
-  }
-
-  const inPoint = Number.isFinite(clip.inPoint) ? clip.inPoint : 0;
-  const outPoint = Number.isFinite(clip.outPoint)
-    ? clip.outPoint
-    : inPoint + Math.max(0, Number.isFinite(clip.duration) ? clip.duration : 0);
-  const initialSpeed = clip.transitionSourceHold
-    ? 1
-    : getInterpolatedSpeed(clip.id, 0);
-  const startPoint = initialSpeed >= 0 ? inPoint : outPoint;
-  const sourceOffset = getSourceTimeForClip(clip.id, clipLocalTime);
-  const sourceTime = startPoint + sourceOffset;
-  return Number.isFinite(sourceTime)
-    ? Math.max(inPoint, Math.min(outPoint, sourceTime))
-    : undefined;
+  const sourceTime = videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, createStoreSpeedSource(clip.id, {
+    getSourceTimeForClip, getInterpolatedSpeed,
+  })));
+  return Number.isFinite(sourceTime) ? sourceTime : undefined;
 }
 
 function getReversePrimeClipsAtTime(
@@ -252,14 +237,6 @@ function getReversePrimeClipsAtTime(
   return [...clipsAtPlayhead, ...transitionClipsAtPlayhead];
 }
 
-function hasNegativeTransitionSourceRateAtTime(clip: TimelineClip, time: number): boolean {
-  const mappedTime = resolveTransitionSourceMapTime(
-    clip.transitionSourceMap,
-    time - clip.startTime,
-  );
-  return mappedTime ? mappedTime.sourceRate < 0 : false;
-}
-
 function loadReverseWorkerRuntimeModule(): Promise<ReverseWorkerRuntimeModule> {
   reverseWorkerRuntimeModulePromise ??= import('../../services/layerBuilder/reverseWorkerWebCodecsRuntime');
   return reverseWorkerRuntimeModulePromise;
@@ -279,10 +256,9 @@ function primeReverseWorkerWebCodecsPlayback(input: {
   readonly getInterpolatedSpeed: (clipId: string, clipLocalTime: number) => number;
 }): Promise<number> {
   if (
-    input.playbackSpeed >= 0 &&
-    !input.clips.some((clip) =>
-      clip.reversed === true || hasNegativeTransitionSourceRateAtTime(clip, input.playheadPosition)
-    )
+    !input.clips.some(clip => isReverseVideoPlayback(resolveClipSourceTime(
+      clip, input.playheadPosition - clip.startTime, createStoreSpeedSource(clip.id, input),
+    ), input.playbackSpeed))
   ) {
     return Promise.resolve(0);
   }
@@ -371,22 +347,11 @@ export function preparePlaybackStartWarmup(input: {
         input.playheadPosition < clip.startTime + clip.duration;
       if (isAtPlayhead) {
         const compLocalTime = input.playheadPosition - clip.startTime;
-        const mappedCompTime = resolveTransitionSourceMapTime(clip.transitionSourceMap, compLocalTime);
-        const compTime = mappedCompTime?.sourceTime ?? compLocalTime + clip.inPoint;
-        for (const nestedClip of clip.nestedClips) {
+        const compTiming = resolveClipSourceTime(clip, compLocalTime, createStoreSpeedSource(clip.id, input));
+        visitNestedClipsAtTime(clip, videoFrameSourceTime(compTiming), (nestedClip, timing) => {
           const warmupVideo = getTimelinePlaybackWarmupVideo(nestedClip.source);
-          if (warmupVideo) {
-            const isNestedAtTime = compTime >= nestedClip.startTime &&
-              compTime < nestedClip.startTime + nestedClip.duration;
-            if (isNestedAtTime) {
-              const timing = getNestedClipSourceTiming(
-                nestedClip,
-                compTime - nestedClip.startTime,
-              );
-              rememberWarmupVideo(warmupVideo, timing.sourceTime);
-            }
-          }
-        }
+          if (warmupVideo) rememberWarmupVideo(warmupVideo, timing.sourceTime);
+        }, compTiming.sourceRate);
       }
     }
   }

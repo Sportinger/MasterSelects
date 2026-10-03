@@ -1,3 +1,4 @@
+import { createStoreSpeedSource, resolveClipSourceTime, videoFrameSourceTime } from './timeline/retime/clipRetime';
 import type { MediaFile } from '../stores/mediaStore/types';
 import type { TimelineClip } from '../types';
 import { proxyFrameCache } from './proxyFrameCache';
@@ -48,10 +49,7 @@ function getClipProxyMediaTime(
   timelinePosition: number
 ): number {
   const clipLocalTime = Math.max(0, timelinePosition - clip.startTime);
-  const initialSpeed = state.getInterpolatedSpeed(clip.id, 0);
-  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-  const sourceTime = state.getSourceTimeForClip(clip.id, clipLocalTime);
-  return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
+  return videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, createStoreSpeedSource(clip.id, state)));
 }
 
 export function collectProxyFramePrewarmRequests(

@@ -1,3 +1,6 @@
+import { ownsProcessedAudioPreview } from '../../../services/audio/preview/processedAudioPreviewOwnership';
+import { createStoreSpeedSource } from '../../../services/timeline/retime/clipRetime';
+import { resolveAudioPreviewRetime, flagAudioPreviewRetime } from '../../../services/timeline/retime/clipAudioRetime';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import { audioManager, audioStatusTracker } from '../../../services/audioManager';
 import { Logger } from '../../../services/logger';
@@ -17,18 +20,6 @@ interface SyncLayerAudioPlaybackParams {
   isVideoTrackVisible: (track: TimelineTrack) => boolean;
   playheadPosition: number;
   videoTracks: TimelineTrack[];
-}
-
-function getClipPlaybackTime(
-  clip: TimelineClip,
-  clipLocalTime: number,
-  getInterpolatedSpeed: (clipId: string, localTime: number) => number,
-  getSourceTimeForClip: (clipId: string, localTime: number) => number,
-): number {
-  const sourceTime = getSourceTimeForClip(clip.id, clipLocalTime);
-  const initialSpeed = getInterpolatedSpeed(clip.id, 0);
-  const startPoint = initialSpeed >= 0 ? clip.inPoint : clip.outPoint;
-  return Math.max(clip.inPoint, Math.min(clip.outPoint, startPoint + sourceTime));
 }
 
 function syncAudioPlaybackRate(audio: HTMLAudioElement, absSpeed: number): void {
@@ -85,21 +76,18 @@ export function syncLayerAudioPlayback({
 
     const audio = clip.source.audioElement;
     const clipLocalTime = playheadPosition - clip.startTime;
-    const currentSpeed = getInterpolatedSpeed(clip.id, clipLocalTime);
-    const absSpeed = Math.abs(currentSpeed);
-    const clipTime = getClipPlaybackTime(
-      clip,
-      clipLocalTime,
-      getInterpolatedSpeed,
-      getSourceTimeForClip,
-    );
+    const retime = resolveAudioPreviewRetime(clip, clipLocalTime,
+      createStoreSpeedSource(clip.id, { getInterpolatedSpeed, getSourceTimeForClip }));
+    const absSpeed = Math.abs(retime.sourceRate);
+    const clipTime = retime.sourceTime;
+    if (!ownsProcessedAudioPreview(clip.id)) flagAudioPreviewRetime(audio, retime.mutedReason);
     const timeDiff = audio.currentTime - clipTime;
 
     if (Math.abs(timeDiff) > maxAudioDrift) {
       maxAudioDrift = Math.abs(timeDiff);
     }
 
-    const effectivelyMuted = isAudioTrackMuted(track);
+    const effectivelyMuted = isAudioTrackMuted(track) || Boolean(retime.mutedReason) || ownsProcessedAudioPreview(clip.id);
     audio.muted = effectivelyMuted;
     syncAudioPlaybackRate(audio, absSpeed);
     syncPreservesPitch(audio, clip);
@@ -139,16 +127,13 @@ export function syncLayerAudioPlayback({
 
     const audio = clip.mixdownAudio;
     const clipLocalTime = playheadPosition - clip.startTime;
-    const currentSpeed = getInterpolatedSpeed(clip.id, clipLocalTime);
-    const absSpeed = Math.abs(currentSpeed);
-    const clipTime = getClipPlaybackTime(
-      clip,
-      clipLocalTime,
-      getInterpolatedSpeed,
-      getSourceTimeForClip,
-    );
+    const retime = resolveAudioPreviewRetime(clip, clipLocalTime,
+      createStoreSpeedSource(clip.id, { getInterpolatedSpeed, getSourceTimeForClip }));
+    const absSpeed = Math.abs(retime.sourceRate);
+    const clipTime = retime.sourceTime;
+    if (!ownsProcessedAudioPreview(clip.id)) flagAudioPreviewRetime(audio, retime.mutedReason);
     const track = videoTracks.find(candidate => candidate.id === clip.trackId);
-    const effectivelyMuted = track ? !isVideoTrackVisible(track) : false;
+    const effectivelyMuted = (track ? !isVideoTrackVisible(track) : false) || Boolean(retime.mutedReason) || ownsProcessedAudioPreview(clip.id);
     audio.muted = effectivelyMuted;
     syncAudioPlaybackRate(audio, absSpeed);
     syncPreservesPitch(audio, clip);

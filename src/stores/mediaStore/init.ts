@@ -40,6 +40,7 @@ type TimelineCompositionSaveRefs = {
   videoBakeRegions: unknown;
   masterAudioState: unknown;
   sharedSceneGraphs: unknown;
+  compositionGraph: unknown;
 };
 type MediaStoreGlobal = typeof globalThis & {
   __mediaStoreModule?: { useMediaStore: MediaStore };
@@ -80,6 +81,7 @@ function createTimelineSaveRefs(state: TimelineStoreState): TimelineCompositionS
     videoBakeRegions: state.videoBakeRegions,
     masterAudioState: state.masterAudioState,
     sharedSceneGraphs: state.sharedSceneGraphs,
+    compositionGraph: state.compositionGraph,
   };
 }
 
@@ -99,7 +101,8 @@ function areTimelineSaveRefsEqual(
     previous!.markers === next.markers &&
     previous!.videoBakeRegions === next.videoBakeRegions &&
     previous!.masterAudioState === next.masterAudioState &&
-    previous!.sharedSceneGraphs === next.sharedSceneGraphs;
+    previous!.sharedSceneGraphs === next.sharedSceneGraphs &&
+    previous!.compositionGraph === next.compositionGraph;
 }
 
 function createTimelineSaveSignature(timelineData: CompositionTimelineData | undefined): string {

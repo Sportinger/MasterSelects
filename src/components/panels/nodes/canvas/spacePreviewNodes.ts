@@ -1,5 +1,5 @@
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
-import { getNodeHeight, NODE_WIDTH } from './canvasGeometry';
+import { getNodeHeight, getNodeWidth } from './canvasGeometry';
 
 /** Minimum clearance between placed blocks. */
 export const PREVIEW_BLOCK_GAP = 56;
@@ -12,7 +12,7 @@ type Box = PreviewLayoutBlock & { originalX: number; originalY: number };
  * Manual drag coordinates remain the visible coordinates and can be saved normally.
  */
 export function spacePreviewNodes(nodes: NodeGraphNode[]): NodeGraphNode[] {
-  const positions = new Map(spacePreviewBlocks(nodes.map(node => ({ id: node.id, ...node.layout, width: NODE_WIDTH, height: getNodeHeight(node) }))).map(box => [box.id, box]));
+  const positions = new Map(spacePreviewBlocks(nodes.map(node => ({ id: node.id, ...node.layout, width: getNodeWidth(node), height: getNodeHeight(node) }))).map(box => [box.id, box]));
   return nodes.map(node => {
     const box = positions.get(node.id)!;
     return box.x === node.layout.x && box.y === node.layout.y ? node : { ...node, layout: { x: box.x, y: box.y } };

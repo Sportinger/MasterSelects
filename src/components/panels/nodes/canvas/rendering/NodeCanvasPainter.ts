@@ -1,6 +1,7 @@
 import type { CanvasMessage, CanvasScene, CanvasTheme, CanvasTransport, CanvasView } from './nodeCanvasTypes';
 import { drawNodeCard, paintBase, paintOverlay, type DrawContext, type CurveActivity } from './paintNodeCanvas';
 import { cardSignature, NodeCardSprites } from './nodeCardSprites';
+import { recordPaintPhase } from './nodePaintProfile';
 import { NodeFlowClock } from './NodeFlowClock';
 import { NodePreviewPainter } from '../../previews/NodePreviewPainter';
 import { CanvasSceneVisibility } from './canvasSceneVisibility';
@@ -139,6 +140,7 @@ export class NodeCanvasPainter {
       paintOverlay(this.overlay, moving ? paintScene : scene, this.view, this.theme, this.transport, now, this.curveActivity, this.flowClock.advance(now), this.hoveredEdgeId,
         this.flowClock.level(now));
       this.overlayDirty = false; this.changed.overlay = true;
+      if (import.meta.env.DEV) recordPaintPhase('paint-overlay', performance.now() - baseEnd, scene.cables.length);
     }
     const overlayEnd = import.meta.env.DEV ? performance.now() : 0;
     if (this.previews?.draw(paintScene, this.view)) this.changed.previews = true;

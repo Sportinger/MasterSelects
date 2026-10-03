@@ -1,5 +1,6 @@
 import { withRepositoryHydration } from '../../services/project/repository/transaction/storeMutationBoundary';
 import { synchronizeSharedSceneGraphs } from './sharedSceneGraphSynchronization';
+import { synchronizeCompositionRules } from './compositionRuleSynchronization';
 import type { StateCreator, StoreApi } from 'zustand';
 
 import type { TimelineClip } from '../../types/timeline';
@@ -14,6 +15,7 @@ const WATCHED_TIMELINE_KEYS = [
   'markers',
   'masterAudioState',
   'sharedSceneGraphs',
+  'compositionGraph',
   'duration',
   'durationLocked',
   'inPoint',
@@ -42,6 +44,7 @@ const HISTORY_SNAPSHOT_TIMELINE_KEYS = [
   'tempoMap',
   'masterAudioState',
   'sharedSceneGraphs',
+  'compositionGraph',
 ] as const satisfies readonly (keyof TimelineStore)[];
 
 type TimelineStatePatch = TimelineStore | Partial<TimelineStore>;
@@ -189,7 +192,8 @@ export const withTimelineRevision = (
     }
 
     const patch = typeof update === 'function' ? update(currentState) : update;
-    const revisedPatch = applyRevision(currentState, synchronizeSharedSceneGraphs(currentState, synchronizeKeyframeNodes(currentState, patch)), replace);
+    const sharedGraphPatch = synchronizeSharedSceneGraphs(currentState, synchronizeKeyframeNodes(currentState, patch));
+    const revisedPatch = applyRevision(currentState, synchronizeCompositionRules(currentState, sharedGraphPatch), replace);
 
     if (replace) {
       set(revisedPatch as TimelineStore, true);

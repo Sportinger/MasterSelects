@@ -41,6 +41,7 @@ export interface TimelineClipCanvasPassiveDecorationClipInput extends TimelineCl
   needsReload?: boolean;
   inPoint?: number;
   outPoint?: number;
+  timeRemap?: import('../../../types/timeline').ClipTimeRemap;
   reversed?: boolean;
   linkedGroupId?: string;
   isPendingDownload?: boolean;
@@ -113,6 +114,13 @@ export function getTimelineClipCanvasPassiveDecorationBadges(
     badges.push({ label: 'AN', fill: 'rgba(20, 184, 166, 0.78)' });
   }
 
+  if (clip.timeRemap?.kind === 'freeze') {
+    badges.push({ label: 'Freeze', fill: 'rgba(15, 23, 42, 0.86)', stroke: 'rgba(255,255,255,0.35)' });
+  }
+  if (clip.timeRemap?.kind === 'warp') badges.push({ label: 'Warp', fill: 'rgba(15, 23, 42, 0.86)', stroke: 'rgba(255,255,255,0.35)' });
+  if (clip.timeRemap?.kind === 'loop') {
+    badges.push({ label: 'Loop', fill: 'rgba(15, 23, 42, 0.86)', stroke: 'rgba(255,255,255,0.35)' });
+  }
   if (clip.reversed) {
     badges.push({ label: 'R', fill: 'rgba(15, 23, 42, 0.86)', stroke: 'rgba(255,255,255,0.35)' });
   }
@@ -162,7 +170,7 @@ export function hasTimelineClipCanvasPassiveDecorations(
     clip.isPendingDownload ||
     clip.downloadError ||
     clip.linkedGroupId ||
-    clip.reversed ||
+    clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp' || clip.reversed ||
     (clip.transcriptStatus && clip.transcriptStatus !== 'none') ||
     (clip.analysisStatus && clip.analysisStatus !== 'none') ||
     collectTimelineFaceRanges(clip).length > 0 ||

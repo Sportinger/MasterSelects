@@ -55,6 +55,8 @@ export async function initializeParallelDecoding(
         outPoint: clip.outPoint,
         reversed: clip.reversed || false,
         speed: clip.speed ?? 1,
+        timeRemap: clip.timeRemap,
+        source: { type: 'video' as const, naturalDuration: clip.source?.naturalDuration },
       };
     });
 
@@ -77,6 +79,8 @@ export async function initializeParallelDecoding(
         outPoint: clip.outPoint,
         reversed: clip.reversed || false,
         speed: clip.speed ?? 1,
+        timeRemap: clip.timeRemap,
+        source: { type: 'video' as const, naturalDuration: clip.source?.naturalDuration },
         isNested: true,
         mainTimelineStart,
         mainTimelineDuration,

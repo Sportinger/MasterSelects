@@ -105,6 +105,7 @@ function createRestoredNestedClipCommon(
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks || [],
     reversed: serializedClip.reversed,
+    timeRemap: serializedClip.timeRemap ? structuredClone(serializedClip.timeRemap) : undefined,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
     followsLinkedVideoSpeed: serializedClip.followsLinkedVideoSpeed,

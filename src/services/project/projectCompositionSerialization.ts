@@ -190,6 +190,7 @@ export function convertProjectClip(c: ProjectSaveClip): ProjectClip {
       audioEnabled: c.audioEnabled !== false,
       reversed: c.reversed || false,
       disabled: c.disabled || false,
+      timeRemap: c.timeRemap ? structuredClone(c.timeRemap) : undefined,
       speed: c.speed,
       videoInspectorSections: c.videoInspectorSections,
       preservesPitch: c.preservesPitch,
@@ -281,6 +282,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
         ? timelineData.videoBakeRegions.map(serializeProjectVideoBakeRegion)
         : undefined,
       sharedSceneGraphs: timelineData?.sharedSceneGraphs,
+      compositionGraph: timelineData?.compositionGraph,
       masterAudioState: timelineData?.masterAudioState
         ? structuredClone(timelineData.masterAudioState)
         : undefined,

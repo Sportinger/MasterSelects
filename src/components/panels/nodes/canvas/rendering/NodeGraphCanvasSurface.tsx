@@ -8,7 +8,7 @@ import { buildCanvasScene } from './buildCanvasScene';
 import { bufferedCanvasView, createNodeCanvasRuntime, NODE_CANVAS_OVERSCAN } from './nodeCanvasRuntime';
 import type { CanvasTheme } from './nodeCanvasTypes';
 import type { NodeCanvasDragChannel } from './canvasNodeDrag';
-import { NodePreviewController } from '../../previews/NodePreviewController';
+import { WorkspacePreviewController } from './WorkspacePreviewController';
 import './NodeGraphCanvasSurface.css';
 
 type SceneOptions = Parameters<typeof buildCanvasScene>[0];
@@ -27,7 +27,7 @@ type Props = Omit<SceneOptions, 'clips' | 'keyframes' | 'sourceTime'> & {
 
 export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ viewport, surfaceRef, backgroundRef, onReady, onViewRendered, previewsSuspended = false, hoverRef, dragRef, ...options }: Props) {
   const runtime = useRef<ReturnType<typeof createNodeCanvasRuntime> | null>(null);
-  const previewRuntime = useRef<NodePreviewController | null>(null);
+  const previewRuntime = useRef<WorkspacePreviewController | null>(null);
   const suspendedRef = useRef(previewsSuspended); suspendedRef.current = previewsSuspended;
   const clips = useTimelineStore(state => state.clips);
   const keyframes = useTimelineStore(state => state.clipKeyframes);
@@ -38,7 +38,8 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
     hoveredEdgeId: null, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, groupFrameNodes, groupBounds, glideMs, cableStyle, cables, edgeRoots, branches }),
   [graph, nodes, groupFrameNodes, groupBounds, plugs, selection, selectedNodeId, selectedEdgeId, hoveredPort, draft, clips, keyframes, sourceTime, canBypass, glideMs, cableStyle, cables, edgeRoots, branches]);
   const sceneRef = useRef(scene); sceneRef.current = scene;
-  const previewSource = useRef({ clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes, edges: graph.edges }); previewSource.current = { clipId: graph.owner.id, nodes, selectedNodeId, expanded: graph.expandedNodes, edges: graph.edges };
+  const clipOwnerId = graph.owner.kind === 'clip' ? graph.owner.id : null;
+  const previewSource = useRef({ clipId: clipOwnerId, nodes, selectedNodeId, expanded: graph.expandedNodes, edges: graph.edges }); previewSource.current = { clipId: clipOwnerId, nodes, selectedNodeId, expanded: graph.expandedNodes, edges: graph.edges };
   const viewportRef = useRef(viewport); viewportRef.current = viewport;
   const refreshRef = useRef<() => void>(() => {});
   const viewRef = useRef<() => void>(() => {});
@@ -55,7 +56,7 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
       // Its transform must be acknowledged even while a newer request is pending.
       if (rendered) onViewRendered(rendered);
     }); runtime.current = renderer;
-    const previews = new NodePreviewController(renderer, host); previewRuntime.current = previews;
+    const previews = new WorkspacePreviewController(renderer, host); previewRuntime.current = previews;
     if (hoverRef) hoverRef.current = edgeId => renderer.update({ type: 'hover', edgeId });
     let heldDrag: ReturnType<typeof setTimeout> | undefined;
     if (dragRef) dragRef.current = (drag, hold) => {
@@ -143,7 +144,9 @@ export const NodeGraphCanvasSurface = memo(function NodeGraphCanvasSurface({ vie
   useLayoutEffect(() => { previewRuntime.current?.suspend(previewsSuspended); }, [previewsSuspended]);
   // Edge hover is drawn on the worker overlay; it never rebuilds or clones the scene.
   useLayoutEffect(() => { runtime.current?.update({ type: 'hover', edgeId: hoveredEdgeId }); }, [hoveredEdgeId]);
-  useLayoutEffect(() => { previewRuntime.current?.scene(graph.owner.id, nodes, selectedNodeId, graph.expandedNodes, graph.edges); }, [graph.owner.id, nodes, selectedNodeId, graph.expandedNodes, graph.edges]);
+  useLayoutEffect(() => {
+    previewRuntime.current?.scene(clipOwnerId, nodes, selectedNodeId, graph.expandedNodes, graph.edges);
+  }, [clipOwnerId, nodes, selectedNodeId, graph.expandedNodes, graph.edges]);
   useLayoutEffect(() => { viewRef.current(); }, [viewport, previewsSuspended]);
   return <>
     {/* Group fills are cheap vector rectangles. Keep their full geometry on the

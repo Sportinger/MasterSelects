@@ -25,8 +25,14 @@ import type {
   NodeGraphNode,
 } from './types';
 
+const NON_CLIP_BACKINGS = new Set(['color-node', 'flock-node', 'effect-operator', 'scene-node', 'scene-operator', 'operator-group']);
+
+function isClipNodeGraphBacking(binding: NodeGraphNode['binding']): binding is ClipNodeGraphBacking {
+  return !!binding && !NON_CLIP_BACKINGS.has(binding.kind) && !binding.kind.startsWith('composition-');
+}
+
 function getNodeBacking(node: NodeGraphNode): ClipNodeGraphBacking {
-  if (node.binding && node.binding.kind !== 'color-node' && node.binding.kind !== 'flock-node' && node.binding.kind !== 'effect-operator' && node.binding.kind !== 'scene-node' && node.binding.kind !== 'scene-operator' && node.binding.kind !== 'operator-group') {
+  if (isClipNodeGraphBacking(node.binding)) {
     return node.binding;
   }
 

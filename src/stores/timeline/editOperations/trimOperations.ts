@@ -1,3 +1,4 @@
+import { trimClipSourceEdge } from '../../../services/timeline/retime/clipEdgeRetime';
 import type { TimelineClip, TimelineTrack } from '../../../types';
 import { clearProcessedAudioAnalysisRefs } from '../helpers/audioAnalysisStateHelpers';
 import type {
@@ -16,9 +17,8 @@ import {
 } from '../helpers/linkedClipSpeed';
 import {
   getTimelineDurationForSourceWindow,
-  timelineDeltaToSourceDelta,
 } from '../../../utils/clipPlaybackTiming';
-import { quantizeFrameLockedClipTiming } from '../../../utils/timelineFrameQuantization';
+import { quantizeRetimeClipTiming } from '../../../services/timeline/retime/clipRetimeQuantization';
 import { getActiveCompositionFrameRate } from './activeCompositionFrameRate';
 
 export const MIN_CLIP_DURATION = 0.04;
@@ -29,6 +29,7 @@ type ClipTrimUpdate = {
   outPoint?: number;
   startTime?: number;
   duration?: number;
+  timeRemap?: TimelineClip['timeRemap'];
   speed?: number;
   preservesPitch?: boolean;
 };
@@ -51,11 +52,12 @@ function updateTrimmedClip(
   clip: TimelineClip,
   updates: ClipTrimUpdate,
 ): TimelineClip {
-  const inPoint = updates.inPoint ?? clip.inPoint;
-  const outPoint = updates.outPoint ?? clip.outPoint;
-  const duration = updates.duration ?? getTimelineDurationForSourceWindow(clip, inPoint, outPoint);
+  const inPoint = (clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'warp') ? clip.inPoint : updates.inPoint ?? clip.inPoint;
+  const outPoint = (clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'warp') ? clip.outPoint : updates.outPoint ?? clip.outPoint;
+  const duration = updates.duration ?? (clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp' || clip.timeRemap?.kind === 'freeze' ? clip.duration : getTimelineDurationForSourceWindow(clip, inPoint, outPoint));
   return clearProcessedAudioAnalysisRefs({
     ...clip,
+    ...((clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp' && (updates.duration !== undefined || updates.timeRemap !== undefined)) ? { timeRemap: updates.timeRemap ?? trimClipSourceEdge(clip, 'start', (updates.startTime ?? clip.startTime) - clip.startTime).timeRemap ?? clip.timeRemap } : {}),
     ...(updates.startTime !== undefined ? { startTime: Math.max(0, updates.startTime) } : {}),
     inPoint,
     outPoint,
@@ -82,6 +84,8 @@ function pushLinkedTrim(
   const durationDelta = updates.duration !== undefined ? updates.duration - clip.duration : undefined;
 
   updatesByClipId.set(linkedClip.id, {
+    ...((updates.timeRemap?.kind === 'loop' && linkedClip.timeRemap?.kind === 'loop' || updates.timeRemap?.kind === 'warp' && linkedClip.timeRemap?.kind === 'warp')
+      ? { timeRemap: trimClipSourceEdge(linkedClip, 'start', startTimeDelta || -(durationDelta ?? 0)).timeRemap } : {}),
     ...(inPointDelta !== undefined ? { inPoint: linkedClip.inPoint + inPointDelta } : {}),
     ...(outPointDelta !== undefined ? { outPoint: linkedClip.outPoint + outPointDelta } : {}),
     ...(startTimeDelta !== undefined ? { startTime: linkedClip.startTime + startTimeDelta } : {}),
@@ -112,10 +116,10 @@ function applyTrimUpdates(
       continue;
     }
 
-    const inPoint = updates.inPoint ?? clip.inPoint;
-    const outPoint = updates.outPoint ?? clip.outPoint;
-    const duration = updates.duration ?? getTimelineDurationForSourceWindow(clip, inPoint, outPoint);
-    if (!Number.isFinite(inPoint) || !Number.isFinite(outPoint) || !Number.isFinite(duration) || duration < MIN_CLIP_DURATION) {
+    const inPoint = (clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'warp') ? clip.inPoint : updates.inPoint ?? clip.inPoint;
+    const outPoint = (clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'warp') ? clip.outPoint : updates.outPoint ?? clip.outPoint;
+    const duration = updates.duration ?? (clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp' || clip.timeRemap?.kind === 'freeze' ? clip.duration : getTimelineDurationForSourceWindow(clip, inPoint, outPoint));
+    if (!Number.isFinite(inPoint) || !Number.isFinite(outPoint) || !Number.isFinite(duration) || duration < (clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp' ? 1 / frameRate - EPSILON : MIN_CLIP_DURATION)) {
       warnings.push({ code: 'invalid-range', message: 'Trim range must keep a positive clip duration.', clipId });
       continue;
     }
@@ -134,6 +138,9 @@ function applyTrimUpdates(
     changedClipIds.add(clipId);
   }
 
+  if (warnings.length && [...updatesByClipId.keys()].some(id => clips.find(clip => clip.id === id)?.timeRemap?.kind === 'freeze' || clips.find(clip => clip.id === id)?.timeRemap?.kind === 'loop' || clips.find(clip => clip.id === id)?.timeRemap?.kind === 'warp')) {
+    return { clips, changedClipIds: [], warnings };
+  }
   if (validUpdates.size === 0) {
     return {
       clips,
@@ -146,7 +153,7 @@ function applyTrimUpdates(
     clips: clips.map((clip) => {
       const updates = validUpdates.get(clip.id);
       return updates
-        ? quantizeFrameLockedClipTiming(updateTrimmedClip(clip, updates), frameRate)
+        ? quantizeRetimeClipTiming(updateTrimmedClip(clip, updates), frameRate)
         : clip;
     }),
     changedClipIds: [...changedClipIds],
@@ -171,7 +178,8 @@ export function applyTrimClipOperation(
   const updates: ClipTrimUpdate = {
     inPoint: operation.inPoint,
     outPoint: operation.outPoint,
-    duration: getTimelineDurationForSourceWindow(clip, operation.inPoint, operation.outPoint),
+    duration: clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp' ? operation.duration ?? clip.duration - ((operation.startTime ?? clip.startTime) - clip.startTime)
+      : getTimelineDurationForSourceWindow(clip, operation.inPoint, operation.outPoint),
     ...(operation.startTime !== undefined ? { startTime: operation.startTime } : {}),
   };
   const updatesByClipId = new Map<string, ClipTrimUpdate>([
@@ -188,7 +196,8 @@ export function applyTrimClipOperation(
     const extraUpdates: ClipTrimUpdate = {
       inPoint: extra.inPoint,
       outPoint: extra.outPoint,
-      duration: getTimelineDurationForSourceWindow(extraClip, extra.inPoint, extra.outPoint),
+      duration: extraClip.timeRemap?.kind === 'freeze' || extraClip.timeRemap?.kind === 'loop' || extraClip.timeRemap?.kind === 'warp' ? extra.duration ?? extraClip.duration - ((extra.startTime ?? extraClip.startTime) - extraClip.startTime)
+        : getTimelineDurationForSourceWindow(extraClip, extra.inPoint, extra.outPoint),
       ...(extra.startTime !== undefined ? { startTime: extra.startTime } : {}),
     };
     updatesByClipId.set(extra.clipId, extraUpdates);
@@ -235,21 +244,21 @@ export function applyTrimEdgeToTimeOperation(
       continue;
     }
 
-    if (operation.time <= clip.startTime + EPSILON || operation.time >= getClipEnd(clip) - EPSILON) {
+    const frozen = clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp';
+    if (operation.time <= clip.startTime + EPSILON || (!frozen || operation.edge === 'start') && operation.time >= getClipEnd(clip) - EPSILON) {
       warnings.push({ code: 'invalid-time', message: 'Trim-to-time must target a time inside the clip.', clipId });
       continue;
     }
 
     const offset = operation.time - clip.startTime;
-    const sourceOffset = timelineDeltaToSourceDelta(clip, offset);
     const updates = operation.edge === 'start'
       ? {
           startTime: operation.time,
-          inPoint: clip.inPoint + sourceOffset,
+          ...trimClipSourceEdge(clip, 'start', offset),
           duration: getClipEnd(clip) - operation.time,
         }
       : {
-          outPoint: clip.inPoint + sourceOffset,
+          ...trimClipSourceEdge(clip, 'end', offset - clip.duration),
           duration: offset,
         };
     updatesByClipId.set(clip.id, updates);
@@ -384,8 +393,7 @@ export function applyRippleTrimEdgeToTimeOperation(
       }
       const removedDuration = operation.time - originalStart;
       const updates = {
-        inPoint: clip.inPoint + timelineDeltaToSourceDelta(clip, removedDuration),
-        outPoint: clip.outPoint,
+        ...trimClipSourceEdge(clip, 'start', removedDuration),
         startTime: originalStart,
         duration: clip.duration - removedDuration,
       };
@@ -395,13 +403,14 @@ export function applyRippleTrimEdgeToTimeOperation(
         addRippleShiftUpdates(updatesByClipId, clips, tracks, trackId, originalEnd, -removedDuration, protectedClipIds, warnings);
       }
     } else {
-      if (operation.time <= originalStart + MIN_CLIP_DURATION || operation.time >= originalEnd - EPSILON) {
+      const independentDuration = clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'warp';
+      if (operation.time <= originalStart + MIN_CLIP_DURATION || (!independentDuration && operation.time >= originalEnd - EPSILON)) {
         warnings.push({ code: 'invalid-time', message: 'Ripple trim end must target a time inside the clip.', clipId });
         continue;
       }
       const removedDuration = originalEnd - operation.time;
       const updates = {
-        outPoint: clip.outPoint - timelineDeltaToSourceDelta(clip, removedDuration),
+        ...trimClipSourceEdge(clip, 'end', -removedDuration),
         duration: clip.duration - removedDuration,
       };
       updatesByClipId.set(clip.id, updates);
@@ -455,15 +464,12 @@ function addRollingPairUpdates(
 
   const rightSourceDelta = editTime - rightClip.startTime;
   updatesByClipId.set(leftClip.id, {
-    outPoint: leftClip.outPoint + timelineDeltaToSourceDelta(
-      leftClip,
-      leftDuration - leftClip.duration,
-    ),
+    ...trimClipSourceEdge(leftClip, 'end', leftDuration - leftClip.duration),
     duration: leftDuration,
   });
   updatesByClipId.set(rightClip.id, {
     startTime: editTime,
-    inPoint: rightClip.inPoint + timelineDeltaToSourceDelta(rightClip, rightSourceDelta),
+    ...trimClipSourceEdge(rightClip, 'start', rightSourceDelta),
     duration: rightDuration,
   });
   return true;
@@ -557,7 +563,7 @@ function addSlideTripletUpdates(
   delta: number,
 ): void {
   updatesByClipId.set(previousClip.id, {
-    outPoint: previousClip.outPoint + timelineDeltaToSourceDelta(previousClip, delta),
+    ...trimClipSourceEdge(previousClip, 'end', delta),
     duration: previousClip.duration + delta,
   });
   updatesByClipId.set(clip.id, {
@@ -566,7 +572,7 @@ function addSlideTripletUpdates(
   });
   updatesByClipId.set(nextClip.id, {
     startTime: nextClip.startTime + delta,
-    inPoint: nextClip.inPoint + timelineDeltaToSourceDelta(nextClip, delta),
+    ...trimClipSourceEdge(nextClip, 'start', delta),
     duration: nextClip.duration - delta,
   });
 }
@@ -658,7 +664,7 @@ export function applyRateStretchClipOperation(
   const updates: ClipTrimUpdate = {
     ...(operation.edge === 'start' ? { startTime: operation.time } : {}),
     duration: targetDuration,
-    speed,
+    ...(clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'warp' ? {} : { speed }),
     preservesPitch: operation.preservesPitch ?? clip.preservesPitch ?? true,
   };
 

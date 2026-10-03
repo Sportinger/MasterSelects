@@ -1,3 +1,5 @@
+import { createStoreSpeedSource, resolveClipSourceTime } from '../timeline/retime/clipRetime';
+import { resolveAudioPreviewRetime, flagAudioPreviewRetime } from '../timeline/retime/clipAudioRetime';
 import { readEditorContentPublication } from '../project/repository/transaction/editorPublication';
 import { isAutomaticCutFade } from '../audio/automaticCutDeClick';
 // AudioSyncHandler - Unified audio synchronization for all audio sources
@@ -42,8 +44,8 @@ export function canClipDriveAudioMasterClock(
   clip: TimelineClip,
 ): boolean {
   return (
-    !clip.reversed &&
-    (clip.speed ?? 1) > 0 &&
+    resolveClipSourceTime(clip, 0, createStoreSpeedSource(clip.id, ctx)).sourceRate > 0 &&
+    !Number.isFinite(clip.transitionSourceTimeOverride) &&
     !clip.transitionSourceMap &&
     clip.transitionSourceHold !== true &&
     !ctx.hasKeyframes(clip.id, 'speed')
@@ -106,8 +108,8 @@ export class AudioSyncHandler {
     const {
       element,
       clip,
-      clipTime,
-      absSpeed,
+      clipTime: requestedClipTime,
+      absSpeed: requestedSpeed,
       isMuted,
       canBeMaster,
       type,
@@ -118,7 +120,13 @@ export class AudioSyncHandler {
       masterRoute,
       meterTrackId,
     } = target;
-    const effectivelyMuted = isMuted || volume <= 0.01;
+    const retime = resolveAudioPreviewRetime(clip, ctx.playheadPosition - clip.startTime,
+      createStoreSpeedSource(clip.id, ctx));
+    flagAudioPreviewRetime(element, retime.mutedReason);
+    // Transition crossfades can request a source position outside the active interval.
+    const clipTime = requestedClipTime;
+    const absSpeed = requestedSpeed;
+    const effectivelyMuted = isMuted || volume <= 0.01 || Boolean(retime.mutedReason);
     const canDriveMasterClock = canBeMaster && canClipDriveAudioMasterClock(ctx, clip);
 
     // Set muted state
@@ -130,6 +138,7 @@ export class AudioSyncHandler {
       this.cancelTailMeterPolling(meterTrackId);
       this.publishSilentMeterOnce(meterTrackId, ctx.now);
       this.pauseIfPlaying(element);
+      if (playheadState.masterAudioElement === element) clearMasterAudio();
       return;
     }
 

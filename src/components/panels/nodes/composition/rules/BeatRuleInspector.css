@@ -1,0 +1,12 @@
+﻿.beat-rule-inspector { min-width: 0; }
+.beat-rule-actions { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px 8px; }
+.beat-rule-inspector .beat-rule-action { width: auto; min-width: 24px; padding: 3px 7px; font-size: 11px; }
+.beat-rule-member { padding: 6px 0; border-bottom: 1px solid var(--border-color, #333); }
+.beat-rule-member-name, .beat-rule-correction { padding: 2px 8px; overflow-wrap: anywhere; }
+.beat-rule-correction, .beat-rule-status, .beat-rule-messages { font-size: 11px; color: var(--text-secondary, #aaa); }
+.beat-rule-status { margin: 6px 8px; }
+.beat-rule-error { color: var(--error-color, #e87575); }
+.beat-rule-messages { padding: 0 12px 0 24px; }
+.beat-rule-inspector button { -webkit-tap-highlight-color: transparent; }
+.beat-rule-inspector button:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.beat-rule-inspector button:focus-visible { outline: 1px solid var(--accent-color, #6ba8ff); outline-offset: 2px; }

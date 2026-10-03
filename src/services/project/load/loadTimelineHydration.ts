@@ -31,7 +31,7 @@ import type {
 import { calcRangeCoverage } from './loadMediaCacheHydration';
 import { recoverPersistedTranscriptStatus } from '../../transcription/persistedTranscriptStatus';
 import { migratePersistedEffectOperatorGraph } from '../../operators/effectGraphOwner';
-import { quantizeFrameLockedClipTimings, quantizeTimeToFrame } from '../../../utils/timelineFrameQuantization';
+import { quantizeTimeToFrame, quantizeRetimeClipTimings } from '../../timeline/retime/clipRetimeQuantization';
 import {
   normalizePersistedFaceStatus,
   sanitizePersistedFaceAnalysis,
@@ -238,7 +238,7 @@ export function convertProjectCompositionToStore(
         ? { ...clip, naturalDuration: resolveProjectCompositionDuration(sourceComposition).duration }
         : clip;
     });
-    const normalizedClips = quantizeFrameLockedClipTimings(clipsWithSourceDurations, pc.frameRate);
+    const normalizedClips = quantizeRetimeClipTimings(clipsWithSourceDurations, pc.frameRate);
     const normalizedComposition = { ...pc, clips: normalizedClips };
     const { duration, durationLocked } = resolveProjectCompositionDuration(normalizedComposition);
     const timelineData: CompositionTimelineData = {
@@ -387,7 +387,7 @@ export function convertProjectCompositionToStore(
         audioEnabled: c.audioEnabled,
         reversed: c.reversed,
         disabled: c.disabled,
-        speed: c.speed,
+        speed: c.speed, timeRemap: c.timeRemap ? structuredClone(c.timeRemap) : undefined,
         videoInspectorSections: c.videoInspectorSections,
         preservesPitch: c.preservesPitch,
         followsLinkedVideoSpeed: c.followsLinkedVideoSpeed,
@@ -425,15 +425,12 @@ export function convertProjectCompositionToStore(
         };
       }),
       playheadPosition: viewState?.playheadPosition ?? 0,
-      duration,
-      durationLocked,
-      zoom: viewState?.zoom ?? 1,
-      scrollX: viewState?.scrollX ?? 0,
-      inPoint: viewState?.inPoint ?? null,
-      outPoint: viewState?.outPoint ?? null,
+      duration, durationLocked,
+      zoom: viewState?.zoom ?? 1, scrollX: viewState?.scrollX ?? 0,
+      inPoint: viewState?.inPoint ?? null, outPoint: viewState?.outPoint ?? null,
       loopPlayback: false,
       videoBakeRegions: pc.videoBakeRegions ? structuredClone(pc.videoBakeRegions) : undefined,
-      sharedSceneGraphs: pc.sharedSceneGraphs,
+      sharedSceneGraphs: pc.sharedSceneGraphs, compositionGraph: pc.compositionGraph,
       masterAudioState: pc.masterAudioState ? structuredClone(pc.masterAudioState) : undefined,
       markers: (pc.markers || []).map((marker) => ({
         id: marker.id,

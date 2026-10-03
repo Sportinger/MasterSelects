@@ -193,8 +193,9 @@ export function encodeProjectDomains(project: ProjectFile): EncodedProjectDomain
   return { entities, workspace: domainJson(workspace), journals };
 }
 
-export function decodeProjectDomains(entities: ReadonlyMap<string, EntityDTO>, workspace: JsonValue, journals: readonly DomainJournal[] = []): ProjectFile {
-  const root = object(decodeAggregate(PROJECT_ENTITY_KEY, entities));
+export function decodeProjectDomains(entities: ReadonlyMap<string, EntityDTO>, workspace: JsonValue, journals: readonly DomainJournal[] = [],
+  onMissingMembership: (entityId: string) => void = id => console.warn(`[Repository] Missing membership ${id} decoded as empty; the next edit rewrites it.`)): ProjectFile {
+  const root = object(decodeAggregate(PROJECT_ENTITY_KEY, entities, { onMissingMembership }));
   const ws = object(domainJson(workspace));
   const fields = object(ws.fields), resolvers = object(ws.resolvers), cache = object(ws.cache);
   const restore = (key: string, content: ObjectValue): ObjectValue => {

@@ -258,7 +258,8 @@ describe('transition source map export parity', () => {
     expect(getClipSourceWindowTime(legacy, 1.5, ctx)).toBe(5);
     expect(getClipSourceWindowTime(invalid, 1.5, ctx)).toBe(5);
     expect(getClipWarmupSourceTime(mapped, 1.5)).toBe(5.5);
-    expect(getClipWarmupSourceTime(legacy, 1.5)).toBe(8.5);
+    // Shared retime contract: an unset `reversed` flag is forward (the old XOR read undefined as reversed).
+    expect(getClipWarmupSourceTime(legacy, 1.5)).toBe(3.5);
   });
 
   it('uses hold, positive, negative, and boundary map times for composition wrapper currentTime', () => {
@@ -290,9 +291,14 @@ describe('transition source map export parity', () => {
     expect(currentTimeAt(0.5)).toBe(4);
     expect(currentTimeAt(1)).toBe(4);
     expect(currentTimeAt(1.5)).toBe(5.5);
-    expect(currentTimeAt(2)).toBe(7);
-    expect(currentTimeAt(2.5)).toBe(5.5);
-    expect(currentTimeAt(3)).toBe(4);
+    // Falling map samples use the left video frame at exact boundaries.
+    expect(currentTimeAt(2)).toBeCloseTo(7, 4);
+    expect(currentTimeAt(2.5)).toBeCloseTo(5.5, 4);
+    expect(currentTimeAt(3 - 1 / 30)).toBeCloseTo(4.1, 4);
+    // t=3 is outside the wrapper's [0,3) output interval. Its falling map
+    // selects just before source 4, outside the child's [4,8) window.
+    // The old layer at this endpoint came from selecting the right-side frame.
+    expect(currentTimeAt(3)).toBeUndefined();
   });
 
   it('maps recursive composition and child video time while invalid wrappers keep local plus inPoint', () => {
@@ -601,12 +607,12 @@ describe('transition source map export parity', () => {
     for (const time of [0.2, 0.8, 2.1, 2.5]) {
       await seekAllClipsToTime(context(time, mappedClip), clipStates, null, false);
     }
-    expect(seekDuringExport.mock.calls.map(([time]) => time)).toEqual([
-      4,
-      4,
-      expect.closeTo(6.7, 10),
-      5.5,
-    ]);
+    const seekTimes = seekDuringExport.mock.calls.map(([time]) => time);
+    expect(seekTimes).toHaveLength(4);
+    expect(seekTimes.slice(0, 2)).toEqual([4, 4]);
+    // Falling video samples carry the 10-microsecond boundary bias; holds stay exact.
+    expect(seekTimes[2]).toBeCloseTo(6.7, 4);
+    expect(seekTimes[3]).toBeCloseTo(5.5, 4);
 
     const nestedSeek = vi.fn(async () => undefined);
     const nestedLeaf = clip({
@@ -734,8 +740,9 @@ describe('transition source map export parity', () => {
 
     const layer = buildLayersAtTime(ctx, result.clipStates, result.parallelDecoder, result.useParallelDecode)[0];
     const leafLayer = layer?.source.nestedComposition?.layers[0]?.source.nestedComposition?.layers[0];
-    expect(parallelDecoder?.prefetchFrameForClipSourceTime).toHaveBeenCalledWith(leaf.id, 6.5);
-    expect(parallelDecoder?.getFrameForClipSourceTime).toHaveBeenCalledWith(leaf.id, 6.5, expect.anything());
+    // Shared retime contract: the leaf's speed 2 maps local 0.5 to source 6 + 2 * 0.5 = 7.
+    expect(parallelDecoder?.prefetchFrameForClipSourceTime).toHaveBeenCalledWith(leaf.id, 7);
+    expect(parallelDecoder?.getFrameForClipSourceTime).toHaveBeenCalledWith(leaf.id, 7, expect.anything());
     expect(leafLayer?.source.videoFrame).toBe(nestedExportMocks.frame);
 
     cleanupExportMode(result.clipStates, result.parallelDecoder);

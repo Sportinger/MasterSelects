@@ -15,7 +15,8 @@ import {
   getExportSrcKind,
 } from './admission';
 import { resolveClipExportFile } from './sourceResolution';
-import { getMappedClipSourceTime } from '../layerBuilder/timing';
+import { createClipSpeedSource, resolveClipSourceTime, videoFrameSourceTime, type SpeedSource } from '../../../services/timeline/retime/clipRetime';
+import { useTimelineStore } from '../../../stores/timeline';
 
 const log = Logger.create('ClipPreparation');
 
@@ -329,20 +330,12 @@ export async function prepareImageClipsForExport(
   }));
 }
 
-export function getClipWarmupSourceTime(clip: TimelineClip, exportStartTime: number): number {
+export function getClipWarmupSourceTime(
+  clip: TimelineClip,
+  exportStartTime: number,
+  speedSource: SpeedSource = createClipSpeedSource(clip, useTimelineStore.getState().clipKeyframes.get(clip.id) ?? []),
+): number {
   const firstTimelineTime = Math.max(exportStartTime, clip.startTime);
   const clipLocalTime = Math.max(0, Math.min(clip.duration, firstTimelineTime - clip.startTime));
-  const mappedSourceTime = getMappedClipSourceTime(clip, clipLocalTime);
-  if (mappedSourceTime !== undefined) return mappedSourceTime;
-
-  const clipSpeed = clip.speed ?? 1;
-  const speedAdjusted = clipLocalTime * Math.abs(clipSpeed);
-  const sourceTime = (clip.reversed !== (clipSpeed < 0))
-    ? clip.outPoint - speedAdjusted
-    : clip.inPoint + speedAdjusted;
-  const minSourceTime = Math.min(clip.inPoint, clip.outPoint);
-  const maxSourceTime = Math.max(clip.inPoint, clip.outPoint);
-  const safeMaxSourceTime = Math.max(minSourceTime, maxSourceTime - 0.001);
-
-  return Math.max(minSourceTime, Math.min(sourceTime, safeMaxSourceTime));
+  return videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime, speedSource));
 }

@@ -17,7 +17,7 @@ import {
 import { initializeParallelDecoding } from './parallelMode';
 import { type ClipFileDataCache, loadClipFileDataCached } from './sourceResolution';
 import { createExportRuntimeSource, getExportRuntimeOwnerId } from './runtimeBinding';
-import { getMappedClipSourceTime } from '../layerBuilder/timing';
+import { getClipWarmupSourceTime } from './mediaElements';
 import { collectNestedVideoClips, type NestedVideoClip } from './nestedVideoClips';
 import {
   collectShareableRegularVideoSourceKeys,
@@ -79,13 +79,7 @@ export async function initializeFastMode(
       throw new Error(`Export does not support ${describeUnsupportedProviderPlan(providerPlan)} for clip "${clip.name}".`);
     }
 
-    const clipStartInExport = Math.max(0, startTime - clip.startTime);
-    const mappedSourceTime = getMappedClipSourceTime(clip, clipStartInExport);
-    const clipSpeed = clip.speed ?? 1;
-    const speedAdjusted = clipStartInExport * Math.abs(clipSpeed);
-    const clipTime = mappedSourceTime ?? ((clip.reversed !== (clipSpeed < 0))
-      ? clip.outPoint - speedAdjusted
-      : clip.inPoint + speedAdjusted);
+    const clipTime = getClipWarmupSourceTime(clip, startTime);
 
     if (isCodecProviderPlan(providerPlan)) {
       const runtimeSource = createExportRuntimeSource(

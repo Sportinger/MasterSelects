@@ -100,4 +100,23 @@ describe('repository lifecycle handoff', () => {
     if (stage !== 'prepare') expect(release).toHaveBeenCalledOnce();
   });
 
+  it('does not keep the previous owner installed when re-activating it after a failed switch fails', async () => {
+    const first = fakeSession('first'), second = fakeSession('second');
+    vi.spyOn(RepositorySession, 'open').mockResolvedValueOnce(first).mockResolvedValueOnce(second);
+    const installed: (string | null)[] = []; let opens = 0;
+    const lifecycle = new RepositoryLifecycle({ async barrier() { return { release() {} }; },
+      async activate(session) {
+        opens++;
+        // The switch target fails, then restoring the previous owner fails too (e.g. undecodable entities).
+        if (opens > 1) throw new Error(`cannot activate ${session.descriptor.repositoryId}`);
+      },
+      install(session) { installed.push(session ? session.descriptor.repositoryId : null); },
+    });
+    await lifecycle.open(prepared('first'));
+    await expect(lifecycle.open(prepared('second'))).rejects.toThrow('cannot activate second');
+    expect(lifecycle.getSession()).toBeNull();
+    expect(installed.at(-1)).toBeNull();
+    expect(first.close).toHaveBeenCalled();
+    expect(lifecycle.getState().error).toContain('cannot activate');
+  });
 });

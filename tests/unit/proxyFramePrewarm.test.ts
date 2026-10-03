@@ -85,8 +85,9 @@ describe('proxy frame prewarm', () => {
 
     const requests = collectProxyFramePrewarmRequests(state, [createMedia()], 13);
 
-    expect(requests[0]?.mediaTime).toBe(19);
-    expect(requests[0]?.frameIndex).toBe(570);
+    // Backward video selection is biased left by 10 microseconds at the boundary.
+    expect(requests[0]?.mediaTime).toBeCloseTo(19, 4);
+    expect(requests[0]?.frameIndex).toBe(569);
   });
 
   it('skips clips without ready or partially generated proxies', () => {

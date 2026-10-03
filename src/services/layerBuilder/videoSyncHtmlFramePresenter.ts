@@ -1,3 +1,4 @@
+import { rememberPresentedSourceFrame, videoHasTargetFrame } from './videoSyncFrameSelection';
 import { shouldStageHtmlVideoFrame } from '../../engine/texture/videoFrameCopyPolicy';
 import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
@@ -83,10 +84,18 @@ export class VideoSyncHtmlFramePresenter {
       const presentedTime = typeof metadataTime === 'number' && Number.isFinite(metadataTime)
         ? metadataTime
         : video.currentTime;
+      const desiredTime = this.deps.htmlSeeks.getQueuedTarget(clipId) ??
+        this.deps.htmlSeeks.getPendingTarget(clipId) ?? this.deps.htmlSeeks.getLatestTarget(clipId);
+      rememberPresentedSourceFrame(video, presentedTime);
       this.deps.htmlSeeks.deleteRvfcHandle(clipId);
       this.deps.htmlSeeks.clearPendingTarget(clipId);
       const finishPresentedFrame = () => {
-        scrubSettleState.resolve(clipId);
+        const playback = this.deps.getTimelinePlaybackState();
+        if (playback.isPlaying || playback.isDragging || desiredTime === undefined || videoHasTargetFrame(video, desiredTime)) {
+          scrubSettleState.resolve(clipId);
+        } else {
+          this.deps.htmlSeeks.setQueuedTarget(clipId, desiredTime);
+        }
         vfPipelineMonitor.record('vf_seek_done', { clipId });
         this.deps.flushQueuedSeekTarget(clipId, video, 'rvfc');
         renderHostPort.requestNewFrameRender();

@@ -1,3 +1,4 @@
+import type { FrameSelectionProvider } from './videoSyncFrameSelection';
 import {
   shouldFastSeekPausedWebCodecsProviderPolicy,
   shouldSeekPausedWebCodecsProviderPolicy,
@@ -8,7 +9,7 @@ import type { VideoSyncWebCodecsSeekState } from './videoSyncWebCodecsSeekState'
 
 const MANUAL_TELEPORT_FAST_SEEK_THRESHOLD = 0.35;
 
-export type PausedWebCodecsProvider = {
+export type PausedWebCodecsProvider = FrameSelectionProvider & {
   currentTime: number;
   seek: (time: number) => void;
   scrubSeek?: (time: number) => void;

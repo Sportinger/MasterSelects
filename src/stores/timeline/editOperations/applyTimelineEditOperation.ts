@@ -36,6 +36,7 @@ import { ensureTransitionCompositionsForChangedClips, getChangedClipIdsAfterRepl
 import { buildTrimmedKeyframeState } from './trimKeyframeAnchoring';
 import { trimmedParameterSourceClips } from '../../../services/parameterSources/parameterSourceLifecycle';
 import { getPlayheadPosition } from '../../../services/layerBuilder/PlayheadState';
+import { compositionRuleSplitWarning } from '../../../services/compositionRules/beatRuleOwnership';
 export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperationActions> = (set, get) => ({
   applyTimelineEditOperation: (operation: TimelineEditOperation, options): TimelineEditResult => {
     const operationId = operation.id;
@@ -146,6 +147,8 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
         ? resolveSplitAtTimeTargets(operation, get().clips, get().tracks)
         : resolveSplitAllAtTimeTargets(operation, get().clips, get().tracks);
       if (resolved.clipIds.length === 0) return resultFromWarnings(operationId, resolved.warnings);
+      const ruleWarning = compositionRuleSplitWarning(get().compositionGraph, get().clips, resolved.clipIds);
+      if (ruleWarning) return resultFromWarnings(operationId, [ruleWarning]);
 
       const previousClips = get().clips;
       const historyBatch = startBatch(options.historyLabel ?? 'Timeline split');
@@ -203,6 +206,8 @@ export const createTimelineEditOperationSlice: SliceCreator<TimelineEditOperatio
     }
 
     if (operation.type === 'split-at-times') {
+      const ruleWarning = compositionRuleSplitWarning(get().compositionGraph, get().clips, [operation.clipId], operation.includeLinked !== false);
+      if (ruleWarning) return resultFromWarnings(operationId, [ruleWarning]);
       const previousClips = get().clips;
       const result = applySplitAtTimesOperation(
         operation,

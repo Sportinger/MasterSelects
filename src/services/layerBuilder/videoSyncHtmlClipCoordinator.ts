@@ -1,3 +1,5 @@
+import { rememberSourceFrameRate, videoHasTargetFrame } from './videoSyncFrameSelection';
+import { clipSourceTimeToLocal, isReverseVideoPlayback } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types';
 import { flags } from '../../engine/featureFlags';
 import { useTimelineStore } from '../../stores/timeline';
@@ -74,7 +76,6 @@ export type VideoSyncHtmlClipCoordinatorDeps = {
 };
 
 export class VideoSyncHtmlClipCoordinator {
-  private static readonly PAUSED_PRECISE_SEEK_THRESHOLD = 0.015;
   private static readonly PLAYBACK_STOP_SEEK_THRESHOLD = 0.05;
   private static readonly PLAYBACK_STOP_SNAP_MAX_DELTA = 0.5;
 
@@ -97,6 +98,8 @@ export class VideoSyncHtmlClipCoordinator {
     const timeInfo = getClipTimeInfo(ctx, clip);
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
     const mediaFile = getMediaFileForClip(ctx, clip);
+    rememberSourceFrameRate(video, clip, ctx);
+    rememberSourceFrameRate(clipVideoElement, clip, ctx);
     const suppressLiveHtmlVideoPlayback =
       ctx.isPlaying &&
       renderHostPort.getTelemetry().mode === 'worker-gpu-only' &&
@@ -178,7 +181,7 @@ export class VideoSyncHtmlClipCoordinator {
       scrubSettleState.resolve(clip.id);
     }
 
-    const isReversePlayback = clip.reversed || ctx.playbackSpeed < 0 || timeInfo.speed < 0;
+    const isReversePlayback = isReverseVideoPlayback(timeInfo, ctx.playbackSpeed);
     const clipAbsSpeed = timeInfo.absSpeed;
     const timelineAbsSpeed = ctx.isPlaying ? Math.max(0.01, Math.abs(ctx.playbackSpeed || 1)) : 1;
     const effectiveAbsSpeed = clipAbsSpeed * timelineAbsSpeed;
@@ -192,6 +195,7 @@ export class VideoSyncHtmlClipCoordinator {
         clipTime: timeInfo.clipTime,
         timeDiff,
         isInteractivePreview,
+        isPlaying: ctx.isPlaying,
         deps: this.deps,
       });
       return;
@@ -337,14 +341,14 @@ export class VideoSyncHtmlClipCoordinator {
         actualVideo.pause();
         vfPipelineMonitor.record('vf_pause', { clipId: clip.id });
       }
-      const effectiveSpeed = timeInfo.absSpeed > 0.01 ? timeInfo.absSpeed : 1;
-      const videoClipTime = pauseTargetTime;
-      const newPlayheadPos = clip.reversed
-        ? clip.startTime + (clip.outPoint - videoClipTime) / effectiveSpeed
-        : clip.startTime + (videoClipTime - clip.inPoint) / effectiveSpeed;
       const currentPlayhead = playheadState.isUsingInternalPosition
         ? playheadState.position
         : ctx.playheadPosition;
+      const localStopTime = ctx.hasKeyframes(clip.id)
+        ? undefined
+        : clipSourceTimeToLocal(clip, pauseTargetTime);
+      const newPlayheadPos = localStopTime === undefined
+        ? currentPlayhead : clip.startTime + localStopTime;
       const playheadDelta = newPlayheadPos - currentPlayhead;
       const videoAdvanced = playheadDelta > 0.01;
       const videoLaggedBehindPlayhead =
@@ -353,7 +357,8 @@ export class VideoSyncHtmlClipCoordinator {
       const shouldSnapPlayheadToStopFrame =
         playheadDelta <= VideoSyncHtmlClipCoordinator.PLAYBACK_STOP_SNAP_MAX_DELTA;
       const handoffReleased = clipVideoElement !== actualVideo;
-      if (videoLaggedBehindPlayhead) {
+      if (videoLaggedBehindPlayhead ||
+          (localStopTime === undefined && !videoHasTargetFrame(actualVideo, timeInfo.clipTime))) {
         if (handoffReleased) {
           this.deps.setHandoff(clip.id, actualVideo);
         }
@@ -381,8 +386,7 @@ export class VideoSyncHtmlClipCoordinator {
       }
       if (handoffReleased) {
         this.deps.setHandoff(clip.id, actualVideo);
-        const ownVideoTimeDiff = Math.abs(clipVideoElement.currentTime - pauseTargetTime);
-        if (ownVideoTimeDiff > 0.001 || clipVideoElement.readyState < 2) {
+        if (!videoHasTargetFrame(clipVideoElement, pauseTargetTime) || clipVideoElement.readyState < 2) {
           this.deps.beginOrQueueSettleSeek(
             clip.id,
             clipVideoElement,
@@ -413,7 +417,7 @@ export class VideoSyncHtmlClipCoordinator {
     if (justStoppedDragging) {
       this.deps.clipWasDragging.delete(clip.id);
       this.deps.htmlSeeks.clearPreciseSeekTimer(clip.id);
-      if (timeDiff > 0.001) {
+      if (!videoHasTargetFrame(video, timeInfo.clipTime)) {
         this.deps.beginOrQueueSettleSeek(clip.id, video, timeInfo.clipTime, undefined, 'scrub-stop');
       } else {
         scrubSettleState.resolve(clip.id);
@@ -422,10 +426,7 @@ export class VideoSyncHtmlClipCoordinator {
         renderHostPort.requestNewFrameRender();
       }, { once: true });
     } else {
-      const seekThreshold = isInteractivePreview
-        ? 0.08
-        : VideoSyncHtmlClipCoordinator.PAUSED_PRECISE_SEEK_THRESHOLD;
-      if (timeDiff > seekThreshold) {
+      if (isInteractivePreview ? timeDiff > 0.08 : !videoHasTargetFrame(video, timeInfo.clipTime)) {
         this.deps.throttledSeek(clip.id, video, timeInfo.clipTime, ctx);
       } else {
         const recoveredPendingSeek = this.deps.maybeRecoverDraggingPendingSeek(

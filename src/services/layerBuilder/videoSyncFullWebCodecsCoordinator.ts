@@ -1,3 +1,5 @@
+import { isReverseVideoPlayback } from '../timeline/retime/clipRetime';
+import { providerHasTargetFrame, rememberSourceFrameRate, sameProviderSeekFrame, videoHasTargetFrame } from './videoSyncFrameSelection';
 import type { TimelineClip } from '../../types';
 import { renderHostPort } from '../render/renderHostPort';
 import {
@@ -166,9 +168,7 @@ export class VideoSyncFullWebCodecsCoordinator {
     const video = this.deps.getClipHtmlVideoElement(clip);
     const timeInfo = getClipTimeInfo(ctx, clip);
     const isReversePlayback =
-      ctx.playbackSpeed < 0 ||
-      clip.reversed ||
-      timeInfo.speed < 0;
+      isReverseVideoPlayback(timeInfo, ctx.playbackSpeed);
     const allowSharedPreviewRuntimeSession = canUseSharedPreviewRuntimeSession(
       clip,
       ctx.clipsAtTime
@@ -186,6 +186,8 @@ export class VideoSyncFullWebCodecsCoordinator {
       allowSharedPreviewRuntimeSession
     );
     const clipRuntimeProvider = this.deps.getClipRuntimeProvider(clip);
+    rememberSourceFrameRate(video, clip, ctx);
+    rememberSourceFrameRate(clipRuntimeProvider, clip, ctx);
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
 
     const handoffVideo = this.deps.handoffs.getHandoffVideoElement(clip.id);
@@ -200,6 +202,7 @@ export class VideoSyncFullWebCodecsCoordinator {
         video,
         clipRuntimeProvider,
         isInteractivePreview,
+        isPlaying: ctx.isPlaying,
         playbackRuntimeSource,
         scrubRuntimeSource,
         clipTime: timeInfo.clipTime,
@@ -295,8 +298,8 @@ export class VideoSyncFullWebCodecsCoordinator {
         );
         const normalForwardHtmlFallback =
           ctx.playbackSpeed === 1 &&
-          !clip.reversed &&
-          timeInfo.speed > 0 &&
+          !isReversePlayback &&
+          timeInfo.sourceRate > 0 &&
           Math.abs(timeInfo.absSpeed - 1) <= 0.01 &&
           !ctx.hasKeyframes(clip.id, 'speed');
         const liveHtmlFallbackReady =
@@ -376,6 +379,7 @@ export class VideoSyncFullWebCodecsCoordinator {
     }
 
     const pausedRuntimeProvider = getRuntimeFrameProvider(pausedRuntimeSource);
+    rememberSourceFrameRate(pausedRuntimeProvider, clip, ctx);
     const dedicatedScrubProvider =
       useDedicatedScrubProvider && pausedRuntimeProvider?.isFullMode()
         ? pausedRuntimeProvider
@@ -408,11 +412,10 @@ export class VideoSyncFullWebCodecsCoordinator {
       const pendingTarget = pausedProvider.getPendingSeekTime?.();
       const pendingAtTarget =
         pendingTarget != null &&
-        Math.abs(pendingTarget - timeInfo.clipTime) <= 0.01;
-      const displayedDiff = Math.abs(pausedProvider.currentTime - timeInfo.clipTime);
+        sameProviderSeekFrame(pausedProvider, pendingTarget, timeInfo.clipTime);
       const needsVisibleSettle =
         !videoSyncProviderHasFrame(pausedProvider) ||
-        displayedDiff > 0.001;
+        !providerHasTargetFrame(pausedProvider, timeInfo.clipTime);
 
       if (needsVisibleSettle && !pendingAtTarget) {
         pausedProvider.seek(timeInfo.clipTime);
@@ -460,8 +463,7 @@ export class VideoSyncFullWebCodecsCoordinator {
     }
 
     if (video && !isInteractivePreview) {
-      const timeDiff = Math.abs(video.currentTime - timeInfo.clipTime);
-      if (timeDiff > 0.05) {
+      if (!video.seeking && !videoHasTargetFrame(video, timeInfo.clipTime)) {
         video.currentTime = this.deps.safeSeekTime(video, timeInfo.clipTime);
       }
     }
@@ -476,7 +478,7 @@ export class VideoSyncFullWebCodecsCoordinator {
     this.deps.wcSeeks.replacePreciseSeekTimer(clipId, setTimeout(() => {
       this.deps.wcSeeks.clearPreciseSeekTimer(clipId);
       const targetTime = this.deps.wcSeeks.getLatestPreciseTarget(clipId) ?? time;
-      if (Math.abs(wcp.currentTime - targetTime) > 0.01) {
+      if (!providerHasTargetFrame(wcp, targetTime)) {
         wcp.seek(targetTime);
         this.deps.wcSeeks.setLastPreciseSeekAt(clipId, performance.now());
         renderHostPort.requestRender();

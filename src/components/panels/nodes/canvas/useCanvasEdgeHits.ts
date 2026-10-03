@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, type RefObject } from 'react';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
-import { getNodeHeight, NODE_WIDTH, type NodeGraphPoint, type Viewport } from './canvasGeometry';
+import { getNodeHeight, getNodeWidth, type NodeGraphPoint, type Viewport } from './canvasGeometry';
 import { createEdgeHitIndex } from './edgeHitIndex';
 import { useSettingsStore } from '../../../../stores/settingsStore';
 
@@ -13,7 +13,7 @@ const CLICK_SLOP_PX = 4;
 
 /** Cards paint above cables, so a point on a card never touches the cable beneath it. */
 function onCard(point: NodeGraphPoint, nodes: readonly NodeGraphNode[]) {
-  return nodes.some(node => point.x >= node.layout.x && point.x <= node.layout.x + NODE_WIDTH
+  return nodes.some(node => point.x >= node.layout.x && point.x <= node.layout.x + getNodeWidth(node)
     && point.y >= node.layout.y && point.y <= node.layout.y + getNodeHeight(node));
 }
 

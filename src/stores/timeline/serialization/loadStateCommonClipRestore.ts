@@ -29,6 +29,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
   | 'nodeGraph'
   | 'sceneGraphOutput'
   | 'masks'
+  | 'timeRemap'
   | 'speed'
   | 'preservesPitch'
   | 'followsLinkedVideoSpeed'
@@ -62,6 +63,7 @@ export function applyCommonRestoredClipFields(serializedClip: SerializableClip):
     sceneGraphOutput: serializedClip.sceneGraphOutput,
     nodeGraph: cloneClipNodeGraph(serializedClip.nodeGraph),
     masks: serializedClip.masks,
+    timeRemap: serializedClip.timeRemap ? structuredClone(serializedClip.timeRemap) : undefined,
     speed: serializedClip.speed,
     preservesPitch: serializedClip.preservesPitch,
     followsLinkedVideoSpeed: serializedClip.followsLinkedVideoSpeed,

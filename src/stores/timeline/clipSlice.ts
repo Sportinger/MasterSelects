@@ -1,3 +1,5 @@
+import { setClipTimeRemapAction, freezeClipAtPlayheadAction, toggleClipWarpAction } from './clip/clipTimeRemapActions';
+import { splitClipSourceWindow, copyLoopSpeedKeyframesToParts } from '../../services/timeline/retime/clipEdgeRetime';
 // Clip-related actions slice - Coordinator
 // Delegates to specialized modules in ./clip/ and ./helpers/
 // Reduced from ~2031 LOC to ~650 LOC (68% reduction)
@@ -9,9 +11,11 @@ import { Logger } from '../../services/logger';
 import { copyParameterKeyframesToParts, parameterSourceSplitPatch } from '../../services/parameterSources/parameterSourceLifecycle';
 import { getPlayheadPosition } from '../../services/layerBuilder/PlayheadState';
 import { getTimelineDurationForSourceWindow } from '../../utils/clipPlaybackTiming';
-import { quantizeClipStartTime, quantizeFrameLockedClipTiming } from '../../utils/timelineFrameQuantization';
+import { quantizeClipStartTime } from '../../utils/timelineFrameQuantization';
+import { quantizeRetimeClipTiming } from '../../services/timeline/retime/clipRetimeQuantization';
 import { getActiveCompositionFrameRate } from './editOperations/activeCompositionFrameRate';
 import { normalizeTimelinePropertyValue } from './keyframes/keyframePropertyValue';
+import { compositionRuleSplitWarning } from '../../services/compositionRules/beatRuleOwnership';
 
 const log = Logger.create('ClipSlice');
 
@@ -328,11 +332,11 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     setClipsAndCleanupTransitionComps(set, clips, {
       clips: clips.map(c => {
         if (c.id !== id) return c;
-        return quantizeFrameLockedClipTiming(clearProcessedAudioAnalysisRefs({
+        return quantizeRetimeClipTiming(clearProcessedAudioAnalysisRefs({
           ...c,
-          inPoint,
-          outPoint,
-          duration: getTimelineDurationForSourceWindow(c, inPoint, outPoint),
+          inPoint: c.timeRemap?.kind === 'freeze' || c.timeRemap?.kind === 'warp' ? c.inPoint : inPoint,
+          outPoint: c.timeRemap?.kind === 'freeze' || c.timeRemap?.kind === 'warp' ? c.outPoint : outPoint,
+          duration: c.timeRemap?.kind === 'freeze' || c.timeRemap?.kind === 'loop' || c.timeRemap?.kind === 'warp' ? c.duration : getTimelineDurationForSourceWindow(c, inPoint, outPoint),
         }), getActiveCompositionFrameRate());
       }),
     });
@@ -343,6 +347,8 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
 
   splitClip: (clipId, splitTime) => {
     const { clips, tracks, clipKeyframes, updateDuration, invalidateCache } = get();
+    const ruleWarning = compositionRuleSplitWarning(get().compositionGraph, clips, [clipId]);
+    if (ruleWarning) { log.warn(ruleWarning.message, { clipId }); return; }
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
     if (isClipOnLockedTrack(clips, tracks, clipId) || (clip.linkedClipId && isClipOnLockedTrack(clips, tracks, clip.linkedClipId))) {
@@ -433,7 +439,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       ...deepCloneClipProps(clip),
       id: `clip-${timestamp}-${randomSuffix}-a`,
       duration: firstPartDuration,
-      outPoint: splitInSource,
+      ...splitClipSourceWindow(clip, 0, firstPartDuration, clipKeyframes.get(clip.id), true),
       linkedClipId: undefined,
       source: getSourceForFirstSplitPart(clip),
       transitionOut: undefined,
@@ -447,7 +453,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
       id: `clip-${timestamp}-${randomSuffix}-b`,
       startTime: splitTime,
       duration: secondPartDuration,
-      inPoint: splitInSource,
+      ...splitClipSourceWindow(clip, firstPartDuration, clip.duration, clipKeyframes.get(clip.id), true),
       linkedClipId: undefined,
       source: secondClipSource,
       transitionIn: undefined,
@@ -467,7 +473,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           ...deepCloneClipProps(linkedClip),
           id: `clip-${timestamp}-${randomSuffix}-linked-a`,
           duration: firstPartDuration,
-          outPoint: linkedClip.inPoint + firstPartDuration,
+          ...splitClipSourceWindow(linkedClip, 0, firstPartDuration, clipKeyframes.get(linkedClip.id), true),
           linkedClipId: firstClip.id,
           source: getSourceForFirstSplitPart(linkedClip),
           storyboardProperties: cloneStoryboardPropertiesForSplit(linkedClip.storyboardProperties, 0),
@@ -479,7 +485,7 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
           id: linkedSecondClipId,
           startTime: splitTime,
           duration: secondPartDuration,
-          inPoint: linkedClip.inPoint + firstPartDuration,
+          ...splitClipSourceWindow(linkedClip, firstPartDuration, linkedClip.duration, clipKeyframes.get(linkedClip.id), true),
           linkedClipId: secondClip.id,
           source: linkedSecondSource,
           storyboardProperties: cloneStoryboardPropertiesForSplit(linkedClip.storyboardProperties, 1),
@@ -568,9 +574,9 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
     const flockPartKeyframes = clip.flock
       ? copyFlockKeyframesToClipParts(preservedClipKeyframes ?? clipKeyframes, clip.id, [firstClip.id, secondClip.id])
       : null;
-    let nextClipKeyframes = copyParameterKeyframesToParts(flockPartKeyframes ?? preservedClipKeyframes ?? clipKeyframes, clip, [firstClip, secondClip]);
+    let nextClipKeyframes = copyLoopSpeedKeyframesToParts(copyParameterKeyframesToParts(flockPartKeyframes ?? preservedClipKeyframes ?? clipKeyframes, clip, [firstClip, secondClip]), clip, [firstClip, secondClip]);
     const originalLinked = clips.find(candidate => candidate.id === clip.linkedClipId);
-    if (originalLinked && linkedFirstClip && linkedSecondClip) nextClipKeyframes = copyParameterKeyframesToParts(nextClipKeyframes, originalLinked, [linkedFirstClip, linkedSecondClip]);
+    if (originalLinked && linkedFirstClip && linkedSecondClip) nextClipKeyframes = copyLoopSpeedKeyframesToParts(copyParameterKeyframesToParts(nextClipKeyframes, originalLinked, [linkedFirstClip, linkedSecondClip]), originalLinked, [linkedFirstClip, linkedSecondClip]);
     setClipsAndCleanupTransitionComps(set, clips, {
       clips: remappedClips,
       ...(nextClipKeyframes ? { clipKeyframes: nextClipKeyframes } : {}),
@@ -676,6 +682,10 @@ export const createClipSlice: SliceCreator<CoreClipActions> = (set, get) => ({
   getClipChildren: (clipId: string) => {
     return get().clips.filter(c => c.parentClipId === clipId);
   },
+
+  setClipTimeRemap: (...args) => setClipTimeRemapAction({ set, get }, ...args),
+  freezeClipAtPlayhead: (id) => freezeClipAtPlayheadAction({ set, get }, id),
+  toggleClipWarp: (id) => toggleClipWarpAction({ set, get }, id),
 
   setClipSpeed: (...args) => setClipSpeedAction({ set, get }, ...args),
 

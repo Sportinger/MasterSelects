@@ -1,6 +1,8 @@
 # Timeline Node Graph – Umsetzungsplan
 
-Stand: 2026-10-02. Status: überarbeiteter Plan, nicht implementiert.
+Stand: 2026-10-02, ergänzt 2026-10-03 (Node-Hierarchie, Media, Zeitkette, Transitions).
+Status (2026-10-03): Phasen 0–4, Pakete A–F und die Lücken aus 0–3 umgesetzt und geprüft, uncommittet
+(kein Build/Commit ohne Freigabe). Abweichungen, Messbasis und offene Punkte in Abschnitt 12.
 
 Dieser Plan konkretisiert das [ursprüngliche Konzept](Timeline-Node-Graph-Plan.md)
 nach Abgleich mit der Codebase. Er ersetzt dessen Umsetzungsempfehlungen und
@@ -73,14 +75,168 @@ Composition-eigene Darstellungsdaten enthalten nur Layout, Faltungen und andere
 Ansichtspräferenzen. Bestehende `sharedSceneGraphs` sind ein Präzedenzfall für
 Composition-Eigentum, aber kein Speichercontainer für fachfremde Timeline-Regeln.
 
-Clip-Nodes sind zunächst Referenzen mit stabiler Clip-ID, Kurzinfo und Mini-Balken.
-Der Clip-Untergraph wird erst beim Öffnen aufgebaut. Anfangs öffnet Doppelklick die
-vorhandene Clip-Ansicht; Inline-Aufklappen kommt nur bei nachgewiesenem UX-Nutzen hinzu.
+Clip-Nodes sind eingeklappt Referenzen mit stabiler Clip-ID, Kurzinfo und Mini-Balken.
+Der Clip-Untergraph wird erst beim Aufklappen aufgebaut (siehe 3.1c): Composition- und
+Clip-Ebene sind **ein gemeinsamer Node-Graph**, kein Wechsel zwischen zwei Ansichten.
 
 Kabel haben eine eindeutige Bedeutung: Referenz, Spurzuweisung, Transition oder
 unterstütztes Routing. Zeitlich benachbarte Clips werden nicht als Bildverarbeitungskette
 `Clip A → Clip B` verkabelt. Bestehende Beziehungen ohne Editierunterstützung bleiben
 als solche erkennbar und nicht frei umsteckbar.
+
+### 3.1a Hierarchie und Node-Typen (Entscheidung 2026-10-03)
+
+Ebenen des Node-Workspace:
+
+| Ebene | Inhalt | Status |
+|---|---|---|
+| 0 – Composition | Media, Clip-Referenzen, Tracks, Transitions, Video-Stack, Audio-Master, Output, später Regeln. | neu |
+| 1 – Clip | Bestehender Clip-Graph: Source → Transform → Mask → Color → Effekte → Output, Audio-Kette; inline in Ebene 0 aufklappbar (3.1c). | vorhanden, eingebettet |
+| 2 – Gruppen | Bestehende Effekt-/Operator-Gruppen innerhalb des Clip-Graphen. | vorhanden, unverändert |
+
+Verschachtelte Compositions und geöffnete Transition-Compositions sind wieder Ebene 0
+ihrer eigenen Composition; die Breadcrumb zeigt den Pfad, zum Beispiel
+`Main › Transition A→B › Clip (outgoing)`.
+
+Neue Projektions-Nodes der Ebene 0 (gespeichert wird nur Layout):
+
+| Node | Ports | Phase | Bearbeitung |
+|---|---|---|---|
+| Composition Output | in: `Bild` (texture), `Ton` (audio) | 1 | keine |
+| Video-Stack | in: je Videospur (texture), Reihenfolge = Compositing; out: `Bild` | 1 | erst mit eigener Spur-Reihenfolge-Aktion |
+| Audio-Master | in: je Audiospur (audio); out: `Ton` | 1 | keine; Busse siehe Abschnitt 9 |
+| Track (Video/Audio) | in: `Clips` (clip, mehrfach); out: texture bzw. audio; Status Lock/Mute/Solo/Visible | 1 | Phase 2: Spurwechsel über `move-clips` |
+| Media | out: je verwendetem Stück (clip) | 1 | keine |
+| Clip-Referenz | out: `clip`; Mini-Balken, Badges für Speed/Reverse/Trim/Regel/Korrektur | 1 | Doppelklick/Auswahl klappt Ebene 1 inline auf (3.1c) |
+| Transition | in: `A` (clip), `B` (clip); out: in den Track | 1 | über bestehende Transition-Aktionen |
+| Nested Comp | Variante der Clip-Referenz mit Öffnen-Aktion | 1 | Navigation |
+| Zeitkette `Slice → Speed → Place` | aufklappbare Gruppe am Clip-Node | 2 | Trim-, Speed- und Move-Operationen |
+| Beat-Quelle | out: `Beats` (event, Sekunden Timeline-Zeit); Beat-Grid-Artefakt eines Audio-Clips oder Tempo-Map | 3 | Quelle wählen |
+| Rule: Beats verteilen | in: `Beats` (event), `Mitglieder` (clip, geordnet); out: `Place` (time) je Mitglied | 3 | Parameter, Reihenfolge, Lösen, Materialisieren |
+
+Kabelbedeutungen: `Media → Clip` gemeinsame Quelle; `Clip → Track` Zugehörigkeit;
+`Track → Stack/Master` Compositing beziehungsweise Mix; `Clip ⇄ Transition`
+Transition-Beziehung; gestrichelt Linked Audio; `Beats → Rule → Clip.Place`
+Regelsteuerung. Alle Kabel außer Spurzuweisung (Phase 2) und Regelkabel (Phase 3)
+sind `readOnly`. Die vorhandenen Signaltypen `clip`, `event`, `time`, `texture`,
+`audio` reichen; Einheiten kommen über den erweiterten `NodePortContract`.
+
+**Media-Nodes:** Jede in der aktiven Composition verwendete Datei erhält einen
+Media-Node; eine verschachtelte Composition zählt als eigene Quelle. Standardmäßig ist
+die Gruppe `Media (n)` eingeklappt, jede Karte zeigt Name, Länge und Anzahl der
+Stücke, die Kabel sind gebündelt. Aufgeklappt zeigt die Karte einen Quellbalken mit den
+verwendeten Quellbereichen; Klick auf ein Segment wählt den Clip in Timeline und Graph.
+
+**Zeitkette am Clip-Node:** `Slice → Speed → Place` ist eine aufklappbare Gruppe am
+Clip-Node im Composition-Graphen, nicht Teil des Clip-Graphen (Ebene 1 bleibt reine
+Bild-/Tonverarbeitung). Eingeklappt ist der Clip-Node nur die Referenzkarte;
+ausgewählt zeigt der Inspector Slice (In/Out), Speed/Reverse und Place (Start, Spur)
+mit Resolve-Primitives; aufgeklappt zeigt der vorhandene Gruppen-/Faltmechanismus die
+Kette `Media → Slice → Speed → Place → Track`. Die Kette ist fest, nicht umsortierbar.
+
+**Zerteilen und Verteilen:** Slice bestimmt, welcher Quellteil ein Stück ist; Place
+beziehungsweise eine Arrangement-Regel bestimmt, wo es liegt. Zerteilen bleibt in der
+ersten Version eine Timeline-Aktion (Split, `splitClipAtTimes`, `splitClipEvenly`);
+regelgesteuert wird zunächst nur das Verteilen (Phase 3). Eine gespeicherte
+Slice-Regel (gleichmäßig, Marker, Beats, Szenenwechsel) ist ein späterer Operator und
+erzeugt ebenfalls echte Clips mit stabilen IDs. Pro Eigenschaft darf höchstens eine
+Regel Eigentümer sein; Slice- und Arrangement-Regel dürfen denselben Clip steuern.
+
+### 3.1d Spur-Streifen auf Zeitachse (Entscheidung 2026-10-03, Nutzer)
+
+Eine Clip-Node pro Schnitt macht die Composition-Wurzel schon bei 30 Clips unübersichtlich: 45 Nodes,
+109 Kabel, lange Spurspalten, bei „Fit“ 13 % Zoom. Darum gilt für Ebene 0:
+
+- **Spur-Streifen:** Jede Spur ist standardmäßig ein breiter Streifen mit einer Mini-Timeline ihrer Clips:
+  ein Segment pro Clip an seiner Timeline-Position und -Länge, mit Nummer bzw. Name und kleinen Badges
+  (Speed/Reverse/Freeze/Loop/Warp/Regel/Korrektur). Das ist dasselbe Prinzip wie der Quellbalken der
+  Media-Gruppe.
+- **Zeitachse links → rechts wie in der Timeline:** Alle Streifen haben denselben x-Ursprung und
+  denselben Maßstab, gleichzeitige Clips stehen genau übereinander. Die Spuren liegen in Timeline-Reihenfolge
+  untereinander (Video oben, Audio darunter). Rechts davon folgen Video-Stack bzw. Audio-Master und der Output.
+- **Transitions** erscheinen im Streifen als Markierung über der Clipgrenze, mit Auswahl, Inspector und
+  „Open body“. Eine eigene Transition-Node gibt es nur bei Auswahl.
+- **Clip-Nodes nur bei Bedarf:** Ein Klick auf ein Segment wählt den Clip in Timeline und Graph und zeigt
+  seine Clip-Referenz-Node am Segment. Aufklappen (3.1c, Ebene 1) funktioniert wie bisher. Ohne Auswahl
+  oder Aufklappen gibt es keine Einzelkabel pro Clip.
+- **Kabel:** Media → Streifen gebündelt je Medium und Spur; Streifen → Stack/Master; Regel → Streifen der
+  Mitglieder, wobei die Mitgliedssegmente hervorgehoben werden.
+- **Daten unverändert:** Die Projektion behält Clip-, Transition- und Regel-Nodes mit stabilen IDs
+  (Inspector, Agent, Regeln). Die Streifen sind eine Darstellung über dem vorhandenen Falt- und
+  Summary-Segment-Mechanismus, kein zweites Datenmodell.
+
+### 3.1c Ein gemeinsamer Node-Graph (Entscheidung 2026-10-03, Nutzer)
+
+Vorlage ist das bestehende Clip-Node-System (`NodeWorkspacePanel`, `NodeGraphCanvas`,
+Toolbar mit Arrange/Compact/Avoid/Kabelstil, Katalog, Presets, Kontext- und
+Verbindungsmenüs, Vorschauen, Node-Inspector, Gruppen und Faltung). Die
+Composition-Ebene wird in dieses System integriert, nicht als zweite Ansicht daneben
+gebaut. Es gibt genau einen Workspace, eine Canvas und eine Interaktionslogik.
+
+- **Ebenen durch Aufklappen:** Ebene 0 zeigt Media, Clip-Karten, Tracks, Transitions,
+  Video-Stack, Audio-Master und Output. Eine Clip-Karte klappt an Ort und Stelle zu
+  ihrem vollständigen Clip-Graphen auf (Source → Transform → Mask → Color → Effekte →
+  Output, Audio-Kette, Ebene-2-Gruppen) und ist dort mit allen vorhandenen Werkzeugen
+  voll editierbar. Mehrere Clips dürfen gleichzeitig aufgeklappt sein.
+- **Auswahl wählt die Wurzel:** Es gibt einen Graphen, die Ansicht beginnt an einer
+  wählbaren Wurzel. `Timeline` (beziehungsweise `Active` ohne Clip-Auswahl) beginnt an
+  der Composition und zeigt den ganzen Graphen; Clips sind dort inline aufklappbar.
+  Wird ein Clip angeklickt (`Active` mit Clip-Auswahl oder gepinnter Clip), zeigt der
+  Workspace nicht den Timeline-Graphen, sondern denselben Graphen **ab diesem Clip**:
+  dessen Teilgraph mit denselben Nodes, IDs, Layouts, Gruppen und Werkzeugen wie beim
+  Inline-Aufklappen, ergänzt höchstens um die direkten Nahtstellen (Media-Quelle, Track)
+  als Kontext. Doppelklick beziehungsweise Enter auf eine Clip-Karte klappt sie in der
+  Timeline-Wurzel auf/zu. Die Breadcrumb zeigt den Pfad `Composition › Clip`; Klick auf
+  die Composition wechselt zur Timeline-Wurzel, mit dem Clip aufgeklappt und im Fokus.
+- **Echte Kabel an den Nahtstellen:** `Media → Source` des aufgeklappten Clips und
+  `Clip-Output → Track` (Bild beziehungsweise Ton bei verknüpftem Paar) ersetzen die
+  Kabel der Referenzkarte. Innerhalb des Clips gelten die bestehenden Clip-Kabel; die
+  Invariante „keine Bildkabel zwischen benachbarten Clips“ bleibt.
+- **Eigentum bleibt getrennt:** Clip-Nodes gehören weiter dem Clip (`clip.nodeGraph`,
+  Effekte, Keyframes); ihr Layout wird relativ zum Clip-Ursprung gespeichert und beim
+  Aufklappen verschoben dargestellt. Composition-Layout und Faltungen liegen in
+  `compositionGraph.layout`. Jede Aktion wird anhand des Node-Eigentümers an den
+  passenden Adapter geleitet (Composition-Aktionen beziehungsweise die vorhandenen
+  Clip-Aktionen dieses Clips); Node-IDs eingebetteter Clips sind pro Clip
+  namensraumgetrennt, damit keine Composition-ID als Clip-ID durchrutscht.
+- **Kosten:** Eingeklappte Clips bauen keinen Untergraphen. Nur aufgeklappte Clips werden
+  über die vorhandene Clip-Projektion gebaut und pro unveränderter Eingabe gecacht.
+- **Inspector:** ein Inspector; Composition-Nodes zeigen die Composition-Abschnitte
+  (Slice/Speed/Place, Track, Transition, Regel), Clip-Nodes den bestehenden
+  Node-Inspector.
+
+### 3.1b Transitions und Transition-Compositions
+
+Grundlage ist der bestehende Vertrag aus
+[Transition Compositions](../Features/Transition-Compositions.md): Eine Transition
+rendert entweder transient aus ihrem Rezept oder über eine verknüpfte
+Transition-Composition (`TimelineTransition.compositionId`, `TransitionCompositionLink`,
+`sourceLayout: 'mapped-v3'`). Der Graph bildet diese Zustände ab und erzeugt selbst
+keinen neuen Zustand.
+
+- **Ebene 0 der Eltern-Composition:** Der Transition-Node liegt zwischen den Kabeln
+  von Clip A (`outgoing`) und Clip B (`incoming`) und führt in den gemeinsamen Track.
+  Badges zeigen Typ, Dauer, Offset und Zustand: `Rezept` (noch keine Composition),
+  `Composition` (verknüpft), `Bake` beziehungsweise `Bake veraltet` (zum Beispiel
+  Datamosh-Artefakt).
+- **Öffnen:** Doppelklick verwendet die vorhandene Aktion „Transition-Body öffnen“. Ist
+  noch keine Composition vorhanden, materialisiert erst diese explizite Aktion sie;
+  das bloße Anzeigen des Graphen materialisiert nie.
+- **Innen (Ebene 0 der Transition-Composition):** Dieselbe Composition-Ansicht zeigt
+  die normalerweise volle Dauer überspannenden Quellclips `outgoing` und `incoming`,
+  bei Mehrfeld-Vorlagen deren Panel-Slices, sowie generierte Overlay-Ebenen als normale
+  Clip-Referenzen. Jede Quellclip-Karte verweist auf ihren Eltern-Clip
+  (`parentOutgoingClipId`/`parentIncomingClipId`) und auf dieselbe Media-Identität;
+  ein Link springt zurück in die Eltern-Composition.
+- **Zeitkette innen:** Slice und Speed der Quellclips stammen aus der
+  `TransitionSourceMap` (Quellzeit, ursprüngliche Clip-Animationszeit, lokale
+  Rezeptzeit). Sie werden mit ihren Zeitdomänen angezeigt, sind in Version eins aber
+  `readOnly`; Änderungen erfolgen am Eltern-Clip oder über Transition-Dauer/-Offset.
+  Ein Bearbeitungsvertrag für gemappte Zeit gehört zu Phase 4.
+- **Effekte innen:** Transforms, Masken, Effekte und Blend-Fenster der inneren Ebenen
+  sind normale Clip-Graphen (Ebene 1) und dort wie gewohnt bearbeitbar.
+- **Regeln:** Mitglieder mit Transitions werden von der Beat-Regel zunächst abgelehnt
+  (Abschnitt 5). Die Transition-Composition selbst enthält keine Regeln.
 
 ### 3.2 Arrangement: Anordnung beim Editieren berechnen
 
@@ -223,8 +379,8 @@ garantiert weder beschränkte Decode-Kosten noch eindeutige Invertierbarkeit.
 - Source-Selector: `Active`, explizite `Timeline` und vorhandene Clip-Ziele.
 - `Active` folgt der Auswahl; ohne Clip-Auswahl zeigt es die aktuelle Composition.
   Ein explizit gewähltes oder gepinntes Ziel bleibt stabil.
-- Breadcrumb unterscheidet Workspace-Navigation und das tatsächliche Öffnen einer
-  verschachtelten Composition. Navigation verwendet deren vorhandenen Lebenszyklus.
+- Breadcrumb unterscheidet Aufklappen im gemeinsamen Graphen (3.1c) und das tatsächliche
+  Öffnen einer verschachtelten Composition. Navigation verwendet deren vorhandenen Lebenszyklus.
 - Standardlayout nach Spur und Zeit, ergänzt um lesbare Mindestabstände. Node-x ist
   keine zweite Schnittoberfläche: freies Verschieben einer Karte ändert nur Layout.
   Zeitänderungen erfolgen in Timeline oder expliziten Place-Kontrollen.
@@ -351,7 +507,9 @@ in den privaten Kernel. Ein Undo-Schritt entsteht durch eine Transaktion, nicht 
 durch die Darstellung als einzelner Node. Tool-Katalog und gepinnte Verträge gemeinsam
 aktualisieren, wenn neue öffentliche Aktionen hinzukommen.
 
-Je Phase nach abgeschlossener Implementierung gezielt prüfen:
+Gesammelt nach Abschluss aller umgesetzten Phasen prüfen (Ausführungsmodus siehe
+Abschnitt 12); die folgende Liste ist ein Katalog, aus dem der Orchestrator die
+risikorelevanten Punkte auswählt, keine Pflicht-Abnahme pro Phase:
 
 - Projektion und Persistenz: stabile IDs, Composition-Wechsel, Save/Reload,
   Duplizieren, Undo/Redo, unbekannte Versionen und fehlende Quellen.
@@ -378,3 +536,281 @@ oder lösen sie sie sofort? Ist der zusätzliche Graph bei großen Projekten hil
 Diese Ergebnisse bestimmen die nächste Investition. Retime, Audio-Routing und Live
 müssen nicht gemeinsam entstehen. Der Composition-Graph bleibt auch ohne diese
 Folgeprojekte ein nutzbares, abgeschlossenes Produktmerkmal.
+
+## 12. Ausführungsmodus (Entscheidung 2026-10-03)
+
+### Feste Invarianten und Gestaltungsfreiheit
+
+Verbindlich sind nur diese Invarianten:
+
+- Die Timeline-Clips bleiben die einzige ausführbare Wahrheit; der Graph ist Projektion.
+  Gespeichert werden nur Layout, Faltungen und Regeldefinitionen.
+- Jede fachliche Änderung läuft über bestehende Timeline-Operationen beziehungsweise
+  eine gemeinsame Mutation, atomar und als ein Undo-Schritt; keine Teiländerungen.
+- Gesteuerte Eigenschaften gehen nie still verloren: manuelle Änderungen werden
+  Korrekturen, nicht unterstützte Fälle werden vor der Änderung abgelehnt.
+- Anzeigen erzeugt keinen Projektzustand (zum Beispiel keine Transition-Composition).
+- Kabel haben eine eindeutige Bedeutung; keine Bildkabel zwischen benachbarten Clips.
+- Kernel-Grenze aus ADR-001, 700-LOC-Grenze, Inspector- und Fokusregeln aus AGENTS.md.
+
+Alles andere ist Empfehlung: Dateischnitt, Modulnamen, genaue Port-Namen, Layout-
+Algorithmus, LOD-Stufen, Form des Ownership-Guards, Reihenfolge innerhalb einer Phase.
+Der ausführende Agent darf davon abweichen, wenn er im Code einen einfacheren oder
+robusteren Weg findet, und vermerkt die Abweichung kurz in diesem Abschnitt unter
+„Abweichungen“. Widerspricht der Code einer Invariante, wird nachgefragt statt umgangen.
+
+### Orchestrierung
+
+Der ausführende Agent ist Orchestrator: Er schneidet Arbeitspakete mit disjunkten
+Schreibmengen, lässt sie von Worker-Agenten bauen (zum Beispiel über den
+`codex-worker`-Skill oder Subagenten), prüft deren Diffs gegen die Invarianten und
+integriert. Selbst implementiert er nur Integrationsnähte und kleine Korrekturen.
+
+Empfohlener Paketschnitt:
+
+| Paket | Inhalt | Abhängigkeit |
+|---|---|---|
+| A – Datenvertrag | Typen für Composition-Kontext, Layout, Regel; Feld `compositionGraph` entlang des `sharedSceneGraphs`-Pfads (Store, History, Serialisierung, Repository-Klassifikation, Revision) | – |
+| B – Projektion | reine Funktion Timeline → Composition-Graph (Media, Clip, Track, Transition, Stack, Master, Output, Zeitkette, Bündelung) | Typen aus A |
+| C – UI | Composition-Subject, Quelle „Timeline“, Breadcrumb, Navigation in Clip/Nested/Transition, Inspector-Abschnitte Slice/Speed/Place | B |
+| D – Beat-Regel | reine Planung, Anwendung über `move-clips`, Ownership-Guard, Split-Sperre, Lösen/Materialisieren | A |
+| E – Agent-Zugriff | kompakte Composition-/Regelansicht und Regel-Aktionen als Editor-Tools | D; erfordert den In-App-Chat-Lauf nach AGENTS.md |
+| F – Gemeinsamer Graph | Clip-Node-System als Vorlage: ein Workspace, Composition-Ebene integriert, Clips inline aufklappbar, Aktionen nach Node-Eigentümer geroutet (3.1c) | B, C; vor E |
+
+A und B laufen parallel, danach C und D parallel. Durchlauf ab 2026-10-03 (Nutzerauftrag):
+zuerst die Lücken aus 0–3, dann F, dann E, danach Phase 4 (Retime: zuerst
+Speed/Reverse-Vertrag, danach Freeze, Loop, Warp einzeln).
+
+### Verifikation pro Paket
+
+Ab dem Durchlauf vom 2026-10-03 (Nutzerauftrag) wird pro Paket geprüft:
+
+- Worker liefern einen Typecheck ihrer Dateien; der Orchestrator führt danach `tsc`,
+  gezielte Unit-Tests für die neue Logik und einen Browser-Durchgang im eigenen
+  browser-lokalen Testprojekt mit echten Medien (Video mit Ton) aus, nie im Tab des Nutzers.
+- Ergebnisse per Screenshot bewerten: Lesbarkeit des Graphen, Layout, Fokus (Pointer und
+  Tastatur), korrekte Timeline-Werte, Undo/Redo, Save/Reload. Höchstens drei
+  Verbesserungsiterationen pro Paket; Offenes kommt in den Abschlussbericht.
+- Phase 4 zusätzlich: Quellframe-/PTS-Gleichheit bei Seek, Vorwärts-/Rückwärts-Scrub und
+  Export sowie das Audio-Verhalten.
+- `npm run build` und Commit erst auf ausdrückliche Anweisung des Nutzers („build bitte“).
+
+### Abweichungen
+
+Stand 2026-10-03, Phasen 0–3 (Pakete A–D) integriert; Phase 4 und Paket E offen.
+
+- **Ownership-Guard als synchrone Patch-Umschreibung** (`synchronizeCompositionRules` in der
+  Revision-Middleware, nach `synchronizeSharedSceneGraphs`) statt Prüfungen in jedem Mutationsweg.
+  Jede Start-/Spuränderung eines Mitglieds aus Timeline, Inspector, Graph, Ripple oder Agent
+  wird im selben Patch und damit im selben Undo-Schritt zur Korrektur; gelöschte Mitglieder
+  verlassen die Regel. Patches, die `compositionGraph` selbst enthalten (Regelanwendung), bleiben
+  unberührt. Leere Regeln bleiben sichtbar. Beim Entfernen eines Mitglieds werden die übrigen
+  Korrekturen neu bezogen, damit nichts springt.
+- **Split-Sperre** nur an den Einstiegen `splitClip`, `split-at-time`/`split-all-at-time` und
+  `split-at-times`; Meldung verweist auf „Release“.
+- **Beat-Snapshot in der Regel** (`beatSnapshot` + `sourceRevision`): Planung und Guard sind
+  synchron und deterministisch ohne asynchronen Artefaktzugriff; Quelländerung markiert die Regel
+  `stale`, Neuberechnung nur explizit über „Refresh source“.
+- **Atomare Regelanwendung**: `startBatch` + `runEditorGesture`/`finishEditorGesture` im
+  Repository-Modus, Snapshot-Rollback im Legacy-Modus; `move-clips` wird vorab mit dem reinen
+  Planer simuliert, weil es gültige Teilmengen akzeptiert.
+- **Vertragsnaht**: `NodeGraphOwner` ist eine Union `clip | composition`, Bindungen
+  `composition-*`, `NodeGraphNode.summary` für Badges und Mini-Balken; Composition-Layout und
+  Faltungen liegen in `compositionGraph.layout`.
+- **Verknüpftes Video/Audio als ein Node** (Nutzerentscheidung): ein Clip-Node mit Ausgängen
+  `Bild` → Videospur und `Ton` → Audiospur (`targetClipId` je Port), kein Linked-Audio-Kabel.
+- **Regelkabel in v1 `readOnly`**: Mitgliedschaft und Reihenfolge werden im Regel-Inspector
+  bearbeitet, nicht durch Umstecken.
+- **Auswahl im Composition-Graphen pinnt die Quelle auf „Timeline“**, sonst würde `Active` beim
+  Klick auf einen Clip-Node sofort in den Clip-Graphen springen; Doppelklick öffnet den Clip.
+- **Duplizieren**: `duplicateComposition` behält Clip-IDs, Regeln brauchen kein Remapping;
+  eingefügte Kopien erhalten neue IDs und sind normale Clips.
+- `updateCompositionGraph(..., { skipHistory })` ignoriert `skipHistory` (kein gemeinsamer
+  Mechanismus); Layout-Drags bleiben lokal und schreiben einmal beim Loslassen.
+
+Ergänzt 2026-10-03 (Lücken aus 0–3, Paket F, Paket E, Phase 4):
+
+- **Messbasis als Dev-Hook statt gespeicherter Referenzprojekte:** `createCompositionReferenceTimeline`
+  (rein, für Unit-Skalierungstests) und `window.__MS_COMPOSITION_BASELINE__` (nur DEV) bauen 30/300/1000
+  Clip-Paare aus einem importierten Medium über die normalen Store-Aktionen als ein Undo-Schritt;
+  `measureCompositionProjection` zählt Projektionen. Reproduzierbar ohne Projektdateien im Repository.
+- **Transition-Eltern** werden rein abgeleitet (`deriveCompositionTransitionParents`): direkte
+  Verknüpfung, generierte Panel-IDs, sonst gleiche Medienidentität plus gleicher Quellzeitvertrag;
+  mehrdeutige Fälle bleiben bewusst unverknüpft. „Go to parent clip“ wartet auf `openCompositionTab`.
+- **Beat-Quelle:** jeder Clip mit Ton ist wählbar; nicht analysierte Clips sind nur UI-Entwurf
+  („Analyze beats“ startet die vorhandene Beat/Onset-Analyse), erst danach läuft `setBeatRuleSource`.
+  Processed-Beat-Grids liegen bereits in Clip-Zeit (nach Trim/Speed/Reverse gerendert) und werden
+  nur noch um `startTime` verschoben; vorher wurden sie fälschlich erneut durch Trim/Speed gemappt.
+- **Media-Quellbalken:** bis zu vier Spuren für überlappende Stücke, danach nummerierte Kacheln.
+- **Kernel-Katalog:** Der Dev-Kernel hatte einen anderen Digest gepinnt als dieser Editor
+  (`renameTrack`, `syncClipsViaAudio`, `getAudioSyncStatus`, `setMulticamMode` ohne Kernel-Kategorie),
+  der In-App-Chat lief deshalb mit `400 invalid_request`. Wird mit Paket E synchronisiert.
+- **Paket F (gemeinsamer Graph):** `CompositionWorkspace` und `NodeWorkspaceContextPanel` entfallen; ein
+  `NodeWorkspacePanel` mit Wurzel Composition oder Clip. Eingebettete Clip-Nodes tragen Namensräume
+  (`clip:<clipId>::<lokaleId>`), `workspaceRouting` leitet jede Canvas-Aktion an den Eigentümer; die
+  Clip-Werkzeuge stecken in einem pro Clip instanziierten Controller (`useClipWorkspaceController`), es
+  gibt keine zweite Implementierung der Clip-Bearbeitung. Timing bleibt im Composition-Inspector;
+  optionale Kontextnähte (Media/Track) in der Clip-Wurzel entfallen in v1. Kabel-Knickpunkte auf
+  Composition-Ebene werden nicht gespeichert (bräuchte `compositionGraph.layout.branches`).
+  Standardlayout: Spalten Media → Clips (nach Spur und Startzeit, feste Abstände) → Tracks →
+  Stack/Master → Output, Regeln darunter; Verdrängung durch aufgeklappte Clips zur Projektionszeit.
+- **Paket E:** sechs atomare Tools (`getCompositionGraph`, `createBeatRule`, `updateBeatRule`,
+  `releaseBeatRuleMember`, `materializeBeatRule`, `startClipBeatAnalysis`). Release nur einzeln (die
+  geteilte Aktion ist atomar pro Mitglied). Fehler tragen alle Konflikte im `error`-Text, weil die
+  öffentliche Operationsgrenze bei Misserfolg nur `error` weiterreicht. Kernel: nur Kategorie-Zuordnung
+  und Digest-Pin (plus die vier zuvor fehlenden Multicam-/Track-Tools), keine Prompt- oder Fast-Path-Logik.
+- **Tempo-Map-Revision ohne Composition-Länge:** Eine Regel, die die Composition verlängert, hat sich
+  vorher sofort selbst als `stale` markiert. Die Revision hängt nur noch an der Tempo-Map; der Snapshot
+  deckt `max(600 s, 2 × Länge)` ab, „Refresh source“ erweitert ihn.
+- **Phase 4, Retime-Vertrag (`src/services/timeline/retime/clipRetime.ts`):** Vorrang
+  `transitionSourceMap` > `transitionSourceTimeOverride` > `transitionSourceHold` > signierte
+  Speed-Integration (Start bei `inPoint`, wenn Speed bei lokal 0 ≥ 0, sonst `outPoint`, Klemmen auf das
+  Trim-Fenster). `reversed` ist eine Spiegelung `in + out − s` mit negierter Rate (für konstante Speed =
+  XOR mit dem Speed-Vorzeichen). Gemappte Transition-Zeiten werden nicht erneut gespiegelt. Vorher
+  ignorierte die Top-Level-Preview `reversed`, und die Export-Vorbereitung las ein fehlendes `reversed`
+  als rückwärts (`undefined !== false`); beides ist behoben, die alten Testerwartungen wurden angepasst.
+- **Videoframe-Auswahl rückwärts linksoffen:** Gespiegelte Abtastung macht aus `[a, b)` ein `(a′, b′]`.
+  Exakt auf Ausgabeframe-Grenzen (Export tastet am Frame-Anfang ab) wählte der Export deshalb den
+  Quellframe rechts der Grenze, die Preview den richtigen (im Browser gemessen: Vorwärts-Clip Export =
+  Preview, Rückwärts-Clip um einen Frame versetzt). `videoFrameSourceTime` verschiebt nur die
+  Frame-Auswahl rückwärts laufender Abtastungen um 1e-5 s nach links; Audio, Split, Trim und
+  Umkehrfunktion bleiben exakt.
+- **Audio-Vertrag (R2):** Export/Mixdown rendern Speed und Reverse nach demselben Vertrag (XOR,
+  ein Integrator mit Holds). Die Live-Preview spielt Rückwärts-/Kurven-Clips aus einem
+  revisionsgeschlüsselten Render-Cache (dieselbe Clip-Render-Funktion wie der Export, LRU 8 Clips /
+  300 s / 128 MiB) und bleibt stumm, solange der Render aussteht. Freeze ist in Preview und Export stumm.
+- **Nested und Split/Trim (R3):** Parent→Kind-Zeit und Kind-Quellzeit laufen rekursiv über den Vertrag
+  (Preview, Warmup, Proxy, RAM-Preview, Export). Split und Trim erhalten das gezeigte Quellbild an jeder
+  Zeitstelle; bei umgekehrten Clips ändert der linke Rand den Out-Punkt. Speed-Keyframe-Splits behalten
+  das bisherige Verhalten (exaktes Rebasing einer Rampe ist nicht Teil dieses Durchlaufs).
+- **Freeze (R4):** Feld `timeRemap: { kind: 'freeze', sourceTime }`, Vorrang nach den Transition-Overrides
+  und vor Speed; Dauer unabhängig von In/Out, rechte Kante frei verlängerbar; Speed/Reverse bleiben
+  gespeichert, wirken aber nicht; verknüpftes Paar atomar; unbekannte künftige `timeRemap`-Arten bleiben
+  als opakes JSON erhalten.
+- **Loop (R5, R5b, R5c):** `timeRemap: { kind: 'loop', phase? }`. Die signierte Integration läuft
+  ungeklemmt weiter und wird halboffen in `[in, out)` gefaltet, danach greift die Reverse-Spiegelung.
+  Ein leerer Zyklus hält am In-Punkt. Ein Quellfenster über eine Faltstelle hinweg liefert konservativ
+  `[in, out]`. Es gibt keine Umkehrfunktion. Trim und Split passen `phase` an, sodass jede Zeitstelle ihr
+  Quellbild behält. Die rechte Kante ist frei verlängerbar, im Select-/Edge-Trim aber durch den nächsten
+  Clip (auch auf der verknüpften Spur) begrenzt; Ripple-Trim verschiebt die Folgeclips. Audio wiederholt
+  den bearbeiteten Zyklus. Bei automatisierter Speed wird über die Quellzeit resampelt, die Tonhöhe
+  bleibt dann nicht erhalten. Die Preview nutzt den Processed-Buffer-Pfad.
+- **Warp (R6, R6b):** `timeRemap: { kind: 'warp', points: [{ time, source }] }` mit 2–256 Punkten,
+  stückweise linear, Halten außerhalb der Punkte und Klemmen auf die Quell-Domain. Speed und Reverse
+  bleiben gespeichert, wirken aber nicht. **Abweichung:** Statt der geplanten Zweipunkt-Initialisierung
+  übernimmt das Einschalten die aktuell sichtbare Abbildung adaptiv: affine und eingefrorene Abbildungen
+  exakt, Kurven mit einem Fehler unter einem halben Frame, Loop-Sprünge als Ein-Frame-Brücke. Braucht die
+  Abbildung mehr als 256 Punkte, wird das Einschalten atomar abgelehnt, ohne Clip- oder History-Änderung.
+  Das Umschalten ist eine Store-Aktion (`toggleClipWarp`), die Properties, Kontextmenü und
+  Composition-Inspector gemeinsam nutzen. Audio wird mit der signierten Steigung resampelt, Halten
+  bleibt stumm, die Tonhöhe wird nicht erhalten. Der Export-Audiopfad holt die Quellbereiche jetzt über
+  den Vertrag (`clipSourceRange.ts`, `sourceBufferStart`) statt über In/Out.
+- **P1 (Skalierung der Composition-Wurzel):** Abgeschaltet wurde der volle DOM/SVG-Fallback vor dem
+  Canvas-Start, ebenso die Okklusionskopien pro Kabel; es gibt jetzt einen gemeinsamen räumlichen
+  Rechteck-Index. Port-, Branch- und Gruppensuchen in Schleifen sind indiziert. Unveränderte projizierte
+  Nodes behalten ihre Identität (Structural Sharing), Card-Callbacks sind stabil, und Avoid-Routing wird
+  bei unveränderter Geometrie wiederverwendet. Die DEV-Messpunkte `ms-node:*` (User Timing) sind in
+  `docs/Features/Node-Workspace.md` beschrieben, `tests/unit/nodeGraphScaleGeometry.test.ts` bewacht die
+  Komplexität über Zähler. Vier dort gefundene rote Tests (Fisheye-Gruppenzahl, Cable-Avoidance,
+  Flow-Pfeil) sind auf HEAD 517e3be0 bereits rot und nicht Teil dieses Plans; das Overscan-Fixture wurde
+  an die lazy Preview-Controller angepasst.
+- **Richtung und Fenster bei Video-Consumern (R6c–R6e):** Ein Browsertest zeigte, dass ein identischer
+  Warp auf einem umgekehrten Clip an einer exakten Frame-Grenze einen Frame später zeigte. Die Ursache war,
+  dass Decoder-Wahl, Warmup und Seek-Toleranz aus den gespeicherten Feldern `reversed`/`speed` sowie festen
+  13–50-ms-Fenstern abgeleitet wurden. Richtung und Fenster kommen jetzt aus dem Vertrag (Vorzeichen der
+  aufgelösten `sourceRate` × Wiedergaberichtung, `frameDomain`). Pausiert bzw. nach einem Scrub wird nur
+  noch der exakt gleiche Quellframe akzeptiert (Frame-Index statt Millisekunden); während der Wiedergabe
+  bleiben die bisherigen Drift-Schwellen. Properties sperrt Speed und Keyframe-Steuerung bei Freeze und
+  Warp (mit Hinweis). Das Timeline-Kontextmenü zeigt Freeze/Loop/Warp im Stil der übrigen Einträge, mit
+  Häkchen und „Unfreeze“.
+- **Warp-Initialisierung:** Eine Klemm-Kreuzung, die durch Rundung 1e-16 s vor dem Clipende lag,
+  erzeugte einen doppelten Endpunkt. Kreuzungen innerhalb von 1 ns um die Enden zählen jetzt als Endpunkt.
+- **Export-Audio bei verschachtelten Compositions:** Nach R6b wurde Nested-Mixdown-PCM nicht mehr am
+  Export-Ende gekürzt. Für Clips ohne Loop/Warp ist das wieder so, verankert am In-Punkt; Loop und Warp
+  behalten ihr ganzes Fenster.
+- **UI-Befunde aus den Browserprüfungen, behoben:** Der Composition-Breadcrumb bleibt einzeilig, jedes
+  Glied wird mit Ellipse gekürzt, der volle Pfad steht im Tooltip, der Tastaturring liegt innerhalb der
+  Zeile. Die Composition-Inspector-Spalte ist ein Size-Container, damit die schmalen Resolve-Regeln
+  greifen (vorher 377 px Inhalt in 303 px Spalte, horizontal scrollbar). „Distribute on beats“ zählt den
+  Audio-Partner eines mit ausgewählten Video-Clips nicht mehr als eigenes Mitglied (die Planung zieht
+  verknüpfte Partner wie `move-clips` nach). Vorher scheiterte die Regel an „Track … is incompatible“.
+  Der Warp-Punkteditor rendert bei der Wiedergabe nicht mehr pro Frame neu.
+
+### Messbasis (gemessen 2026-10-03, vor Paket P1)
+
+Aufbau: eigene Composition „Baseline“ im browser-lokalen Testprojekt, `__MS_COMPOSITION_BASELINE__.build(N,
+{ clipDuration: 1.5, trackCount: 3 })` mit einem echten Medium (H.264 + AAC), N verknüpfte Video/Audio-Paare.
+Nodes-Panel mit Wurzel Composition, Media-Gruppe eingeklappt, kein Clip aufgeklappt, Toolbar-Standard.
+Edit = Verschieben des letzten Clips um 0,1 s über `move-clips`, gemessen bis zwei Animation-Frames später.
+
+| N Paare | Graph-Nodes | Projektion | Panel öffnen | Edit, Panel offen | Edit, Panel zu | Projektionen/Edit | Wiedergabe offen/zu |
+|---|---|---|---|---|---|---|---|
+| 30 | 42 | 0,4 ms | 275 ms | 182 ms | 73 ms | 1 | 29 / 30 fps |
+| 300 | 312 | 2–3 ms | 9,6–13,9 s | 5,4–11 s | 121–155 ms | 1 | 29 / 27 fps |
+| 1000 | – | – | nicht gemessen (bei 300 bereits superlinear) | – | – | – | – |
+
+Befund: Die Projektion ist billig; die Kosten entstehen beim Rendern der Composition-Wurzel (React-Commit
+bis 3,4 s bei 300 Paaren, danach Canvas-/Routing-Arbeit). Geschlossenes Panel: null Projektionen pro Edit.
+Wiedergabe im eingeschwungenen Zustand unbeeinträchtigt (keine Commits während der Wiedergabe). Daraus
+folgt Paket P1 (Skalierung der Composition-Wurzel).
+
+### Messbasis nach P1 (gemessen 2026-10-03)
+
+Gleicher Aufbau. 1000 Paare in einer eigenen leeren Composition „Baseline 1000“ (Aufbau über den echten
+`addClip`-Pfad: 445 s für 2000 Clips, also nicht Teil der Graph-Kosten). „Öffnen“ = Tab-Klick bis Canvas
+gemountet; „eingeschwungen“ = bis keine Long Tasks mehr folgen.
+
+| N Paare | Graph-Nodes/Kabel | Projektion | Panel öffnen | Edit, Panel offen | Edit, Panel zu | Projektionen/Edit (zu) | Wiedergabe offen/zu |
+|---|---|---|---|---|---|---|---|
+| 300 | 312 / – | 6 ms | 925 ms | 264 ms | 124 ms | 1 (0) | 29 / 28 fps |
+| 1000 | 1012 / 3010 | 10 ms | 822 ms (gecacht erneut: 101–109 ms) | 348 ms | 173 ms | 1 (0) | 26–32 / 29 fps eingeschwungen |
+
+Befund bei 1000 Paaren (offen, Paket P1c): Beim ersten Öffnen nach dem Aufbau bzw. nach Edits bei
+geschlossenem Panel blockierte der Hauptthread bis über 80 s. Ursachen per Long-Animation-Frame und
+React-Commit-Hook: Der Worker-Renderer malte die ganze Szene mehrere Sekunden lang, ein Watchdog wertete
+ihn als ausgefallen und schaltete auf Software-Malen im Hauptthread um (`tick` 20 s, danach 3 s pro Frame).
+Beim Umschalten montierte der DOM-Fallback alle 3010 Kabel (`NodeGraphEdges` 77 s, `NodeGraphFlowSignals`
+5,7 s in einem Commit). Die eingeschwungenen Werte oben gelten erst nach diesem Einbruch.
+
+### Messbasis nach P1c/P1d (gemessen 2026-10-03)
+
+P1c: Der Worker quittiert `init` sofort, Paint und Preview-Batches haben keine Ausfallfrist mehr (Ausfall
+nur noch bei Fehler oder fehlender Init-Quittung). Der Wechsel zu Software-Malen montiert kein SVG mehr.
+Der echte DOM-Fallback zeichnet bei großen Graphen höchstens 256 Kabel im Viewport (ausgewählte, gehoverte
+und gezogene bleiben immer erhalten). Der Canvas-Paint schneidet Kabel, Abdeckungen und Signalpunkte auf den
+Viewport zu, statt die Gruppenfläche pro Kabel neu zu zerlegen. Neue Messpunkte: `ms-node:paint-nodes`,
+`paint-edges`, `paint-covers`, `paint-overlay`. P1d: Eine synchrone Fähigkeitsprüfung des Software-Canvas
+(z. B. fehlendes `Path2D`) schaltet sofort auf DOM, damit Karten, Ports und Gruppenköpfe ohne Worker sofort da sind.
+
+| N Paare | Panel öffnen (kalt) | größter Long Task beim Öffnen | Edit, Panel offen | Edit, Panel zu | Öffnen nach Edit bei geschlossenem Panel | Leerlauf offen | Wiedergabe offen/zu |
+|---|---|---|---|---|---|---|---|
+| 30 | 59 ms | – | 87 ms | 68 ms (0 Projektionen) | – | – | 28 / 28 fps |
+| 1000 | Worker-Paint 738 ms, Avoid-Routing 6,2 s im Worker | 109 ms | 454–551 ms | 123 ms | größter Long Task 96 ms (vorher bis > 80 s) | keine Long Tasks | 28 fps |
+
+Renderer blieb in allen Läufen `worker`. Der Edit bei offenem Panel liegt bei 1000 Paaren an der 500-ms-Grenze;
+den größten Anteil hat der synchrone Timeline-Edit selbst (2000 Clips, History-Snapshot). 300 Paare wurden
+nach P1 gemessen (Tabelle oben), nicht erneut nach P1c.
+
+### Offene Punkte (Stand 2026-10-03)
+
+- Kein Build und kein Commit: Beides wartet auf „build bitte“.
+- Vorbestehend rot, nicht aus diesem Plan: `fisheyeFlowLayout`, `nodeCableAvoidance`, `nodeFlowActivity`
+  (auf HEAD 517e3be0 rot).
+- Im Browser nicht gezeigt, nur per Unit-Test belegt: Export-Audio von Warp und Loop (Resampling, stumme
+  Holds) sowie eine positive Beat-Verteilung mit einem langen Audio-Clip als Quelle. Die analysierte
+  1,5-s-Quelle hatte zu wenige Beats; die Ablehnung ist korrekt.
+- Bei 1000 Paaren liegt ein Edit mit offenem Panel bei 454–551 ms, also an der 500-ms-Grenze. Der größte
+  Teil ist der synchrone Timeline-Edit selbst (2000 Clips, History-Snapshot).
+- Tonhöhe wird bei Loop mit Speed-Automation und bei Warp nicht erhalten (dokumentiert). Speed-Keyframe-Splits
+  rebasen eine Rampe nicht exakt (wie vor diesem Plan).
+- Kernel-Verhalten (privates Repo, nicht Editor): Die erste Rückfrage im Chatlauf ging von einer falschen
+  Tempo-Map aus, und es gab ein ungefragtes `startMediaTranscription` (Credits 112 → 63).
+- Außerhalb des Plans gefunden und nicht angefasst:
+  1. In der Sitzung neu angelegte Compositions sind bis zum Reload nicht navigierbar
+     („Composition is not in the installed project“, Repository-Navigation).
+  2. `.dock-guided-resize-corner` ragt 12 px aus den Dock-Spalten; ein `scrollIntoView` (etwa beim Öffnen
+     eines Inspector-Dropdowns) verschiebt dadurch die ganze App. `dock.css` hat fremde, uncommittete Änderungen.
+  3. Der Warmup abgeleiteter Waveforms schreibt `audioState` über den Derived-Pfad
+     („Derived timeline updates cannot change durable clip field audioState“).
+  4. Undo/Redo im Repository-Modus wird bei großen Projekten erst nach Sekunden sichtbar
+     (langsame History-Snapshots).

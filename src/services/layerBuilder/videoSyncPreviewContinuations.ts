@@ -1,3 +1,5 @@
+import { videoHasTargetFrame } from './videoSyncFrameSelection';
+import { resolveClipSourceTime } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types';
 
 const PREVIEW_CONTINUATION_MS = 180;
@@ -14,6 +16,7 @@ export interface VideoSyncTrackState {
 }
 
 export interface PreviewContinuationOptions {
+  isPlaying?: boolean;
   trackKey?: string;
   continuityKey?: string;
 }
@@ -27,16 +30,17 @@ function isSameSource(clip: TimelineClip, previous: VideoSyncTrackState): boolea
   return sourceKey ? sourceKey === previous.fileId : clip.file === previous.file;
 }
 
-function canUseVideo(video: HTMLVideoElement, targetTime: number): boolean {
-  return Math.abs(video.currentTime - targetTime) <= PREVIEW_CONTINUATION_TARGET_EPSILON && !video.seeking;
+function canUseVideo(video: HTMLVideoElement, targetTime: number, playing: boolean): boolean {
+  return !video.seeking && (playing ? Math.abs(video.currentTime - targetTime) <= PREVIEW_CONTINUATION_TARGET_EPSILON
+    : videoHasTargetFrame(video, targetTime));
 }
 
-function ownVideoNeedsContinuation(video: HTMLVideoElement, targetTime: number): boolean {
+function ownVideoNeedsContinuation(video: HTMLVideoElement, targetTime: number, playing: boolean): boolean {
   return (
     (video.played?.length ?? 0) === 0 ||
     video.readyState < 2 ||
     video.seeking ||
-    Math.abs(video.currentTime - targetTime) > PREVIEW_CONTINUATION_OWN_READY_EPSILON
+    (playing ? Math.abs(video.currentTime - targetTime) > PREVIEW_CONTINUATION_OWN_READY_EPSILON : !videoHasTargetFrame(video, targetTime))
   );
 }
 
@@ -68,13 +72,13 @@ export class VideoSyncPreviewContinuationManager {
     const now = performance.now();
     this.clearExpired(now);
     const entryKey = JSON.stringify([options.trackKey ?? clip.trackId, clip.id]);
-    if (!ownVideoNeedsContinuation(ownVideo, targetTime)) {
+    if (!ownVideoNeedsContinuation(ownVideo, targetTime, options.isPlaying === true)) {
       this.elements.delete(entryKey);
       return null;
     }
 
     const stored = this.elements.get(entryKey);
-    if (stored && stored.videoElement !== ownVideo && canUseVideo(stored.videoElement, targetTime)) {
+    if (stored && stored.videoElement !== ownVideo && canUseVideo(stored.videoElement, targetTime, options.isPlaying === true)) {
       return stored.videoElement;
     }
     if (!previous || previous.videoElement === ownVideo || !isSameSource(clip, previous)) {
@@ -84,10 +88,10 @@ export class VideoSyncPreviewContinuationManager {
 
     const sameLogicalNestedClip = !!options.continuityKey &&
       previous.continuityKey === options.continuityKey;
-    const isSequentialCut = Math.abs(clip.inPoint - previous.outPoint) <= 0.1;
+    const isSequentialCut = Math.abs(resolveClipSourceTime(clip, 0).sourceTime - previous.outPoint) <= 0.1;
     if (
       (previous.clipId !== clip.id && !sameLogicalNestedClip && !isSequentialCut) ||
-      !canUseVideo(previous.videoElement, targetTime)
+      !canUseVideo(previous.videoElement, targetTime, options.isPlaying === true)
     ) {
       this.elements.delete(entryKey);
       return null;

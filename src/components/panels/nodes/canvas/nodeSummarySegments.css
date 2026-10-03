@@ -1,0 +1,51 @@
+.node-summary-segments {
+  position: absolute;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.node-summary-source-track {
+  position: absolute;
+  inset: 0 0 auto;
+  border-radius: 2px;
+  background: var(--bg-primary, #181818);
+}
+
+.node-summary-segments .node-summary-segment {
+  position: absolute;
+  box-sizing: border-box;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: var(--border-color, #444);
+  color: var(--text-primary, #ddd);
+  font: 500 9px/12px system-ui, sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.node-summary-segment-number { position: absolute; inset: 0 0 auto; text-align: center; overflow: hidden; }
+.node-summary-segment-range { position: absolute; top: 15px; height: 3px; background: var(--accent-color, #79b8fa); }
+.node-summary-segment:focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.node-summary-segment:focus-visible { outline: 2px solid var(--accent-color, #79b8fa); outline-offset: 2px; z-index: 1; }
+.node-summary-segment:hover { box-shadow: inset 0 0 0 1px var(--text-secondary, #999); }
+.node-summary-segment[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--accent-color, #79b8fa); }
+
+/* Canvas owns the static pixels; DOM retains independent selection and keyboard focus. */
+.node-summary-segments.canvas-painted .node-summary-source-track,
+.node-summary-segments.canvas-painted .node-summary-segment > span { visibility: hidden; }
+.node-summary-segments.canvas-painted .node-summary-segment { background: transparent; }
+.node-workspace-board.board-interacting .node-summary-segments { visibility: hidden; }
+
+.timeline-segments .node-summary-segment-number { font-size: 20px; line-height: 22px; }
+.timeline-segments .node-summary-segment { overflow: hidden; }
+.timeline-segments .node-summary-segment-badges { position: absolute; inset: auto 3px 0; white-space: nowrap; font-size: 9px; }
+.timeline-segments .node-summary-segment[data-transition] { background: #c59a55; }
+.timeline-segments .node-summary-segment[data-rule] { background: #325b69; }
+.timeline-segments .node-summary-segment[data-compact] > span { display: none; }
+.timeline-segments .node-summary-segment:focus-visible { overflow: visible; }
+
+.timeline-segments.canvas-painted .node-summary-segment[data-transition],
+.timeline-segments.canvas-painted .node-summary-segment[data-rule] { background: transparent; }

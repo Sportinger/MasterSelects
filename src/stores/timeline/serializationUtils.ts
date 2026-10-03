@@ -74,6 +74,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
       set({
         tracks: DEFAULT_TRACKS.map(t => ({ ...t })),
         sharedSceneGraphs: undefined,
+        compositionGraph: undefined,
         clips: [],
         playheadPosition: 0,
         duration: 60,
@@ -115,6 +116,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
 
     set({
       sharedSceneGraphs: data.sharedSceneGraphs,
+      compositionGraph: data.compositionGraph,
       tracks: data.tracks.map(t => ({ ...t })),
       clips: [], // We'll restore clips separately
       playheadPosition: safePlayheadPosition,
@@ -296,6 +298,7 @@ export const createSerializationUtils: SliceCreator<SerializationUtils> = (set, 
     set({
       clips: [],
       sharedSceneGraphs: undefined,
+      compositionGraph: undefined,
       layers: [],
       selectedClipIds: new Set(),
       primarySelectedClipId: null,

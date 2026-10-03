@@ -1,3 +1,4 @@
+import { startNodeMeasure, endNodeMeasure } from '../../../../services/nodeGraph/unified/nodeGraphPerformance';
 import type { NodeCableBranch, NodeGraphEdge } from '../../../../types/nodeGraph';
 import type { NodeGraphPoint } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
@@ -55,26 +56,38 @@ export function branchChain(branches: Branches, id: string): string[] {
 }
 
 export function resolveCableBranches(edges: readonly NodeGraphEdge[], branches: Branches = {}): ResolvedCableBranches {
+  const measurement = import.meta.env.DEV ? startNodeMeasure('routing-bundles') : undefined;
+  try {
   const edgeBranch = new Map<string, string>(), edgeRoot = new Map<string, string>();
   const live = new Map<string, NodeCableBranch & { parent?: string }>();
   const ids = Object.keys(branches);
   if (!ids.length) return { edgeBranch, edgeRoot, live };
+  const branchByTarget = new Map<string, string>();
+  const socketKey = (from: string, port: string, to: string, input: string) => JSON.stringify([from, port, to, input]);
+  for (const id of ids) {
+    const branch = branches[id];
+    for (const target of branch.targets) {
+      const key = socketKey(branch.nodeId, branch.portId, target.nodeId, target.portId);
+      if (!branchByTarget.has(key)) branchByTarget.set(key, id);
+    }
+  }
+  const chains = new Map<string, string[]>();
   for (const edge of edges) {
-    const id = ids.find(key => {
-      const branch = branches[key];
-      return branch.nodeId === edge.fromNodeId && branch.portId === edge.fromPortId
-        && branch.targets.some(target => target.nodeId === edge.toNodeId && target.portId === edge.toPortId);
-    });
+    const id = branchByTarget.get(socketKey(edge.fromNodeId, edge.fromPortId, edge.toNodeId, edge.toPortId));
     if (!id) continue;
-    const chain = branchChain(branches, id);
+    const chain = chains.get(id) ?? branchChain(branches, id);
+    chains.set(id, chain);
     edgeBranch.set(edge.id, id); edgeRoot.set(edge.id, chain.at(-1)!);
     chain.forEach((branchId, index) => live.set(branchId, { ...branches[branchId], parent: chain[index + 1] }));
   }
   return { edgeBranch, edgeRoot, live };
+  } finally { if (import.meta.env.DEV) endNodeMeasure('routing-bundles', measurement); }
 }
 
 /** Pairs each connection's grips and routes branched ones through their branch points. */
 export function routeCables(plugs: readonly ConnectionPlug[], resolved: ResolvedCableBranches): RoutedCable[] {
+  const measurement = import.meta.env.DEV ? startNodeMeasure('routing-endpoints') : undefined;
+  try {
   const pairs = new Map<string, { output?: ConnectionPlug; input?: ConnectionPlug }>();
   for (const plug of plugs) {
     const pair = pairs.get(plug.edge.id) ?? {};
@@ -102,6 +115,7 @@ export function routeCables(plugs: readonly ConnectionPlug[], resolved: Resolved
       ...(parent ? { from: { x: parent.x, y: parent.y }, fromBranch: branch.parent } : { from: grip.tip, fromNode: branch.nodeId }) });
   }
   return cables;
+  } finally { if (import.meta.env.DEV) endNodeMeasure('routing-endpoints', measurement); }
 }
 
 const matches = (a: { nodeId: string; portId: string }, b: { nodeId: string; portId: string }) => a.nodeId === b.nodeId && a.portId === b.portId;

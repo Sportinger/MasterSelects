@@ -161,6 +161,8 @@ export interface MoveClipsResolvedApplyOperation extends TimelineEditOperationBa
 
 export interface TrimClipOperation extends TimelineEditOperationBase {
   type: 'trim-clip';
+  /** Explicit output duration for Freeze; source in/out remain unchanged. */
+  duration?: number;
   clipId: string;
   inPoint: number;
   outPoint: number;
@@ -172,6 +174,7 @@ export interface TrimClipOperation extends TimelineEditOperationBase {
     clipId: string;
     inPoint: number;
     outPoint: number;
+    duration?: number;
     startTime?: number;
   }>;
 }

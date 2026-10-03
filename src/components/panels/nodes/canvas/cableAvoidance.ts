@@ -1,3 +1,4 @@
+import { createOcclusionRectIndex } from './occlusionRectIndex';
 /** Obstacle-avoiding cable routes: orthogonal waypoints around node cards. */
 
 export interface AvoidPoint { x: number; y: number }
@@ -150,8 +151,11 @@ function waypoints(cells: Array<[number, number]>, from: AvoidPoint, to: AvoidPo
 
 /** Prefer a clear port-to-port lane before grid snapping or shared lanes can
  * introduce a dogleg. Check full segments against the real clearance rectangles. */
-function directLane(from: AvoidPoint, to: AvoidPoint, obstacles: readonly AvoidRect[], preferredX?: number): AvoidPoint[] | undefined {
-  const clear = (a: AvoidPoint, b: AvoidPoint) => !obstacles.some(rect => {
+function directLane(from: AvoidPoint, to: AvoidPoint, obstacles: readonly AvoidRect[], preferredX?: number, cards?: ReturnType<typeof createOcclusionRectIndex<AvoidRect>>): AvoidPoint[] | undefined {
+  const clear = (a: AvoidPoint, b: AvoidPoint) => ![
+    ...(cards?.({ x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), width: Math.abs(b.x - a.x), height: Math.abs(b.y - a.y) }) ?? []),
+    ...obstacles,
+  ].some(rect => {
     const margin = rect.groupId ? GROUP_MARGIN : MARGIN;
     return Math.max(a.x, b.x) > rect.x - margin && Math.min(a.x, b.x) < rect.x + rect.width + margin
       && Math.max(a.y, b.y) > rect.y - margin && Math.min(a.y, b.y) < rect.y + rect.height + margin;
@@ -181,6 +185,8 @@ function directLane(from: AvoidPoint, to: AvoidPoint, obstacles: readonly AvoidR
 /** Waypoints (between the ports, excluding them) for every cable that found a clear path. */
 export function routeAroundCards(obstacles: readonly AvoidRect[], cables: readonly AvoidCable[]): Map<string, AvoidPoint[]> {
   const cards = obstacles.filter(rect => !rect.groupId), groups = obstacles.filter(rect => rect.groupId);
+  const cardQuery = createOcclusionRectIndex(cards.map(rect => ({ value: rect,
+    rect: { x: rect.x - MARGIN, y: rect.y - MARGIN, width: rect.width + MARGIN * 2, height: rect.height + MARGIN * 2 } })));
   const cardBlocked = obstacleGrid(cards), routes = new Map<string, AvoidPoint[]>();
   const grids = new Map<string, ReturnType<typeof obstacleGrid>>();
   const used = new Map<string, Set<number>>();
@@ -192,7 +198,7 @@ export function routeAroundCards(obstacles: readonly AvoidRect[], cables: readon
       ? rect.nodeIds.includes(nodeId)
       : point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
     const blockingGroups = groups.filter(rect => !contains(rect, cable.from, cable.fromNode) && !contains(rect, cable.to, cable.toNode));
-    const direct = directLane(cable.from, cable.to, [...cards, ...blockingGroups], cable.laneX);
+    const direct = directLane(cable.from, cable.to, blockingGroups, cable.laneX, cardQuery);
     if (direct) { routes.set(cable.id, direct); continue; }
     const key = JSON.stringify(blockingGroups.map(rect => rect.groupId));
     let groupBlocked = grids.get(key);

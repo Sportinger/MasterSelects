@@ -1,8 +1,7 @@
 import type { TimelineClip } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
-import { calculateSourceTime, getSpeedAtTime } from '../../utils/speedIntegration';
+import { createClipSpeedSource, resolveClipSourceTime, videoFrameSourceTime } from '../../services/timeline/retime/clipRetime';
 import { isVideoInspectorSectionEnabled } from '../../services/videoInspector/sectionBypass';
-import { resolveTransitionSourceMapTime } from '../../services/timeline/transitionSourceMap';
 import { slitScanDurationFactor, slitScanPlaybackFactor } from './slit-scan/timeFactor';
 
 /** Value-only frame context, copied by layer builders; never a decoder or store reference. */
@@ -18,6 +17,10 @@ export interface TemporalClipSource {
   speedKeyframes: Keyframe[];
   sourceMap?: TimelineClip['transitionSourceMap'];
   sourceOverride?: number;
+  sourceHold?: boolean;
+  timeRemap?: TimelineClip['timeRemap'];
+  naturalDuration?: number;
+  reversed?: boolean;
 }
 
 export function temporalClipSource(clip: TimelineClip, localTime: number, keyframes: readonly Keyframe[]): TemporalClipSource | undefined {
@@ -30,16 +33,19 @@ export function temporalClipSource(clip: TimelineClip, localTime: number, keyfra
     duration: clip.duration * slitScanDurationFactor(clip), inPoint: clip.inPoint, outPoint: clip.outPoint,
     speed: speedEnabled ? clip.speed ?? 1 : 1,
     speedKeyframes: speedEnabled ? keyframes.filter(keyframe => keyframe.property === 'speed').map(keyframe => ({ ...keyframe })) : [],
-    sourceMap: clip.transitionSourceMap, sourceOverride: clip.transitionSourceTimeOverride };
+    sourceMap: clip.transitionSourceMap, sourceOverride: clip.transitionSourceTimeOverride,
+    timeRemap: clip.timeRemap, naturalDuration: clip.source.naturalDuration,
+    sourceHold: clip.transitionSourceHold, reversed: clip.reversed };
 }
 
 export function temporalSourceTime(source: TemporalClipSource, localTime: number): number {
   const held = Math.max(0, Math.min(source.duration, localTime));
-  const mapped = resolveTransitionSourceMapTime(source.sourceMap, held);
-  if (mapped) return mapped.sourceTime;
-  if (Number.isFinite(source.sourceOverride)) return source.sourceOverride!;
-  const initialSpeed = getSpeedAtTime(source.speedKeyframes, 0, source.speed);
-  const start = initialSpeed >= 0 ? source.inPoint : source.outPoint;
-  return Math.max(source.inPoint, Math.min(source.outPoint,
-    start + calculateSourceTime(source.speedKeyframes, held, source.speed)));
+  const timing = {
+    timeRemap: source.timeRemap, source: { type: 'video' as const, naturalDuration: source.naturalDuration },
+    inPoint: source.inPoint, outPoint: source.outPoint, speed: source.speed,
+    reversed: source.reversed, transitionSourceMap: source.sourceMap,
+    transitionSourceTimeOverride: source.sourceOverride, transitionSourceHold: source.sourceHold,
+  };
+  // Temporal local time is already in the Slit Scan clock domain.
+  return videoFrameSourceTime(resolveClipSourceTime(timing, held, createClipSpeedSource(timing, source.speedKeyframes)));
 }

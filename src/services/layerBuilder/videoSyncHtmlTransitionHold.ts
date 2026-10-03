@@ -1,3 +1,4 @@
+import { videoHasTargetFrame } from './videoSyncFrameSelection';
 import type { TimelineClip } from '../../types';
 import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
@@ -16,6 +17,7 @@ export function syncHtmlTransitionSourceHold({
   clipTime,
   timeDiff,
   isInteractivePreview,
+  isPlaying = false,
   deps,
 }: {
   clip: TimelineClip;
@@ -23,6 +25,7 @@ export function syncHtmlTransitionSourceHold({
   clipTime: number;
   timeDiff: number;
   isInteractivePreview: boolean;
+  isPlaying?: boolean;
   deps: VideoSyncHtmlTransitionHoldDeps;
 }): void {
   deps.clipWasPlaying.delete(clip.id);
@@ -37,7 +40,8 @@ export function syncHtmlTransitionSourceHold({
   }
 
   const seekThreshold = isInteractivePreview ? 0.04 : 0.015;
-  if (!video.seeking && timeDiff > seekThreshold) {
+  if (!video.seeking && (isPlaying || isInteractivePreview
+    ? timeDiff > seekThreshold : !videoHasTargetFrame(video, clipTime))) {
     const seekTime = deps.safeSeekTime(video, clipTime);
     video.addEventListener('seeked', () => {
       renderHostPort.markVideoFramePresented(video, seekTime, clip.id);

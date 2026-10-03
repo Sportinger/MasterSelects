@@ -1,3 +1,4 @@
+import { createClipSpeedSource, createStoreSpeedSource, isUnitRateSourceWindow, resolveClipSourceTime } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types/timeline';
 import { flags } from '../../engine/featureFlags';
 import { renderHostPort } from '../render/renderHostPort';
@@ -163,7 +164,7 @@ export class VideoSyncWarmupCoordinator {
     clipStartSourceTime: number
   ): void {
     if (!ctx.isPlaying || ctx.isDraggingPlayhead || ctx.hasClipDragPreview) return;
-    if (ctx.playbackSpeed !== 1 || clip.reversed || ctx.hasKeyframes(clip.id, 'speed')) return;
+    if (ctx.playbackSpeed !== 1 || (clip.timeRemap?.kind !== 'warp' && ctx.hasKeyframes(clip.id, 'speed'))) return;
     if (this.deps.warmups.hasUpcomingPreplay(video)) return;
     if (this.deps.warmups.isWarming(video) || video.seeking || !video.paused) return;
     if (!this.deps.isVideoGpuReady(video) || video.readyState < 2) return;
@@ -174,13 +175,17 @@ export class VideoSyncWarmupCoordinator {
       return;
     }
 
-    const initialSpeed = Math.abs(ctx.getInterpolatedSpeed(clip.id, 0) || 1);
-    if (!Number.isFinite(initialSpeed) || initialSpeed <= 0 || Math.abs(initialSpeed - 1) > 0.01) {
+    // Without animation the authored adapter proves constant rate. The opaque
+    // store adapter deliberately returns conservative bounds for unknown curves.
+    const speedSource = ctx.hasKeyframes(clip.id)
+      ? createStoreSpeedSource(clip.id, ctx) : createClipSpeedSource(clip);
+    const first = resolveClipSourceTime(clip, 0, speedSource);
+    if (!isUnitRateSourceWindow(clip, 0, Math.min(clip.duration, leadSeconds), speedSource)) {
       return;
     }
 
     const requestedPreplayTime = clipStartSourceTime - leadSeconds;
-    const clipFloor = (clip.inPoint ?? 0) + 0.01;
+    const clipFloor = Math.min(first.frameDomain?.max ?? first.sourceTime, (first.frameDomain?.min ?? first.sourceTime) + 0.01);
     const clampedAtClipStart = requestedPreplayTime < clipFloor;
     const preplayTime = Math.max(clipFloor, requestedPreplayTime);
 

@@ -58,6 +58,7 @@ if (import.meta.env.DEV) {
     list: () => AI_TOOLS,
     status: getQuickTimelineSummary,
   };
+  void import('./dev/compositionGraphBaseline').then(({ registerCompositionGraphBaselineHook }) => registerCompositionGraphBaselineHook());
 
   // The HTTP/MCP bridge is a local development interface. External agents
   // bring their own model and harness; production builds do not expose it.

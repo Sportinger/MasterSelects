@@ -1,6 +1,7 @@
 import type { useTimelineStore } from '../../../stores/timeline';
 import type { CallerContext } from '../policy';
 import type { ToolResult } from '../types';
+import { compositionRuleHandlers } from './compositionRules';
 import { handleCaptureAppScreenshot } from '../appScreenshot';
 import {
   handleGetTimelineRangeSelection,
@@ -163,6 +164,7 @@ type TimelineHandler = (
 
 /** Handlers that operate on the caller's single fresh timeline-store snapshot. */
 export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
+  ...compositionRuleHandlers,
   captureAppScreenshot: async (args) => handleCaptureAppScreenshot(args),
   getTimelineRangeSelection: handleGetTimelineRangeSelection,
   getTimelineState: handleGetTimelineState,

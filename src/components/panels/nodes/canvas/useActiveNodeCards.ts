@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
-import { getNodeHeight, NODE_WIDTH, type NodeGraphPoint } from './canvasGeometry';
+import { getNodeHeight, getNodeWidth, type NodeGraphPoint } from './canvasGeometry';
 import type { ConnectionPlug } from './connectionPlugs';
 
 /** Graph units around a card that still count as hovering it. */
@@ -12,7 +12,7 @@ const PLUG_MARGIN = 12;
 export function nodeUnderPoint(point: NodeGraphPoint, nodes: readonly NodeGraphNode[], plugs: readonly ConnectionPlug[]): string | null {
   for (let index = nodes.length - 1; index >= 0; index--) {
     const { id, layout } = nodes[index], node = nodes[index];
-    if (point.x >= layout.x - CARD_MARGIN && point.x <= layout.x + NODE_WIDTH + CARD_MARGIN
+    if (point.x >= layout.x - CARD_MARGIN && point.x <= layout.x + getNodeWidth(node) + CARD_MARGIN
       && point.y >= layout.y - CARD_MARGIN && point.y <= layout.y + getNodeHeight(node) + CARD_MARGIN) return id;
   }
   for (const { node, center, tip } of plugs) {

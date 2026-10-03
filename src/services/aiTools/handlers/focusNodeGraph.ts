@@ -6,7 +6,9 @@ import { requestNodeWorkspaceView } from '../../nodeGraph/nodeWorkspaceNavigatio
 import type { ToolResult } from '../types';
 
 function assignedClip(panel: DockPanel): string | undefined {
-  return (panel.data as NodeWorkspacePanelData | undefined)?.nodeClipId ?? undefined;
+  const id = (panel.data as NodeWorkspacePanelData | undefined)?.nodeClipId;
+  // '@timeline' / '@active' are view modes, not clip assignments.
+  return id && !id.startsWith('@') ? id : undefined;
 }
 function preferredPanel(panels: DockPanel[], clipId: string): DockPanel | undefined {
   const nodes = panels.filter(panel => panel.type === 'node-workspace');

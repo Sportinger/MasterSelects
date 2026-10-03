@@ -1,3 +1,4 @@
+import { rememberSourceFrameRate, videoHasTargetFrame } from './videoSyncFrameSelection';
 import type { TimelineClip } from '../../types';
 import { flags } from '../../engine/featureFlags';
 import { renderHostPort } from '../render/renderHostPort';
@@ -10,7 +11,7 @@ import {
 } from '../mediaRuntime/runtimePlayback';
 import type { RuntimeFrameProvider } from '../mediaRuntime/types';
 import { scrubSettleState } from '../scrubSettleState';
-import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
+import { createStoreSpeedSource, isReverseVideoPlayback, resolveClipSourceTime, videoFrameSourceTime } from '../timeline/retime/clipRetime';
 import { getNestedClipSourceTiming } from './layerBuilderNestedLayers';
 import type { FrameContext } from './types';
 import { syncNestedFullWebCodecs } from './videoSyncNestedFullWebCodecs';
@@ -84,7 +85,6 @@ export type VideoSyncNestedCompositionCoordinatorDeps = {
 };
 
 export class VideoSyncNestedCompositionCoordinator {
-  private static readonly PAUSED_PRECISE_SEEK_THRESHOLD = 0.015;
   private static readonly SCRUB_SETTLE_TIMEOUT_MS = 220;
 
   private readonly deps: VideoSyncNestedCompositionCoordinatorDeps;
@@ -99,16 +99,15 @@ export class VideoSyncNestedCompositionCoordinator {
     depth = 0,
     compositionTime?: number,
     parentTrackKey = getNestedPreviewRootTrackKey(compClip),
+    compositionRate?: number,
   ): void {
     if (!compClip.nestedClips || !compClip.nestedTracks) return;
     if (depth >= MAX_NESTING_DEPTH) return;
     const isInteractivePreview = ctx.isDraggingPlayhead || ctx.hasClipDragPreview;
     const compLocalTime = ctx.playheadPosition - compClip.startTime;
-    const mappedCompTime = resolveTransitionSourceMapTime(
-      compClip.transitionSourceMap,
-      compLocalTime,
-    );
-    const compTime = compositionTime ?? mappedCompTime?.sourceTime ?? compLocalTime + compClip.inPoint;
+    const compTiming = resolveClipSourceTime(compClip, compLocalTime, createStoreSpeedSource(compClip.id, ctx));
+    const compTime = compositionTime ?? videoFrameSourceTime(compTiming);
+    const compRate = compositionRate ?? compTiming.sourceRate;
 
     for (const nestedClip of compClip.nestedClips) {
       const nestedVideo = this.deps.getClipHtmlVideoElement(nestedClip);
@@ -129,7 +128,9 @@ export class VideoSyncNestedCompositionCoordinator {
       // Reached its cut: normal sync takes over (and restores the playback rate).
       this.deps.clearUpcomingPreplay?.(nestedVideo);
 
-      const timing = getNestedClipSourceTiming(nestedClip, compTime - nestedClip.startTime);
+      const childTiming = getNestedClipSourceTiming(nestedClip, compTime - nestedClip.startTime);
+      const timing = { ...childTiming, sourceRate: childTiming.sourceRate * compRate,
+        isHold: childTiming.isHold || compRate === 0 };
       const nestedClipTime = timing.sourceTime;
       const trackKey = getNestedPreviewTrackKey(parentTrackKey, compClip, nestedClip);
       const continuityKey = getNestedClipContinuityKey(compClip, nestedClip);
@@ -143,6 +144,7 @@ export class VideoSyncNestedCompositionCoordinator {
       this.deps.rememberPreviewVideo(trackKey, nestedClip, nestedVideo, continuityKey);
 
       const video = nestedVideo;
+      rememberSourceFrameRate(video, nestedClip, ctx);
       if (nestedClip.freeRun) {
         this.deps.activateFreeRunVideo(video);
         continue;
@@ -180,20 +182,20 @@ export class VideoSyncNestedCompositionCoordinator {
       if (timing.isHold) {
         scrubSettleState.resolve(nestedClip.id);
         if (!video.paused) video.pause();
-        if (!video.seeking && timeDiff > VideoSyncNestedCompositionCoordinator.PAUSED_PRECISE_SEEK_THRESHOLD) {
+        if (!video.seeking && (ctx.isPlaying || isInteractivePreview ? timeDiff > 0.015 : !videoHasTargetFrame(video, nestedClipTime))) {
           this.deps.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
         }
         continue;
       }
 
       const isReversePlayback =
-        ctx.playbackSpeed < 0 || nestedClip.reversed || timing.sourceRate < 0;
+        isReverseVideoPlayback(timing, ctx.playbackSpeed);
       const effectiveAbsRate = Math.abs(timing.sourceRate) *
         (ctx.isPlaying ? Math.max(0.01, Math.abs(ctx.playbackSpeed || 1)) : 1);
 
       if (isReversePlayback) {
         if (!video.paused) video.pause();
-        if (!video.seeking && timeDiff > (isInteractivePreview ? 0.04 : 0.02)) {
+        if (!video.seeking && (ctx.isPlaying || isInteractivePreview ? timeDiff > (isInteractivePreview ? 0.04 : 0.02) : !videoHasTargetFrame(video, nestedClipTime))) {
           this.deps.throttledSeek(nestedClip.id, video, nestedClipTime, ctx);
         }
         if (!isInteractivePreview) {
@@ -232,10 +234,7 @@ export class VideoSyncNestedCompositionCoordinator {
           this.deps.forceVideoFrameDecode(nestedClip.id, video);
         }
 
-        const seekThreshold = isInteractivePreview
-          ? 0.1
-          : VideoSyncNestedCompositionCoordinator.PAUSED_PRECISE_SEEK_THRESHOLD;
-        if (timeDiff > seekThreshold) {
+        if (isInteractivePreview ? timeDiff > 0.1 : !videoHasTargetFrame(video, nestedClipTime)) {
           if (!isInteractivePreview) {
             scrubSettleState.begin(
               nestedClip.id,
@@ -296,6 +295,7 @@ export class VideoSyncNestedCompositionCoordinator {
             depth + 1,
             nestedCompTiming.sourceTime,
             getNestedPreviewTrackKey(parentTrackKey, compClip, nestedClip),
+            compRate * nestedCompTiming.sourceRate,
           );
         }
       }

@@ -212,7 +212,7 @@
 }
 
 .preview-transport-quality:hover,
-.preview-transport-quality:focus-within {
+.preview-transport-quality:has(select:focus-visible) {
   background: var(--preview-transport-hover-bg, #292b31);
   color: var(--preview-transport-icon-active, #eceef2);
 }

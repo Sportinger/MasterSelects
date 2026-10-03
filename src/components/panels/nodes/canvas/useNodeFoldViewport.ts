@@ -80,7 +80,13 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
     if (!follow || !element || follow.graph === source) return;
     const matches = follow.automatic ? true : follow.groupId ? target.groups?.some(group => group.id === follow.groupId && !!group.collapsed === follow.collapsed)
       : target.groups?.every(group => !!group.collapsed === follow.collapsed);
-    if (follow.graph.id !== source.id || !matches) { cancel(); return; }
+    if (follow.graph.id !== source.id) { cancel(); return; }
+    // A workspace fold first mounts the clip controller, then receives its graph.
+    // Keep the targeted request through the intermediate collapsed projection.
+    if (!matches) {
+      if (source.workspace && follow.groupId && !follow.collapsed) return;
+      cancel(); return;
+    }
     const finished = !animating && shown === target;
     const progress = finished || matchMedia('(prefers-reduced-motion: reduce)').matches
       ? 1 : Math.min(1, (performance.now() - follow.started) / NODE_LAYOUT_DURATION);

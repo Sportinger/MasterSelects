@@ -88,8 +88,11 @@ describe('cable direction arrows', () => {
   it('follows the cubic tangent for forward, vertically curved and backward connections', () => {
     expect(getConnectionArrowTransform({ x: 0, y: 0 }, { x: 300, y: 0 })).toBe('translate(150 0) rotate(0)');
     expect(getConnectionArrowTransform({ x: 300, y: 0 }, { x: 0, y: 0 })).toBe('translate(150 0) rotate(180)');
-    // Short horizontal spans bend back through their midpoint; use the curve's tangent.
-    expect(getConnectionArrowTransform({ x: 0, y: 0 }, { x: 60, y: 0 })).toBe('translate(30 0) rotate(180)');
-    expect(getConnectionArrowTransform({ x: 0, y: 0 }, { x: 72, y: 100 })).toBe('translate(36 50) rotate(90)');
+    // Forward handles are clamped to half the span (no loop-back), so a short cable's tangent stays forward.
+    expect(getConnectionArrowTransform({ x: 0, y: 0 }, { x: 60, y: 0 })).toBe('translate(30 0) rotate(0)');
+    // Vertically curved: handles are clamped to 36, so the midpoint tangent is B'(0.5) = (54, 150).
+    const curved = getConnectionArrowTransform({ x: 0, y: 0 }, { x: 72, y: 100 });
+    expect(curved.startsWith('translate(36 50) rotate(')).toBe(true);
+    expect(Number(curved.match(/rotate\(([-\d.]+)\)/)![1])).toBeCloseTo(Math.atan2(150, 54) * 180 / Math.PI, 6);
   });
 });

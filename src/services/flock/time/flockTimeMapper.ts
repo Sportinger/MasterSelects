@@ -1,3 +1,4 @@
+import { resolveClipSourceTime, type ClipRetimeTiming } from '../../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../../types/timeline';
 import type { FlockProgram } from '../compiler/flockProgramTypes';
 
@@ -40,8 +41,8 @@ export function flockStepForSourceTime(
 }
 
 /** Nested clips have no timeline FrameContext; mirror the model/splat nested mapping. */
-export function nestedFlockSourceTime(clip: Pick<TimelineClip, 'reversed' | 'inPoint' | 'outPoint'>, clipLocalTime: number): number {
-  return clip.reversed ? clip.outPoint - clipLocalTime : clipLocalTime + clip.inPoint;
+export function nestedFlockSourceTime(clip: ClipRetimeTiming, clipLocalTime: number): number {
+  return resolveClipSourceTime(clip, clipLocalTime).sourceTime;
 }
 
 export interface FlockClipTimeMap {

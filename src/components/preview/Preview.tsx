@@ -64,6 +64,7 @@ import {
 } from './motionPathGeometry';
 import { useMotionPathEditing } from './useMotionPathEditing';
 import { useMotionNullViewportEditing } from './useMotionNullViewportEditing';
+import { fitPreviewDockSplitToAspect } from './previewDockSplitFit';
 import {
   readStoredMotionPathOnionFrameDistance,
   readStoredMotionPathOnionSkinVisible,
@@ -806,6 +807,21 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     onOpenStats: () => activateStatsPanel('stats'),
   };
 
+  const togglePlaybackControls = () => {
+    const container = containerRef.current;
+    if (container && !sourceMonitorActive && !usesPanelSizedEditViewport) {
+      fitPreviewDockSplitToAspect({
+        aspectHeight: effectiveResolution.height,
+        aspectWidth: effectiveResolution.width,
+        container,
+        nextTransportHeight: playbackControlsVisible
+          ? 0
+          : container.querySelector<HTMLElement>('.preview-transport-panel')?.offsetHeight ?? 0,
+      });
+    }
+    setPlaybackControlsVisible(visible => !visible);
+  };
+
   const transportPortalContext = useMemo(() => ({
     externalSourceControls: showTransport,
     sourceControlsTarget,
@@ -912,7 +928,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
       {showTransport && (
         <PreviewTransport
           playbackControlsVisible={playbackControlsVisible}
-          onTogglePlaybackControls={() => setPlaybackControlsVisible(visible => !visible)}
+          onTogglePlaybackControls={togglePlaybackControls}
           onToggleSceneObjectOverlay={() => setSceneObjectOverlayEnabled(!sceneObjectOverlayEnabled)}
           onToggleTransparency={toggleTransparency}
           previewQuality={previewQuality}

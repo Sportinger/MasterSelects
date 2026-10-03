@@ -47,7 +47,11 @@ class CompositionAudioMixerService {
   private audioContext: AudioContext | null = null;
   private emptyMixdownBuffer: AudioBuffer | null = null;
   private blobUrls: Set<string> = new Set();
-  private readonly clipRenderer = new ClipAudioRenderService();
+  // Lazy: the module singleton is created while the timeline store may still be initializing.
+  private clipRendererInstance: ClipAudioRenderService | undefined;
+  private get clipRenderer(): ClipAudioRenderService {
+    return this.clipRendererInstance ??= new ClipAudioRenderService();
+  }
 
   private getAudioContext(): AudioContext {
     if (!this.audioContext) {

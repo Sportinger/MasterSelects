@@ -1,3 +1,5 @@
+import { takePaintPhases } from './nodePaintProfile';
+import { takeCablePathTiming } from './cableGeometry';
 import { NodeCanvasPainter } from './NodeCanvasPainter';
 import type { CanvasMessage, CanvasWorkerReply } from './nodeCanvasTypes';
 import { dragUpdatesFirst } from './canvasNodeDrag';
@@ -71,7 +73,7 @@ function frame() {
     dirty = false;
     if (bitmap || previewBitmap !== undefined || overlayBitmap !== undefined) {
       inFlight = true;
-      post({ type: 'frame', bitmap, previews: previewBitmap, overlay: overlayBitmap, revision: painter.viewRevision },
+      post({ type: 'frame', ...(import.meta.env.DEV ? { paintPhases: takePaintPhases() } : {}), ...(import.meta.env.DEV && bitmap ? { paintDuration: performance.now() - start, pathTiming: takeCablePathTiming() } : {}), bitmap, previews: previewBitmap, overlay: overlayBitmap, revision: painter.viewRevision },
         [bitmap, previewBitmap, overlayBitmap].filter((value): value is ImageBitmap => !!value));
     } else if (painter.animated) schedule(painter.playing ? PLAYBACK_FRAME_MS : 1000 / 30);
     // The DOM hides its static group frames while the worker animates them.
@@ -117,6 +119,8 @@ self.onmessage = (event: MessageEvent<CanvasMessage>) => {
       if (!contexts[0] || !contexts[1] || !contexts[2] || !composed) throw new Error('Canvas 2D unavailable');
       context = composed; previewOutput = viewportOutput(); overlayOutput = viewportOutput();
       painter = new NodeCanvasPainter(contexts[0], contexts[2], contexts[1], () => new OffscreenCanvas(1, 1).getContext('2d', { willReadFrequently: true }));
+      // Acknowledge before any queued scene update or raster work.
+      post({ type: 'initialized' });
     } else if (message.type === 'previews') painter?.update(message);
     else pending.set(message.type, message);
     dirty = true;

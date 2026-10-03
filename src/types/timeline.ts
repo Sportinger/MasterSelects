@@ -1,3 +1,6 @@
+// Source seconds (composition seconds for nested clips). Extend with new kinds explicitly.
+export type ClipTimeRemap = { kind: 'freeze'; sourceTime: number } | { kind: 'loop'; phase?: number } | { kind: 'warp'; points: Array<{ time: number; source: number }> };
+
 import type {
   ClipAudioAnalysisJobState,
   ClipAudioState,
@@ -163,6 +166,7 @@ export interface TimelineClip {
   nodeGraph?: ClipNodeGraph; // Field-backed node graph UI state for this clip
   isLoading?: boolean;    // True while media is being loaded
   needsReload?: boolean;  // True if file handle needs re-authorization after page refresh
+  timeRemap?: ClipTimeRemap;
   reversed?: boolean;     // True if clip plays in reverse
   speed?: number;         // Playback speed (default 1.0, 0.5 = half speed, -1.0 = reverse)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
@@ -325,6 +329,7 @@ export interface SerializableClip {
   sceneDescriptions?: SceneSegment[];
   sceneDescriptionStatus?: SceneDescriptionStatus;
   // Playback
+  timeRemap?: ClipTimeRemap;
   reversed?: boolean;
   speed?: number;         // Playback speed (default 1.0)
   preservesPitch?: boolean;  // Keep pitch when speed changes (default true)
@@ -426,6 +431,7 @@ export interface TempoMap {
 // Serializable timeline data for composition storage
 export interface CompositionTimelineData {
   sharedSceneGraphs?: import('./sharedSceneGraph').SharedSceneGraphs;
+  compositionGraph?: import('./compositionGraph').CompositionGraphState;
   tracks: TimelineTrack[];
   clips: SerializableClip[];
   playheadPosition: number;

@@ -644,6 +644,9 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
         isDraggingPlayhead: false,
         hasClipDragPreview: false,
         playbackSpeed: 1,
+        // Constant unit speed through the shared retime contract's store adapter.
+        getInterpolatedSpeed: () => 1,
+        getSourceTimeForClip: (_clipId: string, local: number) => local,
         playheadPosition: 13,
       } as FrameContext;
 
@@ -2419,6 +2422,8 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     handoffs.compute({
       isPlaying: true,
       isDraggingPlayhead: false,
+      getInterpolatedSpeed: () => 1,
+      getSourceTimeForClip: (_clipId: string, localTime: number) => localTime,
     } as never, [clip] as never, getTestClipVideo);
 
     expect(handoffs.getHandoffVideoElement('clip-next')).toBeNull();
@@ -2459,6 +2464,8 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     handoffs.compute({
       isPlaying: true,
       isDraggingPlayhead: false,
+      getInterpolatedSpeed: () => 1,
+      getSourceTimeForClip: (_clipId: string, localTime: number) => localTime,
     } as never, [clip] as never, getTestClipVideo);
 
     expect(handoffs.getHandoffVideoElement('clip-next')).toBeNull();
@@ -2499,6 +2506,8 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     handoffs.compute({
       isPlaying: true,
       isDraggingPlayhead: false,
+      getInterpolatedSpeed: () => 1,
+      getSourceTimeForClip: (_clipId: string, localTime: number) => localTime,
     } as never, [clip] as never, getTestClipVideo);
 
     expect(handoffs.getHandoffVideoElement('clip-next')).toBe(previousVideo);
@@ -2711,6 +2720,9 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
       isDraggingPlayhead: false,
       hasClipDragPreview: false,
       playbackSpeed: 1,
+      // Constant unit speed through the shared retime contract's store adapter.
+      getInterpolatedSpeed: () => 1,
+      getSourceTimeForClip: (_clipId: string, local: number) => local,
       playheadPosition: 0.5,
     } as FrameContext;
 

@@ -57,10 +57,12 @@ export class MediaAudioRangeReader {
     return this.trackPromise;
   }
 
-  async read(startSeconds: number, endSeconds: number): Promise<AudioBuffer> {
+  async read(startSeconds: number, endSeconds: number, signal?: AbortSignal, maxBytes = Infinity): Promise<AudioBuffer> {
+    signal?.throwIfAborted();
     const safeStartSeconds = Math.max(0, startSeconds);
     const safeEndSeconds = Math.max(safeStartSeconds + 0.001, endSeconds);
     const track = await this.getTrack();
+    signal?.throwIfAborted();
     const sampleRate = track.sampleRate;
     const channelCount = track.numberOfChannels;
 
@@ -73,6 +75,9 @@ export class MediaAudioRangeReader {
       requestedStartFrame + 1,
       Math.ceil(safeEndSeconds * sampleRate),
     );
+    if ((requestedEndFrame - requestedStartFrame) * channelCount * 4 > maxBytes) {
+      throw new MediaAudioRangeError('Audio source range exceeds the preview preparation budget');
+    }
     const output = createBuffer(
       channelCount,
       requestedEndFrame - requestedStartFrame,
@@ -82,6 +87,7 @@ export class MediaAudioRangeReader {
 
     for await (const sample of sink.samples(safeStartSeconds, safeEndSeconds)) {
       try {
+        signal?.throwIfAborted();
         const sampleStartFrame = Math.round(sample.timestamp * sampleRate);
         const sampleEndFrame = sampleStartFrame + sample.numberOfFrames;
         const copyStartFrame = Math.max(requestedStartFrame, sampleStartFrame);

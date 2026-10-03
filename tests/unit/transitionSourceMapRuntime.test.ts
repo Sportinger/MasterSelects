@@ -125,10 +125,11 @@ describe('transition source map preview runtime', () => {
 
     expect(getClipTimeInfo(createContext(3, 3.5), clip)).toMatchObject({
       clipLocalTime: 2,
-      sourceTime: 5,
+      // Debug offsets are relative to the clip's resolved source time at local 0.
+      sourceTime: 3,
       clipTime: 7,
       visualClipLocalTime: 2.5,
-      visualSourceTime: 6.5,
+      visualSourceTime: 4.5,
       visualClipTime: 8.5,
       isHold: false,
       sourceRate: 3,
@@ -138,8 +139,8 @@ describe('transition source map preview runtime', () => {
     expect(getClipTimeInfo(createContext(1.5, 2.5), clip)).toMatchObject({
       clipTime: 4,
       visualClipTime: 5.5,
-      sourceTime: 2,
-      visualSourceTime: 3.5,
+      sourceTime: 0,
+      visualSourceTime: 1.5,
       isHold: true,
       sourceRate: 0,
       speed: 0,
@@ -177,21 +178,24 @@ describe('transition source map preview runtime', () => {
     expect(getNestedClipSourceTime(createClip(), 2)).toBe(4);
   });
 
-  it('keeps reverse source-map speed signed while leaving legacy reverse unchanged', () => {
+  it('keeps reverse source-map speed signed and reports mirrored legacy reverse as a negative rate', () => {
     const reverseMap: TransitionSourceMap = {
       version: 1,
       segments: [{ kind: 'linear', compStart: 0, compEnd: 2, sourceStart: 10, sourceEnd: 4 }],
     };
 
-    expect(getClipTimeInfo(createContext(2), createClip({ startTime: 1, transitionSourceMap: reverseMap }))).toMatchObject({
-      clipTime: 7,
+    const reverseTiming = getClipTimeInfo(createContext(2), createClip({ startTime: 1, transitionSourceMap: reverseMap }));
+    // Backward video selection is biased left by 10 microseconds.
+    expect(reverseTiming.clipTime).toBeCloseTo(7, 4);
+    expect(reverseTiming).toMatchObject({
       sourceRate: -3,
       speed: -3,
       absSpeed: 3,
       isHold: false,
     });
+    // Shared retime contract: `reversed` mirrors the source window, so the effective rate is negative.
     expect(getClipTimeInfo(createContext(2), createClip({ reversed: true }))).toMatchObject({
-      speed: 1,
+      speed: -1,
       absSpeed: 1,
       isHold: false,
     });
@@ -269,7 +273,8 @@ describe('transition source map preview runtime', () => {
       time: 1,
     });
 
-    expect(layer.source?.mediaTime).toBe(7);
+    // Backward video selection is biased left by 10 microseconds.
+    expect(layer.source?.mediaTime).toBeCloseTo(7, 4);
     expect(pause).toHaveBeenCalledTimes(1);
     expect(play).not.toHaveBeenCalled();
   });

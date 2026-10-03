@@ -1,3 +1,4 @@
+import { splitClipSourceWindow, copyLoopSpeedKeyframesToParts } from '../../../services/timeline/retime/clipEdgeRetime';
 import type { Keyframe, TimelineClip, TimelineTrack } from '../../../types';
 import { copyParameterKeyframesToParts, parameterSourceSplitPatch } from '../../../services/parameterSources/parameterSourceLifecycle';
 import { cloneClipNodeGraph } from '../../../services/nodeGraph/clipGraphProjectionState';
@@ -278,8 +279,6 @@ export function applySplitAtTimesOperation(
     const partStart = boundaries[index];
     const partEnd = boundaries[index + 1];
     const partDuration = partEnd - partStart;
-    const partInPoint = clip.inPoint + (partStart - clip.startTime);
-    const partOutPoint = partInPoint + partDuration;
     const partId = `clip-${timestamp}-${randomSuffix}-p${index}`;
     const linkedPartId = linkedClip ? `clip-${timestamp}-${randomSuffix}-lp${index}` : undefined;
 
@@ -290,8 +289,8 @@ export function applySplitAtTimesOperation(
       id: partId,
       startTime: partStart,
       duration: partDuration,
-      inPoint: partInPoint,
-      outPoint: partOutPoint,
+      ...splitClipSourceWindow(clip, partStart - clip.startTime, partEnd - clip.startTime,
+        parentPreservation?.clipKeyframes.get(clip.id)),
       storyboardProperties: cloneStoryboardPropertiesForSplit(clip.storyboardProperties, index),
       linkedClipId: linkedPartId,
       source: index === 0 ? getSourceForFirstSplitPart(clip) : cloneSourceForPart(clip),
@@ -300,7 +299,6 @@ export function applySplitAtTimesOperation(
     });
 
     if (linkedClip && linkedPartId) {
-      const linkedInPoint = linkedClip.inPoint + (partStart - clip.startTime);
       newLinkedParts.push({
         ...linkedClip,
         ...deepCloneClipProps(linkedClip),
@@ -308,8 +306,8 @@ export function applySplitAtTimesOperation(
         id: linkedPartId,
         startTime: partStart,
         duration: partDuration,
-        inPoint: linkedInPoint,
-        outPoint: linkedInPoint + partDuration,
+        ...splitClipSourceWindow(linkedClip, partStart - linkedClip.startTime, partEnd - linkedClip.startTime,
+          parentPreservation?.clipKeyframes.get(linkedClip.id)),
         storyboardProperties: cloneStoryboardPropertiesForSplit(linkedClip.storyboardProperties, index),
         linkedClipId: partId,
         source: index === 0
@@ -404,8 +402,8 @@ export function applySplitAtTimesOperation(
   );
   const keyframeSource = nextClipKeyframes ?? parentPreservation?.clipKeyframes;
   if (keyframeSource) {
-    nextClipKeyframes = copyParameterKeyframesToParts(keyframeSource, clip, newParts);
-    if (linkedClip) nextClipKeyframes = copyParameterKeyframesToParts(nextClipKeyframes, linkedClip, newLinkedParts);
+    nextClipKeyframes = copyLoopSpeedKeyframesToParts(copyParameterKeyframesToParts(keyframeSource, clip, newParts), clip, newParts);
+    if (linkedClip) nextClipKeyframes = copyLoopSpeedKeyframesToParts(copyParameterKeyframesToParts(nextClipKeyframes, linkedClip, newLinkedParts), linkedClip, newLinkedParts);
   }
   if (clip.flock && keyframeSource) {
     nextClipKeyframes = copyFlockKeyframesToClipParts(

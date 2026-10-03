@@ -1,3 +1,5 @@
+import { getNestedClipSourceTime } from './layerBuilder/nestedLayers';
+import { resolveClipSourceTime, videoFrameSourceTime } from '../../services/timeline/retime/clipRetime';
 // Video seeking and ready-state management for export
 
 import { Logger } from '../../services/logger';
@@ -88,17 +90,7 @@ function getRenderableClips(ctx: FrameContext): TimelineClip[] {
 }
 
 function getNestedVideoClipTime(clip: TimelineClip, nestedTime: number): number {
-  const nestedLocalTime = nestedTime - clip.startTime;
-  const mappedSourceTime = getMappedClipSourceTime(clip, nestedLocalTime);
-  if (mappedSourceTime !== undefined) return mappedSourceTime;
-
-  if (Number.isFinite(clip.transitionSourceTimeOverride)) {
-    return clip.transitionSourceTimeOverride!;
-  }
-  if (clip.transitionSourceHold) return clip.inPoint ?? 0;
-  return clip.reversed
-    ? (clip.outPoint ?? clip.duration) - nestedLocalTime
-    : nestedLocalTime + (clip.inPoint ?? 0);
+  return getNestedClipSourceTime(clip, nestedTime - clip.startTime);
 }
 
 function getRenderableNestedClips(clip: TimelineClip, nestedTime: number): TimelineClip[] {
@@ -139,7 +131,7 @@ function getNestedCompositionTime(clip: TimelineClip, parentTime: number): {
   const clipLocalTime = parentTime - clip.startTime;
   const mappedSourceTime = getMappedClipSourceTime(clip, clipLocalTime);
   return {
-    time: mappedSourceTime ?? clipLocalTime + (clip.inPoint || 0),
+    time: getNestedClipSourceTime(clip, clipLocalTime),
     isMapped: mappedSourceTime !== undefined,
   };
 }
@@ -196,10 +188,7 @@ function getMappedVideoSeekTargets(ctx: FrameContext): VideoSeekTarget[] {
     if (clip.source?.type !== 'video') continue;
 
     const clipLocalTime = ctx.time - clip.startTime;
-    const mappedSourceTime = getMappedClipSourceTime(clip, clipLocalTime);
-    if (mappedSourceTime !== undefined) {
-      targets.push({ clip, sourceTime: mappedSourceTime });
-    }
+    targets.push({ clip, sourceTime: getClipSourceWindowTime(clip, clipLocalTime, ctx) });
   }
 
   return targets;
@@ -265,10 +254,7 @@ async function seekSequentialMode(
       try {
         clipTime = getClipSourceWindowTime(clip, clipLocalTime, ctx);
       } catch {
-        clipTime = clip.reversed
-          ? clip.outPoint - clipLocalTime
-          : clipLocalTime + clip.inPoint;
-        clipTime = Math.max(clip.inPoint, Math.min(clip.outPoint, clipTime));
+        clipTime = videoFrameSourceTime(resolveClipSourceTime(clip, clipLocalTime));
       }
 
       const clipState = clipStates.get(clip.id);
@@ -412,7 +398,7 @@ async function ensureVideoReadyForExport(video: HTMLVideoElement, targetTime: nu
       // Ignore autoplay / play-pause warmup failures.
     }
 
-    if (Math.abs(video.currentTime - targetTime) > 0.01) {
+    if (Math.abs(video.currentTime - targetTime) > 0.000001) {
       try {
         video.currentTime = targetTime;
       } catch {
@@ -433,7 +419,8 @@ export async function seekVideo(video: HTMLVideoElement, time: number): Promise<
     ? Math.max(0, Math.min(time, maxSeekTime))
     : Math.max(0, time);
 
-  if (Math.abs(video.currentTime - targetTime) < 0.01 && !video.seeking) {
+  // A nearby time may be on the other side of a backward frame boundary.
+  if (Math.abs(video.currentTime - targetTime) < 0.000001 && !video.seeking) {
     await ensureVideoReadyForExport(video, targetTime);
     return;
   }

@@ -51,6 +51,7 @@ export interface StateSnapshot {
     tempoMap?: TempoMap;
     masterAudioState?: MasterAudioState;
     sharedSceneGraphs?: import('../../types/sharedSceneGraph').SharedSceneGraphs;
+    compositionGraph?: import('../../types/compositionGraph').CompositionGraphState;
   };
   timelineEditState?: HistoryTimelineEditState;
   media: {
@@ -146,6 +147,7 @@ export interface TimelineStoreState {
   tempoMap?: TempoMap;
   masterAudioState?: MasterAudioState;
   sharedSceneGraphs?: import('../../types/sharedSceneGraph').SharedSceneGraphs;
+  compositionGraph?: import('../../types/compositionGraph').CompositionGraphState;
   isExporting?: boolean;
 }
 

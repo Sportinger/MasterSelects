@@ -1,5 +1,5 @@
 import type { NodeGraphNode } from '../../../../types/nodeGraph';
-import { getNodeHeight, NODE_WIDTH, type NodeBounds, type NodeGraphPoint, type Viewport } from './canvasGeometry';
+import { getNodeHeight, getNodeWidth, type NodeBounds, type NodeGraphPoint, type Viewport } from './canvasGeometry';
 import type { NodeCableStyle } from '../../../../types/nodeGraph';
 import { cableRoute, cableRouteBounds } from './cableRoute';
 
@@ -28,7 +28,7 @@ export function intersectsNodeDomView(view: NodeBounds | null | undefined, box: 
   return !view || (box.right >= view.left && box.left <= view.right && box.bottom >= view.top && box.top <= view.bottom);
 }
 export function nodeDomVisible(node: NodeGraphNode, view: NodeBounds | null | undefined): boolean {
-  return intersectsNodeDomView(view, { left: node.layout.x - 40, right: node.layout.x + NODE_WIDTH + 40,
+  return intersectsNodeDomView(view, { left: node.layout.x - 40, right: node.layout.x + getNodeWidth(node) + 40,
     top: node.layout.y, bottom: node.layout.y + getNodeHeight(node) });
 }
 export function cableDomVisible(from: NodeGraphPoint, to: NodeGraphPoint, view: NodeBounds | null | undefined, style: NodeCableStyle = 'curved'): boolean {

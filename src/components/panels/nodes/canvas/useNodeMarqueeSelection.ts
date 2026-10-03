@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { NodeGraphNode } from '../../../../services/nodeGraph';
-import { getNodeHeight, NODE_WIDTH, type Viewport } from './canvasGeometry';
+import { getNodeHeight, getNodeWidth, type Viewport } from './canvasGeometry';
 
 const RIGHT_BUTTON = 2;
 export const NODE_MARQUEE_DRAG_THRESHOLD = 5;
@@ -33,7 +33,7 @@ export function nodesIntersectingMarquee(nodes: readonly NodeGraphNode[], marque
   const bottom = marquee.top + marquee.height;
   return nodes.filter(node => (
     node.layout.x < right
-    && node.layout.x + NODE_WIDTH > marquee.left
+    && node.layout.x + getNodeWidth(node) > marquee.left
     && node.layout.y < bottom
     && node.layout.y + getNodeHeight(node) > marquee.top
   )).map(node => node.id);

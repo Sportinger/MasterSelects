@@ -110,6 +110,7 @@ export interface HistoryTimelineClipEditState {
   faceAnalysisMessage?: string;
   sceneDescriptionStatus?: TimelineClip['sceneDescriptionStatus'];
   reversed?: boolean;
+  timeRemap?: TimelineClip['timeRemap'];
   speed?: number;
   preservesPitch?: boolean;
   followsLinkedVideoSpeed?: boolean;
@@ -176,6 +177,7 @@ export interface HistoryTimelineEditState {
     tempoMap?: TempoMap;
     masterAudioState?: MasterAudioState;
     sharedSceneGraphs?: import('../../types/sharedSceneGraph').SharedSceneGraphs;
+    compositionGraph?: import('../../types/compositionGraph').CompositionGraphState;
   };
 }
 
@@ -197,6 +199,7 @@ export interface CreateHistoryTimelineEditStateInput {
   tempoMap?: TempoMap;
   masterAudioState?: MasterAudioState;
   sharedSceneGraphs?: import('../../types/sharedSceneGraph').SharedSceneGraphs;
+  compositionGraph?: import('../../types/compositionGraph').CompositionGraphState;
 }
 
 const HISTORY_RUNTIME_PAYLOAD_KEYS = new Set([
@@ -219,10 +222,11 @@ const HISTORY_RUNTIME_PAYLOAD_KEYS = new Set([
 
 const validatedTerrainMeshes = new WeakSet<object>();
 
-function stripUndefinedDeep(value: unknown): unknown {
+function stripUndefinedDeep(value: unknown, path = '$'): unknown {
+  if (path === '$.timeline.compositionGraph') return structuredClone(value);
   if (value && typeof value === 'object' && isRetainedTerrainMesh(value)) return value;
   if (Array.isArray(value)) {
-    return value.map(stripUndefinedDeep);
+    return value.map((child, index) => stripUndefinedDeep(child, `${path}[${index}]`));
   }
 
   if (!value || typeof value !== 'object') {
@@ -232,7 +236,7 @@ function stripUndefinedDeep(value: unknown): unknown {
   const output: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(value)) {
     if (child !== undefined) {
-      output[key] = stripUndefinedDeep(child);
+      output[key] = stripUndefinedDeep(child, `${path}.${key}`);
     }
   }
   return output;
@@ -312,7 +316,10 @@ export function findHistoryStateBoundaryViolations(value: unknown): string[] {
       // handle but is durable JSON (#298).
       // Durable keyed maps use arbitrary node IDs. Their values are still fully
       // traversed, so a real videoElement/File/etc. nested inside remains rejected.
-      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object' && !isDurableIdMapPath(path)) {
+      // Composition rules (including unknown operators) may use arbitrary durable JSON keys.
+      const compositionGraphData = path === '$.timeline.compositionGraph' || path.startsWith('$.timeline.compositionGraph.');
+      if (compositionGraphData && child === undefined) continue; // Optional fields stay verbatim in snapshots.
+      if (HISTORY_RUNTIME_PAYLOAD_KEYS.has(key) && child !== null && typeof child === 'object' && !isDurableIdMapPath(path) && !compositionGraphData) {
         violations.push(`${childPath}: runtime payload key`);
         continue;
       }
@@ -593,6 +600,7 @@ export function toHistoryTimelineClipEditState(
     faceAnalysisMessage: clip.faceAnalysisMessage,
     sceneDescriptionStatus: clip.sceneDescriptionStatus,
     reversed: clip.reversed,
+    timeRemap: clip.timeRemap ? structuredClone(clip.timeRemap) : undefined,
     speed: clip.speed,
     preservesPitch: clip.preservesPitch,
     followsLinkedVideoSpeed: clip.followsLinkedVideoSpeed,
@@ -666,6 +674,7 @@ export function createHistoryTimelineEditState(
       markers: cloneHistoryPlainData(input.markers ?? []),
       tempoMap: input.tempoMap ? cloneHistoryPlainData(input.tempoMap) : undefined,
       sharedSceneGraphs: cloneAudioPlainData(input.sharedSceneGraphs),
+      compositionGraph: input.compositionGraph,
       masterAudioState: cloneAudioPlainData<MasterAudioState>(input.masterAudioState),
     },
   };

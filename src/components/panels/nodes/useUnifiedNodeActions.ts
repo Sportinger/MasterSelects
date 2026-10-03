@@ -4,9 +4,9 @@ import { useState } from 'react';
 import type { NodeGraph, NodeGraphConnectionRequest, NodeGraphLayout, NodeGraphNode } from '../../../types/nodeGraph';
 import type { TimelineClip } from '../../../types/timeline';
 import { useTimelineStore } from '../../../stores/timeline';
-import { startBatch, endBatch } from '../../../stores/historyStore';
-import { buildClipNodeGraphDocument, createClipNodeGraphState } from '../../../services/nodeGraph';
-import { buildUnifiedClipGraph } from '../../../services/nodeGraph/unifiedClipGraph';
+import { clipWorkspaceBatch } from './unified/useClipDomainAdapter';
+import { createClipNodeGraphState } from '../../../services/nodeGraph';
+import { setWorkspaceClipGroupsCollapsed } from './unified/clipGroupFolding';
 import { createEffectGraphActions, editEffectGraph, editCompositionInput } from '../../../services/operators/effectGraphEditing';
 import { findClipOperatorEffect, resolveClipOperatorOwner } from '../../../services/operators/clipOperatorGraphOwner';
 import { createSceneGraphActions, editSceneGraph } from '../../../services/operators/sceneGraphEditing';
@@ -23,8 +23,9 @@ import { chainCutEffect, detachChainEffect } from '../../../services/nodeGraph/c
 function detachEffect(clipId: string, effectId: string) {
   const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clipId);
   if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
-  startBatch('Free effect group');
-  try { state.updateClip(clipId, { effects: detachChainEffect(current, effectId).effects }); state.invalidateCache(); } finally { endBatch(); }
+  clipWorkspaceBatch('Free effect group', () => {
+    state.updateClip(clipId, { effects: detachChainEffect(current, effectId).effects }); state.invalidateCache();
+  });
 }
 
 interface BaseActions {
@@ -88,8 +89,9 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
         const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(c => c.id === clip.id)!;
         if (state.isExporting || state.tracks.find(t => t.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         const model = current.nodeGraph ?? createClipNodeGraphState(current), group = model.groups?.scene3d;
-        startBatch('Move scene node');
-        try { state.updateClip(clip.id, { nodeGraph: { ...model, groups: { ...model.groups, scene3d: { ...group, nodeLayouts: { ...group?.nodeLayouts, [id]: layout } } } } }); } finally { endBatch(); }
+        clipWorkspaceBatch('Move scene node', () => {
+          state.updateClip(clip.id, { nodeGraph: { ...model, groups: { ...model.groups, scene3d: { ...group, nodeLayouts: { ...group?.nodeLayouts, [id]: layout } } } } });
+        });
       },
       connectPorts: () => { throw new Error('Scene links follow the clip geometry, camera and light settings.'); },
       disconnectEdge: () => { throw new Error('Scene links follow the clip geometry, camera and light settings.'); },
@@ -152,11 +154,10 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
         if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         const effect = findClipOperatorEffect(current, effectId);
         if (!effect) return;
-        startBatch('Toggle effect group bypass');
-        try {
+        clipWorkspaceBatch('Toggle effect group bypass', () => {
           if (effect.type === 'audio-math') state.setClipAudioEffectInstanceEnabled(current.id, effect.id, !effect.enabled);
           else state.setClipEffectEnabled(current.id, effect.id, !effect.enabled);
-        } finally { endBatch(); }
+        });
       });
     },
     deleteNode: (id: string) => route(id, (actions, node) => actions.deleteNode(localId(node))),
@@ -248,26 +249,17 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       bindingActions(node)?.disconnectEdge(id.slice(id.lastIndexOf('/') + 1));
     }),
     setAllGroupsCollapsed: (collapsed: boolean) => safely(() => {
-      if (!clip) return;
-      const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(c => c.id === clip.id);
-      if (!current || state.isExporting || state.tracks.find(t => t.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
-      const model = current.nodeGraph ?? createClipNodeGraphState(current);
-      // Inventory the fully expanded projection: hidden and never-opened descendants count too.
-      const expanded = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current, state.clips, [], undefined, true);
-      const ids = new Set([...(expanded.groups ?? []), ...(graph?.groups ?? [])].map(group => group.id));
-      const groups = { ...model.groups };
-      for (const id of ids) groups[id] = { ...groups[id], collapsed };
-      startBatch(collapsed ? 'Collapse all node groups' : 'Expand all node groups');
-      try { state.updateClip(current.id, { nodeGraph: { ...model, groups } }); } finally { endBatch(); }
+      if (clip) setWorkspaceClipGroupsCollapsed([clip.id], collapsed, graph ? new Map([[clip.id, graph]]) : undefined);
     }),
     toggleGroup: (id: string) => safely(() => {
       if (!clip) return;
       const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(c => c.id === clip.id)!;
       if (state.isExporting || state.tracks.find(t => t.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
       const model = current.nodeGraph ?? createClipNodeGraphState(current);
-      startBatch('Toggle node group');
-      try { state.updateClip(current.id, { nodeGraph: { ...model, groups: { ...model.groups,
-        [id]: { ...model.groups?.[id], collapsed: !(model.groups?.[id]?.collapsed ?? graph?.groups?.find(group => group.id === id)?.collapsed ?? false) } } } }); } finally { endBatch(); }
+      clipWorkspaceBatch('Toggle node group', () => {
+        state.updateClip(current.id, { nodeGraph: { ...model, groups: { ...model.groups,
+          [id]: { ...model.groups?.[id], collapsed: !(model.groups?.[id]?.collapsed ?? graph?.groups?.find(group => group.id === id)?.collapsed ?? false) } } } });
+      });
     }),
   };
 }

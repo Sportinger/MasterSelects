@@ -14,7 +14,7 @@ import { FaceCableControls } from '../../properties/FaceCableControls';
 import { VoxelReliefControls } from '../../properties/VoxelReliefControls';
 import { useCallback, useMemo, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { getCategoriesWithEffects } from '../../../../effects';
-import { startBatch, endBatch } from '../../../../stores/historyStore';
+import { clipWorkspaceAddActions, runWorkspaceAdd } from '../unified/clipWorkspaceAddActions';
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { GenerateClipAudioAnalysisOptions, TimelineClip } from '../../../../stores/timeline/types';
 import type { NodeGraphNode, NodeGraphPort } from '../../../../services/nodeGraph';
@@ -246,7 +246,6 @@ export function NodeInspector({
   const generateBeatOnsetForClip = useTimelineStore((state) => state.generateBeatOnsetForClip);
   const generateFrequencyPhaseForClip = useTimelineStore((state) => state.generateFrequencyPhaseForClip);
   const cancelAudioAnalysisForClip = useTimelineStore((state) => state.cancelAudioAnalysisForClip);
-  const addClipAICustomNodeFromPort = useTimelineStore((state) => state.addClipAICustomNodeFromPort);
   const clips = useTimelineStore((state) => state.clips);
   const nodeTargetClipId = typeof node?.params?.targetClipId === 'string'
     ? node.params.targetClipId
@@ -282,14 +281,10 @@ export function NodeInspector({
   ]);
   const createAICustomNodeFromPort = useCallback((source: { fromNodeId: string; fromPortId: string; label?: string }) => {
     if (!clip) return;
-    startBatch('Add AI node from audio port');
-    try {
-      const nodeId = addClipAICustomNodeFromPort(clip.id, source);
-      if (nodeId) onSelectNode(nodeId);
-    } finally {
-      endBatch();
-    }
-  }, [addClipAICustomNodeFromPort, clip, onSelectNode]);
+    const nodeId = runWorkspaceAdd(clip.id, 'Add AI node from audio port', () =>
+      useTimelineStore.getState().addClipAICustomNodeFromPort(clip.id, source));
+    if (nodeId) onSelectNode(nodeId);
+  }, [clip, onSelectNode]);
 
   if (!node) {
     return (
@@ -457,8 +452,7 @@ export function NodeInspector({
 }
 
 function ClipNodeActions({ clip, onSelectNode }: { clip: TimelineClip; onSelectNode: (nodeId: string) => void }) {
-  const addClipEffect = useTimelineStore((state) => state.addClipEffect);
-  const addClipAICustomNode = useTimelineStore((state) => state.addClipAICustomNode);
+  const addActions = useMemo(() => clipWorkspaceAddActions(clip.id), [clip.id]);
   const effectCategories = useMemo(() => getCategoriesWithEffects(), []);
 
   return (
@@ -467,14 +461,10 @@ function ClipNodeActions({ clip, onSelectNode }: { clip: TimelineClip; onSelectN
       <button
         type="button"
         className="node-workspace-secondary-action"
-        onClick={() => {
-          startBatch('Add AI node');
-          try {
-            const nodeId = addClipAICustomNode(clip.id);
-            if (nodeId) onSelectNode(nodeId);
-          } finally {
-            endBatch();
-          }
+        onClick={event => {
+          if (event.detail > 0) event.currentTarget.blur();
+          const nodeId = addActions.ai();
+          if (nodeId) onSelectNode(nodeId);
         }}
       >
         AI Node
@@ -485,13 +475,7 @@ function ClipNodeActions({ clip, onSelectNode }: { clip: TimelineClip; onSelectN
         onChange={(event) => {
           const effectType = event.target.value;
           if (!effectType) return;
-          startBatch('Add effect node');
-          try {
-            const effectId = addClipEffect(clip.id, effectType);
-            onSelectNode(`effect-${effectId}`);
-          } finally {
-            endBatch();
-          }
+          onSelectNode(addActions.effect(effectType));
           event.target.value = '';
         }}
       >
