@@ -21,6 +21,8 @@ export interface RecentProjectEntry {
   updatedAt?: string;
   handleKey?: string;
   path?: string;
+  /** Media folders of an FSA project, re-allowed by the click that opens it. */
+  mediaSourceRootIds?: string[];
 }
 
 function getStorage(): Storage | null {
@@ -175,6 +177,10 @@ async function findFsaEntry(
   return null;
 }
 
+function mediaSourceRootIdsOf(value: unknown): string[] | undefined {
+  return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string' && id.length > 0) : undefined;
+}
+
 function upsertEntry(entries: RecentProjectEntry[], nextEntry: RecentProjectEntry): RecentProjectEntry[] {
   return [
     nextEntry,
@@ -246,9 +252,30 @@ export async function addRecentFsaProject(
     handleKey,
     updatedAt: projectData?.updatedAt,
     lastOpenedAt: Date.now(),
+    mediaSourceRootIds: mediaSourceRootIdsOf(projectData?.mediaSourceRoots?.map((root) => root.id))
+      ?? mediaSourceRootIdsOf(existing?.mediaSourceRootIds),
   };
 
   await persistEntries(upsertEntry(entries, nextEntry));
+}
+
+export async function getRecentFsaProjectMediaSourceRootIds(handle: FileSystemDirectoryHandle): Promise<string[]> {
+  if (resolveProjectRootMode() !== 'fsa') return [];
+  const entry = await findFsaEntry(getRecentProjects(), handle);
+  return mediaSourceRootIdsOf(entry?.mediaSourceRootIds) ?? [];
+}
+
+export async function rememberRecentFsaProjectMediaSourceRoots(
+  handle: FileSystemDirectoryHandle,
+  rootIds: string[],
+): Promise<void> {
+  if (resolveProjectRootMode() !== 'fsa') return;
+  const entries = getRecentProjects();
+  const entry = await findFsaEntry(entries, handle);
+  if (!entry) return;
+  writeRecentProjects(entries.map((candidate) => candidate.id === entry.id
+    ? { ...candidate, mediaSourceRootIds: [...new Set(rootIds)] }
+    : candidate));
 }
 
 export async function addRecentOpfsProject(path: string, projectData: ProjectFile | null): Promise<void> {

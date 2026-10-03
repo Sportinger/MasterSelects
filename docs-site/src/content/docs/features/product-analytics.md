@@ -82,7 +82,10 @@ Pages Functions that write these columns.
 Fassandra's Stats view shows the aggregates (sources, codes, components,
 platforms, browsers, builds, pages, 14-day trend), the top fingerprints of the
 last seven days with occurrences, sessions, and users, and the 30 most recent
-events with stack, context, and breadcrumbs.
+events with stack, context, and breadcrumbs. It classifies each group by origin
+(editor error, assets removed by a newer deploy, unsupported device, third-party
+noise) and tracks a handling status (open, in progress, fixed with commit,
+ignored) that the owner, local agents and the auto-repair loop set.
 
 The top list selects up to 50 fingerprints by affected sessions, then occurrences. The private dashboard can sort by sessions, occurrences, or a labeled heuristic priority (saving, startup/export, editor functions, telemetry); repeat storms are not equivalent to many affected users.
 

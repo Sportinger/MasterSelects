@@ -43,7 +43,13 @@ All three use the same repository format. The browser's IndexedDB databases
 cache handles and derived metadata; they are not the authoritative project
 history. An unavailable index can be reconstructed from committed records.
 
-FSA handles may require permission again after reload. If browser storage was
+FSA handles may require permission again after reload. Reopening a recent
+project or restoring the last project's folder access also re-requests read
+access to that project's known media source folders in the same click, before
+the project loads, so linked media reconnect without a separate step. Media
+that still lack access are offered in the Reconnect media dialog; choosing
+"Allow on every visit" in the browser prompt avoids the prompt after reloads.
+If browser storage was
 cleared, select the existing project folder again. The filesystem directory
 can still exist even when its cached browser handle has been lost.
 

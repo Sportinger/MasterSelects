@@ -1,5 +1,6 @@
 import { Logger } from '../../logger';
 import { projectDB } from '../../projectDB';
+import { requestMediaSourceRootAccess } from '../mediaSourceRootAccess';
 import type { NativeProjectCoreService } from '../core/NativeProjectCoreService';
 import type { ProjectCoreService } from '../core/ProjectCoreService';
 import {
@@ -68,6 +69,7 @@ export async function openRecentProject(context: RecentProjectOpeningContext, id
   if (permission !== 'granted') {
     throw new Error(`Folder access was not granted for "${recentProject.name}". Retry or use Open existing to reconnect it.`);
   }
+  await requestMediaSourceRootAccess(recentProject.mediaSourceRootIds ?? []);
 
   context.activateFsaBackend();
   const loaded = await context.coreService.loadProject(projectHandle);

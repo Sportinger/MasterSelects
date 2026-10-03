@@ -2,9 +2,10 @@ import { Logger } from '../logger';
 import { projectDB } from '../projectDB';
 import { projectFileService } from '../projectFileService';
 import { PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID, type ProjectMediaSourceRoot } from './types/project.types';
+import { mediaSourceRootHandleKey as handleKey } from './mediaSourceRootAccess';
+import { rememberRecentFsaProjectMediaSourceRoots } from './recentProjects';
 
 const log = Logger.create('MediaSourceRoots');
-const HANDLE_KEY_PREFIX = 'media_source_root:';
 
 type PermissionDirectoryHandle = FileSystemDirectoryHandle & {
   queryPermission?: (descriptor?: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
@@ -14,10 +15,6 @@ type PermissionDirectoryHandle = FileSystemDirectoryHandle & {
 export interface ProjectMediaSourceRootState extends ProjectMediaSourceRoot {
   handle: FileSystemDirectoryHandle | null;
   permission: PermissionState | 'missing';
-}
-
-function handleKey(rootId: string): string {
-  return `${HANDLE_KEY_PREFIX}${rootId}`;
 }
 
 function createRootId(): string {
@@ -87,6 +84,14 @@ function persistRootDescriptor(
     mediaSourceFolders: [...new Set(nextRoots.map((entry) => entry.name))],
     mediaSourceRoots: nextRoots,
   });
+  // Opening the project after a reload re-allows these folders in the same click.
+  const projectHandle = typeof projectFileService.getProjectHandle === 'function'
+    ? projectFileService.getProjectHandle()
+    : null;
+  if (projectHandle) {
+    void rememberRecentFsaProjectMediaSourceRoots(projectHandle, nextRoots.map((entry) => entry.id))
+      .catch((error: unknown) => log.debug('Could not remember media folders for the recent project', error));
+  }
   return root;
 }
 

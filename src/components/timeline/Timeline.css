@@ -485,6 +485,8 @@
   flex: 1;
   overflow: hidden;
   position: relative;
+  /* Matches the sections so a panel grow is not visible before they re-measure. */
+  background: var(--bg-secondary);
 }
 
 .timeline-scroll-wrapper.graph-mode {
@@ -784,6 +786,15 @@
 .timeline-container.is-synchronous-track-scaling .track-header-top,
 .timeline-container.is-synchronous-track-scaling .track-lane,
 .timeline-container.is-synchronous-track-scaling .track-clip-row {
+  transition: none !important;
+}
+
+/* Panel resizes: sections snap to the new height instead of easing behind it. */
+.timeline-scroll-wrapper[data-viewport-resizing] .timeline-track-section,
+.timeline-scroll-wrapper[data-viewport-resizing] .track-header,
+.timeline-scroll-wrapper[data-viewport-resizing] .track-header-top,
+.timeline-scroll-wrapper[data-viewport-resizing] .track-lane,
+.timeline-scroll-wrapper[data-viewport-resizing] .track-clip-row {
   transition: none !important;
 }
 

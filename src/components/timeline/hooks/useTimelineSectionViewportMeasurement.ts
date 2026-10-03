@@ -21,6 +21,11 @@ function getResizeObserverInlineSize(entry: ResizeObserverEntry): number {
   return borderBoxSize?.inlineSize ?? entry.contentRect.width;
 }
 
+// Section heights follow the panel height through React state, so they land a
+// render later. Their height transition must not stretch that lag further.
+const VIEWPORT_RESIZING_ATTRIBUTE = 'data-viewport-resizing';
+const VIEWPORT_RESIZING_SETTLE_MS = 160;
+
 export function useTimelineSectionViewportMeasurement({
   scrollWrapperRef,
   timelineRef,
@@ -35,6 +40,16 @@ export function useTimelineSectionViewportMeasurement({
   const [splitViewportHeight, setSplitViewportHeight] = useState(320);
 
   useLayoutEffect(() => {
+    const observedScrollWrapper = scrollWrapperRef.current;
+    let lastSplitViewportHeight: number | null = null;
+    let viewportResizeSettleTimer: ReturnType<typeof setTimeout> | undefined;
+    const markViewportResizing = (scrollWrapper: HTMLDivElement) => {
+      scrollWrapper.setAttribute(VIEWPORT_RESIZING_ATTRIBUTE, '');
+      clearTimeout(viewportResizeSettleTimer);
+      viewportResizeSettleTimer = setTimeout(() => {
+        scrollWrapper.removeAttribute(VIEWPORT_RESIZING_ATTRIBUTE);
+      }, VIEWPORT_RESIZING_SETTLE_MS);
+    };
     const updateViewportHeights = (entryByElement?: Map<Element, ResizeObserverEntry>) => {
       const scrollWrapper = scrollWrapperRef.current;
       const timeline = timelineRef.current;
@@ -46,7 +61,12 @@ export function useTimelineSectionViewportMeasurement({
       // split drives those children, so mixing measurements creates feedback.
       if (scrollWrapper && (!entryByElement || entryByElement.has(scrollWrapper))) {
         const entry = entryByElement?.get(scrollWrapper);
-        setSplitViewportHeight(entry ? getResizeObserverBlockSize(entry) : scrollWrapper.clientHeight);
+        const nextSplitViewportHeight = entry ? getResizeObserverBlockSize(entry) : scrollWrapper.clientHeight;
+        if (lastSplitViewportHeight !== null && nextSplitViewportHeight !== lastSplitViewportHeight) {
+          markViewportResizing(scrollWrapper);
+        }
+        lastSplitViewportHeight = nextSplitViewportHeight;
+        setSplitViewportHeight(nextSplitViewportHeight);
       }
       if (videoViewport && (!entryByElement || entryByElement.has(videoViewport))) {
         const entry = entryByElement?.get(videoViewport);
@@ -85,6 +105,8 @@ export function useTimelineSectionViewportMeasurement({
     const handleWindowResize = () => updateViewportHeights();
     window.addEventListener('resize', handleWindowResize);
     return () => {
+      clearTimeout(viewportResizeSettleTimer);
+      observedScrollWrapper?.removeAttribute(VIEWPORT_RESIZING_ATTRIBUTE);
       observer?.disconnect();
       window.removeEventListener('resize', handleWindowResize);
     };

@@ -6,7 +6,8 @@ import type { FileStorageService } from './FileStorageService';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 import { acquireProjectRoot, resolveProjectRootMode, listProjectFolderNames } from './projectRootAccess';
 import { rememberLastProject, rememberProjectParent } from './projectDirectoryPersistence';
-import { addRecentFsaProject, addRecentOpfsProject } from '../recentProjects';
+import { addRecentFsaProject, addRecentOpfsProject, getRecentFsaProjectMediaSourceRootIds } from '../recentProjects';
+import { requestMediaSourceRootAccess } from '../mediaSourceRootAccess';
 import { getTabLastProjectHandleKey, LEGACY_LAST_PROJECT_HANDLE_KEY, readLastOpfsProjectName } from '../tabProjectPersistence';
 import { openRepositoryProject, createRepositoryAt, renameRepositoryProject, createIndependentProjectBackup, repositoryHasUnsavedChanges } from '../repository/lifecycle/repositoryProjectOperations';
 import { closeEditorRepository, flushEditorRepository, getActiveRepositorySession, readEditorRepositoryProject, isScratchRepository } from '../repository/lifecycle/editorRepositoryLifecycle';
@@ -30,6 +31,8 @@ export class ProjectCoreService {
   async requestPendingPermission(): Promise<boolean> {
     const handle = this.pendingHandle; if (!handle) return false;
     if (await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') return false;
+    // Same click as the folder prompt: media folders lose access on reload too.
+    await requestMediaSourceRootAccess(await getRecentFsaProjectMediaSourceRootIds(handle));
     const opened = await this.loadProject(handle); if (opened) this.pendingHandle = null; return opened;
   }
   async createProject(name: string, preserveCurrent = false): Promise<boolean> {
