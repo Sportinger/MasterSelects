@@ -122,6 +122,7 @@ export class NestedLayerCollector {
     motionFrameAdmission?: MotionFrameRuntimeAdmission,
     renderOccurrenceKey?: string,
     previewRenderScale = 1,
+    compositionSize?: { width: number; height: number },
   ): LayerRenderData[] {
     const result: LayerRenderData[] = [];
 
@@ -172,7 +173,7 @@ export class NestedLayerCollector {
           : null;
         const size = rendered ?? getMotionRenderSizeForAdmission(layer, motionFrameAdmission);
         result.push({
-          layer: applyMotionRenderPlacement(layer, size),
+          layer: applyMotionRenderPlacement(layer, size, compositionSize ?? { width: 1920, height: 1080 }),
           isVideo: false,
           externalTexture: null,
           textureView: rendered?.textureView ?? null,

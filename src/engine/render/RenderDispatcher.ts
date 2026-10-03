@@ -451,7 +451,7 @@ export class RenderDispatcher {
           motionFrameAdmission,
         );
         const size = rendered ?? getMotionRenderSizeForAdmission(data.layer, motionFrameAdmission);
-        data.layer = applyMotionRenderPlacement(data.layer, size);
+        data.layer = applyMotionRenderPlacement(data.layer, size, referenceSize);
         data.textureView = rendered?.textureView ?? null;
         data.sourceWidth = size.width;
         data.sourceHeight = size.height;

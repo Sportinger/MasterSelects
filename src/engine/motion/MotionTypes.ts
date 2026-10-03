@@ -375,14 +375,20 @@ export function getMotionRenderSize(
  * The Replicator texture is centered on its content bounds. Move the compositor
  * layer by that local-space center so asymmetric layouts keep their authored
  * contract-space placement instead of being visually re-centered.
+ * The center is in composition pixels; layer positions are normalized to the
+ * composition half-extents, so the rotated pixel offset is converted with the
+ * reference (composition) size the layer is composited in.
  */
 export function applyMotionRenderPlacement(
   layer: Layer,
   size: MotionRenderSize,
+  referenceSize: { width: number; height: number },
 ): Layer {
   const localX = size.replicator.boundsCenterX * layer.scale.x;
   const localY = size.replicator.boundsCenterY * layer.scale.y;
   if (localX === 0 && localY === 0) return layer;
+  const halfWidth = Math.max(1, referenceSize.width) / 2;
+  const halfHeight = Math.max(1, referenceSize.height) / 2;
   const rotationDegrees = typeof layer.rotation === 'number'
     ? layer.rotation
     : layer.rotation.z;
@@ -393,8 +399,8 @@ export function applyMotionRenderPlacement(
     ...layer,
     position: {
       ...layer.position,
-      x: layer.position.x + localX * cos - localY * sin,
-      y: layer.position.y + localX * sin + localY * cos,
+      x: layer.position.x + (localX * cos - localY * sin) / halfWidth,
+      y: layer.position.y + (localX * sin + localY * cos) / halfHeight,
     },
   };
 }

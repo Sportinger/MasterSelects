@@ -369,6 +369,7 @@ export class NestedCompRenderer {
         motionFrameAdmission,
         renderOccurrenceKey,
         effectiveRenderScale,
+        { width, height },
       );
       if (hasMissingCriticalNestedLayer(nestedLayers, nestedLayerData)) {
         if (particleQuality === 'preview') {
@@ -519,10 +520,11 @@ export class NestedCompRenderer {
     motionFrameAdmission?: MotionFrameRuntimeAdmission,
     renderOccurrenceKey?: string,
     previewRenderScale = 1,
+    compositionSize?: { width: number; height: number },
   ): LayerRenderData[] {
     return this.layerCollector.collect(
       layers, commandEncoder, sampler, depth, skipEffects, particleQuality,
-      motionFrameAdmission, renderOccurrenceKey, previewRenderScale,
+      motionFrameAdmission, renderOccurrenceKey, previewRenderScale, compositionSize,
     );
   }
 

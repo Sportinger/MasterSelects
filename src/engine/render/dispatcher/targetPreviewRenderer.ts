@@ -249,7 +249,7 @@ export class TargetPreviewRenderer {
         motionFrameAdmission,
       );
       const size = rendered ?? getMotionRenderSizeForAdmission(data.layer, motionFrameAdmission);
-      data.layer = applyMotionRenderPlacement(data.layer, size);
+      data.layer = applyMotionRenderPlacement(data.layer, size, { width: referenceWidth, height: referenceHeight });
       data.textureView = rendered?.textureView ?? null;
       data.sourceWidth = size.width;
       data.sourceHeight = size.height;
