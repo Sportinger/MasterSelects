@@ -1,7 +1,8 @@
 import type { RepositoryBackend, RepositoryDescriptor } from '../contracts';
 import { RepositoryError } from '../contracts';
 import type { RepositoryLocation, RepositoryOpenProgress } from '../storageWorkerProtocol';
-import { fileDigest, readFileChunks, readJson } from '../archive/streamIO';
+import { fileDigest, readFileChunks, readJson, writeJson } from '../archive/streamIO';
+import { recoverRepository } from '../persistence/recovery';
 import { restoreRepositoryArchive } from '../archive/archiveTransport';
 import { prepareArchive } from '../archive/selectiveArchive';
 import { openLegacySource, RepositoryArchiveSourceError, type ReadOnlyProjectSource } from '../import/legacySource';
@@ -46,16 +47,19 @@ async function importBindings(target: RepositoryBackend): Promise<Array<{ import
   return bindings;
 }
 
+/** Unfinished imports only matter while no import of the folder has finished; a restarted one supersedes them. */
+const unfinished = (bindings: Awaited<ReturnType<typeof importBindings>>) => bindings.length > 0 && !bindings.some(binding => binding.complete);
+
 /** A converted folder whose import stopped midway must be resumed from the original, not opened empty. */
 export async function assertLegacyImportComplete(target: RepositoryBackend): Promise<void> {
-  if ((await importBindings(target)).some(binding => !binding.complete)) {
+  if (unfinished(await importBindings(target))) {
     throw new RepositoryError('conflict', 'Project conversion did not finish. Open the original project again and choose this folder to resume.');
   }
 }
 
 /** An in-place conversion that stopped midway: the old project files sit next to an unfinished repository. */
 export async function hasResumableInPlaceImport(backend: RepositoryBackend): Promise<boolean> {
-  if (!(await importBindings(backend)).some(binding => !binding.complete)) return false;
+  if (!unfinished(await importBindings(backend))) return false;
   return Boolean(await backend.stat('project.json') || await findLegacyPackage(backend));
 }
 
@@ -69,10 +73,27 @@ async function chooseImport(source: ReadOnlyProjectSource, target: RepositoryBac
   }
   const descriptor = await readJson<RepositoryDescriptor>(target, 'project.msrepo.json', 65536);
   const bindings = await importBindings(target);
-  // In place the folder can only hold its own conversion, even when another browser registered the source.
-  const resumable = inPlace ? bindings.find(binding => !binding.complete) : bindings.find(binding => binding.sourceId === source.sourceId);
-  if (!resumable) throw new RepositoryError('conflict', inPlace ? 'This folder already contains a converted project' : 'This folder already contains a different project; choose an empty folder');
+  if (inPlace) {
+    // The folder can only hold its own conversion, even when another browser registered the source.
+    if (!unfinished(bindings)) throw new RepositoryError('conflict', 'This folder already contains a converted project');
+    return restartInPlaceImport(target, descriptor, bindings[0].importId);
+  }
+  const resumable = bindings.find(binding => binding.sourceId === source.sourceId);
+  if (!resumable) throw new RepositoryError('conflict', 'This folder already contains a different project; choose an empty folder');
   return { importId: resumable.importId, descriptor, target, complete: resumable.complete };
+}
+
+/**
+ * The old files may have changed since the interrupted attempt (e.g. edited in an older build), so an
+ * unfinished in-place import starts over under a new identity instead of failing on its stale binding.
+ * An attempt that already published its commit only lacks the completion marker and opens as it is.
+ */
+async function restartInPlaceImport(target: RepositoryBackend, descriptor: RepositoryDescriptor, previousImportId: string): Promise<ImportChoice> {
+  const recovered = await recoverRepository(target, descriptor);
+  if (!recovered.head) return { importId: crypto.randomUUID(), descriptor, target, complete: false };
+  const binding = await readJson<Record<string, unknown>>(target, `${IMPORTS}${previousImportId}/target.json`, 65536);
+  await writeJson(target, `${IMPORTS}${previousImportId}/complete.json`, { ...binding, commit: recovered.head });
+  return { importId: previousImportId, descriptor, target, complete: true };
 }
 
 export interface LegacyImportRequest {

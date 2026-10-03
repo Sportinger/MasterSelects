@@ -136,7 +136,11 @@ export async function importLegacyRepository(source: LegacySourceBundle, descrip
       }
       // Sidecar content gets its own canonical domain, while original bytes stay reachable.
       if ((classification === 'content' || classification === 'journal') && path.endsWith('.json') && length <= 32 * 1024 * 1024) {
-        const value = await source.readJson<unknown>(path);
+        // A damaged sidecar (e.g. truncated by a crash) keeps its original bytes above but no parsed domain;
+        // the old editor could not read it either, so it must not block converting the rest of the project.
+        let value: unknown;
+        try { value = await source.readJson<unknown>(path); }
+        catch (error) { if (error instanceof RepositoryError && error.code === 'corrupt') continue; throw error; }
         const domains = encodeProjectAggregate(classification === 'journal' ? 'legacyJournal' : 'legacySidecar', source.sourceId, path,
           { sourcePath: path, sourceVersion: source.sourceVersion, value }, { blobs: [identity] });
         await importLegacyArtifactDependencies(source, target, owner, transport, domains, options.signal, { evidenceOnly: true, sourcePath: path });

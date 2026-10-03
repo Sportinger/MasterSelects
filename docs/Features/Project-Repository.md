@@ -195,13 +195,19 @@ The source-change proof hashes the package and sidecars completely but linked
 media only by path and size, so projects with hundreds of gigabytes of footage
 convert in seconds. Packages keep the old physical layout: raw media sit directly
 in the media folder, caches in its `.masterselects-cache` folder and documents
-at the project root. An interrupted in-place conversion resumes
-automatically the next time the folder is opened. A separate conversion folder
-resumes when the same original is converted into it again; opening that
-half-converted folder directly reports that the conversion did not finish.
-Listing the old folder walks it once per pass, so tens of thousands of old proxy
-frames do not multiply the scan; the repository's own `.masterselects/` folder
-is never part of the legacy source.
+at the project root. An interrupted in-place conversion starts again
+automatically the next time the folder is opened, also when the old files were
+changed in between (for example in an older build); an attempt that already
+published its commit opens as it is. A separate conversion folder resumes when
+the same original is converted into it again; opening that half-converted folder
+directly reports that the conversion did not finish.
+Listing the old folder walks it once per pass, and the repository's own
+`.masterselects/` folder is never part of the legacy source. Regenerable caches
+(proxy frames, audio proxies, thumbnails, waveforms and backups) stay usable in
+place but are not listed or proven file by file, so tens of thousands of old
+proxy frames do not slow the conversion; cached artifacts stay linked. A damaged
+sidecar JSON or an unreadable `project.autosave.json` keeps its original bytes
+and is recorded in the import provenance instead of stopping the conversion.
 
 Older per-clip keyframes may include a redundant runtime `clipId`. Import
 checks that it matches the containing clip and keeps the authored curve fields.

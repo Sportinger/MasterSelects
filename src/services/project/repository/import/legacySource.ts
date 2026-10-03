@@ -8,7 +8,7 @@ import { StreamHash } from '../segments/streamHash';
 import { canonicalBytes } from '../segments/canonical';
 import { extractZip } from '../archive/streamZip';
 import { fileDigest, readFileChunks, readJson, safePath, TRANSPORT_LIMITS, writeJson } from '../archive/streamIO';
-import { isLegacyLinkedPath, legacyLogicalPath, legacyPhysicalCandidates, legacySourceRole, type LegacySourceRole } from './legacyPackageLayout';
+import { isLegacyDerivedCachePath, isLegacyLinkedPath, legacyLogicalPath, legacyPhysicalCandidates, legacySourceRole, type LegacySourceRole } from './legacyPackageLayout';
 
 export interface ReadOnlyProjectSource extends Pick<RepositoryBackend, 'read' | 'stat' | 'list'> { readonly sourceId: string; readonly locationId: string; }
 /** Reader over logical package paths that also reports where linked bytes physically remain. */
@@ -120,7 +120,7 @@ function packageSource(staging: EntryStore, prefix: string, source: ReadOnlyProj
     } while (cursor);
     do {
       const page = await source.list('', cursor, 1024, signal);
-      for (const path of page.paths) { const logical = legacyLogicalPath(path, folder); if (logical) all.add(logical); }
+      for (const path of page.paths) { const logical = legacyLogicalPath(path, folder); if (logical && !isLegacyDerivedCachePath(logical)) all.add(logical); }
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     return [...all].toSorted();
@@ -214,10 +214,16 @@ export async function openLegacySource(source: ReadOnlyProjectSource, input: Leg
   }
   await writeJson(options.staging, `.masterselects/imports/${options.importId}/binding.json`, { sourceId: source.sourceId, sourceLocationId: source.locationId, targetLocationId: options.staging.locationId, sourceVersion, input }, signal);
   const candidates: LegacyProvenance['candidates'] = [];
-  let selected: ProjectFile | null = null; let selectedProjectPath = '';
+  let selected: ProjectFile | null = null; let selectedProjectPath = ''; const unreadable: string[] = [];
   for (const path of ['project.json', 'project.autosave.json']) {
     if (!await reader.stat(path)) continue;
-    const candidate = await readJson<unknown>(reader, path, TRANSPORT_LIMITS.jsonBytes, signal); assertProject(candidate);
+    // One unreadable state file (often a half-written autosave) must not hide the other one.
+    let candidate: ProjectFile;
+    try { const parsed = await readJson<unknown>(reader, path, TRANSPORT_LIMITS.jsonBytes, signal); assertProject(parsed); candidate = parsed; }
+    catch (error) {
+      if (!(error instanceof RepositoryError) || (error.code !== 'corrupt' && error.code !== 'unsupported')) throw error;
+      unreadable.push(`${path} is unreadable; its original bytes are retained`); continue;
+    }
     const identity = await fileDigest(reader, path, signal);
     candidates.push({ path, hash: identity.hash, updatedAt: candidate.updatedAt });
     if (!selected || path === 'project.autosave.json' && shouldPreferAutosave(selected, candidate)) { selected = candidate; selectedProjectPath = path; }
@@ -225,7 +231,7 @@ export async function openLegacySource(source: ReadOnlyProjectSource, input: Leg
   if (!selected) throw new RepositoryError('corrupt', 'Legacy source has no project state');
   const project = await resolveTerrain(selected, reader, signal);
   const provenance: LegacyProvenance = { selectedProjectPath, candidates, missingRequired,
-    conflicts: candidates.length > 1 && candidates[0].hash !== candidates[1].hash ? ['project.json and autosave differ; both originals retained'] : [] };
+    conflicts: [...unreadable, ...candidates.length > 1 && candidates[0].hash !== candidates[1].hash ? ['project.json and autosave differ; both originals retained'] : []] };
   await writeJson(options.staging, `.masterselects/imports/${options.importId}/source.json`, { sourceId: source.sourceId, sourceLocationId: source.locationId, targetLocationId: options.staging.locationId, sourceVersion, input, provenance }, signal);
   const bundle: LegacySourceBundle = {
     sourceId: source.sourceId, sourceVersion, project, provenance,

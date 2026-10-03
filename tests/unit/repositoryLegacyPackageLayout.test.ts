@@ -255,3 +255,56 @@ describe('legacy directory source listing', () => {
     expect(walks.count).toBe(2);
   });
 });
+
+describe('robust legacy conversion', () => {
+  const location: RepositoryLocation = { kind: 'opfs', path: 'Robust Project' };
+  function folderWith(files: Record<string, Uint8Array>) {
+    const folder = memory('folder:Robust Project');
+    for (const [path, bytes] of Object.entries(files)) folder.files.set(path, bytes);
+    const request = { source: { ...folder.backend, sourceId: 'folder:Robust Project' }, sourceHandle: null, target: location, inPlace: true,
+      workspaceId: 'workspace', backendFor: async () => folder.backend };
+    return { folder, request };
+  }
+  const project = () => canonicalBytes(createRepositoryProject('Robust Project'));
+
+  it('leaves regenerable caches out of the per-file source proof and listing', () => {
+    expect(legacySourceRole('Proxy/clip/frame_000001.jpg', 'Raw', null)).toBe('ignored');
+    expect(legacySourceRole('Audio Proxies/clip.wav', 'Raw', null)).toBe('ignored');
+    expect(legacySourceRole('Backups/project_1.json', 'Raw', null)).toBe('ignored');
+    expect(legacySourceRole('Cache/thumbnails/t.webp', 'Raw', null)).toBe('ignored');
+    expect(legacySourceRole('Cache/artifacts/sha256/ab/x/artifact.bin', 'Raw', null)).toBe('linked');
+    expect(legacySourceRole('My Media/.masterselects-cache/Proxy/m/frame.webp', 'My Media', 'My.msproj')).toBe('ignored');
+    expect(legacySourceRole('My Media/.masterselects-cache/artifacts/sha256/ab/x/artifact.bin', 'My Media', 'My.msproj')).toBe('linked');
+    expect(legacySourceRole('Raw/clip.mov', 'Raw', null)).toBe('linked');
+  });
+
+  it('converts despite an unreadable sidecar or autosave and keeps their original bytes', async () => {
+    const broken = new TextEncoder().encode('{"cuts": [1, 2');
+    const { folder, request } = folderWith({ 'project.json': project(), 'project.autosave.json': broken, 'Analysis/clip.json': broken });
+    const converted = await prepareLegacyImport(request);
+    await expect(assertLegacyImportComplete(folder.backend)).resolves.toBeUndefined();
+    expect(folder.files.has(blobPath(await hashBytes(broken)))).toBe(true);
+    const source = JSON.parse(new TextDecoder().decode([...folder.files].find(([path]) => path.endsWith('/source.json'))![1])) as { provenance: { selectedProjectPath: string; conflicts: string[] } };
+    expect(source.provenance.selectedProjectPath).toBe('project.json');
+    expect(source.provenance.conflicts).toEqual(['project.autosave.json is unreadable; its original bytes are retained']);
+    expect(converted.descriptor.format).toBe('masterselects-repository');
+  });
+
+  it('restarts an interrupted in-place conversion after the old files changed', async () => {
+    const { folder, request } = folderWith({ 'project.json': project(), 'Analysis/clip.json': canonicalBytes({ cuts: [] }) });
+    // An attempt that wrote its repository and bindings, then stopped before publishing a commit.
+    let failWrites = false; const writeNew = folder.backend.writeNew.bind(folder.backend);
+    folder.backend.writeNew = async (path, chunks, signal) => { if (failWrites && path.startsWith('.masterselects/segments/')) throw new RepositoryError('io', 'Interrupted'); return writeNew(path, chunks, signal); };
+    failWrites = true;
+    await expect(prepareLegacyImport(request)).rejects.toMatchObject({ code: 'io' });
+    failWrites = false;
+    await expect(hasResumableInPlaceImport(folder.backend)).resolves.toBe(true);
+    // Edited in an older build meanwhile.
+    folder.files.set('Analysis/clip.json', canonicalBytes({ cuts: [1] }));
+    const converted = await prepareLegacyImport(request);
+    await expect(hasResumableInPlaceImport(folder.backend)).resolves.toBe(false);
+    await expect(assertLegacyImportComplete(folder.backend)).resolves.toBeUndefined();
+    const recovered = await recoverRepository(folder.backend, converted.descriptor);
+    expect(recovered.head).not.toBeNull();
+  });
+});

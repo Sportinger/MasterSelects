@@ -20,6 +20,17 @@ export function isLegacyLinkedPath(path: string): boolean {
   return Boolean(rest) && LINKED_FOLDERS.has(head);
 }
 /**
+ * Regenerable caches (proxy frames, audio proxies, thumbnails, waveforms, backups) can hold tens of
+ * thousands of files. They stay usable in place but are neither listed nor proven file by file; only
+ * cached artifacts stay linked because project data references them.
+ */
+const DERIVED_FOLDERS = new Set<string>([PROJECT_FOLDERS.PROXY, PROJECT_FOLDERS.AUDIO_PROXIES, PROJECT_FOLDERS.BACKUPS]);
+export function isLegacyDerivedCachePath(path: string): boolean {
+  const [head, rest] = split(path);
+  if (!rest) return false;
+  return DERIVED_FOLDERS.has(head) || head === PROJECT_FOLDERS.CACHE && !rest.startsWith('artifacts/');
+}
+/**
  * How a physical file of the old folder takes part in conversion and in the source proof:
  * imported files are copied and fully hashed, linked media contribute path and size only, and
  * unrelated files (backups next to the package, foreign folders) are neither read nor proven.
@@ -30,7 +41,7 @@ const REPOSITORY_DESCRIPTOR = 'project.msrepo.json';
 export function legacySourceRole(physical: string, mediaFolder: string, packagePath: string | null): LegacySourceRole {
   if (!physical.includes('/')) return physical === packagePath || packagePath === null && physical.endsWith('.json') && physical !== REPOSITORY_DESCRIPTOR ? 'imported' : 'ignored';
   const logical = legacyLogicalPath(physical, mediaFolder);
-  return logical === null ? 'ignored' : isLegacyLinkedPath(logical) ? 'linked' : 'imported';
+  return logical === null || isLegacyDerivedCachePath(logical) ? 'ignored' : isLegacyLinkedPath(logical) ? 'linked' : 'imported';
 }
 
 function split(path: string): [string, string] {
