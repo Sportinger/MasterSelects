@@ -77,7 +77,9 @@ export function resolveClipGeometry(
     const directPreviewStart = clip.startTime + (clipDrag?.multiSelectClipIds?.includes(clip.id)
       ? clipDrag.multiSelectTimeDelta ?? dragTimelineDelta ?? 0
       : dragTimelineDelta ?? 0);
-    startTime = Math.max(0, dragPreviewPatch?.startTime ?? directPreviewStart);
+    // The live drag delta updates every drag frame; the store preview patch is
+    // published at a lower rate and would make linked clips trail the primary.
+    startTime = Math.max(0, directPreviewStart);
     if (dragPreviewPatch) {
       visible = (dragPreviewPatch.trackId ?? clip.trackId) === trackId;
     }

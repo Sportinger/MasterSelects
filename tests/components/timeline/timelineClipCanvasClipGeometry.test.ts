@@ -66,6 +66,27 @@ describe('timeline clip canvas trim geometry', () => {
     expect(geometry.startTime).toBe(4);
   });
 
+  it('keeps linked clips on the live drag position when the preview patch is stale', () => {
+    const geometry = resolveClipGeometry(clip({
+      id: 'audio',
+      linkedClipId: 'video',
+      startTime: 2,
+      trackId: 'audio-track',
+      source: { type: 'audio', naturalDuration: 10 },
+    }), {
+      trackId: 'audio-track',
+      clipDrag: drag({ snappedTime: 6 }),
+      clipDragPreview: {
+        patches: {
+          video: { startTime: 3, trackId: 'video-track' },
+          audio: { startTime: 3, trackId: 'audio-track' },
+        },
+      },
+    });
+
+    expect(geometry).toMatchObject({ startTime: 6, visible: true });
+  });
+
   it('uses destination-track preview patches for multi-selected drag followers', () => {
     const follower = clip({
       id: 'follower',
