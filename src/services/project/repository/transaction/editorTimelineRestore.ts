@@ -14,6 +14,24 @@ import { isLinkedMediaDeferred } from '../../linkedMediaDemand';
 import type { TimelineClip } from '../../../../types/timeline';
 
 export interface StagedTimeline { state: Partial<TimelineStore>; activate(): void; abandon(): void; }
+/** Fields derived from the clip's media only (source waveform, projected transcript, analysis, scenes). */
+const MEDIA_DERIVED_CLIP_FIELDS = ['waveform', 'waveformChannels', 'transcript', 'transcriptStatus', 'transcriptProgress',
+  'analysis', 'analysisStatus', 'analysisProgress', 'faceAnalysisStatus', 'faceAnalysisProgress', 'faceAnalysisMessage',
+  'sceneDescriptions', 'sceneDescriptionStatus', 'sceneDescriptionProgress', 'sceneDescriptionMessage'] as const;
+
+/** Keep media-derived fields across undo/redo and composition switches, so warmups and artifact projection do
+ * not regenerate (and re-render) every clip after each revision. Only for the same clip on the same media. */
+export function carryDerivedClipWaveforms(previousClips: readonly TimelineClip[], clips: TimelineClip[]): TimelineClip[] {
+  const previous = new Map(previousClips.map(clip => [clip.id, clip]));
+  const mediaOf = (clip: TimelineClip) => clip.mediaFileId ?? clip.source?.mediaFileId;
+  return clips.map(clip => {
+    const before = previous.get(clip.id);
+    if (!before || clip.isComposition || !mediaOf(clip) || mediaOf(before) !== mediaOf(clip)) return clip;
+    const carried: Partial<Record<(typeof MEDIA_DERIVED_CLIP_FIELDS)[number], unknown>> = {};
+    for (const field of MEDIA_DERIVED_CLIP_FIELDS) if (clip[field] === undefined && before[field] !== undefined) carried[field] = before[field];
+    return Object.keys(carried).length ? { ...clip, ...carried } as TimelineClip : clip;
+  });
+}
 /** Existing parameterized restore codecs bind into a private buffer, never the visible store. */
 export async function stageEditorTimeline(current: TimelineStore, media: MediaState, composition: Composition | undefined,
   signal: AbortSignal, publishRuntimePatch: (patch: Partial<TimelineStore>) => void, readRuntimeState: () => TimelineStore): Promise<StagedTimeline> {
@@ -76,7 +94,7 @@ export async function stageEditorTimeline(current: TimelineStore, media: MediaSt
     ...(isLinkedMediaDeferred(clip.source?.mediaFileId ?? clip.mediaFileId ?? '') ? { needsReload: false, isLoading: false } : {}),
     ...(clip.nestedClips ? { nestedClips: deferTree(clip.nestedClips) } : {}),
   }));
-  set({ clips: deferTree(sanitized.clips) });
+  set({ clips: carryDerivedClipWaveforms(current.clips, deferTree(sanitized.clips)) });
   set(restoreLoadStateLinkedSpeedState(state.clips, state.clipKeyframes));
   const clipIds = new Set(state.clips.map(clip => clip.id));
   const keyframeIds = new Set([...state.clipKeyframes.values()].flat().map(frame => frame.id));

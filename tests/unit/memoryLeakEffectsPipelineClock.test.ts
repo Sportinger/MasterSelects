@@ -23,7 +23,7 @@ describe('Memory Leak EffectsPipeline clock adapter', () => {
       limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => undefined),
       createShaderModule: vi.fn(() => ({})), createBindGroupLayout: vi.fn(() => ({})), createPipelineLayout: vi.fn(() => ({})),
       createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: vi.fn(() => ({})) })), createComputePipeline: vi.fn(() => ({})), createBindGroup: vi.fn(() => ({})),
-      createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
+      createBuffer: vi.fn(() => ({ destroy: vi.fn() })), createSampler: vi.fn(() => ({})),
       createTexture: vi.fn(({ label }: GPUTextureDescriptor) => {
         textureLabels.push(String(label));
         return { createView: vi.fn(() => ({})), destroy: vi.fn() };

@@ -23,13 +23,21 @@ function reference(uv: [number, number], resolution: [number, number], time: num
     color[2] * (1 - amount) + shaded[2] * amount, color[3]];
 }
 
+// Owner presentation may share literal leaves and add composition folders; computational nodes stay the catalog recipe.
+const computationalNodes = (graph: ReturnType<typeof effectOperatorGraph>) => graph.nodes
+  .filter(node => !(node.operator.startsWith('values.') && node.constants && !Object.keys(node.bindings).length))
+  .toSorted((a, b) => a.id.localeCompare(b.id));
+
 describe('CRT Screen image graph', () => {
   it('uses the canonical contextual owner and catalog defaults', () => {
     const effect: Effect = { id: 'crt', name: 'CRT Screen', type: 'crt-screen', enabled: true, params: {} };
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('crt-screen'));
-    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultCrtScreenGraph(), compositionRules: 2 });
+    const owned = effectOperatorGraph(effect), recipe = createDefaultCrtScreenGraph();
+    expect(owned.compositionRules).toBe(2);
+    expect(computationalNodes(owned)).toEqual(computationalNodes(recipe));
+    expect(effectOperatorGraph({ ...effect, operatorGraph: recipe })).toEqual(owned);
   });
 
   it('uses owner-bound parameters and only shared granular operators', () => {

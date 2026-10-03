@@ -313,7 +313,7 @@ class RenderSchedulerService {
         this.lastFrameTime = now;
         if (!renderHostPort.getIsExporting()) {
           try {
-            const __tr = performance.now(); this.renderAllTargets(); performance.measure('mc:targets', { start: __tr }); // TEMP-MC-PROFILE
+            this.renderAllTargets();
           } catch (error) {
             log.error('Independent render target pass failed; scheduler will continue', error);
           }

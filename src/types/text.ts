@@ -8,12 +8,21 @@ export interface TextValueLink {
   property: string;             // property registry path, e.g. 'speed', 'opacity', 'position.x'
 }
 
+/** How a partially revealed text draws its glyph slots (see services/text/textReveal). */
+export type TextRevealMode = 'typewriter' | 'decode' | 'fade' | 'rise';
+
 // Text clip typography properties
 export interface TextClipProperties {
   // Content
   text: string;                 // may contain {value}/{time} tokens (see textValueTemplate)
   value?: number;               // keyframeable number substituted into {value} tokens
   valueLink?: TextValueLink;    // when set, {value} follows another clip's numeric property
+
+  // Per-character reveal animation; reveal is keyframeable as text.reveal
+  reveal?: number;              // 0-1 progress, 1 (default) = fully visible
+  revealMode?: TextRevealMode;  // default typewriter
+  revealSpread?: number;        // decode: scrambled glyphs ahead; fade/rise: soft edge width, in characters
+  revealCursor?: boolean;       // typewriter/decode: block cursor at the reveal head
 
   // Typography
   fontFamily: string;           // e.g., 'Roboto', 'Open Sans'

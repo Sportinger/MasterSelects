@@ -157,6 +157,8 @@ export interface NodeGraphNode {
   summary?: {
     /** Shared timeline axis for a composition track, in graph units. */
     timeAxis?: { width: number; duration: number; pixelsPerSecond: number };
+    /** Collapsed clip lane (plan 3.1e): one compact row 'source ▸ range ▸ effects ▸ target'. */
+    laneRow?: { width: number; index: string; title: string; text: string; tone: 'video' | 'audio' | 'transition' };
     badges?: readonly string[];
     bar?: { start: number; end: number };
     /** Source-time ranges normalized to 0..1; presentation only, never executable. */

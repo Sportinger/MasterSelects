@@ -24,6 +24,7 @@ export const transformToolDefinitions: ToolDefinition[] = [
           rotationZ: { type: 'number', description: 'Z-axis rotation in degrees.' },
           opacity: { type: 'number', description: 'Opacity (0 = transparent, 1 = fully visible)' },
           blendMode: { type: 'string', enum: BLEND_MODES, description: 'Clip compositing blend mode.' },
+          is3D: { type: 'boolean', description: 'Switch a video or image clip into the shared 3D scene as a textured plane (true) or back to 2D (false), like the Transform panel 3D toggle. Applied first; switching resets 3D-specific transform state and later fields use the new space.' },
         },
         required: ['clipId'],
       },

@@ -20,7 +20,7 @@ function createStackEqEffect(id = 'eq-1'): AudioEffectInstance {
 
 function addStackEqFromSelect(container: HTMLElement): AudioEffectInstance {
   fireEvent.click(within(container).getByText('+ Add Effect', { exact: true }));
-  fireEvent.click(within(container).getByRole('button', { name: 'EQ', exact: true }));
+  fireEvent.click(within(container).getByRole('button', { name: 'Graphic EQ', exact: true }));
 
   const effect = useTimelineStore.getState().clips[0].audioState?.effectStack?.find(item => item.descriptorId === 'audio-eq');
   expect(effect).toBeDefined();

@@ -77,7 +77,9 @@ describe('AI tool media handlers', () => {
 
     const bytes = new Uint8Array([1, 2, 3, 4, 5]);
     let callIndex = 0;
-    const fetchMock = vi.fn<typeof fetch>(async (_input, init) => {
+    const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
+      // Dev logging forwards WARN/ERROR lines to /api/logs through the same fetch.
+      if (!String(input).startsWith('/api/local-file')) return new Response(null, { status: 204 });
       callIndex += 1;
       if (callIndex === 1) return fullResponse;
 
@@ -126,10 +128,11 @@ describe('AI tool media handlers', () => {
     expect(importedFile?.type).toBe('video/mp4');
     expect(importedFile?.size).toBe(5);
 
-    expect(fetchMock.mock.calls[0]?.[0]).toBe('/api/local-file?path=C%3A%2FUsers%2Fadmin%2FDocuments%2FBig%20Clip.mp4');
-    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Authorization')).toBe('Bearer dev-token');
+    const localFileCalls = fetchMock.mock.calls.filter(([input]) => String(input).startsWith('/api/local-file'));
+    expect(localFileCalls[0]?.[0]).toBe('/api/local-file?path=C%3A%2FUsers%2Fadmin%2FDocuments%2FBig%20Clip.mp4');
+    expect(new Headers(localFileCalls[0]?.[1]?.headers).get('Authorization')).toBe('Bearer dev-token');
 
-    const rangeRequests = fetchMock.mock.calls
+    const rangeRequests = localFileCalls
       .slice(1)
       .map(([, init]) => new Headers(init?.headers).get('Range'))
       .filter((range): range is string => Boolean(range));

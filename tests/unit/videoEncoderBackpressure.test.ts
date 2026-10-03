@@ -37,7 +37,9 @@ class MockVideoEncoder {
   encodeQueueSize = 0;
   state: CodecState = 'unconfigured';
 
-  constructor(_init: VideoEncoderInit) {
+  readonly init: VideoEncoderInit;
+  constructor(init: VideoEncoderInit) {
+    this.init = init;
     MockVideoEncoder.instances.push(this);
   }
 }
@@ -157,6 +159,32 @@ describe('VideoEncoderWrapper export backpressure', () => {
     expect(encoder.flush).toHaveBeenCalledOnce();
     expect(encoder.encode).toHaveBeenCalledTimes(25);
 
+    wrapper.cancel();
+  });
+
+  it('waits for encoded output instead of flushing, so hardware encoders keep their GOP and rate control', async () => {
+    vi.stubGlobal('VideoEncoder', MockVideoEncoder);
+    vi.stubGlobal('VideoFrame', MockVideoFrame);
+    Object.defineProperty(window, 'VideoEncoder', { configurable: true, value: MockVideoEncoder });
+    const settings = { ...createSettings(), width: 3440, height: 1440, fps: 60 };
+    const wrapper = new VideoEncoderWrapper(settings);
+    await expect(wrapper.init()).resolves.toBe(true);
+    const encoder = MockVideoEncoder.instances[0];
+    // Only codec backpressure is under test here; the muxer is not involved.
+    (wrapper as unknown as { muxer: null }).muxer = null;
+    // A codec that consumes each frame shortly after encode(), like Chromium's hardware H.264 encoder.
+    encoder.encode.mockImplementation(() => {
+      encoder.encodeQueueSize += 1;
+      setTimeout(() => {
+        encoder.encodeQueueSize -= 1;
+        encoder.init.output({ byteLength: 1 } as EncodedVideoChunk, {} as EncodedVideoChunkMetadata);
+      }, 1);
+    });
+    const pixels = new Uint8ClampedArray(settings.width * settings.height * 4);
+    for (let frame = 0; frame < 20; frame++) await wrapper.encodeFrame(pixels, frame);
+    expect(encoder.flush).not.toHaveBeenCalled();
+    const keyFrames = encoder.encode.mock.calls.filter(([, options]) => (options as VideoEncoderEncodeOptions | undefined)?.keyFrame);
+    expect(keyFrames).toHaveLength(1);
     wrapper.cancel();
   });
 

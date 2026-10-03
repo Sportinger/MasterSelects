@@ -99,6 +99,15 @@ export function hasColorGraph(clip: TimelineClip): boolean {
   return clip.colorCorrection?.enabled === true;
 }
 
+/** A switched-off stage stays in the graph as bypassed, so its Byp can switch it back on. */
+export function hasMaskStack(clip: TimelineClip): boolean {
+  return (clip.masks?.length ?? 0) > 0;
+}
+
+export function hasColorState(clip: TimelineClip): boolean {
+  return !!clip.colorCorrection;
+}
+
 export function hasForcedBuiltInNode(clip: TimelineClip, node: ClipNodeGraphForcedBuiltIn): boolean {
   return clip.nodeGraph?.forcedBuiltIns?.includes(node) ?? false;
 }
@@ -216,7 +225,8 @@ export function createMaskNode(depth: number, signalType: NodeGraphSignalType, c
       inputPort('mask', 'mask', 'mask'),
     ],
     outputs: [outputPort('output', signalType, signalType)],
-    params: { masks: maskCount },
+    // Byp switches every mask of the stack off/on (masks keep their own enabled flags).
+    params: { masks: maskCount, bypassable: (clip.masks?.length ?? 0) > 0, enabled: maskCount > 0 || !clip.masks?.length },
     layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
     domain: 'clip',
     binding: { kind: 'clip-mask-stack' },
@@ -237,6 +247,8 @@ export function createColorNode(depth: number, signalType: NodeGraphSignalType, 
     params: {
       nodes: activeVersion?.nodes.length ?? 0,
       version: activeVersion?.name ?? 'Active',
+      bypassable: !!clip.colorCorrection,
+      enabled: clip.colorCorrection?.enabled !== false,
     },
     layout: { x: depth * NODE_SPACING_X, y: MAIN_LANE_Y },
     domain: 'color',

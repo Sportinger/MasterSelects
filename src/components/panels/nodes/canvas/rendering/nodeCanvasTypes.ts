@@ -32,6 +32,8 @@ export interface CanvasNode extends Rect {
   viewerEnabled?: boolean;
   valueBesideOutput?: boolean;
   expandable?: boolean;
+  /** Collapsed clip lane: one compact row instead of a card (plan 3.1e). */
+  laneRow?: { index: string; title: string; text: string; tone: string };
   mathSymbol?: Point & { text: string };
   preview?: Rect & { key: string; label: string; text?: boolean };
 }

@@ -90,18 +90,22 @@ export async function generateProcessedWaveformForClipAction(
             return;
           }
 
-          updateClips(clips => updateClipById(clips, clipId, {
-              ...(currentClip.waveform?.length ? {} : { waveform: result.waveform }),
+          // Merge into the clip being updated, never into the snapshot read before the await.
+          updateClips(clips => {
+            const fresh = clips.find(c => c.id === clipId) ?? currentClip;
+            return updateClipById(clips, clipId, {
+              ...(fresh.waveform?.length ? {} : { waveform: result.waveform }),
               audioState: {
-                ...(currentClip.audioState ?? {}),
+                ...(fresh.audioState ?? {}),
                 processedAnalysisRefs: {
-                  ...(currentClip.audioState?.processedAnalysisRefs ?? {}),
+                  ...(fresh.audioState?.processedAnalysisRefs ?? {}),
                   ...result.audioAnalysisRefs,
                 },
               },
               ...clearAudioAnalysisJobUpdate(),
               waveformProgress: 100,
-            }));
+            });
+          });
           log.debug('Derived processed waveform complete', { clip: clip.name, artifactId: result.artifact.id });
           return;
         }

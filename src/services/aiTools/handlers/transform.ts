@@ -19,9 +19,23 @@ export async function handleSetTransform(
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const clipId = args.clipId as string;
-  const clip = timelineStore.clips.find(c => c.id === clipId);
+  let clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) {
     return { success: false, error: `Clip not found: ${clipId}` };
+  }
+  let toggled3D = false;
+  if (args.is3D !== undefined) {
+    if (typeof args.is3D !== 'boolean') return { success: false, error: 'is3D must be a boolean' };
+    const sourceType = clip.source?.type;
+    if (args.is3D !== !!clip.is3D) {
+      if (sourceType !== 'video' && sourceType !== 'image') {
+        return { success: false, error: 'is3D can only be switched on video and image clips' };
+      }
+      // Switching resets 3D-specific transform state; later fields apply in the new space.
+      useTimelineStore.getState().toggle3D(clipId);
+      clip = useTimelineStore.getState().clips.find(c => c.id === clipId) ?? clip;
+      toggled3D = true;
+    }
   }
 
   // Get composition resolution for pixel → normalized conversion
@@ -40,6 +54,9 @@ export async function handleSetTransform(
 
   if (!hasPosition && !hasScale && !hasRotation
     && args.opacity === undefined && args.blendMode === undefined) {
+    if (args.is3D !== undefined) {
+      return { success: true, data: { clipId, is3D: !!clip.is3D, toggled3D, updatedProperties: toggled3D ? ['is3D'] : [] } };
+    }
     return { success: false, error: 'No transform properties provided' };
   }
 
@@ -106,6 +123,7 @@ export async function handleSetTransform(
   if (args.blendMode !== undefined) updates.blendMode = workingClip.transform.blendMode;
 
   const mutationSnapshot = captureMutationEntitySnapshot('transform', [clip]);
+  const currentClip = clip;
   const { updateClipTransform, invalidateCache } = useTimelineStore.getState();
   updateClipTransform(clipId, updates);
   invalidateCache();
@@ -114,7 +132,8 @@ export async function handleSetTransform(
     success: true,
     data: {
       clipId,
-      updatedProperties: Object.keys(updates),
+      ...(args.is3D !== undefined ? { is3D: !!currentClip.is3D, toggled3D } : {}),
+      updatedProperties: toggled3D ? ['is3D', ...Object.keys(updates)] : Object.keys(updates),
       ...describeMutationEntities(
         mutationSnapshot,
         useTimelineStore.getState().clips.filter((candidate) => candidate.id === clipId),

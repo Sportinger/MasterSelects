@@ -58,6 +58,7 @@ const mockState = vi.hoisted(() => ({
       },
     }],
     selectColorNode: vi.fn(),
+    ensureColorCorrection: vi.fn(),
   },
 }));
 
@@ -84,6 +85,7 @@ import { ColorTab } from '../../src/components/panels/properties/ColorTab';
 describe('ColorTab', () => {
   beforeEach(() => {
     mockState.store.selectColorNode.mockClear();
+    mockState.store.ensureColorCorrection.mockClear();
     mockState.activatePanelType.mockClear();
   });
 
@@ -91,6 +93,7 @@ describe('ColorTab', () => {
     const { container } = render(<ColorTab clipId="clip-1" />);
     const selector = screen.getByRole('combobox', { name: 'Correction node' });
 
+    expect(mockState.store.ensureColorCorrection).toHaveBeenCalledWith('clip-1');
     expect(selector).toHaveValue('primary-1');
     expect(screen.getAllByRole('option')).toHaveLength(2);
     expect(screen.getByRole('option', { name: '1. Base correction · Primary' })).toBeInTheDocument();

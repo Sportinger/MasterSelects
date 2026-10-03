@@ -31,6 +31,7 @@ import type {
   MotionStableDiagnostic,
 } from '../../services/motionDesign/contracts/envelopes';
 import { normalizeMotionReplicatorBundle } from '../../services/motionDesign/contracts/replicatorTimelineAdapter';
+import { sealMotionOracleOutput } from '../../services/motionDesign/contracts/oracleProvenanceSeal';
 import {
   MotionModifierContractError,
   type MotionModifierDiagnostic,
@@ -670,6 +671,8 @@ export function createMotionFrameRuntimeAdmission(
         })),
       };
     }
+    // Fresh oracle output: sealing lets the frame contract skip re-evaluating it.
+    sealMotionOracleOutput(evaluation);
     replicators.push({
       layerId: entry.layerId,
       contract: entry.contract,
@@ -721,6 +724,7 @@ export function createMotionFrameRuntimeAdmission(
           })),
         };
       }
+      sealMotionOracleOutput(plan);
       if (cacheKey !== null) motionModifierPlanCache.set(cacheKey, plan);
       modifiers.push({
         layerId: entry.layerId,

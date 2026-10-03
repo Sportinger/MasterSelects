@@ -9,7 +9,7 @@ import { syncVideoClipToPlayback } from '../../src/services/layerPlayback/mediaS
 import { VideoSyncHtmlClipCoordinator, type VideoSyncHtmlClipCoordinatorDeps } from '../../src/services/layerBuilder/videoSyncHtmlClipCoordinator';
 import { VideoSyncHtmlSeekCoordinator } from '../../src/services/layerBuilder/videoSyncHtmlSeekCoordinator';
 import { VideoSyncHtmlSeekState } from '../../src/services/layerBuilder/videoSyncHtmlSeekState';
-import { providerHasTargetFrame, rememberPresentedSourceFrame, rememberSourceFrameRate, sameSourceFrame, videoHasTargetFrame } from '../../src/services/layerBuilder/videoSyncFrameSelection';
+import { providerHasTargetFrame, rememberPresentedSourceFrame, rememberSourceFrameRate, sameSourceFrame, videoHasTargetFrame, videoPausedOnTargetFrame } from '../../src/services/layerBuilder/videoSyncFrameSelection';
 import { shouldSeekPausedWebCodecsProviderPolicy } from '../../src/services/layerBuilder/videoSyncWebCodecsPolicy';
 import { ensureRuntimeFrameProvider } from '../../src/services/mediaRuntime/runtimePlayback';
 
@@ -276,6 +276,50 @@ describe('paused frame acceptance versus active playback drift', () => {
     expect(videoHasTargetFrame(video, 1.04999)).toBe(true);
     expect(sameSourceFrame(1.05, 1.04999, 120)).toBe(false);
     expect(sameSourceFrame(1.05, 1.04999)).toBe(false);
+  });
+
+  it('never accepts a presented frame that starts after the target, even with an averaged VFR fps', () => {
+    const c = clip();
+    // 70 frames in 3 s report 23.33 fps although parts run at 30 fps: 0.8 and 0.7833 share a bin.
+    const vfr = { ...context(c), mediaFileById: new Map([['media', { id: 'media', fps: 23.33 }]]) } as FrameContext;
+    const video = videoAt(0.78333);
+    rememberSourceFrameRate(video, c, vfr);
+    rememberPresentedSourceFrame(video, 0.8);
+    expect(videoHasTargetFrame(video, 0.78333)).toBe(false);
+    rememberPresentedSourceFrame(video, 0.766667);
+    expect(videoHasTargetFrame(video, 0.78333)).toBe(true);
+    // Paused after playback at 0.80 s: the element is behind no seek, yet shows F24, not F23.
+    expect(sameSourceFrame(0.8, 0.78333, 23.33)).toBe(false);
+    expect(sameSourceFrame(0.78, 0.7833, 30)).toBe(true);
+  });
+
+  it('does not queue a paused settle seek behind a stale frame callback', () => {
+    const video = Object.assign(videoAt(1.2833), { cancelVideoFrameCallback: vi.fn(), requestVideoFrameCallback: vi.fn(() => 7) });
+    const htmlSeeks = new VideoSyncHtmlSeekState();
+    // A seek that stayed in the shown frame presented nothing: its callback handle never fired.
+    htmlSeeks.setRvfcHandle('c', 3);
+    htmlSeeks.setPendingTarget('c', 1.2833, performance.now() - 1000);
+    const seeks = new VideoSyncHtmlSeekCoordinator({ htmlSeeks, safeSeekTime: (_video, time) => time, maybeRecoverDraggingPendingSeek: () => false });
+    seeks.beginOrQueueSettleSeek('c', video, 1.1833);
+    expect(video.currentTime).toBe(1.1833);
+  });
+
+  it('seeks a paused element that ran past the target unless its presented frame is known to fit', () => {
+    const c = clip();
+    const vfr = { ...context(c), mediaFileById: new Map([['media', { id: 'media', fps: 23.33 }]]) } as FrameContext;
+    // Warmup playback left the element 8 ms past the target, showing the next source frame.
+    const ahead = videoAt(1.2917);
+    rememberSourceFrameRate(ahead, c, vfr);
+    expect(videoPausedOnTargetFrame(ahead, 1.2833)).toBe(false);
+    // Seeked onto the target, the presented 10 fps frame (pts 1.2) counts even though an averaged
+    // 23.33 fps bin would separate it; a later presented frame never does.
+    const onTarget = videoAt(1.2833);
+    rememberSourceFrameRate(onTarget, c, vfr);
+    expect(videoPausedOnTargetFrame(onTarget, 1.2833)).toBe(true);
+    rememberPresentedSourceFrame(onTarget, 1.2);
+    expect(videoPausedOnTargetFrame(onTarget, 1.2833)).toBe(true);
+    rememberPresentedSourceFrame(onTarget, 1.3);
+    expect(videoPausedOnTargetFrame(onTarget, 1.2833)).toBe(false);
   });
 
   it('allows unit-rate forward Warp preplay despite retained flags and rejects a loop wrap', () => {

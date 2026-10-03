@@ -32,8 +32,10 @@ describe('ArtifactStore', () => {
     });
 
     expect(result.deduplicated).toBe(false);
+    // Each manifest is an immutable version addressed by blob hash plus manifest hash.
+    expect(result.manifest.artifactId.startsWith(`artifact:sha256:${HELLO_SHA256}:manifest:`)).toBe(true);
     expect(result.manifest).toMatchObject({
-      artifactId: buildArtifactId(HELLO_SHA256),
+      blobId: buildArtifactId(HELLO_SHA256),
       hash: HELLO_SHA256,
       hashAlgorithm: 'sha256',
       size: 5,
@@ -47,10 +49,10 @@ describe('ArtifactStore', () => {
     const stored = await store.getArtifact(result.manifest.artifactId);
     expect(stored?.manifest.artifactId).toBe(result.manifest.artifactId);
     expect(stored ? await readBlobText(stored.blob) : '').toBe('hello');
-    expect(await store.hasArtifact(HELLO_SHA256)).toBe(true);
+    expect(await store.hasArtifact(result.manifest.artifactId)).toBe(true);
   });
 
-  it('deduplicates ArrayBuffer content and merges source refs', async () => {
+  it('deduplicates ArrayBuffer content and keeps source refs per immutable version', async () => {
     const store = createStore();
     const bytes = new TextEncoder().encode('hello');
 
@@ -63,18 +65,30 @@ describe('ArtifactStore', () => {
       sourceRefs: ['source:second'],
     });
 
-    expect(first.manifest.artifactId).toBe(second.manifest.artifactId);
+    const repeated = await store.putArtifact(bytes.buffer.slice(0), {
+      mimeType: 'application/octet-stream',
+      sourceRefs: ['source:first'],
+    });
+
+    // Identical descriptions resolve to the same version; a new description is a new
+    // version that reuses the already stored bytes instead of rewriting them.
+    expect(repeated.manifest.artifactId).toBe(first.manifest.artifactId);
+    expect(repeated.deduplicated).toBe(true);
+    expect(second.manifest.artifactId).not.toBe(first.manifest.artifactId);
+    expect(second.manifest.hash).toBe(first.manifest.hash);
     expect(second.deduplicated).toBe(true);
-    expect(second.manifest.sourceRefs).toEqual(['source:first', 'source:second']);
+    expect(first.manifest.sourceRefs).toEqual(['source:first']);
+    expect(second.manifest.sourceRefs).toEqual(['source:second']);
 
     const firstSource = await store.listArtifactsBySource('source:first');
     const secondSource = await store.listArtifactsBySource('source:second');
     expect(firstSource).toHaveLength(1);
     expect(secondSource).toHaveLength(1);
-    expect(await store.listArtifacts()).toHaveLength(1);
+    expect(await store.listArtifacts()).toHaveLength(2);
+    expect(await readBlobText((await store.getArtifact(second.manifest.artifactId))!.blob)).toBe('hello');
   });
 
-  it('stores real File data and deletes the artifact by hash', async () => {
+  it('stores real File data and deletes the artifact by its versioned id', async () => {
     const store = createStore();
     const fileBytes = new Uint8Array([0, 17, 34, 255]);
     const file = new File([fileBytes], 'sample.bin', { type: 'application/x-test-binary' });
@@ -88,10 +102,10 @@ describe('ArtifactStore', () => {
     expect(manifest.size).toBe(4);
     expect(await sha256ArtifactInput(file)).toBe(manifest.hash);
 
-    const stored = await store.getArtifact(manifest.hash);
+    const stored = await store.getArtifact(manifest.artifactId);
     expect(new Uint8Array(await blobToArrayBuffer(stored!.blob))).toEqual(fileBytes);
 
-    expect(await store.deleteArtifact(manifest.hash)).toBe(true);
+    expect(await store.deleteArtifact(manifest.artifactId)).toBe(true);
     expect(await store.hasArtifact(manifest.artifactId)).toBe(false);
     expect(await store.getArtifact(manifest.artifactId)).toBeNull();
   });

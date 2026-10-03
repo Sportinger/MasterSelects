@@ -5,9 +5,9 @@ import { operatorFamilyOptions } from '../../src/components/panels/nodes/workspa
 describe('adaptive operator family UI', () => {
   it.each(['vector.split.vec2', 'vector.combine.vec4'])('shows one typed choice per vector width for %s', id => {
     expect(operatorFamilyOptions(getEffectOperator(id)!)).toEqual([
-      { value: id.startsWith('vector.split') ? 'vector.split.vec2' : 'vector.combine.vec2', label: 'VEC2' },
-      { value: id.startsWith('vector.split') ? 'vector.split.vec3' : 'vector.combine.vec3', label: 'VEC3' },
-      { value: id.startsWith('vector.split') ? 'vector.split.vec4' : 'vector.combine.vec4', label: 'VEC4' },
+      { value: id.startsWith('vector.split') ? 'vector.split.vec2' : 'vector.combine.vec2', label: 'Vector 2' },
+      { value: id.startsWith('vector.split') ? 'vector.split.vec3' : 'vector.combine.vec3', label: 'Vector 3' },
+      { value: id.startsWith('vector.split') ? 'vector.split.vec4' : 'vector.combine.vec4', label: 'Vector 4' },
     ]);
   });
 

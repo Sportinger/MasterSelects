@@ -364,6 +364,7 @@ export class RenderDispatcher {
       isPlaying,
     });
     const importTime = performance.now() - t1;
+    const __m: Record<string, number> = { start: performance.now() }; // TEMP-PROFILE
     const debugSnapshot: RenderDispatcherDebugSnapshot = this.debugSnapshotFacet.createRenderDebugSnapshot(
       layers,
       layerData,
@@ -371,6 +372,7 @@ export class RenderDispatcher {
     this.lastRenderDebugSnapshot = debugSnapshot;
     this.debugSnapshotFacet.recordSceneRenderInputChanged(layers, layerData);
 
+    __m.snapshot = performance.now(); // TEMP-PROFILE
     // Update stats
     d.performanceStats.setDecoder(d.layerCollector.getDecoder());
     d.performanceStats.setWebCodecsInfo(d.layerCollector.getWebCodecsInfo());
@@ -407,6 +409,7 @@ export class RenderDispatcher {
         effectRenderClock,
       );
     }
+    __m.scene3d = performance.now(); // TEMP-PROFILE
     debugSnapshot.after3DLayerData = layerData.length;
 
     const commandBuffers: GPUCommandBuffer[] = [];
@@ -428,6 +431,7 @@ export class RenderDispatcher {
           ...getMotionDeviceTextureLimits(device),
         })
       : undefined;
+    __m.admission = performance.now(); // TEMP-PROFILE
     if (motionFrameAdmission && !motionFrameAdmission.ok) {
       const failure = describeMotionFrameRuntimeFailure(motionFrameAdmission);
       if (isExporting) {
@@ -436,6 +440,7 @@ export class RenderDispatcher {
       log.warn('Motion frame admission failed; affected Motion layers are hidden', { failure });
     }
 
+    const __tNested = performance.now(); // TEMP-PROFILE
     const preRenderEncoder = device.createCommandEncoder();
     for (let i = layerData.length - 1; i >= 0; i--) {
       const data = layerData[i];
@@ -502,6 +507,7 @@ export class RenderDispatcher {
         }
       }
     }
+    const __nestedMs = performance.now() - __tNested; // TEMP-PROFILE
     debugSnapshot.finalLayerData = layerData.length;
     if (hasDeferredNestedComp && isExporting) {
       throw new Error('Export frame deferred because a nested composition was not ready');
@@ -547,6 +553,7 @@ export class RenderDispatcher {
     });
     const renderTime = performance.now() - t2;
 
+    __m.composite = performance.now(); // TEMP-PROFILE
     // Output
     const skipCanvas = d.exportCanvasManager.shouldSkipPreviewOutput();
     const outputSnapshot = !skipCanvas ? this.outputRouter.captureSnapshot() : undefined;
@@ -610,6 +617,7 @@ export class RenderDispatcher {
       });
     }
 
+    __m.output = performance.now(); // TEMP-PROFILE
     if (!skipCanvas) {
       if (d.previewContext) {
         this.recordMainPreviewFrame('composite', layerData);
@@ -632,6 +640,7 @@ export class RenderDispatcher {
       }
       submitTime = performance.now() - t3;
     }
+    __m.submit = performance.now(); // TEMP-PROFILE
     this.previewCompositeHold.recordComposite(result.finalView, layers, frameContext,
       !isExporting && !skipCanvas && !hasDeferredNestedComp
       && layerData.length === layers.filter(layer => layer.visible && layer.source && layer.opacity !== 0).length);
@@ -640,8 +649,17 @@ export class RenderDispatcher {
     // nested sets as well releases wrappers removed since the previous frame.
     d.nestedCompRenderer?.cleanupPendingTextures();
 
+    __m.cleanup = performance.now(); // TEMP-PROFILE
     // Stats
     const totalTime = performance.now() - t0;
+    if (isExporting) { // TEMP-PROFILE
+      const w = window as unknown as { __exportPhases?: Record<string, number> };
+      const a = (w.__exportPhases ??= { frames: 0, collect: 0, nested: 0, composite: 0, submit: 0, total: 0 });
+      a.submit += submitTime; a.frames++;
+      const order = ['start', 'snapshot', 'scene3d', 'admission', 'composite', 'output', 'submit', 'cleanup'];
+      for (let i = 1; i < order.length; i++) { const k = `seg_${order[i]}`; if (__m[order[i]] && __m[order[i - 1]]) a[k] = (a[k] ?? 0) + __m[order[i]] - __m[order[i - 1]]; }
+      a.seg_end = (a.seg_end ?? 0) + performance.now() - (__m.cleanup ?? performance.now()); a.collect += importTime; a.nested += __nestedMs; a.composite += renderTime; a.total += totalTime;
+    }
     d.performanceStats.recordRenderTiming({
       importTexture: importTime,
       createBindGroup: 0,

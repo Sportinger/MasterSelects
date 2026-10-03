@@ -374,6 +374,45 @@
   border-bottom: 1px solid rgba(255, 255, 255, 0.075);
 }
 
+/* Collapsed clip lane (plan 3.1e): chevron slot, index chip, title column, lane summary. */
+.node-lane-row {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 180px) minmax(0, 1fr);
+  align-items: center;
+  column-gap: 10px;
+  height: 100%;
+  padding: 0 10px 0 30px;
+  border-left: 3px solid #55a6c4;
+  font-size: 11px;
+}
+
+.node-lane-row.tone-audio { border-left-color: #5fb37e; }
+.node-lane-row.tone-transition { border-left-color: #c98f3c; }
+
+.node-lane-row-index {
+  height: 20px;
+  border-radius: 4px;
+  background: #55a6c4;
+  color: #fff;
+  font-weight: 600;
+  line-height: 20px;
+  text-align: center;
+}
+
+.node-lane-row.tone-audio .node-lane-row-index { background: #5fb37e; }
+.node-lane-row.tone-transition .node-lane-row-index { background: #c98f3c; }
+
+.node-lane-row-title,
+.node-lane-row-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.node-lane-row-title { color: var(--text-primary); font-size: 12px; font-weight: 600; }
+.node-lane-row-text { color: var(--text-muted); }
+
 .node-workspace-node-header span {
   min-width: 0;
   overflow: hidden;

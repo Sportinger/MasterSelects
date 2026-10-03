@@ -33,8 +33,8 @@ export async function createGuidedPhotoPreview(file: File, lensEffects: Effect[]
   const resources: Array<GPUTexture | GPUBuffer> = [];
   let context: GPUCanvasContext | null = null;
   try {
-    const { engine } = await import('../../engine/WebGPUEngine');
-    let device = engine.getDevice();
+    const { renderHostPort } = await import('../render/renderHostPort');
+    let device = renderHostPort.getDevice();
     if (!device) {
       const adapter = await navigator.gpu?.requestAdapter();
       if (!adapter) throw new Error('WebGPU is needed to show the lens-corrected guide image.');

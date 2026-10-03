@@ -14,8 +14,8 @@ import {
   createSourceNode,
   createTransformNode,
   customNodeLaneY,
-  hasActiveMasks,
-  hasColorGraph,
+  hasMaskStack,
+  hasColorState,
   hasForcedBuiltInNode,
   isAudioEffect,
   isMainSignalCustomNode,
@@ -66,7 +66,7 @@ export function buildClipNodeGraphView(
     depth += 1;
   }
 
-  if (isVisualSource(clip) && (hasActiveMasks(clip) || hasForcedBuiltInNode(clip, 'mask'))) {
+  if (isVisualSource(clip) && (hasMaskStack(clip) || hasForcedBuiltInNode(clip, 'mask'))) {
     chain = appendProcessingNode(
       nodes,
       edges,
@@ -79,7 +79,7 @@ export function buildClipNodeGraphView(
   }
 
   const visualEffects = clip.effects.filter((candidate) => !isAudioEffect(candidate) && !candidate.detached);
-  const hasColor = isVisualSource(clip) && (hasColorGraph(clip) || hasForcedBuiltInNode(clip, 'color'));
+  const hasColor = isVisualSource(clip) && (hasColorState(clip) || hasForcedBuiltInNode(clip, 'color'));
   const colorIndex = Math.min(visualEffects.length, Math.max(0, Math.trunc(clip.colorCorrection?.stackIndex ?? 0)));
   for (const [effectIndex, effect] of visualEffects.entries()) {
     if (hasColor && effectIndex === colorIndex) {

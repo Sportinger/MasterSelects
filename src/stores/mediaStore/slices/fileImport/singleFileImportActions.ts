@@ -1,6 +1,6 @@
 import { bindEditorAsyncStore, captureEditorAsyncMutation, discardUnpublishedMedia } from '../../../../services/project/repository/transaction/editorAsyncMutation';
 import { withProjectArtifactWriteBatch } from '../../../../services/project/projectArtifactWriteBatch';
-import type { MediaSliceCreator, MediaState } from '../../types';
+import type { MediaFile, MediaSliceCreator, MediaState } from '../../types';
 import { generateId, processImport } from '../../helpers/importPipeline';
 import type { FileImportActions, ImportFileOptions } from '../fileImportSlice';
 import type { FileManageActions } from '../fileManageSlice';
@@ -59,6 +59,8 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
           const repairedMediaFile = {
             ...existing,
             ...result.mediaFile,
+            // Same source (name and size match): a repair must not reset its transcript, analysis or scenes.
+            ...preservedSourceArtifacts(existing),
             ...importMetadata(options),
           };
           finalizeImportedMediaFile(set, get, existing.id, repairedMediaFile);
@@ -154,3 +156,17 @@ export const createSingleFileImportActions: MediaSliceCreator<Pick<FileImportAct
     });
   },
 });
+
+const SOURCE_ARTIFACT_FIELDS = ['transcriptStatus', 'transcript', 'transcriptArtifact', 'transcribedRanges', 'transcriptCoverage',
+  'analysis', 'analysisStatus', 'analysisProgress', 'analysisCoverage', 'faceAnalysisStatus', 'faceAnalysisProgress',
+  'sceneDescriptions', 'sceneDescriptionStatus', 'sceneDescriptionProgress'] as const;
+
+/** Artifacts of an existing source that a repair re-import keeps (it is the same file). */
+export function preservedSourceArtifacts(existing: MediaFile): Partial<MediaFile> {
+  const kept: Partial<Record<(typeof SOURCE_ARTIFACT_FIELDS)[number], unknown>> = {};
+  for (const field of SOURCE_ARTIFACT_FIELDS) {
+    const value = existing[field];
+    if (value !== undefined && value !== 'none') kept[field] = value;
+  }
+  return kept as Partial<MediaFile>;
+}

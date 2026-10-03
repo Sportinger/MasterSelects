@@ -73,12 +73,15 @@ describe('image derivative operators', () => {
     higher.edges.push(edge('derivative', 'gradient', 'gradient-split', 'value'), edge('gradient-split', 'x', 'second', 'value'));
     expect(() => compileImageOperatorPreview(higher, {}, { nodeId: 'second', direction: 'output', portId: 'gradient' })).toThrow(/Higher-order/);
 
+    // A runtime condition keeps the select lazy; constant conditions fold away at compile time.
     const lazy = derivativeGraph('fine');
     lazy.nodes.push(node('gradient-split', 'vector.split.vec2'), node('gradient-vec4', 'convert.scalar-to-vec4'),
-      node('gradient-image', 'convert.vec4-to-image'), node('condition', 'values.boolean', true), node('select', 'control.select.image'));
+      node('gradient-image', 'convert.vec4-to-image'), node('below', 'values.number', -1), node('condition', 'compare.greater.scalar'),
+      node('select', 'control.select.image'));
     lazy.edges = lazy.edges.filter(candidate => candidate.to !== 'output');
     lazy.edges.push(edge('derivative', 'gradient', 'gradient-split', 'value'), edge('gradient-split', 'x', 'gradient-vec4', 'value'),
-      edge('gradient-vec4', 'value', 'gradient-image', 'value'), edge('condition', 'value', 'select', 'condition'),
+      edge('gradient-vec4', 'value', 'gradient-image', 'value'), edge('split', 'x', 'condition', 'a'), edge('below', 'value', 'condition', 'b'),
+      edge('condition', 'condition', 'select', 'condition'),
       edge('frame', 'image', 'select', 'falseValue'), edge('gradient-image', 'image', 'select', 'trueValue'), edge('select', 'image', 'output', 'image'));
     expect(() => compileImageOperatorGraph(lazy, {})).toThrow(/root evaluation scope/);
 

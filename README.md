@@ -17,7 +17,7 @@ Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in on
 | Workspace | Highlights |
 | --- | --- |
 | **Video** | Multitrack editing, nested compositions, proxies, multicam, and Premiere Pro sequence import. Speed, reverse and freeze frames share one retime contract across preview, scrubbing, export and audio. |
-| **Nodes** | Build and reuse effect, color, geometry, and 3D graphs with typed connections and live previews. Unconnected cards pack compactly, separately from expanded groups. Cables fade with overlapping group depth using cached coverage and reusable paths; obstacle routing prefers clear direct lanes and removes retraced segments. The composition graph shows media, clips, tracks, transitions and beat rules as one graph; each clip expands in place into its full processing graph. |
+| **Nodes** | Build and reuse effect, color, geometry, and 3D graphs with typed connections and live previews. Unconnected cards pack compactly, separately from expanded groups. Cables fade with overlapping group depth using cached coverage and reusable paths; obstacle routing prefers clear direct lanes and removes retraced segments. The composition graph shows media, tracks, transitions and beat rules as one graph, with one compact lane per clip under its track strip (source, range, speed, effects, target); each lane expands in place into its full processing graph. |
 | **Color & effects** | Grade footage, combine GPU effects and transitions, and animate masks and properties. |
 | **Audio** | Edit waveforms, mix tracks, record, apply effects, and separate stems. |
 | **Motion & tracking** | Animate text and shapes, create captions, and attach graphics to tracked footage. |

@@ -5,6 +5,7 @@ export { grain } from './grain';
 export { sharpen } from './sharpen';
 export { posterize } from './posterize';
 export { glow } from './glow';
+export { sheen } from './sheen';
 export { edgeDetect } from './edge-detect';
 export { scanlines } from './scanlines';
 export { threshold } from './threshold';

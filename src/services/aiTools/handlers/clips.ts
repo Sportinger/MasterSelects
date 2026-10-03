@@ -24,3 +24,4 @@ export {
   handleSelectClips,
 } from './clips/selection';
 export { handleAddClipSegment } from './clips/addSegment';
+export { handleAddCompositionClip } from './clips/addCompositionClip';

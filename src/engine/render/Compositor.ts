@@ -565,8 +565,8 @@ export class Compositor {
         // dynamic texture views can change while keeping the same layer.id.
         const canCacheBindGroup =
           isStaticTextureSource &&
-          !complexEffects &&
-          !renderEffects &&
+          complexEffects.length === 0 &&
+          renderEffects.length === 0 &&
           !hasColorCorrection &&
           !data.isDynamic;
         const cacheLayerId = canCacheBindGroup ? resourceLayerId : undefined;

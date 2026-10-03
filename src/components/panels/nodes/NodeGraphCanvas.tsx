@@ -250,7 +250,7 @@ export function NodeGraphCanvas({
     transform: `translate3d(${viewport.panX % 32}px, ${viewport.panY % 32}px, 0)`,
   }) as CSSProperties, [viewport.panX, viewport.panY]);
 
-  const foldViewport = useNodeFoldViewport(canvasRef, sourceGraph, targetGraph, graph, graphBounds, animating, visualViewportRef, setViewport, groupBounds, showVisualViewport);
+  const foldViewport = useNodeFoldViewport(canvasRef, sourceGraph, targetGraph, graph, graphBounds, animating, visualViewportRef, setViewport, groupBounds, showVisualViewport, followGraphGrowth);
   const cancelFoldFit = foldViewport.cancel;
   const fitBounds = useCallback((bounds: typeof graphBounds) => {
     cancelFoldFit();
@@ -320,6 +320,7 @@ export function NodeGraphCanvas({
   const { connectionDraft, startConnectionDrag, startPlugDrag, startBranchDrag, moveConnectionDrag, finishConnectionDrag, cancelConnectionDrag, suppressConnectionContextMenu } = useNodeConnectionDrag({
     graphId: graph.id, canvasRef, nodesById, edges: graph.edges, getGraphPoint: getGraphPointFromClient,
     onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection, onConnectBranch: branchUi.connect,
+    onBlockedCable: () => setGroupMessage('This cable is derived from the clip (its source, text or a recorded bake) and cannot be unplugged.'),
   });
   const domViewport = useNodeDomViewport(canvasRef, viewport, !!nodeGesture || !!connectionDraft, isPanning, zoomingRef);
   const dom = useNodeDomVisibility(displayNodes, plugs, domViewport);

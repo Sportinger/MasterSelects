@@ -1,4 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+// The shadow port reaches renderHostPort through EffectsPipeline and the timeline
+// store; renderHostPort builds a shadow port at module load, so enter the cycle
+// through renderHostPort instead of through the shadow port module.
+import '../../src/services/render/renderHostPort';
 import {
   clearWorkerFirstCounterSourcesForTests,
   getWorkerFirstCounterSourceSnapshot,

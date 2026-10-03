@@ -1,4 +1,4 @@
-import { samePresentedSourceFrame, videoHasTargetFrame } from './videoSyncFrameSelection';
+import { samePresentedSourceFrame, videoHasTargetFrame, videoPausedOnTargetFrame } from './videoSyncFrameSelection';
 import { useTimelineStore } from '../../stores/timeline';
 import { renderHostPort } from '../render/renderHostPort';
 import { scrubSettleState } from '../scrubSettleState';
@@ -26,6 +26,7 @@ export type VideoSyncHtmlSeekCoordinatorDeps = {
 };
 
 export class VideoSyncHtmlSeekCoordinator {
+  private static readonly STALE_FRAME_CALLBACK_MS = 250;
   private static readonly SCRUB_SETTLE_TIMEOUT_MS = 220;
   private static readonly SCRUB_SETTLE_RVFC_DEFER_MS = 90;
   private static readonly SCRUB_DRAG_RVFC_FOLLOW_THRESHOLD = 0.08;
@@ -66,6 +67,14 @@ export class VideoSyncHtmlSeekCoordinator {
     reason?: 'manual-seek' | 'scrub-stop' | 'playback-stop'
   ): void {
     scrubSettleState.begin(clipId, targetTime, VideoSyncHtmlSeekCoordinator.SCRUB_SETTLE_TIMEOUT_MS, reason);
+
+    // A settled seek that landed in the frame already shown presents no new frame, so its frame
+    // callback never fires; do not queue every later target behind that stale handle.
+    const pendingStartedAt = this.deps.htmlSeeks.getPendingStartedAt(clipId);
+    if (!video.seeking && this.deps.htmlSeeks.hasRvfcHandle(clipId)
+      && (pendingStartedAt === undefined || performance.now() - pendingStartedAt > VideoSyncHtmlSeekCoordinator.STALE_FRAME_CALLBACK_MS)) {
+      this.cancelRvfcHandle(clipId, video);
+    }
 
     if (video.seeking || this.deps.htmlSeeks.hasRvfcHandle(clipId)) {
       this.deps.htmlSeeks.setQueuedTarget(clipId, targetTime);
@@ -113,7 +122,7 @@ export class VideoSyncHtmlSeekCoordinator {
     const displayedDriftSeconds = Math.abs(effectiveDisplayedTime - time);
 
     if (!ctx.isPlaying && !isInteractivePreview) {
-      if (!video.seeking && videoHasTargetFrame(video, time)) return;
+      if (!video.seeking && videoPausedOnTargetFrame(video, time)) return;
       this.beginOrQueueSettleSeek(clipId, video, time);
       return;
     }

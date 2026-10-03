@@ -5,6 +5,7 @@ vi.mock('../../src/stores/timeline', () => ({ useTimelineStore: { getState: () =
 vi.mock('../../src/stores/trackingStore', () => ({ useTrackingStore: { getState: () => ({ assets: state.assets }) } }));
 vi.mock('../../src/effects/time/SlitScanMaskRuntime', () => ({ SlitScanMaskRuntime: class { destroy() {} } }));
 vi.mock('../../src/effects/time/TimeMapMediaRuntime', () => ({ TimeMapMediaRuntime: class { destroy() {} } }));
+vi.mock('../../src/effects/time/time-stack/TimeStackResources', () => ({ TimeStackResources: class { retain() {} destroy() {} } }));
 vi.mock('../../src/effects/time/SourceTemporalRuntime', async importOriginal => ({
   ...await importOriginal<any>(), SourceTemporalRuntime: class { resolve = state.resolve; destroy() {} },
 }));

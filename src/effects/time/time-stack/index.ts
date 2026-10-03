@@ -5,8 +5,8 @@ export const timeStack: FullscreenEffectDefinition = {
   shader: '// Rendered by the editable Time Stack image graph.', entryPoint: 'timeStackFragment', uniformSize: 0,
   usesInputHistory: true, sourceTimeOwner: 'time-stack', packUniforms: () => null,
   params: {
-    count: { type: 'number', label: 'Instances', default: 20, min: 1, max: 32, step: 1 },
-    offset: { type: 'number', label: 'Time offset (s)', default: 0.1, min: 0, max: 10, step: 0.01 },
+    count: { type: 'number', label: 'Instances', default: 20, min: 1, max: 32, step: 1, animatable: false },
+    offset: { type: 'number', label: 'Time offset (s)', default: 0.1, min: 0, max: 10, step: 0.01, animatable: false },
     blendMode: { type: 'select', label: 'Blend mode', default: 'darken', options: SEQUENCE_BLEND_MODES.map(value => ({ value, label: value.split('-').map(word => word[0].toUpperCase() + word.slice(1)).join(' ') })) },
     previewSize: { type: 'select', label: 'Preview size', default: 'full', options: [
       { value: 'small', label: 'Small (960 px)' }, { value: 'full', label: 'Full' },

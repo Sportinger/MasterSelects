@@ -154,24 +154,28 @@ export async function generateWaveformForClipAction(
 
       discardDerivedWaveformProgress(clipId, jobId);
       if (signal.aborted) throw signal.reason;
-      const currentClip = get().clips.find(c => c.id === clipId);
-      updateClips(clips => updateClipById(clips, clipId, {
-        waveform,
-        waveformChannels,
-        ...(audioAnalysisRefs
-          ? {
-              audioState: {
-                ...(currentClip?.audioState ?? {}),
-                sourceAnalysisRefs: {
-                  ...(currentClip?.audioState?.sourceAnalysisRefs ?? {}),
-                  ...audioAnalysisRefs,
+      // Merge refs into the clip being updated: a stale snapshot would revert concurrent audio edits
+      // and trip the derived-update guard.
+      updateClips(clips => {
+        const currentClip = clips.find(c => c.id === clipId);
+        return updateClipById(clips, clipId, {
+          waveform,
+          waveformChannels,
+          ...(audioAnalysisRefs
+            ? {
+                audioState: {
+                  ...(currentClip?.audioState ?? {}),
+                  sourceAnalysisRefs: {
+                    ...(currentClip?.audioState?.sourceAnalysisRefs ?? {}),
+                    ...audioAnalysisRefs,
+                  },
                 },
-              },
-            }
-          : {}),
-        ...clearAudioAnalysisJobUpdate(),
-        waveformProgress: 100,
-      }));
+              }
+            : {}),
+          ...clearAudioAnalysisJobUpdate(),
+          waveformProgress: 100,
+        });
+      });
     });
   } catch (e) {
     if (isAudioAnalysisCancellation(e)) {

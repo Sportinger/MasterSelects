@@ -1,11 +1,18 @@
 // Texture creation and caching for images and video frames
 
 import { Logger } from '../../services/logger';
+import { getCanvasVersion } from '../../services/canvasVersion';
 
 const log = Logger.create('TextureManager');
 
 function isDynamicCanvas(canvas: HTMLCanvasElement): boolean {
   return Boolean(canvas.dataset.masterselectsDynamic);
+}
+
+// Text rasters are only drawn by the text renderer, which bumps the canvas version
+// on every draw; other dynamic canvases are redrawn in place without a version.
+function isVersionedCanvas(canvas: HTMLCanvasElement): boolean {
+  return canvas.dataset.masterselectsDynamic === 'text';
 }
 
 export class TextureManager {
@@ -18,6 +25,7 @@ export class TextureManager {
   // Canvas reference changes when text properties change, so caching by reference is safe
   private canvasTextures: Map<HTMLCanvasElement, GPUTexture> = new Map();
   private canvasTextureSizes: Map<HTMLCanvasElement, { width: number; height: number }> = new Map();
+  private canvasTextureVersions: Map<HTMLCanvasElement, string> = new Map();
 
   // Cached image texture views
   private cachedImageViews: Map<GPUTexture, GPUTextureView> = new Map();
@@ -96,6 +104,10 @@ export class TextureManager {
           return cached;
         }
 
+        if (isVersionedCanvas(canvas) && this.canvasTextureVersions.get(canvas) === getCanvasVersion(canvas)) {
+          return cached;
+        }
+
         if (this.updateCanvasTexture(canvas)) {
           return cached;
         }
@@ -119,6 +131,7 @@ export class TextureManager {
 
       this.canvasTextures.set(canvas, texture);
       this.canvasTextureSizes.set(canvas, { width, height });
+      this.canvasTextureVersions.set(canvas, getCanvasVersion(canvas));
       return texture;
     } catch (e) {
       log.error('Failed to create canvas texture', e);
@@ -142,6 +155,7 @@ export class TextureManager {
         { texture },
         [width, height]
       );
+      this.canvasTextureVersions.set(canvas, getCanvasVersion(canvas));
       return true;
     } catch (e) {
       log.error('Failed to update canvas texture', e);
@@ -328,6 +342,7 @@ export class TextureManager {
     this.imageTextures.clear();
     this.canvasTextures.clear();
     this.canvasTextureSizes.clear();
+    this.canvasTextureVersions.clear();
     this.cachedImageViews.clear();
     this.videoFrameTextures.clear();
     this.videoFrameViews.clear();
@@ -355,6 +370,7 @@ export class TextureManager {
       texture.destroy();
       this.canvasTextures.delete(canvas);
       this.canvasTextureSizes.delete(canvas);
+      this.canvasTextureVersions.delete(canvas);
       this.cachedImageViews.delete(texture);
     }
   }

@@ -36,6 +36,7 @@ import type { CallerContext } from './policy';
 import { beginAIToolAudit, completeAIToolAudit } from './audit';
 import {
   abortAgentTransaction, attachGroupedPartialFailure, beginAgentTransaction, pinAgentTransactionOptions, getPinnedAgentTransaction, bindAgentTransactionStore, runWithAgentTransaction,
+  captureAgentTransactionAcrossAwaits,
   commitAgentTransaction, completeAgentToolAudit, completeOrDeferAgentToolAudit,
   createAgentTransactionRollbackReason, createGroupedPartialFailureInfo, createGroupedRollbackReason, type AgentToolAuditCompletion,
 } from './agentTransaction';
@@ -52,6 +53,8 @@ const SELF_MANAGED_HISTORY_TOOLS = new Set([
 // authorizes synchronous work, so each step commits as its own revision instead.
 const PROJECT_REBUILD_TOOLS = new Set([
   'createStressTestProjectFixture',
+  // Nested composition loading awaits the media store before it inserts the clip.
+  'addCompositionClip',
 ]);
 
 function opensStandaloneAgentTransaction(toolName: string): boolean {
@@ -178,11 +181,15 @@ async function executeAIToolWithDeferredAudit(
   const useGuidedExecution = shouldUseGuidedAIToolExecution(callerContext, options);
   setAIExecutionActive(true, useGuidedExecution ? getGuidedLegacyFeedback(options) : getLegacyFeedback(options));
   try {
-    const result = useGuidedExecution
-      ? await executeGuidedAITool(toolName, args, callerContext, options)
-      : await _executeAIToolInternal(toolName, args, callerContext, options);
+    const run = () => useGuidedExecution
+      ? executeGuidedAITool(toolName, args, callerContext, options)
+      : _executeAIToolInternal(toolName, args, callerContext, options);
+    // A batch is one undo step and one saved revision, including mutations its actions make after awaits.
+    const batchTool = toolName === 'executeBatch';
+    const result = batchTool ? await captureAgentTransactionAcrossAwaits(standaloneTransaction, run) : await run();
     if (standaloneTransaction) {
-      if (result.success) commitAgentTransaction(standaloneTransaction); else abortAgentTransaction(standaloneTransaction);
+      // executeBatch is documented as non-transactional: successful sibling actions stay applied.
+      if (result.success || batchTool) commitAgentTransaction(standaloneTransaction); else abortAgentTransaction(standaloneTransaction);
     }
     completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, result }, deferAuditCompletion);
     return result;

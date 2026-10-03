@@ -225,7 +225,9 @@ export async function handleImportLocalFiles(
     const timelineStore = useTimelineStore.getState();
     const requestedTrackId = args.trackId as string | undefined;
     const createTrack = (args.createTrack as boolean) || false;
-    const trackType = (args.trackType as 'video' | 'audio') || 'video';
+    // Audio-only imports go to an audio track unless a track or type is requested explicitly.
+    const trackType = (args.trackType as 'video' | 'audio')
+      || (results.length > 0 && results.every(result => result.type === 'audio') ? 'audio' : 'video');
     const requestedStartTime = args.startTime as number | undefined;
     const sequential = args.sequential !== false; // default true
 
@@ -296,7 +298,14 @@ export async function handleImportLocalFiles(
 
       const mediaFile = mediaState.files.find(f => f.id === result.id);
       if (mediaFile && mediaFile.file) {
+        const before = new Set(useTimelineStore.getState().clips.map(clip => clip.id));
         await useTimelineStore.getState().addClip(targetTrackId!, mediaFile.file, currentTime, mediaFile.duration, mediaFile.id);
+        // Report only clips that were actually created (e.g. audio is refused on a video track).
+        if (!useTimelineStore.getState().clips.some(clip => !before.has(clip.id))) {
+          const track = useTimelineStore.getState().tracks.find(candidate => candidate.id === targetTrackId);
+          errors.push({ path: result.path, error: `Could not place ${result.name} (${mediaFile.type}) on ${track?.type ?? 'unknown'} track ${track?.name ?? targetTrackId}.` });
+          continue;
+        }
         placedClips.push({ name: result.name, trackId: targetTrackId!, startTime: currentTime, type: mediaFile.type });
         if (sequential) {
           currentTime += mediaFile.duration || 5;

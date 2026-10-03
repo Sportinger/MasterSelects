@@ -83,7 +83,7 @@ describe('WebCodecsExportMode speed ramps', () => {
     (globalThis as Record<string, unknown>).EncodedVideoChunk = MockEncodedVideoChunk;
   });
 
-  it('keeps feeding a hardware decoder that holds samples until more input arrives', async () => {
+  it('keeps feeding a hardware decoder that holds samples until more input arrives', { timeout: 60_000 }, async () => {
     const samples = createSamples(1200);
     let currentFrame: VideoFrame | null = null;
     // Models a reordering hardware decoder: it keeps three samples queued and

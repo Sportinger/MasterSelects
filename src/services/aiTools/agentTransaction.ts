@@ -1,5 +1,5 @@
 import { getEditorRepositorySession, beginEditorTransaction, commitEditorTransaction, cancelEditorTransaction,
-  ownsEditorTransaction, runEditorTransaction } from '../project/repository/transaction/editorMutationRuntime';
+  ownsEditorTransaction, runEditorTransaction, captureEditorTransactionAcrossAwaits } from '../project/repository/transaction/editorMutationRuntime';
 import type { TransactionToken } from '../project/repository/transaction/ProjectTransactionCoordinator';
 import {
   cancelHistoryBatch,
@@ -282,6 +282,11 @@ function createRolledBackAuditResult(
 
 export function isAgentTransactionOpen(): boolean {
   return openTransactionIds.size > 0;
+}
+
+/** Multi-step tools (executeBatch) also capture awaited store mutations into their transaction. */
+export function captureAgentTransactionAcrossAwaits<T>(transaction: AgentTransaction | null, action: () => Promise<T>): Promise<T> {
+  return transaction?.repositoryToken ? captureEditorTransactionAcrossAwaits(transaction.repositoryToken, action) : action();
 }
 
 /** Atomic tool execution must enter only the transaction that initiated it. */

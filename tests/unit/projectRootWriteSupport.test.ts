@@ -1,4 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+// ProjectCoreService sits in an import cycle with the project service barrel; load the
+// barrel first, as the app does, so the class is initialized before its singleton uses it.
+import '../../src/services/project';
 import { writeFsaProjectPackage } from '../../src/services/project/core/projectCorePersistence';
 import type { ProjectPackageSession } from '../../src/services/project/core/projectPackage';
 import type { ProjectFile } from '../../src/services/project/types';

@@ -6,6 +6,10 @@
  * slice functions under test.
  */
 
+// The slices still reach the real store through media store <-> timeline store
+// imports. Entering that cycle through a slice evaluates the store index while
+// the slice module is incomplete, so load the index first.
+import '../../src/stores/timeline';
 import { createStore } from 'zustand';
 import type { TimelineStore } from '../../src/stores/timeline/types';
 import {

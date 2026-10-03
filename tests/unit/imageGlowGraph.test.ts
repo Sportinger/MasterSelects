@@ -8,6 +8,11 @@ const luma = (pixel: Pixel) => pixel[0] * .2126 + pixel[1] * .7152 + pixel[2] * 
 const smoothstep = (a: number, b: number, value: number) => { const t = Math.max(0, Math.min(1, (value - a) / (b - a))); return t * t * (3 - 2 * t); };
 const source = ([u, v]: [number, number]): Pixel => [u * .7 + .1, v * .6 + .15, (u + v) * .25, .17 + u * .4];
 
+// Owner presentation may share literal leaves and add composition folders; computational nodes stay the catalog recipe.
+const computationalNodes = (graph: ReturnType<typeof effectOperatorGraph>) => graph.nodes
+  .filter(node => !(node.operator.startsWith('values.') && node.constants && !Object.keys(node.bindings).length))
+  .toSorted((a, b) => a.id.localeCompare(b.id));
+
 describe('glow image graph', () => {
   it('is a granular single-pass graph at the owner limit with all six stable bindings', () => {
     const graph = createDefaultGlowGraph();
@@ -59,6 +64,9 @@ describe('glow image graph', () => {
     expect(isImageGraphEffectType('glow')).toBe(true);
     expect(isLocalImageEffectType('glow')).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject({ amount: 5, threshold: .7935, radius: 1, softness: .496, rings: 6.85, samplesPerRing: 17.95 });
-    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultGlowGraph(), compositionRules: 2 });
+    const owned = effectOperatorGraph(effect), recipe = createDefaultGlowGraph();
+    expect(owned.compositionRules).toBe(2);
+    expect(computationalNodes(owned)).toEqual(computationalNodes(recipe));
+    expect(effectOperatorGraph({ ...effect, operatorGraph: recipe })).toEqual(owned);
   });
 });

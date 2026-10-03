@@ -21,6 +21,14 @@ export class VideoEncoderWrapper {
   // Bound retained input surfaces by bytes rather than frame count. This keeps
   // 4K/8K exports within the same memory envelope as 1080p exports.
   private static readonly MAX_UNFLUSHED_INPUT_BYTES = 96 * 1024 * 1024;
+  // Hardware encoders hold several input frames before the first output (lookahead).
+  // Fewer frames in flight than that pipeline depth makes every new frame wait for the
+  // codec, serializing render and encode. Keep at least this many in flight while the
+  // retained surfaces stay under the hard byte ceiling (8K stays at two frames).
+  private static readonly MIN_FRAMES_IN_FLIGHT = 8;
+  private static readonly MAX_IN_FLIGHT_INPUT_BYTES = 384 * 1024 * 1024;
+  // How long backpressure waits for encoded output before it falls back to flush().
+  private static readonly OUTPUT_WAIT_MS = 1000;
 
   private encoder: VideoEncoder | null = null;
   private startEncoder: (() => void) | null = null;
@@ -28,6 +36,9 @@ export class VideoEncoderWrapper {
   private settings: ExportSettings;
   private encodedFrameCount = 0;
   private framesSubmittedSinceFlush = 0;
+  /** Frames handed to encode(); with encodedFrameCount this gives the frames the codec still holds. */
+  private framesSubmitted = 0;
+  private outputWaiters: Array<() => void> = [];
   private isClosed = false;
   private hasAudio = false;
   private audioCodec: AudioCodec = 'aac';
@@ -158,6 +169,8 @@ export class VideoEncoderWrapper {
             this.muxer.addVideoChunk(chunk, meta);
           }
           this.encodedFrameCount++;
+          const waiters = this.outputWaiters; this.outputWaiters = [];
+          for (const wake of waiters) wake();
         },
         error: (e) => {
           log.error('Encode error:', e);
@@ -293,6 +306,7 @@ export class VideoEncoderWrapper {
     try {
       this.encoder.encode(frame, { keyFrame });
       this.framesSubmittedSinceFlush++;
+      this.framesSubmitted++;
     } finally {
       frame.close();
     }
@@ -312,13 +326,22 @@ export class VideoEncoderWrapper {
     if (!this.encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
     }
+    const __w0 = performance.now(); // TEMP-PROFILE
     await this.waitForEncodeCapacity();
+    const __w1 = performance.now(); // TEMP-PROFILE
 
     // FPS-based keyframe interval (default: 1 keyframe per second)
     const interval = keyframeInterval ?? this.settings.fps;
     const keyFrame = frameIndex % interval === 0;
     this.encoder.encode(frame, { keyFrame });
+    { // TEMP-PROFILE
+      const w = window as unknown as { __encPhases?: Record<string, number> };
+      const a = (w.__encPhases ??= { frames: 0, wait: 0, encodeCall: 0, inFlightAtEncode: 0, queueAtEncode: 0 });
+      a.frames++; a.wait += __w1 - __w0; a.encodeCall += performance.now() - __w1;
+      a.inFlightAtEncode += this.framesSubmitted - this.encodedFrameCount; a.queueAtEncode += this.encoder.encodeQueueSize;
+    }
     this.framesSubmittedSinceFlush++;
+    this.framesSubmitted++;
 
     // WebKit can keep the GPU-backed canvas surface alive asynchronously after
     // encode() returns. Re-rendering into that surface before the encode task
@@ -350,25 +373,48 @@ export class VideoEncoderWrapper {
     const bytesPerFrame = this.settings.width * this.settings.height * 4;
     const maxFramesWithoutFlush = Math.max(
       1,
-      Math.floor(VideoEncoderWrapper.MAX_UNFLUSHED_INPUT_BYTES / bytesPerFrame)
+      Math.floor(VideoEncoderWrapper.MAX_UNFLUSHED_INPUT_BYTES / bytesPerFrame),
+      Math.min(
+        VideoEncoderWrapper.MIN_FRAMES_IN_FLIGHT,
+        Math.floor(VideoEncoderWrapper.MAX_IN_FLIGHT_INPUT_BYTES / bytesPerFrame),
+      ),
     );
-    const submittedFramesAreBelowLimit =
-      this.framesSubmittedSinceFlush < maxFramesWithoutFlush;
-    if (queueIsBelowLimit && submittedFramesAreBelowLimit) {
+    const inFlight = () => this.framesSubmitted - this.encodedFrameCount;
+    const hasCapacity = () => encoder.encodeQueueSize < VideoEncoderWrapper.MAX_ENCODE_QUEUE_SIZE
+      && inFlight() < maxFramesWithoutFlush;
+    if (queueIsBelowLimit && hasCapacity()) {
       return;
     }
 
-    // flush() is deliberately used instead of merely waiting for a dequeue
-    // event: dequeue means the control message left the JS queue, but the codec
-    // may still retain the frame's backing pixels. The submitted-frame limit is
-    // essential for Chromium, where encodeQueueSize often returns to zero while
-    // full-resolution input surfaces remain owned by the codec. The byte-based
-    // boundary drains after 3 frames at 4K and 12 frames at 1080p.
+    // A dequeue event only means the control message left the JS queue; the codec
+    // may still retain the frame's backing pixels. An encoded output chunk means
+    // the frame was consumed, so wait for outputs first. Encoder flush() would
+    // also release the surfaces, but hardware encoders restart the GOP after
+    // every flush: frequent flushes (every 3-4 frames at 4K) turned exports into
+    // all-keyframe streams far above the requested bitrate. The byte-based
+    // in-flight limit keeps 4K/8K inside the same memory envelope as 1080p.
+    const deadline = performance.now() + VideoEncoderWrapper.OUTPUT_WAIT_MS;
+    while (!hasCapacity() && performance.now() < deadline) {
+      await this.waitForEncodedOutput(deadline - performance.now());
+      if (encoder.state === 'closed' || this.isClosed) {
+        throw new Error('Encoder closed while applying export backpressure');
+      }
+    }
+    if (hasCapacity()) return;
+    // Codecs that hold frames until more input or a flush arrives still drain here.
     await encoder.flush();
     this.framesSubmittedSinceFlush = 0;
     if (encoder.state === 'closed' || this.isClosed) {
       throw new Error('Encoder closed while applying export backpressure');
     }
+  }
+
+  private waitForEncodedOutput(timeoutMs: number): Promise<void> {
+    return new Promise(resolve => {
+      const timer = setTimeout(done, Math.max(0, timeoutMs));
+      function done() { clearTimeout(timer); resolve(); }
+      this.outputWaiters.push(done);
+    });
   }
 
   async flushPendingVideo(): Promise<void> {

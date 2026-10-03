@@ -17,6 +17,7 @@ import { createGeneratedMediaItemsForLoad, createSignalHydrationStateForLoad } f
 import { stopInternalPosition, updateInternalPosition } from '../../../layerBuilder/PlayheadState';
 import { stopTimelineAudioPlayback } from '../../../audio/timelineAudioPlaybackStopper';
 import { syncHistoryRehydratedTimelineRuntimeResources } from '../../../timeline/historyRuntimeRehydration';
+import { scheduleMediaSourceArtifactProjectionForClips } from '../../../mediaArtifacts/mediaSourceArtifacts';
 import { layerBuilder } from '../../../layerBuilder';
 import { renderHostPort } from '../../../render/renderHostPort';
 import { isExclusiveTimelineMutationLeaseActive } from '../../../../stores/timeline/exclusiveMutationLease';
@@ -99,8 +100,11 @@ async function activateEditorProjection(projection: RepositoryProjection, previo
       const reusable = !initialOpen && requestedSession === getEditorRepositorySession() && prior?.file && (
         identity.identityStatus === 'verified' && identity.contentHash === oldIdentity.contentHash ||
         identity.identityStatus !== 'verified' && sameEditorMediaSourceBinding(authored, beforeAuthored));
+      // Same source: keep its loaded artifacts too, so undo/redo does not re-hydrate and re-render every clip.
       if (reusable) return { ...file, file: prior.file, url: prior.url, hasFileHandle: prior.hasFileHandle,
-        thumbnailUrl: prior.thumbnailUrl, proxyVideoUrl: prior.proxyVideoUrl };
+        thumbnailUrl: prior.thumbnailUrl, proxyVideoUrl: prior.proxyVideoUrl,
+        ...Object.fromEntries((['transcript', 'transcriptArtifact', 'transcribedRanges', 'analysis', 'sceneDescriptions'] as const)
+          .filter(field => file[field] === undefined && prior[field] !== undefined).map(field => [field, prior[field]])) };
       // Originals outside the repository connect after opening by size and fingerprint. A full-content hash of
       // hundreds of GB is only needed when exporting embedded originals (runtimeSources), never on every open.
       const item = project.media.find(entry => entry.id === file.id); if (item) linkedMedia.push(item);
@@ -155,6 +159,7 @@ async function activateEditorProjection(projection: RepositoryProjection, previo
     updateInternalPosition((timelineStore.getState() as TimelineStore).playheadPosition);
     staged.activate();
     syncHistoryRehydratedTimelineRuntimeResources((timelineStore.getState() as TimelineStore).clips);
+    scheduleMediaSourceArtifactProjectionForClips((timelineStore.getState() as TimelineStore).clips);
     layerBuilder.invalidateCache(); renderHostPort.clearCaches();
     if (signal.aborted) throw new RepositoryError('cancelled', 'Project activation cancelled after runtime rebind');
     publishEditorContentProjection(projection); renderHostPort.requestNewFrameRender();

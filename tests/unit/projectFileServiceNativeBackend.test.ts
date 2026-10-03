@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => {
   const nativeCore = {
@@ -66,6 +66,12 @@ function disableFileSystemAccessApi(): void {
 }
 
 describe('ProjectFileService native backend', () => {
+  // The service pulls in the whole repository graph; transform it once up front so the
+  // per-test fresh imports only re-evaluate modules instead of hitting the test timeout.
+  beforeAll(async () => {
+    await import('../../src/services/project/ProjectFileService');
+  }, 180_000);
+
   beforeEach(() => {
     vi.clearAllMocks();
     disableFileSystemAccessApi();
@@ -98,6 +104,7 @@ describe('ProjectFileService native backend', () => {
     expect(mocks.nativeCore.createProjectAtPath).toHaveBeenCalledWith(
       'C:/Projects',
       'Firefox Project',
+      false,
     );
     expect(mocks.nativeClient.grantPath).toHaveBeenCalledWith('C:/Projects');
     expect(projectFileService.activeBackend).toBe('native');

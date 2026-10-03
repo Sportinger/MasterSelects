@@ -1,3 +1,4 @@
+import { rememberPresentedSourceFrame } from './videoSyncFrameSelection';
 import { createClipSpeedSource, createStoreSpeedSource, isUnitRateSourceWindow, resolveClipSourceTime } from '../timeline/retime/clipRetime';
 import type { TimelineClip } from '../../types/timeline';
 import { flags } from '../../engine/featureFlags';
@@ -426,14 +427,15 @@ export class VideoSyncWarmupCoordinator {
       }
     };
 
-    const finishWarmup = async (fallback = false): Promise<void> => {
+    const finishWarmup = async (fallback = false, presentedMediaTime?: number): Promise<void> => {
       if (!this.deps.warmups.isAttemptCurrent(video, attemptId) || finishingWarmup) {
         return;
       }
 
       finishingWarmup = true;
       this.deps.warmups.clearWatchdog(video);
-      const presentedTime = video.currentTime;
+      // Playback presents frames ahead of currentTime: label the copy with the presented frame's own time.
+      const presentedTime = Number.isFinite(presentedMediaTime) ? presentedMediaTime! : video.currentTime;
       let captured = renderHostPort.captureVideoFrameAtTime(video, presentedTime, clipId);
       if (!captured) {
         captured = await renderHostPort.preCacheVideoFrame(video, clipId);
@@ -463,6 +465,7 @@ export class VideoSyncWarmupCoordinator {
         video.play().catch(() => {});
       } else {
         video.pause?.();
+        rememberPresentedSourceFrame(video, presentedTime);
       }
       if (shouldRequestRender) {
         renderHostPort.requestRender();
@@ -484,8 +487,8 @@ export class VideoSyncWarmupCoordinator {
         return;
       }
       if (hasVideoFrameCallback(video)) {
-        video.requestVideoFrameCallback(() => {
-          void finishWarmup(false);
+        video.requestVideoFrameCallback((_now, metadata) => {
+          void finishWarmup(false, metadata?.mediaTime);
         });
       } else {
         setTimeout(() => {

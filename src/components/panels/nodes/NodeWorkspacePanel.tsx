@@ -1,5 +1,4 @@
 import { compositionTrackStripView } from '../../../services/nodeGraph/composition/compositionTrackStripView';
-import { compositionGroupId } from '../../../services/nodeGraph/composition/compositionGraphPrimitives';
 import { getNodeHeight } from './canvas/canvasGeometry';
 import { WorkspaceControllerMenus } from './unified/WorkspaceControllerMenus';
 import { WorkspaceContextMenu } from './unified/WorkspaceContextMenu';
@@ -30,6 +29,10 @@ import { clipWorkspaceBatch } from './unified/useClipDomainAdapter';
 import { useNodeWorkspaceNavigation } from '../../../services/nodeGraph/nodeWorkspaceNavigation';
 import './NodeWorkspacePanel.css';
 
+/** Lanes replace the Slice → Speed → Place chain (plan 3.1e); the projection keeps it for agents. */
+const NO_TIME_CHAINS: ReadonlySet<string> = new Set();
+/** Clip lanes a pick opens transiently; folding them open keeps them open. */
+const MAX_REVEALED_LANES = 8;
 const clipOf = (node?: NodeGraphNode) => node?.binding?.kind === 'composition-clip' || node?.binding?.kind === 'composition-time-chain' ? node.binding.clipId : undefined;
 
 /** One workspace, canvas and inspector for either root. Only open clips mount domain adapters. */
@@ -60,21 +63,19 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   const [compositionMenu, setCompositionMenu] = useState<{ x: number; y: number } | null>(null);
   const [focusGroup, setFocusGroup] = useState<{ id: string; nonce: number }>();
   const requestGroupFocus = (id: string) => setFocusGroup(previous => ({ id, nonce: (previous?.nonce ?? 0) + 1 }));
-  const expandedIds = useMemo(() => rootOwner ? [rootOwner] : clips.filter(clip => collapsed?.[workspaceClipGroup(clip.id)] === false).map(clip => clip.id), [rootOwner, clips, collapsed]);
-  const projections = useMemo(() => collectOpenClipProjections(expandedIds, id => controllers.get(id)?.projection), [expandedIds, controllers]);
-  // Slice → Speed → Place opens per clip through its fold state (view state only, like any group).
-  const expandedTimeChains = useMemo(() => new Set(clips.filter(clip => collapsed?.[compositionGroupId.timeChain(clip.id)] === false)
-    .map(clip => clip.id)), [clips, collapsed]);
-  const composition = useCompositionGraphSubject(compositionId, expandedTimeChains, undefined, !rootOwner);
-  const selectedCompositionNodes = useMemo(() => new Set(selection?.graphId === composition.graph.id ? selection.ids : []), [selection, composition.graph.id]);
-  // What the overview shows is decided by explicit picks (timeline clip/transition, strip segment),
+  // Which lanes are open is decided by explicit picks (timeline clip, strip segment) and fold state,
   // never by grabbing or selecting nodes inside the graph.
   const [revealedClips, setRevealedClips] = useState<ReadonlySet<string>>(() => new Set());
-  const [revealedNodes, setRevealedNodes] = useState<ReadonlySet<string>>(() => new Set());
+  const laneOwner = useCallback((id: string) => resolveLinkedClipNodeGraphContext(clips, tracks, id)?.ownerClip.id ?? id, [clips, tracks]);
+  const expandedIds = useMemo(() => rootOwner ? [rootOwner] : [...new Set([
+    ...clips.filter(clip => collapsed?.[workspaceClipGroup(clip.id)] === false).map(clip => clip.id),
+    ...[...revealedClips].filter(id => clips.some(clip => clip.id === id))])], [rootOwner, clips, collapsed, revealedClips]);
+  const projections = useMemo(() => collectOpenClipProjections(expandedIds, id => controllers.get(id)?.projection), [expandedIds, controllers]);
+  const composition = useCompositionGraphSubject(compositionId, NO_TIME_CHAINS, undefined, !rootOwner);
+  const selectedCompositionNodes = useMemo(() => new Set(selection?.graphId === composition.graph.id ? selection.ids : []), [selection, composition.graph.id]);
   const stripGraph = useMemo(() => compositionTrackStripView(composition.graph, { selectedNodeIds: selectedCompositionNodes,
-    selectedClipIds: selectedClips, revealedClipIds: expandedTimeChains.size ? new Set([...revealedClips, ...expandedTimeChains]) : revealedClips,
-    revealedNodeIds: revealedNodes, expandedClipIds: new Set(expandedIds), collapsed, nodeHeight: getNodeHeight }),
-    [composition.graph, selectedCompositionNodes, selectedClips, revealedClips, revealedNodes, expandedIds, collapsed, expandedTimeChains]);
+    selectedClipIds: selectedClips, expandedClipIds: new Set(expandedIds), collapsed, nodeHeight: getNodeHeight }),
+    [composition.graph, selectedCompositionNodes, selectedClips, expandedIds, collapsed]);
   const previousGraph = useRef<ReturnType<typeof embedWorkspaceGraph> | undefined>(undefined);
   const graph = useMemo(() => {
     const next = rootOwner && projections.has(rootOwner) ? workspaceClipRoot(rootOwner, projections.get(rootOwner)!)
@@ -91,8 +92,11 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
     lastTimelineSelection.current = selectedClips;
     const fromGraph = selectionFromGraph.current; selectionFromGraph.current = false;
     if (rootOwner) return;
-    // A timeline pick decides which clip cards are shown; picks inside the graph keep them as they are.
-    if (!fromGraph && selectedClips.size) { setRevealedClips(new Set(selectedClips)); setRevealedNodes(new Set()); }
+    // A timeline pick opens the picked clip's lane; picks inside the graph keep the lanes as they are.
+    const picked = primary && selectedClips.has(primary) ? primary : selectedClips.values().next().value;
+    if (!fromGraph) setRevealedClips(picked ? new Set([laneOwner(picked)]) : new Set());
+    // A clip picked in the timeline is brought into view once its lane is open; graph picks are not.
+    if (!fromGraph && picked) requestGroupFocus(workspaceClipGroup(laneOwner(picked)));
     const ids = composition.graph.nodes.filter(node => node.binding?.kind === 'composition-clip'
       && (selectedClips.has(node.binding.clipId) || (!!node.binding.linkedClipId && selectedClips.has(node.binding.linkedClipId))))
       .map(node => graph.nodes.find(candidate => candidate.workspaceOwner?.clipId === clipOf(node) && candidate.binding?.kind === 'clip-source')?.id ?? node.id);
@@ -100,18 +104,16 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
     if (previousOwners.length && previousOwners.every(owner => selectedClips.has(owner!.clipId))) return;
     setSelection({ graphId: composition.graph.id, ids });
     setActiveClip(workspaceClipOwner(ids.at(-1) ?? '')?.clipId ?? null);
-    // A clip picked in the timeline is brought into view; picks inside the node editor are not.
-    if (!fromGraph && ids.length) requestGroupFocus(ids.at(-1)!);
-  }, [selectedClips, rootOwner, composition.graph, graph, selection]);
-  // A transition picked in the timeline shows the transition view: its node with both clips,
-  // framed in the composition graph. Opening the body stays an explicit action (no materializing).
+  }, [selectedClips, primary, rootOwner, composition.graph, graph, selection, laneOwner]);
+  // A transition picked in the timeline selects and frames its lane row between both clips.
+  // Opening the body stays an explicit action (no materializing).
   const transitionSelection = useTimelineStore(state => state.propertiesSelection?.kind === 'transition' ? state.propertiesSelection.transitionId : null);
   useEffect(() => {
     if (!transitionSelection || rootOwner) return;
     const node = composition.graph.nodes.find(node => node.binding?.kind === 'composition-transition' && node.binding.transitionId === transitionSelection);
     if (!node) return;
     setSelection({ graphId: composition.graph.id, ids: [node.id] });
-    setRevealedNodes(new Set([node.id])); setRevealedClips(new Set());
+    setRevealedClips(new Set());
     requestGroupFocus(node.id);
     // Only a new transition pick refocuses; graph updates must not steal the user's viewport.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -137,6 +139,9 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   const toggle = (id: string) => {
     const nextCollapsed = !graph.groups?.find(group => group.id === id)?.collapsed;
     fold({ [id]: nextCollapsed });
+    // Folding a lane closed also ends a transient opening from a pick.
+    const owner = nextCollapsed ? workspaceClipOwner(id)?.clipId : undefined;
+    if (owner) setRevealedClips(current => current.has(owner) ? new Set([...current].filter(value => value !== owner)) : current);
     if (!nextCollapsed) requestGroupFocus(id);
   };
   const openTransition = useTransitionCompositionOpen();
@@ -209,16 +214,15 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
               const segment = graph.nodes.find(node => node.id === id)?.summary?.segments?.find(segment => segment.id === segmentId);
               if (!segment) return;
               if (segment.transitionId && segment.nodeId) {
-                setRevealedNodes(new Set([segment.nodeId])); select([segment.nodeId]); requestGroupFocus(segment.nodeId); return;
+                select([segment.nodeId]); requestGroupFocus(segment.nodeId); return;
               }
               const reference = composition.graph.nodes.find(node => node.binding?.kind === 'composition-clip'
                 && (node.binding.clipId === segment.clipId || node.binding.linkedClipId === segment.clipId));
               const target = graph.nodes.find(node => node.workspaceOwner?.clipId === (reference ? clipOf(reference) : segment.clipId) && node.binding?.kind === 'clip-source') ?? reference;
               if (target) {
-                // A segment pick shows that clip's card (Shift adds it), without moving the camera.
-                setRevealedClips(current => additive ? new Set([...current, segment.clipId]) : new Set([segment.clipId]));
-                // A plain pick replaces the shown set, closing an open transition view; Shift only adds.
-                if (!additive) setRevealedNodes(new Set());
+                // A segment pick opens that clip's lane (Shift adds one), without moving the camera.
+                const lane = laneOwner(segment.clipId);
+                setRevealedClips(current => additive ? new Set([...current, lane].slice(-MAX_REVEALED_LANES)) : new Set([lane]));
                 const ids = additive ? selectedIds.includes(target.id) ? selectedIds.filter(value => value !== target.id) : [...selectedIds, target.id] : [target.id];
                 select(ids, segment.clipId, additive);
               }

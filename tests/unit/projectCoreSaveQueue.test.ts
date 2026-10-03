@@ -1,316 +1,128 @@
-import { decodeProjectPackage, ProjectPackageSession, registerFsaProjectPackageSession } from '../../src/services/project/core/projectPackage';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Saving no longer writes project.json/.msproj packages from ProjectCoreService: domain
+// transactions are journaled by the repository writer, and an explicit save waits for the
+// repository flush receipt. Journal queueing, coalescing and retry are covered by the
+// repository tests (repositoryCoordinator, repositoryJournalCoalescing, repositoryPersistence).
+const repo = vi.hoisted(() => ({
+  session: null as null | { opening: { writable: boolean } },
+  scratch: false,
+  dirty: false,
+  flushEditorRepository: vi.fn(),
+  updateEditorRepositoryProjectFields: vi.fn(),
+}));
+vi.mock('../../src/services/project/repository/lifecycle/repositoryProjectOperations', () => ({
+  createRepositoryAt: vi.fn(async () => undefined),
+  openRepositoryProject: vi.fn(async () => undefined),
+  renameRepositoryProject: vi.fn(async () => true),
+  createIndependentProjectBackup: vi.fn(async () => true),
+  repositoryHasUnsavedChanges: () => repo.dirty,
+}));
+vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({
+  closeEditorRepository: vi.fn(async () => undefined),
+  flushEditorRepository: repo.flushEditorRepository,
+  getActiveRepositorySession: () => repo.session,
+  readEditorRepositoryProject: () => null,
+  isScratchRepository: () => repo.scratch,
+}));
+vi.mock('../../src/services/project/repository/lifecycle/repositoryLocations', () => ({
+  directoryForOpfs: vi.fn(),
+  isLegacyProjectLocation: vi.fn(async () => false),
+}));
+vi.mock('../../src/services/project/repository/transaction/editorRepositorySession', () => ({
+  updateEditorRepositoryProjectFields: repo.updateEditorRepositoryProjectFields,
+}));
+vi.mock('../../src/services/project/legacyImportTarget', () => ({ requestLegacyImportTarget: vi.fn() }));
+vi.mock('../../src/services/project/androidProjectAutoRestore', () => ({ isAndroidAutoRestoreProjectHandle: () => false }));
+vi.mock('../../src/services/project/mediaSourceRootAccess', () => ({ requestMediaSourceRootAccess: vi.fn() }));
+
 import { ProjectCoreService } from '../../src/services/project/core/ProjectCoreService';
-import type { ProjectFile } from '../../src/services/project/types';
-import { projectSaveStatus } from '../../src/services/project/projectSaveStatus';
+import { fileStorageService } from '../../src/services/project/core/FileStorageService';
+import { RepositoryError } from '../../src/services/project/repository/contracts';
+import type { ProjectMediaFile } from '../../src/services/project/types';
 
-type TestProjectCoreService = ProjectCoreService & {
-  projectHandle: FileSystemDirectoryHandle;
-  projectData: ProjectFile;
-  saveKeysFile: () => Promise<void>;
-};
-
-function createProjectData(): ProjectFile {
-  return {
-    version: 1,
-    name: 'Save Queue Test',
-    createdAt: '2026-04-27T00:00:00.000Z',
-    updatedAt: '2026-04-27T00:00:00.000Z',
-    settings: {
-      width: 1920,
-      height: 1080,
-      frameRate: 30,
-      sampleRate: 48000,
-    },
-    media: [],
-    compositions: [],
-    folders: [],
-    activeCompositionId: null,
-    openCompositionIds: [],
-    expandedFolderIds: [],
-  };
+function createService(): ProjectCoreService {
+  return new ProjectCoreService(fileStorageService);
 }
 
-function createService(createWritable: FileSystemFileHandle['createWritable']): ProjectCoreService {
-  const service = new ProjectCoreService({} as never) as TestProjectCoreService;
-  const fileHandle = { createWritable } as FileSystemFileHandle;
-  service.projectHandle = {
-    getFileHandle: vi.fn(async () => fileHandle),
-  } as unknown as FileSystemDirectoryHandle;
-  service.projectData = createProjectData();
-  service.saveKeysFile = vi.fn(async () => undefined);
-  return service;
-}
-
-describe('ProjectCoreService save queue', () => {
-  it('retains a staged chat journal through denied saves and writes it on recovery', async () => {
-    const chunks: Uint8Array[] = [];
-    const write = vi.fn(async (bytes: ArrayBuffer) => { chunks.push(new Uint8Array(bytes)); });
-    const createWritable = vi.fn()
-      .mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'))
-      .mockRejectedValueOnce(new DOMException('Denied', 'NotAllowedError'))
-      .mockResolvedValue({ write, close: vi.fn(async () => undefined) });
-    const service = createService(createWritable) as TestProjectCoreService;
-    const session = ProjectPackageSession.create(service.projectData);
-    (service as unknown as { configurePackageSession: (h: FileSystemDirectoryHandle, s: ProjectPackageSession) => void }).configurePackageSession(service.projectHandle, session);
-    const journal = JSON.stringify({ messages: [{ role: 'user', text: 'Keep this chat' }] });
-    expect(await session.writeEntry('AI_CHAT', 'history.json', journal)).toBe(true);
-    expect(createWritable).not.toHaveBeenCalled();
-    for (let attempt = 0; attempt < 2; attempt++) {
-      expect(await service.saveProject()).toBe(false);
-      expect(service.hasUnsavedChanges()).toBe(true);
-      expect(projectSaveStatus.read(service.projectHandle).failed).toBe(true);
-      expect(new TextDecoder().decode(session.readEntry('AI_CHAT', 'history.json')!)).toBe(journal);
-    }
-    expect(await service.saveProject()).toBe(true);
-    expect(service.hasUnsavedChanges()).toBe(false);
-    expect(projectSaveStatus.read(service.projectHandle).failed).toBe(false);
-    const bytes = new Uint8Array(chunks.reduce((size, chunk) => size + chunk.byteLength, 0));
-    let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
-    const archive = await decodeProjectPackage(bytes);
-    expect(new TextDecoder().decode(archive.entries.get('AI/Chat/history.json'))).toBe(journal);
+describe('ProjectCoreService repository save contract', () => {
+  beforeEach(() => {
+    repo.session = { opening: { writable: true } };
+    repo.scratch = false;
+    repo.dirty = false;
+    repo.flushEditorRepository.mockReset().mockResolvedValue(true);
+    repo.updateEditorRepositoryProjectFields.mockReset();
   });
 
-  it('stages imported artifacts as unsaved until an explicit project save', async () => {
-    const createWritable = vi.fn(async () => ({ write: vi.fn(async () => undefined), close: vi.fn(async () => undefined) }) as unknown as FileSystemWritableFileStream);
-    const service = createService(createWritable) as TestProjectCoreService;
-    const session = ProjectPackageSession.create(service.projectData);
-    (service as unknown as { configurePackageSession: (h: FileSystemDirectoryHandle, s: ProjectPackageSession) => void }).configurePackageSession(service.projectHandle, session);
-    await session.batchWrites(async () => {
-      await session.writeEntry('ANALYSIS', 'audio.json', '{"ready":true}');
-    });
+  it('reports a save only after the repository flush receipt and then clears unsaved changes', async () => {
+    const service = createService();
+    repo.dirty = true;
+    let confirm!: (saved: boolean) => void;
+    repo.flushEditorRepository.mockReturnValueOnce(new Promise<boolean>(resolve => { confirm = resolve; }));
+
+    const saving = service.saveProject();
+    expect(repo.flushEditorRepository).toHaveBeenCalledTimes(1);
     expect(service.hasUnsavedChanges()).toBe(true);
-    expect(createWritable).not.toHaveBeenCalled();
-    expect(await service.saveProject()).toBe(true);
-    expect(createWritable).toHaveBeenCalledTimes(1);
+
+    // The writer confirms the journal; the repository no longer reports pending records.
+    repo.dirty = false;
+    confirm(true);
+    await expect(saving).resolves.toBe(true);
     expect(service.hasUnsavedChanges()).toBe(false);
   });
 
-  it('holds manual saves during import and coalesces with the artifact flush', async () => {
-    const createWritable = vi.fn(async () => ({ write: vi.fn(async () => undefined), close: vi.fn(async () => undefined) }) as unknown as FileSystemWritableFileStream);
-    const service = createService(createWritable) as TestProjectCoreService;
-    const session = ProjectPackageSession.create(service.projectData);
-    registerFsaProjectPackageSession(service.projectHandle, session);
-    session.setPersistCallback(() => service.saveProject());
-    let release!: () => void;
-    const gate = new Promise<void>(resolve => { release = resolve; });
-    const importing = session.batchWrites(async () => {
-      await session.writeEntry('ANALYSIS', 'audio.json', '{}');
-      await gate;
-    });
-    const manual = service.saveProject();
-    await new Promise(resolve => setTimeout(resolve, 10));
-    expect(createWritable).not.toHaveBeenCalled();
-    expect(projectSaveStatus.read(service.projectHandle).saving).toBe(false);
-    release();
-    await importing;
-    expect(await manual).toBe(true);
-    expect(createWritable).toHaveBeenCalledTimes(1);
-  });
+  it('does not report a denied or failed repository flush as saved', async () => {
+    const service = createService();
+    repo.dirty = true;
+    repo.flushEditorRepository.mockRejectedValueOnce(new RepositoryError('ownership', 'Read-only project cannot publish a save'));
 
-  it('does not report a recovery-protected skipped write as saved', async () => {
-    const createWritable = vi.fn();
-    const service = createService(createWritable) as TestProjectCoreService;
-    const autosave = { ...createProjectData(), folders: [{ id: 'recoverable', name: 'Shots', parentId: null }] };
-    service.projectHandle = {
-      getFileHandle: vi.fn(async () => ({
-        getFile: async () => ({ text: async () => JSON.stringify(autosave) }),
-        createWritable,
-      })),
-    } as unknown as FileSystemDirectoryHandle;
-    service.markDirty();
-    expect(await service.saveProject()).toBe(false);
+    await expect(service.saveProject()).rejects.toMatchObject({ code: 'ownership' });
     expect(service.hasUnsavedChanges()).toBe(true);
-    expect(createWritable).not.toHaveBeenCalled();
-    expect(projectSaveStatus.read(service.projectHandle)).toEqual({
-      saving: false, failed: true, lastSuccessfulSave: null,
-    });
-  });
 
-  it('coalesces concurrent project.json writes', async () => {
-    let activeWriters = 0;
-    let maxActiveWriters = 0;
-
-    const createWritable = vi.fn(async () => {
-      activeWriters += 1;
-      maxActiveWriters = Math.max(maxActiveWriters, activeWriters);
-      if (activeWriters > 1) {
-        throw new Error('concurrent writer');
-      }
-
-      return {
-        write: vi.fn(async () => undefined),
-        close: vi.fn(async () => {
-          await new Promise((resolve) => setTimeout(resolve, 5));
-          activeWriters -= 1;
-        }),
-      } as unknown as FileSystemWritableFileStream;
-    });
-
-    const service = createService(createWritable);
-    service.markDirty();
-
-    const [firstSaved, secondSaved] = await Promise.all([
-      service.saveProject(),
-      service.saveProject(),
-    ]);
-
-    expect(firstSaved).toBe(true);
-    expect(secondSaved).toBe(true);
-    expect(maxActiveWriters).toBe(1);
-    expect(createWritable).toHaveBeenCalledTimes(1);
-  });
-
-  it('retains one follow-up save for edits arriving during an active write', async () => {
-    let followUps: Promise<boolean>[] = [];
-    const writes: string[] = [];
-    const createWritable = vi.fn(async () => ({
-      write: vi.fn(async (content: string) => {
-        writes.push(content);
-        if (writes.length === 1) {
-          (service as TestProjectCoreService).projectData.name = 'New edit';
-          service.markDirty();
-          followUps = [service.saveProject(), service.saveProject()];
-        }
-      }),
-      close: vi.fn(async () => undefined),
-    } as unknown as FileSystemWritableFileStream));
-    const service = createService(createWritable);
-    expect(await service.saveProject()).toBe(true);
-    expect(await Promise.all(followUps)).toEqual([true, true]);
-    expect(createWritable).toHaveBeenCalledTimes(2);
-    expect(JSON.parse(writes[1]).name).toBe('New edit');
+    // A later retry succeeds once the writer recovers.
+    repo.dirty = false;
+    await expect(service.saveProject()).resolves.toBe(true);
     expect(service.hasUnsavedChanges()).toBe(false);
   });
 
   it('keeps the project dirty when a change lands during an active save', async () => {
-    let markedDirtyDuringSave = false;
+    const service = createService();
+    repo.dirty = true;
+    repo.flushEditorRepository.mockImplementationOnce(async () => {
+      // An edit is journaled after the flush captured its sequence.
+      repo.dirty = true;
+      return true;
+    });
 
-    const createWritable = vi.fn(async () => ({
-      write: vi.fn(async () => {
-        if (!markedDirtyDuringSave) {
-          markedDirtyDuringSave = true;
-          service.markDirty();
-        }
-      }),
-      close: vi.fn(async () => undefined),
-    } as unknown as FileSystemWritableFileStream));
-
-    const service = createService(createWritable);
-    service.markDirty();
-
-    const saved = await service.saveProject();
-
-    expect(saved).toBe(true);
+    await expect(service.saveProject()).resolves.toBe(true);
     expect(service.hasUnsavedChanges()).toBe(true);
   });
 
-  it('falls back to project.autosave.json when project.json swap creation fails', async () => {
-    const projectWritable = {
-      write: vi.fn(async () => undefined),
-      close: vi.fn(async () => undefined),
-    } as unknown as FileSystemWritableFileStream;
-    const autosaveWritable = {
-      write: vi.fn(async () => undefined),
-      close: vi.fn(async () => undefined),
-    } as unknown as FileSystemWritableFileStream;
-    const projectFileHandle = {
-      createWritable: vi.fn(async () => {
-        throw new DOMException(
-          "Failed to execute 'createWritable' on 'FileSystemFileHandle': Failed to create swap file.",
-          'AbortError',
-        );
-      }),
-    } as unknown as FileSystemFileHandle;
-    const autosaveFileHandle = {
-      createWritable: vi.fn(async () => autosaveWritable),
-    } as unknown as FileSystemFileHandle;
-    const service = new ProjectCoreService({} as never) as TestProjectCoreService;
-    service.projectHandle = {
-      getFileHandle: vi.fn(async (name: string) => (
-        name === 'project.autosave.json' ? autosaveFileHandle : projectFileHandle
-      )),
-    } as unknown as FileSystemDirectoryHandle;
-    service.projectData = createProjectData();
-    service.saveKeysFile = vi.fn(async () => undefined);
-
+  it('never writes in response to dirty marks', () => {
+    const service = createService();
     service.markDirty();
-    const saved = await service.saveProject();
-
-    expect(saved).toBe(true);
-    expect(projectFileHandle.createWritable).toHaveBeenCalledTimes(3);
-    expect(autosaveFileHandle.createWritable).toHaveBeenCalledTimes(1);
-    expect(projectWritable.write).not.toHaveBeenCalled();
-    expect(autosaveWritable.write).toHaveBeenCalledTimes(1);
+    service.markDirty();
+    expect(repo.flushEditorRepository).not.toHaveBeenCalled();
   });
 
-  it('reacquires a fresh file handle after Chromium invalidates cached file state', async () => {
-    const writable = {
-      write: vi.fn(async () => undefined),
-      close: vi.fn(async () => undefined),
-    } as unknown as FileSystemWritableFileStream;
-    const staleHandle = {
-      createWritable: vi.fn(async () => {
-        throw new DOMException(
-          'An operation that depends on state cached in an interface object was made but the state had changed since it was read from disk.',
-          'InvalidStateError',
-        );
-      }),
-    } as unknown as FileSystemFileHandle;
-    const freshHandle = {
-      createWritable: vi.fn(async () => writable),
-    } as unknown as FileSystemFileHandle;
-    let projectFileHandleReads = 0;
-    const getFileHandle = vi.fn(async (name: string) => {
-      if (name === 'project.autosave.json') {
-        throw new DOMException('File not found.', 'NotFoundError');
-      }
-      projectFileHandleReads += 1;
-      return projectFileHandleReads === 1 ? staleHandle : freshHandle;
-    });
-    const service = new ProjectCoreService({} as never) as TestProjectCoreService;
-    service.projectHandle = { getFileHandle } as unknown as FileSystemDirectoryHandle;
-    service.projectData = createProjectData();
-    service.saveKeysFile = vi.fn(async () => undefined);
-
-    service.markDirty();
-    const saved = await service.saveProject();
-
-    expect(saved).toBe(true);
-    expect(getFileHandle).toHaveBeenCalledTimes(3);
-    expect(staleHandle.createWritable).toHaveBeenCalledTimes(1);
-    expect(freshHandle.createWritable).toHaveBeenCalledTimes(1);
-    expect(writable.write).toHaveBeenCalledTimes(1);
+  it('treats only a non-scratch repository session as an open project', () => {
+    const service = createService();
+    expect(service.isProjectOpen()).toBe(true);
+    repo.scratch = true;
+    expect(service.isProjectOpen()).toBe(false);
+    repo.scratch = false;
+    repo.session = null;
+    expect(service.isProjectOpen()).toBe(false);
   });
 
-  it('falls back to project.autosave.json after repeated stale-state failures', async () => {
-    const autosaveWritable = {
-      write: vi.fn(async () => undefined),
-      close: vi.fn(async () => undefined),
-    } as unknown as FileSystemWritableFileStream;
-    const staleProjectHandle = {
-      createWritable: vi.fn(async () => {
-        throw new DOMException('Cached file state changed.', 'InvalidStateError');
-      }),
-    } as unknown as FileSystemFileHandle;
-    const autosaveFileHandle = {
-      createWritable: vi.fn(async () => autosaveWritable),
-    } as unknown as FileSystemFileHandle;
-    const getFileHandle = vi.fn(async (name: string) => (
-      name === 'project.autosave.json' ? autosaveFileHandle : staleProjectHandle
-    ));
-    const service = new ProjectCoreService({} as never) as TestProjectCoreService;
-    service.projectHandle = { getFileHandle } as unknown as FileSystemDirectoryHandle;
-    service.projectData = createProjectData();
-    service.saveKeysFile = vi.fn(async () => undefined);
+  it('routes project field updates into the active repository session only', () => {
+    const service = createService();
+    const media = [{ id: 'media-1', name: 'clip.mp4' }] as ProjectMediaFile[];
+    service.updateMedia(media);
+    expect(repo.updateEditorRepositoryProjectFields).toHaveBeenCalledWith(repo.session, { media });
 
-    service.markDirty();
-    const saved = await service.saveProject();
-
-    expect(saved).toBe(true);
-    expect(staleProjectHandle.createWritable).toHaveBeenCalledTimes(3);
-    expect(autosaveFileHandle.createWritable).toHaveBeenCalledTimes(1);
-    expect(autosaveWritable.write).toHaveBeenCalledTimes(1);
+    repo.session = null;
+    service.updateFolders([]);
+    expect(repo.updateEditorRepositoryProjectFields).toHaveBeenCalledTimes(1);
   });
 });

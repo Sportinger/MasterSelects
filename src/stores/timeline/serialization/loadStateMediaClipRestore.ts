@@ -24,7 +24,7 @@ import {
 } from '../nestedRestore';
 import { startRestoredVectorRuntimeRestore } from '../vectorRuntimeRestore';
 import {
-  hydrateAndProjectMediaSourceArtifacts,
+  scheduleMediaSourceArtifactProjection,
 } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 import { bindRuntimeToClip } from '../../../services/mediaRuntime/clipBindings';
 import {
@@ -49,12 +49,8 @@ function loadCachedProjectMediaArtifacts(params: {
 }): void {
   const { serializedClip } = params;
   if (!serializedClip.mediaFileId || !projectFileService.isProjectOpen()) return;
-  hydrateAndProjectMediaSourceArtifacts(serializedClip.mediaFileId).catch(err => {
-    log.warn('Failed to load media-scoped source artifacts', {
-      clip: serializedClip.name,
-      error: err,
-    });
-  });
+  // Coalesced per media: restoring hundreds of its clips must not project once per clip.
+  scheduleMediaSourceArtifactProjection(serializedClip.mediaFileId);
 }
 
 function startLoadStateTopLevelRuntimeRestore(params: {

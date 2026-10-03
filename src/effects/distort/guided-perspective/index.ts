@@ -6,7 +6,7 @@ const params: Record<string, EffectParam> = {
   scale: { type: 'number', label: 'Scale', default: 100, min: 50, max: 300, step: 0.1, animatable: true },
   strength: { type: 'number', label: 'Strength', default: 100, min: 0, max: 100, step: 0.1, animatable: true },
 };
-IDENTITY.forEach((value, i) => { params[`matrix${i}`] = { type: 'number', label: `Matrix ${i}`, default: value, hidden: true }; });
+IDENTITY.forEach((value, i) => { params[`matrix${i}`] = { type: 'number', label: `Matrix ${i}`, default: value, hidden: true, animatable: false }; });
 export const guidedPerspective: EffectDefinition = {
   id: 'guided-perspective', name: 'Guided Perspective', category: 'distort', shader,
   entryPoint: 'guidedPerspectiveFragment', uniformSize: 64, params,

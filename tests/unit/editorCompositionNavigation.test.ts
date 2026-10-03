@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const fixture = vi.hoisted(() => ({
   session: {} as object | null, media: {} as any, timeline: {} as any,
-  workspace: {} as Record<string, unknown>, stage: vi.fn(), activate: vi.fn(), abandon: vi.fn(),
+  workspace: {} as Record<string, unknown>, stage: vi.fn(), activate: vi.fn(), project: vi.fn(), abandon: vi.fn(),
   queue: vi.fn(), stop: vi.fn(), sync: vi.fn(), clear: vi.fn(), render: vi.fn(),
   publication: { generation: 4, revisionId: 'revision', blocked: false },
   clock: { isUsingInternalPosition: false, position: 42 },
@@ -35,6 +35,7 @@ vi.mock('../../src/services/timeline/historyRuntimeRehydration', () => ({ syncHi
 vi.mock('../../src/services/layerBuilder', () => ({ layerBuilder: { invalidateCache: vi.fn() } }));
 vi.mock('../../src/services/render/renderHostPort', () => ({ renderHostPort: { clearCaches: fixture.clear, requestNewFrameRender: fixture.render } }));
 vi.mock('../../src/services/logger', () => ({ Logger: { create: () => ({ info: vi.fn() }) } }));
+vi.mock('../../src/services/mediaArtifacts/mediaSourceArtifacts', () => ({ scheduleMediaSourceArtifactProjectionForClips: fixture.project }));
 
 import { navigateEditorComposition } from '../../src/services/project/repository/transaction/editorCompositionNavigation';
 

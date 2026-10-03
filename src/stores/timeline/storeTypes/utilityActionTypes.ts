@@ -6,6 +6,7 @@ import type {
   ClipMask,
   ClipTransform,
   CompositionTimelineData,
+  EasingType,
   Effect,
   Keyframe,
   Layer,
@@ -20,6 +21,7 @@ import type { CompositionGraphState } from '../../../types/compositionGraph';
 import type { VectorAnimationClipSettings } from '../../../types/vectorAnimation';
 import type { LightClipSettings } from '../../../types/light';
 import type { SceneCameraSettings } from '../../mediaStore/types';
+import type { CubicBezierPoints } from '../../../utils/easingPresets';
 import type {
   TimelineEditOperationSource,
   TimelineEditResult,
@@ -150,6 +152,8 @@ export interface KeyframeActions {
   isCurveExpanded: (trackId: string, property: AnimatableProperty) => boolean;
   setCurveEditorHeight: (height: number) => void;
   updateBezierHandle: (keyframeId: string, handle: 'in' | 'out', position: BezierHandle) => void;
+  /** Eases the segments that start at these keys: a cubic-bezier curve, or null to store a plain preset easing and clear segment handles. */
+  applyKeyframeEasingCurve: (keyframeIds: readonly string[], curve: CubicBezierPoints | null, easing?: EasingType) => void;
   disablePropertyKeyframes: (clipId: string, property: AnimatableProperty, currentValue: number) => void;
 }
 

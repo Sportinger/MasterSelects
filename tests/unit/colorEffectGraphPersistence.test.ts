@@ -5,7 +5,9 @@ import { setOperatorParameter } from '../../src/services/operators/effectGraphEd
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import type { Effect } from '../../src/types/effects';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { buildEffectOperatorGraph } from '../../src/services/nodeGraph/effectGraphProjection';
 import { imageOperatorValuePreview } from '../../src/services/nodePreview/imageOperatorPreviews';
@@ -30,9 +32,16 @@ describe('editable color effect graphs', () => {
 
   it.each(['brightness', 'contrast', 'saturation'] as const)('migrates legacy %s ownership and round-trips the canonical project graph', type => {
     const legacy = effect(type), graph = effectOperatorGraph(legacy);
-    expect(graph).toEqual({ ...createDefaultColorEffectGraph(type), compositionRules: 2 });
+    // The canonical graph is the default recipe with reusable blocks and the one-time readable grouping applied.
+    const recipe = createDefaultColorEffectGraph(type), expanded = expandOperatorCompositions(graph);
+    const nodes = (value: EffectOperatorGraph) => value.nodes.map(node => [node.id, node.operator, node.bindings, node.constants]).toSorted();
+    const edges = (value: EffectOperatorGraph) => value.edges.map(edge => [edge.from, edge.output, edge.to, edge.input].join(':')).toSorted();
+    expect(graph).toMatchObject({ domain: recipe.domain, compositionRules: 2, effectPresentationRules: 1 });
+    expect(nodes(expanded)).toEqual(nodes(recipe));
+    expect(edges(expanded)).toEqual(edges(recipe));
     const canonical = migratePersistedEffectOperatorGraph(legacy);
-    expect(canonical.operatorGraph).toEqual(graph);
+    // Persistence stores reusable blocks packed; loading expands them back to the same canonical graph.
+    expect(canonical.operatorGraph).toEqual(packOperatorCompositions(graph));
     expect(canonical.params.amount).toBe(getDefaultParams(type).amount);
     expect(effectOperatorGraph(JSON.parse(JSON.stringify(canonical)) as Effect)).toEqual(graph);
   });

@@ -4,7 +4,7 @@ import { Logger } from '../../logger';
 import { projectDB } from '../../projectDB';
 import type { FileStorageService } from './FileStorageService';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
-import { acquireProjectRoot, resolveProjectRootMode, listProjectFolderNames } from './projectRootAccess';
+import { acquireProjectRoot, getProjectWriteSupportError, resolveProjectRootMode, listProjectFolderNames } from './projectRootAccess';
 import { rememberLastProject, rememberProjectParent } from './projectDirectoryPersistence';
 import { addRecentFsaProject, addRecentOpfsProject, getRecentFsaProjectMediaSourceRootIds } from '../recentProjects';
 import { requestMediaSourceRootAccess } from '../mediaSourceRootAccess';
@@ -36,15 +36,21 @@ export class ProjectCoreService {
     const opened = await this.loadProject(handle); if (opened) this.pendingHandle = null; return opened;
   }
   async createProject(name: string, preserveCurrent = false): Promise<boolean> {
+    if (!this.canWriteProjects()) return false;
     const root = await acquireProjectRoot(resolveProjectRootMode()); if (!root) return false;
     return this.createProjectInFolder(root, name, preserveCurrent);
   }
   async createProjectInFolder(parent: FileSystemDirectoryHandle, name: string, preserveCurrent = false): Promise<boolean> {
+    if (!this.canWriteProjects()) return false;
     await rememberProjectParent(parent);
     const handle = await parent.getDirectoryHandle(name, { create: true });
     const location: RepositoryLocation = resolveProjectRootMode() === 'opfs' ? { kind: 'opfs', path: name } : { kind: 'fsa', handle };
     await createRepositoryAt(location, name, preserveCurrent);
     await this.adoptSession(handle); return true;
+  }
+  /** Read-only OPFS (no writable streams) must fail before any folder or repository is created. */
+  private canWriteProjects(): boolean {
+    const error = getProjectWriteSupportError(); if (error) log.warn(error); return error === null;
   }
   async openProject(): Promise<boolean> {
     if (resolveProjectRootMode() !== 'fsa') return false;

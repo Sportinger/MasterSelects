@@ -118,6 +118,16 @@ export async function runEditorBatch<T>(label: string, action: () => Promise<T>)
     throw error;
   }
 }
+/**
+ * Lets an already open transaction capture mutations across awaits while `action` runs, like
+ * runEditorBatch, without committing it: the caller keeps ownership. Used by multi-step tool
+ * batches that promise one undo step and one saved revision.
+ */
+export async function captureEditorTransactionAcrossAwaits<T>(token: TransactionToken, action: () => Promise<T>): Promise<T> {
+  if (!runtime.session || activeEditorBatch() || !ownsEditorTransaction(token)) return action();
+  runtime.batch = token;
+  try { return await action(); } finally { if (runtime.batch === token) runtime.batch = null; }
+}
 export function cancelEditorTransaction(token: TransactionToken): void {
   session().coordinator.cancel(token);
   const mutations = runtime.rollbacks.get(token.owner) ?? [];
@@ -130,7 +140,8 @@ export function cancelEditorTransaction(token: TransactionToken): void {
   runtime.rollbacks.delete(token.owner); publishEditorContentProjection(session().coordinator.getStatus());
 }
 function beginScope(domain: string, label: string): ActionScope {
-  const parent = runtime.scopes.at(-1)?.token ?? runtime.explicit ?? getEditorGestureToken();
+  // An active batch (runEditorBatch / captured tool batch) owns mutations made after its awaits too.
+  const parent = runtime.scopes.at(-1)?.token ?? runtime.explicit ?? getEditorGestureToken() ?? activeEditorBatch();
   return { token: parent, owns: false, label, domain };
 }
 function ensureScopeToken(scope: ActionScope): TransactionToken {

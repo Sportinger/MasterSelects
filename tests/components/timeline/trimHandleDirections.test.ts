@@ -87,14 +87,19 @@ describe('trimHandleDirections', () => {
         source: { type: 'video', naturalDuration: 10 },
       });
 
+      // Negative speed plays the source backwards: the timeline end edge trims
+      // the source in-point and the timeline start edge trims the source out-point.
+      const reversed = speed < 0;
       const trimEnd = computeTrimTiming(clip, 'right', trimOriginalsFromClip(clip), -1);
-      expect(trimEnd.newOutPoint).toBe(8);
+      expect(trimEnd.newInPoint).toBe(reversed ? 2 : 0);
+      expect(trimEnd.newOutPoint).toBe(reversed ? 10 : 8);
       expect(trimEnd.newDuration).toBe(4);
       expect(trimEnd.targetTime).toBe(4);
 
       const trimStart = computeTrimTiming(clip, 'left', trimOriginalsFromClip(clip), 1);
       expect(trimStart.newStartTime).toBe(1);
-      expect(trimStart.newInPoint).toBe(2);
+      expect(trimStart.newInPoint).toBe(reversed ? 0 : 2);
+      expect(trimStart.newOutPoint).toBe(reversed ? 8 : 10);
       expect(trimStart.newDuration).toBe(4);
     }
   });

@@ -19,7 +19,8 @@ describe('blur effect operator graph ownership', () => {
     expect(graph.nodes.flatMap(node => Object.values(node.bindings))).toEqual(expect.arrayContaining(bindings));
     expect(graph.nodes.flatMap(node => Object.values(node.bindings)).every(binding => typeof binding === 'string' && bindings.includes(binding as never))).toBe(true);
     expect(isImageGraphEffectType(type)).toBe(true);
-    expect(effectOperatorGraph({ type, params: {} }).nodes.map(node => node.id)).toEqual(graph.nodes.map(node => node.id));
+    // Composition recognition may reorder nodes; the owner keeps exactly the recipe node set.
+    expect(effectOperatorGraph({ type, params: {} }).nodes.map(node => node.id).toSorted()).toEqual(graph.nodes.map(node => node.id).toSorted());
     expect(effectOperatorParams({ type, params: {} })).toMatchObject(Object.fromEntries(bindings.map(id => [id, getEffect(type)!.params[id].default])));
   });
 

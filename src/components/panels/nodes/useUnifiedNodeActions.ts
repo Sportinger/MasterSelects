@@ -20,6 +20,9 @@ import type { AnimatableProperty } from '../../../types/animationProperties';
 import { toggleEffectGroupEnabled } from '../../../services/operators/effectGroupBypassEditing';
 import { chainCutEffect, detachChainEffect } from '../../../services/nodeGraph/clipEffectChain';
 
+/** Clip stages whose image links the projection rebuilds from the clip itself. */
+const BUILT_IN_CHAIN = new Set(['clip-source', 'clip-text', 'clip-transform', 'clip-mask-stack', 'clip-color-correction', 'clip-output']);
+
 function detachEffect(clipId: string, effectId: string) {
   const state = readTimelineRuntimeState(useTimelineStore), current = state.clips.find(candidate => candidate.id === clipId);
   if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
@@ -154,6 +157,8 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
         if (!current || state.isExporting || state.tracks.find(track => track.id === current.trackId)?.locked) throw new Error('The clip is locked or exporting.');
         const effect = findClipOperatorEffect(current, effectId);
         if (!effect) return;
+        // Bypass never re-attaches a free-standing group; reconnecting its cables does.
+        if (effect.detached) throw new Error(`${effect.name || effect.type} stands outside the clip chain and does not render. Connect it between two chain nodes to use it.`);
         clipWorkspaceBatch('Toggle effect group bypass', () => {
           if (effect.type === 'audio-math') state.setClipAudioEffectInstanceEnabled(current.id, effect.id, !effect.enabled);
           else state.setClipEffectEnabled(current.id, effect.id, !effect.enabled);
@@ -226,7 +231,7 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
     disconnectEdge: (id: string) => safely(() => {
       if (clip && id.startsWith('control-target:')) { setParameterSourceBinding(clip.id, decodeURIComponent(id.slice('control-target:'.length)), { source: undefined, enabled: undefined }); return; }
       if (clip?.nodeGraph?.parameterSources?.graph.edges.some(edge => edge.id === id)) { disconnectControlEdge(clip.id, id); return; }
-      if (graph?.edges.find(edge => edge.id === id)?.readOnly) return;
+      if (graph?.edges.find(edge => edge.id === id)?.readOnly) throw new Error('This cable is derived from the clip (its source, text or a recorded bake) and cannot be unplugged.');
       for (const animation of clip?.nodeGraph?.keyframeNodes ?? []) for (const channel of animation.channels) {
         for (const property of [channel.property, ...channel.targets.map(t => t.property)]) {
           if (id === keyframeEdgeId(animation.id, property)) { disconnectKeyframeNode(clip!.id, animation.id, property); return; }
@@ -246,6 +251,11 @@ export function useUnifiedNodeActions(clip: TimelineClip | undefined, graph: Nod
       const freed = graph ? chainCutEffect(graph, edge) : undefined;
       if (freed && clip) { detachEffect(clip.id, freed); return; }
       if (edge.toPortId.startsWith('group-') || edge.fromPortId.startsWith('group-')) throw new Error('Reconnect the Clip input/output ports to reorder effects, or bypass an effect to skip it.');
+      // Built-in stage links are rebuilt from the clip; a cut would silently snap back.
+      const fromNode = graph?.nodes.find(n => n.id === edge.fromNodeId);
+      if (['texture', 'scene', 'geometry'].includes(edge.type) && BUILT_IN_CHAIN.has(fromNode?.binding?.kind ?? '') && BUILT_IN_CHAIN.has(node.binding?.kind ?? '')) {
+        throw new Error('Built-in chain links (Source, Transform, Masks, Color, Output) cannot be unplugged. Bypass a stage to skip it, or cut the cable into an effect to take that effect out.');
+      }
       bindingActions(node)?.disconnectEdge(id.slice(id.lastIndexOf('/') + 1));
     }),
     setAllGroupsCollapsed: (collapsed: boolean) => safely(() => {

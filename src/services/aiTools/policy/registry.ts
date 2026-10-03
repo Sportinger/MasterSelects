@@ -594,6 +594,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['commitTimelineVariantOption', mutatingMedium()],
   ['archiveTimelineVariantSet', mutatingMedium()],
   ['addClipSegment', mutatingMedium()],
+  ['addCompositionClip', mutatingMedium()],
   ...MULTICAM_POLICIES,
   ...COMPOSITION_RULE_POLICIES,
   ['sendAINodePrompt', {

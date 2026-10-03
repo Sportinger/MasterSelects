@@ -41,6 +41,33 @@ describe('effect group bypass', () => {
     expect(project().groups?.find(g => g.id === 'effect:face')?.bypassed).toBe(false);
   });
 
+  it('never re-attaches a free-standing group through bypass and says why', () => {
+    const { clip } = setup(true, false);
+    useTimelineStore.setState({ clips: [{ ...clip, effects: clip.effects.map(effect => ({ ...effect, detached: true })) }] });
+    const current = useTimelineStore.getState().clips[0];
+    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(current), current);
+    const { result } = renderHook(() => useUnifiedNodeActions(current, graph, null, flock));
+    act(() => result.current.toggleBypass('effect-face'));
+    expect(useTimelineStore.getState().clips[0].effects[0]).toMatchObject({ detached: true, enabled: false });
+    expect(result.current.message).toContain('outside the clip chain');
+  });
+
+  it('offers Byp on the mask stack and color stage only when they have state, reflecting their enabled flags', () => {
+    const clip = createMockClip({ id: 'staged', masks: [{ id: 'm', enabled: false } as never],
+      colorCorrection: { version: 1, enabled: false, activeVersionId: 'v', versions: [], ui: {} } as never });
+    const document = buildClipNodeGraphDocument(clip);
+    const stage = (kind: string) => document.graphs[0].nodes.find(node => node.binding?.kind === kind);
+    for (const kind of ['clip-mask-stack', 'clip-color-correction']) {
+      const node = stage(kind);
+      expect(node, kind).toBeDefined();
+      if (!node) continue;
+      expect(isNodeBypassable(node)).toBe(true);
+      expect(isNodeBypassed(node)).toBe(true);
+    }
+    const plain = buildClipNodeGraphDocument(createMockClip({ id: 'plain' })).graphs[0].nodes;
+    expect(plain.filter(node => ['clip-mask-stack', 'clip-color-correction'].includes(node.binding?.kind ?? '')).some(isNodeBypassable)).toBe(false);
+  });
+
   it.each(['locked', 'exporting'])('refuses changes while %s', reason => {
     const { clip, graph } = setup();
     useTimelineStore.setState(reason === 'locked'
@@ -151,5 +178,23 @@ describe('splat branch and scene node bypass', () => {
     else if (id === 'transform') expect(result.every(b => !b.applyClipTransform)).toBe(true);
     else expect(result.some(b => b.mesh)).toBe(false);
     act(() => actions.toggleBypass(id)); expect(branches()).toHaveLength(4);
+  });
+});
+
+describe('cable unplug feedback', () => {
+  it('explains instead of silently re-adding built-in chain links and derived cables', () => {
+    const clip = createMockClip({ id: 'chain', masks: [{ id: 'm', enabled: true } as never] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], isExporting: false });
+    const graph = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
+    const kind = (id: string) => graph.nodes.find(node => node.id === id)?.binding?.kind;
+    const link = graph.edges.find(edge => edge.type === 'texture' && kind(edge.fromNodeId) === 'clip-source' && kind(edge.toNodeId) === 'clip-mask-stack');
+    expect(link).toBeDefined();
+    const { result } = renderHook(() => useUnifiedNodeActions(clip, graph, null, flock));
+    act(() => result.current.disconnectEdge(link!.id));
+    expect(result.current.message).toContain('Built-in chain links');
+    const derived = { ...graph, edges: graph.edges.map(edge => edge.id === link!.id ? { ...edge, readOnly: true } : edge) };
+    const { result: readOnly } = renderHook(() => useUnifiedNodeActions(clip, derived, null, flock));
+    act(() => readOnly.current.disconnectEdge(link!.id));
+    expect(readOnly.current.message).toContain('cannot be unplugged');
   });
 });

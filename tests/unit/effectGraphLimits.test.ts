@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
-import { ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS, IMAGE_EFFECT_GRAPH_LIMITS, LEGACY_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
+import { ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS, IMAGE_EFFECT_GRAPH_LIMITS, LEGACY_EFFECT_GRAPH_LIMITS, SCENE_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
 import { compileImageOperatorGraph, compileImageOperatorPreview } from '../../src/services/operators/imageOperatorGraph';
 import { migrateImageOperatorGraph } from '../../src/services/operators/imageOperatorMigration';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../src/types/operatorGraph';
@@ -28,7 +28,8 @@ function nestedImageSelectionGraph(depth: number): EffectOperatorGraph {
   let imagePort = 'image';
   for (let index = 0; index < depth; index++) {
     const condition = `condition-${index}`, select = `select-${index}`;
-    nodes.push({ ...value(condition, 'values.boolean'), constants: { value: index % 2 === 0 } },
+    // Parameter-bound conditions stay runtime-variable; constant switches are folded before lowering.
+    nodes.push({ ...value(condition, 'values.boolean'), bindings: { value: condition }, constants: { value: index % 2 === 0 } },
       { id: select, operator: 'control.select.image', operatorVersion: 1, bindings: {} });
     edges.push({ id: `${condition}-select`, from: condition, output: 'value', to: select, input: 'condition' },
       { id: `${imageNode}-${select}-false`, from: imageNode, output: imagePort, to: select, input: 'falseValue' },
@@ -83,10 +84,22 @@ describe('effect graph persisted limits', () => {
     expect(() => compileImageOperatorGraph(nestedImageSelectionGraph(12))).toThrow(/exceeds 2048 instructions/);
   });
 
-  it('retains the original cap outside the image and Analog domains', () => {
+  it('retains the original cap outside the image, Analog and scene domains', () => {
     const graph = largeImageGraph(61); // 65 nodes, below the image cap but above the legacy cap.
-    for (const domain of ['voxel', 'scene', 'cables', undefined] as const)
+    for (const domain of ['voxel', 'cables', undefined] as const)
       expect(validateEffectGraph({ ...graph, domain })).toEqual(['Invalid operator graph.']);
+  });
+
+  it('bounds the scene and geometry domains by their own cap', () => {
+    for (const domain of ['scene', 'geometry'] as const) {
+      const graph = { ...largeImageGraph(61), domain };
+      expect(validateEffectGraph(graph)).not.toContain('Invalid operator graph.');
+      while (graph.nodes.length <= SCENE_EFFECT_GRAPH_LIMITS.nodes) {
+        const id = `scene-extra-${graph.nodes.length}`;
+        graph.nodes.push(value(id)); graph.layout[id] = { x: 0, y: 0 };
+      }
+      expect(validateEffectGraph(graph)).toEqual(['Invalid operator graph.']);
+    }
   });
 
   it('bounds the larger Analog domain independently', () => {

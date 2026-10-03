@@ -60,7 +60,7 @@ export const NodeGraphPlugs = memo(function NodeGraphPlugs({ canvasRendered = fa
           if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelectEdge(edge.id); }
         }}
         onContextMenu={event => { event.preventDefault(); event.stopPropagation(); if (!edge.readOnly) onDisconnectEdge?.(edge.id); }}>
-        <title>{`${label} — ${edge.readOnly ? 'recorded bake dependency' : 'drag to reconnect or unplug'}`}</title>
+        <title>{`${label} — ${edge.readOnly ? 'derived from the clip; cannot be unplugged' : 'drag to reconnect or unplug'}`}</title>
         <g className="node-workspace-plug-visual">
           <path className="node-workspace-plug-backing" d={path} />
           <path className="node-workspace-plug-shape" d={path} />

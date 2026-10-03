@@ -56,5 +56,6 @@ describe('publication cost after importing a wide project', () => {
     expect(costs.at(-1)!).toBeLessThanOrEqual(costs[4] + 2);
     // A fresh session still validates everything from disk.
     expect((await recoverRepository(source.backend, descriptor)).operationSequence).toBe(41);
-  });
+    // CPU-bound (41 hashed publishes over 300 records); the assertions count reads, not time.
+  }, 120_000);
 });

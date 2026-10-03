@@ -4,7 +4,7 @@ import type { MaskTextureManager } from '../../texture/MaskTextureManager';
 import { PLANE_UNIFORM_SIZE } from '../sceneRenderer/constants';
 import { createPlaneResources, createPlaneWhiteMaskResource } from '../sceneRenderer/pipelineResources';
 import { buildPlaneMvp, buildPlaneUniformData } from '../sceneRenderer/planeUniforms';
-import { resolvePlaneTextureSource, type CachedPlaneTexture } from '../sceneRenderer/planeTextureSources';
+import { planeTextureSourceRevision, resolvePlaneTextureSource, type CachedPlaneTexture } from '../sceneRenderer/planeTextureSources';
 
 const log = Logger.create('NativeSceneRenderer');
 
@@ -152,12 +152,19 @@ export class PlanePass {
       cached.source = sourceState.source;
     }
 
+    // Static images and unchanged text rasters already hold their pixels on the GPU.
+    const revision = sourceState.transient ? null : planeTextureSourceRevision(sourceState.source);
+    if (revision !== null && cached.source === sourceState.source && cached.uploadedRevision === revision) {
+      return cached.view;
+    }
+
     try {
       device.queue.copyExternalImageToTexture(
         { source: sourceState.source },
         { texture: cached.texture },
         { width: sourceState.width, height: sourceState.height },
       );
+      cached.uploadedRevision = revision ?? undefined;
     } catch (error) {
       if (canReuseCurrent) return cached.view;
       log.warn('Failed to upload native plane texture', { layerId: layer.layerId, error });

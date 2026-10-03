@@ -47,6 +47,6 @@ export function TextValueControls({ clipId, textProperties, disabled = false }: 
       <InspectorSelect ariaLabel="Followed property" disabled={disabled} value={link.property} groups={propertyGroups}
         onChange={property => setLink({ clipId: link.clipId, property })} />
     </ResolveInspectorRow>}
-    <div className="tt-token-hint">{'{value}  {value:1}  {value*100:0}%  {time:2}'}</div>
+    <div className="tt-token-hint">{'{value}  {value:1}  {value*100:0}%  {time:2}  {frame}  {timecode}'}</div>
   </>;
 }

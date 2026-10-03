@@ -13,6 +13,8 @@ import { getKeyframeSegmentIndex } from './utils/keyframeSegmentIndex';
 import { visibleKeyframeMarkers } from './utils/visibleKeyframeMarkers';
 import { DenseKeyframeCanvas } from './components/DenseKeyframeCanvas';
 import { isClipKeyframeBypassed } from '../../services/nodeGraph/keyframePlaybackState';
+import { useTimelineStore } from '../../stores/timeline';
+import { KEYFRAME_EASING_PRESET_IDS, KEYFRAME_EASING_PRESETS, type KeyframeEasingPresetId } from '../../utils/easingPresets';
 
 interface KeyframeData {
   id: string;
@@ -452,9 +454,21 @@ function TimelineKeyframesComponent({
       contextMenu.targetKeyframeIds.forEach((keyframeId) => {
         onUpdateKeyframe(keyframeId, { easing });
       });
+      // A plain easing must also drop segment handles, which would otherwise keep the bezier curve.
+      const store = useTimelineStore.getState();
+      const targets = new Set(contextMenu.targetKeyframeIds);
+      const curved = [...store.clipKeyframes.values()].some(keys => keys.some(key => targets.has(key.id) && key.handleOut));
+      if (curved) store.applyKeyframeEasingCurve(contextMenu.targetKeyframeIds, null, easing);
       setContextMenu(null);
     }
   }, [contextMenu, onUpdateKeyframe]);
+
+  const handleEasingPresetSelect = useCallback((preset: KeyframeEasingPresetId) => {
+    if (contextMenu) {
+      useTimelineStore.getState().applyKeyframeEasingCurve(contextMenu.targetKeyframeIds, KEYFRAME_EASING_PRESETS[preset].points);
+      setContextMenu(null);
+    }
+  }, [contextMenu]);
 
   const handleRotationInterpolationSelect = useCallback((rotationInterpolation: RotationInterpolationMode) => {
     if (contextMenu) {
@@ -566,6 +580,20 @@ Drag to move; right-click for options; double-click for Graph`,
             >
               {option.label}
               {contextMenu.currentEasing === option.value && <span className="checkmark">&#10003;</span>}
+            </div>
+          ))}
+          <div className="context-menu-subtitle">Motion Curves</div>
+          {KEYFRAME_EASING_PRESET_IDS.map((preset) => (
+            <div
+              key={preset}
+              className="context-menu-item"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onClick={() => handleEasingPresetSelect(preset)}
+            >
+              {KEYFRAME_EASING_PRESETS[preset].label}
             </div>
           ))}
           {contextMenu.rotationTargetKeyframeIds.length > 0 && (

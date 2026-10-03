@@ -4,6 +4,7 @@ import type { AnimatableProperty, EasingType, TimelineClip } from '../../../type
 import type { KeyframeCreateOperation } from '../../../stores/timeline/editOperations/transactionTypes';
 import { animateKeyframe } from '../aiFeedback';
 import { normalizeEasingType } from '../../../utils/easing';
+import { KEYFRAME_EASING_PRESET_IDS, resolveEasingCurve, type CubicBezierPoints } from '../../../utils/easingPresets';
 import { getKeyframeAtTime } from '../../../utils/keyframeInterpolation';
 import { propertyRegistry } from '../../properties';
 import { validatePropertyAuthoringValue } from '../../properties/propertyAuthoring';
@@ -38,6 +39,8 @@ interface KeyframeAuthoringRequest {
   requestedTime: number | undefined;
   requestedSourceTime: number | undefined;
   easing: EasingType;
+  /** Motion-curve preset or cubic-bezier: materialized as handles on the segment to the next key. */
+  curve: CubicBezierPoints | null;
 }
 
 interface PlannedKeyframe extends KeyframeAuthoringRequest {
@@ -154,6 +157,21 @@ export async function handleAddKeyframe(
         error: result.warnings.map((warning) => warning.message).join('; ')
           || 'Keyframe transaction failed',
       };
+    }
+
+    const curved = planned.filter((keyframe) => keyframe.curve);
+    if (curved.length > 0) {
+      // One store action per distinct curve, not one per keyframe.
+      const state = useTimelineStore.getState();
+      const byCurve = new Map<string, { curve: CubicBezierPoints; ids: string[] }>();
+      for (const keyframe of curved) {
+        const actual = getKeyframeAtTime(state.getClipKeyframes(keyframe.clipId), keyframe.property, keyframe.storedTime);
+        if (!actual || !keyframe.curve) continue;
+        const key = keyframe.curve.join(',');
+        const group = byCurve.get(key) ?? { curve: keyframe.curve, ids: [] };
+        group.ids.push(actual.id); byCurve.set(key, group);
+      }
+      for (const { curve, ids } of byCurve.values()) useTimelineStore.getState().applyKeyframeEasingCurve(ids, curve);
     }
 
     const finalTimeline = useTimelineStore.getState();
@@ -297,20 +315,22 @@ function parseKeyframeRequest(
     requestedValue: input.value,
     requestedTime: input.time as number | undefined,
     requestedSourceTime: input.sourceTime as number | undefined,
-    easing: parseEasing(input.easing, `${label}.easing`),
+    ...parseEasing(input.easing, `${label}.easing`),
   };
 }
 
-function parseEasing(value: unknown, label: string): EasingType {
-  if (value === undefined) return 'ease-in-out';
+function parseEasing(value: unknown, label: string): { easing: EasingType; curve: CubicBezierPoints | null } {
+  if (value === undefined) return { easing: 'ease-in-out', curve: null };
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`${label} must be a supported easing string`);
   }
+  const curve = resolveEasingCurve(value);
+  if (curve) return { easing: 'bezier', curve };
   const compact = value.trim().toLowerCase().replace(/[\s_-]+/g, '');
   if (!VALID_EASING_KEYS.has(compact)) {
-    throw new Error(`${label} must be one of: linear, ease-in, ease-out, ease-in-out, bezier`);
+    throw new Error(`${label} must be one of: linear, ease-in, ease-out, ease-in-out, bezier, ${KEYFRAME_EASING_PRESET_IDS.join(', ')}, or cubic-bezier(x1, y1, x2, y2)`);
   }
-  return normalizeEasingType(value, 'ease-in-out');
+  return { easing: normalizeEasingType(value, 'ease-in-out'), curve: null };
 }
 
 function planKeyframe(

@@ -51,6 +51,10 @@ const TEXT_PROPERTY_KEYS = [
   'pathPoints',
   'value',
   'valueLink',
+  'reveal',
+  'revealMode',
+  'revealSpread',
+  'revealCursor',
 ] as const satisfies readonly (keyof TextClipProperties)[];
 
 const BOX_PROPERTY_KEYS = ['boxX', 'boxY', 'boxWidth', 'boxHeight'] as const;
@@ -460,6 +464,8 @@ function validateTextPropertyInputs(
     ['shadowOffsetY', -50, 50],
     ['shadowBlur', 0, 50],
     ['value', -1e9, 1e9],
+    ['reveal', 0, 1],
+    ['revealSpread', 0.5, 40],
   ] as const) {
     const error = validateOptionalFiniteRange(args[key], key, min, max);
     if (error) return failure(error);
@@ -473,6 +479,7 @@ function validateTextPropertyInputs(
     ['textAlign', ['left', 'center', 'right']],
     ['verticalAlign', ['top', 'middle', 'bottom']],
     ['wrapMode', ['word', 'none']],
+    ['revealMode', ['typewriter', 'decode', 'fade', 'rise']],
   ];
   for (const [key, values] of enumChecks) {
     if (args[key] !== undefined && (typeof args[key] !== 'string' || !values.includes(args[key]))) {
@@ -480,7 +487,7 @@ function validateTextPropertyInputs(
     }
   }
 
-  for (const key of ['boxEnabled', 'strokeEnabled', 'shadowEnabled', 'pathEnabled']) {
+  for (const key of ['boxEnabled', 'strokeEnabled', 'shadowEnabled', 'pathEnabled', 'revealCursor']) {
     if (args[key] !== undefined && typeof args[key] !== 'boolean') {
       return failure(`${key} must be a boolean`);
     }

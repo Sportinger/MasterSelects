@@ -23,7 +23,7 @@ vi.mock('../../src/services/fileSystemService', () => ({
 vi.mock('../../src/services/projectDB', () => ({ projectDB: { getStoredHandle: mocks.storedHandle, storeHandle: mocks.storeHandle } }));
 vi.mock('../../src/services/project/mediaSourceRoots', () => ({ readProjectMediaSourceFile: mocks.sourceRoot }));
 vi.mock('../../src/services/project/mediaObjectUrlManager', () => ({
-  createPrimaryMediaObjectUrl: mocks.url,
+  createPrimaryMediaObjectUrl: mocks.url, createRenderablePrimaryMediaObjectUrl: mocks.url,
   createMediaObjectUrl: vi.fn(), getModelSequenceFrameObjectUrlKey: vi.fn(), getGaussianSplatSequenceFrameObjectUrlKey: vi.fn(),
 }));
 

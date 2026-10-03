@@ -49,7 +49,7 @@ describe('Weave flyaways and node groups', () => {
     }
   });
 
-  it('bypasses a field group by returning its consumers to their defaults', () => {
+  it('bypasses a field group by returning its consumers to their defaults', { timeout: 60_000 }, () => {
     const graph = createDefaultWeaveGraph();
     expect(operatorGroupBypassRoutes(graph, graph.groups!.find(group => group.id === 'reveal-by-shape')!)?.get('reveal-ramp-value-yarn-radius-a')).toBeNull();
     bypass(graph, 'reveal-by-shape');

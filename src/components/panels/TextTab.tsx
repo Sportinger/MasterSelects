@@ -13,6 +13,7 @@ import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsSer
 import { LabeledValue } from './properties/transformTab/ValueControls';
 import { TextAnimatedNumberRow } from './properties/TextAnimatedNumberRow';
 import { TextValueControls } from './properties/TextValueControls';
+import { TextRevealSection } from './properties/TextRevealSection';
 import {
   PROPERTY_VALUE_RESET_TITLE,
   resetPropertyValueOnContextMenu,
@@ -213,23 +214,26 @@ export function TextTab({
   disabled = false,
 }: TextTabProps) {
   const { updateTextProperties } = useTimelineStore();
-  const [localText, setLocalText] = useState(textProperties.text);
+  // The draft belongs to one clip: a selection change must never commit the
+  // previous clip's text into the newly selected clip.
+  const [draft, setDraft] = useState({ clipId, text: textProperties.text });
+  const localText = draft.clipId === clipId ? draft.text : textProperties.text;
 
   // Sync local text with props
   useEffect(() => {
-    queueMicrotask(() => setLocalText(textProperties.text));
-  }, [textProperties.text]);
+    queueMicrotask(() => setDraft({ clipId, text: textProperties.text }));
+  }, [clipId, textProperties.text]);
 
   // Debounced text update - 50ms for near-instant preview
   useEffect(() => {
-    if (liveText || disabled) return;
+    if (liveText || disabled || draft.clipId !== clipId) return;
     const timer = setTimeout(() => {
-      if (localText !== textProperties.text) {
-        updateTextProperties(clipId, { text: localText });
+      if (draft.text !== textProperties.text) {
+        updateTextProperties(clipId, { text: draft.text });
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [liveText, disabled, localText, clipId, textProperties.text, updateTextProperties]);
+  }, [liveText, disabled, draft, clipId, textProperties.text, updateTextProperties]);
 
   // Load font when component mounts
   useEffect(() => {
@@ -242,8 +246,8 @@ export function TextTab({
   }, [selectionPills, textProperties.fontFamily]);
 
   const handleTextChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setLocalText(e.target.value);
-  }, []);
+    setDraft({ clipId, text: e.target.value });
+  }, [clipId]);
 
   const updateProp = useCallback(<K extends keyof TextClipProperties>(
     key: K,
@@ -490,6 +494,8 @@ export function TextTab({
           </button>
         </ResolveInspectorRow>
       </ResolveInspectorSection></>}
+
+      {scope === 'all' && <TextRevealSection clipId={clipId} textProperties={textProperties} disabled={disabled} animatable={!liveText} />}
 
       {(scope === 'all' || scope === 'shadow') && <ResolveInspectorSection
         defaultOpen={textProperties.shadowEnabled}

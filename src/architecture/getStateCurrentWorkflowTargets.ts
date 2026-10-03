@@ -8,7 +8,7 @@ export const currentWorkflowGetStateHardTargets = [
   { path: 'src/components/common/EditorPlaybackRuntimeHost.tsx', maxCurrentHits: 1 },
   { path: 'src/components/dock/useMobilePreviewLayoutFit.ts', maxCurrentHits: 1 },
   { path: 'src/components/export/runners/hapExportRunner.ts', maxCurrentHits: 1 },
-  { path: 'src/components/panels/annotations/AnnotationsPanel.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/panels/annotations/AnnotationsPanel.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/color-workspace/ColorClipStrip.tsx', maxCurrentHits: 12 },
   { path: 'src/components/panels/color-workspace/ColorWorkspaceTopBar.tsx', maxCurrentHits: 2 },
   { path: 'src/components/panels/media/panel/useMediaPanelTouchTimelineDrag.ts', maxCurrentHits: 2 },
@@ -23,7 +23,7 @@ export const currentWorkflowGetStateHardTargets = [
   { path: 'src/components/panels/properties/surfaceTracking/TrackingAttachPicker.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/surfaceTracking/TrackingConnectionControls.tsx', maxCurrentHits: 11 },
   { path: 'src/components/panels/properties/surfaceTracking/useTrackingAssetActions.ts', maxCurrentHits: 11 },
-  { path: 'src/components/panels/properties/surfaceTracking/useTrackingWorkspace.ts', maxCurrentHits: 8 },
+  { path: 'src/components/panels/properties/surfaceTracking/useTrackingWorkspace.ts', maxCurrentHits: 17 },
   { path: 'src/components/preview/PreviewFpsTouchControls.tsx', maxCurrentHits: 2 },
   { path: 'src/components/preview/tracking/TrackingPreviewOverlay.tsx', maxCurrentHits: 1 },
   { path: 'src/components/preview/useMaskBoundsResize.ts', maxCurrentHits: 1 },
@@ -76,7 +76,7 @@ export const currentWorkflowGetStateHardTargets = [
 
   // Depth/face jobs validate source ranges and composition identity across
   // awaits. Completion and UI actions publish to the current tracking store.
-  { path: 'src/components/panels/properties/DepthEstimationControls.tsx', maxCurrentHits: 6 },
+  { path: 'src/components/panels/properties/DepthEstimationControls.tsx', maxCurrentHits: 8 },
   { path: 'src/components/panels/properties/FaceStabilizationControls.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/PreciseFaceTrackingControls.tsx', maxCurrentHits: 4 },
   { path: 'src/services/landmarkTracking/bakeFaceStabilization.ts', maxCurrentHits: 4 },

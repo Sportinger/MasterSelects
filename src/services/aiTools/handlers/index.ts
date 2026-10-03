@@ -45,6 +45,7 @@ import {
   handleSelectClips,
   handleClearSelection,
   handleAddClipSegment,
+  handleAddCompositionClip,
 } from './clips';
 
 import {
@@ -298,6 +299,7 @@ const selfContainedHandlers: Record<string, (args: Record<string, unknown>, call
   archiveTimelineVariantSet: handleArchiveTimelineVariantSet,
   listLocalFiles: handleListLocalFiles,
   addClipSegment: handleAddClipSegment,
+  addCompositionClip: handleAddCompositionClip,
   listEffects: handleListEffects,
   removeKeyframe: handleRemoveKeyframe,
   undo: handleUndo,

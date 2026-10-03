@@ -108,7 +108,7 @@ describe('dock store saved layouts', () => {
     const rightGroup = findTabGroup(layout.root, 'right-group');
     const timelineGroup = findTabGroup(layout.root, 'timeline-group');
 
-    expect(panelTypes(leftGroup)).toEqual(['media', 'ai-studio', 'transitions']);
+    expect(panelTypes(leftGroup)).toEqual(['media', 'ai-studio', 'node-workspace']);
     expect(panelTypes(previewGroup)).toEqual(['preview']);
     expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'color-controls']);
     expect(leftGroup?.panels[1]?.title).toBe('AI Studio');
@@ -373,7 +373,7 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(findTabGroup(layout.root, 'left-group'))).toEqual([
       'media',
       'ai-studio',
-      'transitions',
+      'node-workspace',
     ]);
     expect(panelTypes(findTabGroup(layout.root, 'right-group'))).toEqual([
       'clip-properties',
@@ -517,7 +517,7 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(findTabGroup(bottom.children[0], 'left-group'))).toEqual([
       'media',
       'discover',
-      'transitions',
+      'node-workspace',
     ]);
     expect(panelTypes(findTabGroup(mixerProperties.children[0], 'audio-mixer-group'))).toEqual(['audio-mixer']);
     const rightGroup = findTabGroup(mixerProperties.children[1], 'right-group');
@@ -548,7 +548,7 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(findTabGroup(sidebar, 'left-group'))).toEqual([
       'media',
       'discover',
-      'transitions',
+      'node-workspace',
     ]);
     const rightGroup = findTabGroup(sidebar, 'right-group');
     expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'ai-studio']);
@@ -673,7 +673,7 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(findTabGroup(state.layout.root, 'left-group'))).toEqual([
       'media',
       'ai-studio',
-      'transitions',
+      'node-workspace',
     ]);
     const rightGroup = findTabGroup(state.layout.root, 'right-group');
     expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'color-controls']);
@@ -705,7 +705,7 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(findTabGroup(state.layout.root, 'mobile-v-tools-group'))).toEqual([
       'media',
       'ai-studio',
-      'transitions',
+      'node-workspace',
       'clip-properties',
       'export',
       'color-controls',
@@ -764,7 +764,7 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(findTabGroup(state.layout.root, 'left-group'))).toEqual([
       'media',
       'ai-studio',
-      'transitions',
+      'node-workspace',
     ]);
     expect(panelTypes(findTabGroup(state.layout.root, 'right-group'))).toEqual([
       'clip-properties',
@@ -859,7 +859,7 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(findTabGroup(mergedAudio.layout.root, 'left-group'))).toEqual([
       'media',
       'discover',
-      'transitions',
+      'node-workspace',
     ]);
     expect(panelTypes(findTabGroup(mergedAudio.layout.root, 'right-group'))).toEqual([
       'clip-properties',
@@ -869,7 +869,7 @@ describe('dock store saved layouts', () => {
     expect(panelTypes(findTabGroup(mergedThreeD.layout.root, 'left-group'))).toEqual([
       'media',
       'discover',
-      'transitions',
+      'node-workspace',
     ]);
     expect(panelTypes(findTabGroup(mergedThreeD.layout.root, 'right-group'))).toEqual([
       'clip-properties',

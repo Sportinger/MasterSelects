@@ -1,8 +1,8 @@
 # Timeline Node Graph – Umsetzungsplan
 
 Stand: 2026-10-02, ergänzt 2026-10-03 (Node-Hierarchie, Media, Zeitkette, Transitions).
-Status (2026-10-03): Phasen 0–4, Pakete A–F und die Lücken aus 0–3 umgesetzt und geprüft, uncommittet
-(kein Build/Commit ohne Freigabe). Abweichungen, Messbasis und offene Punkte in Abschnitt 12.
+Status (2026-10-03): Phasen 0–4, Pakete A–F, die Lücken aus 0–3 und 3.1e (Clip-Lanes) umgesetzt und geprüft;
+die offenen Punkte aus Abschnitt 12 sind abgearbeitet. Uncommittet (kein Build/Commit ohne Freigabe).
 
 Dieser Plan konkretisiert das [ursprüngliche Konzept](Timeline-Node-Graph-Plan.md)
 nach Abgleich mit der Codebase. Er ersetzt dessen Umsetzungsempfehlungen und
@@ -141,6 +141,74 @@ regelgesteuert wird zunächst nur das Verteilen (Phase 3). Eine gespeicherte
 Slice-Regel (gleichmäßig, Marker, Beats, Szenenwechsel) ist ein späterer Operator und
 erzeugt ebenfalls echte Clips mit stabilen IDs. Pro Eigenschaft darf höchstens eine
 Regel Eigentümer sein; Slice- und Arrangement-Regel dürfen denselben Clip steuern.
+
+### 3.1e Clip-Lanes: ein Clip, eine Zeile (Entscheidung 2026-10-03, Nutzer; Mockup abgenommen, umgesetzt)
+
+**Anlass.** Mit 3.1d und aufgeklappter Zeitkette zerfällt jeder Clip in vier Karten (Referenz, Slice, Speed,
+Place). Seine Effekte liegen zusätzlich auf einer zweiten Ebene in einem eigenen Clip-Graphen mit leeren
+Start- und Endkarten („video + audio Source“, „Clip Output“). Selbst 30 Clips ergeben eine unlesbare Wand.
+
+**Entscheidung.** Ebene 0 (Composition) und Ebene 1 (Clip) verschmelzen in der Timeline-Ansicht zu
+**Clip-Lanes**. Jeder Timeline-Clip ist genau eine Lane, die von links nach rechts gelesen wird:
+
+`[Quelle] → Slice (In–Out, Speed) → Effekt … → Effekt → Ziel (Spur @ Start)`
+
+- **Eine Lane pro Clip, nicht pro Medium.** Wird dieselbe Quelle erneut verwendet, gibt es eine neue Lane
+  mit eigenem Slice und eigenen Effekten. Das entspricht der Timeline, in der jeder Clip eigenes In/Out und
+  eigene Effekte hat.
+- **Ein Slice-Node statt drei Karten.** Slice, Speed (inkl. Reverse/Freeze/Loop/Warp) und Place werden
+  ein Node mit Bereich, Geschwindigkeit und Ziel. Die Bearbeitung läuft über die bestehenden
+  Timeline-Aktionen (ein Undo-Schritt, Linked Audio, Locks).
+- **Die Lane ist der Clip.** Die Leerlaufkarten „Source“ und „Clip Output“ entfallen in der Lane.
+  Effekte, Masken, Color und Operator-Gruppen des bisherigen Clip-Graphen sitzen direkt in der Lane und
+  bleiben dort voll editierbar, inklusive freier Kabel innerhalb des Clips.
+- **Eingeklappt ist eine Lane eine Zeile** von etwa Timeline-Spurhöhe:
+  `Quelle ▸ 0,0–1,5 s · 1× ▸ 2 FX ▸ V2 @ 7,5 s`. Aufgeklappt zeigt sie die echten Nodes.
+  Standard: eingeklappt. Bei vielen Clips bleibt die Ansicht damit eine Liste und keine Wand.
+- **Quelle als Chip, nicht als Kabel.** Kein Kabelbündel von einer Media-Node zu vielen Lanes. Die
+  Media-Node mit ihrem Segmentbalken (3.1a) zeigt die Mehrfachnutzung einer Quelle.
+- **Anordnung wie die Timeline.** Die Lanes stehen gruppiert unter ihrem Spur-Streifen (3.1d), zeitlich
+  sortiert. Der Streifen bleibt die Übersicht, die Lanes sind das Detail. Ein Klick auf ein Segment oder
+  in der Timeline öffnet die passende Lane, ohne Kamerasprung bei Klicks im Graphen.
+- **Was nicht zu einem Clip gehört, bleibt auf Spurebene:** Transitions (verbinden zwei aufeinanderfolgende
+  Lanes, erscheinen zwischen ihnen), Spur-Effekte (Folgeprojekt), Video-Stack, Audio-Master, Output, Regeln.
+- **Verknüpfter Ton** wird als Unterzeile der Video-Lane gezeigt (Audio-Effekte dort). Ob eigene Audio-Lanes
+  besser sind, entscheidet das Mockup.
+- **Nested Compositions** sind Lanes, deren Quelle eine Composition ist („Öffnen“ wie bisher).
+
+**Unverändert.** Die Timeline bleibt die einzige ausführbare Wahrheit, Anzeigen erzeugt keinen
+Projektzustand, ein Undo-Schritt pro fachlicher Änderung, stabile IDs für Inspector, Agent und Regeln.
+Der Lock-Schalter und „Auswahl wählt die Wurzel“ (Clip-Ansicht) bleiben. Die Clip-Ansicht zeigt künftig
+dieselbe Lane, nur allein.
+
+**Umsetzung (2026-10-03).** Mockup: https://claude.ai/artifact/HJXMPuRJvSgDpgsetjCKcM.
+- `compositionTrackStripView` setzt jede Clip-Referenz als Lane-Zeile (`summary.laneRow`, 760 × 40, Abstand 46)
+  unter ihren Streifen, nach Startzeit sortiert; Transitions als Zeile vor ihrem eingehenden Clip. Zeilen haben
+  keine Ports und keine Kabel. Streifen und Zeilen sind feste Slots (gespeicherte Drag-Positionen verschieben sie
+  nicht). Die Streifen-Gruppe heißt `comp:track:<id>:lanes`, ist standardmäßig offen und umrahmt ihre Zeilen.
+- Lane-Text aus der Projektion: Quellname, In–Out, Speed/Reverse/Retime-Art, Effekt- und Maskenzahl, Spur @ Start,
+  `+ audio ▸ Spur` für verknüpften Ton (die Unterzeile ist damit Text; Audio-Nodes stehen in der offenen Lane).
+- Offene Lane = bestehender Clip-Graph eingebettet; `clip-source` heißt dort „Slice · …“, `clip-output` „Target“
+  (nur Darstellung, auch in der Clip-Ansicht). Der Slice-Node zeigt im Inspector Slice/Speed/Place
+  (`CompositionClipTiming`).
+- Öffnen: Timeline-Pick öffnet und rahmt die Lane; Segment-Klick öffnet ohne Kamerabewegung (Shift ergänzt, max. 8);
+  Doppelklick/Chevron hält sie dauerhaft offen (Fold-Zustand). Zeilen-Klick wählt nur aus.
+  Automatisches „Fold folgen“ ist in der Timeline-Übersicht aus (`useNodeFoldViewport(followFolds)`).
+- Die Zeitkette (Slice/Speed/Place-Karten) wird im Panel nicht mehr angefordert; die Projektion bietet sie für
+  Agenten weiter an. Kollisions-Sweep: 6 Einheiten zwischen Zeilen/Streifen, 32 um offene Lanes.
+- Messung (Composition „Lanes 300“, 300 Paare aus `splitClipEvenly`, Panel offen): Leerlauf ohne Long Tasks,
+  Timeline-Pick mit Lane-Öffnen ein Long Task von 180 ms, Edit (`setClipSpeed`) 187–193 ms
+  (Messbasis nach P1: 264 ms). Das Zerlegen in 300 Teile lief als 300 Einzel-Edits (gesamt rund 58 s Long Tasks,
+  Bridge-Timeout nach 120 s, Ergebnis vollständig).
+
+**Vorgehen.**
+1. Klickbares Mockup (Lanes eingeklappt/aufgeklappt, 30 Clips, Transition, Mehrfachnutzung einer Quelle),
+   Abnahme durch den Nutzer.
+2. Danach Umsetzung in Paketen: Lane-Projektion aus dem bestehenden Clip-Graphen, zusammengelegter
+   Slice-Node, eingeklappte Lane-Zeile (Canvas-gezeichnet), Transitions zwischen Lanes, Linked-Audio-Unterzeile.
+3. 3.1d (Streifen) bleibt als Übersicht erhalten. Die Zeitketten-Darstellung aus Abschnitt 3.1a
+   (Slice → Speed → Place als drei Karten) und die eingebetteten Clip-Graphen auf Ebene 0 (3.1c) werden
+   durch die Lanes ersetzt.
 
 ### 3.1d Spur-Streifen auf Zeitachse (Entscheidung 2026-10-03, Nutzer)
 
@@ -597,7 +665,7 @@ Ab dem Durchlauf vom 2026-10-03 (Nutzerauftrag) wird pro Paket geprüft:
 
 ### Abweichungen
 
-Stand 2026-10-03, Phasen 0–3 (Pakete A–D) integriert; Phase 4 und Paket E offen.
+Stand 2026-10-03, Phasen 0–3 (Pakete A–D) integriert; Phase 4 und Paket E inzwischen ebenfalls umgesetzt (siehe unten).
 
 - **Ownership-Guard als synchrone Patch-Umschreibung** (`synchronizeCompositionRules` in der
   Revision-Middleware, nach `synchronizeSharedSceneGraphs`) statt Prüfungen in jedem Mutationsweg.
@@ -765,7 +833,7 @@ gemountet; „eingeschwungen“ = bis keine Long Tasks mehr folgen.
 | 300 | 312 / – | 6 ms | 925 ms | 264 ms | 124 ms | 1 (0) | 29 / 28 fps |
 | 1000 | 1012 / 3010 | 10 ms | 822 ms (gecacht erneut: 101–109 ms) | 348 ms | 173 ms | 1 (0) | 26–32 / 29 fps eingeschwungen |
 
-Befund bei 1000 Paaren (offen, Paket P1c): Beim ersten Öffnen nach dem Aufbau bzw. nach Edits bei
+Befund bei 1000 Paaren (mit Paket P1c behoben): Beim ersten Öffnen nach dem Aufbau bzw. nach Edits bei
 geschlossenem Panel blockierte der Hauptthread bis über 80 s. Ursachen per Long-Animation-Frame und
 React-Commit-Hook: Der Worker-Renderer malte die ganze Szene mehrere Sekunden lang, ein Watchdog wertete
 ihn als ausgefallen und schaltete auf Software-Malen im Hauptthread um (`tick` 20 s, danach 3 s pro Frame).
@@ -805,12 +873,74 @@ nach P1 gemessen (Tabelle oben), nicht erneut nach P1c.
   rebasen eine Rampe nicht exakt (wie vor diesem Plan).
 - Kernel-Verhalten (privates Repo, nicht Editor): Die erste Rückfrage im Chatlauf ging von einer falschen
   Tempo-Map aus, und es gab ein ungefragtes `startMediaTranscription` (Credits 112 → 63).
-- Außerhalb des Plans gefunden und nicht angefasst:
-  1. In der Sitzung neu angelegte Compositions sind bis zum Reload nicht navigierbar
-     („Composition is not in the installed project“, Repository-Navigation).
-  2. `.dock-guided-resize-corner` ragt 12 px aus den Dock-Spalten; ein `scrollIntoView` (etwa beim Öffnen
-     eines Inspector-Dropdowns) verschiebt dadurch die ganze App. `dock.css` hat fremde, uncommittete Änderungen.
-  3. Der Warmup abgeleiteter Waveforms schreibt `audioState` über den Derived-Pfad
-     („Derived timeline updates cannot change durable clip field audioState“).
-  4. Undo/Redo im Repository-Modus wird bei großen Projekten erst nach Sekunden sichtbar
-     (langsame History-Snapshots).
+- Außerhalb des Plans gefunden (Stand nach 3.1e):
+  1. Neu angelegte Compositions nicht navigierbar: in einer frischen Sitzung nicht reproduzierbar (anlegen,
+     öffnen, per Tab hin und zurück geprüft). Ursache war die HMR-Store-Spaltung im Dev-Modus.
+  2. Dock-Überlauf behoben: `.dock-container` und `.dock-split-child` nutzen `overflow: clip` statt `hidden`,
+     damit `scrollIntoView` sie nicht mehr um 12 px scrollen kann (live geprüft).
+  3. `audioState` im Derived-Warmup behoben: Source- und Processed-Waveform mischen ihre Analyse-Refs in den
+     Clip des jeweiligen Updates statt in einen Snapshot von vor dem `await` (Regressionstest).
+  4. Undo/Redo-Latenz bei großen Projekten: behoben. Gemessen in „Lanes 300“
+     (600 Clips): Long Tasks nach einem Undo von 211 s auf 1,0 s, größter Frame 489 ms (das Anwenden), Undo nach
+     ~0,6 s sichtbar. Ursachen und Fixes:
+     - Der Neuaufbau verwarf medienabgeleitete Clip-Felder (Waveform, projiziertes Transkript, Analyse, Szenen):
+       `carryDerivedClipWaveforms` übernimmt sie bei gleicher Clip-ID und gleichem Medium.
+     - Die Reaktivierung baut Medien-Records neu: geladene Artefakte (Transkript, Analyse, Szenen) werden bei
+       gleicher Quelle mitgenommen wie Datei-Handles.
+     - `hydrateAndProjectMediaSourceArtifacts` lief beim Restore einmal pro Clip über alle Clips des Mediums
+       (quadratisch, hunderte Male) und erzeugte jedes Mal neue Clip-Objekte. Jetzt pro Medium zusammengefasst
+       (`scheduleMediaSourceArtifactProjection`, höchstens zwei Läufe pro Schwall, plus einer nach dem Aktivieren),
+       unveränderte Clips behalten ihre Identität (inhaltlicher Vergleich, je Array-Paar gecacht), und fehlende
+       Wörter am Medium löschen keine Wörter am Clip mehr.
+     Weiteres Potenzial (kein offener Mangel): eine Revision inkrementell anwenden statt das Projekt zu reaktivieren.
+  5. Timeline-Freeze mit 600 Clips: Die Frames bis 7,6 s entstanden aus genau dieser Projektionskaskade (jede
+     Projektion → neue Clip-Objekte → Neuzeichnen von 300 Audio-Clips im Hauptthread). Eingeschwungen kostet eine
+     Hauptthread-Zeichnung der Audiospur 40–50 ms; die Spur bleibt im Hauptthread, solange einem sichtbaren Clip
+     die vorbereitete Waveform-Ressource fehlt (`audio-resource-visuals`).
+  6. Datenverlust beim Re-Import gefunden und behoben: Ein Re-Import einer Datei, deren Quelle gerade fehlt
+     („Missing“), „reparierte“ den Eintrag mit frischen Standardwerten und setzte Transkript, Analyse und Szenen
+     zurück. `preservedSourceArtifacts` behält sie. Im Testprojekt ist das Transkript von
+     `masterselects_github.mp4` dadurch verloren (nur durch erneutes Transkribieren wiederherstellbar).
+- Kabel und Bypass (Nutzerrückfrage):
+  - Byp gibt es jetzt für Masks (alle Masken aus/an) und Color (Grade an/aus); ausgeschaltete Stufen bleiben als
+    bypassed im Graphen. Transform hat keinen Ein/Aus-Zustand und daher keinen Byp.
+  - Byp auf einer frei stehenden Effektgruppe hängt sie nicht mehr still wieder ein, sondern erklärt es.
+  - Kabel der eingebauten Kette und abgeleitete (read-only) Kabel melden jetzt, warum sie nicht abziehbar sind,
+    statt nach dem Rebuild still zurückzuspringen. Freie Umverdrahtung, die das Rendering ändert, bleibt
+    Folgeprojekt (Renderer liest gespeicherte manuelle Kabel nicht).
+  - Bewusst unverändert: Bypass klappt die Effektgruppe zu (durch `effectGroupBypass`-Test festgelegt).
+- Regel-Clips sind in der Timeline markiert (`Rule`, `Rule*` bei Korrektur; verknüpfter Ton ebenso).
+- Composition duplizieren mit Regel im Browser geprüft: Regel-Sockets und Mitglieder bleiben; Repository-Clips
+  sind pro Composition geschlüsselt (`clip/<compositionId>/<clipId>`), gleiche Clip-IDs kollidieren nicht.
+- Transition-Karte rutscht nicht mehr nach dem Ziehen: Lanes sind feste Slots.
+- VFR-Retime im Browser geprüft (Testdatei 30/10/30 fps mit eingebrannter Frame-Nummer, „VFR QA“): 1×, 0,5× und
+  0,5× rückwärts halten im 10-fps-Abschnitt den Frame mit pts ≤ Quellzeit (z. B. 1,283 s → F36, nicht F39).
+  Dabei gefunden und behoben:
+  - Scrub-Cache-Slots runden nicht mehr auf (`Math.round` → letzter Slot ≤ Zeit), der Pausen-Guard lässt den
+    Slot-Anfang bis eine Slotlänge vor dem Ziel zu; 0,75 s zeigt F22 statt F23.
+  - Bei gemittelter VFR-fps (23,33) galt ein später startender Frame als „Ziel erreicht“: präsentierte PTS nach
+    dem Ziel werden abgelehnt, ein früherer PTS innerhalb einer nominalen Frame-Dauer gilt als gehalten, und steht
+    das Element hinter dem Ziel, wird mit mindestens 60-fps-Bins verglichen (nach Wiedergabe kein F24 mehr).
+  - Nachgemessen mit farbkodierter VFR-Datei („VFR Color QA“, n mod 4 in Grün/Blau, `captureFrame` der Vorschau)
+    und der Ursache nach behoben: Der Editor zeigte reproduzierbar den nächsten Quell-Frame, wenn dieser bis ~17 ms
+    nach der Quellzeit begann (0,7833 → F24, 1,2833 → F39). Das rohe Video-Element wählt korrekt.
+    - Das gezielte GPU-Warmup spielt das Element kurz an und pausiert; es meldete und cachte den präsentierten Frame
+      mit `currentTime` statt mit seiner echten Zeit. Jetzt `mediaTime` aus den rVFC-Metadaten, und der präsentierte
+      PTS wird für die Zielprüfung gemerkt (`rememberPresentedSourceFrame`).
+    - Pausierte Settle-Prüfung `videoPausedOnTargetFrame`: exakt auf das Ziel gesucht zählt (VFR-sicher), ein Element
+      hinter dem Ziel ohne bekannten PTS wird neu gesucht.
+    - Ein Seek innerhalb des schon gezeigten Frames präsentiert nichts; das rVFC-Handle blieb hängen und alle späteren
+      Ziele warteten ewig (`empty-hold`, v. a. rückwärts). Veraltete Handles (kein Seek, > 250 ms) werden verworfen.
+    Ergebnis: vorwärts 14/14, nach Abspielen/Pause 9/9, Scrub-Ende 12/12, rückwärts 8/8 korrekt (Gleichstände
+    inklusive: 0,75 → F22).
+- Positive Beat-Verteilung mit langer Quelle im Browser geprüft („Beat QA“, 20-s-Click-Spur 120 BPM, 4 Clips à 3 s):
+  Schritt 1 und 8 werden korrekt abgelehnt (Überlappung bzw. zu wenige Beats), Schritt 4 verteilt auf 0,5 / 4,5 /
+  8,5 / 12,5 s mit „Rule: Distribute on beats“ in Place und `Rule`-Badges. Der Detektor erkennt reine Clicks als
+  60 BPM (Oktav-Mehrdeutigkeit der Beat-Analyse, nicht des Regel-Operators).
+- Gefunden und behoben (außerhalb des Plans): `importLocalFiles` mit `addToTimeline` ohne `trackId` legte Audio auf
+  die erste Videospur, wo `addClip` es still verwarf, meldete aber eine Platzierung. Reine Audio-Importe wählen jetzt
+  eine Audiospur; nicht angelegte Clips erscheinen als Fehler statt in `placedClips` (live geprüft).
+- Export-Audio von Warp/Loop/Freeze im Browser geprüft („Audio Retime QA“, Click-Spur, `debugExport` ohne Download;
+  der Dev-Modus legt den Blob als `window.__lastDebugExportBlob` ab, Klicks per `decodeAudioData` vermessen):
+  Loop 0–1,25 s über 3,77 s → Klicks 0 / 0,5 / 1,0 / 1,25 / 1,75 / 2,25 / 2,5 / 3,0 / 3,5 / 3,75 s; Warp
+  (0→0, 1→1, 4→2) → 0 / 0,5 / 1,0 / 2,5 s; Freeze → Spitzenpegel 0 (stumm). Alles wie erwartet.

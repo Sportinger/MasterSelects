@@ -1,6 +1,6 @@
 import { startNodeMeasure, endNodeMeasure } from '../../../../services/nodeGraph/unified/nodeGraphPerformance';
 import type { NodeGraph, NodeGraphLayout, NodeGraphNode } from '../../../../types/nodeGraph';
-import { expansionDisplacements, type WorkspaceLayoutBlock } from '../../../../services/nodeGraph/unified/expansionDisplacement';
+import { expansionDisplacements, workspaceBlockGap, type WorkspaceLayoutBlock } from '../../../../services/nodeGraph/unified/expansionDisplacement';
 import { workspaceClipGroup, workspaceClipOwner } from '../../../../services/nodeGraph/unified/workspaceIds';
 import { getNodeHeight, getNodeWidth } from '../canvas/canvasGeometry';
 import { nodeGroupBounds } from '../canvas/groupBounds';
@@ -20,24 +20,26 @@ export function layoutWorkspaceExpansion(graph: NodeGraph, composition: NodeGrap
     const bounds = expanded ? groups.get(workspaceClipGroup(clipId!)) : node && {
       left: node.layout.x, top: node.layout.y, right: node.layout.x + getNodeWidth(node), bottom: node.layout.y + getNodeHeight(node),
     };
-    return bounds ? [{ id: reference.id, anchor: reference.layout, bounds, expanded,
+    const compact = !expanded && (!!node?.summary?.laneRow || !!node?.summary?.timeAxis);
+    return bounds ? [{ id: reference.id, anchor: reference.layout, bounds, expanded, compact,
       cardWidth: getNodeWidth(reference), cardHeight: getNodeHeight(reference) }] : [];
   });
   const offsets = expansionDisplacements(blocks);
   // Composition strips share x even after expansion. A vertical collision sweep
   // reserves complete body bounds, keeping later strips and their cards below them.
   if (composition.workspace) {
-    const placed: Array<{ left: number; right: number; top: number; bottom: number }> = [];
+    const placed: Array<{ left: number; right: number; top: number; bottom: number; compact?: boolean }> = [];
     for (const block of blocks.toSorted((a, b) => a.anchor.y - b.anchor.y || a.anchor.x - b.anchor.x)) {
       const shift = offsets[block.id];
       if (nodes.get(block.id)?.summary?.timeAxis) shift.x = 0;
       const box = { left: block.bounds.left + shift.x, right: block.bounds.right + shift.x,
-        top: block.bounds.top + shift.y, bottom: block.bounds.bottom + shift.y };
+        top: block.bounds.top + shift.y, bottom: block.bounds.bottom + shift.y, compact: block.compact };
       for (;;) {
-        const collision = placed.find(other => box.left < other.right + 32 && box.right + 32 > other.left
-          && box.top < other.bottom + 32 && box.bottom + 32 > other.top);
+        const gap = (other: { compact?: boolean }) => workspaceBlockGap(box, other);
+        const collision = placed.find(other => box.left < other.right + gap(other) && box.right + gap(other) > other.left
+          && box.top < other.bottom + gap(other) && box.bottom + gap(other) > other.top);
         if (!collision) break;
-        const dy = collision.bottom + 32 - box.top;
+        const dy = collision.bottom + gap(collision) - box.top;
         shift.y += dy; box.top += dy; box.bottom += dy;
       }
       placed.push(box);

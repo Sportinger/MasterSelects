@@ -45,6 +45,15 @@ export function useClipDomainAdapter(subject: NodeGraphClipSubject | null, after
             context.state.setClipAudioEffectInstanceEnabled(targetClipId, node.binding.effectId, node.params?.enabled === false);
           } else if (node.kind === 'custom') {
             context.state.updateClipAICustomNode(clipId, nodeId, { bypassed: node.params?.bypassed !== true });
+          } else if (node.binding?.kind === 'clip-color-correction') {
+            const target = context.state.clips.find(clip => clip.id === clipId);
+            context.state.setColorCorrectionEnabled(clipId, target?.colorCorrection?.enabled === false);
+          } else if (node.binding?.kind === 'clip-mask-stack') {
+            const masks = context.state.clips.find(clip => clip.id === clipId)?.masks ?? [];
+            const enable = !masks.some(mask => mask.enabled !== false);
+            for (const mask of masks) context.state.updateMask(clipId, mask.id, { enabled: enable });
+          } else {
+            throw new Error(`${node.label} has no bypass.`);
           }
         });
       },

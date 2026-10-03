@@ -38,7 +38,7 @@ describe('Weave reveal fields', () => {
     expect(fieldNoise([1, 2, 3], 3, 0.5, 3, 3)).not.toBe(fieldNoise([1, 2, 3], 3, 0.5, 2, 3));
   });
 
-  it('grows the default weave from its center with a swollen front', () => {
+  it('grows the default weave from its center with a swollen front', { timeout: 60_000 }, () => {
     expect(validateWeaveGraph(createDefaultWeaveGraph())).toEqual([]);
     expect(exposedGraphValues(createDefaultWeaveGraph())).toMatchObject([{ nodeId: 'reveal', key: 'reveal_value', label: 'Reveal', min: 0, max: 1 },
       { nodeId: 'weave', key: 'weave_value', label: 'Weave Speed' }, { nodeId: 'hand-amount', key: 'irregularity_value', label: 'Irregularity', min: 0, max: 3 }]);

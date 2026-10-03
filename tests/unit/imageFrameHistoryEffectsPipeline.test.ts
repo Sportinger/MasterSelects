@@ -40,7 +40,7 @@ describe('image frame-history EffectsPipeline adapter', () => {
       createShaderModule: vi.fn(() => ({})), createBindGroupLayout: vi.fn(() => ({})), createPipelineLayout: vi.fn(() => ({})),
       createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: vi.fn(() => ({})) })), createComputePipeline: vi.fn(() => ({})),
       createBindGroup: vi.fn((descriptor: GPUBindGroupDescriptor) => { bindGroups.push(descriptor); return {}; }),
-      createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
+      createBuffer: vi.fn(() => ({ destroy: vi.fn() })), createSampler: vi.fn(() => ({})),
       createTexture,
     } as unknown as GPUDevice;
     const encoder = {

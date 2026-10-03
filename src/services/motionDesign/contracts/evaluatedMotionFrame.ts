@@ -12,6 +12,7 @@ import {
 import { planMotionMediaResourcePools } from '../media/resourcePoolPlanner';
 import type { MotionModifierStackContractV1 } from '../modifiers/contracts';
 import {
+  createMotionModifierPlanCacheKey,
   planMotionModifiers,
   type MotionModifierPlanContext,
   type SuccessfulMotionModifierPlan,
@@ -27,9 +28,11 @@ import {
 } from '../replicator/contracts';
 import {
   composeReplicatorTransforms,
+  createMotionReplicatorCacheKey,
   evaluateMotionReplicatorReference,
   validateReplicatorBounds,
 } from '../replicator/referenceEvaluator';
+import { hasSealedMotionOracleProvenance } from './oracleProvenanceSeal';
 import type {
   MotionParentGraphEvaluation,
   MotionParentGraphSnapshot,
@@ -244,26 +247,58 @@ function assertDenseBoundedArray(
   }
 }
 
-/** Iterative descriptor walk: large 100k-instance packets cannot overflow the stack. */
-function assertRuntimeFreeFrameTree(root: unknown): void {
+interface PendingFrameNode {
+  readonly value: unknown;
+  readonly parent: PendingFrameNode | null;
+  readonly key: string | number | null;
+  readonly depth: number;
+  readonly exit?: object;
+}
+
+/** Objects one walk already proved runtime-free, with the deepest depth they were checked at. */
+interface FrameTreeWalk {
+  readonly depthByObject: Map<object, number>;
+  nodeCount: number;
+}
+
+/** Paths are only rendered for error messages; building one per node dominated large packets. */
+function frameNodePath(node: PendingFrameNode, childKey?: string): string {
+  const segments: string[] = childKey === undefined ? [] : [`.${childKey}`];
+  for (let entry: PendingFrameNode | null = node; entry && entry.key !== null; entry = entry.parent) {
+    segments.push(typeof entry.key === 'number' ? `[${entry.key}]` : `.${entry.key}`);
+  }
+  return `$${segments.reverse().join('')}`;
+}
+
+function isArrayIndexKey(key: string | symbol): boolean {
+  return typeof key !== 'symbol' && (key === 'length' || /^(0|[1-9][0-9]*)$/.test(key));
+}
+
+/**
+ * Iterative descriptor walk: large 100k-instance packets cannot overflow the stack.
+ * `record` collects every object this walk proved; `trusted` skips objects an earlier
+ * walk in the same build proved at the same or a greater depth, so their subtree stays
+ * inside the depth budget. Node counts continue from the earlier walk.
+ */
+function assertRuntimeFreeFrameTree(
+  root: unknown,
+  record?: FrameTreeWalk,
+  trusted?: FrameTreeWalk,
+): void {
   const active = new Set<object>();
-  const pending: Array<{
-    value: unknown;
-    path: string;
-    depth: number;
-    exit?: object;
-  }> = [{
-    value: root,
-    path: '$',
-    depth: 0,
-  }];
-  let nodeCount = 0;
+  const pending: PendingFrameNode[] = [{ value: root, parent: null, key: null, depth: 0 }];
+  let nodeCount = trusted?.nodeCount ?? 0;
 
   while (pending.length > 0) {
     const current = pending.pop()!;
     if (current.exit) {
       active.delete(current.exit);
       continue;
+    }
+    const value = current.value;
+    if (trusted && typeof value === 'object' && value !== null) {
+      const provenDepth = trusted.depthByObject.get(value);
+      if (provenDepth !== undefined && current.depth <= provenDepth) continue;
     }
     nodeCount += 1;
     if (
@@ -272,92 +307,82 @@ function assertRuntimeFreeFrameTree(root: unknown): void {
     ) {
       throw new Error('Motion frame state exceeds its JSON node or depth budget');
     }
-    const value = current.value;
     if (value === null || typeof value === 'boolean') continue;
     if (typeof value === 'number') {
-      if (!Number.isFinite(value)) throw new Error(`Non-finite Motion frame value at ${current.path}`);
+      if (!Number.isFinite(value)) throw new Error(`Non-finite Motion frame value at ${frameNodePath(current)}`);
       continue;
     }
     if (typeof value === 'string') {
       if (value.length > MOTION_FRAME_STATE_LIMITS.maxStringLength) {
-        throw new Error(`Motion frame string budget exceeded at ${current.path}`);
+        throw new Error(`Motion frame string budget exceeded at ${frameNodePath(current)}`);
       }
-      if (/^data:[^,]+;base64,/i.test(value)) {
-        throw new Error(`Embedded binary data is forbidden at ${current.path}`);
+      if (value.length > 5 && (value.charCodeAt(0) | 32) === 100 && /^data:[^,]+;base64,/i.test(value)) {
+        throw new Error(`Embedded binary data is forbidden at ${frameNodePath(current)}`);
       }
       continue;
     }
     if (typeof value !== 'object' || value === undefined) {
-      throw new Error(`Motion frame state is not JSON-safe at ${current.path}`);
+      throw new Error(`Motion frame state is not JSON-safe at ${frameNodePath(current)}`);
     }
     if (active.has(value)) {
-      throw new Error(`Motion frame state contains a cycle at ${current.path}`);
+      throw new Error(`Motion frame state contains a cycle at ${frameNodePath(current)}`);
     }
     active.add(value);
-    pending.push({
-      value: null,
-      path: current.path,
-      depth: current.depth,
-      exit: value,
-    });
+    pending.push({ value: null, parent: null, key: null, depth: current.depth, exit: value });
     if (!Array.isArray(value) && !isPlainRecord(value)) {
-      throw new Error(`Motion frame state contains a runtime object at ${current.path}`);
+      throw new Error(`Motion frame state contains a runtime object at ${frameNodePath(current)}`);
     }
     if (Array.isArray(value) && Object.getPrototypeOf(value) !== Array.prototype) {
-      throw new Error(`Motion frame state contains a custom Array prototype at ${current.path}`);
+      throw new Error(`Motion frame state contains a custom Array prototype at ${frameNodePath(current)}`);
     }
     if (Object.getOwnPropertySymbols(value).length > 0) {
-      throw new Error(`Motion frame state contains a symbol at ${current.path}`);
+      throw new Error(`Motion frame state contains a symbol at ${frameNodePath(current)}`);
+    }
+    if (record) {
+      const recordedDepth = record.depthByObject.get(value);
+      if (recordedDepth === undefined || recordedDepth < current.depth) {
+        record.depthByObject.set(value, current.depth);
+      }
     }
 
     const descriptors = Object.getOwnPropertyDescriptors(value);
     if (Array.isArray(value)) {
+      // A dense array owns exactly its indexes plus length; only other shapes need the key scan.
       const ownKeys = Reflect.ownKeys(value);
-      if (ownKeys.some((key) => (
-        typeof key === 'symbol' || (key !== 'length' && !/^(0|[1-9][0-9]*)$/.test(key))
-      ))) {
-        throw new Error(`Motion frame array contains a custom property at ${current.path}`);
+      if (ownKeys.length !== value.length + 1 && !ownKeys.every(isArrayIndexKey)) {
+        throw new Error(`Motion frame array contains a custom property at ${frameNodePath(current)}`);
       }
       for (let index = 0; index < value.length; index += 1) {
         const descriptor = descriptors[String(index)];
         if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
-          throw new Error(`Motion frame array contains a hole or accessor at ${current.path}`);
+          throw new Error(`Motion frame array contains a hole or accessor at ${frameNodePath(current)}`);
         }
-        pending.push({
-          value: descriptor.value,
-          path: `${current.path}[${index}]`,
-          depth: current.depth + 1,
-        });
+        pending.push({ value: descriptor.value, parent: current, key: index, depth: current.depth + 1 });
       }
       continue;
     }
 
-    for (const [key, descriptor] of Object.entries(descriptors)) {
+    for (const key of Object.keys(descriptors)) {
+      const descriptor = descriptors[key];
       if (!descriptor.enumerable || !('value' in descriptor)) {
-        throw new Error(`Motion frame object contains an accessor at ${current.path}.${key}`);
+        throw new Error(`Motion frame object contains an accessor at ${frameNodePath(current, key)}`);
       }
       if (FORBIDDEN_RUNTIME_FIELDS.has(key.toLowerCase())) {
-        throw new Error(`Motion frame runtime field is forbidden at ${current.path}.${key}`);
+        throw new Error(`Motion frame runtime field is forbidden at ${frameNodePath(current, key)}`);
       }
-      pending.push({
-        value: descriptor.value,
-        path: `${current.path}.${key}`,
-        depth: current.depth + 1,
-      });
+      pending.push({ value: descriptor.value, parent: current, key, depth: current.depth + 1 });
     }
   }
+  if (record) record.nodeCount = nodeCount;
 }
 
+/** Freezes a JSON-parsed tree: plain data properties only and no shared references. */
 function deepFreezeMotionFrameState(state: MotionFrameState): MotionFrameState {
   const pending: object[] = [state];
-  const frozen = new Set<object>();
   while (pending.length > 0) {
-    const current = pending.pop()!;
-    if (frozen.has(current)) continue;
-    frozen.add(current);
-    for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(current))) {
-      if (!('value' in descriptor)) continue;
-      const child = descriptor.value;
+    const current = pending.pop()! as Record<string, unknown>;
+    for (const key of Object.keys(current)) {
+      const child = current[key];
       if (typeof child === 'object' && child !== null) pending.push(child);
     }
     Object.freeze(current);
@@ -419,13 +444,20 @@ function assertReplicatorState(value: unknown): asserts value is MotionFrameRepl
   ) {
     throw new Error('Motion frame Replicator provenance must use exact canonical V2 inputs');
   }
-  const recomputed = evaluateMotionReplicatorReference(
-    value.contract,
-    value.runtimeLimits,
-    value.sourceBounds,
-  );
-  if (!recomputed.ok || JSON.stringify(recomputed) !== JSON.stringify(value.evaluation)) {
-    throw new Error('Motion frame Replicator evaluation must match its exact contract provenance');
+  const sealed = hasSealedMotionOracleProvenance(value.evaluation, () => createMotionReplicatorCacheKey(
+    value.contract as MotionReplicatorContractV2,
+    value.runtimeLimits as unknown as ReplicatorRuntimeLimits,
+    value.sourceBounds as unknown as ReplicatorBounds,
+  ));
+  if (!sealed) {
+    const recomputed = evaluateMotionReplicatorReference(
+      value.contract,
+      value.runtimeLimits,
+      value.sourceBounds,
+    );
+    if (!recomputed.ok || JSON.stringify(recomputed) !== JSON.stringify(value.evaluation)) {
+      throw new Error('Motion frame Replicator evaluation must match its exact contract provenance');
+    }
   }
   const evaluation = value.evaluation;
   if (
@@ -465,9 +497,15 @@ function assertModifierState(value: unknown): asserts value is MotionFrameModifi
   ) {
     throw new Error('Motion frame modifier entry is malformed');
   }
-  const recomputed = planMotionModifiers(value.contract, value.context);
-  if (!recomputed.ok || JSON.stringify(recomputed) !== JSON.stringify(value.plan)) {
-    throw new Error('Motion frame modifier plan must match its exact contract and time provenance');
+  const sealed = hasSealedMotionOracleProvenance(
+    value.plan,
+    () => createMotionModifierPlanCacheKey(value.contract, value.context),
+  );
+  if (!sealed) {
+    const recomputed = planMotionModifiers(value.contract, value.context);
+    if (!recomputed.ok || JSON.stringify(recomputed) !== JSON.stringify(value.plan)) {
+      throw new Error('Motion frame modifier plan must match its exact contract and time provenance');
+    }
   }
   const plan = value.plan;
   if (
@@ -1000,7 +1038,15 @@ function assertMediaState(
 }
 
 export function assertMotionFrameState(value: unknown): asserts value is MotionFrameState {
-  assertRuntimeFreeFrameTree(value);
+  assertMotionFrameStateWithProof(value);
+}
+
+/** `inputProof` lets a build skip input subtrees its first walk already proved runtime-free. */
+function assertMotionFrameStateWithProof(
+  value: unknown,
+  inputProof?: FrameTreeWalk,
+): asserts value is MotionFrameState {
+  assertRuntimeFreeFrameTree(value, undefined, inputProof);
   if (!hasExactKeys(value, [
     'contractVersion',
     'frameId',
@@ -1041,7 +1087,8 @@ export function assertMotionFrameState(value: unknown): asserts value is MotionF
 
 export function createMotionFrameState(input: MotionFrameStateBuildInput): MotionFrameStateResult {
   try {
-    assertRuntimeFreeFrameTree(input);
+    const inputProof: FrameTreeWalk = { depthByObject: new Map(), nodeCount: 0 };
+    assertRuntimeFreeFrameTree(input, inputProof);
     if (!hasExactKeys(input, [
       'frameId',
       'compositionId',
@@ -1107,7 +1154,7 @@ export function createMotionFrameState(input: MotionFrameStateBuildInput): Motio
       )),
       diagnostics: [...input.diagnostics],
     };
-    assertMotionFrameState(candidate);
+    assertMotionFrameStateWithProof(candidate, inputProof);
     const state = deepFreezeMotionFrameState(
       JSON.parse(JSON.stringify(candidate)) as MotionFrameState,
     );

@@ -107,10 +107,13 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
     render(<EffectsTab clipId={clipId} effects={[]} />);
 
     const categoryPicker = screen.getByRole('combobox', { name: 'Effect category' });
-    const categoryValues = Array.from((categoryPicker as HTMLSelectElement).options)
-      .map((option) => option.value)
+    // The category picker is the shared InspectorSelect: open it to read its options.
+    fireEvent.click(categoryPicker);
+    const categoryValues = screen.getAllByRole('option')
+      .map((option) => option.getAttribute('data-value'))
       .filter(Boolean);
-    expect(categoryValues).toEqual(['all', 'color', 'blur']);
+    fireEvent.click(categoryPicker);
+    expect(categoryValues).toEqual(['all', 'Color & Tone', 'Blur & Sharpen']);
     expect(screen.getAllByRole('button', {
       name: /^(Brightness|Contrast|Saturation|Invert|Gaussian Blur)$/,
     })).toHaveLength(5);

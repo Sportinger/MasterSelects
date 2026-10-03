@@ -7,8 +7,11 @@ export interface WorkspaceLayoutBlock {
   expanded: boolean;
   cardWidth: number;
   cardHeight: number;
+  /** Lane rows and strips: stacked tightly; open bodies keep the full gap around them. */
+  compact?: boolean;
 }
-const GAP = 32;
+const GAP = 32, COMPACT_GAP = 6;
+export const workspaceBlockGap = (a: { compact?: boolean }, b: { compact?: boolean }) => a.compact && b.compact ? COMPACT_GAP : GAP;
 
 /** Insert expansion space into the saved/default anchor grid, without changing it.
  * A final monotone sweep also handles manually overlapping anchors and tall nodes.
@@ -35,14 +38,15 @@ export function expansionDisplacements(blocks: readonly WorkspaceLayoutBlock[]):
     const box = { left: block.bounds.left + offset.x, right: block.bounds.right + offset.x,
       top: block.bounds.top + offset.y, bottom: block.bounds.bottom + offset.y };
     for (;;) {
-      const collision = placed.find(other => box.left < other.bounds.right + GAP && box.right + GAP > other.bounds.left
-        && box.top < other.bounds.bottom + GAP && box.bottom + GAP > other.bounds.top);
+      const gap = (other: WorkspaceLayoutBlock) => workspaceBlockGap(block, other);
+      const collision = placed.find(other => box.left < other.bounds.right + gap(other) && box.right + gap(other) > other.bounds.left
+        && box.top < other.bounds.bottom + gap(other) && box.bottom + gap(other) > other.bounds.top);
       if (!collision) break;
       if (block.anchor.y >= collision.anchor.y + collision.cardHeight) {
-        const delta = collision.bounds.bottom + GAP - box.top;
+        const delta = collision.bounds.bottom + gap(collision) - box.top;
         offset.y += delta; box.top += delta; box.bottom += delta;
       } else {
-        const delta = collision.bounds.right + GAP - box.left;
+        const delta = collision.bounds.right + gap(collision) - box.left;
         offset.x += delta; box.left += delta; box.right += delta;
       }
     }

@@ -17,6 +17,7 @@ import {
 import { finalizeLinkedSpeedKeyframeMutation, isValidSpeedKeyframeValue } from './linkedSpeedKeyframeState';
 import { normalizeTimelinePropertyValue } from './keyframePropertyValue';
 import { clipLocalToKeyframeTime } from '../../../services/flock/time/flockKeyframeTime';
+import { applyEasingCurveToKeyframes } from './keyframeEasingCurves';
 
 type KeyframeBasicActions = Pick<
   KeyframeActions,
@@ -30,6 +31,7 @@ type KeyframeBasicActions = Pick<
   | 'toggleKeyframeRecording'
   | 'isRecording'
   | 'updateBezierHandle'
+  | 'applyKeyframeEasingCurve'
 >;
 
 export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (set, get) => ({
@@ -286,6 +288,23 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
         ? synchronizeAllFollowingAudioSpeedKeyframes(clips, newMap)
         : newMap,
     });
+    invalidateCache();
+  },
+
+  applyKeyframeEasingCurve: (keyframeIds, curve, easing) => {
+    if (keyframeIds.length === 0) return;
+    const { clipKeyframes, clips, tracks, invalidateCache } = get();
+    if (isAnyKeyframeOnLockedTrack(clipKeyframes, clips, tracks, keyframeIds)) return;
+    const targets = new Set(keyframeIds);
+    const newMap = new Map<string, Keyframe[]>();
+    let speedChanged = false;
+    clipKeyframes.forEach((keyframes, clipId) => {
+      if (!keyframes.some(key => targets.has(key.id))) { newMap.set(clipId, keyframes); return; }
+      speedChanged ||= keyframes.some(key => targets.has(key.id) && key.property === 'speed');
+      newMap.set(clipId, applyEasingCurveToKeyframes(keyframes, targets, curve, easing)
+        .sort((a, b) => a.time - b.time));
+    });
+    set({ clipKeyframes: speedChanged ? synchronizeAllFollowingAudioSpeedKeyframes(clips, newMap) : newMap });
     invalidateCache();
   },
 });

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   syncStoresToProject: vi.fn(async () => undefined),
   saveCurrentProject: vi.fn(async () => true),
   loadProjectToStores: vi.fn(async () => undefined),
+  ensureEditorScratchRepository: vi.fn(async () => undefined),
   mediaSubscribe: vi.fn(),
   mediaNewProject: vi.fn(),
   mediaSetProjectName: vi.fn(),
@@ -44,6 +45,11 @@ vi.mock('../../src/services/project/projectSave', () => ({
   isProjectStoreDirtyMarkSuppressed: mocks.isProjectStoreDirtyMarkSuppressed,
   syncStoresToProject: mocks.syncStoresToProject,
   saveCurrentProject: mocks.saveCurrentProject,
+}));
+
+// Auto-sync opens the browser scratch repository; the repository itself is not under test here.
+vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({
+  ensureEditorScratchRepository: mocks.ensureEditorScratchRepository,
 }));
 
 vi.mock('../../src/services/project/projectLoad', () => ({
@@ -313,7 +319,8 @@ describe('project lifecycle auto sync', () => {
     const { createNewProject } = await import('../../src/services/project/projectLifecycle');
 
     await expect(createNewProject('Project With Spaces')).resolves.toBe(false);
-    expect(mocks.createProject).toHaveBeenCalledWith('Project With Spaces');
+    // The current editor state is kept and carried into the new repository.
+    expect(mocks.createProject).toHaveBeenCalledWith('Project With Spaces', true);
     expect(mocks.syncStoresToProject).toHaveBeenCalledTimes(1);
     expect(mocks.saveProject).toHaveBeenCalledTimes(1);
   });
@@ -323,10 +330,19 @@ describe('project lifecycle auto sync', () => {
 
     await expect(createBlankProject('Quiet Documentary')).resolves.toBe('created');
 
+    // The blank repository is created (and activated) by the folder step itself;
+    // the editor stores are not reset or mirrored in a separate sync pass anymore.
     expect(mocks.createProject).toHaveBeenCalledWith('Quiet Documentary');
-    expect(mocks.mediaNewProject).toHaveBeenCalledTimes(1);
-    expect(mocks.mediaSetProjectName).toHaveBeenCalledWith('Quiet Documentary');
-    expect(mocks.syncStoresToProject).toHaveBeenCalledTimes(1);
+    expect(mocks.mediaNewProject).not.toHaveBeenCalled();
+    expect(mocks.syncStoresToProject).not.toHaveBeenCalled();
+    expect(mocks.saveProject).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a failed first save of a blank project', async () => {
+    mocks.saveProject.mockResolvedValue(false);
+    const { createBlankProject } = await import('../../src/services/project/projectLifecycle');
+
+    await expect(createBlankProject('Quiet Documentary')).resolves.toBe('save-failed');
     expect(mocks.saveProject).toHaveBeenCalledTimes(1);
   });
 

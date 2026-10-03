@@ -11,10 +11,11 @@ WebCodecs export — plus an in-app AI agent (FlashBoard chat) that edits the
 timeline through deterministic tools. Stack: React + TypeScript + Zustand +
 WebGPU; Cloudflare Pages/D1 backend; private AI kernel in the sibling repo
 `../masterselects-kernel`. The editor is licensed under AGPL-3.0-only; see
-`LICENSING.md` for scope and component exceptions. Development is maintained
-in `Sportinger/MasterSelects-Private`; reviewed source snapshots are published
-to `Sportinger/MasterSelects`. Kernel-internal code and secrets must stay out
-of this editor repository (see section 7).
+`LICENSING.md` for scope and component exceptions. Development happens directly
+in the public repository `Sportinger/MasterSelects`; the former
+`Sportinger/MasterSelects-Private` repository is retired (decision 2026-10-03, user)
+and is never a commit or push target. Kernel-internal code and secrets must stay
+out of this editor repository (see section 7).
 
 Feature docs: one page per feature under `docs/Features/`, index at
 [`docs/Features/README.md`](docs/Features/README.md). Product overview:
@@ -33,20 +34,14 @@ the same time, on the same branch. Therefore:
   coordination protocol — just never touch work that isn't yours.
 - Stage only the files you yourself changed: `git add <explicit paths>`.
   Never `git add -A`, `git add .`, or `git commit -a`.
-- In the shared private checkout, before every commit verify that `origin` resolves exactly to
-  `Sportinger/MasterSelects-Private` for both fetch and push. If it does not,
-  stop immediately and report the mismatch; never change that checkout's
-  remotes to bypass the guard.
-- Commits on private `main` are published only to
-  `Sportinger/MasterSelects-Private` by the tracked post-commit hook. Never
-  push, merge, or switch branches manually in the shared private checkout.
-- Public publication requires an explicit user request and an isolated
-  checkout. Publish a reviewed source snapshot on the existing public history;
-  never merge private history or include private plans, audits, credentials,
-  or kernel implementation. Keep the shared private checkout's remotes intact.
-- In public or contributor checkouts, verify the intended repository/fork
-  before committing. Private auto-publication hooks do not apply there;
-  pushing still requires authorization.
+- The target repository is always the public `Sportinger/MasterSelects`. The
+  private repository is retired: never commit to, push to, or restore a
+  `MasterSelects-Private` remote. Before every commit verify that `origin`
+  resolves to `Sportinger/MasterSelects` for fetch and push; if it does not,
+  stop and report the mismatch instead of changing remotes.
+- Never push, merge, or switch branches manually without an explicit user
+  request. Because every commit is public, never commit credentials, secrets,
+  `.dev.vars` values, or kernel implementation.
 - Agents may start or restart the shared dev environment (`npm run dev:full`)
   when the task requires it. Resolve the exact MasterSelects process tree and
   never stop unrelated Node processes; after every restart, wait for all four
@@ -119,10 +114,9 @@ only in another agent's files, fix a trivial missing import or typo and report
 it; otherwise hold the affected commit and report the foreign failure.
 
 Production deployment, releases, version bumps, changelog entries, and external
-messages still require an explicit request. The private checkout's branch and
-publication guards in section 1 remain in effect; explicitly requested public
-snapshots use an isolated checkout. If the user reports a regression, fix
-forward and verify it yourself.
+messages still require an explicit request. The repository guards in section 1
+remain in effect (public `Sportinger/MasterSelects` only). If the user reports a
+regression, fix forward and verify it yourself.
 
 ---
 

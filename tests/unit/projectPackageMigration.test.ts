@@ -1,75 +1,72 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { RepositoryLocation } from '../../src/services/project/repository/storageWorkerProtocol';
+
+// Projects are repositories now: ProjectCoreService only chooses the location and hands it
+// to the repository lifecycle. The repository format, the in-place conversion of old
+// .msproj/project.json folders and its source proofs are covered by the repository tests
+// (repositoryLegacyPackageLayout, repositoryLifecycle); this file keeps the core's contract.
+const repo = vi.hoisted(() => ({
+  session: null as null | { location: RepositoryLocation },
+  projectName: '',
+  opfsRoot: null as null | FileSystemDirectoryHandle,
+  createRepositoryAt: vi.fn(),
+  openRepositoryProject: vi.fn(),
+  isLegacyProjectLocation: vi.fn(),
+  requestLegacyImportTarget: vi.fn(),
+  closeEditorRepository: vi.fn(),
+}));
+vi.mock('../../src/services/project/repository/lifecycle/repositoryProjectOperations', () => ({
+  createRepositoryAt: repo.createRepositoryAt,
+  openRepositoryProject: repo.openRepositoryProject,
+  renameRepositoryProject: vi.fn(async () => true),
+  createIndependentProjectBackup: vi.fn(async () => true),
+  repositoryHasUnsavedChanges: vi.fn(() => false),
+}));
+vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({
+  closeEditorRepository: repo.closeEditorRepository,
+  flushEditorRepository: vi.fn(async () => true),
+  getActiveRepositorySession: () => repo.session,
+  readEditorRepositoryProject: () => (repo.session ? { name: repo.projectName } : null),
+  isScratchRepository: () => false,
+}));
+vi.mock('../../src/services/project/repository/lifecycle/repositoryLocations', () => ({
+  directoryForOpfs: vi.fn(async (path: string) => repo.opfsRoot!.getDirectoryHandle(path, { create: true })),
+  isLegacyProjectLocation: repo.isLegacyProjectLocation,
+}));
+vi.mock('../../src/services/project/repository/transaction/editorRepositorySession', () => ({
+  updateEditorRepositoryProjectFields: vi.fn(),
+}));
+vi.mock('../../src/services/project/legacyImportTarget', () => ({
+  requestLegacyImportTarget: repo.requestLegacyImportTarget,
+}));
+vi.mock('../../src/services/project/androidProjectAutoRestore', () => ({
+  isAndroidAutoRestoreProjectHandle: () => false,
+}));
+vi.mock('../../src/services/project/mediaSourceRootAccess', () => ({
+  requestMediaSourceRootAccess: vi.fn(async () => undefined),
+}));
+
 import { projectDB } from '../../src/services/projectDB';
 import { ProjectCoreService } from '../../src/services/project/core/ProjectCoreService';
 import { fileStorageService } from '../../src/services/project/core/FileStorageService';
-import { decodeProjectPackage } from '../../src/services/project/core/projectPackage';
-import type { ProjectFile } from '../../src/services/project/types';
-import { readLastOpfsProjectName } from '../../src/services/project/tabProjectPersistence';
 import { readProjectParent } from '../../src/services/project/core/projectDirectoryPersistence';
 import { getRecentProjects } from '../../src/services/project/recentProjects';
 
-function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-}
-
-async function writeChunkToBytes(chunk: FileSystemWriteChunkType): Promise<Uint8Array> {
-  if (typeof chunk === 'string') return new TextEncoder().encode(chunk);
-  if (chunk instanceof ArrayBuffer || Object.prototype.toString.call(chunk) === '[object ArrayBuffer]') {
-    return new Uint8Array(chunk as ArrayBuffer);
-  }
-  if (ArrayBuffer.isView(chunk)) return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-  if (chunk instanceof Blob) {
-    if (typeof chunk.arrayBuffer === 'function') return new Uint8Array(await chunk.arrayBuffer());
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
-      reader.onerror = () => reject(reader.error);
-      reader.readAsArrayBuffer(chunk);
-    });
-  }
-  throw new Error('Unsupported test write chunk');
-}
-
 class MemoryFileHandle {
   readonly kind = 'file' as const;
-  private bytes = new Uint8Array();
-  lastModified = Date.now();
+  readonly writes: string[] = [];
 
-  constructor(readonly name: string) {}
+  constructor(readonly name: string, private content = '') {}
 
   async getFile(): Promise<File> {
-    const bytes = new Uint8Array(this.bytes);
-    return {
-      name: this.name,
-      size: bytes.byteLength,
-      lastModified: this.lastModified,
-      type: '',
-      text: async () => new TextDecoder().decode(bytes),
-      arrayBuffer: async () => toArrayBuffer(bytes),
-    } as File;
+    return new File([this.content], this.name);
   }
 
   async createWritable(): Promise<FileSystemWritableFileStream> {
-    let position = 0;
     return {
-      write: async (chunk: FileSystemWriteChunkType) => {
-        const nextChunk = await writeChunkToBytes(chunk);
-        const requiredLength = position + nextChunk.byteLength;
-        if (requiredLength > this.bytes.byteLength) {
-          const expanded = new Uint8Array(requiredLength);
-          expanded.set(this.bytes);
-          this.bytes = expanded;
-        }
-        this.bytes.set(nextChunk, position);
-        position = requiredLength;
-        this.lastModified = Date.now();
-      },
+      write: async (chunk: FileSystemWriteChunkType) => { this.writes.push(String(chunk)); },
       close: async () => undefined,
     } as FileSystemWritableFileStream;
-  }
-
-  async seed(content: string): Promise<void> {
-    this.bytes = new TextEncoder().encode(content);
   }
 }
 
@@ -80,13 +77,17 @@ class MemoryDirectoryHandle {
 
   constructor(readonly name: string) {}
 
+  seedFile(name: string, content: string): MemoryFileHandle {
+    const file = new MemoryFileHandle(name, content);
+    this.files.set(name, file);
+    return file;
+  }
+
   async getFileHandle(name: string, options?: FileSystemGetFileOptions): Promise<FileSystemFileHandle> {
     const existing = this.files.get(name);
     if (existing) return existing as unknown as FileSystemFileHandle;
     if (!options?.create) throw new DOMException('File not found', 'NotFoundError');
-    const file = new MemoryFileHandle(name);
-    this.files.set(name, file);
-    return file as unknown as FileSystemFileHandle;
+    return this.seedFile(name, '') as unknown as FileSystemFileHandle;
   }
 
   async getDirectoryHandle(name: string, options?: FileSystemGetDirectoryOptions): Promise<FileSystemDirectoryHandle> {
@@ -98,12 +99,6 @@ class MemoryDirectoryHandle {
     return directory as unknown as FileSystemDirectoryHandle;
   }
 
-  async removeEntry(name: string): Promise<void> {
-    if (!this.files.delete(name) && !this.directories.delete(name)) {
-      throw new DOMException('Entry not found', 'NotFoundError');
-    }
-  }
-
   async *values(): AsyncIterableIterator<MemoryFileHandle | MemoryDirectoryHandle> {
     yield* this.files.values();
     yield* this.directories.values();
@@ -113,51 +108,60 @@ class MemoryDirectoryHandle {
     return 'granted';
   }
 
-  async requestPermission(): Promise<PermissionState> {
-    return 'granted';
-  }
-
   async isSameEntry(other: FileSystemHandle): Promise<boolean> {
     return other === this as unknown as FileSystemHandle;
   }
 }
 
-function createLegacyProject(): ProjectFile {
-  return {
-    version: 1,
-    name: 'Legacy Cut',
-    createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T01:00:00.000Z',
-    settings: { width: 1920, height: 1080, frameRate: 30, sampleRate: 48000 },
-    media: [],
-    compositions: [],
-    folders: [],
-    activeCompositionId: null,
-    openCompositionIds: [],
-    expandedFolderIds: [],
-  };
+function asDirectory(handle: MemoryDirectoryHandle): FileSystemDirectoryHandle {
+  return handle as unknown as FileSystemDirectoryHandle;
 }
 
-describe('legacy project to .msproj migration', () => {
-  beforeEach(() => localStorage.clear());
+describe('project repository creation and legacy conversion', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    repo.session = null;
+    repo.projectName = '';
+    repo.opfsRoot = null;
+    repo.createRepositoryAt.mockReset().mockImplementation(async (location: RepositoryLocation, name: string) => {
+      repo.session = { location };
+      repo.projectName = name;
+    });
+    repo.openRepositoryProject.mockReset().mockImplementation(async (location: RepositoryLocation, options?: { legacyTarget?: RepositoryLocation }) => {
+      repo.session = { location: options?.legacyTarget ?? location };
+      repo.projectName = location.kind === 'opfs' ? location.path : location.kind === 'fsa' ? location.handle.name : 'Native';
+    });
+    repo.isLegacyProjectLocation.mockReset().mockResolvedValue(false);
+    repo.requestLegacyImportTarget.mockReset();
+    repo.closeEditorRepository.mockReset().mockImplementation(async () => { repo.session = null; });
+  });
   afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-  it('creates and restores an OPFS package by name without caching directory handles', async () => {
+  it('creates and restores an OPFS repository by name without caching directory handles', async () => {
     const root = new MemoryDirectoryHandle('Origin root');
+    repo.opfsRoot = asDirectory(root);
     vi.stubGlobal('showDirectoryPicker', undefined);
     vi.stubGlobal('showSaveFilePicker', undefined);
     vi.stubGlobal('FileSystemFileHandle', MemoryFileHandle);
     vi.stubGlobal('navigator', { storage: { getDirectory: vi.fn(async () => root) } });
     const storeHandle = vi.spyOn(projectDB, 'storeHandle').mockRejectedValue(new Error('Unexpected handle cache write'));
     const getHandle = vi.spyOn(projectDB, 'getStoredHandle').mockRejectedValue(new Error('Unsafe legacy handle read'));
+
     const core = new ProjectCoreService(fileStorageService);
     expect(await core.createProject('Browser Cut')).toBe(true);
-    expect(readLastOpfsProjectName()).toBe('Browser Cut');
+    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'opfs', path: 'Browser Cut' }, 'Browser Cut', false);
+    expect(root.directories.has('Browser Cut')).toBe(true);
+    expect(core.getProjectHandle()).toBe(root.directories.get('Browser Cut'));
     expect(getRecentProjects()).toMatchObject([{ backend: 'opfs', path: 'Browser Cut' }]);
-    core.closeProject();
+    // Activating a browser-local repository records it for this tab (editor repository lifecycle).
+    sessionStorage.setItem('ms.repository.last-opfs-path', 'Browser Cut');
+    await core.closeProject();
+    expect(core.getProjectHandle()).toBeNull();
 
     const reopened = new ProjectCoreService(fileStorageService);
     expect(await reopened.restoreLastProject()).toBe(true);
+    expect(repo.openRepositoryProject).toHaveBeenLastCalledWith({ kind: 'opfs', path: 'Browser Cut' });
     expect(reopened.getProjectData()?.name).toBe('Browser Cut');
     // Rename also reacquires the origin root instead of reading projectsFolder.
     expect(await readProjectParent()).toBe(root);
@@ -165,66 +169,85 @@ describe('legacy project to .msproj migration', () => {
     expect(getHandle).not.toHaveBeenCalled();
   });
 
-  it.each(['picker', 'existing-folder'])('creates a readable project despite unavailable handle cache (%s)', async (mode) => {
+  it.each(['picker', 'existing-folder'])('creates a project despite an unavailable handle cache (%s)', async (mode) => {
     const root = new MemoryDirectoryHandle('Projects');
     vi.stubGlobal('showDirectoryPicker', vi.fn().mockResolvedValue(root));
     vi.stubGlobal('showSaveFilePicker', vi.fn());
     vi.spyOn(projectDB, 'storeHandle').mockRejectedValue(new DOMException('Database connection is closing', 'InvalidStateError'));
+    vi.spyOn(projectDB, 'getStoredHandle').mockResolvedValue(null);
+    vi.spyOn(projectDB, 'getAllHandles').mockResolvedValue([]);
+
     const core = new ProjectCoreService(fileStorageService);
     const result = mode === 'picker'
       ? await core.createProject('Offline Cache')
-      : await core.createProjectInFolder(root as unknown as FileSystemDirectoryHandle, 'Offline Cache');
+      : await core.createProjectInFolder(asDirectory(root), 'Offline Cache');
+
     expect(result).toBe(true);
-    const file = root.directories.get('Offline Cache')?.files.get('Offline Cache.msproj');
-    expect(file).toBeDefined();
-    const archive = await decodeProjectPackage(await (await file!.getFile()).arrayBuffer());
-    expect(archive.projectData.name).toBe('Offline Cache');
-    expect(archive.projectData.compositions).toHaveLength(1);
+    const folder = root.directories.get('Offline Cache');
+    expect(folder).toBeDefined();
+    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'fsa', handle: folder }, 'Offline Cache', false);
+    expect(core.getProjectHandle()).toBe(folder);
+    expect(core.getProjectData()?.name).toBe('Offline Cache');
   });
 
-  it('creates a validated package while preserving the old project files and layout', async () => {
+  it('converts a legacy project in place while preserving the old project files and layout', async () => {
+    vi.stubGlobal('showDirectoryPicker', vi.fn());
+    vi.stubGlobal('showSaveFilePicker', vi.fn());
+    vi.spyOn(projectDB, 'storeHandle').mockResolvedValue(undefined);
+    vi.spyOn(projectDB, 'getStoredHandle').mockResolvedValue(null);
+    vi.spyOn(projectDB, 'getAllHandles').mockResolvedValue([]);
     const root = new MemoryDirectoryHandle('Legacy Cut');
-    const legacyProject = createLegacyProject();
-    await (await root.getFileHandle('project.json', { create: true }) as unknown as MemoryFileHandle)
-      .seed(JSON.stringify(legacyProject));
-    const analysis = await root.getDirectoryHandle('Analysis', { create: true }) as unknown as MemoryDirectoryHandle;
-    await (await analysis.getFileHandle('media-1.json', { create: true }) as unknown as MemoryFileHandle)
-      .seed('{"analyses":{}}');
+    const projectJson = root.seedFile('project.json', JSON.stringify({ name: 'Legacy Cut' }));
     const raw = await root.getDirectoryHandle('Raw', { create: true }) as unknown as MemoryDirectoryHandle;
-    await (await raw.getFileHandle('clip.mp4', { create: true }) as unknown as MemoryFileHandle).seed('raw-bytes');
+    const clip = raw.seedFile('clip.mp4', 'raw-bytes');
+    repo.isLegacyProjectLocation.mockResolvedValue(true);
+    repo.requestLegacyImportTarget.mockImplementation(async (handle: FileSystemDirectoryHandle) => handle);
 
     const core = new ProjectCoreService(fileStorageService);
-    await expect(core.loadProject(root as unknown as FileSystemDirectoryHandle)).resolves.toBe(true);
+    await expect(core.loadProject(asDirectory(root))).resolves.toBe(true);
 
-    expect(root.files.has('project.json')).toBe(true);
-    expect(root.directories.get('Raw')?.files.has('clip.mp4')).toBe(true);
-    const packageFile = root.files.get('Legacy Cut.msproj');
-    expect(packageFile).toBeDefined();
-    const archive = await decodeProjectPackage(await (await packageFile!.getFile()).arrayBuffer());
-    expect(archive.projectData.name).toBe('Legacy Cut');
-    expect(new TextDecoder().decode(archive.entries.get('Analysis/media-1.json'))).toBe('{"analyses":{}}');
-    expect(archive.manifest.mediaFolderName).toBe('Raw');
+    expect(repo.requestLegacyImportTarget).toHaveBeenCalledWith(root);
+    expect(repo.openRepositoryProject).toHaveBeenCalledWith(
+      { kind: 'fsa', handle: root },
+      { legacyTarget: { kind: 'fsa', handle: root } },
+    );
+    expect(core.getProjectHandle()).toBe(root);
+    expect(root.files.get('project.json')).toBe(projectJson);
+    expect(projectJson.writes).toEqual([]);
+    expect(root.directories.get('Raw')?.files.get('clip.mp4')).toBe(clip);
+    expect(clip.writes).toEqual([]);
   });
 
-  it('creates new projects with one package, one named media folder, and a hidden cache', async () => {
-    const root = new MemoryDirectoryHandle('Fresh Cut');
-    const core = new ProjectCoreService(fileStorageService) as ProjectCoreService & {
-      initializeProject: (handle: FileSystemDirectoryHandle, name: string) => Promise<boolean>;
-    };
+  it('leaves a legacy project untouched when no conversion target is chosen', async () => {
+    vi.stubGlobal('showDirectoryPicker', vi.fn());
+    vi.stubGlobal('showSaveFilePicker', vi.fn());
+    const root = new MemoryDirectoryHandle('Legacy Cut');
+    repo.isLegacyProjectLocation.mockResolvedValue(true);
+    repo.requestLegacyImportTarget.mockResolvedValue(null);
 
-    await expect(core.initializeProject(root as unknown as FileSystemDirectoryHandle, 'Fresh Cut'))
-      .resolves.toBe(true);
+    const core = new ProjectCoreService(fileStorageService);
+    await expect(core.loadProject(asDirectory(root))).resolves.toBe(false);
+    expect(repo.openRepositoryProject).not.toHaveBeenCalled();
+    expect(core.getProjectHandle()).toBeNull();
+  });
 
-    expect(root.files.has('Fresh Cut.msproj')).toBe(true);
-    expect(root.files.has('project.json')).toBe(false);
-    expect(root.directories.has('Fresh Cut Media')).toBe(true);
-    expect(root.directories.has('.masterselects-cache')).toBe(false);
-    expect(root.directories.has('Analysis')).toBe(false);
-    expect(root.directories.has('Transcripts')).toBe(false);
-    expect(root.directories.has('Proxy')).toBe(false);
-    expect(root.directories.get('Fresh Cut Media')?.directories.has('Baked Audio')).toBe(true);
-    expect(root.directories.get('Fresh Cut Media')?.directories.has('Downloads')).toBe(true);
-    expect(root.directories.get('Fresh Cut Media')?.directories.has('Renders')).toBe(true);
-    expect(root.directories.get('Fresh Cut Media')?.directories.has('.masterselects-cache')).toBe(true);
+  it('creates new projects as one named folder handed to a fresh repository', async () => {
+    vi.stubGlobal('showDirectoryPicker', vi.fn());
+    vi.stubGlobal('showSaveFilePicker', vi.fn());
+    vi.spyOn(projectDB, 'storeHandle').mockResolvedValue(undefined);
+    vi.spyOn(projectDB, 'getStoredHandle').mockResolvedValue(null);
+    vi.spyOn(projectDB, 'getAllHandles').mockResolvedValue([]);
+    const parent = new MemoryDirectoryHandle('Projects');
+
+    const core = new ProjectCoreService(fileStorageService);
+    await expect(core.createProjectInFolder(asDirectory(parent), 'Fresh Cut', true)).resolves.toBe(true);
+
+    expect([...parent.directories.keys()]).toEqual(['Fresh Cut']);
+    expect(parent.files.size).toBe(0);
+    const folder = parent.directories.get('Fresh Cut')!;
+    // The repository writes its own layout; the core creates no legacy package or folders.
+    expect(folder.files.size).toBe(0);
+    expect(folder.directories.size).toBe(0);
+    expect(repo.createRepositoryAt).toHaveBeenCalledWith({ kind: 'fsa', handle: folder }, 'Fresh Cut', true);
   });
 });

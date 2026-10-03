@@ -79,8 +79,11 @@ export function createIllegalRootReducerIndexGraph(kind: 'sequence' | 'kernel'):
 }
 
 export function createRootPureImageSelectGraph(selected = true): EffectOperatorGraph {
-  return base([n('frame', 'image.frame'), { ...n('condition', 'values.boolean'), constants: { value: selected } },
-    n('select', 'control.select.image'), n('output', 'image.output')], [e('condition', 'value', 'select', 'condition'),
+  // Runtime luminance condition (always true/false by threshold): constant conditions fold away at compile time.
+  return base([n('frame', 'image.frame'), n('luma', 'color.luminance-rec709.image'), n('threshold', 'values.number', selected ? -1 : 2),
+    n('condition', 'compare.greater.scalar'), n('select', 'control.select.image'), n('output', 'image.output')],
+  [e('frame', 'image', 'luma', 'image'), e('luma', 'value', 'condition', 'a'), e('threshold', 'value', 'condition', 'b'),
+    e('condition', 'condition', 'select', 'condition'),
     e('frame', 'image', 'select', 'falseValue'), e('frame', 'image', 'select', 'trueValue'), e('select', 'image', 'output', 'image')]);
 }
 

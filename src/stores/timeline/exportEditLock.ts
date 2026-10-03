@@ -185,6 +185,7 @@ const EXPORT_LOCKED_ACTION_NAMES = new Set<string>([
   'recordTextBoundsPathKeyframe',
   'disableTextBoundsPathKeyframes',
   'updateBezierHandle',
+  'applyKeyframeEasingCurve',
 
   'setMaskEditMode',
   'setMaskPanelActive',

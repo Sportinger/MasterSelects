@@ -34,15 +34,15 @@ export function useExportDialogSupport({
   useEffect(() => {
     const checkSupport = async () => {
       const support: Record<VideoCodec, boolean> = {
-        h264: await FrameExporter.checkCodecSupport('h264', width, height),
-        h265: await FrameExporter.checkCodecSupport('h265', width, height),
-        vp9: await FrameExporter.checkCodecSupport('vp9', width, height),
-        av1: await FrameExporter.checkCodecSupport('av1', width, height),
+        h264: await FrameExporter.checkCodecSupport('h264', width, height, fps),
+        h265: await FrameExporter.checkCodecSupport('h265', width, height, fps),
+        vp9: await FrameExporter.checkCodecSupport('vp9', width, height, fps),
+        av1: await FrameExporter.checkCodecSupport('av1', width, height, fps),
       };
       setCodecSupport(support);
     };
     checkSupport();
-  }, [width, height, setCodecSupport]);
+  }, [width, height, fps, setCodecSupport]);
 
   useEffect(() => {
     if (!useCustomBitrate) {

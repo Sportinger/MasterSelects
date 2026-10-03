@@ -9,7 +9,7 @@ export const aiEdgeFill: FullscreenEffectDefinition = {
   params: {
     mix: { type: 'number', label: 'Fill Opacity', default: 100, min: 0, max: 100, step: .1, animatable: true, hidden: true },
     seamBlend: { type: 'number', label: 'Seam Blend', default: 12, min: 0, max: 64, step: 1, animatable: true, hidden: true },
-    canvasWidth: { type: 'number', label: 'Canvas Width', default: 0, hidden: true },
+    canvasWidth: { type: 'number', label: 'Canvas Width', default: 0, hidden: true, animatable: false },
     prompt: { type: 'text', label: 'Prompt', default: EDGE_FILL_PROMPT, hidden: true },
     resolution: { type: 'select', label: 'Generation Size', default: '2K', hidden: true,
       options: ['1K', '2K', '4K'].map(value => ({ value, label: value })) },

@@ -57,6 +57,7 @@ import {
   getTimelineClipCanvasMediaStatus,
 } from './utils/timelineClipCanvasChromeOverlays';
 import { getTimelineTrackColor } from './trackColor';
+import { isBeatDistributeRule } from '../../services/compositionRules/beatRuleOwnership';
 
 // Viewport-bounded canvas sizing (the Linux/Mesa blank-canvas guard) lives in
 // useTimelineClipCanvasViewport; see docs/Features/Linux-Mesa-GPU.md.
@@ -133,10 +134,24 @@ function TimelineClipCanvasComponent(props: TimelineClipCanvasProps) {
     () => buildSourceWaveformPyramidIdMap(mediaFiles),
     [mediaFiles],
   );
-  const clips = useMemo(
-    () => enrichClipsWithSourceWaveformRef(rawClips, sourceWaveformPyramidIds),
-    [rawClips, sourceWaveformPyramidIds],
-  );
+  const compositionRules = useTimelineStore((state) => state.compositionGraph?.rules);
+  const ruleRoles = useMemo(() => {
+    const roles = new Map<string, 'rule' | 'corrected'>();
+    for (const rule of Object.values(compositionRules ?? {})) {
+      if (!isBeatDistributeRule(rule)) continue;
+      for (const member of rule.members) roles.set(member.clipId, member.correction ? 'corrected' : 'rule');
+    }
+    return roles;
+  }, [compositionRules]);
+  const clips = useMemo(() => {
+    const enriched = enrichClipsWithSourceWaveformRef(rawClips, sourceWaveformPyramidIds);
+    if (!ruleRoles.size) return enriched;
+    // A linked audio partner follows its rule-placed video clip and shows the same mark.
+    return enriched.map(clip => {
+      const role = ruleRoles.get(clip.id) ?? (clip.linkedClipId ? ruleRoles.get(clip.linkedClipId) : undefined);
+      return role ? { ...clip, compositionRuleRole: role } : clip;
+    });
+  }, [rawClips, sourceWaveformPyramidIds, ruleRoles]);
   const thumbnailClips = thumbnailsEnabled ? clips : NO_THUMBNAIL_CLIPS;
   const geometryProps = useMemo(() => ({
     trackId,

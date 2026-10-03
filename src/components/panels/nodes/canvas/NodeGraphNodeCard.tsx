@@ -94,6 +94,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
   const nodeBadges = getNodeBadges(node);
   const hasAudioBadges = getAudioAnalysisBadges(node).length > 0;
   const analysisProgress = clamp(getNodeParamNumber(node, 'progressPercent'), 0, 100);
+  const laneRow = node.summary?.laneRow;
 
   const renderPort = (port: NodeGraphPort) => <NodeGraphPortView key={port.id} node={node} port={port}
     canvasRendered={canvasRendered}
@@ -106,7 +107,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
     <div
       role="button"
       tabIndex={0}
-      aria-label={canvasRendered ? node.label : undefined}
+      aria-label={laneRow ? `${laneRow.title}: ${laneRow.text}` : canvasRendered ? node.label : undefined}
       aria-description={canvasRendered ? node.description : undefined}
       className={[
         'node-workspace-node',
@@ -153,7 +154,12 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
         }
       }}
     >
-      {content && <><div className="node-workspace-node-header">
+      {content && laneRow && !canvasRendered && <div className={`node-lane-row tone-${laneRow.tone}`}>
+        <span className="node-lane-row-index">{laneRow.index}</span>
+        <span className="node-lane-row-title" title={laneRow.title}>{laneRow.title}</span>
+        <span className="node-lane-row-text" title={laneRow.text}>{laneRow.text}</span>
+      </div>}
+      {content && !laneRow && <><div className="node-workspace-node-header">
         <span>{getNodeHeaderLabel(node)}</span>
         <div className="node-workspace-node-header-actions">
           {isBypassable && onToggleNodeBypass && (
@@ -230,7 +236,7 @@ export const NodeGraphNodeCard = memo(function NodeGraphNodeCard({
     <NodeSummarySegments node={node} canvasRendered={canvasRendered} selectedClipIds={selectedSegmentClipIds} onSelect={onSelectSummarySegment} />
     {content && <><NodeControlInputPicker clipId={clipId} node={node} />
     {collapsedGroupId && onToggleGroup && <button type="button" className="node-workspace-node-expand"
-      style={{ left: node.layout.x + 5, top: node.layout.y + 31 }} aria-label={`Expand ${node.label} group`} aria-expanded={false}
+      style={{ left: node.layout.x + 5, top: node.layout.y + (laneRow ? 10 : 31) }} aria-label={`Expand ${node.label} group`} aria-expanded={false}
       title={`Expand ${node.label}`} onPointerDown={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}
       onClick={event => { event.stopPropagation(); if (event.detail > 0) event.currentTarget.blur(); onToggleGroup(collapsedGroupId); }}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>

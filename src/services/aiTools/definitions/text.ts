@@ -28,7 +28,7 @@ const textPathPointItems = {
 };
 
 const textPropertySchema: Record<string, unknown> = {
-  text: { type: 'string', description: 'Text content. Newlines are supported. Number tokens render live per frame: {value} (up to 2 decimals), {value:N} (N fixed decimals), {value*100:0} (scaled), {time:N} (clip-local seconds); e.g. "{value:2}×" or "{value*100:0}%". Use them for counters instead of many static clips.' },
+  text: { type: 'string', description: 'Text content. Newlines are supported. Number tokens render live per frame: {value} (up to 2 decimals), {value:N} (N fixed decimals), {value*100:0} (scaled), {time:N} (clip-local seconds), {frame} and {timecode} (clip-local HH:MM:SS:FF at the composition frame rate); e.g. "{value:2}×" or "{value*100:0}%". Use them for counters instead of many static clips.' },
   value: { type: 'number', description: 'Number printed by {value} tokens. Animate it with addKeyframe property "text.value" (one clip, any number of keyframes) for counters and rising/falling numbers.' },
   valueLink: {
     type: ['object', 'null'],
@@ -36,6 +36,10 @@ const textPropertySchema: Record<string, unknown> = {
     properties: { clipId: { type: 'string' }, property: { type: 'string' } },
     required: ['clipId', 'property'],
   },
+  reveal: { type: 'number', description: 'Per-character reveal progress 0-1 (1 = fully visible). Animate with addKeyframe property "text.reveal" for typewriter/decode/fade/rise text; the layout never shifts while it builds.' },
+  revealMode: { type: 'string', enum: ['typewriter', 'decode', 'fade', 'rise'], description: 'How unrevealed characters appear: typewriter, decode (scrambled glyphs ahead of the head), fade, or rise (fade + lift).' },
+  revealSpread: { type: 'number', description: 'Decode: scrambled characters ahead of the head. Fade/rise: soft edge width in characters (0.5-40, default 3).' },
+  revealCursor: { type: 'boolean', description: 'Typewriter/decode: draw a block cursor at the reveal head.' },
   fontFamily: { type: 'string', description: 'Font family, for example Arial, Inter, Roboto, or Open Sans.' },
   fontSize: { type: 'number', description: 'Font size in pixels (8-500).' },
   fontWeight: { type: 'number', description: 'Numeric font weight (100-900).' },

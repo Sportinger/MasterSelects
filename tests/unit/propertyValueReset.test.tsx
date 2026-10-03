@@ -35,6 +35,7 @@ describe('property value right-click reset', () => {
   const updateCaptionProperties = vi.fn();
   const updateText3DProperties = vi.fn();
   const ensureCaptionTextClip = vi.fn(async () => 'caption-1');
+  const setPropertyValue = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,6 +47,7 @@ describe('property value right-click reset', () => {
         updateCaptionProperties,
         updateText3DProperties,
         ensureCaptionTextClip,
+        setPropertyValue,
       });
     });
   });
@@ -70,10 +72,9 @@ describe('property value right-click reset', () => {
       />,
     );
 
+    // Font size is keyframeable, so its reset goes through the keyframe-aware property setter.
     fireEvent.contextMenu(screen.getByLabelText('Font Size'));
-    expect(updateTextProperties).toHaveBeenCalledWith('text-1', {
-      fontSize: DEFAULT_TEXT_PROPERTIES.fontSize,
-    });
+    expect(setPropertyValue).toHaveBeenCalledWith('text-1', 'text.fontSize', DEFAULT_TEXT_PROPERTIES.fontSize);
 
     fireEvent.contextMenu(screen.getByRole('combobox', { name: 'Font family' }));
     expect(updateTextProperties).toHaveBeenCalledWith('text-1', {

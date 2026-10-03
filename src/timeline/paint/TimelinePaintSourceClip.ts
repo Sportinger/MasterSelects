@@ -26,6 +26,8 @@ export interface TimelinePaintFadeVisuals {
 }
 
 export interface TimelinePaintSourceClip {
+  /** Member of a composition rule; 'corrected' when it carries a manual correction (display only). */
+  compositionRuleRole?: 'rule' | 'corrected';
   sceneGraphOutput?: import('../../types/sharedSceneGraph').SceneGraphOutput;
   id: string;
   trackId: string;

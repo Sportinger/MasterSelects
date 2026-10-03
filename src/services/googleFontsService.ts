@@ -33,6 +33,8 @@ export const POPULAR_FONTS: FontConfig[] = [
   { family: 'Quicksand', weights: [300, 400, 500, 600, 700], category: 'sans-serif' },
   { family: 'Mulish', weights: [200, 300, 400, 500, 600, 700, 800, 900], category: 'sans-serif' },
   { family: 'Barlow', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], category: 'sans-serif' },
+  { family: 'Barlow Semi Condensed', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], category: 'sans-serif' },
+  { family: 'Barlow Condensed', weights: [100, 200, 300, 400, 500, 600, 700, 800, 900], category: 'sans-serif' },
   { family: 'Manrope', weights: [200, 300, 400, 500, 600, 700, 800], category: 'sans-serif' },
   { family: 'IBM Plex Sans', weights: [100, 200, 300, 400, 500, 600, 700], category: 'sans-serif' },
   { family: 'Source Sans 3', weights: [200, 300, 400, 500, 600, 700, 800, 900], category: 'sans-serif' },

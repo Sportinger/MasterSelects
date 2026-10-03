@@ -637,8 +637,8 @@ export class FrameExporter {
     return getVideoCodecsForContainer(container);
   }
 
-  static async checkCodecSupport(codec: 'h264' | 'h265' | 'vp9' | 'av1', width: number, height: number): Promise<boolean> {
-    return checkCodecSupport(codec, width, height);
+  static async checkCodecSupport(codec: 'h264' | 'h265' | 'vp9' | 'av1', width: number, height: number, fps?: number): Promise<boolean> {
+    return checkCodecSupport(codec, width, height, fps);
   }
 
   static getBitrateRange() {

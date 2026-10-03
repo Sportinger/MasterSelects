@@ -2,22 +2,39 @@ import type { NodeGraph, NodeGraphEdge, NodeGraphNode } from '../../../types/nod
 import { compositionEdge, compositionPort } from './compositionGraphPrimitives';
 import { compositionNodeId } from './compositionGraphProjection';
 
-export const trackStripGroupId = (trackId: string) => `comp:track:${trackId}:pieces`;
-/** Gap between stacked cards of a clip column (reference card, Slice, Speed, Place). */
-const CHAIN_GAP = 24, LANE_PITCH = 230;
+export const trackStripGroupId = (trackId: string) => `comp:track:${trackId}:lanes`;
+/** Clip lanes (plan 3.1e): one compact row per clip under its strip, in timeline order. */
+export const LANE_WIDTH = 760;
+export const LANE_PITCH = 46;
+const LANE_INDENT = 10, STRIP_TO_LANES = 14, TRACK_GAP = 84, RULE_GAP = 60;
 export interface TrackStripViewOptions {
   selectedNodeIds?: ReadonlySet<string>;
   selectedClipIds?: ReadonlySet<string>;
+  /** Clips whose lane is open: the embedded processing graph replaces the row. */
   expandedClipIds?: ReadonlySet<string>;
-  /** Clips whose reference cards stay shown (picked in the timeline); graph-side picks do not change it. */
-  revealedClipIds?: ReadonlySet<string>;
-  /** Transition nodes that stay shown after being picked, independent of later graph selection. */
-  revealedNodeIds?: ReadonlySet<string>;
-  /** Card height as painted (canvas geometry); stacked columns use it so cards never overlap. */
+  /** Card height as painted (canvas geometry); strips use it to place their lanes. */
   nodeHeight?: (node: NodeGraphNode) => number;
   collapsed?: Readonly<Record<string, boolean>>;
   /** Deterministic operation counts for scale regression tests; no clocks or global state. */
   counters?: { nodes: number; edges: number; segments: number };
+}
+
+const seconds = (value: unknown) => `${(Number(value) || 0).toFixed(1)} s`;
+const count = (value: number, one: string, many = `${one}s`) => `${value} ${value === 1 ? one : many}`;
+
+/** 'source ▸ in–out · speed ▸ effects ▸ track @ start', plus the linked audio target. */
+export function describeClipLane(node: NodeGraphNode, trackName: (trackId: string) => string): string {
+  const params = node.params ?? {};
+  const speed = Number(params.speed ?? 1);
+  const retime = typeof params.retime === 'string' ? params.retime : undefined;
+  const timing = retime ? retime[0].toUpperCase() + retime.slice(1)
+    : params.reversed ? 'reverse' : `${Number(Math.abs(speed).toFixed(3))}×`;
+  const effects = Number(params.effectCount) || 0, masks = Number(params.maskCount) || 0;
+  const processing = [effects ? count(effects, 'effect') : 'no effects', ...(masks ? [count(masks, 'mask')] : [])].join(' · ');
+  const start = seconds(params.startTime);
+  const audio = typeof params.audioTrackId === 'string' ? ` + audio ▸ ${trackName(params.audioTrackId)} @ ${start}` : '';
+  const range = `${(Number(params.inPoint) || 0).toFixed(1)}–${seconds(params.outPoint)}`;
+  return `${String(params.sourceName ?? node.label)} ▸ ${range} · ${timing} ▸ ${processing} ▸ ${trackName(String(params.trackId))} @ ${start}${audio}`;
 }
 
 /** Display-only folding. The complete stable projection stays available to agents and inspectors. */
@@ -25,17 +42,11 @@ export function compositionTrackStripView(graph: NodeGraph, options: TrackStripV
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const tracks = new Map<string, NodeGraphNode>();
   const clipTracks = new Map<string, string[]>();
-  const visible = new Set<string>();
-  const opened = new Set<string>();
-  const requiredParticipants = new Set<string>();
   const selected = options.selectedNodeIds ?? new Set<string>();
   for (const node of graph.nodes) {
     if (options.counters) options.counters.nodes++;
     const binding = node.binding;
     if (binding?.kind === 'composition-track') tracks.set(binding.trackId, { ...node, inputs: [...node.inputs], outputs: [...node.outputs] });
-    if (binding?.kind === 'composition-transition' && (selected.has(node.id) || options.revealedNodeIds?.has(node.id))) {
-      requiredParticipants.add(binding.outgoingClipId); requiredParticipants.add(binding.incomingClipId);
-    }
   }
   for (const track of tracks.values()) for (const segment of track.summary?.segments ?? []) {
     if (options.counters) options.counters.segments++;
@@ -48,40 +59,26 @@ export function compositionTrackStripView(graph: NodeGraph, options: TrackStripV
     const primary = compositionNodeId.track(String(nodes.get(id)?.params?.trackId));
     const index = ids.indexOf(primary); if (index > 0) { ids.splice(index, 1); ids.unshift(primary); }
   }
+  const stripCollapsed = (trackNodeId?: string) => !!trackNodeId && options.collapsed?.[`${trackNodeId}:lanes`] === true;
+  const transitionTrack = (node: NodeGraphNode) => node.binding?.kind === 'composition-transition'
+    ? clipTracks.get(compositionNodeId.clip(node.binding.outgoingClipId))?.[0] ?? clipTracks.get(compositionNodeId.clip(node.binding.incomingClipId))?.[0]
+    : undefined;
+  const opened = new Set<string>();
+  const visible = new Set<string>();
   for (const node of graph.nodes) {
     const binding = node.binding;
+    if (binding?.kind === 'composition-time-chain') continue;
     if (binding?.kind === 'composition-clip') {
-      const expand = options.expandedClipIds?.has(binding.clipId) || (binding.linkedClipId && options.expandedClipIds?.has(binding.linkedClipId));
+      const expand = options.expandedClipIds?.has(binding.clipId) || (!!binding.linkedClipId && options.expandedClipIds?.has(binding.linkedClipId));
       if (expand) opened.add(node.id);
-      // Selection itself only highlights the strip segment. Cards appear for clips revealed by a
-      // timeline pick, expanded clips/strips and selected transitions; graph clicks never fold them.
-      if (expand || options.revealedClipIds?.has(binding.clipId) || (binding.linkedClipId && options.revealedClipIds?.has(binding.linkedClipId))
-        || requiredParticipants.has(binding.clipId) || (binding.linkedClipId && requiredParticipants.has(binding.linkedClipId))
-        || (clipTracks.get(node.id) ?? []).some(id => options.collapsed?.[`${id}:pieces`] === false)
-        || !clipTracks.has(node.id)) visible.add(node.id);
-    } else if (binding?.kind === 'composition-time-chain') continue;
-    else if (binding?.kind !== 'composition-transition' || selected.has(node.id) || options.revealedNodeIds?.has(node.id)) visible.add(node.id);
+      // Every clip is a lane; a folded strip hides its lanes unless one is open.
+      if (expand || !stripCollapsed(clipTracks.get(node.id)?.[0])) visible.add(node.id);
+    } else if (binding?.kind !== 'composition-transition' || selected.has(node.id) || !stripCollapsed(transitionTrack(node))) visible.add(node.id);
   }
-  // Slice → Speed → Place cards belong to their reference card: shown with it, placed under it.
-  const chainReference = new Map<string, string>();
-  for (const node of graph.nodes) if (node.binding?.kind === 'composition-time-chain') {
-    const reference = compositionNodeId.clip(node.binding.clipId);
-    chainReference.set(node.id, reference);
-    if (visible.has(reference)) visible.add(node.id);
-  }
-  const chainedReferences = new Set([...chainReference].filter(([id]) => visible.has(id)).map(([, reference]) => reference));
-  // Stack offsets per chain card, measured from its reference card's top edge.
-  const height = options.nodeHeight ?? (() => 170);
-  const stackOffset = new Map<string, number>();
-  const stackHeight = new Map<string, number>();
-  for (const reference of chainedReferences) {
-    let y = height(nodes.get(reference)!) + CHAIN_GAP;
-    for (const stage of ['slice', 'speed', 'place'] as const) {
-      const node = nodes.get(`${reference}:${stage}`); if (!node) continue;
-      stackOffset.set(node.id, y); y += height(node) + CHAIN_GAP;
-    }
-    stackHeight.set(reference, y);
-  }
+  const rows = new Set([...visible].filter(id => {
+    const kind = nodes.get(id)?.binding?.kind;
+    return kind === 'composition-transition' || (kind === 'composition-clip' && !opened.has(id));
+  }));
   const trackByNode = new Map([...tracks.values()].map(track => [track.id, track]));
   const mediaPorts = new Map<string, Set<string>>();
   const edges = new Map<string, NodeGraphEdge>();
@@ -123,20 +120,21 @@ export function compositionTrackStripView(graph: NodeGraph, options: TrackStripV
       }
       continue;
     }
-    if (!visible.has(from.id) || !visible.has(to.id)) continue;
-    // A collapsed linked reference has one attachment; an embedded processing graph keeps both seams.
+    // Rows carry no cables: the lane text names its source and target, the strip shows the timing.
+    if (!visible.has(from.id) || !visible.has(to.id) || rows.has(from.id) || rows.has(to.id)) continue;
+    // An open linked lane has one attachment per seam; the audio seam stays on the audio track.
     if (sourceClip && to.binding?.kind === 'composition-track' && !opened.has(from.id)
       && to.id !== clipTracks.get(from.id)?.[0]) continue;
     add(edge);
   }
+  const trackName = (trackId: string) => tracks.get(trackId)?.label ?? trackId;
   const groups = [...graph.groups ?? []];
   const displayNodes = graph.nodes.filter(node => visible.has(node.id)).map(node => {
     if (node.binding?.kind === 'composition-track') {
       const track = tracks.get(node.binding.trackId)!;
       const groupId = trackStripGroupId(node.binding.trackId);
-      const collapsed = options.collapsed?.[groupId] !== false;
-      groups.push({ id: groupId, proxyId: node.id, label: `${node.label} clips`, color: '#55a6c4',
-        collapsed, collapsedByDefault: true, nodeIds: [node.id] });
+      groups.push({ id: groupId, proxyId: node.id, label: `${node.label} lanes`, color: '#55a6c4',
+        collapsed: stripCollapsed(node.id), collapsedByDefault: false, nodeIds: [node.id] });
       return { ...track, groupId, summary: { ...track.summary, segments: track.summary?.segments?.map(segment => ({ ...segment,
         selected: segment.transitionId ? !!segment.nodeId && selected.has(segment.nodeId) : options.selectedClipIds?.has(segment.clipId) })) } };
     }
@@ -145,75 +143,73 @@ export function compositionTrackStripView(graph: NodeGraph, options: TrackStripV
         ...node.outputs.filter(port => mediaPorts.get(node.id)?.has(port.id))] };
     return node;
   });
-  const offsets = new Map<string, number>();
-  let offset = 0;
-  const references = new Map<string, NodeGraphNode[]>();
-  for (const node of displayNodes) if (node.binding?.kind === 'composition-clip') {
-    const track = clipTracks.get(node.id)?.[0]; if (!track) continue;
-    const row = references.get(track) ?? []; row.push(node); references.set(track, row);
+  // Lane order per strip: clips by start, each transition right before its incoming clip.
+  const start = (node: NodeGraphNode) => {
+    const binding = node.binding;
+    if (binding?.kind !== 'composition-transition') return Number(node.params?.startTime) || 0;
+    const incoming = nodes.get(compositionNodeId.clip(binding.incomingClipId)) ?? nodes.get(compositionNodeId.clip(binding.outgoingClipId));
+    return (Number(incoming?.params?.startTime) || 0) - 1e-6;
+  };
+  const lanesByTrack = new Map<string, NodeGraphNode[]>();
+  const unassigned: NodeGraphNode[] = [];
+  for (const node of displayNodes) {
+    const kind = node.binding?.kind;
+    if (kind !== 'composition-clip' && kind !== 'composition-transition') continue;
+    const track = kind === 'composition-clip' ? clipTracks.get(node.id)?.[0] : transitionTrack(node);
+    if (!track) { unassigned.push(node); continue; }
+    const lanes = lanesByTrack.get(track) ?? []; lanes.push(node); lanesByTrack.set(track, lanes);
   }
-  const transitionRows = new Map<string, NodeGraphNode[]>();
-  for (const node of displayNodes) if (node.binding?.kind === 'composition-transition') {
-    const participant = compositionNodeId.clip(node.binding.outgoingClipId);
-    const track = clipTracks.get(participant)?.[0]; if (!track) continue;
-    const row = transitionRows.get(track) ?? []; row.push(node); transitionRows.set(track, row);
-  }
-  const transitionPositions = new Map<string, { x: number; y: number }>();
-  const referenceOffsets = new Map<string, number>();
-  const referenceShifts = new Map<string, number>();
-  const rowEnds: (() => number)[] = [];
-  for (const track of [...tracks.values()].toSorted((a, b) => a.defaultLayout!.y - b.defaultLayout!.y)) {
-    offsets.set(track.id, offset);
-    // One row in timeline order: keep the time position while it fits, otherwise push right.
-    const laneEnds: number[] = [];
-    let rowEnd = -Infinity;
-    rowEnds.push(() => rowEnd);
-    for (const node of (references.get(track.id) ?? []).toSorted((a, b) => a.layout.x - b.layout.x || a.id.localeCompare(b.id))) {
-      const x = Math.max(node.layout.x, rowEnd + 24);
-      rowEnd = x + 184; laneEnds[0] = rowEnd;
-      referenceOffsets.set(node.id, offset);
-      if (x !== node.layout.x) referenceShifts.set(node.id, x - node.layout.x);
+  const height = options.nodeHeight ?? (() => 170);
+  const targets = new Map<string, { x: number; y: number }>();
+  const laneRows = new Map<string, NonNullable<NonNullable<NodeGraphNode['summary']>['laneRow']>>();
+  const sortedTracks = [...tracks.values()].toSorted((a, b) => (a.defaultLayout ?? a.layout).y - (b.defaultLayout ?? b.layout).y);
+  let cursor = sortedTracks.length ? (sortedTracks[0].defaultLayout ?? sortedTracks[0].layout).y : 80;
+  const placeLanes = (lanes: readonly NodeGraphNode[], x: number, tone: 'video' | 'audio') => {
+    const ordered = lanes.toSorted((a, b) => start(a) - start(b) || a.id.localeCompare(b.id));
+    const indexes = new Map<string, number>();
+    for (const node of ordered) if (node.binding?.kind === 'composition-clip') indexes.set(node.binding.clipId, indexes.size + 1);
+    for (const node of ordered) {
+      targets.set(node.id, { x, y: cursor }); cursor += LANE_PITCH;
+      const binding = node.binding;
+      if (binding?.kind === 'composition-transition') {
+        const pair = `${indexes.get(binding.outgoingClipId) ?? '?'} → ${indexes.get(binding.incomingClipId) ?? '?'}`;
+        laneRows.set(node.id, { width: LANE_WIDTH, index: '⇄', title: node.label, tone: 'transition',
+          text: `${seconds(node.params?.duration)} between clips ${pair} · double-click opens its body` });
+      } else if (binding?.kind === 'composition-clip') {
+        laneRows.set(node.id, { width: LANE_WIDTH, index: String(indexes.get(binding.clipId) ?? ''), title: node.label, tone,
+          text: describeClipLane(node, trackName) });
+      }
     }
-    // Reserve enough lanes for the tallest stacked Slice/Speed/Place column of this track.
-    const stack = Math.max(0, ...(references.get(track.id) ?? []).map(node => stackHeight.get(node.id) ?? 0));
-    for (let lanes = laneEnds.length; lanes * LANE_PITCH < stack; lanes++) laneEnds.push(0);
-    const transitions = transitionRows.get(track.id) ?? [];
-    transitions.forEach((node, index) => {
-      const segment = track.summary?.segments?.find(segment => segment.nodeId === node.id);
-      transitionPositions.set(node.id, { x: track.layout.x + 10 + (segment?.start ?? 0) * (track.summary!.timeAxis!.width - 20),
-        y: track.layout.y + 216 + offset + (laneEnds.length + index) * 230 });
-    });
-    offset += (laneEnds.length + transitions.length) * LANE_PITCH;
+  };
+  for (const track of sortedTracks) {
+    targets.set(track.id, { x: (track.defaultLayout ?? track.layout).x, y: cursor });
+    cursor += height(track) + STRIP_TO_LANES;
+    placeLanes(lanesByTrack.get(track.id) ?? [], (track.defaultLayout ?? track.layout).x + LANE_INDENT,
+      track.params?.trackType === 'audio' ? 'audio' : 'video');
+    cursor += TRACK_GAP;
   }
+  // The strip frame encloses its lane rows; open lanes keep their own clip frame.
+  for (const [trackId, lanes] of lanesByTrack) {
+    const index = groups.findIndex(group => group.proxyId === trackId && group.id === `${trackId}:lanes`);
+    if (index >= 0) groups[index] = { ...groups[index], nodeIds: [trackId, ...lanes.filter(node => rows.has(node.id)).map(node => node.id)] };
+  }
+  if (unassigned.length) placeLanes(unassigned, (sortedTracks[0]?.defaultLayout ?? sortedTracks[0]?.layout ?? { x: 300 }).x + LANE_INDENT, 'video');
+  // Rules and their beat sources sit below the last lane.
+  const ruleTop = Math.min(Infinity, ...displayNodes.filter(node => node.binding?.kind === 'composition-rule' || node.binding?.kind === 'composition-beat-source')
+    .map(node => (node.defaultLayout ?? node.layout).y));
+  const ruleShift = Number.isFinite(ruleTop) ? Math.max(0, cursor + RULE_GAP - ruleTop) : 0;
   const compositionOffsets: Record<string, { x: number; y: number }> = {};
-  // Long expanded rows grow past the strips: keep Stack/Master/Output right of the widest row.
-  const widest = Math.max(-Infinity, ...rowEnds.map(end => end()));
-  const busIds = new Set([compositionNodeId.videoStack(), compositionNodeId.audioMaster(), compositionNodeId.output()]);
-  const busLeft = Math.min(...[...busIds].map(id => nodes.get(id)?.defaultLayout?.x ?? nodes.get(id)?.layout.x ?? Infinity));
-  const busShift = Number.isFinite(widest) && Number.isFinite(busLeft) ? Math.max(0, widest + 80 - busLeft) : 0;
-  for (const id of busIds) if (busShift) referenceShifts.set(id, busShift);
   const positioned = displayNodes.map(node => {
-    const transitionPosition = transitionPositions.get(node.id);
-    if (transitionPosition) {
-      const dy = transitionPosition.y - (node.defaultLayout?.y ?? node.layout.y);
-      compositionOffsets[node.id] = { x: transitionPosition.x - (node.defaultLayout?.x ?? node.layout.x), y: dy };
-      return { ...node, layout: { x: node.layout.x + compositionOffsets[node.id].x, y: node.layout.y + dy } };
-    }
-    const reference = chainReference.get(node.id);
-    if (reference && node.binding?.kind === 'composition-time-chain') {
-      // Stack Slice, Speed and Place in the clip's own column so neighbouring chains never overlap.
-      const base = nodes.get(reference)?.defaultLayout ?? nodes.get(reference)?.layout ?? node.layout;
-      const own = node.defaultLayout ?? node.layout;
-      const x = base.x + (referenceShifts.get(reference) ?? 0) - own.x;
-      const y = base.y + (referenceOffsets.get(reference) ?? offsets.get(reference) ?? 0) + (stackOffset.get(node.id) ?? 0) - own.y;
-      compositionOffsets[node.id] = { x, y };
-      return { ...node, layout: { x: node.layout.x + x, y: node.layout.y + y } };
-    }
-    const owner = node.id;
-    const dy = referenceOffsets.get(owner) ?? offsets.get(owner) ?? 0;
-    const dx = referenceShifts.get(owner) ?? 0;
-    if (dy || dx) compositionOffsets[node.id] = { x: dx, y: dy };
-    return dy || dx ? { ...node, layout: { x: node.layout.x + dx, y: node.layout.y + dy } } : node;
+    const target = targets.get(node.id);
+    // Strips and lanes are fixed slots: a stored drag position never displaces them.
+    const offset = target ? { x: target.x - node.layout.x, y: target.y - node.layout.y }
+      : ruleShift && (node.binding?.kind === 'composition-rule' || node.binding?.kind === 'composition-beat-source') ? { x: 0, y: ruleShift } : undefined;
+    const row = laneRows.get(node.id);
+    const shown = row && rows.has(node.id) ? { ...node, inputs: [], outputs: [], summary: { ...node.summary, laneRow: row } }
+      : row ? { ...node, summary: { ...node.summary, laneRow: row } } : node;
+    if (!offset || (!offset.x && !offset.y)) return shown;
+    compositionOffsets[node.id] = offset;
+    return { ...shown, layout: { x: node.layout.x + offset.x, y: node.layout.y + offset.y } };
   });
   return { ...graph, workspace: { clips: {}, defaultNodes: Object.fromEntries(graph.nodes.map(node => [node.id, node.defaultLayout ?? node.layout])), compositionOffsets }, nodes: positioned, edges: [...edges.values()], groups,
     expandedNodes: [...new Map([...(graph.expandedNodes ?? []), ...graph.nodes].map(node => [node.id, node])).values()] };

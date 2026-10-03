@@ -9,6 +9,9 @@ import {
   type WaveformPyramidGenerationProgress,
 } from '../../../src/services/audio/WaveformPyramidGenerator';
 import { readTimelineWaveformPyramid } from '../../../src/services/audio/timelineWaveformPyramidCache';
+import { installInProcessWaveformWorker } from '../../helpers/inProcessWaveformWorker';
+
+installInProcessWaveformWorker();
 
 const FIXED_TIME = '2026-05-25T10:00:00.000Z';
 
@@ -28,6 +31,9 @@ function createMockAudioBuffer(channels: number[][], sampleRate = 8): AudioBuffe
     length,
     duration: length / sampleRate,
     getChannelData: vi.fn((channelIndex: number) => channelData[channelIndex]),
+    copyFromChannel: vi.fn((destination: Float32Array, channelIndex: number, offset = 0) => {
+      destination.set(channelData[channelIndex].subarray(offset, offset + destination.length));
+    }),
   } as unknown as AudioBuffer;
 }
 
@@ -213,7 +219,7 @@ describe('WaveformPyramidGenerator', () => {
       decoderVersion: '1.0.0',
     });
 
-    expect(buffer.getChannelData).toHaveBeenCalledTimes(1);
+    expect(buffer.copyFromChannel).toHaveBeenCalledTimes(1);
     expect(result.manifest.levels.map(level => level.samplesPerBucket)).toEqual([2, 4, 8]);
 
     const pyramid = await readTimelineWaveformPyramid(result.manifest, store);

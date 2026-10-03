@@ -9,6 +9,7 @@ import { markDynamicCanvasUpdated } from './canvasVersion';
 import { isCssGenericFontFamily } from './fontFamily';
 import { googleFontsService } from './googleFontsService';
 import { formatTextValueTemplate, hasTextValueTokens } from './text/textValueTemplate';
+import { countTextRevealSlots, createTextRevealPlan, type TextRevealPlan } from './text/textReveal';
 import {
   isAreaTextEnabled,
   measureTextWithLetterSpacing,
@@ -38,6 +39,10 @@ class TextRenderer {
   private height: number;
   private renderedBounds: TextPixelBounds | null = null;
   private capturesBounds = false;
+  /** Active per-character reveal for the current render call. */
+  private reveal: TextRevealPlan | null = null;
+  private revealIndex = 0;
+  private revealSlots = 0;
 
   constructor(width: number = 1920, height: number = 1080) {
     this.width = width;
@@ -86,6 +91,9 @@ class TextRenderer {
     // Path glyphs are drawn in a changing local transform. Keep their existing
     // full-canvas mapping until transformed bounds can be represented exactly.
     this.beginBoundsCapture(!props.pathEnabled);
+    this.reveal = createTextRevealPlan(props);
+    this.revealIndex = 0;
+    this.revealSlots = this.reveal ? countTextRevealSlots(props.text) : 0;
 
     try {
       // Clear canvas with transparent background
@@ -129,6 +137,7 @@ class TextRenderer {
       }
       markDynamicCanvasUpdated(canvas, 'text');
     } finally {
+      this.reveal = null;
       if (targetCanvas) {
         this.width = previousWidth;
         this.height = previousHeight;
@@ -178,7 +187,7 @@ class TextRenderer {
     }
 
     // Apply letter spacing via character-by-character rendering if needed
-    const useCharacterRendering = props.letterSpacing !== 0;
+    const useCharacterRendering = props.letterSpacing !== 0 || this.reveal !== null;
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
@@ -229,7 +238,7 @@ class TextRenderer {
         break;
     }
 
-    const useCharacterRendering = props.letterSpacing !== 0;
+    const useCharacterRendering = props.letterSpacing !== 0 || this.reveal !== null;
     const lines = wrapTextToShapeLines(
       ctx,
       props.text,
@@ -405,12 +414,38 @@ class TextRenderer {
     ctx.textAlign = 'left';
 
     for (let i = 0; i < chars.length; i++) {
-      this.renderLine(ctx, chars[i], currentX, y, props);
+      if (this.reveal) this.renderRevealGlyph(ctx, chars[i], currentX, y, props);
+      else this.renderLine(ctx, chars[i], currentX, y, props);
       currentX += charWidths[i] + props.letterSpacing;
+    }
+    if (this.reveal && this.revealIndex === this.revealSlots && this.reveal.cursorIndex === this.revealSlots) {
+      this.drawRevealCursor(ctx, currentX, y, props);
     }
 
     // Restore alignment
     ctx.textAlign = originalAlign;
+  }
+
+  /** Draws one glyph slot of a partially revealed text; the slot width always comes from the real character. */
+  private renderRevealGlyph(ctx: CanvasRenderingContext2D, char: string, x: number, y: number, props: TextClipProperties): void {
+    const plan = this.reveal!;
+    const index = this.revealIndex++;
+    if (index === plan.cursorIndex) this.drawRevealCursor(ctx, x, y, props);
+    const state = plan.glyph(index, char);
+    if (!state.visible) return;
+    ctx.save();
+    ctx.globalAlpha *= state.alpha;
+    this.renderLine(ctx, state.glyph, x, y + state.offsetY, props);
+    ctx.restore();
+  }
+
+  private drawRevealCursor(ctx: CanvasRenderingContext2D, x: number, y: number, props: TextClipProperties): void {
+    const size = props.fontSize;
+    const left = ctx.textAlign === 'center' ? x - size * 0.25 : x + size * 0.06;
+    const rect = { left, top: y - size * 0.78, right: left + size * 0.5, bottom: y + size * 0.14 };
+    if (this.capturesBounds) this.includeBounds(rect);
+    ctx.fillStyle = props.color;
+    ctx.fillRect(rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top);
   }
 
   /**
@@ -461,7 +496,8 @@ class TextRenderer {
       // Temporarily switch to center alignment for rotation
       const originalAlign = ctx.textAlign;
       ctx.textAlign = 'center';
-      this.renderLine(ctx, char, 0, 0, props);
+      if (this.reveal) this.renderRevealGlyph(ctx, char, 0, 0, props);
+      else this.renderLine(ctx, char, 0, 0, props);
       ctx.textAlign = originalAlign;
 
       ctx.restore();

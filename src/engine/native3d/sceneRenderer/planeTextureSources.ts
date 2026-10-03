@@ -1,4 +1,5 @@
 import { Logger } from '../../../services/logger';
+import { getCanvasVersion } from '../../../services/canvasVersion';
 import type { ScenePlaneLayer } from '../../scene/types';
 
 const log = Logger.create('NativeSceneRenderer');
@@ -10,6 +11,8 @@ export interface CachedPlaneTexture {
   width: number;
   height: number;
   videoCanvas?: HTMLCanvasElement;
+  /** Content revision of the last upload; only set for sources that report one. */
+  uploadedRevision?: string;
 }
 
 export interface PlaneTextureSourceState {
@@ -128,5 +131,21 @@ export function resolvePlaneTextureSource(
     };
   }
 
+  return null;
+}
+
+/**
+ * Revision of a source whose pixels only change when it says so: loaded images
+ * (by URL) and text rasters (by canvas version). Video and other canvases are
+ * redrawn in place without a revision and return null, so they upload every frame.
+ */
+export function planeTextureSourceRevision(source: PlaneTextureSourceState['source']): string | null {
+  if (typeof HTMLImageElement !== 'undefined' && source instanceof HTMLImageElement) {
+    return source.complete ? `image:${source.currentSrc || source.src}` : null;
+  }
+  if (typeof HTMLCanvasElement !== 'undefined' && source instanceof HTMLCanvasElement
+    && source.dataset.masterselectsDynamic === 'text') {
+    return `text:${getCanvasVersion(source)}`;
+  }
   return null;
 }

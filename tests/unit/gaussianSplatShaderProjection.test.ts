@@ -16,7 +16,7 @@ describe('gaussianSplat.wgsl projection', () => {
   });
 
   it('supports a higher fragment alpha cutoff for soft depth-mask passes', () => {
-    expect(shaderSource).toContain('y = fragment alpha cutoff');
+    expect(shaderSource).toContain('y = alpha cutoff');
     expect(shaderSource).toContain('let alphaCutoff = max(1.0 / 255.0, camera.layer.y);');
     expect(shaderSource).toContain('if (a < alphaCutoff)');
   });

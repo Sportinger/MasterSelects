@@ -29,7 +29,7 @@ describe('compute image final-output preview dispatch', () => {
     const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}),
       queue: { writeBuffer: vi.fn() }, createShaderModule: vi.fn(() => ({})), createBindGroupLayout: vi.fn(() => ({})),
       createPipelineLayout: vi.fn(() => ({})), createRenderPipeline: vi.fn(() => ({})), createComputePipeline: vi.fn(() => ({})),
-      createBuffer: vi.fn(() => ({ destroy: vi.fn() })) } as unknown as GPUDevice;
+      createBuffer: vi.fn(() => ({ destroy: vi.fn() })), createSampler: vi.fn(() => ({})) } as unknown as GPUDevice;
     const pipeline = new EffectsPipeline(device), encoder = {} as GPUCommandEncoder, sampler = {} as GPUSampler;
     const input = { id: 'input' } as unknown as GPUTextureView, output = { id: 'output' } as unknown as GPUTextureView;
     const ping = { id: 'ping' } as unknown as GPUTextureView, pong = { id: 'pong' } as unknown as GPUTextureView;

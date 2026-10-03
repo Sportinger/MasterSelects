@@ -115,7 +115,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     if (sprite) {
       ctx.drawImage(sprite, -CARD_SPRITE_PAD, -CARD_SPRITE_PAD, node.width + CARD_SPRITE_PAD * 2, node.height + CARD_SPRITE_PAD * 2);
     } else drawNodeCard(ctx, node, theme);
-    if (titleBoost > 1) drawOverviewTitle(ctx, node, theme, titleBoost);
+    if (titleBoost > 1 && !node.laneRow) drawOverviewTitle(ctx, node, theme, titleBoost);
     ctx.restore();
   }
   if (import.meta.env.DEV) recordPaintPhase('paint-nodes', performance.now() - nodesStart, nodeCount);
@@ -201,6 +201,7 @@ function drawOverviewTitle(ctx: DrawContext, node: CanvasNode, theme: CanvasThem
 
 /** A complete card at the context's current origin; shared by direct paint and sprites. */
 export function drawNodeCard(ctx: DrawContext, node: CanvasNode, theme: CanvasTheme) {
+    if (node.laneRow) { drawLaneRow(ctx, node, node.laneRow, theme); return; }
     box(ctx, 0, 0, node.width, node.height, 6); ctx.fillStyle = theme.card; ctx.fill(); ctx.strokeStyle = node.selected ? theme.accent : theme.border;
     ctx.lineWidth = node.selected ? 2 : 1; ctx.stroke(); ctx.clip();
     ctx.fillStyle = node.color; ctx.fillRect(0, 0, node.width, 3);
@@ -233,6 +234,23 @@ export function drawNodeCard(ctx: DrawContext, node: CanvasNode, theme: CanvasTh
       text(ctx, port.label, x, port.y + 1, 65, theme.text, 9, 500, align);
       text(ctx, port.type, x, port.y + 12, 65, port.color, 8, 400, align);
     }
+}
+
+const LANE_TONES: Record<string, string> = { video: '#55a6c4', audio: '#5fb37e', transition: '#c98f3c' };
+/** Collapsed clip lane: chevron slot, index chip, clip title and 'source ▸ range ▸ effects ▸ target'. */
+function drawLaneRow(ctx: DrawContext, node: CanvasNode, row: NonNullable<CanvasNode['laneRow']>, theme: CanvasTheme) {
+  const tone = LANE_TONES[row.tone] ?? node.color, middle = node.height / 2;
+  box(ctx, 0, 0, node.width, node.height, 6); ctx.fillStyle = theme.card; ctx.fill();
+  ctx.strokeStyle = node.selected ? theme.accent : theme.border; ctx.lineWidth = node.selected ? 2 : 1; ctx.stroke(); ctx.clip();
+  ctx.fillStyle = tone; ctx.fillRect(0, 0, 3, node.height);
+  if (node.expandable) {
+    ctx.strokeStyle = theme.muted; ctx.lineWidth = 1.6; ctx.beginPath();
+    ctx.moveTo(12, middle - 5); ctx.lineTo(17, middle); ctx.lineTo(12, middle + 5); ctx.stroke();
+  }
+  box(ctx, 30, middle - 10, 26, 20, 4); ctx.fillStyle = tone; ctx.fill();
+  text(ctx, row.index, 43, middle + 4, 24, '#ffffff', 11, 600, 'center');
+  text(ctx, row.title, 66, middle + 4, 180, theme.text, 12, 600);
+  text(ctx, row.text, 256, middle + 4, node.width - 266, theme.muted, 11);
 }
 
 export interface CurveActivity { playhead: number; values: number[]; until: number }

@@ -13,6 +13,9 @@ import { WaveformPyramidGenerator } from '../../../src/services/audio/WaveformPy
 import { getCachedTimelineWaveformPyramid } from '../../../src/services/audio/timelineWaveformPyramidCache';
 import type { Effect, TimelineClip } from '../../../src/types';
 import { createMockClip } from '../../helpers/mockData';
+import { installInProcessWaveformWorker } from '../../helpers/inProcessWaveformWorker';
+
+installInProcessWaveformWorker();
 
 const FIXED_TIME = '2026-05-25T10:00:00.000Z';
 
@@ -32,6 +35,9 @@ function createMockAudioBuffer(channels: number[][], sampleRate = 8): AudioBuffe
     length,
     duration: length / sampleRate,
     getChannelData: vi.fn((channelIndex: number) => channelData[channelIndex]),
+    copyFromChannel: vi.fn((destination: Float32Array, channelIndex: number, offset = 0) => {
+      destination.set(channelData[channelIndex].subarray(offset, offset + destination.length));
+    }),
   } as unknown as AudioBuffer;
 }
 

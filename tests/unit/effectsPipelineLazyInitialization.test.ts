@@ -10,7 +10,7 @@ describe('EffectsPipeline startup', () => {
   it('defers catalog pipeline compilation until an effect is used', async () => {
     vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 });
     vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2 });
-    const createShaderModule = vi.fn(() => ({}));
+    const createShaderModule = vi.fn((_descriptor: GPUShaderModuleDescriptor) => ({}));
     const createRenderPipeline = vi.fn(() => ({}));
     const createComputePipeline = vi.fn(() => ({}));
     const device = {
@@ -21,6 +21,7 @@ describe('EffectsPipeline startup', () => {
       createRenderPipeline,
       createComputePipeline,
       createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
+      createSampler: vi.fn(() => ({})),
       queue: { writeBuffer: vi.fn() },
     } as unknown as GPUDevice;
 
@@ -29,7 +30,11 @@ describe('EffectsPipeline startup', () => {
 
     // The split-compare helper owns one baseline pipeline. The effect catalog
     // itself must remain untouched until apply/prewarm requests an entry.
-    expect(createShaderModule).toHaveBeenCalledTimes(1);
+    // Temporal source-frame uploaders own their small upload modules (no pipelines).
+    const nonTemporalModules = createShaderModule.mock.calls
+      .map(([descriptor]) => descriptor.label)
+      .filter((label) => !label?.startsWith('temporal-'));
+    expect(nonTemporalModules).toEqual(['effect-split-compare']);
     expect(createRenderPipeline).toHaveBeenCalledTimes(1);
     expect(createComputePipeline).not.toHaveBeenCalled();
     expect(pipeline.getPipelineCount()).toBe(0);
@@ -52,6 +57,7 @@ describe('EffectsPipeline startup', () => {
       createRenderPipeline: vi.fn(() => ({})),
       createComputePipeline: vi.fn(() => ({})),
       createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
+      createSampler: vi.fn(() => ({})),
       pushErrorScope: vi.fn(),
       popErrorScope: vi.fn(() => validation),
       queue: { writeBuffer: vi.fn() },

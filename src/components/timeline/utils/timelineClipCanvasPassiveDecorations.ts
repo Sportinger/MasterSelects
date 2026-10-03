@@ -44,6 +44,7 @@ export interface TimelineClipCanvasPassiveDecorationClipInput extends TimelineCl
   timeRemap?: import('../../../types/timeline').ClipTimeRemap;
   reversed?: boolean;
   linkedGroupId?: string;
+  compositionRuleRole?: 'rule' | 'corrected';
   isPendingDownload?: boolean;
   downloadProgress?: number;
   downloadError?: string;
@@ -127,6 +128,10 @@ export function getTimelineClipCanvasPassiveDecorationBadges(
   if (clip.linkedGroupId) {
     badges.push({ label: 'L', fill: 'rgba(15, 23, 42, 0.86)', stroke: 'rgba(255,255,255,0.35)' });
   }
+  // Rule-placed clips (plan section 7): 'Rule*' marks a manual correction on top of the rule value.
+  if (clip.compositionRuleRole) {
+    badges.push({ label: clip.compositionRuleRole === 'corrected' ? 'Rule*' : 'Rule', fill: 'rgba(120, 72, 8, 0.9)', stroke: 'rgba(255, 196, 92, 0.75)' });
+  }
 
   return badges;
 }
@@ -170,6 +175,7 @@ export function hasTimelineClipCanvasPassiveDecorations(
     clip.isPendingDownload ||
     clip.downloadError ||
     clip.linkedGroupId ||
+    clip.compositionRuleRole ||
     clip.timeRemap?.kind === 'freeze' || clip.timeRemap?.kind === 'loop' || clip.timeRemap?.kind === 'warp' || clip.reversed ||
     (clip.transcriptStatus && clip.transcriptStatus !== 'none') ||
     (clip.analysisStatus && clip.analysisStatus !== 'none') ||

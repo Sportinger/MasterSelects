@@ -1,4 +1,5 @@
-const PAUSED_TARGET_BACKWARD_TOLERANCE_SECONDS = 1 / 60;
+// Cached frames report their slot start, which lies up to one 1/30 s slot before the target.
+const PAUSED_TARGET_BACKWARD_TOLERANCE_SECONDS = 1 / 30 + 0.001;
 const PAUSED_TARGET_FORWARD_TOLERANCE_SECONDS = 0.05;
 
 export function shouldGuardPausedHtmlTargetFrames(options: {

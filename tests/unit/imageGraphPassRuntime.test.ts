@@ -47,7 +47,7 @@ describe('ImageGraphPassRuntime', () => {
     const layoutEntries = createBindGroupLayout.mock.calls[0][0].entries as GPUBindGroupLayoutEntry[];
     expect(layoutEntries).toEqual(expect.arrayContaining([
       expect.objectContaining({ binding: 2, buffer: { type: 'uniform' } }),
-      expect.objectContaining({ binding: 3, texture: { sampleType: 'uint' } }),
+      expect.objectContaining({ binding: 3, texture: { sampleType: 'uint', viewDimension: '2d' } }),
     ]));
     runtime.dispose();
   });

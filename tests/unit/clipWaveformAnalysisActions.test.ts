@@ -48,6 +48,19 @@ describe('background waveform analysis', () => {
     expect(getTimelineRevision()).toBe(revision);
   });
 
+  it('merges refs into the current clip when an audio edit lands during the analysis', async () => {
+    analysis.generate.mockImplementation(async () => {
+      // A durable audio edit replaces audioState while the background analysis runs.
+      useTimelineStore.setState({ clips: useTimelineStore.getState().clips.map(clip => (
+        clip.id === clipId ? { ...clip, audioState: { muted: true } } : clip
+      )) });
+      return { waveform: [0.1], audioAnalysisRefs: { waveformPyramidId: 'pyramid-2' } };
+    });
+    await generateWaveformForClipAction(context, clipId, { derivedOnly: true });
+    expect(useTimelineStore.getState().clips.find(clip => clip.id === clipId)?.audioState)
+      .toEqual({ muted: true, sourceAnalysisRefs: { waveformPyramidId: 'pyramid-2' } });
+  });
+
   it('does not mutate durable file/relink fields when a background source is unavailable', async () => {
     analysis.resolveFile.mockResolvedValue(undefined);
     const before = useTimelineStore.getState().clips.find(clip => clip.id === clipId)!;

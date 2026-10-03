@@ -166,3 +166,18 @@ describe('media-scoped source artifact ownership', () => {
     });
   });
 });
+
+describe('source artifact projection identity', () => {
+  it('keeps a clip unchanged when it already carries the projection', () => {
+    const transcript = [{ id: 'w', text: 'hi', start: 0, end: 0.5 }] as unknown as TranscriptWord[];
+    const clip = createMockClip({ id: 'p', source: { type: 'audio' } as never });
+    const projected = projectMediaSourceArtifactsOntoClip(clip, { transcript, transcriptStatus: 'ready' });
+    expect(projected).not.toBe(clip);
+    expect(projectMediaSourceArtifactsOntoClip(projected, { transcript, transcriptStatus: 'ready' })).toBe(projected);
+    // A rebuilt media record carries an equal transcript as a new array: still no change.
+    const rebuilt = JSON.parse(JSON.stringify(transcript)) as TranscriptWord[];
+    expect(projectMediaSourceArtifactsOntoClip(projected, { transcript: rebuilt, transcriptStatus: 'ready' })).toBe(projected);
+    // A rebuilt media record without loaded words must not erase the clip's words.
+    expect(projectMediaSourceArtifactsOntoClip(projected, { transcriptStatus: 'ready' })).toBe(projected);
+  });
+});

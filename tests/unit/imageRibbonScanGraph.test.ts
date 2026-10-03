@@ -19,13 +19,21 @@ function reference(uv: [number, number], time: number, scale: number, amount: nu
     original[2] * (1 - ribbon) + color[2] * ribbon, color[3]];
 }
 
+// Owner presentation may share literal leaves and add composition folders; computational nodes stay the catalog recipe.
+const computationalNodes = (graph: ReturnType<typeof effectOperatorGraph>) => graph.nodes
+  .filter(node => !(node.operator.startsWith('values.') && node.constants && !Object.keys(node.bindings).length))
+  .toSorted((a, b) => a.id.localeCompare(b.id));
+
 describe('Ribbon Scan image graph', () => {
   it('uses the contextual owner with authoritative catalog defaults', () => {
     const effect: Effect = { id: 'ribbon', name: 'Ribbon Scan', type: 'ribbon-scan', enabled: true, params: {} };
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('ribbon-scan'));
-    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultRibbonScanGraph(), compositionRules: 2 });
+    const owned = effectOperatorGraph(effect), recipe = createDefaultRibbonScanGraph();
+    expect(owned.compositionRules).toBe(2);
+    expect(computationalNodes(owned)).toEqual(computationalNodes(recipe));
+    expect(effectOperatorGraph({ ...effect, operatorGraph: recipe })).toEqual(owned);
   });
 
   it('uses two explicit shared samples and catalog-owned bindings', () => {

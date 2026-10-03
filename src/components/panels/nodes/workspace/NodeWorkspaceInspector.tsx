@@ -1,4 +1,5 @@
 import { EffectOrderControls } from './EffectOrderControls';
+import { CompositionClipTiming } from '../composition/CompositionNodeInspector';
 import { ControlNodeInspector } from './ControlNodeInspector';
 import { TextNodeParameters } from './TextNodeParameters';
 import { KeyframeNodeInspector } from '../keyframes/KeyframeNodeInspector';
@@ -380,6 +381,7 @@ export function NodeInspector({
   return (
     <NodeInspectorShell width={inspectorWidth} onStartResize={onStartResizeInspector}>
       {clip && node.binding?.kind === 'clip-effect' && <EffectOrderControls clip={clip} effectId={node.binding.effectId} />}
+      {clip && node.binding?.kind === 'clip-source' && <CompositionClipTiming key={clip.id} clip={clip} />}
       <div className="node-workspace-inspector-header">
         <span>{typeof node.params?.categoryLabel === 'string' ? node.params.categoryLabel : node.kind}</span>
         <h3>{node.label}</h3>

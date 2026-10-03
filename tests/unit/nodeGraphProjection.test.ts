@@ -212,8 +212,8 @@ describe('buildClipNodeGraph', () => {
       'effect',
       'output',
     ]);
-    expect(graph.nodes.find((node) => node.id === 'mask')?.params).toEqual({ masks: 1 });
-    expect(graph.nodes.find((node) => node.id === 'color')?.params).toEqual({ nodes: 3, version: 'A' });
+    expect(graph.nodes.find((node) => node.id === 'mask')?.params).toEqual({ masks: 1, bypassable: true, enabled: true });
+    expect(graph.nodes.find((node) => node.id === 'color')?.params).toEqual({ nodes: 3, version: 'A', bypassable: true, enabled: true });
     expect(graph.nodes.find((node) => node.id === 'effect-blur')?.params).toEqual({ enabled: true, params: 1 });
     expect(graph.nodes.find((node) => node.id === 'effect-contrast')?.params).toEqual({ enabled: false, params: 0 });
     expect(graph.edges.filter((edge) => edge.type === 'texture' && edge.toPortId === 'input').map((edge) => [

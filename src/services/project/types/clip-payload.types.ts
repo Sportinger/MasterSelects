@@ -20,6 +20,7 @@ export interface ProjectTextBoundsPath {
   closed: boolean;
   position: { x: number; y: number };
   visible?: boolean;
+  outlineColor?: string;
 }
 
 export interface ProjectTextClipProperties {
@@ -38,6 +39,7 @@ export interface ProjectTextClipProperties {
   boxY?: number;
   boxWidth?: number;
   boxHeight?: number;
+  wrapMode?: 'word' | 'none';
   textBounds?: ProjectTextBoundsPath;
   strokeEnabled: boolean;
   strokeColor: string;
@@ -49,6 +51,10 @@ export interface ProjectTextClipProperties {
   shadowBlur: number;
   value?: number;
   valueLink?: { clipId: string; property: string };
+  reveal?: number;
+  revealMode?: 'typewriter' | 'decode' | 'fade' | 'rise';
+  revealSpread?: number;
+  revealCursor?: boolean;
   pathEnabled: boolean;
   pathPoints: Array<{
     x: number;

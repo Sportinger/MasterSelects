@@ -89,7 +89,7 @@ describe('fileSystemService picker surface', () => {
     expect(options?.types?.[0]?.accept).toEqual({
       'video/*': ['.mp4', '.webm', '.mov', '.avi', '.mkv'],
       'audio/*': ['.mp3', '.wav', '.ogg', '.aac', '.m4a'],
-      'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'],
+      'image/*': ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.cr2'],
       'application/octet-stream': ['.prproj'],
     });
   });

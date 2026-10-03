@@ -150,11 +150,12 @@ export function useExportState(
     const checkSupport = async () => {
       const actualWidth = useCustomResolution ? customWidth : width;
       const actualHeight = useCustomResolution ? customHeight : height;
+      const actualFps = useCustomFps ? customFps : fps;
       const support: Record<VideoCodec, boolean> = {
-        h264: await FrameExporter.checkCodecSupport('h264', actualWidth, actualHeight),
-        h265: await FrameExporter.checkCodecSupport('h265', actualWidth, actualHeight),
-        vp9: await FrameExporter.checkCodecSupport('vp9', actualWidth, actualHeight),
-        av1: await FrameExporter.checkCodecSupport('av1', actualWidth, actualHeight),
+        h264: await FrameExporter.checkCodecSupport('h264', actualWidth, actualHeight, actualFps),
+        h265: await FrameExporter.checkCodecSupport('h265', actualWidth, actualHeight, actualFps),
+        vp9: await FrameExporter.checkCodecSupport('vp9', actualWidth, actualHeight, actualFps),
+        av1: await FrameExporter.checkCodecSupport('av1', actualWidth, actualHeight, actualFps),
       };
       setCodecSupport(support);
 
@@ -168,7 +169,7 @@ export function useExportState(
     };
 
     void checkSupport();
-  }, [containerFormat, customHeight, customWidth, setSettings, useCustomResolution, videoCodec, width, height]);
+  }, [containerFormat, customFps, customHeight, customWidth, fps, setSettings, useCustomFps, useCustomResolution, videoCodec, width, height]);
 
   useEffect(() => {
     const availableCodecs = FrameExporter.getVideoCodecs(containerFormat);

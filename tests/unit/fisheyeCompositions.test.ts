@@ -21,7 +21,9 @@ describe('Fisheye shared nested compositions', () => {
     expect(graph.nodes.filter(node => node.operator === 'coordinates.restore-lens.vec2')).toHaveLength(3);
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'coordinates.divide-x.vec2')).toHaveLength(6);
     expect(expanded.nodes).toHaveLength(250);
-    expect(expanded.groups).toHaveLength(26);
+    // 17 presentation areas, 3 lens transforms, 6 nested divides and 1 shared sample normalization.
+    expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'sampling.normalize-rgba')).toHaveLength(1);
+    expect(expanded.groups).toHaveLength(27);
     expect(semantic(expanded)).toEqual(semantic(original));
     expect(validateEffectGraph(graph)).toEqual([]);
     let roundTrip = graph;
@@ -52,7 +54,8 @@ describe('Fisheye shared nested compositions', () => {
     expect(packed.nodes.find(node => node.id === 'red-unsqueeze-x')?.operator).toBe('math.multiply.scalar');
     expect(expandOperatorCompositions(packed).nodes.find(node => node.id === 'blue-unsqueeze-x')?.operator).toBe('math.divide-ieee.scalar');
     expect(validateEffectGraph(packed)).toEqual([]);
-    expect(recognizeOperatorCompositions(packed)).toBe(packed);
+    // The edited packed graph is stable under re-recognition (it is a fresh clone, so compare by value).
+    expect(recognizeOperatorCompositions(packed)).toEqual(packed);
   });
 
   it('upgrades revision-one graphs without rerunning old rules and refuses cross-folder matches or private fan-out', () => {
@@ -82,6 +85,6 @@ describe('Fisheye shared nested compositions', () => {
     expect(organizeFisheyeGraph(graph)).toBe(graph);
     const custom = createDefaultFisheyeGraph(); custom.groups![0].label = 'My settings';
     expect(organizeFisheyeGraph(custom)).toBe(custom);
-    expect(effectOperatorGraph({ type: 'fisheye', params: {}, operatorGraph: source }).groups).toHaveLength(26);
+    expect(effectOperatorGraph({ type: 'fisheye', params: {}, operatorGraph: source }).groups).toHaveLength(27);
   });
 });

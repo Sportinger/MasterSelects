@@ -14,7 +14,9 @@ export const DEFAULT_VIEWPORT = { zoom: 0.88, panX: 36, panY: 28 };
 export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 2.4;
 export const NODE_WIDTH = 184;
-export const getNodeWidth = (node: NodeGraphNode) => node.summary?.timeAxis?.width ?? NODE_WIDTH;
+export const getNodeWidth = (node: NodeGraphNode) => node.summary?.laneRow?.width ?? node.summary?.timeAxis?.width ?? NODE_WIDTH;
+/** Height of a collapsed clip-lane row (plan 3.1e); its ports sit on the row's middle line. */
+export const LANE_ROW_HEIGHT = 40;
 /** Matches the worker-painted `Byp` label while providing a forgiving pointer target. */
 export const NODE_BYPASS_HITBOX = { left: NODE_WIDTH - 92, top: 3, width: 42, height: 24 } as const;
 export const NODE_MIN_HEIGHT = 126;
@@ -226,6 +228,7 @@ function layoutNodeSummarySegments(source: SummarySegments, axis?: NonNullable<N
 }
 
 export function getNodePortStartY(node: NodeGraphNode): number {
+  if (node.summary?.laneRow) return LANE_ROW_HEIGHT / 2 - PORT_DOT_CENTER_Y;
   if (node.summary?.timeAxis) return 136;
   if (inlineNumericPorts(node)) return 72 + (node.animation?.channels.length ? 64 : 0);
   if (node.binding?.kind === 'keyframe-node') return 175;
@@ -235,6 +238,7 @@ export function getNodePortStartY(node: NodeGraphNode): number {
 }
 
 export function getNodeHeight(node: NodeGraphNode): number {
+  if (node.summary?.laneRow) return LANE_ROW_HEIGHT;
   const portRows = Math.max(node.inputs.length, node.outputs.length, 1);
   if (inlineNumericPorts(node)) return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows - 1) * nodePortRowHeight(node) + (node.inputs.length === 1 ? 86 : 65));
   return Math.max(NODE_MIN_HEIGHT, getNodePortStartY(node) + (portRows * nodePortRowHeight(node)) + 16) + previewExtraHeight(node);
@@ -271,6 +275,7 @@ export function getNodePortIndex(ports: NodeGraphPort[], id: string): number {
 export function getPortCenter(node: NodeGraphNode, portId: string, direction: 'input' | 'output'): NodeGraphPoint {
   const ports = direction === 'input' ? node.inputs : node.outputs;
   const portIndex = Math.max(0, getNodePortIndex(ports, portId));
+  if (node.summary?.laneRow) return { x: node.layout.x + (direction === 'input' ? 0 : getNodeWidth(node)), y: node.layout.y + LANE_ROW_HEIGHT / 2 };
   return {
     x: node.layout.x + (direction === 'input' ? PORT_DOT_CENTER_X : getNodeWidth(node) - PORT_DOT_CENTER_X),
     y: node.layout.y + getNodePortStartY(node) + (portIndex * nodePortRowHeight(node)) + PORT_DOT_CENTER_Y
@@ -307,6 +312,7 @@ export function isNodeBypassable(node: NodeGraphNode): boolean {
   if (node.binding?.kind === 'scene-operator') return node.params?.bypassable === true;
   if (node.binding?.kind === 'operator-group') return node.params?.bypassable === true;
   if (node.binding?.kind === 'scene-node') return false;
+  if (node.binding?.kind === 'clip-mask-stack' || node.binding?.kind === 'clip-color-correction') return node.params?.bypassable === true;
   if (node.binding?.kind === 'effect-operator') return node.params?.bypassable === true;
   if (node.binding?.kind === 'flock-node') {
     return node.params?.bypassable === true;
@@ -322,6 +328,7 @@ export function isNodeBypassed(node: NodeGraphNode): boolean {
   if (node.binding?.kind === 'effect-operator' || node.binding?.kind === 'operator-group') return node.params?.enabled === false;
   if (node.binding?.kind === 'scene-operator') return node.params?.enabled === false;
   if (node.binding?.kind === 'clip-stabilization') return node.params?.enabled === false;
+  if (node.binding?.kind === 'clip-mask-stack' || node.binding?.kind === 'clip-color-correction') return node.params?.enabled === false;
   if (node.binding?.kind === 'flock-node') {
     return node.params?.bypassed === true;
   }

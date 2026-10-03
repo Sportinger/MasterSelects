@@ -48,7 +48,9 @@ export const foundationTypeBoundaryBaselines = {
   // specifier and counts only true src/types barrel imports (store-local
   // types.ts files no longer miscounted). 557 is the measured global value.
   // 557 -> 559 (#298 synth panel: new files import instrument/ADSR types).
-  directGlobalTypeImportHits: 561,
+  // 561 -> 603 on 2026-10-03: measured after the September feature work
+  // (601 committed) plus the keyframe easing-curve modules.
+  directGlobalTypeImportHits: 603,
   allTypesImportFiles: 776,
   sharedSchemaRuntimeHandleTokenHits: 24,
   projectSchemaProductImportHits: 0,

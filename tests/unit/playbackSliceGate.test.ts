@@ -321,6 +321,7 @@ describe('playbackSlice HTML readiness gate', () => {
         startTime: 10,
         duration: 10,
         inPoint: 2,
+        outPoint: 12,
         isComposition: true,
         nestedClips: [{
           id: 'nested-1',
@@ -328,6 +329,7 @@ describe('playbackSlice HTML readiness gate', () => {
           startTime: 1,
           duration: 5,
           inPoint: 0.5,
+          outPoint: 5.5,
           source: { type: 'video', videoElement: htmlVideo },
         }],
         nestedTracks: [{ id: 'nested-video-1', type: 'video', visible: true }],

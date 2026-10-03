@@ -15,7 +15,7 @@ describe('EffectsPipeline frame history', () => {
       limits: { maxSampledTexturesPerShaderStage: 16 },
       createShaderModule: vi.fn(() => ({})), createBindGroupLayout: vi.fn(() => ({})), createPipelineLayout: vi.fn(() => ({})),
       createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: vi.fn(() => ({})) })), createComputePipeline: vi.fn(() => ({})), createBindGroup,
-      createBuffer: vi.fn(() => ({ destroy: vi.fn() })),
+      createBuffer: vi.fn(() => ({ destroy: vi.fn() })), createSampler: vi.fn(() => ({})),
       createTexture: vi.fn(({ label }: { label: string }) => {
         const texture = { label, view: { label: `${label}-view` }, destroy: vi.fn(), createView() { return this.view; } };
         textures.push(texture); return texture;

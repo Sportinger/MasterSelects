@@ -88,6 +88,8 @@ export function buildCanvasScene(options: Options): CanvasScene {
     runtime: node.runtime, color: node.operatorId?.startsWith('values.') ? '#eeeeee' : COLORS[node.kind] ?? '#5cbed6', selected: node.id === options.selectedNodeId || options.selection.has(node.id),
     valueBesideOutput: isNumericValueNode(node),
     expandable: collapsedProxies.has(node.id),
+    ...(node.summary?.laneRow ? { laneRow: { index: node.summary.laneRow.index, title: node.summary.laneRow.title,
+      text: node.summary.laneRow.text, tone: node.summary.laneRow.tone } } : {}),
     viewerEnabled: node.preview?.requested,
     mathSymbol: inlineNumericPorts(node) ? { text: String(node.params?.mathSymbol ?? ''), x: 50, y: getNodePortStartY(node) + (node.inputs.length ? 56 : 8) + 22 } : undefined,
     preview: node.preview?.enabled ? { ...previewRect(getNodeHeight(node), node), key: node.preview.key, label: previewOutput(node, node.preview.portId)?.label ?? 'Values', text: inlineNumericPorts(node) } : undefined,

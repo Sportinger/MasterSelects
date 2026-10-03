@@ -89,7 +89,8 @@ function CompositionClipParent({ clip, parentClipId, parentCompositionId }: {
   </ResolveInspectorSection>;
 }
 
-function CompositionClipTiming({ clip }: { clip: TimelineClip }) {
+/** Slice, Speed and Place of a clip lane; shared by the composition and the lane's Slice node. */
+export function CompositionClipTiming({ clip }: { clip: TimelineClip }) {
   const tracks = useTimelineStore(state => state.tracks);
   const exporting = useTimelineStore(state => state.isExporting);
   const rules = useTimelineStore(state => state.compositionGraph?.rules);

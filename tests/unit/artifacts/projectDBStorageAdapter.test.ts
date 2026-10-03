@@ -68,6 +68,6 @@ describe('ProjectDBArtifactStorageAdapter', () => {
     const stored = await store.getArtifact(manifest.artifactId);
     expect(stored?.manifest.artifactId).toBe(manifest.artifactId);
     expect(stored ? await readBlobText(stored.blob) : '').toBe('durable');
-    expect(await store.hasArtifact(manifest.hash)).toBe(true);
+    expect(await store.hasArtifact(manifest.artifactId)).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ import { syncHistoryRehydratedTimelineRuntimeResources } from '../../../timeline
 import { layerBuilder } from '../../../layerBuilder';
 import { renderHostPort } from '../../../render/renderHostPort';
 import { Logger } from '../../../logger';
+import { scheduleMediaSourceArtifactProjectionForClips } from '../../../mediaArtifacts/mediaSourceArtifacts';
 
 const log = Logger.create('CompositionNavigation');
 
@@ -62,6 +63,7 @@ export async function navigateEditorComposition(id: string | null): Promise<void
         clipAnimationPhase: 'idle', compositionSwitchSourceTracks: null, compositionSwitchTargetTracks: null });
     });
     staged.activate();
+    scheduleMediaSourceArtifactProjectionForClips((timelineStore.getState() as TimelineStore).clips);
     updateInternalPosition(view.playheadPosition);
     syncHistoryRehydratedTimelineRuntimeResources((timelineStore.getState() as TimelineStore).clips);
     layerBuilder.invalidateCache();

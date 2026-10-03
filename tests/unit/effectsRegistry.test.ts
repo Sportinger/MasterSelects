@@ -155,11 +155,12 @@ describe('Expected effects per category', () => {
 
   const expectedDistortEffects = [
     'pixelate', 'kaleidoscope', 'mirror', 'rgb-split', 'twirl', 'wave', 'bulge', 'fisheye',
+    'lens-correction', 'guided-perspective', 'ai-edge-fill',
   ];
 
   const expectedStylizeEffects = [
     'vignette', 'grain', 'sharpen', 'posterize', 'glow', 'edge-detect', 'scanlines', 'threshold', 'acuarela', 'rom1', 'voxel-relief',
-    'pixel-particle-disintegrate',
+    'pixel-particle-disintegrate', 'sheen',
   ];
 
   it('should register all color effects', () => {

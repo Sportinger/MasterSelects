@@ -41,7 +41,9 @@ describe('track strips with inline clip expansion', () => {
     for (const node of strips) expect(undisplacedWorkspacePoint(node.layout, graph.workspace!.compositionOffsets?.[node.id]))
       .toEqual(composition.nodes.find(original => original.id === node.id)!.layout);
     const closed = compositionTrackStripView(composition);
-    for (const node of closed.nodes) expect(node.layout).toEqual(composition.nodes.find(original => original.id === node.id)!.layout);
+    // Closed lanes sit as rows under their strip; every shift is a recorded presentation offset.
+    for (const node of closed.nodes) expect(undisplacedWorkspacePoint(node.layout, closed.workspace!.compositionOffsets?.[node.id]))
+      .toEqual(composition.nodes.find(original => original.id === node.id)!.layout);
     expect(JSON.stringify(composition)).toBe(before);
   });
 

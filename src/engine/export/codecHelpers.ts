@@ -145,17 +145,21 @@ export function formatBitrate(bitrate: number): string {
 export async function checkCodecSupport(
   codec: VideoCodec,
   width: number,
-  height: number
+  height: number,
+  fps = 30,
 ): Promise<boolean> {
   if (!('VideoEncoder' in window)) return false;
 
   try {
+    // Probe with the level the export itself will use; the bare minimum level
+    // (e.g. H.264 4.0) cannot describe large or high-rate frames.
+    const frameRate = Number.isFinite(fps) && fps > 0 ? fps : 30;
     const support = await VideoEncoder.isConfigSupported({
-      codec: getCodecString(codec),
+      codec: getCodecString(codec, { width, height, fps: frameRate }),
       width,
       height,
       bitrate: 10_000_000,
-      framerate: 30,
+      framerate: frameRate,
     });
     return support.supported ?? false;
   } catch {

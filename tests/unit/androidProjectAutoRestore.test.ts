@@ -1,10 +1,46 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getAndroidProjectAutoRestoreHandle,
+  isAndroidAutoRestoreProjectHandle,
   markAndroidProjectAutoRestoreReady,
   prepareAndroidProjectAutoRestore,
   restoreAndroidProjectAutomatically,
 } from '../../src/services/project/androidProjectAutoRestore';
+
+// The mirror is a confirmed repository archive in OPFS; the repository conversion itself is
+// covered by the repository tests, so its boundary is replaced here.
+const repository = vi.hoisted(() => {
+  const sourceBackend = { locationId: 'fsa:source' };
+  const owner = { writerEpoch: 'epoch', assertOwned: () => undefined, release: async () => undefined };
+  const targetBackend = { locationId: 'opfs:mirror', acquireOwner: async () => owner };
+  const descriptor = { repositoryId: 'source-repository' };
+  const head = { revisionId: 'confirmed-head' };
+  return { sourceBackend, targetBackend, owner, descriptor, head, opfsRoot: null as FileSystemDirectoryHandle | null };
+});
+vi.mock('../../src/services/project/repository/lifecycle/repositoryLocations', () => ({
+  prepareRepositoryOpen: vi.fn(async (location: unknown) => ({ options: { location, descriptor: repository.descriptor } })),
+  backendForLocation: vi.fn(async (location: { kind: string }) => (
+    location.kind === 'opfs' ? repository.targetBackend : repository.sourceBackend
+  )),
+  directoryForOpfs: vi.fn(async (path: string) => repository.opfsRoot!.getDirectoryHandle(path, { create: true })),
+}));
+vi.mock('../../src/services/project/repository/lifecycle/repositoryProjectOperations', () => ({
+  createRepositoryAt: vi.fn(async () => undefined),
+}));
+vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({
+  getActiveRepositorySession: vi.fn(() => null),
+  getActiveRepositoryDirectory: vi.fn(() => null),
+  repositoryWorkspaceId: 'test-workspace',
+}));
+vi.mock('../../src/services/project/repository/persistence/recovery', () => ({
+  recoverRepository: vi.fn(async () => ({ head: repository.head })),
+}));
+vi.mock('../../src/services/project/repository/archive/selectiveArchive', () => ({
+  prepareArchive: vi.fn(async () => undefined),
+}));
+
+import { prepareRepositoryOpen } from '../../src/services/project/repository/lifecycle/repositoryLocations';
+import { prepareArchive } from '../../src/services/project/repository/archive/selectiveArchive';
 
 async function blobBytes(blob: Blob): Promise<Uint8Array> {
   if (typeof blob.arrayBuffer === 'function') {
@@ -93,6 +129,10 @@ class MemoryDirectoryHandle {
     yield* this.directories.values();
   }
 
+  async *entries(): AsyncIterableIterator<[string, MemoryFileHandle | MemoryDirectoryHandle]> {
+    for await (const handle of this.values()) yield [handle.name, handle];
+  }
+
   async isSameEntry(other: FileSystemHandle): Promise<boolean> {
     return other === this as unknown as FileSystemHandle;
   }
@@ -111,13 +151,15 @@ describe('Android project auto-restore', () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => vi.unstubAllGlobals());
 
-  it('copies a picker-backed project recursively and restores only after the mirror is marked ready', async () => {
+  it('archives a picker-backed project into a separate OPFS repository and restores only after the mirror is marked ready', async () => {
     const opfsRoot = new MemoryDirectoryHandle('opfs');
     const source = new MemoryDirectoryHandle('Test');
     await source.addFile('project.json', '{"name":"Test"}');
     const raw = await source.getDirectoryHandle('Raw', { create: true }) as unknown as MemoryDirectoryHandle;
     await raw.addFile('clip.mp4', 'video-bytes');
     installAndroidStorage(opfsRoot);
+    repository.opfsRoot = opfsRoot as unknown as FileSystemDirectoryHandle;
+    const release = vi.spyOn(repository.owner, 'release');
 
     const copiedPaths: string[] = [];
     const mirror = await prepareAndroidProjectAutoRestore(
@@ -125,13 +167,28 @@ describe('Android project auto-restore', () => {
       (path) => copiedPaths.push(path),
     );
 
-    expect(mirror?.name).toBe('Test');
-    expect(copiedPaths).toEqual(['project.json', 'Raw/clip.mp4']);
+    // A fresh snapshot never overwrites the picked source or an earlier recovery copy.
+    expect(mirror?.name).toMatch(/^Test \(Android .+\)$/);
+    expect(opfsRoot.directories.get(mirror!.name)).toBe(mirror);
+    expect(copiedPaths).toEqual(['Confirmed project repository']);
+    expect(prepareRepositoryOpen).toHaveBeenCalledWith({ kind: 'fsa', handle: source }, 'test-workspace');
+    expect(prepareArchive).toHaveBeenCalledWith(
+      repository.sourceBackend,
+      repository.descriptor,
+      repository.head,
+      repository.targetBackend,
+      repository.owner,
+      expect.objectContaining({ history: { kind: 'all' }, journals: 'all', media: 'linked' }),
+    );
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(await source.files.get('project.json')?.text()).toBe('{"name":"Test"}');
+    expect(await source.directories.get('Raw')?.files.get('clip.mp4')?.text()).toBe('video-bytes');
+    expect(isAndroidAutoRestoreProjectHandle(mirror)).toBe(true);
     expect(await getAndroidProjectAutoRestoreHandle()).toBeNull();
 
-    const copied = mirror as unknown as MemoryDirectoryHandle;
-    expect(await copied.files.get('project.json')?.text()).toBe('{"name":"Test"}');
-    expect(await copied.directories.get('Raw')?.files.get('clip.mp4')?.text()).toBe('video-bytes');
+    // Preparing the mirror again reuses it instead of duplicating the snapshot.
+    await expect(prepareAndroidProjectAutoRestore(mirror!)).resolves.toBe(mirror);
+    expect(prepareArchive).toHaveBeenCalledTimes(1);
 
     markAndroidProjectAutoRestoreReady(mirror!);
     const loadProject = vi.fn(async () => true);

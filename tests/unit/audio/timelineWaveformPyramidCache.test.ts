@@ -4,6 +4,9 @@ import {
   mapSourceWaveformPreviewProgress,
   mapSourceWaveformPyramidProgress,
 } from '../../../src/services/audio/timelineWaveformPyramidCache';
+import { installInProcessWaveformWorker } from '../../helpers/inProcessWaveformWorker';
+
+installInProcessWaveformWorker();
 
 function createDeferred<T>() {
   let resolve!: (value: T) => void;
@@ -23,6 +26,9 @@ function createMockAudioBuffer(samples: number[], sampleRate = 48_000): AudioBuf
     length: data.length,
     duration: data.length / sampleRate,
     getChannelData: vi.fn(() => data),
+    copyFromChannel: vi.fn((destination: Float32Array, _channelIndex: number, offset = 0) => {
+      destination.set(data.subarray(offset, offset + destination.length));
+    }),
   } as unknown as AudioBuffer;
 }
 
@@ -68,17 +74,20 @@ describe('timeline waveform analysis cache', () => {
 
     const first = generateTimelineWaveformAnalysisForFile(file, {
       includePyramid: false,
+      reusePersisted: false,
       mediaFileId: 'media-shared',
       onProgress: (progress) => firstProgress.push(progress),
     });
     const second = generateTimelineWaveformAnalysisForFile(file, {
       includePyramid: false,
+      reusePersisted: false,
       mediaFileId: 'media-shared',
       onProgress: (progress) => secondProgress.push(progress),
     });
 
+    // The decode is queued as background source work, so the shared job starts asynchronously.
+    await vi.waitFor(() => expect(file.arrayBuffer).toHaveBeenCalledTimes(1));
     expect(contexts).toHaveLength(1);
-    expect(file.arrayBuffer).toHaveBeenCalledTimes(1);
 
     decodeDeferred.resolve(createMockAudioBuffer([0, 0.25, -0.5, 1]));
     const [firstResult, secondResult] = await Promise.all([first, second]);

@@ -67,7 +67,7 @@ describe('compute image graph compiler', () => {
 
     const malformed = createDefaultVoronoiGraph();
     malformed.edges = malformed.edges.filter(edge => !(edge.to === 'jump-flood' && edge.input === 'field'));
-    expect(() => compileComputeImageGraph(malformed)).toThrow('Jump Flood: connect Seed Field.');
+    expect(() => compileComputeImageGraph(malformed)).toThrow('Distance Field (Jump Flood): connect Seed Field.');
   });
 
   it('previews uniform inputs and disconnected values without compute stages', () => {

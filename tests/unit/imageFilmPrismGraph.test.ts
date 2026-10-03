@@ -25,13 +25,21 @@ function reference(uv: [number, number], resolution: [number, number], time: num
     at(uv[0] - radial[0], uv[1] - radial[1])[2] + grain, at(uv[0], uv[1])[3]];
 }
 
+// Owner presentation may share literal leaves and add composition folders; computational nodes stay the catalog recipe.
+const computationalNodes = (graph: ReturnType<typeof effectOperatorGraph>) => graph.nodes
+  .filter(node => !(node.operator.startsWith('values.') && node.constants && !Object.keys(node.bindings).length))
+  .toSorted((a, b) => a.id.localeCompare(b.id));
+
 describe('Film Prism image graph', () => {
   it('uses the contextual owner with authoritative catalog defaults', () => {
     const effect: Effect = { id: 'film-prism', name: 'Film Prism', type: 'film-prism', enabled: true, params: {} };
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('film-prism'));
-    expect(effectOperatorGraph(effect)).toEqual({ ...createDefaultFilmPrismGraph(), compositionRules: 2 });
+    const owned = effectOperatorGraph(effect), recipe = createDefaultFilmPrismGraph();
+    expect(owned.compositionRules).toBe(2);
+    expect(computationalNodes(owned)).toEqual(computationalNodes(recipe));
+    expect(effectOperatorGraph({ ...effect, operatorGraph: recipe })).toEqual(owned);
   });
 
   it('expands common noise2d into four shared hashes and keeps four samples', () => {

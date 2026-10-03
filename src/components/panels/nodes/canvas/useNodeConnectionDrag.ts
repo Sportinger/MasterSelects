@@ -16,9 +16,11 @@ interface Options {
   onDropConnection?: (drop: NodeConnectionDrop) => void;
   /** A cable dragged out of a branch point: connect it and route it through that point. */
   onConnectBranch?: (branchId: string, connection: NodeGraphConnectionRequest) => void;
+  /** A grabbed read-only cable: explain instead of failing silently. */
+  onBlockedCable?: (edge: NodeGraphEdge) => void;
 }
 
-export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection, onConnectBranch }: Options) {
+export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, getGraphPoint, onConnectPorts, onReconnectPorts, onDisconnectEdge, onDropConnection, onConnectBranch, onBlockedCable }: Options) {
   const [connectionDraft, setDraft] = useState<ConnectionDraft | null>(null);
   const currentDraft = useRef(connectionDraft);
   const suppressContextUntil = useRef(0);
@@ -39,7 +41,11 @@ export function useNodeConnectionDrag({ graphId, canvasRef, nodesById, edges, ge
   }, [cancel, graphId]);
 
   const start = useCallback((event: ReactPointerEvent, node: NodeGraphNode, port: NodeGraphPort, plug?: ConnectionPlug, branch?: { id: string; point: NodeGraphPoint }) => {
-    if (port.metadata?.readOnly || plug?.edge.readOnly) { event.preventDefault(); event.stopPropagation(); return; }
+    if (port.metadata?.readOnly || plug?.edge.readOnly) {
+      event.preventDefault(); event.stopPropagation();
+      if (plug?.edge.readOnly) onBlockedCable?.(plug.edge);
+      return;
+    }
     if ((event.button !== 0 && !(event.button === 2 && !plug && onDropConnection)) || currentDraft.current) return;
     event.preventDefault(); event.stopPropagation();
     (event.currentTarget as HTMLElement | SVGElement).blur();

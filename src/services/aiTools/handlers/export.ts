@@ -211,6 +211,8 @@ export async function handleDebugExport(args: Record<string, unknown>): Promise<
     if (download) {
       downloadBlob(blob, `${exportSettings.filename || 'debug-export'}.${fileExtension}`);
     }
+    // Dev diagnostics: keep the in-memory result for in-tab inspection (decoded audio, frames) without a download.
+    if (import.meta.env.DEV) (window as Window & { __lastDebugExportBlob?: Blob }).__lastDebugExportBlob = blob;
 
     return {
       success: true,

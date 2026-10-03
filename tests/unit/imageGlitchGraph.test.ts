@@ -17,10 +17,18 @@ function reference(uv: [number, number], time: number, params: { scale: number; 
   return [at(shift + channel)[0], at(shift)[1], at(shift - channel)[2], at(0)[3]];
 }
 
+// Owner presentation may share literal leaves and add composition folders; computational nodes stay the catalog recipe.
+const computationalNodes = (graph: ReturnType<typeof effectOperatorGraph>) => graph.nodes
+  .filter(node => !(node.operator.startsWith('values.') && node.constants && !Object.keys(node.bindings).length))
+  .toSorted((a, b) => a.id.localeCompare(b.id));
+
 describe('Glitch image graph', () => {
   it('is registered with catalog-owned parameter defaults', () => {
     expect(isImageGraphEffectType('glitch')).toBe(true);
-    expect(effectOperatorGraph({ type: 'glitch', params: {} })).toEqual({ ...createDefaultGlitchGraph(), compositionRules: 2 });
+    const owned = effectOperatorGraph({ type: 'glitch', params: {} }), recipe = createDefaultGlitchGraph();
+    expect(owned.compositionRules).toBe(2);
+    expect(computationalNodes(owned)).toEqual(computationalNodes(recipe));
+    expect(effectOperatorGraph({ type: 'glitch', params: {}, operatorGraph: recipe })).toEqual(owned);
     expect(effectOperatorParams({ type: 'glitch', params: {} })).toMatchObject({ scale: 14, amount: .75, speed: 1 });
   });
 

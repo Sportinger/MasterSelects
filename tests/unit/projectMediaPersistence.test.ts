@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { revokeAllMediaObjectUrls } from '../../src/services/project/mediaObjectUrlManager';
 import { flashBoardMediaBridge } from '../../src/services/flashboard/FlashBoardMediaBridge';
 import { resetFlashBoardActiveGenerationState } from '../../src/stores/flashboardStore/activeGenerationRecords';
-import type { ProjectFlashBoardState } from '../../src/services/project/types';
+import type { ProjectComposition, ProjectFlashBoardState, ProjectFolder, ProjectMediaFile } from '../../src/services/project/types';
 
 const mocks = vi.hoisted(() => ({
   mediaState: {
@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     proxyEnabled: false,
     setProxyEnabled: vi.fn(),
   },
+  activeRepositorySession: null as null | { opening: { writable: boolean } },
   updateMedia: vi.fn(),
   updateCompositions: vi.fn(),
   updateFolders: vi.fn(),
@@ -140,6 +141,25 @@ vi.mock('../../src/stores/midiStore', () => ({
   },
 }));
 
+// Saves are scoped to the active repository session; the tests swap it to simulate another project.
+// The lifecycle is stubbed whole: a partial mock would still be bypassed through its import cycle.
+vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({
+  repositoryWorkspaceId: 'test-workspace',
+  getActiveRepositorySession: () => mocks.activeRepositorySession,
+  getActiveRepositoryDirectory: () => null,
+  subscribeRepositoryLifecycle: () => () => undefined,
+  getRepositoryLifecycleState: () => ({ error: null }),
+  openEditorRepository: vi.fn(async () => undefined),
+  closeEditorRepository: vi.fn(async () => undefined),
+  flushEditorRepository: vi.fn(async () => true),
+  retryEditorRepository: vi.fn(async () => undefined),
+  readEditorRepositoryProject: () => null,
+  flushEditorWorkspace: vi.fn(async () => undefined),
+  reactivateEditorRepository: vi.fn(async () => undefined),
+  isScratchRepository: () => false,
+  ensureEditorScratchRepository: vi.fn(async () => undefined),
+}));
+
 vi.mock('../../src/services/projectFileService', () => ({
   projectFileService: {
     updateMedia: mocks.updateMedia,
@@ -217,6 +237,10 @@ const defaultProjectTransform = () => ({
   blendMode: 'normal',
 });
 
+// syncStoresToProject writes the converted domains straight into the open project data.
+type SyncedProjectData = { media: ProjectMediaFile[]; compositions: ProjectComposition[]; folders: ProjectFolder[] };
+const syncedProject = () => mocks.getProjectData() as SyncedProjectData;
+
 describe('project media persistence', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -232,6 +256,7 @@ describe('project media persistence', () => {
     mocks.mediaState.expandedFolderIds = [];
     mocks.mediaState.slotAssignments = {};
     mocks.mediaState.proxyEnabled = false;
+    mocks.activeRepositorySession = null;
     mocks.midiState.isEnabled = false;
     mocks.midiState.transportBindings = {
       playPause: null,
@@ -314,7 +339,7 @@ describe('project media persistence', () => {
     expect(mocks.saveProject).not.toHaveBeenCalled();
     releaseOuter();
     await outer;
-    expect(mocks.updateMedia).not.toHaveBeenCalled();
+    expect(mocks.timelineState.getSerializableState).not.toHaveBeenCalled();
     releaseInner();
     await inner;
     await expect(saving).resolves.toBe(true);
@@ -324,9 +349,11 @@ describe('project media persistence', () => {
   it('does not redirect a waiting manual save to a different project', async () => {
     const { saveCurrentProject, withProjectStoreSyncGuard } = await import('../../src/services/project/projectSave');
     let release!: () => void;
+    mocks.activeRepositorySession = { opening: { writable: true } };
     const restoring = withProjectStoreSyncGuard(() => new Promise<void>(resolve => { release = resolve; }));
     const saving = saveCurrentProject({ source: 'manual' });
-    mocks.getProjectData.mockReturnValue({ ...mocks.getProjectData(), name: 'Other project' });
+    // Another project's repository becomes active while the save is waiting.
+    mocks.activeRepositorySession = { opening: { writable: true } };
     release();
     await restoring;
     await expect(saving).resolves.toBe(false);
@@ -380,7 +407,7 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateMedia).toHaveBeenCalledWith([
+    expect(syncedProject().media).toEqual([
       expect.objectContaining({
         id: 'media-1',
         sourcePath: 'C:/capture/clip.mp4',
@@ -427,7 +454,7 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    const [savedComposition] = mocks.updateCompositions.mock.calls[0][0];
+    const [savedComposition] = syncedProject().compositions;
     expect(savedComposition.duration).toBe(4321.23356);
     expect(savedComposition.durationLocked).toBe(true);
   });
@@ -505,11 +532,13 @@ describe('project media persistence', () => {
       },
     }];
 
-    const { saveCurrentProject } = await import('../../src/services/project/projectSave');
+    // Serializing into the project data is separate from the repository save receipt.
+    const { saveCurrentProject, syncStoresToProject } = await import('../../src/services/project/projectSave');
+    await syncStoresToProject();
     await expect(saveCurrentProject()).resolves.toBe(true);
     expect(mocks.saveProject).toHaveBeenCalledTimes(1);
 
-    const [savedComposition] = mocks.updateCompositions.mock.calls[0][0];
+    const [savedComposition] = syncedProject().compositions;
     const savedClip = savedComposition.clips[0];
     expect(savedClip).toEqual(expect.objectContaining({
       sourceRect: { x: 0.25, y: 0, width: 0.5, height: 1 },
@@ -897,13 +926,13 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateMedia).toHaveBeenCalledWith([
+    expect(syncedProject().media).toEqual([
       expect.objectContaining({
         id: 'media-audio-1',
         audioAnalysisRefs,
       }),
     ]);
-    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+    expect(syncedProject().compositions).toEqual([
       expect.objectContaining({
         id: 'comp-1',
         masterAudioState,
@@ -926,7 +955,7 @@ describe('project media persistence', () => {
       derivedAssets: expect.arrayContaining([bakeAsset]),
       masterAudioState,
     }));
-    const serializedProjectCompositions = JSON.stringify(mocks.updateCompositions.mock.calls[0][0]);
+    const serializedProjectCompositions = JSON.stringify(syncedProject().compositions);
     expect(serializedProjectCompositions).not.toContain('Float32Array');
     expect(serializedProjectCompositions).not.toContain('blob:');
     expect(serializedProjectCompositions).not.toContain('audioAnalysisJob');
@@ -980,7 +1009,7 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+    expect(syncedProject().compositions).toEqual([
       expect.objectContaining({
         id: 'comp-1',
         markers: [
@@ -1023,7 +1052,7 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+    expect(syncedProject().compositions).toEqual([
       expect.objectContaining({
         id: 'comp-1',
         tracks: [
@@ -1220,7 +1249,7 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateMedia).toHaveBeenCalledWith([
+    expect(syncedProject().media).toEqual([
       expect.objectContaining({
         id: 'media-lottie-1',
         type: 'lottie',
@@ -1230,7 +1259,7 @@ describe('project media persistence', () => {
         }),
       }),
     ]);
-    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+    expect(syncedProject().compositions).toEqual([
       expect.objectContaining({
         clips: [
           expect.objectContaining({
@@ -1357,7 +1386,7 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateMedia).toHaveBeenCalledWith([
+    expect(syncedProject().media).toEqual([
       expect.objectContaining({
         id: 'media-model-seq-1',
         type: 'model',
@@ -1387,7 +1416,7 @@ describe('project media persistence', () => {
         }),
       }),
     ]);
-    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+    expect(syncedProject().compositions).toEqual([
       expect.objectContaining({
         clips: [
           expect.objectContaining({
@@ -1508,7 +1537,7 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateMedia).toHaveBeenCalledWith([
+    expect(syncedProject().media).toEqual([
       expect.objectContaining({
         id: 'media-splat-seq-1',
         type: 'gaussian-splat',
@@ -1542,7 +1571,7 @@ describe('project media persistence', () => {
         }),
       }),
     ]);
-    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+    expect(syncedProject().compositions).toEqual([
       expect.objectContaining({
         clips: [
           expect.objectContaining({
@@ -1645,7 +1674,7 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateCompositions).toHaveBeenCalledWith([
+    expect(syncedProject().compositions).toEqual([
       expect.objectContaining({
         id: 'comp-1',
         clips: [
@@ -3046,9 +3075,9 @@ describe('project media persistence', () => {
     const { syncStoresToProject } = await import('../../src/services/project/projectSave');
     await syncStoresToProject();
 
-    expect(mocks.updateMedia).not.toHaveBeenCalled();
-    expect(mocks.updateCompositions).not.toHaveBeenCalled();
-    expect(mocks.updateFolders).not.toHaveBeenCalled();
+    expect(syncedProject().media).toBe(persistedMedia);
+    expect(syncedProject().compositions.map((composition) => composition.id)).toEqual(['comp-old-1', 'comp-old-2']);
+    expect(syncedProject().folders).toHaveLength(10);
   });
 
   it('restores transport MIDI bindings from project uiState', async () => {

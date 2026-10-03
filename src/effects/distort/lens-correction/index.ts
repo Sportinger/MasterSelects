@@ -11,7 +11,7 @@ export const LENS_CORRECTION_PARAMS: Record<string, EffectParam> = {
   aperture: number('Aperture', 4, 4, 22, 0.1, 'profile'),
   focusDistance: number('Focus Distance', 1000, 0.45, 1000, 0.05, 'profile'),
   cropFactor: number('Sensor Crop', 1, 1, 2, 0.001, 'profile'),
-  sourceAspect: { type: 'number', label: 'Source Aspect', default: 0, min: 0, max: 100, hidden: true },
+  sourceAspect: { type: 'number', label: 'Source Aspect', default: 0, min: 0, max: 100, step: 0.0001, hidden: true, animatable: false },
   distortion: number('Remove Distortion', 0, -100, 100, 0.1, 'geometry'),
   fineDistortion: number('Fine Distortion', 0, -50, 50, 0.1, 'geometry'),
   scale: number('Scale', 100, 50, 200, 0.1, 'geometry'),

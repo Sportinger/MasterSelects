@@ -11,6 +11,8 @@ export const TEXT_NUMERIC_PARAMETERS = {
   shadowOffsetX: { label: 'Shadow Offset X', min: -500, max: 500, step: 1, fallback: 4 },
   shadowOffsetY: { label: 'Shadow Offset Y', min: -500, max: 500, step: 1, fallback: 4 },
   shadowBlur: { label: 'Shadow Blur', min: 0, max: 200, step: 0.1, fallback: 8 },
+  reveal: { label: 'Reveal', min: 0, max: 1, step: 0.001, fallback: 1 },
+  revealSpread: { label: 'Reveal Spread', min: 0.5, max: 40, step: 0.1, fallback: 3 },
   // Free-range number for {value} tokens; the slider covers a practical span only.
   value: { label: 'Value', min: -1e9, max: 1e9, step: 0.01, fallback: 0, sliderMin: 0, sliderMax: 100 },
 } as const;

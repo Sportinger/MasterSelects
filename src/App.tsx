@@ -1,4 +1,3 @@
-import { Profiler } from 'react'; // TEMP-MC-PROFILE
 // WebVJ Mixer - Main Application
 
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
@@ -524,12 +523,14 @@ function App({ initialExperience = 'editor' }: AppProps) {
       {showStartTransitionBackground && (
         <div className="app-start-transition-background" aria-hidden="true" />
       )}
-      <Profiler id="app-toolbar" onRender={(id, _p, a) => performance.measure(`react:${id}`, { start: performance.now() - a, duration: a })}><Toolbar onProjectBootResolved={handleProjectBootResolved} /></Profiler>{/* TEMP-MC-PROFILE */}
+      <Toolbar
+        onProjectBootResolved={handleProjectBootResolved}
+      />
       <FlashBoardRuntimeHost />
-      {!isStartLayout && <Profiler id="app-playback-host" onRender={(id, _p, a) => performance.measure(`react:${id}`, { start: performance.now() - a, duration: a })}><EditorPlaybackRuntimeHost /></Profiler>}{/* TEMP-MC-PROFILE */}
+      {!isStartLayout && <EditorPlaybackRuntimeHost />}
       {isColorLayout && <ColorWorkspaceTopBar />}
-      <Profiler id="app-dock" onRender={(id, _p, a) => performance.measure(`react:${id}`, { start: performance.now() - a, duration: a })}><DockContainer detachedWindowsReady={!isProjectBootPending} /></Profiler>{/* TEMP-MC-PROFILE */}
-      <Profiler id="app-workspacebar" onRender={(id, _p, a) => performance.measure(`react:${id}`, { start: performance.now() - a, duration: a })}><WorkspaceBar /></Profiler>{/* TEMP-MC-PROFILE */}
+      <DockContainer detachedWindowsReady={!isProjectBootPending} />
+      <WorkspaceBar />
       <TouchGooLayer />
       {!isProjectBootPending && shouldShowEditorProjectSelection(
         initialExperience,

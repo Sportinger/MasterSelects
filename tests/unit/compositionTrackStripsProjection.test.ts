@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { TimelineClip } from '../../src/types/timeline';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { buildCompositionGraph, compositionNodeId } from '../../src/services/nodeGraph/composition/compositionGraphProjection';
-import { compositionTrackStripView, trackStripGroupId } from '../../src/services/nodeGraph/composition/compositionTrackStripView';
+import { LANE_PITCH, LANE_WIDTH, compositionTrackStripView, describeClipLane, trackStripGroupId } from '../../src/services/nodeGraph/composition/compositionTrackStripView';
 import { createCompositionReferenceTimeline } from '../../src/services/nodeGraph/composition/compositionReferenceTimeline';
 import { getNodeHeight, getNodeSummarySegments, getNodeWidth, getPortCenter, getGraphBounds } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 import { nodeDomVisible } from '../../src/components/panels/nodes/canvas/nodeDomVisibility';
@@ -38,7 +38,7 @@ describe('composition track strips', () => {
     expect(getGraphBounds({ ...graph, nodes: [strip] }).right).toBe(strip.layout.x + 1620);
   });
 
-  it('projects transition duration/offset as a strip marker, revealing only the selected transition and its A/B links', () => {
+  it('projects transition duration/offset as a strip marker and as a lane row between its two clips', () => {
     const graph = project([
       createMockClip({ id: 'left', trackId: 'v', startTime: 0, duration: 5, transitionOut: { id: 'join', type: 'crossfade', duration: 2, offset: 0.5, linkedClipId: 'right' } }),
       createMockClip({ id: 'right', trackId: 'v', startTime: 5, duration: 5 }),
@@ -50,84 +50,82 @@ describe('composition track strips', () => {
     expect(marker.x - 10).toBeCloseTo(4.5 * pps);
     expect(marker.width).toBeCloseTo(2 * pps);
     expect(hitSummarySegment([strip], strip.layout.x + marker.x + marker.width / 2, strip.layout.y + marker.y + marker.height / 2, 0.4)?.segmentId).toBe(marker.id);
-    expect(compositionTrackStripView(graph).nodes.some(node => node.id === 'comp:transition:join')).toBe(false);
-    const selected = compositionTrackStripView(graph, { selectedNodeIds: new Set(['comp:transition:join']) });
-    expect(selected.nodes.some(node => node.id === 'comp:transition:join')).toBe(true);
-    expect(selected.edges.filter(edge => edge.toNodeId === 'comp:transition:join').map(edge => edge.toPortId).toSorted()).toEqual(['a', 'b']);
-    expect(selected.nodes.find(node => node.id === 'comp:transition:join')!.binding).not.toHaveProperty('compositionId');
-    // A picked transition stays shown with both clips while another node is grabbed in the graph.
-    const kept = compositionTrackStripView(graph, { revealedNodeIds: new Set(['comp:transition:join']), selectedNodeIds: new Set(['comp:clip:left']) });
-    expect(kept.nodes.some(node => node.id === 'comp:transition:join')).toBe(true);
-    expect(kept.edges.filter(edge => edge.toNodeId === 'comp:transition:join')).toHaveLength(2);
+    const view = compositionTrackStripView(graph, { nodeHeight: getNodeHeight });
+    const row = (id: string) => view.nodes.find(node => node.id === id)!;
+    const join = row('comp:transition:join');
+    expect(join.summary?.laneRow).toMatchObject({ tone: 'transition', index: '⇄' });
+    expect(join.summary!.laneRow!.text).toContain('2.0 s between clips 1 → 2');
+    expect(join.binding).not.toHaveProperty('compositionId');
+    // Lane order reads like the timeline: outgoing clip, transition, incoming clip.
+    expect([row('comp:clip:left'), join, row('comp:clip:right')].map(node => node.layout.y))
+      .toEqual([0, 1, 2].map(index => row('comp:clip:left').layout.y + index * LANE_PITCH));
+    // Rows carry no cables; the strip shows the timing.
+    expect(view.edges.some(edge => [edge.fromNodeId, edge.toNodeId].includes(join.id))).toBe(false);
   });
 
-  it('keeps stable full-projection IDs, folds clips by default, reveals expanded or timeline-picked references but never on graph selection', () => {
+  it('keeps stable full-projection IDs and shows every clip as a lane row; selection never moves rows', () => {
     const graph = baseline(30), before = JSON.stringify(graph);
-    const folded = compositionTrackStripView(graph);
-    expect(folded.nodes.filter(node => node.binding?.kind === 'composition-clip')).toHaveLength(0);
+    const view = compositionTrackStripView(graph, { nodeHeight: getNodeHeight });
+    const lanes = view.nodes.filter(node => node.binding?.kind === 'composition-clip');
+    expect(lanes).toHaveLength(30);
+    expect(lanes.every(node => node.summary?.laneRow && !node.inputs.length && !node.outputs.length)).toBe(true);
+    expect(lanes.every(node => getNodeHeight(node) === 40 && getNodeWidth(node) === LANE_WIDTH)).toBe(true);
     const fullIds = new Set(graph.nodes.map(node => node.id));
-    expect(folded.expandedNodes!.filter(node => node.binding?.kind === 'composition-clip')).toHaveLength(30);
-    // Selecting a clip highlights its segment only: no card appears, so the overview does not shift.
-    for (const options of [
-      { selectedClipIds: new Set(['reference-audio-0']) },
-      { selectedNodeIds: new Set(['comp:clip:reference-video-0']) },
-    ]) {
-      const view = compositionTrackStripView(graph, options);
-      expect(view.nodes.find(node => node.id === 'comp:clip:reference-video-0')).toBeUndefined();
-      expect(view.nodes.map(node => node.layout)).toEqual(folded.nodes.map(node => node.layout));
+    expect(view.nodes.every(node => fullIds.has(node.id))).toBe(true);
+    for (const options of [{ selectedClipIds: new Set(['reference-audio-0']) }, { selectedNodeIds: new Set(['comp:clip:reference-video-0']) }]) {
+      expect(compositionTrackStripView(graph, { ...options, nodeHeight: getNodeHeight }).nodes.map(node => node.layout)).toEqual(view.nodes.map(node => node.layout));
     }
-    // A timeline pick reveals the card (linked audio pick reveals its video reference too).
-    for (const revealedClipIds of [new Set(['reference-video-0']), new Set(['reference-audio-0'])]) {
-      expect(compositionTrackStripView(graph, { revealedClipIds }).nodes.find(node => node.id === 'comp:clip:reference-video-0')).toBeDefined();
-    }
-    const expanded = compositionTrackStripView(graph, { expandedClipIds: new Set(['reference-video-0']) });
-    expect(expanded.nodes.find(node => node.id === 'comp:clip:reference-video-0')).toBeDefined();
-    expect(expanded.nodes.every(node => fullIds.has(node.id))).toBe(true);
+    // An open lane keeps its seams for the embedded processing graph (a linked audio id opens its video lane).
+    const expanded = compositionTrackStripView(graph, { expandedClipIds: new Set(['reference-audio-0']), nodeHeight: getNodeHeight });
+    expect(expanded.nodes.find(node => node.id === 'comp:clip:reference-video-0')!.outputs.length).toBeGreaterThan(0);
     const selectedSegment = compositionTrackStripView(graph, { selectedClipIds: new Set(['reference-video-0']) }).nodes
       .find(node => node.id === 'comp:track:reference-video-track-0')!.summary!.segments!.find(segment => segment.clipId === 'reference-video-0');
     expect(selectedSegment?.selected).toBe(true);
-    const expandedTrack = compositionTrackStripView(graph, { collapsed: { [trackStripGroupId('reference-video-track-0')]: false } });
-    expect(expandedTrack.nodes.filter(node => node.binding?.kind === 'composition-clip')).toHaveLength(10);
+    // Folding a strip hides its lanes.
+    const folded = compositionTrackStripView(graph, { collapsed: { [trackStripGroupId('reference-video-track-0')]: true } });
+    expect(folded.nodes.filter(node => node.binding?.kind === 'composition-clip')).toHaveLength(20);
     expect(JSON.stringify(graph)).toBe(before);
   });
 
-  it('stacks an open Slice → Speed → Place chain in its clip column without overlap and keeps buses to the right', () => {
+  it('stacks lanes under their strip in time order without overlap and names source, range, effects and target', () => {
     const fixture = createCompositionReferenceTimeline({ clipCount: 30, trackCount: 3 });
     const clips = fixture.clips as TimelineClip[];
-    const videoIds = clips.filter(clip => clip.source?.type === 'video').map(clip => clip.id);
     const graph = buildCompositionGraph({ compositionId: 'baseline', compositionName: 'Baseline', clips, tracks: fixture.tracks,
-      duration: fixture.duration, media: new Map(), expandedTimeChains: new Set(videoIds) });
-    const view = compositionTrackStripView(graph, { revealedClipIds: new Set(videoIds), nodeHeight: getNodeHeight });
-    const cards = view.nodes.filter(node => node.binding?.kind === 'composition-clip' || node.binding?.kind === 'composition-time-chain');
-    expect(view.nodes.filter(node => node.binding?.kind === 'composition-time-chain')).toHaveLength(videoIds.length * 3);
-    // Real painted card sizes: the earlier fixed 110 px assumption hid a vertical overlap.
+      duration: fixture.duration, media: new Map() });
+    const view = compositionTrackStripView(graph, { nodeHeight: getNodeHeight });
+    const strips = view.nodes.filter(node => node.binding?.kind === 'composition-track').toSorted((a, b) => a.layout.y - b.layout.y);
+    const cards = view.nodes.filter(node => node.binding?.kind === 'composition-clip' || node.binding?.kind === 'composition-track');
     const box = (node: typeof cards[number]) => ({ x: node.layout.x, y: node.layout.y, w: getNodeWidth(node), h: getNodeHeight(node) });
     for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
       const a = box(cards[i]), b = box(cards[j]);
       expect(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h, `${cards[i].id} overlaps ${cards[j].id}`).toBe(false);
     }
-    for (const id of videoIds) {
-      const column = ['slice', 'speed', 'place'].map(stage => view.nodes.find(node => node.id === compositionNodeId.timeChain(id, stage as 'slice'))!);
-      const reference = view.nodes.find(node => node.id === compositionNodeId.clip(id))!;
-      expect(new Set([reference, ...column].map(node => node.layout.x)).size).toBe(1);
-      expect(column.map(node => node.layout.y)).toEqual(column.map(node => node.layout.y).toSorted((a, b) => a - b));
-    }
-    // No card reaches into the next track's strip.
-    for (const card of cards) {
-      const below = view.nodes.filter(node => node.binding?.kind === 'composition-track' && node.layout.y > card.layout.y)
-        .map(node => node.layout.y);
-      if (below.length) expect(card.layout.y + getNodeHeight(card)).toBeLessThanOrEqual(Math.min(...below));
-    }
-    const rightmost = Math.max(...cards.map(node => node.layout.x + getNodeWidth(node)));
+    strips.forEach((strip, index) => {
+      const next = strips[index + 1]?.layout.y ?? Infinity;
+      const lanes = view.nodes.filter(node => node.binding?.kind === 'composition-clip' && compositionNodeId.track(String(node.params?.trackId)) === strip.id);
+      expect(lanes.every(node => node.layout.y > strip.layout.y && node.layout.y + 40 <= next)).toBe(true);
+      expect(new Set(lanes.map(node => node.layout.x))).toEqual(new Set(lanes.length ? [strip.layout.x + 10] : []));
+      const ordered = lanes.toSorted((a, b) => a.layout.y - b.layout.y);
+      expect(ordered.map(node => Number(node.params?.startTime))).toEqual(ordered.map(node => Number(node.params?.startTime)).toSorted((a, b) => a - b));
+      expect(ordered.map(node => node.summary!.laneRow!.index)).toEqual(ordered.map((_, i) => String(i + 1)));
+    });
+    const clip = clips.find(candidate => candidate.source?.type === 'video')!;
+    const lane = view.nodes.find(node => node.id === compositionNodeId.clip(clip.id))!;
+    const trackLabel = (id: string) => strips.find(strip => strip.id === compositionNodeId.track(id))!.label;
+    expect(lane.summary!.laneRow!.text).toBe(`${clip.name} ▸ ${clip.inPoint.toFixed(1)}–${clip.outPoint.toFixed(1)} s · 1× ▸ no effects ▸ `
+      + `${trackLabel(clip.trackId)} @ ${clip.startTime.toFixed(1)} s`
+      + (lane.params?.audioTrackId ? ` + audio ▸ ${trackLabel(String(lane.params.audioTrackId))} @ ${clip.startTime.toFixed(1)} s` : ''));
+    const rightmost = Math.max(...cards.filter(node => node.summary?.laneRow).map(node => node.layout.x + getNodeWidth(node)));
     for (const id of [compositionNodeId.videoStack(), compositionNodeId.audioMaster()]) {
       expect(view.nodes.find(node => node.id === id)!.layout.x).toBeGreaterThan(rightmost);
     }
   });
 
-  it.each([30, 300, 1000])('bundles %i pairs with linear projection visits and constant visible topology', count => {
+  it.each([30, 300, 1000])('bundles %i pairs with linear projection visits and constant cable topology', count => {
     const graph = baseline(count), counters = { nodes: 0, edges: 0, segments: 0 };
     const view = compositionTrackStripView(graph, { counters });
-    expect(view.nodes).toHaveLength(10);
+    // One row per clip pair and per transition (3); rows carry no cables, so the cable count stays constant.
+    expect(view.nodes).toHaveLength(13 + count);
     expect(view.edges).toHaveLength(14);
     expect(counters).toEqual({ nodes: graph.nodes.length, edges: graph.edges.length, segments: count * 2 + 3 });
     expect(counters.nodes + counters.edges + counters.segments).toBeLessThan(count * 7 + 40);
@@ -139,6 +137,18 @@ describe('composition track strips', () => {
       expect(graph.nodes).toHaveLength(43); expect(graph.edges).toHaveLength(107);
       console.log(`S1 30-pair / 3-track-pair fixture: ${graph.nodes.length} nodes / ${graph.edges.length} links -> ${view.nodes.length} visible nodes / ${view.edges.length} links`);
     }
+  });
+
+  it('names retime, reverse, effects and masks in the lane text', () => {
+    const graph = project([
+      createMockClip({ id: 'looped', trackId: 'v', startTime: 1, duration: 2, inPoint: 3, outPoint: 5, timeRemap: { kind: 'loop' } as TimelineClip['timeRemap'],
+        effects: [{ id: 'e1' }, { id: 'e2' }] as TimelineClip['effects'], masks: [{ id: 'm1' }] as TimelineClip['masks'] }),
+      createMockClip({ id: 'back', trackId: 'v2', startTime: 4, duration: 2, reversed: true }),
+    ]);
+    const name = (id: string) => graph.nodes.find(node => node.id === `comp:track:${id}`)?.label ?? id;
+    const text = (id: string) => describeClipLane(graph.nodes.find(node => node.id === `comp:clip:${id}`)!, name);
+    expect(text('looped')).toContain('3.0–5.0 s · Loop ▸ 2 effects · 1 mask ▸ ');
+    expect(text('back')).toContain(' · reverse ▸ no effects ▸ ');
   });
 
   it('keeps independent video/audio source bundles on the correct tracks', () => {

@@ -1,4 +1,4 @@
-import { hydrateAndProjectMediaSourceArtifacts } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
+import { scheduleMediaSourceArtifactProjection } from '../../../services/mediaArtifacts/mediaSourceArtifacts';
 
 export type SourceMediaFile = {
   duration?: number;
@@ -26,7 +26,7 @@ export function getPositiveFiniteDuration(value: number | undefined): number | u
 }
 
 export function queueMediaSourceArtifactProjection(mediaFileId: string | undefined): void {
-  if (mediaFileId) void hydrateAndProjectMediaSourceArtifacts(mediaFileId);
+  if (mediaFileId) scheduleMediaSourceArtifactProjection(mediaFileId);
 }
 
 export async function loadSourceMediaFile(mediaFileId: string | undefined): Promise<SourceMediaFile | undefined> {

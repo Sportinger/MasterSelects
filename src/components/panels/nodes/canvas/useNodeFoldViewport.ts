@@ -12,7 +12,7 @@ const VIEW_COMMIT_MS = 80;
  * destination. A manual gesture immediately releases camera ownership. */
 export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, source: NodeGraph, target: NodeGraph,
   shown: NodeGraph, bounds: NodeBounds, animating: boolean, visual: RefObject<Viewport>, setViewport: (next: Viewport) => void,
-  groupBounds?: ReadonlyMap<string, NodeBounds>, showVisual?: (next: Viewport) => void) {
+  groupBounds?: ReadonlyMap<string, NodeBounds>, showVisual?: (next: Viewport) => void, followFolds = true) {
   const savedViews = useRef(new Map<string, Viewport>());
   // Fold steps arrive as keyframes. A single spring camera follows the latest
   // framing on the visual transform and keeps its velocity across steps.
@@ -45,7 +45,8 @@ export function useNodeFoldViewport(canvas: RefObject<HTMLDivElement | null>, so
   }, []);
   const pending = useRef<{ graph: NodeGraph; collapsed: boolean; groupId?: string; restore?: Viewport; from: Viewport; initialFit?: Viewport; started: number; width: number; height: number; automatic?: boolean } | null>(null);
   const previousFolds = useRef({ graph: source, states: new Map(source.groups?.map(group => [group.id, !!group.collapsed])) });
-  const sourceFoldsChanged = previousFolds.current.graph.id === source.id && !!source.groups?.some(group =>
+  // Views that open groups on a pick (timeline lanes) keep the camera unless the user folds explicitly.
+  const sourceFoldsChanged = followFolds && previousFolds.current.graph.id === source.id && !!source.groups?.some(group =>
     previousFolds.current.states.has(group.id) && previousFolds.current.states.get(group.id) !== !!group.collapsed);
   const cancel = useCallback(() => { pending.current = null; stopTween(); }, [stopTween]);
   const forget = useCallback(() => { cancel(); savedViews.current.clear(); }, [cancel]);

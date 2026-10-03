@@ -53,12 +53,15 @@ describe('image.load-pixel-clamped', () => {
   });
 
   it('forwards integer coordinates through lazy resource branches inside a load scope', () => {
+    // The always-true runtime condition (uv.x > -1) keeps both branches; a constant condition would fold at compile time.
     const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', layout: {}, nodes: [
       node('a', 'image.named-input', undefined, { resource: 'a' }), node('b', 'image.named-input', undefined, { resource: 'b' }),
-      node('condition', 'values.boolean', { value: true }), node('select', 'control.select.image'),
+      node('uv', 'image.normalized-uv'), node('uv-parts', 'vector.split.vec2'), node('below', 'values.number', { value: -1 }),
+      node('condition', 'compare.greater.scalar'), node('select', 'control.select.image'),
       node('x', 'values.number', { value: 1.9 }), node('y', 'values.number', { value: 2.2 }), node('pixel', 'vector.combine.vec2'),
       node('load', 'image.load-pixel-clamped'), node('output', 'image.output')], edges: [edge('a', 'image', 'select', 'falseValue'),
-      edge('b', 'image', 'select', 'trueValue'), edge('condition', 'value', 'select', 'condition'), edge('x', 'value', 'pixel', 'x'),
+      edge('b', 'image', 'select', 'trueValue'), edge('uv', 'uv', 'uv-parts', 'value'), edge('uv-parts', 'x', 'condition', 'a'),
+      edge('below', 'value', 'condition', 'b'), edge('condition', 'condition', 'select', 'condition'), edge('x', 'value', 'pixel', 'x'),
       edge('y', 'value', 'pixel', 'y'), edge('select', 'image', 'load', 'image'), edge('pixel', 'value', 'load', 'pixel'),
       edge('load', 'image', 'output', 'image')] };
     const plan = compileImageOperatorGraph(graph, {}, { namedImages: [

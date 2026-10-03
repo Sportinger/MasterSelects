@@ -244,9 +244,7 @@ export class RenderLoop {
         try {
           const frameReason = { newFrameReady: this.newFrameReady };
           this.newFrameReady = false;
-          const __tm = performance.now(); // TEMP-MC-PROFILE
           const rendered = this.callbacks.onRender(frameReason) !== false;
-          performance.measure('mc:main', { start: __tm }); // TEMP-MC-PROFILE
           if (rendered) {
             const previousSuccessfulRender = this.lastSuccessfulRender;
             if (previousSuccessfulRender > 0 && timestamp >= previousSuccessfulRender) {

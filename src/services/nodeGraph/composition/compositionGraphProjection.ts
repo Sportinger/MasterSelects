@@ -116,6 +116,9 @@ export function buildCompositionGraph(input: CompositionGraphProjectionInput): N
     if (panel) badges.push(`Panel ${panel}`);
     node.params = { startTime: clip.startTime, duration: clip.duration, inPoint: clip.inPoint,
       outPoint: clip.outPoint, speed, reversed: !!clip.reversed || speed < 0, trackId: clip.trackId,
+      sourceName: input.media.get(compositionMediaId(clip))?.name ?? clip.name,
+      effectCount: clip.effects?.length ?? 0, maskCount: clip.masks?.length ?? 0,
+      ...(clip.timeRemap?.kind ? { retime: clip.timeRemap.kind } : {}),
       ...(audio ? { audioTrackId: audio.trackId } : {}),
       ...(parentClipId && link ? { parentClipId, parentCompositionId: link.parentCompositionId } : {}),
       ...(role ? { transitionRole: role } : {}), ...(panel ? { transitionPanel: panel } : {}) };

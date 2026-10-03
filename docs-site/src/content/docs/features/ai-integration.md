@@ -399,6 +399,38 @@ The exported tool groups are:
 
 The chat and bridge code call the shared dispatcher, so the same registry is used in-chat, through the Vite dev bridge, and through the Native Helper bridge. Approval behavior is enforced in the chat UI before execution, while the dispatcher policy is the actual execution gate.
 
+### Composition Graph And Beat Rules
+
+`getCompositionGraph` reads the active composition's level-0 tracks, clips, media,
+transitions and rule definitions without creating project state or transition bodies.
+It accepts `trackIds`, an overlapping `timeRange` in timeline seconds, and a clip
+`limit` (default 200, maximum 1000). Results report omitted records and members;
+the complete response has a shared 350,000-character budget. Beat snapshots and
+clip processing graphs are not included. Media piece counts cover the active
+composition; filtered rule views retain ordered members, subject to the bounds.
+
+`createBeatRule`, `updateBeatRule`, `releaseBeatRuleMember` and
+`materializeBeatRule` delegate to the same undoable beat-rule actions as the UI.
+Sources use the tempo map or an existing clip beat grid selected by clip ID and
+`source`/`processed` provenance. `updateBeatRule` accepts exactly one parameter
+patch, complete member order, source replacement, refresh request, or correction
+reset. Release accepts one stable member ID per atomic action; materialize removes
+the rule while preserving current clip values. Mutations return structured
+conflicts, warnings, changed clip IDs and timeline revision/entity metadata.
+
+`startClipBeatAnalysis({ clipId, force? })` requests background beat/onset analysis
+without waiting for completion. Audio clips are analyzed directly; video clips
+require linked audio, which becomes the returned `analyzedClipId`. The result
+includes existing source/processed beat-grid IDs in `alreadyAvailable`.
+`started` acknowledges dispatch; the shared analysis action handles artifact reuse
+and active jobs. Poll `getCompositionGraph` on the analyzed clip for `beatGrid`
+source/processed availability flags and an optional `analyzing` percentage.
+
+All six tools are available to chat, the dev bridge, kernel, console and internal
+callers. They are in the atomic editor catalog; tool selection and orchestration
+remain private-kernel responsibilities. Rules are queried on demand rather than
+copied into every project-context snapshot.
+
 ### Motion Design Tools
 
 - `getMotionCapabilities` reports only renderer-backed primitives, appearances,

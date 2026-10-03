@@ -9,6 +9,9 @@
   min-height: 0;
   position: relative;
   overflow: hidden;
+  /* Clip without becoming a scroll container: scrollIntoView must never shift the dock
+     by the 12 px the guided resize-corner anchors reach past the outer edges. */
+  overflow: clip;
 }
 
 .dock-container.dragging {
@@ -171,6 +174,7 @@ html[data-dock-resize-hover-axis='xy'] * {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  overflow: clip;
 }
 
 .dock-split.maximized-path > .dock-split-child.is-collapsed {

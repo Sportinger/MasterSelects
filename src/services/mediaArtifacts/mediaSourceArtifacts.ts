@@ -74,6 +74,20 @@ export function getMediaSourceArtifactProjection(
   };
 }
 
+// Reactivation rebuilds media records, so equal artifact arrays arrive as new objects; compare each pair once.
+const equalArtifactPairs = new WeakMap<object, WeakMap<object, boolean>>();
+function sameArtifactValue(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+  let known = equalArtifactPairs.get(a);
+  const cached = known?.get(b);
+  if (cached !== undefined) return cached;
+  const equal = JSON.stringify(a) === JSON.stringify(b);
+  if (!known) { known = new WeakMap(); equalArtifactPairs.set(a, known); }
+  known.set(b, equal);
+  return equal;
+}
+
 export function projectMediaSourceArtifactsOntoClip(
   clip: TimelineClip,
   projection: MediaSourceArtifactProjection = getMediaSourceArtifactProjection(getClipMediaFileId(clip)),
@@ -85,11 +99,11 @@ export function projectMediaSourceArtifactsOntoClip(
   const hasAnalysis = isVisualSource && Boolean(projection.analysis);
   const hasScenes = isVisualSource && Boolean(projection.sceneDescriptions?.length);
   if (!hasTranscript && !hasAnalysis && !hasScenes) return clip;
-  return {
-    ...clip,
+  const patch: Partial<TimelineClip> = {
     ...(hasTranscript
       ? {
-          transcript: projection.transcript ?? [],
+          // Words not loaded (yet) on the media never erase the words a clip already shows.
+          transcript: projection.transcript ?? clip.transcript ?? [],
           transcriptProgress: projection.transcriptStatus === 'ready' ? 100 : clip.transcriptProgress,
           transcriptStatus: projection.transcriptStatus ?? 'ready' as const,
         }
@@ -113,6 +127,10 @@ export function projectMediaSourceArtifactsOntoClip(
         }
       : {}),
   };
+  // Keep identity when the clip already carries this projection: re-projecting a media's artifacts
+  // onto hundreds of its clips must not re-render the whole timeline for nothing.
+  const changed = (Object.keys(patch) as Array<keyof TimelineClip>).some(key => !sameArtifactValue(clip[key], patch[key]));
+  return changed ? { ...clip, ...patch } : clip;
 }
 
 async function runHydration(mediaFileId: string): Promise<MediaFile | undefined> {
@@ -143,6 +161,7 @@ async function runHydration(mediaFileId: string): Promise<MediaFile | undefined>
   });
   const sceneDescriptions = storedScenes as SceneSegment[] | null;
 
+  const storeStarted = performance.now();
   if (hasStoredTranscript || restoredAnalysis || sceneDescriptions?.length) {
     useMediaStore.setState(state => ({
       files: state.files.map(file => file.id === mediaFileId
@@ -186,7 +205,7 @@ async function runHydration(mediaFileId: string): Promise<MediaFile | undefined>
 
   const hydrated = useMediaStore.getState().files.find(file => file.id === mediaFileId);
   log.debug('Hydrated source artifacts', {
-    mediaFileId,
+    mediaFileId, needsTranscript, needsAnalysis, needsScenes, storeUpdateMs: Math.round(performance.now() - storeStarted),
     analysisFrames: hydrated?.analysis?.frames.length ?? 0,
     sceneSegments: hydrated?.sceneDescriptions?.length ?? 0,
     transcriptWords: hydrated?.transcript?.length ?? 0,
@@ -195,10 +214,12 @@ async function runHydration(mediaFileId: string): Promise<MediaFile | undefined>
 }
 
 export function hydrateMediaSourceArtifacts(mediaFileId: string): Promise<MediaFile | undefined> {
-  if (hydratedMediaIds.has(mediaFileId)) {
-    return Promise.resolve(
-      useMediaStore.getState().files.find(file => file.id === mediaFileId),
-    );
+  const current = useMediaStore.getState().files.find(file => file.id === mediaFileId);
+  // A rebuilt media record (project reactivation, undo/redo) keeps its ready status without the loaded
+  // words; hydrate it again instead of trusting the earlier run.
+  const lostTranscript = current?.transcriptStatus === 'ready' && !current.transcript?.length;
+  if (hydratedMediaIds.has(mediaFileId) && !lostTranscript) {
+    return Promise.resolve(current);
   }
   const running = hydrationRuns.get(mediaFileId);
   if (running) return running;
@@ -208,6 +229,25 @@ export function hydrateMediaSourceArtifacts(mediaFileId: string): Promise<MediaF
   });
   hydrationRuns.set(mediaFileId, run);
   return run;
+}
+
+const scheduledProjections = new Map<string, { rerun: boolean }>();
+
+/** Coalesced per media: adding or restoring hundreds of its clips projects at most twice, not once per clip. */
+export function scheduleMediaSourceArtifactProjection(mediaFileId: string): void {
+  const active = scheduledProjections.get(mediaFileId);
+  if (active) { active.rerun = true; return; }
+  const run = { rerun: false };
+  scheduledProjections.set(mediaFileId, run);
+  void (async () => {
+    do { run.rerun = false; await hydrateAndProjectMediaSourceArtifacts(mediaFileId); } while (run.rerun);
+  })().catch(error => log.warn('Failed to project media-scoped source artifacts', { mediaFileId, error }))
+    .finally(() => scheduledProjections.delete(mediaFileId));
+}
+
+/** After a timeline becomes active: one coalesced projection per media of its clips. */
+export function scheduleMediaSourceArtifactProjectionForClips(clips: readonly TimelineClip[]): void {
+  for (const mediaFileId of new Set(clips.map(getClipMediaFileId))) if (mediaFileId) scheduleMediaSourceArtifactProjection(mediaFileId);
 }
 
 export async function hydrateAndProjectMediaSourceArtifacts(mediaFileId: string): Promise<void> {
@@ -223,10 +263,17 @@ export async function hydrateAndProjectMediaSourceArtifacts(mediaFileId: string)
     return;
   }
   const { updateDerivedTimelineClips } = await import('../../stores/timeline/revisionMiddleware');
-  updateDerivedTimelineClips(clips => (
-    clips.map(clip => {
+  const started = performance.now();
+  let changed = 0, matched = 0;
+  updateDerivedTimelineClips(clips => {
+    const next = clips.map(clip => {
       if (getClipMediaFileId(clip) !== mediaFileId) return clip;
-      return projectMediaSourceArtifactsOntoClip(clip, projection);
-    })
-  ));
+      matched++;
+      const projected = projectMediaSourceArtifactsOntoClip(clip, projection);
+      if (projected !== clip) changed++;
+      return projected;
+    });
+    return changed ? next : clips;
+  });
+  log.debug('Projected source artifacts onto clips', { mediaFileId, matched, changed, durationMs: Math.round(performance.now() - started) });
 }

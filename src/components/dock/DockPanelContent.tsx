@@ -1,4 +1,3 @@
-import { Profiler } from 'react'; // TEMP-MC-PROFILE
 // Maps panel type to actual component
 // Note: Effects, Transcript, Analysis are now integrated into PropertiesPanel
 
@@ -67,11 +66,7 @@ interface DockPanelContentProps {
   allowPanelMaximize?: boolean;
 }
 
-export function DockPanelContent(props: DockPanelContentProps) { // TEMP-MC-PROFILE
-  return <Profiler id={props.panel.type} onRender={(id, _phase, actual) => performance.measure(`react:${id}`, { start: performance.now() - actual, duration: actual })}><DockPanelContentInner {...props} /></Profiler>; // TEMP-MC-PROFILE
-} // TEMP-MC-PROFILE
-
-function DockPanelContentInner({ panel, allowPanelMaximize = false }: DockPanelContentProps) { // TEMP-MC-PROFILE
+export function DockPanelContent({ panel, allowPanelMaximize = false }: DockPanelContentProps) {
   switch (panel.type) {
     case 'start':
       return <Suspense fallback={null}><LandingPanel /></Suspense>;

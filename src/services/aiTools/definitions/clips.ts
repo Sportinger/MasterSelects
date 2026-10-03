@@ -329,6 +329,22 @@ export const clipToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'addCompositionClip',
+      description: 'Place an existing composition as a nested composition clip on the active timeline, like dragging it from the Media panel. Use it to build scenes, reusable lower thirds or templates as their own compositions and stack them in a parent composition. The clip has the composition duration and normal transform, effects and keyframes.',
+      parameters: {
+        type: 'object',
+        properties: {
+          compositionId: { type: 'string', description: 'ID of the composition to nest (from getMediaItems or createComposition). It must not be the active composition or contain it.' },
+          trackId: { type: ['string', 'null'], description: 'Video track ID, or null/omitted for the first video track that is free for the range (a new one is created when none is free).' },
+          startTime: { type: 'number', description: 'Timeline start in seconds (default 0).' },
+        },
+        required: ['compositionId'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'addClipSegment',
       description: 'Add a clip segment from the media pool to the timeline. Imports only a specific time range (inPoint to outPoint) from a media file. For video files, automatically creates linked audio on the first free audio track (a new one when none is free). Much more efficient than importing the full clip and then splitting.',
       parameters: {

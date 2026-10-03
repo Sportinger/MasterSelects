@@ -10,6 +10,18 @@ export interface WorkspaceClipProjection {
   bounds: { left: number; top: number; right: number; bottom: number };
 }
 
+/** A lane reads 'source ▸ Slice ▸ effects ▸ Target' (plan 3.1e); the clip graph itself keeps its names. */
+function laneSeams(nodes: NodeGraphNode[]): NodeGraphNode[] {
+  return nodes.map(node => {
+    if (node.binding?.kind === 'clip-source' && node.groupId !== 'flock') {
+      const range = `${(Number(node.params?.inPoint) || 0).toFixed(2)}–${(Number(node.params?.outPoint) || 0).toFixed(2)} s`;
+      return { ...node, label: `Slice · ${node.label}`, description: `Uses ${range} of the source. In, out and speed in the inspector.` };
+    }
+    if (node.binding?.kind === 'clip-output') return { ...node, label: 'Target', description: 'Places the processed clip on its track at its start time.' };
+    return node;
+  });
+}
+
 /** The caller supplies only open clips. Collapsed cards never invoke a clip builder. */
 export function embedWorkspaceGraph(composition: NodeGraph, opened: ReadonlyMap<string, WorkspaceClipProjection>): NodeGraph {
   const measurement = import.meta.env.DEV ? startNodeMeasure('embedding') : undefined;
@@ -36,7 +48,9 @@ export function embedWorkspaceGraph(composition: NodeGraph, opened: ReadonlyMap<
       continue;
     }
     const origin: NodeGraphLayout = { x: reference.layout.x, y: reference.layout.y + 48 };
-    const embedded = namespaceClipGraph(projection.graph, binding.clipId, origin);
+    const namespaced = namespaceClipGraph(projection.graph, binding.clipId, origin);
+    const embedded = { ...namespaced, nodes: laneSeams(namespaced.nodes),
+      ...(namespaced.expandedNodes ? { expandedNodes: laneSeams(namespaced.expandedNodes) } : {}) };
     const source = embedded.nodes.find(node => node.binding?.kind === 'clip-source') ?? embedded.nodes[0];
     const image = embedded.nodes.find(node => node.binding?.kind === 'clip-output') ?? embedded.nodes.at(-1);
     const audio = embedded.nodes.find(node => node.binding?.kind === 'clip-audio-output')
@@ -85,7 +99,9 @@ export function embedWorkspaceGraph(composition: NodeGraph, opened: ReadonlyMap<
 
 export function workspaceClipRoot(clipId: string, projection: WorkspaceClipProjection): NodeGraph {
   const origin = { x: 0, y: 0 };
-  const graph = namespaceClipGraph(projection.graph, clipId, origin);
+  const namespaced = namespaceClipGraph(projection.graph, clipId, origin);
+  const graph = { ...namespaced, nodes: laneSeams(namespaced.nodes),
+    ...(namespaced.expandedNodes ? { expandedNodes: laneSeams(namespaced.expandedNodes) } : {}) };
   return { ...graph, id: `workspace:${projection.graph.id}`, workspace: {
     clips: { [clipId]: { graph: projection.graph, placement: projection.placement, origin } }, defaultNodes: {},
   } };

@@ -9,6 +9,8 @@ vi.mock('../../src/effects/index', () => ({
     ['stateful', { id: 'stateful', params: {}, extraControls: loaders.shown }],
     ['unused', { id: 'unused', params: {}, extraControls: loaders.unused }],
   ]),
+  // The property registry registers effect templates at import time.
+  getAllEffects: () => [],
 }));
 vi.mock('../../src/components/panels/properties/LabeledValue', () => ({ LabeledValue: () => null }));
 

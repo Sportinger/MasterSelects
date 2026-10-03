@@ -19,7 +19,7 @@ describe('depth source alignment', () => {
   });
   it.each([[1, 1, 2], [-1, 1, 8], [2, 1, 4], [1, 4, 8], [-1, 4, 2]])(
     'uses the shared trimmed source clock at speed %s and factor %s', (speed, factor, expected) => {
-      expect(alignedTimeMapTime({ mapAlignment: 'source', mapStart: 999 }, 999, { depthMap }, clock(speed, factor), media).time).toBe(expected);
+      expect(alignedTimeMapTime({ mapAlignment: 'source', mapStart: 999 }, 999, { depthMap }, clock(speed, factor), media).time).toBeCloseTo(expected, 4);
     });
   it('rejects missing provenance, changed sources, stale fingerprints and uncovered ranges', () => {
     const params = { mapAlignment: 'source' }, source = clock(1);

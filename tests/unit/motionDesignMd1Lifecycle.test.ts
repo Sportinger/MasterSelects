@@ -53,6 +53,7 @@ import { getInterpolatedMotionLayer } from '../../src/utils/motionInterpolation'
 import { syncStoresToProject } from '../../src/services/project/projectSave';
 import { convertProjectCompositionToStore } from '../../src/services/project/load/loadTimelineHydration';
 import { projectFileService } from '../../src/services/projectFileService';
+import type { ProjectFile } from '../../src/services/project/types/project.types';
 import {
   MD1_DIFFERENTIAL_CONTROL_IDS,
   MD1_TEMPORAL_DIFFERENTIAL_CROP_IDS,
@@ -672,9 +673,12 @@ describe('MD1 motion-design lifecycle', () => {
         ? { ...clip, parentClipId: 'md1-clip-ellipse' }
         : clip
     ));
-    const updateCompositions = vi.spyOn(projectFileService, 'updateCompositions').mockImplementation(() => {});
-    const updateMedia = vi.spyOn(projectFileService, 'updateMedia').mockImplementation(() => {});
-    const updateFolders = vi.spyOn(projectFileService, 'updateFolders').mockImplementation(() => {});
+    // syncStoresToProject writes the save codec output straight into the open project's data.
+    const projectData = {
+      version: 1, name: 'MD1 codec project', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z',
+      media: [], compositions: [], folders: [], activeCompositionId: null, openCompositionIds: [], expandedFolderIds: [],
+    } as unknown as ProjectFile;
+    const getProjectData = vi.spyOn(projectFileService, 'getProjectData').mockReturnValue(projectData);
     try {
       expect(projectFileService.isProjectOpen()).toBe(false);
       useTimelineStore.setState({
@@ -716,8 +720,9 @@ describe('MD1 motion-design lifecycle', () => {
       expect(useMediaStore.getState().compositions).toHaveLength(1);
 
       await syncStoresToProject();
-      expect(updateCompositions).toHaveBeenCalled();
-      const projectCompositions = updateCompositions.mock.calls.at(-1)![0];
+      expect(getProjectData).toHaveBeenCalled();
+      const projectCompositions = projectData.compositions;
+      expect(projectCompositions).toHaveLength(1);
       const projectRectangle = projectCompositions[0].clips.find(
         (clip) => clip.id === 'md1-clip-rectangle',
       );
@@ -760,9 +765,7 @@ describe('MD1 motion-design lifecycle', () => {
         fixture.clips.find((clip) => clip.id === 'md1-clip-polygon')?.effects.map(migratePersistedEffectOperatorGraph),
       );
     } finally {
-      updateCompositions.mockRestore();
-      updateMedia.mockRestore();
-      updateFolders.mockRestore();
+      getProjectData.mockRestore();
       restoreMd1EvidenceSnapshot(restoreSnapshot);
     }
   });

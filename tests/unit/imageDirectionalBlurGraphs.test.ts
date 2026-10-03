@@ -39,7 +39,8 @@ describe('directional blur image graphs', () => {
     expect(validateEffectGraph(graph)).toEqual([]); expect(graph.nodes.length).toBeLessThanOrEqual(64);
     expect(bindings.toSorted()).toEqual([...expectedBindings[type]].toSorted());
     expect(isImageGraphEffectType(type)).toBe(true); expect(isLocalImageEffectType(type)).toBe(false);
-    expect(effectOperatorGraph({ type, params: {} }).nodes.map(node => node.id)).toEqual(graph.nodes.map(node => node.id));
+    // Composition recognition may reorder nodes; the owner keeps exactly the recipe node set.
+    expect(effectOperatorGraph({ type, params: {} }).nodes.map(node => node.id).toSorted()).toEqual(graph.nodes.map(node => node.id).toSorted());
     const defaults = effectOperatorParams({ type, params: {} });
     expect(defaults).toMatchObject(Object.fromEntries(expectedBindings[type].map(id => [id, getEffect(type)!.params[id].default])));
     expect(compileImageOperatorGraph(graph, defaults).key).toBe(compileImageOperatorGraph(graph, { ...defaults, amount: 0.123 }).key);

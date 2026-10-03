@@ -277,6 +277,7 @@ export const ProjectTextBoundsPathFields = {
   "closed": { class: 'content', owner: 'timeline' },
   "position": { class: 'content', owner: 'timeline' },
   "visible": { class: 'content', owner: 'timeline' },
+  "outlineColor": { class: 'content', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<ProjectTextBoundsPath>;
 
 export const ProjectTextBoundsVertexFields = {
@@ -304,6 +305,7 @@ export const ProjectTextClipPropertiesFields = {
   "boxY": { class: 'content', owner: 'timeline' },
   "boxWidth": { class: 'content', owner: 'timeline' },
   "boxHeight": { class: 'content', owner: 'timeline' },
+  "wrapMode": { class: 'content', owner: 'timeline' },
   "textBounds": { class: 'content', owner: 'timeline' },
   "strokeEnabled": { class: 'content', owner: 'timeline' },
   "strokeColor": { class: 'content', owner: 'timeline' },
@@ -315,6 +317,10 @@ export const ProjectTextClipPropertiesFields = {
   "shadowBlur": { class: 'content', owner: 'timeline' },
   "value": { class: 'content', owner: 'timeline' },
   "valueLink": { class: 'content', owner: 'timeline' },
+  "reveal": { class: 'content', owner: 'timeline' },
+  "revealMode": { class: 'content', owner: 'timeline' },
+  "revealSpread": { class: 'content', owner: 'timeline' },
+  "revealCursor": { class: 'content', owner: 'timeline' },
   "pathEnabled": { class: 'content', owner: 'timeline' },
   "pathPoints": { class: 'content', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<ProjectTextClipProperties>;

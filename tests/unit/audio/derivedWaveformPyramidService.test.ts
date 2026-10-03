@@ -13,6 +13,9 @@ import {
 } from '../../../src/services/audio/timelineWaveformPyramidCache';
 import type { Effect } from '../../../src/types';
 import { createMockClip } from '../../helpers/mockData';
+import { installInProcessWaveformWorker } from '../../helpers/inProcessWaveformWorker';
+
+installInProcessWaveformWorker();
 
 const FIXED_TIME = '2026-05-25T10:00:00.000Z';
 
