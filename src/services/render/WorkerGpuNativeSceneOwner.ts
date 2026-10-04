@@ -1,3 +1,5 @@
+import { getPtStatus } from '../../engine/native3d/pathtrace/runtime/ptStatus';
+import type { WorkerPathTraceReport } from './workerPathTraceReport';
 import { NativeSceneRuntime } from '../../engine/native3d/NativeSceneRuntime';
 import { FlockSimulationRuntime } from '../../engine/flock/runtime/FlockSimulationRuntime';
 import { WorkerGpuNativeSceneAssets } from './WorkerGpuNativeSceneAssets';
@@ -70,7 +72,9 @@ export class WorkerGpuNativeSceneOwner {
       modelState: id => this.assets.modelState(id),
       status: { getStatus: id => statuses.get(id), publishStatus: s => { statuses.set(s.clipId, s); }, clearStatus: id => { statuses.delete(id); } },
     });
-    const scene = new NativeSceneRuntime({ flockRuntime: () => simulation, isRealtime: () => false, sourceFingerprint: () => undefined });
+    // The path tracer asks for more frames while a still image converges; the main thread schedules them.
+    const scene = new NativeSceneRuntime({ flockRuntime: () => simulation, isRealtime: () => false, sourceFingerprint: () => undefined,
+      requestRender: () => { this.pathTraceNeedsFrame = true; } });
     const entry: SceneEntry = { audio, simulation, scene, statuses, definitions: new Map(), keyframes: new Map(), layers: [], camera: null, payload: null, preparingPayload: null };
     this.scenes.set(key, entry);
     await scene.initialize(1, 1);
@@ -188,6 +192,15 @@ export class WorkerGpuNativeSceneOwner {
     return { layer: input.layer, isVideo: false, isDynamic: true, externalTexture: null, textureView,
       sourceWidth: input.payload.width, sourceHeight: input.payload.height, targetMediaTime: input.payload.timelineTime,
       previewPath: 'worker-gpu-frame-stack:native-scene' };
+  }
+
+  private pathTraceNeedsFrame = false;
+
+  /** The path tracer's status and whether it asked for another frame since the last report. */
+  pathTraceReport(): WorkerPathTraceReport {
+    const report = { status: getPtStatus('main'), needsFrame: this.pathTraceNeedsFrame };
+    this.pathTraceNeedsFrame = false;
+    return report;
   }
 
   /** Snapshot only prepared occurrences belonging to this exact frame. */

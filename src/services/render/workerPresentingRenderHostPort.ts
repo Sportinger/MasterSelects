@@ -1,3 +1,4 @@
+import { publishPtStatus } from '../../engine/native3d/pathtrace/runtime/ptStatus';
 import { WorkerFlockControlClient } from './workerFlockControlClient';
 import type {
   RenderCommandTarget,
@@ -610,6 +611,14 @@ class WorkerPresentingRenderHostPortCore {
 
   getIsExporting(): boolean {
     return false;
+  }
+
+  private pathTraceFrameTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Next frame for the worker's converging path tracer, one display frame later (no busy loop on the main thread). */
+  private requestPathTraceFrame(): void {
+    if (this.pathTraceFrameTimer) return;
+    this.pathTraceFrameTimer = setTimeout(() => { this.pathTraceFrameTimer = null; this.requestRender(); }, 16);
   }
 
   requestRender(): void {
@@ -1717,6 +1726,11 @@ class WorkerPresentingRenderHostPortCore {
     if (targetId === 'preview' && currentSurface && (presented || catchUp)) {
       this.flockStatuses.accept(output.flockStatus);
       flockRuntime.setStatusSource(this.readFlockStatuses);
+      // The worker's path tracer: status for the preview toolbar, and more frames while a still image converges.
+      if (output.pathTrace) {
+        publishPtStatus('main', output.pathTrace.status);
+        if (output.pathTrace.needsFrame) this.requestPathTraceFrame();
+      }
     }
     this.recordRuntimeOutput(output, {
       changed: presented,

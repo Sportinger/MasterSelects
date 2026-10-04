@@ -8,7 +8,8 @@
 struct ResolveParams {
   sizes: vec4f,     // render width, height, output width, height
   scales: vec4f,    // 1 / samples, color scale (1 / samples, or 1 for denoised color), debug view, 1 when denoised
-  realtime: vec4f,  // x: weight of the realtime image over the accumulation, y: 1 to show only the realtime image
+  realtime: vec4f,  // x: weight of the realtime image over the accumulation, y: 1 to show only the realtime image,
+                    // z: 1 when a realtime image is bound (it fills pixels without samples, e.g. outside a render region)
 };
 
 @group(0) @binding(0) var<uniform> resolve: ResolveParams;
@@ -79,6 +80,13 @@ fn resolveFragment(@builtin(position) position: vec4f) -> ResolveOut {
   let render = resolve.sizes.xy;
   let pixel = min(vec2u(position.xy * render / resolve.sizes.zw), vec2u(render) - 1u);
   let index = pixel.y * u32(render.x) + pixel.x;
+  // Outside a render region (no samples there) the last realtime image stays visible.
+  if (resolve.realtime.z > 0.5 && pixelState[index].w <= 0.0 && u32(resolve.scales.z + 0.5) == 0u) {
+    let c = realtimeColor[outIndex];
+    out.color = resolveEncodePremultiplied(c);
+    out.depth = select(1.0, realtimeDepth[outIndex], c.a > 0.0);
+    return out;
+  }
   let inverseSamples = resolveInverseSamples(index);
   let alpha = clamp(coverage[index].a * inverseSamples, 0.0, 1.0);
   out.depth = select(1.0, pixelState[index].x, alpha > 0.0);

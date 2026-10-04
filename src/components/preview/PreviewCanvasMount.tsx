@@ -44,6 +44,7 @@ import { usePreview3DMediaDrop } from './usePreview3DMediaDrop';
 import { FlockGuidanceOverlay } from './flock/FlockGuidanceOverlay';
 import { rendersFlock } from '../../services/flock/flockEffect';
 import { PreviewScenePreparationOverlay } from './PreviewScenePreparationOverlay';
+import { PathTraceRegionOverlay } from './PathTraceRegionOverlay';
 import { PerspectiveGuidePreviewHost } from './PerspectiveGuidePreviewHost';
 
 interface PreviewCanvasMountProps {
@@ -428,6 +429,8 @@ export function PreviewCanvasMount({
         <PreviewSplatProgressOverlay progress={activeSplatLoadProgress} />
         {!activeSplatLoadProgress && !isExporting && !sourceMonitorActive && isEngineReady
           && <PreviewScenePreparationOverlay clips={clips} tracks={tracks} />}
+        {!isExporting && !sourceMonitorActive && isEngineReady
+          && <PathTraceRegionOverlay compositionId={displayedCompId} canvasInContainer={canvasInContainer} />}
 
         {layerTransformMode && isEngineReady && !rotoActive && (
           <canvas

@@ -84,6 +84,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [3D Layers](/features/3d-layers/) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
 | [Flock Clips](/features/flock-clips/) | GPU particle swarms defined by an editable node graph: presets, Properties/Node Workspace editing, source-time keyframes, deterministic seek, precompute cache, links/trails/glyphs, and export |
 | [Weave](/features/weave/) | Curve-node fabric, knots and threading, fiber rendering (Hashed, 4x Coverage, Analytic), shadows and cloth |
+| [Path Tracing](/features/path-tracing/) | Path traced 3D scene: fiber BVH, hair BSDF, ReSTIR, radiance cache, SVGF and upscaler preview, OIDN, export Render Quality, physical camera |
 | [Browser 3D Scan](/features/3d-scan/) | Browser-local Camera Solve, FPS-aligned camera/stabilization tracks, project-backed COLMAP data, sparse previews, and capability-gated Brush WebGPU training |
 | [Vector Animation](/features/vector-animation/) | Lottie/Rive import, runtime playback, bounce modes, state-machine keyframes, Rive data binding, and export behavior |
 | [Audio](/features/audio/) | Playback sync, clip audio state, waveform/spectral display, recording, and export |
