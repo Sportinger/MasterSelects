@@ -34,6 +34,17 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 - Lower in the panel, `Advanced Video`, `Advanced Audio`, and `Range & Summary` sections provide raw-value access.
 - Export settings, presets, and the batch queue live in `exportStore` and are restored with the project. They are not timeline undo/redo history entries.
 
+### Render Quality
+
+**Render Quality** sets how 3D scenes are rendered for export: the engine
+(composition setting or override), raster sub-samples (jittered antialiasing, and
+motion blur when the camera shutter is open), and for path traced scenes the samples
+per pixel, an adaptive threshold (pixels stop once their error is below it, after 16
+samples), a time limit per frame and OIDN denoising. Path traced frames render
+bit-identically across exports. The progress shows a second level for the current
+frame: samples → denoise → encode, with the remaining time. See
+[Path Tracing](./Path-Tracing.md).
+
 ### Export Presets
 
 - Presets are stored per project, not in browser-only local storage.

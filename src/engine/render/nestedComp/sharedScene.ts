@@ -1,4 +1,5 @@
 import { sceneCompositeStyle } from '../../scene/sceneEffectRouting';
+import { resolveSceneRenderOptions } from '../../native3d/sceneRenderer/sceneRenderOptionsResolver';
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import type { Layer, LayerRenderData } from '../../core/types';
 import { getNativeSceneRenderer } from '../../native3d/NativeSceneRenderer';
@@ -120,6 +121,7 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
     maskTextureManager,
     'main',
     effectsPipeline && sampler ? { effectsPipeline, sampler, timelineTimeSeconds: currentTime ?? 0, effectRenderClock } : undefined,
+    resolveSceneRenderOptions(compositionId),
   );
   if (!textureView) {
     for (let i = indices3D.length - 1; i >= 0; i--) layerData.splice(indices3D[i], 1);

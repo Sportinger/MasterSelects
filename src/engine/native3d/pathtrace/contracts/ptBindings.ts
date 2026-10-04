@@ -38,7 +38,8 @@ export function ptSceneLayouts(device: GPUDevice): PtSceneLayouts {
     lightsMaterials: device.createBindGroupLayout({ label: 'pt-lights-materials', entries: [
       { binding: 0, visibility, buffer: { type: 'uniform', minBindingSize: PT_LIGHTS_BYTES } },
       { binding: 1, visibility, buffer: { type: 'uniform', minBindingSize: PT_MATERIALS_BYTES } },
-      { binding: 2, visibility, texture: { sampleType: 'float' } },
+      // Environment map and alias table are rgba32float, read with textureLoad.
+      { binding: 2, visibility, texture: { sampleType: 'unfilterable-float' } },
       { binding: 3, visibility, texture: { sampleType: 'unfilterable-float' } },
       { binding: 4, visibility, texture: { sampleType: 'float', viewDimension: '2d-array' } },
       { binding: 5, visibility, sampler: { type: 'filtering' } },

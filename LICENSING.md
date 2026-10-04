@@ -28,7 +28,8 @@ licensed by this notice. Access to hosted services is governed separately; this
 software license does not grant service credentials, credits, or access.
 
 Third-party libraries, optional models, and retained upstream material keep their
-own applicable terms. Read [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), the
+own applicable terms; for example the path tracer's OIDN denoiser weights in
+`public/oidn/` are Apache-2.0 and its oidn-web runtime is MIT. Read [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), the
 component notices, and any model terms shown before downloads. Those notices
 must be preserved where their licenses require it.
 

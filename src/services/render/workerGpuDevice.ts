@@ -101,7 +101,7 @@ function defaultDeviceDescriptor(adapter: GPUAdapter): GPUDeviceDescriptor {
     if (Number.isFinite(value) && value > 0) requiredLimits[key] = value;
   }
   return {
-    requiredFeatures: adapter.features?.has('timestamp-query') ? ['timestamp-query'] : [],
+    requiredFeatures: (['timestamp-query', 'shader-f16'] as GPUFeatureName[]).filter(feature => adapter.features?.has(feature)),
     requiredLimits,
   };
 }

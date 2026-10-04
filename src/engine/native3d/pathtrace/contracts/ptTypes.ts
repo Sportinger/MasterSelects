@@ -78,4 +78,8 @@ export interface PtStatus {
   segments: number;
   bvhNodes: number;
   gpuBytes: number;
+  /** Measured GPU nanoseconds per pixel sample (0 before the first measurement). */
+  nsPerSample?: number;
+  /** Samples behind the denoised image on screen (0: none yet). */
+  denoisedSamples?: number;
 }

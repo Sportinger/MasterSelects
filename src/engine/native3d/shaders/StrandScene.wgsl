@@ -39,6 +39,8 @@ struct StrandUniforms {
   look2: vec4f,
   coat: vec4f,
   materialColors: array<vec4f, 16>,
+  // Environment irradiance / π (environmentIrradiance.ts): [c0 rgb, 1 when present], linear term per channel.
+  irradiance: array<vec4f, 4>,
 };
 
 /** A point (kind 1) or panel (kind 2) scene light, packed like MeshPass lights. */
@@ -227,10 +229,21 @@ fn occluderVisibility(p: vec3f) -> f32 {
   return mix(1.0, lit, u.shadow.w);
 }
 
-/** Light reaching scene position `p` from the shadowing light through fibers and opaque meshes in front of it. */
-fn shadowTransmittance(p: vec3f) -> f32 {
-  return strandShadowTransmittance(p, u.shadowMatrix, u.shadow.y, u.shadow.w, u.shadowRange, SHADOW_BIAS,
-    shadowDepth, shadowOpacity, shadowSampler) * occluderVisibility(p);
+// Share of the light blocked by fibers that still arrives scattered forward through them.
+const DUAL_SCATTER_FORWARD: f32 = 0.6;
+
+/**
+ * Dual scattering (Zinke 2008), raster approximation: the deep opacity map gives how many fibers lie
+ * between the light and `p`; the direct share passes them unscattered, the scattered share arrives
+ * tinted by the fiber color once per two fibers. Bright yarn stays bright and saturated in its depth
+ * instead of turning gray, as in the path tracer. Opaque meshes still block all of it.
+ */
+fn shadowScatter(p: vec3f) -> vec3f {
+  let direct = strandShadowTransmittance(p, u.shadowMatrix, u.shadow.y, u.shadow.w, u.shadowRange, SHADOW_BIAS,
+    shadowDepth, shadowOpacity, shadowSampler);
+  let fibers = -log(max(direct, 1e-4)) / max(u.shadow.z, 0.01);
+  let scattered = pow(clamp(strandShadeColor, vec3f(1e-3), vec3f(1.0)), vec3f(0.5 * fibers + 1.0)) * (1.0 - direct) * DUAL_SCATTER_FORWARD;
+  return (vec3f(direct) + scattered) * occluderVisibility(p);
 }
 
 /**
@@ -272,6 +285,18 @@ fn shadeFiber(tangent: vec3f, normal: vec3f, view: vec3f, light: vec3f, tube: f3
 }
 
 /**
+ * Environment irradiance at a fiber: the cylinder normal for wide fibers; thin fibers see the
+ * average around their axis, where the linear term cancels.
+ */
+fn environmentAmbient(normal: vec3f, tube: f32) -> vec3f {
+  if (u.irradiance[0].w < 0.5) {
+    return vec3f(0.0);
+  }
+  let linear = vec3f(dot(u.irradiance[1].xyz, normal), dot(u.irradiance[2].xyz, normal), dot(u.irradiance[3].xyz, normal));
+  return max(u.irradiance[0].rgb + linear * tube, vec3f(0.0));
+}
+
+/**
  * Lit color of a fiber at one point of its ribbon. `across` runs from -1 to 1 over the ribbon width,
  * `widthAxis` is the world direction of its +1 side and `pixels` the projected fiber width.
  */
@@ -292,12 +317,12 @@ fn shadeStrandPoint(tangentIn: vec3f, toCamera: vec3f, acrossIn: f32, widthAxis:
   let position = u.camera.xyz - toCamera;
   let shadowed = i32(u.shadow.x + 0.5);
   if (u.ambient.w < 0.0) {
-    let visibility = select(1.0, shadowTransmittance(position), shadowed == 1);
+    let visibility = select(vec3f(1.0), shadowScatter(position), shadowed == 1);
     return u.light.w * strandShadeColor * occlusion
       + (1.0 - u.light.w) * visibility * shadeFiber(tangent, normal, view, normalize(u.light.xyz), tube);
   }
   // Scene lights, with the MeshPass falloff and panel direction.
-  var rgb = u.ambient.rgb * strandShadeColor * occlusion;
+  var rgb = (u.ambient.rgb + environmentAmbient(normal, tube)) * strandShadeColor * occlusion;
   let count = i32(u.ambient.w + 0.5);
   for (var index = 0; index < 4; index++) {
     if (index >= count) {
@@ -311,7 +336,7 @@ fn shadeStrandPoint(tangentIn: vec3f, toCamera: vec3f, acrossIn: f32, widthAxis:
     if (light.positionKind.w > 1.5) {
       attenuation *= max(dot(-direction, normalize(light.directionDiameter.xyz)), 0.0);
     }
-    let visibility = select(1.0, shadowTransmittance(position), shadowed == index + 2);
+    let visibility = select(vec3f(1.0), shadowScatter(position), shadowed == index + 2);
     rgb += light.colorIntensity.rgb * light.colorIntensity.a * attenuation * visibility * shadeFiber(tangent, normal, view, direction, tube);
   }
   return min(rgb, vec3f(8.0));

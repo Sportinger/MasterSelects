@@ -450,6 +450,8 @@ export class WebGPUContext {
     const subgroupFeature = 'subgroups' as GPUFeatureName;
     if (adapter.features?.has(subgroupFeature)) features.push(subgroupFeature);
     if (adapter.features?.has('timestamp-query')) features.push('timestamp-query');
+    // The path tracer's OIDN denoiser runs its network in FP16 when available.
+    if (adapter.features?.has('shader-f16')) features.push('shader-f16');
     return features;
   }
 

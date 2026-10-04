@@ -23,6 +23,15 @@ import { MeshStrandShadowBinding } from './meshPass/strandShadowReceiver';
 import type { StrandShadowReceiver } from './StrandPass';
 
 export type SceneMeshLayer = ScenePrimitiveLayer | SceneText3DLayer | SceneModelLayer;
+
+/** One drawn primitive of a mesh layer as the path tracer takes it (see MeshPass.pathTraceGeometry). */
+export interface PathTraceMeshPrimitive {
+  key: string;
+  vertices: Float32Array;
+  indices: Uint32Array;
+  material: import('./meshPass/materials').MeshMaterialPlan;
+  textureView?: GPUTextureView;
+}
 export type SceneNativeMeshLayer = ScenePrimitiveLayer | SceneText3DLayer | SceneModelLayer;
 
 interface PrimitiveGpuResources {
@@ -312,6 +321,38 @@ export class MeshPass {
       }
       this.modelCache.delete(modelCacheKey);
     }
+  }
+
+  /**
+   * The geometry the raster draws for `layer`, for the path tracer: object-space vertices
+   * (position, normal, uv; 8 floats) and indices per primitive, its material plan and base color
+   * texture. Null while a model is still loading.
+   */
+  pathTraceGeometry(device: GPUDevice, layer: SceneNativeMeshLayer, modelRuntimeCache: ModelRuntimeCache): PathTraceMeshPrimitive[] | null {
+    const resources = this.getOrCreateResources(device, layer, modelRuntimeCache);
+    if (!resources) return null;
+    let sources: Array<{ key: string; vertices: Float32Array; indices: Uint32Array }>;
+    if (layer.kind === 'primitive') {
+      const geometry = createPrimitiveGeometry(layer.meshType);
+      if (!geometry) return null;
+      sources = [{ key: `primitive:${layer.meshType}`, vertices: geometry.vertices, indices: geometry.indices }];
+    } else if (layer.kind === 'text3d') {
+      const geometry = this.textMeshCache.getOrCreate(layer.text3DProperties);
+      sources = [{ key: `text:${this.textMeshCache.getKey(layer.text3DProperties)}`, vertices: geometry.vertices, indices: geometry.indices }];
+    } else {
+      const runtime = layer.modelUrl ? modelRuntimeCache.get(layer.modelUrl) : undefined;
+      if (!runtime) return null;
+      const selected = getSelectedModelPrimitiveIndex(layer);
+      sources = selected !== undefined && runtime.primitives[selected]
+        ? [{ key: `model:${layer.modelUrl}:${selected}`, vertices: runtime.primitives[selected].centeredVertices ?? runtime.primitives[selected].vertices,
+          indices: runtime.primitives[selected].indices }]
+        : runtime.primitives.map((primitive, index) => ({ key: `model:${layer.modelUrl}:all:${index}`, vertices: primitive.vertices, indices: primitive.indices }));
+    }
+    return sources.map((source, index) => {
+      const gpu = resources[index] ?? resources[0];
+      return { ...source, material: resolveMeshMaterialPlan(layer, gpu.baseColor, gpu.unlit === true),
+        ...(gpu.textureView ? { textureView: gpu.textureView } : {}) };
+    });
   }
 
   private getOrCreateResources(

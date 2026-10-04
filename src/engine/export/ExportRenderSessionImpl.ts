@@ -13,6 +13,11 @@ import { seekVideo } from './VideoSeeker';
 import type { RenderSurfaceFrameContext } from '../../services/render/renderHostTypes';
 import { waitForLiveInputExportTime } from './liveInputExport';
 import { collectTemporalPreparations, awaitTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
+import { setNativeSceneExportFrame } from '../native3d/sceneRenderer/sceneRenderOptionsResolver';
+import { getNativeSceneExportProgress } from '../native3d/sceneRenderer/sceneExportProgress';
+
+/** Pause between the sample batches of a path traced export frame (system responsiveness). */
+const EXPORT_SAMPLE_GAP_MS = 4;
 
 const MAX_EXPORT_VIDEO_SOURCE_NESTING_DEPTH = 8;
 // Two real-media nesting levels can need several compositor turns after every
@@ -277,8 +282,13 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     syncExportMaskTextures(layers, this.width, this.height, input.time, this.host);
     const maskSyncMs = performance.now() - maskSyncStart;
 
+    // Path traced scenes of this frame accumulate under its export context (see accumulateSceneSamples).
+    if (input.renderQuality) {
+      setNativeSceneExportFrame({ frameIndex: input.frameIndex ?? 0, quality: input.renderQuality, frameDuration: input.frameStepSeconds ?? 1 / 30 });
+    }
     let renderMs = 0;
     const frameHistoryEventRevision = ++this.frameHistoryEventRevision;
+    let lastFrameContext: RenderSurfaceFrameContext | null = null;
     const isExportStart = this.exportStartPending;
     let temporalPreparationAttempts = 0;
     for (let attempt = 0; ; attempt += 1) {
@@ -293,6 +303,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
             ...(isExportStart ? { discontinuity: 'export-start' as const } : {}),
           },
         };
+        lastFrameContext = frameContext;
         const finishPreparations = collectTemporalPreparations(input.frameStepSeconds, input.framesRemaining);
         let pending: Promise<unknown>[];
         try { this.host.render(layers, frameContext); }
@@ -316,6 +327,8 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
         await waitForExportLayerVideoSources(layers, this.signal);
       }
     }
+
+    if (input.renderQuality && lastFrameContext) renderMs += await this.accumulateSceneSamples(input, layers, lastFrameContext);
 
     if (this.useZeroCopy) {
       // Zero-copy path: create VideoFrame directly from OffscreenCanvas
@@ -414,6 +427,39 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     throw createInvalidExportHostError(this.host.getTelemetry(), phase);
   }
 
+  /**
+   * Renders the frame again until its path traced scenes report it complete (samples, time limit or
+   * convergence, and denoise). Each render waits for the GPU to finish the previous one; OIDN runs
+   * asynchronously in between. Returns the time spent.
+   */
+  private async accumulateSceneSamples(input: ExportRenderFrameInput, layers: Layer[], frameContext: RenderSurfaceFrameContext): Promise<number> {
+    const started = performance.now();
+    const frameIndex = input.frameIndex ?? 0;
+    let offset = 0;
+    let current = layers;
+    for (let progress = getNativeSceneExportProgress(frameIndex); progress && !progress.complete; progress = getNativeSceneExportProgress(frameIndex)) {
+      if (this.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
+      input.onSampling?.({ stage: progress.denoising ? 'denoising' : 'sampling', samples: progress.samples, targetSamples: progress.targetSamples });
+      await progress.gpuDone;
+      // Motion blur: the next shutter slice shows the scene a little later in the frame.
+      if (progress.timeOffset !== offset && input.layersAtTime) {
+        offset = progress.timeOffset;
+        current = (await input.layersAtTime(input.time + offset)) as Layer[];
+        this.host.setRenderTimeOverride(input.time + offset);
+        await this.host.ensureExportLayersReady(current);
+        await waitForExportLayerVideoSources(current, this.signal);
+      }
+      // Let OIDN tiles and other queued tasks run, and leave the GPU a short gap so the rest of the
+      // system (desktop compositor, other apps) stays responsive during a long path traced export.
+      await new Promise(resolve => setTimeout(resolve, EXPORT_SAMPLE_GAP_MS));
+      this.host.render(current, frameContext);
+    }
+    if (offset !== 0) this.host.setRenderTimeOverride(input.time);
+    input.onSampling?.({ stage: 'encoding', samples: getNativeSceneExportProgress(frameIndex)?.samples ?? 0,
+      targetSamples: getNativeSceneExportProgress(frameIndex)?.targetSamples ?? 0 });
+    return performance.now() - started;
+  }
+
   cancel(reason?: string): void {
     if (!this.signal.aborted) {
       this.abortController.abort(reason);
@@ -424,6 +470,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    setNativeSceneExportFrame(null);
 
     if (!this.originalDimensions) return;
 

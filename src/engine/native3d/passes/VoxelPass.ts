@@ -2,6 +2,7 @@ import { nodeScalarSampleTap } from '../../../services/nodePreview/NodeScalarSam
 import type { SceneCamera, SceneLayer3DData, SceneVoxelLayer } from '../../scene/types';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
 import voxelShaderSource from '../shaders/VoxelPass.wgsl?raw';
+import voxelInstanceSource from '../shaders/VoxelInstance.wgsl?raw';
 import scalarFieldShader from '../../../shaders/scalarField.wgsl?raw';
 import {
   buildVoxelUniformData,
@@ -50,7 +51,7 @@ export class VoxelPass {
       ],
       label: 'native-scene-voxel-bind-group-layout',
     });
-    const module = device.createShaderModule({ code: scalarFieldShader + '\n' + voxelShaderSource, label: 'native-scene-voxel-shader' });
+    const module = device.createShaderModule({ code: [scalarFieldShader, voxelInstanceSource, voxelShaderSource].join('\n'), label: 'native-scene-voxel-shader' });
     const layout = device.createPipelineLayout({
       bindGroupLayouts: [this.bindGroupLayout],
       label: 'native-scene-voxel-pipeline-layout',

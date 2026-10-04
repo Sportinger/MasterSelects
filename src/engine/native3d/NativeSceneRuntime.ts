@@ -49,6 +49,10 @@ import {
   prepareModelLayerForRender,
 } from './sceneRenderer/modelSequence';
 import { SceneToneMap } from './sceneRenderer/sceneToneMap';
+import { PathTraceRuntime } from './pathtrace/runtime/PathTraceRuntime';
+import { collectPathTraceInputs, NO_STRAND_SHADOWS } from './sceneRenderer/pathTracedFrame';
+import { RasterSubSampleAccumulator } from './sceneRenderer/rasterSubSamples';
+import { onEnvironmentIrradianceReady } from './sceneRenderer/environmentIrradiance';
 import type { NativeSceneRenderOptions } from './sceneRenderer/renderOptions';
 import { createSceneTargets, hasMatchingSceneTargets, type SceneTargets } from './sceneRenderer/targets';
 import {
@@ -70,6 +74,8 @@ export class NativeSceneRuntime {
   private sceneDepthView: GPUTextureView | null = null;
   private readonly sceneTargets = new Map<string, SceneTargets>();
   private readonly toneMap = new SceneToneMap();
+  private readonly pathTrace = new PathTraceRuntime(() => this.host.requestRender?.());
+  private readonly rasterSubSamples = new RasterSubSampleAccumulator();
   private readonly planePass = new PlanePass();
   private readonly faceCablePass = new FaceCablePass();
   private readonly meshPass = new MeshPass();
@@ -83,9 +89,12 @@ export class NativeSceneRuntime {
   private readonly lastRenderableModelSequenceUrls = new Map<string, string>();
   private readonly layerSpaceEffectRenderer = new LayerSpaceEffectRenderer();
   private slitScanSurfaces?: SlitScanSceneSurfaces;
+  private readonly stopIrradianceListener: () => void;
   constructor(host: NativeSceneHost) {
     this.host = host;
     this.flockPass = new FlockPass(() => this.host.flockRuntime());
+    // A loaded environment map changes the raster's environment light: draw again.
+    this.stopIrradianceListener = onEnvironmentIrradianceReady(() => this.host.requestRender?.());
   }
 
   /** Rebind environment callbacks after HMR while retaining device/session state. */
@@ -137,6 +146,8 @@ export class NativeSceneRuntime {
       targets.depthTexture.destroy();
       this.sceneTargets.delete(key);
       this.toneMap.releaseTarget(key);
+      this.pathTrace.releaseTarget(key);
+      this.rasterSubSamples.releaseTarget(key);
       this.layerSpaceEffectRenderer.releaseTarget(key);
       this.slitScanSurfaces?.releaseTarget(key);
       this.faceCablePass.releaseTarget(key);
@@ -152,6 +163,8 @@ export class NativeSceneRuntime {
     targets.depthTexture.destroy();
     this.sceneTargets.delete(targetKey);
     this.toneMap.releaseTarget(targetKey);
+    this.pathTrace.releaseTarget(targetKey);
+    this.rasterSubSamples.releaseTarget(targetKey);
     this.layerSpaceEffectRenderer.releaseTarget(targetKey);
     this.slitScanSurfaces?.releaseTarget(targetKey);
     this.faceCablePass.releaseTarget(targetKey);
@@ -252,6 +265,9 @@ export class NativeSceneRuntime {
     this.sceneDepthView = null;
     this.sceneDisplayView = null;
     this.toneMap.dispose();
+    this.pathTrace.dispose();
+    this.rasterSubSamples.dispose();
+    this.stopIrradianceListener();
     this.initialized = false;
     this.planePass.dispose();
     this.faceCablePass.dispose();
@@ -311,6 +327,10 @@ export class NativeSceneRuntime {
       return null;
     }
 
+    // Raster export sub-samples render with a jittered projection and are averaged before tone mapping.
+    const engine = options?.exportFrame?.quality.engine ?? options?.renderSettings?.engine ?? 'raster';
+    const subSample = engine === 'raster' ? this.rasterSubSamples.begin(targetKey, options?.exportFrame, camera) : null;
+    if (subSample) camera = subSample.camera;
     this.ensureSceneTargets(device, targetKey, camera.viewport.width, camera.viewport.height);
     this.planePass.ensureResources(device);
     this.meshPass.initialize(device, SCENE_DEPTH_FORMAT);
@@ -374,9 +394,22 @@ export class NativeSceneRuntime {
     // Flock simulations advance (compute) before any scene render pass is opened.
     const flockPlans = this.flockPass.prepare(device, commandEncoder, flockLayers, realtimePlayback);
     const strandPlans = this.strandPass.prepare(device, strandLayers, temporaryBuffers);
+    const readyVoxels = voxelLayers.flatMap((layer) => {
+      const textureView = effectedTextureViews.get(layer.layerId) ?? this.planePass.resolveTextureView(device, layer);
+      return textureView ? [{ layer, textureView }] : [];
+    });
+    // Path traced frames replace the mesh, plane, voxel and strand passes (and write scene depth for
+    // the layers still rasterized over them); a scene beyond the device limits falls back to raster.
+    const pathTraced = engine === 'path-traced' && !!options?.renderSettings && this.pathTrace.render({
+      device, encoder: commandEncoder, targetKey, camera, lights: lightLayers, sceneView: this.sceneView, sceneDepthView: this.sceneDepthView,
+      settings: options.renderSettings, exportFrame: options.exportFrame, realtime: realtimePlayback, temporaries: temporaryBuffers,
+      ...collectPathTraceInputs(device, { strandPlans, meshLayers: nativeMeshLayers, planeLayers, meshPass: this.meshPass, planePass: this.planePass,
+        modelRuntimeCache: this.modelRuntimeCache, effectors, effectedTextureViews, voxels: readyVoxels }),
+      sphereSets: this.flockPass.pathTracePoints(device, flockPlans, camera),
+    });
     // Strand shadow maps come before the opaque passes: lit meshes receive them, and opaque meshes
     // seen from a scene light cast into them.
-    const strandShadows = this.strandPass.prepareShadows(device, commandEncoder, strandPlans, temporaryBuffers, lightLayers,
+    const strandShadows = pathTraced ? NO_STRAND_SHADOWS : this.strandPass.prepareShadows(device, commandEncoder, strandPlans, temporaryBuffers, lightLayers,
       (encoder, depth, viewMatrix, projectionMatrix) => this.meshPass.renderShadowCasters(device, encoder, depth,
         { viewMatrix, projectionMatrix }, opaqueMeshes, effectors, this.modelRuntimeCache, temporaryBuffers));
 
@@ -385,55 +418,53 @@ export class NativeSceneRuntime {
     //   2. Splats -> scene color, depth-tested but no writes for full gaussian blending quality
     //   3. Splats -> shared soft depth mask, writing only high-alpha cores for cross-splat occlusion
     //   4. Transparent planes/materials and blended flock branches -> scene color after splats
-    const clearPass = commandEncoder.beginRenderPass({
-      colorAttachments: [
-        {
-          view: this.sceneView,
-          clearValue: { r: 0, g: 0, b: 0, a: 0 },
-          loadOp: 'clear',
-          storeOp: 'store',
+    if (!pathTraced) {
+      const clearPass = commandEncoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: this.sceneView,
+            clearValue: { r: 0, g: 0, b: 0, a: 0 },
+            loadOp: 'clear',
+            storeOp: 'store',
+          },
+        ],
+        depthStencilAttachment: {
+          view: this.sceneDepthView,
+          depthClearValue: 1,
+          depthLoadOp: 'clear',
+          depthStoreOp: 'store',
         },
-      ],
-      depthStencilAttachment: {
-        view: this.sceneDepthView,
-        depthClearValue: 1,
-        depthLoadOp: 'clear',
-        depthStoreOp: 'store',
-      },
-      label: 'native-scene-clear-pass',
-    });
-    clearPass.end();
+        label: 'native-scene-clear-pass',
+      });
+      clearPass.end();
 
-    if (!this.meshPass.renderPrimitivePass(
-      device,
-      commandEncoder,
-      this.sceneView,
-      this.sceneDepthView,
-      opaqueMeshes,
-      camera,
-      effectors,
-      lightLayers,
-      this.modelRuntimeCache,
-      temporaryBuffers,
-      false,
-      strandShadows.receiver,
-    )) {
-      return null;
-    }
+      if (!this.meshPass.renderPrimitivePass(
+        device,
+        commandEncoder,
+        this.sceneView,
+        this.sceneDepthView,
+        opaqueMeshes,
+        camera,
+        effectors,
+        lightLayers,
+        this.modelRuntimeCache,
+        temporaryBuffers,
+        false,
+        strandShadows.receiver,
+      )) {
+        return null;
+      }
 
-    if (!this.planePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, opaquePlanes, camera, false, temporaryBuffers, maskTextureManager, effectedTextureViews)) {
-      return null;
+      if (!this.planePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, opaquePlanes, camera, false, temporaryBuffers, maskTextureManager, effectedTextureViews)) {
+        return null;
+      }
     }
     if (!this.faceCablePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, cableLayers, lightLayers, camera, targetKey,
       layer => effectedTextureViews.get(layer.layerId) ?? this.planePass.resolveTextureView(device, layer), temporaryBuffers)) return null;
 
-    const readyVoxels = voxelLayers.flatMap((layer) => {
-      const textureView = effectedTextureViews.get(layer.layerId) ?? this.planePass.resolveTextureView(device, layer);
-      return textureView ? [{ layer, textureView }] : [];
-    });
-    if (!this.voxelPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, readyVoxels, camera, temporaryBuffers)) return null;
-    if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'opaque', temporaryBuffers)) return null;
-    if (!this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandShadows, camera, temporaryBuffers)) return null;
+    if (!pathTraced && !this.voxelPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, readyVoxels, camera, temporaryBuffers)) return null;
+    if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'opaque', temporaryBuffers, pathTraced)) return null;
+    if (!pathTraced && !this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandShadows, camera, temporaryBuffers)) return null;
 
     for (const layer of sortedLayers) {
       const renderSettings = layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
@@ -513,7 +544,7 @@ export class NativeSceneRuntime {
       }
     }
 
-    if (!this.meshPass.renderPrimitivePass(
+    if (!pathTraced && !this.meshPass.renderPrimitivePass(
       device,
       commandEncoder,
       this.sceneView,
@@ -532,14 +563,15 @@ export class NativeSceneRuntime {
 
     // Slit Scan retains source alpha. Composite after opaque geometry so its
     // translucent pixels reveal the scene already rendered behind the surface.
-    for (const layer of sortBySceneLayerDepth([...transparentPlanes, ...readySurfaces], camera)) {
+    for (const layer of sortBySceneLayerDepth([...(pathTraced ? [] : transparentPlanes), ...readySurfaces], camera)) {
       if (layer.slitScanGeometry && this.geometrySurfaces.hasDraw(layer.layerId)) {
         this.geometrySurfaces.render(device, commandEncoder, this.sceneView, this.sceneDepthView, temporaryBuffers, camera.viewport, layerSpaceEffects, layer.layerId);
       } else if (!this.planePass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, [layer], camera, true, temporaryBuffers, maskTextureManager, effectedTextureViews)) {
         return null;
       }
     }
-    if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'transparent', temporaryBuffers)) return null;
+    if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'transparent', temporaryBuffers,
+      pathTraced)) return null;
     const gizmoLayer = gizmo
       ? [...planeLayers, ...voxelLayers, ...flockLayers, ...strandLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
         (gizmo.worldMatrix && gizmo.worldTransform
@@ -563,10 +595,13 @@ export class NativeSceneRuntime {
     )) {
       return null;
     }
+    if (subSample) this.rasterSubSamples.accumulate(device, commandEncoder, targetKey, this.sceneTexture, options!.exportFrame!, subSample, temporaryBuffers);
     this.toneMap.render(device, commandEncoder, targetKey, this.sceneView, this.sceneDisplayView, camera.lens,
       options?.renderSettings?.engine ?? 'raster');
     const readTimings = gpuTimings.resolve(commandEncoder, `render:${targetKey}`);
     device.queue.submit([commandEncoder.finish()]);
+    this.pathTrace.afterSubmit(device);
+    this.rasterSubSamples.afterSubmit(device);
     readTimings();
     void device.queue.onSubmittedWorkDone()
       .then(() => {

@@ -182,7 +182,8 @@ export class WorkerGpuNativeSceneOwner {
   render(input: WorkerGpuFrameStackNativeSceneInput): LayerRenderData {
     const entry = this.scenes.get(this.key(input.frameStack, input.binding.layerId));
     if (this.disposed || !entry?.camera || entry.payload !== input.payload) throw new Error('Native scene was not prepared for this frozen frame');
-    const textureView = entry.scene.renderScene(this.device, entry.layers, entry.camera, [], false);
+    const textureView = entry.scene.renderScene(this.device, entry.layers, entry.camera, [], false, null, null, 'main', undefined,
+      { renderSettings: input.payload.renderSettings });
     if (!textureView) throw new Error('Worker native scene produced no texture');
     return { layer: input.layer, isVideo: false, isDynamic: true, externalTexture: null, textureView,
       sourceWidth: input.payload.width, sourceHeight: input.payload.height, targetMediaTime: input.payload.timelineTime,

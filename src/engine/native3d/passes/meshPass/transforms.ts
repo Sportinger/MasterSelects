@@ -37,7 +37,8 @@ export function buildMeshMatrixPlan(
   return { modelMatrix, mvp };
 }
 
-function resolveModelMatrix(
+/** World matrix of a mesh layer with scene effectors applied (the matrix the raster draws with). */
+export function resolveModelMatrix(
   layer: SceneNativeMeshLayer,
   effectors: Parameters<typeof applySceneEffectorsToObjectTransform>[1],
 ): Float32Array {

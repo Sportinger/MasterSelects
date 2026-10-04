@@ -90,6 +90,7 @@
     "ml-matrix": "^6.15.0",
     "modern-screenshot": "^4.7.0",
     "mp4box": "^2.3.0",
+    "oidn-web": "^0.4.0",
     "onnxruntime-web": "^1.24.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.2.108",

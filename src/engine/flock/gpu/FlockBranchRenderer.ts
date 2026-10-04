@@ -9,6 +9,7 @@ import type { FlockRenderAssets } from './FlockRenderAssets';
 import { FlockPointCache } from './FlockPointCache';
 import { FlockPointRasterizer, type FlockRasterTarget } from './FlockPointRasterizer';
 import { flockGpuTimings } from './FlockGpuTimings';
+import { FLOCK_PATH_TRACE_WORKGROUP } from '../shaders/flockPathTraceWgsl';
 import { BRANCH_BYTES, RENDER_BLOCK_BYTES, flockPointChildren, flockPointChildrenForViewport, flockPointUsesCompute, flockPointUsesTriangles, packBranch, packRenderBlock } from './flockRenderPacking';
 
 export interface FlockLinkBinding {
@@ -27,6 +28,16 @@ export interface FlockDrawPlan {
 }
 
 export type FlockPassKind = 'opaque' | 'transparent';
+
+/** A point branch the path tracer draws as spheres (plan 3.7). */
+export interface FlockPathTracePoints {
+  key: string;
+  count: number;
+  /** Lit points reflect light; unlit (and additive) points emit their color. */
+  lit: boolean;
+  /** Changes whenever the points may have moved (simulation step, interpolation, camera for screen-sized points). */
+  version: string;
+}
 
 interface PreparedDraw {
   plan: FlockDrawPlan;
@@ -56,6 +67,8 @@ export class FlockBranchRenderer {
   private readonly shadowPlaceholder: GPUTexture;
   private readonly shadowPlaceholderView: GPUTextureView;
   private readonly shadowSampler: GPUSampler;
+  /** Point branches handed to the path tracer this frame, by cache key. */
+  private readonly pathTraceDraws = new Map<string, PreparedDraw>();
   /** Light setup resolved during this frame's opaque pass, reused by the transparent pass. */
   private readonly lights = new WeakMap<FlockDrawPlan, FlockLightSetup>();
   private readonly pointCache: FlockPointCache;
@@ -184,6 +197,45 @@ export class FlockBranchRenderer {
       }
     }
     return draws;
+  }
+
+  /** The plans' point branches for the path tracer, with their point counts (those within the cache budget). */
+  pathTracePoints(plans: FlockDrawPlan[], camera: SceneCamera): FlockPathTracePoints[] {
+    this.pathTraceDraws.clear();
+    const points: FlockPathTracePoints[] = [];
+    for (const plan of plans) {
+      for (const draw of [...this.collect([plan], 'opaque', camera.viewport), ...this.collect([plan], 'transparent', camera.viewport)]) {
+        if (draw.kind !== 'points' || !draw.cacheKey || !this.pointCache.ensure(draw.cacheKey, draw.instanceCount)) continue;
+        this.pathTraceDraws.set(draw.cacheKey, draw);
+        points.push({ key: draw.cacheKey, count: draw.instanceCount, lit: draw.lit && draw.blend !== 'additive',
+          version: `${plan.session.step}|${plan.alpha}|${plan.render.time}|${Array.from(camera.viewMatrix).join(',')}` });
+      }
+    }
+    return points;
+  }
+
+  /** Evaluates the points of `points` (cachePoints) and writes them as spheres at vec4 `base` of the path tracer's object pool. */
+  encodePathTraceSpheres(encoder: GPUCommandEncoder, points: FlockPathTracePoints, base: number, objects: GPUBuffer, camera: SceneCamera,
+    temporaryBuffers: GPUBuffer[]): void {
+    const draw = this.pathTraceDraws.get(points.key);
+    const entry = draw ? this.pointCache.ensure(points.key, draw.instanceCount) : null;
+    if (!draw || !entry) return;
+    const frame = this.frameGroup(draw.plan, camera, resolveFlockLight(draw.plan.render, draw.plan.program.emitters), this.shadowPlaceholderView,
+      temporaryBuffers);
+    const branch = this.branchGroup(draw, temporaryBuffers);
+    this.pointCache.encode(encoder, 'cachePoints', entry, frame, branch);
+    const dispatchWidth = Math.min(65535, this.device.limits.maxComputeWorkgroupsPerDimension) * FLOCK_PATH_TRACE_WORKGROUP;
+    const params = this.device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, label: 'flock-path-trace-params' });
+    temporaryBuffers.push(params);
+    this.device.queue.writeBuffer(params, 0, Uint32Array.of(entry.total, base, dispatchWidth, 0));
+    const pass = encoder.beginComputePass({ label: 'flock-path-trace-spheres' });
+    pass.setPipeline(this.pipelines.getPathTracePipeline());
+    pass.setBindGroup(0, frame);
+    pass.setBindGroup(1, branch);
+    pass.setBindGroup(2, this.device.createBindGroup({ layout: this.pipelines.pathTraceLayout, label: 'flock-path-trace-group', entries: [
+      { binding: 0, resource: { buffer: entry.buffer } }, { binding: 1, resource: { buffer: objects } }, { binding: 2, resource: { buffer: params } }] }));
+    pass.dispatchWorkgroups(Math.ceil(Math.min(entry.total, dispatchWidth) / FLOCK_PATH_TRACE_WORKGROUP), Math.ceil(entry.total / dispatchWidth));
+    pass.end();
   }
 
   private shadowTexture(clipId: string): GPUTexture {
@@ -357,9 +409,11 @@ export class FlockBranchRenderer {
     camera: SceneCamera,
     pass: FlockPassKind,
     temporaryBuffers: GPUBuffer[],
+    /** Path traced frames: the path tracer draws the point branches as spheres. */
+    skipPoints = false,
   ): boolean {
     if (pass === 'opaque') this.prepareFrame(commandEncoder, plans, camera, temporaryBuffers);
-    const draws = this.collect(plans, pass, camera.viewport);
+    const draws = this.collect(plans, pass, camera.viewport).filter(draw => !skipPoints || draw.kind !== 'points');
     if (draws.length === 0) return true;
     const frameGroups = new Map<FlockDrawPlan, GPUBindGroup>();
     for (const plan of new Set(draws.map((draw) => draw.plan))) {

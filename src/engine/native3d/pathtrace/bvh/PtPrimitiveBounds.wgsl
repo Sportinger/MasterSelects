@@ -13,8 +13,8 @@ struct BoundsParams {
 @group(0) @binding(0) var<uniform> boundsParams: BoundsParams;
 @group(0) @binding(1) var<storage, read> boundsFibers: array<PtFiberSegment>;
 @group(0) @binding(2) var<storage, read> boundsObjects: array<vec4f>;
-@group(0) @binding(3) var<storage, read> boundsNodes0: array<PtBvhNode>;
-@group(0) @binding(4) var<storage, read> boundsNodes1: array<PtBvhNode>;
+@group(0) @binding(3) var<storage, read> boundsNodes0: array<PtWideNode>;
+@group(0) @binding(4) var<storage, read> boundsNodes1: array<PtWideNode>;
 @group(0) @binding(5) var<storage, read_write> boundsOut: array<vec4f>;
 
 const BOUNDS_EMPTY_LO: vec3f = vec3f(PT_INFINITY);
@@ -96,7 +96,7 @@ fn boxBounds(@builtin(global_invocation_id) id: vec3u) {
   boundsWrite(i, boundsObjects[at].xyz, boundsObjects[at + 1u].xyz);
 }
 
-fn boundsNode(index: u32) -> PtBvhNode {
+fn boundsNode(index: u32) -> PtWideNode {
   if (index < boundsParams.nodePage1Start) {
     return boundsNodes0[index];
   }
@@ -120,15 +120,18 @@ fn instanceBounds(@builtin(global_invocation_id) id: vec3u) {
     boundsWrite(i, BOUNDS_EMPTY_LO, BOUNDS_EMPTY_HI);
     return;
   }
-  let root = boundsNode(refs.x);
-  if (any(root.boundsMin > root.boundsMax)) {
+  let rootNode = boundsNode(refs.x);
+  // The BLAS bounds: both children of its root traversal node (an empty child has min > max).
+  let rootMin = min(rootNode.leftMin, rootNode.rightMin);
+  let rootMax = max(rootNode.leftMax, rootNode.rightMax);
+  if (any(rootMin > rootMax)) {
     boundsWrite(i, BOUNDS_EMPTY_LO, BOUNDS_EMPTY_HI);
     return;
   }
   var lo = BOUNDS_EMPTY_LO;
   var hi = BOUNDS_EMPTY_HI;
   for (var corner = 0u; corner < 8u; corner++) {
-    let p = select(root.boundsMin, root.boundsMax, vec3<bool>((corner & 1u) != 0u, (corner & 2u) != 0u, (corner & 4u) != 0u));
+    let p = select(rootMin, rootMax, vec3<bool>((corner & 1u) != 0u, (corner & 2u) != 0u, (corner & 4u) != 0u));
     let w = ptTransformPoint(r0, r1, r2, p);
     lo = min(lo, w);
     hi = max(hi, w);
