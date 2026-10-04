@@ -25,8 +25,49 @@ Feature docs: one page per feature under `docs/Features/`, index at
 
 ## 1. Shared-workspace ground rules
 
-Several agents (typically 3) plus the user work in this ONE working tree at
-the same time, on the same branch. Therefore:
+Several agents (typically 3) plus the user work in this repository at the same
+time. The main folder (`C:\Users\admin\Documents\MasterSelects-Public`) is
+shared; every agent task gets its own branch and worktree (branch model below).
+
+### Branch model (decision 2026-10-04, user)
+
+| Branch | Where | Purpose |
+|---|---|---|
+| `master` | GitHub | Integration and release branch. Production is uploaded manually from it; the Fassandra auto-repair loop pushes its tested fixes to it as fast-forward commits. |
+| `local` | main folder only, never pushed | The owner's working branch, checked out in the main folder. |
+| `task/<short-name>` | own worktree | One branch per agent task (Claude Code, Codex workers, any other agent). |
+
+- **Start every task** on a new `task/<short-name>` branch from the current
+  `local`, in its own worktree next to the main folder:
+  `git worktree add -b task/<short-name> ../MasterSelects-tasks/<short-name> local`.
+  Install dependencies there with a real `npm ci`; never link or junction
+  `node_modules` from the main folder (a forced worktree removal once deleted
+  the real packages through such a link).
+- **Work and commit only in your worktree.** In the main folder never switch,
+  create, rename, rebase, reset, or delete branches, and never commit there
+  unless the owner explicitly asks for a change directly on `local`.
+- **Live checks from a task worktree:** run only Vite there on a free port
+  (`npx vite --port 5174 --strictPort`). It proxies to the shared kernel and
+  local API of the main folder's `dev:full` (8787/8788); never start a second
+  `dev:full`. The new origin needs its own login and test project, and the
+  optional bridge MCP tools target the main folder's editor, so test the task
+  worktree in the browser.
+- **Finish** with all commits on your task branch and report the branch name.
+  The owner merges task branches into `local` and `local` into `master`;
+  agents merge, push, or delete branches only on explicit request. Remove a
+  worktree only after the owner confirms its branch is merged, with a plain
+  `git worktree remove <path>` (never `--force` without inspecting it first).
+- **Fixes from Fassandra arrive on `master`.** Keep `local` current by merging
+  `origin/master` into it (owner, or an agent on request) and start new task
+  branches from the updated `local`.
+- **The Fassandra auto-repair agent** (Codex on Fassandra) never sees `local`
+  or task branches: it works in a fresh remote checkout of `origin/master` on
+  the AWS test hosts, does not commit itself, and its controller pushes only
+  reviewed and tested fast-forward commits to `master`. For it, the rest of
+  this section describes how the owner's side works; its own limits are in the
+  Fassandra repair prompt and `aws-test-maintenance` skill.
+
+### Working rules
 
 - Treat every change you did not make as someone else's active work. Never
   revert, overwrite, clean up, or reformat it.
@@ -40,7 +81,8 @@ the same time, on the same branch. Therefore:
   resolves to `Sportinger/MasterSelects` for fetch and push; if it does not,
   stop and report the mismatch instead of changing remotes.
 - Never push, merge, or switch branches manually without an explicit user
-  request. Because every commit is public, never commit credentials, secrets,
+  request (task branches in your own worktree are the exception, see above).
+  Because every pushed commit is public, never commit credentials, secrets,
   `.dev.vars` values, or kernel implementation.
 - Agents may start or restart the shared dev environment (`npm run dev:full`)
   when the task requires it. Resolve the exact MasterSelects process tree and
@@ -80,8 +122,9 @@ implementation choices, or mandatory user testing.
    one existing test tab and run scenarios sequentially;
    open another only when isolation is technically necessary, explaining why
    before opening it. The running local editor at `https://localhost:5173/editor`
-   is explicitly authorized by the user as a test project. Test product behavior
-   directly there: agents may create, modify, and remove test clips, effects,
+   (main folder) and the editor a task worktree serves on its own Vite port
+   (section 1) are explicitly authorized by the user as test projects. Test
+   product behavior directly there: agents may create, modify, and remove test clips, effects,
    graphs, keyframes, and other project data as needed, without asking again.
    Prefer this editor for live interaction checks; isolated probes may supplement
    it for exact GPU/pixel measurements. This authorization applies to the local
@@ -103,9 +146,10 @@ implementation choices, or mandatory user testing.
    to watch or approve the test run.
 5. **Finish without another approval round.** Update the matching feature docs
    and `README.md` when product behavior changes. Once the relevant checks pass,
-   commit locally using an English, one-line conventional message and explicit
-   file paths. User confirmation is not a prerequisite. Report what changed,
-   the verification result, and any material limitation briefly.
+   commit on your task branch using an English, one-line conventional message
+   and explicit file paths. User confirmation is not a prerequisite. Report the
+   branch, what changed, the verification result, and any material limitation
+   briefly.
 
 If a required check is blocked, continue independent work first, then report
 the exact blocker and the smallest user action needed. Do not claim untested
