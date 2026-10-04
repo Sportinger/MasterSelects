@@ -326,20 +326,12 @@ export class VideoEncoderWrapper {
     if (!this.encoder || this.isClosed) {
       throw new Error('Encoder not initialized or already closed');
     }
-    const __w0 = performance.now(); // TEMP-PROFILE
     await this.waitForEncodeCapacity();
-    const __w1 = performance.now(); // TEMP-PROFILE
 
     // FPS-based keyframe interval (default: 1 keyframe per second)
     const interval = keyframeInterval ?? this.settings.fps;
     const keyFrame = frameIndex % interval === 0;
     this.encoder.encode(frame, { keyFrame });
-    { // TEMP-PROFILE
-      const w = window as unknown as { __encPhases?: Record<string, number> };
-      const a = (w.__encPhases ??= { frames: 0, wait: 0, encodeCall: 0, inFlightAtEncode: 0, queueAtEncode: 0 });
-      a.frames++; a.wait += __w1 - __w0; a.encodeCall += performance.now() - __w1;
-      a.inFlightAtEncode += this.framesSubmitted - this.encodedFrameCount; a.queueAtEncode += this.encoder.encodeQueueSize;
-    }
     this.framesSubmittedSinceFlush++;
     this.framesSubmitted++;
 
