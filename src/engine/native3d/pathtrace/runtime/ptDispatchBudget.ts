@@ -14,8 +14,9 @@ export const PT_BAND_STRIDE = 256;
 export const PT_MAX_BANDS = 128;
 
 /** GPU time one band dispatch may take. */
-// Short enough that the desktop compositor and other apps get the GPU between bands (no system lag).
-const DISPATCH_BUDGET_MS = 12;
+// Short enough that the desktop compositor, video in other tabs and other apps get the GPU between
+// bands: Chrome runs every tab's GPU work on one GPU, so a long pass stalls them all.
+const DISPATCH_BUDGET_MS = 6;
 /** Before the first measurement: a conservative guess (fiber-heavy scenes on a mid-range GPU). */
 const INITIAL_NS_PER_PIXEL_SAMPLE = 400;
 /**

@@ -278,6 +278,23 @@
   padding: 4px 6px;
 }
 
+.preview-render-quality-btn {
+  margin-left: 4px;
+  padding: 4px 6px;
+}
+
+.preview-render-status {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.preview-render-status.fallback {
+  color: var(--red-500, #e5484d);
+}
+
 /* Pointer activation never leaves a native focus ring; keyboard focus keeps the product outline. */
 .preview-edit-btn,
 .preview-scene-toggle-btn,

@@ -74,9 +74,11 @@ export function setPtDebugView(view: PtDebugView): void { debugView = view; }
 export function getPtDebugView(): PtDebugView { return debugView; }
 
 /** GPU time per frame the integrator may use: playback and a still preview converging (export renders fixed batches). */
-const FRAME_BUDGET_MS = { realtime: 24, still: 80, export: Number.POSITIVE_INFINITY } as const;
+const FRAME_BUDGET_MS = { realtime: 24, still: 30, export: Number.POSITIVE_INFINITY } as const;
 /** Most samples one frame adds (the budget decides below that; export always adds this many). */
-const MAX_SAMPLES_PER_FRAME = { realtime: 1, still: 16, export: 4 } as const;
+const MAX_SAMPLES_PER_FRAME = { realtime: 1, still: 8, export: 4 } as const;
+/** A converging still image idles this many times as long as its last batch took (a third of the GPU at most). */
+const STILL_IDLE_FACTOR = 2;
 /** A still image fades from the last realtime image to the accumulation between these sample counts. */
 const STILL_FADE_START = 4;
 const STILL_FADE_END = 48;
@@ -135,7 +137,7 @@ export class PathTraceRuntime {
   private requestRenderAfter(delayMs: number): void {
     if (delayMs < 4) { this.requestRender(); return; }
     if (this.renderTimer) return;
-    this.renderTimer = setTimeout(() => { this.renderTimer = null; this.requestRender(); }, Math.min(delayMs, 250));
+    this.renderTimer = setTimeout(() => { this.renderTimer = null; this.requestRender(); }, Math.min(delayMs, 500));
   }
 
   /** Export accumulation state of this render, reported once its commands are submitted. */
@@ -361,10 +363,12 @@ export class PathTraceRuntime {
     const waitForDenoise = denoise && !state.denoiseFailed;
     const blend = output && sameSize && !denoised && debugView === 'none'
       ? waitForDenoise ? 1 : 1 - smoothstep(STILL_FADE_START, fadeEnd, state.samples) : 0;
-    this.resolve(device, encoder, state, request, output && blend > 0 ? { output, blend, only: false } : null);
-    // A converging still image leaves the GPU idle about as long as its last batch took (about half the
-    // GPU at most): accumulating in the background must not make the whole system stutter.
-    if (!converged && !exporting) this.requestRenderAfter(plan ? plan.samples * renderWidth * renderHeight * this.budget.costNs / 1e6 : 0);
+    this.resolve(device, encoder, state, request, output && sameSize && debugView === 'none' ? { output, blend, only: false } : null);
+    // A converging still image leaves the GPU idle for longer than its last batch took (a third of the GPU
+    // at most): refining in the background must not stall video and other tabs on the same GPU.
+    if (!converged && !exporting) {
+      this.requestRenderAfter(plan ? STILL_IDLE_FACTOR * plan.samples * regionWidth * regionRows * this.budget.costNs / 1e6 : 0);
+    }
     const denoising = !!state.denoiseJob || (converged && denoise && !state.denoiseFailed && state.denoisedSamples < target);
     if (exporting) {
       const nextSlice = Math.min(slices - 1, Math.floor(state.samples / sliceSamples));
@@ -419,7 +423,8 @@ export class PathTraceRuntime {
     const denoised = state.denoised && state.denoisedSignature === state.signature ? state.denoised : null;
     const { width, height } = request.camera.viewport;
     device.queue.writeBuffer(this.resolveUniform!, 0, Float32Array.of(state.width, state.height, width, height,
-      inverse, denoised ? 1 : inverse, PT_DEBUG_VIEW_CODE[debugView], denoised ? 1 : 0, realtime?.blend ?? 0, realtime?.only ? 1 : 0, 0, 0));
+      inverse, denoised ? 1 : inverse, PT_DEBUG_VIEW_CODE[debugView], denoised ? 1 : 0, realtime?.blend ?? 0, realtime?.only ? 1 : 0,
+      realtime ? 1 : 0, 0));
     this.realtimePlaceholder ??= device.createBuffer({ label: 'pt-realtime-none', size: 16, usage: GPUBufferUsage.STORAGE });
     const pass = encoder.beginRenderPass({ label: 'pt-resolve',
       colorAttachments: [{ view: request.sceneView, clearValue: { r: 0, g: 0, b: 0, a: 0 }, loadOp: 'clear', storeOp: 'store' }],

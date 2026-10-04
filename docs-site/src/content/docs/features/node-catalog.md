@@ -356,7 +356,9 @@ geometry are rejected instead of silently executing another graph.
 
 `image.frame` provides the decoded image. `texture.uv` composes UV transforms;
 `texture.image` maps the frame to a texture. `material.surface` applies tint and
-opacity or a solid color. `geometry.plane` creates a sized plane;
+opacity or a solid color; its Roughness, Metallic and Emission (color, strength,
+from texture) are used by the path tracer, where a plane with roughness or metallic
+becomes a lit surface instead of showing its texture unlit. `geometry.plane` creates a sized plane;
 `geometry.source` references the clip's baked geometry. `scene.mesh` pairs geometry
 with material. `scene.clip-transform` applies the clip matrix and keyframes once;
 `scene.render` outputs the object using timeline camera/light references.
@@ -394,7 +396,8 @@ node is one node in every graph rather than a per-domain copy.
 | Celtic Knot | Columns, Rows, Cell Size, Height, Points per Step, Roundness → Celtic plait loops alternating over and under like a plain weave |
 | Knit | Stitches, Rows, stitch Width and Height, row Spacing, Depth, Lean, Points per Stitch → weft-knit rows whose loops interlock with the row below |
 | Thread Along | Curves (+ optional per-point Progress) → curves pulled in behind a lifted tip that settles with a damped swing; ahead of the tip hidden or trailing straight from the tip (Progress, Stagger, Lift, Lift Length, Settle, Ahead, Trail) |
-| Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color, Antialiasing) |
+| Fiber Material | Curves → curves with a fiber material for Strand Render: Preset (wool, cotton, silk, synthetic, hair), Color or Absorption or Melanin (+ Redness), longitudinal and azimuthal Roughness, Cuticle Tilt, IOR, Coat Tint, Matte, Fuzz; Color, Roughness, Melanin and Selection field inputs per point |
+| Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color — "From material" with a Fiber Material, Antialiasing, Subdivision: path traced segments per curve segment) |
 
 The default Weave graph is Weave Pattern → Set Position (Handmade) → Thread Along →
 Yarn Profile → Flyaways → Surface Bind → Strand Render: a plain weave of fuzzy
