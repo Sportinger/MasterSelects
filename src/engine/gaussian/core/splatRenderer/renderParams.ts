@@ -10,6 +10,8 @@ export interface SplatRenderOptions {
   backgroundColor?: string;
   /** Render into an existing color attachment instead of an internal pooled target. */
   outputView?: GPUTextureView;
+  /** Format of `outputView`; defaults to the 8-bit format of the internal targets. */
+  outputFormat?: GPUTextureFormat;
   /** Color load operation for the target render pass. */
   colorLoadOp?: GPULoadOp;
   /** Optional shared scene depth attachment. */

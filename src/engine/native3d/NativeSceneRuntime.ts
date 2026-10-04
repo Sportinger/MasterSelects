@@ -34,6 +34,7 @@ import { VoxelPass } from './passes/VoxelPass';
 import {
   SCENE_COLOR_FORMAT,
   SCENE_DEPTH_FORMAT,
+  SCENE_GIZMO_FORMAT,
   SPLAT_SOFT_DEPTH_ALPHA_CUTOFF,
 } from './sceneRenderer/constants';
 import {
@@ -47,7 +48,8 @@ import {
   getModelSequencePreloadOptions,
   prepareModelLayerForRender,
 } from './sceneRenderer/modelSequence';
-import { createCompositeResources } from './sceneRenderer/pipelineResources';
+import { SceneToneMap } from './sceneRenderer/sceneToneMap';
+import type { NativeSceneRenderOptions } from './sceneRenderer/renderOptions';
 import { createSceneTargets, hasMatchingSceneTargets, type SceneTargets } from './sceneRenderer/targets';
 import {
   LayerSpaceEffectRenderer,
@@ -61,14 +63,13 @@ export class NativeSceneRuntime {
   private initialized = false;
   private sceneTexture: GPUTexture | null = null;
   private sceneView: GPUTextureView | null = null;
+  private sceneDisplayView: GPUTextureView | null = null;
   private sceneGizmoTexture: GPUTexture | null = null;
   private sceneGizmoView: GPUTextureView | null = null;
   private sceneDepthTexture: GPUTexture | null = null;
   private sceneDepthView: GPUTextureView | null = null;
   private readonly sceneTargets = new Map<string, SceneTargets>();
-  private compositePipeline: GPURenderPipeline | null = null;
-  private compositeBindGroupLayout: GPUBindGroupLayout | null = null;
-  private compositeSampler: GPUSampler | null = null;
+  private readonly toneMap = new SceneToneMap();
   private readonly planePass = new PlanePass();
   private readonly faceCablePass = new FaceCablePass();
   private readonly meshPass = new MeshPass();
@@ -131,9 +132,11 @@ export class NativeSceneRuntime {
     for (const [key, targets] of this.sceneTargets) {
       if (activeTargetKeys.has(key)) continue;
       targets.texture.destroy();
+      targets.displayTexture.destroy();
       targets.gizmoTexture?.destroy();
       targets.depthTexture.destroy();
       this.sceneTargets.delete(key);
+      this.toneMap.releaseTarget(key);
       this.layerSpaceEffectRenderer.releaseTarget(key);
       this.slitScanSurfaces?.releaseTarget(key);
       this.faceCablePass.releaseTarget(key);
@@ -144,9 +147,11 @@ export class NativeSceneRuntime {
     const targets = this.sceneTargets.get(targetKey);
     if (!targets) return;
     targets.texture.destroy();
+    targets.displayTexture.destroy();
     targets.gizmoTexture?.destroy();
     targets.depthTexture.destroy();
     this.sceneTargets.delete(targetKey);
+    this.toneMap.releaseTarget(targetKey);
     this.layerSpaceEffectRenderer.releaseTarget(targetKey);
     this.slitScanSurfaces?.releaseTarget(targetKey);
     this.faceCablePass.releaseTarget(targetKey);
@@ -166,6 +171,7 @@ export class NativeSceneRuntime {
     maskTextureManager?: MaskTextureManager | null,
     targetKey: string = 'main',
     layerSpaceEffects?: LayerSpaceEffectContext,
+    options?: NativeSceneRenderOptions,
   ): GPUTextureView | null {
     if (!this.initialized) {
       return null;
@@ -211,6 +217,7 @@ export class NativeSceneRuntime {
       maskTextureManager,
       targetKey,
       layerSpaceEffects,
+      options,
     );
     if (!nativeSceneView) {
       return null;
@@ -232,6 +239,7 @@ export class NativeSceneRuntime {
   dispose(): void {
     for (const targets of this.sceneTargets.values()) {
       targets.texture.destroy();
+      targets.displayTexture.destroy();
       targets.gizmoTexture?.destroy();
       targets.depthTexture.destroy();
     }
@@ -242,9 +250,8 @@ export class NativeSceneRuntime {
     this.sceneGizmoView = null;
     this.sceneDepthTexture = null;
     this.sceneDepthView = null;
-    this.compositePipeline = null;
-    this.compositeBindGroupLayout = null;
-    this.compositeSampler = null;
+    this.sceneDisplayView = null;
+    this.toneMap.dispose();
     this.initialized = false;
     this.planePass.dispose();
     this.faceCablePass.dispose();
@@ -261,6 +268,7 @@ export class NativeSceneRuntime {
     let targets = this.sceneTargets.get(targetKey);
     if (!targets || !hasMatchingSceneTargets(targets, width, height)) {
       targets?.texture.destroy();
+      targets?.displayTexture.destroy();
       targets?.gizmoTexture?.destroy();
       targets?.depthTexture.destroy();
       targets = createSceneTargets(device, width, height);
@@ -268,6 +276,7 @@ export class NativeSceneRuntime {
     }
     this.sceneTexture = targets.texture;
     this.sceneView = targets.view;
+    this.sceneDisplayView = targets.displayView;
     this.sceneGizmoTexture = targets.gizmoTexture;
     this.sceneGizmoView = targets.gizmoView;
     this.sceneDepthTexture = targets.depthTexture;
@@ -291,6 +300,7 @@ export class NativeSceneRuntime {
     maskTextureManager?: MaskTextureManager | null,
     targetKey: string = 'main',
     layerSpaceEffects?: LayerSpaceEffectContext,
+    options?: NativeSceneRenderOptions,
   ): GPUTextureView | null {
     const renderer = getGaussianSplatGpuRenderer();
     if (layers.length > 0 && !renderer.isInitialized) {
@@ -302,21 +312,18 @@ export class NativeSceneRuntime {
     }
 
     this.ensureSceneTargets(device, targetKey, camera.viewport.width, camera.viewport.height);
-    this.ensureCompositeResources(device);
     this.planePass.ensureResources(device);
     this.meshPass.initialize(device, SCENE_DEPTH_FORMAT);
     this.voxelPass.initialize(device);
-    this.gizmoPass.initialize(device, SCENE_COLOR_FORMAT);
+    this.gizmoPass.initialize(device, SCENE_GIZMO_FORMAT);
     if (
       !this.sceneTexture ||
       !this.sceneView ||
+      !this.sceneDisplayView ||
       !this.sceneGizmoTexture ||
       !this.sceneGizmoView ||
       !this.sceneDepthTexture ||
       !this.sceneDepthView ||
-      !this.compositePipeline ||
-      !this.compositeBindGroupLayout ||
-      !this.compositeSampler ||
       !this.planePass.isReady
     ) {
       return null;
@@ -441,6 +448,7 @@ export class NativeSceneRuntime {
           clipLocalTime: layer.mediaTime,
           backgroundColor: 'transparent',
           outputView: this.sceneView,
+          outputFormat: SCENE_COLOR_FORMAT,
           colorLoadOp: 'load',
           depthView: this.sceneDepthView,
           depthLoadOp: 'load',
@@ -477,6 +485,7 @@ export class NativeSceneRuntime {
           clipLocalTime: layer.mediaTime,
           backgroundColor: 'transparent',
           outputView: this.sceneView,
+          outputFormat: SCENE_COLOR_FORMAT,
           colorLoadOp: 'load',
           depthView: this.sceneDepthView,
           depthLoadOp: 'load',
@@ -554,6 +563,8 @@ export class NativeSceneRuntime {
     )) {
       return null;
     }
+    this.toneMap.render(device, commandEncoder, targetKey, this.sceneView, this.sceneDisplayView, camera.lens,
+      options?.renderSettings?.engine ?? 'raster');
     const readTimings = gpuTimings.resolve(commandEncoder, `render:${targetKey}`);
     device.queue.submit([commandEncoder.finish()]);
     readTimings();
@@ -568,20 +579,10 @@ export class NativeSceneRuntime {
           buffer.destroy();
         }
       });
-    return this.sceneView;
+    return this.sceneDisplayView;
     } finally {
       gpuTimings.cancel(commandEncoder);
     }
   }
 
-  private ensureCompositeResources(device: GPUDevice): void {
-    if (this.compositePipeline && this.compositeBindGroupLayout && this.compositeSampler) {
-      return;
-    }
-
-    const resources = createCompositeResources(device);
-    this.compositePipeline = resources.pipeline;
-    this.compositeBindGroupLayout = resources.bindGroupLayout;
-    this.compositeSampler = resources.sampler;
-  }
 }

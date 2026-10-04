@@ -1,4 +1,5 @@
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
+import { strandRenderHasFiberMaterial } from '../../../../services/operators/geometry/fiberMaterialOperators';
 import { findClipOperatorEffect } from '../../../../services/operators/clipOperatorGraphOwner';
 import { interpolateKeyframes } from '../../../../utils/keyframeInterpolation';
 import { useState } from 'react';
@@ -90,6 +91,10 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
         const binding = node.bindings[spec.id];
         if (typeof binding === 'string' && getParameterSourceTarget(clip, `effect.${effectId}.${binding}`)) {
           return <ParameterSourceNumberRow key={spec.id} clipId={clip.id} property={`effect.${effectId}.${binding}`} />;
+        }
+        if (node.operator === 'render.strands' && spec.id === 'color' && strandRenderHasFiberMaterial(graph, node.id)) {
+          return <ResolveInspectorRow key={spec.id} label={spec.label} disabled><span className="resolve-inspector-static"
+            title="A Fiber Material before this node sets the fiber color">From material</span></ResolveInspectorRow>;
         }
         const value = sampleOperatorParameter(node, spec.id, evaluatedParams, effectId, keys, time);
         const constant = node.constants?.[spec.id];

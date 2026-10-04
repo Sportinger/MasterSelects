@@ -23,6 +23,7 @@ import {
   type BatchExportSource,
 } from '../../stores/exportStore';
 import { ExportInspectorSections } from './panel/ExportInspectorSections';
+import { ExportRenderQualitySection } from './panel/ExportRenderQualitySection';
 import { ExportActionFooter } from './panel/ExportActionFooter';
 import { ExportPresetSection } from './panel/ExportPresetSection';
 import { GlyphArtifactExportSection } from './panel/GlyphArtifactExportSection';
@@ -774,6 +775,8 @@ export function ExportPanel() {
                 useInOut={useInOut}
                 actions={basicsActions}
               />
+
+              {(isVideoMode || isImageMode) && <ExportRenderQualitySection />}
 
               <BatchExportQueue
                 jobs={batch.jobs}

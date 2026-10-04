@@ -368,5 +368,7 @@ export const namedSchemas: Record<string,string> = {
   "ProjectLightItem": "n990",
   "ProjectSplatEffectorItem": "n992",
   "ProjectMathSceneItem": "n994",
-  "ProjectMotionShapeItem": "n996"
+  "ProjectMotionShapeItem": "n996",
+  "ProjectCompositionRenderSettings": "npt0",
+  "ProjectExportRenderQuality": "npt1"
 };

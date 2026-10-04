@@ -1,3 +1,4 @@
+import { SceneColorReadback } from './sceneColorReadback';
 import { StrandPass } from '../../src/engine/native3d/passes/StrandPass';
 import { lookAt, perspective } from '../../src/engine/scene/cameraUtils/projectionMatrices';
 import { createDefaultWeaveGraph, geometryParameterReader } from '../../src/services/operators/geometry/weaveGraph';
@@ -38,20 +39,17 @@ async function run() {
   const errors: string[] = [];
   device.addEventListener('uncapturederror', event => errors.push(event.error.message));
   const pass = new StrandPass();
-  const color = device.createTexture({ size: [WIDTH, HEIGHT], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+  const target = new SceneColorReadback(device, WIDTH, HEIGHT), color = target.texture;
   const depth = device.createTexture({ size: [WIDTH, HEIGHT], format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
-  const readback = device.createBuffer({ size: WIDTH * HEIGHT * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
   async function draw(label: string, layer: SceneStrandLayer, view: SceneCamera) {
     const encoder = device.createCommandEncoder(), temporary: GPUBuffer[] = [];
     encoder.beginRenderPass({ colorAttachments: [{ view: color.createView(), clearValue: { r: 0.05, g: 0.05, b: 0.06, a: 1 }, loadOp: 'clear', storeOp: 'store' }],
       depthStencilAttachment: { view: depth.createView(), depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' } }).end();
     const shadows = pass.prepareShadows(device, encoder, pass.prepare(device, [layer], temporary), temporary);
     pass.render(device, encoder, color.createView(), depth.createView(), shadows, view, temporary);
-    encoder.copyTextureToBuffer({ texture: color }, { buffer: readback, bytesPerRow: WIDTH * 4 }, [WIDTH, HEIGHT]);
+    target.encodeCopy(encoder);
     device.queue.submit([encoder.finish()]);
-    await readback.mapAsync(GPUMapMode.READ);
-    const pixels = Uint8ClampedArray.from(new Uint8Array(readback.getMappedRange()));
-    readback.unmap();
+    const pixels = Uint8ClampedArray.from(await target.read());
     temporary.forEach(buffer => buffer.destroy());
     const figure = document.createElement('figure'), canvas = document.createElement('canvas'), caption = document.createElement('figcaption');
     canvas.width = WIDTH; canvas.height = HEIGHT; caption.textContent = label;
@@ -80,7 +78,7 @@ async function run() {
     return 'done';
   } finally {
     await device.queue.onSubmittedWorkDone();
-    pass.dispose(); color.destroy(); depth.destroy(); readback.destroy(); device.destroy();
+    pass.dispose(); depth.destroy(); target.destroy(); device.destroy();
   }
 }
 

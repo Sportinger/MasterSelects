@@ -57,6 +57,11 @@ export interface ProjectSceneCameraSettings {
   far: number;
   resolutionWidth?: number;
   resolutionHeight?: number;
+  exposure?: number;
+  toneMapping?: import('../../../types/renderSettings').ToneMapping;
+  fStop?: number;
+  focusDistance?: number;
+  shutterAngle?: number;
 }
 
 export type ProjectLightKind = 'point' | 'panel' | 'environment';
@@ -82,6 +87,10 @@ export interface ProjectModelMaterialSettings {
   uvScaleY: number;
   uvOffsetX: number;
   uvOffsetY: number;
+  roughness?: number;
+  metallic?: number;
+  emissionColor?: string;
+  emissionStrength?: number;
 }
 
 export type ProjectSplatEffectorMode = 'repel' | 'attract' | 'swirl' | 'noise';

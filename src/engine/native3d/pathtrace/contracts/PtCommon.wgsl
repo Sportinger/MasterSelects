@@ -5,7 +5,7 @@
 // Fixed interfaces (each pipeline composes the modules that implement the ones it calls):
 //   pt_trace_closest(ray: PtRay) -> PtHit                      bvh/PtTraverse.wgsl
 //   pt_trace_transmittance(ray: PtRay, tMax: f32) -> f32       bvh/PtTraverse.wgsl
-//   pt_bsdf_eval(s: PtSurface, wo: vec3f, wi: vec3f) -> vec3f  materials/PtBsdf.wgsl
+//   pt_bsdf_eval(s: PtSurface, wo: vec3f, wi: vec3f) -> vec3f  materials/PtBsdf.wgsl (f · |cos θi|)
 //   pt_bsdf_sample(s: PtSurface, wo: vec3f, u: vec3f) -> PtBsdfSample
 //   pt_bsdf_pdf(s: PtSurface, wo: vec3f, wi: vec3f) -> f32
 //   pt_sample_light(p: vec3f, n: vec3f, u: vec3f) -> PtLightSample   lights/PtLights.wgsl
@@ -45,6 +45,7 @@ const PT_MATERIAL_SURFACE: u32 = 2u;
 const PT_MATERIAL_FLAG_COLOR_FIELD: u32 = 1u;
 const PT_MATERIAL_FLAG_MELANIN_FIELD: u32 = 2u;
 const PT_MATERIAL_FLAG_ROUGHNESS_FIELD: u32 = 4u;
+const PT_MATERIAL_FLAG_PRIMITIVE_COLOR: u32 = 16u;
 const PT_MAX_MATERIALS: u32 = 512u;
 
 const PT_GBUFFER_HIT: u32 = 1u;
@@ -212,7 +213,7 @@ struct PtSurface {
 struct PtBsdfSample {
   wi: vec3f,
   pdf: f32,            // 0: no sample
-  value: vec3f,        // f(wo, wi), not divided by the pdf
+  value: vec3f,        // f(wo, wi) · |cos θi|, not divided by the pdf
   delta: u32,          // 1 when the lobe is specular (no MIS against lights)
 };
 

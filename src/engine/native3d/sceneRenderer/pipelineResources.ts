@@ -3,11 +3,14 @@ import planeShaderSource from '../shaders/PlanePass.wgsl?raw';
 import {
   SCENE_COLOR_FORMAT,
   SCENE_DEPTH_FORMAT,
+  SCENE_DISPLAY_FORMAT,
 } from './constants';
 
+/** Tone map pass from the HDR scene target into the compositor's 8-bit scene texture. */
 export interface CompositeResources {
   pipeline: GPURenderPipeline;
   bindGroupLayout: GPUBindGroupLayout;
+  /** Unused by the tone map (it loads texels 1:1); kept for callers that sample scene textures. */
   sampler: GPUSampler;
 }
 
@@ -26,62 +29,20 @@ export interface PlaneWhiteMaskResource {
 export function createCompositeResources(device: GPUDevice): CompositeResources {
   const bindGroupLayout = device.createBindGroupLayout({
     entries: [
-      { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
-      { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'unfilterable-float' } },
+      { binding: 1, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ],
-    label: 'native-scene-composite-bind-group-layout',
+    label: 'native-scene-tone-map-bind-group-layout',
   });
-
-  const shaderModule = device.createShaderModule({
-    code: compositeShaderSource,
-    label: 'native-scene-composite-shader',
-  });
-
+  const shaderModule = device.createShaderModule({ code: compositeShaderSource, label: 'native-scene-tone-map-shader' });
   const pipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [bindGroupLayout],
-      label: 'native-scene-composite-pipeline-layout',
-    }),
-    vertex: {
-      module: shaderModule,
-      entryPoint: 'vertexMain',
-    },
-    fragment: {
-      module: shaderModule,
-      entryPoint: 'fragmentMain',
-      targets: [
-        {
-          format: SCENE_COLOR_FORMAT,
-          blend: {
-            color: {
-              srcFactor: 'one',
-              dstFactor: 'one-minus-src-alpha',
-              operation: 'add',
-            },
-            alpha: {
-              srcFactor: 'one',
-              dstFactor: 'one-minus-src-alpha',
-              operation: 'add',
-            },
-          },
-        },
-      ],
-    },
-    primitive: {
-      topology: 'triangle-list',
-    },
-    label: 'native-scene-composite-pipeline',
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout], label: 'native-scene-tone-map-pipeline-layout' }),
+    vertex: { module: shaderModule, entryPoint: 'vertexMain' },
+    fragment: { module: shaderModule, entryPoint: 'fragmentMain', targets: [{ format: SCENE_DISPLAY_FORMAT }] },
+    primitive: { topology: 'triangle-list' },
+    label: 'native-scene-tone-map-pipeline',
   });
-
-  return {
-    pipeline,
-    bindGroupLayout,
-    sampler: device.createSampler({
-      magFilter: 'linear',
-      minFilter: 'linear',
-    }),
-  };
+  return { pipeline, bindGroupLayout, sampler: device.createSampler({ magFilter: 'linear', minFilter: 'linear' }) };
 }
 
 export function createPlaneResources(device: GPUDevice): PlaneResources {
@@ -191,7 +152,7 @@ export function createPlaneResources(device: GPUDevice): PlaneResources {
 export function createPlaneWhiteMaskResource(device: GPUDevice): PlaneWhiteMaskResource {
   const whiteMaskTexture = device.createTexture({
     size: { width: 1, height: 1 },
-    format: SCENE_COLOR_FORMAT,
+    format: 'rgba8unorm',
     usage: GPUTextureUsage.TEXTURE_BINDING,
     label: 'native-scene-plane-white-mask-texture',
   });

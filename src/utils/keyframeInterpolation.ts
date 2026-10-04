@@ -408,7 +408,14 @@ export function getInterpolatedClipCameraSettings(
     baseSettings.resolutionHeight ?? DEFAULT_SCENE_CAMERA_SETTINGS.resolutionHeight ?? 1080,
   )));
 
-  return { ...baseSettings, fov, near, far, resolutionWidth, resolutionHeight };
+  // Lens values interpolate only where they are keyframed; otherwise the stored value stays (or stays absent).
+  const lens: Partial<SceneCameraSettings> = {};
+  for (const key of ['exposure', 'fStop', 'focusDistance', 'shutterAngle'] as const) {
+    if (keyframes.some((keyframe) => keyframe.property === `camera.${key}`)) {
+      lens[key] = interpolateKeyframes(keyframes, `camera.${key}`, time, baseSettings[key] ?? 0);
+    }
+  }
+  return { ...baseSettings, fov, near, far, resolutionWidth, resolutionHeight, ...lens };
 }
 
 export function getInterpolatedClipLightSettings(

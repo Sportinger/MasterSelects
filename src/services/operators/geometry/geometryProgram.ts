@@ -51,14 +51,28 @@ export interface YarnFlyaways { density: number; length: number; lift: number; h
  * rasterizes them in tiles with exact pixel coverage and front-to-back blending.
  */
 export type StrandAntialiasing = 'coverage4x' | 'analytic';
-export interface GeometryStrandRender { nodeId: string; width: number; color: string; antialiasing?: StrandAntialiasing; profile?: YarnProfile; flyaways?: YarnFlyaways }
+/**
+ * A Fiber Material node: its values (FiberMaterialParams, colors as hex) and optional per-point
+ * fields. `selection` limits it to points where the field exceeds 0.5; the last selected material
+ * of the chain wins per point.
+ */
+export interface GeometryFiberMaterial {
+  nodeId: string;
+  color: string; absorption: 'color' | 'melanin'; melanin: number; melaninRedness: number;
+  roughnessLongitudinal: number; roughnessAzimuthal: number; cuticleTilt: number; ior: number;
+  coatTint: string; matte: number; fuzz: number;
+  colorField?: GeometryField; roughnessField?: GeometryField; melaninField?: GeometryField; selection?: GeometryField;
+}
+/** `subdivision`: path tracer pieces per curve segment; `materials`: Fiber Materials in chain order. */
+export interface GeometryStrandRender { nodeId: string; width: number; color: string; antialiasing?: StrandAntialiasing; profile?: YarnProfile;
+  flyaways?: YarnFlyaways; subdivision?: number; materials?: GeometryFiberMaterial[] }
 export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStrandRender; pointCount: number; strandCount: number }
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit']);
 const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
-  'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend']);
+  'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend', 'material.fiber']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
 export const knotCurveCount = (shape: number) => KNOT_SHAPES[shape] === 'reef' ? 2 : 1;
 /** Points of a knot generator, matching knotCurves: the reef resamples 14 spline intervals per rope. */
@@ -99,6 +113,7 @@ function pruneField(field: GeometryField): GeometryField {
   return { instructions, output: remap.get(field.output)! };
 }
 
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 const axisIndex = (value: OperatorValue): CurveAxis => value === 'x' ? 0 : value === 'y' ? 1 : 2;
 const finite = (value: OperatorValue, label: string) => {
   const number = Number(value);
@@ -143,6 +158,9 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     const antialiasing = read(renderNode, 'antialiasing');
     if (antialiasing !== 'hashed' && antialiasing !== 'coverage4x' && antialiasing !== 'analytic') throw new Error('Unsupported strand antialiasing.');
     if (render && antialiasing !== 'hashed') render.antialiasing = antialiasing;
+    const subdivision = Math.round(finite(read(renderNode, 'subdivision'), 'Subdivision'));
+    if (subdivision < 1 || subdivision > 16) throw new Error('Strand Render subdivision must be 1 to 16.');
+    if (render && subdivision !== 2) render.subdivision = subdivision;
     head = required(renderNode, 'curves').node;
   }
   const chain: BoundOperatorNode[] = [];
@@ -158,6 +176,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
   if (!chain.length) throw new Error('The geometry node is unavailable.');
   const stages: GeometryStage[] = [];
   let profile: YarnProfile | undefined, flyaways: YarnFlyaways | undefined;
+  const materials: GeometryFiberMaterial[] = [];
   for (const node of chain.toReversed()) {
     if (node.bypassed && !GENERATORS.has(node.operator)) continue;
     if (node.operator === 'weave.pattern') {
@@ -184,6 +203,19 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       stages.push({ kind: 'rod-simulation', nodeId: node.id, rod: compileRodSpec(graph, node, read), ...(pins ? { pins } : {}),
         ...(pullStart ? { pullStart } : {}), ...(form ? { form } : {}),
         time: Number.isFinite(context.simulationTime) ? context.simulationTime! : 0 });
+    } else if (node.operator === 'material.fiber') {
+      const colorField = compileField(node, 'color', 'vec3'), roughnessField = compileField(node, 'roughness', 'scalar');
+      const melaninField = compileField(node, 'melanin', 'scalar'), selection = compileField(node, 'selection', 'selection');
+      const absorption = read(node, 'absorption');
+      materials.push({ nodeId: node.id, color: String(read(node, 'color')), absorption: absorption === 'melanin' ? 'melanin' : 'color',
+        melanin: Math.max(0, finite(read(node, 'melanin'), 'Melanin')), melaninRedness: clamp01(finite(read(node, 'melaninRedness'), 'Melanin redness')),
+        roughnessLongitudinal: Math.min(1, Math.max(0.02, finite(read(node, 'roughnessLongitudinal'), 'Roughness along'))),
+        roughnessAzimuthal: Math.min(1, Math.max(0.02, finite(read(node, 'roughnessAzimuthal'), 'Roughness across'))),
+        cuticleTilt: finite(read(node, 'cuticleTilt'), 'Cuticle tilt'), ior: Math.max(1.01, finite(read(node, 'ior'), 'IOR')),
+        coatTint: String(read(node, 'coatTint')), matte: clamp01(finite(read(node, 'matte'), 'Matte')), fuzz: clamp01(finite(read(node, 'fuzz'), 'Fuzz')),
+        ...(colorField ? { colorField } : {}), ...(roughnessField ? { roughnessField } : {}), ...(melaninField ? { melaninField } : {}),
+        ...(selection ? { selection } : {}) });
+      if (materials.length > 64) throw new Error('A Weave graph allows at most 64 Fiber Materials.');
     } else if (node.operator === 'geometry.flyaways') {
       flyaways = { density: Math.max(0, finite(read(node, 'density'), 'Flyaway density')),
         length: Math.max(0.001, finite(read(node, 'length'), 'Flyaway length')), lift: Math.max(0, finite(read(node, 'lift'), 'Flyaway lift')),
@@ -264,6 +296,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
   if (pointCount > CURVE_POINT_LIMIT || strandCount > CURVE_STRAND_LIMIT) {
     throw new Error(`Geometry exceeds ${CURVE_POINT_LIMIT.toLocaleString('en-US')} points or ${CURVE_STRAND_LIMIT.toLocaleString('en-US')} curves.`);
   }
+  if (render && materials.length) render.materials = materials;
   if (render && profile) {
     render.profile = profile;
     // Flyaways leave the yarn surface, so they need a profile to leave from.
@@ -271,7 +304,8 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
   }
   return { stages, ...(render ? { render } : {}), pointCount, strandCount };
 
-  function compileField(owner: BoundOperatorNode, input: string, type: 'vec3' | 'scalar'): GeometryField | undefined {
+  /** `selection` accepts a Number or a Boolean (true selects). */
+  function compileField(owner: BoundOperatorNode, input: string, type: 'vec3' | 'scalar' | 'selection'): GeometryField | undefined {
     const linked = sourceOf(owner, input);
     if (!linked) return undefined;
     const instructions: PointwiseInstruction[] = [], registers = new Map<string, number>(), visiting = new Set<string>();
@@ -318,7 +352,10 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       return emit({ nodeId: node.id, operation: 'combine-vector', type: `vec${components.length}` as 'vec2' | 'vec3' | 'vec4', inputs: components });
     }
     const output = visit(linked.node, linked.output);
-    if (instructions[output].type !== type) throw new Error(`${getEffectOperator(owner.operator)?.label}: ${input} needs a ${type === 'vec3' ? 'Vector 3' : 'Number'}.`);
+    const produced = instructions[output].type;
+    if (type === 'selection' ? produced !== 'scalar' && produced !== 'boolean' : produced !== type) {
+      throw new Error(`${getEffectOperator(owner.operator)?.label}: ${input} needs a ${type === 'vec3' ? 'Vector 3' : 'Number'}.`);
+    }
     return pruneField({ instructions, output });
   }
 }

@@ -9,6 +9,11 @@ export interface ModelMaterialSettings {
   uvScaleY: number;
   uvOffsetX: number;
   uvOffsetY: number;
+  /** Surface response for both renderers' PBR path (plan 4.10); absent keeps the former look (rough, dielectric, no emission). */
+  roughness?: number;
+  metallic?: number;
+  emissionColor?: string;
+  emissionStrength?: number;
 }
 
 export const DEFAULT_MODEL_MATERIAL_SETTINGS: ModelMaterialSettings = {
@@ -36,6 +41,10 @@ export function mergeModelMaterialSettings(input?: Partial<ModelMaterialSettings
     uvScaleY: finiteNumber(input?.uvScaleY, DEFAULT_MODEL_MATERIAL_SETTINGS.uvScaleY),
     uvOffsetX: finiteNumber(input?.uvOffsetX, DEFAULT_MODEL_MATERIAL_SETTINGS.uvOffsetX),
     uvOffsetY: finiteNumber(input?.uvOffsetY, DEFAULT_MODEL_MATERIAL_SETTINGS.uvOffsetY),
+    ...(input?.roughness !== undefined ? { roughness: Math.min(1, Math.max(0, finiteNumber(input.roughness, 1))) } : {}),
+    ...(input?.metallic !== undefined ? { metallic: Math.min(1, Math.max(0, finiteNumber(input.metallic, 0))) } : {}),
+    ...(input?.emissionColor !== undefined ? { emissionColor: normalizeModelMaterialColor(input.emissionColor) } : {}),
+    ...(input?.emissionStrength !== undefined ? { emissionStrength: Math.max(0, finiteNumber(input.emissionStrength, 0)) } : {}),
   };
 }
 

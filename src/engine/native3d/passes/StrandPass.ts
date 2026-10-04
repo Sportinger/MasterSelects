@@ -7,6 +7,7 @@ import { StrandShadowMaps, type StrandShadowTargets } from './strandShadowMaps';
 import { StrandCoverageTargets } from './StrandCoverageTargets';
 import { StrandComputeRaster } from './strandRaster/StrandComputeRaster';
 import { STRAND_SCENE_SHADER } from './strandShaders';
+import { packStrandLook, strandBaseColor, STRAND_LOOK_FLOATS } from './strandLook';
 import { multiplyMat4 } from '../../scene/SceneTransformUtils';
 import { Logger } from '../../../services/logger';
 
@@ -18,7 +19,9 @@ const ANTIALIASING_MODE = { hashed: 0, coverage4x: 1, analytic: 2 } as const;
 const LIGHTS_OFFSET = 76;
 const SHADOW_OFFSET = LIGHTS_OFFSET + STRAND_LIGHT_FLOATS;
 const OCCLUDER_OFFSET = SHADOW_OFFSET + 24;
-const UNIFORM_FLOATS = OCCLUDER_OFFSET + 20;
+/** Fiber Material look (highlights, coat, per-material colors); see strandLook.ts. */
+const LOOK_OFFSET = OCCLUDER_OFFSET + 20;
+const UNIFORM_FLOATS = LOOK_OFFSET + STRAND_LOOK_FLOATS;
 /** Deep opacity one fully covering fiber adds; about one yarn in front leaves a third of the light. */
 const OPACITY_PER_FIBER = 0.3;
 /** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
@@ -143,6 +146,12 @@ export class StrandPass {
   private readonly shadows = new StrandShadowMaps();
   private readonly coverage = new StrandCoverageTargets();
   private readonly raster = new StrandComputeRaster();
+  private emptyAttributes: GPUBuffer | null = null;
+
+  /** Bound when a layer has no per-point Fiber Material attributes; the shaders then ignore binding 7. */
+  private noAttributes(device: GPUDevice): GPUBuffer {
+    return this.emptyAttributes ??= device.createBuffer({ size: 16, usage: GPUBufferUsage.STORAGE, label: 'native-strands-no-attributes' });
+  }
 
   collect(layers: SceneLayer3DData[]): SceneStrandLayer[] {
     return layers.filter((layer): layer is SceneStrandLayer => layer.kind === 'strands');
@@ -162,6 +171,8 @@ export class StrandPass {
       { binding: 4, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
       { binding: 5, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
       { binding: 6, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'depth' } },
+      // Fiber Material attributes per curve point (fiberMaterialAttributes.ts).
+      { binding: 7, visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
     ] });
     const module = device.createShaderModule({ code: STRAND_SCENE_SHADER, label: 'native-strands' });
     void module.getCompilationInfo?.().then(info => {
@@ -201,7 +212,7 @@ export class StrandPass {
     const render = layer.strands.program.render!, profile = render.profile, scale = worldMatrixScale(layer.worldMatrix);
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set(layer.worldMatrix, 0);
-    data.set(parseStrandColor(render.color), 52);
+    data.set(strandBaseColor(render), 52);
     data.set([render.width * scale, 0, 0, Math.max(0, Math.min(1, layer.opacity))], 56);
     data.set([...KEY_LIGHT, AMBIENT], 60);
     data.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist, profile.fiberTwist] : [1, 1, 0, 0, 0], 64);
@@ -212,6 +223,7 @@ export class StrandPass {
       data.set([channels / flyaways.density, flyaways.length, flyaways.lift, flyaways.hair], 72);
     }
     packStrandLights(lights, data, LIGHTS_OFFSET);
+    packStrandLook(render, !!buffers.attributes, data, LOOK_OFFSET);
     // The shadow frames the layer's bounds, padded by the yarn around its curves.
     const center: [number, number, number] = [layer.worldMatrix[12], layer.worldMatrix[13], layer.worldMatrix[14]];
     const pad = (profile ? profile.radius * (1 + (flyaways ? flyaways.lift : 0)) : render.width) * scale;
@@ -239,6 +251,7 @@ export class StrandPass {
       { binding: 4, resource: opacity },
       { binding: 5, resource: this.shadows.shadowSampler(device) },
       { binding: 6, resource: occluders },
+      { binding: 7, resource: { buffer: buffers.attributes ?? this.noAttributes(device) } },
     ] });
   }
 
@@ -342,6 +355,8 @@ export class StrandPass {
     this.shadows.dispose();
     this.coverage.dispose();
     this.raster.dispose();
+    this.emptyAttributes?.destroy();
+    this.emptyAttributes = null;
     this.pipeline = null;
     this.coveragePipeline = null;
     this.depthPipeline = null;

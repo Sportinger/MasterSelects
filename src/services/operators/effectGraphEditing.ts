@@ -1,4 +1,5 @@
 import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
+import { applyFiberMaterialEdit } from './geometry/fiberMaterialOperators';
 import type { EffectOperatorGraph, OperatorValue } from '../../types/operatorGraph';
 import type { NodeGraphConnectionRequest } from '../../types/nodeGraph';
 import { useTimelineStore } from '../../stores/timeline';
@@ -118,6 +119,8 @@ export function setOperatorConstant(clipId: string, effectId: string, nodeId: st
     if (spec.type === 'text' && (typeof value !== 'string' || Array.from(value).length > (spec.maxLength ?? Infinity))) throw new Error('Parameter text is too long.');
     if (spec.type === 'vector' && (!Array.isArray(value) || value.length !== 3
       || value.some(component => !Number.isFinite(component)))) throw new Error('Parameter requires a finite vector.');
+    // A Fiber Material preset fills in its values; editing a value makes the node Custom.
+    if (applyFiberMaterialEdit(node, name, value)) return;
     node.constants = { ...node.constants, [name]: node.operator === 'values.integer' && typeof value === 'number' ? Math.trunc(value) : value };
   });
 }
