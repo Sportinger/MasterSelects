@@ -1,4 +1,5 @@
 import type { TimelineClip } from '../../types/timeline';
+import { getFullFrameCanvas } from '../text/textCanvasFrameRegistry';
 import { mediaRuntimeRegistry } from '../mediaRuntime/registry';
 import type { PreviewFrame, PreviewRequest } from './previewTypes';
 import { useTimelineStore } from '../../stores/timeline';
@@ -10,7 +11,8 @@ export async function sourcePreview(request: PreviewRequest, clip: TimelineClip,
   const state = useTimelineStore.getState(), keys = state.clipKeyframes.get(clip.id) ?? [];
   const localTime = Math.max(0, Math.min(clip.duration, request.time - clip.startTime));
   const bounds = keys.some(key => key.property.startsWith('textBounds.')) ? state.getInterpolatedTextBounds(clip.id, localTime) : undefined;
-  const textCanvas = source?.type === 'text' ? renderTextFrame(clip, keys, localTime, bounds) : source?.textCanvas;
+  const rawTextCanvas = source?.type === 'text' ? renderTextFrame(clip, keys, localTime, bounds) : source?.textCanvas;
+  const textCanvas = rawTextCanvas ? getFullFrameCanvas(rawTextCanvas) : undefined;
   const provider = source?.runtimeSessionKey && source.runtimeSourceId ? mediaRuntimeRegistry.getRuntime(source.runtimeSourceId)?.getSessionFrameProvider(source.runtimeSessionKey) : null;
   const videoFrame = provider?.getCurrentFrame() ?? source?.webCodecsPlayer?.getCurrentFrame();
   const video = source?.videoElement;
@@ -18,8 +20,8 @@ export async function sourcePreview(request: PreviewRequest, clip: TimelineClip,
   const input = videoFrame ?? (video && video.readyState >= 2 ? video : null) ?? (image?.complete && image.naturalWidth ? image : null) ?? textCanvas;
   const base = { key: request.key, revision: request.revision, time: request.time };
   if (!input) return { ...base, status: 'missing', label: 'No decoded frame' };
-  const width = videoFrame?.displayWidth ?? video?.videoWidth ?? image?.naturalWidth ?? source?.textCanvas?.width ?? 1;
-  const height = videoFrame?.displayHeight ?? video?.videoHeight ?? image?.naturalHeight ?? source?.textCanvas?.height ?? 1;
+  const width = videoFrame?.displayWidth ?? video?.videoWidth ?? image?.naturalWidth ?? textCanvas?.width ?? 1;
+  const height = videoFrame?.displayHeight ?? video?.videoHeight ?? image?.naturalHeight ?? textCanvas?.height ?? 1;
   const scale = Math.min(request.width / Math.max(1, width), request.height / Math.max(1, height));
   const presentedTime = videoFrame ? videoFrame.timestamp / 1e6 : video?.currentTime;
   const owned = videoFrame?.clone();

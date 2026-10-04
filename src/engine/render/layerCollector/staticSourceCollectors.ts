@@ -34,16 +34,14 @@ export function collectCanvasElementLayer(
   canvas: HTMLCanvasElement,
   textureManager: TextureManager,
 ): LayerRenderData | null {
-  const texture = textureManager.createCanvasTexture(canvas);
-  if (texture) {
+  const source = textureManager.createCanvasSourceTexture(canvas);
+  if (source) {
     return {
       layer,
       isVideo: false,
       isDynamic: Boolean(canvas.dataset.masterselectsDynamic),
       externalTexture: null,
-      textureView: textureManager.getImageView(texture),
-      sourceWidth: canvas.width,
-      sourceHeight: canvas.height,
+      ...source,
       displayedMediaTime: layer.source?.videoElement?.currentTime ?? layer.source?.mediaTime,
       targetMediaTime: layer.source?.videoElement?.currentTime ?? layer.source?.targetMediaTime,
       previewPath: layer.source?.isLiveInput ? 'live-canvas' : layer.source?.previewPath,

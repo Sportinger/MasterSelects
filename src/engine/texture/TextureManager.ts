@@ -2,6 +2,12 @@
 
 import { Logger } from '../../services/logger';
 import { getCanvasVersion } from '../../services/canvasVersion';
+import {
+  getCanvasSourceSize,
+  getTextCanvasFrame,
+  getTextCanvasTextureRect,
+  type NormalizedTextureRect,
+} from '../../services/text/textCanvasFrameRegistry';
 
 const log = Logger.create('TextureManager');
 
@@ -26,6 +32,8 @@ export class TextureManager {
   private canvasTextures: Map<HTMLCanvasElement, GPUTexture> = new Map();
   private canvasTextureSizes: Map<HTMLCanvasElement, { width: number; height: number }> = new Map();
   private canvasTextureVersions: Map<HTMLCanvasElement, string> = new Map();
+  // Source-sized copies of cropped text rasters, built only for passes that need them.
+  private expandedCanvasTextures: Map<HTMLCanvasElement, { texture: GPUTexture; view: GPUTextureView; key: string }> = new Map();
 
   // Cached image texture views
   private cachedImageViews: Map<GPUTexture, GPUTextureView> = new Map();
@@ -160,6 +168,66 @@ export class TextureManager {
     } catch (e) {
       log.error('Failed to update canvas texture', e);
       return false;
+    }
+  }
+
+  /**
+   * Texture data for a canvas layer source. A cropped text raster keeps its small
+   * texture and reports where it sits inside its composition-sized source.
+   */
+  createCanvasSourceTexture(canvas: HTMLCanvasElement): {
+    textureView: GPUTextureView;
+    sourceWidth: number;
+    sourceHeight: number;
+    textureRect?: NormalizedTextureRect;
+    expandTextureToSource?: () => GPUTextureView | null;
+  } | null {
+    const texture = this.createCanvasTexture(canvas);
+    if (!texture) return null;
+    const { width, height } = getCanvasSourceSize(canvas);
+    const textureRect = getTextCanvasTextureRect(canvas);
+    return {
+      textureView: this.getImageView(texture),
+      sourceWidth: width,
+      sourceHeight: height,
+      ...(textureRect
+        ? { textureRect, expandTextureToSource: () => this.getSourceSizedCanvasTextureView(canvas) }
+        : {}),
+    };
+  }
+
+  /** Composition-sized pixels of a canvas source; cropped text is placed at its offset. */
+  getSourceSizedCanvasTextureView(canvas: HTMLCanvasElement): GPUTextureView | null {
+    const frame = getTextCanvasFrame(canvas);
+    if (!frame) {
+      const texture = this.createCanvasTexture(canvas);
+      return texture ? this.getImageView(texture) : null;
+    }
+    const key = `${getCanvasVersion(canvas)}:${frame.x},${frame.y},${canvas.width}x${canvas.height}:${frame.frameWidth}x${frame.frameHeight}`;
+    const cached = this.expandedCanvasTextures.get(canvas);
+    if (cached?.key === key) return cached.view;
+    cached?.texture.destroy();
+    try {
+      // New textures start transparent, so only the cropped pixels need copying.
+      const texture = this.device.createTexture({
+        size: [frame.frameWidth, frame.frameHeight],
+        format: 'rgba8unorm',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
+      });
+      if (canvas.width > 0 && canvas.height > 0) {
+        this.device.queue.copyExternalImageToTexture(
+          { source: canvas },
+          { texture, origin: { x: frame.x, y: frame.y } },
+          [canvas.width, canvas.height],
+        );
+      }
+      const view = texture.createView();
+      this.expandedCanvasTextures.set(canvas, { texture, view, key });
+      return view;
+    } catch (e) {
+      this.expandedCanvasTextures.delete(canvas);
+      log.error('Failed to expand cropped canvas texture', e);
+      return null;
     }
   }
 
@@ -343,6 +411,8 @@ export class TextureManager {
     this.canvasTextures.clear();
     this.canvasTextureSizes.clear();
     this.canvasTextureVersions.clear();
+    for (const entry of this.expandedCanvasTextures.values()) entry.texture.destroy();
+    this.expandedCanvasTextures.clear();
     this.cachedImageViews.clear();
     this.videoFrameTextures.clear();
     this.videoFrameViews.clear();
@@ -365,6 +435,8 @@ export class TextureManager {
 
   // Remove a specific canvas from cache
   removeCanvasTexture(canvas: HTMLCanvasElement): void {
+    this.expandedCanvasTextures.get(canvas)?.texture.destroy();
+    this.expandedCanvasTextures.delete(canvas);
     const texture = this.canvasTextures.get(canvas);
     if (texture) {
       texture.destroy();

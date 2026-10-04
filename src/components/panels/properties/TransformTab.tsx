@@ -1,5 +1,6 @@
 // Transform Tab - Position, Scale, Rotation, Opacity controls
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getCanvasSourceSize } from '../../../services/text/textCanvasFrameRegistry';
 
 import { useTimelineStore } from '../../../stores/timeline';
 import { useMediaStore } from '../../../stores/mediaStore';
@@ -169,19 +170,20 @@ export function TransformTab({
   const nestedComposition = clip?.compositionId
     ? (mediaState.compositions ?? []).find((candidate) => candidate.id === clip.compositionId)
     : undefined;
+  const textSourceSize = clip?.source?.textCanvas ? getCanvasSourceSize(clip.source.textCanvas) : undefined;
   const sourceWidth =
     positiveDimension(mediaFile?.width)
     ?? positiveDimension(clip?.source?.videoElement?.videoWidth)
     ?? positiveDimension(clip?.source?.imageElement?.naturalWidth)
     ?? positiveDimension(clip?.source?.nativeDecoder?.width)
-    ?? positiveDimension(clip?.source?.textCanvas?.width)
+    ?? positiveDimension(textSourceSize?.width)
     ?? positiveDimension(nestedComposition?.width);
   const sourceHeight =
     positiveDimension(mediaFile?.height)
     ?? positiveDimension(clip?.source?.videoElement?.videoHeight)
     ?? positiveDimension(clip?.source?.imageElement?.naturalHeight)
     ?? positiveDimension(clip?.source?.nativeDecoder?.height)
-    ?? positiveDimension(clip?.source?.textCanvas?.height)
+    ?? positiveDimension(textSourceSize?.height)
     ?? positiveDimension(nestedComposition?.height);
   const fitToFrameScale = sourceWidth !== null && sourceHeight !== null
     ? calculateFitToFrameScale(

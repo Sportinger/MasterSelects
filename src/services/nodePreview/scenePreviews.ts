@@ -1,4 +1,5 @@
 import { readTimelineRuntimeState } from '../timeline/timelineRuntimeCoordinator';
+import { getCanvasSourceSize } from '../text/textCanvasFrameRegistry';
 import type { TimelineClip } from '../../types/timeline';
 import type { PreviewArtifactReader } from './PreviewArtifactReader';
 import type { PreviewDrawing, PreviewFrame, PreviewRequest } from './previewTypes';
@@ -75,8 +76,9 @@ export function scenePreview(request: PreviewRequest, clip: TimelineClip, localT
     return artifacts.sample(`${clip.id}:${effect.id}:scene`, String(effect.params.sceneData), 'scene', 'geometry', localTime).then(result => ({ ...base, status: 'saved', label: transformed ? 'Saved geometry · world space' : result.label, drawing: transformGeometry(result.drawing) }));
   }
   const source = clip.source;
-  const ratio = (source?.videoElement?.videoWidth || source?.imageElement?.naturalWidth || source?.textCanvas?.width || 16)
-    / (source?.videoElement?.videoHeight || source?.imageElement?.naturalHeight || source?.textCanvas?.height || 9);
+  const textSize = source?.textCanvas ? getCanvasSourceSize(source.textCanvas) : undefined;
+  const ratio = (source?.videoElement?.videoWidth || source?.imageElement?.naturalWidth || textSize?.width || 16)
+    / (source?.videoElement?.videoHeight || source?.imageElement?.naturalHeight || textSize?.height || 9);
   const w = param(geometry.id, 'width', 1) * ratio, h = param(geometry.id, 'height', 1);
   const points = [-w / 2, -h / 2, 0, w / 2, -h / 2, 0, w / 2, h / 2, 0, -w / 2, h / 2, 0];
   return { ...base, status: 'live', label: transformed ? 'World-space geometry' : 'Local geometry', drawing: transformGeometry({ kind: 'points', dimensions: 3, points, edges: [0, 1, 1, 2, 2, 3, 3, 0, 0, 2] }) };

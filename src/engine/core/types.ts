@@ -65,6 +65,13 @@ export interface LayerRenderData {
   textureView: GPUTextureView | null;
   sourceWidth: number;
   sourceHeight: number;
+  /**
+   * Normalized rect of the sourceWidth x sourceHeight source that the texture covers
+   * (cropped text rasters); outside it the source is transparent. Omitted = whole source.
+   */
+  textureRect?: { x: number; y: number; width: number; height: number };
+  /** Source-sized texture for passes that need uncropped pixels (effects, color, edge fill). */
+  expandTextureToSource?: () => GPUTextureView | null;
   displayedMediaTime?: number;
   targetMediaTime?: number;
   previewPath?: string;

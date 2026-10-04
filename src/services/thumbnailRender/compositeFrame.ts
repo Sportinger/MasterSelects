@@ -81,7 +81,7 @@ function renderLayerToTarget(
   resources: ThumbnailResources,
   target: ThumbnailRenderTarget,
   commandEncoder: GPUCommandEncoder,
-  data: ThumbnailLayerData,
+  layerData: ThumbnailLayerData,
   readView: GPUTextureView,
   writeView: GPUTextureView,
   outputAspect: number,
@@ -89,6 +89,7 @@ function renderLayerToTarget(
   height: number,
   options: CompositeLayerOptions
 ): { readView: GPUTextureView; writeView: GPUTextureView } | null {
+  let data = layerData;
   const { sampler, compositorPipeline, maskTextureManager } = resources;
   const layer = data.layer;
   const uniformBuffer = compositorPipeline.getOrCreateUniformBuffer(options.uniformId(layer));
@@ -103,6 +104,11 @@ function renderLayerToTarget(
   const maskInfo = maskTextureManager.getMaskInfo(options.maskLookupId(layer));
   const { inlineEffects, complexEffects, renderEffects } = splitLayerEffects(layer.effects);
   const hasPreprocessedEffects = !!complexEffects?.length || !!renderEffects?.length;
+  // Effects read the whole source: give a cropped text raster its composition-sized pixels.
+  if (data.textureRect && hasPreprocessedEffects) {
+    const sourceSized = data.expandTextureToSource?.();
+    if (sourceSized) data = { ...data, textureView: sourceSized, textureRect: undefined };
+  }
   const effectSourceRotation = hasPreprocessedEffects
     ? getVideoFrameEffectSourceRotation(layer)
     : 0;
@@ -115,6 +121,7 @@ function renderLayerToTarget(
     inlineEffects,
     sourcePixelScale,
     effectSourceRotation === 0 ? undefined : 0,
+    data.textureRect,
   );
 
   const source = applyComplexEffectsIfNeeded(resources, target, commandEncoder, data, width, height);

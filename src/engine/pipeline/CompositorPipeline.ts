@@ -172,6 +172,7 @@ export class CompositorPipeline {
     inlineEffects?: InlineEffectParams,
     sourcePixelScale = 1,
     videoRotationOverride?: VideoRotationDegrees,
+    textureRect?: { x: number; y: number; width: number; height: number },
   ): void {
     writeLayerUniformData(
       layer,
@@ -183,6 +184,7 @@ export class CompositorPipeline {
       inlineEffects,
       sourcePixelScale,
       videoRotationOverride,
+      textureRect,
     );
 
     // Change detection - only write to GPU if values changed

@@ -14,6 +14,12 @@ import { isMobileAppleWebKit } from '../../utils/mobileAppleWebKit';
 import { expandSceneOperatorGraph } from './sceneGraphRuntime';
 import { compileVoxelGraph } from '../../services/operators/voxelGraph';
 import { effectOperatorCompileParams } from '../../services/operators/effectGraphOwner';
+import { getFullFrameCanvas } from '../../services/text/textCanvasFrameRegistry';
+
+/** 3D planes sample text as a whole source; cropped text rasters are expanded for them. */
+function sceneTextCanvas(source: LayerRenderData['layer']['source']): HTMLCanvasElement | undefined {
+  return source?.textCanvas ? getFullFrameCanvas(source.textCanvas) : undefined;
+}
 
 function getStableSourceDimensions(
   data: LayerRenderData,
@@ -194,7 +200,7 @@ export function collectScene3DLayers(
         layerSpaceEffects: layer.effects.filter((effect, index) => effect.enabled && index <= layer.effects.indexOf(slitGeometry)),
         postProjectionEffects: layer.effects.filter((effect, index) => effect.enabled && index > layer.effects.indexOf(slitGeometry)),
         videoElement: source?.videoElement ?? undefined, videoFrame: source?.videoFrame ?? undefined,
-        imageElement: source?.imageElement ?? undefined, canvas: source?.textCanvas ?? undefined,
+        imageElement: source?.imageElement ?? undefined, canvas: sceneTextCanvas(source),
         preciseVideoSampling: options.preciseVideoSampling || !!source?.videoElement,
         mediaTime: source?.mediaTime, alphaMode: 'straight', doubleSided: true });
       continue;
@@ -206,7 +212,7 @@ export function collectScene3DLayers(
           && (index < layer.effects!.indexOf(cableEffect) || isLayerSpaceSceneEffect(effect.type))),
         videoRotation: source?.videoFrame ? source.videoRotation ?? 0 : 0,
         videoElement: source?.videoElement ?? undefined, videoFrame: source?.videoFrame ?? undefined,
-        imageElement: source?.imageElement ?? undefined, canvas: source?.textCanvas ?? undefined,
+        imageElement: source?.imageElement ?? undefined, canvas: sceneTextCanvas(source),
         preciseVideoSampling: options.preciseVideoSampling || !!source?.videoElement,
         mediaTime: source?.mediaTime, alphaMode: 'opaque' });
       continue;
@@ -290,7 +296,7 @@ export function collectScene3DLayers(
           // interactive preview holds the same <video> element.
           preciseVideoSampling: !liveInputCanvas && (options.preciseVideoSampling || !!source?.videoElement),
           imageElement: source?.imageElement ?? undefined,
-          canvas: liveInputCanvas ?? source?.textCanvas ?? undefined,
+          canvas: liveInputCanvas ?? sceneTextCanvas(source),
           layerSpaceEffects,
           mediaTime: source?.mediaTime,
           voxelParams: voxelEffect.params as SceneVoxelLayer['voxelParams'],
@@ -318,7 +324,7 @@ export function collectScene3DLayers(
         videoFrame: source?.videoFrame ?? undefined,
         preciseVideoSampling: options.preciseVideoSampling,
         imageElement: source?.imageElement ?? undefined,
-        canvas: liveInputCanvas ?? source?.textCanvas ?? undefined,
+        canvas: liveInputCanvas ?? sceneTextCanvas(source),
         layerSpaceEffects,
         mediaTime: source?.mediaTime,
       });

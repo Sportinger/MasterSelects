@@ -1,4 +1,5 @@
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
+import { getCanvasSourceSize } from '../../../../services/text/textCanvasFrameRegistry';
 import { useCallback } from 'react';
 import { useTimelineStore } from '../../../../stores/timeline';
 import type { ClipNodeGraph } from '../../../../types/nodeGraph';
@@ -21,8 +22,9 @@ export function useNodePreviewPreferences(clipId: string | null) {
   const clip = useTimelineStore(state => state.clips.find(value => value.id === clipId));
   const media = useMediaStore(state => state.files.find(value => value.id === (clip?.source?.mediaFileId ?? clip?.mediaFileId)));
   const source = clip?.source;
-  const width = source?.videoElement?.videoWidth || source?.imageElement?.naturalWidth || source?.textCanvas?.width || media?.width || 1920;
-  const height = source?.videoElement?.videoHeight || source?.imageElement?.naturalHeight || source?.textCanvas?.height || media?.height || 1080;
+  const textSize = source?.textCanvas ? getCanvasSourceSize(source.textCanvas) : undefined;
+  const width = source?.videoElement?.videoWidth || source?.imageElement?.naturalWidth || textSize?.width || media?.width || 1920;
+  const height = source?.videoElement?.videoHeight || source?.imageElement?.naturalHeight || textSize?.height || media?.height || 1080;
   const change = useCallback((edit: (current: typeof EMPTY) => typeof EMPTY) => {
     if (!clipId) return;
     const state = readTimelineRuntimeState(useTimelineStore), clip = state.clips.find(candidate => candidate.id === clipId);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { getCanvasSourceSize } from '../../../../services/text/textCanvasFrameRegistry';
 import type { TimelineClip } from '../../../../types/timeline';
 import type { TextNodeStage } from '../../../../types/text';
 import { TextTab } from '../../TextTab';
@@ -31,7 +32,7 @@ export function TextNodeParameters({ clip, stage }: { clip: TimelineClip; stage:
     <fieldset disabled={locked} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <TextTab clipId={clip.id} textProperties={clip.textProperties} scope={stage === 'render' ? 'all' : stage}
         hideContent={stage === 'render'} liveText={liveText} compact disabled={locked}
-        canvasSize={{ width: clip.source?.textCanvas?.width ?? 1920, height: clip.source?.textCanvas?.height ?? 1080 }} />
+        canvasSize={clip.source?.textCanvas ? getCanvasSourceSize(clip.source.textCanvas) : { width: 1920, height: 1080 }} />
     </fieldset>
     {stage !== 'content' && <ResolveInspectorSection title="Reusable text settings" indicator="none">
       <ResolveInspectorRow label="Name"><input className="operator-group-name" aria-label="Text preset name" value={name} maxLength={80} onChange={event => setName(event.target.value)} /></ResolveInspectorRow>

@@ -1,5 +1,6 @@
 import type { Layer } from '../../types';
 import { mediaRuntimeRegistry } from '../mediaRuntime/registry';
+import { getFullFrameCanvas } from '../text/textCanvasFrameRegistry';
 import type { FrameHandle, RuntimeFrame } from '../mediaRuntime/types';
 import type {
   WorkerRenderSoftwareFrame,
@@ -325,12 +326,14 @@ function layerBitmapSource(
     });
   }
 
-  if (source.textCanvas && source.textCanvas.width > 0 && source.textCanvas.height > 0) {
+  // Workers receive raw pixels: cropped text is expanded to its composition-sized source.
+  const textCanvas = source.textCanvas ? getFullFrameCanvas(source.textCanvas) : undefined;
+  if (textCanvas && textCanvas.width > 0 && textCanvas.height > 0) {
     return {
-      source: source.textCanvas,
-      width: source.textCanvas.width,
-      height: source.textCanvas.height,
-      contentKey: `text-canvas:${layer.id}:${source.textCanvas.width}x${source.textCanvas.height}`,
+      source: textCanvas,
+      width: textCanvas.width,
+      height: textCanvas.height,
+      contentKey: `text-canvas:${layer.id}:${textCanvas.width}x${textCanvas.height}`,
     };
   }
   if (source.textCanvas) return { reason: 'empty-text-canvas' };

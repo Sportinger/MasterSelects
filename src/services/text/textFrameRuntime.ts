@@ -9,12 +9,13 @@ import { resolveTextClipValue } from './textValueLink';
 import { getActiveCompositionFrameRate } from '../../stores/timeline/editOperations/activeCompositionFrameRate';
 import { isCssGenericFontFamily } from '../fontFamily';
 import { googleFontsService } from '../googleFontsService';
+import { clearTextCanvasFrame, getCanvasSourceSize, getTextCanvasFrame, renderFramedTextCanvas } from './textCanvasFrame';
 
 const canvases: WeakMap<HTMLCanvasElement, HTMLCanvasElement> = import.meta.hot?.data?.textFrameCanvases ?? new WeakMap();
-const renderedProps: WeakMap<HTMLCanvasElement, TextClipProperties> = import.meta.hot?.data?.textFrameRenderedProps ?? new WeakMap();
+const renderedProps: WeakMap<HTMLCanvasElement, { props: TextClipProperties; width: number; height: number }> = import.meta.hot?.data?.textFrameRenderedRasters ?? new WeakMap();
 if (import.meta.hot?.dispose) import.meta.hot.dispose(data => {
   data.textFrameCanvases = canvases;
-  data.textFrameRenderedProps = renderedProps;
+  data.textFrameRenderedRasters = renderedProps;
 });
 
 /** Sampled properties keep nested values by identity, so a shallow compare detects held keyframes. */
@@ -41,15 +42,23 @@ export function renderTextFrame(clip: TimelineClip, keys: readonly Keyframe[], l
   }) : sampled.text;
   const props = text === sampled.text ? sampled : { ...sampled, text };
   const frameProps = bounds ? { ...props, boxEnabled: true, textBounds: bounds } : props;
+  // A cropped source (nested text) keeps its animated frames cropped to the same source size.
+  const { width, height } = getCanvasSourceSize(source);
   let canvas = canvases.get(source);
   // Held keyframes and unchanged formatted strings: the last raster is still exact.
   const last = canvas ? renderedProps.get(canvas) : undefined;
-  if (canvas && last && sameTextProperties(last, frameProps)
-    && canvas.width === source.width && canvas.height === source.height) return canvas;
-  if (!canvas) { canvas = textRenderer.createCanvas(source.width, source.height); canvases.set(source, canvas); }
-  if (canvas.width !== source.width) canvas.width = source.width;
-  if (canvas.height !== source.height) canvas.height = source.height;
-  textRenderer.render(frameProps, canvas);
-  if (fontReady(frameProps)) renderedProps.set(canvas, frameProps); else renderedProps.delete(canvas);
+  if (canvas && last && last.width === width && last.height === height
+    && sameTextProperties(last.props, frameProps)) return canvas;
+  if (!canvas) { canvas = textRenderer.createCanvas(width, height); canvases.set(source, canvas); }
+  if (getTextCanvasFrame(source)) {
+    renderFramedTextCanvas(frameProps, canvas, width, height);
+  } else {
+    clearTextCanvasFrame(canvas);
+    if (canvas.width !== width) canvas.width = width;
+    if (canvas.height !== height) canvas.height = height;
+    textRenderer.render(frameProps, canvas);
+  }
+  if (fontReady(frameProps)) renderedProps.set(canvas, { props: frameProps, width, height });
+  else renderedProps.delete(canvas);
   return canvas;
 }

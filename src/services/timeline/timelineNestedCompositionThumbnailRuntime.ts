@@ -1,4 +1,5 @@
 import type { TimelineClip } from '../../types';
+import { drawCanvasSource } from '../text/textCanvasFrameRegistry';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { seekVideo } from '../../engine/export/VideoSeeker';
 import { Logger } from '../logger';
@@ -42,7 +43,8 @@ function createCanvasThumbnail(
   }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  if (source instanceof HTMLCanvasElement) drawCanvasSource(ctx, source, 0, 0, canvas.width, canvas.height);
+  else ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL('image/jpeg', quality);
 }
 

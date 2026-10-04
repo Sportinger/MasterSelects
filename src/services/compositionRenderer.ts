@@ -40,6 +40,7 @@ import {
   getTimelineImageSource,
 } from './compositionRender/sourceSetup';
 import { disposeCompositionSources, reportCompositionSource } from './compositionRender/sourceLifecycle';
+import { renderFramedTextCanvas } from './text/textCanvasFrame';
 import {
   loadImageSource,
   loadVectorAnimationSource,
@@ -332,11 +333,14 @@ class CompositionRendererService {
           // Every prepared text clip needs its own backing canvas. Rendering
           // without a target uses TextRenderer's shared scratch canvas, so the
           // next text clip overwrites the previous one in independent previews.
-          const textCanvas = textRenderer.createCanvas(
-            Math.max(1, Math.round(composition.width)),
-            Math.max(1, Math.round(composition.height)),
-          );
-          textRenderer.render(serializableClip.textProperties, textCanvas);
+          const frameWidth = Math.max(1, Math.round(composition.width));
+          const frameHeight = Math.max(1, Math.round(composition.height));
+          const textCanvas = textRenderer.createCanvas(frameWidth, frameHeight);
+          if (serializableClip.captionProperties) {
+            textRenderer.render(serializableClip.textProperties, textCanvas);
+          } else {
+            renderFramedTextCanvas(serializableClip.textProperties, textCanvas, frameWidth, frameHeight);
+          }
           if (textCanvas) {
             const entry: CompositionClipSourceEntry = {
               clipId: clip.id,

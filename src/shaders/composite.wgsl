@@ -50,6 +50,10 @@ struct LayerUniforms {
   videoRotation: u32,
   anchorX: f32,
   anchorY: f32,
+  textureRectX: f32,      // Part of the source the texture covers (cropped text), normalized
+  textureRectY: f32,
+  textureRectWidth: f32,
+  textureRectHeight: f32,
   operatorValues: array<vec4f, 16>,
 };
 
@@ -425,10 +429,15 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let displaySourceUV = vec2f(layer.sourceRectX, layer.sourceRectY) +
     transitionUV * vec2f(layer.sourceRectWidth, layer.sourceRectHeight);
   let sourceUV = orientSourceUv(displaySourceUV);
+  // A cropped texture covers only textureRect of the source; outside it the source is empty.
+  let textureRectOrigin = vec2f(layer.textureRectX, layer.textureRectY);
+  let textureRectSize = max(vec2f(layer.textureRectWidth, layer.textureRectHeight), vec2f(1e-6));
+  let textureUV = (sourceUV - textureRectOrigin) / textureRectSize;
+  let outsideTexture = any(textureUV < vec2f(-1e-5)) || any(textureUV > vec2f(1.0 + 1e-5));
 
   // Sample both textures in uniform control flow
   let baseColor = textureSample(baseTexture, texSampler, input.uv);
-  var layerColor = textureSample(layerTexture, texSampler, sourceUV);
+  var layerColor = textureSample(layerTexture, texSampler, clamp(textureUV, vec2f(0.0), vec2f(1.0)));
 
   // Apply inline color effects (invert → brightness+contrast → saturation)
   // Zero-cost at defaults (brightness=0, contrast=1, saturation=1, invert=0)
@@ -439,7 +448,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   layerColor = vec4f(clamp(ec, vec3f(0.0), vec3f(1.0)), layerColor.a);
 
   // Check if UV is out of bounds - use this to mask the layer
-  let outOfBounds = uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0;
+  let outOfBounds = uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || outsideTexture;
   let maskAlpha = select(layerColor.a, 0.0, outOfBounds) * getTransitionAlpha(clampedUV);
 
   // Apply blend mode

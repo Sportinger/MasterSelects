@@ -2,6 +2,7 @@ import type { Layer, LayerRenderData } from '../../core/types';
 import { flags } from '../../featureFlags';
 import { getMotionReplicatorSourceGeometry } from '../../motion/MotionTypes';
 import { scrubSettleState } from '../../../services/scrubSettleState';
+import { getCanvasSourceSize } from '../../../services/text/textCanvasFrameRegistry';
 import { useTimelineStore } from '../../../stores/timeline';
 import { getCopiedHtmlVideoPreviewFrame } from '../htmlVideoPreviewFallback';
 import {
@@ -396,10 +397,12 @@ export class TargetPreviewLayerCollector {
         }
       }
       if (layer.source.textCanvas) {
+        // Target previews composite on their own path: give them composition-sized pixels.
         const canvas = layer.source.textCanvas;
-        const texture = d.textureManager?.createCanvasTexture(canvas);
-        if (texture) {
-          layerData.push({ layer, isVideo: false, externalTexture: null, textureView: d.textureManager!.getImageView(texture), sourceWidth: canvas.width, sourceHeight: canvas.height });
+        const textureView = d.textureManager?.getSourceSizedCanvasTextureView(canvas);
+        if (textureView) {
+          const { width, height } = getCanvasSourceSize(canvas);
+          layerData.push({ layer, isVideo: false, externalTexture: null, textureView, sourceWidth: width, sourceHeight: height });
         }
       }
       if (layer.source.nestedComposition && !layer.source.imageElement) {

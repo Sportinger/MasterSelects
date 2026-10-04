@@ -106,6 +106,8 @@ Supported codecs are checked at runtime:
 - Codec strings carry the smallest standard level that fits the export size and frame rate (for example HEVC Level 5.1 and H.264 Level 5.2 for 3840x2160 at 60 fps); small exports keep the historical defaults.
 - Chrome on Windows advertises hardware encoders above 1080p with at most 30 fps even when they encode faster. When the real frame rate is rejected, export retries with a 30 fps rate-control hint and a bitrate scaled by 30/fps, so the file keeps the requested bits per second; frame timestamps keep the real rate (verified: 3840x2160 HEVC at 60 fps and 15 Mbps on an RTX 5080 laptop). Hardware configs are preferred over software ones at the real rate.
 - Dense particle material needs far higher bitrates than camera footage; 4K60 HEVC of fine point clouds looks soft below roughly 60 Mbps.
+- Encoder backpressure waits for encoded output instead of flushing, so hardware encoders keep their GOP and rate control. At least eight frames may be in flight (bounded by a 384 MB ceiling, so 8K stays at two) because hardware encoders hold several frames before their first output.
+- Motion frame state is validated once per frame: replicator evaluations and modifier plans created by the frame runtime are sealed and proven by their input key instead of being re-evaluated and compared as JSON.
 
 ---
 

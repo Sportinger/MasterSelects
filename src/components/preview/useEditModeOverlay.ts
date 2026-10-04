@@ -1,6 +1,7 @@
 // Edit mode overlay helpers: bounding box calculation, hit testing, cursor mapping
 
 import { useCallback } from 'react';
+import { getCanvasSourceSize } from '../../services/text/textCanvasFrameRegistry';
 import type { Layer } from '../../types';
 import type { ClipTransform } from '../../types/timelineCore';
 import {
@@ -46,8 +47,9 @@ export function useEditModeOverlay({
       sourceWidth = projectionLayer.source.imageElement.naturalWidth || sourceWidth;
       sourceHeight = projectionLayer.source.imageElement.naturalHeight || sourceHeight;
     } else if (projectionLayer.source?.textCanvas) {
-      sourceWidth = projectionLayer.source.textCanvas.width || sourceWidth;
-      sourceHeight = projectionLayer.source.textCanvas.height || sourceHeight;
+      const textSize = getCanvasSourceSize(projectionLayer.source.textCanvas);
+      sourceWidth = textSize.width || sourceWidth;
+      sourceHeight = textSize.height || sourceHeight;
     } else if (projectionLayer.source?.nestedComposition) {
       sourceWidth = projectionLayer.source.nestedComposition.width || sourceWidth;
       sourceHeight = projectionLayer.source.nestedComposition.height || sourceHeight;

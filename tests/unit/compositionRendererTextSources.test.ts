@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { compositionRenderer } from '../../src/services/compositionRenderer';
 import { textRenderer } from '../../src/services/textRenderer';
+import { getCanvasSourceSize } from '../../src/services/text/textCanvasFrameRegistry';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import {
   DEFAULT_TEXT_PROPERTIES,
@@ -90,9 +91,10 @@ describe('compositionRenderer serialized text sources', () => {
     expect(layers.map((layer) => layer.clipId)).toEqual(['text-red', 'text-cyan']);
     expect(canvases).toHaveLength(2);
     expect(canvases[0]).not.toBe(canvases[1]);
-    expect(canvases.map((canvas) => [canvas!.width, canvas!.height])).toEqual([
-      [1280, 720],
-      [1280, 720],
+    // Each canvas may hold only its text's pixels, but stands for a composition-sized source.
+    expect(canvases.map((canvas) => getCanvasSourceSize(canvas!))).toEqual([
+      { width: 1280, height: 720 },
+      { width: 1280, height: 720 },
     ]);
   });
 });

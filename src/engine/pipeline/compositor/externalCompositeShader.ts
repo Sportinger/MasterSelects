@@ -38,6 +38,10 @@ struct LayerUniforms {
   videoRotation: u32,
   anchorX: f32,
   anchorY: f32,
+  textureRectX: f32,      // Part of the source the texture covers (cropped text), normalized
+  textureRectY: f32,
+  textureRectWidth: f32,
+  textureRectHeight: f32,
   operatorValues: array<vec4f, 16>,
 };
 

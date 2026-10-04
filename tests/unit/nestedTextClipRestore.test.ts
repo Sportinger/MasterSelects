@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { appendNestedTextClip } from '../../src/stores/timeline/nestedComposition/nestedCompositionTextClip';
 import { textRenderer } from '../../src/services/textRenderer';
+import { getCanvasSourceSize } from '../../src/services/text/textCanvasFrameRegistry';
 import { renderTimelineTextCanvasRuntime } from '../../src/services/timeline/timelineGeneratedCanvasRuntime';
 import type { TextClipProperties } from '../../src/types/text';
 import type { SerializableClip, TimelineClip } from '../../src/types/timeline';
@@ -61,8 +62,8 @@ describe('nested text clip restoration', () => {
       height: 720,
     })).toBe(true);
     expect(output[0].source?.type).toBe('text');
-    expect(output[0].source?.textCanvas?.width).toBe(1280);
-    expect(output[0].source?.textCanvas?.height).toBe(720);
+    // Nested rasters are cropped to their text but stand for the composition-sized source.
+    expect(getCanvasSourceSize(output[0].source!.textCanvas!)).toEqual({ width: 1280, height: 720 });
     expect(output[0].textProperties?.text).toBe('Nested editable text');
   });
 

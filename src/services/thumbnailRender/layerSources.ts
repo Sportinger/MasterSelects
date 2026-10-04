@@ -47,17 +47,9 @@ export function collectThumbnailLayerData(resources: ThumbnailResources, layers:
     }
 
     if (layer.source.textCanvas) {
-      const canvas = layer.source.textCanvas;
-      const texture = textureManager.createCanvasTexture(canvas);
-      if (texture) {
-        result.push({
-          layer,
-          isVideo: false,
-          externalTexture: null,
-          textureView: textureManager.getImageView(texture),
-          sourceWidth: canvas.width,
-          sourceHeight: canvas.height,
-        });
+      const source = textureManager.createCanvasSourceTexture(layer.source.textCanvas);
+      if (source) {
+        result.push({ layer, isVideo: false, externalTexture: null, ...source });
       }
     }
   }

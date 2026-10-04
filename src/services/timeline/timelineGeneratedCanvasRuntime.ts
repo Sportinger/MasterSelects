@@ -3,6 +3,7 @@ import { markDynamicCanvasUpdated } from '../canvasVersion';
 import { getTransitionOverlayCanvas } from '../layerBuilder/transitionOverlayCanvases';
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import { textRenderer } from '../textRenderer';
+import { getCanvasSourceSize, getTextCanvasFrame, renderFramedTextCanvas } from '../text/textCanvasFrame';
 
 export interface TimelineGeneratedCanvasDimensions {
   width?: number;
@@ -40,9 +41,10 @@ export function getTimelineGeneratedCanvasRuntimeDimensions(
   fallback?: TimelineGeneratedCanvasDimensions,
 ): Required<TimelineGeneratedCanvasDimensions> {
   const canvas = getTimelineGeneratedCanvasRuntime(clip);
+  const size = canvas ? getCanvasSourceSize(canvas) : undefined;
   return resolveCanvasDimensions({
-    width: canvas?.width ?? fallback?.width,
-    height: canvas?.height ?? fallback?.height,
+    width: size?.width ?? fallback?.width,
+    height: size?.height ?? fallback?.height,
   });
 }
 
@@ -75,6 +77,8 @@ export function createTimelineMathSceneCanvasRuntime(params: {
 export async function createTimelineTextCanvasRuntime(params: {
   textProperties: TextClipProperties;
   dimensions?: TimelineGeneratedCanvasDimensions;
+  /** Keep only the pixels the text covers (render-only rasters such as nested clips). */
+  cropToContent?: boolean;
 }): Promise<TimelineTextCanvasRuntime> {
   const { width, height } = resolveCanvasDimensions(params.dimensions);
   const [
@@ -103,6 +107,10 @@ export async function createTimelineTextCanvasRuntime(params: {
 
   await googleFontsService.loadFont(textProperties.fontFamily, textProperties.fontWeight);
   const canvas = textRenderer.createCanvas(width, height);
+  if (params.cropToContent) {
+    renderFramedTextCanvas(textProperties, canvas, width, height);
+    return { canvas, textProperties };
+  }
   canvas.width = width;
   canvas.height = height;
   textRenderer.render(textProperties, canvas);
@@ -116,6 +124,14 @@ export function renderTimelineTextCanvasRuntime(params: {
   dimensions?: TimelineGeneratedCanvasDimensions;
 }): HTMLCanvasElement {
   const { width, height } = resolveCanvasDimensions(params.dimensions);
+  // A cropped raster keeps cropping when it is redrawn for the same source size.
+  const frame = getTextCanvasFrame(params.currentCanvas);
+  if (frame && frame.frameWidth === width && frame.frameHeight === height) {
+    const target = sharedImmutableTextCanvases.has(params.currentCanvas!)
+      ? textRenderer.createCanvas(width, height)
+      : params.currentCanvas!;
+    return renderFramedTextCanvas(params.textProperties, target, width, height);
+  }
   const canvas = params.currentCanvas &&
     !sharedImmutableTextCanvases.has(params.currentCanvas) &&
     params.currentCanvas.width === width &&

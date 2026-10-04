@@ -1,4 +1,5 @@
 import type { Layer } from "../../../types/layers";
+import { getCanvasSourceSize } from '../../../services/text/textCanvasFrameRegistry';
 import type { ClipTransform } from "../../../types/timelineCore";
 import type { ClipMask, MaskVertex } from "../../../types/masks";
 import { getMotionRenderSize } from "../../../engine/motion/MotionTypes";
@@ -66,9 +67,10 @@ export function getLayerSourceSize(
     };
   }
   if (layer.source.textCanvas) {
+    const textSize = getCanvasSourceSize(layer.source.textCanvas);
     return {
-      width: layer.source.textCanvas.width || fallback.width,
-      height: layer.source.textCanvas.height || fallback.height,
+      width: textSize.width || fallback.width,
+      height: textSize.height || fallback.height,
     };
   }
   if (layer.source.nestedComposition) {

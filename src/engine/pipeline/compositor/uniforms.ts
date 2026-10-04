@@ -4,7 +4,7 @@ import type { VideoRotationDegrees } from '../../webcodecs/videoTrackOrientation
 import type { ImageOperatorProgram } from '../../../types/imageOperatorProgram';
 import { IMAGE_OPERATOR_PARAMETER_CAPACITY, packImageOperatorParameters } from '../../../services/operators/imageOperatorParameters';
 
-export const COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT = 32;
+export const COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT = 36;
 export const COMPOSITOR_UNIFORM_FLOAT_COUNT = COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT + IMAGE_OPERATOR_PARAMETER_CAPACITY;
 export const COMPOSITOR_UNIFORM_SIZE = COMPOSITOR_UNIFORM_FLOAT_COUNT * 4;
 export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22, 29]; // blendMode, mask flags, inlineInvert, transitionType, source rotation
@@ -83,6 +83,7 @@ export function writeLayerUniformData(
   inlineEffects?: InlineEffectParams,
   sourcePixelScale = 1,
   videoRotationOverride?: VideoRotationDegrees,
+  textureRect?: { x: number; y: number; width: number; height: number },
 ): void {
   // Get rotation values (layer.rotation can be number or {x,y,z} object)
   let rotX = 0, rotY = 0, rotZ = 0;
@@ -132,6 +133,11 @@ export function writeLayerUniformData(
   uniformDataU32[29] = (videoRotationOverride ?? layer.source?.videoRotation ?? 0) / 90;
   uniformData[30] = layer.anchor?.x ?? 0;
   uniformData[31] = layer.anchor?.y ?? 0;
+  // Part of the source the texture covers (cropped text rasters); the rest is transparent.
+  uniformData[32] = textureRect?.x ?? 0;
+  uniformData[33] = textureRect?.y ?? 0;
+  uniformData[34] = textureRect?.width ?? 1;
+  uniformData[35] = textureRect?.height ?? 1;
   uniformData.fill(0, COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT);
   if (inlineEffects?.operatorProgram?.values.length) {
     uniformData.set(packImageOperatorParameters(inlineEffects.operatorProgram.values), COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT);

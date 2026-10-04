@@ -332,9 +332,11 @@ describe('NestedCompRenderer shared-scene integration', () => {
         height: number;
       };
       expect(compositeCall).toMatchObject({ width: 960, height: 540 });
+      // Only the texture is reduced: the child is composited against the full
+      // composition reference, so its source keeps the composition size.
       expect(compositeCall.layerData[0]).toMatchObject({
-        sourceWidth: 960,
-        sourceHeight: 540,
+        sourceWidth: 1920,
+        sourceHeight: 1080,
       });
     } finally {
       renderer.destroy();

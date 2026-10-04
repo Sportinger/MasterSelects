@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { getCanvasSourceSize } from '../../../services/text/textCanvasFrameRegistry';
 import type { ClipAnalysis, SceneDescriptionStatus, SceneSegment, TranscriptStatus, TranscriptWord } from '../../../types/clipMetadata';
 import type { Text3DProperties } from '../../../types/text';
 import type { TimelineClip } from '../../../types/timeline';
@@ -120,10 +121,9 @@ export function PropertiesClipTabContent({
             textProperties={selectedClip.textProperties}
             compact
             selectionPills
-            canvasSize={{
-              width: selectedClip.source?.textCanvas?.width ?? 1920,
-              height: selectedClip.source?.textCanvas?.height ?? 1080,
-            }}
+            canvasSize={selectedClip.source?.textCanvas
+              ? getCanvasSourceSize(selectedClip.source.textCanvas)
+              : { width: 1920, height: 1080 }}
           />
         )}
         {activeTab === 'captions' && isCaptionClip && selectedClip.captionProperties && (

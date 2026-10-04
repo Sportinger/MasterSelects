@@ -12,6 +12,7 @@ import type {
 import type { EngineStats } from '../../types/engineStats';
 import type { Layer } from '../../types/layers';
 import { flags } from '../../engine/featureFlags';
+import { getCanvasSourceSize, getFullFrameCanvas } from '../text/textCanvasFrameRegistry';
 import { useEngineStore } from '../../stores/engineStore';
 import { useMediaStore } from '../../stores/mediaStore';
 import { useRenderTargetStore } from '../../stores/renderTargetStore';
@@ -214,7 +215,10 @@ function layerSourceTargetKey(layer: Layer): string {
   if (source.videoFrame) {
     return ['video-frame', sourceClipId, mediaFrameTargetKey(source.mediaTime)].join(':');
   }
-  if (source.textCanvas) return `text:${sourceClipId}:${source.textCanvas.width}x${source.textCanvas.height}`;
+  if (source.textCanvas) {
+    const { width, height } = getCanvasSourceSize(source.textCanvas);
+    return `text:${sourceClipId}:${width}x${height}`;
+  }
   if (source.imageElement) return `image:${sourceClipId}:${source.imageElement.naturalWidth}x${source.imageElement.naturalHeight}`;
   if (source.type === 'solid') return `solid:${source.color}`;
   if (source.nestedComposition) return ['nested', sourceClipId, mediaFrameTargetKey(source.mediaTime)].join(':');
@@ -1503,12 +1507,14 @@ class WorkerPresentingRenderHostPortCore {
       };
     }
     if (source.type === 'text' && source.textCanvas) {
-      const width = source.textCanvas.width;
-      const height = source.textCanvas.height;
+      // Workers receive raw pixels: cropped text is expanded to its composition-sized source.
+      const textCanvas = getFullFrameCanvas(source.textCanvas);
+      const width = textCanvas.width;
+      const height = textCanvas.height;
       if (width <= 0 || height <= 0) return null;
       return {
         kind: 'bitmap', sourceId: `text:${layer.sourceClipId ?? layer.id}`,
-        runtimeSourceKind: 'text', source: source.textCanvas, width, height,
+        runtimeSourceKind: 'text', source: textCanvas, width, height,
       };
     }
     if (source.type === 'solid' || source.type === 'color') {

@@ -34,6 +34,8 @@ export interface ThumbnailLayerData {
   textureView: GPUTextureView | null;
   sourceWidth: number;
   sourceHeight: number;
+  textureRect?: { x: number; y: number; width: number; height: number };
+  expandTextureToSource?: () => GPUTextureView | null;
 }
 
 export interface ThumbnailRenderTarget {

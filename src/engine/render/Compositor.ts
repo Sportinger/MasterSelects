@@ -338,6 +338,19 @@ export class Compositor {
         ? getVideoFrameEffectSourceRotation(layer)
         : 0;
 
+      // Cropped text rasters composite directly through their texture rect; passes that
+      // read the source as a whole (effects, color, edge fill, projections) get the
+      // composition-sized texture instead.
+      let layerTextureView = data.textureView;
+      let textureRect = isAdjustmentLayer ? undefined : data.textureRect;
+      if (textureRect && (needsSourcePreprocess || canvasFill || terrainProjection || trackingProjection)) {
+        const sourceSized = data.expandTextureToSource?.() ?? null;
+        if (sourceSized) {
+          layerTextureView = sourceSized;
+          textureRect = undefined;
+        }
+      }
+
       // Update uniforms (includes inline effect params)
       this.compositorPipeline.updateLayerUniforms(
         canvasFill?.layer ?? layer,
@@ -348,6 +361,7 @@ export class Compositor {
         inlineEffects,
         canvasFill ? 1 : sourcePixelScale,
         effectSourceRotation === 0 ? undefined : 0,
+        textureRect,
       );
 
       // Track which ping-pong buffer we're reading from for cache key
@@ -356,7 +370,7 @@ export class Compositor {
       // Determine the source texture/view to use for compositing
       // Adjustment layers process the accumulated frame below them. readView
       // remains the untouched snapshot while effects render into temp views.
-      let sourceTextureView = isAdjustmentLayer ? readView : data.textureView;
+      let sourceTextureView = isAdjustmentLayer ? readView : layerTextureView;
       let sourceExternalTexture = isAdjustmentLayer ? null : data.externalTexture;
       let useExternalTexture = !isAdjustmentLayer && data.isVideo && !!data.externalTexture;
 

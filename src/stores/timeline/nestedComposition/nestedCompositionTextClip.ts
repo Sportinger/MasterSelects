@@ -24,10 +24,15 @@ function createInitialTextRuntime(
   // serialized text-properties object. Static text can therefore share its
   // initial raster. Dynamic/keyframed text keeps an independent canvas so a
   // later in-place render can never bleed into another timed instance.
+  // Nested rasters are render-only: crop them to the text so hundreds of nested
+  // labels do not each hold a composition-sized canvas. Captions draw extra
+  // layers in composition space and stay full-size.
+  const cropToContent = !serializedClip.captionProperties;
   if (serializedClip.keyframes?.length || serializedClip.captionProperties) {
     return createTimelineTextCanvasRuntime({
       textProperties: serializedClip.textProperties!,
       dimensions,
+      cropToContent,
     });
   }
   const properties = serializedClip.textProperties!;
@@ -39,7 +44,7 @@ function createInitialTextRuntime(
     sharedStaticTextRuntimes.set(key, existing);
     return existing;
   }
-  const created = createTimelineTextCanvasRuntime({ textProperties: properties, dimensions })
+  const created = createTimelineTextCanvasRuntime({ textProperties: properties, dimensions, cropToContent })
     .then(runtime => {
       markTimelineTextCanvasRuntimeShared(runtime.canvas);
       return runtime;

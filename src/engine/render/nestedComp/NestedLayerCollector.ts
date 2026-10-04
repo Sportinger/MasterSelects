@@ -157,8 +157,11 @@ export class NestedLayerCollector {
             isVideo: false,
             externalTexture: null,
             textureView: subTextureView,
-            sourceWidth: nc.width * previewRenderScale,
-            sourceHeight: nc.height * previewRenderScale,
+            // The parent composites against its full composition size; a reduced
+            // preview render scale only lowers the texture resolution, so the source
+            // keeps its composition size (scaling it here halved nested comps in playback).
+            sourceWidth: nc.width,
+            sourceHeight: nc.height,
           });
         }
         continue;
@@ -424,14 +427,9 @@ export class NestedLayerCollector {
 
       // Text
       if (layer.source.textCanvas) {
-        const canvas = layer.source.textCanvas;
-        const texture = this.textureManager.createCanvasTexture(canvas);
-        if (texture) {
-          result.push({
-            layer, isVideo: false, externalTexture: null,
-            textureView: this.textureManager.getImageView(texture),
-            sourceWidth: canvas.width, sourceHeight: canvas.height,
-          });
+        const source = this.textureManager.createCanvasSourceTexture(layer.source.textCanvas);
+        if (source) {
+          result.push({ layer, isVideo: false, externalTexture: null, ...source });
         }
       }
     }
