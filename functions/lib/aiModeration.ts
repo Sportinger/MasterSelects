@@ -186,9 +186,15 @@ async function moderateImage(env: Env, url: string): Promise<SingleModerationOut
   return outcome;
 }
 
-export async function moderateAiInput(env: Env, value: unknown): Promise<AiModerationResult> {
-  const text = buildModerationInput(value);
-  const images = collectModerationImages(value);
+export interface AiModerationContent {
+  images?: readonly string[];
+  text?: string;
+}
+
+/** Moderates text and an explicit image list; callers choose which images to check. */
+export async function moderateAiContent(env: Env, content: AiModerationContent): Promise<AiModerationResult> {
+  const text = content.text?.trim().slice(0, 20_000) ?? '';
+  const images = [...new Set(content.images ?? [])];
   if (!text && images.length === 0) {
     return { categories: [], errorMessage: null, flagged: false, payload: null, status: 'skipped' };
   }
@@ -213,6 +219,13 @@ export async function moderateAiInput(env: Env, value: unknown): Promise<AiModer
   const flagged = categories.length > 0;
 
   return { categories, errorMessage: null, flagged, payload, status: flagged ? 'flagged' : 'clean' };
+}
+
+export async function moderateAiInput(env: Env, value: unknown): Promise<AiModerationResult> {
+  return moderateAiContent(env, {
+    images: collectModerationImages(value),
+    text: buildModerationInput(value),
+  });
 }
 
 export function blocksAiRequest(

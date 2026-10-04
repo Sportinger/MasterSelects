@@ -1,6 +1,13 @@
 import { json, methodNotAllowed } from '../../lib/db';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 import { tryHandleNormalPath } from '../../lib/hostedAgent/route';
+import {
+  kernelContentBlockedCode,
+  kernelContentBlockedMessage,
+  kernelContentBlockedStatus,
+  moderateKernelRelayBody,
+  recordBlockedKernelContent,
+} from '../../lib/kernelContentModeration';
 
 const DEFAULT_KERNEL_ORIGIN = 'https://fassandra.de';
 const FORWARD_TIMEOUT_MS = 2 * 60 * 60 * 1_000;
@@ -60,6 +67,36 @@ async function readForwardBody(request: Request): Promise<ArrayBuffer | null> {
   return body.byteLength > MAX_FORWARD_BODY_BYTES ? null : body;
 }
 
+function parseJsonBody(body: ArrayBuffer): unknown {
+  try {
+    return JSON.parse(new TextDecoder().decode(body)) as unknown;
+  } catch {
+    return null;
+  }
+}
+
+/** Images relayed to the kernel reach model providers; check them first. */
+async function blockedRelayResponse(
+  context: AppContext,
+  path: string,
+  body: ArrayBuffer,
+  userId: string,
+): Promise<Response | null> {
+  const { blocked, moderation } = await moderateKernelRelayBody(context.env, path, parseJsonBody(body));
+  if (!blocked) return null;
+  await recordBlockedKernelContent(context, {
+    feature: `kernel_relay:${path.split('/').slice(0, 3).join('/')}`,
+    moderation,
+    prompt: { path },
+    userId,
+  });
+  // The editor surfaces `error` as the user-facing message on these routes.
+  return json(
+    { code: kernelContentBlockedCode(moderation), error: kernelContentBlockedMessage(moderation) },
+    { status: kernelContentBlockedStatus(moderation) },
+  );
+}
+
 export const onRequest: AppRouteHandler = async (context: AppContext): Promise<Response> => {
   const path = resolvePath(context);
   if (path === null) {
@@ -108,6 +145,10 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
     forwardBody = await readForwardBody(context.request);
     if (!forwardBody) {
       return json({ error: 'Kernel request body is too large.' }, { status: 413 });
+    }
+    if (context.data.user) {
+      const blocked = await blockedRelayResponse(context, path, forwardBody, context.data.user.id);
+      if (blocked) return blocked;
     }
     headers['Content-Type'] = 'application/json';
   }

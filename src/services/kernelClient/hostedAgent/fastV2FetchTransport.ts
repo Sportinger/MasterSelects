@@ -622,6 +622,9 @@ async function responseError(response: Response): Promise<Error> {
     );
   }
   const code = await safeResponseErrorCode(response);
+  if (code === 'content_policy_violation') {
+    return new Error('This request was blocked by content safety checks.');
+  }
   const detail = code === undefined ? String(response.status) : `${response.status}: ${code}`;
   return new Error(`The Auto request failed safely (${detail}).`);
 }

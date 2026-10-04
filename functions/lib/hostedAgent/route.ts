@@ -60,6 +60,15 @@ import {
 } from '../../../src/services/kernelClient/hostedAgent/fastV2StartContract';
 import type { KernelOperationPlanResultV1 } from '../../../src/services/kernelClient/wp1Spike/operationRoundTrip';
 import {
+  kernelContentBlockedCode,
+  kernelContentBlockedMessage,
+  kernelContentBlockedStatus,
+  moderateHostedAgentOperationResult,
+  moderateHostedAgentStart,
+  recordBlockedKernelContent,
+  type KernelContentVerdict,
+} from '../kernelContentModeration';
+import {
   validBoundedEditorOperationDataV1,
   type PublicOperationIdV1,
 } from '../../../src/services/kernelClient/wp1Spike/publicOperationContracts';
@@ -332,6 +341,25 @@ function parseOperationResult(
   return value as unknown as { result: KernelOperationPlanResultV1 };
 }
 
+async function assertKernelContentAllowed(
+  context: AppContext,
+  input: { feature: string; prompt: unknown; userId: string; verdict: KernelContentVerdict },
+): Promise<void> {
+  if (!input.verdict.blocked) return;
+  const { moderation } = input.verdict;
+  await recordBlockedKernelContent(context, {
+    feature: input.feature,
+    moderation,
+    prompt: input.prompt,
+    userId: input.userId,
+  });
+  throw new HostedAgentRouteError(
+    kernelContentBlockedCode(moderation),
+    kernelContentBlockedMessage(moderation),
+    kernelContentBlockedStatus(moderation),
+  );
+}
+
 async function readJsonBody(
   request: Request,
   maximumBytes: number,
@@ -498,6 +526,13 @@ async function handleFastV2Start(context: AppContext): Promise<Response> {
       409,
     );
   }
+
+  await assertKernelContentAllowed(context, {
+    feature: 'hosted_agent_turn',
+    prompt: { request: browserRequest.request, visualReferenceCount: browserRequest.visualReferences.length },
+    userId: user.id,
+    verdict: await moderateHostedAgentStart(context.env, browserRequest),
+  });
 
   const browserRequestDigest = await digestHostedAgentFastV2BrowserRequest(browserRequest);
   const executionProfile = 'fast' as const;
@@ -730,6 +765,12 @@ async function handleFastV2OperationResults(
       'The operation result contradicts the D1-bound execution profile.',
     );
   }
+  await assertKernelContentAllowed(context, {
+    feature: 'hosted_agent_visual_result',
+    prompt: { batchId: parsed.result.batchId, turnId: session.turn.turn_id },
+    userId: session.turn.user_id,
+    verdict: await moderateHostedAgentOperationResult(context.env, parsed.result),
+  });
   return forwardHostedAgentRequest({
     accept: 'application/json',
     assertion: await mintPersistedFastV2Assertion({ ...session, env: context.env }),
