@@ -42,7 +42,8 @@ export async function handleAddActionClip(args: Record<string, unknown>): Promis
     if (start === undefined) throw new Error('start is required.');
     const target = targetOf(args);
     const actionId = addStickFigureAction(clipId, effectId, args.action, start, {
-      duration: optionalNumber(args.duration, 'duration'), strength: optionalNumber(args.strength, 'strength'), ...(target ? { target } : {}),
+      duration: optionalNumber(args.duration, 'duration'), strength: optionalNumber(args.strength, 'strength'),
+      distance: optionalNumber(args.distance, 'distance'), ...(target ? { target } : {}),
     });
     return { success: true, data: { actionId, figure: stickFigureRef(clipId, effectId) } };
   } catch (error) { return fail(error); }

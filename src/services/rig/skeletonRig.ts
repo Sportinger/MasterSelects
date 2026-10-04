@@ -22,6 +22,24 @@ export type SkeletonShapeDefinition = Record<SkeletonNumericKey, number> & { gro
  */
 export const facingX = (x: number, rootX: number, facing: number) => rootX + facing * (x - rootX);
 
+/**
+ * Horizontal mirror factor of a figure: Facing (left = -1) times the keyframeable Turn (1 = as
+ * faced, -1 = turned around, values between squash the figure through a 2D turnaround).
+ */
+export function figureMirror(params: Readonly<Record<string, unknown>>): number {
+  const turn = typeof params.turn === 'number' && Number.isFinite(params.turn) ? Math.max(-1, Math.min(1, params.turn)) : 1;
+  return (params.facing === 'left' ? -1 : 1) * turn;
+}
+
+/** Inverse of facingX for a mirror factor; a fully squashed figure maps everything onto the pelvis. */
+export const unfacingX = (x: number, rootX: number, mirror: number) => Math.abs(mirror) < 1e-6 ? rootX : rootX + (x - rootX) / mirror;
+
+/** Screen angle (degrees, y down) of a figure-space direction after mirroring. */
+export function mirroredAngle(degrees: number, mirror: number): number {
+  const radians = degrees * Math.PI / 180;
+  return Math.atan2(Math.sin(radians), mirror * Math.cos(radians)) * 180 / Math.PI;
+}
+
 /** Figure units are pixels of a frame this tall; renders scale them to the actual height. */
 export const STICK_FIGURE_REFERENCE_HEIGHT = 1080;
 
@@ -29,6 +47,12 @@ export const STICK_FIGURE_REFERENCE_HEIGHT = 1080;
 export function skeletonFromParams(params: Readonly<Record<string, unknown>>): SkeletonShapeDefinition {
   const values: Partial<SkeletonShapeDefinition> = {};
   for (const key of SKELETON_NUMERIC_KEYS) if (typeof params[key] === 'number') values[key] = params[key] as number;
+  // Scale sizes the figure as a whole: every bone length and the line thickness.
+  const scale = typeof params.scale === 'number' && Number.isFinite(params.scale) ? Math.max(0, params.scale) : 1;
+  if (scale !== 1) {
+    const defaults = createDefaultSkeletonShape();
+    for (const key of SKELETON_LENGTH_KEYS) values[key] = (values[key] ?? defaults[key]) * scale;
+  }
   if (params.groundMode === 'off' || params.groundMode === 'floor' || params.groundMode === 'plant') values.groundMode = params.groundMode;
   return normalizeSkeleton(values);
 }

@@ -5,6 +5,7 @@ import type { EffectDefinition } from '../../types';
 import { colorToRgba } from '../../_shared/catalogColor';
 import {
   facingX,
+  figureMirror,
   SKELETON_JOINTS,
   skeletonFromParams,
   solveSkeleton,
@@ -28,7 +29,7 @@ export const stickFigure: EffectDefinition = {
     const skeleton = skeletonFromParams(params);
     const { joints } = solveSkeleton(skeleton);
     const unit = height > 0 ? height / STICK_FIGURE_REFERENCE_HEIGHT : 1;
-    const facing = params.facing === 'left' ? -1 : 1;
+    const facing = figureMirror(params);
     const [r, g, b, a] = colorToRgba(params.color, '#ffffff');
     const opacity = typeof params.opacity === 'number' && Number.isFinite(params.opacity) ? params.opacity : 1;
     const data = new Float32Array(36);

@@ -1,7 +1,8 @@
 import type { Effect } from '../../types/effects';
 import { useTimelineStore } from '../../stores/timeline';
 import {
-  facingX,
+  figureMirror,
+  unfacingX,
   SKELETON_ANGLE_KEYS,
   skeletonFromParams,
   solveSkeleton,
@@ -45,11 +46,11 @@ function aimLimb(clipId: string, timelineTime: number, clipTime: number, params:
   const transform = useTimelineStore.getState().getInterpolatedTransform(clipId, clipTime);
   const local = mapCompositionPointToLayer(target.x, target.y, transform, width, height);
   const unit = height / STICK_FIGURE_REFERENCE_HEIGHT;
-  const facing = params.facing === 'left' ? -1 : 1;
+  const facing = figureMirror(params);
   const skeleton = skeletonFromParams(params);
   const { joints } = solveSkeleton(skeleton);
   const root = limb === 'legL' || limb === 'legR' ? joints.pelvis : joints.neck;
-  const solved = solveSkeletonLimb(skeleton, limb, facingX(local.x / unit, skeleton.rootX, facing) - root.x, local.y / unit - root.y);
+  const solved = solveSkeletonLimb(skeleton, limb, unfacingX(local.x / unit, skeleton.rootX, facing) - root.x, local.y / unit - root.y);
   const [upper, lower] = LIMB_PARAMS[limb];
   return { [upper]: solved.upper, [lower]: solved.lower };
 }
@@ -69,7 +70,7 @@ export function applyStickFigureActions(clip: { id?: string; startTime?: number 
     const base = Object.fromEntries(SKELETON_ANGLE_KEYS.map(key => [key, numberParam(effect.params, key)])) as Record<SkeletonAngleKey, number>;
     const result = applySkeletonActions(base, numberParam(effect.params, 'lift'), actions, clipTime);
     // Travel goes the way the figure faces; Pelvis X is a screen position.
-    const facing = effect.params.facing === 'left' ? -1 : 1;
+    const facing = Math.sign(figureMirror(effect.params)) || 1;
     const params: Params = { ...effect.params, ...result.pose, lift: result.lift,
       rootX: numberParam(effect.params, 'rootX') + facing * result.advance };
     for (const instance of actions) {

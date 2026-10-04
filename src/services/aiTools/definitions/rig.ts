@@ -39,6 +39,7 @@ export const rigToolDefinitions: ToolDefinition[] = [
           start: { type: 'number', description: 'Start in clip seconds.' },
           duration: { type: 'number', description: 'Duration in seconds (default: the action\'s natural length).' },
           strength: { type: 'number', description: 'How far the pose departs from standing, 0..2 (default 1).' },
+          distance: { type: 'number', description: 'Forward travel in figure pixels (overrides the action\'s own; negative = backwards).' },
           targetFigure: { type: 'string', description: 'Optional figure to aim the strike at ("clipId|effectId").' },
           targetJoint: { type: 'string', enum: [...SKELETON_JOINTS], description: 'Joint of the target figure to hit (default head).' },
         },

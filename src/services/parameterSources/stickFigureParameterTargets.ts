@@ -19,7 +19,7 @@ export function stickFigureParameterTargets(effect: Pick<Effect, 'id' | 'name' |
       path: `effect.${effect.id}.${name}`, label: definition.label, group: effect.name,
       value: typeof stored === 'number' && Number.isFinite(stored) ? stored : fallback, defaultValue: fallback,
       min: definition.min ?? -1000, max: definition.max ?? 1000, step: definition.step ?? 1,
-      unit: isSkeletonAngleKey(name) ? 'degrees' : name === 'opacity' ? 'number' : 'pixels',
+      unit: isSkeletonAngleKey(name) ? 'degrees' : name === 'opacity' || name === 'scale' || name === 'turn' ? 'number' : 'pixels',
     }];
   });
 }

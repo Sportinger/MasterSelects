@@ -1,3 +1,4 @@
+import { shiftSkeletonActions } from '../rig/skeletonActions';
 import type { ParameterSources } from '../../types/parameterSources';
 import type { TimelineClip } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
@@ -70,17 +71,30 @@ export function offsetParameterSourceTime(state: ParameterSources | undefined, d
 }
 
 export function parameterSourceSplitPatch(clip: TimelineClip, delta: number): Partial<TimelineClip> {
-  return clip.nodeGraph?.parameterSources ? { nodeGraph: { ...structuredClone(clip.nodeGraph),
-    parameterSources: offsetParameterSourceTime(clip.nodeGraph.parameterSources, delta) } } : {};
+  return {
+    ...(clip.nodeGraph?.parameterSources ? { nodeGraph: { ...structuredClone(clip.nodeGraph),
+      parameterSources: offsetParameterSourceTime(clip.nodeGraph.parameterSources, delta) } } : {}),
+    ...effectClockPatch(clip, delta),
+  };
+}
+
+/** Effect-owned clocks (Stick Figure action lanes) follow a clip whose local time starts `delta` later. */
+function effectClockPatch(clip: Pick<TimelineClip, 'effects'>, delta: number): Partial<TimelineClip> {
+  if (!delta || !clip.effects?.some(effect => effect.type === 'stick-figure' && typeof effect.params.actions === 'string')) return {};
+  return { effects: clip.effects.map(effect => effect.type === 'stick-figure'
+    ? { ...effect, params: { ...effect.params, actions: shiftSkeletonActions(effect.params.actions, delta) as string } }
+    : effect) };
 }
 
 export function trimmedParameterSourceClips(before: readonly TimelineClip[], after: TimelineClip[]): TimelineClip[] {
   const originals = new Map(before.map(clip => [clip.id, clip]));
   return after.map(clip => {
     const previous = originals.get(clip.id);
-    if (!previous?.nodeGraph?.parameterSources || previous.startTime === clip.startTime || previous.duration === clip.duration) return clip;
-    return { ...clip, nodeGraph: { ...clip.nodeGraph!, parameterSources:
-      offsetParameterSourceTime(previous.nodeGraph.parameterSources, clip.startTime - previous.startTime) } };
+    if (!previous || previous.startTime === clip.startTime || previous.duration === clip.duration) return clip;
+    const delta = clip.startTime - previous.startTime;
+    const withSources = previous.nodeGraph?.parameterSources ? { ...clip, nodeGraph: { ...clip.nodeGraph!, parameterSources:
+      offsetParameterSourceTime(previous.nodeGraph.parameterSources, delta) } } : clip;
+    return { ...withSources, ...effectClockPatch(withSources, delta) };
   });
 }
 

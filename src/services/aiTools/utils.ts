@@ -2,6 +2,7 @@
 
 import { useTimelineStore } from '../../stores/timeline';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useMediaStore } from '../../stores/mediaStore';
 import { NativeHelperClient } from '../nativeHelper';
 import { renderHostPort } from '../render/renderHostPort';
 import type { TimelineClip, TimelineTrack } from '../../stores/timeline/types';
@@ -53,8 +54,11 @@ export async function captureFrameGrid(
   timelineStore: ReturnType<typeof useTimelineStore.getState>,
   options: { settleMs?: number; mode?: PreviewCaptureMode } = {}
 ): Promise<ToolResult> {
-  const frameWidth = 320; // Thumbnail size
-  const frameHeight = 180;
+  // Cells follow the composition's aspect (a 9:16 frame is not squeezed into 16:9) within 320 px.
+  const composition = useMediaStore.getState().getActiveComposition();
+  const aspect = composition?.width && composition?.height ? composition.width / composition.height : 16 / 9;
+  const frameWidth = aspect >= 1 ? 320 : Math.max(1, Math.round(320 * aspect));
+  const frameHeight = aspect >= 1 ? Math.max(1, Math.round(320 / aspect)) : 320;
   const rows = Math.ceil(times.length / columns);
   const settleMs = Math.max(50, Math.min(1500, Math.round(options.settleMs ?? 140)));
   const mode = options.mode ?? 'auto';

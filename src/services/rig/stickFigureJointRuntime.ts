@@ -4,6 +4,8 @@ import type { ClipTransform } from '../../types/timelineCore';
 import { getEffectiveScale } from '../../utils/transformScale';
 import {
   facingX,
+  figureMirror,
+  mirroredAngle,
   SKELETON_JOINTS,
   skeletonFromParams,
   solveSkeleton,
@@ -117,7 +119,7 @@ export function sampleStickFigurePose(ref: string, timelineTime: number): StickF
     if (!effect) throw new Error('The stick figure effect was removed.');
     const skeleton = skeletonFromParams(effect.params);
     const { joints, boneAngles } = solveSkeleton(skeleton);
-    const facing = effect.params.facing === 'left' ? -1 : 1;
+    const facing = figureMirror(effect.params);
     const unit = height / STICK_FIGURE_REFERENCE_HEIGHT;
     const transform = state.getInterpolatedTransform(clip.id, localTime);
     const samples = {} as Record<SkeletonJoint, StickFigureJointSample>;
@@ -125,7 +127,7 @@ export function sampleStickFigurePose(ref: string, timelineTime: number): StickF
     for (const joint of SKELETON_JOINTS) {
       const point = mapLayerPointToComposition(facingX(joints[joint].x, skeleton.rootX, facing) * unit, joints[joint].y * unit,
         transform, width, height);
-      const screenAngle = facing > 0 ? boneAngles[joint] : 180 - boneAngles[joint];
+      const screenAngle = mirroredAngle(boneAngles[joint], facing);
       // Screen angles turn clockwise (y down); clip rotation turns the other way.
       samples[joint] = { ...point, rotation: (transform.rotation?.z ?? 0) - screenAngle };
       lowest = Math.max(lowest, joints[joint].y + (joint === 'head' ? skeleton.headRadius : skeleton.thickness / 2));

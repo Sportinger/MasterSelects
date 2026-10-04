@@ -12,7 +12,7 @@ const keyframeSequenceItemSchema = {
     value: { type: 'number', description: KEYFRAME_VALUE_DESCRIPTION },
     time: { type: 'number', description: 'Clip-local time in seconds. Defaults to the playhead relative to this clip.' },
     sourceTime: { type: 'number', description: FLOCK_SOURCE_TIME_DESCRIPTION },
-    easing: { type: 'string', description: 'linear, ease-in, ease-out, ease-in-out, bezier, a supported legacy alias, a motion curve (sine-out, sine-in-out, cubic-in, cubic-out, cubic-in-out, expo-out, expo-in, expo-in-out, back-out, back-in) or cubic-bezier(x1, y1, x2, y2). Curves shape the segment to the next keyframe of the same property.' },
+    easing: { type: 'string', description: 'linear, ease-in, ease-out, ease-in-out, bezier, hold (keep the value until the next key), a supported legacy alias, a motion curve (sine-out, sine-in-out, cubic-in, cubic-out, cubic-in-out, expo-out, expo-in, expo-in-out, back-out, back-in) or cubic-bezier(x1, y1, x2, y2). Curves shape the segment to the next keyframe of the same property.' },
   },
   required: ['clipId', 'property', 'value'],
 };
@@ -27,7 +27,7 @@ const addKeyframeParameters = {
     value: { type: 'number', description: KEYFRAME_VALUE_DESCRIPTION },
     time: { type: 'number', description: 'Time in seconds relative to clip start. If omitted, uses current playhead position relative to clip.' },
     sourceTime: { type: 'number', description: FLOCK_SOURCE_TIME_DESCRIPTION },
-    easing: { type: 'string', description: 'Easing: linear, ease-in, ease-out, ease-in-out, bezier. Legacy aliases like easeOut are also accepted (default: ease-in-out). Motion curves (expo-out, back-out, cubic-out, expo-in-out, …) or cubic-bezier(x1, y1, x2, y2) shape the segment to the next keyframe.' },
+    easing: { type: 'string', description: 'Easing: linear, ease-in, ease-out, ease-in-out, bezier, hold (keep the value until the next key). Legacy aliases like easeOut are also accepted (default: ease-in-out). Motion curves (expo-out, back-out, cubic-out, expo-in-out, …) or cubic-bezier(x1, y1, x2, y2) shape the segment to the next keyframe.' },
     sequence: {
       type: 'array',
       minItems: 1,

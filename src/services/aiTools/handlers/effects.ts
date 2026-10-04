@@ -1,5 +1,5 @@
 import { useTimelineStore } from '../../../stores/timeline';
-import { getAllEffects, getDefaultParams, hasEffect, getCategoriesWithEffects, resolveEffectTypeId } from '../../../effects';
+import { getAllEffects, getDefaultParams, getEffect, hasEffect, getCategoriesWithEffects, resolveEffectTypeId } from '../../../effects';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import {
@@ -142,6 +142,14 @@ export async function handleUpdateEffect(
 
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) return { success: false, error: `Effect not found: ${effectId}` };
+  if (!params || typeof params !== 'object') return { success: false, error: 'params must be an object.' };
+
+  // A misspelled parameter used to be stored silently and do nothing; reject it with the valid names.
+  const known = new Set([...Object.keys(getEffect(effect.type)?.params ?? {}), ...Object.keys(effect.params)]);
+  const unknown = Object.keys(params).filter(name => !known.has(name));
+  if (unknown.length) {
+    return { success: false, error: `Unknown parameter${unknown.length > 1 ? 's' : ''} for ${effect.type}: ${unknown.join(', ')}. Valid: ${[...known].sort().join(', ')}` };
+  }
 
   if (clip.source?.type === 'motion-adjustment') {
     const adjustmentFailure = validateGenericAdjustmentEffect(

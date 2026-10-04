@@ -66,7 +66,7 @@ export const previewToolDefinitions: ToolDefinition[] = [
           times: {
             type: 'array',
             items: { type: 'number' },
-            description: 'Array of timeline times (in seconds) to capture frames at. Max 8 frames.',
+            description: 'Array of timeline times (in seconds) to capture frames at. Max 16 frames; cells keep the composition aspect.',
           },
           columns: {
             type: 'number',

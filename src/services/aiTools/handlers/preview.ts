@@ -130,7 +130,7 @@ export async function handleGetFramesAtTimes(
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
   const times = Array.isArray(args.times)
-    ? args.times.filter((time): time is number => typeof time === 'number' && Number.isFinite(time)).slice(0, 8)
+    ? args.times.filter((time): time is number => typeof time === 'number' && Number.isFinite(time)).slice(0, 16)
     : [];
   if (times.length === 0) {
     return { success: false, error: 'Provide at least one finite frame time.' };

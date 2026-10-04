@@ -3,7 +3,7 @@ import type { ToolResult } from '../types';
 import type { AnimatableProperty, EasingType, TimelineClip } from '../../../types';
 import type { KeyframeCreateOperation } from '../../../stores/timeline/editOperations/transactionTypes';
 import { animateKeyframe } from '../aiFeedback';
-import { normalizeEasingType } from '../../../utils/easing';
+import { isHoldEasing, normalizeEasingType } from '../../../utils/easing';
 import { KEYFRAME_EASING_PRESET_IDS, resolveEasingCurve, type CubicBezierPoints } from '../../../utils/easingPresets';
 import { getKeyframeAtTime } from '../../../utils/keyframeInterpolation';
 import { propertyRegistry } from '../../properties';
@@ -41,6 +41,8 @@ interface KeyframeAuthoringRequest {
   easing: EasingType;
   /** Motion-curve preset or cubic-bezier: materialized as handles on the segment to the next key. */
   curve: CubicBezierPoints | null;
+  /** Keep the value until the next key (easing 'hold'/'step'). */
+  hold?: boolean;
 }
 
 interface PlannedKeyframe extends KeyframeAuthoringRequest {
@@ -174,6 +176,12 @@ export async function handleAddKeyframe(
       for (const { curve, ids } of byCurve.values()) useTimelineStore.getState().applyKeyframeEasingCurve(ids, curve);
     }
 
+    const held = planned.filter((keyframe) => keyframe.hold);
+    for (const keyframe of held) {
+      const actual = getKeyframeAtTime(useTimelineStore.getState().getClipKeyframes(keyframe.clipId), keyframe.property, keyframe.storedTime);
+      if (actual) useTimelineStore.getState().updateKeyframe(actual.id, { hold: true });
+    }
+
     const finalTimeline = useTimelineStore.getState();
     const keyframes = planned.map((keyframe) => {
       const actual = getKeyframeAtTime(
@@ -197,7 +205,7 @@ export async function handleAddKeyframe(
         ...(isFlockProperty(keyframe.property)
           ? { timeBasis: 'source', clipLocalTime: keyframe.resolvedTime }
           : {}),
-        easing: normalizeEasingType(actual.easing, keyframe.easing),
+        easing: actual.hold ? 'hold' : normalizeEasingType(actual.easing, keyframe.easing),
         status,
         created: status === 'created',
         updated: status === 'updated',
@@ -319,16 +327,17 @@ function parseKeyframeRequest(
   };
 }
 
-function parseEasing(value: unknown, label: string): { easing: EasingType; curve: CubicBezierPoints | null } {
+function parseEasing(value: unknown, label: string): { easing: EasingType; curve: CubicBezierPoints | null; hold?: boolean } {
   if (value === undefined) return { easing: 'ease-in-out', curve: null };
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`${label} must be a supported easing string`);
   }
+  if (isHoldEasing(value)) return { easing: 'linear', curve: null, hold: true };
   const curve = resolveEasingCurve(value);
   if (curve) return { easing: 'bezier', curve };
   const compact = value.trim().toLowerCase().replace(/[\s_-]+/g, '');
   if (!VALID_EASING_KEYS.has(compact)) {
-    throw new Error(`${label} must be one of: linear, ease-in, ease-out, ease-in-out, bezier, ${KEYFRAME_EASING_PRESET_IDS.join(', ')}, or cubic-bezier(x1, y1, x2, y2)`);
+    throw new Error(`${label} must be one of: linear, ease-in, ease-out, ease-in-out, bezier, hold, ${KEYFRAME_EASING_PRESET_IDS.join(', ')}, or cubic-bezier(x1, y1, x2, y2)`);
   }
   return { easing: normalizeEasingType(value, 'ease-in-out'), curve: null };
 }

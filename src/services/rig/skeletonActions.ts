@@ -122,6 +122,8 @@ export interface SkeletonActionInstance {
   strength?: number;
   /** Aim the striking limb at a joint of another figure (`clipId|effectId`) around the contact. */
   target?: { figure: string; joint: SkeletonJoint };
+  /** Forward travel in figure pixels; overrides the action's own distance (e.g. a short run). */
+  distance?: number;
 }
 
 export const isSkeletonActionId = (value: unknown): value is SkeletonActionId =>
@@ -141,6 +143,7 @@ export function parseSkeletonActions(raw: unknown): SkeletonActionInstance[] {
       return [{
         id: item.id, action: item.action, start: Number(item.start), duration: Number(item.duration),
         ...(Number.isFinite(item.strength) ? { strength: Number(item.strength) } : {}),
+        ...(Number.isFinite(item.distance) ? { distance: Number(item.distance) } : {}),
         ...(item.target && typeof item.target.figure === 'string' && typeof item.target.joint === 'string'
           ? { target: { figure: item.target.figure, joint: item.target.joint } } : {}),
       }];
@@ -152,6 +155,17 @@ export function parseSkeletonActions(raw: unknown): SkeletonActionInstance[] {
 
 export const serializeSkeletonActions = (actions: readonly SkeletonActionInstance[]) =>
   JSON.stringify([...actions].sort((a, b) => a.start - b.start));
+
+/**
+ * Move a stored lane to a clip whose clock starts `delta` seconds later (the right part of a split,
+ * a left trim). Actions keep their timeline position; ones that ended earlier stay with negative
+ * starts so their travel still counts. Returns the input when there is nothing to shift.
+ */
+export function shiftSkeletonActions(raw: unknown, delta: number): unknown {
+  const actions = parseSkeletonActions(raw);
+  if (!actions.length || delta === 0 || !Number.isFinite(delta)) return raw;
+  return serializeSkeletonActions(actions.map(action => ({ ...action, start: Math.round((action.start - delta) * 1e6) / 1e6 })));
+}
 
 const STAND = getSkeletonPosePreset('stand')!.pose;
 /** Shortest signed turn from a to b in degrees, so blends never spin a joint the long way. */
@@ -231,7 +245,7 @@ export function applySkeletonActions(base: Pose, baseLift: number, actions: read
   for (const instance of actions) {
     const definition = SKELETON_ACTIONS[instance.action];
     const progress = Math.max(0, Math.min(1, (time - instance.start) / instance.duration));
-    advance += definition.advance * (definition.gait ? progress : smooth(progress));
+    advance += (instance.distance ?? definition.advance) * (definition.gait ? progress : smooth(progress));
     const weight = skeletonActionWeight(instance, time);
     if (weight <= 0) continue;
     const sample = sampleSkeletonAction(instance, time - instance.start);

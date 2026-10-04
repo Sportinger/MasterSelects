@@ -81,6 +81,8 @@ export interface ActionPatch {
   start?: number;
   duration?: number;
   strength?: number;
+  /** Forward travel in figure pixels; null restores the action's own distance. */
+  distance?: number | null;
   target?: { figure: string; joint: SkeletonJoint } | null;
 }
 
@@ -97,6 +99,11 @@ function applyPatch(instance: SkeletonActionInstance, patch: ActionPatch): Skele
   if (patch.strength !== undefined) {
     if (!Number.isFinite(patch.strength) || patch.strength < 0 || patch.strength > 2) throw new Error('Strength must be between 0 and 2.');
     next.strength = patch.strength;
+  }
+  if (patch.distance === null) delete next.distance;
+  else if (patch.distance !== undefined) {
+    if (!Number.isFinite(patch.distance)) throw new Error('Distance must be a number.');
+    next.distance = patch.distance;
   }
   if (patch.target === null) delete next.target;
   else if (patch.target) next.target = { figure: patch.target.figure, joint: patch.target.joint };

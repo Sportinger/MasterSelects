@@ -25,6 +25,7 @@ export const STICK_FIGURE_PARAMS = {
   torso: length('torso'), neck: length('neck', 200), headRadius: length('headRadius', 200),
   upperArm: length('upperArm'), forearm: length('forearm'), thigh: length('thigh'), shin: length('shin'),
   thickness: length('thickness', 100),
+  scale: { type: 'number', label: 'Scale', default: 1, min: 0.05, max: 5, step: 0.01, animatable: true, group: 'Proportions' },
   groundMode: {
     type: 'select', label: 'Ground', default: DEFAULTS.groundMode, group: 'Ground',
     options: [
@@ -38,6 +39,8 @@ export const STICK_FIGURE_PARAMS = {
     type: 'select', label: 'Facing', default: 'right', group: 'Style',
     options: [{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }],
   },
+  // Keyframeable turnaround: 1 = as Facing says, -1 = turned around, in between a 2D squash.
+  turn: { type: 'number', label: 'Turn', default: 1, min: -1, max: 1, step: 0.01, animatable: true, group: 'Style' },
   color: { type: 'color', label: 'Color', default: '#ffffff', group: 'Style' },
   opacity: { type: 'number', label: 'Opacity', default: 1, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
   // Action lane (JSON list of SkeletonActionInstance), edited in the Actions section.

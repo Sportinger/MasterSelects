@@ -11,6 +11,11 @@ const EASING_ALIASES: Record<string, EasingType> = {
   bezier: 'bezier',
 };
 
+/** 'hold' (also 'step' or 'constant') keeps a keyframe's value until the next key: stored as `hold: true`. */
+export function isHoldEasing(easing: string | null | undefined): boolean {
+  return typeof easing === 'string' && /^(hold|step|constant)$/i.test(easing.trim());
+}
+
 export function normalizeEasingType(
   easing: string | null | undefined,
   fallback: EasingType = 'linear'
