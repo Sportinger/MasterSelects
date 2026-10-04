@@ -1,6 +1,6 @@
 # Path Tracing in Echtzeit und AI-Denoise für die Native-3D-Szene
 
-Stand: 2026-10-04. **Status: Plan, nichts umgesetzt.**
+Stand: 2026-10-04. **Status: in Umsetzung (Branch `task/path-tracing`), siehe Statusboard.**
 Ausführung: ein Agent baut alles selbst, Phase für Phase, siehe Abschnitt 7.
 
 **Ziel:** Die Native-3D-Szene (Weave-Garne, Meshes, Planes, Light-Clips, 3D-Kamera)
@@ -484,7 +484,7 @@ Schritten reicht es, Diffs zu lesen.
 
 | Phase | Status | Commit | Notiz |
 |---|---|---|---|
-| 0 Grundlagen | offen | – | – |
+| 0 Grundlagen | erledigt | Phase-0-Commit | Verträge in `pathtrace/contracts/`, `StrandFiberGeometry.wgsl` extrahiert, Prüfseite `pathtrace-check.html`; Weave-Prüfseiten unverändert grün |
 | 1 Grundbausteine | offen | – | – |
 | 2 Path-Tracing-Kern | offen | – | – |
 | 3 Echtzeit, Export, Look | offen | – | – |
@@ -494,9 +494,15 @@ Ausgangsmessung (Phase 0):
 
 | Szene | Fasersegmente | Speicher | Raster ms (GPU) |
 |---|---|---|---|
-| Standard-Weave | – | – | – |
-| Knit Form | – | – | – |
-| Kreuzknoten | – | – | – |
+| Standard-Weave | 12 288 Kurven-, 466 944 PT-Segmente (Unterteilung 2) | 49,9 MB (Segmente + BVH) | 7,73 |
+| Knit Form | 6 720 Kurven-, 295 680 PT-Segmente | 31,6 MB | 3,67 |
+| Kreuzknoten | 840 Kurven-, 31 920 PT-Segmente | 3,4 MB | 1,25 |
+
+Gemessen auf AMD RDNA3 (Chrome, Timestamp-Queries um die Szenen-Submission), 1920×1080,
+`tests/browser/pathtrace-check.html`. Raster-Stücke: Standard-Weave 1,87 Mio., Knit Form 1,03 Mio.
+Befund: Die Segmentzahlen liegen bei unter 0,5 Mio. pro Szene; ein LBVH darüber passt bequem in
+den Speicher. Die Ziele aus Abschnitt 3 bleiben vorerst unverändert; die erste echte Prüfung ist
+die fps-Messung am Ende von Phase 3.
 
 ---
 
