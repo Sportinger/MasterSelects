@@ -18,6 +18,14 @@ export interface ExportRenderFrameInput {
   readonly frameStepSeconds?: number;
   /** Includes this output. Temporal batching must not prepare beyond the export range. */
   readonly framesRemaining?: number;
+  /** Index of the exported frame (seeds path traced sampling). */
+  readonly frameIndex?: number;
+  /** Scene render quality: path traced frames render until their samples (and denoise) are complete. */
+  readonly renderQuality?: import('../../../types/renderSettings').ExportRenderQuality;
+  /** Layers at a time inside the frame's shutter interval (motion blur slices); absent renders the frame's layers. */
+  readonly layersAtTime?: (time: number) => Promise<readonly Layer[]>;
+  /** Called while a path traced frame accumulates. */
+  readonly onSampling?: (sampling: import('../../export/types').ExportFrameSampling) => void;
 }
 
 export interface ExportVideoFrameCapture {

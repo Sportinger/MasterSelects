@@ -1,6 +1,10 @@
 import { hexToRgb01 } from '../../../../types/light';
 import type { SceneLightLayer } from '../../../scene/types';
 import { MAX_MESH_LIGHTS, MESH_UNIFORM_SIZE } from './constants';
+import { packEnvironmentIrradiance } from '../../sceneRenderer/environmentIrradiance';
+
+/** Float offset of the environment irradiance in the mesh uniforms (after the four lights). */
+const IRRADIANCE_OFFSET = 96;
 
 function normalizeVector(x: number, y: number, z: number): readonly [number, number, number] {
   const length = Math.hypot(x, y, z);
@@ -25,12 +29,15 @@ function writeMeshLights(data: Float32Array, lights: readonly SceneLightLayer[])
   let ambientG = 0.08;
   let ambientB = 0.08;
   let directCount = 0;
+  // Environment lights with a loaded map light by their irradiance instead of a flat ambient.
+  const covered = packEnvironmentIrradiance(lights, data, IRRADIANCE_OFFSET);
 
   for (const light of lights) {
     const settings = light.lightSettings;
     const [r, g, b] = hexToRgb01(settings.color);
 
     if (settings.kind === 'environment') {
+      if (covered.has(light)) continue;
       ambientR += r * settings.intensity;
       ambientG += g * settings.intensity;
       ambientB += b * settings.intensity;

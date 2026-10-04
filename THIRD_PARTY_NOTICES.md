@@ -100,3 +100,17 @@ the score editor. Its source code is available from the project link above.
   This adapted dataset remains licensed under CC BY-SA 3.0.
 - No Lensfun library code is bundled. MasterSelects implements coefficient
   interpolation and GPU correction independently from the published models.
+
+## Intel Open Image Denoise weights and oidn-web (path tracing denoise)
+
+- Denoiser runtime: [oidn-web](https://github.com/pissang/oidn-web), version 0.4.0,
+  copyright pissang; MIT. It depends on
+  [@petamoriken/float16](https://github.com/petamoriken/float16) (MIT). Both are
+  unmodified npm dependencies.
+- Network weights: `public/oidn/rt_hdr_alb_nrm.tza` and
+  `public/oidn/rt_hdr_alb_nrm_small.tza` from
+  [Intel Open Image Denoise weights](https://github.com/RenderKit/oidn-weights),
+  copyright Intel Corporation; Apache-2.0. The license text ships next to the
+  weights in [public/oidn/LICENSE.txt](public/oidn/LICENSE.txt).
+- The weights are served from MasterSelects' own asset path and used unmodified;
+  denoising runs locally on the user's GPU.

@@ -37,6 +37,8 @@ export interface ExportSettings {
   exportMode?: ExportMode;  // 'fast' = strict WebCodecs, 'precise' = explicit HTMLVideoElement
   // Alpha channel
   stackedAlpha?: boolean;  // Export as double-height video with RGB top / alpha-as-luma bottom
+  /** Scene render quality (path traced samples, denoise, time limit); absent keeps the preview engine. */
+  renderQuality?: import('../../types/renderSettings').ExportRenderQuality;
 }
 
 export interface FullExportSettings extends ExportSettings {
@@ -55,6 +57,14 @@ export interface ExportProgress {
   currentTime: number;
   audioPhase?: 'extracting' | 'processing' | 'effects' | 'mixing' | 'encoding' | 'complete';
   audioPercent?: number;
+  /** Path traced export: the current frame's sampling (frame i/N -> sample s/S -> denoise -> encode). */
+  frameSampling?: ExportFrameSampling;
+}
+
+export interface ExportFrameSampling {
+  stage: 'sampling' | 'denoising' | 'encoding';
+  samples: number;
+  targetSamples: number;
 }
 
 // ============ INTERNAL STATE ============

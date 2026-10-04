@@ -2,6 +2,7 @@ import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constan
 import type { SceneCamera, SceneLayer3DData, SceneLightLayer, SceneStrandLayer } from '../../scene/types';
 import { StrandBufferCache, type StrandBuffers } from './strandBuffers';
 import { packStrandLights, STRAND_LIGHT_FLOATS } from './strandLights';
+import { IRRADIANCE_FLOATS } from '../sceneRenderer/environmentIrradiance';
 import { STRAND_SHADOW_MAP_SIZE, strandShadowView, type StrandShadowView } from './strandShadowLight';
 import { StrandShadowMaps, type StrandShadowTargets } from './strandShadowMaps';
 import { StrandCoverageTargets } from './StrandCoverageTargets';
@@ -21,7 +22,9 @@ const SHADOW_OFFSET = LIGHTS_OFFSET + STRAND_LIGHT_FLOATS;
 const OCCLUDER_OFFSET = SHADOW_OFFSET + 24;
 /** Fiber Material look (highlights, coat, per-material colors); see strandLook.ts. */
 const LOOK_OFFSET = OCCLUDER_OFFSET + 20;
-const UNIFORM_FLOATS = LOOK_OFFSET + STRAND_LOOK_FLOATS;
+/** Environment irradiance (environmentIrradiance.ts), evaluated per fiber normal. */
+const IRRADIANCE_OFFSET = LOOK_OFFSET + STRAND_LOOK_FLOATS;
+const UNIFORM_FLOATS = IRRADIANCE_OFFSET + IRRADIANCE_FLOATS;
 /** Deep opacity one fully covering fiber adds; about one yarn in front leaves a third of the light. */
 const OPACITY_PER_FIBER = 0.3;
 /** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
@@ -222,7 +225,7 @@ export class StrandPass {
       data[69] = flyaways.seed;
       data.set([channels / flyaways.density, flyaways.length, flyaways.lift, flyaways.hair], 72);
     }
-    packStrandLights(lights, data, LIGHTS_OFFSET);
+    packStrandLights(lights, data, LIGHTS_OFFSET, IRRADIANCE_OFFSET);
     packStrandLook(render, !!buffers.attributes, data, LOOK_OFFSET);
     // The shadow frames the layer's bounds, padded by the yarn around its curves.
     const center: [number, number, number] = [layer.worldMatrix[12], layer.worldMatrix[13], layer.worldMatrix[14]];

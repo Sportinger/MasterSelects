@@ -1,5 +1,6 @@
 import { hexToRgb01 } from '../../../types/light';
 import type { SceneLightLayer } from '../../scene/types';
+import { packEnvironmentIrradiance } from '../sceneRenderer/environmentIrradiance';
 
 /** Direct scene lights a strand layer receives; further point and panel lights are ignored. */
 export const MAX_STRAND_LIGHTS = 4;
@@ -14,8 +15,11 @@ const BASE_AMBIENT = 0.08;
  * color, intensity, panel direction, diameter]. Without lights the count is -1, which keeps the
  * strand pass on its fixed key light.
  */
-export function packStrandLights(lights: readonly SceneLightLayer[], target: Float32Array, offset: number): void {
+export function packStrandLights(lights: readonly SceneLightLayer[], target: Float32Array, offset: number,
+  irradianceOffset?: number): void {
   target.fill(0, offset, offset + STRAND_LIGHT_FLOATS);
+  // Environment lights with a loaded map light by their irradiance (environmentIrradiance.ts) instead of a flat ambient.
+  const covered = irradianceOffset === undefined ? new Set<SceneLightLayer>() : packEnvironmentIrradiance(lights, target, irradianceOffset);
   if (!lights.length) {
     target[offset + 3] = -1;
     return;
@@ -26,7 +30,7 @@ export function packStrandLights(lights: readonly SceneLightLayer[], target: Flo
     const settings = light.lightSettings, color = hexToRgb01(settings.color);
     const intensity = settings.intensity * Math.max(0, Math.min(1, light.opacity ?? 1));
     if (settings.kind === 'environment') {
-      color.forEach((value, axis) => { ambient[axis] += value * intensity; });
+      if (!covered.has(light)) color.forEach((value, axis) => { ambient[axis] += value * intensity; });
       continue;
     }
     if (count >= MAX_STRAND_LIGHTS || intensity <= 0) continue;

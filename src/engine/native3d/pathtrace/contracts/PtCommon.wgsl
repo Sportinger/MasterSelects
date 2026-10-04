@@ -17,6 +17,7 @@ const PT_TWO_PI: f32 = 6.28318530717959;
 const PT_INV_PI: f32 = 0.318309886183791;
 const PT_INFINITY: f32 = 3.0e38;
 const PT_LEAF_BIT: u32 = 0x80000000u;
+const PT_WIDE_EMPTY: u32 = 0xffffffffu;
 
 const PT_PRIMITIVE_FIBER: u32 = 0u;
 const PT_PRIMITIVE_TRIANGLE: u32 = 1u;
@@ -75,6 +76,18 @@ struct PtBvhNode {
   right: u32,      // child node index, or primitive count of a leaf
 };
 
+// Traversal node: both children's boxes; refs are local internal indices, PT_LEAF_BIT | primitive, or PT_WIDE_EMPTY.
+struct PtWideNode {
+  leftMin: vec3f,
+  leftRef: u32,
+  leftMax: vec3f,
+  rightRef: u32,
+  rightMin: vec3f,
+  pad0: u32,
+  rightMax: vec3f,
+  pad1: u32,
+};
+
 struct PtInstance {
   worldToObject0: vec4f,
   worldToObject1: vec4f,
@@ -130,10 +143,11 @@ struct PtFrame {
   jitterTime: vec4f,       // jitter (render pixels), shutter open, shutter close (seconds)
   counters: vec4u,         // frame index, first sample index, samples this dispatch, mode
   limits: vec4u,           // max bounces, light count, node page 1 start, fiber page 1 start
-  scene: vec4u,            // TLAS root, instance count, debug view, flags
+  scene: vec4u,            // TLAS root, instance count, debug view, sample scramble seed
   environment: vec4f,      // environment light index (-1 none), map width, map height, indirect clamp
   region: vec4f,           // render region x0, y0, x1, y1 (normalized output coordinates)
   previousCamera: vec4f,   // previous camera position, w: 1 when valid
+  sampling: vec4f,         // adaptive sampling: relative error threshold (0: off), minimum samples per pixel
 };
 
 struct PtGBufferTexel {
@@ -227,6 +241,15 @@ struct PtLightSample {
 };
 
 // ---- Helpers ----
+
+/** Radiance that is finite and not negative (NaN or infinite samples become 0): one bad sample must never reach a
+ *  denoiser or a temporal history, which would spread it over its neighborhood frame after frame. */
+fn ptSanitize(v: vec3f) -> vec3f {
+  return select(vec3f(0.0), max(v, vec3f(0.0)), all(abs(v) < vec3f(1.0e20)));
+}
+
+/** Smallest pdf a sampled direction may have; below it the throughput would explode. */
+const PT_MIN_PDF: f32 = 1e-6;
 
 fn ptLuminance(color: vec3f) -> f32 {
   return dot(color, vec3f(0.2126, 0.7152, 0.0722));

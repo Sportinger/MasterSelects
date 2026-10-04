@@ -68,6 +68,20 @@ export const PT_BVH_NODE = ptStruct('PtBvhNode', [
 ]);
 export const PT_LEAF_BIT = 0x80000000;
 
+/**
+ * Traversal node in the node pages: the boxes of both children in the parent, so one load visits a
+ * node. A child reference is a local internal node index, `PT_LEAF_BIT | primitive`, or
+ * `PT_WIDE_EMPTY` (the missing second child of a single-primitive BLAS). Packed from the LBVH's
+ * Karras nodes (internal nodes keep their indices; leaves are referenced directly).
+ */
+export const PT_WIDE_NODE = ptStruct('PtWideNode', [
+  ['leftMin', 'vec3f'], ['leftRef', 'u32'], ['leftMax', 'vec3f'], ['rightRef', 'u32'],
+  ['rightMin', 'vec3f'], ['pad0', 'u32'], ['rightMax', 'vec3f'], ['pad1', 'u32'],
+]);
+export const PT_WIDE_EMPTY = 0xffffffff;
+/** Traversal nodes of a BLAS over `count` primitives. */
+export const ptWideNodeCount = (count: number) => Math.max(1, count - 1);
+
 /** Primitive kinds of a BLAS; every instance holds one kind. */
 export const PT_PRIMITIVE = { fiber: 0, triangle: 1, quad: 2, sphere: 3, box: 4 } as const;
 export type PtPrimitiveKind = typeof PT_PRIMITIVE[keyof typeof PT_PRIMITIVE];
@@ -128,7 +142,7 @@ export const PT_FRAME = ptStruct('PtFrame', [
   ['viewProjection', 'mat4x4f'], ['inverseViewProjection', 'mat4x4f'], ['previousViewProjection', 'mat4x4f'],
   ['cameraPosition', 'vec4f'], ['cameraRight', 'vec4f'], ['cameraUp', 'vec4f'], ['cameraForward', 'vec4f'],
   ['lens', 'vec4f'], ['size', 'vec4f'], ['jitterTime', 'vec4f'], ['counters', 'vec4u'], ['limits', 'vec4u'],
-  ['scene', 'vec4u'], ['environment', 'vec4f'], ['region', 'vec4f'], ['previousCamera', 'vec4f'],
+  ['scene', 'vec4u'], ['environment', 'vec4f'], ['region', 'vec4f'], ['previousCamera', 'vec4f'], ['sampling', 'vec4f'],
 ]);
 
 /**
@@ -159,7 +173,7 @@ export const PT_CACHE_ENTRY = ptStruct('PtCacheEntry', [
 export const PT_CACHE_RADIANCE_SCALE = 1024;
 
 export const PT_LAYOUTS: readonly PtStructLayout[] = [
-  PT_FIBER_SEGMENT, PT_BVH_NODE, PT_INSTANCE, PT_MESH_VERTEX, PT_TRIANGLE, PT_SHAPE, PT_LIGHT, PT_MATERIAL,
+  PT_FIBER_SEGMENT, PT_BVH_NODE, PT_WIDE_NODE, PT_INSTANCE, PT_MESH_VERTEX, PT_TRIANGLE, PT_SHAPE, PT_LIGHT, PT_MATERIAL,
   PT_FRAME, PT_GBUFFER, PT_HIT_RECORD, PT_RESERVOIR, PT_CACHE_ENTRY,
 ];
 

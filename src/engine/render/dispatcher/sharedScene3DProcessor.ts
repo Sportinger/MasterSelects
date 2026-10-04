@@ -1,4 +1,5 @@
 import { sceneCompositeStyle } from '../../scene/sceneEffectRouting';
+import { resolveSceneRenderOptions } from '../../native3d/sceneRenderer/sceneRenderOptionsResolver';
 import { nodePreviewTextureTap } from '../../../services/nodePreview/NodePreviewTextureTap';
 import type { Layer, LayerRenderData } from '../../core/types';
 import { getGaussianSplatGpuRenderer } from '../../gaussian/core/GaussianSplatGpuRenderer';
@@ -333,6 +334,7 @@ export class SharedScene3DProcessor {
       d.effectsPipeline && d.sampler
         ? { effectsPipeline: d.effectsPipeline, sampler: d.sampler, timelineTimeSeconds, effectRenderClock }
         : undefined,
+      resolveSceneRenderOptions(),
     );
     const gizmoTextureView = sceneGizmo
       ? renderer.getGizmoOverlayView?.(sceneTargetKey) ?? null

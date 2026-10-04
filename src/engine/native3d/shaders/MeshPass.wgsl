@@ -12,6 +12,8 @@ struct MeshUniforms {
   uvTransform: vec4f,
   ambientColorIntensity: vec4f,
   lights: array<MeshLight, 4>,
+  // Environment irradiance / π (environmentIrradiance.ts): [c0 rgb, 1 when present], linear term per channel.
+  irradiance: array<vec4f, 4>,
 }
 
 struct VertexInput {
@@ -72,6 +74,10 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
 
   var lighting = uniforms.ambientColorIntensity.rgb * uniforms.ambientColorIntensity.a;
+  if (uniforms.irradiance[0].w > 0.5) {
+    lighting += max(uniforms.irradiance[0].rgb + vec3f(dot(uniforms.irradiance[1].xyz, normal), dot(uniforms.irradiance[2].xyz, normal),
+      dot(uniforms.irradiance[3].xyz, normal)), vec3f(0.0));
+  }
   let lightCount = i32(uniforms.shading.y + 0.5);
   for (var i = 0; i < 4; i = i + 1) {
     if (i >= lightCount) {
