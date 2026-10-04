@@ -57,6 +57,16 @@ const PROJECT_REBUILD_TOOLS = new Set([
   'addCompositionClip',
 ]);
 
+// Multi-step tools that await between their store mutations (batches, editable hooks
+// built from shape, text and composition steps). Their transaction captures awaited
+// mutations too; otherwise later steps open a second transaction and collide with it.
+const AWAITING_TRANSACTION_TOOLS = new Set([
+  'executeBatch',
+  'manageEditableHook',
+  'refineEditableHook',
+  'createEditableTitleStack',
+]);
+
 function opensStandaloneAgentTransaction(toolName: string): boolean {
   return MODIFYING_TOOLS.has(toolName) && !PROJECT_REBUILD_TOOLS.has(toolName);
 }
@@ -184,9 +194,12 @@ async function executeAIToolWithDeferredAudit(
     const run = () => useGuidedExecution
       ? executeGuidedAITool(toolName, args, callerContext, options)
       : _executeAIToolInternal(toolName, args, callerContext, options);
-    // A batch is one undo step and one saved revision, including mutations its actions make after awaits.
+    // A batch or hook is one undo step and one saved revision, including mutations made after awaits,
+    // also when an outer (grouped or kernel) agent transaction is pinned.
     const batchTool = toolName === 'executeBatch';
-    const result = batchTool ? await captureAgentTransactionAcrossAwaits(standaloneTransaction, run) : await run();
+    const result = AWAITING_TRANSACTION_TOOLS.has(toolName)
+      ? await captureAgentTransactionAcrossAwaits(standaloneTransaction ?? getPinnedAgentTransaction(options), run)
+      : await run();
     if (standaloneTransaction) {
       // executeBatch is documented as non-transactional: successful sibling actions stay applied.
       if (result.success || batchTool) commitAgentTransaction(standaloneTransaction); else abortAgentTransaction(standaloneTransaction);
