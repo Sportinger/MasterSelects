@@ -1,3 +1,4 @@
+import { applyStickFigureActions } from '../rig/stickFigureActionRuntime';
 import type { Effect } from '../../types/effects';
 import type { Keyframe } from '../../types/keyframes';
 import type { ClipMask } from '../../types/masks';
@@ -23,6 +24,7 @@ export type TransitionMappedAnimationClip = Pick<
 > & Partial<SurfaceClip & ParameterSourceClip>;
 
 function addSurfaces(effects: Effect[], clip: TransitionMappedAnimationClip, time: number, keys?: readonly Keyframe[]): Effect[] {
+  effects = applyStickFigureActions(clip, effects, time);
   if (clip.nodeGraph?.parameterSources && typeof clip.startTime === 'number') {
     effects = applyParameterSourcesToEffects({ ...clip, startTime: clip.startTime }, keys ?? [], time, effects);
   }

@@ -173,6 +173,31 @@ values; the mapping assumes the figure's layer fills the frame, as Blank and Sol
 clips do. A figure cannot follow itself. **Quick connect** in the inspector wires a
 rig node to its obvious targets (figure joints, or this clip's position and rotation).
 
+**Lift** moves the whole figure after ground snapping (negative = up), so jumps work
+with Plant; drive it with Ballistic for a free jump. Facing mirrors the figure around
+its pelvis, so Pelvis X stays a screen position.
+
+**Actions.** The Stick Figure's **Actions** lane holds action clips: Idle, Walk, Run,
+Jump, Punch, Kick, Duck, Hit React, Throw, Grab, Land and Fall. Each has authored key
+poses with anticipation, contact and follow-through, forward travel (added to Pelvis X
+in the facing direction and kept afterwards) and, for Jump, lift. Add one at the
+playhead, drag blocks along the lane, set Start, Duration and Strength (how far the
+pose departs from standing). Actions blend in and out over the keyframed pose and
+cross-fade where they overlap; joint angles always blend the short way round. Fall
+holds its lying pose until a later action blends over it. Node sources still override
+actions. Punch, Kick, Grab and Throw can **Aim at** a joint of another figure: around
+the contact the striking limb bends toward it by IK. Each action's contact (impact,
+release, landing) shows as an orange tick. **Markers** replaces this figure's contact
+markers on the timeline (for Marker Trigger shakes and flashes); **Sounds** adds a
+MIDI track with a Simple Synth SFX preset and one note per contact. **Contact Trigger**
+(`rig.contact-trigger`) reads the contacts directly, like Marker Trigger, so effects
+follow when actions move. Attach to Joint can **Release** at the figure's next Throw.
+**Check choreography** lists feet below the ground, strikes that miss everybody (more
+than 30 px at 1080 p from a body or the aimed joint), joints turning faster than
+2250°/s, actions overlapping beyond their blend and torsos passing through each other;
+click a time to jump there. Actions apply on the timeline, in nested compositions,
+transitions and export; aiming needs the figure's clip in the open timeline.
+
 Transform sources apply after keyframes and before inspector bypass and parenting,
 in preview, nested compositions, 3D scenes and export. In the Transform inspector a
 driven row (Zoom, Position, Rotation, Pitch/Yaw, Anchor Point, Opacity) shows the

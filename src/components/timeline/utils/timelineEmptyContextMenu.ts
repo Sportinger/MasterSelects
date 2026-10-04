@@ -33,8 +33,7 @@ export type TimelineAddLayerTarget =
   | 'math-scene'
   | `flock:${string}`;
 
-/** A Blank clip is a fully transparent solid. */
-export const BLANK_CLIP_COLOR = '#00000000';
+export { BLANK_CLIP_COLOR } from '../../../services/timeline/blankClip';
 
 export type TimelineAddLayerGroup = 'core' | '3d' | 'motion' | 'generators' | 'special';
 

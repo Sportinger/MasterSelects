@@ -13,6 +13,7 @@ import {
 } from '../../../services/rig/skeletonRig';
 import { deleteSkeletonPose, listSkeletonPoses, saveSkeletonPose } from '../../../services/rig/skeletonPoseLibrary';
 import { driveStickFigureWithGait } from '../../../services/rig/stickFigureActions';
+import { StickFigureActionLane } from './StickFigureActionLane';
 
 const EASINGS: ReadonlyArray<{ value: EasingType; label: string }> = [
   { value: 'ease-in-out', label: 'Ease in-out' }, { value: 'linear', label: 'Linear' },
@@ -111,6 +112,7 @@ export default function StickFigureControls({ params, onChange, clipId = '', eff
             onChange={event => onChange({ ...params, color: event.target.value })} />
         </ResolveInspectorRow>
       </ResolveInspectorSection>
+      {ready && <StickFigureActionLane clipId={clipId} effectId={effectInstanceId} actionsParam={params.actions} />}
       {message && <p className="effect-info" role="status">{message}</p>}
     </>
   );

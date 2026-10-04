@@ -15,6 +15,7 @@ import { findClipById } from './keyframeClipLookup';
 import { appendSurfaceEffects } from '../../../services/planarTracking/surfaceEffects';
 import { bindCableRenderTime } from '../../../services/faceCables/cableRenderTime';
 import { pauseIncompleteOperatorEffects } from '../../../services/operators/editableOperatorGraph';
+import { applyStickFigureActions } from '../../../services/rig/stickFigureActionRuntime';
 
 type KeyframeEffectInterpolationActions = Pick<
   KeyframeActions,
@@ -33,7 +34,7 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
 
     const keyframes = clipKeyframes.get(clipId) || [];
     const withSurfaces = (effects: typeof clip.effects) => appendSurfaceEffects(bindCableRenderTime(pauseIncompleteOperatorEffects(
-      applyParameterSourcesToEffects(clip, keyframes, clipLocalTime, effects)), clipLocalTime, clip.videoInspectorSections?.stabilization), clip, clipLocalTime, keyframes);
+      applyParameterSourcesToEffects(clip, keyframes, clipLocalTime, applyStickFigureActions(clip, effects, clipLocalTime))), clipLocalTime, clip.videoInspectorSections?.stabilization), clip, clipLocalTime, keyframes);
     if (keyframes.length === 0) {
       return withSurfaces(clip.effects);
     }

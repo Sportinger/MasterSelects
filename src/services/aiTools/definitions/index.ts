@@ -28,6 +28,7 @@ import { storyboardToolDefinitions } from './storyboard';
 import { documentToolDefinitions } from './documents';
 import { compositionRuleToolDefinitions } from './compositionRules';
 import { multicamToolDefinitions } from './multicam';
+import { rigToolDefinitions } from './rig';
 
 // Combined tool definitions array (OpenAI function calling format)
 export const AI_TOOLS = [
@@ -59,6 +60,7 @@ export const AI_TOOLS = [
   ...documentToolDefinitions,
   ...compositionRuleToolDefinitions,
   ...multicamToolDefinitions,
+  ...rigToolDefinitions,
 ];
 
 // Re-export individual definition sets for selective use

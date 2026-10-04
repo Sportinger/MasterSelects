@@ -9,12 +9,18 @@
 export const SKELETON_NUMERIC_KEYS = [
   'torso', 'neck', 'headRadius', 'upperArm', 'forearm', 'thigh', 'shin', 'thickness',
   'rootX', 'rootY', 'spine', 'head', 'shoulderL', 'elbowL', 'shoulderR', 'elbowR',
-  'hipL', 'kneeL', 'hipR', 'kneeR', 'groundY',
+  'hipL', 'kneeL', 'hipR', 'kneeR', 'groundY', 'lift',
 ] as const;
 export type SkeletonNumericKey = typeof SKELETON_NUMERIC_KEYS[number];
 /** off: free; floor: the figure never sinks below Ground Y; plant: its lowest point always stands on it. */
 export type SkeletonGroundMode = 'off' | 'floor' | 'plant';
 export type SkeletonShapeDefinition = Record<SkeletonNumericKey, number> & { groundMode: SkeletonGroundMode };
+
+/**
+ * Facing mirrors the figure around its pelvis, so Pelvis X stays a screen position: a figure at
+ * +300 facing left stands on the right and looks left. The mapping is its own inverse.
+ */
+export const facingX = (x: number, rootX: number, facing: number) => rootX + facing * (x - rootX);
 
 /** Figure units are pixels of a frame this tall; renders scale them to the actual height. */
 export const STICK_FIGURE_REFERENCE_HEIGHT = 1080;
@@ -31,7 +37,7 @@ export function createDefaultSkeletonShape(): SkeletonShapeDefinition {
   return {
     torso: 110, neck: 14, headRadius: 26, upperArm: 62, forearm: 58, thigh: 74, shin: 70, thickness: 12,
     rootX: 0, rootY: 0, spine: 0, head: 0, shoulderL: 8, elbowL: 10, shoulderR: -8, elbowR: 10,
-    hipL: 4, kneeL: 0, hipR: -4, kneeR: 0, groundY: 144, groundMode: 'plant',
+    hipL: 4, kneeL: 0, hipR: -4, kneeR: 0, groundY: 144, lift: 0, groundMode: 'plant',
   };
 }
 
@@ -59,7 +65,7 @@ export const SKELETON_KEY_LABELS: Record<SkeletonNumericKey, string> = {
   torso: 'Torso', neck: 'Neck', headRadius: 'Head Radius', upperArm: 'Upper Arm', forearm: 'Forearm',
   thigh: 'Thigh', shin: 'Shin', thickness: 'Line Thickness', rootX: 'Pelvis X', rootY: 'Pelvis Y',
   spine: 'Spine Lean', head: 'Head Tilt', shoulderL: 'Shoulder L', elbowL: 'Elbow L', shoulderR: 'Shoulder R',
-  elbowR: 'Elbow R', hipL: 'Hip L', kneeL: 'Knee L', hipR: 'Hip R', kneeR: 'Knee R', groundY: 'Ground Y',
+  elbowR: 'Elbow R', hipL: 'Hip L', kneeL: 'Knee L', hipR: 'Hip R', kneeR: 'Knee R', groundY: 'Ground Y', lift: 'Lift',
 };
 
 export const SKELETON_JOINT_LABELS: Record<SkeletonJoint, string> = {
@@ -131,6 +137,8 @@ export function solveSkeleton(input?: Partial<SkeletonShapeDefinition>): SolvedS
     groundShift = s.groundMode === 'plant' ? s.groundY - lowest : Math.min(0, s.groundY - lowest);
     if (groundShift !== 0) for (const joint of SKELETON_JOINTS) joints[joint] = { x: joints[joint].x, y: joints[joint].y + groundShift };
   }
+  // Lift moves the whole figure after ground snapping (negative = up), so jumps work with Plant.
+  if (s.lift !== 0) for (const joint of SKELETON_JOINTS) joints[joint] = { x: joints[joint].x, y: joints[joint].y + s.lift };
   const boneAngles: Record<SkeletonJoint, number> = {
     pelvis: screenAngle(torsoDir), neck: screenAngle(torsoDir), headBase: screenAngle(headDir), head: screenAngle(headDir),
     elbowL: screenAngle(armL.upperDir), handL: screenAngle(armL.lowerDir),

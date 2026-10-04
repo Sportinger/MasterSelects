@@ -18,6 +18,7 @@ const length = (key: SkeletonNumericKey, max = 400) => number(key, 'Proportions'
 export const STICK_FIGURE_PARAMS = {
   rootX: number('rootX', 'Pose', -2000, 2000),
   rootY: number('rootY', 'Pose', -2000, 2000),
+  lift: number('lift', 'Pose', -2000, 2000),
   spine: angle('spine'), head: angle('head'),
   shoulderL: angle('shoulderL'), elbowL: angle('elbowL'), shoulderR: angle('shoulderR'), elbowR: angle('elbowR'),
   hipL: angle('hipL'), kneeL: angle('kneeL'), hipR: angle('hipR'), kneeR: angle('kneeR'),
@@ -39,4 +40,8 @@ export const STICK_FIGURE_PARAMS = {
   },
   color: { type: 'color', label: 'Color', default: '#ffffff', group: 'Style' },
   opacity: { type: 'number', label: 'Opacity', default: 1, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
+  // Action lane (JSON list of SkeletonActionInstance), edited in the Actions section.
+  actions: { type: 'text', label: 'Actions', default: '[]', hidden: true },
+  // Ids of the timeline markers last created from the contacts (see syncStickFigureContactMarkers).
+  contactMarkers: { type: 'text', label: 'Contact markers', default: '[]', hidden: true },
 } satisfies Record<string, EffectParam>;

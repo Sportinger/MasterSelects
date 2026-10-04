@@ -4,6 +4,7 @@ import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
 import { colorToRgba } from '../../_shared/catalogColor';
 import {
+  facingX,
   SKELETON_JOINTS,
   skeletonFromParams,
   solveSkeleton,
@@ -34,7 +35,7 @@ export const stickFigure: EffectDefinition = {
     data.set([width, height, Math.max(0.5, skeleton.thickness * unit / 2), Math.max(0.5, skeleton.headRadius * unit),
       r, g, b, a, opacity, 0, 0, 0]);
     SKELETON_JOINTS.forEach((joint, index) => {
-      data[12 + index * 2] = width / 2 + facing * joints[joint].x * unit;
+      data[12 + index * 2] = width / 2 + facingX(joints[joint].x, skeleton.rootX, facing) * unit;
       data[13 + index * 2] = height / 2 + joints[joint].y * unit;
     });
     return data;

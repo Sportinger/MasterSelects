@@ -1,3 +1,4 @@
+import { applyStickFigureActions } from '../rig/stickFigureActionRuntime';
 import type { ClipMask } from '../../types/masks';
 import type { ClipTransform } from '../../types/timelineCore';
 import type { Keyframe } from '../../types/keyframes';
@@ -46,6 +47,8 @@ export function evaluateCompositionClipEffects(
   surfaceClip?: SurfaceClip & Partial<ParameterSourceClip>,
 ): Effect[] {
   const withSurfaces = (result: Effect[]) => {
+    // Stick Figure action lanes sit between keyframes and node sources, as on the timeline.
+    result = applyStickFigureActions(surfaceClip, result, localTime);
     if (surfaceClip?.nodeGraph?.parameterSources && typeof surfaceClip.startTime === 'number') {
       result = applyParameterSourcesToEffects({ ...surfaceClip, startTime: surfaceClip.startTime, effects: effects ?? [] }, keyframes ?? [], localTime, result);
     }

@@ -96,6 +96,8 @@ export const MODIFYING_TOOLS = new Set([
   'setClipSpeed',
   // Markers
   'addMarker', 'removeMarker',
+  // Stick figure rigs
+  'createRig', 'addActionClip', 'setActionTarget',
   // Transitions
   'addTransition', 'removeTransition',
   // Masks

@@ -67,6 +67,7 @@ export const CONTROL_OPERATORS: readonly OperatorDefinition[] = [
   source('rig.attach', 'Attach to Joint', [{ id: 'figure', label: 'Stick figure', type: 'select', default: '', options: [] },
     select('joint', 'Joint', 'handR', SKELETON_JOINTS.map(joint => [joint, SKELETON_JOINT_LABELS[joint]] as const)),
     number('grab', 'Grab (s)', 0, 0, 600), number('blend', 'Blend (s)', 0.15, 0, 10),
+    select('releaseMode', 'Release', 'time', [['time', 'At Release time'], ['throw', "At the figure's next throw"]]),
     number('release', 'Release (s, -1 = hold)', -1, -1, 600),
     number('restX', 'Rest X', 0), number('restY', 'Rest Y', 0), number('restRotation', 'Rest rotation', 0, -360, 360, 0.1),
     number('spin', 'Spin after release (deg/s)', 0, -3600, 3600, 1),
@@ -74,6 +75,9 @@ export const CONTROL_OPERATORS: readonly OperatorDefinition[] = [
     number('floorY', 'Floor Y', 0.8), number('bounce', 'Bounce', 0.45, 0, 1), number('slide', 'Slide', 0.85, 0, 1)],
     ['time', 'grab', 'blend', 'release', 'restX', 'restY', 'restRotation', 'spin', 'gravity', 'floorY', 'bounce', 'slide'],
     [port('x', 'X'), port('y', 'Y'), port('rotation', 'Rotation'), port('attached', 'Attached')]),
+  source('rig.contact-trigger', 'Contact Trigger', [{ id: 'figure', label: 'Stick figure', type: 'select', default: '', options: [] },
+    select('mode', 'Output', 'since', [['since', 'Seconds since contact'], ['until', 'Seconds until next contact'],
+      ['count', 'Contacts passed'], ['progress', 'Progress to next contact']])], ['time']),
   source('control.keyframes', 'Keyframes', [{ id: 'property', label: 'Source curve', type: 'select', default: '', options: [] }]),
   source('control.audio-envelope', 'Audio Envelope', [
     { id: 'audioClipId', label: 'Audio source', type: 'select', default: '', options: [] },
@@ -100,6 +104,7 @@ const CLOCK_INPUTS: Readonly<Record<string, Readonly<Record<string, 'clip' | 'ti
   'control.ballistic': { time: 'clip' },
   'rig.gait-cycle': { time: 'clip' },
   'rig.attach': { time: 'clip' },
+  'rig.contact-trigger': { time: 'timeline' },
   'control.marker-trigger': { time: 'timeline' },
   'control.audio-envelope': { time: 'timeline' },
 };

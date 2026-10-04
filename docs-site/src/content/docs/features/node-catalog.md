@@ -79,6 +79,8 @@ Rig and motion controls: **Ballistic** (`control.ballistic`) and **Gait Cycle**
 (`rig.gait-cycle`) under Time & Motion, **Limb IK** (`rig.limb-ik`) and **Attach to
 Joint** (`rig.attach`) under Geometry. They drive the **Stick Figure** effect
 (`effect:stick-figure`, Generate) and clip transforms; see Node-Workspace.md.
+**Contact Trigger** (`rig.contact-trigger`, Time & Motion) times effects to a figure's
+action contacts.
 
 Image effects expose six reusable motion operators through **Add node**:
 

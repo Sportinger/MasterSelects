@@ -2,6 +2,7 @@ import type { useTimelineStore } from '../../../stores/timeline';
 import type { CallerContext } from '../policy';
 import type { ToolResult } from '../types';
 import { compositionRuleHandlers } from './compositionRules';
+import { handleAddActionClip, handleCreateRig, handleListRigs, handleSetActionTarget, handleValidateChoreography } from './rig';
 import { handleCaptureAppScreenshot } from '../appScreenshot';
 import {
   handleGetTimelineRangeSelection,
@@ -252,6 +253,11 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   simulatePlaybackPath: handleSimulatePlaybackPath,
   setClipSpeed: handleSetClipSpeed,
   addMarker: handleAddMarker,
+  createRig: handleCreateRig,
+  addActionClip: handleAddActionClip,
+  setActionTarget: handleSetActionTarget,
+  listRigs: handleListRigs,
+  validateChoreography: handleValidateChoreography,
   getMarkers: handleGetMarkers,
   removeMarker: handleRemoveMarker,
   addTransition: handleAddTransition,

@@ -13,6 +13,7 @@ import { ballisticState, envelopeValue, markerTriggerValue, smoothNoise, solveTw
 import { gaitPose, SKELETON_JOINTS, SKELETON_LENGTH_KEYS, skeletonFromParams, solveSkeletonLimb, type SkeletonGait,
   type SkeletonJoint, type SkeletonLimb } from '../rig/skeletonRig';
 import { sampleStickFigureJoint, STICK_FIGURE_EFFECT } from '../rig/stickFigureJointRuntime';
+import { contactsForFigure } from '../rig/stickFigureContacts';
 import { frozenMarkerParameterContext } from './markerParameterContext';
 import { liveMarkerParameterContext } from './markerParameterRuntime';
 
@@ -136,6 +137,10 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
         compatible(inputUnit('time'), 'seconds', nodeId);
         const mode = String(node.constants?.mode ?? 'since');
         unit = mode === 'since' || mode === 'until' ? 'seconds' : 'number';
+      } else if (node.operator === 'rig.contact-trigger') {
+        compatible(inputUnit('time'), 'seconds', nodeId);
+        const mode = String(node.constants?.mode ?? 'since');
+        unit = mode === 'since' || mode === 'until' ? 'seconds' : 'number';
       } else if (node.operator === 'control.ik-two-bone') {
         const position = inputUnit('rootX');
         for (const id of ['rootY', 'targetX', 'targetY', 'length1', 'length2']) compatible(position, inputUnit(id), nodeId);
@@ -217,6 +222,13 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
         const markers = frozenMarkerParameterContext(state!.graph) ?? liveMarkerParameterContext(state!.graph, clip.id);
         return { value: markerTriggerValue(markers, clockInput('time'), String(node.constants?.label ?? ''), mode) };
       }
+      case 'rig.contact-trigger': {
+        const mode = String(node.constants?.mode ?? 'since') as MarkerTriggerMode;
+        if (!['since', 'until', 'count', 'progress'].includes(mode)) throw new ParameterSourceError('Unknown contact output.', nodeId);
+        // Contacts move with their actions; they behave like markers on the timeline clock.
+        const contacts = contactsForFigure(String(node.constants?.figure ?? ''), clip.id);
+        return { value: markerTriggerValue(contacts.map(contact => ({ time: contact.time, label: '' })), clockInput('time'), '', mode) };
+      }
       case 'control.ik-two-bone': {
         const bend = node.constants?.bend ?? 'positive';
         if (bend !== 'positive' && bend !== 'negative') throw new ParameterSourceError('Unknown bend direction.', nodeId);
@@ -262,7 +274,14 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
         if (!(SKELETON_JOINTS as readonly string[]).includes(joint)) throw new ParameterSourceError('Unknown joint.', nodeId);
         const floor = node.constants?.floor ?? 'on';
         if (floor !== 'on' && floor !== 'off') throw new ParameterSourceError('Unknown floor mode.', nodeId);
-        const time = clockInput('time'), grab = input('grab'), blend = nonNegative('blend'), release = input('release');
+        const time = clockInput('time'), grab = input('grab'), blend = nonNegative('blend');
+        const releaseMode = node.constants?.releaseMode ?? 'time';
+        if (releaseMode !== 'time' && releaseMode !== 'throw') throw new ParameterSourceError('Unknown release mode.', nodeId);
+        // 'throw' follows the figure's action lane: the first Throw contact after Grab releases it.
+        const toClip = clipTime - clock.timelineTime;
+        const thrown = releaseMode === 'throw' ? contactsForFigure(String(node.constants?.figure ?? ''))
+          .find(contact => contact.action === 'throw' && contact.time + toClip > grab) : undefined;
+        const release = releaseMode === 'throw' ? (thrown ? thrown.time + toClip : -1) : input('release');
         const rest = { x: input('restX'), y: input('restY'), rotation: input('restRotation') };
         if (time < grab) return { ...rest, attached: 0 };
         // Grab, Blend and Release are clip seconds; the figure is sampled at the matching timeline time.
@@ -284,8 +303,12 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
         const spinRate = (span > 0 ? wrapDegrees(at.rotation - before.rotation) / span : 0) + input('spin');
         const flight = ballisticState(time - release, at.x, at.y, vx, vy, input('gravity'),
           floor === 'on' ? input('floorY') : null, input('bounce'), input('slide', 1));
-        // It spins freely until it first hits the floor.
-        return { x: flight.x, y: flight.y, rotation: at.rotation + spinRate * Math.min(time - release, flight.firstImpact), attached: 0 };
+        // It spins freely until it first hits the floor, then tips over to lie flat.
+        const airborne = Math.min(time - release, flight.firstImpact);
+        const landed = at.rotation + spinRate * airborne;
+        const flat = Math.round(landed / 180) * 180;
+        const settle = Number.isFinite(flight.firstImpact) ? smoothstep((time - release - flight.firstImpact) / 0.25) : 0;
+        return { x: flight.x, y: flight.y, rotation: landed + (flat - landed) * settle, attached: 0 };
       }
       case 'control.keyframes': return { value: sampleCurve(String(node.constants?.property ?? '')) };
       case 'control.audio-envelope': {

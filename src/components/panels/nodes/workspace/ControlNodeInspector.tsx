@@ -45,7 +45,7 @@ export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nod
   const figureOptions = node.operator === 'rig.limb-ik'
     ? [{ value: '', label: 'First stick figure on this clip' }, ...clip.effects.filter(effect => effect.type === STICK_FIGURE_EFFECT)
       .map(effect => ({ value: effect.id, label: effect.name }))]
-    : [{ value: '', label: 'Choose stick figure' }, ...audioClips.flatMap(item => item.effects.filter(effect => effect.type === STICK_FIGURE_EFFECT)
+    : [{ value: '', label: node.operator === 'rig.contact-trigger' ? 'First stick figure on this clip' : 'Choose stick figure' }, ...audioClips.flatMap(item => item.effects.filter(effect => effect.type === STICK_FIGURE_EFFECT)
       .map(effect => ({ value: stickFigureRef(item.id, effect.id), label: item.id === clip.id ? `${item.name} (this clip)` : item.name })))];
   const quickConnect = rigQuickConnect(node, clip);
   const sourceOptions = graph.nodes.filter(candidate => candidate.id !== nodeId).flatMap(candidate => {

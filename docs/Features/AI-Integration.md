@@ -369,7 +369,7 @@ See [MuScriptor Music-to-MIDI](./MuScriptor.md) for the complete runtime, mappin
 
 ### Tool Registry (parity-gated)
 
-The exported registry holds 190 tool definitions. Hosted chat uses
+The exported registry holds 234 tool definitions. Hosted chat uses
 the policy-eligible definitions, prioritized and capped at 128; the dev bridge
 can additionally reach explicitly registered diagnostics-only tools.
 `tests/unit/aiToolRegistryParity.test.ts` checks coverage; non-chat asymmetries are explicit.
@@ -394,6 +394,7 @@ The exported tool groups are:
 - Motion Design shapes, ordered appearances, gradients, and Grid Replicator
 - Flock clips (GPU swarm simulation graphs)
 - Multicam: audio sync and multicam cut mode
+- Stick figure rigs: `createRig` (Blank clip with a Stick Figure), `addActionClip`, `setActionTarget`, `listRigs` and the read-only `validateChoreography`
 
 The chat and bridge code call the shared dispatcher, so the same registry is used in-chat, through the Vite dev bridge, and through the Native Helper bridge. Approval behavior is enforced in the chat UI before execution, while the dispatcher policy is the actual execution gate.
 
