@@ -7,6 +7,7 @@ import { isUserVisibleComposition } from '../../stores/mediaStore/compositionVis
 import type { TimelineTrack } from '../../types/timeline';
 import type { PreviewPanelSource } from '../../types/dock';
 import { PreviewCompositionSourceGroup } from './PreviewCompositionSourceGroup';
+import { PreviewRenderEngineControls } from './PreviewRenderEngineControls';
 import {
   getCompositionVideoTracks,
   getPreviewLayerLabel,
@@ -173,6 +174,7 @@ export function PreviewControls({
               </svg>
             </button>
           )}
+          <PreviewRenderEngineControls compositionId={source.type === 'composition' ? source.compositionId : activeCompositionId} />
           {sceneObjectOverlayEnabled && (
             <>
               <button

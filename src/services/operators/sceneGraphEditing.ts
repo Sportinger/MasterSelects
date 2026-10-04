@@ -46,6 +46,8 @@ export function createSceneGraphActions(clipId: string) {
     setParameter: (id: string, name: string, value: number) => editSceneGraph(clipId, 'Edit scene node', d => {
       const node = d.graph.nodes.find(n => n.id === id), spec = SCENE_OPERATORS.find(o => o.id === node?.operator)?.parameters.find(p => p.id === name);
       if (!node || !spec || !Number.isFinite(value) || value < (spec.min ?? -Infinity) || value > (spec.max ?? Infinity)) throw new Error('Invalid scene parameter.');
+      // Parameters added to an operator after a graph was saved (material.surface roughness, emission …) get their binding on first edit.
+      if (node.bindings[name] === undefined) node.bindings = { ...node.bindings, [name]: `${id}_${name}` };
       const binding = node.bindings[name]; if (typeof binding !== 'string') throw new Error('Invalid parameter binding.'); d.params[binding] = value;
     }),
     setPrimitiveShape: (id: string, shape: ScenePrimitiveShape) => editSceneGraph(clipId, 'Change primitive shape', d => {

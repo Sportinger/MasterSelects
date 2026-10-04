@@ -83,9 +83,10 @@ const FABRIC_NODES: Spec[] = [
   ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 24, wefts: 16, width: 2.4, height: 1.6, crimp: 0.03, resolution: 16 }],
   ['yarn', 'geometry.yarn-profile', 1320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
   ['yarn-radius', 'math.multiply.scalar', 1320, 300],
-  ['render', 'render.strands', 2280, 80, { width: 0.0035, color: '#e8e2d6' }],
-  ['output', 'scene.output', 2600, 80],
+  ['render', 'render.strands', 2600, 80, { width: 0.0035, color: '#e8e2d6' }],
+  ['output', 'scene.output', 2920, 80],
   ['flyaways', 'geometry.flyaways', 1640, 80, { density: 3, length: 0.08, lift: 2.5, hair: 0.35, seed: 0 }],
+  ['fiber', 'material.fiber', 1960, 80, { preset: 'wool' }],
 ];
 /** Wind Cloth: the woven sheet is held at its corners and billows like a sail in gusty, swirling wind (no gravity). */
 const CLOTH_NODES: Spec[] = [
@@ -93,7 +94,7 @@ const CLOTH_NODES: Spec[] = [
   ['swirl', 'forces.turbulence', 1320, 860, { strength: 0.15, frequency: 1.5 }],
   ['cloth', 'geometry.cloth-sheet', 1640, 620, { columns: 40, rows: 27, width: 2.4, height: 1.6, pin: 'corners', stretch: 0.9, bend: 0.6,
     damping: 0.5, substeps: 6, preroll: 2 }],
-  ['bind', 'geometry.surface-bind', 1960, 80, { height: 1 }],
+  ['bind', 'geometry.surface-bind', 2280, 80, { height: 1 }],
 ];
 /** Reveal by Shape: a growing sphere with a noisy front scales the yarn radius (0 hides, >1 swells the front). */
 const REVEAL_NODES: Spec[] = [
@@ -143,7 +144,7 @@ const HANDMADE_NODES: Spec[] = [
 ];
 const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: string]> = [
   ['pattern', 'curves', 'hand-set', 'curves'], ['hand-set', 'curves', 'thread', 'curves'], ['thread', 'curves', 'yarn', 'curves'],
-  ['yarn', 'curves', 'flyaways', 'curves'], ['flyaways', 'curves', 'bind', 'curves'],
+  ['yarn', 'curves', 'flyaways', 'curves'], ['flyaways', 'curves', 'fiber', 'curves'], ['fiber', 'curves', 'bind', 'curves'],
   ['bind', 'curves', 'render', 'curves'], ['render', 'scene', 'output', 'scene'],
   ['wind', 'force', 'cloth', 'forces'], ['swirl', 'force', 'cloth', 'forces'], ['cloth', 'surface', 'bind', 'surface'],
   ['reveal', 'value', 'reveal-radius', 'a'], ['reach', 'value', 'reveal-radius', 'b'], ['reveal-radius', 'value', 'reveal-shape', 'size'],
@@ -173,7 +174,7 @@ const FABRIC_LINKS: Array<[from: string, output: string, to: string, input: stri
 ];
 
 /**
- * Default Weave graph: a plain-woven sheet of fuzzy three-ply yarns with handmade irregularity
+ * Default Weave graph: a plain-woven sheet of fuzzy three-ply wool yarns (Fiber Material, preset Wool) with handmade irregularity
  * whose threads are pulled in over the first four seconds of the clip and billow in the wind.
  * Reveal (1 = fully grown), Weave Speed and Irregularity are keyframeable in the Effects tab;
  * bypassing Weave In shows the finished weave at once, Handmade a regular one, Yarn the bare
@@ -198,7 +199,7 @@ export function createDefaultWeaveGraph(): EffectOperatorGraph {
     groups: [{ id: 'reveal-by-shape', label: 'Reveal by Shape', color: '#5f9ea0', nodeIds: REVEAL_NODES.map(([id]) => id) },
       { id: 'weave-in', label: 'Weave In', color: '#b07fc8', nodeIds: WEAVE_IN_NODES.map(([id]) => id) },
       { id: 'handmade', label: 'Handmade', color: '#7fae6a', nodeIds: HANDMADE_NODES.map(([id]) => id) },
-      { id: 'yarn', label: 'Yarn', color: '#c8a45a', nodeIds: ['yarn', 'yarn-radius', 'flyaways'] },
+      { id: 'yarn', label: 'Yarn', color: '#c8a45a', nodeIds: ['yarn', 'yarn-radius', 'flyaways', 'fiber'] },
       { id: 'wind-cloth', label: 'Wind Cloth', color: '#6f8fc8', nodeIds: CLOTH_NODES.map(([id]) => id) }] };
 }
 

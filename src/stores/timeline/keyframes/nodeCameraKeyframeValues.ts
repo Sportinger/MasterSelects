@@ -94,6 +94,10 @@ export function normalizeCameraSettingValue(
   if (key === 'fov') {
     return Math.max(10, Math.min(140, value));
   }
+  if (key === 'exposure') return Math.max(-16, Math.min(16, value));
+  if (key === 'fStop') return Math.max(0, Math.min(64, value));
+  if (key === 'focusDistance') return Math.max(0, value);
+  if (key === 'shutterAngle') return Math.max(0, Math.min(360, value));
   if (key === 'near') {
     return Math.max(0.001, value);
   }

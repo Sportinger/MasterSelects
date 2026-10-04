@@ -40,13 +40,14 @@ export class SplatMeshPass {
       if (source.meshes.size >= 4) { const first = source.meshes.keys().next().value!; const old = source.meshes.get(first)!; this.retired.push(old.vertices, old.indices); source.meshes.delete(first); }
       source.meshes.set(key, geometry);
     }
-    const pipelineKey = options.depthView ? 'depth' : 'flat';
+    const format = options.outputView && options.outputFormat ? options.outputFormat : 'rgba8unorm';
+    const pipelineKey = `${options.depthView ? 'depth' : 'flat'}:${format}`;
     let pipeline = this.pipelines.get(pipelineKey);
     if (!pipeline) {
       const module = device.createShaderModule({ code: shader });
       pipeline = device.createRenderPipeline({ layout: 'auto', vertex: { module, entryPoint: 'vs', buffers: [{ arrayStride: 24, attributes: [
         { shaderLocation: 0, offset: 0, format: 'float32x3' }, { shaderLocation: 1, offset: 12, format: 'float32x3' },
-      ] }] }, fragment: { module, entryPoint: 'fs', targets: [{ format: 'rgba8unorm', blend: {
+      ] }] }, fragment: { module, entryPoint: 'fs', targets: [{ format, blend: {
         color: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' }, alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' },
       } }] }, primitive: { topology: 'line-list' }, ...(options.depthView ? { depthStencil: { format: 'depth24plus' as const, depthWriteEnabled: false, depthCompare: 'less-equal' as const } } : {}) });
       this.pipelines.set(pipelineKey, pipeline);

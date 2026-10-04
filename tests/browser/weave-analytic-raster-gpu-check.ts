@@ -1,3 +1,4 @@
+import { SceneColorReadback } from './sceneColorReadback';
 import { StrandPass } from '../../src/engine/native3d/passes/StrandPass';
 import { STRAND_RASTER_SHADER } from '../../src/engine/native3d/passes/strandShaders';
 import { StrandRasterScan } from '../../src/engine/native3d/passes/strandRaster/StrandRasterScan';
@@ -29,9 +30,8 @@ async function check() {
   camera.viewMatrix[14] = -2;
   camera.projectionMatrix[10] = -0.1;
   const pass = new StrandPass();
-  const color = device.createTexture({ size: [WIDTH, HEIGHT], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+  const target = new SceneColorReadback(device, WIDTH, HEIGHT), color = target.texture;
   const depth = device.createTexture({ size: [WIDTH, HEIGHT], format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
-  const readback = device.createBuffer({ size: WIDTH * HEIGHT * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
   const layer = (stages: GeometryStage[], render: GeometryStrandRender, opacity = 1, id = 'analytic'): SceneStrandLayer => ({
     kind: 'strands', layerId: id, clipId: id, opacity, blendMode: 'normal', sourceWidth: WIDTH, sourceHeight: HEIGHT, worldMatrix: identity(),
     strands: { clipId: id, effectId: 'weave', program: { stages, render, pointCount: 0, strandCount: 0 } } });
@@ -47,11 +47,9 @@ async function check() {
       depthStencilAttachment: { view: depth.createView(), depthClearValue: sceneDepth, depthLoadOp: 'clear', depthStoreOp: 'store' } }).end();
     const shadows = pass.prepareShadows(device, encoder, pass.prepare(device, layers, temporary), temporary);
     if (!pass.render(device, encoder, color.createView(), depth.createView(), shadows, camera, temporary)) throw new Error('Strand pass refused the frame');
-    encoder.copyTextureToBuffer({ texture: color }, { buffer: readback, bytesPerRow: WIDTH * 4 }, [WIDTH, HEIGHT]);
+    target.encodeCopy(encoder);
     device.queue.submit([encoder.finish()]);
-    await readback.mapAsync(GPUMapMode.READ);
-    const rgba = Uint8Array.from(new Uint8Array(readback.getMappedRange()));
-    readback.unmap();
+    const rgba = Uint8Array.from(await target.read());
     temporary.forEach(buffer => buffer.destroy());
     const error = await device.popErrorScope();
     if (error) throw new Error(error.message);
@@ -106,7 +104,7 @@ async function check() {
     return { pass: true, ...results };
   } finally {
     await device.queue.onSubmittedWorkDone();
-    pass.dispose(); color.destroy(); depth.destroy(); readback.destroy(); device.destroy();
+    pass.dispose(); depth.destroy(); target.destroy(); device.destroy();
   }
 }
 

@@ -88,6 +88,7 @@ export interface ProjectExportSettings {
   imageExportMode: ProjectExportImageMode;
   imageQuality: number;
   specialContainer: ProjectExportSpecialContainer;
+  renderQuality?: import('../../../types/renderSettings').ExportRenderQuality;
 }
 
 export interface ProjectExportPreset {

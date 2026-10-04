@@ -28,6 +28,18 @@ function isField(value: unknown): value is GeometryField {
     && Array.isArray(item.inputs) && item.inputs.every(input => Number.isInteger(input) && input >= 0 && input < index));
 }
 
+const FIBER_MATERIAL_KEYS = ['nodeId', 'color', 'absorption', 'melanin', 'melaninRedness', 'roughnessLongitudinal', 'roughnessAzimuthal',
+  'cuticleTilt', 'ior', 'coatTint', 'matte', 'fuzz', 'colorField', 'roughnessField', 'melaninField', 'selection'];
+const HEX = /^#[\da-f]{6}([\da-f]{2})?$/i;
+
+function isFiberMaterialList(value: unknown): boolean {
+  return Array.isArray(value) && value.length > 0 && value.length <= 64 && value.every(item => record(item) && exactKeys(item, FIBER_MATERIAL_KEYS)
+    && typeof item.nodeId === 'string' && typeof item.color === 'string' && HEX.test(item.color) && typeof item.coatTint === 'string' && HEX.test(item.coatTint)
+    && (item.absorption === 'color' || item.absorption === 'melanin')
+    && [item.melanin, item.melaninRedness, item.roughnessLongitudinal, item.roughnessAzimuthal, item.cuticleTilt, item.ior, item.matte, item.fuzz].every(finite)
+    && [item.colorField, item.roughnessField, item.melaninField, item.selection].every(field => field === undefined || isField(field)));
+}
+
 /** Validates a transported program, including recomputed point and curve limits. */
 export function isGeometryProgram(value: unknown): value is GeometryProgram {
   if (!record(value) || !exactKeys(value, ['stages', 'render', 'pointCount', 'strandCount']) || !Array.isArray(value.stages)
@@ -98,9 +110,12 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     if (points > CURVE_POINT_LIMIT || strands > CURVE_STRAND_LIMIT) return false;
   }
   const render = value.render;
-  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'antialiasing', 'profile', 'flyaways']) || typeof render.nodeId !== 'string'
+  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'antialiasing', 'profile', 'flyaways', 'subdivision', 'materials'])
+    || typeof render.nodeId !== 'string'
     || !finite(render.width) || render.width < 0 || typeof render.color !== 'string' || render.color.length > 32
-    || (render.antialiasing !== undefined && render.antialiasing !== 'coverage4x' && render.antialiasing !== 'analytic'))) return false;
+    || (render.antialiasing !== undefined && render.antialiasing !== 'coverage4x' && render.antialiasing !== 'analytic')
+    || (render.subdivision !== undefined && (!Number.isInteger(render.subdivision) || (render.subdivision as number) < 1 || (render.subdivision as number) > 16))
+    || (render.materials !== undefined && !isFiberMaterialList(render.materials)))) return false;
   const profile = record(render) ? render.profile : undefined;
   if (profile !== undefined && (!record(profile) || !exactKeys(profile, ['plies', 'fibers', 'radius', 'plyTwist', 'fiberTwist'])
     || !Number.isInteger(profile.plies) || !Number.isInteger(profile.fibers) || (profile.plies as number) < 1 || (profile.fibers as number) < 1

@@ -1,3 +1,4 @@
+import { SCENE_COLOR_FORMAT } from '../../src/engine/native3d/sceneRenderer/constants';
 import { StrandPass, cameraPositionFromView, strandSubdivisions, FLYAWAY_CHANNELS } from '../../src/engine/native3d/passes/StrandPass';
 import { lookAt, perspective } from '../../src/engine/scene/cameraUtils/projectionMatrices';
 import { getSharedSceneDefaultCameraDistance } from '../../src/engine/scene/SceneCameraUtils';
@@ -36,7 +37,7 @@ async function measure() {
   const errors: string[] = [];
   device.addEventListener('uncapturederror', event => errors.push(event.error.message));
   const target = (format: GPUTextureFormat, usage: number) => device.createTexture({ size: [WIDTH, HEIGHT], format, usage });
-  const color = target('rgba8unorm', GPUTextureUsage.RENDER_ATTACHMENT);
+  const color = target(SCENE_COLOR_FORMAT, GPUTextureUsage.RENDER_ATTACHMENT);
   const depth = target('depth24plus', GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING);
   const querySet = timestamps ? device.createQuerySet({ type: 'timestamp', count: 2 }) : null;
   const resolve = device.createBuffer({ size: 16, usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC });

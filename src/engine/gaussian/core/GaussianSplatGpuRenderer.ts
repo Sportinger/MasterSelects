@@ -6,7 +6,7 @@ import { SplatVisibilityPass } from './SplatVisibilityPass';
 import { SplatSortPass } from './SplatSortPass';
 import { ParticleCompute } from '../effects/ParticleCompute';
 import { EffectorCompute } from '../../native3d/passes/EffectorCompute';
-import { createSplatRenderPipelines } from './splatRenderer/pipelines';
+import { createSplatRenderPipelines, splatPipelinesForFormat } from './splatRenderer/pipelines';
 import {
   createSplatCameraUniformResource,
   writeSplatCameraUniforms,
@@ -473,6 +473,7 @@ export class GaussianSplatGpuRenderer {
         !!options?.depthView,
         options?.depthWrite === true,
         options?.colorWrite !== false,
+        options?.outputView ? options.outputFormat : undefined,
       ));
       passEncoder.setBindGroup(0, renderBindGroup);
       passEncoder.setBindGroup(1, cameraBindGroup);
@@ -634,14 +635,17 @@ export class GaussianSplatGpuRenderer {
     return resource;
   }
 
-  private getRenderPipeline(hasDepth: boolean, depthWrite: boolean, colorWrite: boolean): GPURenderPipeline {
+  private getRenderPipeline(hasDepth: boolean, depthWrite: boolean, colorWrite: boolean, format?: GPUTextureFormat): GPURenderPipeline {
+    const set = format && format !== 'rgba8unorm' && this.device ? splatPipelinesForFormat(this.device, format)
+      : { pipeline: this.pipeline, pipelineWithDepth: this.pipelineWithDepth, pipelineWithDepthWrite: this.pipelineWithDepthWrite,
+        pipelineWithDepthWriteMask: this.pipelineWithDepthWriteMask };
     if (!hasDepth) {
-      return this.pipeline!;
+      return set.pipeline!;
     }
     if (depthWrite) {
-      return colorWrite ? this.pipelineWithDepthWrite! : this.pipelineWithDepthWriteMask!;
+      return colorWrite ? set.pipelineWithDepthWrite! : set.pipelineWithDepthWriteMask!;
     }
-    return this.pipelineWithDepth!;
+    return set.pipelineWithDepth!;
   }
 
   private writeCameraUniforms(

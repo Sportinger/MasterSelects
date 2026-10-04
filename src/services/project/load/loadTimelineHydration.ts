@@ -31,6 +31,7 @@ import type {
 import { calcRangeCoverage } from './loadMediaCacheHydration';
 import { recoverPersistedTranscriptStatus } from '../../transcription/persistedTranscriptStatus';
 import { migratePersistedEffectOperatorGraph } from '../../operators/effectGraphOwner';
+import { normalizeCompositionRenderSettings } from '../../../engine/native3d/pathtrace/contracts/ptTypes';
 import { quantizeTimeToFrame, quantizeRetimeClipTimings } from '../../timeline/retime/clipRetimeQuantization';
 import {
   normalizePersistedFaceStatus,
@@ -465,6 +466,7 @@ export function convertProjectCompositionToStore(
       captionComp: pc.captionComp ? structuredClone(pc.captionComp) : undefined,
       annotations: pc.annotations ? structuredClone(pc.annotations) : undefined,
       multicam: pc.multicam ? structuredClone(pc.multicam) : undefined,
+      renderSettings: pc.renderSettings ? normalizeCompositionRenderSettings(pc.renderSettings) : undefined,
       timelineData,
     };
   });

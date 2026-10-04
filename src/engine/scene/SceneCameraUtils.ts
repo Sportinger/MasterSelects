@@ -1,4 +1,5 @@
 import { useMediaStore } from '../../stores/mediaStore';
+import { normalizeCameraLens } from '../native3d/pathtrace/contracts/ptTypes';
 import { selectSceneNavClipId, useEngineStore } from '../../stores/engineStore';
 import type { SceneCameraLiveOverride } from '../../stores/engineStore';
 import { useTimelineStore } from '../../stores/timeline';
@@ -281,6 +282,20 @@ function buildCameraConfigFromClip(
   context: Pick<SceneTimelineContext, 'clips' | 'clipKeyframes'>,
   liveOverride?: SceneCameraLiveOverride | null,
 ): SceneCameraConfig | null {
+  const config = buildCameraPoseConfigFromClip(cameraClip, timelineTime, viewport, context, liveOverride);
+  if (!config) return null;
+  // Exposure, tone mapping, aperture, focus and shutter follow the clip's (keyframed) lens.
+  const lensSettings = resolveSceneClipCameraSettings(cameraClip, timelineTime - cameraClip.startTime, context);
+  return { ...config, lens: normalizeCameraLens(lensSettings) };
+}
+
+function buildCameraPoseConfigFromClip(
+  cameraClip: TimelineClip,
+  timelineTime: number,
+  viewport: SceneViewport,
+  context: Pick<SceneTimelineContext, 'clips' | 'clipKeyframes'>,
+  liveOverride?: SceneCameraLiveOverride | null,
+): SceneCameraConfig | null {
   if (cameraClip.source?.type !== 'camera') {
     return null;
   }
@@ -550,6 +565,7 @@ function buildSceneCameraFromConfig(
     applyDefaultDistance: applyDefaultDistanceToEye ? false : config.applyDefaultDistance,
     projection,
     ...(projection === 'orthographic' ? { orthographicScale: config.orthographicScale ?? 2 } : {}),
+    ...(config.lens ? { lens: config.lens } : {}),
   };
 }
 

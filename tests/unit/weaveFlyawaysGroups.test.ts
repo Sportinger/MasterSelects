@@ -69,11 +69,12 @@ describe('Weave flyaways and node groups', () => {
 
   it('bypasses a curves group by passing the incoming curves through', () => {
     const graph = createDefaultWeaveGraph();
-    expect(operatorGroupBypassRoutes(graph, graph.groups!.find(group => group.id === 'yarn')!)?.get('flyaways-curves-bind-curves')).toEqual({ from: 'thread', output: 'curves' });
+    expect(operatorGroupBypassRoutes(graph, graph.groups!.find(group => group.id === 'yarn')!)?.get('fiber-curves-bind-curves')).toEqual({ from: 'thread', output: 'curves' });
     const program = compile(bypass(graph, 'yarn'));
     expect(program.stages.map(stage => stage.kind)).toEqual(['weave-pattern', 'set-position', 'thread-along', 'surface-bind']);
     expect(program.render).not.toHaveProperty('profile');
     expect(program.render).not.toHaveProperty('flyaways');
+    expect(program.render).not.toHaveProperty('materials');
     expect(isGeometryProgram(structuredClone(program))).toBe(true);
   });
 

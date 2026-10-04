@@ -86,6 +86,14 @@ export function compileSceneGraph(definition: SceneOperatorGraph): SceneSurfaceP
   if (plan.geometry === 'plane') { plan.width = number(geometry, 'width'); plan.height = number(geometry, 'height'); }
   if (plan.geometry === 'primitive') { plan.primitiveShape = scenePrimitiveShape(geometry); }
   plan.tint = [number(material, 'red'), number(material, 'green'), number(material, 'blue')]; plan.opacity = number(material, 'opacity');
+  const roughness = number(material, 'roughness'), metallic = number(material, 'metallic'), strength = number(material, 'emissionStrength');
+  if (roughness !== 1) plan.roughness = roughness;
+  if (metallic !== 0) plan.metallic = metallic;
+  if (strength > 0) {
+    plan.emission = [number(material, 'emissionRed') * strength, number(material, 'emissionGreen') * strength, number(material, 'emissionBlue') * strength];
+    const fromTexture = number(material, 'emissionFromTexture');
+    if (fromTexture > 0) plan.emissionFromTexture = fromTexture;
+  }
   const texture = input(material, 'texture');
   if (texture) { plan.textured = plan.geometry !== 'primitive' && input(texture, 'image')?.operator === 'image.frame'; plan.uv = uv(input(texture, 'uv')); }
   plan.visible = true;

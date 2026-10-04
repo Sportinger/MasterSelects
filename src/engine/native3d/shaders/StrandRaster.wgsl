@@ -61,6 +61,7 @@ struct PieceSpline {
   scaleA: f32,
   scaleB: f32,
   piece: u32,
+  first: u32,
   visible: bool,
 };
 
@@ -72,6 +73,7 @@ fn pieceSpline(index: u32) -> PieceSpline {
   spline.piece = rest % raster.subdivisions;
   let packed = segments[rest / raster.subdivisions];
   let first = packed & 0x3fffffffu;
+  spline.first = first;
   let yarnFibers = u32(max(u.yarn.x, 1.0)) * u32(max(u.yarn.y, 1.0));
   var fly: Flyaway;
   if (fiber >= yarnFibers) {
@@ -264,6 +266,9 @@ fn shadeRasterHit(index: u32, hit: PieceHit) -> vec3f {
   let side = framebufferPixel(viewProjection * vec4f(p + widthDirection * max(u.params.x, 1e-6), 1.0))
     - framebufferPixel(viewProjection * vec4f(p, 1.0));
   let widthAxis = widthDirection * select(1.0, -1.0, dot(side, hit.normal) < 0.0);
+  let look = strandPointLook(spline.first, t);
+  strandShadeColor = look.rgb;
+  strandShadeRoughness = look.a;
   return shadeStrandPoint(tangent, u.camera.xyz - p, hit.across, widthAxis, hit.width);
 }
 

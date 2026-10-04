@@ -234,6 +234,12 @@ export interface SceneCameraSettings {
   far: number;
   resolutionWidth?: number;
   resolutionHeight?: number;
+  /** Physical lens (path tracing plan 4.5): exposure in EV, view transform, aperture (0 = pinhole), focus (0 = target), shutter angle in degrees (0 = no motion blur). */
+  exposure?: number;
+  toneMapping?: import('../../types/renderSettings').ToneMapping;
+  fStop?: number;
+  focusDistance?: number;
+  shutterAngle?: number;
 }
 
 export const DEFAULT_SCENE_CAMERA_SETTINGS: SceneCameraSettings = {
@@ -338,6 +344,8 @@ export interface Composition extends MediaItem {
   annotations?: SourceAnnotation[];
   /** Multicam edit: camera tracks and their full-length sources. */
   multicam?: import('../../types/multicam').CompositionMulticam;
+  /** Render engine of the native 3D scene and its preview quality; absent means raster. */
+  renderSettings?: import('../../types/renderSettings').CompositionRenderSettings;
 }
 
 // Folder for organization

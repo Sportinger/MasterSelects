@@ -165,6 +165,7 @@ export interface SceneCameraConfig {
   applyDefaultDistance?: boolean;
   projection?: 'perspective' | 'orthographic';
   orthographicScale?: number;
+  lens?: import('../native3d/pathtrace/contracts/ptTypes').CameraLensSettings;
 }
 
 export interface SceneCamera {
@@ -182,6 +183,8 @@ export interface SceneCamera {
   applyDefaultDistance?: boolean;
   projection: 'perspective' | 'orthographic';
   orthographicScale?: number;
+  /** Physical lens of the active 3D camera clip: exposure, tone mapping, depth of field, shutter. */
+  lens?: import('../native3d/pathtrace/contracts/ptTypes').CameraLensSettings;
 }
 
 export type SceneGizmoAxis = 'x' | 'y' | 'z';

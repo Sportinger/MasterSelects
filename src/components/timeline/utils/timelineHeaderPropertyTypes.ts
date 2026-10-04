@@ -44,6 +44,6 @@ export function getTimelineHeaderTransformPropertyOrder(
   clip: KeyframeTrackClip | null | undefined,
 ): string[] {
   return usesCameraPropertyModel(clip)
-    ? ['camera.fov', 'camera.near', 'camera.far', 'camera.resolutionWidth', 'camera.resolutionHeight', 'opacity', 'position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z']
+    ? ['camera.fov', 'camera.near', 'camera.far', 'camera.resolutionWidth', 'camera.resolutionHeight', 'camera.exposure', 'camera.fStop', 'camera.focusDistance', 'camera.shutterAngle', 'opacity', 'position.x', 'position.y', 'position.z', 'rotation.x', 'rotation.y', 'rotation.z']
     : ['opacity', 'position.x', 'position.y', 'position.z', 'scale.all', 'scale.x', 'scale.y', 'scale.z', 'rotation.x', 'rotation.y', 'rotation.z'];
 }
