@@ -1,3 +1,4 @@
+import type { WorkerPathTraceReport } from './workerPathTraceReport';
 import { peekWorkerGpuNativeSceneOwner } from './workerGpuVideoFrameResources';
 import type { WorkerFlockControlReply } from './workerFlockControls';
 import type {
@@ -104,6 +105,7 @@ export interface WorkerRenderHostRuntimeJobOutput {
   readonly flockControl?: WorkerFlockControlReply;
   readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp;
   readonly flockStatus?: WorkerFlockStatusSnapshot;
+  readonly pathTrace?: WorkerPathTraceReport;
   readonly accepted: boolean;
   readonly commandType: WorkerRenderHostRuntimeCommand['type'];
   readonly initialized: boolean;
@@ -215,6 +217,7 @@ interface AcceptedRenderCommand {
   readonly flockControl?: WorkerFlockControlReply;
   readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp;
   readonly flockStatus?: WorkerFlockStatusSnapshot;
+  readonly pathTrace?: WorkerPathTraceReport;
   readonly statusEvents: readonly WorkerRenderStatusEvent[];
   readonly presentedFrameId: string | null;
   readonly capabilities?: WorkerRenderHostRuntimeCapabilities | null;
@@ -2146,6 +2149,7 @@ async function presentWorkerGpuFrameStack(
       ],
       presentedFrameId,
       flockStatus: result.flockStatus,
+      pathTrace: result.pathTrace,
       readback: result.readback ? {
         width: result.readback.request.width,
         height: result.readback.request.height,
@@ -2740,6 +2744,7 @@ export const workerRenderHostRuntimeHandler: RuntimeJobHandler<
       webCodecs: accepted.webCodecs ?? null,
       readback: accepted.readback ?? null,
       flockStatus: accepted.flockStatus,
+      pathTrace: accepted.pathTrace,
       flockControl: accepted.flockControl,
       nativeSceneCatchUp: accepted.nativeSceneCatchUp,
     },

@@ -1,0 +1,18 @@
+.pt-region-overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.pt-region-overlay.drawing {
+  pointer-events: auto;
+  cursor: crosshair;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.pt-region-rect {
+  position: absolute;
+  border: 1px dashed var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}

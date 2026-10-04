@@ -1,4 +1,6 @@
-# Path Tracing
+---
+title: "Path Tracing"
+---
 
 The shared 3D scene can render with a **path tracer** instead of the raster. It is
 built for Weave fibers: every fiber of a yarn is a round-cone segment the rays hit,

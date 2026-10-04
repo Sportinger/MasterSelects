@@ -36,6 +36,17 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 - Lower in the panel, `Advanced Video`, `Advanced Audio`, and `Range & Summary` sections provide raw-value access.
 - Export settings, presets, and the batch queue live in `exportStore` and are restored with the project. They are not timeline undo/redo history entries.
 
+### Render Quality
+
+**Render Quality** sets how 3D scenes are rendered for export: the engine
+(composition setting or override), raster sub-samples (jittered antialiasing, and
+motion blur when the camera shutter is open), and for path traced scenes the samples
+per pixel, an adaptive threshold (pixels stop once their error is below it, after 16
+samples), a time limit per frame and OIDN denoising. Path traced frames render
+bit-identically across exports. The progress shows a second level for the current
+frame: samples → denoise → encode, with the remaining time. See
+[Path Tracing](/features/path-tracing/).
+
 ### Export Presets
 
 - Presets are stored per project, not in browser-only local storage.
@@ -108,6 +119,8 @@ Supported codecs are checked at runtime:
 - Codec strings carry the smallest standard level that fits the export size and frame rate (for example HEVC Level 5.1 and H.264 Level 5.2 for 3840x2160 at 60 fps); small exports keep the historical defaults.
 - Chrome on Windows advertises hardware encoders above 1080p with at most 30 fps even when they encode faster. When the real frame rate is rejected, export retries with a 30 fps rate-control hint and a bitrate scaled by 30/fps, so the file keeps the requested bits per second; frame timestamps keep the real rate (verified: 3840x2160 HEVC at 60 fps and 15 Mbps on an RTX 5080 laptop). Hardware configs are preferred over software ones at the real rate.
 - Dense particle material needs far higher bitrates than camera footage; 4K60 HEVC of fine point clouds looks soft below roughly 60 Mbps.
+- Encoder backpressure waits for encoded output instead of flushing, so hardware encoders keep their GOP and rate control. At least eight frames may be in flight (bounded by a 384 MB ceiling, so 8K stays at two) because hardware encoders hold several frames before their first output.
+- Motion frame state is validated once per frame: replicator evaluations and modifier plans created by the frame runtime are sealed and proven by their input key instead of being re-evaluated and compared as JSON.
 
 ---
 

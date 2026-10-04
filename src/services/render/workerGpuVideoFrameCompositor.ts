@@ -1,3 +1,4 @@
+import type { WorkerPathTraceReport } from './workerPathTraceReport';
 import type { LayerRenderData } from '../../engine/core/types';
 import {
   createMotionFrameRuntimeAdmission,
@@ -221,7 +222,8 @@ export async function presentGpuFrameStack(
     readonly isSurfaceCurrent?: () => boolean;
   },
 ): Promise<WorkerGpuPresentResult & { readonly readback: WorkerGpuFrameStackReadbackResult | null;
-  readonly flockStatus?: WorkerFlockStatusSnapshot; readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp }> {
+  readonly flockStatus?: WorkerFlockStatusSnapshot; readonly nativeSceneCatchUp?: WorkerNativeSceneCatchUp;
+  readonly pathTrace?: WorkerPathTraceReport }> {
   const { command } = options;
   const nextSequence = surface.frameSequence + 1;
   const presentedFrameId = `${command.stack.frame.targetId}:${command.commandId}:gpu-frame-stack:${nextSequence}`;
@@ -369,6 +371,7 @@ export async function presentGpuFrameStack(
         error: null,
       }),
       readback,
+      ...(nativeScenes ? { pathTrace: nativeScenes.pathTraceReport() } : {}),
       flockStatus: { ...(nativeScenes?.flockStatusSnapshot(command.stack)
         ?? { compositionId: command.stack.frame.compositionId, occurrences: [], capabilities: null }),
         frameTiming: { ...frameTiming, totalMs: performance.now() - started } },

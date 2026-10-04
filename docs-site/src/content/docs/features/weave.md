@@ -155,7 +155,13 @@ Width is in world units and follows the layer scale; width 0 draws nothing. Fibe
 are shaded as round tubes (Kajiya-Kay for thin fibers, wrapped Lambert across wide
 ones) with two shifted highlights (Marschner/Karis) and forward scattering. Light
 clips light the strands like native meshes; without a light clip a fixed key light
-applies.
+applies. An environment light with an HDRI lights them by its spherical-harmonics
+irradiance. Light that passes fibers is tinted by their color once per two fibers
+(dual scattering), so bright yarn stays bright and saturated in its depth. The
+**Fiber Material** node (wool, cotton, silk, synthetic, hair) sets color, roughness
+and highlights for the raster and the path tracer alike; with **Path Traced** the
+composition renders every fiber as a ray traced round cone with a hair BSDF (see
+[Path Tracing](/features/path-tracing/)).
 
 **Antialiasing** (Strand Render) applies to preview, export, nested compositions
 and both render hosts:
