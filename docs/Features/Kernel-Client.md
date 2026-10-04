@@ -98,6 +98,10 @@ or self-harm instruction content are rejected with a message in the chat. The
 kernel logs the rejection category, authenticated principal, time, and the
 Cloudflare client IP for abuse investigation, without logging the prompt text.
 If moderation is unavailable, the turn is rejected until it can be checked.
+Inline images in client messages are classified as well: a turn whose attached
+image is flagged `sexual`, `sexual/minors`, or `violence/graphic` (or cannot be
+checked) is rejected, and such a frame in a tool result is replaced by a text
+notice before the result reaches Codex.
 The relay also pins the model route: `thread/start` and `thread/resume` may
 name only the default provider or `deepseek` with `deepseek-flash`, and their
 `config` overrides are limited to the feature switches the editor sends, so a
