@@ -39,6 +39,12 @@ export const IMAGE_BLOCKING_CATEGORIES: readonly string[] = ['sexual', 'sexual/m
 // Chat histories resend earlier frames every turn; the newest images are checked.
 export const MAX_MODERATED_IMAGES = 12;
 
+// Chat turns resend earlier frames; remember verdicts for identical image bytes
+// per isolate. Only data URLs are cached: content behind an http URL can change.
+const IMAGE_VERDICT_TTL_MS = 60 * 60 * 1000;
+const IMAGE_VERDICT_CACHE_LIMIT = 500;
+const imageVerdictCache = new Map<string, { categories: string[]; expiresAt: number }>();
+
 const DATA_URL_PREFIX = /^data:[^;,\s]+;base64,/i;
 const IMAGE_DATA_URL_PREFIX = /^data:image\/(?:png|jpe?g|webp|gif);base64,/i;
 const HTTP_URL_PREFIX = /^https?:\/\//i;
@@ -141,6 +147,45 @@ async function requestModeration(env: Env, input: ModerationInput): Promise<Sing
   }
 }
 
+export function clearImageModerationCache(): void {
+  imageVerdictCache.clear();
+}
+
+async function imageCacheKey(url: string): Promise<string | null> {
+  if (!IMAGE_DATA_URL_PREFIX.test(url)) return null;
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(url));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function readCachedImageVerdict(key: string, now: number): string[] | null {
+  const entry = imageVerdictCache.get(key);
+  if (!entry) return null;
+  imageVerdictCache.delete(key);
+  if (entry.expiresAt <= now) return null;
+  imageVerdictCache.set(key, entry);
+  return entry.categories;
+}
+
+function storeImageVerdict(key: string, categories: string[], now: number): void {
+  imageVerdictCache.delete(key);
+  imageVerdictCache.set(key, { categories, expiresAt: now + IMAGE_VERDICT_TTL_MS });
+  while (imageVerdictCache.size > IMAGE_VERDICT_CACHE_LIMIT) {
+    const oldestKey = imageVerdictCache.keys().next().value;
+    if (oldestKey === undefined) break;
+    imageVerdictCache.delete(oldestKey);
+  }
+}
+
+async function moderateImage(env: Env, url: string): Promise<SingleModerationOutcome> {
+  const key = await imageCacheKey(url);
+  const cached = key ? readCachedImageVerdict(key, Date.now()) : null;
+  if (cached) return { categories: cached, errorMessage: null, payload: { cached: true } };
+
+  const outcome = await requestModeration(env, [{ type: 'image_url', image_url: { url } }]);
+  if (key && !outcome.errorMessage) storeImageVerdict(key, outcome.categories, Date.now());
+  return outcome;
+}
+
 export async function moderateAiInput(env: Env, value: unknown): Promise<AiModerationResult> {
   const text = buildModerationInput(value);
   const images = collectModerationImages(value);
@@ -151,7 +196,7 @@ export async function moderateAiInput(env: Env, value: unknown): Promise<AiModer
   // One request per image keeps each verdict independent of per-request image limits.
   const [textOutcome, ...imageOutcomes] = await Promise.all([
     text ? requestModeration(env, text) : Promise.resolve(null),
-    ...images.map((url) => requestModeration(env, [{ type: 'image_url', image_url: { url } }])),
+    ...images.map((url) => moderateImage(env, url)),
   ]);
 
   const payload = { images: imageOutcomes.map((outcome) => outcome.payload), text: textOutcome?.payload ?? null };

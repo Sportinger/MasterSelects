@@ -3,6 +3,7 @@ import { stringifyAiPayloadForStorage } from '../../functions/lib/aiAudit';
 import {
   blocksAiRequest,
   buildModerationInput,
+  clearImageModerationCache,
   collectModerationImages,
   MAX_MODERATED_IMAGES,
   moderateAiInput,
@@ -126,6 +127,7 @@ describe('hosted AI image moderation', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    clearImageModerationCache();
   });
 
   function stubModeration(verdicts: Record<string, string[] | 'fail'>) {
@@ -175,5 +177,32 @@ describe('hosted AI image moderation', () => {
 
     expect(result).toMatchObject({ errorMessage: 'upstream down', status: 'error' });
     expect(blocksAiRequest(result)).toBe(true);
+  });
+
+  it('reuses verdicts for frames resent by later chat turns', async () => {
+    const fetchMock = stubModeration({ [frame]: ['sexual'] });
+
+    const first = await moderateAiInput(env, request);
+    const second = await moderateAiInput(env, request);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(second.categories).toEqual(first.categories);
+    expect(blocksAiRequest(second)).toBe(true);
+  });
+
+  it('does not cache failed checks or http images', async () => {
+    const httpImage = 'https://example.test/start.png';
+    const imageCalls = (mock: ReturnType<typeof stubModeration>, url: string) => mock.mock.calls
+      .filter(([, init]) => String(init.body).includes('image_url') && String(init.body).includes(url)).length;
+
+    stubModeration({ [frame]: 'fail' });
+    await moderateAiInput(env, { startImageUrl: frame });
+    const fetchMock = stubModeration({});
+    await moderateAiInput(env, { startImageUrl: frame });
+    await moderateAiInput(env, { imageInputs: [httpImage] });
+    await moderateAiInput(env, { imageInputs: [httpImage] });
+
+    expect(imageCalls(fetchMock, frame)).toBe(1);
+    expect(imageCalls(fetchMock, httpImage)).toBe(2);
   });
 });
