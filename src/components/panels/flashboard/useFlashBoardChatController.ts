@@ -28,6 +28,7 @@ import {
   resumeDirectCodexChat,
 } from '../../../services/flashboard/FlashBoardDirectCodexTransport';
 import { isDirectChatAgentMode } from '../../../services/flashboard/FlashBoardDirectModelProfile';
+import { getActiveRepositorySession } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import {
   clearDirectCodexReloadSnapshot,
   hasDirectCodexReloadSnapshot,
@@ -204,6 +205,8 @@ export function useFlashBoardChatController({
   const showChatCloudActions = Boolean(chatError && !hasHostedSession && /sign in/i.test(chatError));
 
   useEffect(() => {
+    // A read-only project rejects every write; the draft stays in local state there.
+    if (getActiveRepositorySession()?.opening.writable === false) return;
     updateComposer({ draftPrompt: chatPrompt });
   }, [chatPrompt, updateComposer]);
 

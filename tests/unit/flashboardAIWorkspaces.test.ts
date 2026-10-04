@@ -164,4 +164,15 @@ describe('FlashBoard AI workspaces', () => {
       'First chat completed in the background',
     ]);
   });
+
+  it('leaves project state untouched when a composer patch changes nothing', () => {
+    useFlashBoardStore.getState().updateComposer({ draftPrompt: 'Unchanged draft' });
+    const before = useFlashBoardStore.getState();
+
+    useFlashBoardStore.getState().updateComposer({ draftPrompt: 'Unchanged draft' });
+
+    const after = useFlashBoardStore.getState();
+    expect(after.aiWorkspaces).toBe(before.aiWorkspaces);
+    expect(after.composer).toBe(before.composer);
+  });
 });

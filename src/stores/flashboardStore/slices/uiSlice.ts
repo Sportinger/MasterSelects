@@ -72,7 +72,10 @@ function getWorkspaceTitle(input: CreateFlashBoardAIWorkspaceInput, workspaces: 
 
 export const createUiSlice = (set: Set): UiSliceActions => ({
   updateComposer: (patch: Partial<FlashBoardComposerState>): void => {
-    set((state) => ({
+    set((state) => (Object.entries(patch).every(([key, value]) => (
+      // An unchanged patch (e.g. the chat draft sync on mount) must not touch project state.
+      Object.is(state.composer[key as keyof FlashBoardComposerState], value)
+    )) ? {} : {
       composer: (() => {
         const composer = {
         ...state.composer,
