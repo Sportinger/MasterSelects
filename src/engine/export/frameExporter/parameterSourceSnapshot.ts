@@ -5,6 +5,8 @@ import type { TimelineClip } from '../../../types/timeline';
 import type { Keyframe } from '../../../types/keyframes';
 import { freezeAudioParameterContext } from '../../../services/parameterSources/audioParameterContext';
 import { liveAudioParameterContext, prepareAudioParameterGraphs } from '../../../services/parameterSources/audioParameterRuntime';
+import { freezeMarkerParameterContext, usesMarkerParameters } from '../../../services/parameterSources/markerParameterContext';
+import { liveMarkerParameterContext } from '../../../services/parameterSources/markerParameterRuntime';
 import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 
 /** Freeze authored parameter inputs, not DOM/GPU/media runtime handles. */
@@ -28,7 +30,10 @@ export async function captureExportParameterState() {
       ...{ keyframes: clipKeyframes.get(clip.id) ?? structuredClone(storedKeys ?? []) },
       ...(clip.nestedClips ? { nestedClips: clip.nestedClips.map(copyClip) } : {}) };
     const graph = copy.nodeGraph?.parameterSources?.graph;
-    if (graph) freezeAudioParameterContext(graph, liveAudioParameterContext(graph, false));
+    if (graph) {
+      freezeAudioParameterContext(graph, liveAudioParameterContext(graph, false));
+      if (usesMarkerParameters(graph)) freezeMarkerParameterContext(graph, liveMarkerParameterContext(clip.nodeGraph!.parameterSources!.graph, clip.id));
+    }
     return copy;
   };
   const clips = state.clips.map(copyClip);
@@ -37,9 +42,12 @@ export async function captureExportParameterState() {
   const interpolation = createKeyframeEffectInterpolationActions(() => {}, () => timeline);
   const compositions = media.compositions.map(comp => {
     const timelineData = structuredClone(comp.timelineData);
+    // The active composition's markers live in the timeline store, not in its saved data.
+    const markers = comp.id === media.activeCompositionId ? state.markers : timelineData?.markers ?? [];
     for (const clip of timelineData?.clips ?? []) {
       const graph = clip.nodeGraph?.parameterSources?.graph;
       if (graph) freezeAudioParameterContext(graph, liveAudioParameterContext(graph, false));
+      if (graph && usesMarkerParameters(graph)) freezeMarkerParameterContext(graph, markers);
     }
     return { ...comp, timelineData };
   });

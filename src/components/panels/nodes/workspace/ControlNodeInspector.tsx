@@ -10,32 +10,55 @@ import { ResolveInspectorSection, ResolveInspectorRow } from '../../properties/r
 import { ResolveInspectorNumberRow } from '../../properties/resolveInspector/ResolveInspectorNumberRow';
 import '../../properties/ParameterSourceControls.css';
 
+const endpointValue = (nodeId: string, portId: string) => `${nodeId}|${portId}`;
+const formatOutput = (value: number) => String(Math.round(value * 10000) / 10000);
+
 export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nodeId: string }) {
   const audioClips = useTimelineStore(state => state.clips);
+  const markers = useTimelineStore(state => state.markers);
   const time = useTimelineStore(state => Math.max(0, Math.min(clip.duration, state.playheadPosition - clip.startTime)));
   const keys = useTimelineStore(state => state.clipKeyframes.get(clip.id));
   const locked = useTimelineStore(state => state.isExporting || state.tracks.some(track => track.id === clip.trackId && track.locked));
   const [message, setMessage] = useState('');
+  const [chosenOutput, setChosenOutput] = useState('');
   const graph = clip.nodeGraph?.parameterSources?.graph, node = graph?.nodes.find(item => item.id === nodeId);
   if (!graph || !node) return null;
   const definition = getControlOperator(node.operator);
   if (!definition) return <p role="alert">Unsupported control operator: {node.operator}</p>;
   const targets = parameterSourceTargets(clip);
-  let output = '', outputError = '';
-  try { output = String(createParameterSourceEvaluator(clip, keys ?? [], time).evaluateNode({ nodeId, portId: 'value' })); }
-  catch (error) { outputError = error instanceof Error ? error.message : String(error); }
+  const multiOutput = definition.outputs.length > 1;
+  const outputPort = definition.outputs.find(port => port.id === chosenOutput) ?? definition.outputs[0];
+  const outputs: Array<{ id: string; label: string; text: string }> = [];
+  let outputError = '';
+  try {
+    const evaluator = createParameterSourceEvaluator(clip, keys ?? [], time);
+    for (const port of definition.outputs) outputs.push({ id: port.id, label: multiOutput ? port.label : 'Output',
+      text: formatOutput(evaluator.evaluateNode({ nodeId, portId: port.id })) });
+  } catch (error) { outputError = error instanceof Error ? error.message : String(error); }
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } };
   const inputIds = new Set(definition.inputs.map(input => input.id));
+  const markerLabels = [...new Set(markers.map(marker => marker.label).filter(Boolean))].toSorted();
+  const sourceOptions = graph.nodes.filter(candidate => candidate.id !== nodeId).flatMap(candidate => {
+    const candidateDefinition = getControlOperator(candidate.operator);
+    const name = `${candidateDefinition?.label ?? candidate.operator} · ${candidate.id.slice(-6)}`;
+    const ports = candidateDefinition?.outputs ?? [{ id: 'value', label: 'Value' }];
+    return ports.map(port => ({ value: endpointValue(candidate.id, port.id), label: ports.length > 1 ? `${name} / ${port.label}` : name }));
+  });
   return <div className="parameter-source-inspector" onPointerUp={event => {
     if (event.target instanceof Element) event.target.closest<HTMLButtonElement>('button')?.blur();
   }}>
     <ResolveInspectorSection title={definition.label} indicator="none">
-      <ResolveInspectorRow label="Output"><output>{outputError ? 'Unavailable' : output}</output></ResolveInspectorRow>
+      {outputError
+        ? <ResolveInspectorRow label="Output"><output>Unavailable</output></ResolveInspectorRow>
+        : outputs.map(output => <ResolveInspectorRow key={output.id} label={output.label}><output>{output.text}</output></ResolveInspectorRow>)}
       {definition.parameters.filter(param => !inputIds.has(param.id)).map(param => {
         if (param.type === 'select') {
           const options = param.id === 'audioClipId'
             ? [{ value: '', label: 'Choose analyzed audio source' }, ...audioClips.filter(item => item.source?.type === 'audio' || item.source?.type === 'video').map(item => ({ value: item.id, label: item.name }))]
-            : param.id === 'property' ? [{ value: '', label: 'Choose stored curve' }, ...targets.map(target => ({ value: target.path, label: `${target.group} / ${target.label}` }))] : [...(param.options ?? [])];
+            : param.id === 'property' ? [{ value: '', label: 'Choose stored curve' }, ...targets.map(target => ({ value: target.path, label: `${target.group} / ${target.label}` }))]
+            : node.operator === 'control.marker-trigger' && param.id === 'label'
+              ? [{ value: '', label: 'Any marker' }, ...markerLabels.map(label => ({ value: label, label }))]
+              : [...(param.options ?? [])];
           return <ResolveInspectorRow key={param.id} label={param.label}><InspectorSelect ariaLabel={param.label} disabled={locked}
             value={String(node.constants?.[param.id] ?? param.default)} options={options}
             onChange={value => safely(() => setControlNodeValue(clip.id, nodeId, param.id, value))} /></ResolveInspectorRow>;
@@ -50,27 +73,34 @@ export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nod
         const raw = node.constants?.[input.id] ?? param?.default ?? 0;
         return <ResolveInspectorSection key={input.id} title={param?.label ?? input.label} indicator="none">
           <ResolveInspectorRow label="Input"><InspectorSelect ariaLabel={`${input.label} input source`} disabled={locked}
-            value={edge?.from ?? ''} options={[{ value: '', label: input.id === 'time' && raw === 'clip' ? 'Clip time' : input.id === 'time' && raw === 'timeline' ? 'Timeline time' : 'Local value' },
-              ...graph.nodes.filter(candidate => candidate.id !== nodeId).map(candidate => ({ value: candidate.id,
-                label: `${getControlOperator(candidate.operator)?.label ?? candidate.operator} · ${candidate.id.slice(-6)}` }))]}
+            value={edge ? endpointValue(edge.from, edge.output) : ''}
+            options={[{ value: '', label: raw === 'clip' ? 'Clip time' : raw === 'timeline' ? 'Timeline time' : 'Local value' }, ...sourceOptions]}
             onChange={source => safely(() => {
-              if (source) connectControlNodes(clip.id, { nodeId: source, portId: 'value' }, { nodeId, portId: input.id });
-              else if (edge) disconnectControlEdge(clip.id, edge.id);
+              if (source) {
+                const [sourceNode, sourcePort] = source.split('|');
+                connectControlNodes(clip.id, { nodeId: sourceNode, portId: sourcePort }, { nodeId, portId: input.id });
+              } else if (edge) disconnectControlEdge(clip.id, edge.id);
             })} /></ResolveInspectorRow>
           {!edge && typeof raw === 'number' && <ResolveInspectorNumberRow label={param?.label ?? input.label} disabled={locked}
             value={raw} defaultValue={Number(param?.default ?? 0)} min={param?.min ?? -10} max={param?.max ?? 10} step={param?.step ?? 0.01}
             onChange={value => safely(() => setControlNodeValue(clip.id, nodeId, input.id, value))} />}
         </ResolveInspectorSection>;
       })}
+      {multiOutput && <ResolveInspectorRow label="Connect output"><InspectorSelect ariaLabel="Output to connect" disabled={locked}
+        value={outputPort.id} options={definition.outputs.map(port => ({ value: port.id, label: port.label }))}
+        onChange={setChosenOutput} /></ResolveInspectorRow>}
       <ResolveInspectorRow label="Connect to"><InspectorSelect ariaLabel="Target parameter" disabled={locked} value=""
         options={[{ value: '', label: 'Choose parameter' }, ...targets.map(target => ({ value: target.path, label: `${target.group} / ${target.label}` }))]}
-        onChange={property => { if (property) safely(() => setParameterSourceBinding(clip.id, property, { source: { nodeId, portId: 'value' }, enabled: true, exposed: true })); }} /></ResolveInspectorRow>
-      {Object.entries(clip.nodeGraph!.parameterSources!.targets).filter(([, binding]) => binding.source?.nodeId === nodeId).map(([path, binding]) =>
-        <ResolveInspectorRow key={path} label={targets.find(target => target.path === path)?.label ?? path}>
+        onChange={property => { if (property) safely(() => setParameterSourceBinding(clip.id, property, { source: { nodeId, portId: outputPort.id }, enabled: true, exposed: true })); }} /></ResolveInspectorRow>
+      {Object.entries(clip.nodeGraph!.parameterSources!.targets).filter(([, binding]) => binding.source?.nodeId === nodeId).map(([path, binding]) => {
+        const port = multiOutput ? definition.outputs.find(item => item.id === binding.source?.portId)?.label : undefined;
+        const label = targets.find(target => target.path === path)?.label ?? path;
+        return <ResolveInspectorRow key={path} label={port ? `${port} → ${label}` : label}>
           <button type="button" disabled={locked} onClick={() => safely(() => setParameterSourceBinding(clip.id, path, { enabled: binding.enabled === false }))}>
             {binding.enabled === false ? 'Enable binding' : 'Disable binding'}
           </button>
-        </ResolveInspectorRow>)}
+        </ResolveInspectorRow>;
+      })}
       {(message || outputError) && <p role="alert" className="parameter-source-error">{message || outputError}</p>}
     </ResolveInspectorSection>
   </div>;

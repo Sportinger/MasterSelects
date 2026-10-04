@@ -49,6 +49,8 @@ opaque pixels and storing the fill in the project. See
 
 ### Node graphs
 
+Clip control nodes now also drive the clip Transform (position, anchor, scale, rotation, opacity). New controls add Smooth Noise, attack/hold/decay Envelopes, Marker Triggers that time pulses to timeline markers, and a Two-Bone IK with individual angle and joint outputs for rigging Pick-Whip parented layers. See [Node Workspace](docs/Features/Node-Workspace.md#procedural-parameter-sources).
+
 Flock includes Terracotta and Lilac Sculpture presets: dense, low-gravity
 APIC sheets with slow curl forces, spatial pigment colors and a lit gallery box.
 They start calmly inside the box, with overlapping curl fields developing during playback.

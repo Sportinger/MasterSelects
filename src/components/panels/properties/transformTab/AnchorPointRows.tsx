@@ -8,11 +8,14 @@ import {
 } from '../resolveInspector/ResolveInspectorPrimitives';
 import type { CreateMidiTarget, TransformTabTransform } from './transformTabTypes';
 import { LabeledValue } from './ValueControls';
+import type { OperatorEndpoint } from '../../../../types/operatorGraph';
+import { TransformNodeSourceActions } from './TransformNodeSourceActions';
 
 interface AnchorPointRowsProps {
   clipId: string;
   createMidiTarget: CreateMidiTarget;
   isEffectively3D: boolean;
+  nodeSources?: ReadonlyMap<string, OperatorEndpoint>;
   transform: TransformTabTransform;
   onBatchEnd: () => void;
   onBatchStart: () => void;
@@ -37,6 +40,7 @@ export function AnchorPointRows({
   clipId,
   createMidiTarget,
   isEffectively3D,
+  nodeSources = new Map(),
   transform,
   onBatchEnd,
   onBatchStart,
@@ -54,7 +58,9 @@ export function AnchorPointRows({
 
   return (
     <ResolveInspectorRow
-      actions={(
+      actions={keyframeEntries.some(entry => nodeSources.has(entry.property)) ? (
+        <TransformNodeSourceActions clipId={clipId} properties={keyframeEntries.map(entry => entry.property)} sources={nodeSources} />
+      ) : (
         <>
           <MultiKeyframeToggle
             clipId={clipId}
@@ -73,6 +79,7 @@ export function AnchorPointRows({
           className="resolve-inspector-field"
           decimals={3}
           defaultValue={0}
+          disabled={nodeSources.has('anchor.x')}
           label="X"
           midiTarget={createMidiTarget('anchor.x', 'Anchor X', anchor.x, -1, 1)}
           onChange={value => onChange('anchor.x', value)}
@@ -87,6 +94,7 @@ export function AnchorPointRows({
           className="resolve-inspector-field"
           decimals={3}
           defaultValue={0}
+          disabled={nodeSources.has('anchor.y')}
           label="Y"
           midiTarget={createMidiTarget('anchor.y', 'Anchor Y', anchor.y, -1, 1)}
           onChange={value => onChange('anchor.y', value)}

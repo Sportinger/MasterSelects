@@ -3,12 +3,15 @@ import type { BoundOperatorNode, EffectOperatorGraph, OperatorEndpoint } from '.
 import type { ParameterSourceResult } from '../../types/parameterSources';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { evaluateScalarOperation } from '../operators/scalarOperationSemantics';
-import { getControlOperator } from './controlOperators';
+import { controlClockInputs, getControlOperator } from './controlOperators';
 import { parameterSourceTargets, type ParameterSourceClip } from './parameterSourceTargets';
 import { parameterSourceTime } from './parameterSourceTime';
 import { evaluateAudioParameter, frozenAudioParameterContext, type AudioParameterContext } from './audioParameterContext';
 import type { AudioEnvelopeSampling } from './audioEnvelopeSampling';
 import { liveAudioParameterContext } from './audioParameterRuntime';
+import { envelopeValue, markerTriggerValue, smoothNoise, solveTwoBoneIk, type MarkerTriggerMode } from './controlSignalMath';
+import { frozenMarkerParameterContext } from './markerParameterContext';
+import { liveMarkerParameterContext } from './markerParameterRuntime';
 
 export class ParameterSourceError extends Error {
   readonly nodeId?: string;
@@ -62,6 +65,8 @@ function compile(graph: EffectOperatorGraph): CompiledControls {
   return result;
 }
 
+const IK_ANGLE_OUTPUTS = new Set(['angle1', 'angle2']);
+
 /** One request shares source values across all targets and reads curves from their original owner. */
 export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyframes: readonly Keyframe[], localTime: number,
   timelineTime = clip.startTime + localTime, audioContext?: AudioParameterContext) {
@@ -88,18 +93,26 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
       throw new ParameterSourceError(`Incompatible units (${a} / ${b}). Insert an explicit Remap.`, nodeId);
     }
   };
-  const unitForNode = (nodeId: string): string => {
-    if (units.has(nodeId)) return units.get(nodeId)!;
+  const loadProgram = (nodeId?: string): CompiledControls => {
     if (!state) throw new ParameterSourceError('Control source is missing.', nodeId);
     program ??= compile(state.graph);
-    const node = program.nodes.get(nodeId);
+    return program;
+  };
+  const unitFor = (nodeId: string, portId = 'value'): string => {
+    const cacheKey = `${nodeId}\0${portId}`;
+    if (units.has(cacheKey)) return units.get(cacheKey)!;
+    const node = loadProgram(nodeId).nodes.get(nodeId);
     if (!node) throw new ParameterSourceError('Control source is missing.', nodeId);
     if (unitVisiting.has(nodeId)) throw new ParameterSourceError('Control graph contains a cycle.', nodeId);
     unitVisiting.add(nodeId);
     try {
       const inputUnit = (id: string) => {
         const source = program!.inputs.get(`${nodeId}\0${id}`);
-        return source ? unitForNode(source.nodeId) : 'number';
+        return source ? unitFor(source.nodeId, source.portId) : 'number';
+      };
+      const scaledSignal = () => {
+        const amplitude = inputUnit('amplitude'), offset = inputUnit('offset');
+        compatible(amplitude, offset, nodeId); return amplitude === 'number' ? offset : amplitude;
       };
       let unit = 'number';
       if (node.operator === 'control.time') unit = 'seconds';
@@ -107,9 +120,20 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
       else if (node.operator === 'control.keyframes') unit = targets.get(String(node.constants?.property))?.unit ?? 'number';
       else if (node.operator === 'control.lfo') {
         compatible(inputUnit('time'), 'seconds', nodeId); compatible(inputUnit('frequency'), 'Hz', nodeId);
-        compatible(inputUnit('phase'), 'turns', nodeId);
-        const amplitude = inputUnit('amplitude'), offset = inputUnit('offset');
-        compatible(amplitude, offset, nodeId); unit = amplitude === 'number' ? offset : amplitude;
+        compatible(inputUnit('phase'), 'turns', nodeId); unit = scaledSignal();
+      } else if (node.operator === 'control.noise') {
+        compatible(inputUnit('time'), 'seconds', nodeId); compatible(inputUnit('frequency'), 'Hz', nodeId); unit = scaledSignal();
+      } else if (node.operator === 'control.envelope') {
+        for (const id of ['age', 'attack', 'hold', 'decay']) compatible(inputUnit(id), 'seconds', nodeId);
+        unit = inputUnit('amplitude');
+      } else if (node.operator === 'control.marker-trigger') {
+        compatible(inputUnit('time'), 'seconds', nodeId);
+        const mode = String(node.constants?.mode ?? 'since');
+        unit = mode === 'since' || mode === 'until' ? 'seconds' : 'number';
+      } else if (node.operator === 'control.ik-two-bone') {
+        const position = inputUnit('rootX');
+        for (const id of ['rootY', 'targetX', 'targetY', 'length1', 'length2']) compatible(position, inputUnit(id), nodeId);
+        unit = IK_ANGLE_OUTPUTS.has(portId) ? 'degrees' : portId === 'reach' ? 'number' : position;
       } else if (node.operator === 'math.add.scalar' || node.operator === 'math.multiply.scalar') {
         const a = inputUnit('a'), b = inputUnit('b');
         if (node.operator === 'math.multiply.scalar' && a !== 'number' && b !== 'number') {
@@ -123,24 +147,12 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
         const from = inputUnit('value'); compatible(from, inputUnit('inMin'), nodeId); compatible(from, inputUnit('inMax'), nodeId);
         const a = inputUnit('outMin'), b = inputUnit('outMax'); compatible(a, b, nodeId); unit = a === 'number' ? b : a;
       }
-      units.set(nodeId, unit); return unit;
+      units.set(cacheKey, unit); return unit;
     } finally { unitVisiting.delete(nodeId); }
   };
-  const evaluateNode = (endpoint: OperatorEndpoint): number => {
-    if (!state || state.version !== 1) throw new ParameterSourceError('Unsupported parameter-source state.');
-    program ??= compile(state.graph);
-    const { nodeId, portId } = endpoint;
-    if (portId !== 'value') throw new ParameterSourceError('Unknown control output.', nodeId);
-    const found = values.get(nodeId);
-    if (found !== undefined) return found;
-    const node = program.nodes.get(nodeId);
-    if (!node) throw new ParameterSourceError('Control source is missing.', nodeId);
-    const error = program.errors.get(nodeId);
-    if (error) throw new ParameterSourceError(error, nodeId);
-    unitForNode(nodeId);
-    if (visiting.has(nodeId)) throw new ParameterSourceError('Control graph contains a cycle.', nodeId);
-    visiting.add(nodeId);
-    const definition = getControlOperator(node.operator)!;
+  /** Compute every output of one node; multi-output nodes share a single solve per request. */
+  const computeOutputs = (node: BoundOperatorNode): Record<string, number> => {
+    const nodeId = node.id, definition = getControlOperator(node.operator)!;
     const input = (id: string, fallback = 0): number => {
       const source = program!.inputs.get(`${nodeId}\0${id}`);
       if (source) return evaluateNode(source);
@@ -148,52 +160,105 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
       if (typeof constant !== 'number') throw new ParameterSourceError(`Input ${id} requires a number.`, nodeId);
       return finite(constant, nodeId);
     };
-    let value: number;
-    try {
-      switch (node.operator) {
-        case 'values.number': value = input('value'); break;
-        case 'control.time': {
-          const basis = node.constants?.basis ?? 'clip';
-          if (basis !== 'clip' && basis !== 'timeline') throw new ParameterSourceError('Unknown time basis.', nodeId);
-          value = basis === 'timeline' ? clock.timelineTime : clipTime; break;
-        }
-        case 'control.lfo': {
-          const timeInput = program.inputs.get(`${nodeId}\0time`);
-          const time = timeInput ? evaluateNode(timeInput) : node.constants?.time === 'clip' || node.constants?.time === undefined ? clipTime : input('time');
-          value = input('offset') + input('amplitude', 1) * evaluateScalarOperation('sin', 2 * Math.PI * (input('frequency', 1) * time + input('phase'))); break;
-        }
-        case 'control.keyframes': value = sampleCurve(String(node.constants?.property ?? '')); break;
-        case 'control.audio-envelope': {
-          const context = frozenAudioParameterContext(state.graph) ?? audioContext ?? liveAudioParameterContext(state.graph);
-          if (!context) throw new ParameterSourceError('Audio analysis context is unavailable.', nodeId);
-          const linked = program.inputs.get(`${nodeId}\0time`);
-          if (!linked && node.constants?.basis === 'source' && node.constants?.time === 'timeline') {
-            throw new ParameterSourceError('Connect explicit source seconds to the Audio envelope time input.', nodeId);
-          }
-          const time = linked ? evaluateNode(linked) : node.constants?.time === 'timeline' ? clock.timelineTime : input('time');
-          value = evaluateAudioParameter(context, String(node.constants?.audioClipId ?? ''), time,
-            String(node.constants?.basis ?? 'timeline') as 'timeline' | 'source', {
-              metric: String(node.constants?.metric ?? 'rms-dbfs') as AudioEnvelopeSampling['metric'],
-              interpolation: String(node.constants?.interpolation ?? 'linear') as AudioEnvelopeSampling['interpolation'],
-              floorDb: input('floorDb', -60), ceilingDb: input('ceilingDb', 0),
-            });
-          break;
-        }
-        case 'math.add.scalar': value = evaluateScalarOperation('add', input('a'), input('b')); break;
-        case 'math.multiply.scalar': value = evaluateScalarOperation('multiply', input('a'), input('b', 1)); break;
-        case 'math.clamp.scalar': {
-          const min = input('min'), max = input('max', 1);
-          if (min > max) throw new ParameterSourceError('Clamp minimum must not exceed maximum.', nodeId);
-          value = evaluateScalarOperation('clamp', input('value'), min, max); break;
-        }
-        case 'control.remap': {
-          const minimum = input('inMin', -1), span = input('inMax', 1) - minimum;
-          if (span === 0) throw new ParameterSourceError('Remap input range must not be zero.', nodeId);
-          value = evaluateScalarOperation('mix', input('outMin'), input('outMax', 1), (input('value') - minimum) / span); break;
-        }
-        default: throw new ParameterSourceError('Unsupported control operator.', nodeId);
+    /** An unwired clock input reads its authored clock; an explicit number stays a number. */
+    const clockInput = (id: string): number => {
+      const source = program!.inputs.get(`${nodeId}\0${id}`);
+      if (source) return evaluateNode(source);
+      const raw = node.constants?.[id] ?? controlClockInputs(node.operator)[id];
+      if (raw === 'clip') return clipTime;
+      if (raw === 'timeline') return clock.timelineTime;
+      return input(id);
+    };
+    const nonNegative = (id: string) => {
+      const value = input(id);
+      if (value < 0) throw new ParameterSourceError(`${definition.parameters.find(p => p.id === id)?.label ?? id} must not be negative.`, nodeId);
+      return value;
+    };
+    switch (node.operator) {
+      case 'values.number': return { value: input('value') };
+      case 'control.time': {
+        const basis = node.constants?.basis ?? 'clip';
+        if (basis !== 'clip' && basis !== 'timeline') throw new ParameterSourceError('Unknown time basis.', nodeId);
+        return { value: basis === 'timeline' ? clock.timelineTime : clipTime };
       }
-      finite(value, nodeId); values.set(nodeId, value); return value;
+      case 'control.lfo': return { value: input('offset') + input('amplitude', 1)
+        * evaluateScalarOperation('sin', 2 * Math.PI * (input('frequency', 1) * clockInput('time') + input('phase'))) };
+      case 'control.noise': return { value: input('offset') + input('amplitude', 1)
+        * smoothNoise(input('frequency', 1) * clockInput('time'), input('seed'), input('octaves', 1)) };
+      case 'control.envelope': {
+        const curve = String(node.constants?.curve ?? 'exponential');
+        if (curve !== 'exponential' && curve !== 'linear') throw new ParameterSourceError('Unknown envelope curve.', nodeId);
+        return { value: input('amplitude', 1) * envelopeValue(clockInput('age'), nonNegative('attack'), nonNegative('hold'), nonNegative('decay'), curve) };
+      }
+      case 'control.marker-trigger': {
+        const mode = String(node.constants?.mode ?? 'since') as MarkerTriggerMode;
+        if (!['since', 'until', 'count', 'progress'].includes(mode)) throw new ParameterSourceError('Unknown marker output.', nodeId);
+        const markers = frozenMarkerParameterContext(state!.graph) ?? liveMarkerParameterContext(state!.graph, clip.id);
+        return { value: markerTriggerValue(markers, clockInput('time'), String(node.constants?.label ?? ''), mode) };
+      }
+      case 'control.ik-two-bone': {
+        const bend = node.constants?.bend ?? 'positive';
+        if (bend !== 'positive' && bend !== 'negative') throw new ParameterSourceError('Unknown bend direction.', nodeId);
+        try {
+          const solved = solveTwoBoneIk(input('rootX'), input('rootY'), input('targetX'), input('targetY'),
+            input('length1'), input('length2'), bend === 'positive' ? 1 : -1, input('aspect', 1));
+          return { ...solved };
+        } catch (error) {
+          if (error instanceof ParameterSourceError) throw error;
+          throw new ParameterSourceError(error instanceof Error ? error.message : String(error), nodeId);
+        }
+      }
+      case 'control.keyframes': return { value: sampleCurve(String(node.constants?.property ?? '')) };
+      case 'control.audio-envelope': {
+        const context = frozenAudioParameterContext(state!.graph) ?? audioContext ?? liveAudioParameterContext(state!.graph);
+        if (!context) throw new ParameterSourceError('Audio analysis context is unavailable.', nodeId);
+        const linked = program!.inputs.get(`${nodeId}\0time`);
+        if (!linked && node.constants?.basis === 'source' && node.constants?.time === 'timeline') {
+          throw new ParameterSourceError('Connect explicit source seconds to the Audio envelope time input.', nodeId);
+        }
+        const time = linked ? evaluateNode(linked) : node.constants?.time === 'timeline' ? clock.timelineTime : input('time');
+        return { value: evaluateAudioParameter(context, String(node.constants?.audioClipId ?? ''), time,
+          String(node.constants?.basis ?? 'timeline') as 'timeline' | 'source', {
+            metric: String(node.constants?.metric ?? 'rms-dbfs') as AudioEnvelopeSampling['metric'],
+            interpolation: String(node.constants?.interpolation ?? 'linear') as AudioEnvelopeSampling['interpolation'],
+            floorDb: input('floorDb', -60), ceilingDb: input('ceilingDb', 0),
+          }) };
+      }
+      case 'math.add.scalar': return { value: evaluateScalarOperation('add', input('a'), input('b')) };
+      case 'math.multiply.scalar': return { value: evaluateScalarOperation('multiply', input('a'), input('b', 1)) };
+      case 'math.clamp.scalar': {
+        const min = input('min'), max = input('max', 1);
+        if (min > max) throw new ParameterSourceError('Clamp minimum must not exceed maximum.', nodeId);
+        return { value: evaluateScalarOperation('clamp', input('value'), min, max) };
+      }
+      case 'control.remap': {
+        const minimum = input('inMin', -1), span = input('inMax', 1) - minimum;
+        if (span === 0) throw new ParameterSourceError('Remap input range must not be zero.', nodeId);
+        return { value: evaluateScalarOperation('mix', input('outMin'), input('outMax', 1), (input('value') - minimum) / span) };
+      }
+      default: throw new ParameterSourceError('Unsupported control operator.', nodeId);
+    }
+  };
+  const evaluateNode = (endpoint: OperatorEndpoint): number => {
+    if (!state || state.version !== 1) throw new ParameterSourceError('Unsupported parameter-source state.');
+    loadProgram();
+    const { nodeId, portId } = endpoint;
+    const found = values.get(`${nodeId}\0${portId}`);
+    if (found !== undefined) return found;
+    const node = program!.nodes.get(nodeId);
+    if (!node) throw new ParameterSourceError('Control source is missing.', nodeId);
+    const error = program!.errors.get(nodeId);
+    if (error) throw new ParameterSourceError(error, nodeId);
+    if (!getControlOperator(node.operator)!.outputs.some(port => port.id === portId)) throw new ParameterSourceError('Unknown control output.', nodeId);
+    unitFor(nodeId, portId);
+    if (visiting.has(nodeId)) throw new ParameterSourceError('Control graph contains a cycle.', nodeId);
+    visiting.add(nodeId);
+    try {
+      const outputs = computeOutputs(node);
+      for (const [id, value] of Object.entries(outputs)) values.set(`${nodeId}\0${id}`, finite(value, nodeId));
+      const value = values.get(`${nodeId}\0${portId}`);
+      if (value === undefined) throw new ParameterSourceError('Unknown control output.', nodeId);
+      return value;
     } finally { visiting.delete(nodeId); }
   };
   const resolve = (property: string): ParameterSourceResult => {
@@ -202,7 +267,7 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
     const binding = state?.targets[property];
     if (binding?.source && binding.enabled !== false) {
       const value = evaluateNode(binding.source);
-      compatible(unitForNode(binding.source.nodeId), target.unit, binding.source.nodeId);
+      compatible(unitFor(binding.source.nodeId, binding.source.portId), target.unit, binding.source.nodeId);
       if ((target.hardMin !== undefined && value < target.hardMin) || (target.hardMax !== undefined && value > target.hardMax)) {
         throw new ParameterSourceError('Control value is outside the runtime range. Insert Clamp or Remap.', binding.source.nodeId, property);
       }
@@ -212,15 +277,14 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
     return { value: finite(target.value), kind: 'constant' };
   };
   const evaluateInput = (nodeId: string, portId: string): number => {
-    if (!state) throw new ParameterSourceError('Control source is missing.', nodeId);
-    program ??= compile(state.graph);
-    const node = program.nodes.get(nodeId), definition = node && getControlOperator(node.operator);
+    const node = loadProgram(nodeId).nodes.get(nodeId), definition = node && getControlOperator(node.operator);
     if (!node || !definition?.inputs.some(port => port.id === portId)) throw new ParameterSourceError('Unknown control input.', nodeId);
-    const source = program.inputs.get(`${nodeId}\0${portId}`);
+    const source = program!.inputs.get(`${nodeId}\0${portId}`);
     if (source) return evaluateNode(source);
-    const raw = node.constants?.[portId] ?? definition.parameters.find(param => param.id === portId)?.default ?? 0;
-    if (node.operator === 'control.lfo' && portId === 'time' && raw === 'clip') return finite(clipTime, nodeId);
-    if (node.operator === 'control.audio-envelope' && portId === 'time' && raw === 'timeline') return finite(clock.timelineTime, nodeId);
+    const raw = node.constants?.[portId] ?? definition.parameters.find(param => param.id === portId)?.default
+      ?? controlClockInputs(node.operator)[portId] ?? 0;
+    if (raw === 'clip') return finite(clipTime, nodeId);
+    if (raw === 'timeline') return finite(clock.timelineTime, nodeId);
     if (typeof raw !== 'number') throw new ParameterSourceError('Control input requires a number.', nodeId);
     return finite(raw, nodeId);
   };

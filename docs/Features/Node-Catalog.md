@@ -67,6 +67,11 @@ Slit Scan exposes Delay, Map mix and Noise amount as scalar targets. Use Remap
 to convert the normalized audio value into a desired delay range. Audio source
 and export integration have unit coverage; live end-to-end verification is pending.
 
+Timing and rig controls in the same menu: **Smooth Noise** (`control.noise`),
+**Envelope** (`control.envelope`) and **Marker Trigger** (`control.marker-trigger`)
+under Time & Motion, **Two-Bone IK** (`control.ik-two-bone`, seven outputs) under
+Geometry. They also drive the clip Transform; see Node-Workspace.md.
+
 Image effects expose six reusable motion operators through **Add node**:
 
 | Node | Contract |

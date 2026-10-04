@@ -3,6 +3,7 @@ import type { Keyframe } from '../../../types/keyframes';
 import type { ClipTransform } from '../../../types/timelineCore';
 import type { TimelineClip } from '../../../types/timeline';
 import { getInterpolatedClipTransform } from '../../../utils/keyframeInterpolation';
+import { applyParameterSourcesToTransform } from '../../parameterSources/parameterSourceRendering';
 import {
   MOTION_STRUCTURE_LEAF_CONTRACT_VERSION,
   type MotionStructureLeafOperationPlan,
@@ -149,13 +150,14 @@ export function getTimelineMotionLocalTransformAtTime(
   keyframes: readonly Keyframe[],
   timelineTime: number,
 ): ClipTransform {
-  return getInterpolatedClipTransform(
+  const localTime = timelineTime - clip.startTime;
+  return applyParameterSourcesToTransform(clip, keyframes, localTime, getInterpolatedClipTransform(
     [...keyframes],
-    timelineTime - clip.startTime,
+    localTime,
     clip.transform,
     { rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
       stabilizationEnabled: clip.videoInspectorSections?.stabilization },
-  );
+  ));
 }
 
 export function createTimelineMotionParentEvaluation(

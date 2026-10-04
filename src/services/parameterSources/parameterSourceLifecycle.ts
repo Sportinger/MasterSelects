@@ -3,6 +3,7 @@ import type { TimelineClip } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
 import { parameterSourceTargets } from './parameterSourceTargets';
 import { cloneAudioParameterSources } from './audioParameterContext';
+import { isTransformParameterPath } from './transformParameterTargets';
 
 /** Only explicit owner removal cleans up sources. Unknown persisted paths are kept for diagnostics. */
 export function reconcileRemovedParameterTargets(before: TimelineClip, after: TimelineClip): TimelineClip {
@@ -87,7 +88,8 @@ export function trimmedParameterSourceClips(before: readonly TimelineClip[], aft
 export function copyParameterKeyframesToParts(keys: ReadonlyMap<string, readonly Keyframe[]>, before: TimelineClip, parts: readonly TimelineClip[]): Map<string, Keyframe[]> {
   const result = new Map([...keys].map(([id, list]) => [id, [...list]]));
   if (!before.nodeGraph?.parameterSources) return result;
-  const properties = new Set(parameterSourceTargets(before).map(target => target.path));
+  // Transform keys keep the regular split behavior; only effect/color curves are copied whole.
+  const properties = new Set(parameterSourceTargets(before).map(target => target.path).filter(path => !isTransformParameterPath(path)));
   const source = (keys.get(before.id) ?? []).filter(key => properties.has(key.property));
   if (!source.length) return result;
   for (const part of parts) {

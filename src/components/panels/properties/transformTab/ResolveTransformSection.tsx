@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import type { AnimatableProperty } from '../../../../types';
 import {
@@ -19,6 +19,8 @@ import { LayerDimensionToggle } from './LayerModeControls';
 import { LabeledValue } from './ValueControls';
 import { AnchorPointRows } from './AnchorPointRows';
 import { HandleOnlyRange } from './HandleOnlyRange';
+import { TransformNodeSourceActions } from './TransformNodeSourceActions';
+import { useTransformNodeSources } from './useTransformNodeSources';
 
 interface ResolveTransformSectionProps {
   clipId: string;
@@ -95,6 +97,7 @@ function StaticField({ axis }: { axis?: 'X' | 'Y' }) {
 
 function SliderValue({
   createMidiTarget,
+  disabled = false,
   label,
   midiLabel,
   onBatchEnd,
@@ -104,6 +107,7 @@ function SliderValue({
   value,
 }: {
   createMidiTarget: CreateMidiTarget;
+  disabled?: boolean;
   label: string;
   midiLabel: string;
   onBatchEnd: () => void;
@@ -118,6 +122,7 @@ function SliderValue({
     <div className="resolve-inspector-slider-value">
       <HandleOnlyRange
         aria-label={`${label} slider`}
+        disabled={disabled}
         max={180}
         min={-180}
         onChange={onChange}
@@ -131,6 +136,7 @@ function SliderValue({
         className="resolve-inspector-field resolve-inspector-field--plain"
         decimals={3}
         defaultValue={0}
+        disabled={disabled}
         label=""
         midiTarget={createMidiTarget(property, midiLabel, value, -360, 360)}
         onChange={onChange}
@@ -177,6 +183,11 @@ export function ResolveTransformSection({
   onToggle3D,
 }: ResolveTransformSectionProps) {
   const [zoomLinked, setZoomLinked] = useState(true);
+  const nodeSources = useTransformNodeSources(clipId);
+  /** A node-driven row offers the way to its source instead of keyframe/reset actions. */
+  const rowActions = (properties: readonly string[], local: ReactNode): ReactNode => properties.some(path => nodeSources.has(path))
+    ? <TransformNodeSourceActions clipId={clipId} properties={properties} sources={nodeSources} />
+    : local;
 
   useEffect(() => {
     setZoomLinked(true);
@@ -278,7 +289,7 @@ export function ResolveTransformSection({
 
         {!usesCameraControls && (
           <ResolveInspectorRow
-            actions={(
+            actions={rowActions(['scale.x', 'scale.y', 'scale.all'], (
               <>
                 <ScaleKeyframeToggle
                   clipId={clipId}
@@ -293,7 +304,7 @@ export function ResolveTransformSection({
                   ], 'Reset zoom')}
                 />
               </>
-            )}
+            ))}
             label="Zoom"
           >
             <div className="resolve-inspector-values resolve-inspector-values--pair">
@@ -302,6 +313,7 @@ export function ResolveTransformSection({
                 className="resolve-inspector-field"
                 decimals={3}
                 defaultValue={1}
+                disabled={nodeSources.has('scale.x')}
                 label="X"
                 midiTarget={createMidiTarget('scale.x', 'Zoom X', transform.scale.x, -4, 4)}
                 onChange={handleScaleX}
@@ -323,6 +335,7 @@ export function ResolveTransformSection({
                 className="resolve-inspector-field"
                 decimals={3}
                 defaultValue={1}
+                disabled={nodeSources.has('scale.y')}
                 label="Y"
                 midiTarget={createMidiTarget('scale.y', 'Zoom Y', transform.scale.y, -4, 4)}
                 onChange={handleScaleY}
@@ -336,7 +349,7 @@ export function ResolveTransformSection({
         )}
 
         <ResolveInspectorRow
-          actions={(
+          actions={rowActions(['position.x', 'position.y'], (
             <>
               <MultiKeyframeToggle
                 clipId={clipId}
@@ -355,7 +368,7 @@ export function ResolveTransformSection({
                 ], 'Reset position')}
               />
             </>
-          )}
+          ))}
           label="Position"
         >
           <div className="resolve-inspector-values resolve-inspector-values--pair">
@@ -364,6 +377,7 @@ export function ResolveTransformSection({
               className="resolve-inspector-field"
               decimals={3}
               defaultValue={0}
+              disabled={nodeSources.has('position.x')}
               label="X"
               midiTarget={createMidiTarget('position.x', 'Position X', transform.position.x, -2, 2)}
               onChange={usesCameraControls ? onCameraPositionXChange : onPosXChange}
@@ -378,6 +392,7 @@ export function ResolveTransformSection({
               className="resolve-inspector-field"
               decimals={3}
               defaultValue={0}
+              disabled={nodeSources.has('position.y')}
               label="Y"
               midiTarget={createMidiTarget('position.y', 'Position Y', transform.position.y, -2, 2)}
               onChange={usesCameraControls ? onCameraPositionYChange : onPosYChange}
@@ -390,7 +405,7 @@ export function ResolveTransformSection({
         </ResolveInspectorRow>
 
         <ResolveInspectorRow
-          actions={(
+          actions={rowActions(['rotation.z'], (
             <>
               <KeyframeToggle clipId={clipId} property="rotation.z" value={transform.rotation.z} />
               <ResetButton
@@ -400,11 +415,12 @@ export function ResolveTransformSection({
                 ], 'Reset rotation')}
               />
             </>
-          )}
+          ))}
           label="Rotation Angle"
         >
           <SliderValue
             createMidiTarget={createMidiTarget}
+            disabled={nodeSources.has('rotation.z')}
             label="Rotation Angle"
             midiLabel="Rotation Angle"
             onBatchEnd={onBatchEnd}
@@ -421,6 +437,7 @@ export function ResolveTransformSection({
           <AnchorPointRows
             clipId={clipId}
             createMidiTarget={createMidiTarget}
+            nodeSources={nodeSources}
             isEffectively3D={isEffectively3D}
             transform={transform}
             onBatchEnd={onBatchEnd}
@@ -440,7 +457,7 @@ export function ResolveTransformSection({
           const value = transform.rotation[axis];
           return (
             <ResolveInspectorRow
-              actions={isEffectively3D ? (
+              actions={isEffectively3D ? rowActions([property], (
                 <>
                   <KeyframeToggle clipId={clipId} property={property} value={value} />
                   <ResetButton
@@ -448,7 +465,7 @@ export function ResolveTransformSection({
                     onClick={() => resetEntries([{ property, value: 0 }], `Reset ${label.toLowerCase()}`)}
                   />
                 </>
-              ) : undefined}
+              )) : undefined}
               disabled={!isEffectively3D}
               key={axis}
               label={label}
@@ -457,6 +474,7 @@ export function ResolveTransformSection({
               {isEffectively3D ? (
                 <SliderValue
                   createMidiTarget={createMidiTarget}
+                  disabled={nodeSources.has(property)}
                   label={label}
                   midiLabel={usesCameraControls ? `Camera ${label}` : `Rotation ${axis.toUpperCase()}`}
                   onBatchEnd={onBatchEnd}

@@ -376,6 +376,15 @@
     color: #8c8e93;
   }
 
+  /* Transform rows driven by a control node: accent node glyph, red when its source fails. */
+  .resolve-inspector-icon-button.transform-node-source-button {
+    color: var(--accent-color);
+  }
+
+  .resolve-inspector-icon-button.transform-node-source-button.has-error {
+    color: var(--text-error, #e88);
+  }
+
   .resolve-inspector-icon-button svg {
     width: 15px;
     height: 15px;

@@ -54,6 +54,7 @@ function evaluateSingleDomain(
       keyframes,
       compositionLocalTime,
       clip.videoInspectorSections?.stabilization,
+      clip,
     )),
     effects: addSurfaces(cloneEffects(evaluateCompositionClipEffects(clip.effects, keyframes, compositionLocalTime)), clip, compositionLocalTime, keyframes),
     masks: evaluateCompositionClipMasks(clip.masks, keyframes, compositionLocalTime),

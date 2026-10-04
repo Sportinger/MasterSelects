@@ -4,6 +4,7 @@ import { HUE_SHIFT_PARAMS } from '../../effects/color/remainingColorParams';
 import { GAUSSIAN_BLUR_PARAMS } from '../../effects/blur/gaussian/params';
 import { slitScanParams } from '../../effects/time/slit-scan/parameters';
 import { graphParameterTargets } from './graphParameterTargets';
+import { isTransformParameterPath, transformParameterTargets } from './transformParameterTargets';
 
 export interface ParameterSourceTarget {
   path: string;
@@ -20,11 +21,11 @@ export interface ParameterSourceTarget {
 }
 
 export type ParameterSourceClip = Pick<TimelineClip, 'effects' | 'colorCorrection' | 'nodeGraph' | 'startTime'>
-  & Partial<Pick<TimelineClip, 'transitionSourceMap'>>;
+  & Partial<Pick<TimelineClip, 'transitionSourceMap' | 'id' | 'transform'>>;
 
 /** Explicit consumer capabilities, not a promise that every numeric property is drivable. */
 export function parameterSourceTargets(clip: ParameterSourceClip): ParameterSourceTarget[] {
-  const targets: ParameterSourceTarget[] = [];
+  const targets: ParameterSourceTarget[] = transformParameterTargets(clip.transform);
   for (const version of clip.colorCorrection?.versions ?? []) {
     for (const node of version.nodes.filter(isColorGradeNode)) {
       for (const def of RUNTIME_COLOR_PARAM_DEFS) {
@@ -61,7 +62,7 @@ export function parameterSourceTargets(clip: ParameterSourceClip): ParameterSour
 }
 
 export function getParameterSourceTarget(clip: ParameterSourceClip, property: string): ParameterSourceTarget | undefined {
-  if (!parseColorProperty(property) && !property.startsWith('effect.')) return undefined;
+  if (!parseColorProperty(property) && !property.startsWith('effect.') && !isTransformParameterPath(property)) return undefined;
   return parameterSourceTargets(clip).find(target => target.path === property);
 }
 

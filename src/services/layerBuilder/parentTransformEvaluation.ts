@@ -3,6 +3,7 @@ import type { ClipTransform, Keyframe, TimelineClip } from '../../types';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { composeTransforms } from '../../utils/transformComposition';
 import { applyVideoInspectorTransformBypass } from '../videoInspector/sectionBypass';
+import { applyParameterSourcesToTransform } from '../parameterSources/parameterSourceRendering';
 import {
   evaluateTransitionMappedAnimation,
   type TransitionMappedAnimation,
@@ -129,7 +130,9 @@ export function evaluateParentedClipTransform(
           stabilizationEnabled: clip.videoInspectorSections?.stabilization,
         })
       : baseTransform);
-    const ownTransform = applyVideoInspectorTransformBypass(clip, interpolatedTransform);
+    const ownTransform = applyVideoInspectorTransformBypass(clip, mappedAnimation
+      ? interpolatedTransform
+      : applyParameterSourcesToTransform(clip, keyframes, localTime, interpolatedTransform));
 
     if (clip.id === input.clip.id) {
       targetOwnTransform = ownTransform;

@@ -8,6 +8,7 @@ import { createControlNode, getControlOperator } from './controlOperators';
 import { createParameterSourceEvaluator } from './parameterSourceEvaluation';
 import { getParameterSourceTarget } from './parameterSourceTargets';
 import { parseColorProperty } from '../../types/colorCorrection';
+import { isTransformParameterPath, transformParameterPatch } from './transformParameterTargets';
 
 /** Reset the saved basis without recording a key or disconnecting a source. */
 export function setParameterBaseValue(clipId: string, property: string, value: number): void {
@@ -19,7 +20,9 @@ export function setParameterBaseValue(clipId: string, property: string, value: n
   try {
     const color = parseColorProperty(property);
     if (color) timeline.updateColorNodeParam(clipId, color.versionId, color.nodeId, color.paramName, value);
-    else { const [, effectId, param] = property.split('.'); timeline.updateClipEffect(clipId, effectId, { [param]: value }); }
+    else if (isTransformParameterPath(property)) {
+      timeline.updateClipTransform(clipId, transformParameterPatch(property, value) as Parameters<typeof timeline.updateClipTransform>[1]);
+    } else { const [, effectId, param] = property.split('.'); timeline.updateClipEffect(clipId, effectId, { [param]: value }); }
     timeline.invalidateCache(); renderHostPort.requestRender();
   } finally { if (batch.opened) endBatch(); }
 }
