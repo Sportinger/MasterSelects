@@ -4,13 +4,15 @@ import { FIELD_OPERATORS } from './fieldOperators';
 import { CLOTH_OPERATORS } from './clothOperators';
 import { KNOT_OPERATORS } from './knotOperators';
 import { ROD_OPERATORS } from './rodOperators';
+import { FIBER_MATERIAL_OPERATORS } from './fiberMaterialOperators';
+import { STRAND_CURVES_FORMAT } from './curveFormat';
 
 /**
  * General curve geometry operators. Curves flow between generators and modifiers;
  * number/vector inputs of a modifier are evaluated once per curve point, exactly
  * like image math is evaluated once per pixel (see fields/pointwiseLowering).
  */
-export const STRAND_CURVES_FORMAT = 'strand-curves';
+export { STRAND_CURVES_FORMAT };
 const curves = (id = 'curves', required = false): OperatorPort =>
   ({ id, label: 'Curves', type: 'curves', required, contract: { formats: [STRAND_CURVES_FORMAT] } });
 const number = (id: string, label: string, value: number, min: number, max: number, step = 0.01, animatable = true): OperatorParameter =>
@@ -72,11 +74,13 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
   ...FIELD_OPERATORS,
   ...CLOTH_OPERATORS,
   ...ROD_OPERATORS,
-  operator('render.strands', 'Strand Render', 'Draws the connected curves as thin strands in the shared 3D scene.',
+  ...FIBER_MATERIAL_OPERATORS,
+  operator('render.strands', 'Strand Render', 'Draws the connected curves as thin strands in the shared 3D scene. Color applies when no Fiber Material comes before it; Subdivision sets the linear pieces per curve segment for the path tracer.',
     [curves('curves', true)], [{ id: 'scene', label: 'Scene', type: 'scene' }],
     [number('width', 'Width', 0.004, 0, 1, 0.0005), { id: 'color', label: 'Color', type: 'color', default: '#e8e2d6', animatable: true },
       { id: 'antialiasing', label: 'Antialiasing', type: 'select', default: 'hashed', animatable: false,
-        options: [{ value: 'hashed', label: 'Hashed' }, { value: 'coverage4x', label: '4x Coverage' }, { value: 'analytic', label: 'Analytic' }] }],
+        options: [{ value: 'hashed', label: 'Hashed' }, { value: 'coverage4x', label: '4x Coverage' }, { value: 'analytic', label: 'Analytic' }] },
+      number('subdivision', 'Subdivision', 2, 1, 16, 1, false)],
     { bypass: 'mute' }),
 ];
 

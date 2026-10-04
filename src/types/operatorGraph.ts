@@ -97,4 +97,8 @@ export interface SceneSurfacePlan {
   visible: boolean; geometry: 'source' | 'plane' | 'primitive'; primitiveShape?: ScenePrimitiveShape; applyClipTransform: boolean;
   width: number; height: number; textured: boolean;
   uv: [number, number, number, number]; tint: [number, number, number]; opacity: number;
+  /** Surface response (material.surface); absent: roughness 1, metallic 0, no emission (the plain look). */
+  roughness?: number; metallic?: number;
+  /** Emitted radiance (color × strength) and how much the texture color modulates it (0-1). */
+  emission?: [number, number, number]; emissionFromTexture?: number;
 }

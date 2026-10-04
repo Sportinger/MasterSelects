@@ -1,6 +1,7 @@
 import meshShader from '../../shaders/MeshPass.wgsl?raw';
 import strandShadowSample from '../../shaders/StrandShadowSample.wgsl?raw';
 import { createMeshStrandShadowLayout } from './strandShadowReceiver';
+import { SCENE_COLOR_FORMAT } from '../../sceneRenderer/constants';
 
 const shaderSource = `${strandShadowSample}
 ${meshShader}`;
@@ -78,7 +79,7 @@ export function createMeshPipelineResources(
   };
 
   const fragmentTarget: GPUColorTargetState = {
-    format: 'rgba8unorm',
+    format: SCENE_COLOR_FORMAT,
   };
 
   const opaquePipeline = device.createRenderPipeline({

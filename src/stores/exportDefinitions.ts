@@ -1,3 +1,4 @@
+import { normalizeExportRenderQuality } from '../engine/native3d/pathtrace/contracts/ptTypes';
 import type { ContainerFormat, VideoCodec } from '../engine/export';
 import { getChromiumCompatibleAACBitrate } from '../engine/audio/AudioEncoder';
 import type { DnxhrProfile, FFmpegContainer, FFmpegVideoCodec, HapFormat, ProResProfile } from '../engine/ffmpeg';
@@ -269,6 +270,7 @@ export function sanitizeSettings(input?: Partial<ExportSettings> | null): Export
     imageExportMode: pickEnumValue(input.imageExportMode, IMAGE_EXPORT_MODES, defaults.imageExportMode),
     imageQuality: pickNumber(input.imageQuality, defaults.imageQuality, { min: 0.4, max: 1 }),
     specialContainer: pickEnumValue(input.specialContainer, SPECIAL_CONTAINERS, defaults.specialContainer),
+    ...(input.renderQuality ? { renderQuality: normalizeExportRenderQuality(input.renderQuality) } : {}),
   };
 }
 

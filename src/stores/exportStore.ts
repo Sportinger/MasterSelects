@@ -69,6 +69,8 @@ export interface ExportSettings {
   imageExportMode: ExportImageMode;
   imageQuality: number;
   specialContainer: ExportSpecialContainer;
+  /** 3D scene quality: engine override, raster sub-samples, path traced samples and denoise. Absent: defaults. */
+  renderQuality?: import('../types/renderSettings').ExportRenderQuality;
 }
 
 export interface ExportPreset {

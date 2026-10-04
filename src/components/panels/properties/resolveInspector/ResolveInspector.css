@@ -810,3 +810,10 @@
   }
 
 }
+
+/* Read-only value text in an inspector row (for example a value another node provides). */
+.resolve-inspector-static {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-style: italic;
+}

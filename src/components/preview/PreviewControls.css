@@ -266,3 +266,34 @@
   color: var(--text-on-accent);
 }
 }
+
+.preview-render-engine {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.preview-render-scale-btn {
+  min-width: 24px;
+  padding: 4px 6px;
+}
+
+/* Pointer activation never leaves a native focus ring; keyboard focus keeps the product outline. */
+.preview-edit-btn,
+.preview-scene-toggle-btn,
+.preview-reset-btn {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.preview-edit-btn:focus:not(:focus-visible),
+.preview-scene-toggle-btn:focus:not(:focus-visible),
+.preview-reset-btn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.preview-edit-btn:focus-visible,
+.preview-scene-toggle-btn:focus-visible,
+.preview-reset-btn:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}

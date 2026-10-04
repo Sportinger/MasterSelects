@@ -24,8 +24,11 @@ export const SCENE_OPERATORS: readonly OperatorDefinition[] = [
   op('texture.uv', 'UV Transform', 'Scale and offset source UV coordinates. Chained UV transforms compose in connection order.', [port('uv', 'uv', 'UV')], [port('uv', 'uv', 'UV')], [
     number('scaleU', 'Scale U', 1, -10, 10), number('scaleV', 'Scale V', 1, -10, 10), number('offsetU', 'Offset U', 0, -10, 10), number('offsetV', 'Offset V', 0, -10, 10),
   ]),
-  op('material.surface', 'Surface Material', 'Texture with RGB tint and opacity. Without a texture, uses a solid color.', [port('texture', 'texture', 'Color texture')], [port('material', 'material', 'Material')], [
+  op('material.surface', 'Surface Material', 'Texture with RGB tint and opacity; without a texture, a solid color. Roughness, Metallic and Emission (color, strength, from texture) shape it under scene lights and in the path tracer; the defaults keep the plain look.', [port('texture', 'texture', 'Color texture')], [port('material', 'material', 'Material')], [
     number('red', 'Red', 1, 0, 2), number('green', 'Green', 1, 0, 2), number('blue', 'Blue', 1, 0, 2), number('opacity', 'Opacity', 1, 0, 1),
+    number('roughness', 'Roughness', 1, 0, 1), number('metallic', 'Metallic', 0, 0, 1),
+    number('emissionRed', 'Emission Red', 1, 0, 1), number('emissionGreen', 'Emission Green', 1, 0, 1), number('emissionBlue', 'Emission Blue', 1, 0, 1),
+    number('emissionStrength', 'Emission Strength', 0, 0, 100), number('emissionFromTexture', 'Emission from Texture', 0, 0, 1),
   ]),
   op('material.wireframe', 'Wireframe Material', 'Color tint and opacity for a reconstructed splat mesh.', ['red', 'green', 'blue', 'opacity'].map(id => port(id, 'number', id)), [port('material', 'material', 'Material')], [
     number('red', 'Red', 1, 0, 2), number('green', 'Green', 1, 0, 2), number('blue', 'Blue', 1, 0, 2), number('opacity', 'Opacity', 0.5, 0, 1),

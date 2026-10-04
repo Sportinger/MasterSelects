@@ -137,6 +137,10 @@ export const ProjectModelMaterialSettingsFields = {
   "uvScaleY": { class: 'content', owner: 'timeline' },
   "uvOffsetX": { class: 'content', owner: 'timeline' },
   "uvOffsetY": { class: 'content', owner: 'timeline' },
+  "roughness": { class: 'content', owner: 'timeline' },
+  "metallic": { class: 'content', owner: 'timeline' },
+  "emissionColor": { class: 'content', owner: 'timeline' },
+  "emissionStrength": { class: 'content', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<ProjectModelMaterialSettings>;
 
 export const ProjectModelSequenceDataFields = {
@@ -176,6 +180,11 @@ export const ProjectSceneCameraSettingsFields = {
   "far": { class: 'content', owner: 'timeline' },
   "resolutionWidth": { class: 'content', owner: 'timeline' },
   "resolutionHeight": { class: 'content', owner: 'timeline' },
+  "exposure": { class: 'content', owner: 'timeline' },
+  "toneMapping": { class: 'content', owner: 'timeline' },
+  "fStop": { class: 'content', owner: 'timeline' },
+  "focusDistance": { class: 'content', owner: 'timeline' },
+  "shutterAngle": { class: 'content', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<ProjectSceneCameraSettings>;
 
 export const ProjectSceneSegmentFields = {

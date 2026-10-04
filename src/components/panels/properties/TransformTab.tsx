@@ -26,6 +26,7 @@ import {
   fullFrameFocalLengthMmToFov,
 } from '../../../utils/cameraLens';
 import { CameraSettingsSection } from './transformTab/CameraSettingsSection';
+import { CameraLensSection } from './transformTab/CameraLensSection';
 import { LiveInputTab } from './LiveInputTab';
 import { OptionsSection } from './transformTab/OptionsSection';
 import { ResolveTransformSection } from './transformTab/ResolveTransformSection';
@@ -474,6 +475,20 @@ export function TransformTab({
           onCameraFovChange={handleCameraFovChange}
           onCameraNearChange={handleCameraNearChange}
           onResetLens={handleResetCameraLens}
+        />
+      )}
+      {usesCameraControls && (
+        <CameraLensSection
+          clipId={clipId}
+          settings={cameraSettings}
+          onBatchEnd={handleBatchEnd}
+          onBatchStart={handleBatchStart}
+          onPropertyChange={handlePropertyChange}
+          onToneMappingChange={(toneMapping) => {
+            if (clip?.source?.type === 'camera') {
+              updateClip(clipId, { source: { ...clip.source, cameraSettings: { ...DEFAULT_SCENE_CAMERA_SETTINGS, ...clip.source.cameraSettings, toneMapping } } });
+            }
+          }}
         />
       )}
 

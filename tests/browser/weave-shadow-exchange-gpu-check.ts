@@ -1,3 +1,4 @@
+import { SceneColorReadback } from './sceneColorReadback';
 import { StrandPass } from '../../src/engine/native3d/passes/StrandPass';
 import { MeshPass } from '../../src/engine/native3d/passes/MeshPass';
 import { ModelRuntimeCache } from '../../src/engine/native3d/assets/ModelRuntimeCache';
@@ -32,9 +33,8 @@ async function check() {
       render: { nodeId: 'render', width: 0.02, color: '#e8e2d6', profile: { plies: 3, fibers: 4, radius: 0.04, plyTwist: 3, fiberTwist: -6 } } } } };
   const strandPass = new StrandPass(), meshPass = new MeshPass(), models = new ModelRuntimeCache();
   meshPass.initialize(device, 'depth24plus');
-  const color = device.createTexture({ size: [SIZE, SIZE], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+  const target = new SceneColorReadback(device, SIZE, SIZE), color = target.texture;
   const depth = device.createTexture({ size: [SIZE, SIZE], format: 'depth24plus', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
-  const readback = device.createBuffer({ size: SIZE * SIZE * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
 
   async function frame(options: { strands: boolean; receive: boolean; casters: ScenePrimitiveLayer[]; meshes: ScenePrimitiveLayer[] }) {
     device.pushErrorScope('validation');
@@ -47,11 +47,9 @@ async function check() {
     if (!meshPass.renderPrimitivePass(device, encoder, color.createView(), depth.createView(), options.meshes, camera, [], [light], models,
       temporary, false, options.receive ? shadows.receiver : null)) throw new Error('Mesh pass refused the frame');
     if (!strandPass.render(device, encoder, color.createView(), depth.createView(), shadows, camera, temporary)) throw new Error('Strand pass refused the frame');
-    encoder.copyTextureToBuffer({ texture: color }, { buffer: readback, bytesPerRow: SIZE * 4 }, [SIZE, SIZE]);
+    target.encodeCopy(encoder);
     device.queue.submit([encoder.finish()]);
-    await readback.mapAsync(GPUMapMode.READ);
-    const rgba = Uint8Array.from(new Uint8Array(readback.getMappedRange()));
-    readback.unmap();
+    const rgba = Uint8Array.from(await target.read());
     temporary.forEach(buffer => buffer.destroy());
     const error = await device.popErrorScope();
     if (error) throw new Error(error.message);
@@ -100,7 +98,7 @@ async function check() {
     keyLightReceiver: false };
   } finally {
     await device.queue.onSubmittedWorkDone();
-    strandPass.dispose(); meshPass.dispose(); color.destroy(); depth.destroy(); readback.destroy();
+    strandPass.dispose(); meshPass.dispose(); depth.destroy(); target.destroy();
     device.destroy();
   }
 }

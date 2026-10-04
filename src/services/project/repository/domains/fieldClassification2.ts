@@ -393,6 +393,7 @@ export const ProjectCompositionFields = {
   "captionComp": { class: 'content', owner: 'timeline' },
   "annotations": { class: 'content', owner: 'timeline' },
   "multicam": { class: 'content', owner: 'timeline' },
+  "renderSettings": { class: 'content', owner: 'timeline' },
   "tracks": { class: 'content', owner: 'timeline' },
   "clips": { class: 'content', owner: 'timeline' },
   "videoBakeRegions": { class: 'content', owner: 'timeline' },
@@ -485,6 +486,7 @@ export const ProjectExportSettingsFields = {
   "imageExportMode": { class: 'content', owner: 'export' },
   "imageQuality": { class: 'content', owner: 'export' },
   "specialContainer": { class: 'content', owner: 'export' },
+  "renderQuality": { class: 'content', owner: 'export' },
 } as const satisfies FieldOwnershipMap<ProjectExportSettings>;
 
 export const ProjectExportStoreDataFields = {

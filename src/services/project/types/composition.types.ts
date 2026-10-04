@@ -222,6 +222,7 @@ export interface ProjectComposition {
   captionComp?: CaptionCompositionLink;
   annotations?: SourceAnnotation[];
   multicam?: import('../../../types/multicam').CompositionMulticam;
+  renderSettings?: import('../../../types/renderSettings').CompositionRenderSettings;
 
   // Tracks and clips
   tracks: ProjectTrack[];

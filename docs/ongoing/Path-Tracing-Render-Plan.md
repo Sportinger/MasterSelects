@@ -484,8 +484,8 @@ Schritten reicht es, Diffs zu lesen.
 
 | Phase | Status | Commit | Notiz |
 |---|---|---|---|
-| 0 Grundlagen | erledigt | Phase-0-Commit | Verträge in `pathtrace/contracts/`, `StrandFiberGeometry.wgsl` extrahiert, Prüfseite `pathtrace-check.html`; Weave-Prüfseiten unverändert grün |
-| 1 Grundbausteine | offen | – | – |
+| 0 Grundlagen | erledigt | `9030f149` | Verträge in `pathtrace/contracts/`, `StrandFiberGeometry.wgsl` extrahiert, Prüfseite `pathtrace-check.html`; Weave-Prüfseiten unverändert grün |
+| 1 Grundbausteine | erledigt | Phase-1-Commit | HDR-Szene (`rgba16float`) mit Tone-Map-Pass; Standard + 0 EV ist bitgleich zum alten 8-Bit-Ziel (Weave-Prüfseiten zeigen identische Zahlen). Splat-Pipelines sind formatabhängig. Composition `renderSettings`, Kamera-Linse (Exposure, Tone Mapping, f-Stop, Fokus, Shutter, keyframebar), Export Render Quality, alles persistiert. Faser-Emission, GPU-LBVH mit Refit und SAH-Schätzung (Knoten für Knoten gleich zur CPU-Referenz, `pathtrace-kernels-check.html`), Sobol/Owen und Blue Noise, Chiang-BSDF (White Furnace grün), GGX/Diffus. Fiber Material als Render-Eigenschaft statt Kurvenstufe, damit die GPU-Ketten für Stoff und Seile erhalten bleiben; das Raster liest Farbe und Rauheit pro Punkt. `material.surface` mit Roughness, Metallic und Emission. Befund: Hidden-Primitive brauchen in der Traversierung einen expliziten Leer-Test der Bounds. |
 | 2 Path-Tracing-Kern | offen | – | – |
 | 3 Echtzeit, Export, Look | offen | – | – |
 | 4 Vorschau fertig und Leistung | offen | – | – |

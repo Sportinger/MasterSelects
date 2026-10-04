@@ -1,6 +1,8 @@
 import { StrandCoverageTargets } from '../../src/engine/native3d/passes/StrandCoverageTargets';
 import { STRAND_SCENE_SHADER } from '../../src/engine/native3d/passes/StrandPass';
 import type { SceneCamera, SceneStrandLayer } from '../../src/engine/scene/types';
+import { SCENE_COLOR_FORMAT } from '../../src/engine/native3d/sceneRenderer/constants';
+import { SceneColorReadback } from './sceneColorReadback';
 
 /** Exact GPU checks of depth seeding, coverage resolve, opacity and resource reuse. */
 async function check() {
@@ -27,7 +29,7 @@ async function check() {
     { binding: 0, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
   ] });
   const pipeline = device.createRenderPipeline({ layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
-    vertex: { module, entryPoint: 'vertex' }, fragment: { module, entryPoint: 'fragment', targets: [{ format: 'rgba8unorm' }] },
+    vertex: { module, entryPoint: 'vertex' }, fragment: { module, entryPoint: 'fragment', targets: [{ format: SCENE_COLOR_FORMAT }] },
     depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less-equal' },
     multisample: { count: 4, alphaToCoverageEnabled: true } });
   const settings = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
@@ -50,9 +52,9 @@ async function check() {
     device.pushErrorScope('validation');
     const texture = (format: GPUTextureFormat) => device.createTexture({ size: [width, height], format,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC });
-    const color = texture('rgba8unorm'), depth = texture('depth24plus'), depthCopy = texture('r32float');
+    const target = new SceneColorReadback(device, width, height), color = target.texture;
+    const depth = texture('depth24plus'), depthCopy = texture('r32float');
     const stride = Math.ceil(width * 4 / 256) * 256;
-    const pixels = device.createBuffer({ size: stride * height, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     const depths = device.createBuffer({ size: stride * height, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
     device.queue.writeBuffer(settings, 0, Float32Array.from([1, 0, 0, alpha, 0.25, 0, 0, 0]));
     const encoder = device.createCommandEncoder();
@@ -68,20 +70,16 @@ async function check() {
     depthPass.setPipeline(depthPipeline);
     depthPass.setBindGroup(0, device.createBindGroup({ layout: depthLayout, entries: [{ binding: 0, resource: depth.createView() }] }));
     depthPass.draw(3); depthPass.end();
-    encoder.copyTextureToBuffer({ texture: color }, { buffer: pixels, bytesPerRow: stride }, [width, height]);
+    target.encodeCopy(encoder);
     encoder.copyTextureToBuffer({ texture: depthCopy }, { buffer: depths, bytesPerRow: stride }, [width, height]);
     device.queue.submit([encoder.finish()]);
-    await Promise.all([pixels.mapAsync(GPUMapMode.READ), depths.mapAsync(GPUMapMode.READ)]);
-    const rgba = new Uint8Array(width * height * 4), z = new Float32Array(width * height);
-    const raw = new Uint8Array(pixels.getMappedRange()), rawZ = new Float32Array(depths.getMappedRange());
-    for (let y = 0; y < height; y++) {
-      rgba.set(raw.subarray(y * stride, y * stride + width * 4), y * width * 4);
-      z.set(rawZ.subarray(y * stride / 4, y * stride / 4 + width), y * width);
-    }
-    pixels.unmap(); depths.unmap();
+    const [rgba] = await Promise.all([target.read(), depths.mapAsync(GPUMapMode.READ)]);
+    const z = new Float32Array(width * height), rawZ = new Float32Array(depths.getMappedRange());
+    for (let y = 0; y < height; y++) z.set(rawZ.subarray(y * stride / 4, y * stride / 4 + width), y * width);
+    depths.unmap();
     const error = await device.popErrorScope();
-    [color, depth, depthCopy].forEach(value => value.destroy());
-    [pixels, depths].forEach(value => value.destroy());
+    [depth, depthCopy].forEach(value => value.destroy());
+    target.destroy(); depths.destroy();
     if (error) throw new Error(error.message);
     return { rgba, z, width, height };
   }
@@ -141,11 +139,9 @@ async function checkStrands(device: GPUDevice) {
         profile: { plies: 3, fibers: 5, radius: 0.055, plyTwist: 3, fiberTwist: -7 },
         flyaways: { density: 4, length: 0.12, lift: 2, hair: 0.4, seed: 3 } },
     } } };
-  const color = device.createTexture({ size: [width, height], format: 'rgba8unorm',
-    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+  const target = new SceneColorReadback(device, width, height), color = target.texture;
   const depth = device.createTexture({ size: [width, height], format: 'depth24plus',
     usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
-  const readback = device.createBuffer({ size: width * height * 4, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
   async function frame(hidden: boolean, quality: boolean) {
     const render = layer.strands.program.render!;
     if (quality) render.antialiasing = 'coverage4x'; else delete render.antialiasing;
@@ -160,11 +156,9 @@ async function checkStrands(device: GPUDevice) {
     if (!renderer.render(device, encoder, color.createView(), depth.createView(), shadows, camera, temporary)) {
       throw new Error('Strand pass refused the frame');
     }
-    encoder.copyTextureToBuffer({ texture: color }, { buffer: readback, bytesPerRow: width * 4 }, [width, height]);
+    target.encodeCopy(encoder);
     device.queue.submit([encoder.finish()]);
-    await readback.mapAsync(GPUMapMode.READ);
-    const rgba = Uint8Array.from(new Uint8Array(readback.getMappedRange()));
-    readback.unmap();
+    const rgba = await target.read();
     temporary.forEach(buffer => buffer.destroy());
     const error = await device.popErrorScope();
     if (error) throw new Error(error.message);
@@ -188,7 +182,7 @@ async function checkStrands(device: GPUDevice) {
       foregroundOcclusion: true, zeroOpacity: true, zeroWidth: true, flyaways: true };
   } finally {
     await device.queue.onSubmittedWorkDone();
-    renderer.dispose(); color.destroy(); depth.destroy(); readback.destroy();
+    renderer.dispose(); target.destroy(); depth.destroy();
   }
 }
 

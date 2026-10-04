@@ -120,7 +120,7 @@ export const PT_MAX_LIGHTS = 256;
  */
 export const PT_MATERIAL = ptStruct('PtMaterial', [['header', 'vec4f'], ['c0', 'vec4f'], ['c1', 'vec4f'], ['c2', 'vec4f'], ['c3', 'vec4f']]);
 export const PT_MATERIAL_KIND = { fiber: 1, surface: 2 } as const;
-export const PT_MATERIAL_FLAG = { colorField: 1, melaninField: 2, roughnessField: 4, flyawayFuzz: 8 } as const;
+export const PT_MATERIAL_FLAG = { colorField: 1, melaninField: 2, roughnessField: 4, flyawayFuzz: 8, primitiveColor: 16 } as const;
 export const PT_MAX_MATERIALS = 512;
 
 /** Frame uniforms; see `writePtFrame` in runtime/ptFrameUniforms.ts for the meaning of each lane. */
