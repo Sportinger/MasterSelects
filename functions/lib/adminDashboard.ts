@@ -126,7 +126,10 @@ function estimateMrr(rows: SubscriptionBreakdownRow[]): number {
     .reduce((sum, row) => sum + (prices[row.plan_id] ?? 0) * asNumber(row.count), 0);
 }
 
-export async function getAdminDashboardSnapshot(context: AppContext): Promise<AdminDashboardSnapshot> {
+export async function getAdminDashboardSnapshot(
+  context: AppContext,
+  options: { runtimeSince?: string | null } = {},
+): Promise<AdminDashboardSnapshot> {
   const db = context.env.DB;
   const [
     summary,
@@ -233,7 +236,7 @@ export async function getAdminDashboardSnapshot(context: AppContext): Promise<Ad
     listAdminCreditClaims(db, context.request, context.env),
     getCloudflareAdminSnapshot(context.env),
     getProductAnalyticsAdminSnapshot(db),
-    getDiagnosticsAdminSnapshot(db),
+    getDiagnosticsAdminSnapshot(db, options),
   ]);
 
   const totalUsers = asNumber(summary?.total_users);

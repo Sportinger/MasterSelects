@@ -16,6 +16,8 @@ The console lives in the separate private `masterselects-social` repository and 
 
 The response contains aggregate counts and operational summaries such as registered users, paying customers, conversion, open credit links, recent activity, billing totals, and Cloudflare status. It excludes customer email addresses, credit-claim links, per-session analytics, deployment URLs, commit messages, and hashes.
 
+An optional `?since=<ISO timestamp>` sets an operations cut: the client-runtime aggregates (totals, daily trend, breakdowns, error groups and recent errors) start there instead of their usual 24-hour, 7-day and 14-day bounds, and the response echoes it as `diagnostics.clientRuntime.since`. Cuts in the future, older than 14 days, or not in ISO UTC form are ignored. Fassandra sends its current cut so its error views and repair loop see only what happened after it.
+
 The browser never receives the shared token. It calls Fassandra's same-origin `/social/api/stats` route, and the Fassandra server performs the authenticated server-to-server request to MasterSelects.
 
 ```text

@@ -164,4 +164,23 @@ describe('runtime traffic separation', () => {
     expect(result.buildComparison?.builds[0].errorSessions).toBe(2);
     expect(sqlite.prepare('SELECT COUNT(*) AS n FROM app_diagnostic_events').get()?.n).toBe(9);
   });
+  it('starts every runtime window at an operations cut and reports it', async () => {
+    for (const name of ['id', 'stage', 'failure_code', 'error_name', 'app_version', 'country',
+      'device_class', 'platform', 'browser', 'occurred_at', 'user_id', 'stack', 'device_id', 'page_path']) {
+      sqlite.exec(`ALTER TABLE app_diagnostic_events ADD COLUMN ${name} TEXT`);
+    }
+    const cut = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    receivedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    failure(currentBuild, 'before-cut', 'old-session', 5);
+    receivedAt = new Date().toISOString();
+    failure(currentBuild, 'after-cut', 'new-session', 1);
+    const { clientRuntime: full } = await getDiagnosticsAdminSnapshot(db);
+    expect(full.since).toBeNull();
+    expect(full.topErrors7d.map(error => error.fingerprint).toSorted()).toEqual(['after-cut', 'before-cut']);
+    const { clientRuntime: result } = await getDiagnosticsAdminSnapshot(db, { runtimeSince: cut });
+    expect(result.since).toBe(cut);
+    expect(result.stats).toMatchObject({ events7d: 1, sessions7d: 1, occurrences7d: 1 });
+    expect(result.topErrors7d.map(error => error.fingerprint)).toEqual(['after-cut']);
+    expect(result.recentErrors.map(error => error.fingerprint)).toEqual(['after-cut']);
+  });
 });

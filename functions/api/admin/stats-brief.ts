@@ -1,5 +1,6 @@
 import { requireAdminSession } from '../../lib/adminAuth';
 import { getAdminDashboardSnapshot } from '../../lib/adminDashboard';
+import { parseRuntimeSince } from '../../lib/diagnosticsAdmin';
 import { json, methodNotAllowed } from '../../lib/db';
 import type { AppContext, AppRouteHandler } from '../../lib/env';
 import { hasValidSocialAgentToken } from '../../lib/socialCenter';
@@ -13,7 +14,7 @@ export const onRequest: AppRouteHandler = async (context: AppContext): Promise<R
   }
 
   try {
-    const dashboard = await getAdminDashboardSnapshot(context);
+    const dashboard = await getAdminDashboardSnapshot(context, { runtimeSince: parseRuntimeSince(context.request.url) });
     return json({ stats: createSocialStatsBrief(dashboard) }, {
       headers: { 'Cache-Control': 'no-store' },
     });

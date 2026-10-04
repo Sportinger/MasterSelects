@@ -183,6 +183,8 @@ export interface DiagnosticsAdminSnapshot {
     };
     daily14d: Array<{ day: string; events: number; sessions: number }>;
     recentErrors: DiagnosticRecentError[];
+    /** Operations cut the runtime windows start at (never before their 24h/7d/14d bounds). */
+    since?: string | null;
     stats: {
       excludedAutomatedEvents7d?: number;
       excludedAutomatedSessions7d?: number;
@@ -297,6 +299,17 @@ function clip(value: string | null, maxLength: number): string | null {
  * must be an ISO string too. SQLite's `datetime('now')` uses a space and
  * compares one day too coarsely against ISO values.
  */
+const MAX_CUT_AGE_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** Optional operations cut (`?since=<ISO>`): runtime windows start there, never earlier than usual. */
+export function parseRuntimeSince(url: string, now = Date.now()): string | null {
+  const value = new URL(url).searchParams.get('since');
+  if (!value || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/.test(value)) return null;
+  const at = Date.parse(value);
+  if (!Number.isFinite(at) || at > now || at < now - MAX_CUT_AGE_MS) return null;
+  return new Date(at).toISOString();
+}
+
 function sinceIso(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
@@ -418,10 +431,18 @@ function runtimeBreakdown(db: AppD1Database, since: string, expression: string, 
   ).bind(since).all<CountRow>();
 }
 
-async function loadClientRuntime(db: AppD1Database): Promise<DiagnosticsAdminSnapshot['clientRuntime']> {
-  const since24h = sinceIso(1);
-  const since7d = sinceIso(7);
-  const since14d = sinceIso(14);
+async function loadClientRuntime(
+  db: AppD1Database,
+  cut: string | null = null,
+): Promise<DiagnosticsAdminSnapshot['clientRuntime']> {
+  // ISO timestamps compare lexicographically; a cut only narrows each window.
+  const bounded = (days: number) => {
+    const window = sinceIso(days);
+    return cut && cut > window ? cut : window;
+  };
+  const since24h = bounded(1);
+  const since7d = bounded(7);
+  const since14d = bounded(14);
   const [automated, summary, daily, sources, failureCodes, platforms, browsers, builds, components, pages, recent, top, buildComparison] =
     await Promise.all([
       db.prepare(`SELECT COUNT(*) AS events, COUNT(DISTINCT session_id) AS sessions
@@ -457,9 +478,9 @@ async function loadClientRuntime(db: AppD1Database): Promise<DiagnosticsAdminSna
                 COALESCE(repeat_count, 1) AS repeat_count, page_path, session_id, user_id,
                 platform, device_class, browser, app_version, country, occurred_at, received_at, context_json
          FROM app_diagnostic_events
-         WHERE kind = 'client_runtime' AND ${productFailureDiagnosticTrafficSql}
+         WHERE kind = 'client_runtime' AND ${productFailureDiagnosticTrafficSql} AND received_at >= ?
          ORDER BY received_at DESC LIMIT ${RECENT_ERROR_LIMIT}`,
-      ).all<RecentErrorRow>(),
+      ).bind(cut ?? '').all<RecentErrorRow>(),
       db.prepare(
         `SELECT fingerprint,
                 COUNT(*) AS events,
@@ -523,6 +544,7 @@ async function loadClientRuntime(db: AppD1Database): Promise<DiagnosticsAdminSna
       };
     }),
     buildComparison,
+    since: cut,
     stats: {
       excludedAutomatedEvents7d: asNumber(automated?.events),
       excludedAutomatedSessions7d: asNumber(automated?.sessions),
@@ -619,10 +641,13 @@ async function loadKernel(db: AppD1Database): Promise<DiagnosticsAdminSnapshot['
   };
 }
 
-export async function getDiagnosticsAdminSnapshot(db: AppD1Database): Promise<DiagnosticsAdminSnapshot> {
+export async function getDiagnosticsAdminSnapshot(
+  db: AppD1Database,
+  options: { runtimeSince?: string | null } = {},
+): Promise<DiagnosticsAdminSnapshot> {
   const [aiGeneration, clientRuntime, kernel] = await Promise.all([
     loadAiGeneration(db).catch(() => EMPTY.aiGeneration),
-    loadClientRuntime(db).catch(() => EMPTY.clientRuntime),
+    loadClientRuntime(db, options.runtimeSince ?? null).catch(() => EMPTY.clientRuntime),
     loadKernel(db).catch(() => EMPTY.kernel),
   ]);
   return { aiGeneration, clientRuntime, kernel };
