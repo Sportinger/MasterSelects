@@ -1,0 +1,40 @@
+.export-frame-sampling {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.export-frame-sampling-stages {
+  display: flex;
+  gap: 10px;
+  font-size: var(--font-sm);
+  color: var(--text-tertiary, var(--text-secondary));
+}
+
+.export-frame-sampling-stage.done {
+  color: var(--text-secondary);
+}
+
+.export-frame-sampling-stage.active {
+  color: var(--text-primary);
+}
+
+.export-frame-sampling-stage + .export-frame-sampling-stage::before {
+  content: '→';
+  margin-right: 10px;
+  color: var(--text-tertiary, var(--text-secondary));
+}
+
+.export-frame-sampling-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.export-frame-sampling-fill {
+  height: 100%;
+  background: var(--accent);
+  opacity: 0.7;
+  transition: width var(--transition-fast) ease-out;
+}

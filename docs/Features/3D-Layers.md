@@ -207,6 +207,17 @@ Light clips can be created from the Media Panel via `+ Add > 3D > Light` and dra
 - The Transform tab controls the light position and rotation; panel lights emit along their local negative Z direction.
 - The shadow toggle is persisted and shadow strength is keyframeable; real shadow-map rendering is unavailable.
 
+### Render Engine
+
+The preview toolbar switches the active composition between **Raster** and **Path
+Traced** and sets the path tracer's render scale (½, ⅔, 1). The scene renders in
+HDR (`rgba16float`) for both engines and is tone mapped when it enters the
+compositor (Standard, AgX, ACES, Neutral; Auto picks Standard for raster, AgX for
+path traced). The camera's **Physical Camera** section adds exposure, tone mapping,
+f-stop, focus distance and shutter angle. Environment lights with an HDRI light
+raster meshes and strands by spherical-harmonics irradiance. Details:
+[Path Tracing](./Path-Tracing.md).
+
 ## Gaussian Splats
 
 Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas/splat-transform` reader path. Supported scene formats include `.ply`, `.compressed.ply`, `.splat`, `.ksplat`, `.spz`, `.sog`, `.lcc`, and zipped SOG-style `.zip` payloads. Plain point-cloud PLY files without gaussian scale properties fall back to the local point-cloud conversion path.

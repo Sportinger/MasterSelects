@@ -6,7 +6,7 @@ import { AudioExportPipeline, DEFAULT_AUDIO_BITRATE, type EncodedAudioResult } f
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
 import { useTimelineStore } from '../../stores/timeline';
 import { useMediaStore } from '../../stores/mediaStore';
-import type { FullExportSettings, ExportProgress, ExportMode, ExportClipState } from './types';
+import type { FullExportSettings, ExportProgress, ExportMode, ExportClipState, ExportFrameSampling } from './types';
 import { getFrameTolerance, getKeyframeInterval } from './types';
 import { VideoEncoderWrapper } from './VideoEncoderWrapper';
 import { prepareClipsForExport, cleanupExportMode } from './ClipPreparation';
@@ -451,6 +451,16 @@ export class FrameExporter {
             durationMicros,
             frameStepSeconds: 1 / fps,
             framesRemaining: totalFrames - frame,
+            frameIndex: frame,
+            renderQuality: this.settings.renderQuality,
+            layersAtTime: async (subTime) => {
+              const subContext = createExportFrameContext(subTime, fps, frameTolerance, width, height,
+                this.parameterSnapshot!.timeline, this.parameterSnapshot!.media);
+              await seekAllClipsToTime(subContext, this.clipStates, this.parallelDecoder, this.useParallelDecode);
+              await waitForAllVideosReady(subContext, this.clipStates, this.parallelDecoder, this.useParallelDecode);
+              return buildLayersAtTime(subContext, this.clipStates, this.parallelDecoder, this.useParallelDecode);
+            },
+            onSampling: (sampling) => onProgress(this.samplingProgress(frame, totalFrames, time, frameStart, sampling, shouldExportAudio)),
           });
         } catch (error) {
           if (error instanceof ExportFrameCaptureUnavailableError) {
@@ -583,6 +593,21 @@ export class FrameExporter {
       releaseExportRunResources(this.activeExportRunId);
       this.activeExportRunId = null;
     }
+  }
+
+  /** Progress while a path traced frame accumulates: the frame's own share and an ETA from finished frames. */
+  private samplingProgress(frame: number, totalFrames: number, time: number, frameStart: number, sampling: ExportFrameSampling,
+    audio: boolean | undefined): ExportProgress {
+    const audioWeight = audio ? 5 : 0;
+    const within = sampling.stage === 'sampling' ? 0.9 * sampling.samples / Math.max(1, sampling.targetSamples) : sampling.stage === 'denoising' ? 0.95 : 0.99;
+    const elapsed = performance.now() - frameStart;
+    const perFrame = this.frameTimes.length ? this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length : elapsed / Math.max(within, 0.05);
+    return {
+      phase: 'video', currentFrame: frame + 1, totalFrames, currentTime: time, frameSampling: sampling,
+      percent: audioWeight + ((frame + within) / totalFrames) * (100 - audioWeight),
+      estimatedTimeRemaining: ((totalFrames - frame - 1) * perFrame + Math.max(0, perFrame - elapsed)) / 1000,
+      ...(audio ? { audioPhase: 'complete' as const, audioPercent: 100 } : {}),
+    };
   }
 
   private reportExportRuntimeState(runId: string, force = false): void {

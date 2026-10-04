@@ -6,6 +6,10 @@ import { validateFlockDefinition } from '../flock/graph/flockGraphValidation';
 import { isWorkerGpuNativeAudioInputs, type WorkerGpuNativeAudioInput } from './workerGpuNativeAudioContract';
 import type { GeometryProgram } from '../operators/geometry/geometryProgram';
 import { isGeometryProgram } from '../operators/geometry/geometryProgramValidation';
+import { normalizeCameraLens, normalizeCompositionRenderSettings, type CompositionRenderSettings } from '../../types/renderSettings';
+
+/** A value equals its normalized form: every key known, every number in range. */
+const normalized = (value: unknown, normalize: (input: unknown) => unknown) => JSON.stringify(normalize(value)) === JSON.stringify(value);
 
 interface NativeLayerBase {
   readonly layerId: string;
@@ -43,6 +47,8 @@ export interface WorkerGpuNativeScenePayload {
   };
   readonly layers: readonly WorkerGpuNativeSceneLayer[];
   readonly assets?: readonly WorkerGpuNativeSceneAsset[];
+  /** The composition's render engine and preview quality (path tracing plan 2.5); absent: raster. */
+  readonly renderSettings?: CompositionRenderSettings;
 }
 
 const meshes = new Set(['cube', 'sphere', 'plane', 'cylinder', 'torus', 'cone']);
@@ -57,7 +63,8 @@ const size = (v: unknown, w: number, h: number) => record(v) && keys(v, ['width'
 
 /** Called only after the enclosing frame stack's bounded plain-data check. */
 export function isWorkerGpuNativeScenePayload(value: unknown): value is WorkerGpuNativeScenePayload {
-  if (!record(value) || !keys(value, ['kind', 'version', 'width', 'height', 'timelineTime', 'camera', 'layers', 'assets'])
+  if (!record(value) || !keys(value, ['kind', 'version', 'width', 'height', 'timelineTime', 'camera', 'layers', 'assets', 'renderSettings'])
+    || (value.renderSettings !== undefined && !normalized(value.renderSettings, normalizeCompositionRenderSettings))
     || value.kind !== 'native-scene' || value.version !== 1 || !finite(value.timelineTime)
     || !Number.isSafeInteger(value.width) || !Number.isSafeInteger(value.height)
     || (value.width as number) < 1 || (value.height as number) < 1) return false;
@@ -76,7 +83,8 @@ export function isWorkerGpuNativeScenePayload(value: unknown): value is WorkerGp
   }
   const c = value.camera;
   if (!record(c) || !keys(c, ['viewMatrix', 'projectionMatrix', 'cameraPosition', 'cameraTarget', 'cameraUp',
-    'fov', 'near', 'far', 'viewport', 'referenceSize', 'applyDefaultDistance', 'projection', 'orthographicScale'])
+    'fov', 'near', 'far', 'viewport', 'referenceSize', 'applyDefaultDistance', 'projection', 'orthographicScale', 'lens'])
+    || (c.lens !== undefined && !normalized(c.lens, normalizeCameraLens))
     || !matrix(c.viewMatrix) || !matrix(c.projectionMatrix) || !vector(c.cameraPosition)
     || !vector(c.cameraTarget) || !vector(c.cameraUp) || !finite(c.fov) || c.fov <= 0 || c.fov >= 180
     || !finite(c.near) || c.near <= 0 || !finite(c.far) || c.far <= c.near

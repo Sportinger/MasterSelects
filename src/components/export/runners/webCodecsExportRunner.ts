@@ -23,6 +23,7 @@ export interface WebCodecsExportRunnerInput {
   onProgress: (progress: ExportProgress) => void;
   onTimelineProgress: (percent: number, currentTime: number) => void;
   frameDecorator?: ExportRenderFrameDecorator;
+  renderQuality?: import('../../../types/renderSettings').ExportRenderQuality;
 }
 
 export interface WebCodecsExportRunnerResult {
@@ -50,6 +51,7 @@ export async function runWebCodecsExport(
     normalizeAudio: input.normalizeAudio,
     exportMode: input.exportMode,
     frameDecorator: input.frameDecorator,
+    renderQuality: input.renderQuality,
   });
   input.onExporter(exporter);
 

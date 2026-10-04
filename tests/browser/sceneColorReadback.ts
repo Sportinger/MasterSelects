@@ -17,7 +17,12 @@ export class SceneColorReadback {
   private readonly buffer: GPUBuffer;
   private readonly bytesPerRow: number;
 
-  constructor(private readonly device: GPUDevice, private readonly width: number, private readonly height: number) {
+  private readonly device: GPUDevice;
+  private readonly width: number;
+  private readonly height: number;
+
+  constructor(device: GPUDevice, width: number, height: number) {
+    this.device = device; this.width = width; this.height = height;
     this.texture = device.createTexture({ size: [width, height], format: SCENE_COLOR_FORMAT,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING });
     this.bytesPerRow = Math.ceil(width * 8 / 256) * 256;

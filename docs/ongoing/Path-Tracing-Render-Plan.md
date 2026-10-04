@@ -485,9 +485,9 @@ Schritten reicht es, Diffs zu lesen.
 | Phase | Status | Commit | Notiz |
 |---|---|---|---|
 | 0 Grundlagen | erledigt | `9030f149` | Verträge in `pathtrace/contracts/`, `StrandFiberGeometry.wgsl` extrahiert, Prüfseite `pathtrace-check.html`; Weave-Prüfseiten unverändert grün |
-| 1 Grundbausteine | erledigt | Phase-1-Commit | HDR-Szene (`rgba16float`) mit Tone-Map-Pass; Standard + 0 EV ist bitgleich zum alten 8-Bit-Ziel (Weave-Prüfseiten zeigen identische Zahlen). Splat-Pipelines sind formatabhängig. Composition `renderSettings`, Kamera-Linse (Exposure, Tone Mapping, f-Stop, Fokus, Shutter, keyframebar), Export Render Quality, alles persistiert. Faser-Emission, GPU-LBVH mit Refit und SAH-Schätzung (Knoten für Knoten gleich zur CPU-Referenz, `pathtrace-kernels-check.html`), Sobol/Owen und Blue Noise, Chiang-BSDF (White Furnace grün), GGX/Diffus. Fiber Material als Render-Eigenschaft statt Kurvenstufe, damit die GPU-Ketten für Stoff und Seile erhalten bleiben; das Raster liest Farbe und Rauheit pro Punkt. `material.surface` mit Roughness, Metallic und Emission. Befund: Hidden-Primitive brauchen in der Traversierung einen expliziten Leer-Test der Bounds. |
-| 2 Path-Tracing-Kern | offen | – | – |
-| 3 Echtzeit, Export, Look | offen | – | – |
+| 1 Grundbausteine | erledigt | `cfd57ec3` | HDR-Szene (`rgba16float`) mit Tone-Map-Pass; Standard + 0 EV ist bitgleich zum alten 8-Bit-Ziel (Weave-Prüfseiten zeigen identische Zahlen). Splat-Pipelines sind formatabhängig. Composition `renderSettings`, Kamera-Linse (Exposure, Tone Mapping, f-Stop, Fokus, Shutter, keyframebar), Export Render Quality, alles persistiert. Faser-Emission, GPU-LBVH mit Refit und SAH-Schätzung (Knoten für Knoten gleich zur CPU-Referenz, `pathtrace-kernels-check.html`), Sobol/Owen und Blue Noise, Chiang-BSDF (White Furnace grün), GGX/Diffus. Fiber Material als Render-Eigenschaft statt Kurvenstufe, damit die GPU-Ketten für Stoff und Seile erhalten bleiben; das Raster liest Farbe und Rauheit pro Punkt. `material.surface` mit Roughness, Metallic und Emission. Befund: Hidden-Primitive brauchen in der Traversierung einen expliziten Leer-Test der Bounds. |
+| 2 Path-Tracing-Kern | erledigt | Phase-2/3-Commit | Zwei-Ebenen-BVH (Faser-, Mesh-, Ebenen-, Voxel- und Kugel-BLAS, TLAS jeden Frame), Traversierungsknoten mit beiden Kind-Boxen (ein Load pro Besuch; mittlere Schritte Standard-Weave 62 → 59), Any-Hit für Schattenstrahlen, Lichter mit NEE + MIS (Kugel, Rechteck, HDRI mit Alias-Tabelle, Distant), Megakernel, `PathTraceRuntime` mit Debug-Ansichten und Status, OIDN (oidn-web, MIT; Gewichte Apache-2.0 in `public/oidn/`, Lizenzhinweise ergänzt). Prüfseite: drei Referenzszenen, Ergebnis über Läufe bitgleich. **Begründete Anpassung:** Planes zeigen ihre Textur im Raster unbeleuchtet, im Path Tracer emittieren sie sie deshalb (gleicher Look); mit `material.surface` Roughness/Metallic werden sie beleuchtete Flächen. **Befunde (behoben):** lange Dispatches lösen einen GPU-Reset aus, nach dem Chrome WebGPU sperrt; Arbeit läuft deshalb in Bändern von ≈ 12 ms nach gemessenen Kosten, mit Untergrenze 100 ns pro Pixel-Sample und hartem Deckel 2¹⁸ Pixel-Samples pro Dispatch. NaN-/Inf-Strahlen durchliefen den ganzen Baum (Slab-Test lässt NaN durch); sie werden verworfen, jede Traversierung endet nach 1024 Knoten. Ein Placeholder-Buffer wurde im ersten Frame gebunden und zerstört. |
+| 3 Echtzeit, Export, Look | erledigt | Phase-2/3-Commit | 3.1 Bewegungsvektoren aus der Kamera, Reprojektion mit Tiefe/Material-Abgleich; 3.2 ReSTIR DI (Kandidaten, zeitlich, räumlich, Sichtbarkeit); 3.3 SHaRC (Hash-Gitter, Training in 8×8-Kacheln, Resolve); 3.4 SVGF faserbewusst (Tangente statt Normale) + temporaler Upscaler; 3.5 Bewegungsunschärfe im Export über 8 Zeitscheiben mit Refit, feste Export-Seeds und feste Sample-Bündel (bitgleich); 3.6 Render Quality im Export (Raster-Sub-Samples mit Jitter und Shutter, Samples, adaptives Sampling, Zeitlimit, OIDN „standard“, zweite Fortschrittsebene mit Restzeit); 3.7 Voxel als Boxen/Kugeln (gemeinsames `VoxelInstance.wgsl`), Flock-Punkte als Kugeln; 3.8 Dual Scattering und SH-Irradiance aus dem HDRI für Strands und Meshes. **Begründete Anpassungen:** Objekt-Bewegungsvektoren entfallen (Ablehnung über Tiefe/Material deckt bewegte Fasern ab); FaceCables und Flock-Linien/Meshes/Glyphen bleiben gerastert über dem PT-Bild mit korrekter Tiefe (FaceCables mischen unbeleuchtetes Video, Gesichtsausschnitt und Kabel in einem Pass); IBL nur als SH-Irradiance (diffus), ohne vorgefilterte Spiegelkette. **Befunde:** Inf-Werte im Bild ließ OIDN zu schwarz-roten Flecken wachsen; alle Puffer und Filter verwerfen jetzt nicht-endliche Werte. Die Stillstands-Akkumulation lastete die GPU dauerhaft aus und machte das ganze System träge; sie läuft jetzt mit Pausen (≈ halbe GPU). |
 | 4 Vorschau fertig und Leistung | offen | – | – |
 
 Ausgangsmessung (Phase 0):
@@ -498,7 +498,19 @@ Ausgangsmessung (Phase 0):
 | Knit Form | 6 720 Kurven-, 295 680 PT-Segmente | 31,6 MB | 3,67 |
 | Kreuzknoten | 840 Kurven-, 31 920 PT-Segmente | 3,4 MB | 1,25 |
 
-Gemessen auf AMD RDNA3 (Chrome, Timestamp-Queries um die Szenen-Submission), 1920×1080,
+Messungen Phase 3 auf dem Testrechner (NVIDIA Blackwell Laptop-GPU; die AMD 890M ist nur eine
+iGPU, das RDNA3-Referenzgerät stand nicht zur Verfügung; GPU zeitweise mit einem anderen Agenten
+geteilt), 1080p-Ausgabe, `tests/browser/pathtrace-realtime-check.html`:
+
+| Ziel (Abschnitt 3) | gemessen | Stand |
+|---|---|---|
+| Knit Form, Kamera bewegt, Scale 0,5: ≥ 30 fps | 29–35 fps (GPU-Zeit Integrator 21 ms) | erreicht, ohne Reserve |
+| Knit Form, Kamera bewegt, Scale 0,67: ≥ 20 fps | 17–21 fps | Grenze |
+| Animiertes Garn, Scale 0,5: ≥ 20 fps | Prüfseite 27 fps (Szenenaufbau 0,5–0,9 ms GPU); Editor-Wiedergabe 12–15 fps | offen (Editor) |
+| Stillstand sichtbar konvergiert ≤ 2 s | sauber nach ≈ 1 s (Echtzeit-Aufwärmen), erstes OIDN nach 2–5 s | erreicht über Aufwärmen |
+| Export 1080p, 256 spp + OIDN ≤ 20 s/Frame, bitgleich | 230–480 ns pro Pixel-Sample bei Fasern ⇒ ≈ 2–4 min/Frame; Bitgleichheit der Akkumulation über Läufe belegt | offen |
+
+Ausgangsmessung Phase 0 auf AMD RDNA3 (Chrome, Timestamp-Queries um die Szenen-Submission), 1920×1080,
 `tests/browser/pathtrace-check.html`. Raster-Stücke: Standard-Weave 1,87 Mio., Knit Form 1,03 Mio.
 Befund: Die Segmentzahlen liegen bei unter 0,5 Mio. pro Szene; ein LBVH darüber passt bequem in
 den Speicher. Die Ziele aus Abschnitt 3 bleiben vorerst unverändert; die erste echte Prüfung ist

@@ -4,6 +4,7 @@ import type { SceneTimelineContext } from '../../engine/scene/SceneTimelineUtils
 import { collectScene3DLayers } from '../../engine/scene/SceneLayerCollector';
 import { sceneCompositeStyle } from '../../engine/scene/sceneEffectRouting';
 import { isFlockProperty } from '../../types/flock';
+import { resolveSceneRenderOptions } from '../../engine/native3d/sceneRenderer/sceneRenderOptionsResolver';
 import type { WorkerGpuFrameStackIdentity } from './workerGpuFrameStackContract';
 import type { WorkerGpuFrameStackHostSource } from './workerGpuFrameStackProjector';
 import type { WorkerGpuNativeSceneLayer, WorkerGpuNativeScenePayload } from './workerGpuNativeSceneContract';
@@ -62,7 +63,8 @@ export function projectNativeSceneLayers(input: WorkerGpuNativeSceneProjectionIn
   const projected = input.layers.flatMap((layer, index) => index === last ? [synthetic] : included.has(layer) ? [] : [layer]);
   const payload: WorkerGpuNativeScenePayload = { kind: 'native-scene', version: 1, width: input.width, height: input.height,
     timelineTime: input.frame.timelineTime, camera: { ...structuredClone(camera),
-      viewMatrix: Array.from(camera.viewMatrix), projectionMatrix: Array.from(camera.projectionMatrix) }, layers };
+      viewMatrix: Array.from(camera.viewMatrix), projectionMatrix: Array.from(camera.projectionMatrix) }, layers,
+    renderSettings: resolveSceneRenderOptions(input.frame.compositionId).renderSettings };
   return { layers: projected, source: { kind: 'native-scene', runtimeSourceKind: 'nativeScene', layerId: id,
     sourceId: `native-scene:${input.frame.compositionId}`, payload } };
 }

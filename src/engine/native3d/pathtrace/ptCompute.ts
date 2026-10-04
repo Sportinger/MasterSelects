@@ -16,7 +16,11 @@ export function ptShaderModule(device: GPUDevice, label: string, code: string): 
     module = device.createShaderModule({ label, code });
     void module.getCompilationInfo?.().then(info => {
       const errors = info.messages.filter(message => message.type === 'error');
-      if (errors.length) log.error(`${label}: shader compilation failed`, errors.map(message => `${message.lineNum}:${message.linePos} ${message.message}`));
+      if (errors.length) {
+        const lines = code.split(/\r?\n/);
+        log.error(`${label}: shader compilation failed: ${errors.map(message =>
+          `${message.lineNum}:${message.linePos} ${message.message} | ${lines[message.lineNum - 1]?.trim() ?? ''}`).join(' || ')}`);
+      }
     });
     cache.set(code, module);
   }

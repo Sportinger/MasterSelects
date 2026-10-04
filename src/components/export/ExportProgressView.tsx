@@ -2,6 +2,7 @@ import type { ExportProgress } from '../../engine/export';
 import type { FFmpegProgress } from '../../engine/ffmpeg';
 import type { EncoderType } from './useExportState';
 import { ExportRunActions } from './ExportRunActions';
+import { ExportFrameSamplingView } from './ExportFrameSamplingView';
 
 interface ExportProgressViewProps {
   encoder: EncoderType;
@@ -90,6 +91,9 @@ export function ExportProgressView({
           </>
         )}
       </div>
+      {usesBrowserProgress && progress?.phase === 'video' && progress.frameSampling && (
+        <ExportFrameSamplingView sampling={progress.frameSampling} />
+      )}
       {usesBrowserProgress && progress && progress.phase === 'video' && progress.estimatedTimeRemaining > 0 && (
         <div className="export-eta">
           ETA: {formatTime(progress.estimatedTimeRemaining)}

@@ -5,8 +5,8 @@
 @group(0) @binding(0) var<uniform> frame: PtFrame;
 @group(0) @binding(1) var blueNoise: texture_2d<f32>;
 
-@group(1) @binding(0) var<storage, read> nodePage0: array<PtBvhNode>;
-@group(1) @binding(1) var<storage, read> nodePage1: array<PtBvhNode>;
+@group(1) @binding(0) var<storage, read> nodePage0: array<PtWideNode>;
+@group(1) @binding(1) var<storage, read> nodePage1: array<PtWideNode>;
 @group(1) @binding(2) var<storage, read> fiberPage0: array<PtFiberSegment>;
 @group(1) @binding(3) var<storage, read> fiberPage1: array<PtFiberSegment>;
 @group(1) @binding(4) var<storage, read> objects: array<vec4f>;
@@ -18,7 +18,7 @@
 @group(2) @binding(4) var textureAtlas: texture_2d_array<f32>;
 @group(2) @binding(5) var linearSampler: sampler;
 
-fn ptNode(index: u32) -> PtBvhNode {
+fn ptNode(index: u32) -> PtWideNode {
   if (index < frame.limits.z) {
     return nodePage0[index];
   }

@@ -18,6 +18,7 @@ import {
 } from '../shaders/flockRenderWgsl';
 import { FLOCK_POINTS_CACHE_COMPUTE_WGSL, FLOCK_POINTS_CACHED_WGSL, FLOCK_POINTS_WGSL } from '../shaders/flockPointsWgsl';
 import { FLOCK_ROOM_WGSL } from '../shaders/flockRoomWgsl';
+import { FLOCK_POINTS_PATH_TRACE_WGSL } from '../shaders/flockPathTraceWgsl';
 
 const log = Logger.create('FlockGpuPipelines');
 
@@ -110,6 +111,9 @@ export class FlockGpuPipelines {
   readonly frameLayout: GPUBindGroupLayout;
   readonly pointCacheComputeLayout: GPUBindGroupLayout;
   readonly pointCacheRenderLayout: GPUBindGroupLayout;
+  /** Path tracer sphere emission: point cache (read), the path tracer's object pool, parameters. */
+  readonly pathTraceLayout: GPUBindGroupLayout;
+  private pathTracePipeline: GPUComputePipeline | null = null;
   private readonly pointCachePipelines = new Map<'cachePoints' | 'cacheVisibility', GPUComputePipeline>();
   private readonly branchLayouts = new Map<FlockRenderKind, GPUBindGroupLayout>();
   private readonly renderModules = new Map<FlockRenderKind, GPUShaderModule>();
@@ -181,6 +185,10 @@ export class FlockGpuPipelines {
       label: 'flock-point-cache-render-layout',
       entries: [storage(0, VFC, true)],
     });
+    this.pathTraceLayout = device.createBindGroupLayout({
+      label: 'flock-path-trace-layout',
+      entries: [storage(0, GPUShaderStage.COMPUTE, true), storage(1, GPUShaderStage.COMPUTE, false), uniform(2, GPUShaderStage.COMPUTE)],
+    });
   }
 
   getBranchLayout(requestedKind: FlockRenderKind): GPUBindGroupLayout {
@@ -240,6 +248,22 @@ export class FlockGpuPipelines {
     done();
     this.pointCachePipelines.set(entryPoint, pipeline);
     return pipeline;
+  }
+
+  /** Writes cached points as path tracer spheres (flockPathTraceWgsl.ts). */
+  getPathTracePipeline(): GPUComputePipeline {
+    if (this.pathTracePipeline) return this.pathTracePipeline;
+    const done = watchValidation(this.device, 'flock path trace pipeline');
+    this.pathTracePipeline = this.device.createComputePipeline({
+      label: 'flock-path-trace-spheres',
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.frameLayout, this.getBranchLayout('points'), this.pathTraceLayout],
+        label: 'flock-path-trace-layout',
+      }),
+      compute: { module: createCheckedModule(this.device, FLOCK_POINTS_PATH_TRACE_WGSL, 'flock-path-trace'), entryPoint: 'emitSpheres' },
+    });
+    done();
+    return this.pathTracePipeline;
   }
 
   /** Depth-only pipeline that draws a casting branch into the key light's shadow map. */

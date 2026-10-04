@@ -35,6 +35,7 @@ describe('path tracing layouts', () => {
     const size = (name: string) => PT_LAYOUTS.find(layout => layout.name === name)!.size;
     expect(size('PtFiberSegment')).toBe(48);
     expect(size('PtBvhNode')).toBe(32);
+    expect(size('PtWideNode')).toBe(64);
     expect(size('PtInstance')).toBe(128);
     expect(size('PtMeshVertex')).toBe(32);
     expect(size('PtShape')).toBe(64);

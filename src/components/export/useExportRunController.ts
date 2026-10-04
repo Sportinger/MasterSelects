@@ -9,6 +9,7 @@ import { ExportRenderSessionImpl } from '../../engine/export/ExportRenderSession
 import { useMediaStore, type Composition } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { useExportStore } from '../../stores/exportStore';
+import { normalizeExportRenderQuality } from '../../types/renderSettings';
 import type { FFmpegFrameRenderer } from './exportHelpers';
 import { resolveExportRange } from './exportRange';
 import { supportsNativeVideoAlpha } from './exportAlphaSupport';
@@ -212,6 +213,7 @@ export function useExportRunController({
         onProgress: setProgress,
         onTimelineProgress: setExportProgress,
         frameDecorator: createStoryboardFrameDecorator(actualWidth, actualHeight),
+        renderQuality: normalizeExportRenderQuality(useExportStore.getState().settings.renderQuality),
       });
 
       if (result) {

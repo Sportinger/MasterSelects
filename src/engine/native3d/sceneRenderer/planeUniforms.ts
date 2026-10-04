@@ -27,6 +27,11 @@ export function buildPlaneUniformData(
   return data;
 }
 
+/** Model matrix of a plane: its world matrix times the size that fits the source into the frame; the quad spans ±0.5. */
+export function buildPlaneModelMatrix(layer: ScenePlaneLayer, camera: Pick<SceneCamera, 'viewport' | 'referenceSize'>): Float32Array {
+  return multiplyMat4(layer.worldMatrix, createPlaneScaleMatrix(layer, camera.viewport, camera.referenceSize ?? camera.viewport));
+}
+
 export function buildPlaneMvp(layer: ScenePlaneLayer, camera: SceneCamera): Float32Array {
   const planeScale = createPlaneScaleMatrix(
     layer,
