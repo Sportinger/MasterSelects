@@ -1,5 +1,5 @@
-// Resonant lowpass filter controls (#298): cutoff, resonance (Q), env amount, and
-// key tracking. A toggle enables/disables the whole filter (absent `filter` =
+// Resonant filter controls (#298): type (lowpass/highpass/bandpass), cutoff,
+// resonance (Q), env amount, and key tracking. A toggle enables/disables the whole filter (absent `filter` =
 // bypassed, the bare-oscillator path). envAmount may be negative (env closes the
 // filter) per the schema, so its range is symmetric.
 //
@@ -8,7 +8,7 @@
 // automated value during playback). Cutoff uses a log taper; env amount is bipolar
 // (centered at 0). Right-click a knob to reset to the patch default.
 
-import { DEFAULT_SIMPLE_SYNTH_FILTER, type SynthFilter } from '../../../../types/midiClip';
+import { DEFAULT_SIMPLE_SYNTH_FILTER, SYNTH_FILTER_TYPE_OPTIONS, type SynthFilter, type SynthFilterType } from '../../../../types/midiClip';
 import { SynthKnob } from './SynthKnob';
 import type { SynthSectionProps } from './synthSectionTypes';
 
@@ -23,13 +23,21 @@ export function FilterSection({ instrument, onChange }: SynthSectionProps) {
     <div className="properties-section">
       <h4>Filter</h4>
       <label className="audio-bus-control-row audio-bus-control-row-compact">
-        <span>Lowpass</span>
+        <span>Enabled</span>
         <input
           type="checkbox"
           checked={!!filter}
           onChange={(e) => onChange({ filter: e.currentTarget.checked ? { ...DEFAULT_SIMPLE_SYNTH_FILTER } : undefined })}
         />
       </label>
+      {filter && (
+        <label className="audio-bus-control-row audio-bus-control-row-compact">
+          <span>Type</span>
+          <select value={filter.type ?? 'lowpass'} onChange={(e) => set({ type: e.currentTarget.value as SynthFilterType })}>
+            {SYNTH_FILTER_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+      )}
       {filter && (
         <div className="synth-knob-row">
           <SynthKnob label="Cutoff" unit="Hz" value={filter.cutoff} min={20} max={18000}

@@ -5,6 +5,7 @@ import { GAUSSIAN_BLUR_PARAMS } from '../../effects/blur/gaussian/params';
 import { slitScanParams } from '../../effects/time/slit-scan/parameters';
 import { graphParameterTargets } from './graphParameterTargets';
 import { isTransformParameterPath, transformParameterTargets } from './transformParameterTargets';
+import { STICK_FIGURE_EFFECT_TYPE, stickFigureParameterTargets } from './stickFigureParameterTargets';
 
 export interface ParameterSourceTarget {
   path: string;
@@ -45,6 +46,10 @@ export function parameterSourceTargets(clip: ParameterSourceClip): ParameterSour
           min: def.min!, max: def.max!, hardMin: def.min!, hardMax: def.max!, step: def.step!,
           unit: name === 'delay' ? 'seconds' : 'number' });
       }
+      continue;
+    }
+    if (effect.type === STICK_FIGURE_EFFECT_TYPE) {
+      targets.push(...stickFigureParameterTargets(effect));
       continue;
     }
     targets.push(...graphParameterTargets(effect));

@@ -60,20 +60,33 @@ export type MidiInstrument = SimpleSynthInstrument | GmInstrument;
  * This shape is the DURABLE schema (plan §3a): plain JSON, no runtime handles. A
  * future compiled DSP core (FAUST→WASM in an AudioWorklet) reads the same object.
  */
+/** Oscillator shapes plus seeded white noise (SFX: whoosh, hits, crashes). */
+export type SynthWaveform = OscillatorType | 'noise';
+
+/** Pitch offset at note start that glides back to the note pitch (kicks, zaps, risers). */
+export interface SynthPitchEnv {
+  amount: number; // semitones at note start; negative starts below and rises
+  decay: number;  // seconds to reach the note pitch
+}
+
 export interface SimpleSynthInstrument {
   kind: 'simple-synth';
-  waveform: OscillatorType; // 'sawtooth' default (rich harmonics for the filter to shape)
+  waveform: SynthWaveform; // 'sawtooth' default (rich harmonics for the filter to shape)
   adsr: MidiAdsr;           // amplitude envelope
   gain: number;             // 0–1 instrument output gain
   filter?: SynthFilter;         // resonant lowpass; absent = filter bypassed
   filterEnv?: MidiAdsr;         // dedicated filter envelope (drives filter.envAmount)
+  pitchEnv?: SynthPitchEnv;     // absent or amount 0 = steady pitch
   pitchBendRange?: number;      // semitones, ± range for the pitch-bend CC lane (default 2)
   lfos?: SynthLfo[];            // 0..N low-frequency oscillators (per-voice unless global)
   modMatrix?: ModMatrixRoute[]; // additive source → destination → amount routings
 }
 
-/** Resonant lowpass filter config (BiquadFilter in the Phase-1 JS DSP). */
+export type SynthFilterType = 'lowpass' | 'highpass' | 'bandpass';
+
+/** Resonant filter config (BiquadFilter in the Phase-1 JS DSP); lowpass when `type` is absent. */
 export interface SynthFilter {
+  type?: SynthFilterType;
   cutoff: number;     // Hz, base cutoff
   resonance: number;  // BiquadFilter Q (musical range ~0.7..15)
   envAmount: number;  // Hz added to cutoff at filter-env peak (can be NEGATIVE)
@@ -228,11 +241,18 @@ export const MIDI_INSTRUMENT_OPTIONS: ReadonlyArray<{ kind: MidiInstrument['kind
 ];
 
 /** Oscillator waveforms offered for the simple synth. */
-export const MIDI_WAVEFORM_OPTIONS: ReadonlyArray<{ value: OscillatorType; label: string }> = [
+export const MIDI_WAVEFORM_OPTIONS: ReadonlyArray<{ value: SynthWaveform; label: string }> = [
   { value: 'triangle', label: 'Triangle' },
   { value: 'sine', label: 'Sine' },
   { value: 'sawtooth', label: 'Sawtooth' },
   { value: 'square', label: 'Square' },
+  { value: 'noise', label: 'Noise' },
+];
+
+export const SYNTH_FILTER_TYPE_OPTIONS: ReadonlyArray<{ value: SynthFilterType; label: string }> = [
+  { value: 'lowpass', label: 'Lowpass' },
+  { value: 'highpass', label: 'Highpass' },
+  { value: 'bandpass', label: 'Bandpass' },
 ];
 
 // --- Subtractive synth defaults + UI option lists (issue #298) ----------------

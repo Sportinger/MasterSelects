@@ -105,7 +105,8 @@ the saved basis or curve. Driven fields and target keyframe actions are read-onl
 The reset button resets the local basis, not the curve or binding.
 
 **+ Control** adds Constant, Time, sine LFO, Smooth Noise, Envelope, Marker
-Trigger, Two-Bone IK, Keyframes, Audio Envelope, Add, Multiply, Clamp and Remap. The node inspector offers numeric inputs and connection dropdowns as an
+Trigger, Two-Bone IK, Ballistic, Gait Cycle, Limb IK, Attach to Joint, Keyframes,
+Audio Envelope, Add, Multiply, Clamp and Remap. The node inspector offers numeric inputs and connection dropdowns as an
 alternative to cable dragging. A Keyframes source references a stored curve,
 not the already-modulated result. Combine it with an LFO through Add/Multiply;
 fan out one source through separate Remaps to control multiple parameters.
@@ -138,6 +139,39 @@ the joint folds to. Angles follow the parenting convention: a bone at angle θ p
 along (cos θ, sin θ) of the input space. With X scale 1 the solve matches Pick-Whip
 parenting in stored transform units; enter composition width/height for angles in
 square pixels instead. Out-of-reach targets stretch the chain toward the target.
+
+### Stick figures and rig nodes
+
+The **Stick Figure** effect (Generate) draws a posable figure over its clip; on a
+**Blank Clip** (timeline add menu, a transparent composition-sized solid) only the
+figure shows. Every numeric parameter is a control target: joint angles in degrees
+(spine and head lean forward for positive values; hips and shoulders swing forward
+from hanging straight down; knees and elbows are flexion), bone lengths and the
+pelvis offset in figure pixels (pixels at a 1080 px tall frame, scaled with the
+resolution). Ground **Plant** keeps the lowest point on Ground Y, so a leg swing
+becomes the body bounce; **Keep above ground** only stops it sinking. Facing flips
+the figure. The effect's **Pose library** applies built-in or saved poses, keys every
+joint at the playhead with an easing (poses blend over time), and saves the pose at
+the playhead; saved poses are user-local like appearance presets. **Walk**, **Run**
+and **Idle** add a Gait Cycle node wired to every joint in one undo step.
+
+**Gait Cycle** (`rig.gait-cycle`) outputs one angle per joint, named like the figure
+parameters, plus Bounce (pixels) and Foot L/R down; Cycles per second, Stride, Lean and
+Phase shape it, on clip time unless Time is wired. **Limb IK** (`rig.limb-ik`) bends
+one leg or arm of a Stick Figure on the same clip so the foot or hand reaches Target
+(pixels from the hip or shoulder); it reads the figure's lengths and lean as they
+render and outputs Hip/Shoulder and Knee/Elbow angles; Natural bend puts knees forward
+and elbows back. **Ballistic** (`control.ballistic`) is a stateless throw: Start and
+Velocity at Launch (clip seconds), Gravity toward +y (screen down in transform units),
+and analytic bounces on Floor Y keeping Bounce of the vertical and Slide of the
+horizontal speed; outputs X, Y, velocity, Bounces and Resting. **Attach to Joint**
+(`rig.attach`) makes its own clip follow a joint of a Stick Figure on any clip of the
+composition (its keyframes, sources and transform included): Rest values before Grab,
+a smooth Blend into the joint, and after Release a ballistic flight with the joint's
+velocity, spinning until the first floor contact. Its X/Y/Rotation are clip transform
+values; the mapping assumes the figure's layer fills the frame, as Blank and Solid
+clips do. A figure cannot follow itself. **Quick connect** in the inspector wires a
+rig node to its obvious targets (figure joints, or this clip's position and rotation).
 
 Transform sources apply after keyframes and before inspector bypass and parenting,
 in preview, nested compositions, 3D scenes and export. In the Transform inspector a

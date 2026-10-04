@@ -29,8 +29,12 @@ export type TimelineAddLayerTarget =
   | 'motion-ellipse'
   | 'motion-polygon'
   | 'motion-star'
+  | 'blank'
   | 'math-scene'
   | `flock:${string}`;
+
+/** A Blank clip is a fully transparent solid. */
+export const BLANK_CLIP_COLOR = '#00000000';
 
 export type TimelineAddLayerGroup = 'core' | '3d' | 'motion' | 'generators' | 'special';
 
@@ -93,6 +97,7 @@ const VIDEO_LAYER_COMMANDS: ReadonlyArray<{
 }> = [
   { key: 'add-text-layer', label: 'Text', group: 'core', target: 'text' },
   { key: 'add-solid-layer', label: 'Solid', group: 'core', target: 'solid' },
+  { key: 'add-blank-layer', label: 'Blank Clip', group: 'core', target: 'blank' },
   { key: 'add-mesh-cube', label: 'Cube', group: '3d', target: 'mesh-cube' },
   { key: 'add-mesh-sphere', label: 'Sphere', group: '3d', target: 'mesh-sphere' },
   { key: 'add-mesh-plane', label: 'Plane', group: '3d', target: 'mesh-plane' },

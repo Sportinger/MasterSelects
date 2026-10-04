@@ -4,7 +4,7 @@
 // compiled core (FAUST→WASM in an AudioWorklet). It is intentionally
 // Simple-Synth-specific and not shared with the wavetable synth.
 //
-//   osc ─▶ [BiquadFilter lowpass] ─▶ ampGain(ADSR) ─▶ [exprGain] ─▶ destination
+//   osc|noise ─▶ [BiquadFilter] ─▶ ampGain(ADSR) ─▶ [exprGain] ─▶ destination
 //
 // The additive matrix (plan §4) is built with CARRIER nodes, never by scripting a
 // shared param twice: each modulation source is its own node summed via .connect()
@@ -24,8 +24,12 @@ import {
   CUTOFF_CC_RANGE_HZ,
   getSimpleSynthVoiceTiming,
   keytrackCutoffHz,
+  fillSeededNoise,
   midiPitchToFrequency,
   MOD_WHEEL_VIBRATO_CENTS,
+  NOISE_BUFFER_SECONDS,
+  noiseStartOffset,
+  pitchEnvelopeCents,
   semitonesToHzDelta,
 } from './synthVoiceMath';
 
@@ -52,6 +56,19 @@ export interface VoiceHandle {
 }
 
 const VOICE_STEAL_FADE_SECONDS = 0.02;
+
+const noiseBuffers = new WeakMap<BaseAudioContext, AudioBuffer>();
+
+/** One seeded noise buffer per context, shared by every noise voice. */
+function noiseBuffer(ctx: BaseAudioContext): AudioBuffer {
+  let buffer = noiseBuffers.get(ctx);
+  if (!buffer) {
+    buffer = ctx.createBuffer(1, Math.max(1, Math.round(ctx.sampleRate * NOISE_BUFFER_SECONDS)), ctx.sampleRate);
+    fillSeededNoise(buffer.getChannelData(0));
+    noiseBuffers.set(ctx, buffer);
+  }
+  return buffer;
+}
 
 /** Schedule the same click-free voice-steal fade in live and offline contexts. */
 export function scheduleVoiceGainFade(gain: AudioParam, atTime: number): number {
@@ -135,12 +152,29 @@ export function buildSimpleSynthVoice(
   // Latest time any source must keep running (extended by a longer filter release).
   let latestEnd = releaseEnd;
 
-  // --- Oscillator --------------------------------------------------------------
-  const osc = ctx.createOscillator();
-  osc.type = instrument.waveform;
-  osc.frequency.setValueAtTime(freq, startAt);
-  sources.push(osc);
-  nodes.push(osc);
+  // --- Source: oscillator, or looping seeded noise (no frequency param) ----------
+  let osc: OscillatorNode | null = null;
+  let source: OscillatorNode | AudioBufferSourceNode;
+  if (instrument.waveform === 'noise') {
+    const noise = ctx.createBufferSource();
+    noise.buffer = noiseBuffer(ctx);
+    noise.loop = true;
+    source = noise;
+  } else {
+    osc = ctx.createOscillator();
+    osc.type = instrument.waveform;
+    osc.frequency.setValueAtTime(freq, startAt);
+    source = osc;
+  }
+  sources.push(source);
+  nodes.push(source);
+
+  // Pitch envelope: a detune glide in cents (exponential in Hz) back to the note.
+  const pitchEnvCents = pitchEnvelopeCents(instrument.pitchEnv?.amount);
+  if (pitchEnvCents !== 0) {
+    source.detune.setValueAtTime(pitchEnvCents, startAt);
+    source.detune.linearRampToValueAtTime(0, startAt + Math.max(0.001, instrument.pitchEnv?.decay ?? 0));
+  }
 
   // Velocity-sourced mod-matrix routings the JS DSP honors (plan §3/§6B); the rest
   // are the durable schema's job and are left to the future compiled core.
@@ -156,15 +190,15 @@ export function buildSimpleSynthVoice(
   }
 
   // --- Filter + its additive carriers ------------------------------------------
-  let ampInput: AudioNode = osc;
+  let ampInput: AudioNode = source;
   const filterCfg = instrument.filter;
   if (filterCfg) {
     const filter = ctx.createBiquadFilter();
-    filter.type = 'lowpass';
+    filter.type = filterCfg.type ?? 'lowpass';
     filter.frequency.value = clampFilterHz(filterCfg.cutoff + velCutoffAddHz); // base (never scripted)
     filter.Q.value = clampFilterQ(filterCfg.resonance);
     nodes.push(filter);
-    osc.connect(filter);
+    source.connect(filter);
     ampInput = filter;
 
     // Filter envelope carrier: normalized 0→1 ADSR on offset, scaled by envAmount.
@@ -221,14 +255,14 @@ export function buildSimpleSynthVoice(
   // `global` shared LFOs are a documented follow-up; v1 renders every LFO per-voice
   // (retrigger + true vibrato), which is deterministic in both live and offline.
   for (const lfo of instrument.lfos ?? []) {
-    attachLfo(ctx, lfo, { osc, filterFreq: filterCfg ? (ampInput as BiquadFilterNode).frequency : null,
+    attachLfo(ctx, lfo, { frequency: osc?.frequency ?? null, filterFreq: filterCfg ? (ampInput as BiquadFilterNode).frequency : null,
       freq, startAt, endAt: latestEnd, duration, automation, sources, nodes });
   }
 
   // --- Pitch-bend carrier (into osc.frequency) ---------------------------------
   const bendRange = instrument.pitchBendRange ?? 2;
   const bendCurve = laneToCurve(automation?.pitchBend, duration, (v) => semitonesToHzDelta(freq, Math.max(-1, Math.min(1, v)) * bendRange));
-  if (bendCurve) {
+  if (bendCurve && osc) {
     const pbCarrier = ctx.createConstantSource();
     pbCarrier.offset.setValueCurveAtTime(bendCurve, startAt, Math.max(0.02, duration));
     pbCarrier.connect(osc.frequency);
@@ -266,7 +300,8 @@ export function buildSimpleSynthVoice(
   if (forcedFadeEnd !== null) latestEnd = forcedFadeEnd;
   const stopAt = forcedFadeStart === null ? latestEnd + 0.02 : forcedFadeStart + 0.03;
   for (const src of sources) {
-    src.start(startAt);
+    if (src === source && !osc) (src as AudioBufferSourceNode).start(startAt, noiseStartOffset(pitch));
+    else src.start(startAt);
     src.stop(stopAt);
   }
 
@@ -287,7 +322,7 @@ export function buildSimpleSynthVoice(
       }
     },
     onEnded(cb: () => void) {
-      osc.onended = () => cb();
+      source.onended = () => cb();
     },
   };
 }
@@ -307,7 +342,8 @@ function makeLfoNode(
 }
 
 interface LfoWiring {
-  osc: OscillatorNode;
+  /** Oscillator frequency; null for noise, which has no pitch to modulate. */
+  frequency: AudioParam | null;
   filterFreq: AudioParam | null;
   freq: number;
   startAt: number;
@@ -321,7 +357,7 @@ interface LfoWiring {
 /** Wire a pitch/filter LFO to its target param (amp LFOs are handled inline). */
 function attachLfo(ctx: BaseAudioContext, lfo: SynthLfo, w: LfoWiring): void {
   if (lfo.target === 'amp') return; // tremolo wired in the expression stage
-  const target = lfo.target === 'pitch' ? w.osc.frequency : w.filterFreq;
+  const target = lfo.target === 'pitch' ? w.frequency : w.filterFreq;
   if (!target) return;
 
   const source = ctx.createOscillator();

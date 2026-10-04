@@ -112,6 +112,13 @@ absolute-speed handling is not used as the primary playback path.
 
 See [MuScriptor Music-to-MIDI](./MuScriptor.md) for model setup, licensing, provider architecture, and limitations.
 
+## Simple Synth Sound Effects
+
+- The Simple Synth (MIDI tracks) offers a seeded **Noise** waveform next to the oscillator shapes; the same noise plays live and in export, starting at a pitch-dependent offset.
+- **Pitch Env** (semitones at note start) and **Pitch Dec** (seconds back to the note pitch) add kicks, zaps and risers; negative amounts rise into the note.
+- The filter has a **Type**: lowpass, highpass or bandpass; the filter envelope, keytrack and cutoff automation apply to each.
+- SFX presets (Whoosh, Hit, Punch, Click, Glass, Zap) are one-shots for animation sound; short notes trigger them and the note pitch moves filters and sweeps.
+
 ## Audio Effects
 
 Audio clip controls live in the Properties panel under `CLIP Effects`; clip

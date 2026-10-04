@@ -129,6 +129,7 @@ export const SurfaceSampleFields = {
 } as const satisfies FieldOwnershipMap<SurfaceSample>;
 
 export const SynthFilterFields = {
+  "type": { class: 'content', owner: 'timeline' },
   "cutoff": { class: 'content', owner: 'timeline' },
   "resonance": { class: 'content', owner: 'timeline' },
   "envAmount": { class: 'content', owner: 'timeline' },

@@ -109,3 +109,47 @@ export function solveTwoBoneIk(rootX: number, rootY: number, targetX: number, ta
     endX: rootX + ex / aspect, endY: rootY + ey, reach,
   };
 }
+
+export interface BallisticState {
+  x: number; y: number;
+  vx: number; vy: number;
+  /** Floor impacts so far. */
+  bounces: number;
+  /** 1 once the body lies on the floor, else 0. */
+  resting: number;
+  /** Seconds after launch of the first floor contact (Infinity while it has none). */
+  firstImpact: number;
+}
+
+const MAX_BOUNCES = 64;
+
+/**
+ * Projectile under constant gravity along +y, as a pure function of the time since launch.
+ * With a floor, impacts are solved analytically: each keeps `bounce` of the vertical and `slide`
+ * of the horizontal speed; the body rests once a hop becomes negligible. Gravity pulls toward
+ * +y for positive values (screen down in clip transform units), so the floor is crossed in the
+ * direction gravity points. Before launch the start state holds.
+ */
+export function ballisticState(time: number, x: number, y: number, vx: number, vy: number,
+  gravity: number, floor: number | null, bounce = 0.5, slide = 1): BallisticState {
+  if (!(time > 0)) return { x, y, vx, vy, bounces: 0, resting: 0, firstImpact: Infinity };
+  const flight = (t: number) => ({ x: x + vx * t, y: y + vy * t + 0.5 * gravity * t * t, vx, vy: vy + gravity * t });
+  if (floor === null || gravity === 0) return { ...flight(time), bounces: 0, resting: 0, firstImpact: Infinity };
+  const side = Math.sign(gravity), restitution = Math.max(0, Math.min(1, bounce)), keep = Math.max(0, Math.min(1, slide));
+  // A start below the floor is lifted onto it.
+  if ((y - floor) * side > 0) y = floor;
+  let elapsed = 0, bounces = 0, firstImpact = Infinity;
+  while (bounces <= MAX_BOUNCES) {
+    const discriminant = Math.max(0, vy * vy - 2 * gravity * (y - floor));
+    const impact = (-vy + side * Math.sqrt(discriminant)) / gravity;
+    if (impact > 1e-9 && elapsed + impact > time) return { ...flight(time - elapsed), bounces, resting: 0, firstImpact };
+    const step = Math.max(0, impact);
+    x += vx * step; y = floor; elapsed += step;
+    if (bounces === 0) firstImpact = elapsed;
+    const hit = vy + gravity * step;
+    vy = -restitution * hit; vx *= keep; bounces += 1;
+    // A hop shorter than ~0.1 ms (or no rebound at all) ends the motion.
+    if (Math.abs(2 * vy / gravity) < 1e-4) return { x, y: floor, vx: 0, vy: 0, bounces, resting: 1, firstImpact };
+  }
+  return { x, y: floor, vx: 0, vy: 0, bounces, resting: 1, firstImpact };
+}

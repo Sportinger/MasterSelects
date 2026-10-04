@@ -6,6 +6,9 @@ import { parameterSourceTargets } from '../../../../services/parameterSources/pa
 import { getControlOperator } from '../../../../services/parameterSources/controlOperators';
 import { connectControlNodes, disconnectControlEdge, setControlNodeValue, setParameterSourceBinding } from '../../../../services/parameterSources/parameterSourceActions';
 import { InspectorSelect } from '../../../inspector/InspectorSelect';
+import { endBatch, startBatch } from '../../../../stores/historyStore';
+import { rigQuickConnect } from '../../../../services/rig/rigQuickConnect';
+import { STICK_FIGURE_EFFECT, stickFigureRef } from '../../../../services/rig/stickFigureJointRuntime';
 import { ResolveInspectorSection, ResolveInspectorRow } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 import { ResolveInspectorNumberRow } from '../../properties/resolveInspector/ResolveInspectorNumberRow';
 import '../../properties/ParameterSourceControls.css';
@@ -38,6 +41,13 @@ export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nod
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (error) { setMessage(error instanceof Error ? error.message : String(error)); } };
   const inputIds = new Set(definition.inputs.map(input => input.id));
   const markerLabels = [...new Set(markers.map(marker => marker.label).filter(Boolean))].toSorted();
+  // Limb IK reads a figure on its own clip; Attach to Joint follows a figure on any clip.
+  const figureOptions = node.operator === 'rig.limb-ik'
+    ? [{ value: '', label: 'First stick figure on this clip' }, ...clip.effects.filter(effect => effect.type === STICK_FIGURE_EFFECT)
+      .map(effect => ({ value: effect.id, label: effect.name }))]
+    : [{ value: '', label: 'Choose stick figure' }, ...audioClips.flatMap(item => item.effects.filter(effect => effect.type === STICK_FIGURE_EFFECT)
+      .map(effect => ({ value: stickFigureRef(item.id, effect.id), label: item.id === clip.id ? `${item.name} (this clip)` : item.name })))];
+  const quickConnect = rigQuickConnect(node, clip);
   const sourceOptions = graph.nodes.filter(candidate => candidate.id !== nodeId).flatMap(candidate => {
     const candidateDefinition = getControlOperator(candidate.operator);
     const name = `${candidateDefinition?.label ?? candidate.operator} · ${candidate.id.slice(-6)}`;
@@ -58,6 +68,7 @@ export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nod
             : param.id === 'property' ? [{ value: '', label: 'Choose stored curve' }, ...targets.map(target => ({ value: target.path, label: `${target.group} / ${target.label}` }))]
             : node.operator === 'control.marker-trigger' && param.id === 'label'
               ? [{ value: '', label: 'Any marker' }, ...markerLabels.map(label => ({ value: label, label }))]
+              : param.id === 'figure' ? figureOptions
               : [...(param.options ?? [])];
           return <ResolveInspectorRow key={param.id} label={param.label}><InspectorSelect ariaLabel={param.label} disabled={locked}
             value={String(node.constants?.[param.id] ?? param.default)} options={options}
@@ -86,6 +97,15 @@ export function ControlNodeInspector({ clip, nodeId }: { clip: TimelineClip; nod
             onChange={value => safely(() => setControlNodeValue(clip.id, nodeId, input.id, value))} />}
         </ResolveInspectorSection>;
       })}
+      {quickConnect && <ResolveInspectorRow label="Quick connect"><button type="button" disabled={locked}
+        onClick={() => safely(() => {
+          const batch = startBatch(quickConnect.label);
+          try {
+            for (const { portId, property } of quickConnect.connections) {
+              setParameterSourceBinding(clip.id, property, { source: { nodeId, portId }, enabled: true, exposed: true });
+            }
+          } finally { if (batch.opened) endBatch(); }
+        })}>{quickConnect.label}</button></ResolveInspectorRow>}
       {multiOutput && <ResolveInspectorRow label="Connect output"><InspectorSelect ariaLabel="Output to connect" disabled={locked}
         value={outputPort.id} options={definition.outputs.map(port => ({ value: port.id, label: port.label }))}
         onChange={setChosenOutput} /></ResolveInspectorRow>}

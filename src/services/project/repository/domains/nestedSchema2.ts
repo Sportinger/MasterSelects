@@ -57,10 +57,10 @@ export const schemas2: Record<string, DomainSchema> = {
 "n254": {"fields":{"id":{"class":"content","owner":"audio","node":null},"targetBusId":{"class":"content","owner":"audio","node":null},"gainDb":{"class":"content","owner":"audio","node":null},"preFader":{"class":"content","owner":"audio","node":null},"enabled":{"class":"content","owner":"audio","node":null}}},
 "n255": {"variants":[]},
 "n256": {"variants":["n257","n275"]},
-"n257": {"fields":{"kind":{"class":"content","owner":"timeline","node":null},"waveform":{"class":"cache","owner":"timeline","node":"n258"},"adsr":{"class":"content","owner":"timeline","node":"n259"},"gain":{"class":"content","owner":"timeline","node":null},"filter":{"class":"content","owner":"timeline","node":"n260"},"filterEnv":{"class":"content","owner":"timeline","node":"n259"},"pitchBendRange":{"class":"content","owner":"timeline","node":null},"lfos":{"class":"content","owner":"timeline","node":"n261"},"modMatrix":{"class":"content","owner":"timeline","node":"n265"}}},
+"n257": {"fields":{"kind":{"class":"content","owner":"timeline","node":null},"waveform":{"class":"cache","owner":"timeline","node":"n258"},"adsr":{"class":"content","owner":"timeline","node":"n259"},"gain":{"class":"content","owner":"timeline","node":null},"filter":{"class":"content","owner":"timeline","node":"n260"},"filterEnv":{"class":"content","owner":"timeline","node":"n259"},"pitchEnv":{"class":"content","owner":"timeline","node":"n998"},"pitchBendRange":{"class":"content","owner":"timeline","node":null},"lfos":{"class":"content","owner":"timeline","node":"n261"},"modMatrix":{"class":"content","owner":"timeline","node":"n265"}}},
 "n258": {"variants":[]},
 "n259": {"fields":{"attack":{"class":"content","owner":"midi","node":null},"decay":{"class":"content","owner":"midi","node":null},"sustain":{"class":"content","owner":"midi","node":null},"release":{"class":"content","owner":"midi","node":null}}},
-"n260": {"fields":{"cutoff":{"class":"content","owner":"timeline","node":null},"resonance":{"class":"content","owner":"timeline","node":null},"envAmount":{"class":"content","owner":"timeline","node":null},"keytrack":{"class":"content","owner":"timeline","node":null}}},
+"n260": {"fields":{"type":{"class":"content","owner":"timeline","node":null},"cutoff":{"class":"content","owner":"timeline","node":null},"resonance":{"class":"content","owner":"timeline","node":null},"envAmount":{"class":"content","owner":"timeline","node":null},"keytrack":{"class":"content","owner":"timeline","node":null}}},
 "n261": {"element":"n262"},
 "n262": {"fields":{"id":{"class":"content","owner":"timeline","node":null},"target":{"class":"content","owner":"timeline","node":"n263"},"shape":{"class":"content","owner":"timeline","node":"n264"},"rate":{"class":"content","owner":"timeline","node":null},"depth":{"class":"content","owner":"timeline","node":null},"global":{"class":"content","owner":"timeline","node":null},"fadeIn":{"class":"content","owner":"timeline","node":null}}},
 "n263": {"variants":[]},
@@ -99,5 +99,6 @@ export const schemas2: Record<string, DomainSchema> = {
 "n296": {"variants":[]},
 "n297": {"fields":{"kind":{"class":"content","owner":"timeline","node":null},"progress":{"class":"runtime","owner":"timeline","node":null},"clockwise":{"class":"content","owner":"timeline","node":null},"angleOffset":{"class":"content","owner":"timeline","node":null}}},
 "n298": {"fields":{"kind":{"class":"content","owner":"timeline","node":null},"axis":{"class":"content","owner":"timeline","node":"n299"},"progress":{"class":"runtime","owner":"timeline","node":null}}},
-"n299": {"variants":[]}
+"n299": {"variants":[]},
+"n998": {"fields":{"amount":{"class":"content","owner":"timeline","node":null},"decay":{"class":"content","owner":"timeline","node":null}}}
 };

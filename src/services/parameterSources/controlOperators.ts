@@ -1,5 +1,6 @@
 import type { BoundOperatorNode, OperatorDefinition, OperatorParameter, OperatorPort } from '../../types/operatorGraph';
 import { IMAGE_OPERATORS } from '../operators/imageOperators';
+import { SKELETON_JOINT_LABELS, SKELETON_JOINTS } from '../rig/skeletonRig';
 
 const port = (id: string, label = id): OperatorPort => ({ id, label, type: 'number' });
 const number = (id: string, label: string, value: number, min = -10, max = 10, step = 0.01): OperatorParameter =>
@@ -11,6 +12,12 @@ const source = (id: string, label: string, parameters: OperatorParameter[], inpu
   id, label, description: label, version: 1, runtime: 'builtin', invalidates: 'appearance', state: 'stateless',
   inputs: inputs.map(input => port(input)), outputs, parameters, consumers: ['parameter-control'], implementation: 'shared',
 });
+
+/** Gait outputs share ids with the Stick Figure joint parameters, so they connect one to one. */
+const GAIT_ANGLE_PORTS: OperatorPort[] = [['spine', 'Spine'], ['head', 'Head'], ['shoulderL', 'Shoulder L'], ['elbowL', 'Elbow L'],
+  ['shoulderR', 'Shoulder R'], ['elbowR', 'Elbow R'], ['hipL', 'Hip L'], ['kneeL', 'Knee L'], ['hipR', 'Hip R'], ['kneeR', 'Knee R']]
+  .map(([id, label]) => port(id, label));
+export const GAIT_ANGLE_OUTPUTS: readonly string[] = GAIT_ANGLE_PORTS.map(output => output.id);
 
 /** Control-only additions plus the canonical scalar Math definitions. No GPU field evaluation. */
 export const CONTROL_OPERATORS: readonly OperatorDefinition[] = [
@@ -39,6 +46,34 @@ export const CONTROL_OPERATORS: readonly OperatorDefinition[] = [
     ['rootX', 'rootY', 'targetX', 'targetY', 'length1', 'length2'],
     [port('angle1', 'Upper angle'), port('angle2', 'Lower angle'), port('jointX', 'Joint X'), port('jointY', 'Joint Y'),
       port('endX', 'End X'), port('endY', 'End Y'), port('reach', 'Reach')]),
+  source('control.ballistic', 'Ballistic', [number('launch', 'Launch (s)', 0, 0, 600), number('startX', 'Start X', 0),
+    number('startY', 'Start Y', 0), number('velocityX', 'Velocity X', 0.5), number('velocityY', 'Velocity Y', -2),
+    number('gravity', 'Gravity', 6, -100, 100), select('floor', 'Floor', 'on', [['on', 'Bounce on floor'], ['off', 'No floor']]),
+    number('floorY', 'Floor Y', 0.8), number('bounce', 'Bounce', 0.45, 0, 1), number('slide', 'Slide', 0.85, 0, 1)],
+    ['time', 'launch', 'startX', 'startY', 'velocityX', 'velocityY', 'gravity', 'floorY', 'bounce', 'slide'],
+    [port('x', 'X'), port('y', 'Y'), port('vx', 'Velocity X'), port('vy', 'Velocity Y'), port('bounces', 'Bounces'),
+      port('resting', 'Resting')]),
+  source('rig.gait-cycle', 'Gait Cycle', [select('gait', 'Gait', 'walk', [['walk', 'Walk'], ['run', 'Run'], ['idle', 'Idle']]),
+    number('speed', 'Cycles per second', 1, 0, 10), number('stride', 'Stride', 1, 0, 3), number('lean', 'Lean (deg)', 0, -90, 90),
+    number('phase', 'Phase (cycles)', 0, 0, 1)],
+    ['time', 'speed', 'stride', 'lean', 'phase'],
+    [...GAIT_ANGLE_PORTS, port('bounce', 'Bounce (px)'), port('contactL', 'Foot L down'), port('contactR', 'Foot R down')]),
+  source('rig.limb-ik', 'Limb IK', [{ id: 'figure', label: 'Stick figure', type: 'select', default: '', options: [] },
+    select('limb', 'Limb', 'legL', [['legL', 'Leg L'], ['legR', 'Leg R'], ['armL', 'Arm L'], ['armR', 'Arm R']]),
+    number('targetX', 'Target X (px)', 20, -1000, 1000, 1), number('targetY', 'Target Y (px)', 130, -1000, 1000, 1),
+    select('bend', 'Bend', 'natural', [['natural', 'Natural (knee forward, elbow back)'], ['reverse', 'Reverse']])],
+    ['targetX', 'targetY'],
+    [port('upper', 'Hip / Shoulder'), port('lower', 'Knee / Elbow'), port('reach', 'Reach')]),
+  source('rig.attach', 'Attach to Joint', [{ id: 'figure', label: 'Stick figure', type: 'select', default: '', options: [] },
+    select('joint', 'Joint', 'handR', SKELETON_JOINTS.map(joint => [joint, SKELETON_JOINT_LABELS[joint]] as const)),
+    number('grab', 'Grab (s)', 0, 0, 600), number('blend', 'Blend (s)', 0.15, 0, 10),
+    number('release', 'Release (s, -1 = hold)', -1, -1, 600),
+    number('restX', 'Rest X', 0), number('restY', 'Rest Y', 0), number('restRotation', 'Rest rotation', 0, -360, 360, 0.1),
+    number('spin', 'Spin after release (deg/s)', 0, -3600, 3600, 1),
+    number('gravity', 'Gravity', 6, -100, 100), select('floor', 'Floor', 'on', [['on', 'Bounce on floor'], ['off', 'No floor']]),
+    number('floorY', 'Floor Y', 0.8), number('bounce', 'Bounce', 0.45, 0, 1), number('slide', 'Slide', 0.85, 0, 1)],
+    ['time', 'grab', 'blend', 'release', 'restX', 'restY', 'restRotation', 'spin', 'gravity', 'floorY', 'bounce', 'slide'],
+    [port('x', 'X'), port('y', 'Y'), port('rotation', 'Rotation'), port('attached', 'Attached')]),
   source('control.keyframes', 'Keyframes', [{ id: 'property', label: 'Source curve', type: 'select', default: '', options: [] }]),
   source('control.audio-envelope', 'Audio Envelope', [
     { id: 'audioClipId', label: 'Audio source', type: 'select', default: '', options: [] },
@@ -62,6 +97,9 @@ const CLOCK_INPUTS: Readonly<Record<string, Readonly<Record<string, 'clip' | 'ti
   'control.lfo': { time: 'clip' },
   'control.noise': { time: 'clip' },
   'control.envelope': { age: 'clip' },
+  'control.ballistic': { time: 'clip' },
+  'rig.gait-cycle': { time: 'clip' },
+  'rig.attach': { time: 'clip' },
   'control.marker-trigger': { time: 'timeline' },
   'control.audio-envelope': { time: 'timeline' },
 };

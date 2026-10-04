@@ -506,7 +506,7 @@ grades that have not stored their default values yet.
 - `distort` (8): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge, Fisheye Lens
 - `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
 - `keying` (1): Chroma Key
-- `generate`: Memory Leak and **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect))
+- `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
 - `analog` (10): glitch, crystal/glass, ribbon, CRT, prism, wave, hologram, compute Pixel Sort, and Analog Signal Lab
 - `pixel` (2): Blockify and Block Mosaic

@@ -9,7 +9,10 @@ import { parameterSourceTime } from './parameterSourceTime';
 import { evaluateAudioParameter, frozenAudioParameterContext, type AudioParameterContext } from './audioParameterContext';
 import type { AudioEnvelopeSampling } from './audioEnvelopeSampling';
 import { liveAudioParameterContext } from './audioParameterRuntime';
-import { envelopeValue, markerTriggerValue, smoothNoise, solveTwoBoneIk, type MarkerTriggerMode } from './controlSignalMath';
+import { ballisticState, envelopeValue, markerTriggerValue, smoothNoise, solveTwoBoneIk, type MarkerTriggerMode } from './controlSignalMath';
+import { gaitPose, SKELETON_JOINTS, SKELETON_LENGTH_KEYS, skeletonFromParams, solveSkeletonLimb, type SkeletonGait,
+  type SkeletonJoint, type SkeletonLimb } from '../rig/skeletonRig';
+import { sampleStickFigureJoint, STICK_FIGURE_EFFECT } from '../rig/stickFigureJointRuntime';
 import { frozenMarkerParameterContext } from './markerParameterContext';
 import { liveMarkerParameterContext } from './markerParameterRuntime';
 
@@ -66,6 +69,9 @@ function compile(graph: EffectOperatorGraph): CompiledControls {
 }
 
 const IK_ANGLE_OUTPUTS = new Set(['angle1', 'angle2']);
+const GAIT_UNITS: Readonly<Record<string, string>> = { bounce: 'pixels', contactL: 'number', contactR: 'number' };
+const smoothstep = (value: number) => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
+const wrapDegrees = (value: number) => ((value + 180) % 360 + 360) % 360 - 180;
 
 /** One request shares source values across all targets and reads curves from their original owner. */
 export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyframes: readonly Keyframe[], localTime: number,
@@ -134,6 +140,21 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
         const position = inputUnit('rootX');
         for (const id of ['rootY', 'targetX', 'targetY', 'length1', 'length2']) compatible(position, inputUnit(id), nodeId);
         unit = IK_ANGLE_OUTPUTS.has(portId) ? 'degrees' : portId === 'reach' ? 'number' : position;
+      } else if (node.operator === 'control.ballistic') {
+        for (const id of ['time', 'launch']) compatible(inputUnit(id), 'seconds', nodeId);
+        const position = inputUnit('startX');
+        for (const id of ['startY', 'floorY']) compatible(position, inputUnit(id), nodeId);
+        unit = portId === 'x' || portId === 'y' ? position : 'number';
+      } else if (node.operator === 'rig.gait-cycle') {
+        compatible(inputUnit('time'), 'seconds', nodeId); compatible(inputUnit('speed'), 'Hz', nodeId);
+        unit = GAIT_UNITS[portId] ?? 'degrees';
+      } else if (node.operator === 'rig.limb-ik') {
+        for (const id of ['targetX', 'targetY']) compatible(inputUnit(id), 'pixels', nodeId);
+        unit = portId === 'reach' ? 'number' : 'degrees';
+      } else if (node.operator === 'rig.attach') {
+        for (const id of ['time', 'grab', 'blend', 'release']) compatible(inputUnit(id), 'seconds', nodeId);
+        compatible(inputUnit('restRotation'), 'degrees', nodeId);
+        unit = portId === 'rotation' ? 'degrees' : 'number';
       } else if (node.operator === 'math.add.scalar' || node.operator === 'math.multiply.scalar') {
         const a = inputUnit('a'), b = inputUnit('b');
         if (node.operator === 'math.multiply.scalar' && a !== 'number' && b !== 'number') {
@@ -207,6 +228,64 @@ export function createParameterSourceEvaluator(clip: ParameterSourceClip, keyfra
           if (error instanceof ParameterSourceError) throw error;
           throw new ParameterSourceError(error instanceof Error ? error.message : String(error), nodeId);
         }
+      }
+      case 'control.ballistic': {
+        const floor = node.constants?.floor ?? 'on';
+        if (floor !== 'on' && floor !== 'off') throw new ParameterSourceError('Unknown floor mode.', nodeId);
+        const state = ballisticState(clockInput('time') - input('launch'), input('startX'), input('startY'),
+          input('velocityX'), input('velocityY'), input('gravity'), floor === 'on' ? input('floorY') : null,
+          input('bounce'), input('slide', 1));
+        return { x: state.x, y: state.y, vx: state.vx, vy: state.vy, bounces: state.bounces, resting: state.resting };
+      }
+      case 'rig.gait-cycle': {
+        const gait = String(node.constants?.gait ?? 'walk') as SkeletonGait;
+        if (!['walk', 'run', 'idle'].includes(gait)) throw new ParameterSourceError('Unknown gait.', nodeId);
+        return { ...gaitPose(gait, input('speed', 1) * clockInput('time') + input('phase'), input('stride', 1), input('lean')) };
+      }
+      case 'rig.limb-ik': {
+        const limb = String(node.constants?.limb ?? 'legL') as SkeletonLimb;
+        if (!['legL', 'legR', 'armL', 'armR'].includes(limb)) throw new ParameterSourceError('Unknown limb.', nodeId);
+        const figureId = String(node.constants?.figure ?? '');
+        const figure = clip.effects.find(effect => effect.type === STICK_FIGURE_EFFECT && (!figureId || effect.id === figureId));
+        if (!figure) throw new ParameterSourceError('Add a Stick Figure effect to this clip first.', nodeId);
+        // Proportions and lean as they render now: keyframes and other sources included.
+        const values: Record<string, number> = {};
+        for (const key of [...SKELETON_LENGTH_KEYS, 'spine']) values[key] = resolve(`effect.${figure.id}.${key}`).value;
+        try {
+          return { ...solveSkeletonLimb(skeletonFromParams(values), limb, input('targetX'), input('targetY'), node.constants?.bend === 'reverse') };
+        } catch (error) {
+          throw new ParameterSourceError(error instanceof Error ? error.message : String(error), nodeId);
+        }
+      }
+      case 'rig.attach': {
+        const joint = String(node.constants?.joint ?? 'handR') as SkeletonJoint;
+        if (!(SKELETON_JOINTS as readonly string[]).includes(joint)) throw new ParameterSourceError('Unknown joint.', nodeId);
+        const floor = node.constants?.floor ?? 'on';
+        if (floor !== 'on' && floor !== 'off') throw new ParameterSourceError('Unknown floor mode.', nodeId);
+        const time = clockInput('time'), grab = input('grab'), blend = nonNegative('blend'), release = input('release');
+        const rest = { x: input('restX'), y: input('restY'), rotation: input('restRotation') };
+        if (time < grab) return { ...rest, attached: 0 };
+        // Grab, Blend and Release are clip seconds; the figure is sampled at the matching timeline time.
+        const sample = (clipSeconds: number) => {
+          try { return sampleStickFigureJoint(String(node.constants?.figure ?? ''), joint, clock.timelineTime + clipSeconds - clipTime); }
+          catch (error) { throw new ParameterSourceError(error instanceof Error ? error.message : String(error), nodeId); }
+        };
+        const weightAt = (seconds: number) => blend > 0 ? smoothstep((seconds - grab) / blend) : 1;
+        const heldAt = (seconds: number) => {
+          const point = sample(seconds), weight = weightAt(seconds);
+          return { x: rest.x + (point.x - rest.x) * weight, y: rest.y + (point.y - rest.y) * weight,
+            rotation: rest.rotation + wrapDegrees(point.rotation - rest.rotation) * weight, attached: weight };
+        };
+        if (release < 0 || release <= grab || time < release) return heldAt(time);
+        // Released: fly on with the velocity the joint had, measured over the last 1/120 s.
+        const step = 1 / 120, at = heldAt(release), before = heldAt(Math.max(grab, release - step));
+        const span = release - Math.max(grab, release - step);
+        const vx = span > 0 ? (at.x - before.x) / span : 0, vy = span > 0 ? (at.y - before.y) / span : 0;
+        const spinRate = (span > 0 ? wrapDegrees(at.rotation - before.rotation) / span : 0) + input('spin');
+        const flight = ballisticState(time - release, at.x, at.y, vx, vy, input('gravity'),
+          floor === 'on' ? input('floorY') : null, input('bounce'), input('slide', 1));
+        // It spins freely until it first hits the floor.
+        return { x: flight.x, y: flight.y, rotation: at.rotation + spinRate * Math.min(time - release, flight.firstImpact), attached: 0 };
       }
       case 'control.keyframes': return { value: sampleCurve(String(node.constants?.property ?? '')) };
       case 'control.audio-envelope': {

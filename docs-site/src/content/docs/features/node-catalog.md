@@ -75,6 +75,11 @@ Timing and rig controls in the same menu: **Smooth Noise** (`control.noise`),
 under Time & Motion, **Two-Bone IK** (`control.ik-two-bone`, seven outputs) under
 Geometry. They also drive the clip Transform; see Node-Workspace.md.
 
+Rig and motion controls: **Ballistic** (`control.ballistic`) and **Gait Cycle**
+(`rig.gait-cycle`) under Time & Motion, **Limb IK** (`rig.limb-ik`) and **Attach to
+Joint** (`rig.attach`) under Geometry. They drive the **Stick Figure** effect
+(`effect:stick-figure`, Generate) and clip transforms; see Node-Workspace.md.
+
 Image effects expose six reusable motion operators through **Add node**:
 
 | Node | Contract |
