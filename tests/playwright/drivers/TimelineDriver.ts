@@ -20,6 +20,15 @@ export class TimelineDriver {
     this.transportControls = page.locator('[data-guided-target="timeline-transport-controls"]');
   }
 
+  async setLoopPlayback(enabled: boolean): Promise<void> {
+    const button = this.transportControls.getByRole('button', { name: /^Loop (On|Off) \(L\)$/ });
+    const title = enabled ? 'Loop On (L)' : 'Loop Off (L)';
+    if (await button.getAttribute('title') !== title) {
+      await button.click();
+    }
+    await expect(button).toHaveAttribute('title', title);
+  }
+
   async play(): Promise<void> {
     await this.transportControls.getByRole('button', { name: 'Play', exact: true }).click();
     await expect(this.transportControls.getByRole('button', { name: 'Pause', exact: true })).toBeVisible();

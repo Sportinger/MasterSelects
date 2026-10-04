@@ -56,8 +56,13 @@ export const test = base.extend<MasterSelectsFixtures>({
     await provide(await createReferenceMediaFixture())
   },
 
-  referenceProject: async ({ bridge, referenceMedia }, provide, testInfo) => {
-    await provide(new ReferenceProjectFixture(bridge, referenceMedia, testInfo))
+  referenceProject: async ({ bridge, referenceMedia }, provide) => {
+    const project = new ReferenceProjectFixture(bridge, referenceMedia)
+    try {
+      await provide(project)
+    } finally {
+      await project.dispose()
+    }
   },
 
   isolatedProject: async ({ bridge, trackedMedia }, provide, testInfo) => {

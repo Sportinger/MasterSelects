@@ -70,9 +70,10 @@ export function getNestedVideoReuseKey(layer: Pick<Layer, 'id' | 'sourceClipId'>
 
 export function shouldStageStableHtmlVideoLayer(
   layer: Pick<Layer, 'sourceClipId'>,
+  paused = false,
 ): boolean {
   return layer.sourceClipId?.startsWith('nested-video:') === true
-    && layer.sourceClipId.endsWith(':datamosh');
+    && (paused || layer.sourceClipId.endsWith(':datamosh'));
 }
 
 function collectStableHtmlVideoCanvasFrame(input: {
@@ -85,7 +86,10 @@ function collectStableHtmlVideoCanvasFrame(input: {
   textureManager: TextureManager;
   warn: TryCollectHtmlVideoPreviewParams['warn'];
 }): LayerRenderData | null | undefined {
-  if (!shouldStageStableHtmlVideoLayer(input.layer)) return undefined;
+  // A paused nested decoder can expose an old GPU copy after seeked even
+  // when drawImage sees its newly decoded frame. Stage that frame explicitly,
+  // as for baked transition media, instead of retaining the stale copy.
+  if (!shouldStageStableHtmlVideoLayer(input.layer, input.video.paused)) return undefined;
 
   const { video } = input;
   const hasDrawableFrame = video.readyState >= 2

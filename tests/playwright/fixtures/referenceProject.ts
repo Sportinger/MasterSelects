@@ -1,7 +1,6 @@
-import { randomUUID } from 'node:crypto'
-import { copyFile, link, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { copyFile, link, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
-import type { TestInfo } from '@playwright/test'
 import type { BridgeClient } from './bridgeClient'
 import { prepareReferenceVideoSeekIndex } from './referenceVideoSeekIndex'
 import type {
@@ -229,16 +228,21 @@ const NESTED_SUPER_TEMPLATE_RELATIVE_PATH = path.join(
 export class ReferenceProjectFixture {
   private readonly bridge: BridgeClient
   private readonly media: ReferenceMediaFixture
-  private readonly testInfo: TestInfo
+  private readonly workingDirectories: string[] = []
 
   constructor(
     bridge: BridgeClient,
     media: ReferenceMediaFixture,
-    testInfo: TestInfo,
   ) {
     this.bridge = bridge
     this.media = media
-    this.testInfo = testInfo
+  }
+
+  async dispose(): Promise<void> {
+    await Promise.all(this.workingDirectories.map(directory =>
+      rm(directory, { recursive: true, force: true }),
+    ))
+    this.workingDirectories.length = 0
   }
 
   /** Opens a disposable copy of the user-authored two-level nested project. */
@@ -252,10 +256,11 @@ export class ReferenceProjectFixture {
     const projectSnapshot = JSON.parse(await readFile(sourceProjectFile, 'utf8')) as unknown
     assertNestedSuperProjectSnapshot(projectSnapshot, template, sourceProjectFile)
 
-    const workingDirectory = this.testInfo.outputPath(
-      'reference-projects',
-      `${template.templateId}-${randomUUID().slice(0, 8)}`,
-    )
+    // Report output can live outside the dev server's allowed media roots.
+    // Match the canonical roots seeded by the dev server. Windows TEMP may
+    // use an 8.3 user directory alias (MASTER~1) that the browser cannot resolve.
+    const workingDirectory = await mkdtemp(path.join(await realpath(tmpdir()), `masterselects-${template.templateId}-`))
+    this.workingDirectories.push(workingDirectory)
     const rawDirectory = path.join(workingDirectory, 'Raw')
     const projectFile = path.join(workingDirectory, 'project.json')
     await mkdir(rawDirectory, { recursive: true })

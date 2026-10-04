@@ -103,6 +103,9 @@ test(
     });
 
     await test.step('drive Play, Pause, Scrub and Stop through visible controls', async () => {
+      // Keep this two-second export fixture playing while diagnostics cross
+      // the bridge; otherwise it can finish before the Pause interaction.
+      await timeline.setLoopPlayback(true);
       const beforePlay = await readTimeline();
       await timeline.play();
       await timeline.expectPlayheadAfter(
@@ -127,6 +130,7 @@ test(
 
       await timeline.stop();
       await timeline.expectPlayheadNear(readTimeline, 0, 0.04);
+      await timeline.setLoopPlayback(false);
     });
 
     await test.step('export through the UI and inspect the downloaded media', async () => {

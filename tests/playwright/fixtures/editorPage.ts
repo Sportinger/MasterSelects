@@ -76,7 +76,9 @@ export class EditorPage {
       timeout: options.navigationTimeoutMs ?? 60_000,
     })
 
-    await editor.shell.waitFor({ state: 'visible', timeout: options.welcomeTimeoutMs ?? 30_000 })
+    // Each fresh browser must evaluate the module graph even after Vite warmup.
+    // On the Windows host this can exceed 30s; the welcome UI has its own budget.
+    await editor.shell.waitFor({ state: 'visible', timeout: options.readyTimeoutMs ?? 90_000 })
     if (options.prepareEntry) await options.prepareEntry(page)
     else await editor.createBrowserProjectThroughUI(options.welcomeTimeoutMs ?? 30_000)
     await editor.bridge.waitForTarget({
