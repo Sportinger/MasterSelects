@@ -1,3 +1,4 @@
+import { GpuUniformRing } from '../../core/gpuUniformRing';
 import { resolveSceneEffectorAxis } from '../../scene/SceneEffectorEvaluation';
 import type { SceneLayer3DData, SceneSplatEffectorRuntimeData, SceneVector3 } from '../../scene/types';
 import shaderSource from '../shaders/SplatEffectorCompute.wgsl?raw';
@@ -21,14 +22,20 @@ export interface LocalSplatEffectorData {
 
 export class EffectorCompute {
   private pipeline: GPUComputePipeline | null = null;
-  private settingsBuffer: GPUBuffer | null = null;
+  /** One settings slot per dispatch in a frame: each splat layer gets effectors in its own
+   * local space, and all layers are dispatched into the same encoder. */
+  private settingsRing: GpuUniformRing | null = null;
   private dataBindGroupLayout: GPUBindGroupLayout | null = null;
   private settingsBindGroupLayout: GPUBindGroupLayout | null = null;
-  private settingsBindGroup: GPUBindGroup | null = null;
   private _initialized = false;
 
   get isInitialized(): boolean {
     return this._initialized;
+  }
+
+  /** Rewind the per-frame settings slots (called from GaussianSplatGpuRenderer.beginFrame). */
+  beginFrame(): void {
+    this.settingsRing?.beginFrame();
   }
 
   resolveEffectorsForLayer(
@@ -133,16 +140,9 @@ export class EffectorCompute {
       label: 'native-splat-effector-compute-pipeline',
     });
 
-    this.settingsBuffer = device.createBuffer({
-      size: SETTINGS_BUFFER_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    this.settingsRing = new GpuUniformRing(device, {
       label: 'native-splat-effector-settings-uniform',
-    });
-
-    this.settingsBindGroup = device.createBindGroup({
-      layout: this.settingsBindGroupLayout,
-      entries: [{ binding: 0, resource: { buffer: this.settingsBuffer } }],
-      label: 'native-splat-effector-settings-bind-group',
+      size: SETTINGS_BUFFER_SIZE,
     });
 
     this._initialized = true;
@@ -159,9 +159,9 @@ export class EffectorCompute {
     if (
       !this._initialized ||
       !this.pipeline ||
-      !this.settingsBuffer ||
+      !this.settingsRing ||
       !this.dataBindGroupLayout ||
-      !this.settingsBindGroup ||
+      !this.settingsBindGroupLayout ||
       splatCount <= 0 ||
       effectors.length === 0
     ) {
@@ -190,7 +190,12 @@ export class EffectorCompute {
     }
     u32[MAX_SPLAT_EFFECTORS * 16] = Math.min(effectors.length, MAX_SPLAT_EFFECTORS);
     u32[MAX_SPLAT_EFFECTORS * 16 + 1] = splatCount;
-    device.queue.writeBuffer(this.settingsBuffer, 0, data);
+    const settingsBuffer = this.settingsRing.write(data);
+    const settingsBindGroup = device.createBindGroup({
+      layout: this.settingsBindGroupLayout,
+      entries: [{ binding: 0, resource: { buffer: settingsBuffer } }],
+      label: 'native-splat-effector-settings-bind-group',
+    });
 
     const dataBindGroup = device.createBindGroup({
       layout: this.dataBindGroupLayout,
@@ -205,18 +210,17 @@ export class EffectorCompute {
     const pass = commandEncoder.beginComputePass({ label: 'native-splat-effector-compute-pass' });
     pass.setPipeline(this.pipeline);
     pass.setBindGroup(0, dataBindGroup);
-    pass.setBindGroup(1, this.settingsBindGroup);
+    pass.setBindGroup(1, settingsBindGroup);
     pass.dispatchWorkgroups(workgroups);
     pass.end();
   }
 
   dispose(): void {
-    this.settingsBuffer?.destroy();
-    this.settingsBuffer = null;
+    this.settingsRing?.dispose();
+    this.settingsRing = null;
     this.pipeline = null;
     this.dataBindGroupLayout = null;
     this.settingsBindGroupLayout = null;
-    this.settingsBindGroup = null;
     this._initialized = false;
   }
 

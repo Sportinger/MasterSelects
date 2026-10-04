@@ -107,11 +107,20 @@ export class GaussianSplatGpuRenderer {
     legacy.graphCompute?.dispose(); delete legacy.graphCompute; legacy.cropCache?.dispose(); delete legacy.cropCache;
     this.graphPass?.dispose(); this.graphPass = new SplatGraphPass(); this.meshPass ??= new SplatMeshPass();
     Object.setPrototypeOf(this.meshPass, SplatMeshPass.prototype);
+    // These passes keep the prototype and field layout of the module version that built
+    // them; rebuild them so hot updates take effect. Their old GPU objects are dropped, not
+    // destroyed, because an unsubmitted encoder may still reference them.
+    this.visibilityPass = new SplatVisibilityPass();
+    this.particleCompute = new ParticleCompute();
+    this.effectorCompute = new EffectorCompute();
     if (!this._initialized || !this.device) return;
 
     const staleCameraResources = this.cameraUniformPool;
     this.createPipeline();
     this.createCameraBuffer();
+    this.visibilityPass.initialize(this.device);
+    this.effectorCompute.initialize(this.device);
+    this.particleCompute.initialize(this.device);
     this.renderDebugLoggedClips.clear();
 
     void this.device.queue.onSubmittedWorkDone()
@@ -509,9 +518,14 @@ export class GaussianSplatGpuRenderer {
     }
   }
 
-  /** Called at start of each frame to reset per-frame state */
+  /**
+   * Called at start of each frame to reset per-frame state. Every command buffer recorded
+   * since the previous call must have been submitted: per-dispatch uniform slots are
+   * rewound and buffers retired by growth are destroyed here.
+   */
   beginFrame(): void {
     this.graphPass.beginFrame(); this.meshPass.beginFrame(); this.sortPass.beginFrame();
+    this.visibilityPass.beginFrame(); this.particleCompute.beginFrame(); this.effectorCompute.beginFrame();
     if (this.renderTargetPool) {
       this.renderTargetPool.resetFrame();
     }

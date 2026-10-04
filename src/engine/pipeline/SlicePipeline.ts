@@ -4,19 +4,33 @@
 
 import type { OutputSlice, Point2D } from '../../types/outputSlice';
 import sliceShader from '../../shaders/slice.wgsl?raw';
+import { GpuFrameBuffers } from '../core/gpuUniformRing';
 
 const SUBDIVISIONS = 16;
 const FLOATS_PER_VERTEX = 5; // position.xy + uv.xy + maskFlag
+/** Target key for callers that render one sliced output per command encoder. */
+export const DEFAULT_SLICE_TARGET_ID = 'default';
 
 export class SlicePipeline {
   private device: GPUDevice;
   private pipeline: GPURenderPipeline | null = null;
   private bindGroupLayout: GPUBindGroupLayout | null = null;
-  private vertexBuffer: GPUBuffer | null = null;
-  private vertexCount = 0;
+  /**
+   * One vertex buffer per output target. All targets are drawn into the same encoder, so a
+   * shared buffer rewritten per target would draw every target with the last target's
+   * slices, and growing it would destroy a buffer the earlier targets still reference.
+   * Task-framed: replaced buffers are destroyed in the next synchronous render section.
+   */
+  private vertexBuffers: GpuFrameBuffers;
+  private vertexCounts = new Map<string, number>();
 
   constructor(device: GPUDevice) {
     this.device = device;
+    this.vertexBuffers = new GpuFrameBuffers(device, {
+      label: 'slice-vertices',
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+      frame: 'task',
+    });
   }
 
   async createPipeline(): Promise<void> {
@@ -66,10 +80,10 @@ export class SlicePipeline {
    * Inverted masks: 2 triangles (6 verts)
    * Non-inverted masks: 4 complement strips (24 verts)
    */
-  buildVertexBuffer(slices: OutputSlice[]): void {
+  buildVertexBuffer(slices: OutputSlice[], targetId: string = DEFAULT_SLICE_TARGET_ID): void {
     const enabledItems = slices.filter((s) => s.enabled);
     if (enabledItems.length === 0) {
-      this.vertexCount = 0;
+      this.vertexCounts.set(targetId, 0);
       return;
     }
 
@@ -91,20 +105,20 @@ export class SlicePipeline {
       }
     }
 
-    this.vertexCount = offset / FLOATS_PER_VERTEX;
+    const vertexCount = offset / FLOATS_PER_VERTEX;
+    this.vertexCounts.set(targetId, vertexCount);
 
-    const byteSize = this.vertexCount * FLOATS_PER_VERTEX * 4;
+    const byteSize = vertexCount * FLOATS_PER_VERTEX * 4;
     if (byteSize === 0) return;
 
-    if (!this.vertexBuffer || this.vertexBuffer.size < byteSize) {
-      this.vertexBuffer?.destroy();
-      this.vertexBuffer = this.device.createBuffer({
-        size: byteSize,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-      });
-    }
+    const vertexBuffer = this.vertexBuffers.ensure(targetId, byteSize);
+    this.device.queue.writeBuffer(vertexBuffer, 0, data, 0, offset);
+  }
 
-    this.device.queue.writeBuffer(this.vertexBuffer, 0, data, 0, offset);
+  /** Forget a removed output target; its vertex buffer is destroyed after the current frame. */
+  releaseTarget(targetId: string): void {
+    this.vertexBuffers.release(targetId);
+    this.vertexCounts.delete(targetId);
   }
 
   private buildCornerPinVertices(data: Float32Array, offset: number, slice: OutputSlice): number {
@@ -221,9 +235,12 @@ export class SlicePipeline {
     commandEncoder: GPUCommandEncoder,
     context: GPUCanvasContext,
     sourceView: GPUTextureView,
-    sampler: GPUSampler
+    sampler: GPUSampler,
+    targetId: string = DEFAULT_SLICE_TARGET_ID,
   ): void {
-    if (!this.pipeline || !this.bindGroupLayout || !this.vertexBuffer || this.vertexCount === 0) return;
+    const vertexBuffer = this.vertexBuffers.get(targetId);
+    const vertexCount = this.vertexCounts.get(targetId) ?? 0;
+    if (!this.pipeline || !this.bindGroupLayout || !vertexBuffer || vertexCount === 0) return;
 
     let canvasView: GPUTextureView;
     try {
@@ -253,15 +270,14 @@ export class SlicePipeline {
 
     renderPass.setPipeline(this.pipeline);
     renderPass.setBindGroup(0, bindGroup);
-    renderPass.setVertexBuffer(0, this.vertexBuffer);
-    renderPass.draw(this.vertexCount);
+    renderPass.setVertexBuffer(0, vertexBuffer);
+    renderPass.draw(vertexCount);
     renderPass.end();
   }
 
   destroy(): void {
-    this.vertexBuffer?.destroy();
-    this.vertexBuffer = null;
-    this.vertexCount = 0;
+    this.vertexBuffers.dispose();
+    this.vertexCounts.clear();
   }
 }
 

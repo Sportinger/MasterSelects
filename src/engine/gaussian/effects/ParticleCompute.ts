@@ -3,6 +3,7 @@
 // The source buffer is never mutated; all effects are applied to the copy.
 
 import { Logger } from '../../../services/logger';
+import { GpuUniformRing } from '../../core/gpuUniformRing';
 import type { GaussianSplatParticleSettings } from '../types';
 import shaderSource from '../shaders/particleCompute.wgsl?raw';
 
@@ -36,14 +37,21 @@ const SETTINGS_BUFFER_SIZE = 32;
 
 export class ParticleCompute {
   private pipeline: GPUComputePipeline | null = null;
-  private settingsBuffer: GPUBuffer | null = null;
+  /** One settings slot per dispatch in a frame: every particle splat layer is dispatched
+   * into the same encoder, so a single rewritten buffer would give all of them the
+   * settings of the last layer. */
+  private settingsRing: GpuUniformRing | null = null;
   private dataBindGroupLayout: GPUBindGroupLayout | null = null;
   private settingsBindGroupLayout: GPUBindGroupLayout | null = null;
-  private settingsBindGroup: GPUBindGroup | null = null;
   private _initialized = false;
 
   get isInitialized(): boolean {
     return this._initialized;
+  }
+
+  /** Rewind the per-frame settings slots (called from GaussianSplatGpuRenderer.beginFrame). */
+  beginFrame(): void {
+    this.settingsRing?.beginFrame();
   }
 
   /**
@@ -102,19 +110,9 @@ export class ParticleCompute {
         label: 'particle-compute-pipeline',
       });
 
-      // Allocate settings uniform buffer
-      this.settingsBuffer = device.createBuffer({
-        size: SETTINGS_BUFFER_SIZE,
-        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      this.settingsRing = new GpuUniformRing(device, {
         label: 'particle-settings-uniform',
-      });
-
-      this.settingsBindGroup = device.createBindGroup({
-        layout: this.settingsBindGroupLayout,
-        entries: [
-          { binding: 0, resource: { buffer: this.settingsBuffer } },
-        ],
-        label: 'particle-settings-bind-group',
+        size: SETTINGS_BUFFER_SIZE,
       });
 
       this._initialized = true;
@@ -147,7 +145,7 @@ export class ParticleCompute {
     clipLocalTime: number,
     settings: GaussianSplatParticleSettings,
   ): void {
-    if (!this._initialized || !this.pipeline || !this.settingsBuffer || !this.dataBindGroupLayout || !this.settingsBindGroup) {
+    if (!this._initialized || !this.pipeline || !this.settingsRing || !this.dataBindGroupLayout || !this.settingsBindGroupLayout) {
       log.warn('ParticleCompute not initialized, skipping');
       return;
     }
@@ -167,7 +165,14 @@ export class ParticleCompute {
     u32[5] = splatCount;                             // splat_count
     // _pad0 and _pad1 are zero-initialized
 
-    device.queue.writeBuffer(this.settingsBuffer, 0, data);
+    const settingsBuffer = this.settingsRing.write(data);
+    const settingsBindGroup = device.createBindGroup({
+      layout: this.settingsBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: settingsBuffer } },
+      ],
+      label: 'particle-settings-bind-group',
+    });
 
     // Create per-dispatch bind group for source/output buffers
     const dataBindGroup = device.createBindGroup({
@@ -184,7 +189,7 @@ export class ParticleCompute {
     const pass = commandEncoder.beginComputePass({ label: 'particle-compute-pass' });
     pass.setPipeline(this.pipeline);
     pass.setBindGroup(0, dataBindGroup);
-    pass.setBindGroup(1, this.settingsBindGroup);
+    pass.setBindGroup(1, settingsBindGroup);
     pass.dispatchWorkgroups(workgroups);
     pass.end();
 
@@ -198,14 +203,11 @@ export class ParticleCompute {
 
   /** Release GPU resources */
   dispose(): void {
-    if (this.settingsBuffer) {
-      this.settingsBuffer.destroy();
-      this.settingsBuffer = null;
-    }
+    this.settingsRing?.dispose();
+    this.settingsRing = null;
     this.pipeline = null;
     this.dataBindGroupLayout = null;
     this.settingsBindGroupLayout = null;
-    this.settingsBindGroup = null;
     this._initialized = false;
     log.info('ParticleCompute disposed');
   }
