@@ -178,11 +178,13 @@ tmax“ (Schattenstrahlen durch Alpha und dünne Fasern).
 
 ### 4.5 Material, Licht, Kamera
 
-- **Fasern:** Chiang-BSDF mit Lobes p = 0 bis 3 plus Restterm. Absorption aus der
-  Garnfarbe; Rauheit, Neigung und IOR am Strand Render.
+- **Fasern:** Chiang-BSDF mit Lobes p = 0 bis 3 plus Restterm. Parameter aus dem
+  Node `Fiber Material` (4.10), pro Punkt variierbar; ohne Material aus der Color
+  des Strand Render.
 - **Meshes:** Diffus + GGX (Rauheit, Metallic) als OpenPBR-Teilmenge, Basisdaten aus
-  den MeshPass-Materialien.
-- **Planes:** diffus mit Textur, Alpha als Durchlässigkeit, optional Emission.
+  den MeshPass-Materialien und den neuen `material.surface`-Feldern (4.10).
+- **Planes:** diffus mit Textur, Alpha als Durchlässigkeit, Rauheit, Metallic und
+  Emission aus `material.surface`.
 - **Voxel:** diffus mit Zellfarbe. **Flock-Punkte:** diffus mit Partikelfarbe.
 - **Lichter:**
   - Point als Kugel mit Diameter.
@@ -240,7 +242,7 @@ tmax“ (Schattenstrahlen durch Alpha und dünne Fasern).
   (`SceneTextureComposite.wgsl`), für Raster und Path Tracing gleich.
 - Raster-Look: Dual Scattering für Strands, Environment als IBL
   (SH-Irradiance + vorgefilterte Mip-Kette) für Strands und Meshes. Die
-  Path-Tracing-Parameter am Strand Render bilden sich auf das Raster-Shading ab,
+  Fiber-Material-Parameter bilden sich auf das Raster-Shading ab,
   damit beide Modi ähnlich aussehen.
 
 ### 4.9 Bedienung
@@ -249,16 +251,72 @@ tmax“ (Schattenstrahlen durch Alpha und dünne Fasern).
   sie, das Export-Panel kann überschreiben.
 - **Vorschau:** Umschalter und Render Scale im Preview-Panel. Einblendung mit spp,
   ms pro Frame und Status. Optional Render Region.
-- **Strand Render:** Gruppe „Path Tracing“ (Fiber Roughness, Cuticle Tilt, IOR,
-  Absorption aus Farbe oder Melanin, Subdivision).
+- **Nodes:** Fiber Material, Strand Render und `material.surface` wie in 4.10.
 - **3D-Kamera:** Exposure, Tone Mapping, f-Stop, Fokusdistanz, Shutter.
 - **UI-Regeln:** Inspector-Primitive (`ResolveInspectorSection`,
   `ResolveInspectorNumberRow`, `InspectorSelect`) und Pointer-Fokus-Hygiene nach
   AGENTS.md Abschnitt 9.
-- **AI-Agent:** keine Änderung. Er bearbeitet Strand-Render-Werte schon über
-  `editOperatorGraph`.
+- **AI-Agent:** kein neues Tool. Er findet die neuen Nodes über den Katalog und
+  bearbeitet sie über `editOperatorGraph`.
 
-### 4.10 Geräte und Grenzen
+### 4.10 Nodes
+
+Material und Darstellung werden im Node-Graphen getrennt. Rendereinstellungen
+werden keine Nodes.
+
+**Neuer allgemeiner Node `Fiber Material`** (Weave-Graph, Domain `geometry`, Kategorie
+„Shading“):
+- Eingang: Curves.
+- Ausgang: Curves mit Material.
+- Parameter: Color, Absorption-Modus (aus Farbe / Melanin), Melanin, Rauheit
+  längs (β_m) und quer (β_n), Cuticle Tilt, IOR. Dazu Coat Tint für die
+  R-Reflexion, eine Mischung für den matten Restanteil und Fuzz für die
+  Flyaways.
+- Color, Rauheit und Melanin kommen optional **pro Punkt** über Felder (Ramp
+  entlang Curve Param, Noise, Math), genauso wie heute die Radius-Felder der Yarn
+  Profile.
+- Für den Raster-Pfad werden die Werte auf die bestehenden Highlight-Parameter
+  abgebildet (4.8); für den Path Tracer gelten sie als Chiang-Parameter.
+- Mehrere Fiber Materials in einem Graphen sind erlaubt, etwa über Strand-Index
+  oder Selektion. Jede Kurve trägt eine Material-ID.
+- Presets im Node: Wolle, Baumwolle, Seide, Synthetik, Haar (Schritt 4.3 kalibriert
+  sie).
+- Der Node ist allgemein: Haare, Gras und Kabel nutzen ihn später genauso.
+
+**Strand Render** bleibt der Ausgabe-Node:
+- Width, Antialiasing und neu **Subdivision** für den Path Tracer.
+- Ohne vorgeschaltetes Fiber Material gilt wie bisher seine Color. Bestehende
+  Projekte sehen unverändert aus.
+- Mit Fiber Material ist Color ausgegraut und als „vom Material“ beschriftet.
+
+**`material.surface`** (Scene-Graph der Planes, `clip.nodeGraph.scene`) bekommt:
+- Roughness, Metallic, Emission (Farbe + Stärke) und Emission aus Textur.
+- Die Standardwerte (Roughness 1, Metallic 0, Emission 0) erhalten das heutige
+  Aussehen.
+- Meshes ohne Scene-Graph nutzen dieselben Felder über ihr Clip-Material.
+
+**Bewusst keine Nodes:**
+- Render Engine, Samples, Render Scale und Denoise sind Einstellungen der
+  Composition bzw. des Exports.
+- Lichter und Kamera bleiben Clips.
+
+**Pflichten für jeden neuen oder geänderten Node:**
+- Registrierung und Validierung: `geometryProgram.ts` und
+  `geometryProgramValidation.ts` prüfen feste Schlüssel und brauchen die neuen
+  Felder bzw. die neue Stufe. Dazu `sceneGraph.ts` für `material.surface`.
+- Persistenz: Feldklassifizierung im Project-Repository. Laufzeit-Handles nie in
+  die Projektdaten.
+- Katalogtexte, damit der AI-Agent die Nodes über `searchNodeCatalog` findet. Die
+  Bearbeitung läuft über `editOperatorGraph`, ohne neues Tool.
+- Material-Werte lassen sich über Value-Nodes im Effects-Tab einblenden und
+  keyframen.
+- Einordnung laut `Node-Taxonomy-Plan.md`: Fiber Material und `material.surface`
+  unter „Shading“, Strand Render unter „Output & Render“.
+- Doku: `Node-Catalog.md`, `Weave.md`, `3D-Layers.md`.
+- Standard-Weave-Graph: Fiber Material (Preset Wolle) zwischen Flyaways und
+  Surface Bind. Neue Projekte bekommen es, bestehende bleiben unverändert.
+
+### 4.11 Geräte und Grenzen
 
 - `maxStorageBufferBindingSize` prüfen, große Szenen auf mehrere Puffer aufteilen.
   Was trotzdem nicht passt, lehnt der Path Tracer mit Hinweis ab.
@@ -281,6 +339,10 @@ Alles Folgende baut darauf auf:
      Frame-Index, Zeit, Shutter), AOV-Satz, Engine-Typ.
    - `ptLayouts.ts`: Byte-Layouts für Primitive, BVH-Knoten, Instanzen, Lichter,
      Materialien, Treffer, Reservoir, Cache-Eintrag.
+   - Fasersegmente tragen von Anfang an eine Material-ID und Attributplätze
+     pro Punkt (Farbe, Rauheit, Melanin), interpoliert entlang des Segments.
+     Material-Tabelle für Fasern (Chiang-Parameter) und Oberflächen (Rauheit,
+     Metallic, Emission).
    - `PtCommon.wgsl`: Structs als Spiegel der Layouts.
    - Bind-Gruppen: 0 Frame, 1 Szene/BVH, 2 Lichter/Materialien, 3 Ausgaben.
    - Feste WGSL-Schnittstellen, gegen die die späteren Module gebaut werden:
@@ -317,18 +379,21 @@ Schritten reicht es, Diffs zu lesen.
 | Schritt | Inhalt |
 |---|---|
 | 1.1 | HDR-Umstellung aller Native-Pässe (inkl. Coverage- und Analytic-Resolve), Tone Mapping und Belichtung im Composite |
-| 1.2 | Settings, Typen, Persistenz und UI-Felder (Engine, Kamera, Strand Render „Path Tracing“, Export Render Quality) |
+| 1.2 | Settings, Typen, Persistenz und UI-Felder (Engine, Kamera, Export Render Quality) |
 | 1.3 | Faser-Emission (Compute) über das gemeinsame Fasermodul, LOD-Hashing, Segment-Puffer |
 | 1.4 | LBVH-Bau: Morton → `FlockRadixSort` → Karras-Hierarchie → AABB bottom-up; Refit |
 | 1.5 | Sobol/Owen + Blue Noise; Chiang-BSDF in WGSL plus TS-Referenz (eval/sample/pdf) |
 | 1.6 | GGX/Diffus, Plane- und Voxel-Material, Alpha |
+| 1.7 | Nodes nach 4.10: Fiber Material (Stufe, Felder pro Punkt, Material-IDs, Presets), Strand Render (Subdivision, Color-Verhalten), `material.surface` (Roughness, Metallic, Emission); Validierung, Persistenz, Katalogtexte, Taxonomie, Standardgraph; Raster liest das Fiber Material sofort |
 
 **Prüfung Phase 1:**
 - `tsc -b`.
 - Vitest: Chiang-Energie (White Furnace), LBVH gegen Brute Force auf Zufallsstrahlen
   mit CPU-Referenz, Layout-Spiegel.
+- Vitest: Validierung und Persistenz der neuen Node-Felder (alte Projekte laden
+  unverändert).
 - Eine Browser-Sitzung: Weave-Prüfseiten in HDR, neue UI-Felder (Pointer- und
-  Tastaturfokus).
+  Tastaturfokus), Fiber Material im Node-Editor mit Ramp pro Punkt.
 - Commit.
 
 ### Phase 2: Path-Tracing-Kern
@@ -378,9 +443,9 @@ Schritten reicht es, Diffs zu lesen.
 |---|---|
 | 4.1 | Stillstands-Akkumulation ohne Bias, Übergang Bewegung ↔ Stillstand ohne Sprung; OIDN-Politur im Stillstand (Modell „small“) |
 | 4.2 | Traversierungsleistung: Stack im Workgroup-Speicher, Strahlsortierung, BVH-Qualität (Treelet/SAH); Wavefront-Variante nur, wenn die Messung Divergenz zeigt |
-| 4.3 | Abgleich der Faser-Mehrfachstreuung gegen Referenzbilder mit hoher spp; Rauheits- und Absorptions-Presets für typische Garne |
+| 4.3 | Abgleich der Faser-Mehrfachstreuung gegen Referenzbilder mit hoher spp; Kalibrierung der Fiber-Material-Presets (Wolle, Baumwolle, Seide, Synthetik, Haar) |
 | 4.4 | Vorschau-UX: Umschalter, Presets, Einblendung, Render Region, Fallback-Hinweise |
-| 4.5 | Doku: `docs/Features/Path-Tracing.md`, `Weave.md`, `3D-Layers.md`, README |
+| 4.5 | Doku: `docs/Features/Path-Tracing.md`, `Weave.md`, `3D-Layers.md`, `Node-Catalog.md`, README |
 
 **Prüfung Phase 4 = Abnahme gesamt:**
 - `tsc -b`, gesammelter Vitest-Lauf aller Path-Tracing-Testdateien.
