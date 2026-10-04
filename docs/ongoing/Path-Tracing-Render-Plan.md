@@ -1,7 +1,7 @@
 # Path Tracing in Echtzeit und AI-Denoise für die Native-3D-Szene
 
 Stand: 2026-10-04. **Status: Plan, nichts umgesetzt.**
-Ausführung: ein Orchestrator (Claude Code) mit fünf Codex-Lanes, siehe Abschnitt 7.
+Ausführung: ein Agent baut alles selbst, Phase für Phase, siehe Abschnitt 7.
 
 **Ziel:** Die Native-3D-Szene (Weave-Garne, Meshes, Planes, Light-Clips, 3D-Kamera)
 wird physikalisch korrekt path-getract:
@@ -18,8 +18,8 @@ Zeitdruck. Splats sind nicht Teil des Plans; sie bleiben im Raster und werden wi
 heute über die Szenentiefe einkomponiert.
 
 **Arbeitsweise: schnell, Prüfungen gesammelt.**
-- Lanes arbeiten durch, ohne nach jedem Paket zu testen.
-- Geprüft wird gesammelt am Ende einer Wave: eine `tsc`-Runde, ein Vitest-Lauf
+- Durcharbeiten, ohne nach jedem Schritt zu testen.
+- Geprüft wird gesammelt am Ende einer Phase: eine `tsc`-Runde, ein Vitest-Lauf
   über die benannten Dateien, eine Browser-Sitzung.
 - Ein Build nur am Ende des Plans bzw. wenn der Nutzer ihn verlangt.
 - Tests gibt es nur dort, wo Mathematik falsch sein kann, ohne dass man es sieht:
@@ -27,9 +27,8 @@ heute über die Szenentiefe einkomponiert.
   nur die Implementierung nachbilden.
 
 **Leitprinzipien:**
-1. **Verträge zuerst.** Datenlayouts, Bind-Group-Konventionen und WGSL-Signaturen
-   legt der Orchestrator in Wave 0 fest. Danach arbeiten die Lanes parallel gegen
-   diese Verträge, ohne aufeinander zu warten.
+1. **Schnittstellen zuerst.** Datenlayouts, Bind-Group-Konventionen und
+   WGSL-Signaturen stehen in Phase 0 fest. Alle späteren Module bauen dagegen.
 2. **Eine Szenenbeschreibung, zwei Renderer.** Raster und Path Tracer lesen dieselben
    Layer, Lichter, Kamera und dieselbe Garn-Auswertung (gemeinsames
    WGSL-Fasermodul). Kein zweites Modell der Szene.
@@ -93,9 +92,8 @@ Offline-Qualität) für die Native-Szene.
 
 ## 3. Leistungsziele
 
-Alle Werte gelten für das RDNA3-Referenzgerät. Wave 0 misst die Ausgangslage. Sind
-Ziele danach unrealistisch, passt der Orchestrator sie im Statusboard an und
-begründet es.
+Alle Werte gelten für das RDNA3-Referenzgerät. Phase 0 misst die Ausgangslage. Sind
+Ziele danach unrealistisch, werden sie im Statusboard angepasst und begründet.
 
 | Fall | Ziel |
 |---|---|
@@ -108,19 +106,19 @@ begründet es.
 
 ## 4. Architektur
 
-### 4.1 Verzeichnisse und Besitz
+### 4.1 Verzeichnisse
 
 ```
 src/engine/native3d/pathtrace/
-  contracts/      Orchestrator   Typen, Byte-Layouts, WGSL-Structs, Bind-Group-Konventionen
-  scene/          Lane 1         Primitive packen, Faser-Emission, Layer-Adapter
-  bvh/            Lane 1         LBVH-Bau, Refit, TLAS/BLAS, Traversierung, Schnitte
-  integrator/     Lane 2         Megakernel, Sampler, AOVs, Kamera-Sampling
-  materials/      Lane 2         Chiang-BSDF, GGX/Diffus, Plane- und Voxel-Material
-  lights/         Lane 2         Lichtsampling, Environment-Importance
-  realtime/       Lane 3         Bewegungsvektoren, ReSTIR DI, SHaRC, Akkumulation, A-SVGF, Upscaler
-  denoise/        Lane 4         OIDN-Anbindung
-  runtime/        Lane 5         PathTraceRuntime, Szenen-Signatur, Neustart, Stats
+  contracts/      Typen, Byte-Layouts, WGSL-Structs, Bind-Group-Konventionen
+  scene/          Primitive packen, Faser-Emission, Layer-Adapter
+  bvh/            LBVH-Bau, Refit, TLAS/BLAS, Traversierung, Schnitte
+  integrator/     Megakernel, Sampler, AOVs, Kamera-Sampling
+  materials/      Chiang-BSDF, GGX/Diffus, Plane- und Voxel-Material
+  lights/         Lichtsampling, Environment-Importance
+  realtime/       Bewegungsvektoren, ReSTIR DI, SHaRC, Akkumulation, A-SVGF, Upscaler
+  denoise/        OIDN-Anbindung
+  runtime/        PathTraceRuntime, Szenen-Signatur, Neustart, Stats
 ```
 
 Jede Datei bleibt unter 700 Zeilen. WGSL-Module werden per String-Komposition
@@ -131,7 +129,7 @@ zusammengesetzt, wie in `strandShaders.ts`.
 ```
 Layer (Strands, Meshes, Planes, Voxel, Flock, FaceCables, Lights, Kamera)
   │
-  ├─ Raster-Pfad (Engine „Raster“, ab Wave 1 in HDR)
+  ├─ Raster-Pfad (Engine „Raster“, ab Phase 1 in HDR)
   │
   └─ Path-Tracing-Pfad (Engine „Path Traced“)
        1. Faser-Emission (Compute): Mittellinien → Fasersegmente
@@ -166,7 +164,7 @@ tmax“ (Schattenstrahlen durch Alpha und dünne Fasern).
 ### 4.4 Fasern
 
 - Die WGSL-Funktionen für Ply-Offsets, Twist, Fasern, Flyaways und Radius-Felder
-  zieht der Orchestrator in Wave 0 aus `StrandScene.wgsl` in ein gemeinsames Modul
+  kommen in Phase 0 aus `StrandScene.wgsl` in ein gemeinsames Modul
   `shaders/StrandFiberGeometry.wgsl`. Raster und Emission nutzen es beide.
 - **Unterteilung** ist eine eigene Path-Tracing-Einstellung und hängt nicht von der
   Bildschirmgröße ab.
@@ -274,24 +272,23 @@ tmax“ (Schattenstrahlen durch Alpha und dünne Fasern).
 
 ---
 
-## 5. Wave 0: Orchestrator allein
+## 5. Phase 0: Grundlagen
 
-Ohne Lanes, weil alles Folgende davon abhängt:
+Alles Folgende baut darauf auf:
 
-1. **Verträge** in `pathtrace/contracts/`:
+1. **Gemeinsame Typen und Layouts** in `pathtrace/contracts/`:
    - `ptTypes.ts`: Settings, Frame-Eingaben (Kamera aktuell + vorher, Jitter,
      Frame-Index, Zeit, Shutter), AOV-Satz, Engine-Typ.
    - `ptLayouts.ts`: Byte-Layouts für Primitive, BVH-Knoten, Instanzen, Lichter,
      Materialien, Treffer, Reservoir, Cache-Eintrag.
    - `PtCommon.wgsl`: Structs als Spiegel der Layouts.
    - Bind-Gruppen: 0 Frame, 1 Szene/BVH, 2 Lichter/Materialien, 3 Ausgaben.
-   - **Signaturen mit Stub-Rümpfen**, damit jede Lane sofort kompiliert:
+   - Feste WGSL-Schnittstellen, gegen die die späteren Module gebaut werden:
      - `pt_trace_closest(ray) -> PtHit`,
      - `pt_trace_transmittance(ray, tmax) -> f32`,
      - `pt_bsdf_eval/sample/pdf`,
      - `pt_sample_light`,
      - `pt_cache_query/update`.
-     Jede Lane ersetzt nur die Rümpfe ihrer eigenen Funktionen.
 2. **Fasermodul extrahieren**: `shaders/StrandFiberGeometry.wgsl` aus
    `StrandScene.wgsl`, verhaltensgleich.
 3. **Referenzszenen** als Prüfseite `tests/browser/pathtrace-check.html`:
@@ -300,78 +297,72 @@ Ohne Lanes, weil alles Folgende davon abhängt:
    - Kreuzknoten auf Boden mit HDRI.
    Zeitmessung und Readback-Prüfung.
 4. **Ausgangsmessung**: Segmentzahlen, Speicher, Raster-Zeiten → Statusboard.
-5. **Codex-Probe**: ein Mini-Paket, das in `pathtrace/runtime/` eine Datei anlegt.
-   Damit sind Sandbox-Flags, Schreibrecht und Bericht geprüft (Abschnitt 7.2).
-6. Eine Prüfrunde für Wave 0: `tsc -b`, Layout-Spiegeltest, Prüfseite lädt, die
-   `weave-*-check`-Seiten bleiben unverändert. Commit.
+
+**Prüfung Phase 0:**
+- `tsc -b`.
+- Layout-Spiegeltest.
+- Prüfseite lädt; die `weave-*-check`-Seiten bleiben unverändert.
+- Commit.
 
 ---
 
-## 6. Waves und Pakete
+## 6. Phasen 1–4
 
-Fünf Lanes laufen parallel, je ein Worker pro Lane. Innerhalb einer Lane laufen die
-Pakete nacheinander. Abhängigkeiten zwischen Lanes gehen nur über die Verträge und
-Stubs, deshalb wartet keine Lane innerhalb einer Wave auf eine andere.
+Ein Agent arbeitet die Schritte der Reihe nach ab, ohne nach jedem Schritt zu
+testen. Am Ende jeder Phase wird gesammelt geprüft und committet. Zwischen den
+Schritten reicht es, Diffs zu lesen.
 
-| Lane | Thema | Schreibbereich |
-|---|---|---|
-| **L1 Geometrie** | Emission, Primitive, BVH, Traversierung | `pathtrace/scene/`, `pathtrace/bvh/` |
-| **L2 Licht & Material** | Sampler, BSDFs, Lichter, Integrator | `pathtrace/integrator/`, `pathtrace/materials/`, `pathtrace/lights/` |
-| **L3 Echtzeit** | Bewegungsvektoren, ReSTIR, SHaRC, Akkumulation, A-SVGF, Upscaler | `pathtrace/realtime/` |
-| **L4 Bild** | HDR-Umstellung, Tone Mapping, Raster-Look, OIDN | `pathtrace/denoise/`, `sceneRenderer/constants.ts`, `sceneRenderer/targets.ts`, `SceneTextureComposite.wgsl`, `StrandScene.wgsl` (nur Shading), `MeshPass.wgsl`, `StrandCoverageTargets.ts`, `passes/strandRaster/`, neues `native3d/ibl/` |
-| **L5 Integration** | Runtime, Worker, Export, Settings, UI, Doku | `pathtrace/runtime/`, `NativeSceneRuntime.ts`, `sceneRenderer/drawPlan.ts`, `workerGpuNativeSceneProjection.ts`, `src/engine/export/`, Typen/Stores für Composition, Kamera, Strand Render (`geometryProgram*.ts`, `curveOperators.ts`), UI-Komponenten, `docs/Features/` |
+### Phase 1: Grundbausteine
 
-### Wave 1: Grundlagen
-
-| Paket | Inhalt |
+| Schritt | Inhalt |
 |---|---|
-| L1-1 | Faser-Emission (Compute) über das gemeinsame Fasermodul, LOD-Hashing, Segment-Puffer |
-| L1-2 | LBVH-Bau: Morton → `FlockRadixSort` → Karras-Hierarchie → AABB bottom-up; Refit |
-| L2-1 | Sobol/Owen + Blue Noise; Chiang-BSDF in WGSL plus TS-Referenz (eval/sample/pdf) |
-| L2-2 | GGX/Diffus, Plane- und Voxel-Material, Alpha |
-| L3-1 | Bewegungsvektoren aus aktueller und vorheriger Kamera und Objektbewegung; Reprojektion und zeitliche Akkumulation gegen den AOV-Vertrag |
-| L4-1 | HDR-Umstellung aller Native-Pässe, Tone Mapping und Belichtung im Composite |
-| L5-1 | Settings, Typen, Persistenz und UI-Felder (Engine, Kamera, Strand Render „Path Tracing“, Export Render Quality) |
+| 1.1 | HDR-Umstellung aller Native-Pässe (inkl. Coverage- und Analytic-Resolve), Tone Mapping und Belichtung im Composite |
+| 1.2 | Settings, Typen, Persistenz und UI-Felder (Engine, Kamera, Strand Render „Path Tracing“, Export Render Quality) |
+| 1.3 | Faser-Emission (Compute) über das gemeinsame Fasermodul, LOD-Hashing, Segment-Puffer |
+| 1.4 | LBVH-Bau: Morton → `FlockRadixSort` → Karras-Hierarchie → AABB bottom-up; Refit |
+| 1.5 | Sobol/Owen + Blue Noise; Chiang-BSDF in WGSL plus TS-Referenz (eval/sample/pdf) |
+| 1.6 | GGX/Diffus, Plane- und Voxel-Material, Alpha |
 
-**Prüfung Wave 1:**
+**Prüfung Phase 1:**
 - `tsc -b`.
 - Vitest: Chiang-Energie (White Furnace), LBVH gegen Brute Force auf Zufallsstrahlen
   mit CPU-Referenz, Layout-Spiegel.
 - Eine Browser-Sitzung: Weave-Prüfseiten in HDR, neue UI-Felder (Pointer- und
   Tastaturfokus).
-- Commit pro Lane.
+- Commit.
 
-### Wave 2: Kern
+### Phase 2: Path-Tracing-Kern
 
-| Paket | Inhalt |
+| Schritt | Inhalt |
 |---|---|
-| L1-3 | Traversierung (Stack, `pt_trace_closest`, `pt_trace_transmittance`), Schnitte für Fasersegment, Dreieck, Quad |
-| L1-4 | Zweistufiges BVH (BLAS pro Layer, TLAS pro Frame), Mesh- und Plane-Upload, Neubau-/Refit-Politik, Puffer-Aufteilung |
-| L2-3 | Lichtsampling (Point, Panel, Environment mit Alias-Tabelle), NEE + MIS |
-| L2-4 | Megakernel-Integrator: Bounces, Russian Roulette, Firefly-Klemmung, AOVs, Tiefenschärfe, Shutter-Zeit |
-| L3-2 | ReSTIR DI (Kandidaten, zeitlich, räumlich, Sichtbarkeit über `pt_trace_transmittance`) |
-| L4-2 | OIDN über `oidn-web`: Gewichte im eigenen Asset-Pfad, GPU-Puffer, Kacheln, FP16-Fallback; Lizenzen prüfen und in `LICENSING.md` eintragen |
-| L5-2 | `PathTraceRuntime`: Szenen-Signatur, Akkumulations-Neustart, Verzweigung in `NativeSceneRuntime`, Worker-Projektion, Debug-Ansichten (Albedo, Normale, Tiefe, BVH-Heatmap) |
+| 2.1 | Traversierung (Stack, `pt_trace_closest`, `pt_trace_transmittance`), Schnitte für Fasersegment, Dreieck, Quad |
+| 2.2 | Zweistufiges BVH (BLAS pro Layer, TLAS pro Frame), Mesh- und Plane-Upload, Neubau-/Refit-Politik, Puffer-Aufteilung |
+| 2.3 | Lichtsampling (Point, Panel, Environment mit Alias-Tabelle), NEE + MIS |
+| 2.4 | Megakernel-Integrator: Bounces, Russian Roulette, Firefly-Klemmung, AOVs, Tiefenschärfe, Shutter-Zeit |
+| 2.5 | `PathTraceRuntime`: Szenen-Signatur, Akkumulations-Neustart, Verzweigung in `NativeSceneRuntime`, Worker-Projektion, Debug-Ansichten (Albedo, Normale, Tiefe, BVH-Heatmap) |
+| 2.6 | OIDN über `oidn-web`: Gewichte im eigenen Asset-Pfad, GPU-Puffer, Kacheln, FP16-Fallback; Lizenzen prüfen und in `LICENSING.md` eintragen |
 
-**Prüfung Wave 2:**
+**Prüfung Phase 2:**
 - `tsc -b`.
 - Vitest: Schnitttests gegen CPU-Referenz, MIS-Gewichte.
 - Eine Browser-Sitzung im Editor mit dem Weave-Projekt: Path Traced zeigt ein
   konvergierendes Bild, Debug-Ansichten stimmen, Raster unverändert.
 - Commit.
 
-### Wave 3: Echtzeit, Export, Look
+### Phase 3: Echtzeit, Export, Look
 
-| Paket | Inhalt |
+| Schritt | Inhalt |
 |---|---|
-| L1-5 | Weitere Layer: FaceCables und Flock-Kurven als Fasersegmente, Flock-Punkte als Kugeln, Voxel als Boxen |
-| L2-5 | Bewegungsunschärfe mit Refit pro Unterzeit, Simulation interpoliert; deterministische Export-Seeds |
-| L3-3 | SHaRC: Hash-Gitter, Update-Pass, Abfrage am Pfadende, Zellgröße nach Distanz |
-| L3-4 | A-SVGF faserbewusst; temporaler Upscaler mit Render Scale |
-| L4-3 | Raster-Look: Dual Scattering, IBL für Strands und Meshes, Abbildung der PT-Parameter |
-| L5-3 | Export: Render Quality (Raster-Sub-Samples und Path Traced), adaptives Sampling, Zeitlimit, OIDN, Fortschritt mit Restzeit |
+| 3.1 | Bewegungsvektoren aus Kamera- und Objektbewegung, Reprojektion, zeitliche Akkumulation |
+| 3.2 | ReSTIR DI (Kandidaten, zeitlich, räumlich, Sichtbarkeit über `pt_trace_transmittance`) |
+| 3.3 | SHaRC: Hash-Gitter, Update-Pass, Abfrage am Pfadende, Zellgröße nach Distanz |
+| 3.4 | A-SVGF faserbewusst; temporaler Upscaler mit Render Scale |
+| 3.5 | Bewegungsunschärfe mit Refit pro Unterzeit, Simulation interpoliert; deterministische Export-Seeds |
+| 3.6 | Export: Render Quality (Raster-Sub-Samples und Path Traced), adaptives Sampling, Zeitlimit, OIDN, Fortschritt mit Restzeit |
+| 3.7 | Weitere Layer: FaceCables und Flock-Kurven als Fasersegmente, Flock-Punkte als Kugeln, Voxel als Boxen |
+| 3.8 | Raster-Look: Dual Scattering, IBL für Strands und Meshes, Abbildung der PT-Parameter |
 
-**Prüfung Wave 3:**
+**Prüfung Phase 3:**
 - `tsc -b`.
 - Vitest nur für neue Mathematik (Cache-Hash, Varianzschätzung).
 - Eine Browser-Sitzung:
@@ -381,17 +372,17 @@ Stubs, deshalb wartet keine Lane innerhalb einer Wave auf eine andere.
   - Raster mit HDR-Look.
 - Commit.
 
-### Wave 4: Vorschau fertig und Leistung
+### Phase 4: Vorschau fertig und Leistung
 
-| Paket | Inhalt |
+| Schritt | Inhalt |
 |---|---|
-| L1-6 | Traversierungsleistung: Stack im Workgroup-Speicher, Strahlsortierung, BVH-Qualität (Treelet/SAH); Wavefront-Variante nur, wenn die Messung Divergenz zeigt |
-| L2-6 | Abgleich der Faser-Mehrfachstreuung gegen Referenzbilder mit hoher spp; Rauheits- und Absorptions-Presets für typische Garne |
-| L3-5 | Stillstands-Akkumulation ohne Bias, Übergang Bewegung ↔ Stillstand ohne Sprung |
-| L4-4 | OIDN-Politur im Stillstand (Modell „small“), Firefly-Behandlung der Denoise-Eingaben |
-| L5-4 | Vorschau-UX: Umschalter, Presets, Einblendung, Render Region, Fallback-Hinweise; Feature-Seite `docs/Features/Path-Tracing.md`, `Weave.md`, `3D-Layers.md`, README |
+| 4.1 | Stillstands-Akkumulation ohne Bias, Übergang Bewegung ↔ Stillstand ohne Sprung; OIDN-Politur im Stillstand (Modell „small“) |
+| 4.2 | Traversierungsleistung: Stack im Workgroup-Speicher, Strahlsortierung, BVH-Qualität (Treelet/SAH); Wavefront-Variante nur, wenn die Messung Divergenz zeigt |
+| 4.3 | Abgleich der Faser-Mehrfachstreuung gegen Referenzbilder mit hoher spp; Rauheits- und Absorptions-Presets für typische Garne |
+| 4.4 | Vorschau-UX: Umschalter, Presets, Einblendung, Render Region, Fallback-Hinweise |
+| 4.5 | Doku: `docs/Features/Path-Tracing.md`, `Weave.md`, `3D-Layers.md`, README |
 
-**Prüfung Wave 4 = Abnahme gesamt:**
+**Prüfung Phase 4 = Abnahme gesamt:**
 - `tsc -b`, gesammelter Vitest-Lauf aller Path-Tracing-Testdateien.
 - Eine Browser-Sitzung mit allen Zielen aus Abschnitt 3 und dem Vergleich Raster ↔
   Path Traced an festen Frames.
@@ -399,104 +390,42 @@ Stubs, deshalb wartet keine Lane innerhalb einer Wave auf eine andere.
 - `npm run build` einmal am Ende (oder wenn der Nutzer ihn verlangt).
 - Commit, Plan-Status auf „umgesetzt“.
 
-Fehler aus einer Prüfung werden als Fix-Pakete in die nächste Wave oder sofort als
-einzelnes Paket der betroffenen Lane nachgeschoben. Erneut geprüft wird nur das, was
-der Fix berührt.
-
 ---
 
-## 7. Orchestrierung
+## 7. Arbeitsweise
 
-### 7.1 Rollen
-
-- **Orchestrator (Claude Code):**
-  - schreibt die Verträge (Wave 0) und als Einziger Änderungen daran,
-  - schneidet die Pakete und dispatcht die Worker,
-  - prüft gesammelt pro Wave und committet,
-  - führt das Statusboard (8).
-  Er implementiert nur Wave 0 und kleine Integrationsreparaturen selbst.
-- **Worker (Codex):** setzen je ein Paket in ihrem Schreibbereich um und
-  berichten. Sie committen nie und ändern keine Verträge. Brauchen sie eine
-  Vertragsänderung, melden sie das im Bericht.
-
-### 7.2 Dispatch
-
-- Modell **`gpt-6.1-sol`**, Reasoning **`low`** als Standard. Eskalation auf
-  `medium` nur für ein Paket, das zweimal an der Prüfung gescheitert ist. Das wird
-  im Statusboard vermerkt.
-- Paket als Datei unter
-  `C:\Users\admin\AppData\Local\Temp\claude\…\scratchpad\pt-packets\`, per stdin
-  übergeben, im Hintergrund gestartet:
-
-```powershell
-Get-Content <paket.md> -Raw | codex exec -m gpt-6.1-sol -c model_reasoning_effort=low `
-  -s workspace-write -C C:\Users\admin\Documents\MasterSelects-Public -o <bericht.md> -
-```
-
-- Scheitert die Sandbox mit „cannot enforce split writable root sets“, kommen
-  `-c sandbox_workspace_write.exclude_tmpdir_env_var=true -c
-  sandbox_workspace_write.exclude_slash_tmp=true` dazu. Die Codex-Probe in Wave 0
-  entscheidet das.
-- `resume` nicht verwenden. Folgepakete werden als neue, eigenständige Pakete
-  dispatcht.
-- Höchstens 5 Worker gleichzeitig (einer pro Lane), alle im selben Working Tree,
-  Schreibbereiche disjunkt.
-- Bei „usage limit“ bis zur genannten Zeit warten, dann neu dispatchen. Nicht in
-  einer Schleife wiederholen.
-
-### 7.3 Paketvorlage
-
-```text
-Du bist Worker für Paket <ID> (Lane <L>). Erweitere den Umfang nicht.
-Ziel: <ein Satz>
-Zuerst lesen: docs/ongoing/Path-Tracing-Render-Plan.md Abschnitt <x>,
-  src/engine/native3d/pathtrace/contracts/*, <weitere Dateien>
-Erlaubter Schreibbereich: <Pfade> – NUR diese Dateien anlegen/ändern.
-Verboten: contracts/, Schreibbereiche anderer Lanes, Löschen/Zurücksetzen
-  fremder Dateien, rm/git clean/git restore/git checkout, Commits.
-Vertrag: <Signaturen/Layouts, die einzuhalten sind>
-Tests: nur <genannte Mathematik-Tests>, sonst keine. Bekannte Fixture-Fallen: <…>
-Prüfung: einmal am Ende `node ./node_modules/typescript/bin/tsc -b --pretty false`,
-  Fehler in deinem Bereich beheben. Kein Vitest, kein Build, kein Browser.
-Bericht: geänderte Dateien, tsc-Ergebnis (nur Fehlerzeilen), Vertragswünsche,
-  bemerkte Probleme außerhalb des Bereichs (melden, nicht beheben).
-Abbrechen und berichten, wenn: der Vertrag nicht reicht oder fremde Dateien
-  geändert werden müssten.
-```
-
-### 7.4 Ablauf pro Paket (leichtgewichtig)
-
-Nach jedem Bericht, ohne Tests:
-1. Prüfen, ob die Dateien wirklich geändert wurden (Änderungszeit im
-   Schreibbereich). Berichte allein reichen nicht.
-2. Mit `git status --short` auf Löschungen und Schreibzugriffe außerhalb des
-   Bereichs achten.
-3. Diff überfliegen, ob der Vertrag eingehalten ist.
-4. Nächstes Paket der Lane sofort dispatchen.
-
-Tests, Browser und Commits passieren gesammelt am Wave-Ende (Abschnitt 6).
-
-### 7.5 Commits
-
-- Pro Lane und Wave ein Commit mit expliziten Pfaden
-  (`git commit -- <pfade>`), einzeiliger Conventional-Commit-Text auf Englisch,
-  z. B. `feat(pathtrace): add LBVH build and refit`.
-- Vorher prüfen, dass `origin` auf `Sportinger/MasterSelects` zeigt. Fremde
-  Änderungen anderer Agenten bleiben unberührt.
-- Kein Push ohne Auftrag des Nutzers.
+- **Ein Agent baut alles selbst.** Keine Codex-Worker, keine parallelen Lanes, keine
+  Subagenten für die Implementierung.
+- **Reihenfolge:** Phasen und Schritte wie in Abschnitt 6. Ein Schritt darf
+  vorgezogen werden, wenn er für einen anderen gebraucht wird.
+- **Zwischen den Schritten:** keine Tests, kein Build, kein Browser; Diffs lesen
+  reicht.
+- **Am Phasenende:** gesammelte Prüfung wie oben. Erneut geprüft wird nur, was ein
+  Fix berührt.
+- **Commits:** am Phasenende, bei großen Phasen auch nach fertigen Teilblöcken. Mit
+  expliziten Pfaden (`git commit -- <pfade>`), einzeiliger Conventional-Commit-Text
+  auf Englisch, z. B. `feat(pathtrace): add LBVH build and refit`.
+  - Vorher prüfen, dass `origin` auf `Sportinger/MasterSelects` zeigt.
+  - Fremde Änderungen anderer Agenten bleiben unberührt.
+  - Kein bekannt kaputter Zwischenstand.
+  - Kein Push ohne Auftrag.
+- **Rückfragen** nur bei echten Blockern, die nur der Nutzer lösen kann.
+- **Plan aktuell halten:** Statusboard (Abschnitt 8) nach jeder Phase, Befunde und
+  angepasste Ziele mit Begründung.
 
 ---
 
 ## 8. Statusboard
 
-Pflegt nur der Orchestrator.
+| Phase | Status | Commit | Notiz |
+|---|---|---|---|
+| 0 Grundlagen | offen | – | – |
+| 1 Grundbausteine | offen | – | – |
+| 2 Path-Tracing-Kern | offen | – | – |
+| 3 Echtzeit, Export, Look | offen | – | – |
+| 4 Vorschau fertig und Leistung | offen | – | – |
 
-| Paket | Lane | Wave | Status | Commit | Notiz |
-|---|---|---|---|---|---|
-| W0 Verträge, Fasermodul, Prüfseite, Messung, Codex-Probe | O | 0 | offen | – | – |
-| L1-1 … L5-4 | – | 1–4 | offen | – | – |
-
-Ausgangsmessung (Wave 0):
+Ausgangsmessung (Phase 0):
 
 | Szene | Fasersegmente | Speicher | Raster ms (GPU) |
 |---|---|---|---|
@@ -510,14 +439,13 @@ Ausgangsmessung (Wave 0):
 
 | Risiko | Gegenmaßnahme |
 |---|---|
-| Software-Traversierung zu langsam für die Ziele | Faser-LOD, Render Scale, L1-6, Wavefront; Ziele nach Wave-0-Messung anpassen |
+| Software-Traversierung zu langsam für die Ziele | Faser-LOD, Render Scale, Schritt 4.2, Wavefront; Ziele nach der Messung in Phase 0 anpassen |
 | Speichergrenzen bei großen Geweben | Puffer aufteilen, kompakte Segmente (16-Bit-Offsets relativ zum Garn), sichtbare Ablehnung |
 | Fasern unter Pixelgröße verwischen im Denoiser | Tangenten-/Material-Kanten, Coverage-gewichtete Albedo, höhere spp im Stillstand |
 | Fireflies durch TRT-Lobes und kleine Lichter | MIS, ReSTIR, Klemmung indirekter Beiträge |
 | Flackern im Export-Denoise | genug spp, gleiche Scramble-Seeds pro Pixel |
-| HDR-Umstellung bricht bestehende Pässe | L4-1 als eigenes Paket, Weave-Prüfseiten am Ende von Wave 1 |
-| Worker-Berichte stimmen nicht | Änderungszeit-Prüfung (7.4), gesammelte Tests am Wave-Ende |
-| Vertragslücken blockieren Lanes | Worker melden statt improvisieren; der Orchestrator ergänzt zwischen den Paketen |
+| HDR-Umstellung bricht bestehende Pässe | Schritt 1.1 zuerst, Weave-Prüfseiten am Ende von Phase 1 |
+| Gesammelte Prüfung findet Fehler spät | Diffs zwischen den Schritten lesen, Fixes nur gezielt nachprüfen |
 
 ---
 
