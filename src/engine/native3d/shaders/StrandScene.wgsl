@@ -37,6 +37,7 @@ struct StrandUniforms {
   shadowRange: vec4f,    // x: near, y: far, z: 1 perspective, 0 orthographic
   occluderMatrix: mat4x4f, // view-projection of the shadowing light for opaque meshes, near plane close to the light
   occluder: vec4f,         // x: 1 when meshes cast, y: near, z: far, w: depth bias (scene units)
+  material: vec4f,         // x: arc-length offset of flowing fiber detail
 };
 
 /** A point (kind 1) or panel (kind 2) scene light, packed like MeshPass lights. */
@@ -96,13 +97,14 @@ fn hash3(x: u32, y: u32, z: u32) -> f32 {
 /** The flyaway of `channel` in the curve cell holding arc length `s`: one per cell, at a hashed place. */
 fn flyawayAt(strand: u32, channel: u32, s: f32) -> Flyaway {
   let cell = max(u.fly.x, 1e-6);
-  let index = u32(max(floor(s / cell), 0.0));
+  let signedIndex = i32(floor(s / cell));
+  let index = bitcast<u32>(signedIndex);
   let usable = cell * (1.0 - 2.0 * FLYAWAY_MARGIN);
   let key = index * 16u + channel;
   let salt = u32(u.twist.y) * 0x51ed27u;
   var fly: Flyaway;
   fly.length = min(u.fly.y, usable);
-  fly.start = f32(index) * cell + cell * FLYAWAY_MARGIN + (usable - fly.length) * hash3(strand, key, salt + 1u);
+  fly.start = f32(signedIndex) * cell + cell * FLYAWAY_MARGIN + (usable - fly.length) * hash3(strand, key, salt + 1u);
   fly.angle = hash3(strand, key, salt + 2u);
   fly.hair = hash3(strand, key, salt + 3u) < u.fly.w;
   return fly;
@@ -114,7 +116,8 @@ fn flyawayAt(strand: u32, channel: u32, s: f32) -> Flyaway {
  * without gaps.
  */
 fn fiberPoint(index: u32, fiber: u32, fly: Flyaway) -> vec3f {
-  let a = points[index * 3u];
+  var a = points[index * 3u];
+  a.w += u.material.x;
   let b = points[index * 3u + 1u];
   let tangent = points[index * 3u + 2u].xyz;
   let radius = u.yarn.z * b.w;
@@ -174,8 +177,8 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let yarnFibers = u32(max(u.yarn.x, 1.0)) * u32(max(u.yarn.y, 1.0));
   var fly: Flyaway;
   if (fiber >= yarnFibers) {
-    let startArc = points[first * 3u].w;
-    let endArc = points[(first + 1u) * 3u].w;
+    let startArc = points[first * 3u].w + u.material.x;
+    let endArc = points[(first + 1u) * 3u].w + u.material.x;
     fly = flyawayAt(u32(points[first * 3u + 2u].w), fiber - yarnFibers, 0.5 * (startArc + endArc));
     if (endArc <= fly.start || startArc >= fly.start + fly.length) {
       return out;

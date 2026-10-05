@@ -114,6 +114,7 @@ The **Compact** toggle wraps top-level effects into roughly square arrangements 
 
 Knit Sphere's band height can gather all rings into one connected knitting patch. Preview camera orbit drags follow the pointer vertically as well as horizontally.
 Strand Render also accepts per-point RGB fields for gradients and alternating color bands with independent offsets per yarn.
+Material-coordinate yarn colors retain GPU cloth and rod simulation; spatial color fields use the final CPU-deformed positions. Yarn Profile Surface Feed moves fiber detail along a curve without changing its centerline. Legacy parameter graphs remain isolated per effect.
 Curve Contact separates overlapping yarn capsules after procedural deformation while preserving closed rings and their color coordinates.
 Closed Curve Flow circulates yarn material along fixed stitch paths, independently of the shape animation.
 

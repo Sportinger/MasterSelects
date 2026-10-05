@@ -115,10 +115,10 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
   if (record(render) && render.colorField !== undefined && (!isField(render.colorField)
     || render.colorField.instructions[render.colorField.output].type !== 'vec3')) return false;
   const profile = record(render) ? render.profile : undefined;
-  if (profile !== undefined && (!record(profile) || !exactKeys(profile, ['plies', 'fibers', 'radius', 'plyTwist', 'fiberTwist'])
+  if (profile !== undefined && (!record(profile) || !exactKeys(profile, ['plies', 'fibers', 'radius', 'plyTwist', 'fiberTwist', 'materialOffset'])
     || !Number.isInteger(profile.plies) || !Number.isInteger(profile.fibers) || (profile.plies as number) < 1 || (profile.fibers as number) < 1
     || (profile.plies as number) * (profile.fibers as number) > 256 || ![profile.radius, profile.plyTwist, profile.fiberTwist].every(finite)
-    || (profile.radius as number) < 0)) return false;
+    || (profile.radius as number) < 0 || (profile.materialOffset !== undefined && !finite(profile.materialOffset)))) return false;
   const flyaways = record(render) ? render.flyaways : undefined;
   if (flyaways !== undefined && (profile === undefined || !record(flyaways) || !exactKeys(flyaways, ['density', 'length', 'lift', 'hair', 'seed'])
     || ![flyaways.density, flyaways.length, flyaways.lift, flyaways.hair].every(finite) || !Number.isInteger(flyaways.seed)

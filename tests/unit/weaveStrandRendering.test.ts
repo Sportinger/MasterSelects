@@ -15,6 +15,21 @@ const program = (): GeometryProgram => compileGeometryGraph(createWaveStrandsGra
 const weave = (overrides: Partial<Effect> = {}): Effect => ({ id: 'fx-weave', name: 'Weave', type: 'weave', enabled: true, params: {}, ...overrides });
 
 describe('Weave strand rendering', () => {
+  it('isolates legacy parameter graphs and observes their edits without polluting the default', () => {
+    const graph = createWaveStrandsGraph();
+    graph.nodes.find(node => node.id === 'array')!.constants!.count = 4;
+    const first = weave({ params: { operatorGraph: JSON.stringify(graph) } });
+    graph.nodes.find(node => node.id === 'array')!.constants!.count = 7;
+    const second = weave({ id: 'other', params: { operatorGraph: JSON.stringify(graph) } });
+    const counts = () => buildStrandsLayerSources({ id: 'clip', effects: [first, second, weave()] }, 0, [])
+      .map(layer => layer.source.strands.program.strandCount);
+    expect(counts()).toEqual([4, 7, 40]);
+    first.params.operatorGraph = second.params.operatorGraph;
+    expect(counts()).toEqual([7, 7, 40]);
+    first.params.operatorGraph = '{invalid';
+    expect(counts()).toEqual([7, 40]);
+  });
+
   it('validates transported geometry programs', () => {
     const valid = structuredClone(program());
     expect(isGeometryProgram(valid)).toBe(true);

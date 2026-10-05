@@ -2,6 +2,11 @@ import type { CurveSet } from '../../../services/operators/geometry/geometryEval
 import type { GeometryField } from '../../../services/operators/geometry/geometryProgram';
 import { evaluateFieldColumn } from '../../../services/operators/geometry/curveFieldColumns';
 
+/** Material coordinates survive GPU deformation; spatial fields need the final CPU positions. */
+export function strandColorNeedsPositions(field: GeometryField | undefined): boolean {
+  return !!field?.instructions.some(instruction => instruction.operation === 'position');
+}
+
 /** RGB per centerline point, shared by every ply, fiber and flyaway of that yarn. */
 export function packStrandColors(curves: CurveSet, field: GeometryField): Float32Array {
   const evaluate = evaluateFieldColumn(field, curves);

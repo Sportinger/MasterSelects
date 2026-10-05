@@ -45,7 +45,7 @@ export type GeometryStage =
   /** The incoming curves simulated as rods from their rest state, at source time `time` (seconds). See rodSolver.ts. */
   | { kind: 'rod-simulation'; nodeId: string; rod: RodSpec; pins?: GeometryField; pullStart?: GeometryField; form?: GeometryField; time: number };
 /** Render-time yarn: plies around the curve and fibers around each ply, twisted along curve length. */
-export interface YarnProfile { plies: number; fibers: number; radius: number; plyTwist: number; fiberTwist: number }
+export interface YarnProfile { plies: number; fibers: number; radius: number; plyTwist: number; fiberTwist: number; materialOffset?: number }
 /**
  * Render-time stray fibers of a yarn: Density per unit curve length, each spanning Length along the
  * curve and rising Lift yarn radii off its surface; a Hair fraction ends free at the peak.
@@ -179,6 +179,8 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       profile = { plies: Math.round(finite(read(node, 'plies'), 'Plies')), fibers: Math.round(finite(read(node, 'fibers'), 'Fibers')),
         radius: Math.max(0, finite(read(node, 'radius'), 'Yarn radius')), plyTwist: finite(read(node, 'plyTwist'), 'Ply twist'),
         fiberTwist: finite(read(node, 'fiberTwist'), 'Fiber twist') };
+      const feed = finite(read(node, 'feedSpeed'), 'Surface feed');
+      if (feed !== 0) profile.materialOffset = -feed * (context.simulationTime ?? 0);
       if (profile.plies < 1 || profile.fibers < 1 || profile.plies * profile.fibers > 256) throw new Error('Yarn Profile allows 1 to 256 fibers per yarn.');
     } else if (node.operator === 'geometry.surface-bind') {
       const cloth = required(node, 'surface').node;

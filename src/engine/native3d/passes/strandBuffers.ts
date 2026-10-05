@@ -6,7 +6,7 @@ import { packStrandPoints, STRAND_POINT_FLOATS } from './strandFrames';
 import { StrandSurfaceBinder, type StrandRestCurves } from './StrandSurfaceBinder';
 import { rodChain, surfaceBindChain, type RodChain } from './strandGpuChains';
 import { RodGpuSimulation } from '../rods/RodGpuSimulation';
-import { packStrandColors } from './strandColors';
+import { packStrandColors, strandColorNeedsPositions } from './strandColors';
 
 /** Segment flags above the 30-bit point index: the strand continues before / after the segment. */
 export const SEGMENT_HAS_PREVIOUS = 0x80000000;
@@ -65,10 +65,11 @@ export class StrandBufferCache {
     const signature = JSON.stringify(program.stages);
     // A final Surface Bind (and a Thread Along before it) or a Rod Simulation runs on the GPU from the rest curves.
     // Position-dependent colors must see the same final curves as the renderer.
-    // Colored cloth/rods therefore use the CPU curve evaluator for both geometry and color.
+    // Material colors (strand index, u, constants) can use rest coordinates and keep GPU simulation.
     const colorField = program.render?.colorField;
-    const chain = colorField ? null : surfaceBindChain(program.stages);
-    const candidate = chain || colorField ? null : rodChain(program.stages);
+    const spatialColor = strandColorNeedsPositions(colorField);
+    const chain = spatialColor ? null : surfaceBindChain(program.stages);
+    const candidate = chain || spatialColor ? null : rodChain(program.stages);
     const rods = candidate && !this.rodFailures.has(candidate.topology) ? candidate : null;
     const stages = chain ? chain.restStages : rods ? rods.restStages : program.stages;
     const topology = chain ? JSON.stringify(stages) : rods ? rods.topology : signature;
@@ -97,12 +98,12 @@ export class StrandBufferCache {
       buffers.extent = Math.max(buffers.rest!.extent, reach) + lift * Math.abs(bind.height);
       buffers.signature = signature;
     }
-    const colorSignature = colorField ? JSON.stringify([signature, colorField]) : undefined;
+    const colorSignature = colorField ? JSON.stringify([chain || rods ? topology : signature, colorField]) : undefined;
     if (buffers.colorSignature !== colorSignature) {
       if (buffers.colors) temporaryBuffers.push(buffers.colors);
       buffers.colors = undefined;
       if (colorField) {
-        const colors = packStrandColors(evaluateGeometryProgram(program), colorField);
+        const colors = packStrandColors(evaluateGeometryProgram({ ...program, stages }), colorField);
         buffers.colors = device.createBuffer({ size: Math.max(16, colors.byteLength),
           usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: `native-strands-colors-${layer.layerId}` });
         if (colors.byteLength) device.queue.writeBuffer(buffers.colors, 0, colors.buffer, colors.byteOffset, colors.byteLength);

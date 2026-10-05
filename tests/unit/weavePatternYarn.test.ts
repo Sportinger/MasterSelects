@@ -17,6 +17,23 @@ const compile = (graph = flatWeave()) => compileGeometryGraph(graph, geometryPar
 const z = (curves: ReturnType<typeof evaluateGeometryProgram>, strand: number, point: number) => curves.positions[(curves.starts[strand] + point) * 3 + 2];
 
 describe('Weave pattern and yarn profile', () => {
+  it('feeds fiber detail on the source clock while preserving the centerline', () => {
+    const graph = flatWeave();
+    const yarn = graph.nodes.find(node => node.operator === 'geometry.yarn-profile')!;
+    yarn.constants = { ...yarn.constants, feedSpeed: 0.5 };
+    const at = (time: number) => compileGeometryGraph(graph, geometryParameterReader({}), undefined, { simulationTime: time });
+    const first = at(12), later = at(14);
+    expect(first.render?.profile?.materialOffset).toBe(-6);
+    expect(later.render?.profile?.materialOffset).toBe(-7);
+    expect(evaluateGeometryProgram(first).positions).toEqual(evaluateGeometryProgram(later).positions);
+    expect(isGeometryProgram(structuredClone(later))).toBe(true);
+    expect(isGeometryProgram({ ...later, render: { ...later.render, profile: { ...later.render!.profile, materialOffset: NaN } } })).toBe(false);
+    yarn.constants.feedSpeed = -0.5;
+    expect(at(12).render?.profile?.materialOffset).toBe(6);
+    yarn.constants.feedSpeed = 0;
+    expect(at(12).render?.profile?.materialOffset).toBeUndefined();
+  });
+
   it('interlaces warp and weft according to the draft', () => {
     const program = compile();
     expect(program).toMatchObject({ strandCount: 40, pointCount: 24 * (16 * 16 + 1) + 16 * (24 * 16 + 1),

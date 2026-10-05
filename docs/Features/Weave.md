@@ -95,9 +95,10 @@ Strand Render accepts an optional **Color** vector field (RGB, 0 to 1), replacin
 its uniform color. Curve Info's Curve Param and Strand Index can drive gradients
 and alternating bands with a different offset per yarn. The color follows the
 material points and is shared by all plies, fibers and flyaways; all three strand
-antialiasing modes and export use the same interpolated colors. Colored cloth and
-rod graphs currently evaluate geometry on the CPU so position-based colors match
-their final curves.
+antialiasing modes and export use the same interpolated colors. Material colors
+based on Curve Param, Strand Index or constants retain GPU cloth/rod simulation
+and reuse their color buffer while those values stay unchanged. Position-based
+colors evaluate geometry on the CPU so they match the final deformed curves.
 
 **Knit Sphere ? Yarn Profile ? Flyaways (optional) ? Strand Render ? Scene Output**
 builds a hollow ball of closed horizontal yarn rings. All rings circulate in the
@@ -276,3 +277,7 @@ them and expose values. There is no Weave-specific toolset.
 - Rod Simulation holds up to 16,384 rod nodes; a whole weave of rods needs coarse
   Segment Lengths.
 - The cloth does not collide with itself or with rods.
+
+Legacy graphs stored in effect parameters are cached per effect and stored revision. Switching between custom Weave graphs no longer reuses the first loaded graph or contaminates the default graph.
+
+Yarn Profile ? **Surface Feed** moves ply, fiber and flyaway detail along arc length in local units per source second (positive follows the curve). It can show feed through a guided knitting zone while the straight ends stay in place. Zero preserves existing scenes. This is surface transport: it does not advect connected color fields, conserve yarn length, or calculate tension/friction. Curve Contact remains a frame-local contact correction, not a continuous collision guarantee.

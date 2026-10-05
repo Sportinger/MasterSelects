@@ -3,7 +3,7 @@ import { createWaveStrandsGraph, geometryParameterReader } from '../../src/servi
 import { compileGeometryGraph, type GeometryField } from '../../src/services/operators/geometry/geometryProgram';
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
 import { evaluateGeometryProgram } from '../../src/services/operators/geometry/geometryEvaluation';
-import { packStrandColors } from '../../src/engine/native3d/passes/strandColors';
+import { packStrandColors, strandColorNeedsPositions } from '../../src/engine/native3d/passes/strandColors';
 
 function coloredGraph() {
   const graph = createWaveStrandsGraph();
@@ -19,6 +19,17 @@ function coloredGraph() {
 }
 
 describe('strand color fields', () => {
+  it('keeps material colors identical on rest and deformed curves while spatial colors follow deformation', () => {
+    const program = compileGeometryGraph(coloredGraph(), geometryParameterReader({}));
+    const rest = evaluateGeometryProgram(program);
+    const moved = { ...rest, positions: rest.positions.map(value => value + 0.7) };
+    const material = program.render!.colorField!;
+    expect(strandColorNeedsPositions(material)).toBe(false);
+    expect(packStrandColors(rest, material)).toEqual(packStrandColors(moved, material));
+    const spatial: GeometryField = { instructions: [{ nodeId: 'p', operation: 'position', type: 'vec3', inputs: [] }], output: 0 };
+    expect(strandColorNeedsPositions(spatial)).toBe(true);
+    expect(packStrandColors(rest, spatial)).not.toEqual(packStrandColors(moved, spatial));
+  });
   it('compiles and transports a color field independently of the uniform fallback', () => {
     const p = compileGeometryGraph(coloredGraph(), geometryParameterReader({}));
     expect(p.render?.colorField).toBeDefined();

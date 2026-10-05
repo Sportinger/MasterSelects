@@ -75,8 +75,8 @@ fn pieceSpline(index: u32) -> PieceSpline {
   let yarnFibers = u32(max(u.yarn.x, 1.0)) * u32(max(u.yarn.y, 1.0));
   var fly: Flyaway;
   if (fiber >= yarnFibers) {
-    let startArc = points[first * 3u].w;
-    let endArc = points[(first + 1u) * 3u].w;
+    let startArc = points[first * 3u].w + u.material.x;
+    let endArc = points[(first + 1u) * 3u].w + u.material.x;
     fly = flyawayAt(u32(points[first * 3u + 2u].w), fiber - yarnFibers, 0.5 * (startArc + endArc));
     if (endArc <= fly.start || startArc >= fly.start + fly.length) {
       return spline;

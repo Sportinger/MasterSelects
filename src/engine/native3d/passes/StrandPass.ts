@@ -18,7 +18,8 @@ const ANTIALIASING_MODE = { hashed: 0, coverage4x: 1, analytic: 2 } as const;
 const LIGHTS_OFFSET = 76;
 const SHADOW_OFFSET = LIGHTS_OFFSET + STRAND_LIGHT_FLOATS;
 const OCCLUDER_OFFSET = SHADOW_OFFSET + 24;
-const UNIFORM_FLOATS = OCCLUDER_OFFSET + 20;
+const MATERIAL_OFFSET = OCCLUDER_OFFSET + 20;
+const UNIFORM_FLOATS = MATERIAL_OFFSET + 4;
 /** Deep opacity one fully covering fiber adds; about one yarn in front leaves a third of the light. */
 const OPACITY_PER_FIBER = 0.3;
 /** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
@@ -207,6 +208,7 @@ export class StrandPass {
     data.set([render.width * scale, 0, 0, Math.max(0, Math.min(1, layer.opacity))], 56);
     data.set([...KEY_LIGHT, AMBIENT], 60);
     data.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist, profile.fiberTwist] : [1, 1, 0, 0, 0], 64);
+    data[MATERIAL_OFFSET] = profile?.materialOffset ?? 0;
     data[71] = ANTIALIASING_MODE[render.antialiasing ?? 'hashed'];
     const flyaways = profile && render.flyaways, channels = flyaways ? FLYAWAY_CHANNELS : 0;
     if (flyaways) {
