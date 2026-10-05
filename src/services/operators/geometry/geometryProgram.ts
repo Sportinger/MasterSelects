@@ -9,6 +9,7 @@ import { compileClothSpec, type ClothSpec } from './clothProgram';
 import { compileRodSpec, type RodSpec } from './rodProgram';
 import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES, type CelticKnotSpec, type KnotSpec } from './knotCurves';
 import { knitPointCount, type KnitSpec } from './knitCurves';
+import { isKnitSphereSpec, KNIT_SPHERE_KEYS, type KnitSphereSpec } from './knitSphereCurves';
 import type { ExtendSpec } from './extendCurves';
 
 /** Context values a curve-point field can read, in addition to shared pointwise operations. */
@@ -28,6 +29,7 @@ export type GeometryStage =
   | ({ kind: 'knot'; nodeId: string } & KnotSpec)
   | ({ kind: 'celtic-knot'; nodeId: string } & CelticKnotSpec)
   | ({ kind: 'knit'; nodeId: string } & KnitSpec)
+  | ({ kind: 'knit-sphere'; nodeId: string } & KnitSphereSpec)
   | { kind: 'strand-array'; nodeId: string; count: number; spacing: number; axis: CurveAxis }
   | ({ kind: 'extend'; nodeId: string } & ExtendSpec)
   /** See threadAlong.ts; `value` is the Progress parameter used when no field is connected; `trail` (unit) when Ahead is Trail. */
@@ -56,7 +58,7 @@ export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStr
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
-const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit']);
+const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit', 'geometry.knit-sphere']);
 const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
   'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
@@ -201,6 +203,13 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         rows: Math.round(finite(read(node, 'rows'), 'Rows')), size: finite(read(node, 'size'), 'Cell size'),
         height: finite(read(node, 'height'), 'Crossing height'), resolution: Math.round(finite(read(node, 'resolution'), 'Points per step')),
         roundness: finite(read(node, 'roundness'), 'Roundness') });
+    } else if (node.operator === 'geometry.knit-sphere') {
+      const spec = Object.fromEntries(KNIT_SPHERE_KEYS.map(key => [key, finite(read(node, key), key)])) as unknown as KnitSphereSpec;
+      const time = Number.isFinite(context.simulationTime) ? context.simulationTime! : 0;
+      spec.phase += time * finite(read(node, 'speed'), 'Speed');
+      if (!isKnitSphereSpec({ ...spec })) throw new Error('Knit Sphere parameters are outside their supported ranges.');
+      spec.phase = ((spec.phase % 1) + 1) % 1;
+      stages.push({ kind: 'knit-sphere', nodeId: node.id, ...spec });
     } else if (node.operator === 'geometry.knit') {
       stages.push({ kind: 'knit', nodeId: node.id, stitches: Math.round(finite(read(node, 'stitches'), 'Stitches')),
         rows: Math.round(finite(read(node, 'rows'), 'Rows')), width: finite(read(node, 'width'), 'Stitch width'),
@@ -250,7 +259,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       if (stage.columns * stage.rows > 4096) throw new Error('Celtic Knot allows at most 4096 cells.');
       const loops = celticLoops(stage.columns, stage.rows);
       pointCount = loops.reduce((sum, loop) => sum + loop.length * stage.resolution + 1, 0); strandCount = loops.length;
-    } else if (stage.kind === 'knit') {
+    } else if (stage.kind === 'knit' || stage.kind === 'knit-sphere') {
       if (stage.stitches < 1 || stage.rows < 1 || stage.resolution < 4) throw new Error('Knit needs at least one stitch, one row and four points per stitch.');
       pointCount = knitPointCount(stage); strandCount = stage.rows;
     } else if (stage.kind === 'extend') {

@@ -3,6 +3,7 @@ import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
 import { CURVE_CONTEXT_OPERATIONS, knotCurveCount, knotPointCount, weavePatternPointCount, type GeometryField, type GeometryProgram } from './geometryProgram';
 import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES } from './knotCurves';
 import { knitPointCount } from './knitCurves';
+import { isKnitSphereSpec, KNIT_SPHERE_KEYS } from './knitSphereCurves';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { isClothSpec } from './clothProgram';
 import { isRodSpec } from './rodProgram';
@@ -62,6 +63,9 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
         || ![stage.size, stage.height, stage.roundness].every(finite)) return false;
       const loops = celticLoops(stage.columns as number, stage.rows as number);
       points = loops.reduce((sum, loop) => sum + loop.length * (stage.resolution as number) + 1, 0); strands = loops.length;
+    } else if (stage.kind === 'knit-sphere') {
+      if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', ...KNIT_SPHERE_KEYS]) || !isKnitSphereSpec(stage)) return false;
+      points = knitPointCount(stage as { stitches: number; rows: number; resolution: number }); strands = stage.rows as number;
     } else if (stage.kind === 'knit') {
       if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', 'stitches', 'rows', 'width', 'height', 'spacing', 'depth', 'lean', 'resolution'])
         || ![stage.stitches, stage.rows, stage.resolution].every(Number.isInteger) || (stage.stitches as number) < 1 || (stage.rows as number) < 1

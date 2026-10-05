@@ -393,6 +393,7 @@ node is one node in every graph rather than a per-domain copy.
 | Knot | Shape (trefoil, figure-eight, reef knot of two ropes, (P, Q) torus knot), Size, Depth, Points → closed knot curves whose crossings pass over and under |
 | Celtic Knot | Columns, Rows, Cell Size, Height, Points per Step, Roundness → Celtic plait loops alternating over and under like a plain weave |
 | Knit | Stitches, Rows, stitch Width and Height, row Spacing, Depth, Lean, Points per Stitch → weft-knit rows whose loops interlock with the row below |
+| Knit Sphere | Horizontal closed rings with moving Knit loops in a fixed lower-front window; Sphere Radius, Rings, Stitches per Ring, Loop Height, Depth, Lean, Speed, Phase, Zone Width/Center/Height, Edge Softness, Points per Stitch |
 | Thread Along | Curves (+ optional per-point Progress) → curves pulled in behind a lifted tip that settles with a damped swing; ahead of the tip hidden or trailing straight from the tip (Progress, Stagger, Lift, Lift Length, Settle, Ahead, Trail) |
 | Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color, Antialiasing) |
 

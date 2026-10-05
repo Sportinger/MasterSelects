@@ -67,6 +67,34 @@ streams in from the **Trail** direction instead of being hidden. Thread Along mo
 the threads along their paths without collisions, so a trailing thread can pass
 through finished loops.
 
+## Endless knit sphere
+
+**Knit Sphere ? Yarn Profile ? Flyaways (optional) ? Strand Render ? Scene Output**
+builds a hollow ball of closed horizontal yarn rings. All rings circulate in the
+same direction. A small stationary oval patch at the lower front (+Z) forms the same loose
+stockinette loops as Knit. At one visible edge the incoming yarn bows and folds
+into loops; at the opposite edge the loops open and straighten again. Courses
+shorten toward the top and bottom of the patch, so parallel yarn surrounds it on
+all sides, including below. Edge Softness spreads the formation/unravelling over
+a readable transition instead of filling a whole hemisphere. **Zone Center** is height divided by sphere radius
+(negative is below the equator); **Zone Height**, **Zone Width** in degrees and
+**Edge Softness** control the window. **Loop Height**, **Depth** and **Lean** shape
+the stitches; **Rings**, **Stitches per Ring** and **Points per Stitch** set detail.
+
+**Speed (turns/s)** runs in clip source time: 0.05 gives a 20-second revolution,
+zero freezes it, and negative values reverse it. **Phase (turns)** offsets the
+motion and can be keyframed. Trimming, splitting and constant clip speed/reverse
+follow the same source-time mapping as the other curve animations. For a seamless
+export, use a duration containing a whole revolution with constant parameters.
+The generator has no simulation history, so seeking directly to a time gives the
+same geometry as playback. Preview and export evaluate the same curve program.
+
+This is a stylized periodic deformation: it does not conserve yarn length or
+resolve collisions while loops form and dissolve. A sphere made of independent
+horizontal rings has no yarn at its exact poles. Start with the default 28 rings,
+32 stitches and a Yarn Profile radius around 0.0055; large loop heights or thick
+yarns can overlap, especially near the poles and transition edges.
+
 ## Rope simulation
 
 **Rod Simulation** turns any incoming curves into elastic ropes or threads with
