@@ -23,16 +23,22 @@ Tone mapping **Auto** means Standard for raster and AgX for path traced. Standar
 ## How the preview behaves
 
 - **While the camera, the scene or the timeline moves**, the realtime path renders
-  one sample per pixel at the render scale: ReSTIR direct light, indirect light that
+  one sample per pixel, reducing its internal resolution below the selected render
+  scale when the measured tracing cost exceeds the 12 ms preview budget: ReSTIR direct light, indirect light that
   ends in a radiance cache from its second bounce, a fiber-aware SVGF denoiser and a
   temporal upscaler to the output size.
-- **When everything holds still**, the realtime path keeps running for about a
-  second (its history settles into a clean image), while unbiased samples accumulate
-  in the background. A first OIDN pass at 16 samples replaces the realtime image;
-  the final OIDN pass runs at the sample target. Chrome runs every tab's GPU work on
-  one GPU, so a still image refines in passes of at most about 6 ms and idles twice as
-  long as it worked (a third of the GPU): video and other tabs keep playing. Choose
-  **Draft** to finish sooner.
+- **When everything holds still**, unbiased samples accumulate at the selected
+  render scale. Expensive samples are split across submissions into small bands
+  instead of forcing a whole image into one frame. The preview waits for GPU
+  completion, then idles twice the submission's elapsed time before continuing.
+  It reuses the presented image during that interval. The realtime history warms
+  alongside accumulation only when both fit the budget. Refinement fades in as
+  samples arrive; OIDN runs at 16 samples and at the final target. Choose **Draft**
+  to finish sooner. These are measured scheduling budgets, not a guarantee of any
+  individual shader's execution time on an unfamiliar scene or GPU.
+- Unchanged planes reuse their acceleration structure, so they do not repeatedly
+  restart a still image. Switching back to **Raster** cancels preview wakeups and
+  pending denoising; a batch already submitted to the GPU still has to finish.
 - Fibers thin out with a hashed share per yarn while the view moves (preview level
   of detail); a still image and the export always use all fibers.
 - Voxel reliefs (boxes, sphere blocks), Flock points (spheres) and planes are path
@@ -102,6 +108,11 @@ Rules the runtime keeps:
   never assumes less than 100 ns per pixel sample and never puts more than 2¹⁸ pixel
   samples into one dispatch: a long dispatch makes Windows reset the GPU, and Chrome
   then blocks WebGPU until it is restarted.
+- **No preview backlog.** At most one scene submission is in flight per runtime.
+  Still samples count as complete only after every row has been sampled. Export
+  retains its fixed full-image batches and resolution; preview throttling does
+  not change export sampling. The worker reports pending demand while waiting
+  for GPU completion or an idle timer.
 - **No NaN or infinite value leaves a pass.** Path samples, ReSTIR weights, SVGF
   histories, the upscaler and the OIDN input drop them; a single bad value would
   otherwise spread through denoisers and temporal histories.
@@ -116,3 +127,7 @@ Rules the runtime keeps:
   the scene build, integrator, ReSTIR, cache resolve and denoiser of a recent frame.
 - `getPtStatus('main')` (`runtime/ptStatus.ts`): engine, state, samples, render size,
   segments, BVH nodes, GPU bytes, measured nanoseconds per pixel sample.
+- `tests/browser/pathtrace-preview-scheduling-check.html` checks static-plane
+  convergence, partial sample coverage, invalidation and agreement with export
+  batches on an actual WebGPU device. Scheduler and budget regressions are covered
+  by `tests/unit/pathtracePreviewScheduling.test.ts`.
