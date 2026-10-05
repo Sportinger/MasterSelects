@@ -3,11 +3,11 @@ import type { CurveSet } from './geometryEvaluation';
 export interface KnitSphereSpec {
   rows: number; stitches: number; resolution: number; radius: number;
   height: number; depth: number; lean: number; phase: number;
-  zoneWidth: number; zoneCenter: number; zoneHeight: number; feather: number;
+  zoneWidth: number; zoneCenter: number; zoneHeight: number; feather: number; bandSpan: number;
 }
 
 export const KNIT_SPHERE_KEYS = ['rows', 'stitches', 'resolution', 'radius', 'height', 'depth', 'lean',
-  'phase', 'zoneWidth', 'zoneCenter', 'zoneHeight', 'feather'] as const;
+  'phase', 'zoneWidth', 'zoneCenter', 'zoneHeight', 'feather', 'bandSpan'] as const;
 
 /** Shared compiler/transport bounds, checked before allocating curve buffers. */
 export function isKnitSphereSpec(value: Record<string, unknown>): boolean {
@@ -19,7 +19,8 @@ export function isKnitSphereSpec(value: Record<string, unknown>): boolean {
     && s.radius > 0 && s.radius <= 100 && s.height >= 0 && s.height <= 100
     && s.depth >= 0 && s.depth <= 10 && s.lean >= 0 && s.lean <= 4
     && s.zoneWidth >= 0 && s.zoneWidth <= 360 && s.zoneCenter >= -1 && s.zoneCenter <= 1
-    && s.zoneHeight > 0 && s.zoneHeight <= 2 && s.feather > 0 && s.feather <= 1;
+    && s.zoneHeight > 0 && s.zoneHeight <= 2 && s.feather > 0 && s.feather <= 1
+    && s.bandSpan >= 0.01 && s.bandSpan <= 0.94;
 }
 
 const TAU = 2 * Math.PI;
@@ -43,7 +44,7 @@ export function knitSphereCurves(spec: KnitSphereSpec): CurveSet {
     const start = row * count;
     starts[row] = start;
     // Keep the rings away from the singular poles; all rows remain distinct closed curves.
-    const latitude = -0.94 + 1.88 * row / (rows - 1);
+    const latitude = spec.bandSpan * (-1 + 2 * row / (rows - 1));
     const rowDistance = Math.abs(latitude - zoneCenter) / (zoneHeight / 2);
     const rowWeight = smooth((1 - rowDistance) / feather);
     // Shorter courses toward the top/bottom make a bounded oval, with the entry and

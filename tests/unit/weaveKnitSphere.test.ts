@@ -8,7 +8,7 @@ import { geometryParameterReader, validateWeaveGraph } from '../../src/services/
 import { buildStrandsLayerSources } from '../../src/services/operators/geometry/strandsLayerSource';
 
 const spec: KnitSphereSpec = { rows: 28, stitches: 32, resolution: 24, radius: 0.8, height: 0.052,
-  depth: 0.016, lean: 1.5, phase: 0, zoneCenter: -0.38, zoneHeight: 0.6, zoneWidth: 90, feather: 0.65 };
+  depth: 0.016, lean: 1.5, phase: 0, zoneCenter: -0.38, zoneHeight: 0.6, zoneWidth: 90, feather: 0.65, bandSpan: 0.94 };
 const graph = (): EffectOperatorGraph => ({ version: 1, schemaVersion: 1, domain: 'geometry', layout: {}, nodes: [
   { id: 'sphere', operator: 'geometry.knit-sphere', operatorVersion: 1, bindings: {} },
   { id: 'yarn', operator: 'geometry.yarn-profile', operatorVersion: 1, bindings: {}, constants: { radius: 0.008 } },
@@ -21,6 +21,17 @@ const graph = (): EffectOperatorGraph => ({ version: 1, schemaVersion: 1, domain
 ] });
 
 describe('Knit Sphere', () => {
+  it('knits every row of a narrow band while leaving its back parallel', () => {
+    const band = { ...spec, rows: 8, bandSpan: 0.58, zoneCenter: 0, zoneHeight: 1.8, feather: 0.3 };
+    const c = knitSphereCurves(band);
+    for (let row = 0; row < band.rows; row++) {
+      const restY = band.radius * band.bandSpan * (-1 + 2 * row / (band.rows - 1));
+      const front = c.starts[row] * 3;
+      const back = (c.starts[row] + band.stitches * band.resolution / 2) * 3;
+      expect(c.positions[front + 1] - restY).toBeCloseTo(band.height, 5);
+      expect(c.positions[back + 1]).toBeCloseTo(restY, 5);
+    }
+  });
   it('keeps every ring closed and finite across time, including reverse motion', () => {
     for (const phase of [0, 0.137, 0.99999, -0.23, 12345]) {
       const c = knitSphereCurves({ ...spec, phase });
@@ -96,7 +107,7 @@ describe('Knit Sphere', () => {
   it('rejects invalid or oversized transported geometry before evaluation', () => {
     const p = compileGeometryGraph(graph(), geometryParameterReader({}));
     for (const change of [{ rows: 1 }, { rows: 2.5 }, { radius: 0 }, { feather: 0 }, { phase: Infinity },
-      { zoneWidth: 361 }, { rows: 512, stitches: 512, resolution: 128 }, { unknown: true }]) {
+      { zoneWidth: 361 }, { bandSpan: 0 }, { bandSpan: 1 }, { rows: 512, stitches: 512, resolution: 128 }, { unknown: true }]) {
       const bad = structuredClone(p);
       Object.assign(bad.stages[0], change);
       expect(isGeometryProgram(bad)).toBe(false);

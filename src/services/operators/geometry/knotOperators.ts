@@ -11,6 +11,7 @@ const generator = (id: string, variant: string, label: string, description: stri
 export const KNOT_OPERATORS: readonly OperatorDefinition[] = [
   generator('geometry.knit-sphere', 'knit-sphere', 'Knit Sphere', 'Closed horizontal yarn rings form a sphere and circulate through a fixed knitting window at the front. Loose Knit loops form on entry and unravel on exit. Zone Center is height / radius (negative = below equator). Speed is turns per source second; zero pauses, negative reverses. This seamless deformation does not simulate collisions or preserve yarn length.', [
     number('radius', 'Sphere Radius', 0.8, 0.001, 100),
+    number('bandSpan', 'Band Half Height / Radius', 0.94, 0.01, 0.94, 0.01),
     number('rows', 'Rings', 28, 2, 512, 1, false), number('stitches', 'Stitches per Ring', 32, 4, 512, 1, false),
     number('height', 'Loop Height', 0.052, 0, 100), number('depth', 'Depth', 0.016, 0, 10), number('lean', 'Lean', 1.5, 0, 4, 0.01),
     number('speed', 'Speed (turns/s)', 0.05, -2, 2, 0.001), number('phase', 'Phase (turns)', 0, -100, 100, 0.001),

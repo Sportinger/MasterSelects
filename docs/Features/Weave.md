@@ -80,6 +80,9 @@ a readable transition instead of filling a whole hemisphere. **Zone Center** is 
 (negative is below the equator); **Zone Height**, **Zone Width** in degrees and
 **Edge Softness** control the window. **Loop Height**, **Depth** and **Lean** shape
 the stitches; **Rings**, **Stitches per Ring** and **Points per Stitch** set detail.
+**Band Half Height / Radius** narrows the rows around the equator (default 0.94).
+For a connected band using every row, reduce it and center a taller knitting
+window over the band; the rings still close around the free back of the sphere.
 
 **Speed (turns/s)** runs in clip source time: 0.05 gives a 20-second revolution,
 zero freezes it, and negative values reverse it. **Phase (turns)** offsets the
