@@ -47,8 +47,8 @@ interface TargetState {
   auxiliary: GPUBuffer;
   depth: GPUBuffer;
   samples: number;
-  /** Next row of the current preview sample (0 after a complete image). */
-  sampleRow: number;
+  /** Pixels covered in the current center-first preview sample (0 after a complete image). */
+  samplePixels: number;
   signature: string;
   frameIndex: number;
   previousCamera: SceneCamera | null;
@@ -59,7 +59,7 @@ interface TargetState {
   denoisedSignature: string;
   denoisedSamples: number;
   denoiseJob: PtDenoiseJob | null;
-  /** OIDN is unavailable (initialization failed): the still image fades in from the realtime image instead. */
+  /** OIDN is unavailable (initialization failed): show the raw accumulation. */
   denoiseFailed: boolean;
   /** The last frame changed the scene or camera (or the timeline played): the realtime path renders. */
   moving: boolean;
@@ -80,11 +80,8 @@ export function getPtDebugView(): PtDebugView { return debugView; }
 const FRAME_BUDGET_MS = { realtime: 12, still: 12, export: Number.POSITIVE_INFINITY } as const;
 /** Most samples one frame adds (the budget decides below that; export always adds this many). */
 const MAX_SAMPLES_PER_FRAME = { realtime: 1, still: 8, export: 4 } as const;
-/** A converging still image idles this many times as long as its last batch took (a third of the GPU at most). */
-const STILL_IDLE_FACTOR = 2;
-/** A still image fades from the last realtime image to the accumulation between these sample counts. */
-const STILL_FADE_START = 4;
-const STILL_FADE_END = 48;
+/** Leave room for other GPU clients without delaying every small batch by several refresh intervals. */
+const STILL_IDLE_FACTOR = 0.25;
 /** A still preview gets a first OIDN pass at this sample count (visible convergence), the final one at the target. */
 const EARLY_DENOISE_SAMPLES = 16;
 /** Realtime frames rendered beside the accumulation after the view stops (see render()). */
@@ -104,11 +101,6 @@ function motionBlurSlices(camera: SceneCamera, samples: number): number {
   let slices = MOTION_BLUR_SLICES;
   while (slices > 1 && samples % slices !== 0) slices /= 2;
   return Math.max(1, Math.min(slices, samples));
-}
-
-function smoothstep(edge0: number, edge1: number, x: number): number {
-  const t = Math.min(1, Math.max(0, (x - edge0) / (edge1 - edge0)));
-  return t * t * (3 - 2 * t);
 }
 
 /**
@@ -192,7 +184,7 @@ export class PathTraceRuntime {
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
     const pixels = width * height;
     state = { width, height, accumulation: buffer('pt-accumulation', pixels * 16), auxiliary: buffer('pt-auxiliary', pixels * 32),
-      depth: buffer('pt-pixel-state', pixels * 16), samples: 0, sampleRow: 0, signature: '', frameIndex: 0, previousCamera: null, lastFrameMs: 0,
+      depth: buffer('pt-pixel-state', pixels * 16), samples: 0, samplePixels: 0, signature: '', frameIndex: 0, previousCamera: null, lastFrameMs: 0,
       startedAt: performance.now(), denoised: null, denoisedSignature: '', denoisedSamples: 0, denoiseJob: null, denoiseFailed: false,
       moving: false, viewKey: '', stillRealtimeFrames: 0 };
     this.targets.set(key, state);
@@ -265,7 +257,7 @@ export class PathTraceRuntime {
     if (changed) {
       state.signature = signature;
       state.samples = 0;
-      state.sampleRow = 0;
+      state.samplePixels = 0;
       state.startedAt = performance.now();
       this.dropDenoise(state);
       // Partial samples and render regions must not show pixels left over from the previous image.
@@ -327,11 +319,14 @@ export class PathTraceRuntime {
     const slices = exporting ? motionBlurSlices(camera, target) : 1;
     const sliceSamples = target / slices;
     const sliceEnd = Math.min(target, (Math.floor(state.samples / sliceSamples) + 1) * sliceSamples);
-    const plan = state.samples >= target ? null : exporting
-      ? { ...this.budget.plan(regionWidth, regionRows, Math.round(sliceEnd - state.samples), FRAME_BUDGET_MS[pace], MAX_SAMPLES_PER_FRAME[pace]), nextRow: 0 }
-      : this.budget.planPreview(regionWidth, regionRows, Math.round(sliceEnd - state.samples), FRAME_BUDGET_MS[pace], MAX_SAMPLES_PER_FRAME[pace], state.sampleRow);
+    const exportPlan = exporting && state.samples < target
+      ? this.budget.plan(regionWidth, regionRows, Math.round(sliceEnd - state.samples), FRAME_BUDGET_MS[pace], MAX_SAMPLES_PER_FRAME[pace]) : null;
+    const plan = state.samples >= target ? null : exportPlan
+      ? { ...exportPlan, bands: exportPlan.bands.map(band => ({ ...band, firstColumn: 0, columns: regionWidth })), nextPixel: 0 }
+      : this.budget.planPreview(regionWidth, regionRows, Math.round(sliceEnd - state.samples), FRAME_BUDGET_MS[pace], MAX_SAMPLES_PER_FRAME[pace], state.samplePixels);
     const samples = plan?.samples ?? 0;
     if (plan && samples > 0) {
+      const bands = plan.bands;
       device.queue.writeBuffer(this.frameUniform!, 0, writePtFrame({ ...frameValues, renderSize: { width: renderWidth, height: renderHeight },
         jitter: [0, 0], frameIndex: state.frameIndex, sampleOffset: state.samples, samples, mode: exporting ? 2 : 1, region,
         adaptiveThreshold: exporting ? request.exportFrame!.quality.adaptiveThreshold : 0 }));
@@ -340,32 +335,30 @@ export class PathTraceRuntime {
         device.createBindGroup({ layout: pipelines.integratorOutputs, entries: [
           { binding: 0, resource: { buffer: state.accumulation } }, { binding: 1, resource: { buffer: state.auxiliary } },
           { binding: 2, resource: { buffer: state.depth } }, { binding: 3, resource: { buffer: this.bandBuffer!, size: 16 } }] })];
-      const bandData = new Uint32Array(plan.bands.length * PT_BAND_STRIDE / 4);
-      plan.bands.forEach((band, index) => bandData.set([band.firstRow, band.rows], index * PT_BAND_STRIDE / 4));
+      const bandData = new Uint32Array(bands.length * PT_BAND_STRIDE / 4);
+      bands.forEach((band, index) => bandData.set([band.firstRow, band.rows, band.firstColumn, band.columns], index * PT_BAND_STRIDE / 4));
       device.queue.writeBuffer(this.bandBuffer!, 0, bandData);
       // One pass per band: every pass ends a short GPU workload (see ptDispatchBudget.ts).
       const profiling = this.stillProfiler.begin(device);
-      plan.bands.forEach((band, index) => {
-        const timestampWrites = profiling ? this.stillProfiler.writes('integrate', index === 0, index === plan.bands.length - 1)
-          : this.budget.timestampWrites(device, index, plan.bands.length);
+      bands.forEach((band, index) => {
+        const timestampWrites = profiling ? this.stillProfiler.writes('integrate', index === 0, index === bands.length - 1)
+          : this.budget.timestampWrites(device, index, bands.length);
         const pass = encoder.beginComputePass({ label: 'pt-integrate', ...(timestampWrites ? { timestampWrites } : {}) });
         pass.setPipeline(pipelines.integrator);
         groups.forEach((group, slot) => pass.setBindGroup(slot, group, slot === 3 ? [index * PT_BAND_STRIDE] : []));
-        pass.dispatchWorkgroups(Math.ceil(regionWidth / 8), Math.ceil(band.rows / 8));
+        pass.dispatchWorkgroups(Math.ceil(band.columns / 8), Math.ceil(band.rows / 8));
         pass.end();
       });
-      const work = regionWidth * plan.bands.reduce((rows, band) => rows + band.rows, 0) * samples;
+      const work = bands.reduce((pixels, band) => pixels + band.columns * band.rows, 0) * samples;
       if (profiling) this.stillProfiler.resolve(encoder);
       else this.budget.encodeResolve(device, encoder, work);
       this.lastStillWork = work;
-      state.sampleRow = plan.nextRow;
-      if (state.sampleRow === 0) state.samples += samples;
+      state.samplePixels = plan.nextPixel;
+      if (state.samplePixels === 0) state.samples += samples;
       state.frameIndex++;
     }
-    // The first still frames keep the realtime path running beside the accumulation: with a static
-    // camera its temporal history settles to a clean image within about a second, which stays on
-    // screen until the first OIDN image of the unbiased accumulation replaces it.
-    // Only warm a cheap realtime image. A heavy scene must not run two full integrators per batch.
+    // Warm a cheap realtime image for pixels the accumulation has not reached yet.
+    // A heavy scene must not run two full integrators per batch.
     const warmCostMs = renderWidth * renderHeight * this.realtimeBudget.costNs / 1e6;
     const stillCostMs = plan ? this.lastStillWork * this.budget.costNs / 1e6 : 0;
     const warming = !exporting && debugView === 'none' && !request.realtime && state.stillRealtimeFrames < STILL_REALTIME_FRAMES
@@ -379,19 +372,16 @@ export class PathTraceRuntime {
     state.wantsDenoise = denoise;
     // Denoise checkpoints: the target, and for the preview an early pass once a few samples exist.
     const checkpoint = converged ? target : !exporting && state.samples >= Math.min(EARLY_DENOISE_SAMPLES, target) ? EARLY_DENOISE_SAMPLES : 0;
-    if (denoise && state.sampleRow === 0 && !state.denoiseFailed && checkpoint > 0 && state.denoisedSamples < checkpoint && !state.denoiseJob) {
+    if (denoise && state.samplePixels === 0 && !state.denoiseFailed && checkpoint > 0 && state.denoisedSamples < checkpoint && !state.denoiseJob) {
       this.startDenoise(device, state, exporting ? 'standard' : 'small');
     }
     if (profileBuild && !warmOutput) this.realtime.profiler.resolve(encoder);
     const output = exporting ? null : warmOutput ?? this.realtime.lastOutput(request.targetKey);
     const outputSize = this.realtime.outputSize(request.targetKey);
     const sameSize = !!outputSize && outputSize.width === width && outputSize.height === height;
-    const fadeEnd = Math.max(STILL_FADE_START + 8, Math.min(STILL_FADE_END, target));
-    const denoised = !!state.denoised && state.denoisedSignature === state.signature;
-    // Show progressive refinement even when a costly scene takes a while to reach the OIDN checkpoint.
-    const blend = output && sameSize && !denoised && debugView === 'none'
-      ? 1 - smoothstep(STILL_FADE_START, fadeEnd, state.samples) : 0;
-    this.resolve(device, encoder, state, request, output && sameSize && debugView === 'none' ? { output, blend, only: false } : null);
+    // Each sampled tile is visible immediately, even before the first complete sample.
+    // The resolve shader retains the realtime image only where no samples exist yet.
+    this.resolve(device, encoder, state, request, output && sameSize && debugView === 'none' ? { output, blend: 0, only: false } : null);
     // afterSubmit waits for completion and THEN leaves room for other GPU clients.
     if (!converged && !exporting) {
       this.requestRender();
@@ -404,6 +394,7 @@ export class PathTraceRuntime {
         timeOffset: slices > 1 ? nextSlice / slices * shutterFraction(camera) * request.exportFrame!.frameDuration : 0 };
     }
     publishPtStatus(request.targetKey, { ...this.status(state, settings, converged && denoising ? 'denoising' : converged ? 'converged' : 'converging'), ...stats,
+      partialSample: state.samplePixels / (regionWidth * regionRows),
       nsPerSample: this.budget.hasMeasurement ? this.budget.costNs : 0 });
     return true;
   }

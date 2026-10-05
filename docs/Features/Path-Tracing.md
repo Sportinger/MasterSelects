@@ -26,12 +26,16 @@ Tone mapping **Auto** means Standard for raster and AgX for path traced. Standar
   ends in a radiance cache from its second bounce, a fiber-aware SVGF denoiser and a
   temporal upscaler to the output size.
 - **When everything holds still**, unbiased samples accumulate at the selected
-  render scale. Expensive samples are split across submissions into small bands
+  render scale. Expensive samples are split across submissions into small tiles,
+  starting at the image center and spreading outward (or the center of a render region),
   instead of forcing a whole image into one frame. The preview waits for GPU
-  completion, then idles twice the submission's elapsed time before continuing.
+  completion, then leaves an idle gap of a quarter of the submission's elapsed
+  time (at least 4 ms) before continuing.
   It reuses the presented image during that interval. The realtime history warms
-  alongside accumulation only when both fit the budget. Refinement fades in as
-  samples arrive; OIDN runs at 16 samples and at the final target. Choose **Draft**
+  alongside accumulation only when both fit the budget. Each sampled tile is shown
+  immediately; unsampled pixels retain the realtime image. The status includes
+  fractional progress through the next sample, so a costly first sample does not
+  appear stuck at zero. OIDN runs at 16 samples and at the final target. Choose **Draft**
   to finish sooner. These are measured scheduling budgets, not a guarantee of any
   individual shader's execution time on an unfamiliar scene or GPU.
 - Unchanged planes reuse their acceleration structure, so they do not repeatedly
@@ -85,6 +89,10 @@ the browser pages `tests/browser/pathtrace-check.html`, `pathtrace-realtime-chec
 
 ## Architecture
 
+This renderer uses WebGPU compute shaders and a custom BVH traversal. It does not
+call CUDA or OptiX and has no hardware ray-tracing backend. Using NVIDIA's OptiX
+would require a separate native renderer outside the browser.
+
 All code lives in `src/engine/native3d/pathtrace/`:
 
 | Folder | Content |
@@ -101,13 +109,14 @@ All code lives in `src/engine/native3d/pathtrace/`:
 
 Rules the runtime keeps:
 
-- **No dispatch may run long.** Work runs in horizontal bands, one compute pass
+- **No dispatch may run long.** Work runs in small tiles for a partial still preview
+  and horizontal bands for whole-image batches, one compute pass
   each, sized from measured GPU time (timestamp queries) to about 6 ms. Planning
   never assumes less than 100 ns per pixel sample and never puts more than 2¹⁸ pixel
   samples into one dispatch: a long dispatch makes Windows reset the GPU, and Chrome
   then blocks WebGPU until it is restarted.
 - **No preview backlog.** At most one scene submission is in flight per runtime.
-  Still samples count as complete only after every row has been sampled. Export
+  Still samples count as complete only after every pixel has been sampled. Export
   retains its fixed full-image batches and resolution; preview throttling does
   not change export sampling. The worker reports pending demand while waiting
   for GPU completion or an idle timer.
@@ -126,6 +135,6 @@ Rules the runtime keeps:
 - `getPtStatus('main')` (`runtime/ptStatus.ts`): engine, state, samples, render size,
   segments, BVH nodes, GPU bytes, measured nanoseconds per pixel sample.
 - `tests/browser/pathtrace-preview-scheduling-check.html` checks static-plane
-  convergence, partial sample coverage, invalidation and agreement with export
+  convergence, center-first sample coverage and immediate visibility, invalidation and agreement with export
   batches on an actual WebGPU device. Scheduler and budget regressions are covered
   by `tests/unit/pathtracePreviewScheduling.test.ts`.

@@ -13,7 +13,7 @@
 // Per pixel: NDC depth of the nearest primary hit (1 = none, for compositing splats), luminance sum and
 // sum of squares (adaptive sampling), and the pixel's own sample count (adaptive pixels stop early).
 @group(3) @binding(2) var<storage, read_write> pixelState: array<vec4f>;
-// The rows of the region this dispatch covers: x first row, y rows (short dispatches, see ptDispatchBudget.ts).
+// Dispatch rectangle within the render region: x first row, y rows, z first column, w columns.
 @group(3) @binding(3) var<uniform> band: vec4u;
 
 struct PtSampleResult {
@@ -121,8 +121,8 @@ fn ptTracePath(pixel: vec2u, sampleIndex: u32) -> PtSampleResult {
 fn integrate(@builtin(global_invocation_id) id: vec3u) {
   let size = ptRenderSize();
   let region = vec4u(frame.region * vec4f(frame.size.xy, frame.size.xy));
-  let pixel = id.xy + region.xy + vec2u(0u, band.x);
-  if (id.y >= band.y || pixel.x >= min(region.z, size.x) || pixel.y >= min(region.w, size.y)) {
+  let pixel = id.xy + region.xy + vec2u(band.z, band.x);
+  if (id.x >= band.w || id.y >= band.y || pixel.x >= min(region.z, size.x) || pixel.y >= min(region.w, size.y)) {
     return;
   }
   let index = pixel.y * size.x + pixel.x;

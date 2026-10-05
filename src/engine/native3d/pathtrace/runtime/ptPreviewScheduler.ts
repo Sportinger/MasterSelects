@@ -47,7 +47,9 @@ export class PtPreviewScheduler {
     void done.then(() => {
       if (generation !== this.generation) return;
       this.inFlight = false;
-      this.notBefore = performance.now() + Math.max(16, (performance.now() - start) * idleFactor);
+      // A whole refresh interval here adds another skipped frame after a short batch.
+      // Keep a small minimum gap and scale it up when the GPU actually takes longer.
+      this.notBefore = performance.now() + Math.max(4, (performance.now() - start) * idleFactor);
       if (this.requested) this.request();
     }, () => {
       if (generation !== this.generation) return;
