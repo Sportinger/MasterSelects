@@ -1,21 +1,31 @@
-const NODE_STREAM_FENCE = '```ms-nodegraph-v1';
+/** Executable stream fences and how the chat names a block of each. */
+const STREAM_FENCES = [
+  { fence: '```ms-nodegraph-v1', label: () => 'Node-Stream' },
+  { fence: '```ms-scene-v1', label: (body: string) => {
+    const name = body.match(/"scene"\s*:\s*"([^"\\]{1,80})"/)?.[1];
+    return name ? `Szene „${name}“` : 'Szene-Stream';
+  } },
+];
 
 /**
- * The chat shows an executable node stream as one summary line. The stored
+ * The chat shows an executable node or scene stream as one summary line. The stored
  * message keeps the raw records (copy, history); only the rendered text is short.
  */
 export function collapseNodeStreamBlocks(text: string): string {
-  if (!text.includes(NODE_STREAM_FENCE)) return text;
+  if (!STREAM_FENCES.some(({ fence }) => text.includes(fence))) return text;
   let output = '';
   let index = 0;
   for (;;) {
-    const start = text.indexOf(NODE_STREAM_FENCE, index);
-    if (start < 0) return output + text.slice(index);
-    output += text.slice(index, start);
-    const bodyStart = start + NODE_STREAM_FENCE.length;
+    const next = STREAM_FENCES.map(kind => ({ kind, start: text.indexOf(kind.fence, index) }))
+      .filter(match => match.start >= 0).sort((a, b) => a.start - b.start)[0];
+    if (!next) return output + text.slice(index);
+    output += text.slice(index, next.start);
+    const bodyStart = next.start + next.kind.fence.length;
     const end = text.indexOf('\n```', bodyStart);
-    const steps = (text.slice(bodyStart, end < 0 ? undefined : end).match(/"op"\s*:\s*"tool"/g) ?? []).length;
-    output += end < 0 ? `[Node-Stream läuft: ${steps} Schritte …]` : `[Node-Stream: ${steps} Schritte]`;
+    const body = text.slice(bodyStart, end < 0 ? undefined : end);
+    const steps = (body.match(/"op"\s*:\s*"tool"/g) ?? []).length;
+    const label = next.kind.label(body);
+    output += end < 0 ? `[${label} läuft: ${steps} Schritte …]` : `[${label}: ${steps} Schritte]`;
     if (end < 0) return output;
     index = end + 4;
   }

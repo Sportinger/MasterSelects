@@ -262,7 +262,41 @@ export async function handleAddKeyframe(
   }
 }
 
+/**
+ * Compact multi-property mode: `{ clipId, effectId?, keys: { property: [[time, value, easing?] | { time, value, easing? }] } }`.
+ * With effectId, a bare parameter name ("progress") means `effect.<effectId>.<param>`.
+ */
+function expandKeysMode(args: Record<string, unknown>): Record<string, unknown>[] {
+  const allowed = ['clipId', 'effectId', 'keys'];
+  const unknown = Object.keys(args).filter((field) => !allowed.includes(field));
+  if (unknown.length) throw new Error(`keys mode accepts only clipId, effectId and keys; remove ${unknown.join(', ')}`);
+  const keys = args.keys;
+  if (!keys || typeof keys !== 'object' || Array.isArray(keys) || Object.keys(keys).length === 0) {
+    throw new Error('keys must be an object mapping property names to [[time, value, easing?], ...]');
+  }
+  if (args.effectId !== undefined && (typeof args.effectId !== 'string' || !args.effectId)) throw new Error('effectId must be a string');
+  const requests: Record<string, unknown>[] = [];
+  for (const [name, list] of Object.entries(keys as Record<string, unknown>)) {
+    const property = args.effectId && !name.includes('.') ? `effect.${args.effectId}.${name}` : name;
+    if (!Array.isArray(list) || list.length === 0) throw new Error(`keys.${name} must be a non-empty array`);
+    list.forEach((key, index) => {
+      const entry = Array.isArray(key) ? { time: key[0], value: key[1], ...(key[2] !== undefined ? { easing: key[2] } : {}) }
+        : key && typeof key === 'object' ? key as Record<string, unknown> : null;
+      if (!entry || (Array.isArray(key) && (key.length < 2 || key.length > 3))) {
+        throw new Error(`keys.${name}[${index}] must be [time, value, easing?] or { time, value, easing? }`);
+      }
+      if (typeof entry.time !== 'number') throw new Error(`keys.${name}[${index}] needs a numeric time`);
+      requests.push({ clipId: args.clipId, property, value: entry.value, time: entry.time, ...(entry.easing !== undefined ? { easing: entry.easing } : {}) });
+    });
+  }
+  return requests;
+}
+
 function parseKeyframeRequests(args: Record<string, unknown>): KeyframeAuthoringRequest[] {
+  if (Object.prototype.hasOwnProperty.call(args, 'keys')) {
+    if (Object.prototype.hasOwnProperty.call(args, 'sequence')) throw new Error('Use either keys or sequence, not both');
+    return expandKeysMode(args).map((item, index) => parseKeyframeRequest(item, `keys[${index}]`));
+  }
   const hasSequence = Object.prototype.hasOwnProperty.call(args, 'sequence');
   const hasLegacyField = LEGACY_KEYFRAME_FIELDS.some((field) => (
     Object.prototype.hasOwnProperty.call(args, field)

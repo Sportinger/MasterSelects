@@ -9,7 +9,7 @@ export const HOSTED_AGENT_FAST_V2_PROTOCOL_VERSION = 'fast-agent-v2' as const;
 // former eight-call batching default. Keep a finite fail-closed ceiling.
 export const HOSTED_AGENT_FAST_V2_MAX_TOOL_CALLS_PER_ROUND = 256 as const;
 export const HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST =
-  'sha256:feaaa0c87a843216b45dd90a944e3f2990d4d0c9799afc6ee11b7e439f8750fb' as const;
+  'sha256:ee2d68ebe537cb0b064ca0c0d508a5a72623f82b240d022ed1fb94ccad1560cd' as const;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_VERSION =
   PUBLIC_OPERATION_CONTRACT_V1.contractVersion;
 export const HOSTED_AGENT_FAST_V2_EXECUTION_CONTRACT_DIGEST =

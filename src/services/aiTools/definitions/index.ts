@@ -29,6 +29,7 @@ import { documentToolDefinitions } from './documents';
 import { compositionRuleToolDefinitions } from './compositionRules';
 import { multicamToolDefinitions } from './multicam';
 import { rigToolDefinitions } from './rig';
+import { streamToolDefinitions } from './streams';
 
 // Combined tool definitions array (OpenAI function calling format)
 export const AI_TOOLS = [
@@ -61,6 +62,7 @@ export const AI_TOOLS = [
   ...compositionRuleToolDefinitions,
   ...multicamToolDefinitions,
   ...rigToolDefinitions,
+  ...streamToolDefinitions,
 ];
 
 // Re-export individual definition sets for selective use

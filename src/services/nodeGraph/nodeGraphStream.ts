@@ -51,5 +51,5 @@ export class NodeGraphStreamParser extends FencedRecordStreamParser<NodeGraphStr
 }
 
 export function resolveNodeGraphStreamReferences(value: unknown, results: Map<string, unknown>): unknown {
-  return resolveStreamReferences(value, results, 'Node');
+  return resolveStreamReferences(value, results, { label: 'Node', forbiddenFields: ['clipId'] });
 }

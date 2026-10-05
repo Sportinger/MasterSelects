@@ -21,6 +21,7 @@ export const rigToolDefinitions: ToolDefinition[] = [
           facing: { type: 'string', enum: ['right', 'left'], description: 'Direction the figure faces.' },
           color: { type: 'string', description: 'Figure color as #rrggbb.' },
           x: { type: 'number', description: 'Pelvis X in figure pixels at a 1080 px frame (0 = centre, e.g. -300 left, 300 right).' },
+          params: { type: 'object', description: 'Any other Stick Figure parameters, e.g. { "scale": 0.6, "groundY": 250, "groundMode": "plant", "turn": 1, "thickness": 9 }. Figure pixels at a 1080 px tall frame; unknown names are rejected.' },
         },
         required: [],
       },

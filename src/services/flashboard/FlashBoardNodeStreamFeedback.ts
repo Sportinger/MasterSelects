@@ -17,10 +17,19 @@ function describeFailure(failure: NodeStreamFailure): string {
  * Streamed node records execute from text deltas, so the model never receives
  * their results. Failures are handed to it once, attached to its next tool result.
  */
+const NODE_STREAM_HINT = 'Cables to a node that failed to add fail as well. Read getOperatorGraph for each affected effect, repair the gaps, and tell the user about anything that remains incomplete.';
+
 export class NodeStreamFeedback {
   private reported = 0;
   private readonly failures: readonly NodeStreamFailure[];
-  constructor(failures: readonly NodeStreamFailure[]) { this.failures = failures; }
+  private readonly label: string;
+  private readonly hint: string;
+  /** label and hint default to the node stream; the scene stream passes its own. */
+  constructor(failures: readonly NodeStreamFailure[], options: { label?: string; hint?: string } = {}) {
+    this.failures = failures;
+    this.label = options.label ?? 'Node stream';
+    this.hint = options.hint ?? NODE_STREAM_HINT;
+  }
 
   get unreported(): number { return this.failures.length - this.reported; }
 
@@ -29,10 +38,10 @@ export class NodeStreamFeedback {
     this.reported = this.failures.length;
     if (!fresh.length) return [];
     const text = [
-      `Node stream report: ${fresh.length} streamed step(s) failed and were skipped; later steps still ran.`,
+      `${this.label} report: ${fresh.length} streamed step(s) failed and were skipped; later steps still ran.`,
       ...fresh.slice(0, MAX_LISTED_FAILURES).map(describeFailure),
       ...(fresh.length > MAX_LISTED_FAILURES ? [`… and ${fresh.length - MAX_LISTED_FAILURES} more.`] : []),
-      'Cables to a node that failed to add fail as well. Read getOperatorGraph for each affected effect, repair the gaps, and tell the user about anything that remains incomplete.',
+      this.hint,
     ].join('\n');
     return [{ text, type: 'inputText' }];
   }
@@ -65,4 +74,10 @@ export function nodeStreamUserNotice(failures: readonly NodeStreamFailure[], fee
   for (const graph of incomplete) lines.push(`„${graph.name}“ ist unvollständig und pausiert: ${graph.reason}`);
   if (!incomplete.length) lines.push('Der Agent hat die Fehler nicht mehr geprüft; bitte den Graphen kontrollieren.');
   return lines.join('\n');
+}
+
+/** Visible chat warning for streamed scene records the agent did not get to repair. */
+export function sceneStreamUserNotice(failures: readonly NodeStreamFailure[], feedback: NodeStreamFeedback): string | undefined {
+  if (!failures.length || !feedback.unreported) return undefined;
+  return `⚠ Szene-Stream: ${failures.length} Schritt(e) fehlgeschlagen. Der Agent hat die Fehler nicht mehr geprüft; bitte die Szene kontrollieren und neu ausführen.`;
 }

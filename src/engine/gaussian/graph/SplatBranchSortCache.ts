@@ -24,7 +24,7 @@ export class SplatBranchSortCache {
     }
     const ids = indices ?? compactCropIndices(source, sourceCount, sampling, []);
     const scene = { ...base, workerSorter: null, workerSortedBindGroup: null, activeWorkerSortedBindGroup: null,
-      sortedBindGroup: null, framesSinceSort: 0 } as SplatSceneGpuResources;
+      framesSinceSort: 0 } as SplatSceneGpuResources;
     try {
       scene.workerSorter = new SplatOrderSorter(device, cacheId, source, ids.length, ids);
       scene.workerSortedBindGroup = createSplatDataBindGroup(device, layout, base.splatBuffer, scene.workerSorter.orderBuffer, 'splat-branch-worker');

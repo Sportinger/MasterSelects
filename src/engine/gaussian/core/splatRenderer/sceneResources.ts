@@ -3,6 +3,8 @@ import {
   createIdentityIndexBuffer,
   createSplatDataBindGroup,
   createSplatDataBuffer,
+  reuseSplatDataBindGroup,
+  type CachedSplatDataBindGroup,
   type UploadableSplatData,
 } from './sceneUpload';
 
@@ -17,17 +19,14 @@ export interface SplatSceneGpuResources {
   identityIndexBuffer: GPUBuffer;
   /** Bind group for the render pipeline (splatData + identityIndices) */
   bindGroup: GPUBindGroup;
-  /** Frame counter for sort frequency throttling */
+  /**
+   * Frame counter for worker sort frequency throttling. GPU sort cadence and orders live
+   * per draw stream (see drawStreams.ts) because graph branches share this scene.
+   */
   framesSinceSort: number;
-  /** Cached sorted bind group — reused between sort frames */
-  sortedBindGroup: GPUBindGroup | null;
   workerSorter: SplatOrderSorter | null;
   workerSortedBindGroup: GPUBindGroup | null;
-  activeWorkerSortedBindGroup: {
-    dataBuffer: GPUBuffer;
-    orderBuffer: GPUBuffer;
-    bindGroup: GPUBindGroup;
-  } | null;
+  activeWorkerSortedBindGroup: CachedSplatDataBindGroup | null;
 }
 
 /** Create all per-clip GPU resources for an uploaded splat scene. */
@@ -72,7 +71,6 @@ export function createSplatSceneResources(
     identityIndexBuffer,
     bindGroup,
     framesSinceSort: 0,
-    sortedBindGroup: null,
     workerSorter,
     workerSortedBindGroup,
     activeWorkerSortedBindGroup: null,
@@ -99,18 +97,13 @@ export function getActiveWorkerSortedBindGroup(
   dataBuffer: GPUBuffer,
   orderBuffer: GPUBuffer,
 ): GPUBindGroup {
-  const cached = scene.activeWorkerSortedBindGroup;
-  if (cached && cached.dataBuffer === dataBuffer && cached.orderBuffer === orderBuffer) {
-    return cached.bindGroup;
-  }
-
-  const bindGroup = createSplatDataBindGroup(
+  scene.activeWorkerSortedBindGroup = reuseSplatDataBindGroup(
     device,
     splatDataBindGroupLayout,
+    scene.activeWorkerSortedBindGroup,
     dataBuffer,
     orderBuffer,
     `splat-worker-sorted-active-bind-group-${clipId}`,
   );
-  scene.activeWorkerSortedBindGroup = { dataBuffer, orderBuffer, bindGroup };
-  return bindGroup;
+  return scene.activeWorkerSortedBindGroup.bindGroup;
 }

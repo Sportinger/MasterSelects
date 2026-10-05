@@ -198,6 +198,7 @@ import {
 } from '../workerFirstRuntimeExportPlaybackSmoke';
 import { handleRunWorkerFirstPlatformEvidencePackage } from '../workerFirstPlatformEvidencePackage';
 import { handleVerifyWorkerFirstPlatformEvidenceMatrix } from '../workerFirstPlatformEvidenceMatrix';
+import { handleGetStreamProtocol, handleListScenes, handleRunEditorStream } from './editorStream';
 import { handleRunWorkerFirstSolidTextImageGoldenFixture } from '../workerFirstSolidTextImageGoldenFixture';
 import { handleRunWorkerFirstSolidTextImageShadowParity } from '../workerFirstSolidTextImageShadowParity';
 import { handleRunWorkerFirstUniversal3dGoldenFixture } from '../workerFirstUniversal3dGoldenFixture';
@@ -601,6 +602,10 @@ export async function executeToolInternal(
   if (toolName === 'getTimelineAnalysis') {
     return handleGetTimelineAnalysis(args, timelineStore, mediaStore);
   }
+
+  if (toolName === 'runEditorStream') return handleRunEditorStream(args, callerContext, signal);
+  if (toolName === 'listScenes') return handleListScenes();
+  if (toolName === 'getStreamProtocol') return handleGetStreamProtocol(args);
 
   if (toolName === 'verifyTimelineInvariants') {
     return handleVerifyTimelineInvariants(args, timelineStore);

@@ -28,11 +28,13 @@ export class SplatSortPass {
   private depthKeyPipeline: GPUComputePipeline | null = null;
   private bitonicStepPipeline: GPUComputePipeline | null = null;
 
-  // Sort buffers. Growing retires the old pair until the next frame: layers sorted
-  // earlier in this frame still reference it from the unsubmitted encoder.
+  // Depth keys are scratch shared by every sort; each output key (one per draw stream)
+  // owns its sorted-index buffer, so a caller that skips sorting can redraw its own last
+  // order instead of whatever another layer sorted last. Growing or releasing a buffer
+  // retires it until the next frame: passes recorded earlier still reference it.
   private sortBuffers: GpuFrameBuffers | null = null;
-  private keyBuffer: GPUBuffer | null = null;
-  private sortedIndexBuffer: GPUBuffer | null = null;
+  /** Valid entries in each output key's buffer since its last sort. */
+  private orderCounts = new Map<string, number>();
   /** One uniform slot per dispatch (depth keys + every bitonic step of every layer). */
   private uniformRing: GpuUniformRing | null = null;
   beginFrame(): void { this.uniformRing?.beginFrame(); this.sortBuffers?.beginFrame(); }
@@ -42,21 +44,17 @@ export class SplatSortPass {
   private uniformLayout: GPUBindGroupLayout | null = null;
   private sortBufferLayout: GPUBindGroupLayout | null = null;
 
-  // Cached sort bind group (recreated when buffers change)
-  private sortBindGroup: GPUBindGroup | null = null;
-
-  private maxCapacity = 0;
   private _initialized = false;
 
   get isInitialized(): boolean {
     return this._initialized;
   }
 
-  initialize(device: GPUDevice, maxSplatCount: number): void {
+  initialize(device: GPUDevice, maxSplatCount = 0): void {
     if (this._initialized && this.device === device) {
       // Scenes may upload mid-frame; grow without disposing buffers already recorded.
       try {
-        this.ensureBuffers(device, maxSplatCount);
+        this.ensureKeyBuffer(maxSplatCount);
       } catch (err) {
         log.error('Failed to grow SplatSortPass buffers', err);
       }
@@ -68,7 +66,7 @@ export class SplatSortPass {
 
     try {
       this.createPipelines();
-      this.ensureBuffers(device, maxSplatCount);
+      this.ensureKeyBuffer(maxSplatCount);
       this._initialized = true;
       log.info('SplatSortPass initialized', { maxSplatCount });
     } catch (err) {
@@ -79,13 +77,13 @@ export class SplatSortPass {
   }
 
   /**
-   * Sort visible splat indices by depth (back-to-front).
-   * The sorted indices are written to an internal buffer which is returned.
+   * Sort visible splat indices by depth (back-to-front) into `outputKey`'s own buffer.
    *
    * @param indexBuffer   — visible indices from the cull pass (or identity)
    * @param visibleCount  — number of visible splats to sort
    * @param viewMatrix    — the camera view matrix (for depth computation)
-   * @returns the GPUBuffer containing sorted indices, or null on failure
+   * @param outputKey     — draw stream that owns the result; see getOrder()
+   * @returns the key's GPUBuffer with the sorted indices, or null on failure
    */
   execute(
     device: GPUDevice,
@@ -95,29 +93,37 @@ export class SplatSortPass {
     visibleCount: number,
     viewMatrix: Float32Array,
     worldMatrix: Float32Array,
+    outputKey: string,
   ): GPUBuffer | null {
     if (!this._initialized || !this.depthKeyPipeline || !this.bitonicStepPipeline) {
       log.warn('Cannot execute: sort pass not initialized');
       return null;
     }
 
-    if (visibleCount <= 1) {
-      // Nothing to sort — copy indices directly
-      return indexBuffer;
-    }
-
     try {
       const sortPlan = buildBitonicSortPlan(visibleCount);
-      this.ensureBuffers(device, sortPlan.paddedCount);
+      const output = this.sortBuffers!.ensure(orderBufferKey(outputKey), sortCapacity(sortPlan.paddedCount) * 4);
+      const sortedCount = Math.max(0, Math.floor(visibleCount));
 
-      // Copy visible indices to our sortable buffer
-      commandEncoder.copyBufferToBuffer(
-        indexBuffer, 0,
-        this.sortedIndexBuffer!, 0,
-        visibleCount * 4,
-      );
+      // Copy visible indices into this key's sortable buffer
+      if (sortedCount > 0) {
+        commandEncoder.copyBufferToBuffer(indexBuffer, 0, output, 0, sortedCount * 4);
+      }
+      if (sortedCount <= 1) {
+        // Nothing to sort; the key still owns its (trivial) order.
+        this.orderCounts.set(outputKey, sortedCount);
+        return output;
+      }
 
       const workgroupCount = sortPlan.workgroupCount;
+      const sortBindGroup = device.createBindGroup({
+        layout: this.sortBufferLayout!,
+        entries: [
+          { binding: 0, resource: { buffer: this.ensureKeyBuffer(sortPlan.paddedCount) } },
+          { binding: 1, resource: { buffer: output } },
+        ],
+        label: `sort-buffers-bg-${outputKey}`,
+      });
 
       // Create splat data bind group
       const splatDataBindGroup = device.createBindGroup({
@@ -136,7 +142,7 @@ export class SplatSortPass {
         pass.setPipeline(this.depthKeyPipeline);
         pass.setBindGroup(0, splatDataBindGroup);
         pass.setBindGroup(1, uniformBindGroup);
-        pass.setBindGroup(2, this.sortBindGroup!);
+        pass.setBindGroup(2, sortBindGroup);
         pass.dispatchWorkgroups(workgroupCount);
         pass.end();
       }
@@ -154,17 +160,33 @@ export class SplatSortPass {
           pass.setPipeline(this.bitonicStepPipeline);
           pass.setBindGroup(0, splatDataBindGroup);
           pass.setBindGroup(1, stepUniforms);
-          pass.setBindGroup(2, this.sortBindGroup!);
+          pass.setBindGroup(2, sortBindGroup);
           pass.dispatchWorkgroups(workgroupCount);
           pass.end();
         }
       }
 
-      return this.sortedIndexBuffer;
+      this.orderCounts.set(outputKey, sortedCount);
+      return output;
     } catch (err) {
+      // A partially recorded sort leaves no order a later frame could trust.
+      this.orderCounts.delete(outputKey);
       log.error('Sort execute failed', err);
       return null;
     }
+  }
+
+  /** Last order sorted for `outputKey` (still valid on frames that skip sorting). */
+  getOrder(outputKey: string): { buffer: GPUBuffer; count: number } | null {
+    const buffer = this.sortBuffers?.get(orderBufferKey(outputKey));
+    const count = this.orderCounts.get(outputKey);
+    return buffer && count !== undefined ? { buffer, count } : null;
+  }
+
+  /** Drop `outputKey`'s order; its buffer is destroyed at the next frame start. */
+  release(outputKey: string): void {
+    this.sortBuffers?.release(orderBufferKey(outputKey));
+    this.orderCounts.delete(outputKey);
   }
 
   dispose(): void {
@@ -172,17 +194,14 @@ export class SplatSortPass {
     this.uniformRing?.dispose();
 
     this.sortBuffers = null;
-    this.keyBuffer = null;
-    this.sortedIndexBuffer = null;
+    this.orderCounts.clear();
     this.uniformRing = null;
-    this.sortBindGroup = null;
     this.depthKeyPipeline = null;
     this.bitonicStepPipeline = null;
     this.splatDataLayout = null;
     this.uniformLayout = null;
     this.sortBufferLayout = null;
     this.device = null;
-    this.maxCapacity = 0;
     this._initialized = false;
 
     log.debug('SplatSortPass disposed');
@@ -271,28 +290,9 @@ export class SplatSortPass {
     });
   }
 
-  private ensureBuffers(device: GPUDevice, count: number): void {
-    // Pad to next power of 2 for bitonic sort
-    const capacity = nextPowerOf2(Math.max(count, 1024));
-
-    if (capacity <= this.maxCapacity && this.keyBuffer) return;
-
-    // Key buffer + sorted index buffer: u32 per element
-    this.keyBuffer = this.sortBuffers!.ensure('keys', capacity * 4);
-    this.sortedIndexBuffer = this.sortBuffers!.ensure('indices', capacity * 4);
-
-    // Recreate bind group
-    this.sortBindGroup = device.createBindGroup({
-      layout: this.sortBufferLayout!,
-      entries: [
-        { binding: 0, resource: { buffer: this.keyBuffer } },
-        { binding: 1, resource: { buffer: this.sortedIndexBuffer } },
-      ],
-      label: 'sort-buffers-bg',
-    });
-
-    this.maxCapacity = capacity;
-    log.debug('Allocated sort buffers', { capacity });
+  /** Shared depth-key scratch buffer; growing retires the smaller one until the next frame. */
+  private ensureKeyBuffer(count: number): GPUBuffer {
+    return this.sortBuffers!.ensure('keys', sortCapacity(count) * 4);
   }
 
   private writeUniforms(
@@ -326,6 +326,15 @@ export class SplatSortPass {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function orderBufferKey(outputKey: string): string {
+  return `order:${outputKey}`;
+}
+
+/** Elements to allocate for `count`: power of two, at least 1024 so small sorts share sizes. */
+function sortCapacity(count: number): number {
+  return nextPowerOf2(Math.max(count, 1024));
+}
 
 function nextPowerOf2(n: number): number {
   let v = n - 1;

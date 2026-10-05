@@ -13,6 +13,11 @@ const optionalNumber = (value: unknown, name: string): number | undefined => {
   return value;
 };
 
+function paramsObject(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('params must be an object.');
+  return value as Record<string, unknown>;
+}
+
 function targetOf(args: Record<string, unknown>): { figure: string; joint: SkeletonJoint } | undefined {
   if (args.targetFigure === undefined || args.targetFigure === '') return undefined;
   const target = resolveStickFigure(String(args.targetFigure));
@@ -29,6 +34,7 @@ export async function handleCreateRig(args: Record<string, unknown>): Promise<To
       start: optionalNumber(args.start, 'start'), duration: optionalNumber(args.duration, 'duration'),
       trackId: typeof args.trackId === 'string' ? args.trackId : undefined, name: typeof args.name === 'string' ? args.name : undefined,
       facing, color: typeof args.color === 'string' ? args.color : undefined, x: optionalNumber(args.x, 'x'),
+      ...(args.params === undefined ? {} : { params: paramsObject(args.params) }),
     });
     return { success: true, data: created };
   } catch (error) { return fail(error); }

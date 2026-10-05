@@ -165,20 +165,33 @@ export class FencedRecordStreamParser<R extends FencedStreamRecord = FencedStrea
   }
 }
 
+export interface StreamReferenceOptions {
+  /** Name used in messages, e.g. "Node". */
+  label?: string;
+  /** Result fields a reference must not read (the node stream owns its clipId). */
+  forbiddenFields?: readonly string[];
+}
+
 /** Replace {"$ref": alias, "field": name} with an earlier result's scalar field. */
-export function resolveStreamReferences(value: unknown, results: Map<string, unknown>, label = 'Node', depth = 0): unknown {
+export function resolveStreamReferences(value: unknown, results: Map<string, unknown>, options: StreamReferenceOptions = {}, depth = 0): unknown {
+  const label = options.label ?? 'Node';
   if (depth > 16) throw new Error(`${label} stream arguments are too deeply nested.`);
-  if (Array.isArray(value)) return value.map(v => resolveStreamReferences(v, results, label, depth + 1));
+  if (Array.isArray(value)) return value.map(v => resolveStreamReferences(v, results, options, depth + 1));
   if (!isRecordObject(value)) return value;
   if ('$ref' in value) {
     if (!hasOnlyKeys(value, ['$ref', 'field']) || typeof value.$ref !== 'string' || typeof value.field !== 'string'
-      || ['__proto__', 'constructor', 'prototype', 'clipId'].includes(value.field)) throw new Error(`Invalid ${label.toLowerCase()} result reference.`);
+      || ['__proto__', 'constructor', 'prototype', ...(options.forbiddenFields ?? [])].includes(value.field)) {
+      throw new Error(`Invalid ${label.toLowerCase()} result reference.`);
+    }
     const result = results.get(value.$ref);
-    if (!isRecordObject(result) || !Object.hasOwn(result, value.field)) throw new Error(`${label} result reference is missing.`);
+    if (!isRecordObject(result)) throw new Error(`${label} result reference is missing: no successful record "${value.$ref}" before this one.`);
+    if (!Object.hasOwn(result, value.field)) {
+      throw new Error(`${label} result reference is missing: "${value.$ref}" has no field "${value.field}" (fields: ${Object.keys(result).join(', ')}).`);
+    }
     const field = result[value.field];
     if (!['string', 'number', 'boolean'].includes(typeof field)) throw new Error(`${label} result references must resolve to scalar fields.`);
     return field;
   }
   if (Object.keys(value).some(k => ['__proto__', 'prototype', 'constructor'].includes(k))) throw new Error(`Invalid ${label.toLowerCase()} argument key.`);
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveStreamReferences(v, results, label, depth + 1)]));
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveStreamReferences(v, results, options, depth + 1)]));
 }

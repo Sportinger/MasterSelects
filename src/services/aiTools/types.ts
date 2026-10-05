@@ -98,6 +98,8 @@ export const MODIFYING_TOOLS = new Set([
   'addMarker', 'removeMarker',
   // Stick figure rigs
   'createRig', 'addActionClip', 'setActionTarget',
+  // Content clips and editor streams
+  'createSolidClip', 'createMidiClip', 'runEditorStream',
   // Transitions
   'addTransition', 'removeTransition',
   // Masks

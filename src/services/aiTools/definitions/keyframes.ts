@@ -34,12 +34,22 @@ const addKeyframeParameters = {
       description: 'Atomic multi-keyframe mode. Every item is prevalidated and the full sequence is committed as one undo step.',
       items: keyframeSequenceItemSchema,
     },
+    effectId: { type: 'string', description: 'keys mode only: bare parameter names in keys address this effect (progress -> effect.<effectId>.progress).' },
+    keys: {
+      type: 'object',
+      description: 'Compact atomic mode for one clip: { "<property>": [[time, value, easing?], ...], ... }, e.g. { "position.x": [[0, -300], [1.2, 200, "expo-out"]], "opacity": [[0, 0], [0.3, 1]] }. Use with clipId (and effectId for effect parameters); one undo step.',
+      additionalProperties: { type: 'array' },
+    },
   },
   required: [],
   oneOf: [
     {
       required: ['clipId', 'property', 'value'],
-      not: { required: ['sequence'] },
+      not: { anyOf: [{ required: ['sequence'] }, { required: ['keys'] }] },
+    },
+    {
+      required: ['clipId', 'keys'],
+      not: { anyOf: [{ required: ['sequence'] }, { required: ['property'] }, { required: ['value'] }] },
     },
     {
       required: ['sequence'],
@@ -70,7 +80,7 @@ export const keyframeToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'addKeyframe',
-      description: 'Add one keyframe with the legacy clipId/property/value fields, or atomically author a keyframe sequence of any required size. Use exactly one mode. Times are relative to each clip start (0 = clip start). Transform values are absolute final values, not multipliers relative to the clip base transform.',
+      description: 'Add one keyframe with the legacy clipId/property/value fields, atomically author a keyframe sequence of any required size, or key several properties of one clip with the compact keys map. Use exactly one mode. Times are relative to each clip start (0 = clip start). Transform values are absolute final values, not multipliers relative to the clip base transform.',
       parameters: addKeyframeParameters,
     },
   },

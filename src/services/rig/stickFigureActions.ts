@@ -2,6 +2,7 @@ import { GAIT_ANGLE_OUTPUTS } from '../parameterSources/controlOperators';
 import { addControlNode, setParameterSourceBinding } from '../parameterSources/parameterSourceActions';
 import { useTimelineStore } from '../../stores/timeline';
 import { BLANK_CLIP_COLOR } from '../timeline/blankClip';
+import { STICK_FIGURE_PARAMS } from '../../effects/generate/stickFigure/params';
 import type { SkeletonGait, SkeletonJoint } from './skeletonRig';
 import {
   isSkeletonActionId,
@@ -36,10 +37,33 @@ export interface CreateStickFigureOptions {
   color?: string;
   /** Pelvis X in figure pixels (0 = frame centre). */
   x?: number;
+  /** Any visible Stick Figure parameters (scale, groundY, turn, angles, lengths...), validated by name, type and options. */
+  params?: Record<string, unknown>;
+}
+
+/** Validate figure parameters so a typo fails loudly instead of being stored and ignored. */
+export function validateStickFigureParams(params: Record<string, unknown>): Record<string, string | number | boolean> {
+  const valid: Record<string, string | number | boolean> = {};
+  for (const [key, value] of Object.entries(params)) {
+    const spec = (STICK_FIGURE_PARAMS as Record<string, { default: unknown; hidden?: boolean; options?: { value: unknown }[] }>)[key];
+    if (!spec || spec.hidden) {
+      const names = Object.entries(STICK_FIGURE_PARAMS).filter(([, item]) => !(item as { hidden?: boolean }).hidden).map(([name]) => name);
+      throw new Error(`Unknown stick figure parameter: ${key}. Valid: ${names.join(', ')}`);
+    }
+    if (typeof value !== typeof spec.default || (typeof value === 'number' && !Number.isFinite(value))) {
+      throw new Error(`Stick figure parameter ${key} must be a ${typeof spec.default}.`);
+    }
+    if (spec.options && !spec.options.some(option => option.value === value)) {
+      throw new Error(`Stick figure parameter ${key} must be one of ${spec.options.map(option => String(option.value)).join(', ')}.`);
+    }
+    valid[key] = value as string | number | boolean;
+  }
+  return valid;
 }
 
 /** A Blank clip carrying one Stick Figure effect: the starting point of a rig. */
 export function createStickFigureRig(options: CreateStickFigureOptions = {}): { clipId: string; effectId: string; figure: string } {
+  const extra = options.params ? validateStickFigureParams(options.params) : {};
   const state = useTimelineStore.getState();
   const track = options.trackId
     ? state.tracks.find(item => item.id === options.trackId && item.type === 'video')
@@ -50,7 +74,7 @@ export function createStickFigureRig(options: CreateStickFigureOptions = {}): { 
   if (!clipId) throw new Error('Could not create the Blank clip.');
   state.updateClip(clipId, { name: options.name?.trim() || 'Stick Figure' });
   const effectId = useTimelineStore.getState().addClipEffect(clipId, STICK_FIGURE_EFFECT);
-  const params: Record<string, string | number> = {};
+  const params: Record<string, string | number | boolean> = { ...extra };
   if (options.facing) params.facing = options.facing;
   if (options.color) params.color = options.color;
   if (Number.isFinite(options.x)) params.rootX = options.x!;

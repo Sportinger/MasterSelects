@@ -62,10 +62,20 @@ const PROJECT_REBUILD_TOOLS = new Set([
 // mutations too; otherwise later steps open a second transaction and collide with it.
 const AWAITING_TRANSACTION_TOOLS = new Set([
   'executeBatch',
+  'runEditorStream',
   'manageEditableHook',
   'refineEditableHook',
   'createEditableTitleStack',
 ]);
+
+/**
+ * Multi-step tools whose completed steps stay applied when a later step fails (documented as
+ * non-transactional). Their partial result is still one undo step and one saved revision.
+ */
+function keepsPartialMutations(toolName: string, result: ToolResult): boolean {
+  if (toolName === 'executeBatch') return true;
+  return toolName === 'runEditorStream' && Number((result.data as { executed?: unknown } | undefined)?.executed) > 0;
+}
 
 function opensStandaloneAgentTransaction(toolName: string): boolean {
   return MODIFYING_TOOLS.has(toolName) && !PROJECT_REBUILD_TOOLS.has(toolName);
@@ -196,13 +206,12 @@ async function executeAIToolWithDeferredAudit(
       : _executeAIToolInternal(toolName, args, callerContext, options);
     // A batch or hook is one undo step and one saved revision, including mutations made after awaits,
     // also when an outer (grouped or kernel) agent transaction is pinned.
-    const batchTool = toolName === 'executeBatch';
     const result = AWAITING_TRANSACTION_TOOLS.has(toolName)
       ? await captureAgentTransactionAcrossAwaits(standaloneTransaction ?? getPinnedAgentTransaction(options), run)
       : await run();
     if (standaloneTransaction) {
-      // executeBatch is documented as non-transactional: successful sibling actions stay applied.
-      if (result.success || batchTool) commitAgentTransaction(standaloneTransaction); else abortAgentTransaction(standaloneTransaction);
+      // executeBatch and runEditorStream are non-transactional: successful steps stay applied.
+      if (result.success || keepsPartialMutations(toolName, result)) commitAgentTransaction(standaloneTransaction); else abortAgentTransaction(standaloneTransaction);
     }
     completeOrDeferAgentToolAudit({ callId: audit.callId, tool: toolName, result }, deferAuditCompletion);
     return result;
@@ -387,7 +396,7 @@ async function _executeAIToolInternal(
     }
     const invoke = () => executeToolInternal(toolName, args, timelineStore, mediaStore, callerContext, options.signal);
     const result = await (transaction ? runWithAgentTransaction(transaction, invoke) : invoke());
-    mutationSucceeded = result.success;
+    mutationSucceeded = result.success || keepsPartialMutations(toolName, result);
     return result;
   } catch (error) {
     log.error(`Error executing ${toolName}`, error);

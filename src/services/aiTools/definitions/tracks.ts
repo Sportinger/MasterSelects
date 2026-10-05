@@ -7,14 +7,18 @@ export const trackToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'createTrack',
-      description: 'Create a new video or audio track.',
+      description: 'Create a new video, audio or MIDI track. MIDI tracks play MIDI clips through their instrument (createMidiClip).',
       parameters: {
         type: 'object',
         properties: {
           type: {
             type: 'string',
-            enum: ['video', 'audio'],
+            enum: ['video', 'audio', 'midi'],
             description: 'Type of track to create',
+          },
+          instrument: {
+            type: 'string',
+            description: 'MIDI tracks only: Simple Synth preset id, e.g. sub-bass, acid-bass, pluck, warm-pad, bright-lead, strings, organ, wobble-bass, sfx-whoosh, sfx-hit, sfx-punch, sfx-click, sfx-glass, sfx-zap.',
           },
           name: {
             type: 'string',
