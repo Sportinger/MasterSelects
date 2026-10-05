@@ -1,4 +1,8 @@
+import { knitCycleGuideTable, CYCLE_GUIDE_POINTS, CYCLE_GUIDE_PHASES } from '../../../services/operators/geometry/knitCycleGuides';
+import { Logger } from '../../../services/logger';
 import solverShader from '../shaders/RodSolver.wgsl?raw';
+import cycleShader from '../shaders/RodCycleGuide.wgsl?raw';
+import motionGuardShader from '../shaders/RodMotionGuard.wgsl?raw';
 import outputShader from '../shaders/RodOutput.wgsl?raw';
 import { FlockRadixSort } from '../../flock/gpu/FlockRadixSort';
 import { FIELD_FUNCTIONS_WGSL } from '../../../services/operators/fields/fieldFunctionsWgsl';
@@ -10,10 +14,10 @@ import { ROD_KINETIC, ROD_SELF_GAP, rodCellSize } from '../../../services/operat
 import { ROD_AIR_DRAG, ROD_FORM_TRAVEL, ROD_MAX_TRAVEL, ROD_STEP_LIMIT, ROD_STEP_RATE, rodBendModulus, rodInverseMass,
   rodStretchModulus } from '../../../services/operators/geometry/rodSolver';
 import { windVelocity } from '../../../services/operators/geometry/simulationForces';
-import { strandRadiusFieldCode, type StrandFieldCode } from '../passes/strandFieldShader';
+import { strandRodFieldCode, type StrandFieldCode } from '../passes/strandFieldShader';
 import { StrandFramesPass } from '../passes/StrandFramesPass';
 
-const PARAMS_BYTES = 224;
+const PARAMS_BYTES = 304;
 const PASS_BYTES = 48;
 const NO_SEGMENT = 0xffffffff;
 /** Form time of nodes that are never formed: WGSL may assume finite floats. */
@@ -21,8 +25,8 @@ const NEVER = 3e38;
 const CHECKPOINT_INTERVAL = 30;
 /** GPU memory bound: when full, every other checkpoint is dropped and the spacing doubles. */
 const CHECKPOINT_LIMIT = 40;
-const NO_FIELDS = strandRadiusFieldCode([]);
-const SOLVER_ENTRIES = ['predict', 'stretch', 'bend', 'cellKeys', 'cellRangesOf', 'contacts', 'apply', 'nodeExtent'] as const;
+const NO_FIELDS = strandRodFieldCode([]);
+const SOLVER_ENTRIES = ['predict', 'stretch', 'bend', 'limitMotion', 'measureSegments', 'motionBounds', 'cellKeys', 'cellRangesOf', 'contacts', 'correctContacts', 'apply', 'nodeExtent'] as const;
 type SolverEntry = typeof SOLVER_ENTRIES[number];
 
 interface DevicePipelines {
@@ -39,13 +43,16 @@ function devicePipelines(device: GPUDevice): DevicePipelines {
   const entry = (binding: number, type: GPUBufferBindingType, dynamic = false): GPUBindGroupLayoutEntry =>
     ({ binding, visibility: GPUShaderStage.COMPUTE, buffer: { type, hasDynamicOffset: dynamic } });
   const solverLayout = device.createBindGroupLayout({ label: 'rod-solver', entries: [entry(0, 'uniform'), entry(1, 'uniform', true),
-    entry(2, 'read-only-storage'), entry(3, 'storage'), entry(4, 'storage'), entry(5, 'storage'), entry(6, 'storage')] });
-  const module = device.createShaderModule({ label: 'rod-solver', code: solverShader });
+    entry(2, 'read-only-storage'), entry(3, 'storage'), entry(4, 'storage'), entry(5, 'storage'), entry(6, 'storage'), entry(7, 'read-only-storage')] });
+  const module = device.createShaderModule({ label: 'rod-solver', code: solverShader.replace('//@cycle-guide', cycleShader).replace('//@motion-guard', motionGuardShader) });
+  void module.getCompilationInfo().then(info => { for (const message of info.messages) if (message.type === 'error') Logger.create('RodGpuSimulation').error(message.message); });
   const layout = device.createPipelineLayout({ bindGroupLayouts: [solverLayout] });
+  device.pushErrorScope('validation');
   const solver = Object.fromEntries(SOLVER_ENTRIES.map(name => [name,
     device.createComputePipeline({ label: `rod-${name}`, layout, compute: { module, entryPoint: name } })])) as Record<SolverEntry, GPUComputePipeline>;
+  void device.popErrorScope().then(error => { if (error) Logger.create('RodGpuSimulation').error(error.message); });
   const outputLayout = device.createBindGroupLayout({ label: 'rod-output', entries: [entry(0, 'uniform'), entry(1, 'read-only-storage'),
-    entry(2, 'read-only-storage'), entry(3, 'read-only-storage'), entry(4, 'read-only-storage'), entry(5, 'storage'), entry(6, 'read-only-storage')] });
+    entry(2, 'read-only-storage'), entry(3, 'read-only-storage'), entry(4, 'read-only-storage'), entry(5, 'storage'), entry(6, 'read-only-storage'), entry(7, 'storage')] });
   pipelines = { solverLayout, solver, outputLayout, outputs: new Map() };
   pipelinesByDevice.set(device, pipelines);
   return pipelines;
@@ -115,13 +122,13 @@ export class RodGpuSimulation {
     const storage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC;
     // Topology words: nodes, segments, bends, then the colour lists (four entries per word).
     const colorEntries = [...stretchColors, ...bendColors].reduce((sum, list) => sum + list.length, 0);
-    const segmentBase = nodes * 3, bendBase = segmentBase + segmentCount * 2, colorBase = bendBase + bendCount * 2;
+    const segmentBase = nodes * 4, bendBase = segmentBase + segmentCount * 2, colorBase = bendBase + bendCount * 2;
     const words = new ArrayBuffer((colorBase + Math.ceil(colorEntries / 4) + 1) * 16);
     const u = new Uint32Array(words), f = new Float32Array(words);
     const stretch = rodStretchModulus(spec.stretch), bend = rodBendModulus(spec.bend);
     const inverseMass = new Float32Array(nodes);
     for (let node = 0; node < nodes; node++) {
-      const word = node * 12;
+      const word = node * 16;
       inverseMass[node] = rodInverseMass(mass[node], rest.pinned[node] === 1, spec.radius);
       f.set([rest.positions[node * 3], rest.positions[node * 3 + 1], rest.positions[node * 3 + 2], inverseMass[node]], word);
       // Pinned nodes never form: their slot holds the pull start instead.
@@ -129,6 +136,11 @@ export class RodGpuSimulation {
       f.set([rest.pull[node * 3], rest.pull[node * 3 + 1], rest.pull[node * 3 + 2], time], word + 4);
       u.set([before[node], after[node], nodeSegments[node * 2] < 0 ? NO_SEGMENT : nodeSegments[node * 2],
         nodeSegments[node * 2 + 1] < 0 ? NO_SEGMENT : nodeSegments[node * 2 + 1]], word + 8);
+    }
+    for (let row = 0; row < rest.counts.length; row++) {
+      for (let node = rest.starts[row], end = node + rest.counts[row]; node < end; node++) {
+        f.set([rest.material[node], row, 0, 0], node * 16 + 12);
+      }
     }
     for (let c = 0; c < segmentCount; c++) {
       const word = (segmentBase + c * 2) * 4;
@@ -151,7 +163,7 @@ export class RodGpuSimulation {
     const topology = create(words.byteLength, storage, 'topology');
     device.queue.writeBuffer(topology, 0, words);
     // State: positions (xyz, inverse mass), velocities, predicted positions, two contact sums per segment.
-    this.state = create((3 * nodes + 2 * segmentCount) * 16, storage, 'state');
+    this.state = create((3 * nodes + (spec.cycle ? 3 : 2) * segmentCount) * 16, storage, 'state');
     const initial = new Float32Array(nodes * 4);
     for (let node = 0; node < nodes; node++) initial.set([rest.start[node * 3], rest.start[node * 3 + 1], rest.start[node * 3 + 2], inverseMass[node]], node * 4);
     device.queue.writeBuffer(this.state, 0, initial);
@@ -175,17 +187,29 @@ export class RodGpuSimulation {
     pf.set([rodCellSize(longest, spec.radius), ROD_SELF_GAP, ROD_KINETIC], 14);
     pu.set([segmentBase, bendBase, colorBase], 17);
     spec.turbulence.slice(0, 8).forEach((field, index) => pf.set([field.strength, field.frequency, 0, 0], 20 + index * 4));
-    pf.set([spec.formEase, ROD_FORM_TRAVEL * spec.radius, spec.pull, spec.pullTime], 52);
+    // The sign encodes constant-speed pulling without changing the uniform layout.
+    pf.set([spec.formEase, ROD_FORM_TRAVEL * spec.radius, spec.pull, spec.pullLinear ? -spec.pullTime : spec.pullTime], 52);
+    if (spec.cycle) {
+      const s = spec.cycle;
+      pf.set([1, s.rows, s.stitches, s.radius, s.spacing, s.height, s.depth, s.lean,
+        s.width, s.entry, s.exit, s.period, s.strength, CYCLE_GUIDE_POINTS, CYCLE_GUIDE_PHASES, 0], 56);
+    }
+    // cycle3.w carries fixture motion independently of whether cycle guides are enabled.
+    pf[71] = spec.pullOscillate ? 1 : 0;
+    pf.set([spec.pullHold ?? 0, spec.pullPause ?? 0, 0, 0], 72);
     this.params = create(PARAMS_BYTES, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 'params');
     device.queue.writeBuffer(this.params, 0, data);
     const stride = Math.max(256, device.limits.minUniformBufferOffsetAlignment);
     this.passes = create(spec.substeps * (1 + this.slots.length) * stride, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 'passes');
     const placeholder = this.sort ? null : create(16, storage, 'no-sort');
+    const guideData = spec.cycle ? knitCycleGuideTable(spec.cycle) : new Float32Array(4);
+    const guideBuffer = create(guideData.byteLength, storage, 'cycle-guides');
+    device.queue.writeBuffer(guideBuffer, 0, guideData as Float32Array<ArrayBuffer>);
     this.group = device.createBindGroup({ layout: this.pipelines.solverLayout, entries: [
       { binding: 0, resource: { buffer: this.params } }, { binding: 1, resource: { buffer: this.passes, size: PASS_BYTES } },
       { binding: 2, resource: { buffer: topology } }, { binding: 3, resource: { buffer: this.state } },
       { binding: 4, resource: { buffer: this.sort?.input ?? placeholder! } },
-      { binding: 5, resource: { buffer: cells } }, { binding: 6, resource: { buffer: this.extentBits } }] });
+      { binding: 5, resource: { buffer: cells } }, { binding: 6, resource: { buffer: this.extentBits } }, { binding: 7, resource: { buffer: guideBuffer } }] });
     // Output: every incoming curve point on its rod, with its rest detail and radius scale.
     this.points = curves.positions.length / 3; this.strands = curves.counts.length;
     const rods = new Uint32Array(Math.max(1, this.points) * 4), geometry = new Float32Array(Math.max(1, this.points) * 8);
@@ -195,7 +219,7 @@ export class RodGpuSimulation {
       ranges.set([start, count], strand * 2);
       for (let point = 0; point < count; point++) {
         const index = start + point;
-        rods.set([rest.pointNode[index], rest.starts[strand], rest.counts[strand], rest.closed[strand]], index * 4);
+        rods.set([rest.pointNode[index], rest.starts[strand], rest.counts[strand], rest.closed[strand] + (spec.cycle ? 2 : 0)], index * 4);
         geometry.set([rest.detail[index * 3], rest.detail[index * 3 + 1], rest.detail[index * 3 + 2], rest.pointFraction[index],
           curves.radius ? curves.radius[index] : 1, strand, point, count], index * 8);
       }
@@ -273,6 +297,7 @@ export class RodGpuSimulation {
     const encoder = device.createCommandEncoder({ label: 'rod-step' });
     for (let substep = 0; substep < spec.substeps; substep++) {
       const offset = (slot: number) => [(substep * slots + slot) * stride];
+      if (spec.cycle) encoder.clearBuffer(this.extentBits, 4, 4);
       let pass = encoder.beginComputePass({ label: 'rod-substep' });
       pass.setBindGroup(0, this.group, offset(0));
       pass.setPipeline(solver.predict);
@@ -283,6 +308,12 @@ export class RodGpuSimulation {
         pass.dispatchWorkgroups(Math.ceil(color.count / 64));
       });
       pass.setBindGroup(0, this.group, offset(0));
+      if (spec.cycle) {
+        pass.setPipeline(solver.limitMotion);
+        pass.dispatchWorkgroups(nodeGroups);
+        pass.setPipeline(solver.measureSegments);
+        pass.dispatchWorkgroups(segmentGroups);
+      }
       if (this.sort) {
         pass.setPipeline(solver.cellKeys);
         pass.dispatchWorkgroups(segmentGroups);
@@ -292,8 +323,18 @@ export class RodGpuSimulation {
         pass.setBindGroup(0, this.group, offset(0));
         pass.setPipeline(solver.cellRangesOf);
         pass.dispatchWorkgroups(segmentGroups);
-        pass.setPipeline(solver.contacts);
-        pass.dispatchWorkgroups(Math.ceil(this.segmentCount / 64));
+        if (spec.cycle) {
+          pass.setPipeline(solver.motionBounds);
+          pass.dispatchWorkgroups(Math.ceil(this.segmentCount / 64));
+        }
+        for (let iteration = 0; iteration < (spec.cycle ? 3 : 1); iteration++) {
+          pass.setPipeline(solver.contacts);
+          pass.dispatchWorkgroups(Math.ceil(this.segmentCount / 64));
+          if (spec.cycle && iteration < 2) {
+            pass.setPipeline(solver.correctContacts);
+            pass.dispatchWorkgroups(nodeGroups);
+          }
+        }
       }
       pass.setPipeline(solver.apply);
       pass.dispatchWorkgroups(nodeGroups);
@@ -345,14 +386,9 @@ export class RodGpuSimulation {
       { binding: 0, resource: { buffer: uniform } }, { binding: 1, resource: { buffer: this.state, size: this.nodeCount * 16 } },
       { binding: 2, resource: { buffer: this.earlier } }, { binding: 3, resource: { buffer: this.pointRods } },
       { binding: 4, resource: { buffer: this.pointGeometry } }, { binding: 5, resource: { buffer: target } },
-      { binding: 6, resource: { buffer: constants } }] }));
+      { binding: 6, resource: { buffer: constants } }, { binding: 7, resource: { buffer: this.extentBits } }] }));
     pass.dispatchWorkgroups(width, Math.ceil(groups / width));
     this.frames.encode(device, pass, this.ranges, this.strands, target, temporaryBuffers);
-    if (measure) {
-      pass.setBindGroup(0, this.group, [0]);
-      pass.setPipeline(this.pipelines.solver.nodeExtent);
-      pass.dispatchWorkgroups(Math.ceil(this.nodeCount / 256));
-    }
     pass.end();
     if (measure) encoder.copyBufferToBuffer(this.extentBits, 0, this.extentRead, 0, 4);
     device.queue.submit([encoder.finish()]);

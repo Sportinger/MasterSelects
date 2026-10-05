@@ -116,7 +116,11 @@ Knit Sphere's band height can gather all rings into one connected knitting patch
 Strand Render also accepts per-point RGB fields for gradients and alternating color bands with independent offsets per yarn.
 Material-coordinate yarn colors retain GPU cloth and rod simulation; spatial color fields use the final CPU-deformed positions. Yarn Profile Surface Feed moves fiber detail along a curve without changing its centerline. Legacy parameter graphs remain isolated per effect.
 Curve Contact separates overlapping yarn capsules after procedural deformation while preserving closed rings and their color coordinates.
-Closed Curve Flow circulates yarn material along fixed stitch paths, independently of the shape animation.
+Closed Curve Flow circulates yarn material along fixed stitch paths, independently of the shape animation. Rod Simulation supports per-node time scale and offset for paired entry and exit studies. Constant-speed pulling and the finite, baked Knit Passage Study support successive four-yarn draw-throughs on an upright ring, with a wider mature patch separating entry and exit; its entry is reverse playback and its return is constructed.
+Experimental Knit Cycle Guides drive closed yarn bands through separate forming and release zones in one forward-time rod solve.
+Close Curve adds a smooth return bow to each open yarn, creating closed ropes for Rod Simulation; geometric closure alone does not loop the motion.
+Rod Simulation's Pull Direction field moves selected pins on open or closed ropes along fixed normalized directions; zero vectors hold supports still. Build and map the closed ring before the solve for coupled tension and contacts. This enables tension studies, not repeated needle-driven stitch formation.
+Set Position after Rod Simulation deforms the result on the GPU, for example bending a stitch animation into a ring while preserving its original simulation.
 
 [Slit Scan](docs/Features/Effects.md#slit-scan) starts with 3D geometry bypassed. It can match its time factor to the source frame rate and sample count, and optionally compensate motion between decoded frames in resident GPU history with adjustable flow strength.
 

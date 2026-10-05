@@ -4,6 +4,8 @@ import { FIELD_OPERATORS } from './fieldOperators';
 import { CLOTH_OPERATORS } from './clothOperators';
 import { KNOT_OPERATORS } from './knotOperators';
 import { ROD_OPERATORS } from './rodOperators';
+import { KNIT_CYCLE_OPERATORS } from './knitCycleOperators';
+import { KNIT_PASSAGE_OPERATORS } from './knitPassageOperators';
 
 /**
  * General curve geometry operators. Curves flow between generators and modifiers;
@@ -41,6 +43,11 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
   operator('geometry.curve-flow', 'Closed Curve Flow', 'Moves material points along an existing closed path. Unlike forming new loops, the stitch path stays fixed while yarn and its colors circulate. Requires a repeated endpoint; linearly resamples positions and radius scales.',
     [curves('curves', true)], [curves()], [number('speed', 'Turns per Second', 0.05, -10, 10, 0.01),
       number('phase', 'Phase', 0, -1000, 1000, 0.01)], { bypass: 'passthrough' }),
+  operator('geometry.close-curve', 'Close Curve', 'Connects each open strand end back to its own start through a smooth return bow. Offset places the back of the bow relative to the endpoint midpoint. Place before Rod Simulation for a physically closed rope. This closes the geometry; it does not loop the animation.',
+    [curves('curves', true)], [curves()], [
+      { id: 'offset', label: 'Return Offset', type: 'vector', default: [0, 0, -1], animatable: false },
+      number('handle', 'End Handles', 0.4, 0, 100, 0.01, false),
+      number('points', 'Return Points', 96, 8, 4096, 1, false)], { bypass: 'passthrough' }),
   operator('geometry.position', 'Position', 'The current position of each curve point, evaluated where a modifier reads it.',
     [], [{ id: 'position', label: 'Position', type: 'vec3' }]),
   operator('geometry.clip-time', 'Clip Time', 'Seconds of source time of the clip that hosts the effect: 0 where the clip starts, continuing across splits. Cloth runs on the same clock.',
@@ -80,6 +87,8 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
   ...FIELD_OPERATORS,
   ...CLOTH_OPERATORS,
   ...ROD_OPERATORS,
+  ...KNIT_CYCLE_OPERATORS,
+  ...KNIT_PASSAGE_OPERATORS,
   operator('render.strands', 'Strand Render', 'Draws the connected curves as thin strands in the shared 3D scene.',
     [curves('curves', true), { id: 'color', label: 'Color', type: 'vec3' }], [{ id: 'scene', label: 'Scene', type: 'scene' }],
     [number('width', 'Width', 0.004, 0, 1, 0.0005), { id: 'color', label: 'Color', type: 'color', default: '#e8e2d6', animatable: true },

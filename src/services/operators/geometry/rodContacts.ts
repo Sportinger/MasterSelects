@@ -24,7 +24,7 @@ const KINETIC = ROD_KINETIC;
 export const rodCellSize = (longest: number, radius: number) => longest * 1.25 + radius * (2 + SKIN);
 
 /** Closest points of segments p1q1 and p2q2 (Ericson, Real-Time Collision Detection 5.1.9). */
-function closestParameters(d1: number[], d2: number[], r: number[], out: number[]) {
+export function closestParameters(d1: number[], d2: number[], r: number[], out: number[]) {
   const a = d1[0] * d1[0] + d1[1] * d1[1] + d1[2] * d1[2], e = d2[0] * d2[0] + d2[1] * d2[1] + d2[2] * d2[2];
   const f = d2[0] * r[0] + d2[1] * r[1] + d2[2] * r[2];
   const clamp = (value: number) => Math.min(1, Math.max(0, value));

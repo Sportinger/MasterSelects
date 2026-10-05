@@ -8,6 +8,8 @@ import { CONTACT_POINT_LIMIT } from './curveContacts';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { isClothSpec } from './clothProgram';
 import { isRodSpec } from './rodProgram';
+import { isKnitCycleSpec, KNIT_CYCLE_KEYS } from './knitCycleGuides';
+import { isKnitPassageSpec, KNIT_PASSAGE_POINTS, KNIT_PASSAGE_ROWS } from './knitPassageSpec';
 
 const FIELD_INSTRUCTION_LIMIT = 256;
 const STAGE_LIMIT = 64;
@@ -67,6 +69,12 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     } else if (stage.kind === 'knit-sphere') {
       if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', ...KNIT_SPHERE_KEYS]) || !isKnitSphereSpec(stage)) return false;
       points = knitPointCount(stage as { stitches: number; rows: number; resolution: number }); strands = stage.rows as number;
+    } else if (stage.kind === 'knit-cycle') {
+      if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', ...KNIT_CYCLE_KEYS]) || !isKnitCycleSpec(stage)) return false;
+      points = knitPointCount(stage as { stitches: number; rows: number; resolution: number }); strands = stage.rows as number;
+    } else if (stage.kind === 'knit-passage') {
+      if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase', 'travel', 'follow']) || !isKnitPassageSpec(stage)) return false;
+      points = KNIT_PASSAGE_ROWS * KNIT_PASSAGE_POINTS; strands = KNIT_PASSAGE_ROWS; simulated = true;
     } else if (stage.kind === 'knit') {
       if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', 'stitches', 'rows', 'width', 'height', 'spacing', 'depth', 'lean', 'resolution'])
         || ![stage.stitches, stage.rows, stage.resolution].every(Number.isInteger) || (stage.stitches as number) < 1 || (stage.rows as number) < 1
@@ -82,6 +90,12 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'length', 'points']) || !finite(stage.length) || (stage.length as number) < 0
         || !Number.isInteger(stage.points) || (stage.points as number) < 1 || (stage.points as number) > 4096) return false;
       points += 2 * (stage.points as number) * strands;
+    } else if (stage.kind === 'close-curve') {
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'offset', 'handle', 'points'])
+        || !Array.isArray(stage.offset) || stage.offset.length !== 3 || !stage.offset.every(finite)
+        || !finite(stage.handle) || stage.handle < 0 || !Number.isInteger(stage.points)
+        || (stage.points as number) < 8 || (stage.points as number) > 4096) return false;
+      points += (stage.points as number) * strands;
     } else if (stage.kind === 'curve-flow') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase']) || !finite(stage.phase)) return false;
     } else if (stage.kind === 'curve-contact') {
@@ -99,8 +113,10 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
         || !isClothSpec(stage.cloth)) return false;
       simulated = true;
     } else if (stage.kind === 'rod-simulation') {
-      if (index === 0 || simulated || !exactKeys(stage, ['kind', 'nodeId', 'rod', 'pins', 'pullStart', 'form', 'time']) || !finite(stage.time)
-        || !isRodSpec(stage.rod) || [stage.pins, stage.pullStart, stage.form].some(field => field !== undefined && !isField(field))) return false;
+      if (index === 0 || simulated || !exactKeys(stage, ['kind', 'nodeId', 'rod', 'pins', 'pullStart', 'pullDirection', 'form', 'time']) || !finite(stage.time)
+        || !isRodSpec(stage.rod) || [stage.pins, stage.pullStart, stage.form].some(field => field !== undefined && !isField(field))
+        || (stage.pullDirection !== undefined && (!isField(stage.pullDirection)
+          || stage.pullDirection.instructions[stage.pullDirection.output].type !== 'vec3'))) return false;
       simulated = true;
     } else if (stage.kind === 'set-position') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'position', 'offset'])

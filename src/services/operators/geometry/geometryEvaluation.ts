@@ -6,6 +6,9 @@ import { celticKnotCurves, knotCurves } from './knotCurves';
 import { knitCurves } from './knitCurves';
 import { knitSphereCurves } from './knitSphereCurves';
 import { extendCurves } from './extendCurves';
+import { closeCurves } from './closeCurves';
+import { knitCycleCurves } from './knitCycleGuides';
+import { knitPassageCurves } from './knitPassageCurves';
 import { threadAlong } from './threadAlong';
 import { simulateRodCurves } from './rodCurves';
 import { separateCurveContacts } from './curveContacts';
@@ -48,7 +51,7 @@ function weavePattern(stage: Extract<GeometryStage, { kind: 'weave-pattern' }>):
 }
 
 /**
- * Stages before the first Surface Bind do not depend on cloth time. Each of their results is kept
+ * Stages before the first simulation or authored animation do not depend on its time. Each result is kept
  * under the content of all stages up to it, so a change late in that chain (an animated Yarn
  * Profile radius) reuses the earlier curves, and field columns keyed by those curves stay valid.
  */
@@ -62,7 +65,7 @@ const prefixes = new Map<string, CurveSet>();
  * `rodBudget` bounds the rod simulation work of this call (see simulateRodCurves).
  */
 export function evaluateGeometryProgram(program: GeometryProgram, options: { rodBudget?: number } = {}): CurveSet {
-  const split = program.stages.findIndex(stage => stage.kind === 'surface-bind' || stage.kind === 'rod-simulation');
+  const split = program.stages.findIndex(stage => stage.kind === 'surface-bind' || stage.kind === 'rod-simulation' || stage.kind === 'knit-passage');
   const cached = split < 0 ? program.stages.length : split;
   let curves: CurveSet | undefined, key = '';
   for (let index = 0; index < cached; index++) {
@@ -99,12 +102,18 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet, ke
       curves = celticKnotCurves(stage);
     } else if (stage.kind === 'knit') {
       curves = knitCurves(stage);
+    } else if (stage.kind === 'knit-cycle') {
+      curves = knitCycleCurves(stage);
+    } else if (stage.kind === 'knit-passage') {
+      curves = knitPassageCurves(stage);
     } else if (stage.kind === 'knit-sphere') {
       curves = knitSphereCurves(stage);
     } else if (stage.kind === 'thread-along') {
       curves = threadAlong(stage, curves);
     } else if (stage.kind === 'extend') {
       curves = extendCurves(stage, curves);
+    } else if (stage.kind === 'close-curve') {
+      curves = closeCurves(curves, stage);
     } else if (stage.kind === 'strand-array') {
       const { positions, starts, counts, radius } = curves;
       const pointTotal = positions.length / 3, strandTotal = counts.length;

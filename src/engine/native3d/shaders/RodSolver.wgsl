@@ -4,7 +4,7 @@
 // iteration orders and a stable sort make every step deterministic on one device.
 //
 // `topology` (read-only) holds, in vec4u words with floats bit-cast:
-//   per node    3 words: (rest xyz, inverse mass), (pull direction xyz, time), (before, after, left segment, right segment)
+//   per node    4 words: (rest xyz, inverse mass), (pull direction xyz, time), (before, after, left segment, right segment), (material u, strand, 0, 0)
 //               where time is the form time of free nodes and the pull start of pinned ones
 //   per segment 2 words: (node a, node b, rod, ring), (rest length, arc of midpoint, rod length, stretch compliance)
 //   per bend    2 words: (prev, mid, next, 0), (1 / l1, 1 / l2, compliance, 0)
@@ -37,7 +37,12 @@ struct RodParams {
   formEase: f32,      // seconds a node takes to be drawn onto its rest position
   formTravel: f32,    // largest forming move per substep
   pull: f32,          // distance pinned nodes travel along their pull direction
-  pullTime: f32,      // seconds the pull takes from each node's pull start
+  pullTime: f32,      // absolute seconds; negative selects constant speed rather than easing
+  cycle0: vec4f,      // enabled, threads, stitches per turn, ring radius
+  cycle1: vec4f,      // spacing, height, depth, fold
+  cycle2: vec4f,      // patch width, entry width, exit width, seconds per stitch
+  cycle3: vec4f,      // strength, guide points, guide phases, out-and-back pull (also without guides)
+  pullTiming: vec4f,  // seconds held at full extension, seconds paused at home, reserved, reserved
 };
 
 struct PassParams {
@@ -60,7 +65,9 @@ struct PassParams {
 @group(0) @binding(4) var<storage, read_write> sorted: array<vec2u>;
 @group(0) @binding(5) var<storage, read_write> cellRanges: array<vec4u>;
 // Largest node distance from the origin, as f32 bits (positive floats order like their bits).
-@group(0) @binding(6) var<storage, read_write> extentBits: atomic<u32>;
+@group(0) @binding(6) var<storage, read_write> extentBits: array<atomic<u32>>;
+
+@group(0) @binding(7) var<storage, read> cycleGuides: array<vec4f>;
 
 const NO_SEGMENT = 0xffffffffu;
 
@@ -68,20 +75,43 @@ fn position(node: u32) -> vec4f { return state[node]; }
 fn velocityIndex(node: u32) -> u32 { return rod.nodes + node; }
 fn predictedIndex(node: u32) -> u32 { return 2u * rod.nodes + node; }
 fn deltaIndex(segment: u32) -> u32 { return 3u * rod.nodes + 2u * segment; }
-fn restNode(node: u32) -> vec4f { return bitcast<vec4f>(topology[node * 3u]); }
-fn pullDirection(node: u32) -> vec3f { return bitcast<vec4f>(topology[node * 3u + 1u]).xyz; }
-fn nodeTime(node: u32) -> f32 { return bitcast<vec4f>(topology[node * 3u + 1u]).w; }
+fn restNode(node: u32) -> vec4f { return bitcast<vec4f>(topology[node * 4u]); }
+fn pullDirection(node: u32) -> vec3f { return bitcast<vec4f>(topology[node * 4u + 1u]).xyz; }
+fn nodeTime(node: u32) -> f32 { return bitcast<vec4f>(topology[node * 4u + 1u]).w; }
 fn ease(value: f32) -> f32 {
   let s = clamp(value, 0.0, 1.0);
   return s * s * (3.0 - 2.0 * s);
 }
-fn nodeLinks(node: u32) -> vec4u { return topology[node * 3u + 2u]; }
+fn pullProgress(elapsed: f32) -> f32 {
+  let duration = abs(rod.pullTime);
+  let phase = elapsed / duration;
+  if (rod.cycle3.w <= 0.0) {
+    return select(ease(phase), clamp(phase, 0.0, 1.0), rod.pullTime < 0.0);
+  }
+  let hold = rod.pullTiming.x;
+  let pause = rod.pullTiming.y;
+  if (hold == 0.0 && pause == 0.0) {
+    let positive = max(0.0, phase);
+    let wrapped = positive - 2.0 * floor(positive * 0.5);
+    return ease(1.0 - abs(wrapped - 1.0));
+  }
+  let period = 2.0 * duration + hold + pause;
+  let positive = max(0.0, elapsed);
+  let at = positive - period * floor(positive / period);
+  if (at < duration) { return ease(at / duration); }
+  if (at < duration + hold) { return 1.0; }
+  if (at < 2.0 * duration + hold) { return ease(1.0 - (at - duration - hold) / duration); }
+  return 0.0;
+}
+fn nodeLinks(node: u32) -> vec4u { return topology[node * 4u + 2u]; }
+//@cycle-guide
 fn segmentNodes(segment: u32) -> vec4u { return topology[rod.segmentBase + segment * 2u]; }
 fn segmentData(segment: u32) -> vec4f { return bitcast<vec4f>(topology[rod.segmentBase + segment * 2u + 1u]); }
 fn colorEntry(index: u32) -> u32 {
   let word = topology[rod.colorBase + index / 4u];
   return word[index % 4u];
 }
+//@motion-guard
 
 /** Gravity, air across the rod axis and damping, then a speed limit and forming; pins follow their pull. */
 @compute @workgroup_size(256)
@@ -93,7 +123,7 @@ fn predict(@builtin(global_invocation_id) gid: vec3u) {
   let x = position(node);
   let rest = restNode(node);
   if (rest.w == 0.0) {
-    let reach = rod.pull * ease((step.substepEnd - nodeTime(node)) / rod.pullTime);
+    let reach = rod.pull * pullProgress(step.substepEnd - nodeTime(node));
     state[predictedIndex(node)] = vec4f(rest.xyz + pullDirection(node) * reach, 0.0);
     return;
   }
@@ -126,6 +156,14 @@ fn predict(@builtin(global_invocation_id) gid: vec3u) {
     if (size > rod.formTravel) {
       toward *= rod.formTravel / size;
     }
+    p += toward;
+  }
+  if (rod.cycle0.x > 0.0 && rod.cycle3.x > 0.0) {
+    let material = bitcast<vec4f>(topology[node * 4u + 3u]);
+    let guidePoint = cycleTarget(material.x, material.y, step.substepEnd);
+    var toward = (guidePoint.xyz - p) * (1.0 - exp(-rod.cycle3.x * guidePoint.w * rod.dt));
+    let distance = length(toward);
+    if (distance > rod.formTravel) { toward *= rod.formTravel / distance; }
     p += toward;
   }
   state[predictedIndex(node)] = vec4f(p, 0.0);
@@ -187,7 +225,11 @@ fn bend(@builtin(global_invocation_id) gid: vec3u) {
 }
 
 fn cellOf(point: vec3f) -> vec3i {
-  return vec3i(floor(point / rod.cell));
+  var cell = rod.cell;
+  if (rod.cycle0.x > 0.0) {
+    cell = max(cell, bitcast<f32>(atomicLoad(&extentBits[1])) + 4.0 * rod.radius);
+  }
+  return vec3i(floor(point / cell));
 }
 
 fn cellKey(cell: vec3i) -> u32 {
@@ -290,7 +332,6 @@ fn contacts(@builtin(global_invocation_id) gid: vec3u) {
   let xa0 = position(nc.x).xyz;
   let xa1 = position(nc.y).xyz;
   let wa = vec2f(restNode(nc.x).w, restNode(nc.y).w);
-  let restC = segmentData(c).x;
   let contact = 2.0 * rod.radius;
   let home = cellOf(0.5 * (a0 + a1));
   var deltaA = vec3f(0.0);
@@ -324,7 +365,7 @@ fn contacts(@builtin(global_invocation_id) gid: vec3u) {
           let nd = segmentNodes(d);
           let b0 = state[predictedIndex(nd.x)].xyz;
           let b1 = state[predictedIndex(nd.y)].xyz;
-          let bound = (restC + segmentData(d).x) * 1.25 + 2.0 * contact;
+          let bound = length(a1 - a0) + length(b1 - b0) + 2.0 * contact;
           let mid = a0 + a1 - b0 - b1;
           if (dot(mid, mid) > bound * bound) {
             continue;
@@ -384,13 +425,7 @@ fn contacts(@builtin(global_invocation_id) gid: vec3u) {
   state[deltaIndex(c) + 1u] = vec4f(deltaB, hits);
 }
 
-/** Averaged contact corrections, the floor, then velocity from the substep's motion. */
-@compute @workgroup_size(256)
-fn apply(@builtin(global_invocation_id) gid: vec3u) {
-  let node = gid.x;
-  if (node >= rod.nodes) {
-    return;
-  }
+fn contactPoint(node: u32) -> vec3f {
   let links = nodeLinks(node);
   var p = state[predictedIndex(node)].xyz;
   var delta = vec3f(0.0);
@@ -408,6 +443,23 @@ fn apply(@builtin(global_invocation_id) gid: vec3u) {
   if (hits > 0.0) {
     p += delta / hits;
   }
+  return p;
+}
+
+/** Repeat contact projection without changing the substep's velocity/reference state. */
+@compute @workgroup_size(256)
+fn correctContacts(@builtin(global_invocation_id) gid: vec3u) {
+  let node = gid.x;
+  if (node >= rod.nodes) { return; }
+  state[predictedIndex(node)] = vec4f(guardNodePoint(node, contactPoint(node)), 0.0);
+}
+
+/** Averaged contact corrections, the floor, then velocity from the substep's motion. */
+@compute @workgroup_size(256)
+fn apply(@builtin(global_invocation_id) gid: vec3u) {
+  let node = gid.x;
+  if (node >= rod.nodes) { return; }
+  var p = contactPoint(node);
   let x = position(node);
   let w = restNode(node).w;
   let ground = rod.floorHeight + rod.radius;
@@ -423,6 +475,9 @@ fn apply(@builtin(global_invocation_id) gid: vec3u) {
       p.z = x.z + slide.y * keep;
     }
   }
+  if (rod.cycle0.x > 0.0) {
+    p = guardNodePoint(node, p);
+  }
   state[velocityIndex(node)] = vec4f((p - x.xyz) / rod.dt, 0.0);
   state[node] = vec4f(p, w);
 }
@@ -433,5 +488,5 @@ fn nodeExtent(@builtin(global_invocation_id) gid: vec3u) {
   if (gid.x >= rod.nodes) {
     return;
   }
-  atomicMax(&extentBits, bitcast<u32>(length(state[gid.x].xyz)));
+  atomicMax(&extentBits[0], bitcast<u32>(length(state[gid.x].xyz)));
 }

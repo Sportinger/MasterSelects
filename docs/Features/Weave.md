@@ -69,6 +69,12 @@ through finished loops.
 
 ## Endless knit sphere
 
+**Close Curve** connects each open yarn back to its own start with a smooth return
+bow. Return Offset positions the back of the bow, End Handles sets the endpoint
+tangents, and Return Points controls its resolution. Put it before Rod Simulation
+to include the return and seam in the same closed rod and contact solve. Closing
+geometry does not make a simulation periodic or provide a knitting guide.
+
 **Closed Curve Flow** advects material points around existing closed yarn paths at
 Turns per Second in clip source time. Unlike changing a stitch generator's phase,
 it keeps the path in place while yarn colors travel through it. It preserves the
@@ -140,13 +146,37 @@ Turbulence and Drag connect as on Cloth Sheet.
 
 The incoming curves are the rest state at the start of the simulation; curves that
 repeat their first point become rings. **Pin** holds the starts or both ends of open
-curves, and a connected **Pin** field holds the points where it exceeds 0.5.
-**Pull** moves the pinned points outward along the tangent of their nearer end over
-**Pull Time** seconds from each point's **Pull Start** (a per-point field, 0 when
+curves, and a connected **Pin** field holds the points where it exceeds 0.5, including
+points on closed rings. **Pull** sets the distance those pins move over **Pull Time**
+seconds from each point's **Pull Start** (a per-point field, 0 when
 unconnected). That tightens a knot: Knot (reef knot) →
 Rod Simulation → Yarn Profile draws two ropes locking together. Pulling further
 than the knot allows stretches the ropes, sooner with higher friction, because the
-knot jams earlier.
+knot jams earlier. **Pull Motion** chooses the existing eased pull or a constant-speed pull for a steady succession of releases.
+**Out and back** repeatedly eases selected pins outward and home, with a full cycle
+of twice Pull Time starting at each pin's Pull Start. This moves the fixture;
+the rod state, velocities and contacts keep advancing forward without replaying
+the simulation backwards.
+
+**Pull Direction** is an optional Vector 3 field over the rest curves. It is
+interpolated onto the arc-length rod nodes and normalized to unit length; its
+magnitude does not change the Pull distance. A zero vector keeps a selected pin
+stationary. Only pinned nodes move under this control. Without this input, open
+curves pull along their nearer end's outward tangent and closed-ring pins remain
+stationary. Directions stay fixed in the rest state: Clip Time and Timeline Time
+dependencies are rejected. Use Pull Start, Pull Time and Pull Motion for the
+movement schedule. Keyframing upstream fields changes the rest setup and restarts
+the solve; it does not animate a moving target in an existing simulation.
+
+**Closed-rope tension studies.** Create the stitch geometry, apply any ring mapping,
+and add **Close Curve before Rod Simulation**, then render with Yarn Profile.
+The ring, return and knit now participate in the same forward-time contact and
+tension solve. Use a Pin field to select supported loop heads and return handles;
+give supports zero Pull Direction and handles their desired pull vectors. Set the
+Pin dropdown to None when only the field should select pins. Avoid a post-solve
+ring mapping for this setup: that changes the displayed shape without moving its
+collision bodies. This supports closed-rope tension studies; it does not implement
+repeated needle-driven stitch formation.
 
 **Unravelling, played backwards.** A fabric that knits itself without any thread
 passing through another is its unravelling played in reverse. **Extend** continues
@@ -161,6 +191,54 @@ Then reverse the clip (clip speed, Reverse): straight threads are pulled in from
 outside the frame, row by row, and through the loops of the row below. The
 simulation runs forward in source time, so playing backwards resumes from the
 checkpoints and costs more per frame than forward playback.
+
+**Knit Cycle Guides (experimental).** Creates closed yarn rings arranged across a
+cylindrical band. Connect its Curves output to both Curves and Cycle Guide on one
+Rod Simulation: the initial curves and the moving soft guides then share one
+forward-time rod/contact solve. Entry Turns and Exit Turns control independent
+forming/release windows; Seconds per Stitch advances the material without
+resetting the solver clock. Each stitch uses a sampled draw-through shape from
+the four-yarn rod study, resampled by arc length so slack can feed into a growing
+loop. Each whole stitch shares one draw-through phase; the measured expanding
+end chord reserves a longer entry/exit path instead of squeezing the release into
+the compact stitch pitch. Formation follows the inverse shape progression as a moving guide; the
+live four-ring solver itself runs only forward, with stretch/bend/contact forces.
+This is guided choreography based on a physical study, not autonomous knitting
+or proof that every crossing is collision-free. This is an experimental driven solve, not a guaranteed
+collision-free knitting planner or a certified seamless animation loop. The rod
+solver still has its ten-minute simulation limit. Guide forces compete with
+length, bend and contact constraints, so evaluate actual motion before increasing
+speed or tightening the patch. Guided rods also bound every substep, including
+stretch, bend and contact corrections, by conservative displacement balls based
+on the previous segment separation. Three contact projections reduce capsule
+overlap. Guided output follows the actual segment centre lines, without spline
+overshoot or rest-detail offsets. The guard protects disjoint non-neighbouring
+centre lines during accepted substeps; it does not certify initial geometry,
+rendered fibre thickness, frame interpolation or downstream deformations. Invalid
+guides can stall or distort the knit instead of completing a draw-through.
+
+**Knit Passage Study (finite).** Replays a baked four-yarn rod draw-through over
+33.8 seconds. A travelling material window retains the active loops of the longer
+simulation; one additional mature stitch on each side separates formation from
+release. A short mature seam blend and a tangent return form four closed yarn
+rings. Entry uses the reversed release trajectory. This is an authored presentation
+of a physical study, not an independently simulated entry or a fully coupled ring
+simulation. Playback Seconds sets the duration, while Time Scale and Time Offset
+map the host clip's source clock. Follow Patch keeps the patch in a common moving
+frame and preserves the user's orbital camera; Fixed View reveals Patch Travel
+Turns. The first and last states hold outside the finite interval. No live rod
+catch-up is required, and this does not make the animation seamless. The authored
+seam, return and frame interpolation are not certified collision-free.
+
+**Paired entry and exit.** Each Rod Simulation has its own **Time Scale** and
+**Time Offset**. The default is source time (scale 1, offset 0); scale -1 and
+offset 8 replay the same eight-second physical trajectory backwards. Times below
+zero hold the initial state. This changes the simulation clock, including its
+forces, while retaining the same rest geometry and CPU/GPU checkpoint identity.
+A mirrored reverse simulation can form the lower edge while the upper edge
+unravels forwards. Hold a shared middle stitch and match the halves there;
+separate simulations do not calculate contact with each other. Reversal alone
+does not produce a seamless infinite loop or guarantee collision-free joins.
 
 **Forming.** With **Start: Straight**, every open curve begins as a straight thread
 of its own length, laid along the line from its first to its last point through its
@@ -190,8 +268,9 @@ and bend constraints are solved colour by colour (constraints of one colour shar
 node) and contacts as one averaged Jacobi pass, so the same scheme runs in parallel on
 the GPU. Rods carry no frames: with a straight rest shape and position-only pins,
 twist does not move the centre line. Contact candidates come from a hashed grid, and
-no node moves more than half a radius per substep, so ropes cannot pass through each
-other.
+prediction limits reduce tunneling. Contacts are discrete rather than a guarantee
+against every crossing, especially when prescribed pin motion forces an impossible
+path.
 
 When only Yarn Profiles follow it, the renderer simulates on the GPU in f32 and writes
 the strand points itself, including the Yarn Profile radius fields; node previews and
@@ -253,6 +332,12 @@ substeps) for a tightening reef knot, 3.5 ms for 16 falling threads, 4.2 ms for 
 and 4.3 ms for 256 threads (9,728 rod nodes); the CPU reference needs 1.7, 10.6 and
 38 ms for the first three. Small knots are bound by the fixed number of passes per
 substep, large scenes hardly cost more.
+
+Set Position and Yarn Profile modifiers after Rod Simulation also run in its GPU
+output pass, in graph order. This allows bending an existing stitch motion into
+a ring without a CPU readback or a new rod solve. Bounds are measured on the
+deformed output. These are render deformations: collisions and friction still
+belong to the original simulation space, not the bent ring.
 
 The browser checks `tests/browser/weave-*-gpu-check.html` verify the coverage
 modes, the analytic raster, the shadow exchange and the GPU Surface Bind against

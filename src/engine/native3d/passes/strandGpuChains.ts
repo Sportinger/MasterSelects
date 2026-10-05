@@ -1,7 +1,7 @@
 import type { GeometryStage } from '../../../services/operators/geometry/geometryProgram';
 import type { RodStage } from '../../../services/operators/geometry/rodCurves';
 import type { StrandThreadParams } from './StrandSurfaceBinder';
-import { strandRadiusFieldCode, type StrandFieldCode } from './strandFieldShader';
+import { strandRadiusFieldCode, strandRodFieldCode, type StrandFieldCode } from './strandFieldShader';
 
 /**
  * The tails of a geometry program the GPU evaluates per frame. Everything before a tail is
@@ -49,16 +49,16 @@ export function surfaceBindChain(stages: readonly GeometryStage[]): SurfaceBindC
 }
 
 /**
- * A Rod Simulation followed only by Yarn Profiles: the GPU simulates the rods from the cached rest
+ * A Rod Simulation followed by Yarn Profiles and Set Position: the GPU simulates the rods from the cached rest
  * curves and writes the strand points itself. `topology` names the rest curves and the simulation
  * setup (everything but time), so a new frame only advances the simulation.
  */
 export interface RodChain { rod: RodStage; fields: StrandFieldCode | undefined; restStages: GeometryStage[]; topology: string }
 export function rodChain(stages: readonly GeometryStage[]): RodChain | null {
   const at = stages.findIndex(stage => stage.kind === 'rod-simulation');
-  if (at < 1 || !stages.slice(at + 1).every(stage => stage.kind === 'yarn-profile')) return null;
-  const fields = radiusFields(stages.slice(at + 1));
-  if (fields === null) return null;
+  if (at < 1 || !stages.slice(at + 1).every(stage => stage.kind === 'yarn-profile' || stage.kind === 'set-position')) return null;
+  let fields: StrandFieldCode;
+  try { fields = strandRodFieldCode(stages.slice(at + 1)); } catch { return null; }
   const rod = stages[at] as RodStage, { time: _time, ...setup } = rod, restStages = stages.slice(0, at);
   return { rod, fields, restStages, topology: `${JSON.stringify(restStages)}\n${JSON.stringify(setup)}` };
 }
