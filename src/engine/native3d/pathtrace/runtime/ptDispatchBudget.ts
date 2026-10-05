@@ -55,7 +55,7 @@ export class PtDispatchBudget {
   /** Forget the measurement (the scene changed substantially). */
   reset(): void {
     this.measured = false;
-    this.nsPerPixelSample = INITIAL_NS_PER_PIXEL_SAMPLE;
+    this.nsPerPixelSample = Math.max(this.nsPerPixelSample, INITIAL_NS_PER_PIXEL_SAMPLE);
   }
 
   /**
@@ -76,6 +76,27 @@ export class PtDispatchBudget {
     const bands: PtBand[] = [];
     for (let firstRow = 0; firstRow < rows; firstRow += bandRows) bands.push({ firstRow, rows: Math.min(bandRows, rows - firstRow) });
     return { samples, bands };
+  }
+
+  /** A preview may cover only part of one sample; export keeps whole, deterministic batches. */
+  planPreview(width: number, rows: number, remaining: number, frameBudgetMs: number, maxSamples: number,
+    firstRow = 0): PtDispatchPlan & { nextRow: number } {
+    const cost = Math.max(this.nsPerPixelSample, MIN_PLANNED_NS_PER_PIXEL_SAMPLE);
+    const affordableRows = Math.max(1, Math.floor(frameBudgetMs * 1e6 / (Math.max(1, width) * cost)));
+    const count = Math.min(rows - firstRow, affordableRows);
+    // Once part of a sample was submitted, every remaining row must use that SAME sample count.
+    const plan = this.plan(width, count, remaining, frameBudgetMs, firstRow > 0 || count < rows ? 1 : maxSamples);
+    return { samples: plan.samples, bands: plan.bands.map(band => ({ ...band, firstRow: band.firstRow + firstRow })),
+      nextRow: firstRow + count < rows ? firstRow + count : 0 };
+  }
+
+  /** Realtime must produce a whole image: reduce its pixel count instead of overrunning the budget. */
+  previewSize(width: number, height: number, frameBudgetMs: number): { width: number; height: number } {
+    const pixels = frameBudgetMs * 1e6 / Math.max(this.nsPerPixelSample, MIN_PLANNED_NS_PER_PIXEL_SAMPLE);
+    const scale = Math.min(1, Math.sqrt(pixels / Math.max(1, width * height)));
+    // Quantize to workgroups so small timing changes do not resize histories every frame.
+    const dimension = (size: number) => Math.max(1, Math.min(size, Math.max(8, Math.floor(size * scale / 8) * 8)));
+    return { width: dimension(width), height: dimension(height) };
   }
 
   /** Timestamp writes for band pass `index` of `count` (null without timestamp queries or while a readback is busy). */
