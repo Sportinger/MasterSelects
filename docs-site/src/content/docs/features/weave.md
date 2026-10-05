@@ -69,6 +69,14 @@ through finished loops.
 
 ## Endless knit sphere
 
+Strand Render accepts an optional **Color** vector field (RGB, 0 to 1), replacing
+its uniform color. Curve Info's Curve Param and Strand Index can drive gradients
+and alternating bands with a different offset per yarn. The color follows the
+material points and is shared by all plies, fibers and flyaways; all three strand
+antialiasing modes and export use the same interpolated colors. Colored cloth and
+rod graphs currently evaluate geometry on the CPU so position-based colors match
+their final curves.
+
 **Knit Sphere ? Yarn Profile ? Flyaways (optional) ? Strand Render ? Scene Output**
 builds a hollow ball of closed horizontal yarn rings. All rings circulate in the
 same direction. A small stationary oval patch at the lower front (+Z) forms the same loose

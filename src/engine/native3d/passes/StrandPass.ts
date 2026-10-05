@@ -162,6 +162,7 @@ export class StrandPass {
       { binding: 4, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
       { binding: 5, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, sampler: { type: 'filtering' } },
       { binding: 6, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'depth' } },
+      { binding: 7, visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
     ] });
     const module = device.createShaderModule({ code: STRAND_SCENE_SHADER, label: 'native-strands' });
     void module.getCompilationInfo?.().then(info => {
@@ -202,6 +203,7 @@ export class StrandPass {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set(layer.worldMatrix, 0);
     data.set(parseStrandColor(render.color), 52);
+    data[55] = buffers.colors ? 1 : 0;
     data.set([render.width * scale, 0, 0, Math.max(0, Math.min(1, layer.opacity))], 56);
     data.set([...KEY_LIGHT, AMBIENT], 60);
     data.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist, profile.fiberTwist] : [1, 1, 0, 0, 0], 64);
@@ -239,6 +241,7 @@ export class StrandPass {
       { binding: 4, resource: opacity },
       { binding: 5, resource: this.shadows.shadowSampler(device) },
       { binding: 6, resource: occluders },
+      { binding: 7, resource: { buffer: buffers.colors ?? buffers.positions } },
     ] });
   }
 

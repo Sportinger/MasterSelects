@@ -24,7 +24,7 @@ struct StrandUniforms {
   view: mat4x4f,
   projection: mat4x4f,
   camera: vec4f,  // xyz: camera position (world)
-  color: vec4f,   // rgb: strand color
+  color: vec4f,   // rgb: fallback color, w: connected per-point color field
   params: vec4f,  // x: world fiber width, yz: viewport pixels, w: layer opacity
   light: vec4f,   // xyz: key light direction (world, toward the light), w: ambient
   yarn: vec4f,    // x: plies, y: fibers per ply, z: yarn radius (local), w: ply twist (turns per unit length)
@@ -64,6 +64,14 @@ struct Flyaway {
 @group(0) @binding(5) var shadowSampler: sampler;
 // Nearest opaque mesh depth seen from the shadowing light.
 @group(0) @binding(6) var occluderDepth: texture_depth_2d;
+@group(0) @binding(7) var<storage, read> pointColors: array<vec4f>;
+
+fn strandColorAt(first: u32, t: f32) -> vec3f {
+  if (u.color.w > 0.5) {
+    return mix(pointColors[first].rgb, pointColors[first + 1u].rgb, t);
+  }
+  return u.color.rgb;
+}
 
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -74,6 +82,7 @@ struct VertexOutput {
   @location(4) @interpolate(flat) segment: u32,
   @location(5) widthAxis: vec3f,  // world direction of the ribbon's +across side
   @location(6) pixels: f32,       // projected fiber width
+  @location(7) color: vec3f,
 };
 
 fn hash3(x: u32, y: u32, z: u32) -> f32 {
@@ -181,6 +190,7 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let atB = corner == 1u || corner == 4u || corner == 5u;
   let side = select(-1.0, 1.0, corner == 2u || corner == 3u || corner == 5u);
   let t = (f32(piece) + select(0.0, 1.0, atB)) / f32(subdivisions);
+  out.color = strandColorAt(first, t);
   let p = catmullRom(before, a, b, after, t);
   // A yarn radius scale of zero hides the strand: fibers thin out with the radius they grow from.
   let scaleA = clamp(points[first * 3u + 1u].w, 0.0, 1.0);
@@ -293,7 +303,7 @@ fn specularLobe(tangent: vec3f, normal: vec3f, halfway: vec3f, shift: f32, expon
  * Two shifted lobes follow Marschner 2003 / Karis 2016: R (white, toward the root) and TRT
  * (tinted, toward the tip); TT lets a light behind the fiber shine through it.
  */
-fn shadeFiber(tangent: vec3f, normal: vec3f, view: vec3f, light: vec3f, tube: f32) -> vec3f {
+fn shadeFiber(tangent: vec3f, normal: vec3f, view: vec3f, light: vec3f, tube: f32, color: vec3f) -> vec3f {
   let tl = dot(tangent, light);
   let kajiya = sqrt(max(0.0, 1.0 - tl * tl));
   let wrapped = max(0.0, (dot(normal, light) + 0.35) / 1.35);
@@ -302,14 +312,14 @@ fn shadeFiber(tangent: vec3f, normal: vec3f, view: vec3f, light: vec3f, tube: f3
   let r = specularLobe(tangent, normal, halfway, -0.08, 90.0);
   let trt = specularLobe(tangent, normal, halfway, 0.12, 24.0);
   let tt = pow(max(0.0, -dot(view, light)), 6.0) * kajiya;
-  return u.color.rgb * (diffuse + 0.3 * trt + 0.35 * tt) + vec3f(0.22 * r);
+  return color * (diffuse + 0.3 * trt + 0.35 * tt) + vec3f(0.22 * r);
 }
 
 /**
  * Lit color of a fiber at one point of its ribbon. `across` runs from -1 to 1 over the ribbon width,
  * `widthAxis` is the world direction of its +1 side and `pixels` the projected fiber width.
  */
-fn shadeStrandPoint(tangentIn: vec3f, toCamera: vec3f, acrossIn: f32, widthAxis: vec3f, pixels: f32) -> vec3f {
+fn shadeStrandPoint(tangentIn: vec3f, toCamera: vec3f, acrossIn: f32, widthAxis: vec3f, pixels: f32, color: vec3f) -> vec3f {
   let tangent = normalize(tangentIn);
   let view = normalize(toCamera);
   // Cylinder normal across the ribbon: the width axis at the edges, facing the viewer in the middle.
@@ -327,11 +337,11 @@ fn shadeStrandPoint(tangentIn: vec3f, toCamera: vec3f, acrossIn: f32, widthAxis:
   let shadowed = i32(u.shadow.x + 0.5);
   if (u.ambient.w < 0.0) {
     let visibility = select(1.0, shadowTransmittance(position), shadowed == 1);
-    return u.light.w * u.color.rgb * occlusion
-      + (1.0 - u.light.w) * visibility * shadeFiber(tangent, normal, view, normalize(u.light.xyz), tube);
+    return u.light.w * color * occlusion
+      + (1.0 - u.light.w) * visibility * shadeFiber(tangent, normal, view, normalize(u.light.xyz), tube, color);
   }
   // Scene lights, with the MeshPass falloff and panel direction.
-  var rgb = u.ambient.rgb * u.color.rgb * occlusion;
+  var rgb = u.ambient.rgb * color * occlusion;
   let count = i32(u.ambient.w + 0.5);
   for (var index = 0; index < 4; index++) {
     if (index >= count) {
@@ -346,7 +356,7 @@ fn shadeStrandPoint(tangentIn: vec3f, toCamera: vec3f, acrossIn: f32, widthAxis:
       attenuation *= max(dot(-direction, normalize(light.directionDiameter.xyz)), 0.0);
     }
     let visibility = select(1.0, shadowTransmittance(position), shadowed == index + 2);
-    rgb += light.colorIntensity.rgb * light.colorIntensity.a * attenuation * visibility * shadeFiber(tangent, normal, view, direction, tube);
+    rgb += light.colorIntensity.rgb * light.colorIntensity.a * attenuation * visibility * shadeFiber(tangent, normal, view, direction, tube, color);
   }
   return min(rgb, vec3f(8.0));
 }
@@ -357,5 +367,5 @@ fn strandFragment(in: VertexOutput) -> @location(0) vec4f {
     discard;
   }
   // 4x coverage turns alpha into the sample mask; hashed rendering is opaque per fragment.
-  return vec4f(shadeStrandPoint(in.tangent, in.toCamera, in.across, in.widthAxis, in.pixels), select(1.0, in.coverage, u.twist.w > 0.5));
+  return vec4f(shadeStrandPoint(in.tangent, in.toCamera, in.across, in.widthAxis, in.pixels, in.color), select(1.0, in.coverage, u.twist.w > 0.5));
 }

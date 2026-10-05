@@ -264,7 +264,8 @@ fn shadeRasterHit(index: u32, hit: PieceHit) -> vec3f {
   let side = framebufferPixel(viewProjection * vec4f(p + widthDirection * max(u.params.x, 1e-6), 1.0))
     - framebufferPixel(viewProjection * vec4f(p, 1.0));
   let widthAxis = widthDirection * select(1.0, -1.0, dot(side, hit.normal) < 0.0);
-  return shadeStrandPoint(tangent, u.camera.xyz - p, hit.across, widthAxis, hit.width);
+  let first = segments[index / raster.instances / raster.subdivisions] & 0x3fffffffu;
+  return shadeStrandPoint(tangent, u.camera.xyz - p, hit.across, widthAxis, hit.width, strandColorAt(first, t));
 }
 
 var<workgroup> tileEnds: array<vec4f, 256>;

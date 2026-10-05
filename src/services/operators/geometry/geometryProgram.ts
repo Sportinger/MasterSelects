@@ -53,7 +53,7 @@ export interface YarnFlyaways { density: number; length: number; lift: number; h
  * rasterizes them in tiles with exact pixel coverage and front-to-back blending.
  */
 export type StrandAntialiasing = 'coverage4x' | 'analytic';
-export interface GeometryStrandRender { nodeId: string; width: number; color: string; antialiasing?: StrandAntialiasing; profile?: YarnProfile; flyaways?: YarnFlyaways }
+export interface GeometryStrandRender { nodeId: string; width: number; color: string; colorField?: GeometryField; antialiasing?: StrandAntialiasing; profile?: YarnProfile; flyaways?: YarnFlyaways }
 export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStrandRender; pointCount: number; strandCount: number }
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
@@ -142,6 +142,8 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     if (renderNode.operator !== 'render.strands') throw new Error('Scene Output must be fed by Strand Render.');
     if (!renderNode.bypassed) render = { nodeId: renderNode.id, width: Math.max(0, finite(read(renderNode, 'width'), 'Strand width')),
       color: String(read(renderNode, 'color')) };
+    const colorField = render && compileField(renderNode, 'color', 'vec3');
+    if (render && colorField) render.colorField = colorField;
     const antialiasing = read(renderNode, 'antialiasing');
     if (antialiasing !== 'hashed' && antialiasing !== 'coverage4x' && antialiasing !== 'analytic') throw new Error('Unsupported strand antialiasing.');
     if (render && antialiasing !== 'hashed') render.antialiasing = antialiasing;

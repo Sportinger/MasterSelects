@@ -102,9 +102,11 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     if (points > CURVE_POINT_LIMIT || strands > CURVE_STRAND_LIMIT) return false;
   }
   const render = value.render;
-  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'antialiasing', 'profile', 'flyaways']) || typeof render.nodeId !== 'string'
+  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'colorField', 'antialiasing', 'profile', 'flyaways']) || typeof render.nodeId !== 'string'
     || !finite(render.width) || render.width < 0 || typeof render.color !== 'string' || render.color.length > 32
     || (render.antialiasing !== undefined && render.antialiasing !== 'coverage4x' && render.antialiasing !== 'analytic'))) return false;
+  if (record(render) && render.colorField !== undefined && (!isField(render.colorField)
+    || render.colorField.instructions[render.colorField.output].type !== 'vec3')) return false;
   const profile = record(render) ? render.profile : undefined;
   if (profile !== undefined && (!record(profile) || !exactKeys(profile, ['plies', 'fibers', 'radius', 'plyTwist', 'fiberTwist'])
     || !Number.isInteger(profile.plies) || !Number.isInteger(profile.fibers) || (profile.plies as number) < 1 || (profile.fibers as number) < 1
