@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum Command {
+    /// Optional native still-render prototype. Paths and executable are owned by the helper.
+    Optix { id: String, action: String, #[serde(default)] job_id: Option<String>, #[serde(default)] samples: Option<u32> },
     Repository { id: String, action: String, root: String,
         #[serde(default)] path: Option<String>, #[serde(default)] lease: Option<String>,
         #[serde(default)] upload: Option<String>, #[serde(default)] data: Option<String>,
@@ -426,6 +428,7 @@ impl Command {
     /// auth and model-download commands can carry credentials.
     pub fn name(&self) -> &'static str {
         match self {
+            Self::Optix { .. } => "optix",
             Self::Auth { .. } => "auth",
             Self::Info { .. } => "info",
             Self::Ping { .. } => "ping",

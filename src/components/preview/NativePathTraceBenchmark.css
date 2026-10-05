@@ -1,0 +1,14 @@
+.native-pt-benchmark { width: min(1400px, 94vw); max-height: 90vh; overflow: auto; color: var(--text-primary, #ddd); background: var(--bg-panel, #222); border: 1px solid #555; border-radius: 8px; padding: 20px; font: 13px/1.5 sans-serif; }
+.native-pt-benchmark::backdrop { background: #000b; }
+.native-pt-benchmark-heading { display: flex; align-items: center; justify-content: space-between; }
+.native-pt-benchmark-images { display: flex; gap: 16px; }
+.native-pt-benchmark figure { margin: 0; flex: 1; min-width: 0; }
+.native-pt-benchmark canvas { width: 100%; height: auto; background: #101a36; }
+.native-pt-benchmark table { border-collapse: collapse; margin-top: 16px; }
+.native-pt-benchmark th, .native-pt-benchmark td { text-align: left; padding: 4px 18px 4px 0; }
+.native-pt-benchmark button { color: inherit; background: #333; border: 1px solid #666; border-radius: 4px; padding: 4px 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.native-pt-benchmark button:focus:not(:focus-visible) { outline: none; }
+.native-pt-benchmark button:focus-visible { outline: 2px solid var(--accent, #4ca3ff); outline-offset: 2px; }
+.native-pt-benchmark button:disabled { opacity: .5; cursor: default; }
+.native-pt-benchmark [role="alert"] { color: #ffa899; }
+@media (max-width: 700px) { .native-pt-benchmark-images { flex-direction: column; } }

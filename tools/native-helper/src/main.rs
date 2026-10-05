@@ -17,6 +17,7 @@ mod download;
 mod http_server;
 mod matanyone;
 mod muscriptor;
+mod optix;
 mod protocol;
 mod rtmp;
 mod server;

@@ -124,6 +124,7 @@ export class NativeSceneRuntime {
   }
 
   get needsPathTraceFrame(): boolean { return this.pathTrace.needsPreviewFrame; }
+  beginNativeBenchmark() { return this.pathTrace.beginNativeBenchmark(); }
 
   async initialize(_width: number, _height: number): Promise<boolean> {
     this.initialized = true;
