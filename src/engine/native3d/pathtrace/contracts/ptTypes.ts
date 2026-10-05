@@ -70,6 +70,8 @@ export interface PtStatus {
   engine: RenderEngine;
   state: 'idle' | 'realtime' | 'converging' | 'denoising' | 'converged' | 'fallback';
   samples: number;
+  /** Fraction of the next preview sample already covered; `samples` counts complete images. */
+  partialSample?: number;
   targetSamples: number;
   frameMs: number;
   renderSize: { width: number; height: number };

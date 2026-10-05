@@ -2,11 +2,13 @@
  * Splits the integrator's work into short dispatches and sizes it from measured GPU time.
  *
  * One dispatch that runs longer than about two seconds makes Windows reset the GPU (TDR), which
- * loses the WebGPU device of every tab. The integrator therefore runs in horizontal bands, each in
+ * loses the WebGPU device of every tab. The integrator therefore runs in small regions, each in
  * its own compute pass, small enough to stay far below that limit; the cost per pixel sample is
  * measured with timestamp queries (or the submission wall time without them) and sets both the band
  * height and how many samples a frame may add within its time budget.
  */
+
+import { PtPreviewTiles, type PtPreviewTile } from './ptPreviewTiles';
 
 /** Bytes between the band uniforms (minUniformBufferOffsetAlignment is at most 256). */
 export const PT_BAND_STRIDE = 256;
@@ -38,6 +40,7 @@ export interface PtDispatchPlan {
 }
 
 export class PtDispatchBudget {
+  private readonly previewTiles = new PtPreviewTiles();
   private nsPerPixelSample = INITIAL_NS_PER_PIXEL_SAMPLE;
   private measured = false;
   private querySet: GPUQuerySet | null = null;
@@ -80,14 +83,16 @@ export class PtDispatchBudget {
 
   /** A preview may cover only part of one sample; export keeps whole, deterministic batches. */
   planPreview(width: number, rows: number, remaining: number, frameBudgetMs: number, maxSamples: number,
-    firstRow = 0): PtDispatchPlan & { nextRow: number } {
+    firstPixel = 0): { samples: number; bands: PtPreviewTile[]; nextPixel: number } {
     const cost = Math.max(this.nsPerPixelSample, MIN_PLANNED_NS_PER_PIXEL_SAMPLE);
-    const affordableRows = Math.max(1, Math.floor(frameBudgetMs * 1e6 / (Math.max(1, width) * cost)));
-    const count = Math.min(rows - firstRow, affordableRows);
-    // Once part of a sample was submitted, every remaining row must use that SAME sample count.
-    const plan = this.plan(width, count, remaining, frameBudgetMs, firstRow > 0 || count < rows ? 1 : maxSamples);
-    return { samples: plan.samples, bands: plan.bands.map(band => ({ ...band, firstRow: band.firstRow + firstRow })),
-      nextRow: firstRow + count < rows ? firstRow + count : 0 };
+    const pixels = Math.max(1, Math.floor(frameBudgetMs * 1e6 / cost));
+    if (firstPixel === 0 && pixels >= width * rows) {
+      const plan = this.plan(width, rows, remaining, frameBudgetMs, maxSamples);
+      return { samples: plan.samples, bands: plan.bands.map(band => ({ ...band, firstColumn: 0, columns: width })), nextPixel: 0 };
+    }
+    // A partially submitted sample always finishes with that same single sample per pixel.
+    return { samples: 1, ...this.previewTiles.plan(width, rows, firstPixel, pixels,
+      Math.min(MAX_PIXEL_SAMPLES_PER_DISPATCH, DISPATCH_BUDGET_MS * 1e6 / cost), PT_MAX_BANDS) };
   }
 
   /** Realtime must produce a whole image: reduce its pixel count instead of overrunning the budget. */

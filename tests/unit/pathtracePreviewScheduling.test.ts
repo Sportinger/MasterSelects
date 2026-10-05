@@ -40,6 +40,23 @@ describe('path tracing GPU backpressure', () => {
     expect(wake).toHaveBeenCalledOnce();
   });
 
+  it('resumes short still batches after a small gap without adding a whole refresh interval', async () => {
+    const wake = vi.fn(), scheduler = new PtPreviewScheduler(wake);
+    let finish!: () => void;
+    scheduler.request();
+    scheduler.submitted(new Promise<void>(resolve => { finish = resolve; }), 0.25);
+    vi.advanceTimersByTime(12);
+    expect(scheduler.canRender()).toBe(false);
+    finish();
+    await Promise.resolve();
+    vi.advanceTimersByTime(3);
+    expect(wake).not.toHaveBeenCalled();
+    expect(scheduler.canRender()).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(wake).toHaveBeenCalledOnce();
+    expect(scheduler.canRender()).toBe(true);
+  });
+
   it('cancels future wakes on raster switch and ignores completion from a disposed device', async () => {
     const wake = vi.fn(), scheduler = new PtPreviewScheduler(wake);
     let finish!: () => void;
@@ -67,7 +84,7 @@ describe('path tracing GPU backpressure', () => {
     scheduler.submitted(Promise.resolve(), 0);
     expect(scheduler.canRender('b')).toBe(false);
     await Promise.resolve();
-    vi.advanceTimersByTime(16);
+    vi.advanceTimersByTime(4);
     expect(scheduler.canRender('a')).toBe(false);
     expect(scheduler.canRender('b')).toBe(true);
     scheduler.releaseTarget('a');
@@ -77,34 +94,61 @@ describe('path tracing GPU backpressure', () => {
 });
 
 describe('bounded preview work', () => {
-  it('covers a costly image over several submissions without skipping or double sampling rows', () => {
+  it('covers a costly image from its center without skipping or double sampling pixels', () => {
     const budget = new PtDispatchBudget();
-    let row = 0, submissions = 0;
-    const counts = new Uint32Array(540);
+    let cursor = 0, submissions = 0;
+    const counts = new Uint8Array(960 * 540);
     do {
-      const plan = budget.planPreview(960, 540, 8, 12, 8, row);
+      const plan = budget.planPreview(960, 540, 8, 12, 8, cursor);
       expect(plan.samples).toBe(1);
       let pixels = 0;
       for (const band of plan.bands) {
-        for (let y = band.firstRow; y < band.firstRow + band.rows; y++) counts[y]++;
-        pixels += band.rows * 960;
+        for (let y = band.firstRow; y < band.firstRow + band.rows; y++) {
+          for (let x = band.firstColumn; x < band.firstColumn + band.columns; x++) counts[y * 960 + x]++;
+        }
+        pixels += band.rows * band.columns;
+      }
+      if (submissions === 0) {
+        expect(counts[270 * 960 + 480]).toBe(1);
+        expect(counts[0]).toBe(0);
+        expect(counts.at(-1)).toBe(0);
       }
       expect(pixels * plan.samples * budget.costNs / 1e6).toBeLessThanOrEqual(12);
-      row = plan.nextRow;
+      cursor = plan.nextPixel;
       submissions++;
-    } while (row !== 0 && submissions < 100);
-    expect(row).toBe(0);
+    } while (cursor !== 0 && submissions < 100);
+    expect(cursor).toBe(0);
     expect(submissions).toBeGreaterThan(1);
     expect([...counts].every(count => count === 1)).toBe(true);
   });
 
-  it('keeps an in-progress sample at one even when its remaining rows become cheap', () => {
+  it('keeps an in-progress sample at one even when its remaining pixels become cheap', () => {
     const budget = new PtDispatchBudget();
-    const plan = budget.planPreview(960, 540, 256, 12, 8, 538);
+    const plan = budget.planPreview(960, 540, 256, 12, 8, 960 * 540 - 2);
     expect(plan.samples).toBe(1);
-    expect(plan.nextRow).toBe(0);
-    expect(plan.bands[0].firstRow).toBe(538);
+    expect(plan.nextPixel).toBe(0);
+    expect(plan.bands.reduce((pixels, band) => pixels + band.columns * band.rows, 0)).toBe(2);
     expect(budget.plan(1920, 1080, 256, Infinity, 4).samples).toBe(4);
+  });
+
+  it('covers odd-sized and narrow regions exactly across changing tiny budgets', () => {
+    for (const [width, height] of [[137, 71], [1, 9], [9, 1], [63, 65]]) {
+      const budget = new PtDispatchBudget(), counts = new Uint8Array(width * height);
+      let cursor = 0, submission = 0;
+      do {
+        const plan = budget.planPreview(width, height, 1, (submission % 2 ? 31 : 7) * 400 / 1e6, 8, cursor);
+        for (const band of plan.bands) {
+          expect(band.firstColumn + band.columns).toBeLessThanOrEqual(width);
+          expect(band.firstRow + band.rows).toBeLessThanOrEqual(height);
+          for (let y = band.firstRow; y < band.firstRow + band.rows; y++) {
+            for (let x = band.firstColumn; x < band.firstColumn + band.columns; x++) counts[y * width + x]++;
+          }
+        }
+        cursor = plan.nextPixel;
+      } while (cursor && ++submission < width * height);
+      expect(cursor).toBe(0);
+      expect([...counts].every(count => count === 1)).toBe(true);
+    }
   });
 
   it('reduces realtime resolution to fit the budget but leaves small views unchanged', () => {

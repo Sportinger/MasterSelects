@@ -34,7 +34,11 @@ function statusText(status: PtStatus): string {
     case 'realtime': return 'Realtime';
     case 'denoising': return `${status.samples} spp · Denoising`;
     case 'converged': return `${status.samples} spp · Done`;
-    case 'converging': return `${status.samples} / ${status.targetSamples} spp`;
+    case 'converging': {
+      const samples = status.partialSample
+        ? (Math.floor((status.samples + status.partialSample) * 100) / 100).toFixed(2) : status.samples;
+      return `${samples} / ${status.targetSamples} spp`;
+    }
     default: return '';
   }
 }
