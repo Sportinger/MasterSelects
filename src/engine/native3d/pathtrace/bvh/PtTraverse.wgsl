@@ -40,8 +40,13 @@ fn ptSafeInverse(d: vec3f) -> vec3f {
 /** Round cone between spheres (a, ra) and (b, rb) (Quilez); x: t, yzw: unit normal; t < 0 misses. Needs a unit rd. */
 fn ptIntersectRoundCone(ro: vec3f, rd: vec3f, a: vec3f, b: vec3f, ra: f32, rb: f32) -> vec4f {
   let ba = b - a;
-  let oa = ro - a;
-  let ob = ro - b;
+  // Shift the ray origin near the segment before subtracting squared distances.
+  // At camera distance, that cancellation can erase a subpixel fiber's radius.
+  // Keep the computation relative to a to avoid another large world-space sum.
+  let relative = ro - a;
+  let shift = -dot(rd, relative);
+  let oa = relative + rd * shift;
+  let ob = oa - ba;
   let rr = ra - rb;
   let m0 = dot(ba, ba);
   let m1 = dot(ba, oa);
@@ -62,7 +67,7 @@ fn ptIntersectRoundCone(ro: vec3f, rd: vec3f, a: vec3f, b: vec3f, ra: f32, rb: f
     let t = (-sqrt(h) - k1) / k2;
     let y = m1 - ra * rr + t * m2;
     if (y > 0.0 && y < d2) {
-      return vec4f(t, normalize(d2 * (oa + t * rd) - ba * y));
+      return vec4f(t + shift, normalize(d2 * (oa + t * rd) - ba * y));
     }
   }
   let h1 = m3 * m3 - m5 + ra * ra;
@@ -81,7 +86,7 @@ fn ptIntersectRoundCone(ro: vec3f, rd: vec3f, a: vec3f, b: vec3f, ra: f32, rb: f
       r = vec4f(t, (ob + t * rd) / max(rb, 1e-12));
     }
   }
-  return r;
+  return vec4f(r.x + shift, r.yzw);
 }
 
 /** Möller-Trumbore, two-sided; xyz: t, u, v barycentrics; t = PT_INFINITY misses. */

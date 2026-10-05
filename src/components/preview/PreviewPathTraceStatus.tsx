@@ -5,6 +5,7 @@ import { getPtStatus, subscribePtStatus } from '../../engine/native3d/pathtrace/
 import type { CompositionRenderSettings, PtStatus } from '../../engine/native3d/pathtrace/contracts/ptTypes';
 import { updateCompositionRenderSettings } from './compositionRenderSettings';
 import { setPtRegionDrawing, usePtRegionDrawing } from './PathTraceRegionOverlay';
+import { NativePathTraceBenchmark } from './NativePathTraceBenchmark';
 
 /** Still image quality of the path tracer: samples until the image is done, and path length. */
 export const PT_QUALITY_PRESETS = [
@@ -53,6 +54,7 @@ export function PreviewPathTraceStatus({ compositionId, settings }: { compositio
   const hasRegion = !!settings.region;
   return (
     <>
+      {import.meta.env.DEV && <NativePathTraceBenchmark />}
       <button
         type="button"
         className="preview-edit-btn preview-render-quality-btn"

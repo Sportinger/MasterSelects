@@ -412,7 +412,7 @@ export class PtSceneBuilder {
       throw new PtSceneLimitError('The meshes of the scene exceed the device storage binding size');
     }
     if (this.objects) temporaries.push(this.objects);
-    this.objects = device.createBuffer({ label: 'pt-objects', size: Math.max(64, bytes), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+    this.objects = device.createBuffer({ label: 'pt-objects', size: Math.max(64, bytes), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
     // Existing mesh BLAS stay valid: they index triangles relative to the shape's base.
     for (const part of parts) device.queue.writeBuffer(this.objects, part.at * 16, part.data as Float32Array<ArrayBuffer>);
   }

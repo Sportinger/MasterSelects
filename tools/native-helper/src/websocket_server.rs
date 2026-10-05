@@ -55,7 +55,8 @@ pub(super) async fn handle_connection(
 /// Extract the `id` field from any Command variant for error responses
 fn get_command_id(cmd: &Command) -> &str {
     match cmd {
-        Command::Auth { id, .. }
+        Command::Optix { id, .. }
+        | Command::Auth { id, .. }
         | Command::Info { id }
         | Command::Ping { id }
         | Command::RtmpStart { id, .. }

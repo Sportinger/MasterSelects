@@ -31,6 +31,7 @@ import { createMatAnyoneCommands } from './nativeHelperMatAnyoneCommands';
 import { createMuscriptorCommands } from './nativeHelperMuscriptorCommands';
 import { handleNativeHelperMessage } from './nativeHelperMessageHandler';
 import { getErrorMessage, okField } from './nativeHelperResponseUtils';
+import { createOptixCommands } from './nativeHelperOptixCommands';
 
 // LZ4 decompression (we'll use a simple implementation or skip for now)
 // In production, use a proper LZ4 library like 'lz4js'
@@ -85,6 +86,7 @@ class NativeHelperClientImpl {
   };
   private readonly matAnyoneCommands = createMatAnyoneCommands(this.commandHost);
   readonly muscriptor = createMuscriptorCommands(this.commandHost);
+  readonly optix = createOptixCommands(this.commandHost);
 
   constructor() {
     this.config = {

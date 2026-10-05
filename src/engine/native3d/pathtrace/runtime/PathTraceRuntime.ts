@@ -19,6 +19,8 @@ import { PT_BAND_STRIDE, PT_MAX_BANDS, PtDispatchBudget } from './ptDispatchBudg
 import { ptJitter, PtRealtimeRenderer, type PtRealtimeResult } from './ptRealtime';
 import { PtPassProfiler } from './ptPassProfiler';
 import { PtPreviewScheduler } from './ptPreviewScheduler';
+import { captureNativeSnapshot } from '../native/ptNativeSnapshot';
+import { benchmarkPtReference } from '../native/ptReferenceBenchmark';
 
 export interface PtRenderRequest {
   device: GPUDevice;
@@ -128,6 +130,25 @@ export class PathTraceRuntime {
   private lightsKey = '';
   private readonly previewScheduler: PtPreviewScheduler;
   private previewIdleFactor: number | null = null;
+  private nativeBenchmarkBusy = false;
+  private nativeCapture: { scene: PtSceneFrame; frame: ArrayBuffer; lights: Float32Array; env: { map: GPUTextureView; alias: GPUTextureView } } | null = null;
+
+  /** Development prototype: keep the displayed image while both backends measure the same frozen scene. */
+  async beginNativeBenchmark() {
+    const captured = this.nativeCapture, device = this.device;
+    if (!captured || !device || this.nativeBenchmarkBusy) throw new Error('Pause a path-traced fiber scene and wait for still accumulation first.');
+    this.nativeBenchmarkBusy = true; this.pausePreview();
+    const frame = captured.frame.slice(0);
+    const uniform = device.createBuffer({ size: PT_FRAME_BYTES, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    let released = false;
+    const release = () => { if (released) return; released = true; uniform.destroy(); this.nativeBenchmarkBusy = false; this.requestRender(); };
+    try {
+      const snapshot = await captureNativeSnapshot(device, captured.scene, frame, captured.lights);
+      const groups = this.sceneGroups(device, captured.scene, captured.env, uniform);
+      return { snapshot, exposure: new Float32Array(frame)[66], release,
+        reference: (samples: number, progress: (message: string) => void) => benchmarkPtReference(device, frame, groups, uniform, samples, progress) };
+    } catch (error) { release(); throw error; }
+  }
 
   /** Export accumulation state of this render, reported once its commands are submitted. */
   private pendingExportProgress: Omit<NativeSceneExportProgress, 'gpuDone'> | null = null;
@@ -147,6 +168,7 @@ export class PathTraceRuntime {
   /** Called before preparing scene geometry, so a busy GPU receives no new preview batches. */
   canRenderPreview(device: GPUDevice, targetKey = 'main'): boolean {
     this.ensure(device);
+    if (this.nativeBenchmarkBusy) return false;
     return this.previewScheduler.canRender(targetKey);
   }
 
@@ -273,6 +295,12 @@ export class PathTraceRuntime {
       maxBounces: settings.maxBounces, lightCount: lights.count, nodePage1Start: scene.nodePage1Start, fiberPage1Start: scene.fiberPage1Start,
       tlasRoot: scene.tlasRoot, instanceCount: scene.instanceCount, debugView: PT_DEBUG_VIEW_CODE[debugView], seed: 0,
       environmentIndex: lights.environmentIndex, environmentSize: [1, 1] as [number, number], clampIndirect: settings.clampIndirect };
+    if (import.meta.env.DEV && request.targetKey === 'main') {
+      this.nativeCapture = !exporting && !request.realtime && !changed && !viewChanged ? { scene, env,
+        lights: lights.data.slice(0, lights.count * 16), frame: writePtFrame({ ...frameValues,
+          renderSize: { width: renderWidth, height: renderHeight }, jitter: [0, 0], frameIndex: 0, sampleOffset: 0,
+          samples: 1, mode: 2, region: [0, 0, 1, 1] }) } : null;
+    }
     const stats = { targetSamples: target, segments: scene.stats.segments, bvhNodes: scene.stats.bvhNodes,
       gpuBytes: scene.stats.gpuBytes + this.realtime.gpuBytes };
 
@@ -487,6 +515,7 @@ export class PathTraceRuntime {
   }
 
   releaseTarget(key: string): void {
+    if (key === 'main') this.nativeCapture = null;
     this.previewScheduler.releaseTarget(key);
     const state = this.targets.get(key);
     if (!state) return;
@@ -498,6 +527,8 @@ export class PathTraceRuntime {
   }
 
   dispose(): void {
+    this.nativeCapture = null;
+    this.nativeBenchmarkBusy = false;
     this.previewScheduler.dispose();
     this.previewIdleFactor = null;
     for (const key of [...this.targets.keys()]) this.releaseTarget(key);

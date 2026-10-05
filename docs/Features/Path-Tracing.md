@@ -128,6 +128,34 @@ Rules the runtime keeps:
 
 ## Debugging
 
+### Optional native OptiX comparison (development only)
+
+The **OptiX test** preview button captures a paused fiber scene and compares one
+sample with the optional native helper worker; the result offers four- and 16-sample
+comparison. The WebGPU preview pauses while both backends run. Both images use
+the same geometry, camera, hair BSDF, lights, bounce limit and sample sequence,
+without denoising. Linear RGB error and coverage error are shown alongside GPU
+render time, wall time, native initialization, acceleration-structure build and
+browser transfer time. WebGPU reuses its existing preview BVH.
+
+Both backends shift each fiber intersection into a ray origin near that segment
+before evaluating its quadratic, preserving thin fibers that lost precision at
+camera distance. Floating-point differences can still change later sampled paths;
+the images are not bit-identical. The browser check at
+`tests/browser/pathtrace-native-check.html` tests analytic near/far fiber hits,
+coarse fibers and dense knitted fibers at 16 or 64 samples, including coverage,
+mean luminance and linear RGB error.
+
+This is a still-render prototype, separate from the preview/export engine selector.
+The worker uses OptiX RTX BVH traversal and CUDA custom round-cone intersection
+and shading; WebGPU itself does not call CUDA or OptiX. Supported inputs are
+world-space fibers and sphere, panel, distant and constant-environment lights.
+Other geometry and HDR environment maps fail explicitly. Jobs have bounded
+sample counts, memory and runtime, with one native render at a time and short
+GPU submissions. Setup and protocol: [native worker README](../../tools/native-helper/optix/README.md).
+
+### WebGPU diagnostics
+
 - Debug views (console): `setPtDebugView('albedo' | 'normal' | 'depth' | 'bvh-heatmap')`
   from `runtime/PathTraceRuntime.ts`.
 - `window.__PT_PROFILE__.set(true)`, then `__PT_PROFILE__.get()`: GPU milliseconds of

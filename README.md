@@ -112,6 +112,8 @@ The **Compact** toggle wraps top-level effects into roughly square arrangements 
 
 [Weave](docs/Features/Weave.md) builds woven fabric, yarns, ropes and knots from general curve nodes: threads are pulled in one by one, wobble like handmade cloth and billow on a simulated sheet, and simulated ropes collide, fall and pull knots tight. Strand Render draws them as lit fibers with Hashed, 4x Coverage or analytic tile-raster antialiasing and exchanges shadows with lit meshes. With [Path Tracing](docs/Features/Path-Tracing.md) the 3D scene renders physically: every fiber is ray traced with a hair BSDF, the preview adapts its moving resolution and refines a still image in small tiles from the center outward, with progress visible even within the first sample (ReSTIR, radiance cache, denoiser and upscaler). Export renders deterministic, denoised frames at the requested quality.
 
+Development builds also offer an optional [native OptiX comparison](tools/native-helper/optix/README.md) for paused fiber scenes, with matched WebGPU/native images and separate GPU, initialization and transfer timings.
+
 [Slit Scan](docs/Features/Effects.md#slit-scan) starts with 3D geometry bypassed. It can match its time factor to the source frame rate and sample count, and optionally compensate motion between decoded frames in resident GPU history with adjustable flow strength.
 Its [space-time slice](docs/Features/Slit-Scan-3D.md#space-time-slice-observed-depth) tilts and cuts baked color/depth observations from a fixed camera. A tracked 2D shape target can also solve a time field from an anchor and target stretch, with recorded-motion fit errors shown in the inspector.
 
