@@ -69,6 +69,28 @@ through finished loops.
 
 ## Endless knit sphere
 
+**Closed Curve Flow** advects material points around existing closed yarn paths at
+Turns per Second in clip source time. Unlike changing a stitch generator's phase,
+it keeps the path in place while yarn colors travel through it. It preserves the
+repeated seam and interpolates upstream radius scales. A useful chain is a static
+Knit Sphere, Curve Contact to relax its rest paths, Closed Curve Flow, animated
+deformations, Yarn Profile and a final Curve Contact. This separates material flow
+from forming new crossings. Linear resampling and later deformations still need
+enough curve resolution and contact clearance.
+
+**Curve Contact** corrects overlapping yarn capsules after procedural animation.
+Place it after all position modifiers and after Yarn Profile when using its radius
+scale. Set Contact Radius to cover the outer yarn bundle, including fiber width and
+a small allowance for spline interpolation. Iterations controls contact convergence;
+Correction Smoothing spreads displacement without smoothing away the input stitches.
+The modifier preserves point IDs, per-point colors and closed seams, and supports up
+to 16,384 points. It evaluates deterministically at each requested frame on the CPU.
+This is geometric contact projection, not a dynamic simulation: it does not conserve
+length, prevent tunneling between frames or calculate temporal friction. Finite
+iterations can leave residual overlaps in crowded configurations; flyaway hairs are
+decorative and do not collide. Use Rod Simulation for integrated rod dynamics and
+friction with a fixed rest shape.
+
 Strand Render accepts an optional **Color** vector field (RGB, 0 to 1), replacing
 its uniform color. Curve Info's Curve Param and Strand Index can drive gradients
 and alternating bands with a different offset per yarn. The color follows the

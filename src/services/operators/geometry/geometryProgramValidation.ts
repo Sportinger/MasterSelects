@@ -4,6 +4,7 @@ import { CURVE_CONTEXT_OPERATIONS, knotCurveCount, knotPointCount, weavePatternP
 import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES } from './knotCurves';
 import { knitPointCount } from './knitCurves';
 import { isKnitSphereSpec, KNIT_SPHERE_KEYS } from './knitSphereCurves';
+import { CONTACT_POINT_LIMIT } from './curveContacts';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { isClothSpec } from './clothProgram';
 import { isRodSpec } from './rodProgram';
@@ -81,6 +82,12 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'length', 'points']) || !finite(stage.length) || (stage.length as number) < 0
         || !Number.isInteger(stage.points) || (stage.points as number) < 1 || (stage.points as number) > 4096) return false;
       points += 2 * (stage.points as number) * strands;
+    } else if (stage.kind === 'curve-flow') {
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase']) || !finite(stage.phase)) return false;
+    } else if (stage.kind === 'curve-contact') {
+      if (index === 0 || points > CONTACT_POINT_LIMIT || !exactKeys(stage, ['kind', 'nodeId', 'radius', 'iterations', 'smoothing'])
+        || !finite(stage.radius) || stage.radius < 0.0005 || stage.radius > 10 || !finite(stage.smoothing) || stage.smoothing < 0 || stage.smoothing > 1
+        || !Number.isInteger(stage.iterations) || (stage.iterations as number) < 1 || (stage.iterations as number) > 128) return false;
     } else if (stage.kind === 'yarn-profile') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'radius']) || (stage.radius !== undefined && !isField(stage.radius))) return false;
     } else if (stage.kind === 'strand-array') {

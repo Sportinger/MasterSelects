@@ -114,6 +114,8 @@ The **Compact** toggle wraps top-level effects into roughly square arrangements 
 
 Knit Sphere's band height can gather all rings into one connected knitting patch. Preview camera orbit drags follow the pointer vertically as well as horizontally.
 Strand Render also accepts per-point RGB fields for gradients and alternating color bands with independent offsets per yarn.
+Curve Contact separates overlapping yarn capsules after procedural deformation while preserving closed rings and their color coordinates.
+Closed Curve Flow circulates yarn material along fixed stitch paths, independently of the shape animation.
 
 [Slit Scan](docs/Features/Effects.md#slit-scan) starts with 3D geometry bypassed. It can match its time factor to the source frame rate and sample count, and optionally compensate motion between decoded frames in resident GPU history with adjustable flow strength.
 

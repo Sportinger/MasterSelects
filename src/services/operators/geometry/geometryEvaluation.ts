@@ -8,6 +8,8 @@ import { knitSphereCurves } from './knitSphereCurves';
 import { extendCurves } from './extendCurves';
 import { threadAlong } from './threadAlong';
 import { simulateRodCurves } from './rodCurves';
+import { separateCurveContacts } from './curveContacts';
+import { flowClosedCurves } from './curveFlow';
 
 /**
  * Polylines as flat XYZ positions; strand `i` owns points `starts[i]` … `starts[i] + counts[i] - 1`.
@@ -50,7 +52,8 @@ function weavePattern(stage: Extract<GeometryStage, { kind: 'weave-pattern' }>):
  * under the content of all stages up to it, so a change late in that chain (an animated Yarn
  * Profile radius) reuses the earlier curves, and field columns keyed by those curves stay valid.
  */
-const PREFIX_LIMIT = 8;
+const PREFIX_LIMIT = 16;
+const PREFIX_BYTE_LIMIT = 64 * 1024 * 1024;
 const prefixes = new Map<string, CurveSet>();
 
 /**
@@ -71,7 +74,12 @@ export function evaluateGeometryProgram(program: GeometryProgram, options: { rod
     prefixes.set(key, next);
     curves = next;
   }
-  while (prefixes.size > PREFIX_LIMIT) prefixes.delete(prefixes.keys().next().value!);
+  const bytes = (curve: CurveSet) => curve.positions.byteLength + curve.starts.byteLength + curve.counts.byteLength + (curve.radius?.byteLength ?? 0);
+  let retained = [...prefixes.values()].reduce((sum, curve) => sum + bytes(curve), 0);
+  while (prefixes.size > PREFIX_LIMIT || retained > PREFIX_BYTE_LIMIT) {
+    const oldest = prefixes.keys().next().value!;
+    retained -= bytes(prefixes.get(oldest)!); prefixes.delete(oldest);
+  }
   return evaluateStages(program.stages.slice(cached), curves, key, options.rodBudget);
 }
 
@@ -129,6 +137,10 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet, ke
       curves = { ...curves, positions: next };
     } else if (stage.kind === 'surface-bind') {
       curves = { ...curves, positions: bindToCloth(curves.positions, clothGridAt(stage.cloth, stage.time), stage.height) };
+    } else if (stage.kind === 'curve-flow') {
+      curves = flowClosedCurves(curves, stage.phase);
+    } else if (stage.kind === 'curve-contact') {
+      curves = separateCurveContacts(curves, stage);
     } else if (stage.kind === 'rod-simulation') {
       // Compilation places a rod stage first among the uncached stages, so `key` names its rest curves.
       curves = simulateRodCurves(stage, curves, key, rodBudget);

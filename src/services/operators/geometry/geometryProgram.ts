@@ -11,6 +11,7 @@ import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES, type CelticKnotSpec, type
 import { knitPointCount, type KnitSpec } from './knitCurves';
 import { isKnitSphereSpec, KNIT_SPHERE_KEYS, type KnitSphereSpec } from './knitSphereCurves';
 import type { ExtendSpec } from './extendCurves';
+import { CONTACT_POINT_LIMIT, type CurveContactSpec } from './curveContacts';
 
 /** Context values a curve-point field can read, in addition to shared pointwise operations. */
 export const CURVE_CONTEXT_OPERATIONS = ['position', 'curve-u', 'point-index', 'strand-index', 'point-count', 'strand-count'] as const;
@@ -37,6 +38,8 @@ export type GeometryStage =
       trail?: [number, number, number] }
   | { kind: 'set-position'; nodeId: string; position?: GeometryField; offset?: GeometryField }
   | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField }
+  | ({ kind: 'curve-contact'; nodeId: string } & CurveContactSpec)
+  | { kind: 'curve-flow'; nodeId: string; phase: number }
   /** Curves on the cloth simulated by `cloth` at source time `time` (seconds). */
   | { kind: 'surface-bind'; nodeId: string; height: number; cloth: ClothSpec; time: number }
   /** The incoming curves simulated as rods from their rest state, at source time `time` (seconds). See rodSolver.ts. */
@@ -60,7 +63,7 @@ export type GeometryParameterReader = (node: BoundOperatorNode, parameter: strin
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit', 'geometry.knit-sphere']);
 const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
-  'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend']);
+  'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend', 'geometry.curve-contact', 'geometry.curve-flow']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
 export const knotCurveCount = (shape: number) => KNOT_SHAPES[shape] === 'reef' ? 2 : 1;
 /** Points of a knot generator, matching knotCurves: the reef resamples 14 spline intervals per rope. */
@@ -227,6 +230,12 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         stagger: finite(read(node, 'stagger'), 'Stagger'), lift: finite(read(node, 'lift'), 'Lift'),
         liftLength: finite(read(node, 'liftLength'), 'Lift length'), settle: finite(read(node, 'settle'), 'Settle'),
         ...(trail ? { trail: (reach > 0 ? trail.map(value => value / reach) : [0, 1, 0]) as [number, number, number] } : {}) });
+    } else if (node.operator === 'geometry.curve-flow') {
+      stages.push({ kind: 'curve-flow', nodeId: node.id, phase: finite(read(node, 'phase'), 'Flow phase')
+        + finite(read(node, 'speed'), 'Flow speed') * (context.simulationTime ?? context.time ?? 0) });
+    } else if (node.operator === 'geometry.curve-contact') {
+      stages.push({ kind: 'curve-contact', nodeId: node.id, radius: finite(read(node, 'radius'), 'Contact radius'),
+        iterations: Math.round(finite(read(node, 'iterations'), 'Contact iterations')), smoothing: finite(read(node, 'smoothing'), 'Contact smoothing') });
     } else if (node.operator === 'geometry.extend') {
       stages.push({ kind: 'extend', nodeId: node.id, length: Math.max(0, finite(read(node, 'length'), 'Extend length')),
         points: Math.round(finite(read(node, 'points'), 'Points per end')) });
@@ -246,6 +255,8 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
   });
   let pointCount = 0, strandCount = 0;
   for (const stage of stages) {
+    if (stage.kind === 'curve-contact' && (pointCount > CONTACT_POINT_LIMIT || stage.radius < 0.0005 || stage.radius > 10
+      || stage.iterations < 1 || stage.iterations > 128 || stage.smoothing < 0 || stage.smoothing > 1)) throw new Error('Curve Contact exceeds its supported limits.');
     if (stage.kind === 'curve-line') {
       if (stage.points < 2) throw new Error('A curve needs at least two points.');
       pointCount = stage.points; strandCount = 1;
