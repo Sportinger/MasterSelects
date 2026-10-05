@@ -198,7 +198,8 @@ export class WorkerGpuNativeSceneOwner {
 
   /** The path tracer's status and whether it asked for another frame since the last report. */
   pathTraceReport(): WorkerPathTraceReport {
-    const report = { status: getPtStatus('main'), needsFrame: this.pathTraceNeedsFrame };
+    const report = { status: getPtStatus('main'), needsFrame: this.pathTraceNeedsFrame
+      || [...this.scenes.values()].some(entry => entry.scene.needsPathTraceFrame) };
     this.pathTraceNeedsFrame = false;
     return report;
   }

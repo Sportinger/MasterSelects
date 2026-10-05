@@ -114,6 +114,7 @@ export class PtSceneBuilder {
   private readonly fiberBlas = new Map<string, Blas>();
   private readonly meshBlas = new Map<string, Blas>();
   private planesBlas: Blas | null = null;
+  private planesKey = '';
   private readonly voxelBlas = new Map<string, Blas>();
   private voxelBases = new Map<string, number>();
   private voxelSignatures = new Map<string, string>();
@@ -284,7 +285,7 @@ export class PtSceneBuilder {
       defer(() => { blas.lbvh.dispose(); blas.nodes.destroy(); });
     }
 
-    // ---- Planes: one world-space BLAS of quads, rebuilt every frame ----
+    // ---- Planes: reuse the world-space BLAS while the quad geometry is unchanged ----
     if (input.planes.length) {
       const quads = new Float32Array(input.planes.length * 16);
       input.planes.forEach((plane, index) => {
@@ -302,10 +303,15 @@ export class PtSceneBuilder {
         this.planesBlas = { lbvh: new PtLbvh(device, 'pt-planes', input.planes.length), key: 'planes', version: 0,
           nodes: device.createBuffer({ label: 'pt-planes-blas', size: ptLbvhNodeCount(input.planes.length) * PT_BVH_NODE.size,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }) };
+        this.planesKey = '';
       }
-      this.planesBlas.lbvh.build(encoder, { kind: PT_PRIMITIVE.quad, count: input.planes.length, base: quadBase, fibers: { buffer: this.fibers.bindings(device)[0] },
-        objects, nodePages: this.nodes.bindings(device), nodePage1Start: this.nodes.page1Start }, { buffer: this.planesBlas.nodes }, temporaries);
-      this.planesBlas.version++;
+      const planesKey = `${quadBase}|${Array.from(new Uint32Array(quads.buffer)).join(',')}`;
+      if (planesKey !== this.planesKey) {
+        this.planesKey = planesKey;
+        this.planesBlas.lbvh.build(encoder, { kind: PT_PRIMITIVE.quad, count: input.planes.length, base: quadBase, fibers: { buffer: this.fibers.bindings(device)[0] },
+          objects, nodePages: this.nodes.bindings(device), nodePage1Start: this.nodes.page1Start }, { buffer: this.planesBlas.nodes }, temporaries);
+        this.planesBlas.version++;
+      }
       placed.push({ blas: this.planesBlas, count: input.planes.length, kind: PT_PRIMITIVE.quad, primGlobal: quadBase, materialBase: 0,
         objectId: hashId('planes'), objectToWorld: null });
     } else if (this.planesBlas) {

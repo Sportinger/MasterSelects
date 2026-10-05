@@ -123,6 +123,8 @@ export class NativeSceneRuntime {
     return this.initialized;
   }
 
+  get needsPathTraceFrame(): boolean { return this.pathTrace.needsPreviewFrame; }
+
   async initialize(_width: number, _height: number): Promise<boolean> {
     this.initialized = true;
     return true;
@@ -329,6 +331,12 @@ export class NativeSceneRuntime {
 
     // Raster export sub-samples render with a jittered projection and are averaged before tone mapping.
     const engine = options?.exportFrame?.quality.engine ?? options?.renderSettings?.engine ?? 'raster';
+    if (!options?.exportFrame) {
+      if (engine !== 'path-traced') this.pathTrace.pausePreview();
+      else if (!this.pathTrace.canRenderPreview(device, targetKey)) {
+        return this.sceneTargets.get(targetKey)?.displayView ?? null;
+      }
+    }
     const subSample = engine === 'raster' ? this.rasterSubSamples.begin(targetKey, options?.exportFrame, camera) : null;
     if (subSample) camera = subSample.camera;
     this.ensureSceneTargets(device, targetKey, camera.viewport.width, camera.viewport.height);

@@ -18,6 +18,7 @@ import { reportNativeSceneExportProgress, type NativeSceneExportProgress } from 
 import { PT_BAND_STRIDE, PT_MAX_BANDS, PtDispatchBudget } from './ptDispatchBudget';
 import { ptJitter, PtRealtimeRenderer, type PtRealtimeResult } from './ptRealtime';
 import { PtPassProfiler } from './ptPassProfiler';
+import { PtPreviewScheduler } from './ptPreviewScheduler';
 
 export interface PtRenderRequest {
   device: GPUDevice;
@@ -46,6 +47,8 @@ interface TargetState {
   auxiliary: GPUBuffer;
   depth: GPUBuffer;
   samples: number;
+  /** Next row of the current preview sample (0 after a complete image). */
+  sampleRow: number;
   signature: string;
   frameIndex: number;
   previousCamera: SceneCamera | null;
@@ -74,7 +77,7 @@ export function setPtDebugView(view: PtDebugView): void { debugView = view; }
 export function getPtDebugView(): PtDebugView { return debugView; }
 
 /** GPU time per frame the integrator may use: playback and a still preview converging (export renders fixed batches). */
-const FRAME_BUDGET_MS = { realtime: 24, still: 30, export: Number.POSITIVE_INFINITY } as const;
+const FRAME_BUDGET_MS = { realtime: 12, still: 12, export: Number.POSITIVE_INFINITY } as const;
 /** Most samples one frame adds (the budget decides below that; export always adds this many). */
 const MAX_SAMPLES_PER_FRAME = { realtime: 1, still: 8, export: 4 } as const;
 /** A converging still image idles this many times as long as its last batch took (a third of the GPU at most). */
@@ -131,14 +134,8 @@ export class PathTraceRuntime {
   private readonly stillProfiler = new PtPassProfiler();
   private realtimePlaceholder: GPUBuffer | null = null;
   private lightsKey = '';
-  private renderTimer: ReturnType<typeof setTimeout> | null = null;
-
-  /** Requests the next frame after `delayMs` (immediately for 0); a pending request is kept. */
-  private requestRenderAfter(delayMs: number): void {
-    if (delayMs < 4) { this.requestRender(); return; }
-    if (this.renderTimer) return;
-    this.renderTimer = setTimeout(() => { this.renderTimer = null; this.requestRender(); }, Math.min(delayMs, 500));
-  }
+  private readonly previewScheduler: PtPreviewScheduler;
+  private previewIdleFactor: number | null = null;
 
   /** Export accumulation state of this render, reported once its commands are submitted. */
   private pendingExportProgress: Omit<NativeSceneExportProgress, 'gpuDone'> | null = null;
@@ -150,9 +147,26 @@ export class PathTraceRuntime {
   private readonly requestRender: () => void;
 
   constructor(requestRender: () => void) {
-    this.requestRender = requestRender;
-    this.environment = new PtEnvironmentCache(requestRender);
+    this.previewScheduler = new PtPreviewScheduler(requestRender);
+    this.requestRender = () => this.previewScheduler.request();
+    this.environment = new PtEnvironmentCache(this.requestRender);
   }
+
+  /** Called before preparing scene geometry, so a busy GPU receives no new preview batches. */
+  canRenderPreview(device: GPUDevice, targetKey = 'main'): boolean {
+    this.ensure(device);
+    return this.previewScheduler.canRender(targetKey);
+  }
+
+  pausePreview(): void {
+    this.previewScheduler.cancel();
+    for (const state of this.targets.values()) {
+      state.denoiseJob?.abort();
+      state.denoiseJob = null;
+    }
+  }
+
+  get needsPreviewFrame(): boolean { return this.previewScheduler.needsFrame; }
 
   private ensure(device: GPUDevice): void {
     if (this.device === device) return;
@@ -170,12 +184,15 @@ export class PathTraceRuntime {
   private target(device: GPUDevice, key: string, width: number, height: number, temporaries: GPUBuffer[]): TargetState {
     let state = this.targets.get(key);
     if (state && state.width === width && state.height === height) return state;
-    if (state) temporaries.push(state.accumulation, state.auxiliary, state.depth);
+    if (state) {
+      this.dropDenoise(state);
+      temporaries.push(state.accumulation, state.auxiliary, state.depth);
+    }
     const buffer = (label: string, bytes: number) => device.createBuffer({ label: `${label}-${key}`, size: Math.max(16, bytes),
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST });
     const pixels = width * height;
     state = { width, height, accumulation: buffer('pt-accumulation', pixels * 16), auxiliary: buffer('pt-auxiliary', pixels * 32),
-      depth: buffer('pt-pixel-state', pixels * 16), samples: 0, signature: '', frameIndex: 0, previousCamera: null, lastFrameMs: 0,
+      depth: buffer('pt-pixel-state', pixels * 16), samples: 0, sampleRow: 0, signature: '', frameIndex: 0, previousCamera: null, lastFrameMs: 0,
       startedAt: performance.now(), denoised: null, denoisedSignature: '', denoisedSamples: 0, denoiseJob: null, denoiseFailed: false,
       moving: false, viewKey: '', stillRealtimeFrames: 0 };
     this.targets.set(key, state);
@@ -248,9 +265,13 @@ export class PathTraceRuntime {
     if (changed) {
       state.signature = signature;
       state.samples = 0;
+      state.sampleRow = 0;
       state.startedAt = performance.now();
       this.dropDenoise(state);
-      // A new image measures its own cost: the last one may have been far cheaper (empty frames).
+      // Partial samples and render regions must not show pixels left over from the previous image.
+      encoder.clearBuffer(state.accumulation);
+      encoder.clearBuffer(state.auxiliary);
+      encoder.clearBuffer(state.depth);
       this.budget.reset();
     }
     device.queue.writeBuffer(this.lightsBuffer!, 0, lights.data);
@@ -266,17 +287,19 @@ export class PathTraceRuntime {
     // One realtime frame: own frame uniform, so it can share a command buffer with the accumulation.
     const encodeRealtime = () => {
       const tick = this.realtime.tick, jitter = ptJitter(tick);
-      const plan = this.realtimeBudget.plan(renderWidth, renderHeight, 1, FRAME_BUDGET_MS.realtime, 1);
-      device.queue.writeBuffer(this.realtimeFrameUniform!, 0, writePtFrame({ ...frameValues, renderSize: { width: renderWidth, height: renderHeight },
+      const renderSize = this.realtimeBudget.previewSize(renderWidth, renderHeight, FRAME_BUDGET_MS.realtime);
+      const plan = this.realtimeBudget.plan(renderSize.width, renderSize.height, 1, FRAME_BUDGET_MS.realtime, 1);
+      device.queue.writeBuffer(this.realtimeFrameUniform!, 0, writePtFrame({ ...frameValues, renderSize,
         jitter, frameIndex: tick, sampleOffset: tick, samples: 1, mode: 0, region: [0, 0, 1, 1] }));
       const clearCache = lightsKey !== this.lightsKey;
       this.lightsKey = lightsKey;
-      return this.realtime.encode({ device, encoder, targetKey: request.targetKey, renderSize: { width: renderWidth, height: renderHeight },
+      return this.realtime.encode({ device, encoder, targetKey: request.targetKey, renderSize,
         outputSize: { width, height }, sceneGroups: this.sceneGroups(device, scene, env, this.realtimeFrameUniform!), bands: plan.bands, jitter,
         clearCache, budget: this.realtimeBudget, temporaries: request.temporaries });
     };
 
     state.moving = !exporting && debugView === 'none' && (request.realtime || changed);
+    this.previewIdleFactor = exporting ? null : state.moving ? 0.5 : STILL_IDLE_FACTOR;
     if (state.moving) {
       state.stillRealtimeFrames = 0;
       const output = encodeRealtime();
@@ -304,8 +327,9 @@ export class PathTraceRuntime {
     const slices = exporting ? motionBlurSlices(camera, target) : 1;
     const sliceSamples = target / slices;
     const sliceEnd = Math.min(target, (Math.floor(state.samples / sliceSamples) + 1) * sliceSamples);
-    const plan = state.samples >= target ? null
-      : this.budget.plan(regionWidth, regionRows, Math.round(sliceEnd - state.samples), FRAME_BUDGET_MS[pace], MAX_SAMPLES_PER_FRAME[pace]);
+    const plan = state.samples >= target ? null : exporting
+      ? { ...this.budget.plan(regionWidth, regionRows, Math.round(sliceEnd - state.samples), FRAME_BUDGET_MS[pace], MAX_SAMPLES_PER_FRAME[pace]), nextRow: 0 }
+      : this.budget.planPreview(regionWidth, regionRows, Math.round(sliceEnd - state.samples), FRAME_BUDGET_MS[pace], MAX_SAMPLES_PER_FRAME[pace], state.sampleRow);
     const samples = plan?.samples ?? 0;
     if (plan && samples > 0) {
       device.queue.writeBuffer(this.frameUniform!, 0, writePtFrame({ ...frameValues, renderSize: { width: renderWidth, height: renderHeight },
@@ -330,16 +354,22 @@ export class PathTraceRuntime {
         pass.dispatchWorkgroups(Math.ceil(regionWidth / 8), Math.ceil(band.rows / 8));
         pass.end();
       });
+      const work = regionWidth * plan.bands.reduce((rows, band) => rows + band.rows, 0) * samples;
       if (profiling) this.stillProfiler.resolve(encoder);
-      else this.budget.encodeResolve(device, encoder, regionWidth * regionRows * samples);
-      this.lastStillWork = regionWidth * regionRows * samples;
-      state.samples += samples;
+      else this.budget.encodeResolve(device, encoder, work);
+      this.lastStillWork = work;
+      state.sampleRow = plan.nextRow;
+      if (state.sampleRow === 0) state.samples += samples;
       state.frameIndex++;
     }
     // The first still frames keep the realtime path running beside the accumulation: with a static
     // camera its temporal history settles to a clean image within about a second, which stays on
     // screen until the first OIDN image of the unbiased accumulation replaces it.
+    // Only warm a cheap realtime image. A heavy scene must not run two full integrators per batch.
+    const warmCostMs = renderWidth * renderHeight * this.realtimeBudget.costNs / 1e6;
+    const stillCostMs = plan ? this.lastStillWork * this.budget.costNs / 1e6 : 0;
     const warming = !exporting && debugView === 'none' && !request.realtime && state.stillRealtimeFrames < STILL_REALTIME_FRAMES
+      && warmCostMs + stillCostMs <= FRAME_BUDGET_MS.still
       && !(state.denoised && state.denoisedSignature === state.signature);
     const warmOutput = warming ? encodeRealtime() : null;
     if (warming) state.stillRealtimeFrames++;
@@ -349,7 +379,7 @@ export class PathTraceRuntime {
     state.wantsDenoise = denoise;
     // Denoise checkpoints: the target, and for the preview an early pass once a few samples exist.
     const checkpoint = converged ? target : !exporting && state.samples >= Math.min(EARLY_DENOISE_SAMPLES, target) ? EARLY_DENOISE_SAMPLES : 0;
-    if (denoise && !state.denoiseFailed && checkpoint > 0 && state.denoisedSamples < checkpoint && !state.denoiseJob) {
+    if (denoise && state.sampleRow === 0 && !state.denoiseFailed && checkpoint > 0 && state.denoisedSamples < checkpoint && !state.denoiseJob) {
       this.startDenoise(device, state, exporting ? 'standard' : 'small');
     }
     if (profileBuild && !warmOutput) this.realtime.profiler.resolve(encoder);
@@ -358,16 +388,13 @@ export class PathTraceRuntime {
     const sameSize = !!outputSize && outputSize.width === width && outputSize.height === height;
     const fadeEnd = Math.max(STILL_FADE_START + 8, Math.min(STILL_FADE_END, target));
     const denoised = !!state.denoised && state.denoisedSignature === state.signature;
-    // Until the first denoised image exists the last realtime image stays (it is cleaner than a few
-    // samples); without a denoiser the accumulation fades in over it.
-    const waitForDenoise = denoise && !state.denoiseFailed;
+    // Show progressive refinement even when a costly scene takes a while to reach the OIDN checkpoint.
     const blend = output && sameSize && !denoised && debugView === 'none'
-      ? waitForDenoise ? 1 : 1 - smoothstep(STILL_FADE_START, fadeEnd, state.samples) : 0;
+      ? 1 - smoothstep(STILL_FADE_START, fadeEnd, state.samples) : 0;
     this.resolve(device, encoder, state, request, output && sameSize && debugView === 'none' ? { output, blend, only: false } : null);
-    // A converging still image leaves the GPU idle for longer than its last batch took (a third of the GPU
-    // at most): refining in the background must not stall video and other tabs on the same GPU.
+    // afterSubmit waits for completion and THEN leaves room for other GPU clients.
     if (!converged && !exporting) {
-      this.requestRenderAfter(plan ? STILL_IDLE_FACTOR * plan.samples * regionWidth * regionRows * this.budget.costNs / 1e6 : 0);
+      this.requestRender();
     }
     const denoising = !!state.denoiseJob || (converged && denoise && !state.denoiseFailed && state.denoisedSamples < target);
     if (exporting) {
@@ -449,6 +476,10 @@ export class PathTraceRuntime {
 
   /** After the frame's command buffer was submitted: release replaced resources, start readbacks. */
   afterSubmit(device: GPUDevice): void {
+    if (this.previewIdleFactor !== null) {
+      this.previewScheduler.submitted(device.queue.onSubmittedWorkDone(), this.previewIdleFactor);
+      this.previewIdleFactor = null;
+    }
     this.builder.afterSubmit();
     this.budget.afterSubmit(device);
     this.realtimeBudget.afterSubmit(device);
@@ -465,6 +496,7 @@ export class PathTraceRuntime {
   }
 
   releaseTarget(key: string): void {
+    this.previewScheduler.releaseTarget(key);
     const state = this.targets.get(key);
     if (!state) return;
     this.dropDenoise(state);
@@ -475,7 +507,8 @@ export class PathTraceRuntime {
   }
 
   dispose(): void {
-    if (this.renderTimer) { clearTimeout(this.renderTimer); this.renderTimer = null; }
+    this.previewScheduler.dispose();
+    this.previewIdleFactor = null;
     for (const key of [...this.targets.keys()]) this.releaseTarget(key);
     this.builder.dispose();
     this.environment.dispose();
