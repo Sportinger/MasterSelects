@@ -2,7 +2,7 @@
 // display-referred HDR value (sRGB-encoded, premultiplied, may exceed 1), like the raster writes,
 // and the nearest primary hit becomes scene depth so splats composite over it. The accumulation is
 // upsampled bilinearly from the render scale; the realtime path's output (already at output size)
-// is shown alone while the camera moves and faded out while a still image converges (no jump).
+// is shown while the camera moves and in still-image pixels that have not been sampled yet.
 // Debug views show the primary-hit AOVs or a BVH traversal heatmap instead.
 
 struct ResolveParams {
@@ -55,6 +55,12 @@ fn resolveAccumulated(p: vec2i) -> vec4f {
   let render = vec2i(resolve.sizes.xy);
   let q = clamp(p, vec2i(0), render - 1);
   let index = u32(q.y * render.x + q.x);
+  // Bilinear taps can cross the frontier of a partially sampled image or render region.
+  // Use the preview there instead of blending a cleared accumulation buffer into the image.
+  if (pixelState[index].w <= 0.0 && resolve.realtime.z > 0.5) {
+    let output = min(vec2u((vec2f(q) + 0.5) * resolve.sizes.zw / resolve.sizes.xy), vec2u(resolve.sizes.zw) - 1u);
+    return realtimeColor[output.y * u32(resolve.sizes.z) + output.x];
+  }
   let inverse = resolveInverseSamples(index);
   return vec4f(color[index].rgb * select(inverse, 1.0, resolve.scales.w > 0.5), clamp(coverage[index].a * inverse, 0.0, 1.0));
 }
