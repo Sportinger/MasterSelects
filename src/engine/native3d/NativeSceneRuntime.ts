@@ -333,7 +333,7 @@ export class NativeSceneRuntime {
     // Raster export sub-samples render with a jittered projection and are averaged before tone mapping.
     const engine = options?.exportFrame?.quality.engine ?? options?.renderSettings?.engine ?? 'raster';
     if (!options?.exportFrame) {
-      if (engine !== 'path-traced') this.pathTrace.pausePreview();
+      if (engine !== 'path-traced') this.pathTrace.pausePreview(targetKey);
       else if (!this.pathTrace.canRenderPreview(device, targetKey)) {
         return this.sceneTargets.get(targetKey)?.displayView ?? null;
       }

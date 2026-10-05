@@ -61,7 +61,7 @@ D float3 indirect(float3 v) {
 }
 extern "C" __global__ void __raygen__path() {
   uint3 launch = optixGetLaunchIndex();
-  uint32_t x = launch.x, y = launch.y + params.firstRow;
+  uint32_t x = launch.x + params.firstColumn, y = launch.y + params.firstRow;
   Sampler sampler(x, y, params.frame.scene.w, params.sampleIndex);
   Ray ray = cameraRay(params.frame, x, y, sampler.next());
   float3 throughput = v3(1), radiance = v3(0);
@@ -92,6 +92,12 @@ extern "C" __global__ void __raygen__path() {
     float3 wo = local(s.frame, -ray.direction);
     if (!bounce) {
       coverage = 1;
+      if (params.depth) {
+        const float *m = params.frame.viewProjection;
+        float z = m[2] * s.p.x + m[6] * s.p.y + m[10] * s.p.z + m[14];
+        float w = m[3] * s.p.x + m[7] * s.p.y + m[11] * s.p.z + m[15];
+        params.depth[y * uint32_t(params.frame.size.x) + x] = clamp(z / w, 0, 1);
+      }
       if (params.albedo) {
         radiance = s.hair.color;
         break;

@@ -1,6 +1,6 @@
-# Native OptiX still-render prototype
+# Native OptiX preview and comparison
 
-Optional Windows NVIDIA worker for the development editor's **OptiX test** button.
+Optional Windows NVIDIA worker for the development editor's **OptiX** preview and **OptiX test** button.
 It renders a captured fiber scene with OptiX RTX BVH traversal and CUDA round-cone
 intersection/shading. It does not make CUDA or OptiX available inside WebGPU.
 
@@ -39,8 +39,38 @@ Other geometry, textured environments and oversized snapshots fail explicitly.
 Maximum: 1920×1080, 64 samples, 16 bounces, 16 million segments, 1 GiB snapshot;
 the worker stops after 110 seconds and the helper kills a stalled process after
 120 seconds. One native render can run at a time. Temporary files are deleted on
-discard/disconnect. There is no persistent scene cache, denoising, motion blur,
-interactive native preview or native export integration yet.
+discard/disconnect. The still comparison uses a separate one-shot process with no
+persistent scene cache. Native denoising, motion blur and export integration are not implemented.
+
+## Persistent preview
+
+With **Path Traced** selected, switch the preview backend from **WebGPU** to **OptiX**.
+Rebuild both the Rust helper and CUDA/OptiX worker for this protocol version and reload
+the editor. Set `--allowed-origins` to the actual worktree server origin.
+
+The preview keeps its process, CUDA pipeline, fibers and OptiX GAS resident. Camera
+changes use a fixed 416-byte packet; scene edits upload a snapshot, with OptiX refit
+when the primitive count stays unchanged. Short center-first tile batches accumulate
+progressively. Moving views reduce resolution; still views use the selected preview
+scale, capped at 1920 × 1080. GPU work yields between batches. Pending new views show
+the raster renderer until a matching native frame arrives. Unsupported input and
+helper errors fall back to WebGPU with a status reason.
+
+One preview process is allowed globally; GPU submissions are serialized with still
+comparison jobs. `preview-open/load/frame/close` retain connection ownership. Only
+helper-generated job directories reach the worker's `--preview` mode; commands use
+stdin and bounded responses use stdout. Image output is premultiplied linear RGBA32F
+followed by float32 depth, served through the existing authenticated HTTP transport.
+Alpha -1 marks an unsampled tile so the browser retains the previous image there.
+An individual frame call requests 1–4 additional samples, but stops between tiles
+after an 8 ms GPU / 20 ms wall-time budget. Up to 65,536 samples accumulate per view.
+This is a budget target, not a guarantee on the duration of one GPU launch.
+
+This implementation is limited to the main-thread development renderer, supported
+fiber scenes and constant environments. HDRIs, other path-traced primitive types,
+render regions, debug views and more than 16 bounces use WebGPU. Native denoising and
+zero-copy GPU texture sharing are not implemented. Native video export is separate
+work. Runtime verification of this preview integration is pending.
 
 ## Verification
 

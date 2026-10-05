@@ -271,12 +271,20 @@ cargo build --release
 ## Tests
 
 The optional OptiX worker adds a
-development-only still-render comparison for fiber scenes. Authenticated `optix`
+development-only native preview and still-render comparison for fiber scenes. Authenticated `optix`
 commands create a connection-owned job, render it with a fixed sibling executable,
 and discard its temporary files. The browser uploads a versioned binary snapshot
 and reads linear RGBA32F pixels through the existing authenticated file transport.
 Only one native render runs at a time; a stalled worker is stopped after 120
-seconds. This does not change the browser's preview or export engine defaults.
+seconds. The persistent preview uses connection-owned `preview-open`, `preview-load`,
+`preview-frame` and `preview-close` actions. It keeps CUDA initialization and the
+scene resident, refits unchanged topology, and returns bounded center-first sample
+batches with depth. Camera packets contain exactly 416 bytes; browsers cannot select
+worker paths or output file names. One preview worker is allowed globally, and GPU
+work is serialized with still-render jobs. Preview startup/scene loading time out
+after 30 seconds; frame commands after 10 seconds. Switching backend/disconnecting
+stops the worker. Preview images use the existing authenticated local file transport.
+This does not change the browser's preview or export engine defaults.
 
 The helper has Rust unit tests for protocol normalization, path-policy behavior, provider state, token redaction, archive selection, process helpers, and inference parsing. Browser protocol adapters and provider stores/mappers have focused Vitest coverage in `tests/unit/`.
 

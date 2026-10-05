@@ -3,15 +3,20 @@ use crate::{
     protocol::{error_codes, Response},
     session::AppState,
 };
-use std::{path::PathBuf, sync::OnceLock, time::Duration};
+use std::{
+    path::PathBuf,
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 use tokio::{process::Command, sync::Semaphore};
 
 #[derive(Default)]
 pub struct OptixSession {
     job: Option<(String, PathBuf)>,
+    preview: crate::optix_preview::PreviewSession,
 }
 
-fn worker_path() -> Result<PathBuf, String> {
+pub(crate) fn worker_path() -> Result<PathBuf, String> {
     let name = if cfg!(windows) {
         "masterselects-optix.exe"
     } else {
@@ -22,6 +27,15 @@ fn worker_path() -> Result<PathBuf, String> {
         .with_file_name(name))
 }
 
+pub(crate) fn render_permit() -> Result<tokio::sync::OwnedSemaphorePermit, String> {
+    static RENDER: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    RENDER
+        .get_or_init(|| Arc::new(Semaphore::new(1)))
+        .clone()
+        .try_acquire_owned()
+        .map_err(|_| "Another native render is active".into())
+}
+
 impl OptixSession {
     pub async fn handle(
         &mut self,
@@ -30,7 +44,19 @@ impl OptixSession {
         action: &str,
         job_id: Option<&str>,
         samples: Option<u32>,
+        frame: Option<&[u8]>,
+        reset: bool,
     ) -> Response {
+        if action.starts_with("preview-") {
+            return match self
+                .preview
+                .run(state, action, job_id, samples, frame, reset)
+                .await
+            {
+                Ok(value) => Response::ok(id, value),
+                Err(message) => Response::error(id, error_codes::INTERNAL_ERROR, message),
+            };
+        }
         match self.run(state, action, job_id, samples).await {
             Ok(value) => Response::ok(id, value),
             Err(message) => Response::error(id, error_codes::INTERNAL_ERROR, message),
@@ -81,11 +107,7 @@ impl OptixSession {
         if !(1..=64).contains(&samples) {
             return Err("Samples must be 1..64".into());
         }
-        static RENDER: OnceLock<Semaphore> = OnceLock::new();
-        let _permit = RENDER
-            .get_or_init(|| Semaphore::new(1))
-            .try_acquire()
-            .map_err(|_| "Another native render is active")?;
+        let _permit = render_permit()?;
         let input = root.join("scene.mspx");
         let output = root.join("result.rgba32f");
         let size = tokio::fs::metadata(&input)

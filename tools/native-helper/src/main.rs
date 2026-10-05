@@ -18,6 +18,7 @@ mod http_server;
 mod matanyone;
 mod muscriptor;
 mod optix;
+mod optix_preview;
 mod protocol;
 mod rtmp;
 mod server;

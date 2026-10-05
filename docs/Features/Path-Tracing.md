@@ -128,7 +128,33 @@ Rules the runtime keeps:
 
 ## Debugging
 
-### Optional native OptiX comparison (development only)
+### Optional native OptiX preview (development only)
+
+In a path-traced composition, switch the **WebGPU / OptiX** toolbar button to OptiX.
+The native helper keeps one CUDA/OptiX process, scene and acceleration structure
+alive. Camera updates use a 416-byte packet; changed fibers are uploaded again and
+refit when their count stays constant. A stationary image accumulates to the selected
+sample target. Camera motion uses a reduced resolution, adjusted using total render
+and transfer latency; after 180 ms without changes the requested preview scale is
+restored (up to 1920 × 1080). Initial frames and pending view changes retain responsive
+raster rendering until a matching native image arrives.
+
+Work proceeds in center-first tiles, with one bounded batch in flight (an 8 ms GPU
+or 20 ms wall-time target, checked between launches). Unfinished tiles retain the
+previous image. The returned color and depth enter the normal HDR scene and tone map.
+Preview images currently travel through the authenticated local file transport;
+there is no shared GPU texture interop and no native denoising yet. Consequently,
+GPU-only benchmark timings do not predict the achieved preview frame rate.
+
+Only one native preview may be open across helper connections. Switching back to
+WebGPU or raster, or closing the main preview, releases the worker. Unsupported geometry, HDR
+environment maps, render regions, debug views, more than 16 bounces, worker-thread
+rendering or helper errors use WebGPU; the status tooltip gives the reason. This
+option affects the development preview only: export remains WebGPU.
+
+Runtime verification of this preview integration is pending.
+
+### Native OptiX comparison
 
 The **OptiX test** preview button captures a paused fiber scene and compares one
 sample with the optional native helper worker; the result offers four- and 16-sample

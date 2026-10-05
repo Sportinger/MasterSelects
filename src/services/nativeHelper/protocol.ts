@@ -357,7 +357,7 @@ export interface RepositoryCommand {
 }
 
 export type Command =
-  | { cmd: 'optix'; id: string; action: 'status' | 'begin' | 'render' | 'discard'; job_id?: string; samples?: number }
+  | { cmd: 'optix'; id: string; action: 'status' | 'begin' | 'render' | 'discard' | 'preview-open' | 'preview-load' | 'preview-frame' | 'preview-close'; job_id?: string; samples?: number; frame?: number[]; reset?: boolean }
   | RepositoryCommand
   | AuthCommand
   | OpenCommand

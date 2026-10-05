@@ -54,12 +54,22 @@ export function PreviewPathTraceStatus({ compositionId, settings }: { compositio
   const hasRegion = !!settings.region;
   return (
     <>
-      {import.meta.env.DEV && <NativePathTraceBenchmark />}
+      {import.meta.env.DEV && <>
+        <button type="button" className="preview-edit-btn"
+          onPointerUp={event => event.currentTarget.blur()}
+          aria-label={`Preview backend ${settings.previewBackend === 'optix' ? 'OptiX' : 'WebGPU'}`}
+          title="Experimental native OptiX preview for fiber scenes. Requires the matching native helper. Export uses WebGPU."
+          onClick={() => updateCompositionRenderSettings(compositionId, { previewBackend: settings.previewBackend === 'optix' ? 'webgpu' : 'optix' })}>
+          {settings.previewBackend === 'optix' ? 'OptiX' : 'WebGPU'}
+        </button>
+        {settings.previewBackend !== 'optix' && <NativePathTraceBenchmark />}
+      </>}
       <button
         type="button"
         className="preview-edit-btn preview-render-quality-btn"
         title={`Path tracing quality ${preset ? preset.label : 'Custom'} (${settings.stillSamples} samples, ${settings.maxBounces} bounces). Click: ${next.label}`}
         aria-label={`Path tracing quality ${preset ? preset.label : 'Custom'}`}
+        onPointerUp={event => event.currentTarget.blur()}
         onClick={() => updateCompositionRenderSettings(compositionId, { stillSamples: next.stillSamples, maxBounces: next.maxBounces })}
       >
         {preset ? preset.label : 'Custom'}
@@ -68,6 +78,7 @@ export function PreviewPathTraceStatus({ compositionId, settings }: { compositio
         type="button"
         className={`preview-edit-btn preview-render-region-btn ${drawing || hasRegion ? 'active' : ''}`}
         aria-pressed={drawing || hasRegion}
+        onPointerUp={event => event.currentTarget.blur()}
         title={drawing ? 'Drag over the preview to set the render region (Esc cancels)'
           : hasRegion ? 'Render region active: click to render the whole image again' : 'Render region: refine only part of the still image'}
         onClick={() => {
@@ -82,11 +93,12 @@ export function PreviewPathTraceStatus({ compositionId, settings }: { compositio
         <span
           className={`preview-render-status ${fallback ? 'fallback' : ''}`}
           role="status"
-          title={fallback ? `Path tracing fell back to raster: ${status.fallbackReason ?? 'unknown reason'}`
+          title={status.nativeMessage || (fallback ? `Path tracing fell back to raster: ${status.fallbackReason ?? 'unknown reason'}`
             : `${status.renderSize.width} × ${status.renderSize.height} render size, ${(status.gpuBytes / 1048576).toFixed(0)} MB GPU`
-              + (status.nsPerSample ? `, ${status.nsPerSample.toFixed(0)} ns per pixel sample` : '')}
+              + (status.nsPerSample ? `, ${status.nsPerSample.toFixed(0)} ns per pixel sample` : ''))}
         >
-          {statusText(status)}
+          {status.previewBackend === 'optix' ? 'OptiX · ' : status.nativeMessage ? 'WebGPU fallback · ' : ''}
+          {status.previewBackend === 'optix' && status.nativeMessage ? status.nativeMessage : statusText(status)}
         </span>
       )}
     </>

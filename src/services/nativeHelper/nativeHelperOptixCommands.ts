@@ -1,6 +1,7 @@
 import type { NativeHelperCommandHost } from './nativeHelperClientTypes';
 import type { OkResponse } from './protocol';
 import { getErrorMessage } from './nativeHelperResponseUtils';
+import { createOptixPreview } from './nativeHelperOptixPreview';
 
 export interface OptixMetrics {
   backend: string; gpu: string; width: number; height: number; samples: number; segments: number;
@@ -14,6 +15,7 @@ export function createOptixCommands(host: NativeHelperCommandHost) {
     return response as OkResponse;
   };
   return {
+    preview: createOptixPreview(host),
     begin: async () => {
       const result = await send('begin');
       if (typeof result.jobId !== 'string' || typeof result.inputPath !== 'string') throw new Error('Invalid OptiX job response');

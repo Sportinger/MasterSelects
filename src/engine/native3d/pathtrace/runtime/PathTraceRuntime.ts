@@ -21,6 +21,7 @@ import { PtPassProfiler } from './ptPassProfiler';
 import { PtPreviewScheduler } from './ptPreviewScheduler';
 import { captureNativeSnapshot } from '../native/ptNativeSnapshot';
 import { benchmarkPtReference } from '../native/ptReferenceBenchmark';
+import { PtNativePreview } from '../native/PtNativePreview';
 
 export interface PtRenderRequest {
   device: GPUDevice;
@@ -131,6 +132,8 @@ export class PathTraceRuntime {
   private readonly previewScheduler: PtPreviewScheduler;
   private previewIdleFactor: number | null = null;
   private nativeBenchmarkBusy = false;
+  private readonly nativePreview: PtNativePreview;
+  private nativePreviewReason = '';
   private nativeCapture: { scene: PtSceneFrame; frame: ArrayBuffer; lights: Float32Array; env: { map: GPUTextureView; alias: GPUTextureView } } | null = null;
 
   /** Development prototype: keep the displayed image while both backends measure the same frozen scene. */
@@ -163,6 +166,7 @@ export class PathTraceRuntime {
     this.previewScheduler = new PtPreviewScheduler(requestRender);
     this.requestRender = () => this.previewScheduler.request();
     this.environment = new PtEnvironmentCache(this.requestRender);
+    this.nativePreview = new PtNativePreview(this.requestRender);
   }
 
   /** Called before preparing scene geometry, so a busy GPU receives no new preview batches. */
@@ -172,7 +176,8 @@ export class PathTraceRuntime {
     return this.previewScheduler.canRender(targetKey);
   }
 
-  pausePreview(): void {
+  pausePreview(targetKey = 'main'): void {
+    if (targetKey === 'main') this.nativePreview.stop();
     this.previewScheduler.cancel();
     for (const state of this.targets.values()) {
       state.denoiseJob?.abort();
@@ -240,6 +245,16 @@ export class PathTraceRuntime {
     const { device, encoder, camera, settings } = request;
     this.ensure(device);
     const exporting = !!request.exportFrame;
+    const wantsNative = import.meta.env.DEV && !exporting && request.targetKey === 'main' && settings.previewBackend === 'optix';
+    const nativeUnsupported = !wantsNative ? '' : typeof window === 'undefined' ? 'Native preview requires the main-thread renderer'
+      : request.meshes.length || request.planes.length || request.voxels.length || request.sphereSets.length || !request.strands.length
+        ? 'Native preview currently supports fiber geometry only'
+      : request.lights.some(light => light.lightSettings.kind === 'environment' && !!light.lightSettings.environmentMapUrl)
+        ? 'Native preview does not support HDR environment maps yet'
+      : settings.maxBounces > 16 ? 'Native preview supports up to 16 bounces'
+      : settings.region || debugView !== 'none' ? 'Render regions and debug views use WebGPU' : '';
+    this.nativePreviewReason = '';
+    if (!wantsNative && (request.targetKey === 'main' || exporting)) this.nativePreview.stop();
     const width = camera.viewport.width, height = camera.viewport.height;
     const scale = exporting ? 1 : settings.renderScale;
     const renderWidth = Math.max(1, Math.round(width * scale)), renderHeight = Math.max(1, Math.round(height * scale));
@@ -257,7 +272,8 @@ export class PathTraceRuntime {
     try {
       scene = this.builder.build(device, encoder, { strands: request.strands, meshes: request.meshes, planes: request.planes, voxels: request.voxels,
         sphereSets: request.sphereSets, camera,
-        fiberLod: !exporting && (request.realtime || viewChanged) }, request.temporaries, release => this.pending.push(release));
+        fiberLod: !(wantsNative && !nativeUnsupported && !this.nativePreview.failure) && !exporting
+          && (request.realtime || viewChanged) }, request.temporaries, release => this.pending.push(release));
     } catch (error) {
       if (!(error instanceof PtSceneLimitError) && !(error instanceof PtMaterialLimitError)) throw error;
       ptLog.warn('Path tracing falls back to raster', { reason: error.message });
@@ -303,6 +319,20 @@ export class PathTraceRuntime {
     }
     const stats = { targetSamples: target, segments: scene.stats.segments, bvhNodes: scene.stats.bvhNodes,
       gpuBytes: scene.stats.gpuBytes + this.realtime.gpuBytes };
+
+    if (wantsNative) {
+      if (nativeUnsupported) { this.nativePreview.stop(); this.nativePreviewReason = nativeUnsupported; }
+      else {
+        const shown = this.nativePreview.tick(request, scene, lights.data.slice(0, lights.count * 16), lightsKey,
+          frameValues, signature, callback => this.pending.push(callback));
+        if (!this.nativePreview.failure) {
+          this.previewIdleFactor = null;
+          publishPtStatus(request.targetKey, this.nativePreview.status(request, scene));
+          return shown; // Responsive raster until the first native image of this view arrives.
+        }
+        this.nativePreviewReason = this.nativePreview.failure;
+      }
+    }
 
     // One realtime frame: own frame uniform, so it can share a command buffer with the accumulation.
     const encodeRealtime = () => {
@@ -488,6 +518,7 @@ export class PathTraceRuntime {
 
   private status(state: TargetState, settings: CompositionRenderSettings, kind: PtStatus['state'], reason?: string): PtStatus {
     return { engine: 'path-traced', state: kind, samples: state.samples, targetSamples: settings.stillSamples,
+      ...(this.nativePreviewReason ? { previewBackend: 'webgpu' as const, nativeMessage: this.nativePreviewReason } : {}),
       frameMs: performance.now() - state.startedAt, renderSize: { width: state.width, height: state.height },
       ...(reason ? { fallbackReason: reason } : {}), segments: 0, bvhNodes: 0, gpuBytes: 0,
       denoisedSamples: state.denoisedSignature === state.signature ? state.denoisedSamples : 0 };
@@ -511,11 +542,12 @@ export class PathTraceRuntime {
     if (!this.pending.length) return;
     const releases = this.pending;
     this.pending = [];
-    void device.queue.onSubmittedWorkDone().then(() => releases.forEach(release => release()));
+    const complete = () => releases.forEach(release => release());
+    void device.queue.onSubmittedWorkDone().then(complete, complete);
   }
 
   releaseTarget(key: string): void {
-    if (key === 'main') this.nativeCapture = null;
+    if (key === 'main') { this.nativeCapture = null; this.nativePreview.stop(); }
     this.previewScheduler.releaseTarget(key);
     const state = this.targets.get(key);
     if (!state) return;
@@ -527,6 +559,7 @@ export class PathTraceRuntime {
   }
 
   dispose(): void {
+    this.nativePreview.stop();
     this.nativeCapture = null;
     this.nativeBenchmarkBusy = false;
     this.previewScheduler.dispose();

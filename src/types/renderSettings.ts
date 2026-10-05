@@ -30,6 +30,8 @@ export type PtRenderScale = typeof PT_RENDER_SCALES[number];
 /** Render settings stored on a composition; the export takes them over and may override. */
 export interface CompositionRenderSettings {
   engine: RenderEngine;
+  /** Optional native helper for the development preview; export remains WebGPU. */
+  previewBackend?: 'webgpu' | 'optix';
   /** Realtime path tracing resolution scale in the preview. */
   renderScale: PtRenderScale;
   /** Samples per pixel the paused preview converges to before the final denoise. */
@@ -73,6 +75,7 @@ export function normalizeCompositionRenderSettings(value: unknown): CompositionR
   const region = normalizeRegion(input.region);
   return {
     engine: input.engine === 'path-traced' ? 'path-traced' : 'raster',
+    ...(input.previewBackend === 'optix' ? { previewBackend: 'optix' as const } : {}),
     renderScale: scale,
     stillSamples: Math.round(clampNumber(input.stillSamples, 1, 65536, DEFAULT_COMPOSITION_RENDER_SETTINGS.stillSamples)),
     maxBounces: Math.round(clampNumber(input.maxBounces, 1, 64, DEFAULT_COMPOSITION_RENDER_SETTINGS.maxBounces)),

@@ -30,8 +30,9 @@ struct LaunchParams {
   const Material *materials;
   const Light *lights;
   float4 *pixels;
+  float *depth;
   Frame frame;
-  uint32_t firstRow, sampleIndex, albedo;
+  uint32_t firstRow, sampleIndex, albedo, firstColumn;
 };
 static_assert(sizeof(Fiber) == 48 && sizeof(Material) == 80 && sizeof(Light) == 64);
 static_assert(sizeof(Frame) == 416 && sizeof(Instance) == 128);

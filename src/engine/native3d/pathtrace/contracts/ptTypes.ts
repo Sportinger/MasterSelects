@@ -68,6 +68,8 @@ export const PT_DEBUG_VIEW_CODE: Record<PtDebugView, number> = { none: 0, albedo
 /** Status of the path tracer as shown by the preview overlay and export progress. */
 export interface PtStatus {
   engine: RenderEngine;
+  previewBackend?: 'webgpu' | 'optix';
+  nativeMessage?: string;
   state: 'idle' | 'realtime' | 'converging' | 'denoising' | 'converged' | 'fallback';
   samples: number;
   /** Fraction of the next preview sample already covered; `samples` counts complete images. */

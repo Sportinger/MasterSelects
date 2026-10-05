@@ -183,7 +183,7 @@ impl Session {
         }
 
         match cmd {
-            Command::Optix { id, action, job_id, samples } => Some(self.optix.handle(&self.state, &id, &action, job_id.as_deref(), samples).await),
+            Command::Optix { id, action, job_id, samples, frame, reset } => Some(self.optix.handle(&self.state, &id, &action, job_id.as_deref(), samples, frame.as_deref(), reset).await),
             Command::Repository { id, action, root, path, lease, upload, data, offset, length, limit, cursor, replace, publish, expected_previous } => {
                 Some(self.handle_repository(&id, &action, &root, path.as_deref(), lease.as_deref(), upload.as_deref(), data.as_deref(), offset, length, limit, cursor.as_deref(), replace, publish, expected_previous))
             },
