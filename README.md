@@ -6,6 +6,8 @@ the confirmed `openLocalProject` bridge operation (Native Helper required).
 A browser-based video editor and a workspace you can extend while you create.
 Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in one multitrack timeline. The editor runs on React, TypeScript, WebGPU, and WebCodecs.
 
+On desktop Linux, Vulkan troubleshooting appears only when WebGPU initialization fails and clears after a successful initialization. See [Linux GPU troubleshooting](docs/Features/Linux-Mesa-GPU.md).
+
 [Open the editor](https://www.masterselects.com/) · [Documentation](https://www.masterselects.com/docs/) · [Discord](https://discord.com/invite/K8dApzG3XC) · [Report an issue](https://github.com/Sportinger/MasterSelects/issues)
 
 ![Face Cables effect in MasterSelects](docs/images/screenshot-face-cables.png)

@@ -261,10 +261,6 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
     if (success) {
       engineStore.setEngineInitFailed(false);
       engineStore.setGpuInfo(engine.getGPUInfo());
-      const isLinux = navigator.platform.toLowerCase().includes('linux');
-      if (isLinux) {
-        engineStore.setLinuxVulkanWarning(true);
-      }
       return true;
     }
 

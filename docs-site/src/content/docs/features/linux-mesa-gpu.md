@@ -104,3 +104,13 @@ Use the AI debug bridge (see [Debugging](/features/debugging/)):
   `src/services/mediaRuntime/liveInputRuntime.ts`, and
   `src/services/sceneCutDetection/proxySceneCutAnalyzer.ts` — additional
   shipped consumers of the shared Linux canvas policy.
+
+## Linux WebGPU warning
+
+The Vulkan troubleshooting banner appears only after WebGPU initialization
+fails on desktop Linux, including the worker render host. Successful
+initialization clears the banner. Android is excluded, and dismissing the
+banner remains persistent. The message suggests checking hardware acceleration,
+drivers, and Chrome's Vulkan setting; it does not claim Vulkan is disabled.
+Websites cannot read Chrome's Vulkan flag, so working WebGPU is the condition
+used to hide this warning.

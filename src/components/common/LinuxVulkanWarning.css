@@ -54,6 +54,19 @@
   transition: all 0.15s ease;
 }
 
+.linux-vulkan-warning-dismiss:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.linux-vulkan-warning-dismiss:focus-visible {
+  outline: 2px solid var(--warning-light);
+  outline-offset: 2px;
+}
+
+.linux-vulkan-warning-dismiss {
+  -webkit-tap-highlight-color: transparent;
+}
+
 .linux-vulkan-warning-dismiss:hover {
   background: rgba(0, 0, 0, 0.4);
   border-color: rgba(255, 255, 255, 0.4);
