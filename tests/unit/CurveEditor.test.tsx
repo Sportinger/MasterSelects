@@ -1,5 +1,6 @@
+import { animationFrameClock } from '../helpers/animationFrameClock';
 import { cleanup, fireEvent, render } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
 import { CurveEditor } from '../../src/components/timeline/CurveEditor';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { createMockKeyframe } from '../helpers/mockData';
@@ -24,6 +25,9 @@ function createOpacityKeyframes() {
     }),
   ];
 }
+
+let frames: ReturnType<typeof animationFrameClock>;
+beforeEach(() => { frames = animationFrameClock(); });
 
 describe('CurveEditor behavior', () => {
   afterEach(() => {
@@ -73,12 +77,14 @@ describe('CurveEditor behavior', () => {
     fireEvent.mouseDown(handle, { button: 0, clientX: 66, clientY: 50, buttons: 1 });
     fireEvent.mouseLeave(svg);
     fireEvent.mouseMove(window, { clientX: 500, clientY: -50, buttons: 1 });
+    frames.flush();
 
     expect(onUpdateBezierHandle).toHaveBeenLastCalledWith('kf-left', 'out', expect.objectContaining({
       x: expect.closeTo(4 / 3, 12),
     }), 'update');
 
     fireEvent.mouseMove(window, { clientX: 100, clientY: 50, buttons: 1 });
+    frames.flush();
 
     expect(onUpdateBezierHandle).toHaveBeenLastCalledWith('kf-left', 'out', expect.objectContaining({
       x: 1,
@@ -159,6 +165,7 @@ describe('CurveEditor behavior', () => {
 
     fireEvent.mouseDown(keyframe, { button: 0, clientX: 0, clientY: 50, buttons: 1 });
     fireEvent.mouseMove(window, { clientX: 192, clientY: 45, buttons: 1, shiftKey: true });
+    frames.flush();
 
     expect(onMoveKeyframe).toHaveBeenLastCalledWith('kf-left', 2, 0.5, 'update');
   });

@@ -28,6 +28,9 @@ export function prepareDomainMutation(coordinator: ProjectTransactionCoordinator
       const before = aggregate.before.get(key) ?? null;
       const after = aggregate.after.get(key) ?? null;
       if (canonicalJson(before) === canonicalJson(after)) continue;
+      // A preview gesture reserves its clip root without encoding every intermediate value.
+      // Block-only writers must respect that reservation too.
+      coordinator.touch(token, aggregate.key);
       coordinator.touch(token, key); keys.add(key);
     }
   }

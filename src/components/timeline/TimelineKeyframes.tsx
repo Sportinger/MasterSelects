@@ -1,3 +1,4 @@
+import { useFrameCoalescedDrag } from './hooks/useFrameCoalescedDrag';
 /* @refresh reset */
 // TimelineKeyframes component - Keyframe diamonds/handles with drag support
 
@@ -72,7 +73,6 @@ function TimelineKeyframesComponent({
   onSelectKeyframe,
   onMoveKeyframe,
   onDeleteKeyframes,
-  onUpdateKeyframe,
   onToggleCurveExpanded,
   timeToPixel,
   pixelToTime,
@@ -334,7 +334,7 @@ function TimelineKeyframesComponent({
   }, [onSelectKeyframe, selectedKeyframeIds, clipKeyframes]);
 
   // Handle drag movement
-  useEffect(() => {
+  const handleDragMove = useCallback((clientX: number, shiftKey: boolean) => {
     if (!dragState) return;
 
     const getSnappedTimeDelta = (timeDelta: number) => {
@@ -366,8 +366,7 @@ function TimelineKeyframesComponent({
       return snappedTimeDelta;
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const deltaX = e.clientX - dragState.startX;
+      const deltaX = clientX - dragState.startX;
 
       // Convert pixel delta to time delta
       const currentPixel = timeToPixel(dragState.clipStartTime + dragState.startTime);
@@ -376,7 +375,7 @@ function TimelineKeyframesComponent({
 
       // Calculate time delta from original position
       const rawTimeDelta = newAbsTime - (dragState.clipStartTime + dragState.startTime);
-      const timeDelta = e.shiftKey ? getSnappedTimeDelta(rawTimeDelta) : rawTimeDelta;
+      const timeDelta = shiftKey ? getSnappedTimeDelta(rawTimeDelta) : rawTimeDelta;
 
       // Move all selected keyframes by the same time delta
       for (const [keyframeId, original] of dragState.originalTimes.entries()) {
@@ -387,20 +386,21 @@ function TimelineKeyframesComponent({
         const clampedTime = Math.max(0, Math.min(clip.duration, newTime));
         onMoveKeyframe(keyframeId, clampedTime);
       }
-    };
-
-    const handleMouseUp = () => {
-      setDragState(null);
-    };
-
+  }, [dragState, timeToPixel, pixelToTime, clips, clipKeyframes, onMoveKeyframe]);
+  const pointerQueue = useFrameCoalescedDrag(handleDragMove);
+  useEffect(() => {
+    if (!dragState) return;
+    const handleMouseMove = (event: MouseEvent) => pointerQueue.push(event.clientX, event.shiftKey);
+    const handleMouseUp = () => { pointerQueue.flush(); setDragState(null); };
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-
+    window.addEventListener('blur', handleMouseUp);
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+      window.removeEventListener('blur', handleMouseUp);
     };
-  }, [dragState, timeToPixel, pixelToTime, clips, clipKeyframes, onMoveKeyframe]);
+  }, [dragState, pointerQueue]);
 
   // Handle right-click context menu
   const handleContextMenu = useCallback((
@@ -451,17 +451,10 @@ function TimelineKeyframesComponent({
   // Handle easing selection
   const handleEasingSelect = useCallback((easing: EasingType) => {
     if (contextMenu) {
-      contextMenu.targetKeyframeIds.forEach((keyframeId) => {
-        onUpdateKeyframe(keyframeId, { easing });
-      });
-      // A plain easing must also drop segment handles, which would otherwise keep the bezier curve.
-      const store = useTimelineStore.getState();
-      const targets = new Set(contextMenu.targetKeyframeIds);
-      const curved = [...store.clipKeyframes.values()].some(keys => keys.some(key => targets.has(key.id) && key.handleOut));
-      if (curved) store.applyKeyframeEasingCurve(contextMenu.targetKeyframeIds, null, easing);
+      useTimelineStore.getState().applyKeyframeEasingCurve(contextMenu.targetKeyframeIds, null, easing);
       setContextMenu(null);
     }
-  }, [contextMenu, onUpdateKeyframe]);
+  }, [contextMenu]);
 
   const handleEasingPresetSelect = useCallback((preset: KeyframeEasingPresetId) => {
     if (contextMenu) {
@@ -472,12 +465,10 @@ function TimelineKeyframesComponent({
 
   const handleRotationInterpolationSelect = useCallback((rotationInterpolation: RotationInterpolationMode) => {
     if (contextMenu) {
-      contextMenu.rotationTargetKeyframeIds.forEach((keyframeId) => {
-        onUpdateKeyframe(keyframeId, { rotationInterpolation });
-      });
+      useTimelineStore.getState().updateKeyframes(contextMenu.rotationTargetKeyframeIds, { rotationInterpolation });
       setContextMenu(null);
     }
-  }, [contextMenu, onUpdateKeyframe]);
+  }, [contextMenu]);
 
   const handleDeleteKeyframes = useCallback(() => {
     if (!contextMenu) return;

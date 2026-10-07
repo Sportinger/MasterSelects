@@ -1,3 +1,5 @@
+import { createKeyframeBasicActions } from '../keyframes/keyframeBasicActions';
+import type { TimelineStore } from '../types';
 import type { Keyframe } from '../../../types/keyframes';
 import { getKeyframeAtTime } from '../../../utils/keyframeInterpolation';
 import type { TimelineEditOperationApplyContext } from './editOperationContext';
@@ -10,7 +12,33 @@ import {
 import type { KeyframeEditOperation } from './transactionTypes';
 import type { TimelineEditWarning } from './types';
 
+/** Stage one pointer sample atomically; publication, subscribers and invalidation run once. */
 export function applyKeyframeTransactionMutations(
+  operations: readonly KeyframeEditOperation[],
+  context: TimelineEditOperationApplyContext,
+  warnings: TimelineEditWarning[],
+): void {
+  const before = context.get();
+  let draft = before;
+  let invalidated = false;
+  const patch: Partial<TimelineStore> = {};
+  const set: TimelineEditOperationApplyContext['set'] = partial => {
+    const next = typeof partial === 'function' ? partial(draft) : partial;
+    Object.assign(patch, next);
+    draft = { ...draft, ...next };
+  };
+  const actions = createKeyframeBasicActions(set, () => draft);
+  draft = { ...draft, ...actions, invalidateCache: () => { invalidated = true; } };
+  const warningCount = warnings.length;
+  applyKeyframeOperations(operations, { ...context, get: () => draft, set }, warnings);
+  if (warnings.length !== warningCount) return;
+  const changed = Object.fromEntries(Object.entries(patch).filter(([key, value]) =>
+    before[key as keyof TimelineStore] !== value)) as Partial<TimelineStore>;
+  if (Object.keys(changed).length) context.set(changed);
+  if (invalidated) context.get().invalidateCache();
+}
+
+function applyKeyframeOperations(
   operations: readonly KeyframeEditOperation[],
   context: TimelineEditOperationApplyContext,
   warnings: TimelineEditWarning[],

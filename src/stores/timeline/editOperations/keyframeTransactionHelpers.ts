@@ -11,29 +11,19 @@ export function findKeyframeOwner(
   return null;
 }
 
-export function keyframeSnapshot(clipKeyframes: Map<string, Keyframe[]>): Map<string, string> {
-  const snapshot = new Map<string, string>();
-  for (const [clipId, keyframes] of clipKeyframes) {
-    snapshot.set(clipId, JSON.stringify(keyframes.map(keyframe => ({
-      id: keyframe.id,
-      property: keyframe.property,
-      time: keyframe.time,
-      value: keyframe.value,
-      pathValue: keyframe.pathValue,
-      easing: keyframe.easing,
-      hold: keyframe.hold,
-      handleIn: keyframe.handleIn,
-      handleOut: keyframe.handleOut,
-      cameraOrbitPivot: keyframe.cameraOrbitPivot,
-      rotationInterpolation: keyframe.rotationInterpolation,
-    }))));
-  }
-  return snapshot;
+/** Store keyframe arrays are immutable: unchanged clips need no traversal or serialization. */
+export function keyframeSnapshot(clipKeyframes: Map<string, Keyframe[]>): Map<string, Keyframe[]> {
+  return new Map(clipKeyframes);
 }
 
-export function changedKeyframeClipIds(before: Map<string, string>, after: Map<string, Keyframe[]>): string[] {
+export function changedKeyframeClipIds(before: Map<string, Keyframe[]>, after: Map<string, Keyframe[]>): string[] {
   const clipIds = new Set([...before.keys(), ...after.keys()]);
-  return [...clipIds].filter((clipId) => before.get(clipId) !== keyframeSnapshot(new Map([[clipId, after.get(clipId) ?? []]])).get(clipId));
+  return [...clipIds].filter(clipId => {
+    const a = before.get(clipId), b = after.get(clipId);
+    if (a === b) return false;
+    if (!a || !b || a.length !== b.length) return true;
+    return a.some((key, index) => key !== b[index] && JSON.stringify(key) !== JSON.stringify(b[index]));
+  });
 }
 
 export function clonePathKeyframeValue(pathValue: NonNullable<Keyframe['pathValue']>): NonNullable<Keyframe['pathValue']> {

@@ -340,3 +340,25 @@ every keyframe. Sparse rows keep their existing DOM controls.
 Interpolation shares a weakly cached property/time index for each immutable
 keyframe array and finds adjacent keys by binary search. Editing or undoing
 creates a new array and therefore a fresh index; old indexes can be collected.
+
+
+### Responsive curve editing
+
+Curve editors and timeline diamonds coalesce pointer movements to the latest position once per
+animation frame. Mouse release flushes the last pending position before committing; global graph
+Escape/blur cancellation discards queued movement and restores the existing transaction.
+Easing and rotation-interpolation menu selections update all selected targets in one store action.
+Global curve transaction samples stage their keyframe operations before a single publication and
+cache invalidation. Unchanged clip keyframe arrays are retained, and transaction change detection
+skips those arrays instead of serializing the entire timeline on every pointer event.
+These changes reduce main-thread authoring work; they do not move the entire render engine to a worker.
+
+Editing/re-recording a value at an existing keyframe preserves its easing, hold flag and Bezier
+handles unless an easing is explicitly supplied. This includes inspector and timeline pen edits;
+new keyframes still default to linear.
+
+With repository storage, clip-value and keyframe drag samples stay in the live timeline until the
+gesture ends. The repository reserves each touched clip, retains its initial immutable values,
+and encodes the final values once at commit, creating one undo/save revision. Cancellation restores
+the original values without saving the previews. Unrelated clip edits remain independent. Structural
+edits interleaved with a gesture flush its preview through the normal transactional path first.

@@ -1,3 +1,5 @@
+import { beforeEach, afterEach } from 'vitest';
+import { animationFrameClock } from '../helpers/animationFrameClock';
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
@@ -118,6 +120,10 @@ function TimelineGlobalCurveSurfaceHarness({
     />
   );
 }
+
+let frames: ReturnType<typeof animationFrameClock>;
+beforeEach(() => { frames = animationFrameClock(); });
+afterEach(() => vi.restoreAllMocks());
 
 describe('GlobalCurveEditor', () => {
   it('keeps a recognizable graph grid and mode label when no curves are available', () => {
@@ -347,6 +353,7 @@ describe('GlobalCurveEditor', () => {
 
     fireEvent.mouseDown(point!, { button: 0, clientX: 600, clientY: 183 });
     fireEvent.mouseMove(window, { clientX: 700, clientY: 131 });
+    frames.flush();
     fireEvent.mouseUp(window);
 
     expect(onSelectKeyframe).not.toHaveBeenCalled();
@@ -454,6 +461,7 @@ describe('GlobalCurveEditor', () => {
 
     fireEvent.mouseDown(handle!, { button: 0, clientX: 667, clientY: 148 });
     fireEvent.mouseMove(window, { clientX: 700, clientY: 131 });
+    frames.flush();
     fireEvent.mouseUp(window);
 
     const [begin, update, commit] = applyTimelineEditOperation.mock.calls.map((call) => call[0]);
@@ -496,6 +504,7 @@ describe('GlobalCurveEditor', () => {
 
     fireEvent.mouseDown(handle!, { button: 0, clientX: 667, clientY: 148 });
     fireEvent.mouseMove(window, { clientX: 950, clientY: 131 });
+    frames.flush();
 
     const update = applyTimelineEditOperation.mock.calls[1][0];
     if (update.type !== 'keyframe-transaction-update') throw new Error('Expected update');
@@ -530,6 +539,7 @@ describe('GlobalCurveEditor', () => {
     );
     fireEvent.mouseDown(point!, { button: 0, clientX: 600, clientY: 183 });
     fireEvent.mouseMove(window, { clientX: 650, clientY: 170 });
+    frames.flush();
 
     cancel(rendered.unmount);
 

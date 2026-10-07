@@ -18,6 +18,13 @@ asynchronously through the storage worker. A successful logical edit is not
 itself a disk acknowledgement. Save status distinguishes pending operations,
 confirmed operations and failures. Failed writes remain pending for retry.
 
+Clip-value and keyframe drags keep their intermediate values in the live timeline. An owned
+gesture reserves the affected clip aggregates and keeps only their original immutable values;
+it does not encode every pointer sample into repository entities or composition snapshots.
+Release encodes the final state and saves one revision. Cancellation restores the initial values
+without saving intermediate samples, while unrelated clip edits stay independent. Structural edits
+within the same gesture flush the current preview before taking the normal mutation path.
+
 Filesystem head checks discover the commit folder freshly before and after a
 publication. Each discovery enumerates that folder once and pages through a
 bounded filename snapshot, rather than rescanning it for every page. Independent
