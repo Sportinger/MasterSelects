@@ -448,7 +448,7 @@ export class PathTraceRuntime {
     if (exporting) {
       const nextSlice = Math.min(slices - 1, Math.floor(state.samples / sliceSamples));
       this.pendingExportProgress = { frameIndex: request.exportFrame!.frameIndex, samples: state.samples, targetSamples: target,
-        denoising, complete: converged && this.isFrameComplete(request.targetKey),
+        denoising, denoiseEnabled: denoise, complete: converged && this.isFrameComplete(request.targetKey),
         timeOffset: slices > 1 ? nextSlice / slices * shutterFraction(camera) * request.exportFrame!.frameDuration : 0 };
     }
     publishPtStatus(request.targetKey, { ...this.status(state, settings, converged && denoising ? 'denoising' : converged ? 'converged' : 'converging'), ...stats,

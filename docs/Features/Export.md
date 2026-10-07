@@ -36,6 +36,12 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 
 ### Render Quality
 
+Single-sample Raster exports show frame progress only, without a flashing sample
+counter. Multi-sample renders keep their sample progress visible between frames;
+Denoise appears only when the renderer has enabled that pass. Raster sub-samples
+also improve edge antialiasing with the physical camera bypassed; one sub-sample
+means one ordinary render, not path tracing.
+
 **Raster is the default for new exports.** Choose Path Traced explicitly, or choose
 Composition to follow its render engine. Saved explicit choices remain intact.
 

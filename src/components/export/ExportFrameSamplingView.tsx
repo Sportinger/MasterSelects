@@ -9,12 +9,15 @@ const STAGES: Array<{ key: ExportFrameSampling['stage']; label: string }> = [
 
 /** Second progress level of a path traced export: the current frame's samples, then denoise and encode. */
 export function ExportFrameSamplingView({ sampling }: { sampling: ExportFrameSampling }) {
-  const current = STAGES.findIndex(stage => stage.key === sampling.stage);
+  const denoise = sampling.denoiseEnabled || sampling.stage === 'denoising';
+  if (sampling.targetSamples <= 1 && !denoise) return null;
+  const stages = STAGES.filter(stage => stage.key !== 'denoising' || denoise);
+  const current = stages.findIndex(stage => stage.key === sampling.stage);
   const fraction = sampling.stage === 'sampling' ? sampling.samples / Math.max(1, sampling.targetSamples) : 1;
   return (
     <div className="export-frame-sampling" aria-label="Current frame progress">
       <div className="export-frame-sampling-stages">
-        {STAGES.map((stage, index) => (
+        {stages.map((stage, index) => (
           <span key={stage.key} className={`export-frame-sampling-stage${index === current ? ' active' : index < current ? ' done' : ''}`}>
             {stage.key === 'sampling' ? `${stage.label} ${sampling.samples} / ${sampling.targetSamples}` : stage.label}
           </span>

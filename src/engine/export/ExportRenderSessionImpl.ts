@@ -445,7 +445,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     let current = layers;
     for (let progress = getNativeSceneExportProgress(frameIndex); progress && !progress.complete; progress = getNativeSceneExportProgress(frameIndex)) {
       if (this.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
-      input.onSampling?.({ stage: progress.denoising ? 'denoising' : 'sampling', samples: progress.samples, targetSamples: progress.targetSamples });
+      input.onSampling?.({ stage: progress.denoising ? 'denoising' : 'sampling', samples: progress.samples, targetSamples: progress.targetSamples, denoiseEnabled: progress.denoiseEnabled ?? progress.denoising });
       await progress.gpuDone;
       // Motion blur: the next shutter slice shows the scene a little later in the frame.
       if (progress.timeOffset !== offset && input.layersAtTime) {
@@ -470,8 +470,13 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       }
     }
     if (offset !== 0) this.host.setRenderTimeOverride(input.time);
-    input.onSampling?.({ stage: 'encoding', samples: getNativeSceneExportProgress(frameIndex)?.samples ?? 0,
-      targetSamples: getNativeSceneExportProgress(frameIndex)?.targetSamples ?? 0 });
+    const completed = getNativeSceneExportProgress(frameIndex);
+    // Ordinary raster frames have no accumulation report. Do not invent a 0/0
+    // sampling phase that appears during capture and disappears after each frame.
+    if (completed && (completed.targetSamples > 1 || completed.denoiseEnabled)) {
+      input.onSampling?.({ stage: 'encoding', samples: completed.samples, targetSamples: completed.targetSamples,
+        denoiseEnabled: completed.denoiseEnabled ?? false });
+    }
     return performance.now() - started;
   }
 

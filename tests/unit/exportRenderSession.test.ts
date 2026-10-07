@@ -145,6 +145,18 @@ beforeEach(() => {
 });
 
 describe('ExportRenderSessionImpl', () => {
+  it('does not emit fake 0/0 sampling progress for single-sample raster export', async () => {
+    clearNativeSceneExportProgress();
+    const host = createInjectedHost(), onSampling = vi.fn();
+    const session = new ExportRenderSessionImpl({ runId: 'raster-progress', compositionId: 'composition-a',
+      width: 320, height: 180, stackedAlpha: false, preferZeroCopy: false, host });
+    await session.begin();
+    await session.renderFrame({ time: 0, layers, renderQuality: DEFAULT_EXPORT_RENDER_QUALITY, onSampling });
+    expect(host.readPixels).toHaveBeenCalledOnce();
+    expect(onSampling).not.toHaveBeenCalled();
+    session.dispose();
+  });
+
   it('waits for temporal decoding, rerenders the same frame, and only then captures', async () => {
     const host = createInjectedHost();
     const session = new ExportRenderSessionImpl({ runId: 'temporal', compositionId: 'composition-a',
@@ -187,15 +199,16 @@ describe('ExportRenderSessionImpl', () => {
       reportNativeSceneExportProgress({ frameIndex: 0, samples: 2, targetSamples: 2,
         complete: true, denoising: false, timeOffset: 0 });
     });
-    const layersAtTime = vi.fn(async () => layers);
+    const layersAtTime = vi.fn(async () => layers), onSampling = vi.fn();
     const capture = session.renderFrame({ time: 2, layers, frameStepSeconds: 1 / 30,
-      renderQuality: { ...DEFAULT_EXPORT_RENDER_QUALITY, rasterSubSamples: 2 }, layersAtTime });
+      renderQuality: { ...DEFAULT_EXPORT_RENDER_QUALITY, rasterSubSamples: 2 }, layersAtTime, onSampling });
     await requested;
     expect(host.readPixels).not.toHaveBeenCalled();
     release(); await capture;
     expect(host.render).toHaveBeenCalledTimes(3);
     expect(vi.mocked(host.render).mock.calls[2][1]?.timelineTimeSeconds).toBe(2.01);
     expect(layersAtTime).toHaveBeenCalledWith(2.01);
+    expect(onSampling).toHaveBeenLastCalledWith({ stage: 'encoding', samples: 2, targetSamples: 2, denoiseEnabled: false });
     expect(host.readPixels).toHaveBeenCalledTimes(1);
     session.dispose(); clearNativeSceneExportProgress();
   });
