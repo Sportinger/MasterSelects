@@ -19,7 +19,7 @@ export interface FlockLinkBinding {
 }
 
 export interface FlockDrawPlan {
-  layer: Pick<SceneFlockLayer, 'clipId' | 'worldMatrix'>;
+  layer: Pick<SceneFlockLayer, 'clipId' | 'worldMatrix'> & Partial<Pick<SceneFlockLayer, 'opacity' | 'blendMode'>>;
   session: FlockGpuSession;
   program: FlockProgram;
   render: FlockResolvedRender;

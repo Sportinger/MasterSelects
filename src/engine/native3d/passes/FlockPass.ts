@@ -1,3 +1,4 @@
+import { FlockLayerComposite, flockNeedsLayerComposite } from '../../flock/gpu/FlockLayerComposite';
 import type { SceneCamera, SceneFlockLayer, SceneLayer3DData } from '../../scene/types';
 import type { FlockDrawPlan, FlockPassKind } from '../../flock/gpu/FlockBranchRenderer';
 import type { FlockSimulationRuntime } from '../../flock/runtime/FlockSimulationRuntime';
@@ -10,6 +11,9 @@ import type { PtSphereSetInput } from '../pathtrace/scene/ptSceneBuilder';
  * transparent geometry.
  */
 export class FlockPass {
+  private readonly composite = new FlockLayerComposite();
+  dispose(): void { this.composite.dispose(); }
+
   private readonly runtime: () => FlockSimulationRuntime;
 
   constructor(runtime: () => FlockSimulationRuntime) {
@@ -31,7 +35,7 @@ export class FlockPass {
     const plans: FlockDrawPlan[] = [];
     for (const layer of layers) {
       const plan = registry.prepare(device, commandEncoder, layer, { realtime: realtimePlayback });
-      if (plan) plans.push(plan);
+      if (plan) plans.push({ ...plan, layer: { ...plan.layer, opacity: layer.opacity, blendMode: layer.blendMode } });
     }
     return plans;
   }
@@ -48,16 +52,24 @@ export class FlockPass {
     skipPoints = false,
   ): boolean {
     if (plans.length === 0) return true;
-    return this.runtime()
-      .getRenderer(device)
-      .render(commandEncoder, sceneView, sceneDepthView, plans, camera, pass, temporaryBuffers, skipPoints);
+    const renderer = this.runtime().getRenderer(device);
+    const direct = plans.filter(plan => !flockNeedsLayerComposite(plan));
+    if (!renderer.render(commandEncoder, sceneView, sceneDepthView, direct, camera, pass, temporaryBuffers, skipPoints)) return false;
+    if (pass === 'transparent') for (const plan of plans.filter(flockNeedsLayerComposite)) {
+      if ((plan.layer.opacity ?? 1) <= 0) continue;
+      const view = this.composite.begin(device, commandEncoder, sceneView, camera.viewport.width, camera.viewport.height);
+      if (!renderer.render(commandEncoder, view, sceneDepthView, [plan], camera, 'opaque', temporaryBuffers, false)) return false;
+      if (!renderer.render(commandEncoder, view, sceneDepthView, [plan], camera, 'transparent', temporaryBuffers, false)) return false;
+      this.composite.end(commandEncoder, sceneView, plan, temporaryBuffers);
+    }
+    return true;
   }
 
   /** Point branches for the path tracer; each `emit` writes that branch's spheres into the object pool. */
   pathTracePoints(device: GPUDevice, plans: FlockDrawPlan[], camera: SceneCamera): PtSphereSetInput[] {
     if (plans.length === 0) return [];
     const renderer = this.runtime().getRenderer(device);
-    return renderer.pathTracePoints(plans, camera).map(points => ({
+    return renderer.pathTracePoints(plans.filter(plan => !flockNeedsLayerComposite(plan)), camera).map(points => ({
       key: `flock:${points.key}`, count: points.count, lit: points.lit, version: points.version,
       emit: (encoder, objects, base, temporaries) => renderer.encodePathTraceSpheres(encoder, points, base, objects, camera, temporaries),
     }));

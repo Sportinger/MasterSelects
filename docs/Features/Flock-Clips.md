@@ -631,3 +631,17 @@ have not been measured yet.
 The Wind operator shares its directional-force contract and CPU/WGSL calculation
 with Face Cables. Existing Flock defaults and deterministic gust modulation are
 retained. See [Node Workspace](./Node-Workspace.md) for the common canvas.
+
+### Soft particles and layer compositing
+
+Points offer **Sprite Softness**, **Sprite Opacity Variance**, and **Sprite Motion Blur**.
+Softness expands a Gaussian halo without a flat white center; stable per-particle opacity
+variation avoids flicker. Motion blur stretches the sprite along projected simulation velocity
+(in seconds), preserving energy, with no additional simulation or scene samples. Camera motion
+is not included. Defaults preserve existing presets. These are Raster sprite controls;
+path-traced points remain physical spheres.
+
+The Transform panel's blend mode and opacity also apply to Flock layers. Custom modes isolate
+the depth-tested particle layer and use the editor's shared blend functions against the scene.
+Normal/full-opacity layers keep the direct fast path. Custom-composited point layers remain
+raster overlays when using path tracing so the layer is not rendered twice.

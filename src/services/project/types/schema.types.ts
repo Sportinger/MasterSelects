@@ -62,6 +62,7 @@ export interface ProjectSceneCameraSettings {
   fStop?: number;
   focusDistance?: number;
   shutterAngle?: number;
+  physicalCameraEnabled?: boolean;
 }
 
 export type ProjectLightKind = 'point' | 'panel' | 'environment';

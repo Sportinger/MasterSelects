@@ -209,3 +209,7 @@ Weave supports larger multi-stage formation graphs: reusable compositions respec
 Repeated pure geometry expressions share shader work within a stage, allowing reused motion graphs without duplicating identical samples.
 
 Export uses Raster by default; Render Quality can opt into Path Traced or follow the composition.
+
+Raster 3D cameras support depth-buffer-based focus blur and a Physical Camera bypass. Flock particles include Gaussian
+softness, stable opacity variation and inexpensive velocity streaks; their Transform blend
+mode and opacity composite against the shared scene.

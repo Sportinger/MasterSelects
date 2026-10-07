@@ -485,6 +485,13 @@ export function TransformTab({
         <CameraLensSection
           clipId={clipId}
           settings={cameraSettings}
+          onEnabledChange={(physicalCameraEnabled) => {
+            const current = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+            if (current?.source?.type === 'camera') {
+              updateClip(clipId, { source: { ...current.source, cameraSettings: { ...DEFAULT_SCENE_CAMERA_SETTINGS,
+                ...current.source.cameraSettings, physicalCameraEnabled } } });
+            }
+          }}
           onBatchEnd={handleBatchEnd}
           onBatchStart={handleBatchStart}
           onPropertyChange={handlePropertyChange}

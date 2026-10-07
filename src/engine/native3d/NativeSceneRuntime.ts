@@ -48,6 +48,7 @@ import {
   getModelSequencePreloadOptions,
   prepareModelLayerForRender,
 } from './sceneRenderer/modelSequence';
+import { RasterDepthOfField } from './sceneRenderer/rasterDepthOfField';
 import { SceneToneMap } from './sceneRenderer/sceneToneMap';
 import { PathTraceRuntime } from './pathtrace/runtime/PathTraceRuntime';
 import { collectPathTraceInputs, NO_STRAND_SHADOWS } from './sceneRenderer/pathTracedFrame';
@@ -74,6 +75,7 @@ export class NativeSceneRuntime {
   private sceneDepthView: GPUTextureView | null = null;
   private readonly sceneTargets = new Map<string, SceneTargets>();
   private readonly toneMap = new SceneToneMap();
+  private depthOfField?: RasterDepthOfField;
   private readonly pathTrace = new PathTraceRuntime(() => this.host.requestRender?.());
   private readonly rasterSubSamples = new RasterSubSampleAccumulator();
   private readonly planePass = new PlanePass();
@@ -100,6 +102,9 @@ export class NativeSceneRuntime {
   /** Rebind environment callbacks after HMR while retaining device/session state. */
   setHost(host: NativeSceneHost): void {
     this.host = host;
+    this.depthOfField?.dispose();
+    this.depthOfField = undefined;
+    this.flockPass?.dispose?.();
     this.flockPass = new FlockPass(() => this.host.flockRuntime());
     if (this.slitScanSurfaces?.setHost) this.slitScanSurfaces.setHost(host);
     else if (this.slitScanSurfaces) {
@@ -149,6 +154,7 @@ export class NativeSceneRuntime {
       targets.depthTexture.destroy();
       this.sceneTargets.delete(key);
       this.toneMap.releaseTarget(key);
+      this.depthOfField?.releaseTarget(key);
       this.pathTrace.releaseTarget(key);
       this.rasterSubSamples.releaseTarget(key);
       this.layerSpaceEffectRenderer.releaseTarget(key);
@@ -166,6 +172,7 @@ export class NativeSceneRuntime {
     targets.depthTexture.destroy();
     this.sceneTargets.delete(targetKey);
     this.toneMap.releaseTarget(targetKey);
+    this.depthOfField?.releaseTarget(targetKey);
     this.pathTrace.releaseTarget(targetKey);
     this.rasterSubSamples.releaseTarget(targetKey);
     this.layerSpaceEffectRenderer.releaseTarget(targetKey);
@@ -268,6 +275,7 @@ export class NativeSceneRuntime {
     this.sceneDepthView = null;
     this.sceneDisplayView = null;
     this.toneMap.dispose();
+    this.depthOfField?.dispose();
     this.pathTrace.dispose();
     this.rasterSubSamples.dispose();
     this.stopIrradianceListener();
@@ -277,6 +285,7 @@ export class NativeSceneRuntime {
     this.meshPass.dispose();
     this.voxelPass.dispose();
     this.strandPass.dispose();
+    this.flockPass.dispose();
     this.gizmoPass.dispose();
     this.layerSpaceEffectRenderer.destroy();
     this.slitScanSurfaces?.destroy(); this.slitScanSurfaces = undefined;
@@ -607,7 +616,9 @@ export class NativeSceneRuntime {
       return null;
     }
     if (subSample && resourcesReady) this.rasterSubSamples.accumulate(device, commandEncoder, targetKey, this.sceneTexture, options!.exportFrame!, subSample, temporaryBuffers);
-    this.toneMap.render(device, commandEncoder, targetKey, this.sceneView, this.sceneDisplayView, camera.lens,
+    const focusedView = (this.depthOfField ??= new RasterDepthOfField()).render(
+      device, commandEncoder, targetKey, this.sceneView, this.sceneDepthView, camera, engine);
+    this.toneMap.render(device, commandEncoder, targetKey, focusedView, this.sceneDisplayView, camera.lens,
       options?.renderSettings?.engine ?? 'raster');
     const readTimings = gpuTimings.resolve(commandEncoder, `render:${targetKey}`);
     device.queue.submit([commandEncoder.finish()]);

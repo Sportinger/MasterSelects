@@ -497,3 +497,27 @@ color or dimensions refreshes the upload.
 The browser regression at `tests/browser/weave-point-fields-gpu-check.html`
 compares positions, radius, frames and bounds against the CPU reference, including
 animated input, topology changes, export preparation and the jellyfish preset.
+
+### Raster camera depth of field
+
+The Physical Camera f-Stop and Focus Distance controls now work in Raster preview as well.
+A bounded pair of 37-tap separable HDR passes uses the shared scene depth and the thin-lens circle of confusion;
+it does not repeat geometry evaluation. f-Stop 0 disables it with no extra texture/pass.
+Focus Distance 0 follows the camera target. The blur radius is bounded to 18 output pixels.
+Orthographic cameras and path-traced output bypass this approximation. Transparent surfaces
+inherit the underlying raster depth; it cannot reconstruct hidden or multiple transparent layers.
+Particle sprite softness provides independent soft appearance for those layers.
+Foreground gathers include clear pixels behind thin strands and spread into neighboring
+pixels even when those pixels are in focus, so yarn silhouettes soften as well as solid interiors.
+The camera inspector explicitly shows when f-stop 0 disables depth of field.
+
+Camera numeric properties, including aperture and focus, are registered for the shared
+property authoring and keyframe path. Lens keyframes preserve camera framing and movement.
+
+The **Physical Camera** section has a persistent bypass switch. Off skips exposure,
+custom tone mapping, depth of field and camera shutter processing in preview and export,
+without changing the stored lens parameters, their keyframes or the camera's pose/FOV.
+Particle sprite softness and particle velocity streaks remain independent. Existing projects
+keep physical processing enabled unless explicitly bypassed. Raster focus blur is a bounded
+screen-space approximation; it is not equivalent to path-traced lens sampling, and the
+jellyfish project currently leaves it bypassed while its export appearance is under review.

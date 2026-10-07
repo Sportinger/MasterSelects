@@ -142,6 +142,7 @@ const TRIANGLE_POINT_MAX_PX = 4;
 export function flockPointUsesTriangles(branch: FlockResolvedNode<FlockBranchSpec>, viewportHeight = 1080): boolean {
   // A triangle enclosing a disc does not enclose the corners of a square.
   return branch.p.e.shape !== 'square' && (branch.p.e.sizeMode ?? 'screen') === 'screen'
+    && !(branch.p.n.shutterSeconds > 0) && !(branch.p.n.softness > 0) && !(branch.p.n.opacityVariance > 0)
     && (branch.p.n.size ?? 4) * (1 + Math.abs(branch.p.n.sizeVariance ?? 0)) * viewportHeight / 1080 <= TRIANGLE_POINT_MAX_PX;
 }
 
@@ -149,6 +150,7 @@ export function flockPointUsesTriangles(branch: FlockResolvedNode<FlockBranchSpe
 export function flockPointUsesCompute(branch: FlockResolvedNode<FlockBranchSpec>, viewportHeight: number): boolean {
   return branch.spec.kind === 'points' && branch.p.e.blend === 'opaque'
     && (branch.p.e.sizeMode ?? 'screen') === 'screen'
+    && !(branch.p.n.shutterSeconds > 0) && !(branch.p.n.softness > 0) && !(branch.p.n.opacityVariance > 0)
     && (branch.p.n.size ?? 4) * (1 + Math.abs(branch.p.n.sizeVariance ?? 0)) * viewportHeight / 1080 <= 2;
 }
 
@@ -220,6 +222,9 @@ export function packBranch(
     f[44] = spec.kind === 'points' ? p.n.relief ?? 0 : 0;
     f[45] = spec.kind === 'points' && flockPointUsesTriangles(branch, extras.viewportHeight) ? 1 : 0;
     f[46] = spec.kind === 'points' ? Math.sqrt(flockPointChildren(branch)) : 1;
+    f[47] = spec.kind === 'points' && p.e.shape === 'soft' ? Math.max(0, Math.min(1, p.n.softness ?? 0)) : 0;
+    f[48] = spec.kind === 'points' ? Math.max(0, Math.min(1, p.n.opacityVariance ?? 0)) : 0;
+    f[49] = spec.kind === 'points' ? Math.max(0, Math.min(0.15, p.n.shutterSeconds ?? 0)) : 0;
   }
   let renderKind: FlockRenderKind = spec.kind === 'glyphs' ? 'glyphs' : spec.kind;
   if (spec.kind === 'glyphs' && p.e.glyph === 'cube') renderKind = 'glyphCubes';

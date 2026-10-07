@@ -105,7 +105,11 @@ export const DEFAULT_CAMERA_LENS: CameraLensSettings = {
 };
 
 export function normalizeCameraLens(value: unknown): CameraLensSettings {
-  const input = value && typeof value === 'object' ? value as Partial<CameraLensSettings> : {};
+  const input = value && typeof value === 'object'
+    ? value as Partial<CameraLensSettings> & { physicalCameraEnabled?: boolean } : {};
+  // Only normalize the rendered lens. Durable camera settings retain their values
+  // and curves, so switching the section back on restores the authored look.
+  if (input.physicalCameraEnabled === false) return { ...DEFAULT_CAMERA_LENS, toneMapping: 'standard' };
   return {
     exposure: clampNumber(input.exposure, -16, 16, 0),
     toneMapping: TONE_MAPPINGS.includes(input.toneMapping as ToneMapping) ? input.toneMapping as ToneMapping : 'auto',

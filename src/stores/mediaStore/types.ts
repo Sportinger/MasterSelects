@@ -240,6 +240,8 @@ export interface SceneCameraSettings {
   fStop?: number;
   focusDistance?: number;
   shutterAngle?: number;
+  /** Bypass physical lens processing while preserving lens values and keyframes. */
+  physicalCameraEnabled?: boolean;
 }
 
 export const DEFAULT_SCENE_CAMERA_SETTINGS: SceneCameraSettings = {

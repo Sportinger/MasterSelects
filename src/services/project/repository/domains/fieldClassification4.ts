@@ -184,6 +184,7 @@ export const ProjectSceneCameraSettingsFields = {
   "toneMapping": { class: 'content', owner: 'timeline' },
   "fStop": { class: 'content', owner: 'timeline' },
   "focusDistance": { class: 'content', owner: 'timeline' },
+  "physicalCameraEnabled": { class: 'content', owner: 'timeline' },
   "shutterAngle": { class: 'content', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<ProjectSceneCameraSettings>;
 
