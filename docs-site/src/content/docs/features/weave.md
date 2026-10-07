@@ -19,6 +19,11 @@ steps. Unexposing a value removes it from property discovery without changing ot
 effect instances or catalog-owned parameter contracts.
 Node contracts are listed in the [Node Catalog](/features/node-catalog/#curve-graphs-weave).
 
+Geometry graphs allow 1,024 nodes and 4,096 edges, including expanded reusable
+compositions. Expansion uses the graph's own domain budget and reports that domain
+and its limits on overflow. Each per-point field still has a separate 512-instruction
+limit, so additional formation stages do not lift the shader complexity guard.
+
 ## Default graph
 
 A new Weave effect starts with a plain weave of fuzzy three-ply yarns on a sail

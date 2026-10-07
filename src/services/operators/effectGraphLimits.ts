@@ -6,8 +6,8 @@ export const IMAGE_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 512, edges:
 /** The canonical 140-node/209-edge Analog graph keeps bounded editing headroom. */
 export const ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 256, edges: 512 };
 export const SCENE_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 256, edges: 1024 };
-/** Two editable evolving curl compositions plus their geometry controls. */
-export const GEOMETRY_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 512, edges: 2048 };
+/** Multiple editable force compositions and formation stages; individual fields stay bounded below. */
+export const GEOMETRY_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 1024, edges: 4096 };
 export const GEOMETRY_FIELD_INSTRUCTION_LIMIT = 512;
 /** Expanded lexical scopes are bounded independently from the persisted graph. */
 export const IMAGE_SCOPED_INSTRUCTION_LIMIT = 2048;

@@ -204,3 +204,5 @@ Projects assume saved media locations are available and open sources only when n
 Camera **Continuous / Orbit** keyframes retain the actual Preview Orbit pivot, including off-centre objects and off-axis framing. Saved projects and copied camera keys preserve it; **Shortest Path** restores the direct move. See [camera rotation paths](docs/Features/Keyframes.md#rotation-path).
 
 Exposed values in editable effect graphs participate in property search and keyframe authoring, including their per-instance labels and slider ranges. See [Weave](docs/Features/Weave.md).
+
+Weave supports larger multi-stage formation graphs: reusable compositions respect the geometry graph budget, while per-point shader instruction limits remain separate.

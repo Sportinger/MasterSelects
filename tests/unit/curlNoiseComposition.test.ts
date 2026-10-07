@@ -4,6 +4,7 @@ import { expandOperatorCompositions, packOperatorCompositions } from '../../src/
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { evaluateFieldColumn } from '../../src/services/operators/geometry/curveFieldColumns';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
+import { GEOMETRY_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
 
 function graph(detail = 3.5, strength = 0.18, evolution?: number): EffectOperatorGraph {
   const specs = [
@@ -31,6 +32,25 @@ function field(points: number[][], detail = 3.5, strength = 0.18, evolution?: nu
 }
 
 describe('reusable Curl Noise geometry node group', () => {
+  it('uses the geometry budget for expanded compositions and still rejects overflow', () => {
+    const source = graph(3.5, .18, .2);
+    const expansionGrowth = expandOperatorCompositions(source).nodes.length - source.nodes.length;
+    const fillTo = (total: number) => {
+      while (source.nodes.length + expansionGrowth < total) {
+        const id = `control-${source.nodes.length}`;
+        source.nodes.push({ id, operator: 'values.number', operatorVersion: 1, bindings: {}, constants: { value: 1 } });
+        source.layout[id] = { x: 0, y: 0 };
+      }
+    };
+    fillTo(600);
+    expect(validateWeaveGraph(source)).toEqual([]);
+    expect(expandOperatorCompositions(source).nodes).toHaveLength(600);
+    expect(compileGeometryGraph(source, geometryParameterReader({})).pointCount).toBe(4);
+    expect(() => expandOperatorCompositions({ ...source, domain: 'image' })).toThrow(/image graph budget/);
+    fillTo(GEOMETRY_EFFECT_GRAPH_LIMITS.nodes + 1);
+    expect(() => expandOperatorCompositions(source)).toThrow(/geometry graph budget/);
+  });
+
   it('is discoverable, expands into supported nodes, and survives pack/save/load', () => {
     expect(geometryOwnerOperators().find(op => op.id === 'field.curl-noise3d')?.composition).toBeDefined();
     const source = graph(), expanded = expandOperatorCompositions(source);
