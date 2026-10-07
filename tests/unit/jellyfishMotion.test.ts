@@ -8,7 +8,11 @@ import { evaluateFieldColumn } from '../../src/services/operators/geometry/curve
 import { buildStrandsLayerSources } from '../../src/services/operators/geometry/strandsLayerSource';
 import type { Effect } from '../../src/types/effects';
 
-const jellyfish = () => instantiateEffectPreset(listBuiltInWeavePresets().find(p => p.id === 'builtin:weave:jellyfish-reference')!);
+const jellyfish = () => {
+  const effect = instantiateEffectPreset(listBuiltInWeavePresets().find(p => p.id === 'builtin:weave:jellyfish-reference')!);
+  Object.assign(effect.params, { 'soft-head_value': 0, 'soft-tail_value': 0 });
+  return effect;
+};
 const sample = (effect: Effect, time: number) => evaluateGeometryProgram(compileGeometryGraph(
   effect.operatorGraph!, geometryParameterReader(effect.params), undefined, { simulationTime: time }));
 const maxDifference = (a: CurveSet, b: CurveSet) => a.positions.reduce((max, value, i) => Math.max(max, Math.abs(value - b.positions[i])), 0);

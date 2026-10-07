@@ -45,6 +45,8 @@ describe('built-in Weave studies', () => {
     const effect = instantiateEffectPreset(listBuiltInWeavePresets().find(p => p.id === 'builtin:weave:jellyfish-reference')!);
     effect.params.circulation_value = 0;
     effect.params['curl-strength_value'] = 0;
+    effect.params['soft-head_value'] = 0;
+    effect.params['soft-tail_value'] = 0;
     effect.params['return-motion_value'] = 0;
     effect.params['pulse-strength_value'] = 0;
     const compile = (time: number) => compileGeometryGraph(effect.operatorGraph!, geometryParameterReader(effect.params), undefined, { simulationTime: time });

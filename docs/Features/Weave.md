@@ -418,6 +418,14 @@ saved effects stay in their existing browser library.
   for smaller swirls. **Curl Evolution (turns/s)** controls shape change independently
   of travel; zero freezes evolution. The knitted front is masked out. This is
   procedural displacement without collision or fluid simulation.
+  **Head Wobble** (default 0.035) adds a gentle, spatially coherent motion over
+  the knitted dome. **Tail Soft Noise** (default 0.075) adds broad rounded bends
+  with a different stable noise seed per yarn; neighbouring courses no longer
+  have to follow the same contour. Both use single-octave, low-frequency noise,
+  smoothly masked to their regions, before the swimming pulse. **Soft Motion**
+  (default 0.15) animates their noise field independently of curl evolution.
+  Set either strength to zero to remove that contribution. Closed yarn endpoints
+  stay joined; these are procedural fields, not extra physics or a blur pass.
   **Return Flow (units/s)** sets constant travel speed; negative values reverse
   both directions and zero stops travel. **Irregularity** sets the smaller plain
   noise amplitude (default 0.04, strongly reduced at the knitted front). The
