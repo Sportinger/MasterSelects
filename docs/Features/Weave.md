@@ -323,6 +323,8 @@ receive shadows.
 
 ## Performance
 
+CPU curve fields store scalar and vector columns in packed double-precision buffers and reuse scratch arguments per instruction. Large animated Curl/Noise graphs avoid allocating an argument array and input vectors for every point and operation; field values, curve resolution, animation and export quality stay unchanged. Cached columns and values returned to callers retain independent ownership.
+
 Curves before the first Surface Bind are cached; within them, field expressions
 that did not change are reused per point. Each frame of animated cloth advances the
 simulation on the CPU; the GPU pulls the threads in (Thread Along with one progress
