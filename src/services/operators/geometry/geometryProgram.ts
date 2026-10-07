@@ -302,7 +302,13 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       stages.push({ kind: 'curve-flow', nodeId: node.id, phase: finite(read(node, 'phase'), 'Flow phase')
         + finite(read(node, 'speed'), 'Flow speed') * (context.simulationTime ?? context.time ?? 0) });
     } else if (node.operator === 'geometry.curve-contact') {
-      stages.push({ kind: 'curve-contact', nodeId: node.id, radius: finite(read(node, 'radius'), 'Contact radius'),
+      const influence = compileField(node, 'strength', 'scalar');
+      if (influence && (influence.instructions.length !== 1 || influence.instructions[0].operation !== 'constant'))
+        throw new Error('Curve Contact Strength must be uniform: connect a value or clock envelope, not a per-point field.');
+      const strength = finite(influence ? influence.instructions[0].value ?? 0 : read(node, 'strength') ?? 1, 'Contact strength');
+      if (strength < 0 || strength > 1) throw new Error('Curve Contact strength must be between 0 and 1.');
+      // Omitting a disabled solve also restores the ordinary GPU deformation chain.
+      if (strength > 0) stages.push({ kind: 'curve-contact', nodeId: node.id, strength, radius: finite(read(node, 'radius'), 'Contact radius'),
         iterations: Math.round(finite(read(node, 'iterations'), 'Contact iterations')), smoothing: finite(read(node, 'smoothing'), 'Contact smoothing') });
     } else if (node.operator === 'geometry.extend') {
       stages.push({ kind: 'extend', nodeId: node.id, length: Math.max(0, finite(read(node, 'length'), 'Extend length')),

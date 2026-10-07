@@ -111,7 +111,8 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     } else if (stage.kind === 'curve-flow') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase']) || !finite(stage.phase)) return false;
     } else if (stage.kind === 'curve-contact') {
-      if (index === 0 || points > CONTACT_POINT_LIMIT || !exactKeys(stage, ['kind', 'nodeId', 'radius', 'iterations', 'smoothing'])
+      if (index === 0 || points > CONTACT_POINT_LIMIT || !exactKeys(stage, ['kind', 'nodeId', 'radius', 'iterations', 'smoothing', 'strength'])
+        || (stage.strength !== undefined && (!finite(stage.strength) || stage.strength < 0 || stage.strength > 1))
         || !finite(stage.radius) || stage.radius < 0.0005 || stage.radius > 10 || !finite(stage.smoothing) || stage.smoothing < 0 || stage.smoothing > 1
         || !Number.isInteger(stage.iterations) || (stage.iterations as number) < 1 || (stage.iterations as number) > 128) return false;
     } else if (stage.kind === 'yarn-profile') {

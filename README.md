@@ -171,6 +171,8 @@ Projects [save continuously](docs/Features/Project-Persistence.md), with durable
 Filesystem saves page through one bounded filename snapshot per fresh history-folder check, avoiding repeated physical scans as history grows.
 Large redo-preference lists are stored in bounded blocks so long editing histories can continue saving without dropping remembered branches.
 
+[Weave](docs/Features/Weave.md) supports fading Curve Contact corrections for selected animation intervals. Raster strand layers keep their own projected image effects, including Glow on transparent backgrounds, when sharing a scene with other objects.
+
 Chrome or Edge on desktop is a good starting point. Editing and rendering run locally in the browser; hosted AI and media generation use external services and may require credits. Local AI features may download models on first use. MasterSelects is under active development, so keep backups of important projects.
 
 ## Run locally

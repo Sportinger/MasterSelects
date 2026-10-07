@@ -105,11 +105,24 @@ a small allowance for spline interpolation. Iterations controls contact converge
 Correction Smoothing spreads displacement without smoothing away the input stitches.
 The modifier preserves point IDs, per-point colors and closed seams, and supports up
 to 16,384 points. It evaluates deterministically at each requested frame on the CPU.
+Strength blends the positional correction from zero to one and accepts an animated
+parameter or a uniform clock/value input. Zero removes the solve from the compiled
+program, retaining the original positions and the usual GPU deformation path.
+This allows contact correction only during an unfolding interval; per-point
+Strength fields are rejected explicitly. Partial strength can leave overlap.
 This is geometric contact projection, not a dynamic simulation: it does not conserve
 length, prevent tunneling between frames or calculate temporal friction. Finite
 iterations can leave residual overlaps in crowded configurations; flyaway hairs are
 decorative and do not collide. Use Rod Simulation for integrated rod dynamics and
 friction with a fixed rest shape.
+
+In Raster rendering, image effects after Weave (including Glow) process each
+strand layer's own projected image before it joins the shared 3D scene. The layer
+retains its depth and opacity; other strand and particle layers are not included
+in its effect input. Generated halo pixels outside the strands occupy the far
+plane. Glow expands alpha coverage and accounts for source coverage, so its halo
+survives transparent backgrounds. Per-layer projected strand stacks currently
+apply to Raster; mixed path-traced scenes do not gain this per-object image pass.
 
 Strand Render accepts an optional **Color** vector field (RGB, 0 to 1), replacing
 its uniform color. Curve Info's Curve Param and Strand Index can drive gradients

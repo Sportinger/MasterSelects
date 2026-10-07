@@ -105,11 +105,24 @@ a small allowance for spline interpolation. Iterations controls contact converge
 Correction Smoothing spreads displacement without smoothing away the input stitches.
 The modifier preserves point IDs, per-point colors and closed seams, and supports up
 to 16,384 points. It evaluates deterministically at each requested frame on the CPU.
+Strength blends the positional correction from zero to one and accepts an animated
+parameter or a uniform clock/value input. Zero removes the solve from the compiled
+program, retaining the original positions and the usual GPU deformation path.
+This allows contact correction only during an unfolding interval; per-point
+Strength fields are rejected explicitly. Partial strength can leave overlap.
 This is geometric contact projection, not a dynamic simulation: it does not conserve
 length, prevent tunneling between frames or calculate temporal friction. Finite
 iterations can leave residual overlaps in crowded configurations; flyaway hairs are
 decorative and do not collide. Use Rod Simulation for integrated rod dynamics and
 friction with a fixed rest shape.
+
+In Raster rendering, image effects after Weave (including Glow) process each
+strand layer's own projected image before it joins the shared 3D scene. The layer
+retains its depth and opacity; other strand and particle layers are not included
+in its effect input. Generated halo pixels outside the strands occupy the far
+plane. Glow expands alpha coverage and accounts for source coverage, so its halo
+survives transparent backgrounds. Per-layer projected strand stacks currently
+apply to Raster; mixed path-traced scenes do not gain this per-object image pass.
 
 Strand Render accepts an optional **Color** vector field (RGB, 0 to 1), replacing
 its uniform color. Curve Info's Curve Param and Strand Index can drive gradients
@@ -497,3 +510,27 @@ color or dimensions refreshes the upload.
 The browser regression at `tests/browser/weave-point-fields-gpu-check.html`
 compares positions, radius, frames and bounds against the CPU reference, including
 animated input, topology changes, export preparation and the jellyfish preset.
+
+### Raster camera depth of field
+
+The Physical Camera f-Stop and Focus Distance controls now work in Raster preview as well.
+A bounded pair of 37-tap separable HDR passes uses the shared scene depth and the thin-lens circle of confusion;
+it does not repeat geometry evaluation. f-Stop 0 disables it with no extra texture/pass.
+Focus Distance 0 follows the camera target. The blur radius is bounded to 18 output pixels.
+Orthographic cameras and path-traced output bypass this approximation. Transparent surfaces
+inherit the underlying raster depth; it cannot reconstruct hidden or multiple transparent layers.
+Particle sprite softness provides independent soft appearance for those layers.
+Foreground gathers include clear pixels behind thin strands and spread into neighboring
+pixels even when those pixels are in focus, so yarn silhouettes soften as well as solid interiors.
+The camera inspector explicitly shows when f-stop 0 disables depth of field.
+
+Camera numeric properties, including aperture and focus, are registered for the shared
+property authoring and keyframe path. Lens keyframes preserve camera framing and movement.
+
+The **Physical Camera** section has a persistent bypass switch. Off skips exposure,
+custom tone mapping, depth of field and camera shutter processing in preview and export,
+without changing the stored lens parameters, their keyframes or the camera's pose/FOV.
+Particle sprite softness and particle velocity streaks remain independent. Existing projects
+keep physical processing enabled unless explicitly bypassed. Raster focus blur is a bounded
+screen-space approximation; it is not equivalent to path-traced lens sampling, and the
+jellyfish project currently leaves it bypassed while its export appearance is under review.

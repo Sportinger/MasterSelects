@@ -409,7 +409,7 @@ export class SharedScene3DProcessor {
       for (const layer of renderLayers3D) nodePreviewTextureTap.capture(`scene:${layer.clipId}`, device, encoder, d.sampler, textureView, width, height);
       device.queue.submit([encoder.finish()]);
     }
-    const compositeStyle = sceneCompositeStyle(layerData, renderLayers3D, !!(d.effectsPipeline && d.sampler));
+    const compositeStyle = sceneCompositeStyle(layerData, renderLayers3D, !!(d.effectsPipeline && d.sampler), renderer.hasProjectedStrandEffects(sceneTargetKey));
     const sceneTexturePixelScale = calculateSourcePixelScale(
       width,
       height,

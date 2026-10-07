@@ -26,6 +26,16 @@ and source. Other effects and structural settings are not implicitly enabled.
   byte-texture binding described below.
 - `time` contains Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
+## Glow on transparent and 3D layers
+
+Glow samples premultiplied light energy and expands alpha into its halo. Hidden RGB
+in fully transparent pixels contributes no light, and pixel-radius sampling stays
+circular on portrait frames. Canonical saved Glow recipes, including composition
+folders, upgrade automatically; custom rewired graphs retain their own behavior.
+Raster Weave strands process their own projected effect stack before joining the
+shared 3D scene, so Glow works with other strands or particles without affecting
+those layers. See [Weave](/features/weave/) for rendering limitations.
+
 ## Slit Scan
 
 **Time field source → Shape target (tracked 2D motion)** reuses a source tracking

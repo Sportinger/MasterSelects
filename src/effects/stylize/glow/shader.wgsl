@@ -29,19 +29,19 @@ fn glowFragment(input: VertexOutput) -> @location(0) vec4f {
   let samplesPerRing = i32(clamp(params.samplesPerRing, 4.0, 64.0));
 
   for (var ring = 1; ring <= rings; ring++) {
-    let ringRadius = f32(ring) * params.radius * texelSize.x * 10.0;
+    let ringRadius = f32(ring) * params.radius * 10.0;
     let ringWeight = gaussian(f32(ring) / f32(rings), params.softness + 0.3);
 
     for (var i = 0; i < samplesPerRing; i++) {
       let angle = f32(i) * TAU / f32(samplesPerRing) + f32(ring) * 0.5; // Offset each ring
-      let offset = vec2f(cos(angle), sin(angle)) * ringRadius;
+      let offset = vec2f(cos(angle), sin(angle)) * texelSize * ringRadius;
 
       let sampleColor = textureSample(inputTex, texSampler, input.uv + offset);
       let sampleLuma = luminance(sampleColor.rgb);
 
       // Soft threshold with smoothstep
       let brightFactor = smoothstep(params.threshold - 0.1, params.threshold + 0.1, sampleLuma);
-      let brightColor = sampleColor.rgb * brightFactor;
+      let brightColor = sampleColor.rgb * sampleColor.a * brightFactor;
 
       glow += brightColor * ringWeight;
       totalWeight += ringWeight;
@@ -51,13 +51,15 @@ fn glowFragment(input: VertexOutput) -> @location(0) vec4f {
   // Also sample center
   let centerLuma = luminance(color.rgb);
   let centerBright = smoothstep(params.threshold - 0.1, params.threshold + 0.1, centerLuma);
-  glow += color.rgb * centerBright * 2.0;
+  glow += color.rgb * color.a * centerBright * 2.0;
   totalWeight += 2.0;
 
   glow /= totalWeight;
 
   // Combine: original + glow (additive)
-  let result = color.rgb + glow * params.amount * 2.0;
-
-  return vec4f(clamp(result, vec3f(0.0), vec3f(1.0)), color.a);
+  let halo = glow * params.amount * 2.0;
+  let coverage = clamp(max(halo.r, max(halo.g, halo.b)), 0.0, 1.0);
+  let alpha = color.a + coverage * (1.0 - color.a);
+  let result = (color.rgb * color.a + halo) / max(alpha, 0.000001);
+  return vec4f(clamp(result, vec3f(0.0), vec3f(1.0)), alpha);
 }

@@ -133,7 +133,7 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
     id: '__scene_3d_nested__',
     name: '3D Scene (Nested)',
     visible: true,
-    ...sceneCompositeStyle(layerData, layers3D, !!(effectsPipeline && sampler)),
+    ...sceneCompositeStyle(layerData, layers3D, !!(effectsPipeline && sampler), renderer.hasProjectedStrandEffects('main')),
     source: { type: 'image' },
     position: { x: 0, y: 0, z: 0 },
     scale: { x: 1, y: 1 },

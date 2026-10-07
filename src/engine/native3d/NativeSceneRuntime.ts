@@ -1,6 +1,7 @@
 import { Logger } from '../../services/logger';
 import { flockGpuTimings } from '../flock/gpu/FlockGpuTimings';
 import { SlitScanSceneSurfaces } from './sceneRenderer/SlitScanSceneSurfaces';
+import { StrandProjectedEffects } from './sceneRenderer/StrandProjectedEffects';
 import { hasPendingTemporalPreparations, isCollectingTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
@@ -91,6 +92,8 @@ export class NativeSceneRuntime {
   private readonly lastRenderableModelSequenceUrls = new Map<string, string>();
   private readonly layerSpaceEffectRenderer = new LayerSpaceEffectRenderer();
   private slitScanSurfaces?: SlitScanSceneSurfaces;
+  private strandImageEffects?: StrandProjectedEffects;
+  hasProjectedStrandEffects(targetKey = 'main'): boolean { return this.strandImageEffects?.hasApplied(targetKey) ?? false; }
   private readonly stopIrradianceListener: () => void;
   constructor(host: NativeSceneHost) {
     this.host = host;
@@ -159,6 +162,7 @@ export class NativeSceneRuntime {
       this.rasterSubSamples.releaseTarget(key);
       this.layerSpaceEffectRenderer.releaseTarget(key);
       this.slitScanSurfaces?.releaseTarget(key);
+      this.strandImageEffects?.releaseTarget(key);
       this.faceCablePass.releaseTarget(key);
     }
   }
@@ -177,6 +181,7 @@ export class NativeSceneRuntime {
     this.rasterSubSamples.releaseTarget(targetKey);
     this.layerSpaceEffectRenderer.releaseTarget(targetKey);
     this.slitScanSurfaces?.releaseTarget(targetKey);
+    this.strandImageEffects?.releaseTarget(targetKey);
     this.faceCablePass.releaseTarget(targetKey);
   }
 
@@ -289,6 +294,7 @@ export class NativeSceneRuntime {
     this.gizmoPass.dispose();
     this.layerSpaceEffectRenderer.destroy();
     this.slitScanSurfaces?.destroy(); this.slitScanSurfaces = undefined;
+    this.strandImageEffects?.destroy(); this.strandImageEffects = undefined;
     this.modelRuntimeCache.clear();
   }
 
@@ -484,7 +490,9 @@ export class NativeSceneRuntime {
 
     if (!pathTraced && !this.voxelPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, readyVoxels, camera, temporaryBuffers)) return null;
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'opaque', temporaryBuffers, pathTraced)) return null;
-    if (!pathTraced && !this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandShadows, camera, temporaryBuffers)) return null;
+    if (pathTraced) this.strandImageEffects?.releaseTarget(targetKey);
+    else if (!(this.strandImageEffects ??= new StrandProjectedEffects()).render(targetKey, this.strandPass,
+      device, commandEncoder, this.sceneView, this.sceneDepthView, strandShadows, camera, temporaryBuffers, layerSpaceEffects)) return null;
 
     for (const layer of sortedLayers) {
       const renderSettings = layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;

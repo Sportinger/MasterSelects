@@ -39,7 +39,7 @@ import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
 import { createDefaultBlurEffectGraph, type EditableBlurEffectType } from './blurEffectGraphs';
 import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectType } from './directionalBlurEffectGraphs';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
-import { createDefaultGlowGraph } from './glowEffectGraph';
+import { createDefaultGlowGraph, upgradeGlowGraph } from './glowEffectGraph';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
 import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
@@ -236,7 +236,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     if (known && known.signature === signature && (options.inspectionOnly || known.params === effect.params)) return known.graph;
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
-      : effectType === 'gaussian-blur' ? organizeGaussianBlurGraph(saved) : saved;
+      : effectType === 'gaussian-blur' ? organizeGaussianBlurGraph(saved) : effectType === 'glow' ? upgradeGlowGraph(expandOperatorCompositions(saved)) : saved;
     const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
