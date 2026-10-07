@@ -7,6 +7,8 @@ import type {
 import type { MaskPathKeyframeValue } from './masks';
 
 export interface Keyframe {
+  /** World pivot of the manual orbit arriving at this pose (independent of outgoing rotation mode). */
+  cameraOrbitPivot?: { x: number; y: number; z: number };
   /** Materialized linked output; its source curve remains authoritative. */
   animationSource?: { nodeId: string; channelId: string; keyframeId: string };
   hold?: boolean;

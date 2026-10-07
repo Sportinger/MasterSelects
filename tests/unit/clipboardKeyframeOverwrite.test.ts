@@ -52,11 +52,13 @@ describe('keyframe paste replacement', () => {
   });
 
   it('copies curve handles without sharing mutable objects with the clipboard', () => {
-    const copied = { ...key(0, 0.5), handleOut: { x: 0.2, y: 0.3 } };
+    const copied = { ...key(0, 0.5), handleOut: { x: 0.2, y: 0.3 }, cameraOrbitPivot: { x: 1, y: 2, z: 3 } };
     const result = planPastedKeyframes({
       targetClip, existing: [], clipLocalTime: 1, clipboardKeyframes: [copied], createId: () => 'pasted',
     });
     expect(result.keyframes[0].handleOut).toEqual(copied.handleOut);
     expect(result.keyframes[0].handleOut).not.toBe(copied.handleOut);
+    expect(result.keyframes[0].cameraOrbitPivot).toEqual(copied.cameraOrbitPivot);
+    expect(result.keyframes[0].cameraOrbitPivot).not.toBe(copied.cameraOrbitPivot);
   });
 });

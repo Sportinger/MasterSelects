@@ -24,6 +24,7 @@ export function keyframeSnapshot(clipKeyframes: Map<string, Keyframe[]>): Map<st
       hold: keyframe.hold,
       handleIn: keyframe.handleIn,
       handleOut: keyframe.handleOut,
+      cameraOrbitPivot: keyframe.cameraOrbitPivot,
       rotationInterpolation: keyframe.rotationInterpolation,
     }))));
   }

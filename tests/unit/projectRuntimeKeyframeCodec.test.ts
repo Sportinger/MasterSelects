@@ -13,7 +13,7 @@ function runtimeClip(): TimelineClip {
 describe('current runtime keyframe canonical serialization', () => {
   it('encodes a newly authored fade without runtime clipId while preserving curve and linked animation fields', () => {
     const frame: Keyframe = { id: 'fade', clipId: 'clip', property: 'opacity', time: 4.106370327183125,
-      value: 1, easing: 'ease-out', hold: true, rotationInterpolation: 'continuous',
+      value: 1, easing: 'ease-out', hold: true, rotationInterpolation: 'continuous', cameraOrbitPivot: { x: 2, y: -1, z: 3 },
       handleIn: { x: -0.2, y: 0.1 }, handleOut: { x: 0.3, y: 0.4 },
       animationSource: { nodeId: 'node', channelId: 'channel', keyframeId: 'original-frame' },
     };

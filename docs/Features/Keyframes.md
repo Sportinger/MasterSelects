@@ -267,7 +267,23 @@ The data model also supports `bezier` easing. A keyframe becomes Bezier-driven o
 Rotation keyframes also expose a segment path option in the right-click context menu:
 
 - Shortest Path: rotate through the smallest angular difference. Camera clips use this by default.
-- Continuous / Orbit: preserve the raw angle delta, so values like `1x + 0deg` produce a full 360-degree turn. Camera positions recorded with Preview Orbit follow the circular path around the shared world pivot instead of cutting straight between the keyed eye positions.
+- Continuous / Orbit: preserve the raw angle delta, so values like `1x + 0deg` produce a full 360-degree turn. Camera positions recorded with Preview Orbit follow the recorded world pivot, including off-centre objects and off-axis framing, instead of cutting straight between the keyed eye positions.
+
+For a camera move, set a pose keyframe, move the playhead, orbit in the normal
+camera preview, then set the next pose keyframe. Switch a **rotation keyframe at
+the start** of the segment to **Continuous / Orbit**. Preview navigation also
+updates keyed camera channels automatically. The arriving pose saves the gesture's
+pivot independently of the outgoing path mode; switching back to Shortest Path
+restores the direct connection. The pivot survives project save/reload and keyframe
+copy/paste. Panning or FPS-looking at that time clears the recorded orbit intent.
+The temporary Edit camera only changes the viewport and does not record timeline
+camera motion.
+
+Older look-at orbits can recover their shared target from the two camera poses.
+Ambiguous older moves retain their keyed positions and log that no pivot could be
+recovered; record the second pose with Preview Orbit to make the pivot explicit.
+Two poses define the angular interpolation, including unwrapped full turns, not
+every intermediate mouse gesture. Use additional pose keys for a freeform route.
 
 Like easing, the rotation path is stored on the keyframe that starts the segment leading into the next keyframe. This lets one camera move use shortest-path aiming while the next segment performs a deliberate orbit.
 

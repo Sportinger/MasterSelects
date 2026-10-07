@@ -103,6 +103,7 @@ export interface ClipboardKeyframeData {
   value: number;
   pathValue?: Keyframe['pathValue'];
   easing: EasingType;
+  cameraOrbitPivot?: Keyframe['cameraOrbitPivot'];
   rotationInterpolation?: Keyframe['rotationInterpolation'];
   handleIn?: BezierHandle;
   handleOut?: BezierHandle;
