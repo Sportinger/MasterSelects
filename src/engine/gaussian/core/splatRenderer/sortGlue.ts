@@ -57,6 +57,12 @@ export function updateWorkerSortFrame(
   return { canUseWorkerSort, usedWorkerSort, drawCount };
 }
 
+export interface GpuSortOrder {
+  buffer: GPUBuffer;
+  /** Valid sorted entries in `buffer`. */
+  count: number;
+}
+
 interface GpuSortPassLike {
   readonly isInitialized: boolean;
   execute(
@@ -67,21 +73,25 @@ interface GpuSortPassLike {
     visibleCount: number,
     viewMatrix: Float32Array,
     worldMatrix: Float32Array,
+    outputKey: string,
   ): GPUBuffer | null;
+  getOrder(outputKey: string): GpuSortOrder | null;
 }
 
-export interface GpuSortSceneState {
+/** GPU sort cadence of one draw stream; `key` is also its sort-pass output key. */
+export interface GpuSortStreamState {
+  readonly key: string;
   framesSinceSort: number;
-  sortedBindGroup: GPUBindGroup | null;
-  identityIndexBuffer: GPUBuffer;
+  sortedSourceCount: number;
 }
 
 export interface GpuSortFrameOptions {
-  scene: GpuSortSceneState;
+  stream: GpuSortStreamState;
   sortPass: GpuSortPassLike;
   device: GPUDevice;
   commandEncoder: GPUCommandEncoder;
   activeSplatBuffer: GPUBuffer;
+  identityIndexBuffer: GPUBuffer;
   cullIndexBuffer: GPUBuffer | null;
   effectiveSplatCount: number;
   drawCount: number;
@@ -93,34 +103,34 @@ export interface GpuSortFrameOptions {
   worldMatrix: Float32Array;
 }
 
-export interface GpuSortFrameResult {
-  sortedIndexBuffer: GPUBuffer | null;
-  shouldSort: boolean;
-  sortThisFrame: boolean;
-}
-
-export function updateGpuSortFrame(options: GpuSortFrameOptions): GpuSortFrameResult {
+/**
+ * GPU depth order for this draw: sorted now, or on frames that skip sorting the stream's
+ * own last order (each stream sorts into its own buffer, so a skipped frame never picks up
+ * another layer's order). Null when the draw uses cull or identity indices instead.
+ */
+export function updateGpuSortFrame(options: GpuSortFrameOptions): GpuSortOrder | null {
+  const { stream, sortPass, sortFrequency } = options;
   const shouldSort = !options.canUseWorkerSort &&
     options.effectiveSplatCount > SORT_THRESHOLD &&
     (options.precise || options.hasValidatedCullResult);
-  const sortThisFrame = shouldSort && (
-    options.sortFrequency !== 0 && (
-      !options.scene.sortedBindGroup ||
-      options.sortFrequency <= 1 ||
-      options.scene.framesSinceSort + 1 >= options.sortFrequency
-    )
-  );
+  // Frequency 0 turns sorting off: draw the current visible set, never a frozen order.
+  if (!shouldSort || sortFrequency === 0) return null;
 
-  let sortedIndexBuffer: GPUBuffer | null = null;
-  if (sortThisFrame && options.sortPass.isInitialized) {
+  // An order is only valid for the splat set it was built from.
+  const lastOrder = stream.sortedSourceCount === options.effectiveSplatCount
+    ? sortPass.getOrder(stream.key)
+    : null;
+  const sortThisFrame = !lastOrder || sortFrequency <= 1 || stream.framesSinceSort + 1 >= sortFrequency;
+
+  if (sortThisFrame && sortPass.isInitialized) {
     const sourceIndexBuffer = options.precise
-      ? options.scene.identityIndexBuffer
-      : (options.cullIndexBuffer ?? options.scene.identityIndexBuffer);
+      ? options.identityIndexBuffer
+      : (options.cullIndexBuffer ?? options.identityIndexBuffer);
     const sortCount = options.precise
       ? options.effectiveSplatCount
       : (options.hasValidatedCullResult ? options.drawCount : options.effectiveSplatCount);
 
-    const sorted = options.sortPass.execute(
+    const sorted = sortPass.execute(
       options.device,
       options.commandEncoder,
       options.activeSplatBuffer,
@@ -128,15 +138,17 @@ export function updateGpuSortFrame(options: GpuSortFrameOptions): GpuSortFrameRe
       sortCount,
       options.viewMatrix,
       options.worldMatrix,
+      stream.key,
     );
 
     if (sorted) {
-      sortedIndexBuffer = sorted;
-      options.scene.framesSinceSort = 0;
+      stream.framesSinceSort = 0;
+      stream.sortedSourceCount = options.effectiveSplatCount;
+      return { buffer: sorted, count: sortCount };
     }
-  } else if (shouldSort) {
-    options.scene.framesSinceSort++;
+  } else {
+    stream.framesSinceSort++;
   }
 
-  return { sortedIndexBuffer, shouldSort, sortThisFrame };
+  return lastOrder;
 }

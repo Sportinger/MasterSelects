@@ -23,7 +23,9 @@ import { useMediaStore } from '../../stores/mediaStore';
 import { getToolPolicy } from '../aiTools/policy';
 import { NodeGraphStreamParser, NODE_GRAPH_STREAM_PROTOCOL } from '../nodeGraph/nodeGraphStream';
 import { FlashBoardNodeGraphStream, type NodeStreamFailure } from './FlashBoardNodeGraphStream';
-import { NodeStreamFeedback, nodeStreamUserNotice } from './FlashBoardNodeStreamFeedback';
+import { NodeStreamFeedback, nodeStreamUserNotice, sceneStreamUserNotice } from './FlashBoardNodeStreamFeedback';
+import { SceneStreamParser } from '../scenes/sceneStream';
+import { SceneStreamExecutor } from '../scenes/sceneStreamExecutor';
 import { DIRECT_EAGER_TOOLS, compactDirectToolEntry, directToolSchemaEntry, localDirectToolResult } from './FlashBoardDirectToolSurface';
 import { directToolContentItems } from './FlashBoardDirectToolResultContent';
 import { CodexStreamDiagnostics } from './CodexStreamDiagnostics';
@@ -243,6 +245,11 @@ export function buildDirectCodexVerifiedResponse(
 
 /** Reference material goes out once per thread; resumed turns already carry it in history. */
 const NODE_CATALOG_ON_DEMAND = 'Before authoring nodes, call searchNodeCatalog with list: true once for the full compact inventory, then getNodeDefinitions once with every ID you need.';
+/** Scene streams are referenced compactly; the full format is one tool call away. */
+const SCENE_STREAM_ON_DEMAND = {
+  fence: 'ms-scene-v1',
+  use: 'To build or rebuild a named part of the timeline (tracks, clips, stick figures, keys, effects, MIDI), stream a ```ms-scene-v1 block in your answer: each record runs while you write, and streaming the same scene name again replaces what it created. Call getStreamProtocol {"format":"ms-scene-v1"} once first for its records and allowed tools.',
+};
 
 export function directTurnInput(request: FlashBoardChatRequest, includeReference = true): Array<Record<string, unknown>> {
   const input: Array<Record<string, unknown>> = [{
@@ -251,7 +258,7 @@ export function directTurnInput(request: FlashBoardChatRequest, includeReference
   }];
   // The ~8k-token inventory is fetched on demand (searchNodeCatalog list), so
   // turns without node work do not carry it through every model call.
-  if (includeReference) input.push({ type: 'text', text: JSON.stringify({ nodeCatalog: NODE_CATALOG_ON_DEMAND, nodeGraphStream: NODE_GRAPH_STREAM_PROTOCOL }) });
+  if (includeReference) input.push({ type: 'text', text: JSON.stringify({ nodeCatalog: NODE_CATALOG_ON_DEMAND, nodeGraphStream: NODE_GRAPH_STREAM_PROTOCOL, sceneStream: SCENE_STREAM_ON_DEMAND }) });
   for (const reference of request.visualReferences ?? []) {
     input.push({ detail: 'auto', type: 'image', url: reference.dataUrl });
   }
@@ -306,6 +313,7 @@ async function runDirectCodexChat(
   const fail = (error: Error) => {
     terminalError = error;
     nodeStream.stop();
+    sceneStream.stop();
     for (const waiter of pending.values()) waiter.reject(error);
     pending.clear();
     completionReject?.(error);
@@ -323,10 +331,10 @@ async function runDirectCodexChat(
       send({ id, method, params });
     });
   };
-  const nodeStream = new FlashBoardNodeGraphStream(async (toolName, args, sequence) => {
-    const callId = `${turnId}:${sequence}`;
+  // Node and scene stream records run through the same audited tool boundary as tool calls.
+  const runStreamTool = async (toolName: string, args: Record<string, unknown>, callId: string): Promise<ToolResult> => {
     const caller = callerForDirectTool(toolName);
-    if (!caller || resumeOnly) return { success: false, error: 'Node stream is unavailable in a resumed turn.' };
+    if (!caller || resumeOnly) return { success: false, error: 'Stream records are unavailable in a resumed turn.' };
     const safeLabel = safeToolActivityLabel(toolName);
     emitAgentActivity(request, { kind: 'operation', operationId: callId, phase: 'started', safeLabel, toolName });
     const guarded = turnToolPolicy.beforeTool(toolName, args);
@@ -340,8 +348,13 @@ async function runDirectCodexChat(
     emitAgentActivity(request, { kind: 'operation', operationId: callId, phase: result.success ? 'completed' : 'failed', safeLabel, toolName });
     if (result.success && toolName !== 'focusNodeGraph') streamDiagnostics.operationCompleted();
     return result;
-  }, request.signal);
+  };
+  const nodeStream = new FlashBoardNodeGraphStream((toolName, args, sequence) => runStreamTool(toolName, args, `${turnId}:${sequence}`), request.signal);
+  let sceneOperations = 0;
+  const sceneStream = new SceneStreamExecutor((toolName, args) => runStreamTool(toolName, args, `${turnId}:scene-stream:${++sceneOperations}`), request.signal);
   const streamFeedback = new NodeStreamFeedback(nodeStream.failures);
+  const sceneFeedback = new NodeStreamFeedback(sceneStream.failures, { label: 'Scene stream',
+    hint: 'References to a failed step fail as well. Fix the records and stream the same scene name again (it replaces what the scene created), then tell the user about anything that remains incomplete.' });
   // Steps rejected before execution never reach the audited tool boundary; keep them in the turn's history.
   let skippedStreamSteps = 0;
   const recordSkippedStreamStep = (failure: NodeStreamFailure | undefined) => {
@@ -364,6 +377,19 @@ async function runDirectCodexChat(
     nodeStream.failures.push(failure);
     recordSkippedStreamStep(failure);
   });
+  const sceneParser = new SceneStreamParser(record => {
+    toolResponseQueue = toolResponseQueue.then(() => sceneStream.accept(record)).then(recordSkippedStreamStep).catch(error => {
+      fail(error instanceof Error ? error : new Error('Scene stream failed.'));
+      throw error;
+    });
+    void toolResponseQueue.catch(() => undefined);
+  }, rejection => {
+    const failure = { scene: '', seq: rejection.seq ?? 0, ref: '', tool: rejection.tool ?? 'record',
+      args: rejection.args ?? {}, error: `Record skipped: ${rejection.reason}`, executed: false };
+    sceneStream.failures.push(failure);
+    recordSkippedStreamStep(failure);
+  });
+  const streamParsers = [nodeParser, sceneParser];
   const respondToTool = async (message: RpcMessage) => {
     const params = record(message.params);
     const callId = typeof params.callId === 'string' ? params.callId : '';
@@ -488,7 +514,7 @@ async function runDirectCodexChat(
     send({
       id: message.id,
       result: {
-        contentItems: [...directToolContentItems(result), ...streamFeedback.takeModelContentItems()],
+        contentItems: [...directToolContentItems(result), ...streamFeedback.takeModelContentItems(), ...sceneFeedback.takeModelContentItems()],
         success: result.success,
       },
     });
@@ -531,13 +557,13 @@ async function runDirectCodexChat(
           streamedText += delta;
           streamDiagnostics.delta(delta);
           request.onTextDelta?.(delta);
-          if (!resumeOnly) nodeParser.push(delta);
+          if (!resumeOnly) for (const parser of streamParsers) parser.push(delta);
         }
       } else if (message.method === 'item/completed') {
         if (params.threadId !== threadId || params.turnId !== turnId) return;
         const item = record(params.item);
         if (item.type === 'agentMessage' && typeof item.text === 'string') finalText = item.text;
-        if (item.type === 'agentMessage' && !resumeOnly && params.turnId === turnId) nodeParser.push('\n');
+        if (item.type === 'agentMessage' && !resumeOnly && params.turnId === turnId) for (const parser of streamParsers) parser.push('\n');
       } else if (message.method === 'turn/completed') {
         const turn = record(params.turn);
         if (turn.id !== turnId) return;
@@ -560,7 +586,7 @@ async function runDirectCodexChat(
     'Codex Direct is unavailable. Start MasterSelects with npm run dev:full.',
   )));
   socket.addEventListener('close', () => {
-    if (nodeParser.active && !providerTurnCompleted) fail(new Error('Codex disconnected during the node stream. Completed steps remain undoable.'));
+    if (streamParsers.some(parser => parser.active) && !providerTurnCompleted) fail(new Error('Codex disconnected during the node stream. Completed steps remain undoable.'));
     if (!finalText && !streamedText) fail(new Error('Codex Direct disconnected before completion.'));
   });
 
@@ -628,19 +654,22 @@ async function runDirectCodexChat(
       });
     }
     await completion;
-    if (!resumeOnly) nodeParser.finish();
+    if (!resumeOnly) for (const parser of streamParsers) parser.finish();
     await toolResponseQueue;
     if (terminalError) throw terminalError;
+    sceneStream.finish();
     const response = finalText.trim() || streamedText.trim();
     if (!response) throw new Error('Codex Direct returned no final message.');
     if (request.resumeMessageId) clearDirectCodexReloadSnapshot(request.resumeMessageId);
     // The chat collapses stream blocks for display, so the model's own final answer is shown.
     const answer = buildDirectCodexVerifiedResponse(request.prompt, response, executedToolCalls);
-    const notice = nodeStreamUserNotice(nodeStream.failures, streamFeedback, executedToolCalls);
-    return notice ? `${answer}\n\n${notice}` : answer;
+    const notices = [nodeStreamUserNotice(nodeStream.failures, streamFeedback, executedToolCalls),
+      sceneStreamUserNotice(sceneStream.failures, sceneFeedback)].filter(Boolean);
+    return notices.length ? `${answer}\n\n${notices.join('\n\n')}` : answer;
   } finally {
     nodeStream.stop();
-    if (nodeParser.active) {
+    sceneStream.stop();
+    if (streamParsers.some(parser => parser.active)) {
       const timing = streamDiagnostics.finish(turnId);
       emitAgentActivity(request, { kind: 'progress',
         label: `Node-Stream: ${timing.deltas} Text-Deltas; ${timing.operationsBeforeCompletion} Schritte bei laufender Antwort. Erste Änderung: ${timing.firstOperationMs ?? '–'} ms; Antwortende: ${timing.providerCompletedMs ?? '–'} ms.${terminalError ? ` Unterbrochen: ${terminalError.message}` : ''}` });

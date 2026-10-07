@@ -43,17 +43,23 @@ export function simulateRodCurves(stage: RodStage, curves: CurveSet, inputKey: s
     const next = simulation.positionsAt(step + 1);
     for (let index = 0; index < nodes.length; index++) nodes[index] += (next[index] - nodes[index]) * alpha;
   }
-  return { ...curves, positions: rodCurvePositions(entry.rest, nodes, curves) };
+  return { ...curves, positions: rodCurvePositions(entry.rest, nodes, curves, !!stage.rod.cycle) };
 }
 
 /** The rods of a Rod Simulation stage over its incoming curves (shared with the GPU solver). */
 export function rodRestFor(stage: RodStage, curves: CurveSet): RodRest {
   const pins = stage.pins && evaluateFieldColumn(stage.pins, curves), form = stage.form && evaluateFieldColumn(stage.form, curves);
   const pullStart = stage.pullStart && evaluateFieldColumn(stage.pullStart, curves);
+  const pullDirection = stage.pullDirection && evaluateFieldColumn(stage.pullDirection, curves);
   // Segment Length 0 spaces nodes one radius apart: finer rods add contact work, not detail (it stays on the points).
-  return buildRodRest(curves, stage.rod.segmentLength || stage.rod.radius, stage.rod.pin, { pinValue: pins ? index => Number(pins(index)) : undefined,
+  const rest = buildRodRest(curves, stage.rod.segmentLength || stage.rod.radius, stage.rod.pin, { pinValue: pins ? index => Number(pins(index)) : undefined,
     formValue: form ? index => Number(form(index)) : undefined, pullStartValue: pullStart ? index => Number(pullStart(index)) : undefined,
+    pullDirectionValue: pullDirection ? index => pullDirection(index) as number[] : undefined,
     straight: stage.rod.start === 1 });
+  if (stage.rod.cycle && (rest.counts.length !== stage.rod.cycle.rows || rest.closed.some(value => value !== 1))) {
+    throw new Error('Cycle Guide needs the matching closed Knit Cycle Guides curves.');
+  }
+  return rest;
 }
 
 /** Simulation time of a frame as a fixed step and the blend toward the next one (pre-roll included). */

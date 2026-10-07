@@ -48,8 +48,8 @@ it('retains each sort dispatch uniform until all branches are submitted', () => 
     }) } as unknown as GPUCommandEncoder;
     const sort = new SplatSortPass(); sort.initialize(device, 8);
     const matrix = new Float32Array(16);
-    sort.execute(device, encoder, {} as GPUBuffer, {} as GPUBuffer, 5, matrix, matrix);
-    sort.execute(device, encoder, {} as GPUBuffer, {} as GPUBuffer, 3, matrix, matrix);
+    sort.execute(device, encoder, {} as GPUBuffer, {} as GPUBuffer, 5, matrix, matrix, 'branch-a');
+    sort.execute(device, encoder, {} as GPUBuffer, {} as GPUBuffer, 3, matrix, matrix, 'branch-b');
     expect(new Set(dispatches).size).toBe(11);
     expect(dispatches.slice(0, 7).map(buffer => Array.from(writes.get(buffer)!.slice(32)))).toEqual([
       [5, 8, 0, 0], [5, 8, 2, 1], [5, 8, 4, 2], [5, 8, 4, 1], [5, 8, 8, 4], [5, 8, 8, 2], [5, 8, 8, 1],

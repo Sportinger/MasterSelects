@@ -227,7 +227,14 @@ export const useEngineStore = create<EngineState>()(
     },
 
     setEngineInitFailed: (failed: boolean, error?: string) => {
-      set({ engineInitFailed: failed, engineInitError: error ?? null });
+      const isLinux = navigator.platform.toLowerCase().includes('linux')
+        && !/android/i.test(navigator.userAgent);
+      set({
+        engineInitFailed: failed,
+        engineInitError: error ?? null,
+        linuxVulkanWarning: failed && isLinux
+          && !localStorage.getItem(LINUX_VULKAN_DISMISSED_KEY),
+      });
     },
 
     setGpuInfo: (info: { vendor: string; device: string; description: string } | null) => {

@@ -3,6 +3,7 @@ import type { SceneCameraConfig } from './types';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../stores/mediaStore/types';
 import { getInterpolatedClipCameraSettings, getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
+import { applyParameterSourcesToTransform } from '../../services/parameterSources/parameterSourceRendering';
 import { composeTransforms } from '../../utils/transformComposition';
 
 export interface SceneTimelineContext {
@@ -50,12 +51,12 @@ export function resolveSceneClipTransform(
 ): ClipTransform {
   const keyframes = context.clipKeyframes?.get(clip.id) ?? [];
   const baseTransform = buildBaseTransform(clip);
-  const ownTransform = keyframes.length === 0
+  const ownTransform = applyParameterSourcesToTransform(clip, keyframes, clipLocalTime, keyframes.length === 0
     ? baseTransform
     : getInterpolatedClipTransform(keyframes, clipLocalTime, baseTransform, {
         rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
           stabilizationEnabled: clip.videoInspectorSections?.stabilization,
-      });
+      }));
 
   if (!clip.parentClipId) {
     return ownTransform;

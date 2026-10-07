@@ -109,6 +109,10 @@ export interface DiagnosticBreadcrumb {
 
 export interface DiagnosticRecentError {
   appVersion: string | null;
+  buildId: string | null;
+  sourceRevision: string | null;
+  sourceDirty: boolean | null;
+  releaseId: string | null;
   breadcrumbs: DiagnosticBreadcrumb[];
   browser: string;
   component: string | null;
@@ -521,6 +525,11 @@ async function loadClientRuntime(
       const parsed = parseContext(row.context_json);
       return {
         appVersion: row.app_version,
+        buildId: typeof parsed.context?.buildId === 'string' ? parsed.context.buildId.slice(0, 100) : null,
+        sourceRevision: typeof parsed.context?.sourceRevision === 'string' && /^[a-f0-9]{40}$/.test(parsed.context.sourceRevision)
+          ? parsed.context.sourceRevision : null,
+        sourceDirty: typeof parsed.context?.sourceDirty === 'boolean' ? parsed.context.sourceDirty : null,
+        releaseId: typeof parsed.context?.releaseId === 'string' ? parsed.context.releaseId.slice(0, 100) : null,
         breadcrumbs: parsed.breadcrumbs,
         browser: row.browser,
         component: row.component,

@@ -53,8 +53,8 @@ fn emitFibers(@builtin(global_invocation_id) id: vec3u, @builtin(num_workgroups)
   var fly: Flyaway;
   var flags = 0u;
   if (fiber >= yarnFibers) {
-    let startArc = points[first * 3u].w;
-    let endArc = points[(first + 1u) * 3u].w;
+    let startArc = points[first * 3u].w + params.twist.z;
+    let endArc = points[(first + 1u) * 3u].w + params.twist.z;
     fly = strandFlyawayAt(params, strand, fiber - yarnFibers, 0.5 * (startArc + endArc));
     if (endArc <= fly.start || startArc >= fly.start + fly.length) {
       emissionHidden(slot);

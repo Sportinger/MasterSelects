@@ -3,9 +3,13 @@ import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
 import { CURVE_CONTEXT_OPERATIONS, knotCurveCount, knotPointCount, weavePatternPointCount, type GeometryField, type GeometryProgram } from './geometryProgram';
 import { celticLoops, isCoprimeTorusKnot, KNOT_SHAPES } from './knotCurves';
 import { knitPointCount } from './knitCurves';
+import { isKnitSphereSpec, KNIT_SPHERE_KEYS } from './knitSphereCurves';
+import { CONTACT_POINT_LIMIT } from './curveContacts';
 import { WEAVE_PATTERNS } from './weaveOperators';
 import { isClothSpec } from './clothProgram';
 import { isRodSpec } from './rodProgram';
+import { isKnitCycleSpec, KNIT_CYCLE_KEYS } from './knitCycleGuides';
+import { isKnitPassageSpec, KNIT_PASSAGE_POINTS, KNIT_PASSAGE_ROWS } from './knitPassageSpec';
 
 const FIELD_INSTRUCTION_LIMIT = 256;
 const STAGE_LIMIT = 64;
@@ -74,6 +78,15 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
         || ![stage.size, stage.height, stage.roundness].every(finite)) return false;
       const loops = celticLoops(stage.columns as number, stage.rows as number);
       points = loops.reduce((sum, loop) => sum + loop.length * (stage.resolution as number) + 1, 0); strands = loops.length;
+    } else if (stage.kind === 'knit-sphere') {
+      if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', ...KNIT_SPHERE_KEYS]) || !isKnitSphereSpec(stage)) return false;
+      points = knitPointCount(stage as { stitches: number; rows: number; resolution: number }); strands = stage.rows as number;
+    } else if (stage.kind === 'knit-cycle') {
+      if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', ...KNIT_CYCLE_KEYS]) || !isKnitCycleSpec(stage)) return false;
+      points = knitPointCount(stage as { stitches: number; rows: number; resolution: number }); strands = stage.rows as number;
+    } else if (stage.kind === 'knit-passage') {
+      if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase', 'travel', 'follow']) || !isKnitPassageSpec(stage)) return false;
+      points = KNIT_PASSAGE_ROWS * KNIT_PASSAGE_POINTS; strands = KNIT_PASSAGE_ROWS; simulated = true;
     } else if (stage.kind === 'knit') {
       if (index !== 0 || !exactKeys(stage, ['kind', 'nodeId', 'stitches', 'rows', 'width', 'height', 'spacing', 'depth', 'lean', 'resolution'])
         || ![stage.stitches, stage.rows, stage.resolution].every(Number.isInteger) || (stage.stitches as number) < 1 || (stage.rows as number) < 1
@@ -89,6 +102,18 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'length', 'points']) || !finite(stage.length) || (stage.length as number) < 0
         || !Number.isInteger(stage.points) || (stage.points as number) < 1 || (stage.points as number) > 4096) return false;
       points += 2 * (stage.points as number) * strands;
+    } else if (stage.kind === 'close-curve') {
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'offset', 'handle', 'points'])
+        || !Array.isArray(stage.offset) || stage.offset.length !== 3 || !stage.offset.every(finite)
+        || !finite(stage.handle) || stage.handle < 0 || !Number.isInteger(stage.points)
+        || (stage.points as number) < 8 || (stage.points as number) > 4096) return false;
+      points += (stage.points as number) * strands;
+    } else if (stage.kind === 'curve-flow') {
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase']) || !finite(stage.phase)) return false;
+    } else if (stage.kind === 'curve-contact') {
+      if (index === 0 || points > CONTACT_POINT_LIMIT || !exactKeys(stage, ['kind', 'nodeId', 'radius', 'iterations', 'smoothing'])
+        || !finite(stage.radius) || stage.radius < 0.0005 || stage.radius > 10 || !finite(stage.smoothing) || stage.smoothing < 0 || stage.smoothing > 1
+        || !Number.isInteger(stage.iterations) || (stage.iterations as number) < 1 || (stage.iterations as number) > 128) return false;
     } else if (stage.kind === 'yarn-profile') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'radius']) || (stage.radius !== undefined && !isField(stage.radius))) return false;
     } else if (stage.kind === 'strand-array') {
@@ -100,8 +125,10 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
         || !isClothSpec(stage.cloth)) return false;
       simulated = true;
     } else if (stage.kind === 'rod-simulation') {
-      if (index === 0 || simulated || !exactKeys(stage, ['kind', 'nodeId', 'rod', 'pins', 'pullStart', 'form', 'time']) || !finite(stage.time)
-        || !isRodSpec(stage.rod) || [stage.pins, stage.pullStart, stage.form].some(field => field !== undefined && !isField(field))) return false;
+      if (index === 0 || simulated || !exactKeys(stage, ['kind', 'nodeId', 'rod', 'pins', 'pullStart', 'pullDirection', 'form', 'time']) || !finite(stage.time)
+        || !isRodSpec(stage.rod) || [stage.pins, stage.pullStart, stage.form].some(field => field !== undefined && !isField(field))
+        || (stage.pullDirection !== undefined && (!isField(stage.pullDirection)
+          || stage.pullDirection.instructions[stage.pullDirection.output].type !== 'vec3'))) return false;
       simulated = true;
     } else if (stage.kind === 'set-position') {
       if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'position', 'offset'])
@@ -110,17 +137,19 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     if (points > CURVE_POINT_LIMIT || strands > CURVE_STRAND_LIMIT) return false;
   }
   const render = value.render;
-  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'antialiasing', 'profile', 'flyaways', 'subdivision', 'materials'])
+  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'colorField', 'antialiasing', 'profile', 'flyaways', 'subdivision', 'materials'])
     || typeof render.nodeId !== 'string'
     || !finite(render.width) || render.width < 0 || typeof render.color !== 'string' || render.color.length > 32
     || (render.antialiasing !== undefined && render.antialiasing !== 'coverage4x' && render.antialiasing !== 'analytic')
     || (render.subdivision !== undefined && (!Number.isInteger(render.subdivision) || (render.subdivision as number) < 1 || (render.subdivision as number) > 16))
     || (render.materials !== undefined && !isFiberMaterialList(render.materials)))) return false;
+  if (record(render) && render.colorField !== undefined && (!isField(render.colorField)
+    || render.colorField.instructions[render.colorField.output].type !== 'vec3')) return false;
   const profile = record(render) ? render.profile : undefined;
-  if (profile !== undefined && (!record(profile) || !exactKeys(profile, ['plies', 'fibers', 'radius', 'plyTwist', 'fiberTwist'])
+  if (profile !== undefined && (!record(profile) || !exactKeys(profile, ['plies', 'fibers', 'radius', 'plyTwist', 'fiberTwist', 'materialOffset'])
     || !Number.isInteger(profile.plies) || !Number.isInteger(profile.fibers) || (profile.plies as number) < 1 || (profile.fibers as number) < 1
     || (profile.plies as number) * (profile.fibers as number) > 256 || ![profile.radius, profile.plyTwist, profile.fiberTwist].every(finite)
-    || (profile.radius as number) < 0)) return false;
+    || (profile.radius as number) < 0 || (profile.materialOffset !== undefined && !finite(profile.materialOffset)))) return false;
   const flyaways = record(render) ? render.flyaways : undefined;
   if (flyaways !== undefined && (profile === undefined || !record(flyaways) || !exactKeys(flyaways, ['density', 'length', 'lift', 'hair', 'seed'])
     || ![flyaways.density, flyaways.length, flyaways.lift, flyaways.hair].every(finite) || !Number.isInteger(flyaways.seed)

@@ -3,7 +3,8 @@ import type { TimelineAuxiliaryLayerProps } from '../components/TimelineAuxiliar
 import { trackTimelineEdit } from '../../../services/productAnalytics';
 import { createSubcompositionFromSelection } from '../../../services/timelineSubcomposition';
 import { useTimelineStore } from '../../../stores/timeline';
-import { parseFlockLayerTarget, type TimelineAddLayerTarget } from '../utils/timelineEmptyContextMenu';
+import { endBatch, startBatch } from '../../../stores/historyStore';
+import { BLANK_CLIP_COLOR, parseFlockLayerTarget, type TimelineAddLayerTarget } from '../utils/timelineEmptyContextMenu';
 
 type TimelineContextMenuProps = TimelineAuxiliaryLayerProps['timelineContextMenuProps'];
 type EmptyContextMenuProps = TimelineAuxiliaryLayerProps['emptyContextMenuProps'];
@@ -116,6 +117,16 @@ export function useTimelineAuxiliaryLayerProps({
       case 'solid':
         selectCreatedClip(timeline.addSolidClip(trackId, time, undefined, undefined, true));
         return;
+      case 'blank': {
+        // A fully transparent, composition-sized solid: a canvas for generator effects like Stick Figure.
+        const batch = startBatch('Add blank clip');
+        try {
+          const clipId = timeline.addSolidClip(trackId, time, BLANK_CLIP_COLOR, undefined, true);
+          if (clipId) timeline.updateClip(clipId, { name: 'Blank' });
+          selectCreatedClip(clipId);
+        } finally { if (batch.opened) endBatch(); }
+        return;
+      }
       case 'mesh-cube':
         selectCreatedClip(timeline.addMeshClip(trackId, time, 'cube', undefined, true));
         return;

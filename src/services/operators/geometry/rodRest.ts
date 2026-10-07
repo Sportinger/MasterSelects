@@ -13,7 +13,9 @@ export interface RodRest {
   start: Float64Array; form: Float64Array; pullStart: Float64Array;
   starts: Uint32Array; counts: Uint32Array; closed: Uint8Array;
   pinned: Uint8Array;
-  /** Per node: unit direction a pinned node travels when pulled (zero on rings and free nodes). */
+  /** Original curve parameter at each material node, retained through arc-length resampling. */
+  material: Float64Array;
+  /** Per node: unit pull direction, or zero. Free nodes and rings without a direction field stay zero. */
   pull: Float64Array;
   /** Per curve point: rod node and fraction toward the next node, and its offset from the rest rod curve. */
   pointNode: Uint32Array; pointFraction: Float64Array; detail: Float64Array;
@@ -55,9 +57,10 @@ export function rodCurvePoint(nodes: Float64Array, start: number, count: number,
   }
 }
 
-/** Rod options beyond the curves: pins, per-point form and pull start times, and a straight start of open rods. */
+/** Fixed fields over the rest curves: pins, form/pull times and optional pull directions; open rods can start straight. */
 export interface RodRestOptions {
   pinValue?: (index: number) => number; formValue?: (index: number) => number; pullStartValue?: (index: number) => number; straight?: boolean;
+  pullDirectionValue?: (index: number) => readonly number[];
 }
 
 /** A per-point time at a rod node a fraction `f` from point a to b; Infinity (never) is not blended. */
@@ -67,11 +70,13 @@ const blendTime = (a: number, b: number, f: number) => Number.isFinite(a) && Num
  * Builds the rods. `segment` 0 uses the curve points as nodes; coarser rods (and any input above
  * ROD_NODE_LIMIT nodes) are resampled evenly by arc length. Pins hold curve starts or ends of open
  * curves and the nodes nearest to points whose `pinValue` exceeds 0.5. Form and pull start times
- * are interpolated along the curve. A straight start lays each open rod along its chord through its centroid, keeping
+ * and explicit pull vectors are interpolated along the curve. Directions are then normalized only for
+ * pinned nodes, including field-selected pins on rings; zero directions stay stationary.
+ * A straight start lays each open rod along its chord through its centroid, keeping
  * every segment length, so it is a thread of the same length that can be formed into the curve.
  */
 export function buildRodRest(curves: CurveSet, segment: number, pin: number, options: RodRestOptions = {}): RodRest {
-  const { pinValue, formValue, pullStartValue } = options;
+  const { pinValue, formValue, pullStartValue, pullDirectionValue } = options;
   const formAt = (point: number) => { const value = formValue ? formValue(point) : Infinity; return Number.isFinite(value) ? value : Infinity; };
   const pullAt = (point: number) => { const value = pullStartValue ? pullStartValue(point) : 0; return Number.isFinite(value) ? value : 0; };
   const { positions: points, starts, counts } = curves;
@@ -92,7 +97,7 @@ export function buildRodRest(curves: CurveSet, segment: number, pin: number, opt
   const rest: RodRest = { positions: new Float64Array(nodeTotal * 3), start: new Float64Array(nodeTotal * 3), form: new Float64Array(nodeTotal),
     pullStart: new Float64Array(nodeTotal),
     starts: rodStarts, counts: rodCounts, closed,
-    pinned: new Uint8Array(nodeTotal), pull: new Float64Array(nodeTotal * 3),
+    pinned: new Uint8Array(nodeTotal), material: new Float64Array(nodeTotal), pull: new Float64Array(nodeTotal * 3),
     pointNode: new Uint32Array(pointTotal), pointFraction: new Float64Array(pointTotal), detail: new Float64Array(pointTotal * 3) };
   const sample = [0, 0, 0];
   lines.forEach((line, rod) => {
@@ -101,6 +106,7 @@ export function buildRodRest(curves: CurveSet, segment: number, pin: number, opt
     // Rest nodes: the curve points, or points at even arc length along the polyline.
     for (let node = 0, cursor = 0; node < count; node++) {
       if (!resampled) {
+        rest.material[start + node] = node / Math.max(1, line.count - 1);
         for (let axis = 0; axis < 3; axis++) rest.positions[(start + node) * 3 + axis] = points[(line.start + node) * 3 + axis];
         rest.form[start + node] = formAt(line.start + node); rest.pullStart[start + node] = pullAt(line.start + node);
         continue;
@@ -109,6 +115,7 @@ export function buildRodRest(curves: CurveSet, segment: number, pin: number, opt
       while (cursor < line.count - 2 && line.arcs[cursor + 1] < arc) cursor++;
       const span = line.arcs[cursor + 1] - line.arcs[cursor], f = span > 0 ? Math.min(1, Math.max(0, (arc - line.arcs[cursor]) / span)) : 0;
       const a = (line.start + cursor) * 3, b = a + 3;
+      rest.material[start + node] = (cursor + f) / Math.max(1, line.count - 1);
       for (let axis = 0; axis < 3; axis++) rest.positions[(start + node) * 3 + axis] = points[a + axis] + (points[b + axis] - points[a + axis]) * f;
       const next = line.start + Math.min(line.count - 1, cursor + 1);
       rest.form[start + node] = blendTime(formAt(line.start + cursor), formAt(next), f);
@@ -129,10 +136,30 @@ export function buildRodRest(curves: CurveSet, segment: number, pin: number, opt
       for (let axis = 0; axis < 3; axis++) rest.detail[point * 3 + axis] = points[point * 3 + axis] - sample[axis];
       if (pinValue && pinValue(point) > 0.5) rest.pinned[start + ((node + (fraction >= 0.5 ? 1 : 0)) % count)] = 1;
     }
-    if (ring || count < 1) return;
-    if (pin !== PIN_NONE) rest.pinned[start] = 1;
-    if (pin > PIN_START) rest.pinned[start + count - 1] = 1;
-    if (count < 2) return;
+    if (count < 1) return;
+    if (!ring) {
+      if (pin !== PIN_NONE) rest.pinned[start] = 1;
+      if (pin > PIN_START) rest.pinned[start + count - 1] = 1;
+    }
+    if (pullDirectionValue) {
+      for (let node = 0; node < count; node++) {
+        if (!rest.pinned[start + node]) continue;
+        const at = rest.material[start + node] * Math.max(1, line.count - 1), index = Math.floor(at), fraction = at - index;
+        const a = pullDirectionValue(line.start + index);
+        const b = pullDirectionValue(line.start + Math.min(index + 1, line.count - 1));
+        if (a.length !== 3 || b.length !== 3 || !a.every(Number.isFinite) || !b.every(Number.isFinite)) {
+          throw new Error('Rod Pull Direction needs finite Vector 3 values.');
+        }
+        const direction = a.map((value, axis) => value * (1 - fraction) + b[axis] * fraction);
+        const scale = Math.max(...direction.map(Math.abs));
+        if (!scale) continue;
+        // Scale first so even very large finite input vectors normalize without overflowing.
+        const normalized = direction.map(value => value / scale), size = Math.hypot(...normalized);
+        rest.pull.set(normalized.map(value => value / size), (start + node) * 3);
+      }
+      return;
+    }
+    if (ring || count < 2) return;
     // Pinned nodes are pulled outward along the tangent of their nearer end.
     const outward = (from: number, to: number) => {
       const a = (start + from) * 3, b = (start + to) * 3;
@@ -171,7 +198,7 @@ function layStart(rest: RodRest, start: number, count: number, keep: boolean) {
 }
 
 /** Curve positions from simulated rod nodes: each point follows its place on the rod plus its detail. */
-export function rodCurvePositions(rest: RodRest, nodes: Float64Array, curves: CurveSet): Float32Array {
+export function rodCurvePositions(rest: RodRest, nodes: Float64Array, curves: CurveSet, capsuleLine = false): Float32Array {
   const out = new Float32Array(curves.positions.length), sample = [0, 0, 0];
   for (let rod = 0; rod < curves.counts.length; rod++) {
     const start = rest.starts[rod], count = rest.counts[rod], ring = rest.closed[rod] === 1;
@@ -179,6 +206,13 @@ export function rodCurvePositions(rest: RodRest, nodes: Float64Array, curves: Cu
       if (!count) continue;
       rodCurvePoint(nodes, start, count, ring, rest.pointNode[point], rest.pointFraction[point], sample);
       for (let axis = 0; axis < 3; axis++) out[point * 3 + axis] = sample[axis] + rest.detail[point * 3 + axis];
+      if (capsuleLine) {
+        const k = rest.pointNode[point], next = ring ? (k + 1) % count : Math.min(k + 1, count - 1);
+        const t = rest.pointFraction[point];
+        for (let axis = 0; axis < 3; axis++) {
+          out[point * 3 + axis] = nodes[(start+k)*3+axis]*(1-t) + nodes[(start+next)*3+axis]*t;
+        }
+      }
     }
   }
   return out;

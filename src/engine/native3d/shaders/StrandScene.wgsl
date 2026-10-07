@@ -20,7 +20,7 @@ struct StrandUniforms {
   view: mat4x4f,
   projection: mat4x4f,
   camera: vec4f,  // xyz: camera position (world)
-  color: vec4f,   // rgb: strand color
+  color: vec4f,   // rgb: fallback color, w: connected per-point color field
   params: vec4f,  // x: world fiber width, yz: viewport pixels, w: layer opacity
   light: vec4f,   // xyz: key light direction (world, toward the light), w: ambient
   yarn: vec4f,    // x: plies, y: fibers per ply, z: yarn radius (local), w: ply twist (turns per unit length)
@@ -41,6 +41,7 @@ struct StrandUniforms {
   materialColors: array<vec4f, 16>,
   // Environment irradiance / π (environmentIrradiance.ts): [c0 rgb, 1 when present], linear term per channel.
   irradiance: array<vec4f, 4>,
+  material: vec4f,         // x: arc-length offset of flowing fiber detail
 };
 
 /** A point (kind 1) or panel (kind 2) scene light, packed like MeshPass lights. */
@@ -63,6 +64,7 @@ struct StrandLight {
 @group(0) @binding(6) var occluderDepth: texture_depth_2d;
 // Fiber Material attributes per point: unorm4x8 color + roughness scale / 2, melanin << 16 | material.
 @group(0) @binding(7) var<storage, read> pointAttributes: array<vec2u>;
+@group(0) @binding(8) var<storage, read> pointColors: array<vec4f>;
 
 /** Diffuse color and roughness scale shadeStrandPoint uses; entry points set them before shading. */
 var<private> strandShadeColor: vec3f;
@@ -70,8 +72,12 @@ var<private> strandShadeRoughness: f32;
 
 /** Per-point Fiber Material color and roughness scale between curve points `first` and `first + 1`. */
 fn strandPointLook(first: u32, t: f32) -> vec4f {
+  var color = u.color.rgb;
+  if (u.color.w > 0.5) {
+    color = mix(pointColors[first].rgb, pointColors[first + 1u].rgb, t);
+  }
   if (u.look2.w < 0.5) {
-    return vec4f(u.color.rgb, 1.0);
+    return vec4f(color, 1.0);
   }
   let a = pointAttributes[first];
   let b = pointAttributes[first + 1u];
@@ -79,7 +85,7 @@ fn strandPointLook(first: u32, t: f32) -> vec4f {
   let colorB = unpack4x8unorm(b.x);
   let tintA = u.materialColors[min(a.y & 0xffffu, 15u)].rgb;
   let tintB = u.materialColors[min(b.y & 0xffffu, 15u)].rgb;
-  return vec4f(mix(colorA.rgb * tintA, colorB.rgb * tintB, t), 2.0 * mix(colorA.a, colorB.a, t));
+  return vec4f(select(mix(colorA.rgb * tintA, colorB.rgb * tintB, t), color, u.color.w > 0.5), 2.0 * mix(colorA.a, colorB.a, t));
 }
 
 struct VertexOutput {
@@ -97,7 +103,9 @@ struct VertexOutput {
 // The yarn geometry (hash3, flyaways, fiber points, Catmull-Rom) is in StrandFiberGeometry.wgsl,
 // shared with the path tracer's fiber emission; these wrappers feed it this layer's uniforms.
 fn strandFiberParams() -> StrandFiberParams {
-  return StrandFiberParams(u.world, u.yarn, u.twist, u.fly);
+  var twist = u.twist;
+  twist.z = u.material.x;
+  return StrandFiberParams(u.world, u.yarn, twist, u.fly);
 }
 
 /** The flyaway of `channel` in the curve cell holding arc length `s`: one per cell, at a hashed place. */
@@ -130,8 +138,8 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let yarnFibers = u32(max(u.yarn.x, 1.0)) * u32(max(u.yarn.y, 1.0));
   var fly: Flyaway;
   if (fiber >= yarnFibers) {
-    let startArc = points[first * 3u].w;
-    let endArc = points[(first + 1u) * 3u].w;
+    let startArc = points[first * 3u].w + u.material.x;
+    let endArc = points[(first + 1u) * 3u].w + u.material.x;
     fly = flyawayAt(u32(points[first * 3u + 2u].w), fiber - yarnFibers, 0.5 * (startArc + endArc));
     if (endArc <= fly.start || startArc >= fly.start + fly.length) {
       return out;

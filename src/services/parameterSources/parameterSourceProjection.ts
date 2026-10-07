@@ -19,7 +19,8 @@ export function projectParameterSources(graph: NodeGraph, clip: TimelineClip): N
       params: Object.fromEntries(Object.entries(node.constants ?? {}).filter((entry): entry is [string, number | string | boolean] =>
         typeof entry[1] === 'number' || typeof entry[1] === 'string' || typeof entry[1] === 'boolean')),
       inputs: (definition?.inputs ?? []).map(port => ({ ...port, direction: 'input', type: 'number' })),
-      outputs: [{ id: 'value', label: 'Value', type: 'number', direction: 'output' }] };
+      outputs: (definition?.outputs ?? [{ id: 'value', label: 'Value', type: 'number' as const }]).map(port => ({ id: port.id,
+        label: port.id === 'value' ? 'Value' : port.label, type: 'number' as const, direction: 'output' as const })) };
   });
   nodes.push(...controls);
   edges.push(...(state?.graph.edges ?? []).map(edge => ({ id: edge.id, fromNodeId: edge.from, fromPortId: edge.output,

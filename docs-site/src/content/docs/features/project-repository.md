@@ -26,6 +26,14 @@ bounded filename snapshot, rather than rescanning it for every page. Independent
 checks do not reuse an earlier discovery, so external commits remain detectable.
 Snapshots expire, and folders exceeding the memory budget use bounded rescans.
 
+Rapid edit series (AI agents, scripts, fast slider commits) are group-committed.
+While a publication is in flight, later revisions wait in order; the next write
+takes the whole backlog of consecutive revisions (up to 32 or about 4 MB) into
+one publication. Every revision keeps its own record, parent link and Undo step;
+only the per-publication cost (segment write and read-back, validation and both
+head checks) is shared. A batch ends after a revision that writes a checkpoint.
+A failed batch is retried as the identical batch.
+
 The in-memory pending queue is bounded. If persistence cannot keep up or fails
 for too long, further content edits stop before exceeding that bound. Permission,
 quota and I/O failures do not advance the confirmed save position.

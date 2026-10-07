@@ -1,5 +1,7 @@
 // WebGPU device, adapter, and queue initialization
 
+import { prefersSoftwareTimelineCanvas } from '../../utils/canvasPlatform';
+import { SoftwareOutputCanvas } from './SoftwareOutputCanvas';
 import { Logger } from '../../services/logger';
 import { attachWebGPUDeviceDiagnostics, markExpectedWebGPUDeviceDestruction } from '../../services/runtimeDiagnostics';
 import type { GPUInitializationFailure } from './gpuInitializationFailure';
@@ -37,6 +39,7 @@ type GPURequestAdapterOptionsWithFeatureLevel = GPURequestAdapterOptions & {
 };
 
 export class WebGPUContext {
+  private readonly softwareCanvases = new WeakMap<HTMLCanvasElement, SoftwareOutputCanvas>();
   private device: GPUDevice | null = null;
   private adapter: GPUAdapter | null = null;
   private initPromise: Promise<boolean> | null = null;
@@ -486,6 +489,13 @@ export class WebGPUContext {
   configureCanvas(canvas: HTMLCanvasElement): GPUCanvasContext | null {
     if (!this.device) return null;
 
+    if (prefersSoftwareTimelineCanvas()) {
+      let context = this.softwareCanvases.get(canvas);
+      if (!context) { context = new SoftwareOutputCanvas(canvas); this.softwareCanvases.set(canvas, context); }
+      context.configure({ device: this.device, format: navigator.gpu.getPreferredCanvasFormat(), alphaMode: 'opaque' });
+      log.debug('Canvas uses GPU rendering with software presentation on Linux');
+      return context;
+    }
     const context = canvas.getContext('webgpu');
     if (context) {
       // Use the GPU's preferred format to avoid extra copies

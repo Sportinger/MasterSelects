@@ -22,6 +22,7 @@ import {
   transformToolDefinitions,
   transitionToolDefinitions,
 } from './definitions';
+import { rigToolDefinitions } from './definitions/rig';
 import type { ToolDefinition } from './types';
 
 /**
@@ -73,6 +74,7 @@ const CANDIDATE_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   ...compositionRuleToolDefinitions,
   ...multicamToolDefinitions,
   ...flockToolDefinitions,
+  ...rigToolDefinitions,
 ];
 
 export const ATOMIC_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] =

@@ -30,7 +30,7 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false }:
   } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); kind = 'Error'; }
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (failure) { setMessage(failure instanceof Error ? failure.message : String(failure)); } };
   const nodes = clip.nodeGraph?.parameterSources?.graph.nodes ?? [];
-  const selection = driven ? `node:${binding!.source!.nodeId}` : binding?.localMode === 'constant' ? 'fixed' : 'auto';
+  const selection = driven ? `node:${binding!.source!.nodeId}|${binding!.source!.portId}` : binding?.localMode === 'constant' ? 'fixed' : 'auto';
   const navigate = (id: string) => { requestNodeAnimation(clipId, id, false); useDockStore.getState().activatePanelType('node-workspace'); };
   return <div className="parameter-source-control" onPointerUp={event => {
     const button = event.target instanceof Element ? event.target.closest('button') : null;
@@ -54,11 +54,18 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false }:
     {open && <>
       <ResolveInspectorRow label="Source"><InspectorSelect ariaLabel={`${target.label} source`} disabled={readOnly} value={selection}
         options={[{ value: 'auto', label: 'Local value / keyframes' }, { value: 'fixed', label: 'Fixed (keep keys)' },
-          ...nodes.map(node => ({ value: `node:${node.id}`, label: `${getControlOperator(node.operator)?.label ?? node.operator} · ${node.id.slice(-6)}` })),
+          ...nodes.flatMap(node => {
+            const definition = getControlOperator(node.operator), name = `${definition?.label ?? node.operator} · ${node.id.slice(-6)}`;
+            const ports = definition?.outputs ?? [{ id: 'value', label: 'Value' }];
+            return ports.map(port => ({ value: `node:${node.id}|${port.id}`, label: ports.length > 1 ? `${name} / ${port.label}` : name }));
+          }),
           ...['control.lfo', 'values.number', 'control.keyframes'].map(operator => ({ value: `add:${operator}`, label: `New ${getControlOperator(operator)!.label}` }))]}
         onChange={next => safely(() => {
           if (next.startsWith('add:')) navigate(addParameterSource(clipId, property, next.slice(4)));
-          else if (next.startsWith('node:')) setParameterSourceBinding(clipId, property, { source: { nodeId: next.slice(5), portId: 'value' }, enabled: true, exposed: true });
+          else if (next.startsWith('node:')) {
+            const [nodeId, portId = 'value'] = next.slice(5).split('|');
+            setParameterSourceBinding(clipId, property, { source: { nodeId, portId }, enabled: true, exposed: true });
+          }
           else setParameterSourceBinding(clipId, property, { enabled: false, localMode: next === 'fixed' ? 'constant' : 'auto' });
         })} /></ResolveInspectorRow>
       <ResolveInspectorRow label="Graph input" actions={<ResolveInspectorIconButton ariaLabel="Show parameter in Nodes" onClick={() => {

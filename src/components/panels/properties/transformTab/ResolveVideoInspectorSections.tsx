@@ -30,6 +30,8 @@ import {
   RESOLVE_CROP_MASK_NAME,
   type ResolveCropValues,
 } from './resolveCropMask';
+import { TransformNodeSourceActions } from './TransformNodeSourceActions';
+import { useTransformNodeSources } from './useTransformNodeSources';
 
 interface ResolveVisualInspectorSectionsProps {
   blendMode: string;
@@ -92,6 +94,7 @@ export function ResolveVisualInspectorSections({
   onResetSpeed,
   onSpeedChange,
 }: ResolveVisualInspectorSectionsProps) {
+  const opacitySources = useTransformNodeSources(clipId);
   const retimeClip = useTimelineStore(state => state.clips.find(clip => clip.id === clipId));
   const frozen = retimeClip?.timeRemap?.kind === 'freeze';
   const warped = retimeClip?.timeRemap?.kind === 'warp';
@@ -244,12 +247,15 @@ export function ResolveVisualInspectorSections({
           />
         </ResolveInspectorRow>
         <ResolveInspectorRow
-          actions={<KeyframeToggle clipId={clipId} property="opacity" value={opacity} />}
+          actions={opacitySources.has('opacity')
+            ? <TransformNodeSourceActions clipId={clipId} properties={['opacity']} sources={opacitySources} />
+            : <KeyframeToggle clipId={clipId} property="opacity" value={opacity} />}
           label="Opacity"
         >
           <div className="resolve-inspector-slider-value">
             <HandleOnlyRange
               aria-label="Opacity slider"
+              disabled={opacitySources.has('opacity')}
               max={100}
               min={0}
               onChange={onOpacityChange}
@@ -263,6 +269,7 @@ export function ResolveVisualInspectorSections({
               className="resolve-inspector-field resolve-inspector-field--plain"
               decimals={2}
               defaultValue={100}
+              disabled={opacitySources.has('opacity')}
               label=""
               max={100}
               midiTarget={createMidiTarget('opacity', 'Opacity', opacity, 0, 1)}

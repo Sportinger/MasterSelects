@@ -427,3 +427,23 @@ For an important question or a problem only the developer can solve,
 their source commit with every diagnostic (`sourceRevision`, and `releaseId` for
 builds without local changes); diagnostics keep page paths only, never query
 strings.
+
+## 12. Nodes and effects: improve them whenever you touch them
+
+
+Whenever dev work touches nodes, effects, operators, the stick-figure rig, or
+the tools agents use to drive them (also while building a project or an
+animation with them), leave them better than you found them:
+
+- Fix limitations and bugs at their root in the node, effect, engine, or tool,
+  not with workarounds in the project content. The next agent must not hit the
+  same problem.
+- Check whether the touched node can be more general or more robust, and harden
+  related failure modes right away. Typical candidates: parameters that should
+  be keyframeable or node-drivable, hard limits that should degrade gracefully,
+  GPU state shared between layers or effect instances, and per-call settings
+  that only one caller can use.
+- Silent failure is a bug. When a node passes through, clamps, or ignores input,
+  it must say so in a log, the inspector, or the tool result.
+- Cover each improvement with a targeted test and the feature doc in
+  `docs/Features/`, and name it in the commit.

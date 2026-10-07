@@ -12,7 +12,7 @@ const keyframeSequenceItemSchema = {
     value: { type: 'number', description: KEYFRAME_VALUE_DESCRIPTION },
     time: { type: 'number', description: 'Clip-local time in seconds. Defaults to the playhead relative to this clip.' },
     sourceTime: { type: 'number', description: FLOCK_SOURCE_TIME_DESCRIPTION },
-    easing: { type: 'string', description: 'linear, ease-in, ease-out, ease-in-out, bezier, a supported legacy alias, a motion curve (sine-out, sine-in-out, cubic-in, cubic-out, cubic-in-out, expo-out, expo-in, expo-in-out, back-out, back-in) or cubic-bezier(x1, y1, x2, y2). Curves shape the segment to the next keyframe of the same property.' },
+    easing: { type: 'string', description: 'linear, ease-in, ease-out, ease-in-out, bezier, hold (keep the value until the next key), a supported legacy alias, a motion curve (sine-out, sine-in-out, cubic-in, cubic-out, cubic-in-out, expo-out, expo-in, expo-in-out, back-out, back-in) or cubic-bezier(x1, y1, x2, y2). Curves shape the segment to the next keyframe of the same property.' },
   },
   required: ['clipId', 'property', 'value'],
 };
@@ -27,19 +27,29 @@ const addKeyframeParameters = {
     value: { type: 'number', description: KEYFRAME_VALUE_DESCRIPTION },
     time: { type: 'number', description: 'Time in seconds relative to clip start. If omitted, uses current playhead position relative to clip.' },
     sourceTime: { type: 'number', description: FLOCK_SOURCE_TIME_DESCRIPTION },
-    easing: { type: 'string', description: 'Easing: linear, ease-in, ease-out, ease-in-out, bezier. Legacy aliases like easeOut are also accepted (default: ease-in-out). Motion curves (expo-out, back-out, cubic-out, expo-in-out, …) or cubic-bezier(x1, y1, x2, y2) shape the segment to the next keyframe.' },
+    easing: { type: 'string', description: 'Easing: linear, ease-in, ease-out, ease-in-out, bezier, hold (keep the value until the next key). Legacy aliases like easeOut are also accepted (default: ease-in-out). Motion curves (expo-out, back-out, cubic-out, expo-in-out, …) or cubic-bezier(x1, y1, x2, y2) shape the segment to the next keyframe.' },
     sequence: {
       type: 'array',
       minItems: 1,
       description: 'Atomic multi-keyframe mode. Every item is prevalidated and the full sequence is committed as one undo step.',
       items: keyframeSequenceItemSchema,
     },
+    effectId: { type: 'string', description: 'keys mode only: bare parameter names in keys address this effect (progress -> effect.<effectId>.progress).' },
+    keys: {
+      type: 'object',
+      description: 'Compact atomic mode for one clip: { "<property>": [[time, value, easing?], ...], ... }, e.g. { "position.x": [[0, -300], [1.2, 200, "expo-out"]], "opacity": [[0, 0], [0.3, 1]] }. Use with clipId (and effectId for effect parameters); one undo step.',
+      additionalProperties: { type: 'array' },
+    },
   },
   required: [],
   oneOf: [
     {
       required: ['clipId', 'property', 'value'],
-      not: { required: ['sequence'] },
+      not: { anyOf: [{ required: ['sequence'] }, { required: ['keys'] }] },
+    },
+    {
+      required: ['clipId', 'keys'],
+      not: { anyOf: [{ required: ['sequence'] }, { required: ['property'] }, { required: ['value'] }] },
     },
     {
       required: ['sequence'],
@@ -70,7 +80,7 @@ export const keyframeToolDefinitions: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'addKeyframe',
-      description: 'Add one keyframe with the legacy clipId/property/value fields, or atomically author a keyframe sequence of any required size. Use exactly one mode. Times are relative to each clip start (0 = clip start). Transform values are absolute final values, not multipliers relative to the clip base transform.',
+      description: 'Add one keyframe with the legacy clipId/property/value fields, atomically author a keyframe sequence of any required size, or key several properties of one clip with the compact keys map. Use exactly one mode. Times are relative to each clip start (0 = clip start). Transform values are absolute final values, not multipliers relative to the clip base transform.',
       parameters: addKeyframeParameters,
     },
   },

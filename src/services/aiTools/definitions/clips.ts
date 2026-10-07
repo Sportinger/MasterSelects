@@ -386,4 +386,51 @@ export const clipToolDefinitions: ToolDefinition[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'createSolidClip',
+      description: 'Create a solid color clip on a video track. blank: true (or color "#00000000") makes a transparent Blank clip to host generator effects (Stick Figure, particles).',
+      parameters: {
+        type: 'object',
+        properties: {
+          trackId: { type: 'string', description: 'Unlocked video track (default: first unlocked video track).' },
+          start: { type: 'number', description: 'Timeline start in seconds (default: playhead).' },
+          duration: { type: 'number', description: 'Duration in seconds (default 5).' },
+          color: { type: 'string', description: 'Fill as #rrggbb or #rrggbbaa (default #ffffff).' },
+          blank: { type: 'boolean', description: 'Transparent Blank clip; overrides color.' },
+          name: { type: 'string', description: 'Clip name.' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'createMidiClip',
+      description: 'Create a MIDI clip with notes on a MIDI track (createTrack type "midi" with an instrument preset). Note times are clip seconds.',
+      parameters: {
+        type: 'object',
+        properties: {
+          trackId: { type: 'string', description: 'MIDI track (default: first unlocked MIDI track).' },
+          start: { type: 'number', description: 'Timeline start in seconds (default: playhead).' },
+          duration: { type: 'number', description: 'Clip duration in seconds (default: covers the notes, at least 1).' },
+          notes: {
+            type: 'array',
+            description: 'Notes: { time (clip seconds), pitch (MIDI 0..127, 60 = C4), duration? (default 0.15), velocity? (0..1, default 0.85) }.',
+            items: {
+              type: 'object',
+              properties: {
+                time: { type: 'number' }, pitch: { type: 'integer' }, duration: { type: 'number' }, velocity: { type: 'number' },
+              },
+              required: ['time', 'pitch'],
+            },
+          },
+          name: { type: 'string', description: 'Clip name.' },
+        },
+        required: [],
+      },
+    },
+  },
 ];

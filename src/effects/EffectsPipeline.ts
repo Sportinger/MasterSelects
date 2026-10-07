@@ -491,6 +491,11 @@ export class EffectsPipeline {
           });
           this.device.queue.writeBuffer(effectUniformBuffer, 0, effectParams.buffer);
         }
+        // Compute runtimes keep per-instance GPU state (analog stage uniforms written with
+        // queue.writeBuffer, signal textures, receiver line state). Scope the instance to the
+        // render occurrence: nested compositions keep their original effect ids, so a nested
+        // comp visible twice would otherwise render both occurrences with the last params.
+        const computeInstanceId = JSON.stringify([frameHistory?.scopeId ?? clock.scopeId, effect.id]);
         try {
           const analogPlan = definition.computeMode === 'analog-signal'
             ? compileAnalogSignalGraph(effect.operatorGraph ?? createDefaultAnalogSignalGraph(), effect.params) : undefined;
@@ -509,9 +514,7 @@ export class EffectsPipeline {
               effect, fieldResources, device: this.device, encoder: commandEncoder, sampler,
               source: { kind: 'texture', view: effectInput }, width: outputWidth, height: outputHeight, timelineTimeSeconds,
             }),
-            instanceId: computeImagePlan
-              ? JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id])
-              : effect.id,
+            instanceId: computeInstanceId,
             timelineTimeSeconds,
             onAnalogImageInputs: (stage, inputs) => captureAnalogImageOperatorPreviews({
               effect, stage, inputs, device: this.device, encoder: commandEncoder, sampler,

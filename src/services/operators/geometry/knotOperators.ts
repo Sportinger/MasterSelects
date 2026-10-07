@@ -9,6 +9,16 @@ const generator = (id: string, variant: string, label: string, description: stri
 
 /** General knot curve generators; their curves feed Yarn Profile, Thread Along or any curve modifier. */
 export const KNOT_OPERATORS: readonly OperatorDefinition[] = [
+  generator('geometry.knit-sphere', 'knit-sphere', 'Knit Sphere', 'Closed horizontal yarn rings form a sphere and circulate through a fixed knitting window at the front. Loose Knit loops form on entry and unravel on exit. Zone Center is height / radius (negative = below equator). Speed is turns per source second; zero pauses, negative reverses. This seamless deformation does not simulate collisions or preserve yarn length.', [
+    number('radius', 'Sphere Radius', 0.8, 0.001, 100),
+    number('bandSpan', 'Band Half Height / Radius', 0.94, 0.01, 0.94, 0.01),
+    number('rows', 'Rings', 28, 2, 512, 1, false), number('stitches', 'Stitches per Ring', 32, 4, 512, 1, false),
+    number('height', 'Loop Height', 0.052, 0, 100), number('depth', 'Depth', 0.016, 0, 10), number('lean', 'Lean', 1.5, 0, 4, 0.01),
+    number('speed', 'Speed (turns/s)', 0.05, -2, 2, 0.001), number('phase', 'Phase (turns)', 0, -100, 100, 0.001),
+    number('zoneWidth', 'Zone Width (deg)', 90, 0, 360, 1), number('zoneCenter', 'Zone Center', -0.38, -1, 1, 0.01),
+    number('zoneHeight', 'Zone Height', 0.6, 0.01, 2, 0.01), number('feather', 'Edge Softness', 0.65, 0.01, 1, 0.01),
+    number('resolution', 'Points per Stitch', 24, 8, 128, 1, false),
+  ]),
   generator('geometry.knot', 'knot', 'Knot', 'Creates knot curves centered on the origin: a trefoil (simple knot), figure-eight, reef knot of two ropes, or a (P, Q) torus knot. Depth lifts the crossings.', [
     { id: 'shape', label: 'Shape', type: 'select', default: 'trefoil', options: [
       { value: 'trefoil', label: 'Trefoil' }, { value: 'figure-eight', label: 'Figure Eight' },

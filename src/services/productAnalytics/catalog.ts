@@ -222,6 +222,9 @@ export const PRODUCT_ANALYTICS_EVENT_DEFINITIONS = {
   app_opened: {
     properties: {
       build_id: identifier(32),
+      source_revision: { kind: 'string', maximumLength: 40, pattern: /^[a-f0-9]{40}$/ },
+      source_dirty: { kind: 'boolean' },
+      release_id: { kind: 'string', maximumLength: 100, pattern: /^masterselects-\d+\.\d+\.\d+-[a-f0-9]{40}$/ },
       acquisition_campaign: identifier(64),
       acquisition_content: identifier(64),
       acquisition_medium: choice([

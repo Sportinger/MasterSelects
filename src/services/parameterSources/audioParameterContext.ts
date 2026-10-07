@@ -7,6 +7,7 @@ import { calculateSourceTime, getSpeedAtTime } from '../../utils/speedIntegratio
 import { resolveTransitionSourceMapTime } from '../timeline/transitionSourceMap';
 import { isVideoInspectorSectionEnabled } from '../videoInspector/sectionBypass';
 import type { ParameterSources } from '../../types/parameterSources';
+import { copyMarkerParameterContext } from './markerParameterContext';
 
 export interface AudioParameterSource {
   clip: Pick<TimelineClip, 'startTime' | 'duration' | 'inPoint' | 'outPoint' | 'speed' | 'videoInspectorSections' | 'transitionSourceMap'>;
@@ -25,10 +26,12 @@ export function freezeAudioParameterContext(graph: EffectOperatorGraph, context:
 export function frozenAudioParameterContext(graph: EffectOperatorGraph): AudioParameterContext | undefined {
   return snapshots.get(graph);
 }
+/** Clone sources together with their frozen export contexts (audio and markers). */
 export function cloneAudioParameterSources(state: ParameterSources | undefined): ParameterSources | undefined {
   if (!state) return undefined;
   const copy = structuredClone(state), context = snapshots.get(state.graph);
   if (context) snapshots.set(copy.graph, context);
+  copyMarkerParameterContext(state.graph, copy.graph);
   return copy;
 }
 

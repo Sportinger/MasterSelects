@@ -5,6 +5,11 @@ import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { createParameterSourceEvaluator } from './parameterSourceEvaluation';
 import type { ParameterSourceClip } from './parameterSourceTargets';
 import { parameterSourceTime } from './parameterSourceTime';
+import type { ClipTransform } from '../../types/timelineCore';
+import { isTransformParameterPath, writeTransformParameter } from './transformParameterTargets';
+import { Logger } from '../logger';
+
+const log = Logger.create('ParameterSources');
 
 /** Final parameter override, AFTER legacy interpolation and BEFORE packing/rendering. */
 export function applyParameterSourcesToEffects(clip: ParameterSourceClip, keys: readonly Keyframe[], time: number,
@@ -22,6 +27,38 @@ export function applyParameterSourcesToEffects(clip: ParameterSourceClip, keys: 
     for (const [path] of entries) params[path.slice(prefix.length)] = evaluator.resolve(path).value;
     return { ...effect, params };
   });
+}
+
+/**
+ * Final transform override, AFTER keyframe interpolation and BEFORE inspector bypass and parenting.
+ * Without an active transform binding the input object is returned unchanged. Like the existing
+ * transform evaluation in export, a failing source keeps the interpolated value for that property
+ * and reports the error; the Transform inspector shows the same diagnosis.
+ */
+export function applyParameterSourcesToTransform(clip: ParameterSourceClip, keys: readonly Keyframe[], time: number,
+  transform: ClipTransform, timelineTime?: number): ClipTransform {
+  const bindings = clip.nodeGraph?.parameterSources?.targets;
+  if (!bindings) return transform;
+  const active = Object.entries(bindings).filter(([path, binding]) => isTransformParameterPath(path)
+    && binding.source && binding.enabled !== false);
+  if (!active.length) return transform;
+  const evaluator = createParameterSourceEvaluator(clip, keys, time, timelineTime);
+  const result: ClipTransform = { ...transform };
+  for (const [path] of active) {
+    try { writeTransformParameter(result, path, evaluator.resolve(path).value); }
+    catch (error) { reportTransformSourceError(clip.id, path, error); }
+  }
+  return result;
+}
+
+const reportedTransformErrors = new Set<string>();
+function reportTransformSourceError(clipId: string | undefined, path: string, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error);
+  const key = `${clipId ?? '?'}\0${path}\0${message}`;
+  if (reportedTransformErrors.has(key)) return;
+  if (reportedTransformErrors.size > 256) reportedTransformErrors.clear();
+  reportedTransformErrors.add(key);
+  log.warn(`Transform source ${path} of clip ${clipId ?? '?'} failed; keeping the keyframe value. ${message}`);
 }
 
 /** The same pure grade calculation serves timeline, nested compositions and export. */

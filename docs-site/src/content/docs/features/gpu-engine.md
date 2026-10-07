@@ -80,6 +80,55 @@ Clean `pagehide` completion and a three-second settled startup prevent normal
 reloads from being counted as crashes. Runtime owners and the engine singleton
 remain HMR-safe.
 
+### Per-Draw GPU Buffers (Shared Uniform Ring)
+
+`queue.writeBuffer()` is staged before the command buffer it belongs to is
+submitted. A single buffer rewritten between draws or dispatches recorded into
+one encoder therefore gives every recorded pass the last written data (two
+layers of one effect both render with the second layer's settings). Destroying
+or replacing a buffer that the unsubmitted encoder still references makes the
+whole submit fail.
+
+New GPU nodes and renderers must take per-draw uniforms, settings, and
+vertices from `src/engine/core/gpuUniformRing.ts` instead of owning one shared
+buffer:
+
+- `GpuUniformRing.write(data)` returns a buffer that no other call in the same
+  frame receives. The pool grows when a frame needs more slots and rewinds at
+  the next frame start.
+- `GpuFrameBuffers.ensure(key, bytes)` keeps one growable buffer per key (for
+  example per output target). A replaced buffer is retired and destroyed at the
+  next frame start, never mid-frame. Use `retire()` for any other buffer that a
+  recorded pass may still use.
+- Frames are `'explicit'` when the owner has a begin hook that runs after all
+  of its encoders were submitted (`GaussianSplatGpuRenderer.beginFrame()` drives
+  the splat cull, sort, particle, and effector passes). Use `'task'` for nodes
+  reached from several frame owners without a shared hook (pixel-particle
+  renderer, slice vertex buffers): the frame ends with the current synchronous
+  section, so record and submit an encoder without an `await` in between.
+- Data that a later frame reads again needs its own key, never a shared scratch
+  buffer. The splat GPU sort writes into one sorted-index buffer per draw
+  stream (uploaded scene plus graph branch). With a sort frequency above 1,
+  skipped frames redraw that stream's own last order and count, bound to the
+  current data buffer; before, every layer reused the single shared sort
+  output (another layer's order, or a buffer destroyed after growth). A
+  stream's buffer is retired when its scene is released or after 600 renderer
+  frames without a draw. Sort frequency 0 draws the current cull/identity
+  order, never a frozen one. Cull counts are tracked per stream too.
+- The splat camera uniforms, splat mesh uniforms, and splat graph compute
+  slots use their own per-call pools rewound in
+  `GaussianSplatGpuRenderer.beginFrame()`. They follow the same rule (one slot
+  per call, nothing destroyed before the frame start) without the shared helper.
+
+Runtimes with per-instance GPU state (Analog Signal Lab, compute image graphs)
+key instances by render scope plus effect id. Nested compositions keep their
+original effect ids, so the scope keeps two visible occurrences apart.
+
+Targeted coverage: `gpuUniformRing.test.ts`, `gpuFrameScopedRenderers.test.ts`
+(including two GPU-sorted splat layers across a skipped-sort frame),
+`splatSortPass.test.ts`, and `effectsPipelineComputeInstanceScope.test.ts` under
+`tests/unit/`.
+
 ---
 
 ## Texture Paths
@@ -252,6 +301,7 @@ Key implementation files:
 - `src/engine/managers/ExportCanvasManager.ts`
 - `src/engine/texture/ScrubbingCache.ts`
 - `src/engine/core/RenderTargetManager.ts`
+- `src/engine/core/gpuUniformRing.ts`
 - `src/engine/featureFlags.ts`
 - `src/engine/video/VideoFrameManager.ts`
 - `src/services/render/renderHostPort.ts`

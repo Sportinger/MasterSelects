@@ -3,7 +3,7 @@ import type { ToolResult } from '../types';
 import type { AnimatableProperty, EasingType, TimelineClip } from '../../../types';
 import type { KeyframeCreateOperation } from '../../../stores/timeline/editOperations/transactionTypes';
 import { animateKeyframe } from '../aiFeedback';
-import { normalizeEasingType } from '../../../utils/easing';
+import { isHoldEasing, normalizeEasingType } from '../../../utils/easing';
 import { KEYFRAME_EASING_PRESET_IDS, resolveEasingCurve, type CubicBezierPoints } from '../../../utils/easingPresets';
 import { getKeyframeAtTime } from '../../../utils/keyframeInterpolation';
 import { propertyRegistry } from '../../properties';
@@ -41,6 +41,8 @@ interface KeyframeAuthoringRequest {
   easing: EasingType;
   /** Motion-curve preset or cubic-bezier: materialized as handles on the segment to the next key. */
   curve: CubicBezierPoints | null;
+  /** Keep the value until the next key (easing 'hold'/'step'). */
+  hold?: boolean;
 }
 
 interface PlannedKeyframe extends KeyframeAuthoringRequest {
@@ -174,6 +176,12 @@ export async function handleAddKeyframe(
       for (const { curve, ids } of byCurve.values()) useTimelineStore.getState().applyKeyframeEasingCurve(ids, curve);
     }
 
+    const held = planned.filter((keyframe) => keyframe.hold);
+    for (const keyframe of held) {
+      const actual = getKeyframeAtTime(useTimelineStore.getState().getClipKeyframes(keyframe.clipId), keyframe.property, keyframe.storedTime);
+      if (actual) useTimelineStore.getState().updateKeyframe(actual.id, { hold: true });
+    }
+
     const finalTimeline = useTimelineStore.getState();
     const keyframes = planned.map((keyframe) => {
       const actual = getKeyframeAtTime(
@@ -197,7 +205,7 @@ export async function handleAddKeyframe(
         ...(isFlockProperty(keyframe.property)
           ? { timeBasis: 'source', clipLocalTime: keyframe.resolvedTime }
           : {}),
-        easing: normalizeEasingType(actual.easing, keyframe.easing),
+        easing: actual.hold ? 'hold' : normalizeEasingType(actual.easing, keyframe.easing),
         status,
         created: status === 'created',
         updated: status === 'updated',
@@ -254,7 +262,41 @@ export async function handleAddKeyframe(
   }
 }
 
+/**
+ * Compact multi-property mode: `{ clipId, effectId?, keys: { property: [[time, value, easing?] | { time, value, easing? }] } }`.
+ * With effectId, a bare parameter name ("progress") means `effect.<effectId>.<param>`.
+ */
+function expandKeysMode(args: Record<string, unknown>): Record<string, unknown>[] {
+  const allowed = ['clipId', 'effectId', 'keys'];
+  const unknown = Object.keys(args).filter((field) => !allowed.includes(field));
+  if (unknown.length) throw new Error(`keys mode accepts only clipId, effectId and keys; remove ${unknown.join(', ')}`);
+  const keys = args.keys;
+  if (!keys || typeof keys !== 'object' || Array.isArray(keys) || Object.keys(keys).length === 0) {
+    throw new Error('keys must be an object mapping property names to [[time, value, easing?], ...]');
+  }
+  if (args.effectId !== undefined && (typeof args.effectId !== 'string' || !args.effectId)) throw new Error('effectId must be a string');
+  const requests: Record<string, unknown>[] = [];
+  for (const [name, list] of Object.entries(keys as Record<string, unknown>)) {
+    const property = args.effectId && !name.includes('.') ? `effect.${args.effectId}.${name}` : name;
+    if (!Array.isArray(list) || list.length === 0) throw new Error(`keys.${name} must be a non-empty array`);
+    list.forEach((key, index) => {
+      const entry = Array.isArray(key) ? { time: key[0], value: key[1], ...(key[2] !== undefined ? { easing: key[2] } : {}) }
+        : key && typeof key === 'object' ? key as Record<string, unknown> : null;
+      if (!entry || (Array.isArray(key) && (key.length < 2 || key.length > 3))) {
+        throw new Error(`keys.${name}[${index}] must be [time, value, easing?] or { time, value, easing? }`);
+      }
+      if (typeof entry.time !== 'number') throw new Error(`keys.${name}[${index}] needs a numeric time`);
+      requests.push({ clipId: args.clipId, property, value: entry.value, time: entry.time, ...(entry.easing !== undefined ? { easing: entry.easing } : {}) });
+    });
+  }
+  return requests;
+}
+
 function parseKeyframeRequests(args: Record<string, unknown>): KeyframeAuthoringRequest[] {
+  if (Object.prototype.hasOwnProperty.call(args, 'keys')) {
+    if (Object.prototype.hasOwnProperty.call(args, 'sequence')) throw new Error('Use either keys or sequence, not both');
+    return expandKeysMode(args).map((item, index) => parseKeyframeRequest(item, `keys[${index}]`));
+  }
   const hasSequence = Object.prototype.hasOwnProperty.call(args, 'sequence');
   const hasLegacyField = LEGACY_KEYFRAME_FIELDS.some((field) => (
     Object.prototype.hasOwnProperty.call(args, field)
@@ -319,16 +361,17 @@ function parseKeyframeRequest(
   };
 }
 
-function parseEasing(value: unknown, label: string): { easing: EasingType; curve: CubicBezierPoints | null } {
+function parseEasing(value: unknown, label: string): { easing: EasingType; curve: CubicBezierPoints | null; hold?: boolean } {
   if (value === undefined) return { easing: 'ease-in-out', curve: null };
   if (typeof value !== 'string' || !value.trim()) {
     throw new Error(`${label} must be a supported easing string`);
   }
+  if (isHoldEasing(value)) return { easing: 'linear', curve: null, hold: true };
   const curve = resolveEasingCurve(value);
   if (curve) return { easing: 'bezier', curve };
   const compact = value.trim().toLowerCase().replace(/[\s_-]+/g, '');
   if (!VALID_EASING_KEYS.has(compact)) {
-    throw new Error(`${label} must be one of: linear, ease-in, ease-out, ease-in-out, bezier, ${KEYFRAME_EASING_PRESET_IDS.join(', ')}, or cubic-bezier(x1, y1, x2, y2)`);
+    throw new Error(`${label} must be one of: linear, ease-in, ease-out, ease-in-out, bezier, hold, ${KEYFRAME_EASING_PRESET_IDS.join(', ')}, or cubic-bezier(x1, y1, x2, y2)`);
   }
   return { easing: normalizeEasingType(value, 'ease-in-out'), curve: null };
 }

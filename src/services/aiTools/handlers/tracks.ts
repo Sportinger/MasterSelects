@@ -1,6 +1,7 @@
 // Track Tool Handlers
 
 import { useTimelineStore } from '../../../stores/timeline';
+import { getSimpleSynthPreset, SIMPLE_SYNTH_PRESETS } from '../../../engine/audio/synth/simpleSynthPresets';
 import type { ToolResult } from '../types';
 import {
   captureMutationEntitySnapshot,
@@ -13,14 +14,21 @@ export async function handleCreateTrack(
   args: Record<string, unknown>,
   timelineStore: TimelineStore
 ): Promise<ToolResult> {
-  const type = args.type as 'video' | 'audio';
+  const type = args.type as 'video' | 'audio' | 'midi';
+  if (!['video', 'audio', 'midi'].includes(type)) return { success: false, error: 'type must be video, audio or midi.' };
   const name = typeof args.name === 'string' ? args.name.trim() : '';
+  const preset = args.instrument === undefined ? undefined : getSimpleSynthPreset(String(args.instrument));
+  if (args.instrument !== undefined && (type !== 'midi' || !preset)) {
+    return { success: false, error: type !== 'midi' ? 'instrument needs a midi track.'
+      : `Unknown instrument: ${String(args.instrument)}. Presets: ${SIMPLE_SYNTH_PRESETS.map(item => item.id).join(', ')}` };
+  }
   const mutationSnapshot = captureMutationEntitySnapshot(
     'track',
     useTimelineStore.getState().tracks,
   );
   const trackId = timelineStore.addTrack(type);
   if (name) useTimelineStore.getState().renameTrack(trackId, name);
+  if (preset) useTimelineStore.getState().setTrackMidiInstrument(trackId, structuredClone(preset.instrument));
   const track = useTimelineStore.getState().tracks.find(t => t.id === trackId);
 
   return {

@@ -98,6 +98,10 @@ When a 2D text clip is selected and the preview is in Edit mode, the preview sho
 - Shadows
 - Text-on-path rendering through `pathEnabled` and `pathPoints`
 
+Text inside nested compositions is render-only, so its raster keeps only the pixels the text covers (measured glyph, outline, and shadow bounds plus a small margin) instead of a composition-sized canvas. `src/services/text/textCanvasFrameRegistry.ts` records where that crop sits in the composition-sized source; the compositor samples it through a texture rect, and passes that read a whole source (effects, color correction, edge fill, 3D planes, worker previews) get a composition-sized copy. Path text, captions, and text covering most of the frame stay full-size. A project with hundreds of nested labels therefore no longer holds gigabytes of canvas and GPU memory.
+
+Static text uploads to the GPU only when its raster changes, and animated text stops re-rasterizing once its keyframes hold.
+
 ## Automation
 
 The AI tool surface can create and update editable text clips, set an area-text box, inspect text properties, add text-bounds keyframes, and supply `pathEnabled` and `pathPoints`.

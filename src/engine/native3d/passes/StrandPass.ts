@@ -24,7 +24,8 @@ const OCCLUDER_OFFSET = SHADOW_OFFSET + 24;
 const LOOK_OFFSET = OCCLUDER_OFFSET + 20;
 /** Environment irradiance (environmentIrradiance.ts), evaluated per fiber normal. */
 const IRRADIANCE_OFFSET = LOOK_OFFSET + STRAND_LOOK_FLOATS;
-const UNIFORM_FLOATS = IRRADIANCE_OFFSET + IRRADIANCE_FLOATS;
+const MATERIAL_OFFSET = IRRADIANCE_OFFSET + IRRADIANCE_FLOATS;
+const UNIFORM_FLOATS = MATERIAL_OFFSET + 4;
 /** Deep opacity one fully covering fiber adds; about one yarn in front leaves a third of the light. */
 const OPACITY_PER_FIBER = 0.3;
 /** Extra fiber instances per yarn that can leave it as flyaways; Density sets how often each one does. */
@@ -176,6 +177,7 @@ export class StrandPass {
       { binding: 6, visibility: GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE, texture: { sampleType: 'depth' } },
       // Fiber Material attributes per curve point (fiberMaterialAttributes.ts).
       { binding: 7, visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 8, visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
     ] });
     const module = device.createShaderModule({ code: STRAND_SCENE_SHADER, label: 'native-strands' });
     void module.getCompilationInfo?.().then(info => {
@@ -216,9 +218,11 @@ export class StrandPass {
     const data = new Float32Array(UNIFORM_FLOATS);
     data.set(layer.worldMatrix, 0);
     data.set(strandBaseColor(render), 52);
+    data[55] = buffers.colors ? 1 : 0;
     data.set([render.width * scale, 0, 0, Math.max(0, Math.min(1, layer.opacity))], 56);
     data.set([...KEY_LIGHT, AMBIENT], 60);
     data.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist, profile.fiberTwist] : [1, 1, 0, 0, 0], 64);
+    data[MATERIAL_OFFSET] = profile?.materialOffset ?? 0;
     data[71] = ANTIALIASING_MODE[render.antialiasing ?? 'hashed'];
     const flyaways = profile && render.flyaways, channels = flyaways ? FLYAWAY_CHANNELS : 0;
     if (flyaways) {
@@ -255,6 +259,7 @@ export class StrandPass {
       { binding: 5, resource: this.shadows.shadowSampler(device) },
       { binding: 6, resource: occluders },
       { binding: 7, resource: { buffer: buffers.attributes ?? this.noAttributes(device) } },
+      { binding: 8, resource: { buffer: buffers.colors ?? this.noAttributes(device) } },
     ] });
   }
 

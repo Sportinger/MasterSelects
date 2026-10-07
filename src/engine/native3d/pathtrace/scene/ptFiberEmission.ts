@@ -31,7 +31,7 @@ export function packStrandFiberParams(layer: SceneStrandLayer, target: Float32Ar
   const render = layer.strands.program.render!, profile = render.profile, flyaways = profile && render.flyaways;
   target.set(layer.worldMatrix, offset);
   target.set(profile ? [profile.plies, profile.fibers, profile.radius, profile.plyTwist] : [1, 1, 0, 0], offset + 16);
-  target.set([profile ? profile.fiberTwist : 0, flyaways ? flyaways.seed : 0, 0, 0], offset + 20);
+  target.set([profile ? profile.fiberTwist : 0, flyaways ? flyaways.seed : 0, profile?.materialOffset ?? 0, 0], offset + 20);
   if (flyaways) target.set([FLYAWAY_CHANNELS / flyaways.density, flyaways.length, flyaways.lift, flyaways.hair], offset + 24);
 }
 

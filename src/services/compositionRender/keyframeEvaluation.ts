@@ -1,8 +1,9 @@
+import { applyStickFigureActions } from '../rig/stickFigureActionRuntime';
 import type { ClipMask } from '../../types/masks';
 import type { ClipTransform } from '../../types/timelineCore';
 import type { Keyframe } from '../../types/keyframes';
 import type { Effect } from '../../types/effects';
-import { applyParameterSourcesToEffects } from '../parameterSources/parameterSourceRendering';
+import { applyParameterSourcesToEffects, applyParameterSourcesToTransform } from '../parameterSources/parameterSourceRendering';
 import type { ParameterSourceClip } from '../parameterSources/parameterSourceTargets';
 import { bindCableRenderTime } from '../faceCables/cableRenderTime';
 import { pauseIncompleteOperatorEffects } from '../operators/editableOperatorGraph';
@@ -28,9 +29,15 @@ export function evaluateCompositionClipTransform(
   keyframes: readonly Keyframe[] | undefined,
   localTime: number,
   stabilizationEnabled?: boolean,
+  sourceClip?: Partial<ParameterSourceClip>,
 ): ClipTransform {
-  if (!keyframes?.length) return baseTransform;
-  return getInterpolatedClipTransform([...keyframes], localTime, baseTransform, { stabilizationEnabled });
+  const interpolated = keyframes?.length
+    ? getInterpolatedClipTransform([...keyframes], localTime, baseTransform, { stabilizationEnabled })
+    : baseTransform;
+  return sourceClip?.nodeGraph?.parameterSources && typeof sourceClip.startTime === 'number'
+    ? applyParameterSourcesToTransform({ ...sourceClip, startTime: sourceClip.startTime, effects: sourceClip.effects ?? [],
+      transform: baseTransform }, keyframes ?? [], localTime, interpolated)
+    : interpolated;
 }
 
 export function evaluateCompositionClipEffects(
@@ -40,6 +47,8 @@ export function evaluateCompositionClipEffects(
   surfaceClip?: SurfaceClip & Partial<ParameterSourceClip>,
 ): Effect[] {
   const withSurfaces = (result: Effect[]) => {
+    // Stick Figure action lanes sit between keyframes and node sources, as on the timeline.
+    result = applyStickFigureActions(surfaceClip, result, localTime);
     if (surfaceClip?.nodeGraph?.parameterSources && typeof surfaceClip.startTime === 'number') {
       result = applyParameterSourcesToEffects({ ...surfaceClip, startTime: surfaceClip.startTime, effects: effects ?? [] }, keyframes ?? [], localTime, result);
     }

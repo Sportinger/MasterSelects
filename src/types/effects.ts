@@ -28,6 +28,7 @@ export type EffectType =
   | 'face-cables'
   | 'flocking'
   | 'weave'
+  | 'stick-figure'
   | 'surface-overlay'
   | 'terrain-overlay'
   | 'hue-shift'

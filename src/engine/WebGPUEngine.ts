@@ -171,8 +171,8 @@ export class WebGPUEngine {
   }
 
   // === CANVAS MANAGEMENT (Unified) ===
-
   setPreviewCanvas(canvas: HTMLCanvasElement): void {
+    if (this.mainPreviewCanvas !== canvas) this.previewContext?.unconfigure();
     this.mainPreviewCanvas = canvas;
     this.previewContext = this.context.configureCanvas(canvas);
   }
@@ -194,6 +194,8 @@ export class WebGPUEngine {
   /** Remove a canvas from the unified target map */
   unregisterTargetCanvas(targetId: string): void {
     this.renderDispatcher?.releasePreviewTarget(targetId);
+    this.res?.slicePipeline?.releaseTarget(targetId);
+    this.targetCanvases.get(targetId)?.context.unconfigure();
     this.targetCanvases.delete(targetId);
     log.debug('Unregistered target canvas', { targetId });
   }
@@ -676,7 +678,6 @@ export class WebGPUEngine {
     if (!device || !this.res) return null;
     return this.pixelReadback.readPixels(device, this.res.renderTargetManager, this.res.compositor);
   }
-
   destroy(): void {
     this.stop();
     engineResources.destroyEngineRenderers(this.res);
@@ -688,7 +689,6 @@ export class WebGPUEngine {
     this.context.destroy();
   }
 }
-
 const hmrLog = Logger.create('WebGPU-HMR');
 export const engine = retainHmrSingleton({
   hot: import.meta.hot,

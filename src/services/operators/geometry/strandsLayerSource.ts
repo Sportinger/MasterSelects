@@ -18,10 +18,17 @@ export interface StrandsLayerSourceData { clipId: string; effectId: string; prog
 
 /** Resolving a stored graph validates and re-parses it; keep one result per stored revision. */
 const resolvedGraphs = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
-let resolvedDefault: EffectOperatorGraph | undefined;
+const resolvedLegacyGraphs = new WeakMap<Effect, { value: unknown; graph: EffectOperatorGraph }>();
 function weaveGraphOf(effect: Effect): EffectOperatorGraph {
   const stored = effect.operatorGraph;
-  if (!stored) return resolvedDefault ??= effectOperatorGraph(effect);
+  if (!stored) {
+    // Legacy parameter graphs differ per effect; none may become the shared default.
+    const value = effect.params.operatorGraph, cached = resolvedLegacyGraphs.get(effect);
+    if (cached && cached.value === value) return cached.graph;
+    const graph = effectOperatorGraph(effect);
+    resolvedLegacyGraphs.set(effect, { value, graph });
+    return graph;
+  }
   let graph = resolvedGraphs.get(stored);
   if (!graph) { graph = effectOperatorGraph(effect); resolvedGraphs.set(stored, graph); }
   return graph;

@@ -191,6 +191,8 @@ export function renderTimelineSolidCanvasRuntime(params: {
   const canvas = getReusableCanvas(params.currentCanvas, params.dimensions);
   const context = canvas.getContext('2d');
   if (context) {
+    // Clear first: a (semi-)transparent color, as on Blank clips, must not keep the previous fill.
+    context.clearRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = params.color;
     context.fillRect(0, 0, canvas.width, canvas.height);
   }

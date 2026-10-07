@@ -14,7 +14,6 @@ import {
   type SplatCameraUniformResource,
 } from './splatRenderer/cameraUniforms';
 import {
-  createSplatDataBindGroup,
   getExpectedSplatFloatCount,
   getOrCreateEffectorStorageBuffer,
   getOrCreateParticleStorageBuffer,
@@ -34,11 +33,11 @@ import {
 } from './splatRenderer/renderParams';
 import {
   createSplatSceneResources,
-  getActiveWorkerSortedBindGroup,
   releaseSplatSceneResources,
   type SplatSceneGpuResources,
 } from './splatRenderer/sceneResources';
 import { updateGpuSortFrame, updateWorkerSortFrame } from './splatRenderer/sortGlue';
+import { resolveSplatDrawBindGroup, SplatDrawStreams } from './splatRenderer/drawStreams';
 import {
   readRenderTargetSummary,
   type GaussianSplatRenderTargetSummary,
@@ -90,8 +89,8 @@ export class GaussianSplatGpuRenderer {
   // Wave 4: GPU sort + cull passes
   private visibilityPass = new SplatVisibilityPass();
   private sortPass = new SplatSortPass();
-  /** Last known visible count from async readback (used as draw count estimate) */
-  private lastVisibleCount: Map<string, number> = new Map();
+  /** Cull count, GPU sort cadence and own GPU order per scene + graph branch */
+  private drawStreams = new SplatDrawStreams();
   private lastRenderDebug: Map<string, GaussianSplatRenderDebugSnapshot> = new Map();
   private lastRenderTargets: Map<string, { texture: GPUTexture; width: number; height: number }> = new Map();
   /** One-time debug logging per clip for smoke-test diagnosis */
@@ -107,11 +106,24 @@ export class GaussianSplatGpuRenderer {
     legacy.graphCompute?.dispose(); delete legacy.graphCompute; legacy.cropCache?.dispose(); delete legacy.cropCache;
     this.graphPass?.dispose(); this.graphPass = new SplatGraphPass(); this.meshPass ??= new SplatMeshPass();
     Object.setPrototypeOf(this.meshPass, SplatMeshPass.prototype);
+    // These passes keep the prototype and field layout of the module version that built
+    // them; rebuild them so hot updates take effect. Their old GPU objects are dropped, not
+    // destroyed, because an unsubmitted encoder may still reference them.
+    const sortWasInitialized = this.sortPass.isInitialized;
+    this.visibilityPass = new SplatVisibilityPass();
+    this.sortPass = new SplatSortPass();
+    this.drawStreams = new SplatDrawStreams(); // their GPU orders lived in the dropped sort pass
+    this.particleCompute = new ParticleCompute();
+    this.effectorCompute = new EffectorCompute();
     if (!this._initialized || !this.device) return;
 
     const staleCameraResources = this.cameraUniformPool;
     this.createPipeline();
     this.createCameraBuffer();
+    this.visibilityPass.initialize(this.device);
+    if (sortWasInitialized) this.sortPass.initialize(this.device);
+    this.effectorCompute.initialize(this.device);
+    this.particleCompute.initialize(this.device);
     this.renderDebugLoggedClips.clear();
 
     void this.device.queue.onSubmittedWorkDone()
@@ -208,11 +220,12 @@ export class GaussianSplatGpuRenderer {
   releaseScene(clipId: string): void {
     this.graphPass.release(clipId);
     this.meshPass.release(clipId);
+    // Sorted-index buffers are retired, not destroyed: a recorded pass may still use them.
+    this.drawStreams.release(clipId, (streamKey) => this.sortPass.release(streamKey));
     const scene = this.sceneCache.get(clipId);
     if (scene) {
       releaseSplatSceneResources(scene);
       this.sceneCache.delete(clipId);
-      this.lastVisibleCount.delete(clipId);
       releaseEffectorStorageBuffer(this.effectorOutputBuffers, clipId);
       // Also clean up particle buffers for this clip
       releaseParticleStorageBuffer(this.particleOutputBuffers, clipId);
@@ -348,6 +361,7 @@ export class GaussianSplatGpuRenderer {
         : activeSplatCount;
 
       // ── Step 3: Frustum Culling [Wave 4] ──────────────────────────────────
+      const stream = this.drawStreams.get(clipId, options?.graphBranch?.id);
       let cullIndexBuffer: GPUBuffer | null = null;
       let hasValidatedCullResult = false;
       const workerSortFrame = updateWorkerSortFrame(
@@ -375,7 +389,7 @@ export class GaussianSplatGpuRenderer {
         );
 
         if (cullResult) {
-          const validatedVisibleCount = this.lastVisibleCount.get(clipId);
+          const validatedVisibleCount = stream.visibleCount;
           if (validatedVisibleCount !== undefined && validatedVisibleCount > 0) {
             cullIndexBuffer = cullResult.visibleIndexBuffer;
             drawCount = Math.min(validatedVisibleCount, effectiveSplatCount);
@@ -397,22 +411,19 @@ export class GaussianSplatGpuRenderer {
           queueSplatVisibleCountReadback(
             this.device,
             readbackBuffer,
-            (count) => this.lastVisibleCount.set(clipId, count),
+            (count) => { stream.visibleCount = count; },
           );
         }
       }
 
       // ── Step 4: Depth Sort (back-to-front) [Wave 4] ──────────────────────
-      const {
-        sortedIndexBuffer,
-        shouldSort,
-        sortThisFrame,
-      } = updateGpuSortFrame({
-        scene,
+      const gpuOrder = updateGpuSortFrame({
+        stream,
         sortPass: this.sortPass,
         device: this.device,
         commandEncoder,
         activeSplatBuffer,
+        identityIndexBuffer: scene.identityIndexBuffer,
         cullIndexBuffer,
         effectiveSplatCount,
         drawCount,
@@ -433,37 +444,11 @@ export class GaussianSplatGpuRenderer {
         options?.outputView,
       );
 
-      // Determine which bind group to use
-      let renderBindGroup = scene.bindGroup; // default: identity indices + original data
-
-      // Build the appropriate bind group based on which passes ran
-      if (canUseWorkerSort && scene.workerSorter && scene.workerSortedBindGroup) {
-        renderBindGroup = activeSplatBuffer === scene.splatBuffer
-          ? scene.workerSortedBindGroup
-          : getActiveWorkerSortedBindGroup(
-            this.device,
-            this.splatDataBindGroupLayout!,
-            scene,
-            clipId,
-            activeSplatBuffer,
-            scene.workerSorter.orderBuffer,
-          );
-      } else if (sortedIndexBuffer || cullIndexBuffer || activeSplatBuffer !== scene.splatBuffer) {
-        const indexBuf = sortedIndexBuffer ?? cullIndexBuffer ?? scene.identityIndexBuffer;
-        renderBindGroup = createSplatDataBindGroup(
-          this.device,
-          this.splatDataBindGroupLayout!,
-          activeSplatBuffer,
-          indexBuf,
-          `splat-active-bind-group-${clipId}`,
-        );
-        if (sortedIndexBuffer) {
-          scene.sortedBindGroup = renderBindGroup;
-        }
-      } else if (scene.sortedBindGroup && shouldSort && !sortThisFrame) {
-        // Reuse last sorted bind group on skip frames
-        renderBindGroup = scene.sortedBindGroup;
-      }
+      const renderBindGroup = resolveSplatDrawBindGroup({
+        device: this.device, layout: this.splatDataBindGroupLayout!, clipId, scene, stream,
+        activeSplatBuffer, canUseWorkerSort, gpuOrder, cullIndexBuffer,
+      });
+      if (gpuOrder) drawCount = gpuOrder.count;
 
       const passEncoder = commandEncoder.beginRenderPass(
         buildSplatRenderPassDescriptor(clipId, targetView, clearColor, options),
@@ -480,7 +465,7 @@ export class GaussianSplatGpuRenderer {
 
       recordSplatRenderDebug(log, this.renderDebugLoggedClips, this.lastRenderDebug, {
         branchId: options?.graphBranch?.id,
-        sortMode: canUseWorkerSort ? 'worker' : sortedIndexBuffer ? 'gpu' : 'identity',
+        sortMode: canUseWorkerSort ? 'worker' : gpuOrder ? 'gpu' : 'identity',
         clipId,
         sceneSplatCount: scene.splatCount,
         activeSplatCount,
@@ -497,7 +482,7 @@ export class GaussianSplatGpuRenderer {
         colorWrite: options?.colorWrite !== false,
         hasParticleOverride: activeSplatBuffer !== scene.splatBuffer,
         usedCull: !!cullIndexBuffer,
-        usedSort: usedWorkerSort || !!sortedIndexBuffer,
+        usedSort: usedWorkerSort || !!gpuOrder,
       });
       // Instanced draw: 4 vertices per quad, one instance per splat
       passEncoder.draw(4, drawCount, 0, 0);
@@ -510,9 +495,15 @@ export class GaussianSplatGpuRenderer {
     }
   }
 
-  /** Called at start of each frame to reset per-frame state */
+  /**
+   * Called at start of each frame to reset per-frame state. Every command buffer recorded
+   * since the previous call must have been submitted: per-dispatch uniform slots are
+   * rewound and buffers retired by growth are destroyed here.
+   */
   beginFrame(): void {
     this.graphPass.beginFrame(); this.meshPass.beginFrame(); this.sortPass.beginFrame();
+    this.visibilityPass.beginFrame(); this.particleCompute.beginFrame(); this.effectorCompute.beginFrame();
+    this.drawStreams.beginFrame((streamKey) => this.sortPass.release(streamKey));
     if (this.renderTargetPool) {
       this.renderTargetPool.resetFrame();
     }
@@ -553,7 +544,7 @@ export class GaussianSplatGpuRenderer {
       log.debug('Disposed scene buffer', { clipId });
     }
     this.sceneCache.clear();
-    this.lastVisibleCount.clear();
+    this.drawStreams.clear();
     this.lastRenderDebug.clear();
     this.lastRenderTargets.clear();
     this.renderDebugLoggedClips.clear();

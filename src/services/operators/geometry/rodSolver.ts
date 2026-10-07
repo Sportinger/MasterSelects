@@ -3,6 +3,8 @@ import type { RodRest } from './rodRest';
 import { RodContacts } from './rodContacts';
 import { buildRodTopology, type RodTopology } from './rodTopology';
 import { airVelocity, windVelocity } from './simulationForces';
+import { knitCycleTarget } from './knitCycleGuides';
+import { RodMotionGuard } from './rodMotionGuard';
 
 /** Fixed simulation steps per second of source time; substeps subdivide each step. */
 export const ROD_STEP_RATE = 60;
@@ -12,7 +14,7 @@ const CHECKPOINT_LIMIT = 120;
 export const ROD_STEP_LIMIT = ROD_STEP_RATE * 600;
 /** Air drag of a thin rod (per second), across its axis only. */
 export const ROD_AIR_DRAG = 1;
-/** No node travels more than this share of the radius per substep, so rods cannot pass through each other. */
+/** Prediction speed cap. Constraint corrections need a separate movement guard. */
 export const ROD_MAX_TRAVEL = 0.5;
 
 /**
@@ -22,6 +24,18 @@ export const ROD_MAX_TRAVEL = 0.5;
 export const rodStretchModulus = (stiffness: number) => 10 ** (1 + 6 * stiffness);
 export const rodBendModulus = (stiffness: number) => 10 ** (-4 + 5 * stiffness);
 export const rodPullEase = (value: number) => value <= 0 ? 0 : value >= 1 ? 1 : value * value * (3 - 2 * value);
+/** Fixture progress from a pin's Pull Start. Holds and pauses affect only the repeating motion. */
+export function rodPullProgress(spec: Pick<RodSpec, 'pullTime' | 'pullLinear' | 'pullOscillate' | 'pullHold' | 'pullPause'>, elapsed: number): number {
+  const phase = elapsed / spec.pullTime;
+  if (!spec.pullOscillate) return spec.pullLinear ? Math.max(0, Math.min(1, phase)) : rodPullEase(phase);
+  const hold = spec.pullHold ?? 0, pause = spec.pullPause ?? 0;
+  if (hold === 0 && pause === 0) return rodPullEase(1 - Math.abs((Math.max(0, phase) % 2) - 1));
+  const at = Math.max(0, elapsed) % (2 * spec.pullTime + hold + pause);
+  if (at < spec.pullTime) return rodPullEase(at / spec.pullTime);
+  if (at < spec.pullTime + hold) return 1;
+  if (at < 2 * spec.pullTime + hold) return rodPullEase(1 - (at - spec.pullTime - hold) / spec.pullTime);
+  return 0;
+}
 /**
  * Forming moves a node by at most this share of the radius per substep: half the travel limit, so
  * contacts keep up even where a thread has to slide past others to reach its place.
@@ -54,7 +68,9 @@ export class RodSimulation {
   private readonly stretchCompliance: Float64Array;
   private readonly bendCompliance: Float64Array;
   private readonly contacts: RodContacts;
+  private readonly motionGuard?: RodMotionGuard;
   private readonly air = new Float64Array(3);
+  private readonly guide = new Float64Array(4);
   private readonly checkpoints = new Map<number, Float64Array>();
   private interval = CHECKPOINT_INTERVAL;
   private step = 0;
@@ -72,6 +88,7 @@ export class RodSimulation {
     this.bendCompliance = this.topology.bends.length.map(length => length / bend);
     this.inverseMass = this.topology.mass.map((value, node) => rodInverseMass(value, rest.pinned[node] === 1, spec.radius));
     this.contacts = new RodContacts(this.topology.segments, spec.radius);
+    if (spec.cycle) this.motionGuard = new RodMotionGuard(this.topology.segments, spec.radius, count);
     this.contacts.update(this.positions);
     this.checkpoints.set(0, this.snapshot());
   }
@@ -137,7 +154,8 @@ export class RodSimulation {
       for (let node = 0; node < count; node++) {
         const base = node * 3;
         if (inverseMass[node] === 0) {
-          const reach = spec.pull * rodPullEase((end - rest.pullStart[node]) / spec.pullTime);
+          // Only the fixture target returns; velocities, contacts and the rod state continue forward.
+          const reach = spec.pull * rodPullProgress(spec, end - rest.pullStart[node]);
           for (let axis = 0; axis < 3; axis++) predicted[base + axis] = rest.positions[base + axis] + rest.pull[base + axis] * reach;
           continue;
         }
@@ -159,11 +177,17 @@ export class RodSimulation {
         predicted[base] = positions[base] + vx * dt; predicted[base + 1] = positions[base + 1] + vy * dt; predicted[base + 2] = positions[base + 2] + vz * dt;
       }
       this.solveForm(end);
-      this.contacts.update(predicted);
+      this.solveCycleGuide(end, dt);
       this.solveStretch(dt);
       this.solveBend(dt);
-      this.contacts.solve(predicted, positions, inverseMass, spec.friction);
+      this.motionGuard?.limit(predicted, positions);
+      for (let iteration = 0; iteration < (this.motionGuard ? 3 : 1); iteration++) {
+        this.contacts.update(predicted);
+        this.contacts.solve(predicted, positions, inverseMass, spec.friction);
+        this.motionGuard?.constrain(predicted, positions);
+      }
       if (spec.floor) this.solveFloor();
+      this.motionGuard?.constrain(predicted, positions);
       for (let index = 0; index < positions.length; index++) {
         velocities[index] = (predicted[index] - positions[index]) / dt;
         positions[index] = predicted[index];
@@ -182,6 +206,24 @@ export class RodSimulation {
       const scale = (length - rest[c]) / (weight + stretchCompliance[c] * inverseDt2) / length;
       p[i * 3] += wi * scale * dx; p[i * 3 + 1] += wi * scale * dy; p[i * 3 + 2] += wi * scale * dz;
       p[j * 3] -= wj * scale * dx; p[j * 3 + 1] -= wj * scale * dy; p[j * 3 + 2] -= wj * scale * dz;
+    }
+  }
+
+  /** Soft forward-time needle/return guides; stretch and contacts get the final correction. */
+  private solveCycleGuide(time: number, dt: number) {
+    const s = this.spec.cycle;
+    if (!s || s.strength === 0) return;
+    const { rest, guide, predicted: p, inverseMass } = this, travel = ROD_FORM_TRAVEL * this.spec.radius;
+    for (let row = 0; row < rest.counts.length; row++) {
+      for (let node = rest.starts[row], end = node + rest.counts[row]; node < end; node++) {
+        if (inverseMass[node] === 0) continue;
+        knitCycleTarget(s, rest.material[node], row, time, guide);
+        const weight = 1 - Math.exp(-s.strength * guide[3] * dt), at = node * 3;
+        let dx = (guide[0] - p[at]) * weight, dy = (guide[1] - p[at + 1]) * weight, dz = (guide[2] - p[at + 2]) * weight;
+        const length = Math.hypot(dx, dy, dz), scale = length > travel ? travel / length : 1;
+        dx *= scale; dy *= scale; dz *= scale;
+        p[at] += dx; p[at + 1] += dy; p[at + 2] += dz;
+      }
     }
   }
 

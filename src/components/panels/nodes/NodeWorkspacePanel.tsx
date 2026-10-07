@@ -187,11 +187,27 @@ export function NodeWorkspacePanel({ panelId = 'node-workspace', data }: { panel
   };
   const request = useNodeWorkspaceNavigation(state => state.request);
   const handled = useNodeWorkspaceNavigation(state => state.handledNonce);
+  const revealedRequest = useRef(0);
   useEffect(() => {
     if (!request || request.nonce <= handled) return;
+    if (!request.panelId && source === TIMELINE_NODE_SOURCE) {
+      // Links from other panels (e.g. a driven property's source) open the clip's lane in place;
+      // its inline controller consumes the request and selects the node.
+      if (revealedRequest.current >= request.nonce || !clips.some(clip => clip.id === request.clipId)) return;
+      revealedRequest.current = request.nonce;
+      const owner = laneOwner(request.clipId);
+      setRevealedClips(current => current.has(owner) ? current : new Set([...current, owner].slice(-MAX_REVEALED_LANES)));
+      if (request.nodeId) {
+        const target = workspaceClipId(owner, request.nodeId);
+        setSelection({ graphId: composition.graph.id, ids: [target] });
+        setActiveClip(owner);
+        requestGroupFocus(target);
+      } else requestGroupFocus(workspaceClipGroup(owner));
+      return;
+    }
     if (request.panelId ? request.panelId !== panelId : source && source !== request.clipId) return;
     if (!rootOwner || (request.panelId && rootOwner !== request.clipId)) setSource(request.clipId);
-  }, [request, handled, panelId, source, rootOwner, setSource]);
+  }, [request, handled, panelId, source, rootOwner, setSource, clips, laneOwner, composition.graph.id]);
   return <div className="node-workspace-context">
     <CompositionBreadcrumb context={rootOwner ? { kind: 'clip', clipId: rootOwner } : { kind: 'composition', compositionId }} onTimeline={onTimeline} />
     {expandedIds.map(id => <ClipWorkspaceController key={`${compositionId}:${id}`} clipId={id} panelId={panelId} inline={!rootOwner} onChange={register} />)}

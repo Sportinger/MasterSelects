@@ -4,7 +4,7 @@
  * adapter, and the recent console/log breadcrumbs that led up to the failure.
  */
 
-import { APP_BUILD_ID, APP_RELEASE_ID, APP_SOURCE_DIRTY, APP_SOURCE_REVISION } from '../appBuild';
+import { APP_BUILD_ID, APP_SOURCE_REVISION, APP_SOURCE_DIRTY, APP_RELEASE_ID } from '../appBuild';
 import {
   getRecentRuntimeDiagnosticEntries,
   getRuntimeGpuInfo,
@@ -43,6 +43,9 @@ export interface DiagnosticBreadcrumb {
 
 export interface DiagnosticContext {
   buildId?: string;
+  sourceRevision?: string | null;
+  sourceDirty?: boolean;
+  releaseId?: string | null;
   connection?: { downlink?: number; effectiveType?: string; rtt?: number; saveData?: boolean };
   deviceMemoryGb?: number;
   hardwareConcurrency?: number;
@@ -54,10 +57,7 @@ export interface DiagnosticContext {
   pageUrl?: string;
   performanceNow?: number;
   referrer?: string;
-  releaseId?: string;
   screen?: { height: number; width: number };
-  sourceDirty?: boolean;
-  sourceRevision?: string;
   storageMb?: { quotaMb?: number; usageMb?: number };
   timezone?: string;
   uptimeMs: number;
@@ -146,10 +146,8 @@ function referrerOrigin(referrer: string): string | undefined {
 }
 
 export function collectDiagnosticContext(): DiagnosticContext {
-  const context: DiagnosticContext = { buildId: APP_BUILD_ID, uptimeMs: Date.now() - BOOT_AT_MS };
-  if (APP_SOURCE_REVISION) context.sourceRevision = APP_SOURCE_REVISION;
-  if (APP_SOURCE_DIRTY !== null) context.sourceDirty = APP_SOURCE_DIRTY;
-  if (APP_RELEASE_ID) context.releaseId = APP_RELEASE_ID;
+  const context: DiagnosticContext = { buildId: APP_BUILD_ID, sourceRevision: APP_SOURCE_REVISION,
+    sourceDirty: APP_SOURCE_DIRTY, releaseId: APP_RELEASE_ID, uptimeMs: Date.now() - BOOT_AT_MS };
   if (typeof navigator === 'undefined' || typeof window === 'undefined') return context;
 
   const nav = navigator as NavigatorWithExtras;

@@ -24,6 +24,8 @@ These discovery/focus tools do not create or mutate graphs. Shaders, implementat
 
 ## Codex Direct node stream
 
+Timeline content (tracks, clips, figures, keys, MIDI) streams through the sibling format `ms-scene-v1`; see [Scene Streams](/features/scene-streams/).
+
 Direct receives the `nodeGraphStream` version-1 contract alongside the inventory. An exact `ms-nodegraph-v1` fenced block contains newline-delimited JSON. Its first record is `{"op":"begin","schemaVersion":1,"clipId":"<existing clip ID>"}`. Only after receiving that complete record does the browser select the clip and open Nodes beside Preview automatically; no separate focus call is necessary. If a Nodes panel is already visible elsewhere (the active tab of a docked group, a floating panel or a detached window), that panel is switched to the clip in place and no additional Nodes panel is opened or moved. A new clip must be created before the stream, using its returned ID.
 
 The fenced text protocol is optional: Codex Direct can also call the atomic editor tools. Both paths yield a browser presentation frame after each edit, so consecutive connections, node moves, and other tool mutations become visible one step at a time even when the provider emits several tool calls together. `executeBatch` reports and presents each contained action before starting the next. A registered compound operator may still expand into many visual nodes in one atomic edit; its nodes and cables enter in a short staggered wave without splitting the saved edit or undo point. Prompt guidelines alone cannot guarantee that a provider chooses the text protocol.
@@ -69,6 +71,18 @@ time basis, interpolation and dB normalization are stored in the control graph.
 Slit Scan exposes Delay, Map mix and Noise amount as scalar targets. Use Remap
 to convert the normalized audio value into a desired delay range. Audio source
 and export integration have unit coverage; live end-to-end verification is pending.
+
+Timing and rig controls in the same menu: **Smooth Noise** (`control.noise`),
+**Envelope** (`control.envelope`) and **Marker Trigger** (`control.marker-trigger`)
+under Time & Motion, **Two-Bone IK** (`control.ik-two-bone`, seven outputs) under
+Geometry. They also drive the clip Transform; see Node-Workspace.md.
+
+Rig and motion controls: **Ballistic** (`control.ballistic`) and **Gait Cycle**
+(`rig.gait-cycle`) under Time & Motion, **Limb IK** (`rig.limb-ik`) and **Attach to
+Joint** (`rig.attach`) under Geometry. They drive the **Stick Figure** effect
+(`effect:stick-figure`, Generate) and clip transforms; see Node-Workspace.md.
+**Contact Trigger** (`rig.contact-trigger`, Time & Motion) times effects to a figure's
+action contacts.
 
 Image effects expose six reusable motion operators through **Add node**:
 
@@ -395,6 +409,7 @@ node is one node in every graph rather than a per-domain copy.
 | Knot | Shape (trefoil, figure-eight, reef knot of two ropes, (P, Q) torus knot), Size, Depth, Points → closed knot curves whose crossings pass over and under |
 | Celtic Knot | Columns, Rows, Cell Size, Height, Points per Step, Roundness → Celtic plait loops alternating over and under like a plain weave |
 | Knit | Stitches, Rows, stitch Width and Height, row Spacing, Depth, Lean, Points per Stitch → weft-knit rows whose loops interlock with the row below |
+| Knit Sphere | Horizontal closed rings with moving Knit loops in a fixed lower-front window; Sphere Radius, Rings, Stitches per Ring, Loop Height, Depth, Lean, Speed, Phase, Zone Width/Center/Height, Edge Softness, Points per Stitch |
 | Thread Along | Curves (+ optional per-point Progress) → curves pulled in behind a lifted tip that settles with a damped swing; ahead of the tip hidden or trailing straight from the tip (Progress, Stagger, Lift, Lift Length, Settle, Ahead, Trail) |
 | Fiber Material | Curves → curves with a fiber material for Strand Render: Preset (wool, cotton, silk, synthetic, hair), Color or Absorption or Melanin (+ Redness), longitudinal and azimuthal Roughness, Cuticle Tilt, IOR, Coat Tint, Matte, Fuzz; Color, Roughness, Melanin and Selection field inputs per point |
 | Strand Render | Curves → scene: thin lit ribbons in the shared 3D scene (Width, Color — "From material" with a Fiber Material, Antialiasing, Subdivision: path traced segments per curve segment) |

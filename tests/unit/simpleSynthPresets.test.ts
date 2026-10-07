@@ -20,10 +20,11 @@ function sameInstrument(a: unknown, b: unknown): boolean {
 }
 
 describe('SIMPLE_SYNTH_PRESETS', () => {
-  it('ships the eight starter patches with unique ids', () => {
-    expect(SIMPLE_SYNTH_PRESETS).toHaveLength(8);
+  it('ships the eight starter patches and six SFX one-shots with unique ids', () => {
+    expect(SIMPLE_SYNTH_PRESETS).toHaveLength(14);
     const ids = SIMPLE_SYNTH_PRESETS.map((p) => p.id);
-    expect(new Set(ids).size).toBe(8);
+    expect(new Set(ids).size).toBe(14);
+    expect(ids.filter((id) => id.startsWith('sfx-'))).toHaveLength(6);
   });
 
   it('every preset is a complete, JSON-round-tripping simple-synth patch', () => {

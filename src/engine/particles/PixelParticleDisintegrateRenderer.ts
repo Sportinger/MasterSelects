@@ -1,4 +1,5 @@
 import type { Effect } from '../../types/effects';
+import { GpuUniformRing } from '../core/gpuUniformRing';
 import shaderSource from './shaders/PixelParticleDisintegrate.wgsl?raw';
 import { compileParticleDisintegrateGraph } from '../../services/operators/particleDisintegrateGraph';
 
@@ -29,8 +30,15 @@ interface ParticleResources {
   readonly flatPipeline: GPURenderPipeline;
   readonly particlePipeline: GPURenderPipeline;
   readonly resolvePipeline: GPURenderPipeline;
-  readonly uniformBuffer: GPUBuffer;
+  /** One uniform slot per layer rendered in a frame: queue.writeBuffer is staged before the
+   * submit, so a shared buffer would give every layer the parameters of the last one.
+   * Task-framed because the renderer is reached from the main compositor, nested
+   * compositions, preview targets, workers, and thumbnails, which share no begin hook;
+   * each of them records and submits its encoder within one synchronous section. */
+  readonly uniforms: GpuUniformRing;
 }
+
+const UNIFORM_SIZE = 128;
 
 const rendererByDevice = new WeakMap<GPUDevice, PixelParticleDisintegrateRenderer>();
 
@@ -69,14 +77,14 @@ export class PixelParticleDisintegrateRenderer {
   render(options: PixelParticleDisintegrateRenderOptions): PixelParticleDisintegrateRenderStats {
     const resources = this.getResources();
     const params = this.resolveParams(options);
-    this.device.queue.writeBuffer(resources.uniformBuffer, 0, params.uniformBuffer);
+    const uniformBuffer = resources.uniforms.write(params.uniformBuffer);
 
     const sourceBindGroup = this.device.createBindGroup({
       layout: resources.bindGroupLayout,
       entries: [
         { binding: 0, resource: options.sampler },
         { binding: 1, resource: options.sourceView },
-        { binding: 2, resource: { buffer: resources.uniformBuffer } },
+        { binding: 2, resource: { buffer: uniformBuffer } },
       ],
     });
 
@@ -112,7 +120,7 @@ export class PixelParticleDisintegrateRenderer {
       entries: [
         { binding: 0, resource: options.sampler },
         { binding: 1, resource: options.accumulationView },
-        { binding: 2, resource: { buffer: resources.uniformBuffer } },
+        { binding: 2, resource: { buffer: uniformBuffer } },
       ],
     });
     const resolvePass = options.commandEncoder.beginRenderPass({
@@ -138,7 +146,7 @@ export class PixelParticleDisintegrateRenderer {
   }
 
   destroy(): void {
-    this.resources?.uniformBuffer.destroy();
+    this.resources?.uniforms.dispose();
     this.resources = null;
   }
 
@@ -206,12 +214,12 @@ export class PixelParticleDisintegrateRenderer {
       },
       primitive: { topology: 'triangle-list' },
     });
-    const uniformBuffer = this.device.createBuffer({
+    const uniforms = new GpuUniformRing(this.device, {
       label: 'pixel-particle-disintegrate-uniforms',
-      size: 128,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      size: UNIFORM_SIZE,
+      frame: 'task',
     });
-    this.resources = { bindGroupLayout, flatPipeline, particlePipeline, resolvePipeline, uniformBuffer };
+    this.resources = { bindGroupLayout, flatPipeline, particlePipeline, resolvePipeline, uniforms };
     return this.resources;
   }
 

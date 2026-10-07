@@ -19,6 +19,8 @@ import {
   CLIP_SPEED_MIN_PERCENT,
   CLIP_SPEED_MIN_SIGNED_MULTIPLIER,
 } from '../../../../stores/timeline/helpers/linkedClipSpeed';
+import { TransformNodeSourceActions } from './TransformNodeSourceActions';
+import { useTransformNodeSources } from './useTransformNodeSources';
 
 function LinkedAudioIcon() {
   return (
@@ -118,6 +120,7 @@ export function OptionsSection({
   onToggle3D,
   onWireframeToggle,
 }: OptionsSectionProps) {
+  const opacitySources = useTransformNodeSources(clipId);
   if (isCameraClip) {
     const navigationTitle = 'Click preview, then WASD move, Q/E up-down, LMB orbit, RMB look, MMB/Shift+LMB pan, wheel moves camera.';
 
@@ -324,7 +327,10 @@ export function OptionsSection({
               sensitivity={1}
               onDragStart={onBatchStart}
               onDragEnd={onBatchEnd}
-              keyframeToggle={<KeyframeToggle clipId={clipId} property="opacity" value={opacity} />}
+              disabled={opacitySources.has('opacity')}
+              keyframeToggle={opacitySources.has('opacity')
+                ? <TransformNodeSourceActions clipId={clipId} properties={['opacity']} sources={opacitySources} />
+                : <KeyframeToggle clipId={clipId} property="opacity" value={opacity} />}
               midiTarget={createMidiTarget('opacity', 'Opacity', opacity, 0, 1)}
             />
           </div>

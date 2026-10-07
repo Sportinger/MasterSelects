@@ -3,7 +3,7 @@ import type { KeyframeActions } from '../storeTypes/utilityActionTypes';
 import type { SliceCreator } from '../storeTypes/timelineStoreTypes';
 import { renderHostPort } from '../../../services/render/renderHostPort';
 import { getKeyframeAtTime, hasKeyframesForProperty } from '../../../utils/keyframeInterpolation';
-import { normalizeEasingType } from '../../../utils/easing';
+import { isHoldEasing, normalizeEasingType } from '../../../utils/easing';
 import { isVectorAnimationSourceType, parseVectorAnimationStateProperty } from '../../../types/vectorAnimation';
 import type { AudioKeyframeInvalidationTarget } from './audioEffectKeyframeValues';
 import { findClipById, isAnyKeyframeOnLockedTrack, isClipOnLockedTrack } from './keyframeClipLookup';
@@ -54,7 +54,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
     if (isClipOnLockedTrack(clips, tracks, clipId)) return;
     const clip = clips.find(c => c.id === clipId);
     if (!clip) return;
-    const normalizedEasing = normalizeEasingType(easing, 'linear');
+    const easingFields = { easing: normalizeEasingType(easing, 'linear'), hold: isHoldEasing(easing) || undefined };
     const vectorAnimationState = parseVectorAnimationStateProperty(property);
     const normalizedPropertyValue = normalizeTimelinePropertyValue(property, value);
     const keyframeValue = vectorAnimationState && isVectorAnimationSourceType(clip.source?.type)
@@ -72,7 +72,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
 
     if (existingAtTime) {
       newKeyframes = existingKeyframes.map(k =>
-        k.id === existingAtTime.id ? { ...k, value: keyframeValue, easing: normalizedEasing } : k
+        k.id === existingAtTime.id ? { ...k, value: keyframeValue, ...easingFields } : k
       );
     } else {
       const newKeyframe: Keyframe = {
@@ -81,7 +81,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
         time: clampedTime,
         property,
         value: keyframeValue,
-        easing: normalizedEasing,
+        ...easingFields,
       };
       newKeyframes = [...existingKeyframes, newKeyframe].sort((a, b) => a.time - b.time);
     }

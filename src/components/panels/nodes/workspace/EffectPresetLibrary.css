@@ -5,3 +5,7 @@
 .effect-preset-entry { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
 .effect-preset-entry > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .effect-preset-library input:focus-visible { outline: 2px solid var(--accent-primary, #4a9eff); outline-offset: 2px; }
+
+.effect-preset-library button:focus { outline: none; }
+.effect-preset-library button:focus-visible { outline: 2px solid var(--accent-primary, #4a9eff); outline-offset: 2px; }
+.effect-preset-library button { -webkit-tap-highlight-color: transparent; }

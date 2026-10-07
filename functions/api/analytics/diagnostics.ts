@@ -156,7 +156,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * parts first when the combined blob exceeds the storage budget.
  */
 function buildContextJson(context: unknown, breadcrumbs: unknown): string | null {
-  const safeContext = isPlainObject(context)
+  const safeContext: Record<string, unknown> | null = isPlainObject(context)
     ? { ...context, pageUrl: safePagePath(context.pageUrl) ?? undefined, referrer: referrerOrigin(context.referrer) }
     : null;
   const safeBreadcrumbs = Array.isArray(breadcrumbs) ? breadcrumbs.slice(-40) : null;
@@ -166,6 +166,13 @@ function buildContextJson(context: unknown, breadcrumbs: unknown): string | null
     { breadcrumbs: safeBreadcrumbs, context: safeContext },
     { breadcrumbs: null, context: safeContext, truncated: 'breadcrumbs' },
     { breadcrumbs: null, context: safeContext ? { ...safeContext, extra: undefined } : null, truncated: 'breadcrumbs+extra' },
+    { breadcrumbs: null, context: safeContext ? {
+      buildId: typeof safeContext.buildId === 'string' ? safeContext.buildId.slice(0, 100) : null,
+      sourceRevision: typeof safeContext.sourceRevision === 'string' && /^[a-f0-9]{40}$/.test(safeContext.sourceRevision)
+        ? safeContext.sourceRevision : null,
+      sourceDirty: typeof safeContext.sourceDirty === 'boolean' ? safeContext.sourceDirty : null,
+      releaseId: typeof safeContext.releaseId === 'string' ? safeContext.releaseId.slice(0, 100) : null,
+    } : null, truncated: 'identity-only' },
   ];
   for (const attempt of attempts) {
     try {

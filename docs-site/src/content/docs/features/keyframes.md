@@ -189,6 +189,10 @@ The diamond button writes a keyframe at the playhead. If a keyframe already exis
 - Mask panel stopwatch buttons are available for the whole Mask Path, Feather, and Feather Quality. Position X/Y remain animatable for compatibility and automation, but the visible mask-shape workflow uses the Mask Path stopwatch.
 - Motion shape stopwatch buttons are available for size, corner radius, fill opacity, and stroke width in the Motion tab.
 
+### AI Tools
+
+`addKeyframe` accepts one key (`clipId`, `property`, `value`, `time`, `easing`), an atomic `sequence`, or the compact `keys` map for one clip: `{ clipId, effectId?, keys: { "position.x": [[0, -300], [1.2, 200, "expo-out"]], "opacity": [[0, 0], [0.3, 1]] } }`. With `effectId`, bare names address that effect's parameters. The easing `hold` (also `step`, `constant`) sets `Keyframe.hold`, so the value stays until the next key.
+
 ### Recording Mode
 
 Recording is tracked per `clipId:property` entry.

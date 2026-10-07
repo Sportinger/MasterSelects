@@ -1,8 +1,10 @@
+import { shiftSkeletonActions } from '../rig/skeletonActions';
 import type { ParameterSources } from '../../types/parameterSources';
 import type { TimelineClip } from '../../types/timeline';
 import type { Keyframe } from '../../types/keyframes';
 import { parameterSourceTargets } from './parameterSourceTargets';
 import { cloneAudioParameterSources } from './audioParameterContext';
+import { isTransformParameterPath } from './transformParameterTargets';
 
 /** Only explicit owner removal cleans up sources. Unknown persisted paths are kept for diagnostics. */
 export function reconcileRemovedParameterTargets(before: TimelineClip, after: TimelineClip): TimelineClip {
@@ -69,17 +71,30 @@ export function offsetParameterSourceTime(state: ParameterSources | undefined, d
 }
 
 export function parameterSourceSplitPatch(clip: TimelineClip, delta: number): Partial<TimelineClip> {
-  return clip.nodeGraph?.parameterSources ? { nodeGraph: { ...structuredClone(clip.nodeGraph),
-    parameterSources: offsetParameterSourceTime(clip.nodeGraph.parameterSources, delta) } } : {};
+  return {
+    ...(clip.nodeGraph?.parameterSources ? { nodeGraph: { ...structuredClone(clip.nodeGraph),
+      parameterSources: offsetParameterSourceTime(clip.nodeGraph.parameterSources, delta) } } : {}),
+    ...effectClockPatch(clip, delta),
+  };
+}
+
+/** Effect-owned clocks (Stick Figure action lanes) follow a clip whose local time starts `delta` later. */
+function effectClockPatch(clip: Pick<TimelineClip, 'effects'>, delta: number): Partial<TimelineClip> {
+  if (!delta || !clip.effects?.some(effect => effect.type === 'stick-figure' && typeof effect.params.actions === 'string')) return {};
+  return { effects: clip.effects.map(effect => effect.type === 'stick-figure'
+    ? { ...effect, params: { ...effect.params, actions: shiftSkeletonActions(effect.params.actions, delta) as string } }
+    : effect) };
 }
 
 export function trimmedParameterSourceClips(before: readonly TimelineClip[], after: TimelineClip[]): TimelineClip[] {
   const originals = new Map(before.map(clip => [clip.id, clip]));
   return after.map(clip => {
     const previous = originals.get(clip.id);
-    if (!previous?.nodeGraph?.parameterSources || previous.startTime === clip.startTime || previous.duration === clip.duration) return clip;
-    return { ...clip, nodeGraph: { ...clip.nodeGraph!, parameterSources:
-      offsetParameterSourceTime(previous.nodeGraph.parameterSources, clip.startTime - previous.startTime) } };
+    if (!previous || previous.startTime === clip.startTime || previous.duration === clip.duration) return clip;
+    const delta = clip.startTime - previous.startTime;
+    const withSources = previous.nodeGraph?.parameterSources ? { ...clip, nodeGraph: { ...clip.nodeGraph!, parameterSources:
+      offsetParameterSourceTime(previous.nodeGraph.parameterSources, delta) } } : clip;
+    return { ...withSources, ...effectClockPatch(withSources, delta) };
   });
 }
 
@@ -87,7 +102,8 @@ export function trimmedParameterSourceClips(before: readonly TimelineClip[], aft
 export function copyParameterKeyframesToParts(keys: ReadonlyMap<string, readonly Keyframe[]>, before: TimelineClip, parts: readonly TimelineClip[]): Map<string, Keyframe[]> {
   const result = new Map([...keys].map(([id, list]) => [id, [...list]]));
   if (!before.nodeGraph?.parameterSources) return result;
-  const properties = new Set(parameterSourceTargets(before).map(target => target.path));
+  // Transform keys keep the regular split behavior; only effect/color curves are copied whole.
+  const properties = new Set(parameterSourceTargets(before).map(target => target.path).filter(path => !isTransformParameterPath(path)));
   const source = (keys.get(before.id) ?? []).filter(key => properties.has(key.property));
   if (!source.length) return result;
   for (const part of parts) {

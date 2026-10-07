@@ -1,8 +1,8 @@
 // Rod Simulation output on the GPU (CPU reference: rodRest.ts rodCurvePositions and the Yarn
 // Profile stages after it): every curve point follows its place on its rod (uniform Catmull-Rom on
 // the simulated nodes, blended between two steps) plus its rest detail, and its radius scale is
-// multiplied by the Yarn Profile radius fields (strandRadiusScale, generated in place of the
-// field marker below). StrandFrames.wgsl then writes frames.
+// deformed by Set Position and scaled by Yarn Profile in graph order (strandRodPoint,
+// generated at the field marker below). StrandFrames.wgsl then writes frames.
 
 struct OutputParams {
   points: u32,
@@ -15,7 +15,7 @@ struct OutputParams {
 // Simulated node positions (xyz, inverse mass) at the later step, and at the earlier one.
 @group(0) @binding(1) var<storage, read> nodes: array<vec4f>;
 @group(0) @binding(2) var<storage, read> earlier: array<vec4f>;
-// Per point: (node, first node of its rod, rod node count, ring) and
+// Per point: (node, first node of its rod, rod node count, flags: bit 0 ring, bit 1 capsule centre line) and
 // (detail xyz, fraction), (rest radius scale, strand, point in strand, points in strand).
 @group(0) @binding(3) var<storage, read> pointRods: array<vec4u>;
 @group(0) @binding(4) var<storage, read> pointGeometry: array<vec4f>;
@@ -23,6 +23,8 @@ struct OutputParams {
 @group(0) @binding(5) var<storage, read_write> packed: array<vec4f>;
 // Values of the constants in the radius fields.
 @group(0) @binding(6) var<storage, read> fieldConstants: array<f32>;
+// Measure the rendered points, including post-simulation deformations.
+@group(0) @binding(7) var<storage, read_write> outputExtent: array<atomic<u32>>;
 
 /** Curve context a radius field reads (curveFieldColumns.ts): Position, Curve Param, indices, counts. */
 struct FieldContext {
@@ -58,7 +60,7 @@ fn rodOutput(@builtin(global_invocation_id) gid: vec3u) {
   let info = pointGeometry[index * 2u + 1u];
   var point = geometry.xyz;
   if (rodInfo.z > 0u) {
-    let ring = rodInfo.w == 1u;
+    let ring = (rodInfo.w & 1u) == 1u;
     let k = i32(rodInfo.x);
     let a = node(rodInfo.y, rodInfo.z, ring, k - 1);
     let b = node(rodInfo.y, rodInfo.z, ring, k);
@@ -68,9 +70,12 @@ fn rodOutput(@builtin(global_invocation_id) gid: vec3u) {
     let t2 = t * t;
     let t3 = t2 * t;
     point += 0.5 * (2.0 * b + (c - a) * t + (2.0 * a - 5.0 * b + 4.0 * c - d) * t2 + (3.0 * (b - c) + d - a) * t3);
+    // Guided contacts protect these segments, not Catmull-Rom overshoot or rest detail.
+    if ((rodInfo.w & 2u) != 0u) { point = mix(b, c, t); }
   }
   let curveU = select(0.0, info.z / (info.w - 1.0), info.w > 1.0);
-  let radius = info.x * strandRadiusScale(FieldContext(point, curveU, info.z, info.y, info.w, f32(output.strands)));
-  packed[index * 3u] = vec4f(point, 0.0);
-  packed[index * 3u + 1u] = vec4f(0.0, 0.0, 0.0, radius);
+  let result = strandRodPoint(FieldContext(point, curveU, info.z, info.y, info.w, f32(output.strands)), info.x);
+  packed[index * 3u] = vec4f(result.xyz, 0.0);
+  packed[index * 3u + 1u] = vec4f(0.0, 0.0, 0.0, result.w);
+  atomicMax(&outputExtent[0], bitcast<u32>(length(result.xyz)));
 }

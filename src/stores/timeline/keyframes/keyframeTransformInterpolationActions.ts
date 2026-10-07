@@ -16,6 +16,7 @@ import {
 } from '../../../services/videoInspector/sectionBypass';
 import { findClipById } from './keyframeClipLookup';
 import { slitScanPlaybackFactor } from '../../../effects/time/slit-scan/timeFactor';
+import { applyParameterSourcesToTransform } from '../../../services/parameterSources/parameterSourceRendering';
 
 type KeyframeTransformInterpolationActions = Pick<
   KeyframeActions,
@@ -67,7 +68,8 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
           rotationMode: clip.source?.type === 'camera' ? 'shortest' : 'linear',
           stabilizationEnabled: clip.videoInspectorSections?.stabilization,
         });
-    const ownTransform = applyVideoInspectorTransformBypass(clip, interpolatedTransform);
+    const ownTransform = applyVideoInspectorTransformBypass(clip,
+      applyParameterSourcesToTransform(clip, keyframes, clipLocalTime, interpolatedTransform));
 
     if (clip.parentClipId) {
       const parentClip = clips.find(c => c.id === clip.parentClipId);

@@ -31,3 +31,16 @@ it('saves with the keyboard, restores the library after remount, and inserts wit
   expect(screen.queryByRole('button', { name: 'Add Keyboard preset' })).toBeNull();
   expect(useTimelineStore.getState().clips[0].effects).toHaveLength(2);
 });
+
+it('offers the rescued ring without browser presets and inserts an editable effect', async () => {
+  localStorage.removeItem(EFFECT_PRESET_STORAGE_KEY);
+  const user = userEvent.setup(), clip = createMockClip();
+  useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })], isExporting: false });
+  render(<EffectPresetLibrary clipId={clip.id} width={280} locked={false} onSelectNode={() => {}} />);
+  const add = screen.getByRole('button', { name: 'Add Four-Yarn Knit Ring' });
+  await user.click(add);
+  expect(document.activeElement).not.toBe(add);
+  expect(useTimelineStore.getState().clips[0].effects[0]).toMatchObject({ type: 'weave', name: 'Four-Yarn Knit Ring' });
+  expect(screen.queryByRole('button', { name: 'Delete preset Four-Yarn Knit Ring' })).toBeNull();
+  expect(localStorage.getItem(EFFECT_PRESET_STORAGE_KEY)).toBeNull();
+});

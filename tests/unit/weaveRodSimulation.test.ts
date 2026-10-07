@@ -179,6 +179,6 @@ describe('Rod simulation', () => {
       { id: 'bind', operator: 'geometry.surface-bind', operatorVersion: 1, bindings: {} });
     late.edges = [{ id: 'a', from: 'knot', output: 'curves', to: 'bind', input: 'curves' }, { id: 's', from: 'sheet', output: 'surface', to: 'bind', input: 'surface' },
       { id: 'e', from: 'bind', output: 'curves', to: 'rod', input: 'curves' }, ...graph.edges.slice(1)];
-    expect(() => compileGeometryGraph(late, geometryParameterReader({}))).toThrow('Rod Simulation must come before Surface Bind');
+    expect(() => compileGeometryGraph(late, geometryParameterReader({}))).toThrow('Rod Simulation needs a static rest shape');
   });
 });

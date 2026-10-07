@@ -32,6 +32,7 @@ import { OptionsSection } from './transformTab/OptionsSection';
 import { ResolveTransformSection } from './transformTab/ResolveTransformSection';
 import { ResolveVisualInspectorSections } from './transformTab/ResolveVideoInspectorSections';
 import { SourceSection } from './transformTab/SourceSection';
+import { isParameterNodeDriven } from '../../../services/parameterSources/parameterSourceTargets';
 import { useCameraKeyframeInteractions } from './transformTab/useCameraKeyframeInteractions';
 import {
   resolveCameraValues,
@@ -196,6 +197,9 @@ export function TransformTab({
     : null;
 
   const handlePropertyChange = useCallback((property: AnimatableProperty, value: number) => {
+    // A node-driven value would be overwritten on the next evaluation; its row is locked and links to the source.
+    const current = useTimelineStore.getState().clips.find(item => item.id === clipId);
+    if (current && isParameterNodeDriven(current, property)) return;
     setPropertyValue(clipId, property, value);
   }, [clipId, setPropertyValue]);
 

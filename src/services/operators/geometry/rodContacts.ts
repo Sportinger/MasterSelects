@@ -24,7 +24,7 @@ const KINETIC = ROD_KINETIC;
 export const rodCellSize = (longest: number, radius: number) => longest * 1.25 + radius * (2 + SKIN);
 
 /** Closest points of segments p1q1 and p2q2 (Ericson, Real-Time Collision Detection 5.1.9). */
-function closestParameters(d1: number[], d2: number[], r: number[], out: number[]) {
+export function closestParameters(d1: number[], d2: number[], r: number[], out: number[]) {
   const a = d1[0] * d1[0] + d1[1] * d1[1] + d1[2] * d1[2], e = d2[0] * d2[0] + d2[1] * d2[1] + d2[2] * d2[2];
   const f = d2[0] * r[0] + d2[1] * r[1] + d2[2] * r[2];
   const clamp = (value: number) => Math.min(1, Math.max(0, value));
@@ -53,7 +53,7 @@ function closestParameters(d1: number[], d2: number[], r: number[], out: number[
 export class RodContacts {
   private readonly segments: RodSegments;
   private readonly radius: number;
-  private readonly cell: number;
+  private cell: number;
   private readonly mask: number;
   private readonly buckets: Uint32Array;
   private readonly cursor: Uint32Array;
@@ -73,8 +73,14 @@ export class RodContacts {
   private hits: Uint16Array | null = null;
   /** Node positions the candidate list was built from. */
   private built: Float64Array | null = null;
+  private readonly options: { deforming?: boolean; radii?: Float64Array; sequential?: boolean };
+  private currentArc?: Float64Array;
+  private currentRest?: Float64Array;
+  private currentRodLength?: Float64Array;
 
-  constructor(segments: RodSegments, radius: number) {
+  constructor(segments: RodSegments, radius: number,
+    options: { deforming?: boolean; radii?: Float64Array; sequential?: boolean } = {}) {
+    this.options = options;
     this.segments = segments; this.radius = radius;
     const count = segments.a.length;
     let longest = 0;
@@ -95,7 +101,9 @@ export class RodContacts {
 
   /** Segments that are neighbours along one rod (within SELF_GAP radii of arc length) never collide. */
   private adjacent(c: number, d: number): boolean {
-    const { rod, arc, rest, rodLength, rodClosed } = this.segments;
+    const { rod, rodClosed } = this.segments;
+    const arc = this.currentArc ?? this.segments.arc, rest = this.currentRest ?? this.segments.rest;
+    const rodLength = this.currentRodLength ?? this.segments.rodLength;
     if (rod[c] !== rod[d]) return false;
     let distance = Math.abs(arc[c] - arc[d]);
     if (rodClosed[rod[c]]) distance = Math.min(distance, rodLength[rod[c]] - distance);
@@ -140,7 +148,20 @@ export class RodContacts {
 
   /** Gathers candidate pairs (c < d) whose bounds come within contact distance plus the skin. */
   private collect(p: Float64Array) {
-    const { a, b } = this.segments, count = a.length, { cells, bounds, keys, buckets, cursor, entries, stamp, cell } = this;
+    const { a, b } = this.segments, count = a.length;
+    if (this.options.deforming) {
+      const arc = this.currentArc ??= new Float64Array(count), rest = this.currentRest ??= new Float64Array(count);
+      const lengths = this.currentRodLength ??= new Float64Array(this.segments.rodLength.length);
+      lengths.fill(0);
+      let longest = 0;
+      for (let c = 0; c < count; c++) {
+        const i = a[c] * 3, j = b[c] * 3;
+        const length = Math.hypot(p[i] - p[j], p[i + 1] - p[j + 1], p[i + 2] - p[j + 2]), rod = this.segments.rod[c];
+        longest = Math.max(longest, length); rest[c] = length; arc[c] = lengths[rod] + length / 2; lengths[rod] += length;
+      }
+      this.cell = rodCellSize(longest, this.radius);
+    }
+    const { cells, bounds, keys, buckets, cursor, entries, stamp, cell } = this;
     buckets.fill(0);
     for (let c = 0; c < count; c++) {
       const i = a[c] * 3, j = b[c] * 3;
@@ -186,7 +207,8 @@ export class RodContacts {
    * the positions at the start of the substep.
    */
   solve(p: Float64Array, x: Float64Array, w: Float64Array, friction: number) {
-    const { a, b, rest } = this.segments, { d1, d2, r, st } = this, contact = 2 * this.radius;
+    const { a, b, rest } = this.segments, { d1, d2, r, st } = this, maxContact = 2 * this.radius;
+    let penetration = 0;
     const delta = this.delta ??= new Float64Array(p.length), hits = this.hits ??= new Uint16Array(p.length / 3);
     delta.fill(0); hits.fill(0);
     for (let k = 0; k < this.pairCount; k++) {
@@ -194,22 +216,31 @@ export class RodContacts {
       const a0 = a[c] * 3, a1 = b[c] * 3, b0 = a[d] * 3, b1 = b[d] * 3;
       // Bounding spheres around the midpoints (segments stretched up to a quarter) reject most candidates.
       const mx = p[a0] + p[a1] - p[b0] - p[b1], my = p[a0 + 1] + p[a1 + 1] - p[b0 + 1] - p[b1 + 1], mz = p[a0 + 2] + p[a1 + 2] - p[b0 + 2] - p[b1 + 2];
-      const bound = (rest[c] + rest[d]) * 1.25 + 2 * contact;
+      const lengths = this.options.deforming
+        ? Math.hypot(p[a1] - p[a0], p[a1 + 1] - p[a0 + 1], p[a1 + 2] - p[a0 + 2])
+          + Math.hypot(p[b1] - p[b0], p[b1 + 1] - p[b0 + 1], p[b1 + 2] - p[b0 + 2])
+        : (rest[c] + rest[d]) * 1.25;
+      const bound = lengths + 2 * maxContact;
       if (mx * mx + my * my + mz * mz > bound * bound) continue;
       for (let axis = 0; axis < 3; axis++) {
         d1[axis] = p[a1 + axis] - p[a0 + axis]; d2[axis] = p[b1 + axis] - p[b0 + axis]; r[axis] = p[a0 + axis] - p[b0 + axis];
       }
       closestParameters(d1, d2, r, st);
       const s = st[0], t = st[1];
+      const radii = this.options.radii;
+      if (radii && (Math.max(radii[a[c]], radii[b[c]]) === 0 || Math.max(radii[a[d]], radii[b[d]]) === 0)) continue;
+      const contact = radii ? (1 - s) * radii[a[c]] + s * radii[b[c]] + (1 - t) * radii[a[d]] + t * radii[b[d]] : maxContact;
       let nx = r[0] + d1[0] * s - d2[0] * t, ny = r[1] + d1[1] * s - d2[1] * t, nz = r[2] + d1[2] * s - d2[2] * t;
       const squared = nx * nx + ny * ny + nz * nz;
       if (squared >= contact * contact) continue;
       const distance = Math.sqrt(squared), error = distance - contact;
+      penetration = Math.max(penetration, -error);
       if (distance > 1e-12) { nx /= distance; ny /= distance; nz /= distance; } else {
         // Coincident axes: separate across both segments, or across the first one when parallel.
         nx = d1[1] * d2[2] - d1[2] * d2[1]; ny = d1[2] * d2[0] - d1[0] * d2[2]; nz = d1[0] * d2[1] - d1[1] * d2[0];
         if (Math.hypot(nx, ny, nz) < 1e-18) { nx = -d1[1]; ny = d1[0]; nz = 0; if (Math.hypot(nx, ny) < 1e-18) { nx = 0; ny = -d1[2]; nz = d1[1]; } }
-        const size = Math.hypot(nx, ny, nz) || 1; nx /= size; ny /= size; nz /= size;
+        if (Math.hypot(nx, ny, nz) < 1e-18) nx = 1;
+        const size = Math.hypot(nx, ny, nz); nx /= size; ny /= size; nz /= size;
       }
       const wa0 = w[a[c]] * (1 - s), wa1 = w[b[c]] * s, wb0 = w[a[d]] * (1 - t), wb1 = w[b[d]] * t;
       const weight = wa0 * (1 - s) + wa1 * s + wb0 * (1 - t) + wb1 * t;
@@ -232,6 +263,10 @@ export class RodContacts {
           fx += tx * scale; fy += ty * scale; fz += tz * scale;
         }
       }
+      if (this.options.sequential) {
+        this.apply(p, a0, a1, b0, b1, wa0, wa1, wb0, wb1, fx, fy, fz);
+        continue;
+      }
       this.apply(delta, a0, a1, b0, b1, wa0, wa1, wb0, wb1, fx, fy, fz);
       hits[a[c]]++; hits[b[c]]++; hits[a[d]]++; hits[b[d]]++;
     }
@@ -240,6 +275,7 @@ export class RodContacts {
       const base = node * 3, share = 1 / hits[node];
       p[base] += delta[base] * share; p[base + 1] += delta[base + 1] * share; p[base + 2] += delta[base + 2] * share;
     }
+    return penetration;
   }
 
   /** Moves c's ends by +delta and d's ends by -delta, weighted by inverse mass and barycentric share. */

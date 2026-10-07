@@ -215,6 +215,7 @@ Edit mode is a canvas overlay for layer transforms.
 - Multiple preview panels can mix edit and non-edit views at the same time. Camera and object changes update every visible view immediately, while each panel keeps its own perspective.
 - 3D object handles remain visible across preview modes; selecting one activates the native 3D scene gizmo for that clip.
 - In camera Edit mode, the independent editor camera always orbits the scene origin `(0, 0, 0)`; timeline and viewport selection do not change its pivot.
+- Vertical camera orbit drags carry the front of the scene with the pointer, matching horizontal orbit movement.
 - Camera Edit mode uses an independent editor camera with a 35 mm default, initially offset so the timeline camera is visible as an object. Navigating the editor view never changes the timeline camera; dragging the timeline camera's object gizmo updates its output live in every normal Preview.
 - The projected timeline-camera frame in camera Edit mode is a world-space object drawn from the camera's FOV/mm and Resolution X/Y. It becomes smaller with distance, wide lenses draw a larger front frame, tele lenses draw a smaller one, and the frame aspect follows the camera resolution.
 - Edit views can render a projected world grid that follows camera-view animation instead of snapping as a screen overlay. The grid plane matches the edit view: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`.
@@ -281,3 +282,14 @@ Key implementation files:
 - `src/services/timeline/lazyMediaElements.ts`
 - `src/stores/timeline/ramPreviewSlice.ts`
 - `src/stores/timeline/proxyCacheSlice.ts`
+
+## Software presentation of GPU preview on Linux
+
+Linux desktop uses a main-thread 2D canvas for preview and registered output
+surfaces. The complete image is still rendered on WebGPU, including strands,
+path tracing, transparency grids, and output slices. A single asynchronous GPU
+readback presents the newest completed image as software pixels, with bounded
+canvas dimensions. This avoids transparent/blank GPU canvases that expose stale
+window contents on Mesa. Android and other desktop platforms retain native GPU
+presentation. It adds a final readback cost on Linux; rendering and export quality
+are unchanged. WebGPU must still be available to perform the rendering.

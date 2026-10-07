@@ -3,6 +3,7 @@ import type { Effect } from '../../../../types/effects';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { readTimelineRuntimeState } from '../../../../services/timeline/timelineRuntimeCoordinator';
 import { listEffectPresets, saveEffectPreset, removeEffectPreset, type EffectPreset } from '../../../../services/nodeGraph/effectPresetLibrary';
+import { listBuiltInWeavePresets } from '../../../../services/operators/geometry/weavePresets';
 import { applyEffectPreset } from '../../../../services/nodeGraph/applyEffectPreset';
 import { ResolveInspectorSection } from '../../properties/resolveInspector/ResolveInspectorPrimitives';
 import './EffectPresetLibrary.css';
@@ -40,6 +41,15 @@ export function EffectPresetLibrary({ clipId, effect, width, locked, onSelectNod
         <button type="submit" disabled={!effect || !name.trim()}>Save effect copy</button>
       </form>
       <p className="face-cable-hint">Includes parameters and the internal node graph. Clip animation and external media are not copied.</p>
+    </ResolveInspectorSection>
+    <ResolveInspectorSection title="Weave presets" indicator="none">
+      <p className="face-cable-hint">Built-in studies. Add an editable copy to the selected clip.</p>
+      {listBuiltInWeavePresets().map(preset => <div className="effect-preset-entry" key={preset.id}>
+        <span title={preset.label}>{preset.label}</span>
+        <button type="button" disabled={locked} aria-label={`Add ${preset.label}`} onClick={() => run(() => {
+          onSelectNode(applyEffectPreset(clipId, preset)); return `Added ${preset.label}.`;
+        })}>Add copy</button>
+      </div>)}
     </ResolveInspectorSection>
     <ResolveInspectorSection title="Saved effects" indicator="none">
       {!presets.length && <p className="face-cable-hint">No saved effects yet.</p>}

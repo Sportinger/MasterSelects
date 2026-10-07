@@ -87,9 +87,12 @@ keyboard-accessible alternative to cable dragging.
 
 ## Procedural parameter sources
 
-Color Corrector/Wheels numeric channels, Hue Shift's Shift and Gaussian Blur's
-Radius support **Fixed**, existing **Keyframes**, or a connected **Node**. Their
+Color Corrector/Wheels numeric channels, Hue Shift's Shift, Gaussian Blur's
+Radius and the clip **Transform** (Position X/Y/Z, Anchor X/Y, Scale, Scale X/Y,
+Rotation X/Y/Z, Opacity) support **Fixed**, existing **Keyframes**, or a connected **Node**. Their
 compact Properties/Nodes controls have a **Source** selector and **Go to source**.
+When the Nodes panel shows the **Timeline**, Go to source opens the clip's lane in
+place and selects the source node instead of leaving the timeline view.
 Nodes with optional scalar controls show a compact `+` directly below their last
 visible input, including when previews are enabled. It opens a searchable input
 picker; **All** exposes every remaining
@@ -101,8 +104,9 @@ restores them. A connected source overrides the effective value without changing
 the saved basis or curve. Driven fields and target keyframe actions are read-only.
 The reset button resets the local basis, not the curve or binding.
 
-**+ Control** adds Constant, Time, sine LFO, Keyframes, Add, Multiply, Clamp and
-Remap. The node inspector offers numeric inputs and connection dropdowns as an
+**+ Control** adds Constant, Time, sine LFO, Smooth Noise, Envelope, Marker
+Trigger, Two-Bone IK, Ballistic, Gait Cycle, Limb IK, Attach to Joint, Keyframes,
+Audio Envelope, Add, Multiply, Clamp and Remap. The node inspector offers numeric inputs and connection dropdowns as an
 alternative to cable dragging. A Keyframes source references a stored curve,
 not the already-modulated result. Combine it with an LFO through Add/Multiply;
 fan out one source through separate Remaps to control multiple parameters.
@@ -115,6 +119,94 @@ containing composition's clock instead. Nested compositions use their own clock;
 generated transition clips retain the original owner's clock. Split/leading trim
 preserves the clip oscillator phase. Moving a clip moves clip-time animation;
 media speed and reverse do not implicitly retime it.
+
+**Smooth Noise** outputs `offset + amplitude * noise(frequency * time)`, a smooth
+random wander in −1..1 per Seed; Detail adds up to four finer octaves. **Envelope**
+turns an Age in seconds into a pulse: linear rise over Attack, Hold at 1, then a
+linear or exponential fall over Decay (exponential reaches about 0.7 % at its end);
+negative Age outputs 0. Unwired, both run on clip time. **Marker Trigger** reads the
+markers of the composition that owns the clip, optionally filtered by label, on the
+timeline clock: seconds since the last marker (−1 before the first), seconds until
+the next (−1 after the last), markers passed, or progress between two markers.
+Feeding it into Envelope gives marker-timed flashes, shakes or pulses; export pins
+the markers at start.
+
+**Two-Bone IK** has several outputs, which connect individually by cable or by the
+**Connect output** choice in its inspector: Upper angle (absolute, degrees), Lower
+angle (relative to the upper bone, so it fits a parent chain), Joint X/Y, End X/Y
+and Reach (target distance over chain length, capped at 1). Bend picks the side
+the joint folds to. Angles follow the parenting convention: a bone at angle θ points
+along (cos θ, sin θ) of the input space. With X scale 1 the solve matches Pick-Whip
+parenting in stored transform units; enter composition width/height for angles in
+square pixels instead. Out-of-reach targets stretch the chain toward the target.
+
+### Stick figures and rig nodes
+
+The **Stick Figure** effect (Generate) draws a posable figure over its clip; on a
+**Blank Clip** (timeline add menu, a transparent composition-sized solid) only the
+figure shows. Every numeric parameter is a control target: joint angles in degrees
+(spine and head lean forward for positive values; hips and shoulders swing forward
+from hanging straight down; knees and elbows are flexion), bone lengths and the
+pelvis offset in figure pixels (pixels at a 1080 px tall frame, scaled with the
+resolution). Ground **Plant** keeps the lowest point on Ground Y, so a leg swing
+becomes the body bounce; **Keep above ground** only stops it sinking. Facing flips
+the figure. The effect's **Pose library** applies built-in or saved poses, keys every
+joint at the playhead with an easing (poses blend over time), and saves the pose at
+the playhead; saved poses are user-local like appearance presets. **Walk**, **Run**
+and **Idle** add a Gait Cycle node wired to every joint in one undo step.
+
+**Gait Cycle** (`rig.gait-cycle`) outputs one angle per joint, named like the figure
+parameters, plus Bounce (pixels) and Foot L/R down; Cycles per second, Stride, Lean and
+Phase shape it, on clip time unless Time is wired. **Limb IK** (`rig.limb-ik`) bends
+one leg or arm of a Stick Figure on the same clip so the foot or hand reaches Target
+(pixels from the hip or shoulder); it reads the figure's lengths and lean as they
+render and outputs Hip/Shoulder and Knee/Elbow angles; Natural bend puts knees forward
+and elbows back. **Ballistic** (`control.ballistic`) is a stateless throw: Start and
+Velocity at Launch (clip seconds), Gravity toward +y (screen down in transform units),
+and analytic bounces on Floor Y keeping Bounce of the vertical and Slide of the
+horizontal speed; outputs X, Y, velocity, Bounces and Resting. **Attach to Joint**
+(`rig.attach`) makes its own clip follow a joint of a Stick Figure on any clip of the
+composition (its keyframes, sources and transform included): Rest values before Grab,
+a smooth Blend into the joint, and after Release a ballistic flight with the joint's
+velocity, spinning until the first floor contact. Its X/Y/Rotation are clip transform
+values; the mapping assumes the figure's layer fills the frame, as Blank and Solid
+clips do. A figure cannot follow itself. **Quick connect** in the inspector wires a
+rig node to its obvious targets (figure joints, or this clip's position and rotation).
+
+**Lift** moves the whole figure after ground snapping (negative = up), so jumps work
+with Plant; drive it with Ballistic for a free jump. Facing mirrors the figure around
+its pelvis, so Pelvis X stays a screen position.
+
+**Actions.** The Stick Figure's **Actions** lane holds action clips: Idle, Walk, Run,
+Jump, Punch, Kick, Duck, Hit React, Throw, Grab, Land and Fall. Each has authored key
+poses with anticipation, contact and follow-through, forward travel (added to Pelvis X
+in the facing direction and kept afterwards) and, for Jump, lift. Add one at the
+playhead, drag blocks along the lane, set Start, Duration and Strength (how far the
+pose departs from standing). Actions blend in and out over the keyframed pose and
+cross-fade where they overlap; joint angles always blend the short way round. Fall
+holds its lying pose until a later action blends over it. Node sources still override
+actions. Punch, Kick, Grab and Throw can **Aim at** a joint of another figure: around
+the contact the striking limb bends toward it by IK. Each action's contact (impact,
+release, landing) shows as an orange tick. **Markers** replaces this figure's contact
+markers on the timeline (for Marker Trigger shakes and flashes); **Sounds** adds a
+MIDI track with a Simple Synth SFX preset and one note per contact. **Contact Trigger**
+(`rig.contact-trigger`) reads the contacts directly, like Marker Trigger, so effects
+follow when actions move. Attach to Joint can **Release** at the figure's next Throw.
+**Check choreography** lists feet below the ground, strikes that miss everybody (more
+than 30 px at 1080 p from a body or the aimed joint), joints turning faster than
+2250°/s, actions overlapping beyond their blend and torsos passing through each other;
+click a time to jump there. Actions apply on the timeline, in nested compositions,
+transitions and export; aiming needs the figure's clip in the open timeline.
+
+Transform sources apply after keyframes and before inspector bypass and parenting,
+in preview, nested compositions, 3D scenes and export. In the Transform inspector a
+driven row (Zoom, Position, Rotation, Pitch/Yaw, Anchor Point, Opacity) shows the
+effective value in locked fields; its keyframe and reset actions are replaced by a
+node button that opens the source and an unlink button that returns to the local
+value and keys. Unlike effect targets, a failing transform source keeps the keyframed
+value for that property; the node button turns red and names the error, which is
+also logged. Clips generated by v2 transitions keep their
+keyframed transform, and preview gizmo drags do not override a driven value.
 
 The clip-owned graph is saved under `nodeGraph.parameterSources`, with undoable
 connection changes. Color-version copies get independent reachable sources.

@@ -419,6 +419,7 @@ export const SimpleSynthInstrumentFields = {
   "gain": { class: 'content', owner: 'timeline' },
   "filter": { class: 'content', owner: 'timeline' },
   "filterEnv": { class: 'content', owner: 'timeline' },
+  "pitchEnv": { class: 'content', owner: 'timeline' },
   "pitchBendRange": { class: 'content', owner: 'timeline' },
   "lfos": { class: 'content', owner: 'timeline' },
   "modMatrix": { class: 'content', owner: 'timeline' },

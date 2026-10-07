@@ -12,6 +12,7 @@ import { evaluateTransitionMappedAnimation } from '../../../services/composition
 import { resolveTransitionRecipeBlendMode } from '../../../services/timeline/transitionRecipeBlendWindows';
 import { isVectorAnimationSourceType } from '../../../types/vectorAnimation';
 import { getInterpolatedClipTransform } from '../../../utils/keyframeInterpolation';
+import { applyParameterSourcesToTransform } from '../../../services/parameterSources/parameterSourceRendering';
 import { getEffectiveScale } from '../../../utils/transformScale';
 import { evaluateTransitionRenderState } from '../../../utils/transitionRenderInterpolation';
 import {
@@ -126,12 +127,13 @@ export function buildLayerSyncNestedLayers({
       ? evaluateTransitionMappedAnimation(nestedClip, keyframes, nestedLocalTime)
       : undefined;
     if (nestedClip.transitionSourceMap?.version === 2 && !mappedAnimation) continue;
-    const transform = mappedAnimation?.transform ?? (keyframes.length > 0
-      ? getInterpolatedClipTransform(keyframes, nestedLocalTime, baseTransform, {
-          rotationMode: nestedClip.source?.type === 'camera' ? 'shortest' : 'linear',
-          stabilizationEnabled: nestedClip.videoInspectorSections?.stabilization,
-        })
-      : baseTransform);
+    const transform = mappedAnimation?.transform ?? applyParameterSourcesToTransform(nestedClip, keyframes, nestedLocalTime,
+      keyframes.length > 0
+        ? getInterpolatedClipTransform(keyframes, nestedLocalTime, baseTransform, {
+            rotationMode: nestedClip.source?.type === 'camera' ? 'shortest' : 'linear',
+            stabilizationEnabled: nestedClip.videoInspectorSections?.stabilization,
+          })
+        : baseTransform);
     const effects = mappedAnimation?.effects ?? evaluateCompositionClipEffects(
       nestedClip.effects,
       keyframes,

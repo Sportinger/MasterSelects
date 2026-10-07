@@ -17,7 +17,7 @@ const FLYAWAY_MARGIN: f32 = 0.15;
 struct StrandFiberParams {
   world: mat4x4f,
   yarn: vec4f,   // x: plies, y: fibers per ply, z: yarn radius (local), w: ply twist (turns per unit length)
-  twist: vec4f,  // x: fiber twist, y: flyaway seed
+  twist: vec4f,  // x: fiber twist, y: flyaway seed, z: material arc-length offset, z: material arc-length offset
   fly: vec4f,    // x: flyaway cell length per channel, y: flyaway length, z: lift (yarn radii), w: free-end fraction
 };
 
@@ -44,13 +44,14 @@ fn strandYarnFibers(params: StrandFiberParams) -> u32 {
 /** The flyaway of `channel` in the curve cell holding arc length `s`: one per cell, at a hashed place. */
 fn strandFlyawayAt(params: StrandFiberParams, strand: u32, channel: u32, s: f32) -> Flyaway {
   let cell = max(params.fly.x, 1e-6);
-  let index = u32(max(floor(s / cell), 0.0));
+  let signedIndex = i32(floor(s / cell));
+  let index = bitcast<u32>(signedIndex);
   let usable = cell * (1.0 - 2.0 * FLYAWAY_MARGIN);
   let key = index * 16u + channel;
   let salt = u32(params.twist.y) * 0x51ed27u;
   var fly: Flyaway;
   fly.length = min(params.fly.y, usable);
-  fly.start = f32(index) * cell + cell * FLYAWAY_MARGIN + (usable - fly.length) * hash3(strand, key, salt + 1u);
+  fly.start = f32(signedIndex) * cell + cell * FLYAWAY_MARGIN + (usable - fly.length) * hash3(strand, key, salt + 1u);
   fly.angle = hash3(strand, key, salt + 2u);
   fly.hair = hash3(strand, key, salt + 3u) < params.fly.w;
   return fly;
@@ -62,7 +63,8 @@ fn strandFlyawayAt(params: StrandFiberParams, strand: u32, channel: u32, s: f32)
  * without gaps.
  */
 fn strandFiberPoint(params: StrandFiberParams, index: u32, fiber: u32, fly: Flyaway) -> vec3f {
-  let a = points[index * 3u];
+  var a = points[index * 3u];
+  a.w += params.twist.z;
   let b = points[index * 3u + 1u];
   let tangent = points[index * 3u + 2u].xyz;
   let radius = params.yarn.z * b.w;

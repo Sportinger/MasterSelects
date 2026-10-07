@@ -60,6 +60,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Inspector Performance](/features/inspector-performance/) | Worker-prepared image graph controls, bounded drag updates, and shared undo transactions |
 | [Node Workspace](/features/node-workspace/) | Unified clip nodes, reusable operators, effect-order synchronization, 3D dependencies and execution boundaries |
 | [Node Catalog](/features/node-catalog/) | Registered building blocks, typed contracts, implementation ownership and reuse boundaries |
+| [Scene Streams](/features/scene-streams/) | Named, re-runnable `ms-scene-v1` timeline blocks, live streaming in FlashBoard and `runEditorStream` |
 | [Operator Graph Compiler](/features/operator-graph-compiler/) | Initial local image DAG IR, fused Invert lowering, reuse decisions and current integration boundary |
 | [Keyboard Shortcuts](/features/keyboard-shortcuts/) | Current shortcut registry, playback controls, and preset behavior |
 

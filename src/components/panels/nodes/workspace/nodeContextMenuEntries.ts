@@ -35,7 +35,11 @@ const describe = (id: string, fallback?: string) => {
 
 /** Clip-level nodes (stages, controls) sit in the same categories as graph nodes. */
 const CLIP_STAGE_CATEGORY: Record<string, NodeCategoryId> = { ai: 'inputs', keyframes: 'values', transform: 'coordinates', mask: 'color', color: 'color' };
-const controlCategory = (id: string): NodeCategoryId => id.startsWith('math.') || id === 'control.remap' ? 'math' : 'values';
+const TIME_CONTROLS = new Set(['control.noise', 'control.envelope', 'control.marker-trigger', 'control.ballistic', 'rig.gait-cycle',
+  'rig.contact-trigger']);
+const GEOMETRY_CONTROLS = new Set(['control.ik-two-bone', 'rig.limb-ik', 'rig.attach']);
+const controlCategory = (id: string): NodeCategoryId => id.startsWith('math.') || id === 'control.remap' ? 'math'
+  : GEOMETRY_CONTROLS.has(id) ? 'geometry' : TIME_CONTROLS.has(id) ? 'time' : 'values';
 
 /** Nodes or node groups of the given graphs by category; clip-level items join their categories. */
 function layerMenu(owners: readonly GraphTarget[], id: string, label: string, groups: boolean,

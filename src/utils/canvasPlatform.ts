@@ -1,9 +1,11 @@
-// Canvas rendering is GPU-only on every platform. Keep this gate centralized
-// so callers cannot silently reintroduce platform- or boot-history fallbacks.
+/** Linux/Mesa canvas presentation can silently fail despite valid GPU rendering. */
 export function prefersSoftwareTimelineCanvas(): boolean {
-  return false;
+  if (typeof navigator === 'undefined') return false;
+  const info = navigator as Navigator & { userAgentData?: { platform?: string } };
+  const platform = info.userAgentData?.platform || navigator.platform || navigator.userAgent || '';
+  return /linux/i.test(platform) && !/android/i.test(`${platform} ${navigator.userAgent || ''}`);
 }
 
 export function resetCanvasPlatformPreferenceForTests(): void {
-  // Kept for consumers that reset platform policy between tests.
+  // Policy reads current browser platform information; there is no cached boot state.
 }

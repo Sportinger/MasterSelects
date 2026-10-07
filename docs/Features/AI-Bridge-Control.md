@@ -117,6 +117,10 @@ Explicit unknown or stale session IDs fail instead of silently targeting another
 
 `POST /chat` and `bridge_send_chat_message` use the selected tab's current model class and Auto/Co-direct setting. Tests may provide `requestedModelClass` (`very-fast`, `fast`, or `slow`) explicitly; that also updates the visible selector before the prompt runs. `POST /chat/model-class` and `bridge_set_chat_model_class` switch the same UI selector without sending a prompt. The prompt is inserted into the normal visible chat history and follows the same hosted-agent, cancellation, and timeline-edit path as clicking the Chat button.
 
+### Editor streams
+
+`POST /api/ai-tools` with `runEditorStream { text }` runs `ms-scene-v1` and `ms-nodegraph-v1` blocks in one call: validated first, then executed in order as one undo step (see [Scene Streams](./Scene-Streams.md)). `{ scene }` re-runs a stored scene and `dryRun` only validates. Bridge calls arrive complete, so this is block execution, not token streaming; live record-by-record execution happens in FlashBoard Codex Direct.
+
 ## FlashBoard Chat Runs
 
 The in-app FlashBoard chat uses prompt version `v2` and records its own runs in browser IndexedDB. Bridge history exposes current FlashBoard chat messages and executed tool calls, browser AI-tool audit records, and bridge traces.

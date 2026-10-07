@@ -91,11 +91,11 @@ const CAMERA_NAV_FPS_LOOK_SPEED = 0.18;
 const CAMERA_NAV_ORBIT_SPEED = 0.25;
 
 /**
- * Orbit drag rotation. Pitch turns opposite to the FPS look, so a vertical drag carries the orbited
- * scene with the pointer; yaw keeps the FPS-look direction.
+ * Orbit drag rotation. Positive pitch raises the eye in the scene-camera basis,
+ * carrying the front of the orbited scene downward with a downward pointer drag.
  */
 export function resolveSceneOrbitDragRotation(pitch: number, yaw: number, deltaX: number, deltaY: number): { pitch: number; yaw: number } {
-  return { pitch: pitch - deltaY * CAMERA_NAV_ORBIT_SPEED, yaw: yaw - deltaX * CAMERA_NAV_ORBIT_SPEED };
+  return { pitch: pitch + deltaY * CAMERA_NAV_ORBIT_SPEED, yaw: yaw - deltaX * CAMERA_NAV_ORBIT_SPEED };
 }
 
 export function resolveSceneNavigationLookRotation(

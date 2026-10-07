@@ -9,6 +9,7 @@
 // Complexity: O(n log²n) comparisons, fully parallel on GPU.
 
 import { Logger } from '../../../services/logger';
+import { GpuFrameBuffers, GpuUniformRing } from '../../core/gpuUniformRing';
 import shaderSource from '../shaders/radixSort.wgsl?raw';
 
 const log = Logger.create('SplatSortPass');
@@ -27,30 +28,36 @@ export class SplatSortPass {
   private depthKeyPipeline: GPUComputePipeline | null = null;
   private bitonicStepPipeline: GPUComputePipeline | null = null;
 
-  // Sort buffers
-  private keyBuffer: GPUBuffer | null = null;
-  private sortedIndexBuffer: GPUBuffer | null = null;
-  private uniformBuffers: GPUBuffer[] = [];
-  private uniformCursor = 0;
-  beginFrame(): void { this.uniformCursor = 0; }
+  // Depth keys are scratch shared by every sort; each output key (one per draw stream)
+  // owns its sorted-index buffer, so a caller that skips sorting can redraw its own last
+  // order instead of whatever another layer sorted last. Growing or releasing a buffer
+  // retires it until the next frame: passes recorded earlier still reference it.
+  private sortBuffers: GpuFrameBuffers | null = null;
+  /** Valid entries in each output key's buffer since its last sort. */
+  private orderCounts = new Map<string, number>();
+  /** One uniform slot per dispatch (depth keys + every bitonic step of every layer). */
+  private uniformRing: GpuUniformRing | null = null;
+  beginFrame(): void { this.uniformRing?.beginFrame(); this.sortBuffers?.beginFrame(); }
 
   // Bind group layouts
   private splatDataLayout: GPUBindGroupLayout | null = null;
   private uniformLayout: GPUBindGroupLayout | null = null;
   private sortBufferLayout: GPUBindGroupLayout | null = null;
 
-  // Cached sort bind group (recreated when buffers change)
-  private sortBindGroup: GPUBindGroup | null = null;
-
-  private maxCapacity = 0;
   private _initialized = false;
 
   get isInitialized(): boolean {
     return this._initialized;
   }
 
-  initialize(device: GPUDevice, maxSplatCount: number): void {
-    if (this._initialized && this.device === device && maxSplatCount <= this.maxCapacity) {
+  initialize(device: GPUDevice, maxSplatCount = 0): void {
+    if (this._initialized && this.device === device) {
+      // Scenes may upload mid-frame; grow without disposing buffers already recorded.
+      try {
+        this.ensureKeyBuffer(maxSplatCount);
+      } catch (err) {
+        log.error('Failed to grow SplatSortPass buffers', err);
+      }
       return;
     }
 
@@ -59,7 +66,7 @@ export class SplatSortPass {
 
     try {
       this.createPipelines();
-      this.ensureBuffers(device, maxSplatCount);
+      this.ensureKeyBuffer(maxSplatCount);
       this._initialized = true;
       log.info('SplatSortPass initialized', { maxSplatCount });
     } catch (err) {
@@ -70,13 +77,13 @@ export class SplatSortPass {
   }
 
   /**
-   * Sort visible splat indices by depth (back-to-front).
-   * The sorted indices are written to an internal buffer which is returned.
+   * Sort visible splat indices by depth (back-to-front) into `outputKey`'s own buffer.
    *
    * @param indexBuffer   — visible indices from the cull pass (or identity)
    * @param visibleCount  — number of visible splats to sort
    * @param viewMatrix    — the camera view matrix (for depth computation)
-   * @returns the GPUBuffer containing sorted indices, or null on failure
+   * @param outputKey     — draw stream that owns the result; see getOrder()
+   * @returns the key's GPUBuffer with the sorted indices, or null on failure
    */
   execute(
     device: GPUDevice,
@@ -86,29 +93,37 @@ export class SplatSortPass {
     visibleCount: number,
     viewMatrix: Float32Array,
     worldMatrix: Float32Array,
+    outputKey: string,
   ): GPUBuffer | null {
     if (!this._initialized || !this.depthKeyPipeline || !this.bitonicStepPipeline) {
       log.warn('Cannot execute: sort pass not initialized');
       return null;
     }
 
-    if (visibleCount <= 1) {
-      // Nothing to sort — copy indices directly
-      return indexBuffer;
-    }
-
     try {
       const sortPlan = buildBitonicSortPlan(visibleCount);
-      this.ensureBuffers(device, sortPlan.paddedCount);
+      const output = this.sortBuffers!.ensure(orderBufferKey(outputKey), sortCapacity(sortPlan.paddedCount) * 4);
+      const sortedCount = Math.max(0, Math.floor(visibleCount));
 
-      // Copy visible indices to our sortable buffer
-      commandEncoder.copyBufferToBuffer(
-        indexBuffer, 0,
-        this.sortedIndexBuffer!, 0,
-        visibleCount * 4,
-      );
+      // Copy visible indices into this key's sortable buffer
+      if (sortedCount > 0) {
+        commandEncoder.copyBufferToBuffer(indexBuffer, 0, output, 0, sortedCount * 4);
+      }
+      if (sortedCount <= 1) {
+        // Nothing to sort; the key still owns its (trivial) order.
+        this.orderCounts.set(outputKey, sortedCount);
+        return output;
+      }
 
       const workgroupCount = sortPlan.workgroupCount;
+      const sortBindGroup = device.createBindGroup({
+        layout: this.sortBufferLayout!,
+        entries: [
+          { binding: 0, resource: { buffer: this.ensureKeyBuffer(sortPlan.paddedCount) } },
+          { binding: 1, resource: { buffer: output } },
+        ],
+        label: `sort-buffers-bg-${outputKey}`,
+      });
 
       // Create splat data bind group
       const splatDataBindGroup = device.createBindGroup({
@@ -127,7 +142,7 @@ export class SplatSortPass {
         pass.setPipeline(this.depthKeyPipeline);
         pass.setBindGroup(0, splatDataBindGroup);
         pass.setBindGroup(1, uniformBindGroup);
-        pass.setBindGroup(2, this.sortBindGroup!);
+        pass.setBindGroup(2, sortBindGroup);
         pass.dispatchWorkgroups(workgroupCount);
         pass.end();
       }
@@ -145,35 +160,48 @@ export class SplatSortPass {
           pass.setPipeline(this.bitonicStepPipeline);
           pass.setBindGroup(0, splatDataBindGroup);
           pass.setBindGroup(1, stepUniforms);
-          pass.setBindGroup(2, this.sortBindGroup!);
+          pass.setBindGroup(2, sortBindGroup);
           pass.dispatchWorkgroups(workgroupCount);
           pass.end();
         }
       }
 
-      return this.sortedIndexBuffer;
+      this.orderCounts.set(outputKey, sortedCount);
+      return output;
     } catch (err) {
+      // A partially recorded sort leaves no order a later frame could trust.
+      this.orderCounts.delete(outputKey);
       log.error('Sort execute failed', err);
       return null;
     }
   }
 
-  dispose(): void {
-    this.keyBuffer?.destroy();
-    this.sortedIndexBuffer?.destroy();
-    for (const buffer of this.uniformBuffers) buffer.destroy();
+  /** Last order sorted for `outputKey` (still valid on frames that skip sorting). */
+  getOrder(outputKey: string): { buffer: GPUBuffer; count: number } | null {
+    const buffer = this.sortBuffers?.get(orderBufferKey(outputKey));
+    const count = this.orderCounts.get(outputKey);
+    return buffer && count !== undefined ? { buffer, count } : null;
+  }
 
-    this.keyBuffer = null;
-    this.sortedIndexBuffer = null;
-    this.uniformBuffers = []; this.uniformCursor = 0;
-    this.sortBindGroup = null;
+  /** Drop `outputKey`'s order; its buffer is destroyed at the next frame start. */
+  release(outputKey: string): void {
+    this.sortBuffers?.release(orderBufferKey(outputKey));
+    this.orderCounts.delete(outputKey);
+  }
+
+  dispose(): void {
+    this.sortBuffers?.dispose();
+    this.uniformRing?.dispose();
+
+    this.sortBuffers = null;
+    this.orderCounts.clear();
+    this.uniformRing = null;
     this.depthKeyPipeline = null;
     this.bitonicStepPipeline = null;
     this.splatDataLayout = null;
     this.uniformLayout = null;
     this.sortBufferLayout = null;
     this.device = null;
-    this.maxCapacity = 0;
     this._initialized = false;
 
     log.debug('SplatSortPass disposed');
@@ -255,44 +283,16 @@ export class SplatSortPass {
       label: 'bitonic-step-pipeline',
     });
 
-
+    this.uniformRing = new GpuUniformRing(this.device, { label: 'sort-uniforms', size: SORT_UNIFORM_SIZE });
+    this.sortBuffers = new GpuFrameBuffers(this.device, {
+      label: 'sort',
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
   }
 
-  private ensureBuffers(device: GPUDevice, count: number): void {
-    // Pad to next power of 2 for bitonic sort
-    const capacity = nextPowerOf2(Math.max(count, 1024));
-
-    if (capacity <= this.maxCapacity && this.keyBuffer) return;
-
-    this.keyBuffer?.destroy();
-    this.sortedIndexBuffer?.destroy();
-
-    // Key buffer: u32 per element
-    this.keyBuffer = device.createBuffer({
-      size: capacity * 4,
-      usage: GPUBufferUsage.STORAGE,
-      label: 'sort-keys',
-    });
-
-    // Sorted index buffer: u32 per element
-    this.sortedIndexBuffer = device.createBuffer({
-      size: capacity * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      label: 'sort-indices',
-    });
-
-    // Recreate bind group
-    this.sortBindGroup = device.createBindGroup({
-      layout: this.sortBufferLayout!,
-      entries: [
-        { binding: 0, resource: { buffer: this.keyBuffer } },
-        { binding: 1, resource: { buffer: this.sortedIndexBuffer } },
-      ],
-      label: 'sort-buffers-bg',
-    });
-
-    this.maxCapacity = capacity;
-    log.debug('Allocated sort buffers', { capacity });
+  /** Shared depth-key scratch buffer; growing retires the smaller one until the next frame. */
+  private ensureKeyBuffer(count: number): GPUBuffer {
+    return this.sortBuffers!.ensure('keys', sortCapacity(count) * 4);
   }
 
   private writeUniforms(
@@ -304,9 +304,6 @@ export class SplatSortPass {
     blockSize: number,
     subBlockSize: number,
   ): GPUBindGroup {
-    const index = this.uniformCursor++;
-    const buffer = this.uniformBuffers[index] ??= device.createBuffer({ size: SORT_UNIFORM_SIZE, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-
     const data = new ArrayBuffer(SORT_UNIFORM_SIZE);
     const f32 = new Float32Array(data);
     const u32 = new Uint32Array(data);
@@ -323,12 +320,21 @@ export class SplatSortPass {
     u32[34] = blockSize;
     u32[35] = subBlockSize;
 
-    device.queue.writeBuffer(buffer, 0, data);
+    const buffer = this.uniformRing!.write(data);
     return device.createBindGroup({ layout: this.uniformLayout!, entries: [{ binding: 0, resource: { buffer } }] });
   }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function orderBufferKey(outputKey: string): string {
+  return `order:${outputKey}`;
+}
+
+/** Elements to allocate for `count`: power of two, at least 1024 so small sorts share sizes. */
+function sortCapacity(count: number): number {
+  return nextPowerOf2(Math.max(count, 1024));
+}
 
 function nextPowerOf2(n: number): number {
   let v = n - 1;

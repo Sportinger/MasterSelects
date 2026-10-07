@@ -157,6 +157,7 @@ getTrackChildren()  // Query child tracks
 
 ### Solid
 - Flat color clips used for mattes and backgrounds.
+- **Blank Clip** in the add menu creates a fully transparent, composition-sized solid named Blank: a canvas for generator effects such as Stick Figure.
 
 ### Motion Shape
 - Rectangle and ellipse shape clips are timeline clips with JSON motion definitions.

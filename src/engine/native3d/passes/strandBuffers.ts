@@ -7,6 +7,7 @@ import { StrandSurfaceBinder, type StrandRestCurves } from './StrandSurfaceBinde
 import { rodChain, surfaceBindChain, type RodChain } from './strandGpuChains';
 import { RodGpuSimulation } from '../rods/RodGpuSimulation';
 import { evaluateFiberAttributes, fiberAttributesKey, fiberAttributesTrivial } from '../../../services/operators/geometry/fiberMaterialAttributes';
+import { packStrandColors, strandColorNeedsPositions } from './strandColors';
 
 /** Segment flags above the 30-bit point index: the strand continues before / after the segment. */
 export const SEGMENT_HAS_PREVIOUS = 0x80000000;
@@ -43,6 +44,8 @@ export interface StrandBuffers {
   topology: string;
   positions: GPUBuffer;
   segments: GPUBuffer;
+  colors?: GPUBuffer;
+  colorSignature?: string;
   segmentCount: number;
   segmentLength: number;
   extent: number;
@@ -67,8 +70,12 @@ export class StrandBufferCache {
     const program = layer.strands.program;
     const signature = JSON.stringify(program.stages);
     // A final Surface Bind (and a Thread Along before it) or a Rod Simulation runs on the GPU from the rest curves.
-    const chain = surfaceBindChain(program.stages);
-    const candidate = chain ? null : rodChain(program.stages);
+    // Position-dependent colors must see the same final curves as the renderer.
+    // Material colors (strand index, u, constants) can use rest coordinates and keep GPU simulation.
+    const colorField = program.render?.colorField;
+    const spatialColor = strandColorNeedsPositions(colorField);
+    const chain = spatialColor ? null : surfaceBindChain(program.stages);
+    const candidate = chain || spatialColor ? null : rodChain(program.stages);
     const rods = candidate && !this.rodFailures.has(candidate.topology) ? candidate : null;
     const stages = chain ? chain.restStages : rods ? rods.restStages : program.stages;
     const topology = chain ? JSON.stringify(stages) : rods ? rods.topology : signature;
@@ -98,6 +105,18 @@ export class StrandBufferCache {
       buffers.signature = signature;
     }
     this.updateAttributes(device, layer, buffers, temporaryBuffers);
+    const colorSignature = colorField ? JSON.stringify([chain || rods ? topology : signature, colorField]) : undefined;
+    if (buffers.colorSignature !== colorSignature) {
+      if (buffers.colors) temporaryBuffers.push(buffers.colors);
+      buffers.colors = undefined;
+      if (colorField) {
+        const colors = packStrandColors(evaluateGeometryProgram({ ...program, stages }), colorField);
+        buffers.colors = device.createBuffer({ size: Math.max(16, colors.byteLength),
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, label: `native-strands-colors-${layer.layerId}` });
+        if (colors.byteLength) device.queue.writeBuffer(buffers.colors, 0, colors.buffer, colors.byteOffset, colors.byteLength);
+      }
+      buffers.colorSignature = colorSignature;
+    }
     this.cache.delete(layer.layerId);
     this.cache.set(layer.layerId, buffers);
     while (this.cache.size > CACHE_LIMIT) {
@@ -182,6 +201,7 @@ export class StrandBufferCache {
   private retire(buffers: StrandBuffers, temporaryBuffers: GPUBuffer[]): void {
     temporaryBuffers.push(buffers.positions, buffers.segments);
     if (buffers.attributes) temporaryBuffers.push(buffers.attributes);
+    if (buffers.colors) temporaryBuffers.push(buffers.colors);
     if (buffers.rest) temporaryBuffers.push(buffers.rest.rest, buffers.rest.ranges, buffers.rest.arcs);
     buffers.rods?.retire(temporaryBuffers);
   }
@@ -189,6 +209,7 @@ export class StrandBufferCache {
   dispose(): void {
     for (const buffers of this.cache.values()) {
       buffers.positions.destroy(); buffers.segments.destroy(); buffers.attributes?.destroy();
+      buffers.colors?.destroy();
       buffers.rest?.rest.destroy(); buffers.rest?.ranges.destroy(); buffers.rest?.arcs.destroy();
       const retired: GPUBuffer[] = [];
       buffers.rods?.retire(retired);

@@ -1,0 +1,66 @@
+.stick-figure-lane {
+  position: relative;
+  height: 30px;
+  margin: 4px 0 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+  touch-action: none;
+}
+
+.stick-figure-lane-block {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 6px;
+  border-radius: 3px;
+  background: rgba(64, 140, 255, 0.45);
+  border: 1px solid rgba(110, 170, 255, 0.8);
+  cursor: grab;
+  overflow: hidden;
+}
+
+.stick-figure-lane-block.is-selected {
+  background: rgba(255, 150, 60, 0.55);
+  border-color: rgba(255, 190, 120, 0.95);
+}
+
+.stick-figure-lane-block span {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.stick-figure-lane-contact {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #ff7a2f;
+  pointer-events: none;
+}
+
+.stick-figure-lane-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #fff;
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+.stick-figure-issues {
+  margin: 4px 0;
+  padding-left: 16px;
+  font-size: 11px;
+}
+
+.stick-figure-issues button {
+  padding: 0 4px;
+  font-size: 11px;
+}

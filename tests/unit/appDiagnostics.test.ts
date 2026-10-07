@@ -240,6 +240,19 @@ describe('app diagnostics route', () => {
     expect(row[COLUMN.sessionId]).toBeNull();
   });
 
+  it('retains release identity even when the rest of the device context exceeds storage limits', async () => {
+    const inserted: unknown[][] = [], sourceRevision = 'a'.repeat(40);
+    const identity = { buildId: '2026-10-02T00:00:00.000Z', sourceRevision, sourceDirty: false,
+      releaseId: `masterselects-3.1.9-${sourceRevision}` };
+    const response = await onRequest(makeContext({ body: { events: [validRuntimeEvent({
+      context: { ...identity, userAgent: 'x'.repeat(30_000) },
+    })] } }, inserted));
+    expect(response.status).toBe(202);
+    const stored = JSON.parse(String(inserted[0]?.[COLUMN.contextJson]));
+    expect(stored.context).toEqual(identity);
+    expect(stored.truncated).toBe('identity-only');
+  });
+
   it('rejects events with an unknown stage shape or missing required fields', async () => {
     const inserted: unknown[][] = [];
     const response = await onRequest(makeContext({

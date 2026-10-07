@@ -102,3 +102,24 @@ Use the AI debug bridge (see [Debugging](./Debugging.md)):
   `src/services/mediaRuntime/liveInputRuntime.ts`, and
   `src/services/sceneCutDetection/proxySceneCutAnalyzer.ts` — additional
   shipped consumers of the shared Linux canvas policy.
+
+## Linux WebGPU warning
+
+The Vulkan troubleshooting banner appears only after WebGPU initialization
+fails on desktop Linux, including the worker render host. Successful
+initialization clears the banner. Android is excluded, and dismissing the
+banner remains persistent. The message suggests checking hardware acceleration,
+drivers, and Chrome's Vulkan setting; it does not claim Vulkan is disabled.
+Websites cannot read Chrome's Vulkan flag, so working WebGPU is the condition
+used to hide this warning.
+
+## Software presentation of GPU preview on Linux
+
+Linux desktop uses a main-thread 2D canvas for preview and registered output
+surfaces. The complete image is still rendered on WebGPU, including strands,
+path tracing, transparency grids, and output slices. A single asynchronous GPU
+readback presents the newest completed image as software pixels, with bounded
+canvas dimensions. This avoids transparent/blank GPU canvases that expose stale
+window contents on Mesa. Android and other desktop platforms retain native GPU
+presentation. It adds a final readback cost on Linux; rendering and export quality
+are unchanged. WebGPU must still be available to perform the rendering.

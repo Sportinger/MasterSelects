@@ -6,6 +6,8 @@ the confirmed `openLocalProject` bridge operation (Native Helper required).
 A browser-based video editor and a workspace you can extend while you create.
 Edit video, mix audio, animate graphics, build 3D scenes, and work with AI in one multitrack timeline. The editor runs on React, TypeScript, WebGPU, and WebCodecs.
 
+On desktop Linux, Vulkan troubleshooting appears only when WebGPU initialization fails and clears after a successful initialization. See [Linux GPU troubleshooting](docs/Features/Linux-Mesa-GPU.md).
+
 [Open the editor](https://www.masterselects.com/) · [Documentation](https://www.masterselects.com/docs/) · [Discord](https://discord.com/invite/K8dApzG3XC) · [Report an issue](https://github.com/Sportinger/MasterSelects/issues)
 
 ![Face Cables effect in MasterSelects](docs/images/screenshot-face-cables.png)
@@ -47,7 +49,13 @@ started Kie.ai / Nano Banana Pro generation (1K, 2K or 4K), retaining original
 opaque pixels and storing the fill in the project. See
 [Media Panel](docs/Features/Media-Panel.md) and [Effects](docs/Features/Effects.md#lens-correction).
 
+Linux/Mesa preview and output canvases use software presentation of the completed WebGPU image to prevent blank or transparent GPU surfaces. GPU rendering, including path tracing, remains active. See [Linux/Mesa constraints](docs/Features/Linux-Mesa-GPU.md).
+
 ### Node graphs
+
+Clip control nodes now also drive the clip Transform (position, anchor, scale, rotation, opacity). New controls add Smooth Noise, attack/hold/decay Envelopes, Marker Triggers that time pulses to timeline markers, and a Two-Bone IK with individual angle and joint outputs for rigging Pick-Whip parented layers. See [Node Workspace](docs/Features/Node-Workspace.md#procedural-parameter-sources).
+
+A **Stick Figure** effect draws a posable figure on any clip, best on the new transparent **Blank Clip**; its joints take keyframes, a pose library and control nodes. **Gait Cycle** walks, runs or idles it in one click, **Limb IK** plants feet and reaches hands, **Ballistic** throws and bounces, and **Attach to Joint** lets props follow a hand and fly on when released. The Simple Synth adds noise, a pitch envelope, filter types and SFX presets for the matching sound. Fights build fast from **action clips** (punch, kick, jump, throw, fall …) on a figure's lane: strikes can aim at another figure, contacts become markers, sounds or Contact Trigger pulses, and **Check choreography** (also the `validateChoreography` AI tool) finds misses, pops and feet in the ground. See [Node Workspace](docs/Features/Node-Workspace.md#stick-figures-and-rig-nodes).
 
 Flock includes Terracotta and Lilac Sculpture presets: dense, low-gravity
 APIC sheets with slow curl forces, spatial pigment colors and a lit gallery box.
@@ -114,7 +122,20 @@ The **Compact** toggle wraps top-level effects into roughly square arrangements 
 
 Development builds also offer an optional [native OptiX preview](tools/native-helper/optix/README.md) for fiber scenes. Its persistent CUDA/OptiX worker retains geometry, updates the camera with small packets and refines still images from the center outward. The separate comparison view reports WebGPU/native GPU, initialization and transfer timings. Native preview requires the matching helper; video export continues to use WebGPU.
 
+Built-in Weave presets preserve the **Four-Yarn Knit Ring** study, **Endless Knit Band**, and the earlier **Wave Strands** graph as editable effects in Nodes → Effect presets. They remain available without browser storage.
+
+Knit Sphere's band height can gather all rings into one connected knitting patch. Preview camera orbit drags follow the pointer vertically as well as horizontally.
+Strand Render also accepts per-point RGB fields for gradients and alternating color bands with independent offsets per yarn.
+Material-coordinate yarn colors retain GPU cloth and rod simulation; spatial color fields use the final CPU-deformed positions. Yarn Profile Surface Feed moves fiber detail along a curve without changing its centerline. Legacy parameter graphs remain isolated per effect.
+Curve Contact separates overlapping yarn capsules after procedural deformation while preserving closed rings and their color coordinates.
+Closed Curve Flow circulates yarn material along fixed stitch paths, independently of the shape animation. Rod Simulation supports per-node time scale and offset for paired entry and exit studies. Constant-speed pulling and the finite, baked Knit Passage Study support successive four-yarn draw-throughs on an upright ring, with a wider mature patch separating entry and exit; its entry is reverse playback and its return is constructed.
+Experimental Knit Cycle Guides drive closed yarn bands through separate forming and release zones in one forward-time rod solve.
+Close Curve adds a smooth return bow to each open yarn, creating closed ropes for Rod Simulation; geometric closure alone does not loop the motion.
+Rod Simulation's Pull Direction field moves selected pins on open or closed ropes along fixed normalized directions; zero vectors hold supports still. Build and map the closed ring before the solve for coupled tension and contacts. This enables tension studies, not repeated needle-driven stitch formation.
+Set Position after Rod Simulation deforms the result on the GPU, for example bending a stitch animation into a ring while preserving its original simulation.
+
 [Slit Scan](docs/Features/Effects.md#slit-scan) starts with 3D geometry bypassed. It can match its time factor to the source frame rate and sample count, and optionally compensate motion between decoded frames in resident GPU history with adjustable flow strength.
+
 Its [space-time slice](docs/Features/Slit-Scan-3D.md#space-time-slice-observed-depth) tilts and cuts baked color/depth observations from a fixed camera. A tracked 2D shape target can also solve a time field from an anchor and target stretch, with recorded-motion fit errors shown in the inspector.
 
 | Detail view | Full graph |
@@ -126,6 +147,9 @@ Import video, audio, images, animations, 3D assets, and Premiere Pro projects. E
 The [Notebook](docs/Features/Documents.md) is a continuous writing surface for notes and screenplays. Passages can receive labels, scene ranges, comments and media links after writing; imported PDFs retain an original-page view.
 
 ## Build while you create
+
+[Runtime diagnostics](docs/Features/Debugging.md) include version, build and source
+commit identifiers so maintainers can trace reported failures to a release.
 
 Dense [mask overlays](docs/Features/Masks.md) reuse contour transforms and interpolated paths during interaction. [Project recovery](docs/Features/Project-Persistence.md) retains recent entries when folder access fails. Development refreshes proceed without an unsaved-work browser prompt.
 

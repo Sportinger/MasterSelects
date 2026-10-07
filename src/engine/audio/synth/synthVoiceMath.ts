@@ -95,3 +95,34 @@ export function clampFilterQ(q: number): number {
   if (!Number.isFinite(q)) return MIN_FILTER_Q;
   return Math.max(MIN_FILTER_Q, Math.min(MAX_FILTER_Q, q));
 }
+
+// Noise source (SFX). A fixed seed keeps live playback and offline export
+// sample-identical; the start offset varies with pitch so different notes do not
+// replay the exact same grain.
+export const NOISE_BUFFER_SECONDS = 2;
+const NOISE_SEED = 0x5eed1234;
+
+/** Fill `target` with deterministic white noise in [-1, 1) (mulberry32). */
+export function fillSeededNoise(target: Float32Array, seed = NOISE_SEED): Float32Array {
+  let state = seed >>> 0;
+  for (let i = 0; i < target.length; i++) {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    target[i] = (((t ^ (t >>> 14)) >>> 0) / 4294967296) * 2 - 1;
+  }
+  return target;
+}
+
+/** Start offset (seconds) into the looping noise buffer for a note pitch. */
+export function noiseStartOffset(pitch: number): number {
+  const offset = (Math.max(0, Math.round(pitch)) * 0.1373) % NOISE_BUFFER_SECONDS;
+  return Number.isFinite(offset) ? offset : 0;
+}
+
+/** Pitch-envelope start offset in cents, bounded to ±4 octaves. */
+export function pitchEnvelopeCents(semitones: number | undefined): number {
+  if (!Number.isFinite(semitones)) return 0;
+  return Math.max(-4800, Math.min(4800, (semitones as number) * 100));
+}

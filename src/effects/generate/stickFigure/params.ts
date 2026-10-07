@@ -1,0 +1,50 @@
+// Stick Figure parameters, shared by the effect and its node-drivable targets.
+
+import type { EffectParam } from '../../types';
+import {
+  createDefaultSkeletonShape,
+  SKELETON_KEY_LABELS,
+  type SkeletonNumericKey,
+} from '../../../services/rig/skeletonRig';
+
+const DEFAULTS = createDefaultSkeletonShape();
+const number = (key: SkeletonNumericKey, group: string, min: number, max: number): EffectParam => ({
+  type: 'number', label: SKELETON_KEY_LABELS[key], default: DEFAULTS[key], min, max, step: 1, animatable: true, group,
+});
+const angle = (key: SkeletonNumericKey) => number(key, 'Pose', -180, 180);
+const length = (key: SkeletonNumericKey, max = 400) => number(key, 'Proportions', 0, max);
+
+/** Lengths and offsets are pixels at a 1080 px tall frame; the figure scales with the resolution. */
+export const STICK_FIGURE_PARAMS = {
+  rootX: number('rootX', 'Pose', -2000, 2000),
+  rootY: number('rootY', 'Pose', -2000, 2000),
+  lift: number('lift', 'Pose', -2000, 2000),
+  spine: angle('spine'), head: angle('head'),
+  shoulderL: angle('shoulderL'), elbowL: angle('elbowL'), shoulderR: angle('shoulderR'), elbowR: angle('elbowR'),
+  hipL: angle('hipL'), kneeL: angle('kneeL'), hipR: angle('hipR'), kneeR: angle('kneeR'),
+  torso: length('torso'), neck: length('neck', 200), headRadius: length('headRadius', 200),
+  upperArm: length('upperArm'), forearm: length('forearm'), thigh: length('thigh'), shin: length('shin'),
+  thickness: length('thickness', 100),
+  scale: { type: 'number', label: 'Scale', default: 1, min: 0.05, max: 5, step: 0.01, animatable: true, group: 'Proportions' },
+  groundMode: {
+    type: 'select', label: 'Ground', default: DEFAULTS.groundMode, group: 'Ground',
+    options: [
+      { value: 'plant', label: 'Plant lowest point' },
+      { value: 'floor', label: 'Keep above ground' },
+      { value: 'off', label: 'Off' },
+    ],
+  },
+  groundY: number('groundY', 'Ground', -2000, 2000),
+  facing: {
+    type: 'select', label: 'Facing', default: 'right', group: 'Style',
+    options: [{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }],
+  },
+  // Keyframeable turnaround: 1 = as Facing says, -1 = turned around, in between a 2D squash.
+  turn: { type: 'number', label: 'Turn', default: 1, min: -1, max: 1, step: 0.01, animatable: true, group: 'Style' },
+  color: { type: 'color', label: 'Color', default: '#ffffff', group: 'Style' },
+  opacity: { type: 'number', label: 'Opacity', default: 1, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
+  // Action lane (JSON list of SkeletonActionInstance), edited in the Actions section.
+  actions: { type: 'text', label: 'Actions', default: '[]', hidden: true },
+  // Ids of the timeline markers last created from the contacts (see syncStickFigureContactMarkers).
+  contactMarkers: { type: 'text', label: 'Contact markers', default: '[]', hidden: true },
+} satisfies Record<string, EffectParam>;

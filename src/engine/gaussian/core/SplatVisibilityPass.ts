@@ -3,6 +3,7 @@
 // For scenes > CULL_THRESHOLD splats this reduces GPU draw work significantly.
 
 import { Logger } from '../../../services/logger';
+import { GpuFrameBuffers, GpuUniformRing } from '../../core/gpuUniformRing';
 import shaderSource from '../shaders/visibilityCull.wgsl?raw';
 
 const log = Logger.create('SplatVisibilityPass');
@@ -13,7 +14,13 @@ const CULL_UNIFORM_SIZE = 144;
 export class SplatVisibilityPass {
   private device: GPUDevice | null = null;
   private pipeline: GPUComputePipeline | null = null;
-  private cullUniformBuffer: GPUBuffer | null = null;
+  /** One cull uniform slot per execute() in a frame: the renderer culls every splat layer
+   * into the same encoder, and a single rewritten buffer would cull all of them with the
+   * last layer's camera/world matrices. */
+  private cullUniforms: GpuUniformRing | null = null;
+  /** Index/counter outputs; growing retires the old buffers until the next frame because
+   * earlier layers of this frame still reference them in the unsubmitted encoder. */
+  private outputBuffers: GpuFrameBuffers | null = null;
   private visibleIndexBuffer: GPUBuffer | null = null;
   private counterBuffer: GPUBuffer | null = null;
   private counterResetBuffer: GPUBuffer | null = null;
@@ -33,6 +40,12 @@ export class SplatVisibilityPass {
 
   get isInitialized(): boolean {
     return this._initialized;
+  }
+
+  /** Rewind per-frame uniform slots and destroy buffers retired last frame. */
+  beginFrame(): void {
+    this.cullUniforms?.beginFrame();
+    this.outputBuffers?.beginFrame();
   }
 
   initialize(device: GPUDevice): void {
@@ -92,7 +105,7 @@ export class SplatVisibilityPass {
       u32View[32] = splatCount;
       // padding at 33, 34, 35
 
-      device.queue.writeBuffer(this.cullUniformBuffer!, 0, uniformData);
+      const cullUniformBuffer = this.cullUniforms!.write(uniformData);
 
       // Reset the atomic counter to 0 (copy from zero-initialized staging buffer)
       commandEncoder.copyBufferToBuffer(
@@ -113,7 +126,7 @@ export class SplatVisibilityPass {
       const uniformBindGroup = device.createBindGroup({
         layout: this.uniformLayout!,
         entries: [
-          { binding: 0, resource: { buffer: this.cullUniformBuffer! } },
+          { binding: 0, resource: { buffer: cullUniformBuffer } },
         ],
         label: 'cull-uniform-bg',
       });
@@ -140,15 +153,15 @@ export class SplatVisibilityPass {
   }
 
   dispose(): void {
-    this.visibleIndexBuffer?.destroy();
-    this.counterBuffer?.destroy();
+    this.outputBuffers?.dispose();
     this.counterResetBuffer?.destroy();
-    this.cullUniformBuffer?.destroy();
+    this.cullUniforms?.dispose();
 
+    this.outputBuffers = null;
     this.visibleIndexBuffer = null;
     this.counterBuffer = null;
     this.counterResetBuffer = null;
-    this.cullUniformBuffer = null;
+    this.cullUniforms = null;
     this.outputBindGroup = null;
     this.pipeline = null;
     this.splatDataLayout = null;
@@ -226,11 +239,10 @@ export class SplatVisibilityPass {
       label: 'visibility-cull-pipeline',
     });
 
-    // Create uniform buffer
-    this.cullUniformBuffer = this.device.createBuffer({
-      size: CULL_UNIFORM_SIZE,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-      label: 'cull-uniforms',
+    this.cullUniforms = new GpuUniformRing(this.device, { label: 'cull-uniforms', size: CULL_UNIFORM_SIZE });
+    this.outputBuffers = new GpuFrameBuffers(this.device, {
+      label: 'cull',
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
     });
 
     // Create the zero-reset staging buffer for the counter
@@ -245,27 +257,16 @@ export class SplatVisibilityPass {
   }
 
   private ensureBuffers(device: GPUDevice, splatCount: number): void {
-    if (splatCount <= this.maxSplatCount && this.visibleIndexBuffer) return;
+    if (splatCount <= this.maxSplatCount && this.visibleIndexBuffer && this.outputBindGroup) return;
 
     // Round up to next power of 2 for fewer re-allocations
     const capacity = nextPowerOf2(Math.max(splatCount, 1024));
 
-    this.visibleIndexBuffer?.destroy();
-    this.counterBuffer?.destroy();
-
-    // Visible index buffer: u32 per splat
-    this.visibleIndexBuffer = device.createBuffer({
-      size: capacity * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
-      label: 'cull-visible-indices',
-    });
-
-    // Atomic counter buffer: single u32
-    this.counterBuffer = device.createBuffer({
-      size: 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST,
-      label: 'cull-counter',
-    });
+    // Visible index buffer: u32 per splat. A smaller predecessor is retired, not destroyed:
+    // layers culled earlier in this frame still read it from the unsubmitted encoder.
+    this.visibleIndexBuffer = this.outputBuffers!.ensure('visible-indices', capacity * 4);
+    // Atomic counter buffer: single u32 (allocated once, reset per execute)
+    this.counterBuffer = this.outputBuffers!.ensure('counter', 4);
 
     // Recreate output bind group
     this.outputBindGroup = device.createBindGroup({

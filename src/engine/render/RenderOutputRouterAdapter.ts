@@ -91,8 +91,10 @@ export class RenderOutputRouterAdapter implements RenderOutputRouter {
         const enabledSlices = config?.slices.filter((slice) => slice.enabled) ?? [];
 
         if (enabledSlices.length > 0 && slicePipeline) {
-          slicePipeline.buildVertexBuffer(enabledSlices as OutputSlice[]);
-          slicePipeline.renderSlicedOutput(input.commandEncoder, ctx, input.sourceView, input.sampler);
+          // Vertices are keyed by the drawn target (not sliceLookupId): every target in this
+          // encoder needs its own buffer, even when two of them show the same slice config.
+          slicePipeline.buildVertexBuffer(enabledSlices as OutputSlice[], target.id);
+          slicePipeline.renderSlicedOutput(input.commandEncoder, ctx, input.sourceView, input.sampler, target.id);
         } else {
           const targetBindGroup = outputPipeline.createOutputBindGroup(
             input.sampler,

@@ -75,6 +75,31 @@ export function createSplatDataBindGroup(
   });
 }
 
+export interface CachedSplatDataBindGroup {
+  dataBuffer: GPUBuffer;
+  indexBuffer: GPUBuffer;
+  bindGroup: GPUBindGroup;
+}
+
+/** `cached` when it binds exactly these buffers, otherwise a new bind group for them. */
+export function reuseSplatDataBindGroup(
+  device: GPUDevice,
+  layout: GPUBindGroupLayout,
+  cached: CachedSplatDataBindGroup | null,
+  dataBuffer: GPUBuffer,
+  indexBuffer: GPUBuffer,
+  label: string,
+): CachedSplatDataBindGroup {
+  if (cached && cached.dataBuffer === dataBuffer && cached.indexBuffer === indexBuffer) {
+    return cached;
+  }
+  return {
+    dataBuffer,
+    indexBuffer,
+    bindGroup: createSplatDataBindGroup(device, layout, dataBuffer, indexBuffer, label),
+  };
+}
+
 export interface SplatStorageBufferResource {
   buffer: GPUBuffer;
   splatCount: number;
