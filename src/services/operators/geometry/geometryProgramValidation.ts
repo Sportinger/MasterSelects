@@ -11,7 +11,7 @@ import { isRodSpec } from './rodProgram';
 import { isKnitCycleSpec, KNIT_CYCLE_KEYS } from './knitCycleGuides';
 import { isKnitPassageSpec, KNIT_PASSAGE_POINTS, KNIT_PASSAGE_ROWS } from './knitPassageSpec';
 
-const FIELD_INSTRUCTION_LIMIT = 256;
+import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
 const STAGE_LIMIT = 64;
 const TYPES = new Set<PointwiseValueType>(['scalar', 'boolean', 'vec2', 'vec3', 'vec4']);
 const CONTEXT = new Set<string>(CURVE_CONTEXT_OPERATIONS);
@@ -23,7 +23,7 @@ const axis = (value: unknown) => value === 0 || value === 1 || value === 2;
 function isField(value: unknown): value is GeometryField {
   if (!record(value) || !exactKeys(value, ['instructions', 'output']) || !Array.isArray(value.instructions)) return false;
   const instructions = value.instructions as unknown[];
-  if (!instructions.length || instructions.length > FIELD_INSTRUCTION_LIMIT || !Number.isInteger(value.output)
+  if (!instructions.length || instructions.length > GEOMETRY_FIELD_INSTRUCTION_LIMIT || !Number.isInteger(value.output)
     || (value.output as number) < 0 || (value.output as number) >= instructions.length) return false;
   return instructions.every((item, index) => record(item) && exactKeys(item, ['nodeId', 'operation', 'type', 'inputs', 'value'])
     && typeof item.nodeId === 'string' && typeof item.operation === 'string' && TYPES.has(item.type as PointwiseValueType)

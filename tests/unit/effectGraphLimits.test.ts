@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
-import { ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS, IMAGE_EFFECT_GRAPH_LIMITS, LEGACY_EFFECT_GRAPH_LIMITS, SCENE_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
+import { ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS, GEOMETRY_EFFECT_GRAPH_LIMITS, IMAGE_EFFECT_GRAPH_LIMITS, LEGACY_EFFECT_GRAPH_LIMITS, SCENE_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
 import { compileImageOperatorGraph, compileImageOperatorPreview } from '../../src/services/operators/imageOperatorGraph';
 import { migrateImageOperatorGraph } from '../../src/services/operators/imageOperatorMigration';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../src/types/operatorGraph';
@@ -94,7 +94,7 @@ describe('effect graph persisted limits', () => {
     for (const domain of ['scene', 'geometry'] as const) {
       const graph = { ...largeImageGraph(61), domain };
       expect(validateEffectGraph(graph)).not.toContain('Invalid operator graph.');
-      while (graph.nodes.length <= SCENE_EFFECT_GRAPH_LIMITS.nodes) {
+      while (graph.nodes.length <= (domain === 'geometry' ? GEOMETRY_EFFECT_GRAPH_LIMITS : SCENE_EFFECT_GRAPH_LIMITS).nodes) {
         const id = `scene-extra-${graph.nodes.length}`;
         graph.nodes.push(value(id)); graph.layout[id] = { x: 0, y: 0 };
       }

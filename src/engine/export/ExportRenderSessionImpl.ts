@@ -1,3 +1,4 @@
+import { stackExportAlpha } from './stackExportAlpha';
 import type {
   ExportFrameCapture,
   ExportRenderFrameInput,
@@ -390,7 +391,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   ): Promise<ExportRenderSessionFrameCapture | null> {
     // Fallback: read pixels from GPU (slower)
     const captureStart = performance.now();
-    const pixels = await this.host.readPixels();
+    let pixels = await this.host.readPixels();
     const captureMs = performance.now() - captureStart;
     if (!pixels) {
       if (!this.host.isDeviceValid()) {
@@ -399,6 +400,11 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       return null;
     }
     const captureHeight = this.stackedAlpha ? this.height * 2 : this.height;
+    // Main-host readback returns the compositor's ordinary RGBA texture. A
+    // worker may already return the doubled output; only pack the former.
+    if (this.stackedAlpha && pixels.byteLength === this.width * this.height * 4) {
+      pixels = stackExportAlpha(pixels);
+    }
     const expectedByteLength = this.width * captureHeight * 4;
     if (pixels.byteLength !== expectedByteLength) {
       throw new Error(

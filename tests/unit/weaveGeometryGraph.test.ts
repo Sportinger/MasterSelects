@@ -27,6 +27,29 @@ describe('Weave geometry graph', () => {
     expect(wave.nodes.filter(node => node.operator.startsWith('math.')).length).toBeGreaterThan(5);
   });
 
+  it.each(['canonical', 'legacy'])('reopens an unwired %s Weave as an editable draft without dropping cables', storage => {
+    const graph = createWaveStrandsGraph();
+    const cable = graph.edges.find(edge => edge.to === 'phase' && edge.input === 'a')!;
+    graph.edges = graph.edges.filter(edge => edge !== cable);
+    const original = structuredClone(graph);
+    const effect = weaveEffect(storage === 'canonical' ? { operatorGraph: graph } : { params: { operatorGraph: JSON.stringify(graph) } });
+    const reopened = migratePersistedEffectOperatorGraph(effect);
+    expect(reopened.operatorGraph?.incomplete).toBe('Multiply: connect A.');
+    expect(reopened.operatorGraph?.edges).toEqual(original.edges);
+    expect(graph).toEqual(original);
+    expect(() => effectOperatorGraph(reopened)).not.toThrow();
+    expect(migratePersistedEffectOperatorGraph(reopened).operatorGraph).toEqual(reopened.operatorGraph);
+    const repaired = structuredClone(reopened.operatorGraph!);
+    repaired.edges.push(cable); delete repaired.incomplete;
+    expect(() => assertWeaveGraph(repaired, reopened.params)).not.toThrow();
+  });
+
+  it('still rejects structurally invalid saved Weave connections', () => {
+    const graph = createWaveStrandsGraph();
+    graph.edges[0].from = 'missing-node';
+    expect(() => migratePersistedEffectOperatorGraph(weaveEffect({ operatorGraph: graph }))).toThrow();
+  });
+
   it('evaluates the alternating over/under wave per curve point', () => {
     const program = compileGeometryGraph(createWaveStrandsGraph(), geometryParameterReader({}));
     expect(program.stages.map(stage => stage.kind)).toEqual(['curve-line', 'strand-array', 'set-position']);

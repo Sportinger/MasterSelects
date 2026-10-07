@@ -11,7 +11,7 @@ import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { VORONOI_OPERATORS } from './voronoiOperators';
 import { PARTICLE_DISINTEGRATE_OPERATORS } from './particleDisintegrateOperators';
 import { CURVE_OPERATORS } from './geometry/curveOperators';
-import { IMAGE_COMPOSITIONS, SPACE_COMPOSITIONS } from './operatorCompositionRegistry';
+import { IMAGE_COMPOSITIONS, SPACE_COMPOSITIONS, GEOMETRY_COMPOSITIONS } from './operatorCompositionRegistry';
 
 const port = (id: string, type: OperatorSignal, required = false): OperatorPort => ({ id, label: id[0].toUpperCase() + id.slice(1), type, required });
 const number = (id: string, label: string, value: number, min: number, max: number): OperatorParameter =>
@@ -30,6 +30,7 @@ export const EFFECT_OPERATORS: readonly OperatorDefinition[] = [
   ...IMAGE_OPERATORS,
   ...IMAGE_COMPOSITIONS,
   ...SPACE_COMPOSITIONS,
+  ...GEOMETRY_COMPOSITIONS,
   ...ANALOG_SIGNAL_OPERATORS,
   ...VORONOI_OPERATORS,
   ...PARTICLE_DISINTEGRATE_OPERATORS,

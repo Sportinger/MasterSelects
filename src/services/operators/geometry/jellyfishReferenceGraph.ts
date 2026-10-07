@@ -39,7 +39,7 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   link('length', 'value', 'shape', 'z'); link('shape', 'value', 'stretch', 'position');
 
   // Spatial noise keeps the repeated endpoint identical; no u-based seam or time accumulation.
-  control('irregularity', 'Irregularity', 0.12, 0, 0.3, 0.001, 1120, 1080);
+  control('irregularity', 'Irregularity', 0.04, 0, 1, 0.001, 1120, 1080);
   add('return-position', 'geometry.position', 0, 1200);
   add('return-split', 'vector.split.vec3', 280, 1200);
   add('return-mask', 'field.ramp', 560, 1060, { x0: -1.2, y0: 1, x1: 0.5, y1: 1, x2: 1, y2: 0.12 });
@@ -48,9 +48,9 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   link('return-split', 'z', 'return-mask', 'value');
   link('return-mask', 'value', 'return-amount', 'a');
   link('irregularity', 'value', 'return-amount', 'b');
-  add('wobble-x', 'field.noise', 1400, 480, { frequency: 3.2, amplitude: 0.016, seed: 17, octaves: 2 });
-  add('wobble-y', 'field.noise', 1400, 780, { frequency: 4, amplitude: 0.065, seed: 29, octaves: 2 });
-  add('wobble-z', 'field.noise', 1400, 1080, { frequency: 2.8, amplitude: 0.025, seed: 43, octaves: 2 });
+  add('wobble-x', 'field.noise', 1400, 480, { frequency: 0.9, amplitude: 0.016, seed: 17, octaves: 1 });
+  add('wobble-y', 'field.noise', 1400, 780, { frequency: 1.1, amplitude: 0.065, seed: 29, octaves: 1 });
+  add('wobble-z', 'field.noise', 1400, 1080, { frequency: 0.8, amplitude: 0.025, seed: 43, octaves: 1 });
   // One amount controls all three axes, preserving the proportion of the reference's waviness.
   add('x-ratio', 'values.number', 840, 1280, { value: 0.25 });
   add('z-ratio', 'values.number', 840, 1440, { value: 0.4 });
@@ -119,23 +119,15 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   link('handmade', 'curves', 'pulse-set', 'curves'); link('pulse-shape', 'value', 'pulse-set', 'position');
   const pulseNodes = nodes.slice(pulseStart).map(node => node.id);
 
-  // Move through the noise field on a closed orbit: living returns, deterministic seeks
-  // and the same twenty-second loop as the yarn flow. Zero motion freezes the pattern.
+  // Advect both noise and curl steadily from the +Z head toward the -Z tail.
+  // Sampling z + speed*time moves field features backwards without an orbit,
+  // reversal or time wrap. Source time keeps random seeks/export deterministic.
   const driftStart = nodes.length;
-  control('return-motion', 'Return Motion', 0.6, 0, 2, 0.01, 0, 3250);
-  add('return-rate', 'values.number', 0, 3410, { value: 0.05 });
-  const driftCycles = math('return-cycles', 'multiply', value('pulse-clock'), value('return-rate'), 280, 3250);
-  const driftTurn = math('return-turn', 'fract', driftCycles, undefined, 560, 3250);
-  const driftPhase = math('return-phase', 'multiply', driftTurn, value('pulse-tau'), 840, 3250);
-  const driftCos = math('return-cos', 'cos', driftPhase, undefined, 1120, 3170);
-  const driftSin = math('return-sin', 'sin', driftPhase, undefined, 1120, 3410);
-  const driftOrigin = math('return-origin', 'subtract', driftCos, value('pulse-one'), 1400, 3170);
-  const driftX = math('return-drift-x', 'multiply', driftOrigin, value('return-motion'), 1680, 3170);
-  const driftZ = math('return-drift-z', 'multiply', driftSin, value('return-motion'), 1680, 3410);
-  const samplingX = math('return-sampling-x', 'add', ['return-split', 'x'], driftX, 1960, 3170);
-  const samplingZ = math('return-sampling-z', 'add', ['return-split', 'z'], driftZ, 1960, 3410);
+  control('return-motion', 'Return Flow (units/s)', 0.4, -2, 2, 0.01, 0, 3250);
+  const driftZ = math('return-drift-z', 'multiply', value('pulse-clock'), value('return-motion'), 560, 3250);
+  const samplingZ = math('return-sampling-z', 'add', ['return-split', 'z'], driftZ, 1120, 3250);
   add('return-sampling', 'vector.combine.vec3', 2240, 3250);
-  link(...samplingX, 'return-sampling', 'x');
+  link('return-split', 'x', 'return-sampling', 'x');
   link('return-split', 'y', 'return-sampling', 'y');
   link(...samplingZ, 'return-sampling', 'z');
   for (const axis of ['x', 'y', 'z']) link('return-sampling', 'value', `wobble-${axis}`, 'position');
@@ -150,7 +142,7 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   add('tail-split', 'vector.split.vec3', 280, 3700);
   link('tail-position', 'position', 'tail-split', 'value');
   const tailZ = math('tail-longitudinal', 'divide-ieee', ['tail-split', 'z'], value('body-length'), 560, 3700);
-  add('tail-mask', 'field.ramp', 840, 3700, { x0: -0.55, y0: 0.5, x1: 0.3, y1: 1, x2: 0.72, y2: 0 });
+  add('tail-mask', 'field.ramp', 840, 3700, { x0: -0.55, y0: 0.5, x1: 0.22, y1: 1, x2: 0.62, y2: 0 });
   link(...tailZ, 'tail-mask', 'value');
   const inset = math('tail-amount', 'multiply', value('tail-mask'), value('tail-inset'), 1120, 3700);
   const tailScale = math('tail-scale', 'subtract', value('pulse-one'), inset, 1400, 3700);
@@ -172,12 +164,81 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   const chain = ['pulse-set', 'yarn', 'flyaways', 'material', 'render'];
   chain.slice(1).forEach((id, index) => link(chain[index], 'curves', id, 'curves'));
   link('render', 'scene', 'output', 'scene');
-  return { version: 1, schemaVersion: 1, domain: 'geometry', nodes, edges, layout,
+  return withJellyfishCurl({ version: 1, schemaVersion: 1, domain: 'geometry', nodes, edges, layout,
     groups: [
       { id: 'closed-knit', label: 'Closed Knit Body', color: '#5f9ea0', nodeIds: ['knit', 'circulation', 'position', 'split', 'body-length', 'length', 'shape', 'stretch'] },
       { id: 'tail-shaping', label: 'Tail Shape', color: '#709ba2', nodeIds: tailNodes },
       { id: 'loose-returns', label: 'Loose Returns', color: '#8a7fd1', nodeIds: ['irregularity', 'return-position', 'return-split', 'return-mask', 'return-amount', 'wobble-x', 'wobble-y', 'wobble-z', 'x-ratio', 'z-ratio', 'x-amount', 'z-amount', 'offset', 'handmade', ...driftNodes] },
       { id: 'cream-yarn', label: 'Cream Yarn', color: '#c8a45a', nodeIds: ['yarn', 'flyaways', 'material'] },
       { id: 'jellyfish-pulse', label: 'Jellyfish Pulse', color: '#729fbc', nodeIds: pulseNodes },
-    ] };
+    ] });
+}
+
+
+/** Central differences of three independent smooth noise potentials form a genuine 3D curl.
+ * Spatial masking protects the knit; this is a deterministic displacement, not a fluid solve.
+ */
+function withJellyfishCurl(graph: EffectOperatorGraph): EffectOperatorGraph {
+  const { nodes, edges } = graph, layout = graph.layout!;
+  const first = nodes.length;
+  let row = 0;
+  type Port = [string, string];
+  const value = (id: string): Port => [id, 'value'];
+  const add = (id: string, operator: string, constants?: Record<string, OperatorValue>) => {
+    const node: BoundOperatorNode = { id, operator, operatorVersion: 1, bindings: {}, ...(constants ? { constants } : {}) };
+    nodes.push(node); layout[id] = { x: 5200 + (row % 6) * 280, y: 80 + Math.floor(row++ / 6) * 230 }; return node;
+  };
+  const link = (from: Port, to: string, input: string) =>
+    edges.push({ id: `${from[0]}-${from[1]}-${to}-${input}`, from: from[0], output: from[1], to, input });
+  const math = (id: string, op: string, a: Port, b: Port): Port => {
+    add(id, `math.${op}.scalar`); link(a, id, 'a'); link(b, id, 'b'); return value(id);
+  };
+  const control = (id: string, label: string, amount: number, min: number, max: number, step: number) => {
+    const node = add(id, 'values.number', { value: amount });
+    node.bindings = { value: `${id}_value` }; node.exposed = { label, min, max, step };
+  };
+  control('curl-strength', 'Curl Strength', 0.18, 0, 0.5, 0.01);
+  control('curl-detail', 'Curl Detail', 3.5, 0.5, 8, 0.1);
+  control('curl-evolution', 'Curl Evolution (turns/s)', 0.08, 0, 0.5, 0.01);
+  const evolution = math('curl-evolution-time', 'multiply', value('pulse-clock'), value('curl-evolution'));
+  const longitudinal = math('curl-longitudinal', 'divide-ieee', ['return-split', 'z'], value('body-length'));
+  add('curl-mask', 'field.ramp', { x0: -0.8, y0: 1, x1: 0.2, y1: 1, x2: 0.55, y2: 0 });
+  link(longitudinal, 'curl-mask', 'value');
+  const amplitude = math('curl-amplitude', 'multiply', value('curl-strength'), value('curl-mask'));
+  // Positive circulation carries +X courses toward -Z, and -X courses toward
+  // the +Z knit. Separate fields have support only on their own side, with a
+  // narrow smooth transition at the rear seam. Evolution remains independent.
+  add('curl-side', 'field.ramp', { x0: -0.12, y0: 0, x1: 0, y1: 0.5, x2: 0.12, y2: 1 });
+  link(['return-split', 'x'], 'curl-side', 'value');
+  const incomingMask = math('curl-incoming-mask', 'subtract', value('pulse-one'), value('curl-side'));
+  const outgoingStrength = math('curl-outgoing-strength', 'multiply', amplitude, value('curl-side'));
+  const incomingStrength = math('curl-incoming-strength', 'multiply', amplitude, incomingMask);
+  const incomingZ = math('curl-incoming-z', 'subtract', ['return-split', 'z'], value('return-drift-z'));
+  add('curl-seed-offset', 'values.number', { value: 17.31 });
+  const incomingX = math('curl-incoming-x', 'add', ['return-split', 'x'], value('curl-seed-offset'));
+  add('curl-incoming-position', 'vector.combine.vec3');
+  link(incomingX, 'curl-incoming-position', 'x');
+  link(['return-split', 'y'], 'curl-incoming-position', 'y');
+  link(incomingZ, 'curl-incoming-position', 'z');
+  for (const [id, position, amount] of [
+    ['return-curl-field', 'return-sampling', outgoingStrength],
+    ['incoming-curl-field', 'curl-incoming-position', incomingStrength],
+  ] as const) {
+    add(id, 'field.curl-noise3d-evolving');
+    link(value(position), id, 'position'); link(value('curl-detail'), id, 'detail');
+    link(amount, id, 'strength'); link(evolution, id, 'evolution');
+  }
+  add('curl-vector', 'vector.split.vec3'); link(['return-curl-field', 'vector'], 'curl-vector', 'value');
+  add('curl-incoming-vector', 'vector.split.vec3'); link(['incoming-curl-field', 'vector'], 'curl-incoming-vector', 'value');
+  const result: Record<string, Port> = {};
+  for (const axis of ['x', 'y', 'z']) {
+    const combined = math(`curl-sides-${axis}`, 'add', ['curl-vector', axis], ['curl-incoming-vector', axis]);
+    result[axis] = math(`curl-mixed-${axis}`, 'add', combined, value(`wobble-${axis}`));
+  }
+  add('curl-offset', 'vector.combine.vec3');
+  for (const axis of ['x', 'y', 'z']) link(result[axis], 'curl-offset', axis);
+  graph.edges = edges.filter(edge => !(edge.to === 'handmade' && edge.input === 'offset'));
+  graph.edges.push({ id: 'curl-offset-value-handmade-offset', from: 'curl-offset', output: 'value', to: 'handmade', input: 'offset' });
+  graph.groups!.push({ id: 'return-curl', label: 'Return Curls', color: '#708dbd', nodeIds: nodes.slice(first).map(node => node.id) });
+  return graph;
 }

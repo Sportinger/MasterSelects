@@ -6,6 +6,9 @@ export const IMAGE_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 512, edges:
 /** The canonical 140-node/209-edge Analog graph keeps bounded editing headroom. */
 export const ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 256, edges: 512 };
 export const SCENE_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 256, edges: 1024 };
+/** Two editable evolving curl compositions plus their geometry controls. */
+export const GEOMETRY_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 512, edges: 2048 };
+export const GEOMETRY_FIELD_INSTRUCTION_LIMIT = 512;
 /** Expanded lexical scopes are bounded independently from the persisted graph. */
 export const IMAGE_SCOPED_INSTRUCTION_LIMIT = 2048;
 
@@ -13,5 +16,6 @@ export const IMAGE_SCOPED_INSTRUCTION_LIMIT = 2048;
 export function effectGraphLimits(domain: EffectOperatorGraph['domain'] | undefined): EffectGraphLimits {
   return domain === 'image' || domain === 'compute-image' ? IMAGE_EFFECT_GRAPH_LIMITS
     : domain === 'analog-signal' ? ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS
-    : domain === 'scene' || domain === 'geometry' ? SCENE_EFFECT_GRAPH_LIMITS : LEGACY_EFFECT_GRAPH_LIMITS;
+    : domain === 'geometry' ? GEOMETRY_EFFECT_GRAPH_LIMITS
+    : domain === 'scene' ? SCENE_EFFECT_GRAPH_LIMITS : LEGACY_EFFECT_GRAPH_LIMITS;
 }

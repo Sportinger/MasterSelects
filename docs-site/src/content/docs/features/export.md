@@ -416,3 +416,8 @@ Export submissions retain exclusive ownership until the runner and its cleanup s
 ### Encoder allocation during preparation
 
 Video export checks codec support and selects the audio format before preparation, but allocates the video encoder only when the first RGBA or zero-copy frame is ready. Slow source loading, audio rendering, and asset preparation therefore do not hold an idle video codec that the browser can reclaim. Cancellation during preparation discards the pending encoder and muxer. This does not restore inaccessible source files or prevent resource loss after encoding has begun.
+
+On desktop Linux, WebCodecs export captures compositor pixels by GPU readback.
+This avoids silently black frames from GPU-canvas capture on Mesa, and supports
+stacked alpha (RGB above alpha-as-luma). Rendering remains on WebGPU; readback
+adds a GPU-to-CPU copy.

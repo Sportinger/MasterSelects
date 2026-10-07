@@ -54,6 +54,22 @@ describe('export canvas capture recovery', () => {
     expect(device.queue.onSubmittedWorkDone).not.toHaveBeenCalled();
   });
 
+  it('selects compositor readback on desktop Linux even when a GPU canvas would succeed', () => {
+    const canvas = manager.getExportCanvas();
+    expect(canvas).toBeTruthy();
+    vi.stubGlobal('navigator', { platform: 'Linux x86_64', userAgent: 'Chrome Linux', gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
+    configure.mockClear();
+    expect(manager.initExportCanvas(device, 640, 360)).toBe(false);
+    expect(manager.getExportCanvas()).toBeNull();
+    expect(manager.getExportCanvasContext()).toBeNull();
+    expect(configure).not.toHaveBeenCalled();
+  });
+
+  it('keeps Android on the GPU canvas path', () => {
+    vi.stubGlobal('navigator', { platform: 'Linux armv8', userAgent: 'Chrome Android', gpu: { getPreferredCanvasFormat: () => 'bgra8unorm' } });
+    expect(manager.initExportCanvas(device, 640, 360)).toBe(true);
+  });
+
   it('does not capture after cleanup', async () => {
     manager.cleanupExportCanvas();
     await expect(manager.createVideoFrameFromExport(device, 0, 33)).resolves.toBeNull();

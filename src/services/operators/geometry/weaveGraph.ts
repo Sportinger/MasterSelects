@@ -20,6 +20,7 @@ let ownerOperators: OperatorDefinition[] | undefined;
 /** Nodes a geometry graph offers: curve operators, values and every shared pointwise math/vector operator. */
 export function geometryOwnerOperators(): OperatorDefinition[] {
   return ownerOperators ??= EFFECT_OPERATORS.filter(operator => operator.addable && (isCurveOperator(operator.id)
+    || operator.composition?.graph.domain === 'geometry'
     || ['values.number', 'values.integer', 'image.timeline-time', ...SIMULATION_FORCE_OPERATORS].includes(operator.id) || isCurveFieldOperator(operator)));
 }
 

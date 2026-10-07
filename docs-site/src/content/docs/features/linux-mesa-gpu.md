@@ -125,3 +125,12 @@ canvas dimensions. This avoids transparent/blank GPU canvases that expose stale
 window contents on Mesa. Android and other desktop platforms retain native GPU
 presentation. It adds a final readback cost on Linux; rendering and export quality
 are unchanged. WebGPU must still be available to perform the rendering.
+
+## Video export capture
+
+On desktop Linux, export uses compositor texture readback instead of constructing
+VideoFrames from a WebGPU OffscreenCanvas: that conversion can succeed while
+returning black frames. The shared platform policy selects the fallback before
+export starts. Rendering still runs on WebGPU; capture incurs a GPU-to-CPU copy.
+Stacked-alpha readback places RGB above alpha-as-luma, matching the output shader.
+Android and other platforms retain the GPU canvas capture path.

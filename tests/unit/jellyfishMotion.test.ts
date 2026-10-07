@@ -4,6 +4,7 @@ import { instantiateEffectPreset } from '../../src/services/nodeGraph/effectPres
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { geometryParameterReader } from '../../src/services/operators/geometry/weaveGraph';
 import { evaluateGeometryProgram, type CurveSet } from '../../src/services/operators/geometry/geometryEvaluation';
+import { evaluateFieldColumn } from '../../src/services/operators/geometry/curveFieldColumns';
 import { buildStrandsLayerSources } from '../../src/services/operators/geometry/strandsLayerSource';
 import type { Effect } from '../../src/types/effects';
 
@@ -23,7 +24,7 @@ function radialRatio(rest: CurveSet, moved: CurveSet, select: (z: number) => boo
 }
 
 describe('jellyfish yarn circulation and swimming pulse', () => {
-  it('animates finite closed yarns and repeats the complete default motion after twenty source seconds', () => {
+  it('animates finite closed yarns with deterministic seeks and continuously changing returns', () => {
     const effect = jellyfish(), start = sample(effect, 0);
     for (const time of [-1, 0.37, 1.25, 8.1, 20]) {
       const curves = sample(effect, time);
@@ -35,7 +36,7 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
       }
     }
     expect(maxDifference(start, sample(effect, 0.37))).toBeGreaterThan(0.1);
-    expect(maxDifference(start, sample(effect, 20))).toBeLessThan(0.00001);
+    expect(maxDifference(start, sample(effect, 20))).toBeGreaterThan(0.01);
     const later = sample(effect, 8.1);
     sample(effect, 0.2);
     expect(maxDifference(later, sample(effect, 8.1))).toBe(0);
@@ -43,8 +44,10 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
 
   it('circulates material through a stationary front while the pulse is off, with reversible direction', () => {
     const effect = jellyfish();
+    effect.params['curl-strength_value'] = 0;
     effect.params['pulse-strength_value'] = 0;
     effect.params['return-motion_value'] = 0;
+    effect.params['curl-evolution_value'] = 0;
     const forward = sample(effect, 4), reversedTime = sample(effect, -4);
     expect(maxDifference(sample(effect, 0), forward)).toBeGreaterThan(0.5);
     // The knitted region remains on +Z; it is not a rigid rotation of the sculpture.
@@ -63,6 +66,7 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
 
   it('carries the localized head pulse to the tail at full strength', () => {
     const effect = jellyfish();
+    effect.params['curl-strength_value'] = 0;
     effect.params.circulation_value = 0;
     effect.params.irregularity_value = 0;
     effect.params['pulse-strength_value'] = 0;
@@ -89,6 +93,7 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
 
   it('animates the loose-loop noise even with circulation and pulse stopped, and can freeze it', () => {
     const effect = jellyfish();
+    effect.params['curl-strength_value'] = 0;
     effect.params.circulation_value = 0;
     effect.params['pulse-strength_value'] = 0;
     const start = sample(effect, 0), moved = sample(effect, 4);
@@ -98,15 +103,17 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
       if (start.positions[i + 2] < 0) tailMotion = Math.max(tailMotion, displacement);
       if (start.positions[i + 2] > 1.1) headMotion = Math.max(headMotion, displacement);
     }
-    expect(tailMotion).toBeGreaterThan(0.03);
+    expect(tailMotion).toBeGreaterThan(0.01);
     expect(headMotion).toBeLessThan(tailMotion * 0.3);
-    expect(maxDifference(start, sample(effect, 20))).toBeLessThan(0.00001);
+    expect(maxDifference(start, sample(effect, 20))).toBeGreaterThan(0.01);
     effect.params['return-motion_value'] = 0;
+    effect.params['curl-evolution_value'] = 0;
     expect(maxDifference(sample(effect, 0), sample(effect, 4))).toBe(0);
   });
 
   it('narrows the resting returns without shortening the body or changing the knitted head', () => {
     const effect = jellyfish();
+    effect.params['curl-strength_value'] = 0;
     effect.params.circulation_value = 0;
     effect.params.irregularity_value = 0;
     effect.params['pulse-strength_value'] = 0;
@@ -118,7 +125,7 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
     expect(radialRatio(round, inset, z => z > 1.1)).toBe(1);
     // Inset peaks at the shoulders; the back cap stays fuller, avoiding a pointed tail.
     expect(radialRatio(round, inset, z => z > 0.35 && z < 0.5)).toBeLessThan(0.6);
-    expect(radialRatio(round, inset, z => z > 0.9 && z < 1)).toBeLessThan(0.98);
+    expect(radialRatio(round, inset, z => z > 0.75 && z < 0.85)).toBeLessThan(0.98);
     for (let i = 2; i < round.positions.length; i += 3) expect(inset.positions[i]).toBe(round.positions[i]);
     effect.params['tail-inset_value'] = 0.85;
     expect(radialRatio(round, sample(effect, 0), z => z < -0.9)).toBeCloseTo(0.575, 5);
@@ -128,6 +135,7 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
 
   it('preserves the moving head exactly while shaping the tail underneath noise and swimming', () => {
     const effect = jellyfish();
+    effect.params['curl-strength_value'] = 0;
     for (const time of [0, 1.25, 4.7]) {
       effect.params['tail-inset_value'] = 0;
       const round = sample(effect, time);
@@ -143,7 +151,69 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
     }
   });
 
-  it('keeps both motions continuous across a trimmed or moved host clip', () => {
+  it('curls the returns in all three axes while protecting the knitted front', () => {
+    const effect = jellyfish();
+    effect.params.circulation_value = 0;
+    effect.params['pulse-strength_value'] = 0;
+    effect.params.irregularity_value = 0;
+    effect.params['curl-strength_value'] = 0;
+    const rest = sample(effect, 2);
+    effect.params['curl-strength_value'] = 0.18;
+    const curled = sample(effect, 2);
+    const squared = [0, 0, 0]; let tailPoints = 0, headPoints = 0;
+    for (let i = 0; i < rest.positions.length; i += 3) {
+      if (rest.positions[i + 2] < 0) {
+        tailPoints++;
+        for (let axis = 0; axis < 3; axis++) squared[axis] += (curled.positions[i + axis] - rest.positions[i + axis]) ** 2;
+      }
+      if (rest.positions[i + 2] > 1) {
+        headPoints++;
+        expect(curled.positions.slice(i, i + 3)).toEqual(rest.positions.slice(i, i + 3));
+      }
+    }
+    expect(headPoints).toBeGreaterThan(100);
+    for (const sum of squared) expect(Math.sqrt(sum / tailPoints)).toBeGreaterThan(0.035);
+    expect(maxDifference(curled, sample(effect, 3))).toBeGreaterThan(0.03);
+    effect.params['curl-detail_value'] = 6;
+    const finer = sample(effect, 2);
+    expect(maxDifference(curled, finer)).toBeGreaterThan(0.1);
+    expect([...finer.positions].every(Number.isFinite)).toBe(true);
+    effect.params['return-motion_value'] = 0;
+    effect.params['curl-evolution_value'] = 0;
+    expect(maxDifference(sample(effect, 2), sample(effect, 6))).toBe(0);
+  });
+
+  it('advects separate curl patterns in opposite directions on the two sides', () => {
+    const effect = jellyfish();
+    const speed = Number(effect.params['return-motion_value']);
+    effect.params['curl-evolution_value'] = 0;
+    effect.params.irregularity_value = 0;
+    // Evaluate the deformation field at fixed spatial probes, independently of
+    // circulating yarn points. Stay inside the constant-strength rear mask.
+    const field = (time: number, z: number, x: number) => {
+      const program = compileGeometryGraph(effect.operatorGraph!, geometryParameterReader(effect.params), undefined, { simulationTime: time });
+      const stage = program.stages.filter(s => s.kind === 'set-position')[2];
+      if (stage.kind !== 'set-position' || !stage.offset) throw new Error('Missing return field');
+      return evaluateFieldColumn(stage.offset, {
+        positions: Float32Array.of(x, -0.27, z), starts: Uint32Array.of(0), counts: Uint32Array.of(1),
+      })(0) as number[];
+    };
+    for (const x of [-.25, .25]) for (const time of [0, 4.9, 10.1, 19.9, 27]) {
+      const start = field(time, -0.2, x), downstream = field(time + 0.5, -0.2 - Math.sign(x) * speed * 0.5, x);
+      start.forEach((value, axis) => expect(downstream[axis]).toBeCloseTo(value, 4));
+      expect(Math.hypot(...field(time + 0.5, -0.2, x).map((v, axis) => v - start[axis]))).toBeGreaterThan(0.001);
+    }
+  });
+
+  it('evolves the curl shape while spatial flow, circulation and pulse are frozen', () => {
+    const effect = jellyfish();
+    Object.assign(effect.params, { circulation_value: 0, 'return-motion_value': 0, 'pulse-strength_value': 0, irregularity_value: 0 });
+    expect(maxDifference(sample(effect, 0), sample(effect, 2))).toBeGreaterThan(.05);
+    effect.params['curl-evolution_value'] = 0;
+    expect(maxDifference(sample(effect, 0), sample(effect, 2))).toBe(0);
+  });
+
+  it('keeps all motions continuous across a trimmed or moved host clip', () => {
     const effect = jellyfish();
     const original = { id: 'original', effects: [effect], startTime: 0, inPoint: 0, outPoint: 20, duration: 20 };
     const trimmed = { ...original, id: 'trimmed', startTime: 100, inPoint: 4, duration: 16 };

@@ -1,6 +1,7 @@
 // ExportCanvasManager - Extracted from WebGPUEngine
 // Owns export canvas lifecycle, export/RAM-preview state flags
 
+import { prefersSoftwareTimelineCanvas } from '../../utils/canvasPlatform';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('ExportCanvasManager');
@@ -57,8 +58,12 @@ export class ExportCanvasManager {
    * When stackedAlpha is true, canvas height is doubled (RGB top + alpha-as-luma bottom).
    */
   initExportCanvas(device: GPUDevice, width: number, height: number, stackedAlpha = false): boolean {
+    this.cleanupExportCanvas();
     this.exportCanvasCaptureFailed = false;
     this.stackedAlpha = stackedAlpha;
+    // Mesa can return a valid but black VideoFrame from a GPU canvas. Use the
+    // compositor texture readback path, also used by software preview output.
+    if (prefersSoftwareTimelineCanvas()) return false;
     const canvasHeight = stackedAlpha ? height * 2 : height;
     this.exportCanvas = new OffscreenCanvas(width, canvasHeight);
     const ctx = this.exportCanvas.getContext('webgpu');

@@ -250,7 +250,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
   const params = effectOperatorCompileParams(effect);
   if (effect.type === 'voxel-relief') return voxelOperatorGraph(params);
   if (effect.type === PARTICLE_DISINTEGRATE) return particleDisintegrateOperatorGraph(params);
-  if (effect.type === WEAVE_EFFECT_TYPE) return weaveOperatorGraph(params);
+  if (effect.type === WEAVE_EFFECT_TYPE) return expandOperatorCompositions(weaveOperatorGraph(params));
   if (effect.type === 'face-cables') return cableOperatorGraph(params);
   throw new Error('This effect has no operator graph.');
 }
@@ -262,6 +262,21 @@ export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
   if (!hasEffectOperatorGraph(effect.type)) {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
     return effect;
+  }
+  // A valid Weave document with unfinished wiring is an editable draft, not
+  // an unloadable project. Keep every node/cable; reject structural corruption.
+  if (effect.type === WEAVE_EFFECT_TYPE) {
+    let stored = effect.operatorGraph;
+    if (!stored && typeof legacy === 'string') {
+      try { stored = JSON.parse(legacy); } catch { /* Existing parser reports malformed JSON below. */ }
+    }
+    if (stored && !stored.incomplete) {
+      const errors = validateEffectGraph(stored);
+      if (errors.length && errors.every(error => /: connect .+\.$/.test(error))
+        && validateEffectGraph(stored, true).length === 0) {
+        effect = { ...effect, operatorGraph: { ...stored, incomplete: errors[0] } };
+      }
+    }
   }
   const savedGraph = effectOperatorGraph(effect);
   // Incomplete wiring remains editable; expand legacy display stages once valid.

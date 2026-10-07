@@ -1,3 +1,4 @@
+import { GEOMETRY_FIELD_COMPOSITIONS } from './geometry/curlNoiseComposition';
 import { COORDINATE_COMPOSITIONS } from './coordinateCompositions';
 import { COLOR_COMPOSITIONS } from './colorCompositions';
 import { FISHEYE_GROUP_COMPOSITIONS } from './fisheyeGroupCompositions';
@@ -11,5 +12,6 @@ import { TIME_FIELD_COMPOSITIONS } from './timeFieldCompositions';
 export const IMAGE_COMPOSITIONS = [...COORDINATE_COMPOSITIONS, ...COLOR_COMPOSITIONS, ...SAMPLING_COMPOSITIONS,
   ...PROCESSING_COMPOSITIONS, ...GLYPH_COMPOSITIONS, ...SCREEN_COMPOSITIONS, ...FISHEYE_GROUP_COMPOSITIONS, ...TIME_FIELD_COMPOSITIONS];
 export const SPACE_COMPOSITIONS = SPLAT_COMPOSITIONS;
-const definitions = new Map([...IMAGE_COMPOSITIONS, ...SPACE_COMPOSITIONS].map(definition => [definition.id, definition]));
+export const GEOMETRY_COMPOSITIONS = GEOMETRY_FIELD_COMPOSITIONS;
+const definitions = new Map([...IMAGE_COMPOSITIONS, ...SPACE_COMPOSITIONS, ...GEOMETRY_COMPOSITIONS].map(definition => [definition.id, definition]));
 export const getOperatorComposition = (id: string) => definitions.get(id);

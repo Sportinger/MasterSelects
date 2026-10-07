@@ -1,3 +1,5 @@
+import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
+import { expandOperatorCompositions } from '../operatorComposition';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
 import { getEffectOperator } from '../operatorRegistry';
 import { applyOperatorGroupBypasses } from '../operatorGroupBypass';
@@ -147,7 +149,7 @@ export interface GeometryCompileContext { time?: number; simulationTime?: number
 export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryParameterReader, target?: string,
   context: GeometryCompileContext = {}): GeometryProgram {
   if (graph.domain !== 'geometry') throw new Error('Expected a geometry operator graph.');
-  graph = applyOperatorGroupBypasses(graph);
+  graph = applyOperatorGroupBypasses(expandOperatorCompositions(graph));
   const nodes = new Map(graph.nodes.map(node => [node.id, node]));
   const sourceOf = (node: BoundOperatorNode, input: string) => {
     const edge = graph.edges.find(item => item.to === node.id && item.input === input);
@@ -429,6 +431,8 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     if (type === 'selection' ? produced !== 'scalar' && produced !== 'boolean' : produced !== type) {
       throw new Error(`${getEffectOperator(owner.operator)?.label}: ${input} needs a ${type === 'vec3' ? 'Vector 3' : 'Number'}.`);
     }
-    return pruneField({ instructions, output });
+    const field = pruneField({ instructions, output });
+    if (field.instructions.length > GEOMETRY_FIELD_INSTRUCTION_LIMIT) throw new Error('Geometry field exceeds its instruction budget.');
+    return field;
   }
 }
