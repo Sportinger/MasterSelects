@@ -105,6 +105,7 @@ export interface KeyframeActions {
   addKeyframe: (clipId: string, property: AnimatableProperty, value: number, time?: number, easing?: string | null) => void;
   removeKeyframe: (keyframeId: string) => void;
   updateKeyframe: (keyframeId: string, updates: Partial<Omit<Keyframe, 'id' | 'clipId' | 'easing'>> & { easing?: string | null }) => void;
+  updateKeyframes: (keyframeIds: readonly string[], updates: Partial<Omit<Keyframe, 'id' | 'clipId' | 'easing'>> & { easing?: string | null }) => void;
   moveKeyframe: (keyframeId: string, newTime: number) => void;
   moveKeyframes: (keyframeIds: string[], newTime: number) => void;
   getClipKeyframes: (clipId: string) => Keyframe[];

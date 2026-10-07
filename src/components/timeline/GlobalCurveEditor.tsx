@@ -1,3 +1,4 @@
+import { useFrameCoalescedDrag } from './hooks/useFrameCoalescedDrag';
 import React, {
   useCallback,
   useEffect,
@@ -454,16 +455,20 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
     updateTransaction,
   ]);
 
+  const pointerQueue = useFrameCoalescedDrag(handleMouseMove);
+  useEffect(() => { if (!dragState) pointerQueue.cancel(); }, [dragState, pointerQueue]);
+
   useEffect(() => {
     if (!dragState) return;
     const onMouseMove = (event: MouseEvent) => {
-      handleMouseMove(event.clientX, event.clientY, event.shiftKey);
+      pointerQueue.push(event.clientX, event.clientY, event.shiftKey);
     };
-    const onMouseUp = () => commitActiveTransaction();
-    const onBlur = () => cancelActiveTransaction('blur');
+    const onMouseUp = () => { pointerQueue.flush(); commitActiveTransaction(); };
+    const onBlur = () => { pointerQueue.cancel(); cancelActiveTransaction('blur'); };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       event.preventDefault();
+      pointerQueue.cancel();
       cancelActiveTransaction('escape');
     };
     window.addEventListener('mousemove', onMouseMove);
@@ -478,9 +483,7 @@ export const GlobalCurveEditor: React.FC<GlobalCurveEditorProps> = ({
     };
   }, [
     cancelActiveTransaction,
-    commitActiveTransaction,
-    dragState,
-    handleMouseMove,
+    commitActiveTransaction, dragState, pointerQueue,
   ]);
 
   const activeGrid = useMemo(() => {

@@ -117,7 +117,7 @@ export function TrackPropertyTracks({
     const absoluteTime = pixelToTime(event.clientX - rect.left);
     const localTime = Math.max(0, Math.min(selectedClip.duration, absoluteTime - selectedClip.startTime));
     const value = resolveTimelineTrackPenKeyframeValue(propertyKeyframes, localTime);
-    addKeyframe(selectedClip.id, property, value, localTime, 'linear');
+    addKeyframe(selectedClip.id, property, value, localTime);
   };
 
   return (

@@ -19,6 +19,7 @@ import { canonicalJson } from '../segments/canonical';
 import { projectTimelineMutationToComposition } from './editorCompositionProjection';
 import { refreshEditorHistoryAvailability } from './editorHistory';
 import { playheadState } from '../../../layerBuilder/PlayheadState';
+import { TimelineGesturePreview } from './TimelineGesturePreview';
 
 interface RollbackMutation { domain: string; patch: Record<string, unknown>; }
 interface ActionScope { token: TransactionToken | null; owns: boolean; label: string; domain: string; }
@@ -33,10 +34,14 @@ interface EditorRuntime {
   viewWriting: boolean; workspaceTimer: ReturnType<typeof setInterval> | null;
   /** Modal multi-step operation whose awaited mutations publish as one revision. */
   batch?: TransactionToken | null;
+  gestureTokens?: Set<symbol>;
+  gesturePreviews?: TimelineGesturePreview;
 }
 const runtime: EditorRuntime = import.meta.hot?.data?.editorRepositoryRuntime ?? {
   session: null, explicit: null, scopes: [], rollbacks: new Map(), workspace: {}, viewChain: Promise.resolve(), journalValues: new Map(), sourceJobs: new Map(), sessionListeners: new Set(), pendingViews: new Map(), viewScheduled: false, viewError: null, viewWriting: false, workspaceTimer: null,
 };
+runtime.gestureTokens ??= new Set();
+runtime.gesturePreviews ??= new TimelineGesturePreview();
 export function getEditorRepositorySession(): RepositorySession | null { return runtime.session; }
 export function getEditorTransactionToken(): TransactionToken | null { return runtime.scopes.at(-1)?.token ?? runtime.explicit ?? getEditorGestureToken() ?? activeEditorBatch(); }
 function activeEditorBatch(): TransactionToken | null { return runtime.batch && ownsEditorTransaction(runtime.batch) ? runtime.batch : null; }
@@ -87,7 +92,9 @@ export function installEditorRepositorySession(session: RepositorySession, optio
 }
 function session(): RepositorySession { if (!runtime.session) throw new RepositoryError('ownership', 'No editor repository session'); return runtime.session; }
 export function beginEditorTransaction(label: string, source = 'user'): TransactionToken {
-  const token = session().coordinator.begin(label, source); runtime.rollbacks.set(token.owner, []); return token;
+  const token = session().coordinator.begin(label, source); runtime.rollbacks.set(token.owner, []);
+  if (source === 'gesture') runtime.gestureTokens!.add(token.owner);
+  return token;
 }
 export function ownsEditorTransaction(token: TransactionToken): boolean { return runtime.session?.coordinator.owns(token) === true; }
 /** Authorization is deliberately synchronous. Awaited callbacks must re-enter with their pinned token. */
@@ -96,8 +103,34 @@ export function runEditorTransaction<T>(token: TransactionToken, action: () => T
   const prior = runtime.explicit; runtime.explicit = token;
   try { return action(); } finally { runtime.explicit = prior; }
 }
+function rememberRollback(token: TransactionToken, domain: string, patch: Record<string, unknown>): void {
+  if (!Object.keys(patch).length) return;
+  const rollbacks = runtime.rollbacks.get(token.owner);
+  const first = runtime.gestureTokens!.has(token.owner) && rollbacks?.find(item => item.domain === domain);
+  if (first) for (const [key, value] of Object.entries(patch)) {
+    if (!(key in first.patch)) first.patch[key] = value;
+  }
+  else rollbacks?.push({ domain, patch });
+}
+function flushGesturePreview(token: TransactionToken): void {
+  const timeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
+  const media = getRepositoryStore('media')?.getState() as MediaState | undefined;
+  const baseline = timeline && runtime.gesturePreviews!.baseline(token, timeline, media?.activeCompositionId);
+  if (baseline && timeline) {
+    const coordinator = session().coordinator;
+    const plan = prepareTimelineMutation(baseline, { clips: timeline.clips, clipKeyframes: timeline.clipKeyframes }, {
+      entities: coordinator.getEntities(), activeComposition: media?.compositions.find(comp => comp.id === media.activeCompositionId),
+    });
+    finishDomainMutation(coordinator, prepareDomainMutation(coordinator, token, plan));
+    projectTimelineMutationToComposition(baseline, timeline);
+    rememberRollback(token, 'timeline', { clips: baseline.clips, clipKeyframes: baseline.clipKeyframes });
+    runtime.gesturePreviews!.delete(token);
+  }
+}
 export function commitEditorTransaction(token: TransactionToken): ReturnType<RepositorySession['coordinator']['commit']> {
+  flushGesturePreview(token);
   const result = session().coordinator.commit(token); runtime.rollbacks.delete(token.owner);
+  runtime.gesturePreviews!.delete(token); runtime.gestureTokens!.delete(token.owner);
   publishEditorContentProjection(session().coordinator.getStatus()); return result;
 }
 /**
@@ -134,9 +167,14 @@ export function cancelEditorTransaction(token: TransactionToken): void {
   const timelineBefore = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
   withRepositoryHydration(() => {
     for (const mutation of mutations.toReversed()) getRepositoryStore(mutation.domain)?.setState(mutation.patch);
+    const current = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
+    const media = getRepositoryStore('media')?.getState() as MediaState | undefined;
+    const baseline = current && runtime.gesturePreviews!.baseline(token, current, media?.activeCompositionId);
+    if (baseline) getRepositoryStore('timeline')?.setState({ clips: baseline.clips, clipKeyframes: baseline.clipKeyframes });
   });
   const restored = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
-  if (timelineBefore && restored && mutations.some(mutation => mutation.domain === 'timeline')) projectTimelineMutationToComposition(timelineBefore, restored);
+  if (timelineBefore && restored && (runtime.gestureTokens!.has(token.owner) || mutations.some(mutation => mutation.domain === 'timeline'))) projectTimelineMutationToComposition(timelineBefore, restored);
+  runtime.gesturePreviews!.delete(token); runtime.gestureTokens!.delete(token.owner);
   runtime.rollbacks.delete(token.owner); publishEditorContentProjection(session().coordinator.getStatus());
 }
 function beginScope(domain: string, label: string): ActionScope {
@@ -165,6 +203,19 @@ const boundary: StoreMutationBoundary = {
   beginAction(domain, label) { const scope = beginScope(domain, label); runtime.scopes.push(scope); return scope; },
   prepare(domain, before, patch, replacing) {
     const current = session(), entities = current.coordinator.getEntities();
+    const gestureToken = getEditorTransactionToken();
+    const patchFields = Object.keys(patch as object);
+    const isTimelineContent = patchFields.some(key => key === 'clips' || key === 'clipKeyframes');
+    if (domain === 'timeline' && isTimelineContent && gestureToken && runtime.gestureTokens!.has(gestureToken.owner)) {
+      const media = getRepositoryStore('media')?.getState() as MediaState | undefined;
+      boundary.assertAllowed(domain);
+      const alreadyEncoded = runtime.rollbacks.get(gestureToken.owner)?.some(item => item.domain === 'timeline'
+        && ('clips' in item.patch || 'clipKeyframes' in item.patch));
+      if (!replacing && !alreadyEncoded && runtime.gesturePreviews!.stage(current.coordinator, gestureToken, media?.activeCompositionId,
+        before as TimelineStore, patch as Partial<TimelineStore>)) return { gesturePreview: true };
+      // A structural edit interleaved with a drag must see its current authored content.
+      flushGesturePreview(gestureToken);
+    }
     const changes = replacing ? patch : patch;
     const plan = domain === 'timeline' ? prepareTimelineMutation(before as TimelineStore, changes as Partial<TimelineStore>, {
       entities, activeComposition: (getRepositoryStore('media')?.getState() as MediaState | undefined)?.compositions.find(comp => comp.id === (getRepositoryStore('media')?.getState() as MediaState).activeCompositionId),
@@ -193,10 +244,11 @@ const boundary: StoreMutationBoundary = {
     // Shallow field ownership is enough for runtime rollback: immutable setters retain old handles.
     const old = before as Record<string, unknown>, changed = patch as Record<string, unknown>;
     const rollback = Object.fromEntries(Object.keys(changed).filter(key => old[key] !== changed[key]).map(key => [key, old[key]]));
-    if (scope.token) runtime.rollbacks.get(scope.token.owner)?.push({ domain, patch: rollback });
+    if (scope.token) rememberRollback(scope.token, domain, rollback);
     return { prepared, scope, direct: !existing, plan, before };
   },
   finish(_domain, value, after) {
+    if ((value as { gesturePreview?: boolean })?.gesturePreview) return;
     const preparation = value as PreparedMutation & { before: unknown };
     if (preparation.prepared) finishDomainMutation(session().coordinator, preparation.prepared);
     if (_domain === 'timeline' && preparation.prepared) projectTimelineMutationToComposition(preparation.before as TimelineStore, after as TimelineStore);

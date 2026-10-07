@@ -1,3 +1,4 @@
+import { useFrameCoalescedDrag } from './hooks/useFrameCoalescedDrag';
 // Curve Editor component for keyframe animation curves with bezier handles
 
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react';
@@ -450,29 +451,32 @@ export const CurveEditor: React.FC<CurveEditorProps> = ({
     setDragState(null);
   }, [onMoveKeyframe, onUpdateBezierHandle]);
 
+  const pointerQueue = useFrameCoalescedDrag(handleMouseMove);
+
   useEffect(() => {
     if (!dragState) return;
 
+    const finish = () => { pointerQueue.flush(); handleMouseUp(); };
     const handleWindowMouseMove = (event: MouseEvent) => {
       if ((event.buttons & 1) !== 1) {
-        handleMouseUp();
+        finish();
         return;
       }
 
       event.preventDefault();
-      handleMouseMove(event.clientX, event.clientY, event.shiftKey);
+      pointerQueue.push(event.clientX, event.clientY, event.shiftKey);
     };
 
     window.addEventListener('mousemove', handleWindowMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    window.addEventListener('blur', handleMouseUp);
+    window.addEventListener('mouseup', finish);
+    window.addEventListener('blur', finish);
 
     return () => {
       window.removeEventListener('mousemove', handleWindowMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('blur', handleMouseUp);
+      window.removeEventListener('mouseup', finish);
+      window.removeEventListener('blur', finish);
     };
-  }, [dragState, handleMouseMove, handleMouseUp]);
+  }, [dragState, pointerQueue, handleMouseUp]);
 
   // Handle click on empty area
   const handleSvgClick = useCallback((e: React.MouseEvent) => {

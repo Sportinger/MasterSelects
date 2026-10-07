@@ -25,6 +25,7 @@ type KeyframeBasicActions = Pick<
   | 'addKeyframe'
   | 'removeKeyframe'
   | 'updateKeyframe'
+  | 'updateKeyframes'
   | 'moveKeyframe'
   | 'moveKeyframes'
   | 'getClipKeyframes'
@@ -36,7 +37,7 @@ type KeyframeBasicActions = Pick<
 >;
 
 export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (set, get) => ({
-  addKeyframe: (clipId, property, value, time, easing = 'linear') => {
+  addKeyframe: (clipId, property, value, time, easing) => {
     const { clips, tracks, playheadPosition, clipKeyframes, invalidateCache } = get();
     if (property === 'speed') {
       if (!isValidSpeedKeyframeValue(value)) return;
@@ -75,7 +76,8 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
 
     if (existingAtTime) {
       newKeyframes = existingKeyframes.map(k =>
-        k.id === existingAtTime.id ? { ...k, value: keyframeValue, ...easingFields, ...orbitFields } : k
+        // Recording/inspector edits change the value, not the authored interpolation.
+        k.id === existingAtTime.id ? { ...k, value: keyframeValue, ...(easing === undefined ? {} : easingFields), ...orbitFields } : k
       );
     } else {
       const newKeyframe: Keyframe = {
@@ -127,9 +129,13 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
     invalidateCache();
   },
 
-  updateKeyframe: (keyframeId, updates) => {
+  updateKeyframe: (keyframeId, updates) => get().updateKeyframes([keyframeId], updates),
+
+  updateKeyframes: (keyframeIds, updates) => {
+    if (!keyframeIds.length) return;
+    const targets = new Set(keyframeIds);
     const { clipKeyframes, clips, tracks, invalidateCache } = get();
-    if (isAnyKeyframeOnLockedTrack(clipKeyframes, clips, tracks, [keyframeId])) return;
+    if (isAnyKeyframeOnLockedTrack(clipKeyframes, clips, tracks, keyframeIds)) return;
     const newMap = new Map<string, Keyframe[]>();
     const { easing, ...restUpdates } = updates;
     const baseNormalizedUpdates = easing !== undefined
@@ -138,9 +144,10 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
     const invalidationTargets: AudioKeyframeInvalidationTarget[] = [];
 
     clipKeyframes.forEach((keyframes, clipId) => {
+      if (!keyframes.some(key => targets.has(key.id))) { newMap.set(clipId, keyframes); return; }
       const clip = findClipById(clips, clipId);
       newMap.set(clipId, keyframes.map(k => {
-        if (k.id !== keyframeId) {
+        if (!targets.has(k.id)) {
           return k;
         }
         const nextProperty = baseNormalizedUpdates.property ?? k.property;
@@ -148,6 +155,8 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
           ? k.value
           : normalizeTimelinePropertyValue(nextProperty, baseNormalizedUpdates.value);
         if (nextProperty === 'speed' && !isValidSpeedKeyframeValue(nextValue)) return k;
+        const effective = { ...baseNormalizedUpdates, ...(baseNormalizedUpdates.value === undefined ? {} : { value: nextValue }) };
+        if (Object.entries(effective).every(([key, value]) => Object.is(k[key as keyof Keyframe], value))) return k;
         invalidationTargets.push({ clipId, property: k.property });
         if (baseNormalizedUpdates.property) {
           invalidationTargets.push({ clipId, property: baseNormalizedUpdates.property });
@@ -171,6 +180,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
       }));
     });
 
+    if (!invalidationTargets.length) return;
     set(finalizeLinkedSpeedKeyframeMutation(clips, newMap, invalidationTargets));
     invalidateCache();
   },
@@ -182,6 +192,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
     const invalidationTargets: AudioKeyframeInvalidationTarget[] = [];
 
     clipKeyframes.forEach((keyframes, clipId) => {
+      if (!keyframes.some(key => key.id === keyframeId)) { newMap.set(clipId, keyframes); return; }
       const clip = clips.find(c => c.id === clipId);
       const maxTime = clip?.duration ?? 999;
       const clampedTime = Math.max(0, Math.min(newTime, maxTime));
@@ -189,13 +200,13 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
       newMap.set(clipId, keyframes.map(k => {
         if (k.id !== keyframeId) return k;
         const nextTime = clip ? clipLocalToKeyframeTime(clip, k.property, clampedTime, get().getSourceTimeForClip) : clampedTime;
-        if (k.time !== nextTime) {
-          invalidationTargets.push({ clipId, property: k.property });
-        }
+        if (k.time === nextTime) return k;
+        invalidationTargets.push({ clipId, property: k.property });
         return { ...k, time: nextTime };
       }).sort((a, b) => a.time - b.time));
     });
 
+    if (!invalidationTargets.length) return;
     set(finalizeLinkedSpeedKeyframeMutation(clips, newMap, invalidationTargets));
     invalidateCache();
   },
@@ -273,13 +284,19 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
   },
 
   updateBezierHandle: (keyframeId, handle, position) => {
-    const { clipKeyframes, clips, invalidateCache } = get();
+    const { clipKeyframes, clips, tracks, invalidateCache } = get();
+    if (isAnyKeyframeOnLockedTrack(clipKeyframes, clips, tracks, [keyframeId])) return;
+    let changed = false;
     const newMap = new Map<string, Keyframe[]>();
     let speedChanged = false;
 
     clipKeyframes.forEach((keyframes, clipId) => {
+      if (!keyframes.some(key => key.id === keyframeId)) { newMap.set(clipId, keyframes); return; }
       newMap.set(clipId, keyframes.map(k => {
         if (k.id !== keyframeId) return k;
+        const previous = handle === 'in' ? k.handleIn : k.handleOut;
+        if (k.easing === 'bezier' && previous?.x === position.x && previous?.y === position.y) return k;
+        changed = true;
         speedChanged = k.property === 'speed';
         return {
           ...k,
@@ -289,6 +306,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
       }));
     });
 
+    if (!changed) return;
     set({
       clipKeyframes: speedChanged
         ? synchronizeAllFollowingAudioSpeedKeyframes(clips, newMap)
