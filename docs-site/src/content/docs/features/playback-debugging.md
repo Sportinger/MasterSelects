@@ -117,6 +117,14 @@ If the preview is black after reload, also confirm the browser media element is 
 
 ### Scrub Freezes Or Delayed Updates
 
+Main preview rendering allows one GPU submission to finish before admitting the
+next frame. Repeated playback or scrub requests are coalesced; completion requests
+a fresh render of the current playhead instead of retaining old layers or times.
+This bounds queued work when an expensive GPU pass runs slower than the timeline
+and prevents a burst of stale images after releasing the playhead. Export and RAM
+preview generation retain exact-frame sequencing. GPU loss uses normal device
+recovery rather than waking a failed queue. This limits latency, not shader cost.
+
 - Inspect `previewFreezeEvents` and `firstPreviewUpdateMs`.
 - Check whether RAM preview is stale while the target moved.
 - Confirm whether the render loop is idle and requires restarting.

@@ -1,5 +1,7 @@
 # MasterSelects
 
+Preview GPU submissions are bounded so heavy scenes coalesce playback and scrub requests to the current playhead instead of building a queue of stale frames. Export and RAM-preview generation retain every requested frame.
+
 Development automation can open an authorized project folder by disk path with
 the confirmed `openLocalProject` bridge operation (Native Helper required).
 
