@@ -32,7 +32,8 @@ export function listBuiltInWeavePresets(): EffectPreset[] {
     { id: 'builtin:weave:wave-strands', label: 'Wave Strands',
       effect: { type: 'weave', enabled: true, params: {}, operatorGraph: createWaveStrandsGraph() } },
     { id: 'builtin:weave:jellyfish-reference', label: 'Jellyfish — Video Reconstruction',
-      effect: { type: 'weave', enabled: true, params: { 'body-length_value': 1.5, irregularity_value: 0.12 },
+      effect: { type: 'weave', enabled: true, params: { 'body-length_value': 1.5, irregularity_value: 0.12,
+        circulation_value: 0.05, 'return-motion_value': 0.6, 'pulse-rate_value': 0.4, 'pulse-strength_value': 0.4 },
         operatorGraph: createJellyfishReferenceGraph() } },
   ];
 }

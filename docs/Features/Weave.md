@@ -391,10 +391,20 @@ saved effects stay in their existing browser library.
   thirteen closed cream-colored courses, a round knitted face and elongated,
   irregular return loops. This is a new reconstruction from front/side views,
   not the recovered original graph; the recording's node labels were unreadable.
-  **Body Length** and **Irregularity** are exposed in the effect inspector. Knit
-  Sphere, position fields, Noise, Yarn Profile and Flyaways remain editable in
-  Nodes. The default shape is static and uses no collision or rod simulation;
-  orbit the shared scene camera to inspect the front and the loose back loops.
+  **Body Length** and **Irregularity** control the shape. **Yarn Circulation
+  (turns/s)** moves material around the closed courses, folding it into the fixed
+  front knitting window and unfolding it on exit; zero stops it and negative
+  values reverse it. The independent **Jellyfish Pulse** group starts a strong,
+  localized contraction at the knitted head, then carries the wave backwards
+  through the loose returns at full strength; attenuation starts beyond the tail.
+  **Return Motion** animates the loose loops through a smoothly drifting noise
+  field; zero freezes that drift, while **Irregularity** sets its amplitude. It does not translate
+  the whole body. **Pulse Rate (Hz)** sets the frequency; **Pulse Strength**
+  sets the deformation (default 0.4); zero disables it. At defaults circulation and
+  pulse repeat together after 20 source seconds. Both use clip source time,
+  preserving motion through seeks, trims and export without a collision or rod
+  simulation. Knit Sphere, position fields, Noise, Math, Yarn Profile and Flyaways
+  remain editable in Nodes; orbit the scene camera to inspect all sides.
 
 Each insertion has independent parameters and graph ownership. Customize a copy
 and use **Save effect copy** to retain your own variant. Clip length, transform,

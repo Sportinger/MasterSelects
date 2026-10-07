@@ -41,8 +41,11 @@ describe('built-in Weave studies', () => {
     expect(evaluateGeometryProgram(at(16.9)).positions).toEqual(middle.positions);
   });
 
-  it('keeps the video reconstruction closed, static on seek and editable without a collision solve', () => {
+  it('can freeze the video reconstruction and edit its shape without a collision solve', () => {
     const effect = instantiateEffectPreset(listBuiltInWeavePresets().find(p => p.id === 'builtin:weave:jellyfish-reference')!);
+    effect.params.circulation_value = 0;
+    effect.params['return-motion_value'] = 0;
+    effect.params['pulse-strength_value'] = 0;
     const compile = (time: number) => compileGeometryGraph(effect.operatorGraph!, geometryParameterReader(effect.params), undefined, { simulationTime: time });
     const program = compile(0), curves = evaluateGeometryProgram(program);
     expect(program.stages.some(s => s.kind === 'rod-simulation' || s.kind === 'curve-contact')).toBe(false);
