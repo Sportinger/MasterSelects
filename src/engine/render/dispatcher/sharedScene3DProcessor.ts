@@ -1,3 +1,4 @@
+import { withCurveLabelCameras } from '../../scene/curveLabelCamera';
 import { sceneCompositeStyle } from '../../scene/sceneEffectRouting';
 import { resolveSceneRenderOptions } from '../../native3d/sceneRenderer/sceneRenderOptionsResolver';
 import { nodePreviewTextureTap } from '../../../services/nodePreview/NodePreviewTextureTap';
@@ -184,7 +185,7 @@ export class SharedScene3DProcessor {
       includeLayer: (data) => includedLayers.has(data),
     });
 
-    const camera = {
+    const baseCamera = {
       ...resolveRenderableSharedSceneCamera(
         { width, height },
         this.options.getEffectiveTimelineTime(),
@@ -192,6 +193,9 @@ export class SharedScene3DProcessor {
       ),
       referenceSize: { width: referenceWidth, height: referenceHeight },
     };
+    const camera = withCurveLabelCameras(baseCamera, layers3D, this.options.getEffectiveTimelineTime(),
+      time => resolveRenderableSharedSceneCamera({ width, height }, time,
+        resolvedCameraOverride ? { previewCameraOverride: resolvedCameraOverride } : undefined));
     const activeSplatEffectors = this.options.collectActiveSplatEffectors(width, height);
     const renderLayers3D = layers3D.map((layer) => {
       if (layer.kind !== 'splat' || layer.gaussianSplatIsSequence !== true) {

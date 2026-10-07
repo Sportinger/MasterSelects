@@ -1,3 +1,4 @@
+import { withCurveLabelCameras } from '../../scene/curveLabelCamera';
 import { sceneCompositeStyle } from '../../scene/sceneEffectRouting';
 import { resolveSceneRenderOptions } from '../../native3d/sceneRenderer/sceneRenderOptionsResolver';
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
@@ -114,7 +115,8 @@ export function process3DLayersForNestedScene(params: Process3DLayersForNestedPa
   const textureView = renderer.renderScene(
     device,
     layers3D,
-    resolveRenderableSharedSceneCamera({ width, height }, currentTime ?? 0, sceneContext),
+    withCurveLabelCameras(resolveRenderableSharedSceneCamera({ width, height }, currentTime ?? 0, sceneContext),
+      layers3D, currentTime ?? 0, time => resolveRenderableSharedSceneCamera({ width, height }, time, sceneContext)),
     activeSplatEffectors,
     isRealtimePlayback,
     null,

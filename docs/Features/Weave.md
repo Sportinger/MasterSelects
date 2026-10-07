@@ -43,6 +43,46 @@ strands or particles over transparent canvas simply because the preview displays
 that canvas as black. Geometry behind opaque objects remains occluded. This
 per-layer mixing is a Raster feature, not a change to physical path tracing.
 
+## Curve Scan Labels
+
+Insert **Curve Scan Labels** before **Strand Render** to annotate a curve layer
+with up to twelve transparent 3D outline cards, leader lines, and tracking rings.
+The markers read the final GPU curve positions, including procedural motion and
+contacts; enabling the cards does not rerun the geometry or read positions back to
+the CPU. X/Y/Z readouts show world coordinates. Scan titles cycle independently;
+edit the pipe-separated ASCII titles in the node (1–20 characters per title).
+
+Cards occupy alternating left/right slots relative to the camera. **Camera Follow**
+sets a delay in seconds; their world position and orientation follow sampled past
+camera poses. The same timeline time yields the same layout when seeking backwards,
+playing, or exporting. This follows the animated timeline camera; a static edit-view
+camera has no recorded earlier motion to lag behind. The camera-pose data also travels
+with render-worker packets and is resolved in the owning nested composition.
+
+**Floating Motion** adds independent slow drift, yaw, pitch and roll, even when
+a card already has a clear position. **Avoid Curves** builds a small soft occupancy
+field from projected GPU points. Cards seek clearer space, including crossing to the
+opposite side when their half of the image is crowded. They retain loose vertical
+neighborhoods but may overlap one another. This is a soft layout preference,
+not a collision guarantee; densely filled images may still contain overlaps. The
+layout is recomputed from source time and geometry, with no playback-history state.
+**Preferred Row Spacing** is fitted to the available frame; oversized card/count
+combinations report a validation error.
+
+**Card Style → Mixed** combines rectangular and oval outlines, three typefaces and
+per-card sizes controlled by **Size Variation**. Every card retains its text; headings
+type in, numerical rows drift slightly, and rotating first-word accents turn bold red.
+These accents are a scan graphic, not event or fault detection.
+
+**Side Position**, **Preferred Row Spacing**, **Card Width/Height**, and **Camera Distance**
+control placement. **First Strand / Strand Step** wrap over available curves;
+**First Curve Position / Curve Position Step** choose normalized positions along
+them. Numeric parameters accept keyframes or uniform node inputs. Per-point fields
+are rejected with an explanation. **Opacity**, line width, marker size, color, and
+scan-cycle length control the look. Bypass removes the annotations, preserving the
+original strand image. Cards are unlit, depth-tested geometry and remain separate
+from the strand's Glow or other projected effects.
+
 ## Default graph
 
 A new Weave effect starts with a plain weave of fuzzy three-ply yarns on a sail

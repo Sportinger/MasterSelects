@@ -1,3 +1,4 @@
+import { CurveLabelPass } from './labels/CurveLabelPass';
 import { Logger } from '../../services/logger';
 import { flockGpuTimings } from '../flock/gpu/FlockGpuTimings';
 import { SlitScanSceneSurfaces } from './sceneRenderer/SlitScanSceneSurfaces';
@@ -93,6 +94,7 @@ export class NativeSceneRuntime {
   private readonly layerSpaceEffectRenderer = new LayerSpaceEffectRenderer();
   private slitScanSurfaces?: SlitScanSceneSurfaces;
   private strandImageEffects?: StrandProjectedEffects;
+  private curveLabels?: CurveLabelPass;
   hasProjectedStrandEffects(targetKey = 'main'): boolean { return this.strandImageEffects?.hasApplied(targetKey) ?? false; }
   private readonly stopIrradianceListener: () => void;
   constructor(host: NativeSceneHost) {
@@ -105,6 +107,7 @@ export class NativeSceneRuntime {
   /** Rebind environment callbacks after HMR while retaining device/session state. */
   setHost(host: NativeSceneHost): void {
     this.host = host;
+    this.curveLabels?.dispose(); this.curveLabels = undefined;
     this.depthOfField?.dispose();
     this.depthOfField = undefined;
     this.flockPass?.dispose?.();
@@ -295,6 +298,7 @@ export class NativeSceneRuntime {
     this.layerSpaceEffectRenderer.destroy();
     this.slitScanSurfaces?.destroy(); this.slitScanSurfaces = undefined;
     this.strandImageEffects?.destroy(); this.strandImageEffects = undefined;
+    this.curveLabels?.dispose(); this.curveLabels = undefined;
     this.modelRuntimeCache.clear();
   }
 
@@ -600,6 +604,10 @@ export class NativeSceneRuntime {
     }
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'transparent', temporaryBuffers,
       pathTraced)) return null;
+    if (strandPlans.some(plan => plan.layer.strands.program.render?.labels)) {
+      (this.curveLabels ??= new CurveLabelPass()).render(device, commandEncoder, this.sceneView, this.sceneDepthView,
+        strandPlans, camera, layerSpaceEffects?.timelineTimeSeconds ?? 0, temporaryBuffers);
+    }
     const gizmoLayer = gizmo
       ? [...planeLayers, ...voxelLayers, ...flockLayers, ...strandLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
         (gizmo.worldMatrix && gizmo.worldTransform

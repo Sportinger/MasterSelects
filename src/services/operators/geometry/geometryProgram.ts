@@ -1,3 +1,4 @@
+import { readCurveLabels, CURVE_LABEL_NUMBERS, type CurveLabelSpec } from './curveLabels';
 import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
 import { expandOperatorCompositions } from '../operatorComposition';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
@@ -80,13 +81,13 @@ export interface GeometryFiberMaterial {
 }
 /** `subdivision`: path tracer pieces per curve segment; `materials`: Fiber Materials in chain order. */
 export interface GeometryStrandRender { nodeId: string; width: number; color: string; colorField?: GeometryField; antialiasing?: StrandAntialiasing; profile?: YarnProfile;
-  flyaways?: YarnFlyaways; subdivision?: number; materials?: GeometryFiberMaterial[] }
+  labels?: CurveLabelSpec; flyaways?: YarnFlyaways; subdivision?: number; materials?: GeometryFiberMaterial[] }
 export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStrandRender; pointCount: number; strandCount: number }
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit', 'geometry.knit-sphere', 'geometry.knit-cycle', 'geometry.knit-passage']);
-const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
+const MODIFIERS = new Set(['geometry.curve-labels', 'geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
   'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend', 'geometry.curve-contact', 'geometry.curve-flow', 'geometry.close-curve', 'material.fiber']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
 export const knotCurveCount = (shape: number) => KNOT_SHAPES[shape] === 'reef' ? 2 : 1;
@@ -228,6 +229,18 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       stages.push({ kind: 'rod-simulation', nodeId: node.id, rod: compileRodSpec(graph, node, read), ...(pins ? { pins } : {}),
         ...(pullStart ? { pullStart } : {}), ...(pullDirection ? { pullDirection } : {}), ...(form ? { form } : {}),
         time: Math.max(0, timeOffset + sourceTime * timeScale) });
+    } else if (node.operator === 'geometry.curve-labels') {
+      if (render?.labels) throw new Error('Use one Curve Scan Labels node per strand layer.');
+      const uniforms = new Map<string, number>();
+      for (const [id] of CURVE_LABEL_NUMBERS) {
+        const field = compileField(node, id, 'scalar');
+        if (!field) continue;
+        if (field.instructions.length !== 1 || field.instructions[0].operation !== 'constant')
+          throw new Error(`Curve Scan Labels ${id} must be uniform, not a per-point field.`);
+        uniforms.set(id, field.instructions[0].value ?? 0);
+      }
+      const labels = readCurveLabels(id => uniforms.get(id) ?? read(node, id));
+      if (render) render.labels = labels;
     } else if (node.operator === 'material.fiber') {
       const colorField = compileField(node, 'color', 'vec3'), roughnessField = compileField(node, 'roughness', 'scalar');
       const melaninField = compileField(node, 'melanin', 'scalar'), selection = compileField(node, 'selection', 'selection');

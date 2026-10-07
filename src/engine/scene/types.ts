@@ -171,6 +171,7 @@ export interface SceneCameraConfig {
 }
 
 export interface SceneCamera {
+  curveLabelCameras?: Record<string, import('./curveLabelCamera').CurveLabelCameraFrame>;
   viewMatrix: Float32Array;
   projectionMatrix: Float32Array;
   cameraPosition: SceneVector3;

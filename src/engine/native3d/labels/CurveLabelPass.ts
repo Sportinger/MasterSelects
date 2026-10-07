@@ -1,0 +1,79 @@
+import common from './curveLabelProjection.wgsl?raw';
+import { CurveLabelAvoidance } from './CurveLabelAvoidance';
+import shader from './curveLabels.wgsl?raw';
+import type { SceneCamera } from '../../scene/types';
+import type { PreparedStrandLayer } from '../passes/StrandPass';
+import { curveLabelCameraFrame } from '../../scene/curveLabelCamera';
+import { multiplyMat4 } from '../../scene/SceneTransformUtils';
+import { CurveLabelAtlas } from './CurveLabelAtlas';
+import { curveLabelAnchors, curveLabelGlyphs, LABEL_GLYPHS } from './curveLabelLayout';
+import { Logger } from '../../../services/logger';
+const log=Logger.create('CurveScanLabels');
+
+/** Thin world-space annotations over final strand positions; no CPU geometry evaluation or GPU readback. */
+export class CurveLabelPass {
+  private device?:GPUDevice;
+  private readonly avoidance=new CurveLabelAvoidance();
+  private atlas?:CurveLabelAtlas;
+  private lines?:GPURenderPipeline;
+  private text?:GPURenderPipeline;
+  private layout?:GPUBindGroupLayout;
+  private readonly warned=new Set<string>();
+  render(device:GPUDevice,encoder:GPUCommandEncoder,color:GPUTextureView,depth:GPUTextureView,
+    plans:PreparedStrandLayer[],camera:SceneCamera,time:number,temporary:GPUBuffer[]):void {
+    const active=plans.filter(p=>(p.layer.strands.program.render?.labels?.opacity??0)>0&&p.layer.opacity>0);
+    if(!active.length)return;
+    this.ensure(device);
+    const buffer=(data:Float32Array|Uint32Array,usage:GPUBufferUsageFlags)=>{
+      const b=device.createBuffer({size:data.byteLength,usage:usage|GPUBufferUsage.COPY_DST});
+      device.queue.writeBuffer(b,0,data as Float32Array<ArrayBuffer>);temporary.push(b);return b;
+    };
+    for(const {layer,buffers} of active){
+      const spec=layer.strands.program.render!.labels!,curves=buffers.curves;
+      if(!curves?.starts.length){
+        if(!this.warned.has(layer.layerId)){log.warn('Curve Scan Labels have no curve topology to attach to.',{layerId:layer.layerId});this.warned.add(layer.layerId);}continue;
+      }
+      const follow=camera.curveLabelCameras?.[spec.lag]??curveLabelCameraFrame(camera);
+      if(spec.lag>0&&!camera.curveLabelCameras?.[spec.lag]&&!this.warned.has(layer.layerId)){
+        log.warn('Curve Scan Labels camera history unavailable for this renderer; using the current pose.',{layerId:layer.layerId});this.warned.add(layer.layerId);
+      }
+      const distance=follow.orthographic?1:spec.depth;
+      const halfWidth=distance/Math.max(1e-5,Math.abs(follow.projectionX)),halfHeight=distance/Math.max(1e-5,Math.abs(follow.projectionY));
+      const pixelScale=camera.viewport.height/Math.max(1,camera.referenceSize?.height??camera.viewport.height);
+      const data=new Float32Array(72);
+      data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix),0);data.set(layer.worldMatrix,16);
+      data.set([...follow.right,halfWidth],32);data.set([...follow.up,halfHeight],36);
+      data.set([...follow.forward,0],40);data.set([...follow.position,0],44);
+      data.set([camera.viewport.width,camera.viewport.height,0,0],48);
+      const colorValue=parseInt(spec.color.slice(1),16);
+      data.set([(colorValue>>16&255)/255,(colorValue>>8&255)/255,(colorValue&255)/255,spec.opacity*layer.opacity],52);
+      data.set([spec.width,spec.height,spec.lineWidth*pixelScale,spec.ringSize*pixelScale],56);
+      data.set([spec.offset,spec.spacing,spec.depth,spec.count],60);data.set([time,spec.cycle,0,0],64);data.set([spec.drift,spec.avoidance,spec.style==='mixed'?1:0,spec.sizeVariation],68);
+      const uniform=buffer(data,GPUBufferUsage.UNIFORM);
+      const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
+      const indices=buffer(curveLabelAnchors(curves.starts,curves.counts,spec),GPUBufferUsage.STORAGE);
+      const glyphs=buffer(curveLabelGlyphs(spec,time),GPUBufferUsage.STORAGE);
+      const group=device.createBindGroup({layout:this.layout!,entries:[{binding:0,resource:{buffer:uniform}},
+        {binding:1,resource:{buffer:buffers.positions}},{binding:2,resource:{buffer:indices}},{binding:3,resource:{buffer:glyphs}},
+        {binding:4,resource:this.atlas!.texture.createView()},{binding:5,resource:this.atlas!.sampler},{binding:6,resource:{buffer:offsets}}]});
+      const pass=encoder.beginRenderPass({label:'curve-scan-labels',colorAttachments:[{view:color,loadOp:'load',storeOp:'store'}],
+        depthStencilAttachment:{view:depth,depthLoadOp:'load',depthStoreOp:'store'}});
+      pass.setBindGroup(0,group);pass.setPipeline(this.lines!);pass.draw(6,spec.count*70);
+      pass.setPipeline(this.text!);pass.draw(6,spec.count*LABEL_GLYPHS);pass.end();
+    }
+  }
+  private ensure(device:GPUDevice):void {
+    if(this.device===device)return;
+    this.dispose();this.device=device;this.atlas=new CurveLabelAtlas(device);
+    this.layout=device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}},
+      ...[1,2,3].map(binding=>({binding,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage' as const}})),
+      {binding:4,visibility:GPUShaderStage.FRAGMENT,texture:{}},{binding:5,visibility:GPUShaderStage.FRAGMENT,sampler:{}},{binding:6,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}}]});
+    const module=device.createShaderModule({label:'curve-scan-labels',code:common+'\n'+shader});
+    const pipeline=(entryPoint:string)=>device.createRenderPipeline({layout:device.createPipelineLayout({bindGroupLayouts:[this.layout!]}),
+      vertex:{module,entryPoint},fragment:{module,entryPoint:'fragment',targets:[{format:'rgba16float',blend:{
+        color:{srcFactor:'one',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}}}]},
+      primitive:{topology:'triangle-list'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less-equal'}});
+    this.lines=pipeline('lines');this.text=pipeline('text');
+  }
+  dispose():void{this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.layout=undefined;this.warned.clear();}
+}
