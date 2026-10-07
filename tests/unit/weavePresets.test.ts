@@ -40,4 +40,29 @@ describe('built-in Weave studies', () => {
     expect(evaluateGeometryProgram(at(60)).positions).toEqual(evaluateGeometryProgram(at(33.8)).positions);
     expect(evaluateGeometryProgram(at(16.9)).positions).toEqual(middle.positions);
   });
+
+  it('keeps the video reconstruction closed, static on seek and editable without a collision solve', () => {
+    const effect = instantiateEffectPreset(listBuiltInWeavePresets().find(p => p.id === 'builtin:weave:jellyfish-reference')!);
+    const compile = (time: number) => compileGeometryGraph(effect.operatorGraph!, geometryParameterReader(effect.params), undefined, { simulationTime: time });
+    const program = compile(0), curves = evaluateGeometryProgram(program);
+    expect(program.stages.some(s => s.kind === 'rod-simulation' || s.kind === 'curve-contact')).toBe(false);
+    expect(curves.counts.length).toBeGreaterThan(4);
+    expect([...curves.positions].every(Number.isFinite)).toBe(true);
+    for (let row = 0; row < curves.counts.length; row++) {
+      const first = curves.starts[row] * 3, last = (curves.starts[row] + curves.counts[row] - 1) * 3;
+      expect(curves.positions.slice(first, first + 3)).toEqual(curves.positions.slice(last, last + 3));
+    }
+    expect(evaluateGeometryProgram(compile(15)).positions).toEqual(curves.positions);
+    effect.params.irregularity_value = 0;
+    const regular = evaluateGeometryProgram(compile(0));
+    expect(regular.positions).not.toEqual(curves.positions);
+    effect.params['body-length_value'] = 2;
+    const stretched = evaluateGeometryProgram(compile(0));
+    const extent = (positions: Float32Array, axis: number) => {
+      const values = positions.filter((_, index) => index % 3 === axis);
+      return Math.max(...values) - Math.min(...values);
+    };
+    expect(extent(stretched.positions, 2) / extent(regular.positions, 2)).toBeCloseTo(2 / 1.5);
+    expect(extent(stretched.positions, 1)).toBeCloseTo(extent(regular.positions, 1));
+  });
 });

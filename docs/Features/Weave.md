@@ -387,6 +387,14 @@ saved effects stay in their existing browser library.
 - **Endless Knit Band** provides four rings with a localized knitted front and a
   20-second procedural cycle. This is a stylized deformation rather than the finite study.
 - **Wave Strands** preserves the earlier general-node strand-wave example.
+- **Jellyfish — Video Reconstruction** approximates a recorded yarn sculpture:
+  thirteen closed cream-colored courses, a round knitted face and elongated,
+  irregular return loops. This is a new reconstruction from front/side views,
+  not the recovered original graph; the recording's node labels were unreadable.
+  **Body Length** and **Irregularity** are exposed in the effect inspector. Knit
+  Sphere, position fields, Noise, Yarn Profile and Flyaways remain editable in
+  Nodes. The default shape is static and uses no collision or rod simulation;
+  orbit the shared scene camera to inspect the front and the loose back loops.
 
 Each insertion has independent parameters and graph ownership. Customize a copy
 and use **Save effect copy** to retain your own variant. Clip length, transform,

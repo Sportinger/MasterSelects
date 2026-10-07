@@ -1,6 +1,7 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
 import type { EffectPreset } from '../../nodeGraph/effectPresetLibrary';
 import { createWaveStrandsGraph } from './weaveGraph';
+import { createJellyfishReferenceGraph } from './jellyfishReferenceGraph';
 
 type NodeSpec = [id: string, operator: string, constants?: Record<string, OperatorValue>];
 
@@ -30,5 +31,8 @@ export function listBuiltInWeavePresets(): EffectPreset[] {
           zoneCenter: 0, zoneHeight: 1.8, feather: 0.3, height: 0.07, depth: 0.025, speed: 0.05 }], 0.012) } },
     { id: 'builtin:weave:wave-strands', label: 'Wave Strands',
       effect: { type: 'weave', enabled: true, params: {}, operatorGraph: createWaveStrandsGraph() } },
+    { id: 'builtin:weave:jellyfish-reference', label: 'Jellyfish — Video Reconstruction',
+      effect: { type: 'weave', enabled: true, params: { 'body-length_value': 1.5, irregularity_value: 0.12 },
+        operatorGraph: createJellyfishReferenceGraph() } },
   ];
 }
