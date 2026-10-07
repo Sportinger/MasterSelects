@@ -98,6 +98,12 @@ split into bounded structural blocks. Checkpoints limit reconstruction work;
 unchanged entities and blobs are reused. A small clip edit does not serialize
 every clip in the project.
 
+Large workspace redo-preference maps also use bounded immutable blocks. Sessions
+read both legacy inline cursors and blocked cursors, preserving every remembered
+branch choice without allowing a long editing history to exceed the 1 MiB record
+limit. The blocks remain reachable through the navigation head and are validated
+and retained with it during recovery and history archive creation.
+
 Checkpoint records live in the immutable segments and map entity IDs to existing
 records; they do not duplicate media. New revisions link their checkpoint
 directly. The checkpoint interval is 128 content revisions or 4 MiB of changes,

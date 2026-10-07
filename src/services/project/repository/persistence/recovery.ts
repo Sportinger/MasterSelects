@@ -1,5 +1,7 @@
 import { rememberRecoveredHead } from './checkpointDiscovery';
 import { recoveryReadCache } from './recoveryReadCache';
+import { readNavigationPreferences } from './navigationPreferences';
+import type { NavigationPayload } from '../contracts';
 import { iterateRevisionChanges } from './revisionChanges';
 import { REPOSITORY_LIMITS, RepositoryError, type CommitManifest, type CommitReference, type RecordReference, type RepositoryBackend, type RepositoryDescriptor, type RepositoryRecord, type RevisionPayload, type SegmentDescriptor } from '../contracts';
 import { readRecord, segmentRecords } from '../segments/recordSegment';
@@ -115,10 +117,11 @@ export async function validateCommit(backend: RepositoryBackend, commit: CommitM
         for (const ref of [change.before, change.after]) if (ref && (await readValidated(ref)).kind !== 'object') throw new RepositoryError('corrupt', 'Changeset reference has wrong record kind');
       }
     } else if (record.kind === 'navigation') {
-      const data = record.payload as unknown as { revision: RecordReference; revisionId: string; workspaceId: string; sequence: number };
+      const data = record.payload as unknown as NavigationPayload;
       if (!data || !data.workspaceId || !Number.isSafeInteger(data.sequence) || !data.revision) throw new RepositoryError('corrupt', 'Malformed navigation payload');
       const revision = await readValidated(data.revision);
       if (revision.kind !== 'revision' || (revision.payload as unknown as RevisionPayload).revisionId !== data.revisionId) throw new RepositoryError('corrupt', 'Navigation revision identity mismatch');
+      await readNavigationPreferences(data, readValidated);
     }
   };
   const verifyPublished = async (ref: RecordReference): Promise<void> => {

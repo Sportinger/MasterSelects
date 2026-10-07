@@ -52,6 +52,8 @@ export interface NavigationPayload {
   revisionId: string;
   revision: RecordReference;
   redoPreferences: Record<string, string>;
+  /** Large cursors split their branch choices across bounded immutable records. */
+  redoPreferenceBlocks?: RecordReference[];
 }
 export interface SegmentDescriptor { segmentId: string; hash: ContentHash; length: number; }
 export interface CommitReference { commitId: string; hash: ContentHash; }
