@@ -1,7 +1,7 @@
 import { Logger } from '../../services/logger';
 import { flockGpuTimings } from '../flock/gpu/FlockGpuTimings';
 import { SlitScanSceneSurfaces } from './sceneRenderer/SlitScanSceneSurfaces';
-import { isCollectingTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
+import { hasPendingTemporalPreparations, isCollectingTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeUtils';
@@ -409,7 +409,9 @@ export class NativeSceneRuntime {
     });
     // Path traced frames replace the mesh, plane, voxel and strand passes (and write scene depth for
     // the layers still rasterized over them); a scene beyond the device limits falls back to raster.
-    const pathTraced = engine === 'path-traced' && !!options?.renderSettings && this.pathTrace.render({
+    // An export retry must not accumulate a placeholder or the previous geometry frame.
+    const resourcesReady = !options?.exportFrame || !hasPendingTemporalPreparations();
+    const pathTraced = resourcesReady && engine === 'path-traced' && !!options?.renderSettings && this.pathTrace.render({
       device, encoder: commandEncoder, targetKey, camera, lights: lightLayers, sceneView: this.sceneView, sceneDepthView: this.sceneDepthView,
       settings: options.renderSettings, exportFrame: options.exportFrame, realtime: realtimePlayback, temporaries: temporaryBuffers,
       ...collectPathTraceInputs(device, { strandPlans, meshLayers: nativeMeshLayers, planeLayers, meshPass: this.meshPass, planePass: this.planePass,
@@ -604,7 +606,7 @@ export class NativeSceneRuntime {
     )) {
       return null;
     }
-    if (subSample) this.rasterSubSamples.accumulate(device, commandEncoder, targetKey, this.sceneTexture, options!.exportFrame!, subSample, temporaryBuffers);
+    if (subSample && resourcesReady) this.rasterSubSamples.accumulate(device, commandEncoder, targetKey, this.sceneTexture, options!.exportFrame!, subSample, temporaryBuffers);
     this.toneMap.render(device, commandEncoder, targetKey, this.sceneView, this.sceneDisplayView, camera.lens,
       options?.renderSettings?.engine ?? 'raster');
     const readTimings = gpuTimings.resolve(commandEncoder, `render:${targetKey}`);

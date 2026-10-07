@@ -210,6 +210,7 @@ export class FrameExporter {
       stackedAlpha: !!this.settings.stackedAlpha,
       codec: this.settings.codec,
       container: this.settings.container,
+      renderQuality: this.settings.renderQuality,
     });
     exportDiagnostics.annotate({
       requestedAudio,

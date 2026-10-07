@@ -3,6 +3,7 @@ import { useExportStore } from '../../../../../stores/exportStore';
 import { useTimelineStore } from '../../../../../stores/timeline';
 import type { ContainerFormat, VideoCodec } from '../../../../../engine/export';
 import type { ExportSettings } from '../../../../../stores/exportStore';
+import { normalizeExportRenderQuality } from '../../../../../types/renderSettings';
 import { exportDiagnostics } from '../../../../export/exportDiagnostics';
 import { exportGpuPhaseDiagnostics } from '../../../../export/exportGpuPhaseDiagnostics';
 
@@ -86,6 +87,7 @@ export function getCurrentExportPanelState() {
     success: true,
     data: {
       panel: summarizeExportPanelForProbe(),
+      settings: cloneForExportProbe(useExportStore.getState().settings),
       timelineExportState: {
         isExporting: timeline.isExporting,
         exportProgress: timeline.exportProgress,
@@ -180,6 +182,7 @@ export async function runExportPanelButtonProbe(args: Record<string, unknown> = 
     await waitForExportProbe(180);
 
     exportStore.setSettings({
+      ...(['raster', 'path-traced'].includes(String(args.renderEngine)) ? { renderQuality: normalizeExportRenderQuality({ ...originalSettings.renderQuality, engine: args.renderEngine as 'raster' | 'path-traced' }) } : {}),
       encoder: exportMode === 'precise' ? 'htmlvideo' : 'webcodecs',
       width,
       height,

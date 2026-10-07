@@ -93,6 +93,9 @@ import {
   ExportRenderSessionImpl,
 } from '../../src/engine/export/ExportRenderSessionImpl';
 
+import { reportNativeSceneExportProgress, clearNativeSceneExportProgress } from '../../src/engine/native3d/sceneRenderer/sceneExportProgress';
+import { DEFAULT_EXPORT_RENDER_QUALITY } from '../../src/types/renderSettings';
+
 const layers = [{ id: 'layer-a' }] as unknown as Layer[];
 
 function createSession(preferZeroCopy = true): ExportRenderSessionImpl {
@@ -165,6 +168,36 @@ describe('ExportRenderSessionImpl', () => {
     expect(remaining).toEqual([7, 7]);
     expect(temporalExportFramesRemaining()).toBeUndefined();
     session.dispose();
+  });
+
+  it('waits for geometry at the next shutter slice before capturing its completed samples', async () => {
+    const host = createInjectedHost();
+    const session = new ExportRenderSessionImpl({ runId: 'shutter', compositionId: 'composition-a',
+      width: 320, height: 180, stackedAlpha: false, preferZeroCopy: false, host });
+    await session.begin();
+    let release!: () => void, entered!: () => void;
+    const preparing = new Promise<void>(resolve => { release = resolve; });
+    const requested = new Promise<void>(resolve => { entered = resolve; });
+    vi.mocked(host.render).mockImplementationOnce(() => {
+      reportNativeSceneExportProgress({ frameIndex: 0, samples: 1, targetSamples: 2,
+        complete: false, denoising: false, timeOffset: .01 });
+    }).mockImplementationOnce(() => {
+      recordTemporalPreparation(preparing); entered();
+    }).mockImplementationOnce(() => {
+      reportNativeSceneExportProgress({ frameIndex: 0, samples: 2, targetSamples: 2,
+        complete: true, denoising: false, timeOffset: 0 });
+    });
+    const layersAtTime = vi.fn(async () => layers);
+    const capture = session.renderFrame({ time: 2, layers, frameStepSeconds: 1 / 30,
+      renderQuality: { ...DEFAULT_EXPORT_RENDER_QUALITY, rasterSubSamples: 2 }, layersAtTime });
+    await requested;
+    expect(host.readPixels).not.toHaveBeenCalled();
+    release(); await capture;
+    expect(host.render).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(host.render).mock.calls[2][1]?.timelineTimeSeconds).toBe(2.01);
+    expect(layersAtTime).toHaveBeenCalledWith(2.01);
+    expect(host.readPixels).toHaveBeenCalledTimes(1);
+    session.dispose(); clearNativeSceneExportProgress();
   });
 
   it('rejects a failed temporal resource without capturing a placeholder', async () => {

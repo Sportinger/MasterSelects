@@ -131,6 +131,7 @@ export interface ExportRenderQuality {
 }
 
 export const DEFAULT_EXPORT_RENDER_QUALITY: ExportRenderQuality = {
+  engine: 'raster',
   rasterSubSamples: 1,
   samplesPerPixel: 256,
   adaptiveThreshold: 0,
@@ -140,7 +141,8 @@ export const DEFAULT_EXPORT_RENDER_QUALITY: ExportRenderQuality = {
 
 export function normalizeExportRenderQuality(value: unknown): ExportRenderQuality {
   const input = value && typeof value === 'object' ? value as Partial<ExportRenderQuality> : {};
-  const engine = input.engine === 'raster' || input.engine === 'path-traced' ? input.engine : undefined;
+  const engine = input.engine === 'raster' || input.engine === 'path-traced' ? input.engine
+    : value == null ? DEFAULT_EXPORT_RENDER_QUALITY.engine : undefined;
   return {
     ...(engine ? { engine } : {}),
     rasterSubSamples: Math.round(clampNumber(input.rasterSubSamples, 1, 256, 1)),

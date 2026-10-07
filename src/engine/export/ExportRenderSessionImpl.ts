@@ -458,7 +458,16 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       // Let OIDN tiles and other queued tasks run, and leave the GPU a short gap so the rest of the
       // system (desktop compositor, other apps) stays responsive during a long path traced export.
       await new Promise(resolve => setTimeout(resolve, EXPORT_SAMPLE_GAP_MS));
-      this.host.render(current, frameContext);
+      // Shutter slices can request fresh geometry just like the first sample.
+      for (let attempt = 0; ; attempt++) {
+        const finish = collectTemporalPreparations(input.frameStepSeconds, input.framesRemaining);
+        let pending: Promise<unknown>[];
+        try { this.host.render(current, { ...frameContext, timelineTimeSeconds: input.time + offset }); }
+        finally { pending = finish(); }
+        if (!pending.length) break;
+        if (attempt >= 8) throw new Error('Temporal effect resources did not settle for the export sample.');
+        await awaitTemporalPreparations(pending, this.signal);
+      }
     }
     if (offset !== 0) this.host.setRenderTimeOverride(input.time);
     input.onSampling?.({ stage: 'encoding', samples: getNativeSceneExportProgress(frameIndex)?.samples ?? 0,

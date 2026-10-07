@@ -130,6 +130,9 @@ describe('surface materials and render settings', () => {
     expect(normalizeCompositionRenderSettings({ engine: 'path-traced', renderScale: 0.3, extra: 1 })).toEqual({
       engine: 'path-traced', renderScale: 0.5, stillSamples: 256, maxBounces: 8, clampIndirect: 10 });
     expect(normalizeCameraLens({ exposure: 40, toneMapping: 'agx', fStop: -1 })).toMatchObject({ exposure: 16, toneMapping: 'agx', fStop: 0 });
+    expect(normalizeExportRenderQuality(undefined).engine).toBe('raster');
+    expect(normalizeExportRenderQuality({ engine: 'path-traced' }).engine).toBe('path-traced');
+    expect(normalizeExportRenderQuality({ engine: undefined }).engine).toBeUndefined();
     expect(normalizeExportRenderQuality({ samplesPerPixel: 0, denoise: false })).toMatchObject({ samplesPerPixel: 1, denoise: false });
   });
 });

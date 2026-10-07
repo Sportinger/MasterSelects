@@ -206,3 +206,6 @@ Camera **Continuous / Orbit** keyframes retain the actual Preview Orbit pivot, i
 Exposed values in editable effect graphs participate in property search and keyframe authoring, including their per-instance labels and slider ranges. See [Weave](docs/Features/Weave.md).
 
 Weave supports larger multi-stage formation graphs: reusable compositions respect the geometry graph budget, while per-point shader instruction limits remain separate.
+Repeated pure geometry expressions share shader work within a stage, allowing reused motion graphs without duplicating identical samples.
+
+Export uses Raster by default; Render Quality can opt into Path Traced or follow the composition.

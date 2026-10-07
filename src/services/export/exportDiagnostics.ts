@@ -112,6 +112,7 @@ function compactFrame(frame: ExportFrameTiming): Record<string, unknown> {
     waitMs: round(frame.waitMs),
     buildLayersMs: round(frame.buildLayersMs),
     ensureLayersMs: round(frame.ensureLayersMs),
+    renderMs: round(frame.renderMs),
     captureMs: round(frame.captureMs),
     encodeMs: round(frame.encodeMs),
     layerCount: frame.layerCount,

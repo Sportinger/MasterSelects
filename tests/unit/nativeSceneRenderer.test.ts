@@ -9,6 +9,9 @@ import type {
   SceneText3DLayer,
 } from '../../src/engine/scene/types';
 
+import { collectTemporalPreparations, recordTemporalPreparation } from '../../src/effects/time/temporalResourcePreparation';
+import { DEFAULT_EXPORT_RENDER_QUALITY, DEFAULT_COMPOSITION_RENDER_SETTINGS } from '../../src/types/renderSettings';
+
 type RenderPassEntry = {
   descriptor: GPURenderPassDescriptor & { label?: string };
   pass: ReturnType<typeof makeRenderPass>;
@@ -328,6 +331,33 @@ describe('NativeSceneRenderer shared depth contract', () => {
     mockGaussianRenderer.renderToTexture.mockImplementation((clipId: string) => ({
       label: `splat-view-${clipId}`,
     }));
+  });
+
+  it.each(['raster', 'path-traced'] as const)('does not accumulate %s export samples with pending geometry', async engine => {
+    const renderer = await createInitializedRenderer();
+    const { device } = createFakeDevice();
+    const access = renderer as unknown as {
+      strandPass: { prepare: (...args: unknown[]) => unknown[] };
+      pathTrace: { render: (...args: unknown[]) => boolean };
+      rasterSubSamples: { accumulate: (...args: unknown[]) => void };
+    };
+    const prepare = vi.spyOn(access.strandPass, 'prepare').mockImplementation(() => {
+      recordTemporalPreparation(Promise.resolve()); return [];
+    });
+    const traced = vi.spyOn(access.pathTrace, 'render').mockReturnValue(true);
+    const raster = vi.spyOn(access.rasterSubSamples, 'accumulate').mockImplementation(() => {});
+    const options = { renderSettings: { ...DEFAULT_COMPOSITION_RENDER_SETTINGS, engine },
+      exportFrame: { frameIndex: 0, frameDuration: 1 / 30,
+        quality: { ...DEFAULT_EXPORT_RENDER_QUALITY, engine, rasterSubSamples: 2 } } };
+    const render = () => renderer.renderScene(device, [makeSplatLayer('pending', 2, 1)], makeCamera(), [], false,
+      null, null, 'export', undefined, options);
+    const finish = collectTemporalPreparations();
+    try { render(); expect(traced).not.toHaveBeenCalled(); expect(raster).not.toHaveBeenCalled(); }
+    finally { finish(); }
+    prepare.mockReturnValue([]);
+    const ready = collectTemporalPreparations();
+    try { render(); expect(engine === 'raster' ? raster : traced).toHaveBeenCalledTimes(1); }
+    finally { ready(); }
   });
 
   it('keeps size-dependent scene targets isolated per viewport', async () => {

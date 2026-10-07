@@ -23,6 +23,11 @@ Geometry graphs allow 1,024 nodes and 4,096 edges, including expanded reusable
 compositions. Expansion uses the graph's own domain budget and reports that domain
 and its limits on overflow. Each per-point field still has a separate 512-instruction
 limit, so additional formation stages do not lift the shader complexity guard.
+The field compiler shares identical pure expressions and cancels matching vector
+combine/split operations within each stage. Parameter owners remain independent:
+animated constants are shared by their source and expression, never by coincident
+numeric values. Animation updates the constant buffer without changing shader topology. Budget
+errors name the field owner and report the actual and maximum instruction counts.
 
 ## Default graph
 

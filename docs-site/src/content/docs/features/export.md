@@ -38,6 +38,9 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 
 ### Render Quality
 
+**Raster is the default for new exports.** Choose Path Traced explicitly, or choose
+Composition to follow its render engine. Saved explicit choices remain intact.
+
 **Render Quality** sets how 3D scenes are rendered for export: the engine
 (composition setting or override), raster sub-samples (jittered antialiasing, and
 motion blur when the camera shutter is open), and for path traced scenes the samples
@@ -45,7 +48,9 @@ per pixel, an adaptive threshold (pixels stop once their error is below it, afte
 samples), a time limit per frame and OIDN denoising. Path traced frames render
 bit-identically across exports. The progress shows a second level for the current
 frame: samples → denoise → encode, with the remaining time. See
-[Path Tracing](/features/path-tracing/).
+[Path Tracing](/features/path-tracing/). Export samples wait for pending geometry before
+accumulating, including motion-blur time slices, so placeholder frames are never
+counted as completed samples. Diagnostics include the render quality and render time.
 
 ### Export Presets
 
