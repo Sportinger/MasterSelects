@@ -15,8 +15,8 @@ export function sceneCompositeStyle(data: LayerRenderData[], scene: SceneLayer3D
   }
   return {
     sourceClipId: owner?.sourceClipId,
-    // Slit Scan's native surface already applies clip opacity to its pixels.
-    opacity: visual?.kind === 'strands' || visual?.kind === 'plane' && visual.slitScanGeometry ? 1 : owner?.opacity ?? 1,
+    // Native strands, flock and Slit Scan already apply clip opacity to their pixels.
+    opacity: visual?.kind === 'strands' || visual?.kind === 'flock' || visual?.kind === 'plane' && visual.slitScanGeometry ? 1 : owner?.opacity ?? 1,
     blendMode: owner?.blendMode ?? 'normal' as const,
     colorCorrection: owner?.colorCorrection,
     effects: (owner?.effects ?? []).filter(effect => !(effect.enabled && (applied.has(effect.id)

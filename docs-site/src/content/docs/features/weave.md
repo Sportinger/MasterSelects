@@ -29,6 +29,20 @@ animated constants are shared by their source and expression, never by coinciden
 numeric values. Animation updates the constant buffer without changing shader topology. Budget
 errors name the field owner and report the actual and maximum instruction counts.
 
+## Raster layer blending
+
+Strand layers use their Transform **Blend Mode** (including Multiply, Screen and
+Difference) inside a shared Raster 3D scene. Each custom-blend layer is rendered
+separately against the existing scene depth, then mixed with the scene using the
+same blend functions as Flock particles and timeline layers. Clip opacity is
+applied once. Projected effects such as Glow remain confined to their own layer.
+Normal full-opacity layers retain the direct rendering path.
+
+Blend modes affect overlapping visible pixels; Multiply does not darken isolated
+strands or particles over transparent canvas simply because the preview displays
+that canvas as black. Geometry behind opaque objects remains occluded. This
+per-layer mixing is a Raster feature, not a change to physical path tracing.
+
 ## Default graph
 
 A new Weave effect starts with a plain weave of fuzzy three-ply yarns on a sail

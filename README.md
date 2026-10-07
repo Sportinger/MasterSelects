@@ -171,7 +171,7 @@ Projects [save continuously](docs/Features/Project-Persistence.md), with durable
 Filesystem saves page through one bounded filename snapshot per fresh history-folder check, avoiding repeated physical scans as history grows.
 Large redo-preference lists are stored in bounded blocks so long editing histories can continue saving without dropping remembered branches. Saves also keep a checked startup cache in the project folder; reopening reuses unchanged history and applies any newer edits automatically.
 
-[Weave](docs/Features/Weave.md) supports fading Curve Contact corrections for selected animation intervals and evaluates final contacts after procedural fields on the GPU. Single-sample Raster exports show steady frame progress without a sample/denoise indicator. Raster strand layers keep their own projected image effects, including Glow on transparent backgrounds, when sharing a scene with other objects.
+[Weave](docs/Features/Weave.md) supports fading Curve Contact corrections for selected animation intervals and evaluates final contacts after procedural fields on the GPU. Single-sample Raster exports show steady frame progress without a sample/denoise indicator. Raster strand layers keep their own projected image effects, including Glow on transparent backgrounds, and apply Transform blend modes within shared 3D scenes.
 
 Chrome or Edge on desktop is a good starting point. Editing and rendering run locally in the browser; hosted AI and media generation use external services and may require credits. Local AI features may download models on first use. MasterSelects is under active development, so keep backups of important projects.
 
