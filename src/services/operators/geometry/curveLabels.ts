@@ -6,10 +6,25 @@ export const CURVE_LABEL_NUMBERS = [
   ['lag', 'Camera Follow (s)', .22, 0, 2, .01], ['depth', 'Camera Distance', 5, .1, 1000, .1],
   ['offset', 'Side Position', .74, 0, 1.5, .01], ['spacing', 'Preferred Row Spacing', .48, 0, 1, .01],
   ['width', 'Card Width', .43, .05, 1, .01], ['height', 'Card Height', .13, .03, .5, .01],
-  ['lineWidth', 'Line Width (px)', 1.2, .25, 8, .1], ['ringSize', 'Marker Radius (px)', 6, 1, 40, .5],
+  ['lineWidth', 'Line Width (px)', 1.2, .25, 8, .1], ['ringWeight', 'Marker Line Weight', 1, .5, 4, .1], ['ringSize', 'Marker Radius (px)', 6, 1, 40, .5],
   ['start', 'First Curve Position', .08, 0, 1, .01], ['step', 'Curve Position Step', .145, 0, 1, .01],
   ['firstStrand', 'First Strand', 0, 0, 65535, 1], ['strandStep', 'Strand Step', 2, 0, 65535, 1],
   ['cycle', 'Scan Cycle (s)', 8, 1, 60, .1],
+  ['transition', 'Intro / Outro (s)', .45, .05, .5, .01],
+  ['dutyCycle', 'Visible Cycle Fraction', .72, .25, 1, .01],
+  ['retarget', 'Released Tracking Blend', 0, 0, 1, .01],
+  ['detachedFocus', 'Detached Section Focus', 0, 0, 1, .01],
+  ['releaseProgress', 'Released Curve Fraction', 0, 0, 1, .01],
+  ['releaseMargin', 'Released Pool Margin', 0, 0, .9, .01],
+  ['followShare', 'Released Tracker Share', .85, 0, 1, .01],
+  ['depthSpread', 'Depth Spread', 0, 0, .6, .01],
+  ['depthMotion', 'Depth Travel', 0, 0, .6, .01],
+  ['introSpread', 'Opening Build-up (s)', 0, 0, 30, .1],
+  ['motionSpeed', 'Floating Speed', 1, 0, 2, .01],
+  ['fontVariation', 'Font Size Variation', 0, 0, 1, .01],
+  ['boldFlashes', 'Brief Bold Flashes', 0, 0, 1, .01],
+  ['textScramble', 'Changing Readouts', 0, 0, 1, .01],
+  ['echoStrength', 'Window Echoes', 0, 0, 1, .01],
   ['sizeVariation', 'Size Variation', .4, 0, 1, .01],
   ['drift', 'Floating Motion', .65, 0, 2, .01], ['avoidance', 'Avoid Curves', 1, 0, 1, .01],
 ] as const;
@@ -37,6 +52,7 @@ export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec 
     if(['count','firstStrand','strandStep'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
     out[id]=value;
   }
+  if(Number(out.depthSpread)+Number(out.depthMotion)>.8)throw new Error('Curve Scan Labels: combined depth spread and travel must be at most 0.8 to keep cards in front of the camera.');
   const style=read('style');
   if(style!=='uniform'&&style!=='mixed')throw new Error('Curve Scan Labels: choose uniform or mixed card style.');
   out.style=style;

@@ -1,9 +1,11 @@
+import {changingCurveReadouts} from '../../src/engine/native3d/labels/curveLabelReadout';
+import {curveLabelDecoration} from '../../src/engine/native3d/labels/curveLabelDecoration';
 import {describe,it,expect} from 'vitest';
 import {createWaveStrandsGraph,geometryParameterReader} from '../../src/services/operators/geometry/weaveGraph';
 import {compileGeometryGraph} from '../../src/services/operators/geometry/geometryProgram';
 import {isGeometryProgram} from '../../src/services/operators/geometry/geometryProgramValidation';
 import {CURVE_LABEL_OPERATOR,readCurveLabels,isCurveLabels} from '../../src/services/operators/geometry/curveLabels';
-import {curveLabelAnchors,curveLabelGlyphs} from '../../src/engine/native3d/labels/curveLabelLayout';
+import {curveLabelAnchors,curveLabelGlyphs,curveLabelLife,curveLabelTiming} from '../../src/engine/native3d/labels/curveLabelLayout';
 import {withCurveLabelCameras} from '../../src/engine/scene/curveLabelCamera';
 import type {SceneCamera,SceneStrandLayer} from '../../src/engine/scene/types';
 const defaults=Object.fromEntries(CURVE_LABEL_OPERATOR.parameters.map(p=>[p.id,p.default]));
@@ -34,7 +36,7 @@ describe('Curve Scan Labels',()=>{
     expect(()=>compileGeometryGraph(g,geometryParameterReader({}))).toThrow('uniform');
   });
   it('reports malformed settings rather than silently dropping labels',()=>{
-    for(const invalid of [{lag:NaN},{count:1.2},{color:'blue'},{titles:'ä'},{titles:'|EMPTY'},{width:50},{count:12,height:.4},{avoidance:2},{drift:-1},{style:'unknown'}])
+    for(const invalid of [{lag:NaN},{count:1.2},{color:'blue'},{titles:'ä'},{titles:'|EMPTY'},{width:50},{count:12,height:.4},{avoidance:2},{drift:-1},{style:'unknown'},{transition:.6},{dutyCycle:0},{depthSpread:.6,depthMotion:.6}])
       expect(isCurveLabels({...spec(),...invalid})).toBe(false);
   });
   it('keeps anchors on their selected variable-length strands, including wrapping',()=>{
@@ -83,9 +85,71 @@ describe('Curve Scan Labels',()=>{
     const result=compileGeometryGraph(g,geometryParameterReader({}));
     expect(result.render?.labels?.style).toBe('mixed');expect(isGeometryProgram(result)).toBe(true);
     const labels={...spec(),style:'mixed' as const,titles:'FLOW VECTOR'};
-    expect([...curveLabelGlyphs(labels,2).slice(0,4)]).toEqual([70,76,79,87].map(n=>n+1024));
+    expect([...curveLabelGlyphs(labels,2).slice(0,4)].map(n=>n%2048)).toEqual([70,76,79,87].map(n=>n+1024));
     expect([...curveLabelGlyphs(labels,.05).slice(1,11)]).toEqual(Array(10).fill(32));
-    expect([...curveLabelGlyphs(labels,5).slice(0,4)]).toEqual([70,76,79,87]);
+    expect([...curveLabelGlyphs(labels,5).slice(0,4)].map(n=>n%2048)).toEqual([70,76,79,87]);
   });
 
+  it('draws in under half a second, rests offscreen, and retracts with the same timing',()=>{
+    const s=spec(),end=s.cycle*s.dutyCycle;
+    expect(curveLabelLife(s,0,0).reveal).toBe(0);
+    expect(curveLabelLife(s,.5,0).reveal).toBe(1);
+    expect(curveLabelLife(s,end+.1,0).reveal).toBe(0);
+    for(const t of [.05,.15,.30,.44])expect(curveLabelLife(s,t,0).reveal).toBeCloseTo(curveLabelLife(s,end-t,0).reveal);
+    expect(curveLabelLife(s,end+.1,1).reveal).not.toBe(curveLabelLife(s,end+.1,3).reveal);
+    expect(curveLabelLife(s,2,0)).toEqual(curveLabelLife(s,2+s.cycle,0));
+    expect(curveLabelLife({...s,cycle:1,dutyCycle:.25},.125,0).reveal).toBe(1);
+  });
+
+  it('introduces cards one by one at accelerating intervals and keeps unborn cards hidden',()=>{
+    const s={...spec(),introSpread:5,count:12};
+    const births=Array.from({length:12},(_,i)=>curveLabelTiming(s,i).birth);
+    expect(births[0]).toBe(0);expect(births[11]).toBeCloseTo(5);
+    for(let i=2;i<12;i++)expect(births[i]-births[i-1]).toBeLessThan(births[i-1]-births[i-2]);
+    expect(births.filter(t=>t<=1)).toHaveLength(1);
+    expect(curveLabelLife(s,1,5).reveal).toBe(0);
+    expect(curveLabelLife(s,births[5]+.5,5).reveal).toBe(1);
+  });
+  it('keeps ten trackers within released curves and two on the remaining parent curves',()=>{
+    const starts=Uint32Array.from({length:13},(_,i)=>i*10),counts=new Uint32Array(13).fill(10);
+    const s={...spec(),count:12,releaseProgress:1/6,followShare:.85};
+    const target=curveLabelAnchors(starts,counts,s,true);
+    const strands=Array.from({length:12},(_,i)=>target[i*4+3]);
+    expect(strands.slice(0,10).every(i=>i<=2)).toBe(true);
+    expect(strands.slice(10)).toEqual([12,11]);
+    const delayed=curveLabelAnchors(starts,counts,{...s,releaseProgress:2.5/6,releaseMargin:.25},true);
+    expect(Array.from({length:10},(_,i)=>delayed[i*4+3]).every(i=>i<=2)).toBe(true);
+    const finished=curveLabelAnchors(starts,counts,{...s,releaseProgress:1},true);
+    expect(finished[9*4+3]).toBe(12);
+    expect([...finished].every(Number.isFinite)).toBe(true);
+  });
+
+  it('limits occasional window echoes to 3–10 copies for 1–3 seconds, deterministically',()=>{
+    const s={...spec(),echoStrength:1};
+    const samples=Array.from({length:800},(_,i)=>curveLabelDecoration(s,i/100,0));
+    const active=samples.filter(d=>d.copies>0);
+    expect(active.length).toBeGreaterThanOrEqual(99);expect(active.length).toBeLessThanOrEqual(300);
+    expect(active.every(d=>d.copies>=3&&d.copies<=10&&d.fade>=0&&d.fade<=1)).toBe(true);
+    expect(samples).toEqual(Array.from({length:800},(_,i)=>curveLabelDecoration(s,i/100,0)));
+    expect(Array.from({length:800},(_,i)=>curveLabelDecoration(s,i/100,1).copies).every(n=>n===0)).toBe(true);
+    expect(curveLabelDecoration({...s,cycle:1,dutyCycle:.25},.1,0).copies).toBe(0);
+    expect(curveLabelDecoration({...s,introSpread:5},0,5).copies).toBe(0);
+  });
+  it('briefly bolds a heading without flashing hidden cards or changing its text',()=>{
+    const s={...spec(),boldFlashes:1};
+    const flashes=Array.from({length:800},(_,i)=>curveLabelDecoration(s,i/100,0).bold);
+    expect(flashes.filter(v=>v>.5).length).toBeGreaterThan(5);
+    expect(flashes.filter(v=>v>0).length).toBeLessThanOrEqual(18);
+    expect(curveLabelDecoration(s,7.5,0).bold).toBe(0);
+    expect(curveLabelDecoration({...s,boldFlashes:0},2,0).bold).toBe(0);
+  });
+  it('scrambles selected readouts briefly before resolving new words, preserving coordinates',()=>{
+    const a=changingCurveReadouts('FLOW VECTOR',.02,0,1),b=changingCurveReadouts('FLOW VECTOR',.12,0,1);
+    expect(a.status).not.toBe(b.status);expect(a).toEqual(changingCurveReadouts('FLOW VECTOR',.02,0,1));
+    expect(changingCurveReadouts('FLOW VECTOR',.4,0,1)).toEqual(changingCurveReadouts('FLOW VECTOR',1,0,1));
+    expect(changingCurveReadouts('FLOW VECTOR',2.5,0,1).title).not.toBe(changingCurveReadouts('FLOW VECTOR',1,0,1).title);
+    expect(changingCurveReadouts('FLOW VECTOR',.12,2,1)).toEqual({title:'FLOW VECTOR',status:'SCANNING'});
+    const before=curveLabelGlyphs(spec(),.12),after=curveLabelGlyphs({...spec(),textScramble:1},.12);
+    expect([...after.slice(42,49)]).toEqual([...before.slice(42,49)]);
+  });
 });

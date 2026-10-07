@@ -60,19 +60,46 @@ camera has no recorded earlier motion to lag behind. The camera-pose data also t
 with render-worker packets and is resolved in the owning nested composition.
 
 **Floating Motion** adds independent slow drift, yaw, pitch and roll, even when
-a card already has a clear position. **Avoid Curves** builds a small soft occupancy
+a card already has a clear position. **Floating Speed** slows that motion without
+reducing its extent; zero holds the ambient pose. **Avoid Curves** builds a small soft occupancy
 field from projected GPU points. Cards seek clearer space, including crossing to the
-opposite side when their half of the image is crowded. They retain loose vertical
-neighborhoods but may overlap one another. This is a soft layout preference,
+opposite side when their height band is crowded, preserving clear areas such as
+the upper left even when the lower left is occupied. They retain loose vertical
+neighborhoods but may overlap one another. A continuous weighted average over a
+fixed candidate neighborhood replaces iterative position hunting, reducing jitter
+from small strand changes. This is a soft layout preference,
 not a collision guarantee; densely filled images may still contain overlaps. The
 layout is recomputed from source time and geometry, with no playback-history state.
 **Preferred Row Spacing** is fitted to the available frame; oversized card/count
 combinations report a validation error.
 
-**Card Style → Mixed** combines rectangular and oval outlines, three typefaces and
+**Card Style → Mixed** combines rectangular, oval, circular and square outlines, three typefaces and
 per-card sizes controlled by **Size Variation**. Every card retains its text; headings
 type in, numerical rows drift slightly, and rotating first-word accents turn bold red.
-These accents are a scan graphic, not event or fault detection.
+These accents are a scan graphic, not event or fault detection. Circles and squares
+have equal physical side extents, even in portrait compositions. **Font Size Variation**
+varies the text scale; roughly one in four cards emphasizes a changing word.
+**Brief Bold Flashes** adds occasional 180 ms heading pulses. **Changing Readouts**
+periodically scrambles selected headings and status words for up to 240 ms, then
+resolves a new word. Other cards remain steady; X/Y/Z slots retain their actual values. **Window Echoes**
+occasionally duplicates a visible window 3–10 times along camera depth for 1–3 seconds,
+with faded parallel outlines and text. Leader lines and target rings are not duplicated.
+The effect is deterministic and omits episodes when the visible lifetime is too short;
+no duplicate draw instances are issued when no echo is active. **Marker Line Weight**
+changes tracking-circle thickness independently of the card and leader lines.
+
+Cards have staggered lifetimes. **Visible Cycle Fraction** leaves an offscreen pause
+between appearances; **Intro / Outro** (50–500 ms, default 450 ms) draws the marker
+and leader toward the card, then its outline and text. The outro runs the same
+sequence backwards. Short cycles shorten both transitions to fit. Keyframe
+**Camera Follow** down temporarily to let cards catch up during a camera move.
+**Opening Build-up** introduces the first card immediately and each subsequent card
+at shorter intervals over the chosen duration; zero uses ongoing staggered cycles.
+**Depth Spread** distributes planes in front of and behind their common camera
+distance, preserving physical size so parallax and apparent size vary. **Depth Travel**
+adds independent smooth movement along camera depth at **Floating Speed**. Spread
+and travel together must stay at or below 0.8, keeping every plane ahead of its
+follow camera.
 
 **Side Position**, **Preferred Row Spacing**, **Card Width/Height**, and **Camera Distance**
 control placement. **First Strand / Strand Step** wrap over available curves;
@@ -82,6 +109,20 @@ are rejected with an explanation. **Opacity**, line width, marker size, color, a
 scan-cycle length control the look. Bypass removes the annotations, preserving the
 original strand image. Cards are unlit, depth-tested geometry and remain separate
 from the strand's Glow or other projected effects.
+
+**Released Tracking Blend** switches anchors from their normal strand selection to
+an ordered release pool. **Released Curve Fraction** is the normalized release
+front across curve indices. **Released Pool Margin** delays the candidate pool
+relative to that front so barely-started strands are not selected too early;
+**Released Tracker Share** chooses how many cards follow
+that pool. Remaining cards attach to the last unreleased curves. Drive these values
+from the same release graph as the geometry. Until enough curves are released,
+several markers can share one curve at different positions. **Detached Section Focus** finds the portion furthest from the remaining parent
+curves on the GPU, instead of anchoring to a still-attached stitch. Alert colors start
+only after the tracking blend arrives and that portion is measurably separated.
+Released cards flicker between red and orange with deterministic irregular timing; remaining cards gain
+orange as the release fraction increases. After all curves release, they follow the
+last curves rather than inventing a remaining parent.
 
 ## Default graph
 
