@@ -10,7 +10,7 @@ import type { Effect } from '../../src/types/effects';
 
 const jellyfish = () => {
   const effect = instantiateEffectPreset(listBuiltInWeavePresets().find(p => p.id === 'builtin:weave:jellyfish-reference')!);
-  Object.assign(effect.params, { 'soft-head_value': 0, 'soft-tail_value': 0 });
+  Object.assign(effect.params, { 'soft-head_value': 0, 'soft-tail_value': 0, 'return-length_value': 1 });
   return effect;
 };
 const sample = (effect: Effect, time: number) => evaluateGeometryProgram(compileGeometryGraph(

@@ -1,3 +1,4 @@
+import { withJellyfishReturnLength } from './jellyfishReturnLengthGraph';
 import { withJellyfishSoftMotion } from './jellyfishSoftMotionGraph';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
 
@@ -165,14 +166,14 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   const chain = ['pulse-set', 'yarn', 'flyaways', 'material', 'render'];
   chain.slice(1).forEach((id, index) => link(chain[index], 'curves', id, 'curves'));
   link('render', 'scene', 'output', 'scene');
-  return withJellyfishSoftMotion(withJellyfishCurl({ version: 1, schemaVersion: 1, domain: 'geometry', nodes, edges, layout,
+  return withJellyfishReturnLength(withJellyfishSoftMotion(withJellyfishCurl({ version: 1, schemaVersion: 1, domain: 'geometry', nodes, edges, layout,
     groups: [
       { id: 'closed-knit', label: 'Closed Knit Body', color: '#5f9ea0', nodeIds: ['knit', 'circulation', 'position', 'split', 'body-length', 'length', 'shape', 'stretch'] },
       { id: 'tail-shaping', label: 'Tail Shape', color: '#709ba2', nodeIds: tailNodes },
       { id: 'loose-returns', label: 'Loose Returns', color: '#8a7fd1', nodeIds: ['irregularity', 'return-position', 'return-split', 'return-mask', 'return-amount', 'wobble-x', 'wobble-y', 'wobble-z', 'x-ratio', 'z-ratio', 'x-amount', 'z-amount', 'offset', 'handmade', ...driftNodes] },
       { id: 'cream-yarn', label: 'Cream Yarn', color: '#c8a45a', nodeIds: ['yarn', 'flyaways', 'material'] },
       { id: 'jellyfish-pulse', label: 'Jellyfish Pulse', color: '#729fbc', nodeIds: pulseNodes },
-    ] }));
+    ] })));
 }
 
 

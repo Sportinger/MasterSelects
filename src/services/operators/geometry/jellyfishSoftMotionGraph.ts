@@ -41,13 +41,14 @@ export function withJellyfishSoftMotion(graph: EffectOperatorGraph): EffectOpera
   add('soft-seed-spacing', 'values.number', { value: 17.31 });
   const seed = math('soft-strand-seed', 'multiply', ['soft-info', 'strand'], value('soft-seed-spacing'));
   const strandX = math('soft-strand-x', 'add', ['return-split', 'x'], seed);
-  add('soft-two', 'values.number', { value: 2 });
-  const side = math('soft-side-double', 'multiply', value('curl-side'), value('soft-two'));
-  const sign = math('soft-side-sign', 'subtract', side, value('pulse-one'));
-  const drift = math('soft-side-drift', 'multiply', value('return-drift-z'), sign);
-  const strandZ = math('soft-strand-z', 'add', ['return-split', 'z'], drift);
-  add('soft-tail-position', 'vector.combine.vec3');
-  link(strandX, 'soft-tail-position', 'x'); link(movingY, 'soft-tail-position', 'y'); link(strandZ, 'soft-tail-position', 'z');
+  // Blend the two sampled fields, never their travelling coordinates. Mixing
+  // z +/- time*speed first compresses more noise into the rear seam over time.
+  const strandZ = math('soft-strand-z', 'add', ['return-split', 'z'], value('return-drift-z'));
+  const incomingZ = math('soft-incoming-sample-z', 'subtract', ['return-split', 'z'], value('return-drift-z'));
+  for (const [id, z] of [['soft-tail-position', strandZ], ['soft-incoming-position', incomingZ]] as const) {
+    add(id, 'vector.combine.vec3');
+    link(strandX, id, 'x'); link(movingY, id, 'y'); link(z, id, 'z');
+  }
 
   add('soft-curl-vector', 'vector.split.vec3'); link(value('curl-offset'), 'soft-curl-vector', 'value');
   add('soft-offset', 'vector.combine.vec3');
@@ -59,7 +60,14 @@ export function withJellyfishSoftMotion(graph: EffectOperatorGraph): EffectOpera
     add(`soft-tail-${axis}`, 'field.noise', { frequency: 1.3, amplitude: 1, seed: seed + 1009, octaves: 1 });
     link(value('soft-tail-position'), `soft-tail-${axis}`, 'position');
     link(tailAmount, `soft-tail-${axis}`, 'amplitude');
-    const motion = math(`soft-motion-${axis}`, 'add', value(`soft-head-${axis}`), value(`soft-tail-${axis}`));
+    add(`soft-incoming-${axis}`, 'field.noise', { frequency: 1.3, amplitude: 1, seed: seed + 1009, octaves: 1 });
+    link(value('soft-incoming-position'), `soft-incoming-${axis}`, 'position');
+    link(tailAmount, `soft-incoming-${axis}`, 'amplitude');
+    add(`soft-blend-${axis}`, 'math.mix.scalar');
+    link(value(`soft-incoming-${axis}`), `soft-blend-${axis}`, 'a');
+    link(value(`soft-tail-${axis}`), `soft-blend-${axis}`, 'b');
+    link(value('curl-side'), `soft-blend-${axis}`, 't');
+    const motion = math(`soft-motion-${axis}`, 'add', value(`soft-head-${axis}`), value(`soft-blend-${axis}`));
     const combined = math(`soft-total-${axis}`, 'add', ['soft-curl-vector', axis], motion);
     link(combined, 'soft-offset', axis);
   }

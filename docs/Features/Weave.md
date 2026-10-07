@@ -425,7 +425,14 @@ saved effects stay in their existing browser library.
   smoothly masked to their regions, before the swimming pulse. **Soft Motion**
   (default 0.15) animates their noise field independently of curl evolution.
   Set either strength to zero to remove that contribution. Closed yarn endpoints
-  stay joined; these are procedural fields, not extra physics or a blur pass.
+  stay joined. At the rear join, the two directional noise results are blended
+  after sampling; the transition cannot squeeze increasing noise detail into
+  the join as playback advances. These are procedural fields, not extra physics
+  or a blur pass.
+  **Return Length** (default 1.5; 1 restores the earlier length) stretches only
+  the loose returns behind the knit, with a smooth shoulder transition. It acts
+  after the moving fields and pulse, preserving the dome and transverse motion
+  while carrying the same animation through the longer loops.
   **Return Flow (units/s)** sets constant travel speed; negative values reverse
   both directions and zero stops travel. **Irregularity** sets the smaller plain
   noise amplitude (default 0.04, strongly reduced at the knitted front). The
