@@ -39,6 +39,18 @@ describe('GPU tails of geometry programs', () => {
     expect(pointFieldChain(unsupported)).toBeNull();
   });
 
+  it('keeps procedural fields on the GPU before a final contact stage, without moving unsupported operations', () => {
+    const stages: GeometryStage[] = [{ kind: 'curve-line', nodeId: 'line', points: 17, length: 1, axis: 0 },
+      { kind: 'set-position', nodeId: 'move' }];
+    const plain = pointFieldChain(stages)!;
+    const contact: GeometryStage = { kind: 'curve-contact', nodeId: 'contact', radius: .02, iterations: 8, smoothing: .4, strength: .5 };
+    const gpu = pointFieldChain([...stages, contact])!;
+    expect(gpu.contact).toEqual(contact);
+    expect(gpu.restStages).toEqual(plain.restStages);
+    expect(gpu.fields.code).toBe(plain.fields.code);
+    expect(pointFieldChain([...stages, contact, { kind: 'curve-flow', nodeId: 'flow', phase: .2 }])).toBeNull();
+  });
+
   it('runs Thread Along and the yarn radius of the default weave on the GPU, keeping the rest curves fixed', () => {
     const early = surfaceBindChain(weaveAt(1.5).stages)!, later = surfaceBindChain(weaveAt(1.6).stages)!;
     expect(early.restStages.map(stage => stage.kind)).toEqual(['weave-pattern', 'set-position']);

@@ -4,6 +4,9 @@ import type { StrandFieldCode } from './strandFieldShader';
 import type { StrandFieldExecutor } from './StrandFieldExecutor';
 import { Logger } from '../../../services/logger';
 
+import { StrandContactProjector } from './StrandContactProjector';
+import type { CurveContactSpec } from '../../../services/operators/geometry/curveContacts';
+
 const log = Logger.create('StrandFieldDeformer');
 
 export interface StrandFieldSnapshot {
@@ -19,6 +22,7 @@ export class StrandFieldDeformer {
   readonly outputs: GPUBuffer[];
   ready?: StrandFieldSnapshot;
   failed = false;
+  private contact?: StrandContactProjector;
   private pending?: Promise<void>;
   private disposed = false;
   private input?: CurveSet;
@@ -60,7 +64,7 @@ export class StrandFieldDeformer {
     device.queue.writeBuffer(this.contexts, 0, contexts); device.queue.writeBuffer(this.ranges, 0, ranges);
   }
 
-  prepare(curves: CurveSet, fields: StrandFieldCode, signature: string): StrandFieldSnapshot | undefined {
+  prepare(curves: CurveSet, fields: StrandFieldCode, signature: string, contact?: CurveContactSpec): StrandFieldSnapshot | undefined {
     if (this.disposed || this.failed) return undefined;
     if (this.ready?.signature === signature && !this.pending) return this.ready;
     if (!this.pending) {
@@ -83,8 +87,9 @@ export class StrandFieldDeformer {
           this.constants = device.createBuffer({ size, label: 'strand-field-constants', usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
         }
         if (fields.constants.length) device.queue.writeBuffer(this.constants, 0, Float32Array.from(fields.constants));
+        if (contact) this.contact ??= new StrandContactProjector(device, curves.positions.length / 3);
         this.executor.submit(device, fields, [this.params, this.rest, this.contexts, this.ranges, this.constants, target, this.metrics],
-          curves.positions.length / 3, curves.counts.length, this.readback, temporary);
+          curves.positions.length / 3, curves.counts.length, this.readback, temporary, contact ? { projector: this.contact!, spec: contact } : undefined);
       } catch (error) { submissionError = error; }
       const validation = device.popErrorScope();
       this.pending = (async () => {
@@ -115,6 +120,8 @@ export class StrandFieldDeformer {
   /** In-flight completions cannot publish after retirement; the caller retires buffers after its draw. */
   retire(temporary: GPUBuffer[]): void {
     this.disposed = true;
+    // Retire scratch only after already submitted work is complete.
+    if (this.contact) void this.device.queue.onSubmittedWorkDone().then(() => this.contact?.dispose());
     temporary.push(...this.outputs, this.rest, this.contexts, this.ranges, this.params, this.metrics, this.readback);
     if (this.constants) temporary.push(this.constants);
   }

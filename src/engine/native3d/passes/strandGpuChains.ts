@@ -1,3 +1,4 @@
+import type { CurveContactSpec } from '../../../services/operators/geometry/curveContacts';
 import type { GeometryStage } from '../../../services/operators/geometry/geometryProgram';
 import type { RodStage } from '../../../services/operators/geometry/rodCurves';
 import type { StrandThreadParams } from './StrandSurfaceBinder';
@@ -64,12 +65,15 @@ export function rodChain(stages: readonly GeometryStage[]): RodChain | null {
 }
 
 /** A topology-preserving tail, shared by any curve generator, without requiring a simulation. */
-export interface PointFieldChain { fields: StrandFieldCode; restStages: GeometryStage[] }
+export interface PointFieldChain { fields: StrandFieldCode; restStages: GeometryStage[]; contact?: CurveContactSpec }
 export function pointFieldChain(stages: readonly GeometryStage[]): PointFieldChain | null {
-  let at = stages.length;
-  while (at > 1 && ['set-position', 'yarn-profile'].includes(stages[at - 1].kind)) at--;
-  const tail = stages.slice(at);
+  const last = stages.at(-1);
+  const contact = last?.kind === 'curve-contact' ? last : undefined;
+  const body = contact ? stages.slice(0, -1) : stages;
+  let at = body.length;
+  while (at > 1 && ['set-position', 'yarn-profile'].includes(body[at - 1].kind)) at--;
+  const tail = body.slice(at);
   if (!tail.some(stage => stage.kind === 'set-position' || stage.kind === 'yarn-profile' && stage.radius)) return null;
-  try { return { fields: strandPointFieldCode(tail), restStages: stages.slice(0, at) }; }
+  try { return { fields: strandPointFieldCode(tail), restStages: body.slice(0, at), contact }; }
   catch { return null; }
 }

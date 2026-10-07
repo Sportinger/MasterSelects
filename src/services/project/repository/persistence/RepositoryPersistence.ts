@@ -1,3 +1,5 @@
+import { Logger } from '../../../logger';
+import { readStartupCache, writeStartupCache } from './startupCache';
 import { iterateRevisionChanges } from './revisionChanges';
 import { REPOSITORY_LIMITS, RepositoryError, type BlobReference, type CommitReference, type OperationReceipt, type RecordReference, type RepositoryBackend, type RepositoryDescriptor, type RepositoryMetadataIndex, type RepositoryOwner, type RevisionPayload } from '../contracts';
 import { canonicalBytes, frozenJson, hashRecord, hashBytes } from '../segments/canonical';
@@ -30,17 +32,38 @@ export class RepositoryPersistence {
   private fatalError: unknown = null;
   // This writer owns the location: validated immutable history is proven once per session.
   private readonly proofs = createRecoveryProofs();
+  private startupCacheHealthy = true;
+  private startupCacheSequence = -1;
   constructor(backend: RepositoryBackend, descriptor: RepositoryDescriptor, owner: RepositoryOwner, options: PersistenceOptions) {
     this.backend = backend; this.descriptor = frozenJson(descriptor); this.owner = owner; this.options = options;
     if (!backend.capabilities.immutableWrites || !backend.capabilities.ownership) throw new RepositoryError('unsupported', 'Backend cannot safely publish repository commits');
   }
   async recover(signal?: AbortSignal): Promise<RecoveryResult> {
+    const cached = this.options.index ? await readStartupCache(this.backend, this.descriptor, this.options.index, signal) : null;
+    if (cached) {
+      for (const [key, value] of cached.proofs.segments) this.proofs.segments.set(key, value);
+      for (const key of cached.proofs.blobs) this.proofs.blobs.add(key);
+    }
     const result = await recoverRepository(this.backend, this.descriptor, signal, async commit => {
       await this.indexCommit(commit);
-    }, undefined, this.proofs);
+    }, cached?.recovery, this.proofs, cached?.knownCommits);
     this.confirmedRecovery = result;
+    this.startupCacheSequence = cached?.recovery.operationSequence ?? -1;
     this.head = result.head; this.operationSequence = result.operationSequence; this.checkpoints = result.checkpoints;
     this.recovered = true; return result;
+  }
+  /** Explicit save/checkpoint only; dragging and individual publications never write a startup snapshot. */
+  async saveStartupCache(): Promise<void> {
+    const index = this.options.index;
+    if (!index || !this.startupCacheHealthy) return;
+    const save = async () => {
+      if (!this.confirmedRecovery || this.startupCacheSequence === this.operationSequence) return;
+      try {
+        if (await writeStartupCache(this.backend, this.descriptor, this.owner, index, this.confirmedRecovery, this.proofs))
+          this.startupCacheSequence = this.operationSequence;
+      } catch (error) { Logger.create('RepositoryStartupCache').warn('Startup cache unavailable; project remains saved', error); }
+    };
+    const job = this.tail.then(save, () => {}); this.tail = job; await job;
   }
   readRecord(reference: RecordReference, signal?: AbortSignal) { return readRecord(this.backend, reference, signal); }
   readRevision(reference: RecordReference, signal?: AbortSignal) { return readRevision(this.backend, reference, signal); }
@@ -150,7 +173,7 @@ export class RepositoryPersistence {
       }
       // Write last: an interrupted/failed index build is replayed, never mistaken for complete.
       await index.putMetadata(markerKey, { hash: commitHash, operationSequence: commit.lastOperation });
-    } catch (error) { try { this.options.onIndexError?.(error); } catch { /* Reporting cannot revoke durability. */ } }
+    } catch (error) { this.startupCacheHealthy = false; try { this.options.onIndexError?.(error); } catch { /* Reporting cannot revoke durability. */ } }
   }
   private async findPublishedBatch(batch: PublicationBatch, signal?: AbortSignal): Promise<PublicationResult | null> {
     let cursor = this.head;

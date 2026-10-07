@@ -49,7 +49,7 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
   }
   async function write(path: string, chunks: AsyncIterable<Uint8Array>, replace: boolean, signal?: AbortSignal, expectedPrevious?: CommitReference | null) {
     repositoryPath(path);
-    if (path !== 'project.msrepo.json' && path !== 'archive-manifest.json' && !/^\.masterselects\/(segments|commits|artifacts|artifact-manifests|views|imports|transport|backup-sources)\//.test(path)) throw new RepositoryError('permission', 'Repository writes cannot mutate original source paths');
+    if (path !== 'project.msrepo.json' && path !== 'archive-manifest.json' && !/^\.masterselects\/cache\/startup\/[ab]\.json$/.test(path) && !/^\.masterselects\/(segments|commits|artifacts|artifact-manifests|views|imports|transport|backup-sources)\//.test(path)) throw new RepositoryError('permission', 'Repository writes cannot mutate original source paths');
     const task = queue.then(async () => {
       try {
         if (!writable || !owner) throw new RepositoryError('ownership', 'Repository is read-only');
@@ -86,7 +86,7 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
           } while (cursor);
           if (latest?.commitId !== expectedPrevious?.commitId || latest?.hash !== expectedPrevious?.hash) throw new RepositoryError('conflict', 'Repository head changed before publication');
         }
-        if (replace && !/^\.masterselects\/views\/[^/]+\/[^/]+\/[ab]\.json$/.test(path)) throw new RepositoryError('permission', 'Only inactive view slots may be replaced');
+        if (replace && !/^\.masterselects\/views\/[^/]+\/[^/]+\/[ab]\.json$/.test(path) && !/^\.masterselects\/cache\/startup\/[ab]\.json$/.test(path)) throw new RepositoryError('permission', 'Only inactive view or startup cache slots may be replaced');
         const { directory, name } = await parent(path, true);
         let existing = false;
         try { await directory.getFileHandle(name); existing = true; } catch (error) { if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error; }
@@ -197,7 +197,7 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
         const bytes = new Uint8Array(await file.slice(offset, offset + size).arrayBuffer()); checkAbort(signal); return bytes;
       } catch (error) { translate(error); }
     },
-    async stat(path) { try { const { directory, name } = await parent(path); return { length: (await (await directory.getFileHandle(name)).getFile()).size }; } catch (error) { if (error instanceof DOMException && error.name === 'NotFoundError') return null; translate(error); } },
+    async stat(path) { try { const { directory, name } = await parent(path); const file = await (await directory.getFileHandle(name)).getFile(); return { length: file.size, modifiedTime: file.lastModified }; } catch (error) { if (error instanceof DOMException && error.name === 'NotFoundError') return null; translate(error); } },
     async readBlob(path, signal) { checkAbort(signal); try { const { directory, name } = await parent(path); const file = await (await directory.getFileHandle(name)).getFile(); checkAbort(signal); return file; } catch (error) { if (error instanceof DOMException && error.name === 'NotFoundError') return null; translate(error); } },
     writeNew: (path, chunks, signal) => write(path, chunks, false, signal),
     replaceViewSlot: (path, chunks, signal) => write(path, chunks, true, signal),

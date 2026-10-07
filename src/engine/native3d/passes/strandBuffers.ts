@@ -10,6 +10,8 @@ import { evaluateFiberAttributes, fiberAttributesKey, fiberAttributesTrivial } f
 import { packStrandColors, strandColorNeedsPositions } from './strandColors';
 import { StrandFieldExecutor } from './StrandFieldExecutor';
 import { StrandFieldDeformer } from './StrandFieldDeformer';
+import { Logger } from '../../../services/logger';
+const log = Logger.create('StrandBufferCache');
 
 /** Segment flags above the 30-bit point index: the strand continues before / after the segment. */
 export const SEGMENT_HAS_PREVIOUS = 0x80000000;
@@ -103,7 +105,8 @@ export class StrandBufferCache {
         ?? this.build(device, layer.layerId, rods ? evaluateGeometryProgram(program) : curves, signature, rods ? signature : topology, !!chain, !!fields);
       if (fields) {
         try { buffers.fields = new StrandFieldDeformer(device, curves, buffers.positions, this.fieldExecutor, this.requestRender); }
-        catch {
+        catch (error) {
+          log.warn('GPU curve fields unavailable; using CPU evaluation', error);
           this.fieldFailures.add(topology); this.retire(buffers, temporaryBuffers);
           fields = null; stages = program.stages; topology = signature;
           buffers = this.build(device, layer.layerId, evaluateGeometryProgram(program), signature, topology, false);
@@ -130,7 +133,7 @@ export class StrandBufferCache {
     }
     let fieldsReady = true;
     if (fields && buffers.fields) {
-      const ready = buffers.fields.prepare(prefix!, fields.fields, signature);
+      const ready = buffers.fields.prepare(prefix!, fields.fields, signature, fields.contact);
       fieldsReady = !!ready;
       if (ready) {
         buffers.positions = ready.positions; buffers.extent = ready.extent; buffers.segmentLength = ready.segmentLength;

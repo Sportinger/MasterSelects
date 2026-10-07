@@ -111,13 +111,22 @@ and its counters survive reopening. Loading a selected revision uses its branch'
 applicable checkpoint plus subsequent changes, including when another branch
 has a newer checkpoint.
 
-Reconstructing the current state and validating the repository are separate
-steps. Opening still validates the retained commit history; checkpoints alone
-do not make that validation independent of history size. A bounded cache reuses
-validated records within each commit, so a checkpoint with many dependencies
-does not repeatedly decode and hash its parent record. Each new opening checks
-the authoritative bytes again. The loading indicator reports import, recovery
-and activation separately.
+Saving also writes a bounded startup cache into `.masterselects/cache/startup/`
+inside the project folder. Two alternating slots and a browser-local checksum
+attestation prevent an interrupted write from replacing the last complete cache.
+It is refreshed at save/flush boundaries, never for intermediate drag samples;
+unchanged saves do not rewrite it. No project archive must be selected manually.
+
+Opening automatically uses this cache when the same browser/location retains its
+attestation and every previously validated history file still has the same size
+and modification time. Current entity records retain SHA-256 validation when read;
+older unchanged history does not undergo another full byte audit. Publications
+added after the snapshot are validated and applied, rather than reverting to the
+cached version. A changed/missing file, damaged cache, lost browser index, or fork
+at older ancestry falls back to complete history validation. Backends without
+file modification identities keep that full-validation path. All history and
+media remain in place; the cache is disposable and is not a backup or an archive.
+The loading indicator reports recovery and activation separately.
 
 Published segments remain immutable. The history cache and history panel page
 limits do not delete older on-disk revisions. Workspace views use two bounded
@@ -140,8 +149,9 @@ write ownership can be opened read-only.
 IndexedDB is a derived metadata index for revision, branch and named-version
 queries. Repository records remain authoritative.
 Completed commit indexes are retained on reload instead of clearing and
-rewriting every history row. Recovery still validates authoritative bytes;
-missing or interrupted index builds are replayed before being marked complete.
+rewriting every history row. Cold recovery validates authoritative bytes; a valid startup cache reuses its
+locally attested history validation. Missing or interrupted index builds are
+replayed before being marked complete.
 Commit paths are discovered in one paged scan per opening, rather than listing
 the entire history folder again for every revision.
 Independent commit manifests use bounded parallel reads, and filesystem recovery

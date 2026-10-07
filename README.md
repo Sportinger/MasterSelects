@@ -169,9 +169,9 @@ Open [masterselects.com](https://www.masterselects.com/), import a clip, and dra
 
 Projects [save continuously](docs/Features/Project-Persistence.md), with durable branching history. **Ctrl/Cmd+S** waits for pending content, history navigation and workspace changes to reach storage; named versions are separate from Save.
 Filesystem saves page through one bounded filename snapshot per fresh history-folder check, avoiding repeated physical scans as history grows.
-Large redo-preference lists are stored in bounded blocks so long editing histories can continue saving without dropping remembered branches.
+Large redo-preference lists are stored in bounded blocks so long editing histories can continue saving without dropping remembered branches. Saves also keep a checked startup cache in the project folder; reopening reuses unchanged history and applies any newer edits automatically.
 
-[Weave](docs/Features/Weave.md) supports fading Curve Contact corrections for selected animation intervals. Raster strand layers keep their own projected image effects, including Glow on transparent backgrounds, when sharing a scene with other objects.
+[Weave](docs/Features/Weave.md) supports fading Curve Contact corrections for selected animation intervals and evaluates final contacts after procedural fields on the GPU. Raster strand layers keep their own projected image effects, including Glow on transparent backgrounds, when sharing a scene with other objects.
 
 Chrome or Edge on desktop is a good starting point. Editing and rendering run locally in the browser; hosted AI and media generation use external services and may require credits. Local AI features may download models on first use. MasterSelects is under active development, so keep backups of important projects.
 

@@ -104,7 +104,17 @@ scale. Set Contact Radius to cover the outer yarn bundle, including fiber width 
 a small allowance for spline interpolation. Iterations controls contact convergence;
 Correction Smoothing spreads displacement without smoothing away the input stitches.
 The modifier preserves point IDs, per-point colors and closed seams, and supports up
-to 16,384 points. It evaluates deterministically at each requested frame on the CPU.
+to 16,384 points. A final contact modifier after GPU-compatible Set Position and
+Yarn Profile fields runs on the GPU: per-layer scratch buffers, a stable sorted
+capsule grid, simultaneous contact projection and welded ring endpoints. Each
+iteration uses four parallel sweeps to propagate neighboring corrections. Animated
+fields remain on the GPU and export waits for the exact requested geometry through
+the shared preparation barrier. Only bounds and length metrics return to the CPU.
+The solve is frame-local, so seeking does not replay simulation history. Unsupported
+stage orders or position-dependent material colors retain CPU evaluation; GPU
+validation failures log a warning and fall back to CPU. Parallel projection and the
+sequential CPU solver can converge differently in crowded knots; increase Iterations
+when necessary. Neither solver guarantees a topologically collision-free transition.
 Strength blends the positional correction from zero to one and accepts an animated
 parameter or a uniform clock/value input. Zero removes the solve from the compiled
 program, retaining the original positions and the usual GPU deformation path.

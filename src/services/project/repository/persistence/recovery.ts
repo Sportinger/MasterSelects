@@ -174,7 +174,7 @@ export async function validateCommit(backend: RepositoryBackend, commit: CommitM
 }
 
 /** Discovery uses one paged scan per recovery, retaining only paths and immutable manifests. */
-export async function recoverRepository(backend: RepositoryBackend, descriptor: RepositoryDescriptor, signal?: AbortSignal, visit?: (commit: CommitManifest) => Promise<void>, confirmed?: RecoveryResult, sessionProofs?: RecoveryProofs): Promise<RecoveryResult> {
+export async function recoverRepository(backend: RepositoryBackend, descriptor: RepositoryDescriptor, signal?: AbortSignal, visit?: (commit: CommitManifest) => Promise<void>, confirmed?: RecoveryResult, sessionProofs?: RecoveryProofs, knownCommits?: ReadonlySet<string>): Promise<RecoveryResult> {
   const authoritativeBackend = backend;
   backend = recoveryReadCache(backend);
   const proofs: RecoveryProofs = sessionProofs ?? { segments: new Map(), blobs: new Set() };
@@ -192,7 +192,7 @@ export async function recoverRepository(backend: RepositoryBackend, descriptor: 
   await Promise.all(Array.from({ length: Math.min(8, discovered.length) }, async () => {
     while (nextManifest < discovered.length) {
       const path = discovered[nextManifest++]; signal?.throwIfAborted();
-      if (manifests.has(path)) continue;
+      if (manifests.has(path) || knownCommits?.has(path)) continue;
       try { manifests.set(path, await readCommit(backend, path, signal)); }
       catch (error) { if (signal?.aborted) throw error; warn(`Damaged publication retained: ${path}`); }
     }
