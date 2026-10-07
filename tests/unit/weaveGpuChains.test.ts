@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { rodChain, surfaceBindChain } from '../../src/engine/native3d/passes/strandGpuChains';
+import type { GeometryStage } from '../../src/services/operators/geometry/geometryProgram';
+import { rodChain, surfaceBindChain, pointFieldChain } from '../../src/engine/native3d/passes/strandGpuChains';
 import { strandRadiusFieldCode } from '../../src/engine/native3d/passes/strandFieldShader';
 import { colorConstraints, buildRodTopology } from '../../src/services/operators/geometry/rodTopology';
 import { buildRodRest } from '../../src/services/operators/geometry/rodRest';
@@ -16,6 +17,28 @@ const weaveAt = (time: number) => {
 };
 
 describe('GPU tails of geometry programs', () => {
+  it('moves only the topology-preserving tail to the GPU, retaining intermediate topology operations', () => {
+    const program = weaveAt(1);
+    const stages: GeometryStage[] = [program.stages[0], { kind: 'set-position' as const, nodeId: 'before' },
+      { kind: 'curve-flow' as const, nodeId: 'flow', phase: .3 },
+      { kind: 'set-position' as const, nodeId: 'after', offset: { instructions: [
+        { nodeId: 'v', operation: 'constant', type: 'scalar' as const, inputs: [], value: 2 },
+        { nodeId: 'xyz', operation: 'combine-vector', type: 'vec3' as const, inputs: [0, 0, 0] },
+      ], output: 1 } }];
+    const result = pointFieldChain(stages)!;
+    expect(result.restStages.map(stage => stage.nodeId)).toEqual([stages[0].nodeId, 'before', 'flow']);
+    const last = stages[3] as Extract<GeometryStage, { kind: 'set-position' }>;
+    const animated = structuredClone(stages);
+    animated[3] = { ...last, offset: { ...last.offset!, instructions: last.offset!.instructions.map((x, i) => i ? x : { ...x, value: 3 }) } };
+    expect(pointFieldChain(animated)!.fields.code).toBe(result.fields.code);
+    expect(pointFieldChain(animated)!.fields.constants).not.toEqual(result.fields.constants);
+    expect(pointFieldChain(stages.slice(0, 1))).toBeNull();
+    expect(pointFieldChain([...stages, { kind: 'curve-flow', nodeId: 'last', phase: 0 }])).toBeNull();
+    const unsupported = structuredClone(stages);
+    (unsupported[3] as Extract<GeometryStage, { kind: 'set-position' }>).offset!.instructions[0].operation = 'not-a-gpu-operation';
+    expect(pointFieldChain(unsupported)).toBeNull();
+  });
+
   it('runs Thread Along and the yarn radius of the default weave on the GPU, keeping the rest curves fixed', () => {
     const early = surfaceBindChain(weaveAt(1.5).stages)!, later = surfaceBindChain(weaveAt(1.6).stages)!;
     expect(early.restStages.map(stage => stage.kind)).toEqual(['weave-pattern', 'set-position']);

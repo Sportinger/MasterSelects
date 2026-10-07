@@ -136,7 +136,7 @@ export function resolvePlaneTextureSource(
 
 /**
  * Revision of a source whose pixels only change when it says so: loaded images
- * (by URL) and text rasters (by canvas version). Video and other canvases are
+ * (by URL) and text/solid rasters (by canvas version). Video and other canvases are
  * redrawn in place without a revision and return null, so they upload every frame.
  */
 export function planeTextureSourceRevision(source: PlaneTextureSourceState['source']): string | null {
@@ -144,8 +144,8 @@ export function planeTextureSourceRevision(source: PlaneTextureSourceState['sour
     return source.complete ? `image:${source.currentSrc || source.src}` : null;
   }
   if (typeof HTMLCanvasElement !== 'undefined' && source instanceof HTMLCanvasElement
-    && source.dataset.masterselectsDynamic === 'text') {
-    return `text:${getCanvasVersion(source)}`;
+    && (source.dataset.masterselectsDynamic === 'text' || source.dataset.masterselectsDynamic === 'solid')) {
+    return `${source.dataset.masterselectsDynamic}:${getCanvasVersion(source)}`;
   }
   return null;
 }

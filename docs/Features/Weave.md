@@ -452,3 +452,34 @@ Saved Weave graphs with missing required input cables reopen as editable drafts,
 with the connection error shown in Nodes. Nodes and existing cables are retained;
 structurally invalid connections remain validation errors. Completing the wiring
 through the graph editor restores rendering.
+
+
+### GPU curve fields
+
+Trailing **Set Position** and **Yarn Profile** fields run on WebGPU for ordinary
+curve generators as well as simulated rods. This includes the reusable **Curl
+Noise**, **Curl Noise (Evolving)** and Noise compositions, masks, waves and radius
+fields; their existing graphs and saved project format are unchanged. The shared
+pointwise WGSL compiler executes modifiers in graph order. Generators and earlier
+stages that alter topology or require CPU geometry remain on the CPU.
+
+Animated constants reuse compute pipelines; animated input curves reuse buffers
+while their point/strand topology stays the same. Position, frames and radius
+remain GPU-resident. Only two measurements per strand (extent and arc length)
+return to the CPU for shadows and subdivision selection. Preview retains the last
+complete geometry while the next snapshot is prepared, which may introduce one
+preparation interval of visual latency. Export waits for the requested snapshot,
+including on backwards seeks, rather than capturing the previous preview frame.
+
+Position-dependent strand colors or Fiber Material color, roughness, melanin and
+selection fields retain CPU evaluation so they read the final deformed positions.
+Unsupported field operations and GPU preparation failures also retain the CPU
+path. Changing preview resolution reduces raster work, not the number of authored
+curve points. Performance depends on both curve complexity and GPU fill cost. At a fixed time,
+the completed curve buffers are reused during camera navigation. Unchanged Solid
+host textures are also reused across main and target previews; changing their
+color or dimensions refreshes the upload.
+
+The browser regression at `tests/browser/weave-point-fields-gpu-check.html`
+compares positions, radius, frames and bounds against the CPU reference, including
+animated input, topology changes, export preparation and the jellyfish preset.

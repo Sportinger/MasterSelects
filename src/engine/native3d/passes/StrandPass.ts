@@ -146,7 +146,8 @@ export class StrandPass {
   private depthPipeline: GPURenderPipeline | null = null;
   private opacityPipeline: GPURenderPipeline | null = null;
   private layout: GPUBindGroupLayout | null = null;
-  private readonly buffers = new StrandBufferCache();
+  private readonly buffers: StrandBufferCache;
+  constructor(requestRender: () => void = () => {}) { this.buffers = new StrandBufferCache(requestRender); }
   private readonly shadows = new StrandShadowMaps();
   private readonly coverage = new StrandCoverageTargets();
   private readonly raster = new StrandComputeRaster();

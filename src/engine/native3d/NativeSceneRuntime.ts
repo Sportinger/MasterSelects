@@ -82,7 +82,7 @@ export class NativeSceneRuntime {
   private readonly gizmoPass = new GizmoPass();
   private readonly splatPass = new SplatPass();
   private readonly voxelPass = new VoxelPass();
-  private readonly strandPass = new StrandPass();
+  private readonly strandPass = new StrandPass(() => this.host.requestRender?.());
   private flockPass: FlockPass;
   private readonly effectorCompute = new EffectorCompute();
   private readonly modelRuntimeCache = new ModelRuntimeCache();

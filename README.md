@@ -132,6 +132,8 @@ Closed Curve Flow circulates yarn material along fixed stitch paths, independent
 Experimental Knit Cycle Guides drive closed yarn bands through separate forming and release zones in one forward-time rod solve.
 Close Curve adds a smooth return bow to each open yarn, creating closed ropes for Rod Simulation; geometric closure alone does not loop the motion.
 Rod Simulation's Pull Direction field moves selected pins on open or closed ropes along fixed normalized directions; zero vectors hold supports still. Build and map the closed ring before the solve for coupled tension and contacts. This enables tension studies, not repeated needle-driven stitch formation.
+Ordinary curve generators also run trailing Set Position and Yarn Profile fields on the GPU, reusing the existing Curl/Noise nodes. Preview keeps the last completed geometry while the next frame is prepared; export waits for exact geometry and bounds. Position-dependent material fields retain the CPU path. Paused camera navigation reuses unchanged solid textures instead of uploading them on every redraw.
+
 Set Position after Rod Simulation deforms the result on the GPU, for example bending a stitch animation into a ring while preserving its original simulation.
 
 [Slit Scan](docs/Features/Effects.md#slit-scan) starts with 3D geometry bypassed. It can match its time factor to the source frame rate and sample count, and optionally compensate motion between decoded frames in resident GPU history with adjustable flow strength.
