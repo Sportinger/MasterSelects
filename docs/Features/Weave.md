@@ -13,6 +13,10 @@ including an empty host clip: the strands are drawn as an extra 3D layer above t
 clip with the clip's transform. Disabling the effect hides the strands and keeps
 the graph, values and keyframes. The graph is edited on the unified Nodes canvas;
 values exposed from it appear in the clip's **Effects** tab, grouped by node group.
+These instance-owned values are also registered as numeric animatable properties:
+property search and atomic keyframe authoring use their saved labels, ranges and
+steps. Unexposing a value removes it from property discovery without changing other
+effect instances or catalog-owned parameter contracts.
 Node contracts are listed in the [Node Catalog](./Node-Catalog.md#curve-graphs-weave).
 
 ## Default graph

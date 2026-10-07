@@ -202,3 +202,5 @@ Linked clips selected together now share a contour outline in the timeline, foll
 Projects assume saved media locations are available and open sources only when needed for preview, playback, editing or export. Unused media are not scanned on reload; only failed source access requests relinking. See [project persistence](docs/Features/Project-Repository.md).
 
 Camera **Continuous / Orbit** keyframes retain the actual Preview Orbit pivot, including off-centre objects and off-axis framing. Saved projects and copied camera keys preserve it; **Shortest Path** restores the direct move. See [camera rotation paths](docs/Features/Keyframes.md#rotation-path).
+
+Exposed values in editable effect graphs participate in property search and keyframe authoring, including their per-instance labels and slider ranges. See [Weave](docs/Features/Weave.md).

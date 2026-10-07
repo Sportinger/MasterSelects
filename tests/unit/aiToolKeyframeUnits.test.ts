@@ -106,6 +106,30 @@ describe('keyframe position units', () => {
     expect(opacity?.value).toBe(0.5);
   });
 
+  it('authors compact keyframes for exposed controls in an instance-owned operator graph', async () => {
+    useTimelineStore.setState({ clips: [createMockClip({ id: CLIP_ID, effects: [{
+      id: 'weave-one', type: 'weave', name: 'Yarn', enabled: true,
+      params: { unfold_value: 0 }, operatorGraph: {
+        version: 1, domain: 'geometry', edges: [], layout: {}, nodes: [{
+          id: 'unfold', operator: 'values.number', operatorVersion: 1,
+          bindings: { value: 'unfold_value' }, constants: { value: 0 },
+          exposed: { label: 'Unfold', min: 0, max: 1, step: 0.001 },
+        }],
+      },
+    }] })] });
+    const result = await handleAddKeyframe({
+      clipId: CLIP_ID, effectId: 'weave-one',
+      keys: { unfold_value: [[0, 0, 'linear'], [4, 1, 'linear']] },
+    }, useTimelineStore.getState());
+
+    expect(result.success).toBe(true);
+    expect(storedKeyframes()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ property: 'effect.weave-one.unfold_value', time: 0, value: 0 }),
+      expect.objectContaining({ property: 'effect.weave-one.unfold_value', time: 4, value: 1 }),
+    ]));
+    expect(storedKeyframes()).toHaveLength(2);
+  });
+
   it('keeps 3D position keyframes in raw scene units', async () => {
     useTimelineStore.setState({
       clips: useTimelineStore.getState().clips.map((clip) => ({ ...clip, is3D: true })),

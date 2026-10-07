@@ -6,6 +6,20 @@ import { getAllEffects, getEffect } from '../../effects';
 import type { PropertyDescriptor, PropertyValueType } from '../../types/propertyRegistry';
 import type { PropertyRegistry } from './PropertyRegistry';
 import { faceCableDescriptors } from './faceCableProperties';
+import { exposedGraphValues } from '../operators/exposedGraphValueList';
+
+/** Instance-owned graph controls participate in the same property contract as catalog parameters. */
+function graphParameters(effect: TimelineEffect): Record<string, EffectParam> {
+  return Object.fromEntries(exposedGraphValues(effect.operatorGraph).map(value => {
+    const node = effect.operatorGraph?.nodes.find(node => node.id === value.nodeId);
+    const initial = node?.constants?.value ?? effect.params[value.key];
+    return [value.key, {
+      type: 'number', label: value.label, animatable: true,
+      default: typeof initial === 'number' && Number.isFinite(initial) ? initial : 0,
+      min: value.min, max: value.max, step: value.step,
+    } satisfies EffectParam];
+  }));
+}
 
 function mapEffectParamType(param: EffectParam): PropertyValueType {
   if (param.type === 'boolean') return 'boolean';
@@ -73,7 +87,7 @@ export function getEffectDescriptorForPath(path: string, clip?: TimelineClip): P
   if (cable) return cable;
 
   const effectDefinition = getEffect(effect.type);
-  const param = effectDefinition?.params[paramName];
+  const param = effectDefinition?.params[paramName] ?? graphParameters(effect)[paramName];
   return effectDefinition && param
     ? createEffectDescriptor(effectDefinition, effect, paramName, param)
     : undefined;
@@ -84,7 +98,7 @@ export function getEffectDescriptorsForClip(clip: TimelineClip): PropertyDescrip
     const effectDefinition = getEffect(effect.type);
     if (!effectDefinition) return [];
 
-    return [...faceCableDescriptors(effect), ...Object.entries(effectDefinition.params)
+    return [...faceCableDescriptors(effect), ...Object.entries({ ...graphParameters(effect), ...effectDefinition.params })
       .filter(([name, param]) => !param.hidden || effect.type === 'face-cables' && name.startsWith('globalWind'))
       .map(([paramName, param]) => createEffectDescriptor(effectDefinition, effect, paramName, param))];
   });
