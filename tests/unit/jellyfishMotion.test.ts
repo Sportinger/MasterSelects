@@ -105,6 +105,44 @@ describe('jellyfish yarn circulation and swimming pulse', () => {
     expect(maxDifference(sample(effect, 0), sample(effect, 4))).toBe(0);
   });
 
+  it('narrows the resting returns without shortening the body or changing the knitted head', () => {
+    const effect = jellyfish();
+    effect.params.circulation_value = 0;
+    effect.params.irregularity_value = 0;
+    effect.params['pulse-strength_value'] = 0;
+    effect.params['tail-inset_value'] = 0;
+    const round = sample(effect, 0);
+    effect.params['tail-inset_value'] = 0.45;
+    const inset = sample(effect, 0);
+    expect(radialRatio(round, inset, z => z < -0.9)).toBeCloseTo(0.775, 5);
+    expect(radialRatio(round, inset, z => z > 1.1)).toBe(1);
+    // Inset peaks at the shoulders; the back cap stays fuller, avoiding a pointed tail.
+    expect(radialRatio(round, inset, z => z > 0.35 && z < 0.5)).toBeLessThan(0.6);
+    expect(radialRatio(round, inset, z => z > 0.9 && z < 1)).toBeLessThan(0.98);
+    for (let i = 2; i < round.positions.length; i += 3) expect(inset.positions[i]).toBe(round.positions[i]);
+    effect.params['tail-inset_value'] = 0.85;
+    expect(radialRatio(round, sample(effect, 0), z => z < -0.9)).toBeCloseTo(0.575, 5);
+    effect.params['tail-inset_value'] = 0;
+    expect(maxDifference(round, sample(effect, 0))).toBe(0);
+  });
+
+  it('preserves the moving head exactly while shaping the tail underneath noise and swimming', () => {
+    const effect = jellyfish();
+    for (const time of [0, 1.25, 4.7]) {
+      effect.params['tail-inset_value'] = 0;
+      const round = sample(effect, time);
+      effect.params['tail-inset_value'] = 0.45;
+      const inset = sample(effect, time);
+      let headPoints = 0;
+      for (let i = 0; i < round.positions.length; i += 3) if (round.positions[i + 2] > 1.18) {
+        headPoints++;
+        expect(inset.positions.slice(i, i + 3)).toEqual(round.positions.slice(i, i + 3));
+      }
+      expect(headPoints).toBeGreaterThan(100);
+      expect(radialRatio(round, inset, z => z < -0.9)).toBeLessThan(0.9);
+    }
+  });
+
   it('keeps both motions continuous across a trimmed or moved host clip', () => {
     const effect = jellyfish();
     const original = { id: 'original', effects: [effect], startTime: 0, inPoint: 0, outPoint: 20, duration: 20 };

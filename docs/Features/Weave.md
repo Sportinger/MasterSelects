@@ -391,14 +391,20 @@ saved effects stay in their existing browser library.
   thirteen closed cream-colored courses, a round knitted face and elongated,
   irregular return loops. This is a new reconstruction from front/side views,
   not the recovered original graph; the recording's node labels were unreadable.
-  **Body Length** and **Irregularity** control the shape. **Yarn Circulation
+  **Body Length** and **Irregularity** control the shape. **Tail Inset** (default
+  0.45, zero restores the round body) draws the loose resting loops inward with
+  a smooth transition immediately behind the front dome. The inset is strongest
+  near the front shoulders and eases toward the back to preserve a rounded cap. It acts before the animated noise
+  and swimming pulse, so the returns settle back into the narrower shape while
+  the front dome and its motion stay intact. **Yarn Circulation
   (turns/s)** moves material around the closed courses, folding it into the fixed
   front knitting window and unfolding it on exit; zero stops it and negative
   values reverse it. The independent **Jellyfish Pulse** group starts a strong,
   localized contraction at the knitted head, then carries the wave backwards
   through the loose returns at full strength; attenuation starts beyond the tail.
   **Return Motion** animates the loose loops through a smoothly drifting noise
-  field; zero freezes that drift, while **Irregularity** sets its amplitude. It does not translate
+  field; zero freezes that drift, while **Irregularity** sets its amplitude
+  (default 0.12, strongly reduced at the knitted front). It does not translate
   the whole body. **Pulse Rate (Hz)** sets the frequency; **Pulse Strength**
   sets the deformation (default 0.4); zero disables it. At defaults circulation and
   pulse repeat together after 20 source seconds. Both use clip source time,

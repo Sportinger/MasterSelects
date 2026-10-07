@@ -65,7 +65,7 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   add('offset', 'vector.combine.vec3', 1680, 600);
   for (const axis of ['x', 'y', 'z']) link(`wobble-${axis}`, 'value', 'offset', axis);
   add('handmade', 'geometry.set-position', 1960, 80);
-  link('stretch', 'curves', 'handmade', 'curves'); link('offset', 'value', 'handmade', 'offset');
+  link('tail-set', 'curves', 'handmade', 'curves'); link('offset', 'value', 'handmade', 'offset');
 
   // A second, independent motion deforms the finished centerlines. The head contracts
   // and locally advances; a narrow wave keeps its strength down the loose returns.
@@ -141,6 +141,28 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   for (const axis of ['x', 'y', 'z']) link('return-sampling', 'value', `wobble-${axis}`, 'position');
   const driftNodes = nodes.slice(driftStart).map(node => node.id);
 
+  // Shape the resting loops before noise and swimming motion. +Z is the knitted head;
+  // the inset peaks behind the dome and eases toward a rounded rear cap.
+  // Un-stretched Z keeps the profile independent of Body Length.
+  const tailStart = nodes.length;
+  control('tail-inset', 'Tail Inset', 0.45, 0, 0.85, 0.01, 0, 3900);
+  add('tail-position', 'geometry.position', 0, 3700);
+  add('tail-split', 'vector.split.vec3', 280, 3700);
+  link('tail-position', 'position', 'tail-split', 'value');
+  const tailZ = math('tail-longitudinal', 'divide-ieee', ['tail-split', 'z'], value('body-length'), 560, 3700);
+  add('tail-mask', 'field.ramp', 840, 3700, { x0: -0.55, y0: 0.5, x1: 0.3, y1: 1, x2: 0.72, y2: 0 });
+  link(...tailZ, 'tail-mask', 'value');
+  const inset = math('tail-amount', 'multiply', value('tail-mask'), value('tail-inset'), 1120, 3700);
+  const tailScale = math('tail-scale', 'subtract', value('pulse-one'), inset, 1400, 3700);
+  const tailX = math('tail-x', 'multiply', ['tail-split', 'x'], tailScale, 1680, 3620);
+  const tailY = math('tail-y', 'multiply', ['tail-split', 'y'], tailScale, 1680, 3820);
+  add('tail-shape', 'vector.combine.vec3', 1960, 3700);
+  link(...tailX, 'tail-shape', 'x'); link(...tailY, 'tail-shape', 'y');
+  link('tail-split', 'z', 'tail-shape', 'z');
+  add('tail-set', 'geometry.set-position', 1680, 80);
+  link('stretch', 'curves', 'tail-set', 'curves');
+  link('tail-shape', 'value', 'tail-set', 'position');
+  const tailNodes = nodes.slice(tailStart).map(node => node.id);
 
   add('yarn', 'geometry.yarn-profile', 2520, 80, { plies: 3, fibers: 8, radius: 0.01, plyTwist: 7, fiberTwist: -13 });
   add('flyaways', 'geometry.flyaways', 2800, 80, { density: 1.5, length: 0.055, lift: 2, hair: 0.3, seed: 7 });
@@ -153,6 +175,7 @@ export function createJellyfishReferenceGraph(): EffectOperatorGraph {
   return { version: 1, schemaVersion: 1, domain: 'geometry', nodes, edges, layout,
     groups: [
       { id: 'closed-knit', label: 'Closed Knit Body', color: '#5f9ea0', nodeIds: ['knit', 'circulation', 'position', 'split', 'body-length', 'length', 'shape', 'stretch'] },
+      { id: 'tail-shaping', label: 'Tail Shape', color: '#709ba2', nodeIds: tailNodes },
       { id: 'loose-returns', label: 'Loose Returns', color: '#8a7fd1', nodeIds: ['irregularity', 'return-position', 'return-split', 'return-mask', 'return-amount', 'wobble-x', 'wobble-y', 'wobble-z', 'x-ratio', 'z-ratio', 'x-amount', 'z-amount', 'offset', 'handmade', ...driftNodes] },
       { id: 'cream-yarn', label: 'Cream Yarn', color: '#c8a45a', nodeIds: ['yarn', 'flyaways', 'material'] },
       { id: 'jellyfish-pulse', label: 'Jellyfish Pulse', color: '#729fbc', nodeIds: pulseNodes },
