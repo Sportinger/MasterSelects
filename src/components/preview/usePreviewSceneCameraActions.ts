@@ -1,3 +1,4 @@
+import { captureCameraOrbit } from '../../services/cameraOrbitCapture';
 import { useCallback, type MutableRefObject } from 'react';
 
 import { renderHostPort } from '../../services/render/renderHostPort';
@@ -64,6 +65,7 @@ export function usePreviewSceneCameraActions({
     const engineState = useEngineStore.getState();
     const timelineState = useTimelineStore.getState();
     const clip = timelineState.clips.find((candidate) => candidate.id === clipId);
+    if (clip?.source?.type === 'camera') captureCameraOrbit(clipId, timelineState.playheadPosition - clip.startTime, values.orbitPivot);
     // A temporary reference view must yield when the user navigates the
     // scene camera; otherwise its fixed pose hides every orbit/pan update.
     if (clip?.source?.type === 'camera' && engineState.previewCameraOverride) {

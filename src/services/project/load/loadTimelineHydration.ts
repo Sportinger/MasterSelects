@@ -376,6 +376,7 @@ export function convertProjectCompositionToStore(
               }
             : undefined,
           easing: keyframe.easing as Keyframe['easing'],
+          cameraOrbitPivot: keyframe.cameraOrbitPivot,
           rotationInterpolation: keyframe.rotationInterpolation as Keyframe['rotationInterpolation'],
           handleIn: keyframe.handleIn ?? (keyframe.bezierHandles
             ? { x: keyframe.bezierHandles.x1, y: keyframe.bezierHandles.y1 }

@@ -78,6 +78,7 @@ export interface ProjectMaskPathKeyframeValue {
 export type ProjectRotationInterpolationMode = 'shortest' | 'continuous';
 
 export interface ProjectKeyframe {
+  cameraOrbitPivot?: import('../../../types/keyframes').Keyframe['cameraOrbitPivot'];
   handleIn?: { x: number; y: number };
   handleOut?: { x: number; y: number };
   hold?: boolean;

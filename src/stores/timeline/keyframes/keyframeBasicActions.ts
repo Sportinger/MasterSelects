@@ -1,3 +1,4 @@
+import { cameraOrbitKeyframeFields } from '../../../services/cameraOrbitCapture';
 import type { Keyframe } from '../../../types/keyframes';
 import type { KeyframeActions } from '../storeTypes/utilityActionTypes';
 import type { SliceCreator } from '../storeTypes/timelineStoreTypes';
@@ -68,11 +69,13 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
     const existingKeyframes = clipKeyframes.get(clipId) || [];
     const existingAtTime = getKeyframeAtTime(existingKeyframes, property, clampedTime);
 
+    const orbitFields = clip.source?.type === 'camera' && (property.startsWith('position.') || property.startsWith('rotation.'))
+      ? cameraOrbitKeyframeFields(clipId, visibleTime) : undefined;
     let newKeyframes: Keyframe[];
 
     if (existingAtTime) {
       newKeyframes = existingKeyframes.map(k =>
-        k.id === existingAtTime.id ? { ...k, value: keyframeValue, ...easingFields } : k
+        k.id === existingAtTime.id ? { ...k, value: keyframeValue, ...easingFields, ...orbitFields } : k
       );
     } else {
       const newKeyframe: Keyframe = {
@@ -82,10 +85,13 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
         property,
         value: keyframeValue,
         ...easingFields,
+        ...orbitFields,
       };
       newKeyframes = [...existingKeyframes, newKeyframe].sort((a, b) => a.time - b.time);
     }
 
+    if (orbitFields) newKeyframes = newKeyframes.map(key => Math.abs(key.time - clampedTime) < 1e-6
+      && (key.property.startsWith('position.') || key.property.startsWith('rotation.')) ? { ...key, ...orbitFields } : key);
     const newMap = new Map(clipKeyframes);
     newMap.set(clipId, newKeyframes);
     set(finalizeLinkedSpeedKeyframeMutation(clips, newMap, [{ clipId, property }]));

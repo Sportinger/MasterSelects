@@ -198,3 +198,5 @@ MasterSelects is licensed under **AGPL-3.0-only**. Commercial use is permitted u
 Linked clips selected together now share a contour outline in the timeline, following their outer edges instead of highlighting every clip individually.
 
 Projects assume saved media locations are available and open sources only when needed for preview, playback, editing or export. Unused media are not scanned on reload; only failed source access requests relinking. See [project persistence](docs/Features/Project-Repository.md).
+
+Camera **Continuous / Orbit** keyframes retain the actual Preview Orbit pivot, including off-centre objects and off-axis framing. Saved projects and copied camera keys preserve it; **Shortest Path** restores the direct move. See [camera rotation paths](docs/Features/Keyframes.md#rotation-path).

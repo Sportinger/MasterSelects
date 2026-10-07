@@ -382,6 +382,7 @@ export const ProjectKeyframeFields = {
   "value": { class: 'content', owner: 'timeline' },
   "pathValue": { class: 'content', owner: 'timeline' },
   "easing": { class: 'content', owner: 'timeline' },
+  "cameraOrbitPivot": { class: 'content', owner: 'timeline' },
   "rotationInterpolation": { class: 'content', owner: 'timeline' },
   "bezierHandles": { class: 'content', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<ProjectKeyframe>;
