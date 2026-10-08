@@ -779,3 +779,20 @@ window must fit the dock/hold/release durations and gaps. If card lifetimes or
 reserved stacks prevent an early lock, the renderer reports it explicitly.
 Changing stack timing changes appearance cues; pre-rendered sound tracks need
 regeneration separately.
+
+### Readable intro planes and released-strand warning text
+
+The first two intro planes face almost parallel to the live camera while retaining
+position lag and a small residual tilt. Their independent text depth moves along
+the viewing ray, keeping off-axis headlines beneath the upper separator rather
+than shifting them toward the frame edge. Main words sit slightly below the
+card center. Four or more language variants use at most 650 ms each (including
+letter decoding); shorter appearances compress the slots to fit all variants.
+
+**Warning Text Groups** adds up to six groups of two to four large bold red
+exclamation marks inside each released-target card. Their deterministic locations
+vary by card and appearance, with individual flicker. More groups fade in as
+Released Curve Fraction increases. They use the same GPU acquisition gate as the
+red alert tint; cards still tracking the parent do not receive these warnings.
+The existing bold glyph atlas is reused, with bounded geometry and no extra
+readback, simulation or per-frame text rasterization. Zero disables the feature.

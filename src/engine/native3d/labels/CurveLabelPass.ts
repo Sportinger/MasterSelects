@@ -1,3 +1,4 @@
+import alertShader from './curveLabelAlerts.wgsl?raw';
 import {curveLabelTrackingInputs} from './curveLabelTrackingInputs';
 import headlineShader from './curveLabelHeadlines.wgsl?raw';
 import {CurveLabelHeadlineCache} from './CurveLabelHeadlineAtlas';
@@ -34,6 +35,7 @@ export class CurveLabelPass {
   private text?:GPURenderPipeline;
   private blocks?:GPURenderPipeline;
   private lockIcon?:GPURenderPipeline;
+  private alerts?:GPURenderPipeline;
   private layout?:GPUBindGroupLayout;
   private readonly warned=new Set<string>();
   render(device:GPUDevice,encoder:GPUCommandEncoder,color:GPUTextureView,depth:GPUTextureView,
@@ -121,6 +123,9 @@ export class CurveLabelPass {
       }
       if(spec.glitchStrength>0&&glitch.age>=0&&glitch.age<=6){pass.setPipeline(this.blocks!);pass.draw(6,spec.count*6*(maxCopies+1));}
       if(curveLabelActiveLocks(spec,time).some(event=>event.amount>0)){pass.setPipeline(this.lockIcon!);pass.draw(6,20*spec.count);}
+      if((spec.alertGroups??0)>0&&spec.retarget>0&&spec.releaseProgress>0){
+        pass.setPipeline(this.alerts!);pass.draw(6,4*spec.count*spec.alertGroups);
+      }
       pass.end();
     }
   }
@@ -130,7 +135,7 @@ export class CurveLabelPass {
     this.layout=device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}},
       ...[1,2,3].map(binding=>({binding,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage' as const}})),
       {binding:4,visibility:GPUShaderStage.FRAGMENT,texture:{}},{binding:5,visibility:GPUShaderStage.FRAGMENT,sampler:{}},{binding:6,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}},{binding:7,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}}]});
-    const module=device.createShaderModule({label:'curve-scan-labels',code:common+'\n'+shader+'\n'+glitchShader+'\n'+headlineShader});
+    const module=device.createShaderModule({label:'curve-scan-labels',code:common+'\n'+shader+'\n'+glitchShader+'\n'+headlineShader+'\n'+alertShader});
     this.headlineLayout=device.createBindGroupLayout({entries:[
       {binding:0,visibility:GPUShaderStage.FRAGMENT,texture:{}},{binding:1,visibility:GPUShaderStage.FRAGMENT,sampler:{}},
       {binding:2,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}}]});
@@ -142,8 +147,8 @@ export class CurveLabelPass {
       vertex:{module,entryPoint},fragment:{module,entryPoint:'fragment',targets:[{format:'rgba16float',blend:{
         color:{srcFactor:'one',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}}}]},
       primitive:{topology:'triangle-list'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less-equal'}});
-    this.lines=pipeline('lines');this.text=pipeline('text');this.blocks=pipeline('blocks');this.lockIcon=pipeline('lockIcon');
+    this.lines=pipeline('lines');this.text=pipeline('text');this.blocks=pipeline('blocks');this.lockIcon=pipeline('lockIcon');this.alerts=pipeline('alerts');
   }
   afterSubmit():void{this.headlineAtlases.afterSubmit();}
-  dispose():void{this.headlineAtlases.dispose();this.headline=undefined;this.headlineLayout=undefined;this.tracking.dispose();this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.blocks=undefined;this.lockIcon=undefined;this.layout=undefined;this.warned.clear();}
+  dispose():void{this.headlineAtlases.dispose();this.headline=undefined;this.headlineLayout=undefined;this.tracking.dispose();this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.blocks=undefined;this.lockIcon=undefined;this.alerts=undefined;this.layout=undefined;this.warned.clear();}
 }

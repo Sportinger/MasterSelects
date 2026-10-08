@@ -16,7 +16,7 @@ export function curveLabelIntroState(spec:CurveLabelSpec,time:number):CurveLabel
     // finish early and give way to ordinary readouts within the same frame.
     const age=episode?Math.max(0,time-episode.birth):0;
     const start=Math.min(.18,(episode?.visible??1)*.05);
-    const slot=Math.min(1.05,Math.max(.01,((episode?.visible??1)-start-.22)/words.length));
+    const slot=Math.min(words.length>3?.65:1.05,Math.max(.01,((episode?.visible??1)-start-.22)/words.length));
     const local=Math.max(0,age-start),variant=Math.min(words.length-1,Math.floor(local/slot));
     const elapsed=local-variant*slot;
     const decode=Math.min(HEADLINE_DECODE_SECONDS,slot*.55);

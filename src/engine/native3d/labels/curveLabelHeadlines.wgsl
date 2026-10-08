@@ -14,7 +14,7 @@ struct HeadlineOut {
  let right=cardPoint(card,vec2f(1,0),0u)-center;let up=cardPoint(card,vec2f(0,1),0u)-center;
  let aspect=length(right)/max(length(up),1e-6);
  let textAspect=bounds.z*1024./max(bounds.w*p.headlineMotion.z,1.);
- var extent=vec2f(.73,.73*aspect/max(textAspect,.01));extent*=min(1.,.40/max(extent.y,.01));
+ var extent=vec2f(.73,.73*aspect/max(textAspect,.01));extent*=min(1.,.38/max(extent.y,.01));
  let cornerUV=corner(vertex);let q=vec2f(cornerUV.x-.5,.5-cornerUV.y)*extent;
  let time=p.clock.x;let seed=f32(card)*1.731;
  let yaw=sin(time*.57+seed)*.08*p.headlineMotion.y;
@@ -28,7 +28,13 @@ struct HeadlineOut {
  let drift=vec2f(sin(time*.49+seed),sin(time*.39+seed+2.))*.012*p.headlineMotion.y;
  let depth=p.headlineMotion.x*p.arrangement.z*(1.+sin(time*.33+seed)*.18*p.headlineMotion.y);
  let glitch=vec2f(sin(floor(time*42.)*13.+seed),cos(floor(time*37.)*7.+seed))*.006*max(0.,pulse);
- let position=center+xr*(rotated.x+drift.x+glitch.x)+yu*(rotated.y+drift.y)+normal*depth;
+ // Pull along the viewing ray: a normal-only depth offset made off-axis words
+ // drift upward/outward over the header rule. Keep depth and local 3D wobble,
+ // while placing the headline slightly below the center of its framed area.
+ let perspective=length(vec3f(p.vp[0].w,p.vp[1].w,p.vp[2].w))>.1;
+ let towardEye=p.liveEye.xyz-center;
+ let depthDirection=select(-p.liveForward.xyz,towardEye/max(length(towardEye),1e-6),perspective);
+ let position=center+xr*(rotated.x+drift.x+glitch.x)+yu*(rotated.y+drift.y-.025)+depthDirection*depth;
  var out:HeadlineOut;out.position=p.vp*vec4f(position,1);out.uv=bounds.xy+corner(vertex)*bounds.zw;
  out.bounds=bounds;out.pulse=max(0.,pulse);out.alpha=(1.+min(0.,pulse))*smoothstep(0.,.08,life(card))*p.headlineMotion.w*smoothstep(.6,1.,life(card))*select(0.,1.,index>=0.);
  return out;

@@ -225,7 +225,7 @@ Weave circulation supports an independent integrated Motion Time clock for smoot
 
 Curve Scan Labels supports independently randomized appearances, shared intro/outro cue timing, tracking hold intervals, 6–20-copy echo trails and smooth window rotations up to 45 degrees that return to camera-parallel rest. Optional brief corner locks show an animated padlock and fast priority ticker before releasing the card back into space; timed lower-side stacks can hold up to three differently sized cards per side without overlapping their reserved footprints, with optional per-card docking/release delays and separate early lock slots. A dev-only visible-material map identifies strand indices and moving material coordinates directly from depth-tested GPU fibers; its compact tracking mode also exposes the actual GPU target-acquisition state for diagnostic and sound-cue alignment.
 
-Scan-window glitch waves include emissive fragments, warped outlines and text sizes, and curved connection lines with fixed endpoints.
+Scan-window glitch waves include emissive fragments, warped outlines and text sizes, and curved connection lines with fixed endpoints. Intro readouts face the camera with brief multilingual decoding; optional bold red warning groups accumulate only after released-strand targets are acquired.
 
 Weave Motion Time also provides a normalized forward loop phase for eased cyclic material motion without an end-of-shot rewind.
 

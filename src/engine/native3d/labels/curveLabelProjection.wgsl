@@ -102,8 +102,15 @@ fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
  let tiltedRight=p.right.xyz*cos(yaw)+p.forward.xyz*sin(yaw);
  let normal=p.forward.xyz*cos(yaw)-p.right.xyz*sin(yaw);
  let tiltedUp=p.up.xyz*cos(pitch)+normal*sin(pitch);
- let right=tiltedRight*cos(roll)+tiltedUp*sin(roll);
- let up=tiltedUp*cos(roll)-tiltedRight*sin(roll);
+ var right=tiltedRight*cos(roll)+tiltedUp*sin(roll);
+ var up=tiltedUp*cos(roll)-tiltedRight*sin(roll);
+ // Intro planes retain spatial position lag, but their words face the live camera.
+ // A small residual tilt preserves depth without the ordinary 45-degree excursions.
+ if(introCard(card)){
+   right=normalize(mix(right,p.liveRight.xyz,.96));
+   up=normalize(mix(up,p.liveUp.xyz,.96));
+   up=normalize(up-right*dot(up,right));
+ }
  var floating=center+aboveCameraStacks(card,center,right,up)+right*q.x*p.right.w*cardMetrics(card).x+up*q.y*p.up.w*cardMetrics(card).y;
  // Bring held cards toward the camera without enlarging their projected footprint.
  // They retain their tilted 3D planes, but no longer sit behind the inspected yarn.

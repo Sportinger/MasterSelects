@@ -77,6 +77,16 @@ describe('Curve Scan Labels',()=>{
     for(const invalid of ['one||two','one>','a|b|c','x'.repeat(33),'line\nnext'])expect(()=>parseCurveLabelIntro(invalid)).toThrow(/Intro Titles/);
   });
 
+  it('finishes six decoded languages promptly within the first appearance',()=>{
+    const s={...spec(),count:2,introSpread:1,lifetimeVariation:0,cycle:8,dutyCycle:.72,
+      introTitles:'KUNST? > ART > L’ART > ¿ARTE? > ИСКУССТВО > कला | KANN WEG.'};
+    for(let variant=0;variant<6;variant++){
+      const state=curveLabelIntroState(s,.18+variant*.65+.5)[0];
+      expect(state.card).toBe(0);expect(state.row).toBe(variant*8+7);
+    }
+    expect(curveLabelIntroState(s,4.35)[0].pulse).toBe(-1);
+  });
+
   it('pins chosen cards to exact material coordinates without changing released destinations',()=>{
     const s={...spec(),count:3,firstStrand:0,strandStep:1,start:.4,step:.1,anchorOverrides:'0:1@0.25 | 2:0@1'};
     const starts=Uint32Array.of(0,5),counts=Uint32Array.of(5,9);
