@@ -750,3 +750,7 @@ During the hold, the full projected footprint of these cards is kept within the 
 **Locked Cards per Side** reserves up to three cards in each lower screen corner between **Stack Lock Start/End**. Cards dock with a slight row stagger, show their own animated padlock and fast priority readout, stay aligned to the live camera, then return smoothly to their floating planes. Sizes remain varied: the placement sums each column's actual card heights and gaps, scaling the column when needed to fit the lower region without overlapping the stacked card footprints. The stack planes move nearer while preserving their screen size, so the inspected object does not hide their text. Other floating planes yield above the reserved lower region during the lock, retaining their depth and orientation lag.
 
 The stack interval extends these cards' shared appearance schedule, including intro/outro audio cues; regenerate pre-rendered cue audio after changing it. Existing material tracking holds can follow or overlap a stack. Individual brief locks that overlap the reserved interval are skipped. Zero cards per side disables stacks and preserves older projects; an enabled stack requires enough cards for both sides and at least 1.5 seconds to dock and release.
+
+Opaque WebCodecs/HTMLVideo export now matches preview coverage on GPU readback:
+soft dust and thin yarn RGB are not attenuated again by residual compositor alpha.
+See [Export](/docs/features/export/) for the readback and stacked-alpha contracts.

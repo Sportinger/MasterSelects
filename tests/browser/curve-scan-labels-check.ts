@@ -1,3 +1,4 @@
+import {probeExportOutputParity} from './exportOutputParityProbe';
 import {probeCameraStacks} from './curveLabelStackProbe';
 import {curveLabelIntroState} from '../../src/engine/native3d/labels/curveLabelIntro';
 import {probeStrandIds} from './strandIdsGpuProbe';
@@ -21,6 +22,7 @@ let validationDevice:GPUDevice|undefined;
 try{
  const adapter=await navigator.gpu.requestAdapter();if(!adapter)throw new Error('No GPU adapter');
  const device=await adapter.requestDevice();validationDevice=device;device.pushErrorScope('validation');
+ result.exportOutputParity=await probeExportOutputParity(device);
  const width=512,height=768;
  const hdr=device.createTexture({size:[width,height],format:'rgba16float',usage:GPUTextureUsage.RENDER_ATTACHMENT|GPUTextureUsage.COPY_SRC});
  const depth=device.createTexture({size:[width,height],format:'depth24plus',usage:GPUTextureUsage.RENDER_ATTACHMENT});

@@ -36,6 +36,16 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 - Lower in the panel, `Advanced Video`, `Advanced Audio`, and `Range & Summary` sections provide raw-value access.
 - Export settings, presets, and the batch queue live in `exportStore` and are restored with the project. They are not timeline undo/redo history entries.
 
+### Opaque preview/export parity
+
+WebCodecs and HTMLVideo video exports preserve the compositor's displayed RGB when
+using GPU readback (including the Linux canvas-capture fallback). Ordinary output
+sets alpha to opaque before publishing the export preview or passing pixels to the
+encoder, matching the normal preview output shader. Partially transparent dust,
+soft glows and thin strands are therefore not multiplied by their coverage a
+second time. Stacked-alpha output keeps its separate coverage plane, and image or
+native-alpha consumers retain their existing readback contract.
+
 ### Render Quality
 
 Single-sample Raster exports show frame progress only, without a flashing sample

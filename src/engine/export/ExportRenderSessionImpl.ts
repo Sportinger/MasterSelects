@@ -1,4 +1,5 @@
 import { stackExportAlpha } from './stackExportAlpha';
+import { opaqueExportPixels } from './opaqueExportPixels';
 import type {
   ExportFrameCapture,
   ExportRenderFrameInput,
@@ -35,6 +36,8 @@ export interface ExportRenderSessionOptions {
   readonly width: number;
   readonly height: number;
   readonly stackedAlpha: boolean;
+  /** Opaque video output must match the canvas output shader, including on readback fallback. */
+  readonly readbackAlpha?: 'preserve' | 'opaque';
   readonly preferZeroCopy: boolean;
   readonly host?: ExportRenderHostPort;
   readonly frameDecorator?: ExportRenderFrameDecorator;
@@ -206,6 +209,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   private readonly height: number;
   private readonly compositionId: string;
   private readonly stackedAlpha: boolean;
+  private readonly readbackAlpha: 'preserve' | 'opaque';
   private readonly preferZeroCopy: boolean;
   private readonly host: ExportRenderHostPort;
   private readonly frameDecorator?: ExportRenderFrameDecorator;
@@ -224,6 +228,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     this.width = options.width;
     this.height = options.height;
     this.stackedAlpha = options.stackedAlpha;
+    this.readbackAlpha = options.readbackAlpha ?? 'preserve';
     this.preferZeroCopy = options.preferZeroCopy;
     this.host = options.host ?? exportRenderHostPort;
     this.frameDecorator = options.frameDecorator;
@@ -411,6 +416,13 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
         `Export readback returned ${pixels.byteLength} RGBA bytes; expected ` +
         `${expectedByteLength} for ${this.width}x${captureHeight}.`
       );
+    }
+
+    // WebCodecs' ordinary video output is opaque, just like output.wgsl.
+    // Do this before both preview publication and encoding,
+    // while retaining the original alpha plane for stacked/native-alpha output.
+    if (!this.stackedAlpha && this.readbackAlpha === 'opaque') {
+      pixels = opaqueExportPixels(pixels);
     }
 
     return {

@@ -312,7 +312,7 @@ describe('ExportRenderSessionImpl', () => {
     const pixels = Uint8ClampedArray.of(40, 80, 120, 64, 10, 20, 30, 255);
     vi.mocked(host.readPixels).mockResolvedValue(pixels);
     const session = new ExportRenderSessionImpl({ runId: 'linux-alpha', compositionId: 'comp',
-      width: 2, height: 1, stackedAlpha: true, preferZeroCopy: true, host });
+      width: 2, height: 1, stackedAlpha: true, readbackAlpha: 'opaque', preferZeroCopy: true, host });
     await session.begin();
     expect(session.usesZeroCopy).toBe(false);
     const capture = await session.renderFrame({ time: 0, layers });
@@ -322,6 +322,35 @@ describe('ExportRenderSessionImpl', () => {
     expect([...capture.pixels]).toEqual([40, 80, 120, 255, 10, 20, 30, 255, 64, 64, 64, 255, 255, 255, 255, 255]);
     expect(pixels[3]).toBe(64);
     expect(host.createVideoFrameFromExport).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('captures opaque readback, including failed canvas capture (%s)', async (canvasCaptureFails) => {
+    const host = createInjectedHost();
+    const pixels = Uint8ClampedArray.of(12, 9, 6, 32, 220, 210, 180, 255);
+    vi.mocked(host.readPixels).mockResolvedValue(pixels);
+    vi.mocked(host.initExportCanvas).mockReturnValue(canvasCaptureFails);
+    const session = new ExportRenderSessionImpl({ runId: 'opaque-readback', compositionId: 'comp',
+      width: 2, height: 1, stackedAlpha: false, readbackAlpha: 'opaque',
+      preferZeroCopy: canvasCaptureFails, host });
+    await session.begin();
+    const capture = await session.renderFrame({ time: 0, layers });
+    if (capture.kind !== 'rgba-pixels') throw new Error('Expected readback');
+    expect([...capture.pixels]).toEqual([12, 9, 6, 255, 220, 210, 180, 255]);
+    expect(pixels[3]).toBe(32);
+    session.dispose();
+  });
+
+  it('preserves alpha for native-alpha and image consumers by default', async () => {
+    const host = createInjectedHost();
+    const pixels = Uint8ClampedArray.of(12, 9, 6, 32);
+    vi.mocked(host.readPixels).mockResolvedValue(pixels);
+    const session = new ExportRenderSessionImpl({ runId: 'alpha-readback', compositionId: 'comp',
+      width: 1, height: 1, stackedAlpha: false, preferZeroCopy: false, host });
+    await session.begin();
+    const capture = await session.renderFrame({ time: 0, layers });
+    if (capture.kind !== 'rgba-pixels') throw new Error('Expected readback');
+    expect([...capture.pixels]).toEqual([12, 9, 6, 32]);
+    session.dispose();
   });
 
   it('passes an injected export host into mask texture sync', async () => {

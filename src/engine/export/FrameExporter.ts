@@ -292,6 +292,7 @@ export class FrameExporter {
       height,
       stackedAlpha: !!this.settings.stackedAlpha,
       preferZeroCopy: zeroCopySurfaceAdmission.admitted,
+      readbackAlpha: 'opaque',
       frameDecorator: this.settings.frameDecorator,
     });
     this.renderSession = renderSession;
