@@ -724,11 +724,11 @@ Rings trace their circumference during the shared intro, at constant radius and 
 
 ### Multilingual 3D intro headlines
 
-**Intro Titles** replaces the first two cards' initial readouts with bold white headlines. Use `KUNST? > ART > कला | KANN WEG.`: `|` separates the two cards, `>` separates language variants. Whole phrases are shaped as Unicode text rather than individual ASCII glyphs. The first phrase remains through the first 55% of the episode; later phrases change with a short slice/chromatic text glitch. Subsequent card episodes return to ordinary scan readouts. Empty Intro Titles preserves regular cards.
+**Intro Titles** places bold multilingual text inside the first two detailed readout cards. Use `KUNST? > ART > कला | KANN WEG. > CAN GO. > À JETER.`: `|` separates cards, `>` separates language variants. Each phrase decodes from changing characters over about 420 ms, rests briefly, and switches after about 1.05 seconds. Whole grapheme clusters settle together, including punctuation and Indic combining marks. After the last phrase a short fade returns to ordinary readouts; the existing card, ring and intro/outro audio schedule stays intact. Short card episodes compress these timings. Empty Intro Titles preserves regular cards.
 
-**Intro Card Scale** and **Intro Camera Distance** make these cards larger and closer while retaining camera lag and free-space placement. **Intro Text Depth** separates the text plane from the frame; **Intro Text Motion** adds independent slow 3D drift and rotation. Atlas resources stay outside project data and retire after GPU submission, including multiple label layers.
+**Intro Card Scale** and **Intro Camera Distance** make these cards larger and closer while retaining camera lag and free-space placement. **Intro Text Depth** separates the text plane from the frame; **Intro Text Motion** adds independent slow 3D drift and rotation. Warm cream text has a subtle vertical gradient and a one-sample offset shadow, surrounded by small optical/material readouts, separators and a moving progress accent. Text opacity remains independent of the dimmer frame while respecting layer opacity.
 
-Intro text has its own opacity (while still following the layer opacity), so white headlines remain bright over dimmer frames. Intro placement contains the enlarged projected card footprint within the shot, including depth and tilt. Readout separators are omitted during the headline episode.
+Decode variants are rasterized once per phrase set, with whole-line Unicode shaping, into a bounded two-column software atlas (at most 1024×7168 for the maximum 16 phrases). Playback only selects atlas tiles; it does not re-rasterize text per frame. Atlas resources stay outside project data and retire after GPU submission, including multiple label layers. Intro placement contains the enlarged projected card footprint within the shot, including depth and tilt.
 
 
 ### Smooth direction changes

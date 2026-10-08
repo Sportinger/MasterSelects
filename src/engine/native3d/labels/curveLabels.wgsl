@@ -97,7 +97,12 @@ fn corner(vertex:u32)->vec2f {
  }
  if(item<32u){drawn=clamp(smoothstep(.28,.80,reveal)*32.-f32(item),0.,1.);}
  if(item>=32u&&item<=35u){drawn=smoothstep(.70,.95,reveal);}
- if(introCard(card)&&item>=32u&&item<36u){drawn=0.;}
+ if(introCard(card)&&item>=32u&&item<35u){
+   let y=select(select(.24,-.24,item==33u),-.47,item==34u);
+   a=windowPoint(card,vec2f(-.40,y),copy);
+   let progress=select(1.,.1+.9*fract(cardPhase(card)*.21),item==34u);
+   b=windowPoint(card,vec2f(-.40+.80*progress,y),copy);
+ }
  if(item<36u){
    let offset=windowGlitchOffset(card,f32(item/4u));
    let shift=cardPoint(card,offset,copy)-cardPoint(card,vec2f(0),copy);a+=shift;b+=shift;
@@ -146,6 +151,10 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  var position=vec2f(-.445+(f32(col)+q.x)*.0445,.39-(f32(row)+q.y)*.208)*select(1.,.76,roundCard(card));
  if(p.motion.z>.5&&row>0u){position.x+=sin(p.clock.x*.8+f32(card)*1.3+f32(row))*.006;}
  if(p.motion.z>.5&&card%4u>=2u){position.y*=p.metrics.y/max(cardMetrics(card).y,.001);}
+ if(introCard(card)){
+   let decoded=select(p.headline.z,p.headline.w,abs(f32(card)-p.intro.y)<.1)>-1.;
+   if(decoded){position=vec2f(-.40+(f32(col)+q.x)*.040,select(.43,-.30,row==3u)-q.y*.12);}
+ }
  position*=1.+(fract(f32(card)*.618034+.1)*2.-1.)*.12*p.animation.w;
  let group=f32(row*4u+col/5u);
  let groupCenter=vec2f(-.445+(f32((col/5u)*5u)+2.5)*.0445,.39-(f32(row)+.5)*.208)*select(1.,.76,roundCard(card));
@@ -157,7 +166,7 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  out.accent=select(0.,smoothstep(1.2,1.5,phase)*(1.-smoothstep(3.5,3.8,phase)),accent);
  let face=select(select(0u,card%3u,p.motion.z>.5),3u,bold);
  out.uv=(vec2f(f32(glyph%16u),f32(glyph/16u+face*6u))+q)/vec2f(16,24);
- out.alpha=fade(card)*echoAlpha(card,copy)*smoothstep(.60,1.,life(card))*select(1.,0.,introCard(card));return out;
+ out.alpha=fade(card)*echoAlpha(card,copy)*smoothstep(.60,1.,life(card));return out;
 }
 @vertex fn blocks(@builtin(vertex_index) vertex:u32,@builtin(instance_index) instance:u32)->Out {
  let count=u32(p.arrangement.w);let card=(instance/6u)%count;let copy=(instance/6u)/count;let block=instance%6u;

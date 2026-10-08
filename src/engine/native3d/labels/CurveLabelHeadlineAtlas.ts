@@ -1,4 +1,5 @@
-const WIDTH=1024,ROW_HEIGHT=256;
+import {curveLabelDecodeFrames} from './curveLabelDecode';
+const WIDTH=1024,TILE_WIDTH=512,ROW_HEIGHT=112;
 /** Whole-line rasterization keeps Indic shaping intact; texture bounds retain natural letter proportions. */
 export class CurveLabelHeadlineAtlas {
   readonly texture:GPUTexture;
@@ -6,19 +7,20 @@ export class CurveLabelHeadlineAtlas {
   readonly sampler:GPUSampler;
   readonly height:number;
   constructor(device:GPUDevice,phrases:readonly string[]){
-    this.height=Math.max(1,phrases.length)*ROW_HEIGHT;
+    const frames=phrases.flatMap(curveLabelDecodeFrames);
+    this.height=Math.max(1,Math.ceil(frames.length/2))*ROW_HEIGHT;
     const canvas=new OffscreenCanvas(WIDTH,this.height),ctx=canvas.getContext('2d');
     if(!ctx)throw new Error('Curve Scan Labels need a 2D canvas to shape intro titles.');
-    const bounds=new Float32Array(Math.max(1,phrases.length)*4);
+    const bounds=new Float32Array(Math.max(1,frames.length)*4);
     ctx.fillStyle='white';ctx.textAlign='left';ctx.textBaseline='alphabetic';
-    phrases.forEach((phrase,row)=>{
+    frames.forEach((phrase,row)=>{
       const font=(size:number)=>`900 ${size}px "Noto Sans", "Noto Sans Devanagari", sans-serif`;
-      ctx.font=font(160);const initial=ctx.measureText(phrase);
-      const size=Math.min(160,160*(WIDTH-64)/Math.max(1,initial.width));ctx.font=font(size);
+      ctx.font=font(68);const initial=ctx.measureText(phrase);
+      const size=Math.min(68,68*(TILE_WIDTH-32)/Math.max(1,initial.width),68*(ROW_HEIGHT-12)/Math.max(1,initial.actualBoundingBoxAscent+initial.actualBoundingBoxDescent));ctx.font=font(size);
       const m=ctx.measureText(phrase),left=m.actualBoundingBoxLeft,right=m.actualBoundingBoxRight;
       const ascent=m.actualBoundingBoxAscent,descent=m.actualBoundingBoxDescent;
       const width=left+right,height=ascent+descent;
-      const x=(WIDTH-width)/2,y=row*ROW_HEIGHT+(ROW_HEIGHT-height)/2;
+      const x=(row%2)*TILE_WIDTH+(TILE_WIDTH-width)/2,y=Math.floor(row/2)*ROW_HEIGHT+(ROW_HEIGHT-height)/2;
       ctx.fillText(phrase,x+left,y+ascent);
       const pad=3;
       bounds.set([(x-pad)/WIDTH,(y-pad)/this.height,(width+2*pad)/WIDTH,(height+2*pad)/this.height],row*4);

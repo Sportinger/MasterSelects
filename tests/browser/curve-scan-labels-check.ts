@@ -75,24 +75,25 @@ try{
  const onSurface=await draw(.06,(centerDepth+skinDepth)/2);
  const hiddenBehindOther=await draw(.06,.9);
  delete plan.layer.strands.program.render!.profile;
- const alphaSum=(v:number[])=>{let sum=0;for(let y=height/2-9;y<height/2+10;y++)for(let x=width/2-9;x<width/2+10;x++)sum+=v[(y*width+x)*4+3];return sum;};
+ // Isolate amber ring coverage: the green leader already grows during this intro.
+ const alphaSum=(v:number[])=>{let sum=0;for(let y=height/2-9;y<height/2+10;y++)for(let x=width/2-9;x<width/2+10;x++){const i=(y*width+x)*4; if(v[i]>v[i+1]&&v[i+1]>v[i+2])sum+=v[i+3];}return sum;};
+ result.markerSurface={buried:alphaSum(buried),surface:alphaSum(onSurface),foreground:alphaSum(hiddenBehindOther)};
  if(alphaSum(buried)>.01||alphaSum(onSurface)<5||alphaSum(hiddenBehindOther)>.01)
    throw new Error('Tracking rings must clear their own yarn surface but remain occluded by foreground geometry.');
- result.markerSurface={buried:alphaSum(buried),surface:alphaSum(onSurface),foreground:alphaSum(hiddenBehindOther)};
 
  Object.assign(spec,initial);
 
  const headlineOriginal={...spec};
  Object.assign(spec,{introSpread:5,lifetimeVariation:1,scheduleSeed:17,introTitles:'KUNST? > ART > कला | KANN WEG.'});
- const whiteCount=(pixels:number[])=>pixels.reduce((count,n,i)=>count+(i%4===0&&n>.9&&pixels[i+1]>.9&&pixels[i+2]>.9?1:0),0);
+ const whiteCount=(pixels:number[])=>pixels.reduce((count,n,i)=>count+(i%4===0&&n>.65&&pixels[i+1]>.6&&pixels[i+2]>.4&&n>=pixels[i+1]&&pixels[i+1]>=pixels[i+2]?1:0),0);
  const headlineEarly=await draw(.6);
- const firstIntro=curveLabelEpisode(spec,0,0),hindiTime=firstIntro.birth+firstIntro.visible*.84;
+ const firstIntro=curveLabelEpisode(spec,0,0),hindiTime=firstIntro.birth+2.8;
  const hindi=await draw(hindiTime),hindiState=curveLabelIntroState(spec,hindiTime);
  const movingHeadline=await draw(2.1);spec.introTextMotion=0;spec.introTextDepth=0;const flatHeadline=await draw(2.1);
  const headlineDepthDifference=movingHeadline.reduce((count,n,i)=>count+(Math.abs(n-flatHeadline[i])>.1?1:0),0);
  const lateHeadlines=await draw(40);spec.introTitles='';const ordinaryLate=await draw(40);
- if(whiteCount(headlineEarly)<100||whiteCount(hindi)<50||hindiState[0].row!==2||headlineDepthDifference<100||lateHeadlines.some((n,i)=>n!==ordinaryLate[i]))
-   throw new Error('Headlines must render white shaped words, change language, move independently in depth and end after the first episode.');
+ if(whiteCount(headlineEarly)<100||whiteCount(hindi)<50||hindiState[0].row!==23||headlineDepthDifference<100||lateHeadlines.some((n,i)=>n!==ordinaryLate[i]))
+   throw new Error('Headlines must render cream shaped words, change language, move independently in depth and end after the first episode.');
  result.headlines={earlyWhite:whiteCount(headlineEarly),hindiWhite:whiteCount(hindi),hindiState,headlineDepthDifference};
  Object.assign(spec,headlineOriginal);
  const first=await draw();
@@ -229,8 +230,9 @@ try{
    smoothestStep=Math.max(smoothestStep,...a.map((v,i)=>Math.abs(v-b[i])));
    if(a.some(v=>Math.abs(v)>Math.PI/4+1e-6))throw new Error('Window excursion exceeded 45 degrees');
  }
+ result.windowRotation={first:rotationFirst,later:rotationLater,maxFrameStep:smoothestStep,alignedSamples:aligned};
  if(aligned.some(n=>n<5)||smoothestStep>.0045)throw new Error('Window rotations do not settle parallel or jump between excursions');
- result.windowRotation={first:rotationFirst,later:rotationLater,maxFrameStep:smoothestStep,alignedSamples:aligned};angles.destroy();
+ angles.destroy();
  const lockModule=device.createShaderModule({code:projectionShader+`
 @group(0) @binding(0) var<uniform> p:Params;
 @group(0) @binding(1) var<storage,read_write> positions:array<vec4f>;

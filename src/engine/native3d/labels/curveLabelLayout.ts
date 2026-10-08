@@ -1,3 +1,4 @@
+import {curveLabelIntroState} from './curveLabelIntro';
 import {parseCurveLabelAnchors} from '../../../services/operators/geometry/curveLabelAnchors';
 import {curveLabelLock,curveLabelLockReadouts} from './curveLabelLock';
 import {curveLabelEpisode,curveLabelReveal} from './curveLabelSchedule';
@@ -38,11 +39,17 @@ export function curveLabelLife(spec:CurveLabelSpec,time:number,card:number):{pha
 /** Coordinate slots (256+) are formatted in the shader from the current world-space anchor. */
 export function curveLabelGlyphs(spec:CurveLabelSpec,time:number):Uint32Array {
   const out=new Uint32Array(spec.count*LABEL_GLYPHS).fill(32),titles=spec.titles.toUpperCase().split('|').filter(Boolean);
-  const lock=curveLabelLock(spec,time);
+  const lock=curveLabelLock(spec,time),intro=curveLabelIntroState(spec,time);
   for(let card=0;card<spec.count;card++){
     if(lock?.card===card&&lock.amount>.01){
       curveLabelLockReadouts(lock).forEach((row,r)=>{for(let c=0;c<Math.min(LABEL_COLUMNS,row.length);c++)
         out[card*LABEL_GLYPHS+r*LABEL_COLUMNS+c]=row.charCodeAt(c)+(r===0?2048:0);});
+      continue;
+    }
+    const opening=intro.find(item=>item.card===card&&item.pulse>-1);
+    if(opening){
+      const rows=[`OPTICAL / ${String(card+1).padStart(3,'0')}`,'','','MATERIAL / LIVE SCAN'];
+      rows.forEach((row,r)=>{for(let c=0;c<Math.min(LABEL_COLUMNS,row.length);c++)out[card*LABEL_GLYPHS+r*LABEL_COLUMNS+c]=row.charCodeAt(c);});
       continue;
     }
     const {cycle}=curveLabelEpisode(spec,time,card);

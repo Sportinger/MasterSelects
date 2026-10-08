@@ -14,7 +14,7 @@ struct HeadlineOut {
  let right=cardPoint(card,vec2f(1,0),0u)-center;let up=cardPoint(card,vec2f(0,1),0u)-center;
  let aspect=length(right)/max(length(up),1e-6);
  let textAspect=bounds.z*1024./max(bounds.w*p.headlineMotion.z,1.);
- var extent=vec2f(.9,.9*aspect/max(textAspect,.01));extent*=min(1.,.74/max(extent.y,.01));
+ var extent=vec2f(.73,.73*aspect/max(textAspect,.01));extent*=min(1.,.40/max(extent.y,.01));
  let cornerUV=corner(vertex);let q=vec2f(cornerUV.x-.5,.5-cornerUV.y)*extent;
  let time=p.clock.x;let seed=f32(card)*1.731;
  let yaw=sin(time*.57+seed)*.08*p.headlineMotion.y;
@@ -27,10 +27,10 @@ struct HeadlineOut {
  let rotated=vec2f(q.x*cos(roll)-q.y*sin(roll),q.x*sin(roll)+q.y*cos(roll));
  let drift=vec2f(sin(time*.49+seed),sin(time*.39+seed+2.))*.012*p.headlineMotion.y;
  let depth=p.headlineMotion.x*p.arrangement.z*(1.+sin(time*.33+seed)*.18*p.headlineMotion.y);
- let glitch=vec2f(sin(floor(time*42.)*13.+seed),cos(floor(time*37.)*7.+seed))*.014*pulse;
+ let glitch=vec2f(sin(floor(time*42.)*13.+seed),cos(floor(time*37.)*7.+seed))*.006*max(0.,pulse);
  let position=center+xr*(rotated.x+drift.x+glitch.x)+yu*(rotated.y+drift.y)+normal*depth;
  var out:HeadlineOut;out.position=p.vp*vec4f(position,1);out.uv=bounds.xy+corner(vertex)*bounds.zw;
- out.bounds=bounds;out.pulse=pulse;out.alpha=smoothstep(0.,.08,life(card))*p.headlineMotion.w*smoothstep(.6,1.,life(card))*select(0.,1.,index>=0.);
+ out.bounds=bounds;out.pulse=max(0.,pulse);out.alpha=(1.+min(0.,pulse))*smoothstep(0.,.08,life(card))*p.headlineMotion.w*smoothstep(.6,1.,life(card))*select(0.,1.,index>=0.);
  return out;
 }
 @fragment fn headlineFragment(in:HeadlineOut)->@location(0) vec4f {
@@ -42,6 +42,12 @@ struct HeadlineOut {
  let red=textureSampleLevel(headlines,headlineSampler,clamp(uv-split,lo,hi),0.).a;
  let green=textureSampleLevel(headlines,headlineSampler,uv,0.).a;
  let blue=textureSampleLevel(headlines,headlineSampler,clamp(uv+split,lo,hi),0.).a;
- let alpha=max(red,max(green,blue))*in.alpha;
- return vec4f(vec3f(red,green,blue)*in.alpha,alpha);
+ let coverage=max(red,max(green,blue));
+ let local=(in.uv-in.bounds.xy)/in.bounds.zw;
+ let cream=mix(vec3f(1.,.965,.87),vec3f(.79,.72,.59),clamp(local.y,0.,1.));
+ // One extra alpha lookup supplies a cheap offset shadow; no blur pass or lighting.
+ let shadowUV=clamp(uv+in.bounds.zw*vec2f(-.009,-.045),lo,hi);
+ let shadow=textureSampleLevel(headlines,headlineSampler,shadowUV,0.).a*.65;
+ let alpha=(coverage+shadow*(1.-coverage))*in.alpha;
+ return vec4f((vec3f(red,green,blue)*cream+vec3f(.035,.015,.009)*shadow*(1.-coverage))*in.alpha,alpha);
 }
