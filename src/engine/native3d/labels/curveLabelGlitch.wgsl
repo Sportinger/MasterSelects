@@ -17,7 +17,7 @@ fn glitchEnvelope(age:f32,arrival:f32,recovery:f32)->f32 {
 }
 fn windowGlitch(card:u32)->f32 {
  if(p.glitch.z<=0.||p.glitch.x<0.||p.glitch.x>6.){return 0.;}
- let center=p.vp*vec4f(projectedCardPoint(card,vec2f(0),offsets[card].xy),1);
+ let center=p.vp*vec4f(placedCardPoint(card,vec2f(0),offsets[card].xy,offsets[card].z),1);
  if(center.w<=.001){return 0.;}
  return glitchEnvelope(p.glitch.x,glitchArrival(center.xy/center.w),glitchRecovery(card))*p.glitch.z;
 }

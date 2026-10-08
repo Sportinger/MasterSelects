@@ -66,7 +66,8 @@ field from projected GPU points. A separable spatial blur suppresses narrow gaps
 and individual moving strands before cards choose space. Unlocked cards search a
 7×9 grid across the whole live camera image, including upper corners and the
 opposite side; they are no longer constrained to their original row. Candidate
-positions are solved back into each lagged 3D plane, retaining depth and rotation.
+positions translate the lagged card in the live image plane, retaining its depth
+and rotation. This avoids unstable inversion when the lagged plane is edge-on.
 The complete projected card footprint contributes occupancy and frame-edge costs.
 Continuous weights and stable per-card preferences reduce position hunting; locked
 cards retain their camera slots and avoidance fades out during docking.
@@ -75,7 +76,14 @@ visible cards. Visibility weights follow the shared intro/outro schedule, so
 hidden windows do not reserve space. Locked cards remain fixed obstacles; floating
 cards yield around them, preferring routes with less yarn occupancy. Tilted card
 footprints include a reading margin, and both sides of each pair see the same
-layout snapshot before a round advances.
+layout snapshot before a round advances. Smaller separation steps reduce lateral
+pressure. Congested floating cards can yield up to 55% of their camera distance
+along their center sightline; perspective makes their fixed world-size planes
+appear smaller. Clear, large foreground cards retain their authored size and
+rotation. Orthographic cameras retain apparent size while moving the plane deeper.
+There is no hard shared height ceiling above stacks: only visible locked card
+footprints reserve space, avoiding a flat constraint that trapped free cards and
+made the placement inversion singular.
 This is a soft layout preference, not a collision guarantee: cards may overlap
 one another or the subject when space is scarce. Spatial smoothing reduces
 sensitivity to fine strand motion; it is not a temporal speed limit. Layout is
@@ -758,7 +766,7 @@ During the hold, the full projected footprint of these cards is kept within the 
 
 ### Stacked camera locks
 
-**Locked Cards per Side** reserves up to three cards in each lower screen corner between **Stack Lock Start/End**. Cards dock with a slight row stagger, show their own animated padlock and fast priority readout, stay aligned to the live camera, then return smoothly to their floating planes. Sizes remain varied: the placement sums each column's actual card heights and gaps, scaling the column when needed to fit the lower region without overlapping the stacked card footprints. The stack planes move nearer while preserving their screen size, so the inspected object does not hide their text. Other floating planes yield above the reserved lower region during the lock, retaining their depth and orientation lag.
+**Locked Cards per Side** reserves up to three cards in each lower screen corner between **Stack Lock Start/End**. Cards dock with a slight row stagger, show their own animated padlock and fast priority readout, stay aligned to the live camera, then return smoothly to their floating planes. Sizes remain varied: the placement sums each column's actual card heights and gaps, scaling the column when needed to fit the lower region without overlapping the stacked card footprints. The stack planes move nearer while preserving their screen size, so the inspected object does not hide their text. Other floating planes avoid the visible locked footprints through the shared placement solver, retaining their orientation lag and optionally yielding in depth when crowded.
 
 The stack interval extends these cards' shared appearance schedule, including intro/outro audio cues; regenerate pre-rendered cue audio after changing it. Existing material tracking holds can follow or overlap a stack. Individual brief locks that overlap the reserved interval are skipped. Zero cards per side disables stacks and preserves older projects; an enabled stack requires enough cards for both sides and at least 1.5 seconds to dock and release.
 

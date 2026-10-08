@@ -35,7 +35,7 @@ fn signalColor(card:u32,base:vec3f)->vec3f {
 }
 fn cardPoint(card:u32,q:vec2f,copy:u32)->vec3f {
  let trail=f32(copy)*(1.-cameraLockAmount(card));
- return projectedCardPoint(card,q,offsets[card].xy)+heldCardOffset(card,p.forward.xyz*p.arrangement.z*.045*trail
+ return placedCardPoint(card,q,offsets[card].xy,offsets[card].z)+heldCardOffset(card,p.forward.xyz*p.arrangement.z*.045*trail
    +p.right.xyz*p.right.w*.022*trail+p.up.xyz*p.up.w*.014*trail);
 }
 fn windowPoint(card:u32,q:vec2f,copy:u32)->vec3f {

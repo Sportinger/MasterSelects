@@ -70,34 +70,20 @@ fn cameraStackMetrics(card:u32)->vec3f {
  let scale=min(1.,1.05/max(.01,total+.08*max(0.,p.stack.x-1.)));
  return vec3f(cardMetrics(card)*scale,(-.90+(preceding+cardMetrics(card).y*.5)*scale));
 }
-// Keep ordinary floating cards out of the temporarily reserved lower columns.
-// Translate their entire tilted plane in live screen-up; their orientation and depth lag remain intact.
-fn aboveCameraStacks(card:u32,center:vec3f,right:vec3f,up:vec3f)->vec3f {
- if(p.stack.x<=0.||f32(card)<p.stack.x*2.){return vec3f(0);}
- let end=p.stack.z+max(0.,p.stack.x*2.-1.)*p.stack.w;
- let amount=rotationEase((p.clock.x-p.stack.y+.3)/.8)*rotationEase((end-p.clock.x)/.7);
- if(amount<=0.){return vec3f(0);}
- let clip=p.vp*vec4f(center,1);if(clip.w<=.001){return vec3f(0);}
- let metrics=cardMetrics(card);
- let r=p.vp*vec4f(right*p.right.w*metrics.x*.59,0);
- let u=p.vp*vec4f(up*p.up.w*metrics.y*.59,0);
- let extent=(abs(r.y)+abs(u.y)+abs(clip.y/clip.w)*(abs(r.w)+abs(u.w)))/max(.001,clip.w-abs(r.w)-abs(u.w));
- let topLeft=cameraStackMetrics(u32(p.stack.x-1.)*2u);
- let topRight=cameraStackMetrics(u32(p.stack.x-1.)*2u+1u);
- let ceiling=max(topLeft.z+topLeft.y*.5,topRight.z+topRight.y*.5)+.08;
- let lift=max(0.,ceiling+extent-clip.y/clip.w)*amount;
- let perspective=length(vec3f(p.vp[0].w,p.vp[1].w,p.vp[2].w))>.1;
- let units=p.liveUp.w*select(1.,clip.w/max(.001,p.arrangement.z),perspective);
- return p.liveUp.xyz*(lift*units);
-}
 fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
  let rows=ceil(p.arrangement.w*.5);let row=f32(card/2u);let side=select(-1.,1.,card%2u==1u);
  let introDistance=select(1.,p.intro.w,introCard(card));
  let depth=introDistance*p.arrangement.z*(1.+sin(f32(card)*2.399963+.5)*p.tracking.w
    +sin(p.clock.x*p.animation.x*.32+f32(card)*1.91)*p.animation.y);
- let center=p.eye.xyz+p.forward.xyz*depth
-   +p.right.xyz*p.right.w*introDistance*(side*p.arrangement.x+shift.x)
-   +p.up.xyz*p.up.w*introDistance*(((rows-1.)*.5-row)*labelRowSpacing()+shift.y);
+ let baseCenter=p.eye.xyz+p.forward.xyz*depth
+   +p.right.xyz*p.right.w*introDistance*side*p.arrangement.x
+   +p.up.xyz*p.up.w*introDistance*((rows-1.)*.5-row)*labelRowSpacing();
+ // Avoidance translates in the LIVE image plane, independently of lagged card
+ // orientation. Inverting an edge-on lagged plane otherwise amplifies tiny changes.
+ let screenDepth=max(.001,dot(baseCenter-p.liveEye.xyz,p.liveForward.xyz));
+ let perspectiveView=length(vec3f(p.vp[0].w,p.vp[1].w,p.vp[2].w))>.1;
+ let units=select(1.,screenDepth/max(.001,p.arrangement.z),perspectiveView);
+ let center=baseCenter+(p.liveRight.xyz*p.liveRight.w*shift.x+p.liveUp.xyz*p.liveUp.w*shift.y)*units;
  let rotation=cardRotation(card);let yaw=rotation.x;let pitch=rotation.y;let roll=rotation.z;
  let tiltedRight=p.right.xyz*cos(yaw)+p.forward.xyz*sin(yaw);
  let normal=p.forward.xyz*cos(yaw)-p.right.xyz*sin(yaw);
@@ -111,7 +97,7 @@ fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
    up=normalize(mix(up,p.liveUp.xyz,.96));
    up=normalize(up-right*dot(up,right));
  }
- var floating=center+aboveCameraStacks(card,center,right,up)+right*q.x*p.right.w*cardMetrics(card).x+up*q.y*p.up.w*cardMetrics(card).y;
+ var floating=center+right*q.x*p.right.w*cardMetrics(card).x+up*q.y*p.up.w*cardMetrics(card).y;
  // Bring held cards toward the camera without enlarging their projected footprint.
  // They retain their tilted 3D planes, but no longer sit behind the inspected yarn.
  floating=p.liveEye.xyz+heldCardOffset(card,floating-p.liveEye.xyz);
@@ -132,4 +118,14 @@ fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
    +p.liveRight.xyz*p.liveRight.w*(location.x+q.x*size.x)*lateral
    +p.liveUp.xyz*p.liveUp.w*(location.y+q.y*size.y)*lateral;
  return mix(floating,locked,amount);
+}
+
+// Move the entire plane away along its center sightline. Its world size remains
+// unchanged, so perspective makes it smaller without moving its screen center.
+fn placedCardPoint(card:u32,q:vec2f,shift:vec2f,depthYield:f32)->vec3f {
+ let point=projectedCardPoint(card,q,shift);
+ let center=projectedCardPoint(card,vec2f(0),shift);
+ let perspective=length(vec3f(p.vp[0].w,p.vp[1].w,p.vp[2].w))>.1;
+ let displacement=select(p.liveForward.xyz*p.arrangement.z,center-p.liveEye.xyz,perspective);
+ return point+displacement*depthYield*(1.-cameraLockAmount(card));
 }

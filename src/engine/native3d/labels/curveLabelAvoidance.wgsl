@@ -44,12 +44,13 @@ fn density(q:vec2f)->f32 {
  return mix(mix(v00,v10,f.x),mix(v01,v11,f.x),f.y)/65535.;
 }
 struct CardFootprint {center:vec4f,right:vec4f,up:vec4f}
-fn cardFootprint(card:u32,shift:vec2f)->CardFootprint {
- let center=p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift),1);
+fn depthFootprint(card:u32,shift:vec2f,depthYield:f32)->CardFootprint {
+ let center=p.vp*vec4f(placedCardPoint(card,vec2f(0),shift,depthYield),1);
  return CardFootprint(center,
-   p.vp*vec4f(projectedCardPoint(card,vec2f(1,0),shift),1)-center,
-   p.vp*vec4f(projectedCardPoint(card,vec2f(0,1),shift),1)-center);
+   p.vp*vec4f(placedCardPoint(card,vec2f(1,0),shift,depthYield),1)-center,
+   p.vp*vec4f(placedCardPoint(card,vec2f(0,1),shift,depthYield),1)-center);
 }
+fn cardFootprint(card:u32,shift:vec2f)->CardFootprint {return depthFootprint(card,shift,0.);}
 fn occupied(footprint:CardFootprint)->f32 {
  var sum=0.;var peak=0.;
  // Project the complete plane once, then sample its footprint cheaply.
@@ -121,11 +122,11 @@ fn initialPlacement(card:u32)->vec2f {
      let footprint=cardFootprint(card,candidate);
      let actual=footprint.center.xy/max(.001,footprint.center.w);
      let distance=actual-preferred;
-     let cost=occupied(footprint)*28.*p.motion.y+dot(distance,distance)*3.;
+     let cost=occupied(footprint)*18.*p.motion.y+dot(distance,distance)*3.;
      let weight=exp(-cost);
      sum+=candidate*weight;total+=weight;
    }}
-   let seek=smoothstep(.015,.12,occupied(home));
+   let seek=smoothstep(.01,.30,occupied(home));
    if(total>1e-12){shift=mix(drift,sum/total,seek*p.motion.y*(1.-smoothstep(0.,.5,cameraLockAmount(card))));}
  }
  return containCard(card,shift);
@@ -153,24 +154,39 @@ fn panelSeparation(card:u32)->vec2f {
    let angle=rotationRandom(f32(low)*19.+f32(high)*37.)*6.2831853;
    let fallback=vec2f(cos(angle),sin(angle))*select(-1.,1.,card>other);
    let direction=mix(fallback,delta/max(distance,.0001),smoothstep(0.,.08,distance));
-   let weight=presence[other];force+=direction*gap*overlap*.45*weight;neighbors+=weight;
+   let weight=presence[other];force+=direction*gap*overlap*.20*weight;neighbors+=weight;
  }
  force/=max(1.,neighbors*.45);
- return force*min(1.,.12/max(length(force),.0001));
+ return force*min(1.,.045/max(length(force),.0001));
+}
+fn panelCrowding(card:u32)->f32 {
+ let bounds=placedBounds[card];var pressure=0.;
+ for(var other=0u;other<u32(p.arrangement.w);other++){
+   if(other==card){continue;}
+   let theirs=placedBounds[other];
+   let overlap=max(vec2f(0),bounds.zw+theirs.zw-abs(bounds.xy-theirs.xy));
+   let area=4.*min(bounds.z* bounds.w,theirs.z*theirs.w);
+   pressure+=overlap.x*overlap.y/max(.0001,area)*presence[other];
+ }return pressure;
 }
 @compute @workgroup_size(16) fn arrange(@builtin(local_invocation_index) card:u32){
- let valid=card<u32(p.arrangement.w);var shift=vec2f(0);
+ let valid=card<u32(p.arrangement.w);var shift=vec2f(0);var depthYield=0.;
  if(valid){shift=initialPlacement(card);}
  // All 16 lanes reach every barrier, including the unused lanes. Read a complete
  // layout before changing any card; results do not depend on invocation order.
  for(var iteration=0;iteration<6;iteration++){
-   if(valid){placedBounds[card]=screenBounds(cardFootprint(card,shift));}
+   if(valid){placedBounds[card]=screenBounds(depthFootprint(card,shift,depthYield));}
    workgroupBarrier();
-   var nextShift=shift;
+   var nextShift=shift;var nextDepth=depthYield;
    if(valid){
      if(p.motion.y>0.&&presence[card]>0.&&cameraLockAmount(card)<.999){
        let bounds=placedBounds[card];
-       let force=panelSeparation(card)*p.motion.y*(1.-cameraLockAmount(card));
+       let freedom=p.motion.y*(1.-cameraLockAmount(card));
+       let force=panelSeparation(card)*freedom;
+       let congestion=panelCrowding(card)+occupied(depthFootprint(card,shift,depthYield))*.65;
+       // Yield at most 55% of the original camera distance. Small relaxed updates
+       // make depth a pressure release rather than another strong repelling force.
+       nextDepth=mix(depthYield,.55*smoothstep(.04,.65,congestion)*freedom,.20);
        let center=p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift),1);
        let origin=center.xy/max(.001,center.w);
        let room=max(vec2f(.04),vec2f(.94)-bounds.zw);
@@ -180,14 +196,14 @@ fn panelSeparation(card:u32)->vec2f {
          let bend=vec2f(-force.y,force.x)*f32(option)*.65;
          let destination=clamp(origin+force+bend,-room,room);
          let candidate=shiftToScreen(card,destination,shift);
-         let cost=occupied(cardFootprint(card,candidate))*20.+f32(option*option)*.3;
+         let cost=occupied(depthFootprint(card,candidate,nextDepth))*14.+f32(option*option)*.3;
          let weight=exp(-cost);sum+=candidate*weight;total+=weight;
        }
        if(total>1e-12){nextShift=mix(shift,sum/total,presence[card]);}
      }
    }
    workgroupBarrier();
-   shift=nextShift;
+   shift=nextShift;depthYield=nextDepth;
  }
- if(valid){offsets[card]=vec4f(containCard(card,shift),0,0);}
+ if(valid){offsets[card]=vec4f(containCard(card,shift),depthYield,0);}
 }
