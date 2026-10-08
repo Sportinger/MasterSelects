@@ -729,3 +729,10 @@ Rings trace their circumference during the shared intro, at constant radius and 
 **Intro Card Scale** and **Intro Camera Distance** make these cards larger and closer while retaining camera lag and free-space placement. **Intro Text Depth** separates the text plane from the frame; **Intro Text Motion** adds independent slow 3D drift and rotation. Atlas resources stay outside project data and retire after GPU submission, including multiple label layers.
 
 Intro text has its own opacity (while still following the layer opacity), so white headlines remain bright over dimmer frames. Intro placement contains the enlarged projected card footprint within the shot, including depth and tilt. Readout separators are omitted during the headline episode.
+
+
+### Smooth direction changes
+
+Motion Time can turn **Motion Seconds** smoothly from forward to backward: set **Turn Start** to source seconds (default `-1` disables it), and choose **Turn Duration**. Signed speed crosses zero halfway through that interval and then follows the negative original speed envelope. The turn is integrated against acceleration and Final Stillness, so accumulated time never jumps and seeking needs no simulation history. Invalid intervals report an error.
+
+**Loop Phase stays forward and still ends at 1**, independently of the direction turn. Use seconds for a return-stage circulation and the phase for a closed periodic path that must continue through the loop seam. Reversing a clock does not itself guarantee continuity when morphing between two different shapes.

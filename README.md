@@ -231,7 +231,7 @@ Weave Motion Time also provides a normalized forward loop phase for eased cyclic
 
 Scan overlays use a slower three-second diagonal glitch front with reduced spatial width and separate per-card aftershocks.
 
-Weave’s Final Stillness control can leave only tiny residual circulation in the last seconds, while preserving the start timing and forward loop closure.
+Weave’s Final Stillness control can leave only tiny residual circulation in the last seconds. An optional integrated direction turn can reverse circulation smoothly while the separate loop phase keeps its forward closure.
 
 Curve Scan Labels supports exact material anchors and amber opening rings that respect randomized card order and appear with their cards.
 

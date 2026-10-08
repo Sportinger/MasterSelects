@@ -471,9 +471,12 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       } else if (node.operator === 'geometry.clip-time') {
         register = emit(constant(node.id, Number.isFinite(context.simulationTime) ? context.simulationTime! : 0), 'clip-time');
       } else if (node.operator === 'geometry.motion-time') {
-        register = emit(constant(node.id, (output === 'phase' ? motionPhase : motionTime)(context.simulationTime ?? 0,
-          finite(read(node, 'duration'), 'Duration'), finite(read(node, 'attack'), 'Acceleration'),
-          finite(read(node, 'release'), 'Deceleration'), finite(read(node, 'stopPower'), 'Final Stillness'))), `motion-time:${node.id}:${output}`);
+        const args = [context.simulationTime ?? 0, finite(read(node, 'duration'), 'Duration'),
+          finite(read(node, 'attack'), 'Acceleration'), finite(read(node, 'release'), 'Deceleration'),
+          finite(read(node, 'stopPower'), 'Final Stillness')] as const;
+        const seconds = motionTime(...args, finite(read(node, 'turnStart'), 'Turn Start'),
+          finite(read(node, 'turnDuration'), 'Turn Duration'));
+        register = emit(constant(node.id, output === 'phase' ? motionPhase(...args) : seconds), `motion-time:${node.id}:${output}`);
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {
