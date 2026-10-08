@@ -1,3 +1,6 @@
+import {CurveLabelTracking} from '../labels/CurveLabelTracking';
+import {curveLabelLife} from '../labels/curveLabelLayout';
+import {multiplyMat4} from '../../scene/SceneTransformUtils';
 import type { SceneCamera } from '../../scene/types';
 import type { PreparedStrandLayer, StrandPass } from './StrandPass';
 import type { StrandIdFrame } from './strandIdMap';
@@ -13,6 +16,30 @@ export class StrandIdCapture {
   }
   forget(targetKey:string):void {this.frames.delete(targetKey);}
   clear():void {this.frames.clear();}
+  async captureTracking(clipId:string,time:number){
+    const entry=[...this.frames].reverse().find(([,frame])=>Math.abs(frame.time-time)<.001&&frame.plans.some(p=>p.layer.clipId===clipId));
+    if(!entry)throw new Error('No current main-thread strand frame for this clip/time. Render the requested still frame first.');
+    const [targetKey,frame]=entry;const layers=[];const tracker=new CurveLabelTracking();
+    try{
+      for(const {layer,buffers} of frame.plans.filter(plan=>plan.layer.clipId===clipId)){
+        const spec=layer.strands.program.render?.labels;if(!spec)continue;
+        if(!buffers.curves)throw new Error('Tracking capture requires curve topology.');
+        const snapshot=await tracker.capture(frame.device,buffers.positions,buffers.curves,spec,time);
+        const matrix=multiplyMat4(multiplyMat4(frame.camera.projectionMatrix,frame.camera.viewMatrix),layer.worldMatrix);
+        const cards=Array.from({length:spec.count},(_,card)=>{
+          const point=snapshot.tracked.subarray(card*4,card*4+4);
+          const clip=Array.from({length:4},(_,i)=>matrix[i]*point[0]+matrix[i+4]*point[1]+matrix[i+8]*point[2]+matrix[i+12]);
+          const reveal=curveLabelLife(spec,time,card).reveal;
+          return {card,sourceStrand:snapshot.source[card*4+3],targetStrand:snapshot.destination[card*4+3],
+            position:[...point.subarray(0,3)],readiness:point[3],followsReleased:card<Math.round(spec.count*spec.followShare),
+            reveal,opacity:spec.opacity*layer.opacity,projected:clip[3]>0?[(clip[0]/clip[3]+1)*frame.camera.viewport.width/2,(1-clip[1]/clip[3])*frame.camera.viewport.height/2]:null};
+        });
+        layers.push({layerId:layer.layerId,retarget:spec.retarget,releaseProgress:spec.releaseProgress,cards});
+      }
+      if(!layers.length)throw new Error('This strand clip has no Curve Scan Labels.');
+      return {clipId,time,targetKey,width:frame.camera.viewport.width,height:frame.camera.viewport.height,layers};
+    }finally{tracker.dispose();}
+  }
   async capture(pass:StrandPass,clipId:string,time:number):Promise<StrandIdFrame> {
     const entry=[...this.frames].reverse().find(([,frame])=>Math.abs(frame.time-time)<.001&&frame.plans.some(p=>p.layer.clipId===clipId));
     if(!entry)throw new Error('No current main-thread strand frame for this clip/time. Render the requested frame in the preview first; worker-only scenes are not available to this diagnostic.');

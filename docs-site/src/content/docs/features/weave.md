@@ -751,6 +751,13 @@ During the hold, the full projected footprint of these cards is kept within the 
 
 The stack interval extends these cards' shared appearance schedule, including intro/outro audio cues; regenerate pre-rendered cue audio after changing it. Existing material tracking holds can follow or overlap a stack. Individual brief locks that overlap the reserved interval are skipped. Zero cards per side disables stacks and preserves older projects; an enabled stack requires enough cards for both sides and at least 1.5 seconds to dock and release.
 
+
+### Inspecting actual tracking acquisition
+
+The dev-only `captureStrandMap` diagnostic also accepts `mode: "tracking"`. On a paused, current main-thread preview frame it returns each card's selected source/target strand, exact GPU tracking position and acquisition readiness, appearance reveal and projected pixel position. Readiness is the same separation test used by the alert tint; it can be used to audit or bake matching acquisition sounds. A projected position is not proof of visibility through foreground yarn.
+
+This mode runs the existing tracking compute pass against the already prepared GPU strands and reads back only the small per-card result. It creates no material PNG, does not evaluate geometry on the CPU, and adds no readback to ordinary playback or export. Missing topology, missing labels, stale frames, playback or a composition/time change during capture return explicit errors. The tool remains read-only and excluded from provider/chat discovery.
+
 Opaque WebCodecs/HTMLVideo export now matches preview coverage on GPU readback:
 soft dust and thin yarn RGB are not attenuated again by residual compositor alpha.
 See [Export](/docs/features/export/) for the readback and stacked-alpha contracts.

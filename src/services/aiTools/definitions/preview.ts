@@ -5,8 +5,9 @@ import type { ToolDefinition } from '../types';
 export const previewToolDefinitions: ToolDefinition[] = [
   {
     type:'function',function:{name:'captureStrandMap',
-      description:'Dev diagnostic: capture exact visible strand material coordinates and a false-color PNG from the currently rendered main-thread preview. Does not modify materials. IDs include strand index and normalized material position. Optional pixel samples use image coordinates, top-left origin. Worker-only scenes return an explicit error.',
+      description:'Dev diagnostic: capture exact visible strand material coordinates and a false-color PNG from the currently rendered main-thread preview. Does not modify materials. IDs include strand index and normalized material position. Optional pixel samples use image coordinates, top-left origin. Tracking mode returns the same GPU target/acquisition readiness used for alert color instead of an image. Worker-only scenes return an explicit error.',
       parameters:{type:'object',properties:{clipId:{type:'string',description:'Generated strand clip to inspect.'},
+        mode:{type:'string',enum:['material','tracking'],description:'Material PNG/pixel IDs (default), or compact GPU tracking readiness/targets without an image.'},
         samples:{type:'array',maxItems:32,items:{type:'object',properties:{x:{type:'integer'},y:{type:'integer'}},required:['x','y']}}},required:['clipId']}}
   },
   {

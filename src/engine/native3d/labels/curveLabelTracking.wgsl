@@ -14,6 +14,11 @@ fn selected(a:vec4f)->vec3f {return mix(points[u32(a.x)].position.xyz,points[u32
  var destination=selected(b);var ready=select(0.,1.,p.tracking.x>=.999);
  if(p.tracking.x>0.&&p.animation.z>0.&&card<u32(round(p.arrangement.w*p.tracking.z))){
    let total=arrayLength(&topology);
+   // At full release the final curve is no longer a parent/reference. Comparing
+   // its sampled polyline against itself invents separation from chord error.
+   if(p.tracking.y>=1.&&u32(ranges.x)==topology[total-1u].x){
+     tracked[card]=vec4f(mix(selected(a),destination,p.tracking.x),ready);return;
+   }
    let firstRemaining=min(total-1u,u32(floor(p.tracking.y*f32(total-1u)))+1u);
    // Compare against every remaining parent curve, so an attached outer stitch does not look detached.
    var low=vec3f(1e20);var high=vec3f(-1e20);

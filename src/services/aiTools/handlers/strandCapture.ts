@@ -7,6 +7,8 @@ import { ensureRenderForDiagnostics } from './renderOnce';
 
 export async function handleCaptureStrandMap(args:Record<string,unknown>):Promise<ToolResult> {
   if(typeof args.clipId!=='string'||!args.clipId)return {success:false,error:'Provide a strand clipId.'};
+  const mode=args.mode??'material';
+  if(mode!=='material'&&mode!=='tracking')return {success:false,error:'Choose material or tracking capture mode.'};
   const samples=args.samples??[];
   if(!Array.isArray(samples)||samples.length>32||samples.some(p=>!p||!Number.isInteger(p.x)||!Number.isInteger(p.y)))
     return {success:false,error:'Provide at most 32 integer x/y pixel samples.'};
@@ -15,6 +17,13 @@ export async function handleCaptureStrandMap(args:Record<string,unknown>):Promis
   const composition=useMediaStore.getState().activeCompositionId,time=before.playheadPosition;
   try{
     await ensureRenderForDiagnostics();
+    if(mode==='tracking'){
+      const data=await getNativeSceneRenderer().captureStrandTracking(args.clipId,time);
+      const after=useTimelineStore.getState();
+      if(after.playheadPosition!==time||useMediaStore.getState().activeCompositionId!==composition||after.isPlaying)
+        return {success:false,error:'Composition or playhead changed during capture; retry on the desired still frame.'};
+      return {success:true,data:{...data,description:'Exact GPU tracking readiness and selected targets, before depth occlusion. Shared with the visible alert tint. Diagnostic only; no playback readback or material changes.'}};
+    }
     const frame=await getNativeSceneRenderer().captureStrandIds(args.clipId,time);
     const after=useTimelineStore.getState();
     if(after.playheadPosition!==time||useMediaStore.getState().activeCompositionId!==composition||after.isPlaying)

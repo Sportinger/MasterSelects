@@ -98,6 +98,7 @@ export class NativeSceneRuntime {
   private curveLabels?: CurveLabelPass;
   private strandIds?: StrandIdCapture;
   captureStrandIds(clipId:string,time:number) {return (this.strandIds??=new StrandIdCapture()).capture(this.strandPass,clipId,time);}
+  captureStrandTracking(clipId:string,time:number) {return (this.strandIds??=new StrandIdCapture()).captureTracking(clipId,time);}
   hasProjectedStrandEffects(targetKey = 'main'): boolean { return this.strandImageEffects?.hasApplied(targetKey) ?? false; }
   private readonly stopIrradianceListener: () => void;
   constructor(host: NativeSceneHost) {

@@ -1,3 +1,6 @@
+import type {CurveSet} from '../../../services/operators/geometry/geometryEvaluation';
+import type {CurveLabelSpec} from '../../../services/operators/geometry/curveLabels';
+import {curveLabelTrackingInputs} from './curveLabelTrackingInputs';
 import common from './curveLabelProjection.wgsl?raw';
 import shader from './curveLabelTracking.wgsl?raw';
 
@@ -18,6 +21,25 @@ export class CurveLabelTracking {
     pass.setBindGroup(0,device.createBindGroup({layout:this.pipeline!.getBindGroupLayout(0),entries:
       [uniform,points,anchors,output,ranges].map((buffer,binding)=>({binding,resource:{buffer}}))}));
     pass.dispatchWorkgroups(Math.ceil(count/16));pass.end();return output;
+  }
+  /** Explicit still-frame diagnostic only; ordinary playback never waits for a GPU readback. */
+  async capture(device:GPUDevice,points:GPUBuffer,curves:CurveSet,spec:CurveLabelSpec,time:number){
+    if(!curves.starts.length)throw new Error('Tracking capture requires curve topology.');
+    const inputs=curveLabelTrackingInputs(curves,spec,time),temporary:GPUBuffer[]=[];
+    const buffer=(values:Float32Array|Uint32Array,usage:GPUBufferUsageFlags)=>{
+      const b=device.createBuffer({size:values.byteLength,usage:usage|GPUBufferUsage.COPY_DST});temporary.push(b);
+      device.queue.writeBuffer(b,0,values as Float32Array<ArrayBuffer>);return b;
+    };
+    const values=new Float32Array(124);values[63]=spec.count;
+    values.set([spec.retarget,spec.releaseProgress,spec.followShare,spec.depthSpread],72);values[78]=spec.detachedFocus;
+    const read=device.createBuffer({size:spec.count*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+    try{
+      const encoder=device.createCommandEncoder();
+      const output=this.encode(device,encoder,buffer(values,GPUBufferUsage.UNIFORM),points,
+        buffer(inputs.anchors,GPUBufferUsage.STORAGE),buffer(inputs.ranges,GPUBufferUsage.STORAGE),spec.count,temporary);
+      encoder.copyBufferToBuffer(output,0,read,0,spec.count*16);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
+      return {...inputs,tracked:new Float32Array(read.getMappedRange()).slice()};
+    }finally{read.destroy();temporary.forEach(b=>b.destroy());}
   }
   dispose():void{this.device=undefined;this.pipeline=undefined;}
 }

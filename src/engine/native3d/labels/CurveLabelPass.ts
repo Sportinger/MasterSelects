@@ -1,3 +1,4 @@
+import {curveLabelTrackingInputs} from './curveLabelTrackingInputs';
 import headlineShader from './curveLabelHeadlines.wgsl?raw';
 import {CurveLabelHeadlineCache} from './CurveLabelHeadlineAtlas';
 import {curveLabelIntroState} from './curveLabelIntro';
@@ -16,7 +17,7 @@ import { worldMatrixScale, type PreparedStrandLayer } from '../passes/StrandPass
 import { curveLabelCameraFrame } from '../../scene/curveLabelCamera';
 import { multiplyMat4 } from '../../scene/SceneTransformUtils';
 import { CurveLabelAtlas } from './CurveLabelAtlas';
-import { curveLabelAnchors, curveLabelGlyphs, LABEL_GLYPHS } from './curveLabelLayout';
+import { curveLabelGlyphs, LABEL_GLYPHS } from './curveLabelLayout';
 import { Logger } from '../../../services/logger';
 const log=Logger.create('CurveScanLabels');
 
@@ -92,22 +93,15 @@ export class CurveLabelPass {
       data.set([spec.stackCount??0,spec.stackStart??13,spec.stackEnd??21,0],120);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
-      const sourceAnchors=curveLabelAnchors(curves.starts,curves.counts,spec,false,time);
-      const targetAnchors=curveLabelAnchors(curves.starts,curves.counts,spec,true,time),anchors=new Float32Array(spec.count*16);
+      const {anchors,ranges:rangeData}=curveLabelTrackingInputs(curves,spec,time);
       let maxCopies=0;
       for(let card=0;card<spec.count;card++){
-        anchors.set(sourceAnchors.subarray(card*4,card*4+4),card*16);
-        anchors.set(targetAnchors.subarray(card*4,card*4+4),card*16+4);
-        const timing=curveLabelEpisode(spec,time,card);anchors[card*16+3]=timing.birth;anchors[card*16+7]=timing.visible;
+        const timing=curveLabelEpisode(spec,time,card);
         const decoration=curveLabelDecoration(spec,time,card);
         const openingMarker=timing.cycle===0&&curveLabelOpeningRank(spec,card)<(spec.openingMarkers??0);
         anchors.set([decoration.copies,decoration.fade,decoration.bold,openingMarker?1:0],card*16+12);maxCopies=Math.max(maxCopies,decoration.copies);
-        const target=targetAnchors[card*4+3],reference=curves.starts.length-1;
-        anchors.set([curves.starts[target],curves.counts[target],curves.starts[reference],curves.counts[reference]],card*16+8);
       }
       const indices=buffer(anchors,GPUBufferUsage.STORAGE);
-      const rangeData=new Uint32Array(curves.starts.length*2);
-      for(let strand=0;strand<curves.starts.length;strand++)rangeData.set([curves.starts[strand],curves.counts[strand]],strand*2);
       const ranges=buffer(rangeData,GPUBufferUsage.STORAGE);
       const tracked=this.tracking.encode(device,encoder,uniform,buffers.positions,indices,ranges,spec.count,temporary);
       const glyphs=buffer(curveLabelGlyphs(spec,time),GPUBufferUsage.STORAGE);

@@ -1,3 +1,4 @@
+import {curveLabelTrackingInputs} from '../../src/engine/native3d/labels/curveLabelTrackingInputs';
 import {parseCurveLabelIntro} from '../../src/services/operators/geometry/curveLabelIntro';
 import {curveLabelIntroState} from '../../src/engine/native3d/labels/curveLabelIntro';
 import {parseCurveLabelAnchors} from '../../src/services/operators/geometry/curveLabelAnchors';
@@ -20,6 +21,20 @@ const graph=()=>{
   g.edges.push({id:'labels-in',from:edge.from,output:'curves',to:'labels',input:'curves'});edge.from='labels';return g;
 };
 describe('Curve Scan Labels',()=>{
+  it('shares variable-length topology and exact targets between rendering and tracking diagnostics',()=>{
+    const s={...spec(),count:3,firstStrand:1,strandStep:1,start:.25,step:.1,releaseProgress:.6,followShare:1};
+    const curves={starts:Uint32Array.of(0,8,20),counts:Uint32Array.of(8,12,6)};
+    const inputs=curveLabelTrackingInputs(curves,s,4);
+    expect([...inputs.ranges]).toEqual([0,8,8,12,20,6]);
+    for(let card=0;card<3;card++){
+      expect([...inputs.anchors.slice(card*16,card*16+3)]).toEqual([...inputs.source.slice(card*4,card*4+3)]);
+      expect([...inputs.anchors.slice(card*16+4,card*16+7)]).toEqual([...inputs.destination.slice(card*4,card*4+3)]);
+      const target=inputs.destination[card*4+3];
+      expect([...inputs.anchors.slice(card*16+8,card*16+12)]).toEqual([curves.starts[target],curves.counts[target],20,6]);
+      expect(inputs.anchors[card*16+7]).toBeCloseTo(curveLabelEpisode(s,4,card).visible,5);
+    }
+  });
+
   it('uses held material anchors for a complete held appearance without changing opening or released anchors',()=>{
     const s={...spec(),count:4,holdCount:4,holdStart:22,holdEnd:27,
       holdAnchors:'0:2@0.94 | 1:4@0.86 | 2:6@0.80 | 3:8@0.74',anchorOverrides:'0:1@0.25'};

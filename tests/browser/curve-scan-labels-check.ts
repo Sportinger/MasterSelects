@@ -294,7 +294,13 @@ try{
  };
  const approaching=await track(.5),acquired=await track(1);
  if(approaching[3]!==0||acquired[0]<2.5||acquired[3]<.99)throw new Error(`Detached target/color gate failed: ${approaching}, ${acquired}`);
- result.detachedTracking={approaching,acquired};tracker.dispose();trackingPoints.destroy();selections.destroy();topology.destroy();
+ const snapshot=await tracker.capture(device,trackingPoints,{positions:new Float32Array(24),starts:Uint32Array.of(0,4),counts:Uint32Array.of(4,4)},
+   {...spec,count:1,firstStrand:0,start:0,step:0,holdAnchors:'',anchorOverrides:'',holdCount:0,stackCount:0,retarget:1,releaseProgress:0,followShare:1,detachedFocus:1},0);
+ if(snapshot.tracked.some((v,i)=>Math.abs(v-acquired[i])>1e-6))throw new Error('Diagnostic acquisition disagrees with the rendered GPU tracker');
+ const finalSnapshot=await tracker.capture(device,trackingPoints,{positions:new Float32Array(24),starts:Uint32Array.of(0,4),counts:Uint32Array.of(4,4)},
+   {...spec,count:2,firstStrand:0,start:.5,step:0,holdAnchors:'',anchorOverrides:'',holdCount:0,stackCount:0,retarget:1,releaseProgress:1,followShare:1,detachedFocus:1},0);
+ if(finalSnapshot.tracked[7]!==1)throw new Error('Fully released last curve was compared against itself');
+ result.detachedTracking={approaching,acquired,snapshot:[...snapshot.tracked],finalReadiness:finalSnapshot.tracked[7]};tracker.dispose();trackingPoints.destroy();selections.destroy();topology.destroy();
 
 
  // Test the actual shader envelope at screen-space corners and at the center.
