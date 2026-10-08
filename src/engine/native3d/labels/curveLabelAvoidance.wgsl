@@ -19,6 +19,20 @@ const GRID=vec2f(64,96);
    atomicMax(&field[u32(q.y)*64u+u32(q.x)],weight);
  }}
 }
+// Reserve the projected silhouette, not individual gaps between yarns. Each row
+// is owned by one invocation, so filling cannot race another row's envelope.
+@compute @workgroup_size(64) fn silhouette(@builtin(global_invocation_id) id:vec3u){
+ let row=id.x;if(row>=96u){return;}
+ var left:array<u32,64>;var maximum=0u;
+ for(var x=0u;x<64u;x++){
+   maximum=max(maximum,atomicLoad(&field[row*64u+x]));left[x]=maximum;
+ }
+ maximum=0u;
+ for(var step=0u;step<64u;step++){
+   let x=63u-step;maximum=max(maximum,atomicLoad(&field[row*64u+x]));
+   atomicStore(&field[row*64u+x],min(left[x],maximum));
+ }
+}
 // Smooth the obstacle field, not playback history: seeks and exports stay identical.
 // Broad, separable Gaussian filtering stops individual strands from becoming slots.
 @compute @workgroup_size(64) fn softenX(@builtin(global_invocation_id) id:vec3u){
@@ -105,29 +119,47 @@ fn containCard(card:u32,initial:vec2f)->vec2f {
  }
  return mix(initial,shift,amount);
 }
+// Average along the screen perimeter, not through its interior. Opposite clear
+// side slots must never average into the occluding subject between them.
+fn perimeterPoint(angle:f32,room:vec2f)->vec2f {
+ let direction=vec2f(cos(angle),sin(angle));
+ return direction/max(abs(direction.x),abs(direction.y))*room;
+}
 fn initialPlacement(card:u32)->vec2f {
  let drift=vec2f(sin(p.clock.x*p.animation.x*.47+f32(card)*2.1)*.022,
    cos(p.clock.x*p.animation.x*.36+f32(card)*1.7)*.029)*p.motion.x;
  var shift=drift;
  if(p.motion.y>0.&&cameraLockAmount(card)<.999){
    let home=cardFootprint(card,drift);
-   let origin=clamp(home.center.xy/max(.001,home.center.w),vec2f(-.8),vec2f(.8));
-   // Stable individual preferences avoid symmetric averaging into the subject.
-   // They do not change with each strand, appearance, or frame.
-   let preferred=clamp(origin+vec2f(0,(rotationRandom(f32(card)*13.+7.)-.5)*.65),vec2f(-.8),vec2f(.8));
-   var sum=vec2f(0);var total=0.;
-   for(var y=0;y<9;y++){for(var x=0;x<7;x++){
-     let destination=vec2f(-.8+f32(x)*1.6/6.,-.8+f32(y)*.2);
+   let rows=ceil(p.arrangement.w*.5);let row=f32(card/2u);
+   // Full-height stable preferences survive camera pans and text/lifetime changes.
+   let preferred=vec2f(select(-.8,.8,card%2u==1u),.8-row*1.6/max(rows-1.,1.));
+   let angle=atan2(preferred.y,preferred.x);
+   let homeBounds=screenBounds(home);
+   let room=max(vec2f(.14),vec2f(.94)-homeBounds.zw);
+   var bestDelta=0.;var bestCost=1e20;
+   for(var sample=0;sample<40;sample++){
+     let delta=(f32(sample)/39.-.5)*6.0;
+     let destination=perimeterPoint(angle+delta,room);
      let candidate=shiftToScreen(card,destination,drift);
-     let footprint=cardFootprint(card,candidate);
-     let actual=footprint.center.xy/max(.001,footprint.center.w);
-     let distance=actual-preferred;
-     let cost=occupied(footprint)*18.*p.motion.y+dot(distance,distance)*3.;
-     let weight=exp(-cost);
-     sum+=candidate*weight;total+=weight;
-   }}
-   let seek=smoothstep(.01,.30,occupied(home));
-   if(total>1e-12){shift=mix(drift,sum/total,seek*p.motion.y*(1.-smoothstep(0.,.5,cameraLockAmount(card))));}
+     let cost=occupied(cardFootprint(card,candidate))*20.*p.motion.y+delta*delta*1.1;
+     if(cost<bestCost){bestCost=cost;bestDelta=delta;}
+   }
+   // Refine within one contiguous patch. Even an angular mean across separate
+   // upper/lower free patches could put the card back into the blocked interval.
+   var sum=0.;var total=0.;
+   for(var sample=0;sample<13;sample++){
+     let delta=clamp(bestDelta+(f32(sample)/12.-.5)*.45,-3.,3.);
+     let candidate=shiftToScreen(card,perimeterPoint(angle+delta,room),drift);
+     let cost=occupied(cardFootprint(card,candidate))*20.*p.motion.y+delta*delta*1.1;
+     let weight=exp(-cost);sum+=delta*weight;total+=weight;
+   }
+   let seek=smoothstep(.01,.20,occupied(home));
+   if(total>1e-12){
+     let destination=perimeterPoint(angle+sum/total,room);
+     let candidate=shiftToScreen(card,destination,drift);
+     shift=mix(drift,candidate,seek*p.motion.y*(1.-smoothstep(0.,.5,cameraLockAmount(card))));
+   }
  }
  return containCard(card,shift);
 }
@@ -192,11 +224,13 @@ fn panelCrowding(card:u32)->f32 {
        let room=max(vec2f(.04),vec2f(.94)-bounds.zw);
        var sum=vec2f(0);var total=0.;
        // Prefer the clear route around yarn while still separating the cards.
-       for(var option=-1;option<=1;option++){
+       for(var option=-1;option<=2;option++){
          let bend=vec2f(-force.y,force.x)*f32(option)*.65;
-         let destination=clamp(origin+force+bend,-room,room);
+         // Staying put is preferable to being forced back behind the subject.
+         let step=select(force+bend,vec2f(0),option==2);
+         let destination=clamp(origin+step,-room,room);
          let candidate=shiftToScreen(card,destination,shift);
-         let cost=occupied(depthFootprint(card,candidate,nextDepth))*14.+f32(option*option)*.3;
+         let cost=occupied(depthFootprint(card,candidate,nextDepth))*14.+select(f32(option*option)*.3,.12,option==2);
          let weight=exp(-cost);sum+=candidate*weight;total+=weight;
        }
        if(total>1e-12){nextShift=mix(shift,sum/total,presence[card]);}

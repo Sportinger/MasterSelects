@@ -248,3 +248,5 @@ Curve Scan Labels can hand off sequentially to a shared moving material target, 
 Closed Curve Flow supports GPU point-field tails in turns or curve-distance units, including a following contact stage.
 
 Scan tracking leaders use short card-relative elbows, bounded in screen space even for near and camera-locked panels.
+
+Scan labels search contiguous free edge regions around a filled yarn silhouette; later text headlines preserve the existing card layout.

@@ -7,6 +7,7 @@ export class CurveLabelAvoidance {
   private layout?:GPUBindGroupLayout;
   private occupy?:GPUComputePipeline;
   private arrange?:GPUComputePipeline;
+  private silhouette?:GPUComputePipeline;
   private softenX?:GPUComputePipeline;
   private softenY?:GPUComputePipeline;
   encode(device:GPUDevice,encoder:GPUCommandEncoder,uniform:GPUBuffer,points:GPUBuffer,pointCount:number,
@@ -22,9 +23,9 @@ export class CurveLabelAvoidance {
     if(avoidance>0){
       const scatter=encoder.beginComputePass({label:'curve-label-space'});scatter.setPipeline(this.occupy!);scatter.setBindGroup(0,group);
       scatter.dispatchWorkgroups(Math.ceil(pointCount/64));scatter.end();
-      for(const pipeline of [this.softenX!,this.softenY!]){
+      for(const pipeline of [this.silhouette!,this.softenX!,this.softenY!]){
         const blur=encoder.beginComputePass({label:'curve-label-soft-space'});blur.setPipeline(pipeline);blur.setBindGroup(0,group);
-        blur.dispatchWorkgroups(96);blur.end();
+        blur.dispatchWorkgroups(pipeline===this.silhouette?2:96);blur.end();
       }
     }
     const solve=encoder.beginComputePass({label:'curve-label-placement'});solve.setPipeline(this.arrange!);solve.setBindGroup(0,group);
@@ -38,7 +39,7 @@ export class CurveLabelAvoidance {
       {binding:5,visibility:GPUShaderStage.COMPUTE,buffer:{type:'read-only-storage'}}]});
     const module=device.createShaderModule({label:'curve-label-avoidance',code:common+'\n'+shader});
     const pipeline=(entryPoint:string)=>device.createComputePipeline({layout:device.createPipelineLayout({bindGroupLayouts:[this.layout!]}),compute:{module,entryPoint}});
-    this.occupy=pipeline('occupy');this.arrange=pipeline('arrange');this.softenX=pipeline('softenX');this.softenY=pipeline('softenY');
+    this.silhouette=pipeline('silhouette');this.occupy=pipeline('occupy');this.arrange=pipeline('arrange');this.softenX=pipeline('softenX');this.softenY=pipeline('softenY');
   }
-  dispose():void{this.device=undefined;this.layout=undefined;this.occupy=undefined;this.arrange=undefined;this.softenX=undefined;this.softenY=undefined;}
+  dispose():void{this.device=undefined;this.layout=undefined;this.occupy=undefined;this.arrange=undefined;this.silhouette=undefined;this.softenX=undefined;this.softenY=undefined;}
 }

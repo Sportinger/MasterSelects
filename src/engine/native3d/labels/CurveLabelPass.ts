@@ -95,7 +95,10 @@ export class CurveLabelPass {
           {layerId:layer.layerId,start:textState.cueStart,headlines:textState.limitedHeadlines});this.warned.add(cueWarning);
       }
       const headlineAtlas=hasIntro?this.headlineAtlases.get(device,textState.phrases):null;
-      data.set([intro[0]?.card??-1,intro[1]?.card??-1,spec.introScale??1.4,spec.introDistance??.78],108);
+      // Later authored headlines replace text only. Reusing intro scale/distance
+      // would teleport a card at cue boundaries and displace all its neighbors.
+      const openingScale=textState.cueStart===undefined?(spec.introScale??1.4):0;
+      data.set([intro[0]?.card??-1,intro[1]?.card??-1,openingScale,spec.introDistance??.78],108);
       data.set([intro[0]?.row??0,intro[1]?.row??0,intro[0]?.pulse??0,intro[1]?.pulse??0],112);
       data.set([spec.introTextDepth??.02,spec.introTextMotion??.4,headlineAtlas?.height??256,(spec.introTextOpacity??1)*layer.opacity],116);
       data.set([spec.stackCount??0,spec.stackStart??13,spec.stackEnd??21,spec.stackStagger??0],120);
