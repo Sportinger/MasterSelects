@@ -829,3 +829,12 @@ clamped; a looping caller wraps time itself.
 
 This governs parameter travel, not physical distance on changing-length curves.
 Morphing geometry can still move even when its circulation is slow.
+
+
+### Authored scan text cues
+
+**Text Cues (JSON)** assigns timed content to existing scan cards. Supply an ordered array of `{ "start": 0, "end": 5, "panels": [["STATUS", "FIRST LINE", "SECOND LINE", "THIRD LINE"]] }`. Times are source seconds and use inclusive starts/exclusive ends. Cues may leave gaps; gaps restore the ordinary readouts. Each cue accepts 1–12 panels, with exactly four ASCII rows of at most 20 characters. Panels repeat across card indices when there are fewer panels than cards. Authored rows replace the changing telemetry and coordinate slots, including camera-locked cards; headings leave space for the animated lock icon.
+
+A cue may also contain `"headlines": [{ "text": "A question?", "header": "OBSERVER", "footer": "LIVE" }]`. At most two headlines can appear together, each with up to 32 printable Unicode characters and 20-column ASCII header/footer. They reuse the shaped cream headline atlas, progressive decode, independent text motion and intro scale/distance settings. The first multilingual Intro Titles keep priority until their phrases finish. Only the current phrase set is rasterized, keeping the atlas bounded independently of the number of cues.
+
+Headline cards are selected deterministically at cue start, preferring already visible, unlocked cards with the greatest remaining overlap. Selection stays fixed through the cue and across seeks. Cue text does not extend an appearance, remove occlusion or guarantee a full cue's visibility: choose suitable card lifetimes or a tracking hold for an uninterrupted reading interval. Existing rings, tracking acquisition, card colors, locks and sound-event timing keep their own controls. The transport rejects overlapping/out-of-order intervals, unknown fields, oversized text and more headlines than available cards instead of silently trimming them. Limits: 64 cues, 32,768 JSON characters and source times through 36,000 seconds. Empty text preserves existing projects.

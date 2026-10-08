@@ -149,6 +149,12 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  if(glitchRandom(glitchTick(card)+f32(slot)*7.)<disturbance*.45&&code!=32u){code=33u+u32(glitchRandom(f32(slot)+glitchTick(card)+3.)*58.);}
  let glyph=clamp(code,32u,127u)-32u;let q=corner(vertex);
  var position=vec2f(-.445+(f32(col)+q.x)*.0445,.39-(f32(row)+q.y)*.208)*select(1.,.76,roundCard(card));
+ // Authored headings retain all 20 columns while leaving room for the lock icon.
+ if(row==0u&&(glyphs[glyphIndex]&4096u)!=0u){
+   let inset=select(1.,.76,roundCard(card));
+   let locked=vec2f(-.23+(f32(col)+q.x)*.0335,.39-q.y*.156)*inset;
+   position=mix(position,locked,cameraLockAmount(card));
+ }
  if(p.motion.z>.5&&row>0u){position.x+=sin(p.clock.x*.8+f32(card)*1.3+f32(row))*.006;}
  if(p.motion.z>.5&&card%4u>=2u){position.y*=p.metrics.y/max(cardMetrics(card).y,.001);}
  if(introCard(card)){

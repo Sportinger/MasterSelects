@@ -2,8 +2,7 @@ import alertShader from './curveLabelAlerts.wgsl?raw';
 import {curveLabelTrackingInputs} from './curveLabelTrackingInputs';
 import headlineShader from './curveLabelHeadlines.wgsl?raw';
 import {CurveLabelHeadlineCache} from './CurveLabelHeadlineAtlas';
-import {curveLabelIntroState} from './curveLabelIntro';
-import {parseCurveLabelIntro} from '../../../services/operators/geometry/curveLabelIntro';
+import {curveLabelTextState} from './curveLabelTextState';
 import {curveLabelLock,curveLabelLocks,curveLabelActiveLocks} from './curveLabelLock';
 import {curveLabelEpisode,curveLabelOpeningRank,curveLabelReveal} from './curveLabelSchedule';
 import {curveLabelGlitchEvent} from './curveLabelGlitch';
@@ -88,8 +87,13 @@ export class CurveLabelPass {
       if((missingEarly>0||(missingLocks>0&&!(spec.stackCount>0)))&&!this.warned.has(lockWarning)){
         log.warn('Curve Scan Labels: some camera locks need longer visible card lifetimes or a wider lock interval.',{layerId:layer.layerId,missingLocks,missingEarly});this.warned.add(lockWarning);
       }
-      const intro=curveLabelIntroState(spec,time),hasIntro=intro.some(item=>item.card>=0);
-      const headlineAtlas=hasIntro?this.headlineAtlases.get(device,parseCurveLabelIntro(spec.introTitles??'').flat()):null;
+      const textState=curveLabelTextState(spec,time),intro=textState.headlines,hasIntro=intro.some(item=>item.card>=0);
+      const cueWarning=`${layer.layerId}:text-cue:${textState.cueStart}`;
+      if(textState.limitedHeadlines.length&&!this.warned.has(cueWarning)){
+        log.warn('Curve Scan Labels: headline cue exceeds its existing card appearance; extend the card lifetime or use a tracking hold.',
+          {layerId:layer.layerId,start:textState.cueStart,headlines:textState.limitedHeadlines});this.warned.add(cueWarning);
+      }
+      const headlineAtlas=hasIntro?this.headlineAtlases.get(device,textState.phrases):null;
       data.set([intro[0]?.card??-1,intro[1]?.card??-1,spec.introScale??1.4,spec.introDistance??.78],108);
       data.set([intro[0]?.row??0,intro[1]?.row??0,intro[0]?.pulse??0,intro[1]?.pulse??0],112);
       data.set([spec.introTextDepth??.02,spec.introTextMotion??.4,headlineAtlas?.height??256,(spec.introTextOpacity??1)*layer.opacity],116);

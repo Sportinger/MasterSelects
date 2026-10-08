@@ -1,4 +1,4 @@
-import {curveLabelIntroState} from './curveLabelIntro';
+import {curveLabelTextState} from './curveLabelTextState';
 import {parseCurveLabelAnchors} from '../../../services/operators/geometry/curveLabelAnchors';
 import {curveLabelActiveLocks,curveLabelLockReadouts} from './curveLabelLock';
 import {curveLabelEpisode,curveLabelReveal} from './curveLabelSchedule';
@@ -39,17 +39,21 @@ export function curveLabelLife(spec:CurveLabelSpec,time:number,card:number):{pha
 /** Coordinate slots (256+) are formatted in the shader from the current world-space anchor. */
 export function curveLabelGlyphs(spec:CurveLabelSpec,time:number):Uint32Array {
   const out=new Uint32Array(spec.count*LABEL_GLYPHS).fill(32),titles=spec.titles.toUpperCase().split('|').filter(Boolean);
-  const locks=curveLabelActiveLocks(spec,time),intro=curveLabelIntroState(spec,time);
+  const locks=curveLabelActiveLocks(spec,time),text=curveLabelTextState(spec,time),intro=text.headlines;
   for(let card=0;card<spec.count;card++){
     const lock=locks.find(item=>item.card===card);
-    if(lock?.card===card&&lock.amount>.01){
+    const authored=text.rows.get(card),opening=intro.find(item=>item.card===card&&item.pulse>-1);
+    if(authored&&!opening){
+      authored.forEach((row,r)=>{for(let c=0;c<row.length;c++)out[card*LABEL_GLYPHS+r*LABEL_COLUMNS+c]=row.charCodeAt(c)+(r===0?2048+4096:0);});
+      continue;
+    }
+    if(lock?.card===card&&lock.amount>.01&&!opening){
       curveLabelLockReadouts(lock).forEach((row,r)=>{for(let c=0;c<Math.min(LABEL_COLUMNS,row.length);c++)
         out[card*LABEL_GLYPHS+r*LABEL_COLUMNS+c]=row.charCodeAt(c)+(r===0?2048:0);});
       continue;
     }
-    const opening=intro.find(item=>item.card===card&&item.pulse>-1);
     if(opening){
-      const rows=[`OPTICAL / ${String(card+1).padStart(3,'0')}`,'','','MATERIAL / LIVE SCAN'];
+      const rows=authored?.[1]===''&&authored?.[2]===''?authored:[`OPTICAL / ${String(card+1).padStart(3,'0')}`,'','','MATERIAL / LIVE SCAN'];
       rows.forEach((row,r)=>{for(let c=0;c<Math.min(LABEL_COLUMNS,row.length);c++)out[card*LABEL_GLYPHS+r*LABEL_COLUMNS+c]=row.charCodeAt(c);});
       continue;
     }
