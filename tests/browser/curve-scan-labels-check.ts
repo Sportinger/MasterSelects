@@ -1,3 +1,4 @@
+import {probeStrandIds} from './strandIdsGpuProbe';
 import {curveLabelLocks} from '../../src/engine/native3d/labels/curveLabelLock';
 import {curveLabelEpisode,curveLabelCues} from '../../src/engine/native3d/labels/curveLabelSchedule';
 import glitchShader from '../../src/engine/native3d/labels/curveLabelGlitch.wgsl?raw';
@@ -304,6 +305,7 @@ try{
  const lockFrame=await draw(events[0].start+1);
  const lockPixels=lockFrame.filter((v,i)=>i%4<3&&v>.05).length;
  if(lockPixels<200)throw new Error('Camera lock not rendered');
+ result.strandMaterialIds=await probeStrandIds(device,camera,identity);
  const validation=await device.popErrorScope();if(validation)throw new Error(validation.message);
  result.cameraLockEvents=events;
  const a=markerEnergy(first,width/2),b=markerEnergy(second,width/2),c=markerEnergy(second,shifted);

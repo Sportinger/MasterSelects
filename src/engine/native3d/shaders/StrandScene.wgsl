@@ -97,6 +97,9 @@ struct VertexOutput {
   @location(4) @interpolate(flat) segment: u32,
   @location(5) widthAxis: vec3f,  // world direction of the ribbon's +across side
   @location(6) pixels: f32,       // projected fiber width
+  @location(8) @interpolate(flat) pickPoint: u32,
+  @location(9) pickT: f32,
+  @location(10) @interpolate(flat) pickStrand: u32,
   @location(7) look: vec4f,       // per-point diffuse color and roughness scale
 };
 
@@ -182,6 +185,7 @@ fn strandVertex(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index
   let spanTangent = select(vec3f(1.0, 0.0, 0.0), normalize(span), dot(span, span) > 1e-18);
   let derivative = catmullRomTangent(before, a, b, after, t);
   let tangent = select(spanTangent, normalize(derivative), dot(derivative, derivative) > 1e-18);
+  out.pickPoint = first; out.pickT = t; out.pickStrand = u32(points[first * 3u + 2u].w);
   out.segment = segment ^ (fiber * 0x9e3779b9u);
   out.look = strandPointLook(first, t);
   out.across = side;

@@ -1,3 +1,4 @@
+import idShader from '../shaders/StrandIds.wgsl?raw';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
 import type { SceneCamera, SceneLayer3DData, SceneLightLayer, SceneStrandLayer } from '../../scene/types';
 import { StrandBufferCache, type StrandBuffers } from './strandBuffers';
@@ -142,6 +143,8 @@ function writeViewer(data: Float32Array, view: Float32Array, projection: Float32
 export class StrandPass {
   private device: GPUDevice | null = null;
   private pipeline: GPURenderPipeline | null = null;
+  private idPipeline: GPURenderPipeline | null = null;
+  private idDepthLayout: GPUBindGroupLayout | null = null;
   private coveragePipeline: GPURenderPipeline | null = null;
   private depthPipeline: GPURenderPipeline | null = null;
   private opacityPipeline: GPURenderPipeline | null = null;
@@ -359,6 +362,34 @@ export class StrandPass {
     return true;
   }
 
+  /** One-shot, unlit material-coordinate IDs using the same fiber vertex geometry as the preview. */
+  renderIds(device: GPUDevice, encoder: GPUCommandEncoder, color: GPUTextureView, depth: GPUTextureView,
+    sceneDepth: GPUTextureView, plans: PreparedStrandLayer[], camera: SceneCamera, temporary: GPUBuffer[]): void {
+    this.initialize(device);
+    if(!this.idPipeline){
+      this.idDepthLayout=device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'depth'}}]});
+      const module=device.createShaderModule({code:STRAND_SCENE_SHADER+'\n'+idShader,label:'strand-material-ids'});
+      this.idPipeline=device.createRenderPipeline({layout:device.createPipelineLayout({bindGroupLayouts:[this.layout!,this.idDepthLayout]}),
+        vertex:{module,entryPoint:'strandVertex'},fragment:{module,entryPoint:'strandIdFragment',targets:[{format:'rgba32uint'}]},
+        primitive:{topology:'triangle-list',cullMode:'none'},depthStencil:{format:SCENE_DEPTH_FORMAT,depthWriteEnabled:true,depthCompare:'less-equal'}});
+    }
+    const pass=encoder.beginRenderPass({colorAttachments:[{view:color,clearValue:[0,0,0,0],loadOp:'clear',storeOp:'store'}],
+      depthStencilAttachment:{view:depth,depthClearValue:1,depthLoadOp:'clear',depthStoreOp:'store'},label:'strand-material-ids'});
+    pass.setPipeline(this.idPipeline);
+    pass.setBindGroup(1,device.createBindGroup({layout:this.idDepthLayout!,entries:[{binding:0,resource:sceneDepth}]}));
+    const eye=cameraPositionFromView(camera.viewMatrix),empty=this.shadows.empty(device);
+    plans.forEach(({layer,buffers},index)=>{
+      const draw=this.layerUniforms(layer,buffers,[]);
+      const subdivisions=strandSubdivisions(buffers.segmentLength,buffers.extent,layer.worldMatrix,eye,camera);
+      const uniforms=writeViewer(draw.base,camera.viewMatrix,camera.projectionMatrix,eye,camera.viewport.width,camera.viewport.height,subdivisions);
+      // IDs are never multisampled or blended; conservatively keep only the covered ribbon core.
+      uniforms[71]=1;uniforms[MATERIAL_OFFSET+1]=index+1;
+      pass.setBindGroup(0,this.bindGroup(device,uniforms,buffers,empty.depth,empty.opacity,temporary,'strand-material-ids'));
+      pass.draw(buffers.segmentCount*6*subdivisions,draw.instances);
+    });
+    pass.end();
+  }
+
   dispose(): void {
     this.buffers.dispose();
     this.shadows.dispose();
@@ -367,6 +398,7 @@ export class StrandPass {
     this.emptyAttributes?.destroy();
     this.emptyAttributes = null;
     this.pipeline = null;
+    this.idPipeline = null; this.idDepthLayout = null;
     this.coveragePipeline = null;
     this.depthPipeline = null;
     this.opacityPipeline = null;

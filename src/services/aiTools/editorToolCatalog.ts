@@ -31,6 +31,7 @@ import type { ToolDefinition } from './types';
  * from progressive discovery because they are not bounded editor operations.
  */
 const NON_ATOMIC_EDITOR_TOOL_NAMES = new Set([
+  'captureStrandMap',
   'createEditableTitleStack',
   'cutRangesFromClip',
   'executeBatch',

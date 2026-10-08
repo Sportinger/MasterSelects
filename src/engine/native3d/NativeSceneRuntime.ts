@@ -1,3 +1,4 @@
+import { StrandIdCapture } from './passes/StrandIdCapture';
 import { CurveLabelPass } from './labels/CurveLabelPass';
 import { Logger } from '../../services/logger';
 import { flockGpuTimings } from '../flock/gpu/FlockGpuTimings';
@@ -86,7 +87,7 @@ export class NativeSceneRuntime {
   private readonly gizmoPass = new GizmoPass();
   private readonly splatPass = new SplatPass();
   private readonly voxelPass = new VoxelPass();
-  private readonly strandPass = new StrandPass(() => this.host.requestRender?.());
+  private strandPass = new StrandPass(() => this.host.requestRender?.());
   private flockPass: FlockPass;
   private readonly effectorCompute = new EffectorCompute();
   private readonly modelRuntimeCache = new ModelRuntimeCache();
@@ -95,6 +96,8 @@ export class NativeSceneRuntime {
   private slitScanSurfaces?: SlitScanSceneSurfaces;
   private strandImageEffects?: StrandProjectedEffects;
   private curveLabels?: CurveLabelPass;
+  private strandIds?: StrandIdCapture;
+  captureStrandIds(clipId:string,time:number) {return (this.strandIds??=new StrandIdCapture()).capture(this.strandPass,clipId,time);}
   hasProjectedStrandEffects(targetKey = 'main'): boolean { return this.strandImageEffects?.hasApplied(targetKey) ?? false; }
   private readonly stopIrradianceListener: () => void;
   constructor(host: NativeSceneHost) {
@@ -107,6 +110,8 @@ export class NativeSceneRuntime {
   /** Rebind environment callbacks after HMR while retaining device/session state. */
   setHost(host: NativeSceneHost): void {
     this.host = host;
+    this.strandIds?.clear();
+    this.strandPass.dispose();this.strandPass=new StrandPass(()=>this.host.requestRender?.());
     this.curveLabels?.dispose(); this.curveLabels = undefined;
     this.depthOfField?.dispose();
     this.depthOfField = undefined;
@@ -165,7 +170,7 @@ export class NativeSceneRuntime {
       this.rasterSubSamples.releaseTarget(key);
       this.layerSpaceEffectRenderer.releaseTarget(key);
       this.slitScanSurfaces?.releaseTarget(key);
-      this.strandImageEffects?.releaseTarget(key);
+      this.strandImageEffects?.releaseTarget(key);this.strandIds?.forget(key);
       this.faceCablePass.releaseTarget(key);
     }
   }
@@ -184,7 +189,7 @@ export class NativeSceneRuntime {
     this.rasterSubSamples.releaseTarget(targetKey);
     this.layerSpaceEffectRenderer.releaseTarget(targetKey);
     this.slitScanSurfaces?.releaseTarget(targetKey);
-    this.strandImageEffects?.releaseTarget(targetKey);
+    this.strandImageEffects?.releaseTarget(targetKey);this.strandIds?.forget(targetKey);
     this.faceCablePass.releaseTarget(targetKey);
   }
 
@@ -292,7 +297,7 @@ export class NativeSceneRuntime {
     this.faceCablePass.dispose();
     this.meshPass.dispose();
     this.voxelPass.dispose();
-    this.strandPass.dispose();
+    this.strandPass.dispose();this.strandIds?.clear();
     this.flockPass.dispose();
     this.gizmoPass.dispose();
     this.layerSpaceEffectRenderer.destroy();
@@ -638,6 +643,7 @@ export class NativeSceneRuntime {
       options?.renderSettings?.engine ?? 'raster');
     const readTimings = gpuTimings.resolve(commandEncoder, `render:${targetKey}`);
     device.queue.submit([commandEncoder.finish()]);
+    (this.strandIds??=new StrandIdCapture()).remember(targetKey,{device,plans:strandPlans,camera,depth:this.sceneDepthView,time:layerSpaceEffects?.timelineTimeSeconds??0});
     this.pathTrace.afterSubmit(device);
     this.rasterSubSamples.afterSubmit(device);
     readTimings();
