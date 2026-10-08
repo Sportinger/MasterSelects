@@ -46,7 +46,7 @@ try{
  const shifted=Math.round(width/2+.8*camera.projectionMatrix[0]/8*width/2);
  // A projected obstacle must move a card toward clear space, reproducibly.
  const avoidance=new CurveLabelAvoidance();
- const uniform=device.createBuffer({size:80*4,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+ const uniform=device.createBuffer({size:84*4,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
  const obstacle=new Float32Array(12*81);
  for(let y=0;y<9;y++)for(let x=0;x<9;x++){
    const i=(y*9+x)*12;obstacle[i]=(-.70+(x-4)*.012)*8/camera.projectionMatrix[0];
@@ -54,7 +54,7 @@ try{
  }
  const cloud=device.createBuffer({size:obstacle.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(cloud,0,obstacle);
  const placement=async(strength:number,time:number,source=cloud,pointCount=81,cardCount=2)=>{
-   const data=new Float32Array(80);data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));data.set(identity,16);
+   const data=new Float32Array(84);data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));data.set(identity,16);
    data.set([1,0,0,5/camera.projectionMatrix[0]],32);data.set([0,1,0,5/camera.projectionMatrix[5]],36);
    data.set([0,0,-1,0],40);data.set([0,0,8,0],44);data.set([.43,.13,1,6],56);
    data.set([.74,.48,5,cardCount],60);data.set([time,8,0,0],64);data.set([.65,strength,0,0],68);data[76]=1;device.queue.writeBuffer(uniform,0,data);
@@ -98,6 +98,21 @@ try{
  const thinEnergy=markerEnergy(thinMarker,shifted),thickEnergy=markerEnergy(thickMarker,shifted);
  if(thickEnergy<thinEnergy*1.5)throw new Error(`Marker weight did not increase: ${thinEnergy}, ${thickEnergy}`);
  result.markerWeight={thin:thinEnergy,thick:thickEnergy};spec.ringWeight=1;
+ spec.markerColor='#ffdc39';const yellowRing=await draw(2);
+ let yellowRed=0,yellowGreen=0,yellowBlue=0;
+ for(let y=height/2-9;y<height/2+10;y++)for(let x=shifted-9;x<shifted+10;x++){
+   const i=(y*width+x)*4;yellowRed+=yellowRing[i];yellowGreen+=yellowRing[i+1];yellowBlue+=yellowRing[i+2];
+ }
+ if(yellowRed<yellowBlue*2||yellowGreen<yellowBlue*2)throw new Error('Tracking ring did not use its independent yellow color');
+ result.markerColor={red:yellowRed,green:yellowGreen,blue:yellowBlue};
+ spec.trackingGlow=1;const glowing=await draw(2);spec.trackingGlow=0;const plain=await draw(2);
+ const haloPixels=glowing.filter((v,i)=>i%4===3&&plain[i]<.001&&v>.005).length;
+ if(haloPixels<20)throw new Error(`Tracking halo is missing: ${haloPixels}`);
+ const disabledAgain=await draw(2);
+ if(plain.some((v,i)=>v!==disabledAgain[i]))throw new Error('Disabling tracking glow did not restore the original raster');
+ spec.leaderWeight=3;const thickLeaders=await draw(2);spec.leaderWeight=1;
+ if(energy(thickLeaders)<=energy(plain))throw new Error('Leader thickness did not increase');
+ result.trackingGlow={haloPixels,plain:energy(plain),glow:energy(glowing),thickLeaders:energy(thickLeaders)};
  spec.echoStrength=1;
  const echoTime=Array.from({length:800},(_,i)=>i/100).find(t=>curveLabelDecoration(spec,t,0).fade>.9)!;
  const echo=await draw(echoTime),echoRepeat=await draw(echoTime);spec.echoStrength=0;const withoutEcho=await draw(echoTime);
@@ -116,7 +131,7 @@ try{
  const depthPipeline=device.createComputePipeline({layout:'auto',compute:{module:depthModule,entryPoint:'probe'}});
  const poseBuffer=device.createBuffer({size:6*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
  const probeDepth=async(time:number)=>{
-   const data=new Float32Array(80);data.set([1,0,0,1],32);data.set([0,1,0,1],36);data.set([0,0,-1,0],40);data.set([0,0,8,0],44);
+   const data=new Float32Array(84);data.set([1,0,0,1],32);data.set([0,1,0,1],36);data.set([0,0,-1,0],40);data.set([0,0,8,0],44);
    data.set([.43,.11,1,6],56);data.set([.74,.3,5,6],60);data[64]=time;data[75]=.26;data[76]=1;data[77]=.3;device.queue.writeBuffer(uniform,0,data);
    const encoder=device.createCommandEncoder(),pass=encoder.beginComputePass();pass.setPipeline(depthPipeline);
    pass.setBindGroup(0,device.createBindGroup({layout:depthPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:poseBuffer}}]}));pass.dispatchWorkgroups(6);pass.end();
@@ -133,7 +148,7 @@ try{
  let q=cardMetrics(id.x);dimensions[id.x]=vec4f(q.x*p.right.w,q.y*p.up.w,0,0);}`});
  const metricPipeline=device.createComputePipeline({layout:'auto',compute:{module:metricModule,entryPoint:'probe'}});
  const dims=device.createBuffer({size:64,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
- const metricData=new Float32Array(80);metricData[35]=2;metricData[39]=5;metricData.set([.43,.11,1,6],56);metricData[70]=1;metricData[71]=.85;device.queue.writeBuffer(uniform,0,metricData);
+ const metricData=new Float32Array(84);metricData[35]=2;metricData[39]=5;metricData.set([.43,.11,1,6],56);metricData[70]=1;metricData[71]=.85;device.queue.writeBuffer(uniform,0,metricData);
  const metricEncoder=device.createCommandEncoder(),metricPass=metricEncoder.beginComputePass();metricPass.setPipeline(metricPipeline);
  metricPass.setBindGroup(0,device.createBindGroup({layout:metricPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:dims}}]}));metricPass.dispatchWorkgroups(4);metricPass.end();
  const metricRead=device.createBuffer({size:64,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});metricEncoder.copyBufferToBuffer(dims,0,metricRead,0,64);device.queue.submit([metricEncoder.finish()]);await metricRead.mapAsync(GPUMapMode.READ);
@@ -146,7 +161,7 @@ try{
  const selections=device.createBuffer({size:64,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(selections,0,Float32Array.of(0,1,0,0,0,1,0,8,0,4,4,4,0,0,0,0));
  const topology=device.createBuffer({size:16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(topology,0,Uint32Array.of(0,4,4,4));
  const track=async(blend:number)=>{
-   const data=new Float32Array(80);data[63]=1;data[72]=blend;data[74]=1;data[78]=1;device.queue.writeBuffer(uniform,0,data);
+   const data=new Float32Array(84);data[63]=1;data[72]=blend;data[74]=1;data[78]=1;device.queue.writeBuffer(uniform,0,data);
    const encoder=device.createCommandEncoder(),temporary:GPUBuffer[]=[];const output=tracker.encode(device,encoder,uniform,trackingPoints,selections,topology,1,temporary);
    const read=device.createBuffer({size:16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});encoder.copyBufferToBuffer(output,0,read,0,16);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
    const values=[...new Float32Array(read.getMappedRange())];read.unmap();read.destroy();temporary.forEach(b=>b.destroy());return values;

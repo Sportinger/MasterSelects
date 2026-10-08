@@ -87,6 +87,13 @@ with faded parallel outlines and text. Leader lines and target rings are not dup
 The effect is deterministic and omits episodes when the visible lifetime is too short;
 no duplicate draw instances are issued when no echo is active. **Marker Line Weight**
 changes tracking-circle thickness independently of the card and leader lines.
+**Tracking Ring Color** sets their independent base color; target-acquisition alerts
+override it with the same red/orange signal as the card. Line weight stays constant
+through introduction and alert changes. **Leader Line Weight** separately thickens
+connecting lines. **Tracking Glow** adds a soft colored halo to rings and leaders
+inside their existing raster draw; text stays sharp. It requires no extra render
+pass, fullscreen blur, or path tracing. At zero, the halo is disabled and line
+quads retain their original size.
 
 Cards have staggered lifetimes. **Visible Cycle Fraction** leaves an offscreen pause
 between appearances; **Intro / Outro** (50–500 ms, default 450 ms) draws the marker
