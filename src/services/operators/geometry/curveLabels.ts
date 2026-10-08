@@ -11,6 +11,12 @@ export const CURVE_LABEL_NUMBERS = [
   ['start', 'First Curve Position', .08, 0, 1, .01], ['step', 'Curve Position Step', .145, 0, 1, .01],
   ['firstStrand', 'First Strand', 0, 0, 65535, 1], ['strandStep', 'Strand Step', 2, 0, 65535, 1],
   ['cycle', 'Scan Cycle (s)', 8, 1, 60, .1],
+  ['lifetimeVariation', 'Lifetime Variation', 0, 0, 1, .01],
+  ['scheduleSeed', 'Appearance Seed', 0, 0, 9999, 1],
+  ['holdStart', 'Tracking Hold Start (s)', 0, 0, 36000, .01],
+  ['holdEnd', 'Tracking Hold End (s)', 0, 0, 36000, .01],
+  ['holdCount', 'Held Tracking Cards', 0, 0, 12, 1],
+  ['rotationRange', 'Window Rotation (deg)', 0, 0, 45, 1],
   ['transition', 'Intro / Outro (s)', .45, .05, .5, .01],
   ['dutyCycle', 'Visible Cycle Fraction', .72, .25, 1, .01],
   ['retarget', 'Released Tracking Blend', 0, 0, 1, .01],
@@ -52,7 +58,7 @@ export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec 
   for(const [id,label,,min,max] of CURVE_LABEL_NUMBERS){
     const value=read(id);
     if(typeof value!=='number'||!Number.isFinite(value)||value<min||value>max)throw new Error(`Curve Scan Labels: ${label} must be ${min}–${max}.`);
-    if(['count','firstStrand','strandStep'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
+    if(['count','firstStrand','strandStep','scheduleSeed','holdCount'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
     out[id]=value;
   }
   if(Number(out.depthSpread)+Number(out.depthMotion)>.8)throw new Error('Curve Scan Labels: combined depth spread and travel must be at most 0.8 to keep cards in front of the camera.');

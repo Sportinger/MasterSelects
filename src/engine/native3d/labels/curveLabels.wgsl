@@ -32,16 +32,15 @@ fn cardPoint(card:u32,q:vec2f,copy:u32)->vec3f {
 fn echoAlpha(card:u32,copy:u32)->f32 {
  if(copy==0u){return 1.;}
  let decor=anchors[card*4u+3u];
- return select(0.,decor.y*.65*pow(.78,f32(copy-1u)),f32(copy)<=decor.x);
+ return select(0.,decor.y*.65*pow(.90,f32(copy-1u)),f32(copy)<=decor.x);
 }
 fn cardPhase(card:u32)->f32 {
- let period=anchors[card*4u+1u].w;
- return fract((p.clock.x-anchors[card*4u].w)/period)*period;
+ return max(0.,p.clock.x-anchors[card*4u].w);
 }
 fn life(card:u32)->f32 {
  if(p.clock.x<anchors[card*4u].w){return 0.;}
  let phase=cardPhase(card);
- let visible=p.clock.y*p.clock.w;let duration=min(p.clock.z,visible*.5);
+ let visible=anchors[card*4u+1u].w;let duration=min(p.clock.z,visible*.5);
  return clamp(min(phase,visible-phase)/max(duration,.001),0.,1.);
 }
 fn fade(card:u32)->f32 {return smoothstep(0.,.08,life(card))*p.color.a;}

@@ -1,3 +1,4 @@
+import {curveLabelEpisode} from './curveLabelSchedule';
 import {curveLabelGlitchEvent} from './curveLabelGlitch';
 import glitchShader from './curveLabelGlitch.wgsl?raw';
 import {curveLabelDecoration} from './curveLabelDecoration';
@@ -10,7 +11,7 @@ import type { PreparedStrandLayer } from '../passes/StrandPass';
 import { curveLabelCameraFrame } from '../../scene/curveLabelCamera';
 import { multiplyMat4 } from '../../scene/SceneTransformUtils';
 import { CurveLabelAtlas } from './CurveLabelAtlas';
-import { curveLabelAnchors, curveLabelGlyphs, curveLabelTiming, LABEL_GLYPHS } from './curveLabelLayout';
+import { curveLabelAnchors, curveLabelGlyphs, LABEL_GLYPHS } from './curveLabelLayout';
 import { Logger } from '../../../services/logger';
 const log=Logger.create('CurveScanLabels');
 
@@ -60,7 +61,7 @@ export class CurveLabelPass {
       const markerColor=parseInt(spec.markerColor.slice(1),16);
       data.set([(markerColor>>16&255)/255,(markerColor>>8&255)/255,(markerColor&255)/255,spec.trackingGlow],80);
       const glitch=curveLabelGlitchEvent(time);
-      data.set([glitch.age,glitch.event,spec.glitchStrength,0],84);
+      data.set([glitch.age,glitch.event,spec.glitchStrength,spec.rotationRange*Math.PI/180],84);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
       const sourceAnchors=curveLabelAnchors(curves.starts,curves.counts,spec);
@@ -69,7 +70,7 @@ export class CurveLabelPass {
       for(let card=0;card<spec.count;card++){
         anchors.set(sourceAnchors.subarray(card*4,card*4+4),card*16);
         anchors.set(targetAnchors.subarray(card*4,card*4+4),card*16+4);
-        const timing=curveLabelTiming(spec,card);anchors[card*16+3]=timing.birth;anchors[card*16+7]=timing.period;
+        const timing=curveLabelEpisode(spec,time,card);anchors[card*16+3]=timing.birth;anchors[card*16+7]=timing.visible;
         const decoration=curveLabelDecoration(spec,time,card);
         anchors.set([decoration.copies,decoration.fade,decoration.bold,0],card*16+12);maxCopies=Math.max(maxCopies,decoration.copies);
         const target=targetAnchors[card*4+3],reference=curves.starts.length-1;

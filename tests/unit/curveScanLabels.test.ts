@@ -124,12 +124,12 @@ describe('Curve Scan Labels',()=>{
     expect([...finished].every(Number.isFinite)).toBe(true);
   });
 
-  it('limits occasional window echoes to 3–10 copies for 1–3 seconds, deterministically',()=>{
+  it('limits occasional window echoes to 6–20 copies with a longer hold, deterministically',()=>{
     const s={...spec(),echoStrength:1};
     const samples=Array.from({length:800},(_,i)=>curveLabelDecoration(s,i/100,0));
     const active=samples.filter(d=>d.copies>0);
-    expect(active.length).toBeGreaterThanOrEqual(99);expect(active.length).toBeLessThanOrEqual(300);
-    expect(active.every(d=>d.copies>=3&&d.copies<=10&&d.fade>=0&&d.fade<=1)).toBe(true);
+    expect(active.length).toBeGreaterThanOrEqual(239);expect(active.length).toBeLessThanOrEqual(480);
+    expect(active.every(d=>d.copies>=6&&d.copies<=20&&d.fade>=0&&d.fade<=1)).toBe(true);
     expect(samples).toEqual(Array.from({length:800},(_,i)=>curveLabelDecoration(s,i/100,0)));
     expect(Array.from({length:800},(_,i)=>curveLabelDecoration(s,i/100,1).copies).every(n=>n===0)).toBe(true);
     expect(curveLabelDecoration({...s,cycle:1,dutyCycle:.25},.1,0).copies).toBe(0);

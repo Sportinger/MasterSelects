@@ -1,3 +1,4 @@
+import {curveLabelEpisode,curveLabelCues} from '../../src/engine/native3d/labels/curveLabelSchedule';
 import glitchShader from '../../src/engine/native3d/labels/curveLabelGlitch.wgsl?raw';
 import {curveLabelDecoration} from '../../src/engine/native3d/labels/curveLabelDecoration';
 import projectionShader from '../../src/engine/native3d/labels/curveLabelProjection.wgsl?raw';
@@ -95,6 +96,13 @@ try{
  const energies={hidden:energy(hidden),intro:energy(intro),shown:energy(shown),outro:energy(outro)};
  if(energies.hidden!==0||energies.intro<=0||energies.shown<=energies.intro*1.5||energies.outro>=energies.shown*.8)throw new Error(`Invalid card lifecycle: ${JSON.stringify(energies)}`);
  result.lifecycle=energies;
+ const periodicSpec={...spec};Object.assign(spec,{lifetimeVariation:1,scheduleSeed:17,introSpread:0});
+ const episode=curveLabelEpisode(spec,20,0),visibleTime=episode.birth+spec.transition+.1;
+ const randomVisible=await draw(visibleTime),randomHidden=await draw(episode.birth+episode.visible+.01);
+ if(energy(randomVisible)<=0||energy(randomHidden)!==0)throw new Error('GPU reveal disagrees with randomized CPU episode');
+ result.randomSchedule={episode,visible:energy(randomVisible),hidden:energy(randomHidden),cues:curveLabelCues({...spec,count:12,height:.11,introSpread:5,holdStart:22,holdEnd:27,holdCount:2},0,59)};
+ Object.assign(spec,periodicSpec);
+
  const thinMarker=await draw(2);spec.ringWeight=2.5;const thickMarker=await draw(2);
  const thinEnergy=markerEnergy(thinMarker,shifted),thickEnergy=markerEnergy(thickMarker,shifted);
  if(thickEnergy<thinEnergy*1.5)throw new Error(`Marker weight did not increase: ${thinEnergy}, ${thickEnergy}`);
@@ -142,6 +150,24 @@ try{
  const depthBefore=await probeDepth(5),depthAfter=await probeDepth(15);
  if(Math.max(...depthBefore)-Math.min(...depthBefore)<1||Math.abs(depthBefore[0]-depthAfter[0])<2)throw new Error('Cards do not spread and travel through depth');
  result.depthTravel={before:depthBefore,after:depthAfter};poseBuffer.destroy();
+ const rotationModule=device.createShaderModule({code:projectionShader+`
+@group(0) @binding(0) var<uniform> p:Params;
+@group(0) @binding(1) var<storage,read_write> angles:array<vec4f>;
+@compute @workgroup_size(1) fn probe(@builtin(global_invocation_id) id:vec3u){angles[id.x]=vec4f(cardRotation(id.x),1);}`});
+ const rotationPipeline=device.createComputePipeline({layout:'auto',compute:{module:rotationModule,entryPoint:'probe'}});
+ const angles=device.createBuffer({size:12*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+ const probeRotation=async(time:number)=>{
+  const data=new Float32Array(88);data[64]=time;data[68]=.65;data[76]=.35;data[87]=Math.PI/4;device.queue.writeBuffer(uniform,0,data);
+  const encoder=device.createCommandEncoder(),pass=encoder.beginComputePass();pass.setPipeline(rotationPipeline);
+  pass.setBindGroup(0,device.createBindGroup({layout:rotationPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:angles}}]}));pass.dispatchWorkgroups(12);pass.end();
+  const read=device.createBuffer({size:192,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});encoder.copyBufferToBuffer(angles,0,read,0,192);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
+  const values=[...new Float32Array(read.getMappedRange())].filter((_,i)=>i%4<2);read.unmap();read.destroy();return values;
+ };
+ const rotationFirst=await probeRotation(2),rotationNext=await probeRotation(2+1/60),rotationLater=await probeRotation(30);
+ const rotationStep=Math.max(...rotationFirst.map((v,i)=>Math.abs(v-rotationNext[i])));
+ if([...rotationFirst,...rotationLater].some(v=>Math.abs(v)>Math.PI/4+1e-6)||rotationStep>.01||Math.max(...rotationFirst)-Math.min(...rotationFirst)<.4)throw new Error('Window rotations are not bounded, varied and smooth');
+ if(Math.max(...rotationFirst.map((v,i)=>Math.abs(v-rotationLater[i])))<.3)throw new Error('Window rotation is static');
+ result.windowRotation={first:rotationFirst,later:rotationLater,maxFrameStep:rotationStep};angles.destroy();
  const metricModule=device.createShaderModule({code:projectionShader+`
 @group(0) @binding(0) var<uniform> p:Params;
 @group(0) @binding(1) var<storage,read_write> dimensions:array<vec4f>;

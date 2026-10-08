@@ -1,3 +1,4 @@
+import {curveLabelEpisode,curveLabelReveal} from './curveLabelSchedule';
 import {changingCurveReadouts} from './curveLabelReadout';
 import type { CurveLabelSpec } from '../../../services/operators/geometry/curveLabels';
 export const LABEL_COLUMNS=20, LABEL_ROWS=4, LABEL_GLYPHS=LABEL_COLUMNS*LABEL_ROWS;
@@ -18,25 +19,18 @@ export function curveLabelAnchors(starts:Uint32Array,counts:Uint32Array,spec:Cur
   }
   return out;
 }
-/** Concave start times introduce cards at progressively shorter intervals. */
+/** Initial appearance metadata, retained for consumers laying out an opening sequence. */
 export function curveLabelTiming(spec:CurveLabelSpec,card:number):{birth:number;period:number} {
-  const birth=spec.introSpread>0?spec.introSpread*Math.log2(card+1)/Math.log2(Math.max(2,spec.count)):-card*.173*spec.cycle;
-  return {birth,period:spec.cycle};
+  return curveLabelEpisode(spec,-Infinity,card);
 }
-/** Stateless appearance timing: opposite edges use exactly the same animation progress. */
 export function curveLabelLife(spec:CurveLabelSpec,time:number,card:number):{phase:number;reveal:number} {
-  const {birth,period}=curveLabelTiming(spec,card),age=time-birth;
-  const raw=age/period,phase=(raw-Math.floor(raw))*period;
-  if(age<0)return {phase:0,reveal:0};
-  const visible=spec.cycle*spec.dutyCycle,duration=Math.min(spec.transition,visible/2);
-  return {phase,reveal:Math.max(0,Math.min(1,phase/duration,(visible-phase)/duration))};
+  return curveLabelReveal(spec,time,curveLabelEpisode(spec,time,card));
 }
 /** Coordinate slots (256+) are formatted in the shader from the current world-space anchor. */
 export function curveLabelGlyphs(spec:CurveLabelSpec,time:number):Uint32Array {
   const out=new Uint32Array(spec.count*LABEL_GLYPHS).fill(32),titles=spec.titles.toUpperCase().split('|').filter(Boolean);
   for(let card=0;card<spec.count;card++){
-    const {birth,period}=curveLabelTiming(spec,card);
-    const cycle=Math.max(0,Math.floor((time-birth)/period));
+    const {cycle}=curveLabelEpisode(spec,time,card);
     const readout=changingCurveReadouts(titles[(cycle+card)%titles.length]??'FIBER TRACK',time,card,spec.textScramble),title=readout.title;
     const rows=[title,`NODE ${String(card+1).padStart(2,'0')}  /  ${readout.status}`,'X +000.00  Y +000.00','Z +000.00  /  LIVE'];
     rows.forEach((row,r)=>{for(let c=0;c<Math.min(LABEL_COLUMNS,row.length);c++)out[card*LABEL_GLYPHS+r*LABEL_COLUMNS+c]=row.charCodeAt(c);});
