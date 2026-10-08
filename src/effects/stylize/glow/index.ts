@@ -1,4 +1,8 @@
-// Glow Effect - High Quality
+// Glow Effect - bright pass, separable prefilter and per-axis ring sampling.
+// Rendering is owned by the editable operator graph (services/operators/glowEffectGraph.ts);
+// shader.wgsl holds its three-pass WGSL reference plus `glowFragment`, a single-pass
+// variant without the prefilter that compiles under the generic effect layout.
+// All of them follow glowSampling.ts.
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
@@ -11,6 +15,8 @@ export const glow: EffectDefinition = {
   shader,
   entryPoint: 'glowFragment',
   uniformSize: 32, // 8 floats
+  // Reports clamped quality (rings, samples, prefilter reach) in the inspector.
+  extraControls: () => import('./GlowQualityNote'),
 
   params: {
     amount: {

@@ -117,11 +117,34 @@ describe('worker software image graphs', () => {
     expect(data[35]).toBe(28);
   });
 
-  it('fails closed for materialized passes and missing resource descriptors', () => {
+  it('fails closed for missing resource descriptors, history inside pass chains and passes without a final output', () => {
     const plan = compileImageOperatorGraph(identityGraph), data = new Uint8ClampedArray([0, 0, 0, 255]);
     expect(() => applyWorkerSoftwareImageGraphs(data, 1, 1, [{ ...plan, resourceInputs: ['prior'] }], 0)).toThrow(/has no glyph-atlas descriptor/);
-    const passPlan: ImageOperatorPlan = { ...plan, passes: [{ id: 'pass', program: plan, inputResources: [] }] };
-    expect(() => applyWorkerSoftwareImageGraphs(data, 1, 1, [passPlan], 0)).toThrow(/materialized passes/);
+    const historyPlan: ImageOperatorPlan = { ...plan, frameHistoryResource: 'history', passes: [{ id: 'pass', program: plan, inputResources: [] }] };
+    expect(canApplyWorkerSoftwareImageGraphPlan(historyPlan)).toBe(false);
+    expect(() => applyWorkerSoftwareImageGraphs(data, 1, 1, [historyPlan], 0)).toThrow(/history inside materialized passes/);
+    const unfinished: ImageOperatorPlan = { ...plan, passes: [{ id: 'pass', program: plan, inputResources: [], outputResource: 'cache' }] };
+    expect(() => applyWorkerSoftwareImageGraphs(data, 1, 1, [unfinished], 0)).toThrow(/no final output pass/);
+    expect(data).toEqual(new Uint8ClampedArray([0, 0, 0, 255]));
+  });
+
+  it('runs materialized pass chains on unclamped float rasters before the final pass', () => {
+    // Pass 1 caches the frame scaled by four (beyond rgba8 range); the final pass samples the cache to the left and divides by four.
+    const nodes = [node('frame', 'image.frame'), node('four', 'values.number', 4), node('quarter', 'values.number', .25),
+      node('scaled', 'math.multiply.image-scalar'), node('store', 'image.materialize'), node('uv', 'image.normalized-uv'),
+      node('dx', 'values.number', -1 / 3), node('zero', 'values.number', 0), node('offset', 'vector.combine.vec2'), node('sample-uv', 'math.add.vec2'),
+      node('sample', 'image.sample'), node('restored', 'math.multiply.image-scalar'), node('output', 'image.output')];
+    const graph: EffectOperatorGraph = { version: 1, schemaVersion: 1, domain: 'image', nodes, layout: {}, edges: [
+      edge('a', 'frame', 'image', 'scaled', 'a'), edge('b', 'four', 'value', 'scaled', 'b'), edge('c', 'scaled', 'value', 'store', 'image'),
+      edge('d', 'dx', 'value', 'offset', 'x'), edge('e', 'zero', 'value', 'offset', 'y'), edge('f', 'uv', 'uv', 'sample-uv', 'a'),
+      edge('g', 'offset', 'value', 'sample-uv', 'b'), edge('h', 'store', 'image', 'sample', 'image'), edge('i', 'sample-uv', 'value', 'sample', 'uv'),
+      edge('j', 'sample', 'image', 'restored', 'a'), edge('k', 'quarter', 'value', 'restored', 'b'), edge('l', 'restored', 'value', 'output', 'image')] };
+    const plan = compileImageOperatorGraph(graph);
+    expect(plan.passes).toHaveLength(2);
+    expect(canApplyWorkerSoftwareImageGraphPlan(plan)).toBe(true);
+    const data = new Uint8ClampedArray([200, 100, 40, 255, 20, 60, 220, 128, 0, 0, 0, 0]);
+    applyWorkerSoftwareImageGraphs(data, 3, 1, [plan], 0);
+    expect(Array.from(data)).toEqual([200, 100, 40, 255, 200, 100, 40, 255, 20, 60, 220, 128]);
   });
 
   it('samples rasterized glyph RGBA through the canonical resource callback and bounded cache identity', () => {

@@ -14,6 +14,7 @@ import {
   type WorkerSoftwareFeedbackFrameMetadata,
 } from './workerSoftwareFeedbackEffects';
 import { applyWorkerSoftwareImageGraphs } from './workerSoftwareImageGraphs';
+import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from './workerSoftwareGlow';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -364,68 +365,6 @@ function applySharpenAdjustment(
   ];
 }
 
-function gaussian(value: number, sigma: number): number {
-  const safeSigma = Math.max(sigma, 0.001);
-  return Math.exp(-(value * value) / (2 * safeSigma * safeSigma));
-}
-
-function applyGlowAdjustment(
-  sourceData: Uint8ClampedArray,
-  width: number,
-  height: number,
-  uvX: number,
-  uvY: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['glowAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  const color = sampleRgba(sourceData, width, height, uvX, uvY);
-  const rings = Math.max(1, Math.min(32, Math.round(finiteNumber(adjustment.rings, 6.85))));
-  const samplesPerRing = Math.max(4, Math.min(64, Math.round(finiteNumber(adjustment.samplesPerRing, 17.95))));
-  const radius = Math.max(0, finiteNumber(adjustment.radius, 1));
-  const softness = Math.max(0.001, finiteNumber(adjustment.softness, 0.496));
-  const threshold = finiteNumber(adjustment.threshold, 0.7935);
-  let glowR = 0;
-  let glowG = 0;
-  let glowB = 0;
-  let weightTotal = 0;
-
-  for (let ring = 1; ring <= rings; ring += 1) {
-    const ringRadius = ring * radius * (1 / Math.max(width, 1)) * 10;
-    const ringWeight = gaussian(ring / rings, softness + 0.3);
-    for (let sampleIndex = 0; sampleIndex < samplesPerRing; sampleIndex += 1) {
-      const angle = sampleIndex * Math.PI * 2 / samplesPerRing + ring * 0.5;
-      const sample = sampleRgba(
-        sourceData,
-        width,
-        height,
-        clamp01(uvX + Math.cos(angle) * ringRadius),
-        clamp01(uvY + Math.sin(angle) * ringRadius),
-      );
-      const sampleLuma = luma(sample[0], sample[1], sample[2]);
-      const brightFactor = smoothstep(threshold - 0.1, threshold + 0.1, sampleLuma);
-      glowR += sample[0] * brightFactor * ringWeight;
-      glowG += sample[1] * brightFactor * ringWeight;
-      glowB += sample[2] * brightFactor * ringWeight;
-      weightTotal += ringWeight;
-    }
-  }
-
-  const centerBright = smoothstep(threshold - 0.1, threshold + 0.1, luma(color[0], color[1], color[2]));
-  glowR += color[0] * centerBright * 2;
-  glowG += color[1] * centerBright * 2;
-  glowB += color[2] * centerBright * 2;
-  weightTotal += 2;
-
-  const amount = finiteNumber(adjustment.amount, 1) * 2;
-  return [
-    clamp01(color[0] + (glowR / weightTotal) * amount),
-    clamp01(color[1] + (glowG / weightTotal) * amount),
-    clamp01(color[2] + (glowB / weightTotal) * amount),
-    color[3],
-  ];
-}
-
 function fract(value: number): number {
   return value - Math.floor(value);
 }
@@ -584,6 +523,8 @@ export function applyWorkerSoftwarePixelEffects(
     || colorGradePrimaryNodes.length > 0
     ? new Uint8ClampedArray(data)
     : data;
+  // Glow is a separable neighborhood prefilter; build it once per frame, then sample rings per pixel.
+  const glowFields = glowAdjustments.map(adjustment => prepareWorkerSoftwareGlow(sourceData, width, height, adjustment));
   const splitDx = hasRgbSplit ? Math.round(Math.cos(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * width) : 0;
   const splitDy = hasRgbSplit ? Math.round(Math.sin(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * height) : 0;
   for (let y = 0; y < height; y += 1) {
@@ -659,10 +600,8 @@ export function applyWorkerSoftwarePixelEffects(
         const uvY = (y + 0.5) / height;
         [r, g, b, alpha] = applySharpenAdjustment(sourceData, width, height, uvX, uvY, adjustment);
       }
-      for (const adjustment of glowAdjustments) {
-        const uvX = (x + 0.5) / width;
-        const uvY = (y + 0.5) / height;
-        [r, g, b, alpha] = applyGlowAdjustment(sourceData, width, height, uvX, uvY, adjustment);
+      for (const glow of glowFields) {
+        [r, g, b, alpha] = applyWorkerSoftwareGlow(glow, sourceData, x, y);
       }
       for (const adjustment of scanlineAdjustments) {
         const uvY = (y + 0.5) / height;

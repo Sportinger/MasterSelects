@@ -9,7 +9,7 @@ import { evaluateImageDerivativeQuad, type ImageDerivativeMode } from './imageOp
 import { evaluateImageBayer4 } from './imagePatternSemantics';
 import { sortImageSegment } from './imageSegmentSortSemantics';
 import { partitionImageQuadtree } from './imageQuadtreePartitionSemantics';
-import { imageScopeReadsPrimaryInput } from './imageOperatorScopes';
+import { imageSampleScopeNeedsSource, imageScopeReadsPrimaryInput } from './imageOperatorScopes';
 import { marchingSquaresTopology } from './marchingSquaresTopology';
 import { temporalDeformation } from './motionDeformationMath';
 import { evaluateOpticalFlow, evaluateDirectionalSmooth, evaluateMotionConsistency } from './motionImageEvaluation';
@@ -35,6 +35,7 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
   const quadtreeScopes = new Map(plan.quadtreeScopes?.map(descriptor => [descriptor.id, descriptor]) ?? []);
   const sourceLoadScopes = new Set(plan.sampleScopes.filter(scope => scope.coordinate === 'pixel'
     && imageScopeReadsPrimaryInput(plan.instructions, scope.id)).map(scope => scope.id));
+  const sourceSampleScopes = new Set(plan.sampleScopes.filter(scope => imageSampleScopeNeedsSource(plan.instructions, scope.id)).map(scope => scope.id));
   const derivativeDependencies = new Map<number, ReadonlySet<number>>();
   const collectDependencies = (index: number, result: Set<number>) => {
     if (result.has(index)) return;
@@ -163,7 +164,8 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     }
     else if (item.operation === 'sample-image') {
       const uv = args[0] as [number, number];
-      values.push(evaluateScope(item.value!, context.sampleImage!(uv), uv, kernelIndex, sequenceIndex, sequenceT, undefined, filter)[sampleScopes.get(item.value!)!.output]);
+      const sampled = sourceSampleScopes.has(item.value!) ? context.sampleImage!(uv) : [0, 0, 0, 0] as [number, number, number, number];
+      values.push(evaluateScope(item.value!, sampled, uv, kernelIndex, sequenceIndex, sequenceT, undefined, filter)[sampleScopes.get(item.value!)!.output]);
     }
     else if (item.operation === 'load-image') {
       const requested = args[0] as [number, number], resolution = context.resolution!;

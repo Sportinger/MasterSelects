@@ -1,7 +1,7 @@
 import { extractImageComposition } from './extractImageComposition';
 import { createDefaultMotionBlurGraph, createDefaultRadialBlurGraph } from './directionalBlurEffectGraphs';
 import { createDefaultContrastGraph, createDefaultSaturationGraph } from './colorEffectGraphs';
-import { createDefaultGlowGraph } from './glowEffectGraph';
+import { createLegacyGlowGraph } from './glowEffectGraph';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultAsciiGraph, createDefaultAsciiGhostGraph } from './asciiEffectGraph';
 
@@ -30,7 +30,8 @@ export const PROCESSING_COMPOSITIONS = [
     description: 'Apply RGB contrast around 0.5. Output is not clamped; alpha stays with the caller.',
     members: ['amount-rgb', 'half-rgb', 'subtract-half', 'multiply', 'add-half'], consumers: ['Image graphs', 'Contrast'],
   }),
-  extractImageComposition(createDefaultGlowGraph(), {
+  // Extracted from the original Glow recipe so the shared definition stays byte-stable.
+  extractImageComposition(createLegacyGlowGraph(), {
     id: 'color.soft-bright-pass', label: 'Bright Pass',
     description: 'Rec.709 luminance, smooth lower/upper threshold and RGBA scaling. Threshold edges are explicit inputs.',
     members: ['sample-luma', 'sample-bright', 'bright-sample'], consumers: ['Image graphs', 'Glow'],

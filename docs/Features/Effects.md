@@ -556,12 +556,15 @@ edges, plus 2048 expanded compiler instructions. The existing 64-node/256-edge
 limits remain unchanged for non-image graph domains. These are validation and
 lowering bounds, not permission for hidden black-box operators.
 
-The worker-software route transports persisted canonical single-pass plans and
-evaluates them in stack order with bilinear sampling and straight alpha. It
-supports a stack only when every enabled visual effect is image-graph owned and
-none of its plans requires materialized passes or resource inputs; mixed
-graph/legacy and multipass stacks fail closed to the existing host fallback.
-Primary color operations remain after the graph stack.
+The worker-software route transports persisted canonical plans and evaluates
+them in stack order with bilinear sampling and straight alpha. Materialized pass
+chains run like `ImageGraphPassRuntime`: each producer pass writes an unclamped
+float raster at its resource size (the GPU uses `rgba16float`), later passes
+sample it with the linear clamp sampler, and the final pass writes RGBA8. It
+supports a stack only when every enabled visual effect is image-graph owned;
+mixed graph/legacy stacks, history inside a pass chain, and external resources
+other than glyph atlases fail closed to the existing host fallback. Primary
+color operations remain after the graph stack.
 
 ## Live Catalog Previews And Looks Foundation
 
@@ -809,14 +812,50 @@ always one, independent of source alpha. Strength remains animatable with defaul
 1 and range 0–5; Invert defaults to false. Sampling, coefficients and the final
 clamp are editable graph connections rather than an opaque Sobel operation.
 
-Glow composes a ring blur, soft brightness threshold and additive blend from the
-same image and math operators. A rectangular kernel reducer supplies ring-major
-sample coordinates; it does not expand the existing sequence reducer's limit.
-Ring and sample counts retain their original truncation and limits (1–32 rings,
-4–64 samples per ring). The graph adds the weighted center after the ring sum,
-normalizes the accumulated light, applies Amount, and clamps RGB. Source-center
-alpha is preserved exactly. The default graph remains a single pass, including
-the original width-based radius scaling and fractional quality defaults.
+Glow composes a bright pass, a separable prefilter, a ring blur and an additive
+resolve from the same image and math operators, in three graph passes (two
+`Cache Image` stages). The shared contract lives in
+`src/effects/stylize/glow/glowSampling.ts`; the operator graph, the three-pass
+WGSL reference (`shader.wgsl`) and the worker software path follow it:
+
+1. **Bright pass + horizontal prefilter.** Each tap emits
+   `rgb × alpha × smoothstep(threshold ± 0.1, Rec.709 luma)`, so transparent
+   pixels never glow. A horizontal Gaussian with σ = half the sample spacing
+   averages that light; its taps sit on texel boundaries two pixels apart, so the
+   linear sampler covers every texel once and thin strokes are never skipped.
+2. **Vertical prefilter** with the same taps over the cached horizontal result.
+3. **Rings.** Ring *k* sits at `k × Radius × 10` pixels, converted per axis, so
+   the glow is round on non-square layers (a 1080×1920 layer used to stretch it
+   1.78× vertically; landscape layers squashed it). Rings and Samples/Ring keep
+   their truncation and limits (1–32, 4–64). Each ring keeps its legacy total
+   weight `Samples/Ring × gaussian(k / rings, Softness + 0.3)` but spreads it
+   over enough samples (`floor(2π × rings) + 1`, at most 64) that the outer arc
+   spacing never exceeds the ring spacing. Samples/Ring therefore acts as the
+   minimum count and still sets the ring-versus-center balance.
+4. **Resolve.** The weighted center light (weight 2) is added, the light is
+   normalized, Amount × 2 is applied and added to the premultiplied source.
+   Output alpha is `max(source alpha, brightest premultiplied channel)` and RGB is
+   un-premultiplied by it. The compositor blends layers with straight alpha
+   (`mix(base, layer, alpha)`), so the result equals the original layer plus the
+   glow light: opaque pixels keep `clamp(color + glow)` exactly as before, and a
+   halo now also appears around glyphs on transparent layers (previously it was
+   clipped to the source alpha and only showed inside opaque areas).
+
+The prefilter is what removes the mottled, blotchy texture that sparse rings
+produced next to thin bright strokes at larger radii (for example a 6 px cyan
+outline around dark text fill at Radius 2.4). Quality degrades gracefully: when
+2π × rings exceeds 64 samples per ring, the prefilter widens to the larger arc
+spacing instead of leaving gaps; the prefilter itself holds at most 32 taps per
+side (±63 px), so radii above roughly 4 with the default ring count can keep
+faint ring structure. Both limits, and clamped Rings or Samples/Ring values, are
+reported below the Glow parameters in the inspector instead of being applied
+silently. Default settings cost about 16 + 16 prefilter taps plus 6 × 38 ring
+taps per pixel and two full-resolution `rgba16float` textures per Glow instance.
+
+Saved projects keep their parameters. Their untouched saved Glow graph (any
+packed, folded or laid-out form of the original single-pass recipe) is upgraded
+to the new recipe on load; graphs whose nodes, wiring, exposed values or folder
+bypasses were edited are kept exactly as authored and keep the legacy sampling.
 
 Wave, Twirl, Bulge and Kaleidoscope use editable UV/math graphs followed by a
 single image sample. Wave preserves its sequential cross-axis displacement;
@@ -901,6 +940,9 @@ Effect rendering and demanded node previews use the same staged execution path.
 Intermediate allocations can be reused across frames, but their pixel contents
 are recomputed for each frame. A CPU reference needs an explicit resource sampler
 to evaluate a materialized input; it cannot silently substitute inline evaluation.
+An `image.sample` whose sampled expression never reads its own pixel (for example
+a cached resource sampled at an offset) no longer fetches the source texture for
+that tap, in both the generated WGSL and the CPU evaluator.
 
 Compile contexts may also declare named image sources. They lower to the same
 resource-input contract without inserting another IR stage or pass, with at most
@@ -1143,7 +1185,8 @@ The registered quality parameters are:
 - Motion Blur: `samples`
 - Radial Blur: `samples`
 - Zoom Blur: `samples`
-- Glow: `rings`, `samplesPerRing`
+- Glow: `rings`, `samplesPerRing` (Samples/Ring is a minimum; outer rings get
+  more samples automatically, see the Glow graph section)
 - Voxel Relief: `maxSteps`
 - Pixel Particle Disintegrate: `maxPreviewParticles`, `maxExportParticles`,
   `maxInstances`

@@ -26,6 +26,15 @@ export function imageScopeReadsPrimaryInput(instructions: readonly ImagePlanInst
       && item.inputs.slice(1).some(child => imageScopeReadsPrimaryInput(instructions, child, seen)))));
 }
 
+/** Operations that forward the enclosing scope's pixel into a nested evaluation. */
+const PIXEL_FORWARDING = new Set(['kernel-sum', 'rect-sum', 'sequence-sum', 'select-image', 'select-lazy-scalar']);
+/** A sample scope that never reads its own pixel (for example a cached resource sampled at an
+ * offset) needs no source texture fetch. Conservative: reducers and lazy branches count as reads. */
+export function imageSampleScopeNeedsSource(instructions: readonly ImagePlanInstruction[], scope: number): boolean {
+  return imageScopeReadsPrimaryInput(instructions, scope)
+    || instructions.some(item => item.scope === scope && PIXEL_FORWARDING.has(item.operation));
+}
+
 export function hasUpstreamImageDerivative(current: BoundOperatorNode, edges: readonly OperatorEdge[],
   nodes: ReadonlyMap<string, BoundOperatorNode>, seen = new Set<string>()): boolean {
   if (current.operator.startsWith('image.derivative.')) return true;
