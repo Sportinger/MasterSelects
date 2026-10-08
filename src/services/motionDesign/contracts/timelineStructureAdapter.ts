@@ -23,9 +23,11 @@ import {
 import {
   MOTION_PARENT_DIAGNOSTIC_CODES,
   MOTION_PARENT_WORLD_PRESERVATION,
+  type MotionParentCompositionSize,
   type MotionParentGraphEvaluation,
   type MotionParentTransform2D,
 } from '../structure/contracts';
+import { compositionPixelSizeOf } from '../../../utils/parentPositionFrame';
 
 const TWO_D_TRANSFORM_PROPERTIES = [
   'position.x',
@@ -37,7 +39,16 @@ const TWO_D_TRANSFORM_PROPERTIES = [
   'opacity',
 ] as const satisfies readonly AnimatableProperty[];
 
-export interface TimelineMotionParentPlanningInput {
+/**
+ * Every planning/apply input names the owning composition size explicitly:
+ * parent rotation turns 2D offsets in its pixel space, and an apply call
+ * replans with it, so plan and apply must use the same value.
+ */
+interface TimelineMotionCompositionFrameInput {
+  readonly compositionSize: MotionParentCompositionSize | undefined;
+}
+
+export interface TimelineMotionParentPlanningInput extends TimelineMotionCompositionFrameInput {
   readonly compositionId: string;
   readonly clips: readonly TimelineClip[];
   readonly clipKeyframes: ReadonlyMap<string, readonly Keyframe[]>;
@@ -46,14 +57,14 @@ export interface TimelineMotionParentPlanningInput {
   readonly parentClipId?: string;
 }
 
-export interface TimelineMotionStructureApplyInput {
+export interface TimelineMotionStructureApplyInput extends TimelineMotionCompositionFrameInput {
   readonly compositionId: string;
   readonly clips: readonly TimelineClip[];
   readonly clipKeyframes: ReadonlyMap<string, readonly Keyframe[]>;
   readonly plan: MotionStructureLeafOperationPlan;
 }
 
-export interface TimelineMotionCreateNullPlanningInput {
+export interface TimelineMotionCreateNullPlanningInput extends TimelineMotionCompositionFrameInput {
   readonly compositionId: string;
   readonly clips: readonly TimelineClip[];
   readonly clipKeyframes: ReadonlyMap<string, readonly Keyframe[]>;
@@ -164,9 +175,12 @@ export function createTimelineMotionParentEvaluation(
   clips: readonly TimelineClip[],
   clipKeyframes: ReadonlyMap<string, readonly Keyframe[]>,
   timelineTime: number,
+  compositionSize: MotionParentCompositionSize | undefined,
 ): MotionParentGraphEvaluation {
+  const validCompositionSize = compositionPixelSizeOf(compositionSize);
   return {
     timelineTime,
+    ...(validCompositionSize ? { compositionSize: validCompositionSize } : {}),
     localTransforms: clips
       .map((clip) => ({
         clipId: clip.id,
@@ -190,6 +204,7 @@ export function planTimelineMotionParentMutation(
     input.clips,
     input.clipKeyframes,
     input.timelineTime,
+    input.compositionSize,
   );
   if (!input.parentClipId) {
     const child = input.clips.find((clip) => clip.id === input.childClipId);
@@ -285,6 +300,7 @@ export function planTimelineMotionCreateNullAndParentSelected(
     input.clips,
     input.clipKeyframes,
     input.timelineTime,
+    input.compositionSize,
   );
   return planMotionCreateNullAndParentSelected({
     graph,
@@ -470,6 +486,7 @@ export function applyTimelineMotionStructurePlan(
 
   const replanned = planTimelineMotionParentMutation({
     compositionId: input.compositionId,
+    compositionSize: input.compositionSize,
     clips: input.clips,
     clipKeyframes: input.clipKeyframes,
     timelineTime: input.plan.timelineTime,
@@ -532,6 +549,7 @@ export function applyTimelineMotionCreateNullAndParentSelectedPlan(
   }
   const replanned = planTimelineMotionCreateNullAndParentSelected({
     compositionId: input.compositionId,
+    compositionSize: input.compositionSize,
     clips: input.clips,
     clipKeyframes: input.clipKeyframes,
     timelineTime: input.timelineTime,
@@ -608,6 +626,7 @@ export function applyTimelineMotionCreateNullPlan(
   }
   const replanned = planTimelineMotionCreateNull({
     compositionId: input.compositionId,
+    compositionSize: input.compositionSize,
     clips: input.clips,
     clipKeyframes: input.clipKeyframes,
     timelineTime: input.timelineTime,

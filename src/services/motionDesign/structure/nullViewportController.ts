@@ -13,6 +13,7 @@ import {
   isFiniteMotionParentTransform2D,
 } from './parentTransformMath';
 import { isValidMotionParentStableId } from './stableId';
+import { createCompositionParentPositionFrame, rotateParentPositionOffset } from '../../../utils/parentPositionFrame';
 
 export const MOTION_NULL_VIEWPORT_CONTROLLER_VERSION = 1 as const;
 
@@ -385,8 +386,9 @@ function buildHandleGeometry(
   const cosine = Math.cos(radians);
   const sine = Math.sin(radians);
   const armLength = 10;
-  const xOffset = { x: cosine * armLength, y: sine * armLength };
-  const yOffset = { x: -sine * armLength, y: cosine * armLength };
+  // Screen Y points down; positive rotation turns counter-clockwise like the compositor.
+  const xOffset = { x: cosine * armLength, y: -sine * armLength };
+  const yOffset = { x: sine * armLength, y: cosine * armLength };
   return {
     center: { ...center },
     xAxis: {
@@ -481,7 +483,14 @@ export function buildMotionNullViewportController(
     );
   }
 
-  const worldEvaluation = evaluateMotionParentGraphWorldTransforms(input.graph, input.evaluation);
+  // The displayed composition is the pixel frame parent rotation acts in.
+  const { compositionSize: evaluationSize } = input.evaluation, mappedSize = input.mapping.compositionSize;
+  if (evaluationSize && (evaluationSize.width !== mappedSize.width || evaluationSize.height !== mappedSize.height)) {
+    return fail(MOTION_NULL_VIEWPORT_DIAGNOSTIC_CODES.MAPPING_INVALID,
+      'The parent snapshot and the viewport mapping must use the same composition size.', [clip.clipId]);
+  }
+  const worldEvaluation = evaluateMotionParentGraphWorldTransforms(input.graph,
+    evaluationSize ? input.evaluation : { ...input.evaluation, compositionSize: { width: mappedSize.width, height: mappedSize.height } });
   if (!worldEvaluation.worlds) {
     return {
       ok: false,
@@ -680,15 +689,15 @@ export function planMotionNullViewportDrag(
     y: compositionDelta.y * 2 / controller.mapping.compositionSize.height,
   };
 
-  const inverseParentRadians = -(
-    (controller.parentWorldTransform?.rotationZ ?? 0) * Math.PI / 180
-  );
-  const cosine = Math.cos(inverseParentRadians);
-  const sine = Math.sin(inverseParentRadians);
   const parentUniformScale = controller.parentWorldTransform?.scale.all ?? 1;
+  const unrotatedDelta = rotateParentPositionOffset(
+    worldDelta,
+    -(controller.parentWorldTransform?.rotationZ ?? 0),
+    createCompositionParentPositionFrame(controller.mapping.compositionSize),
+  );
   const localDelta = {
-    x: (worldDelta.x * cosine - worldDelta.y * sine) / parentUniformScale,
-    y: (worldDelta.x * sine + worldDelta.y * cosine) / parentUniformScale,
+    x: unrotatedDelta.x / parentUniformScale,
+    y: unrotatedDelta.y / parentUniformScale,
   };
   const nextWorld = {
     x: controller.worldTransform.position.x + worldDelta.x,
@@ -726,6 +735,7 @@ export function planMotionNullViewportDrag(
         controller.parentWorldTransform,
         previewWorldTransform,
         [controller.clipId, ...(controller.parentClipId ? [controller.parentClipId] : [])],
+        controller.mapping.compositionSize,
       )
     : { ok: true as const, transform: cloneMotionParentTransform2D(previewWorldTransform) };
   if (!nextLocalTransform.ok) {

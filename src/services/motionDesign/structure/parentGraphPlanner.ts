@@ -19,6 +19,7 @@ import {
   cloneMotionParentTransform2D,
   composeMotionParentTransforms2D,
   deriveMotionParentLocalTransform2D,
+  isExactMotionParentCompositionSize,
   isFiniteMotionParentTransform2D,
 } from './parentTransformMath';
 import { isValidMotionParentStableId } from './stableId';
@@ -255,7 +256,8 @@ function inspectDenseDataArray(value: unknown, maxLength: number): DenseArrayIns
 const GRAPH_KEYS = new Set(['version', 'revision', 'nodes']);
 const NODE_KEYS = new Set(['clipId', 'compositionId', 'space', 'parentClipId']);
 const NODE_REQUIRED_KEYS = new Set(['clipId', 'compositionId', 'space']);
-const EVALUATION_KEYS = new Set(['timelineTime', 'localTransforms']);
+const EVALUATION_KEYS = new Set(['timelineTime', 'localTransforms', 'compositionSize']);
+const EVALUATION_REQUIRED_KEYS = new Set(['timelineTime', 'localTransforms']);
 const EVALUATION_ENTRY_KEYS = new Set(['clipId', 'transform']);
 const TRANSFORM_KEYS = new Set(['position', 'scale', 'rotationZ', 'opacity']);
 const POSITION_KEYS = new Set(['x', 'y']);
@@ -308,11 +310,12 @@ function preflightParentGraphEnvelope(graph: unknown): readonly MotionParentFail
 function preflightParentEvaluationEnvelope(
   evaluation: unknown,
 ): readonly MotionParentFailure[] {
-  const root = inspectExactRecord(evaluation, EVALUATION_KEYS);
-  if (!root) {
+  const root = inspectExactRecord(evaluation, EVALUATION_KEYS, EVALUATION_REQUIRED_KEYS);
+  if (!root || (root.descriptors.compositionSize?.value !== undefined
+    && !isExactMotionParentCompositionSize(root.descriptors.compositionSize.value))) {
     return [failure(
       MOTION_PARENT_ERROR_CODES.EVALUATION_INVALID,
-      'Parent evaluation must be an exact inert evaluation envelope.',
+      'Parent evaluation must be an exact inert envelope; compositionSize, if set, is a positive { width, height }.',
       [],
     )];
   }
@@ -768,6 +771,7 @@ export function evaluateMotionParentGraphWorldTransforms(
       const world = composeMotionParentTransforms2D(
         parentWorld,
         locals.get(childClipId)!,
+        evaluation.compositionSize,
       );
       if (!isFiniteMotionParentTransform2D(world)) {
         derivedFailures.push(failure(
@@ -918,6 +922,7 @@ export function planMotionParentMutation(
       parentWorld,
       childWorld,
       [child.clipId, parent.clipId],
+      input.evaluation.compositionSize,
     );
     if (!inverse.ok) return { ok: false, failures: [inverse.failure] };
     toLocal = inverse.transform;

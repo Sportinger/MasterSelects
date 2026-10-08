@@ -374,14 +374,26 @@ describe('MD6 parent graph contract freeze', () => {
     });
     const world = composeMotionParentTransforms2D(parent, local);
 
-    expect(world.position.x).toBeCloseTo(90);
-    expect(world.position.y).toBeCloseTo(70);
+    // Square frame, Y down: +90 deg turns the Scale All offset (20, 10)
+    // counter-clockwise on screen to (10, -20), like the compositor.
+    expect(world.position.x).toBeCloseTo(110);
+    expect(world.position.y).toBeCloseTo(30);
     expect(world.scale).toEqual({ all: 0.5, x: 6, y: 2 });
     expect(world.rotationZ).toBe(110);
     expect(world.opacity).toBeCloseTo(0.8);
     const inverse = deriveMotionParentLocalTransform2D(parent, world);
     expect(inverse.ok).toBe(true);
     if (inverse.ok) expectTransformClose(inverse.transform, local);
+
+    // In a 1920x1080 composition the offset is (19200, 5400) px and turns
+    // rigidly to (5400, -19200) px before it is normalized again.
+    const compositionSize = { width: 1920, height: 1080 };
+    const pixelWorld = composeMotionParentTransforms2D(parent, local, compositionSize);
+    expect(pixelWorld.position.x).toBeCloseTo(100 + 5400 / 960);
+    expect(pixelWorld.position.y).toBeCloseTo(50 - 19200 / 540);
+    const pixelInverse = deriveMotionParentLocalTransform2D(parent, pixelWorld, [], compositionSize);
+    expect(pixelInverse.ok).toBe(true);
+    if (pixelInverse.ok) expectTransformClose(pixelInverse.transform, local);
   });
 
   it('fails closed when exact world preservation would require a singular inverse', () => {

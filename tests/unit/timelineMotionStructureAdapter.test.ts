@@ -38,6 +38,7 @@ describe('timeline Motion structure adapter', () => {
     const before = structuredClone(clips);
     const result = planTimelineMotionCreateNullAndParentSelected({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips,
       clipKeyframes: new Map(),
       timelineTime: 2,
@@ -54,6 +55,7 @@ describe('timeline Motion structure adapter', () => {
 
     const applied = applyTimelineMotionCreateNullAndParentSelectedPlan({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips,
       clipKeyframes: new Map(),
       timelineTime: 2,
@@ -75,6 +77,7 @@ describe('timeline Motion structure adapter', () => {
     const danglingChild = { ...child, parentClipId: 'missing-parent' };
     const result = planTimelineMotionParentMutation({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips: [parent, danglingChild],
       clipKeyframes: new Map(),
       timelineTime: 2,
@@ -87,6 +90,7 @@ describe('timeline Motion structure adapter', () => {
 
     const applied = applyTimelineMotionStructurePlan({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips: [parent, danglingChild],
       clipKeyframes: new Map(),
       plan: result.plan,
@@ -101,6 +105,7 @@ describe('timeline Motion structure adapter', () => {
     const clips = [parent, child];
     const result = planTimelineMotionParentMutation({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips,
       clipKeyframes: new Map(),
       timelineTime: 2,
@@ -122,6 +127,7 @@ describe('timeline Motion structure adapter', () => {
     };
     const applied = applyTimelineMotionStructurePlan({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips: [changedParent, child],
       clipKeyframes: new Map(),
       plan: result.plan,
@@ -145,6 +151,7 @@ describe('timeline Motion structure adapter', () => {
     }];
     const result = planTimelineMotionParentMutation({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips: [parent, child],
       clipKeyframes: new Map([[child.id, initialKeyframes]]),
       timelineTime: 2,
@@ -156,6 +163,7 @@ describe('timeline Motion structure adapter', () => {
 
     const applied = applyTimelineMotionStructurePlan({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips: [parent, child],
       clipKeyframes: new Map([[child.id, [{ ...initialKeyframes[0], value: 35 }]]]),
       plan: result.plan,
@@ -180,6 +188,7 @@ describe('timeline Motion structure adapter', () => {
     }];
     const result = planTimelineMotionParentMutation({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips: [parent, child],
       clipKeyframes: new Map([[child.id, keyframes]]),
       timelineTime: 2,
@@ -191,6 +200,7 @@ describe('timeline Motion structure adapter', () => {
 
     const applied = applyTimelineMotionStructurePlan({
       compositionId: 'adapter-comp',
+      compositionSize: undefined,
       clips: [parent, child],
       clipKeyframes: new Map([[child.id, keyframes]]),
       plan: result.plan,

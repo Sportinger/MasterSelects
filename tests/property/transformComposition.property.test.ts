@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import fc from 'fast-check';
 import { composeTransforms, wouldCreateCycle } from '../../src/utils/transformComposition';
+import {
+  createCompositionParentPositionFrame,
+  SCENE_PARENT_POSITION_FRAME,
+  type ParentPositionFrame,
+} from '../../src/utils/parentPositionFrame';
 import type { BlendMode, ClipTransform } from '../../src/types';
 
 const RUN_OPTIONS = { numRuns: 100, seed: 20260518 };
@@ -161,11 +166,17 @@ function chainReaches(
   return false;
 }
 
-describe('composeTransforms properties', () => {
+const POSITION_FRAMES: Array<[string, ParentPositionFrame]> = [
+  ['scene units', SCENE_PARENT_POSITION_FRAME],
+  ['portrait 1080x1920 composition', createCompositionParentPositionFrame({ width: 1080, height: 1920 })],
+  ['landscape 1920x1080 composition', createCompositionParentPositionFrame({ width: 1920, height: 1080 })],
+];
+
+describe.each(POSITION_FRAMES)('composeTransforms properties (%s)', (_name, frame) => {
   it('identity parent preserves child transform semantics', () => {
     fc.assert(
       fc.property(transformArbitrary, (child) => {
-        const result = composeTransforms(identityTransform(), child);
+        const result = composeTransforms(identityTransform(), child, frame);
 
         expectClose(result.opacity, child.opacity);
         expect(result.blendMode).toBe(child.blendMode);
@@ -187,7 +198,7 @@ describe('composeTransforms properties', () => {
   it('finite input transforms compose to finite numeric fields', () => {
     fc.assert(
       fc.property(transformArbitrary, transformArbitrary, (parent, child) => {
-        const result = composeTransforms(parent, child);
+        const result = composeTransforms(parent, child, frame);
 
         expect(numericFields(result).every(Number.isFinite)).toBe(true);
       }),
@@ -201,7 +212,7 @@ describe('composeTransforms properties', () => {
         const originalParent = cloneTransform(parent);
         const originalChild = cloneTransform(child);
 
-        composeTransforms(parent, child);
+        composeTransforms(parent, child, frame);
 
         expect(parent).toEqual(originalParent);
         expect(child).toEqual(originalChild);
@@ -213,8 +224,8 @@ describe('composeTransforms properties', () => {
   it('is associative for the implemented parent-child composition semantics', () => {
     fc.assert(
       fc.property(transformArbitrary, transformArbitrary, transformArbitrary, (a, b, c) => {
-        const left = composeTransforms(composeTransforms(a, b), c);
-        const right = composeTransforms(a, composeTransforms(b, c));
+        const left = composeTransforms(composeTransforms(a, b, frame), c, frame);
+        const right = composeTransforms(a, composeTransforms(b, c, frame), frame);
 
         expectTransformClose(left, right);
       }),
@@ -239,9 +250,9 @@ describe('composeTransforms properties', () => {
             scale: { ...axisScaledParent.scale, all: scaleAll },
           };
 
-          const result = composeTransforms(parent, identityTransform());
-          const axisScaledResult = composeTransforms(axisScaledParent, identityTransform());
-          const uniformlyScaledResult = composeTransforms(uniformlyScaledParent, identityTransform());
+          const result = composeTransforms(parent, identityTransform(), frame);
+          const axisScaledResult = composeTransforms(axisScaledParent, identityTransform(), frame);
+          const uniformlyScaledResult = composeTransforms(uniformlyScaledParent, identityTransform(), frame);
 
           expectClose(axisScaledResult.position.x, result.position.x);
           expectClose(axisScaledResult.position.y, result.position.y);

@@ -3,11 +3,15 @@ import {
   applyTimelineMotionStructurePlan,
   planTimelineMotionParentMutation,
 } from '../../../services/motionDesign/contracts/timelineStructureAdapter';
+import type { CompositionPixelSize } from '../../../utils/parentPositionFrame';
+import { getActiveCompositionPixelSize } from '../helpers/activeCompositionSize';
 
 export interface MotionParentWorldPreservationContext {
   readonly clipKeyframes: ReadonlyMap<string, readonly Keyframe[]>;
   readonly timelineTime: number;
   readonly compositionId?: string;
+  /** Owning composition size; defaults to the live timeline's composition. */
+  readonly compositionSize?: CompositionPixelSize;
 }
 
 export type MotionParentWorldPreservationResult =
@@ -41,6 +45,7 @@ export function clearMotionParentsPreservingWorld(
   const clearedClipIds: string[] = [];
   const uniqueChildIds = [...new Set(childClipIds)].toSorted();
   const compositionId = context.compositionId ?? 'timeline:active';
+  const compositionSize = context.compositionSize ?? getActiveCompositionPixelSize();
 
   for (const childClipId of uniqueChildIds) {
     const child = workingClips.find((clip) => clip.id === childClipId);
@@ -48,6 +53,7 @@ export function clearMotionParentsPreservingWorld(
 
     const planned = planTimelineMotionParentMutation({
       compositionId,
+      compositionSize,
       clips: workingClips,
       clipKeyframes: workingKeyframes,
       timelineTime: context.timelineTime,
@@ -62,6 +68,7 @@ export function clearMotionParentsPreservingWorld(
 
     const applied = applyTimelineMotionStructurePlan({
       compositionId,
+      compositionSize,
       clips: workingClips,
       clipKeyframes: workingKeyframes,
       plan: planned.plan,

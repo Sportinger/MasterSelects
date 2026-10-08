@@ -1,9 +1,14 @@
 import {
   MOTION_PARENT_ERROR_CODES,
+  type MotionParentCompositionSize,
   type MotionParentFailure,
   type MotionParentTransform2D,
 } from './contracts';
 import { inspectMotionParentStableIdArray } from './stableId';
+import {
+  createCompositionParentPositionFrame,
+  rotateParentPositionOffset,
+} from '../../../utils/parentPositionFrame';
 
 const INVERSE_EPSILON = 1e-12;
 
@@ -36,6 +41,23 @@ export function isFiniteMotionParentTransform2D(
   );
 }
 
+/** An exact inert `{ width, height }` record of positive finite numbers. */
+export function isExactMotionParentCompositionSize(
+  value: unknown,
+): value is MotionParentCompositionSize {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+  const descriptors = Object.getOwnPropertyDescriptors(value) as Record<string, PropertyDescriptor>;
+  return Reflect.ownKeys(descriptors).length === 2 && ['width', 'height'].every((key) => {
+    const descriptor = descriptors[key];
+    return descriptor?.enumerable === true
+      && 'value' in descriptor
+      && isFiniteNumber(descriptor.value)
+      && descriptor.value > 0;
+  });
+}
+
 export function cloneMotionParentTransform2D(
   transform: MotionParentTransform2D,
 ): MotionParentTransform2D {
@@ -47,23 +69,28 @@ export function cloneMotionParentTransform2D(
   };
 }
 
-/** Exact 2D equivalent of the established composition algebra. */
+/**
+ * Exact 2D equivalent of the established composition algebra. Positions are
+ * normalized half extents of `compositionSize`; omitted means square.
+ */
 export function composeMotionParentTransforms2D(
   parent: MotionParentTransform2D,
   child: MotionParentTransform2D,
+  compositionSize?: MotionParentCompositionSize,
 ): MotionParentTransform2D {
-  const radians = (parent.rotationZ * Math.PI) / 180;
-  const cosine = Math.cos(radians);
-  const sine = Math.sin(radians);
-  const scaledChildX = child.position.x * parent.scale.all;
-  const scaledChildY = child.position.y * parent.scale.all;
-  const rotatedX = scaledChildX * cosine - scaledChildY * sine;
-  const rotatedY = scaledChildX * sine + scaledChildY * cosine;
+  const rotated = rotateParentPositionOffset(
+    {
+      x: child.position.x * parent.scale.all,
+      y: child.position.y * parent.scale.all,
+    },
+    parent.rotationZ,
+    createCompositionParentPositionFrame(compositionSize),
+  );
 
   return {
     position: {
-      x: parent.position.x + rotatedX,
-      y: parent.position.y + rotatedY,
+      x: parent.position.x + rotated.x,
+      y: parent.position.y + rotated.y,
     },
     scale: {
       all: parent.scale.all * child.scale.all,
@@ -88,6 +115,7 @@ export function deriveMotionParentLocalTransform2D(
   parentWorld: MotionParentTransform2D,
   childWorld: MotionParentTransform2D,
   clipIds: readonly string[] = [],
+  compositionSize?: MotionParentCompositionSize,
 ): MotionParentInverseResult {
   const clipIdInspection = inspectMotionParentStableIdArray(clipIds);
   if (!clipIdInspection.ok) {
@@ -127,16 +155,19 @@ export function deriveMotionParentLocalTransform2D(
     };
   }
 
-  const deltaX = childWorld.position.x - parentWorld.position.x;
-  const deltaY = childWorld.position.y - parentWorld.position.y;
-  const inverseRadians = (-parentWorld.rotationZ * Math.PI) / 180;
-  const cosine = Math.cos(inverseRadians);
-  const sine = Math.sin(inverseRadians);
+  const unrotated = rotateParentPositionOffset(
+    {
+      x: childWorld.position.x - parentWorld.position.x,
+      y: childWorld.position.y - parentWorld.position.y,
+    },
+    -parentWorld.rotationZ,
+    createCompositionParentPositionFrame(compositionSize),
+  );
 
   const transform: MotionParentTransform2D = {
     position: {
-      x: (deltaX * cosine - deltaY * sine) / parentWorld.scale.all,
-      y: (deltaX * sine + deltaY * cosine) / parentWorld.scale.all,
+      x: unrotated.x / parentWorld.scale.all,
+      y: unrotated.y / parentWorld.scale.all,
     },
     scale: {
       all: childWorld.scale.all / parentWorld.scale.all,

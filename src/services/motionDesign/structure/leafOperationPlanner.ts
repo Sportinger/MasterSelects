@@ -522,6 +522,7 @@ export function planMotionCreateNullAndParentSelected(
       nullEntity.localTransform,
       childWorld,
       [childClipId, nullEntity.clipId],
+      evaluation.compositionSize,
     );
     if (!inverse.ok) {
       relationshipFailures.push(inverse.failure);

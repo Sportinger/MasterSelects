@@ -168,7 +168,10 @@ export function useMotionNullViewportEditing({
       space: candidate.is3D ? '3d' as const : '2d' as const,
       ...(candidate.parentClipId ? { parentClipId: candidate.parentClipId } : {}),
     })));
-    const evaluation = createTimelineMotionParentEvaluation(clips, clipKeyframes, timelineTime);
+    const evaluation = createTimelineMotionParentEvaluation(clips, clipKeyframes, timelineTime, {
+      width: compositionSize.width,
+      height: compositionSize.height,
+    });
     const result = buildMotionNullViewportController({
       selectedClipId: clip.id,
       clips: clips.map((candidate) => {

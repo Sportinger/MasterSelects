@@ -347,7 +347,10 @@ function buildNestedLayerForExport(
     timelineTime: number;
   },
 ): Layer | null {
-  const baseLayer = buildNestedBaseLayer(nestedClip, nestedClipLocalTime, parentTransformContext);
+  const baseLayer = buildNestedBaseLayer(nestedClip, nestedClipLocalTime, {
+    ...parentTransformContext,
+    compositionSize,
+  });
   if (!baseLayer) return null;
 
   if (nestedClip.isComposition && nestedClip.nestedClips && nestedClip.nestedTracks) {

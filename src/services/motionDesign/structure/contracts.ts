@@ -65,7 +65,9 @@ export type MotionParentSpace = '2d' | '3d';
  * This mirrors the existing 2D portion of `composeTransforms`: parent
  * scale.all affects child position while source-local axis scale does not;
  * scale.all and axis scale compose separately,
- * Z rotation rotates XY position. Opacity stays clip-local and is carried in
+ * Z rotation rotates XY position rigidly in composition pixels and
+ * counter-clockwise on screen, like the compositor draws rotation.z (see
+ * `src/utils/parentPositionFrame.ts`). Opacity stays clip-local and is carried in
  * snapshots only to preserve the child value across parent mutations. Blend
  * mode is omitted because the child blend mode wins and is not parent-relative.
  */
@@ -97,9 +99,21 @@ export interface MotionParentGraphSnapshot {
   readonly nodes: readonly MotionParentGraphNode[];
 }
 
+/** Pixel size of the composition whose half extents normalize 2D positions. */
+export interface MotionParentCompositionSize {
+  readonly width: number;
+  readonly height: number;
+}
+
 /** A caller-owned, already-evaluated transform snapshot at exactly one time. */
 export interface MotionParentGraphEvaluation {
   readonly timelineTime: number;
+  /**
+   * Owning composition size. Parent rotation turns child offsets in its pixel
+   * space so groups stay rigid on non-square compositions; omitted means a
+   * square composition.
+   */
+  readonly compositionSize?: MotionParentCompositionSize;
   /** Canonical order is ascending clipId. No live playhead is consulted. */
   readonly localTransforms: readonly {
     readonly clipId: string;

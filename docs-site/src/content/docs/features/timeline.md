@@ -359,6 +359,19 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
   transform. Uniform parent scale affects both the child's own scale and its
   offset from the parent, so linked animation stays identical across differing
   source aspect ratios.
+- Parent rotation turns the child's offset rigidly in composition pixels and in
+  the same direction the compositor draws `rotation.z` (counter-clockwise on
+  screen for positive values), so a rotated parent spins its whole group like
+  After Effects on any composition aspect. 2D positions are stored as
+  normalized half extents, so the offset is converted to pixels with the owning
+  composition's size, rotated, and converted back; effective-3D groups rotate in
+  isotropic, Y-up scene units. `src/utils/parentPositionFrame.ts` owns this
+  frame for preview, export, nested and transition compositions, the scene
+  path, and the Structure planner. A parented 2D clip whose composition size is
+  unknown falls back to a square frame and logs a warning.
+- Set Parent and Clear Parent keep the child's world transform exactly, also
+  with a rotated parent on a non-square composition: the inverse uses the same
+  pixel frame, so a set/clear round trip restores the original values.
 - Opacity remains local to each clip and is never inherited through the
   pick-whip relationship.
 - During playback and scrubbing, an active parented video layer holds its last

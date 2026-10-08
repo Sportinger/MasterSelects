@@ -21,6 +21,7 @@ import {
   createMotionParentGraphSnapshot,
   evaluateMotionParentGraphWorldTransforms,
 } from '../motionDesign/structure/parentGraphPlanner';
+import { compositionPixelSizeOf } from '../../utils/parentPositionFrame';
 
 function getClipsAtTime(clips: TimelineClip[], playheadPosition: number): TimelineClip[] {
   const EPSILON = 1e-6;
@@ -137,7 +138,12 @@ export function createFrameContext(playheadPositionOverride?: number): FrameCont
       space: clip.is3D ? '3d' as const : '2d' as const,
       ...(clip.parentClipId ? { parentClipId: clip.parentClipId } : {}),
     })));
-    const baseEvaluation = createTimelineMotionParentEvaluation(clips, clipKeyframes, timelineTime);
+    const baseEvaluation = createTimelineMotionParentEvaluation(
+      clips,
+      clipKeyframes,
+      timelineTime,
+      compositionPixelSizeOf(mediaState.compositions.find((composition) => composition.id === activeCompId)),
+    );
     const preview = layerTransformPreview.transform;
     const evaluation = {
       ...baseEvaluation,

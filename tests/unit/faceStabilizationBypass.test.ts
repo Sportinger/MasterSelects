@@ -26,7 +26,7 @@ describe('face stabilization bypass', () => {
   });
   it('agrees in preview/export parent evaluation, native 3D and composition evaluation', () => {
     const expected = getInterpolatedClipTransform(keys, 0.5, transform, { stabilizationEnabled: false });
-    const parent = evaluateParentedClipTransform({ clip, clips: [clip], clipLocalTime: 0.5, parentTimelineTime: 0.5, getKeyframes: () => keys });
+    const parent = evaluateParentedClipTransform({ clip, clips: [clip], clipLocalTime: 0.5, parentTimelineTime: 0.5, compositionSize: undefined, getKeyframes: () => keys });
     expect(parent.ok && parent.transform).toEqual(expected);
     expect(resolveSceneClipTransform(clip, 0.5, 0.5, { clips: [clip], clipKeyframes: new Map([[clip.id, keys]]) })).toEqual(expected);
     expect(evaluateTransitionMappedAnimation(clip, keys, 0.5)?.transform).toEqual(expected);
