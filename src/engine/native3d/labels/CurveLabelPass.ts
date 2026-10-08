@@ -5,7 +5,7 @@ import headlineShader from './curveLabelHeadlines.wgsl?raw';
 import {CurveLabelHeadlineCache} from './CurveLabelHeadlineAtlas';
 import {curveLabelTextState} from './curveLabelTextState';
 import {curveLabelLock,curveLabelLocks,curveLabelActiveLocks} from './curveLabelLock';
-import {curveLabelEpisode,curveLabelOpeningRank,curveLabelReveal} from './curveLabelSchedule';
+import {curveLabelEpisode,curveLabelOpeningRank,curveLabelReveal,curveLabelExit} from './curveLabelSchedule';
 import {curveLabelGlitchEvent} from './curveLabelGlitch';
 import glitchShader from './curveLabelGlitch.wgsl?raw';
 import {curveLabelDecoration} from './curveLabelDecoration';
@@ -59,7 +59,7 @@ export class CurveLabelPass {
       const distance=follow.orthographic?1:spec.depth;
       const halfWidth=distance/Math.max(1e-5,Math.abs(follow.projectionX)),halfHeight=distance/Math.max(1e-5,Math.abs(follow.projectionY));
       const pixelScale=camera.viewport.height/Math.max(1,camera.referenceSize?.height??camera.viewport.height);
-      const data=new Float32Array(136);
+      const data=new Float32Array(144);
       data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix),0);data.set(layer.worldMatrix,16);
       data.set([...follow.right,halfWidth],32);data.set([...follow.up,halfHeight],36);
       data.set([...follow.forward,spec.holdEnd],40);data.set([...follow.position,spec.holdStart],44);
@@ -103,11 +103,16 @@ export class CurveLabelPass {
       data.set([spec.introTextDepth??.02,spec.introTextMotion??.4,headlineAtlas?.height??256,(spec.introTextOpacity??1)*layer.opacity],116);
       data.set([spec.stackCount??0,spec.stackStart??13,spec.stackEnd??21,spec.stackStagger??0],120);
       data.set(curveLabelFinalUniforms(curves.starts,curves.counts,spec),124);
+      data[131]=spec.scheduleSeed;
+      data[135]=(spec.rollOffset??0)*Math.PI/180;
+      data.set([spec.outroStart??-1,spec.outroSpread??.25,spec.outroRetract??.22,spec.outroDuration??.3],136);
+      data.set([spec.anchorFocus??0,spec.anchorFocusCount??6,spec.anchorFocusAxis??2,0],140);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const presence=new Float32Array(spec.count);
       for(let card=0;card<spec.count;card++){
         const reveal=curveLabelReveal(spec,time,curveLabelEpisode(spec,time,card)).reveal;
-        presence[card]=reveal*reveal*(3-2*reveal);
+        const visible=Math.min(reveal,curveLabelExit(spec,time,card).panel);
+        presence[card]=visible*visible*(3-2*visible);
       }
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,presence,temporary);
       const {anchors,ranges:rangeData}=curveLabelTrackingInputs(curves,spec,time);

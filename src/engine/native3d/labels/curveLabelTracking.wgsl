@@ -8,6 +8,31 @@ fn along(start:f32,count:f32,u:f32)->vec3f {
  return mix(points[u32(start+low)].position.xyz,points[u32(start+min(low+1.,count-1.))].position.xyz,fract(at));
 }
 fn selected(a:vec4f)->vec3f {return mix(points[u32(a.x)].position.xyz,points[u32(a.y)].position.xyz,a.z);}
+// A circular mean follows the broad curve tip continuously through the material
+// seam; evaluating along() afterwards keeps the marker on the real polyline.
+fn focusedSource(card:u32,a:vec4f,ranges:vec4f)->vec3f {
+ if(p.anchorFocus.x<=0.||f32(card)>=p.anchorFocus.y||ranges.w<2.){return selected(a);}
+ let axis=u32(p.anchorFocus.z)%3u;let sign=select(1.,-1.,p.anchorFocus.z>=3.);
+ var low=1e20;var high=-1e20;
+ for(var sample=0u;sample<64u;sample++){
+   let point=along(ranges.z,ranges.w,f32(sample)/64.);
+   let value=point[axis]*sign;low=min(low,value);high=max(high,value);
+ }
+ if(high-low<1e-6){return selected(a);}
+ var circular=vec2f(0);var total=0.;
+ for(var sample=0u;sample<64u;sample++){
+   let u=f32(sample)/64.;let point=along(ranges.z,ranges.w,u);
+   let weight=exp((point[axis]*sign-high)/(high-low)*16.);
+   circular+=vec2f(cos(u*6.2831853),sin(u*6.2831853))*weight;total+=weight;
+ }
+ // Flat/multimodal curves have no unique direction; keep the existing material anchor.
+ let confidence=smoothstep(.05,.3,length(circular)/max(total,1e-6));
+ let tip=atan2(circular.y,circular.x)/6.2831853;
+ let original=(a.x-ranges.z+a.z)/max(1.,ranges.w-1.);
+ let delta=fract(tip-original+.5)-.5;
+ let u=fract(original+delta*p.anchorFocus.x*confidence+1.);
+ return along(ranges.z,ranges.w,u);
+}
 fn finishTracking(card:u32,position:vec3f,ready:f32)->vec4f {
  let blend=finalTargetBlend(card);
  if(blend<=0.){return vec4f(position,ready);}
@@ -24,7 +49,7 @@ fn finishTracking(card:u32,position:vec3f,ready:f32)->vec4f {
    // At full release the final curve is no longer a parent/reference. Comparing
    // its sampled polyline against itself invents separation from chord error.
    if(p.tracking.y>=1.&&u32(ranges.x)==topology[total-1u].x){
-     tracked[card]=finishTracking(card,mix(selected(a),destination,p.tracking.x),ready);return;
+     tracked[card]=finishTracking(card,mix(focusedSource(card,a,ranges),destination,p.tracking.x),ready);return;
    }
    let firstRemaining=min(total-1u,u32(floor(p.tracking.y*f32(total-1u)))+1u);
    // Compare against every remaining parent curve, so an attached outer stitch does not look detached.
@@ -56,5 +81,5 @@ fn finishTracking(card:u32,position:vec3f,ready:f32)->vec4f {
      destination=mix(destination,along(ranges.x,ranges.y,fract(bestU+spread+1.)),p.animation.z);
    }
  }
- tracked[card]=finishTracking(card,mix(selected(a),destination,p.tracking.x),ready);
+ tracked[card]=finishTracking(card,mix(focusedSource(card,a,ranges),destination,p.tracking.x),ready);
 }

@@ -1,7 +1,7 @@
 struct Params {
   vp:mat4x4f, world:mat4x4f, right:vec4f, up:vec4f, forward:vec4f, eye:vec4f,
   viewport:vec4f, color:vec4f, metrics:vec4f, arrangement:vec4f, clock:vec4f, motion:vec4f, tracking:vec4f, animation:vec4f, marker:vec4f, glitch:vec4f,
-  liveRight:vec4f, liveUp:vec4f, liveForward:vec4f, liveEye:vec4f, lock:vec4f, intro:vec4f, headline:vec4f, headlineMotion:vec4f, stack:vec4f, finalAnchor:vec4f, finalTiming:vec4f, finalColor:vec4f,
+  liveRight:vec4f, liveUp:vec4f, liveForward:vec4f, liveEye:vec4f, lock:vec4f, intro:vec4f, headline:vec4f, headlineMotion:vec4f, stack:vec4f, finalAnchor:vec4f, finalTiming:vec4f, finalColor:vec4f, outro:vec4f, anchorFocus:vec4f,
 }
 fn finalTargetBlend(card:u32)->f32 {
  if(p.finalAnchor.w<.5){return 0.;}
@@ -88,7 +88,7 @@ fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
  let perspectiveView=length(vec3f(p.vp[0].w,p.vp[1].w,p.vp[2].w))>.1;
  let units=select(1.,screenDepth/max(.001,p.arrangement.z),perspectiveView);
  let center=baseCenter+(p.liveRight.xyz*p.liveRight.w*shift.x+p.liveUp.xyz*p.liveUp.w*shift.y)*units;
- let rotation=cardRotation(card);let yaw=rotation.x;let pitch=rotation.y;let roll=rotation.z;
+ let rotation=cardRotation(card);let yaw=rotation.x;let pitch=rotation.y;let roll=rotation.z+p.finalColor.w;
  let tiltedRight=p.right.xyz*cos(yaw)+p.forward.xyz*sin(yaw);
  let normal=p.forward.xyz*cos(yaw)-p.right.xyz*sin(yaw);
  let tiltedUp=p.up.xyz*cos(pitch)+normal*sin(pitch);

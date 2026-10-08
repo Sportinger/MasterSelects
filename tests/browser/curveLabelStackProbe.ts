@@ -13,11 +13,11 @@ export async function probeCameraStacks(device:GPUDevice,camera:SceneCamera):Pro
   results[id.x]=vec4f(clip.xyz/clip.w,cameraLockAmount(card));
  }`});
  const pipeline=device.createComputePipeline({layout:'auto',compute:{module,entryPoint:'probe'}});
- const uniform=device.createBuffer({size:136*4,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+ const uniform=device.createBuffer({size:144*4,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
  const output=device.createBuffer({size:48*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
  const group=device.createBindGroup({layout:pipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:output}}]});
  const probe=async(pan:number,time:number,height:number,depthYield=0)=>{
-  const d=new Float32Array(136),view=camera.viewMatrix.slice();view[12]=-pan;
+  const d=Float32Array.from({length:144},(_,i)=>i===136?-1:0),view=camera.viewMatrix.slice();view[12]=-pan;
   d.set(multiplyMat4(camera.projectionMatrix,view));d.set([1,0,0,5/camera.projectionMatrix[0]],32);
   d.set([0,1,0,5/camera.projectionMatrix[5]],36);d.set([0,0,-1,0],40);d.set([0,0,8,0],44);
   d.set([.43,height,1,6],56);d.set([.74,.48,5,12],60);d.set([time,8,.45,.72],64);

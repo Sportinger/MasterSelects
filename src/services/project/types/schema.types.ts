@@ -62,6 +62,10 @@ export interface ProjectSceneCameraSettings {
   fStop?: number;
   focusDistance?: number;
   shutterAngle?: number;
+  /** Additive procedural camera movement, independent of physical lens processing. */
+  shakeAmount?: number;
+  shakeFrequency?: number;
+  shakeSeed?: number;
   physicalCameraEnabled?: boolean;
 }
 

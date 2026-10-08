@@ -31,7 +31,7 @@ export class CurveLabelTracking {
       const b=device.createBuffer({size:values.byteLength,usage:usage|GPUBufferUsage.COPY_DST});temporary.push(b);
       device.queue.writeBuffer(b,0,values as Float32Array<ArrayBuffer>);return b;
     };
-    const values=new Float32Array(136);values[63]=spec.count;values[64]=time;values.set(curveLabelFinalUniforms(curves.starts,curves.counts,spec),124);
+    const values=new Float32Array(144);values.set([spec.anchorFocus??0,spec.anchorFocusCount??6,spec.anchorFocusAxis??2,0],140);values[63]=spec.count;values[64]=time;values.set(curveLabelFinalUniforms(curves.starts,curves.counts,spec),124);
     values.set([spec.retarget,spec.releaseProgress,spec.followShare,spec.depthSpread],72);values[78]=spec.detachedFocus;
     const read=device.createBuffer({size:spec.count*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
     try{

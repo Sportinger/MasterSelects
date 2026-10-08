@@ -59,6 +59,23 @@ export function curveLabelReveal(spec:CurveLabelSpec,time:number,episode:CurveLa
   const phase=Math.max(0,time-episode.birth),duration=Math.min(spec.transition,episode.visible/2);
   return {phase,reveal:time<episode.birth?0:Math.max(0,Math.min(1,phase/duration,(episode.visible-phase)/duration))};
 }
+/** A terminal exit is independent of recurring appearances and leaves audio untouched. */
+export function curveLabelExit(spec:CurveLabelSpec,time:number,card:number):{start:number;leader:number;panel:number} {
+  if(!(spec.outroStart>=0))return {start:Infinity,leader:1,panel:1};
+  const rank=curveLabelExitRank(spec,card);
+  const start=spec.outroStart+rank/Math.max(1,spec.count-1)*(spec.outroSpread??.25);
+  const age=time-start,retract=spec.outroRetract??.22,duration=spec.outroDuration??.3;
+  return {start,leader:1-Math.max(0,Math.min(1,age/retract)),panel:1-Math.max(0,Math.min(1,(age-retract)/duration))};
+}
+function curveLabelExitRank(spec:CurveLabelSpec,card:number):number {
+  const seed=spec.scheduleSeed*97+271,score=scanRandom(card+seed);
+  let rank=0;
+  for(let other=0;other<spec.count;other++){
+    const otherScore=scanRandom(other+seed);
+    if(otherScore<score||(otherScore===score&&other<card))rank++;
+  }
+  return rank;
+}
 export interface CurveLabelCue { card:number; cycle:number; kind:'intro'|'outro'; time:number }
 export function curveLabelCues(spec:CurveLabelSpec,start:number,end:number):CurveLabelCue[] {
   if(!Number.isFinite(start)||!Number.isFinite(end)||end<start)throw new Error('Curve Scan Labels: cue range must be finite and ordered.');

@@ -240,6 +240,10 @@ export interface SceneCameraSettings {
   fStop?: number;
   focusDistance?: number;
   shutterAngle?: number;
+  /** Additive procedural camera movement, independent of physical lens processing. */
+  shakeAmount?: number;
+  shakeFrequency?: number;
+  shakeSeed?: number;
   /** Bypass physical lens processing while preserving lens values and keyframes. */
   physicalCameraEnabled?: boolean;
 }

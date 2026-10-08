@@ -9,8 +9,12 @@ const fields = [
   ['resolutionHeight', 'Camera Height', 1, 16384, 1], ['exposure', 'Exposure', -16, 16, .01],
   ['fStop', 'f-Stop', 0, 64, .1], ['focusDistance', 'Focus Distance', 0, 100000, .001],
   ['shutterAngle', 'Shutter Angle', 0, 360, 1],
+  ['shakeAmount', 'Shake Strength (deg)', 0, 20, .01],
+  ['shakeFrequency', 'Shake Frequency (Hz)', .1, 30, .1],
+  ['shakeSeed', 'Shake Seed', 0, 9999, 1],
 ] as const;
 const defaults = { ...DEFAULT_SCENE_CAMERA_SETTINGS, ...DEFAULT_CAMERA_LENS,
+  shakeAmount: 0, shakeFrequency: 8, shakeSeed: 17,
   resolutionWidth: DEFAULT_SCENE_CAMERA_SETTINGS.resolutionWidth ?? 1920,
   resolutionHeight: DEFAULT_SCENE_CAMERA_SETTINGS.resolutionHeight ?? 1080 };
 

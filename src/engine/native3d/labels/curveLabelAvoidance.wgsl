@@ -131,35 +131,43 @@ fn initialPlacement(card:u32)->vec2f {
  var shift=drift;
  if(p.motion.y>0.&&cameraLockAmount(card)<.999){
    let home=cardFootprint(card,drift);
-   let rows=ceil(p.arrangement.w*.5);let row=f32(card/2u);
-   // Full-height stable preferences survive camera pans and text/lifetime changes.
-   let preferred=vec2f(select(-.8,.8,card%2u==1u),.8-row*1.6/max(rows-1.,1.));
-   let angle=atan2(preferred.y,preferred.x);
    let homeBounds=screenBounds(home);
    let room=max(vec2f(.14),vec2f(.94)-homeBounds.zw);
-   var bestDelta=0.;var bestCost=1e20;
-   for(var sample=0;sample<40;sample++){
-     let delta=(f32(sample)/39.-.5)*6.0;
-     let destination=perimeterPoint(angle+delta,room);
+   // Distribute stable card ranks over free perimeter length. No discrete winning
+   // slot: a tiny occupancy change can no longer switch between distant minima.
+   // Keep ranks for invisible cards as well, so births/deaths do not reshuffle all.
+   let order=select(u32(p.arrangement.w)-1u-card/2u,card/2u,card%2u==1u);
+   var before=0.;var totalFree=0.;var ownWeight=1.;
+   for(var other=0u;other<u32(p.arrangement.w);other++){
+     let weight=1.-cameraLockAmount(other);
+     let otherOrder=select(u32(p.arrangement.w)-1u-other/2u,other/2u,other%2u==1u);
+     if(otherOrder<order){before+=weight;}
+     if(other==card){ownWeight=weight;}totalFree+=weight;
+   }
+   // Docked cards already own their lower stacks: do not reserve their former
+   // top slots too. Dock/release amounts continuously transfer that free space.
+   let quantile=clamp((before+ownWeight*.5)/max(.001,totalFree),0.,1.);
+   var cumulative:array<f32,65>;cumulative[0]=0.;
+   for(var sample=0u;sample<64u;sample++){
+     let u=(f32(sample)+.5)/64.;
+     let destination=perimeterPoint(1.5707963-u*6.2831853,room);
      let candidate=shiftToScreen(card,destination,drift);
-     let cost=occupied(cardFootprint(card,candidate))*20.*p.motion.y+delta*delta*1.1;
-     if(cost<bestCost){bestCost=cost;bestDelta=delta;}
+     let obstruction=occupied(cardFootprint(card,candidate));
+     // A positive density floor bounds the inverse CDF even when no space is free.
+     let weight=.08+.92*exp(-8.*obstruction*p.motion.y);
+     cumulative[sample+1u]=cumulative[sample]+weight;
    }
-   // Refine within one contiguous patch. Even an angular mean across separate
-   // upper/lower free patches could put the card back into the blocked interval.
-   var sum=0.;var total=0.;
-   for(var sample=0;sample<13;sample++){
-     let delta=clamp(bestDelta+(f32(sample)/12.-.5)*.45,-3.,3.);
-     let candidate=shiftToScreen(card,perimeterPoint(angle+delta,room),drift);
-     let cost=occupied(cardFootprint(card,candidate))*20.*p.motion.y+delta*delta*1.1;
-     let weight=exp(-cost);sum+=delta*weight;total+=weight;
+   let wanted=quantile*cumulative[64];var perimeter=quantile;
+   for(var sample=0u;sample<64u;sample++){
+     if(wanted<=cumulative[sample+1u]){
+       perimeter=(f32(sample)+(wanted-cumulative[sample])/max(.08,cumulative[sample+1u]-cumulative[sample]))/64.;
+       break;
+     }
    }
-   let seek=smoothstep(.01,.20,occupied(home));
-   if(total>1e-12){
-     let destination=perimeterPoint(angle+sum/total,room);
-     let candidate=shiftToScreen(card,destination,drift);
-     shift=mix(drift,candidate,seek*p.motion.y*(1.-smoothstep(0.,.5,cameraLockAmount(card))));
-   }
+   let destination=perimeterPoint(1.5707963-perimeter*6.2831853,room);
+   let candidate=shiftToScreen(card,destination,drift);
+   let seek=smoothstep(.025,.40,occupied(home));
+   shift=mix(drift,candidate,seek*p.motion.y*(1.-smoothstep(0.,.5,cameraLockAmount(card))));
  }
  return containCard(card,shift);
 }

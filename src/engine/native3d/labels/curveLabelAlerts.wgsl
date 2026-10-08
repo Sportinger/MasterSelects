@@ -17,7 +17,7 @@
  position=glitchGeometry(position,windowGlitch(card),glitchTick(card));
  var out:Out;out.position=p.vp*vec4f(cardPoint(card,position,0u),1);
  // ASCII !, face 3 = bold sans. Keep warnings red even during orange card flicker.
- out.uv=(vec2f(1,18)+q)/vec2f(16,24);out.kind=1u;out.tint=vec3f(1.,.065,.035);
+ out.uv=(vec2f(1,18)+q)/vec2f(16,30);out.kind=1u;out.tint=vec3f(1.,.065,.035);
  out.weight=0.;out.accent=0.;out.glitch=windowGlitch(card)*.25;
  out.alpha=fade(card)*smoothstep(.6,1.,life(card))*growth*(.65+.35*flicker(p.clock.x*7.,seed))
    *select(0.,1.,acquired&&letter<letters);

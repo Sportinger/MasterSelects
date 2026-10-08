@@ -878,6 +878,26 @@ The short terminal arm of each tracking leader follows its card's actual rotated
 
 ### Stable edge regions for floating labels
 
-The placement field now fills each horizontal yarn silhouette with continuous prefix/suffix maxima before spatial blurring. Internal gaps between moving strands are no longer treated as card-sized free holes. Free cards search the full viewport perimeter using stable full-height preferences, then refine within one contiguous clear patch. They no longer average distant left/right free candidates into the subject between them. The mutual-separation solver may stay in place when every displacement would return it behind the silhouette. Existing depth relief and authored large foreground cards remain available. Placement is still a stateless spatial solution, not a guaranteed temporal velocity bound.
+The placement field now fills each horizontal yarn silhouette with continuous prefix/suffix maxima before spatial blurring. Internal gaps between moving strands are no longer treated as card-sized free holes. Free cards use stable ranks distributed over continuously weighted free perimeter length, including the upper and lower sides. They no longer average distant left/right free candidates into the subject between them. The mutual-separation solver may stay in place when every displacement would return it behind the silhouette. Existing depth relief and authored large foreground cards remain available. Placement is still a stateless spatial solution, not a guaranteed temporal velocity bound.
 
 Later authored text-cue headlines now replace only the text on their existing card. They do not reapply the initial intro scale, camera-distance change, camera-facing override or special placement; this prevents the 11.5-second headline cue from abruptly resizing/repositioning its card and pushing its neighbors. The original first two introduction cards retain those layout settings. Scheduled glitch waves remain independent.
+
+
+### Continuous perimeter allocation and directional tracking
+
+Scan-card placement now allocates stable ranks over the continuously weighted free viewport perimeter, instead of choosing one winning slot. The inverse cumulative distribution does not jump between unrelated equal-cost minima. Docked cards release their former free slots gradually with their docking amount, so lower camera stacks no longer also reserve unused upper positions. Invisible free cards keep their slots to avoid reshuffling whenever a card appears. This remains a stateless placement solve; it is not a temporal velocity limiter.
+
+**Directional Tracking Focus** is an optional, animatable source-anchor adjustment for the first **Focused Tracking Cards**. **Focus Axis** selects local +X/+Y/+Z/-X/-Y/-Z (0–5). The GPU finds a soft circular mean around that curve extremity and interpolates along the original polyline; rings do not float between unrelated points. Broad or ambiguous extrema retain the existing anchor. Released and final material targets keep priority. Animate focus in and out gently to distribute targets across a chosen part of an object.
+
+### Terminal scan-card exit and added roll
+
+**Final Exit Start** >= 0 enables a terminal exit. **Final Exit Spread** staggers cards in a deterministic seeded order. Each leader retracts from its tracked curve toward its card over **Leader Retraction**, with the ring disappearing at the start. Only then does the card run its own **Final Card Exit** animation. No later scan cycle can make it reappear. Default -1 preserves recurring appearances. Keep the final tracking hold and layer opacity through this interval. Existing audio stems are independent.
+
+**Added Roll** is a keyframeable/node-driven angular offset on floating planes. Camera locks still override the floating pose. It can carry a small delayed copy of an authored object turn without changing the camera or strand geometry.
+
+
+### Readout word typography
+
+Scan readouts use a higher-density five-face atlas with stronger medium-weight mono/sans base text, heavy emphasis and italic serif variants. Atlas glyphs share a consistent baseline and fitted italic overhang.
+
+For authored Text Cues in **Mixed** style, **Font Size Variation** controls deterministic word-level emphasis: one or two eligible words per card are bold and up to 18% larger, with an occasional separate italic word. Headers and numeric/data rows retain their grid. Enlarged words have fitted advances and spaces inside the existing line width. Zero variation or Uniform style disables authored word variation. Text colors, target-acquisition tints, opacity and timing are unchanged.

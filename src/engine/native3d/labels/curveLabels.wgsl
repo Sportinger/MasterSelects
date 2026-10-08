@@ -74,11 +74,26 @@ fn echoAlpha(card:u32,copy:u32)->f32 {
 fn cardPhase(card:u32)->f32 {
  return max(0.,p.clock.x-anchors[card*4u].w);
 }
+// Match scanRandom's integer hash exactly; no GPU sine hash or frame history.
+fn exitHash(seed:u32)->u32 {
+ var n=seed;n=(n^(n>>16u))*0x21f0aaadu;n=(n^(n>>15u))*0x735a2d97u;
+ return n^(n>>15u);
+}
+fn exitAge(card:u32)->f32 {
+ if(p.outro.x<0.){return -1e6;}
+ let seed=u32(p.finalTiming.w)*97u+271u;let score=exitHash(card+seed);var rank=0u;
+ for(var other=0u;other<u32(p.arrangement.w);other++){
+   let otherScore=exitHash(other+seed);
+   if(otherScore<score||(otherScore==score&&other<card)){rank++;}
+ }
+ return p.clock.x-p.outro.x-f32(rank)/max(1.,p.arrangement.w-1.)*p.outro.y;
+}
 fn life(card:u32)->f32 {
  if(p.clock.x<anchors[card*4u].w){return 0.;}
  let phase=cardPhase(card);
  let visible=anchors[card*4u+1u].w;let duration=min(p.clock.z,visible*.5);
- return clamp(min(phase,visible-phase)/max(duration,.001),0.,1.);
+ return min(clamp(min(phase,visible-phase)/max(duration,.001),0.,1.),
+   1.-clamp((exitAge(card)-p.outro.z)/max(.001,p.outro.w),0.,1.));
 }
 fn fade(card:u32)->f32 {return smoothstep(0.,.08,life(card))*p.color.a;}
 fn corner(vertex:u32)->vec2f {
@@ -116,10 +131,15 @@ fn corner(vertex:u32)->vec2f {
    let elbow=leaderElbow(joint,cardPoint(card,vec2f(side*.5,0),copy),trackedPoint);
    let local=item-36u;let second=local>=32u;let segment=local%32u;
    let start=select(trackedPoint,elbow,second);let end=select(elbow,joint,second);
-   a=glitchLeaderPoint(card,start,end,f32(segment)/32.);
-   b=glitchLeaderPoint(card,start,end,f32(segment+1u)/32.);
+   let mainLength=length(elbow-trackedPoint);let terminalLength=length(joint-elbow);
+   let mainShare=mainLength/max(mainLength+terminalLength,1e-6);
+   let retract=smoothstep(0.,max(.001,p.outro.z),exitAge(card));
+   let localCut=select(retract/max(mainShare,1e-6),(retract-mainShare)/max(1.-mainShare,1e-6),second);
+   let u0=max(f32(segment)/32.,clamp(localCut,0.,1.));let u1=f32(segment+1u)/32.;
+   a=glitchLeaderPoint(card,start,end,min(u0,u1));
+   b=glitchLeaderPoint(card,start,end,u1);
    let progress=select(smoothstep(.02,.30,reveal),smoothstep(.30,.42,reveal),second);
-   drawn=clamp(progress*32.-f32(segment),0.,1.);
+   drawn=clamp(progress*32.-f32(segment),0.,1.)*select(0.,1.,u1>u0);
  }
  if(item<32u){drawn=clamp(smoothstep(.28,.80,reveal)*32.-f32(item),0.,1.);}
  if(item>=32u&&item<=35u){drawn=smoothstep(.70,.95,reveal);}
@@ -143,7 +163,7 @@ fn corner(vertex:u32)->vec2f {
    let uv=(corner(vertex)-.5)*extent*2.;
    var ring:Out;ring.position=vec4f(center.xy+uv*2./p.viewport.xy*center.w,center.zw);
    ring.uv=uv;ring.kind=5u;ring.weight=weight;ring.accent=0.;
-   ring.glitch=smoothstep(.02,.38,reveal);
+   ring.glitch=smoothstep(.02,.38,reveal)*(1.-smoothstep(0.,min(.1,p.outro.z),exitAge(card)));
    ring.tint=signalColor(card,select(p.marker.rgb,vec3f(1.,.70,.16),openingMarker));
    ring.alpha=fade(card)*select(0.,1.,item==100u&&center.w>.001&&ring.glitch>0.);
    return ring;
@@ -175,6 +195,13 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  if(glitchRandom(glitchTick(card)+f32(slot)*7.)<disturbance*.45&&code!=32u){code=33u+u32(glitchRandom(f32(slot)+glitchTick(card)+3.)*58.);}
  let glyph=clamp(code,32u,127u)-32u;let q=corner(vertex);
  var position=vec2f(-.445+(f32(col)+q.x)*.0445,.39-(f32(row)+q.y)*.208)*select(1.,.76,roundCard(card));
+ // Authored words carry fitted advances and glyph scale, without altering the color bits.
+ if((glyphs[glyphIndex]&0x80000000u)!=0u){
+   let center=f32((glyphs[glyphIndex]>>14u)&2047u)/64.;
+   let scale=.75+f32((glyphs[glyphIndex]>>25u)&63u)/64.;
+   position=vec2f(-.445+(center+(q.x-.5)*scale)*.0445,
+     .39-f32(row)*.208-.104+(.5-q.y)*.208*scale)*select(1.,.76,roundCard(card));
+ }
  // Authored headings retain all 20 columns while leaving room for the lock icon.
  if(row==0u&&(glyphs[glyphIndex]&4096u)!=0u){
    let inset=select(1.,.76,roundCard(card));
@@ -196,8 +223,9 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  var out:Out;out.position=p.vp*vec4f(cardPoint(card,position,copy),1);out.glitch=disturbance;out.kind=1u;out.weight=0.;out.tint=signalColor(card,p.color.rgb);
  let phase=cardPhase(card);
  out.accent=select(0.,smoothstep(1.2,1.5,phase)*(1.-smoothstep(3.5,3.8,phase)),accent&&tracked[card].w<1.5);
- let face=select(select(0u,card%3u,p.motion.z>.5),3u,bold);
- out.uv=(vec2f(f32(glyph%16u),f32(glyph/16u+face*6u))+q)/vec2f(16,24);
+ var face=select(select(0u,card%2u,p.motion.z>.5),3u,bold);
+ if((glyphs[glyphIndex]&8192u)!=0u){face=select(2u,4u,bold);}
+ out.uv=(vec2f(f32(glyph%16u),f32(glyph/16u+face*6u))+q)/vec2f(16,30);
  out.alpha=fade(card)*echoAlpha(card,copy)*smoothstep(.60,1.,life(card));return out;
 }
 @vertex fn blocks(@builtin(vertex_index) vertex:u32,@builtin(instance_index) instance:u32)->Out {
@@ -265,7 +293,7 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  else if(in.kind==1u){
    coverage=textureSampleLevel(atlas,atlasSampler,in.uv,0.).a;
    if(in.glitch>.001){
-     let grid=vec2f(16,24);let cell=floor(in.uv*grid);let inset=vec2f(.001)/grid;
+     let grid=vec2f(16,30);let cell=floor(in.uv*grid);let inset=vec2f(.001)/grid;
      let offset=vec2f(in.glitch*.014,0.);
      let red=textureSampleLevel(atlas,atlasSampler,clamp(in.uv-offset,cell/grid+inset,(cell+1.)/grid-inset),0.).a;
      let blue=textureSampleLevel(atlas,atlasSampler,clamp(in.uv+offset,cell/grid+inset,(cell+1.)/grid-inset),0.).a;

@@ -26,6 +26,7 @@ import {
   fullFrameFocalLengthMmToFov,
 } from '../../../utils/cameraLens';
 import { CameraSettingsSection } from './transformTab/CameraSettingsSection';
+import { CameraShakeSection } from './transformTab/CameraShakeSection';
 import { CameraLensSection } from './transformTab/CameraLensSection';
 import { LiveInputTab } from './LiveInputTab';
 import { OptionsSection } from './transformTab/OptionsSection';
@@ -502,6 +503,9 @@ export function TransformTab({
           }}
         />
       )}
+
+      {usesCameraControls && <CameraShakeSection clipId={clipId} settings={cameraSettings}
+        onBatchStart={handleBatchStart} onBatchEnd={handleBatchEnd} onPropertyChange={handlePropertyChange} />}
 
       <ResolveTransformSection
         clipId={clipId}

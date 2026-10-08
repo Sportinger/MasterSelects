@@ -28,7 +28,7 @@ export type TransformProperty =
   | 'rotation.x' | 'rotation.y' | 'rotation.z';
 
 export type CameraPropertyName = 'fov' | 'near' | 'far' | 'resolutionWidth' | 'resolutionHeight'
-  | 'exposure' | 'fStop' | 'focusDistance' | 'shutterAngle';
+  | 'exposure' | 'fStop' | 'focusDistance' | 'shutterAngle' | 'shakeAmount' | 'shakeFrequency' | 'shakeSeed';
 export type CameraProperty = `camera.${CameraPropertyName}`;
 
 // Effect property format: effect.{effectId}.{paramPath}
@@ -67,7 +67,7 @@ export type TransitionRenderProperty = 'transitionRender.progress';
 export type AnimatableProperty = TransformProperty | CameraProperty | LightProperty | EffectProperty | NodeGraphParamProperty | ColorProperty | MaskProperty | TextBoundsProperty | TextProperty | TransitionRenderProperty | VectorAnimationInputProperty | VectorAnimationStateProperty | VectorAnimationDataBindingPropertyPath | MotionProperty | FlockProperty;
 
 export function isCameraProperty(property: string): property is CameraProperty {
-  return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight|exposure|fStop|focusDistance|shutterAngle)$/.test(property);
+  return /^camera\.(fov|near|far|resolutionWidth|resolutionHeight|exposure|fStop|focusDistance|shutterAngle|shakeAmount|shakeFrequency|shakeSeed)$/.test(property);
 }
 
 export function parseCameraProperty(property: string): CameraPropertyName | null {

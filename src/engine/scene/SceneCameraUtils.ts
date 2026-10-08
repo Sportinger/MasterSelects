@@ -1,3 +1,4 @@
+import { applyCameraShake } from './cameraUtils/cameraShake';
 import { recordedOrbitPivot, inferOrbitPivot, interpolateOrbitEye, warnMissingOrbitPivot } from './cameraUtils/orbitKeyframePath';
 import { useMediaStore } from '../../stores/mediaStore';
 import { normalizeCameraLens } from '../native3d/pathtrace/contracts/ptTypes';
@@ -297,6 +298,9 @@ function buildCameraPoseConfigFromClip(
   }
 
   const clipLocalTime = timelineTime - cameraClip.startTime;
+  const cameraSettings = resolveSceneClipCameraSettings(cameraClip, clipLocalTime, context);
+  const finish = (config: SceneCameraConfig) => applyCameraShake(
+    applySceneCameraLiveOverride(config, liveOverride, viewport), cameraSettings, clipLocalTime);
   const poseInterpolatedConfig = buildPoseInterpolatedCameraConfigFromClip(
     cameraClip,
     clipLocalTime,
@@ -304,11 +308,10 @@ function buildCameraPoseConfigFromClip(
     context,
   );
   if (poseInterpolatedConfig) {
-    return applySceneCameraLiveOverride(poseInterpolatedConfig, liveOverride, viewport);
+    return finish(poseInterpolatedConfig);
   }
 
   const transform = resolveSceneClipTransform(cameraClip, clipLocalTime, timelineTime, context);
-  const cameraSettings = resolveSceneClipCameraSettings(cameraClip, clipLocalTime, context);
   const defaultDistance = getSharedSceneDefaultCameraDistance(cameraSettings.fov);
   const pose = resolveOrbitCameraPose(
     {
@@ -325,7 +328,7 @@ function buildCameraPoseConfigFromClip(
     viewport,
   );
 
-  return applySceneCameraLiveOverride({
+  return finish({
     position: pose.eye,
     target: pose.target,
     up: pose.up,
@@ -333,7 +336,7 @@ function buildCameraPoseConfigFromClip(
     near: pose.near,
     far: pose.far,
     applyDefaultDistance: false,
-  }, liveOverride, viewport);
+  });
 }
 
 function hasLiveOverrideVector(vector: SceneCameraLiveOverride[keyof SceneCameraLiveOverride]): boolean {

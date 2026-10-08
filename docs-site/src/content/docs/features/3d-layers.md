@@ -333,3 +333,8 @@ and cropped branches retain independent worker ordering for their actual output 
 Changing color, radius or rotation does not force per-frame GPU depth sorting.
 Lower **Original Splats ? Gaussian Surface ? Splat budget** to reduce full-scan work;
 0 retains every source splat. This is an effect setting and also affects export.
+
+
+### Additive camera shake
+
+Camera clips have a separate **Camera Shake** inspector section: keyframe **Strength** (degrees), **Frequency** (Hz), and **Seed**. Zero strength bypasses the movement exactly. The deterministic smooth-noise motion adds small local translations plus pitch/yaw/roll after the complete authored pose/orbit and live-navigation solve. Existing camera pose/FOV keys and orbit pivots remain intact; shake works independently of Physical Camera processing, in raster preview and export. Saving and loading preserves the separate settings and curves. Animate strength to build tension, create an impact, then return to zero for matching loop endpoints.

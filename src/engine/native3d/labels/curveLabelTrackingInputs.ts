@@ -11,7 +11,7 @@ export function curveLabelTrackingInputs(curves:Pick<CurveSet,'starts'|'counts'>
  for(let card=0;card<spec.count;card++){
   anchors.set(source.subarray(card*4,card*4+4),card*16);anchors.set(destination.subarray(card*4,card*4+4),card*16+4);
   const timing=curveLabelEpisode(spec,time,card);anchors[card*16+3]=timing.birth;anchors[card*16+7]=timing.visible;
-  const target=destination[card*4+3],reference=curves.starts.length-1;
+  const target=destination[card*4+3],reference=source[card*4+3];
   anchors.set([curves.starts[target],curves.counts[target],curves.starts[reference],curves.counts[reference]],card*16+8);
  }
  return {anchors,ranges,source,destination};
