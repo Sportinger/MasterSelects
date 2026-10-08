@@ -221,7 +221,7 @@ mode and opacity composite against the shared scene.
 
 Keyframe curve drags coalesce pointer updates; bulk easing edits publish once and preserve unrelated keyframe data. Clip/keyframe drag previews defer project encoding until release, and editing existing keyframe values retains their easing.
 
-Weave circulation supports an independent integrated Motion Time clock for smooth starts and stops; see [Weave](docs/Features/Weave.md#independent-eased-circulation).
+Weave circulation supports an independent integrated Motion Time clock for smooth starts and stops, with an optional matching minimum speed at both loop endpoints; see [Weave](docs/Features/Weave.md#independent-eased-circulation).
 
 Curve Scan Labels supports independently randomized appearances, shared intro/outro cue timing, tracking hold intervals, 6–20-copy echo trails and smooth window rotations up to 45 degrees that return to camera-parallel rest. Optional brief corner locks show an animated padlock and fast priority ticker before releasing the card back into space; timed lower-side stacks can hold up to three differently sized cards per side without overlapping their reserved footprints, with optional per-card docking/release delays and separate early lock slots. A dev-only visible-material map identifies strand indices and moving material coordinates directly from depth-tested GPU fibers; its compact tracking mode also exposes the actual GPU target-acquisition state for diagnostic and sound-cue alignment.
 

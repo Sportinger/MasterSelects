@@ -18,6 +18,33 @@ const at = (time: number) => motionTime(time, 59, 5, 5);
 const speed = (time: number) => (at(time + 0.0001) - at(time - 0.0001)) / 0.0002;
 
 describe('independent integrated motion clock', () => {
+  it('retains matching tiny endpoint velocities while closing its normalized loop', () => {
+    const at = (t: number) => motionTime(t, 59, 5, 12, 3, -1, 1, .005);
+    const phase = (t: number) => motionPhase(t, 59, 5, 12, 3, .005);
+    const h = .001;
+    expect((at(h) - at(0)) / h).toBeCloseTo(.005, 6);
+    expect((at(59) - at(59 - h)) / h).toBeCloseTo(.005, 6);
+    expect((at(5 + h) - at(5 - h)) / (2 * h)).toBeCloseTo(1, 6);
+    expect(phase(0)).toBe(0); expect(phase(59)).toBe(1);
+    expect((phase(h) - phase(0)) / h).toBeCloseTo((phase(59) - phase(59 - h)) / h, 8);
+    for (const t of [0, 5, 40, 58, 59]) {
+      expect(motionTime(t, 59, 5, 12, 3, -1, 1, 1)).toBe(t);
+      expect(motionTime(t, 59, 5, 12, 3, -1, 1, 0)).toBe(motionTime(t, 59, 5, 12, 3));
+    }
+    for (const invalid of [-.1, 1.1, NaN, Infinity])
+      expect(() => motionTime(1, 59, 5, 12, 3, -1, 1, invalid)).toThrow(/Minimum Speed/);
+  });
+  it('retains the speed floor when an optional direction turn reverses motion seconds', () => {
+    const h = .001, at = (t: number) => motionTime(t, 59, 5, 12, 3, 53, 2, .005);
+    expect((at(59) - at(59 - h)) / h).toBeCloseTo(-.005, 6);
+  });
+  it('compiles the minimum-speed control and uses the zero default for older graphs', () => {
+    const g = graph();
+    g.nodes[0].constants = { duration: 59, attack: 5, release: 12, stopPower: 3, minimumSpeed: .005 };
+    const program = compileGeometryGraph(g, geometryParameterReader({}), undefined, { simulationTime: 58 });
+    expect(program.stages[0]).toMatchObject({ kind: 'knit-sphere',
+      phase: expect.closeTo((motionTime(58, 59, 5, 12, 3, -1, 1, .005) * .05) % 1) });
+  });
   it('can linger almost motionless during the final seconds without retiming the beginning', () => {
     const at = (t: number, power: number) => motionTime(t, 59, 5, 12, power);
     const velocity = (t: number, power: number) => (at(t + .001, power) - at(t - .001, power)) / .002;

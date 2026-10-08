@@ -474,9 +474,10 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         const args = [context.simulationTime ?? 0, finite(read(node, 'duration'), 'Duration'),
           finite(read(node, 'attack'), 'Acceleration'), finite(read(node, 'release'), 'Deceleration'),
           finite(read(node, 'stopPower'), 'Final Stillness')] as const;
+        const minimumSpeed = finite(read(node, 'minimumSpeed'), 'Minimum Speed');
         const seconds = motionTime(...args, finite(read(node, 'turnStart'), 'Turn Start'),
-          finite(read(node, 'turnDuration'), 'Turn Duration'));
-        register = emit(constant(node.id, output === 'phase' ? motionPhase(...args) : seconds), `motion-time:${node.id}:${output}`);
+          finite(read(node, 'turnDuration'), 'Turn Duration'), minimumSpeed);
+        register = emit(constant(node.id, output === 'phase' ? motionPhase(...args, minimumSpeed) : seconds), `motion-time:${node.id}:${output}`);
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {

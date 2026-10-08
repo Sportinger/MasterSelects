@@ -801,3 +801,17 @@ Released Curve Fraction increases. They use the same GPU acquisition gate as the
 red alert tint; cards still tracking the parent do not receive these warnings.
 The existing bold glyph atlas is reused, with bounded geometry and no extra
 readback, simulation or per-frame text rasterization. Zero disables the feature.
+
+### Minimum circulation speed
+
+**Motion Time → Minimum Speed** optionally keeps a small fraction of normal
+speed at the beginning and end. Zero retains the previous full stop; 0.005 means
+0.5 percent, and one disables the speed ramps. The acceleration/deceleration
+intervals and Final Stillness still shape the remaining speed. Both outputs use
+the integrated envelope; Loop Phase is normalized to exactly 0–1, including the
+extra distance, so a periodic path still closes. The optional direction turn also
+reverses the minimum speed of Motion Seconds. Outside Duration the clock stays
+clamped; a looping caller wraps time itself.
+
+This governs parameter travel, not physical distance on changing-length curves.
+Morphing geometry can still move even when its circulation is slow.
