@@ -1,8 +1,10 @@
 /** Integral of a smooth speed envelope, independent of render history and seek order. */
-export function motionTime(time: number, duration: number, attack: number, release: number): number {
+export function motionTime(time: number, duration: number, attack: number, release: number, stopPower = 1): number {
   if (![time, duration, attack, release].every(Number.isFinite)) throw new Error('Motion Time requires finite seconds.');
   if (duration <= 0 || attack < 0 || release < 0 || attack + release > duration)
     throw new Error('Motion Time needs a positive duration and non-overlapping acceleration/deceleration intervals.');
+  if (!Number.isInteger(stopPower) || stopPower < 1 || stopPower > 4)
+    throw new Error('Motion Time Final Stillness must be an integer from 1 to 4.');
   const t = Math.max(0, Math.min(duration, time));
   // Integral of smoothstep(u): u³ - u⁴/2. Speed and acceleration join continuously.
   const integral = (u: number) => u * u * u * (1 - u / 2);
@@ -10,12 +12,25 @@ export function motionTime(time: number, duration: number, attack: number, relea
   const cruiseEnd = duration - release;
   if (release > 0 && t > cruiseEnd) {
     const elapsed = t - cruiseEnd;
-    return cruiseEnd - attack / 2 + elapsed - release * integral(elapsed / release);
+    if (stopPower === 1) return cruiseEnd - attack / 2 + elapsed - release * integral(elapsed / release);
+    // Integrate the remaining distance, not a polynomial near u=1. This avoids
+    // cancellation causing a tiny reversal just before rest at higher powers.
+    return cruiseEnd - attack / 2 + release * (remaining(1, stopPower) - remaining(1 - elapsed / release, stopPower));
   }
   return t - attack / 2;
 }
 
 /** One monotone turn over the complete eased interval, for cyclic motion that must close at the end. */
-export function motionPhase(time: number, duration: number, attack: number, release: number): number {
-  return motionTime(time, duration, attack, release) / motionTime(duration, duration, attack, release);
+export function motionPhase(time: number, duration: number, attack: number, release: number, stopPower = 1): number {
+  return motionTime(time, duration, attack, release, stopPower) / motionTime(duration, duration, attack, release, stopPower);
+}
+
+/** Integral from 0 to v of smoothstep(v)^power, using its exact binomial polynomial. */
+function remaining(v: number, power: number): number {
+  let sum = 0, choose = 1;
+  for (let k = 0; k <= power; k++) {
+    sum += choose * 3 ** (power - k) * (-2) ** k * v ** (2 * power + k + 1) / (2 * power + k + 1);
+    choose *= (power - k) / (k + 1);
+  }
+  return sum;
 }

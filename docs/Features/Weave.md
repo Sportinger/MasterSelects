@@ -707,3 +707,7 @@ Motion Time supplies both integrated **Motion Seconds** and a normalized **Loop 
 ### Narrow scan disturbance front
 
 The diagonal scan disturbance crosses the viewport in three seconds, every twelve seconds. Its bright front uses half the former high-intensity spatial extent (the old envelope above 80%); travel time and spatial width are independent. A quieter, individually timed one-to-two-second aftershock follows each card, without prolonging the bright front. Tracking anchors remain attached throughout.
+
+### Lingering near rest
+
+Motion Time’s **Final Stillness** (integer 1–4, default 1) shapes only the deceleration speed: it raises the remaining smooth speed to that power. Higher values approach near-rest earlier while preserving the chosen stopping time and the entire acceleration/cruise portion. Motion Seconds integrates this envelope analytically, without frame history; Loop Phase normalizes its changed distance back to one full turn. Invalid powers fail explicitly. Shape morphs driven by another clock remain independent and need their own settling curve if their motion must also stop gently.

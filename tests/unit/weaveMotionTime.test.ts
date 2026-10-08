@@ -18,6 +18,20 @@ const at = (time: number) => motionTime(time, 59, 5, 5);
 const speed = (time: number) => (at(time + 0.0001) - at(time - 0.0001)) / 0.0002;
 
 describe('independent integrated motion clock', () => {
+  it('can linger almost motionless during the final seconds without retiming the beginning', () => {
+    const at = (t: number, power: number) => motionTime(t, 59, 5, 12, power);
+    const velocity = (t: number, power: number) => (at(t + .001, power) - at(t - .001, power)) / .002;
+    for (let power = 1; power <= 4; power++) {
+      for (const t of [0, 1, 5, 20, 47]) expect(at(t, power)).toBe(at(t, 1));
+      expect(velocity(47, power)).toBeCloseTo(1, 6);
+      for (let i = 0; i < 1200; i++) expect(at(47 + (i + 1) / 100, power)).toBeGreaterThanOrEqual(at(47 + i / 100, power));
+      expect(motionPhase(59, 59, 5, 12, power)).toBe(1);
+      expect(velocity(59, power)).toBeCloseTo(0, 7);
+    }
+    expect(velocity(57, 3)).toBeLessThan(.0005);
+    expect(velocity(58, 3)).toBeLessThan(.00001);
+    for (const p of [0, 1.5, 5, NaN]) expect(() => at(58, p)).toThrow(/Final Stillness/);
+  });
   it('closes a periodic path by completing a forward turn, never rewinding the elapsed clock', () => {
     const phase = (t: number) => motionPhase(t, 59, 5, 5);
     expect(phase(-1)).toBe(0); expect(phase(60)).toBe(1);

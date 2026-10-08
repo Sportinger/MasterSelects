@@ -473,7 +473,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       } else if (node.operator === 'geometry.motion-time') {
         register = emit(constant(node.id, (output === 'phase' ? motionPhase : motionTime)(context.simulationTime ?? 0,
           finite(read(node, 'duration'), 'Duration'), finite(read(node, 'attack'), 'Acceleration'),
-          finite(read(node, 'release'), 'Deceleration'))), `motion-time:${node.id}:${output}`);
+          finite(read(node, 'release'), 'Deceleration'), finite(read(node, 'stopPower'), 'Final Stillness'))), `motion-time:${node.id}:${output}`);
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {
