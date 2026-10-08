@@ -3,6 +3,8 @@
 @group(0) @binding(2) var<storage,read_write> field:array<atomic<u32>>;
 @group(0) @binding(3) var<storage,read_write> offsets:array<vec4f>;
 @group(0) @binding(4) var<storage,read_write> softened:array<f32>;
+@group(0) @binding(5) var<storage,read> presence:array<f32>;
+var<workgroup> placedBounds:array<vec4f,16>;
 const GRID=vec2f(64,96);
 @compute @workgroup_size(64) fn occupy(@builtin(global_invocation_id) id:vec3u){
  if(id.x>=arrayLength(&points)){return;}
@@ -102,8 +104,7 @@ fn containCard(card:u32,initial:vec2f)->vec2f {
  }
  return mix(initial,shift,amount);
 }
-@compute @workgroup_size(16) fn arrange(@builtin(global_invocation_id) id:vec3u){
- let card=id.x;if(card>=u32(p.arrangement.w)){return;}
+fn initialPlacement(card:u32)->vec2f {
  let drift=vec2f(sin(p.clock.x*p.animation.x*.47+f32(card)*2.1)*.022,
    cos(p.clock.x*p.animation.x*.36+f32(card)*1.7)*.029)*p.motion.x;
  var shift=drift;
@@ -127,5 +128,66 @@ fn containCard(card:u32,initial:vec2f)->vec2f {
    let seek=smoothstep(.015,.12,occupied(home));
    if(total>1e-12){shift=mix(drift,sum/total,seek*p.motion.y*(1.-smoothstep(0.,.5,cameraLockAmount(card))));}
  }
- offsets[card]=vec4f(containCard(card,shift),0,0);
+ return containCard(card,shift);
+}
+
+// Conservative screen rectangles include tilted corners and a readability gap.
+fn screenBounds(footprint:CardFootprint)->vec4f {
+ var low=vec2f(1e5);var high=vec2f(-1e5);
+ for(var corner=0u;corner<4u;corner++){
+   let q=vec2f(select(-.52,.52,corner%2u==1u),select(-.52,.52,corner>=2u));
+   let clip=footprint.center+footprint.right*q.x+footprint.up*q.y;
+   if(clip.w<=.001){return vec4f(10,10,0,0);}
+   let ndc=clip.xy/clip.w;low=min(low,ndc);high=max(high,ndc);
+ }return vec4f((low+high)*.5,max((high-low)*.5,vec2f(.005)));
+}
+fn panelSeparation(card:u32)->vec2f {
+ let bounds=placedBounds[card];var force=vec2f(0);var neighbors=0.;
+ for(var other=0u;other<u32(p.arrangement.w);other++){
+   if(other==card||presence[other]<=0.){continue;}
+   let theirs=placedBounds[other];let gap=bounds.zw+theirs.zw+vec2f(.025);
+   let delta=(bounds.xy-theirs.xy)/gap;let distance=length(delta);
+   // A circumscribed ellipse conservatively separates rectangular corners too.
+   let overlap=max(0.,1.415-distance);if(overlap<=0.){continue;}
+   let low=min(card,other);let high=max(card,other);
+   let angle=rotationRandom(f32(low)*19.+f32(high)*37.)*6.2831853;
+   let fallback=vec2f(cos(angle),sin(angle))*select(-1.,1.,card>other);
+   let direction=mix(fallback,delta/max(distance,.0001),smoothstep(0.,.08,distance));
+   let weight=presence[other];force+=direction*gap*overlap*.45*weight;neighbors+=weight;
+ }
+ force/=max(1.,neighbors*.45);
+ return force*min(1.,.12/max(length(force),.0001));
+}
+@compute @workgroup_size(16) fn arrange(@builtin(local_invocation_index) card:u32){
+ let valid=card<u32(p.arrangement.w);var shift=vec2f(0);
+ if(valid){shift=initialPlacement(card);}
+ // All 16 lanes reach every barrier, including the unused lanes. Read a complete
+ // layout before changing any card; results do not depend on invocation order.
+ for(var iteration=0;iteration<6;iteration++){
+   if(valid){placedBounds[card]=screenBounds(cardFootprint(card,shift));}
+   workgroupBarrier();
+   var nextShift=shift;
+   if(valid){
+     if(p.motion.y>0.&&presence[card]>0.&&cameraLockAmount(card)<.999){
+       let bounds=placedBounds[card];
+       let force=panelSeparation(card)*p.motion.y*(1.-cameraLockAmount(card));
+       let center=p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift),1);
+       let origin=center.xy/max(.001,center.w);
+       let room=max(vec2f(.04),vec2f(.94)-bounds.zw);
+       var sum=vec2f(0);var total=0.;
+       // Prefer the clear route around yarn while still separating the cards.
+       for(var option=-1;option<=1;option++){
+         let bend=vec2f(-force.y,force.x)*f32(option)*.65;
+         let destination=clamp(origin+force+bend,-room,room);
+         let candidate=shiftToScreen(card,destination,shift);
+         let cost=occupied(cardFootprint(card,candidate))*20.+f32(option*option)*.3;
+         let weight=exp(-cost);sum+=candidate*weight;total+=weight;
+       }
+       if(total>1e-12){nextShift=mix(shift,sum/total,presence[card]);}
+     }
+   }
+   workgroupBarrier();
+   shift=nextShift;
+ }
+ if(valid){offsets[card]=vec4f(containCard(card,shift),0,0);}
 }

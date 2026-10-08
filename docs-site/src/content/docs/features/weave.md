@@ -70,6 +70,12 @@ positions are solved back into each lagged 3D plane, retaining depth and rotatio
 The complete projected card footprint contributes occupancy and frame-edge costs.
 Continuous weights and stable per-card preferences reduce position hunting; locked
 cards retain their camera slots and avoidance fades out during docking.
+Six bounded GPU separation rounds also account for the projected bounds of other
+visible cards. Visibility weights follow the shared intro/outro schedule, so
+hidden windows do not reserve space. Locked cards remain fixed obstacles; floating
+cards yield around them, preferring routes with less yarn occupancy. Tilted card
+footprints include a reading margin, and both sides of each pair see the same
+layout snapshot before a round advances.
 This is a soft layout preference, not a collision guarantee: cards may overlap
 one another or the subject when space is scarce. Spatial smoothing reduces
 sensitivity to fine strand motion; it is not a temporal speed limit. Layout is

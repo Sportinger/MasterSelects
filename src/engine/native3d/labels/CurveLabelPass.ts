@@ -5,7 +5,7 @@ import {CurveLabelHeadlineCache} from './CurveLabelHeadlineAtlas';
 import {curveLabelIntroState} from './curveLabelIntro';
 import {parseCurveLabelIntro} from '../../../services/operators/geometry/curveLabelIntro';
 import {curveLabelLock,curveLabelLocks,curveLabelActiveLocks} from './curveLabelLock';
-import {curveLabelEpisode,curveLabelOpeningRank} from './curveLabelSchedule';
+import {curveLabelEpisode,curveLabelOpeningRank,curveLabelReveal} from './curveLabelSchedule';
 import {curveLabelGlitchEvent} from './curveLabelGlitch';
 import glitchShader from './curveLabelGlitch.wgsl?raw';
 import {curveLabelDecoration} from './curveLabelDecoration';
@@ -95,7 +95,12 @@ export class CurveLabelPass {
       data.set([spec.introTextDepth??.02,spec.introTextMotion??.4,headlineAtlas?.height??256,(spec.introTextOpacity??1)*layer.opacity],116);
       data.set([spec.stackCount??0,spec.stackStart??13,spec.stackEnd??21,spec.stackStagger??0],120);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
-      const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
+      const presence=new Float32Array(spec.count);
+      for(let card=0;card<spec.count;card++){
+        const reveal=curveLabelReveal(spec,time,curveLabelEpisode(spec,time,card)).reveal;
+        presence[card]=reveal*reveal*(3-2*reveal);
+      }
+      const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,presence,temporary);
       const {anchors,ranges:rangeData}=curveLabelTrackingInputs(curves,spec,time);
       let maxCopies=0;
       for(let card=0;card<spec.count;card++){

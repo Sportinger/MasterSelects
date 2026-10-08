@@ -121,7 +121,7 @@ try{
    data.set([0,0,-1,0],40);data.set([0,0,8,0],44);data.set([.43,.13,1,6],56);
    data.set([.74,.48,5,cardCount],60);data.set([time,8,0,0],64);data.set([.65,strength,0,0],68);data[76]=1;device.queue.writeBuffer(uniform,0,data);
    const encoder=device.createCommandEncoder(),temporary:GPUBuffer[]=[];
-   const offsets=avoidance.encode(device,encoder,uniform,source,pointCount,cardCount,strength,temporary);
+   const offsets=avoidance.encode(device,encoder,uniform,source,pointCount,cardCount,strength,new Float32Array(cardCount).fill(1),temporary);
    const read=device.createBuffer({size:cardCount*16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
    encoder.copyBufferToBuffer(offsets,0,read,0,cardCount*16);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
    const values=[...new Float32Array(read.getMappedRange())];read.unmap();read.destroy();temporary.forEach(b=>b.destroy());return values;
