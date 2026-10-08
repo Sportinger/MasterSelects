@@ -59,6 +59,17 @@ local −Z birth impulse and a weaker persistent current. **Surface Offset**
 places births outside the yarn. No second geometry evaluation or readback is
 needed; there is no fluid pressure or collision solve.
 
+**Stroke Vortex Strength** adds pulse-born rolling eddies in the local radial/
+trailing plane. They peel sideways from the yarn, retain their world-space
+birth orientation and drift outward as they decay. **Stroke Vortex Radius**
+sets their extent in source units; **Stroke Vortex Decay** controls persistence.
+Nearby births use smoothly varying radii; bounded inherited source speed also
+modulates the eddy strength. Finite cores prevent a velocity singularity.
+The advection uses up to eight short local steps per render to resolve rolls;
+this is an art-directed wake, not a pressure-solving fluid simulation. Vortex
+strength defaults to zero for existing projects. New metadata is optional for
+older saved programs.
+
 **Pixel Size** 1–4 draws crisp pixel-aligned squares; 0 retains world-radius
 round dots. **Light Intensity** controls additive brightness. In pixel mode,
 **Opacity** and lifetime reduce particle density, preserving the brightness of

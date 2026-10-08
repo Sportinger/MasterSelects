@@ -41,10 +41,12 @@ describe('Curve Particle Wake', () => {
     const spec = readCurveWake(() => undefined);
     expect(isCurveWake(spec)).toBe(true);
     expect(isCurveWake({ ...spec, count: 100000, pixelSize: 1, intensity: 8, inherit: .6 })).toBe(true);
-    const { pixelSize, intensity, inherit, ...legacy } = spec;
+    const { pixelSize, intensity, inherit, vortex, vortexRadius, vortexDecay, ...legacy } = spec;
     expect(isCurveWake(legacy)).toBe(true);
     expect([pixelSize, intensity, inherit]).toEqual([0, 1, .65]);
-    for (const patch of [{ count: 1.5 }, { count: 262145 }, { pixelSize: .5 }, { time: NaN }, { pulseRate: -1 }, { drag: 0 }, { opacity: NaN }, { color: 'red' }, { gpuBuffer: {} }])
+    expect([vortex, vortexRadius, vortexDecay]).toEqual([0, .16, 1.2]);
+    expect(isCurveWake({ ...spec, vortex: .85, vortexRadius: .12, vortexDecay: .7 })).toBe(true);
+    for (const patch of [{ count: 1.5 }, { count: 262145 }, { pixelSize: .5 }, { time: NaN }, { vortex: Infinity }, { vortexRadius: 0 }, { vortexDecay: 0 }, { pulseRate: -1 }, { drag: 0 }, { opacity: NaN }, { color: 'red' }, { gpuBuffer: {} }])
       expect(isCurveWake({ ...spec, ...patch })).toBe(false);
   });
 });

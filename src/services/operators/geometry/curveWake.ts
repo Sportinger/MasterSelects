@@ -13,6 +13,9 @@ export const CURVE_WAKE_NUMBERS = [
   ['drag', 'Drift Damping', 1.2, .01, 10, .01],
   ['curl', 'Curl Amount', .12, 0, 2, .01],
   ['curlRate', 'Curl Rate', .8, 0, 5, .01],
+  ['vortex', 'Stroke Vortex Strength', 0, 0, 3, .01],
+  ['vortexRadius', 'Stroke Vortex Radius', .16, .005, 2, .005],
+  ['vortexDecay', 'Stroke Vortex Decay', 1.2, .01, 8, .01],
   ['pulseRate', 'Pulse Rate (Hz)', .4, 0, 10, .01],
   ['pulsePhase', 'Pulse Phase (turns)', 0, -1000000, 1000000, .01],
   ['waveLag', 'Wave Delay', 3.2, 0, 30, .01],
@@ -24,7 +27,7 @@ export const CURVE_WAKE_NUMBERS = [
 export type CurveWakeSpec = Record<typeof CURVE_WAKE_NUMBERS[number][0], number> & { color: string; time?: number };
 export const CURVE_WAKE_OPERATOR: OperatorDefinition = {
   id: 'geometry.curve-wake', version: 1, label: 'Curve Particle Wake',
-  description: 'A GPU particle wake emitted from final curve positions with inherited source motion, viscous damping and slow curl advection in world space. Pulses peel small 3D particles off the yarn into damped curly trails along local -Z. Connect Pulse Phase to the same unwrapped phase as the curve wave; Wave Delay/Origin/Length Scale match its longitudinal phase. Continuous playback retains independent particle positions after birth. Seeking/reversing or a gap over half a second reseeds from the current shape instead of replaying historical geometry. Pixel Size >= 1 draws hard pixel-aligned squares; zero uses world-radius dots. No fluid pressure or collisions. Pulse Rate 0 disables the wake; use opacity to fade it in/out. Place before Strand Render; one wake per strand layer. Bypass removes only the wake.',
+  description: 'A GPU particle wake emitted from final curve positions with inherited source motion, viscous damping and slow curl advection in world space. Pulses peel small 3D particles off the yarn into damped curly trails along local -Z. Connect Pulse Phase to the same unwrapped phase as the curve wave; Wave Delay/Origin/Length Scale match its longitudinal phase. Stroke Vortex Strength adds sideward rolling eddies at pulse births; Radius sets their size and Decay their fade. Continuous playback retains independent particle positions after birth. Seeking/reversing or a gap over half a second reseeds from the current shape instead of replaying historical geometry. Pixel Size >= 1 draws hard pixel-aligned squares; zero uses world-radius dots. No fluid pressure or collisions. Pulse Rate 0 disables the wake; use opacity to fade it in/out. Place before Strand Render; one wake per strand layer. Bypass removes only the wake.',
   inputs: [{ id: 'curves', label: 'Curves', type: 'curves', required: true, contract: { formats: [STRAND_CURVES_FORMAT] } },
     ...CURVE_WAKE_NUMBERS.map(([id, label]) => ({ id, label, type: 'number' as const }))],
   outputs: [{ id: 'curves', label: 'Curves', type: 'curves', contract: { formats: [STRAND_CURVES_FORMAT] } }],
@@ -54,7 +57,7 @@ export function isCurveWake(value: unknown): value is CurveWakeSpec {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   const allowed = new Set<string>(['color', 'time', ...CURVE_WAKE_NUMBERS.map(([id]) => id)]);
-  if (Object.keys(record).some(key => !allowed.has(key)) || [...allowed].some(key => key !== 'time' && !['pixelSize','intensity','inherit'].includes(key) && !(key in record))) return false;
+  if (Object.keys(record).some(key => !allowed.has(key)) || [...allowed].some(key => key !== 'time' && !['pixelSize', 'intensity', 'inherit', 'vortex', 'vortexRadius', 'vortexDecay'].includes(key) && !(key in record))) return false;
   if (record.time !== undefined && (typeof record.time !== 'number' || !Number.isFinite(record.time))) return false;
   try { readCurveWake(id => record[id] as OperatorValue); return true; } catch { return false; }
 }

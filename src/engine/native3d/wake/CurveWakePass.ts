@@ -53,7 +53,7 @@ export class CurveWakePass {
           const oldest = [...this.states].toSorted((a, b) => a[1].used - b[1].used)[0];
           temporary.push(oldest[1].buffer); this.states.delete(oldest[0]);
         }
-        state = { buffer: device.createBuffer({ size: spec.count * 64, usage: GPUBufferUsage.STORAGE, label: 'curve-wake-state' }),
+        state = { buffer: device.createBuffer({ size: spec.count * 112, usage: GPUBufferUsage.STORAGE, label: 'curve-wake-state' }),
           count: spec.count, seed: spec.seed, topology, time, used: 0 };
         this.states.set(key, state);
       }
@@ -64,7 +64,7 @@ export class CurveWakePass {
         reset = true;
         log.debug('Reseeding curve wake after a source-time jump; historical curve positions are unavailable.', { layerId: layer.layerId, elapsed });
       }
-      const values = new Float32Array(64);
+      const values = new Float32Array(68);
       values.set(multiplyMat4(camera.projectionMatrix, camera.viewMatrix), 0);
       values.set(layer.worldMatrix, 16);
       const view = camera.viewMatrix;
@@ -77,6 +77,7 @@ export class CurveWakePass {
       values.set([spec.waveFront, spec.waveLag, spec.waveScale, spec.surfaceRadius], 52);
       values.set([camera.viewport.width, camera.viewport.height, spec.pixelSize ?? 0, spec.intensity ?? 1], 56);
       values.set([time, reset ? 0 : Math.max(0, elapsed), reset ? 1 : 0, spec.inherit ?? .65], 60);
+      values.set([spec.vortex ?? 0, spec.vortexRadius ?? .16, spec.vortexDecay ?? 1.2, 0], 64);
       const entries: GPUBindGroupEntry[] = [
         { binding: 0, resource: { buffer: buffer(values, GPUBufferUsage.UNIFORM) } },
         { binding: 1, resource: { buffer: buffers.positions } },

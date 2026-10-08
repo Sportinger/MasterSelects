@@ -245,7 +245,7 @@ Curve Scan Labels accepts authored text cues with timed four-line readouts and U
 
 Curve Scan Labels can hand off sequentially to a shared moving material target, hold their final appearances longer, and recolor each card on acquisition. See [Weave](docs/Features/Weave.md).
 
-Curve Particle Wake adds depth-tested GPU particles to yarn curves, with inherited motion, damped world-space trails and a crisp one-pixel mode. Continuous playback retains detached particles; timeline jumps reseed them from the current shape. See [Weave](docs/Features/Weave.md#curve-particle-wake).
+Curve Particle Wake adds depth-tested GPU particles to yarn curves, with inherited motion, pulse-born sideways vortices, damped world-space trails and a crisp one-pixel mode. Continuous playback retains detached particles; timeline jumps reseed them from the current shape. See [Weave](docs/Features/Weave.md#curve-particle-wake).
 
 Closed Curve Flow supports GPU point-field tails in turns or curve-distance units, including a following contact stage.
 
