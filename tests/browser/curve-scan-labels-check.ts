@@ -226,10 +226,39 @@ try{
  spec.glitchStrength=0;const clean=await draw(12.65);
  const changed=clean.filter((v,i)=>Math.abs(v-disrupted[i])>.01).length;
  if(changed<100||disrupted.some((v,i)=>v!==disruptedAgain[i]))throw new Error(`Missing or nondeterministic window glitch: ${changed}`);
- if(Math.abs(markerEnergy(disrupted,shifted)-markerEnergy(clean,shifted))>.01)throw new Error('Glitch disturbed the tracking ring');
+ // Leader curves now morph near the ring; verify their fixed attachments separately below.
  spec.glitchStrength=1;const recovered=await draw(15.1);spec.glitchStrength=0;const cleanAfter=await draw(15.1);
  if(recovered.some((v,i)=>v!==cleanAfter[i]))throw new Error('Glitch did not fully recover');
- result.windowGlitch={changed,recoveries,waveSamples,deterministic:true,recovered:true};
+ const glowingPixels=disrupted.filter((v,i)=>i%4!==3&&v>1.05).length;
+ if(glowingPixels<20)throw new Error(`Window glitch lacks emissive accents: ${glowingPixels}`);
+ result.windowGlitch={changed,recoveries,waveSamples,glowingPixels,deterministic:true,recovered:true};
+ const shapeModule=device.createShaderModule({code:projectionShader+'\n'+glitchShader+`
+ @group(0) @binding(0) var<uniform> p:Params;
+ @group(0) @binding(1) var<storage,read> offsets:array<vec4f>;
+ @group(0) @binding(2) var<storage,read_write> result:array<vec4f>;
+ @compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id:vec3u){
+   let i=id.x;let q=vec2f(.42,.31);let a=vec3f(0,0,0);let b=vec3f(2,1,0);
+   if(i==0u){result[i]=vec4f(glitchGeometry(q,0.,13.),glitchGeometry(q,1.,13.));}
+   else if(i<=9u){result[i]=vec4f(glitchLeaderPoint(0u,a,b,f32(i-1u)/8.),1);}
+   else {result[i]=vec4f(windowGlyphScale(0u,f32(i-10u)),0,0,0);}
+ }`});
+ const shapePipeline=device.createComputePipeline({layout:'auto',compute:{module:shapeModule,entryPoint:'main'}});
+ const shapeData=new Float32Array(88);shapeData.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));
+ shapeData.set([1,0,0,1],32);shapeData.set([0,1,0,1],36);shapeData.set([0,0,-1,0],40);shapeData.set([0,0,8,0],44);
+ shapeData.set([.43,.13,1,6],56);shapeData.set([0,.3,5,1],60);shapeData[64]=12.65;shapeData[76]=1;shapeData.set([.65,0,1,0],84);device.queue.writeBuffer(uniform,0,shapeData);
+ const zeroOffset=device.createBuffer({size:16,usage:GPUBufferUsage.STORAGE});
+ const shapeOut=device.createBuffer({size:14*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+ const shapeRead=device.createBuffer({size:14*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+ const shapeEncoder=device.createCommandEncoder(),shapePass=shapeEncoder.beginComputePass();shapePass.setPipeline(shapePipeline);
+ shapePass.setBindGroup(0,device.createBindGroup({layout:shapePipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:zeroOffset}},{binding:2,resource:{buffer:shapeOut}}]}));shapePass.dispatchWorkgroups(14);shapePass.end();
+ shapeEncoder.copyBufferToBuffer(shapeOut,0,shapeRead,0,14*16);device.queue.submit([shapeEncoder.finish()]);await shapeRead.mapAsync(GPUMapMode.READ);
+ const shapeValues=[...new Float32Array(shapeRead.getMappedRange())];shapeRead.unmap();shapeRead.destroy();shapeOut.destroy();zeroOffset.destroy();
+ if(Math.hypot(shapeValues[0]-.42,shapeValues[1]-.31)>1e-6||Math.hypot(shapeValues[2]-.42,shapeValues[3]-.31)<.05)throw new Error('Window geometry does not distort or fails to recover');
+ if(shapeValues.slice(4,7).some(v=>v!==0)||shapeValues[36]!==2||shapeValues[37]!==1||shapeValues[38]!==0)throw new Error('Glitch leader detached from endpoint');
+ const curveDeviation=Math.max(...Array.from({length:7},(_,i)=>Math.hypot(shapeValues[(i+2)*4]-(i+1)/4,shapeValues[(i+2)*4+1]-(i+1)/8,shapeValues[(i+2)*4+2])));
+ const fontScales=Array.from({length:4},(_,i)=>shapeValues[(i+10)*4]);
+ if(curveDeviation<.05||Math.max(...fontScales)-Math.min(...fontScales)<.2)throw new Error('Missing curved leaders or independent font size glitches');
+ result.glitchGeometry={curveDeviation,fontScales,fixedEndpoints:true};
  const a=markerEnergy(first,width/2),b=markerEnergy(second,width/2),c=markerEnergy(second,shifted);
  if(!(a>b+12&&c>20))throw new Error(`Marker did not follow GPU positions: ${a}, ${b}, ${c}`);
  if(second.some((v,i)=>v!==repeated[i]))throw new Error('Repeated frame changed');

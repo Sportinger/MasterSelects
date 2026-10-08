@@ -681,3 +681,7 @@ Composed geometry fields allow up to 640 instructions, including independent mot
 Curve Scan Labels offers **Lifetime Variation** and **Appearance Seed** for reproducible, independent visible durations and pauses, including a shuffled opening order. Opening Build-up retains its accelerating stagger. CPU text, GPU reveal and the exported `curveLabelCues` intro/outro schedule use the same episode boundaries; seeking does not resample randomness. A **Tracking Hold Start/End** interval keeps the first **Held Tracking Cards** fully revealed, overriding their random pauses without a hard visibility jump. This controls visibility timing, not whether the camera can see their anchors.
 
 Window Echoes now produces 6–20 parallel copies for occasional 2.4–4.8-second episodes (limited by the visible interval), with a longer hold and an 800-ms tail fade. Distant copies retain enough opacity to remain visible. **Window Rotation** adds smooth, independent yaw/pitch targets up to 45 degrees, separately from camera lag and spatial drift.
+
+### Emissive scan-window glitches
+
+The diagonal 12-second glitch wave now warps window outlines, shears them into bands and changes groups of glyphs in size. Bright RGB fringes, local shader halos and short rectangular/orbital wireframe fragments strengthen the effect without a fullscreen blur pass. Connection lines morph through subdivided three-dimensional loops, retaining their exact point/card attachments and returning to straight leaders after the wave. Tracking ring positions and scene geometry remain unchanged.

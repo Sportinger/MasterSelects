@@ -224,3 +224,5 @@ Keyframe curve drags coalesce pointer updates; bulk easing edits publish once an
 Weave circulation supports an independent integrated Motion Time clock for smooth starts and stops; see [Weave](docs/Features/Weave.md#independent-eased-circulation).
 
 Curve Scan Labels supports independently randomized appearances, shared intro/outro cue timing, tracking hold intervals, 6–20-copy echo trails and smooth window rotations up to 45 degrees.
+
+Scan-window glitch waves include emissive fragments, warped outlines and text sizes, and curved connection lines with fixed endpoints.
