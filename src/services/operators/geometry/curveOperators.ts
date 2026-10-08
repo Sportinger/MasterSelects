@@ -45,7 +45,7 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
       number('iterations', 'Iterations', 24, 1, 128, 1, false), number('smoothing', 'Correction Smoothing', 0.35, 0, 1)],
     { bypass: 'passthrough' }),
   operator('geometry.curve-flow', 'Closed Curve Flow', 'Moves material points along an existing closed path. Unlike forming new loops, the stitch path stays fixed while yarn and its colors circulate. Requires a repeated endpoint; linearly resamples positions and radius scales.',
-    [curves('curves', true)], [curves()], [number('speed', 'Turns per Second', 0.05, -10, 10, 0.01),
+    [curves('curves', true), { id: 'time', label: 'Motion Seconds', type: 'number' }], [curves()], [number('speed', 'Turns per Second', 0.05, -10, 10, 0.01),
       number('phase', 'Phase', 0, -1000, 1000, 0.01)], { bypass: 'passthrough' }),
   operator('geometry.close-curve', 'Close Curve', 'Connects each open strand end back to its own start through a smooth return bow. Offset places the back of the bow relative to the endpoint midpoint. Place before Rod Simulation for a physically closed rope. This closes the geometry; it does not loop the animation.',
     [curves('curves', true)], [curves()], [
@@ -56,6 +56,11 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
     [], [{ id: 'position', label: 'Position', type: 'vec3' }]),
   operator('geometry.clip-time', 'Clip Time', 'Seconds of source time of the clip that hosts the effect: 0 where the clip starts, continuing across splits. Cloth runs on the same clock.',
     [], [{ id: 'value', label: 'Seconds', type: 'number' }]),
+  operator('geometry.motion-time', 'Motion Time', 'Integrated source-time clock: starts at rest, smoothly reaches normal speed after Acceleration, then slows to rest during Deceleration before Duration. Connect only to motion that should ease; other clocks stay independent. Frozen outside the interval; scrubbing and export are deterministic. Acceleration and Deceleration must not overlap.',
+    [], [{ id: 'value', label: 'Motion Seconds', type: 'number' }], [
+      number('duration', 'Duration', 59, 0.001, 36000, 0.01),
+      number('attack', 'Acceleration', 5, 0, 36000, 0.01),
+      number('release', 'Deceleration', 5, 0, 36000, 0.01)]),
   operator('geometry.curve-info', 'Curve Info', 'Per-point curve data: Curve Param runs from 0 to 1 along each curve; indices count from 0.',
     [], [{ id: 'u', label: 'Curve Param', type: 'number' }, { id: 'point', label: 'Point Index', type: 'number' },
       { id: 'strand', label: 'Strand Index', type: 'number' }, { id: 'points', label: 'Point Count', type: 'number' },

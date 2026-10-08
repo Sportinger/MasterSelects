@@ -1,3 +1,4 @@
+import { motionTime } from './motionTime';
 import { readCurveLabels, CURVE_LABEL_NUMBERS, type CurveLabelSpec } from './curveLabels';
 import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
 import { expandOperatorCompositions } from '../operatorComposition';
@@ -161,6 +162,15 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     if (!linked) throw new Error(`${getEffectOperator(node.operator)?.label ?? node.operator}: connect ${input}.`);
     return linked;
   };
+  function motionClock(node: BoundOperatorNode): number {
+    const field = compileField(node, 'time', 'scalar');
+    if (!field) return node.operator === 'geometry.knit-sphere'
+      ? (Number.isFinite(context.simulationTime) ? context.simulationTime! : 0)
+      : context.simulationTime ?? context.time ?? 0;
+    if (field.instructions.length !== 1 || field.instructions[0].operation !== 'constant')
+      throw new Error(`${getEffectOperator(node.operator)?.label}: Motion Seconds must be uniform, not per-point.`);
+    return finite(field.instructions[0].value ?? 0, 'Motion Seconds');
+  }
   let render: GeometryStrandRender | undefined;
   let head: BoundOperatorNode | undefined;
   if (target) head = nodes.get(target);
@@ -273,7 +283,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         roundness: finite(read(node, 'roundness'), 'Roundness') });
     } else if (node.operator === 'geometry.knit-sphere') {
       const spec = Object.fromEntries(KNIT_SPHERE_KEYS.map(key => [key, finite(read(node, key), key)])) as unknown as KnitSphereSpec;
-      const time = Number.isFinite(context.simulationTime) ? context.simulationTime! : 0;
+      const time = motionClock(node);
       spec.phase += time * finite(read(node, 'speed'), 'Speed');
       if (!isKnitSphereSpec({ ...spec })) throw new Error('Knit Sphere parameters are outside their supported ranges.');
       spec.phase = ((spec.phase % 1) + 1) % 1;
@@ -313,7 +323,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         handle: Math.max(0, finite(read(node, 'handle'), 'End handles')), points: Math.round(finite(read(node, 'points'), 'Return points')) });
     } else if (node.operator === 'geometry.curve-flow') {
       stages.push({ kind: 'curve-flow', nodeId: node.id, phase: finite(read(node, 'phase'), 'Flow phase')
-        + finite(read(node, 'speed'), 'Flow speed') * (context.simulationTime ?? context.time ?? 0) });
+        + finite(read(node, 'speed'), 'Flow speed') * motionClock(node) });
     } else if (node.operator === 'geometry.curve-contact') {
       const influence = compileField(node, 'strength', 'scalar');
       if (influence && (influence.instructions.length !== 1 || influence.instructions[0].operation !== 'constant'))
@@ -436,7 +446,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       if (visiting.has(key)) throw new Error('Cycles are not supported.');
       visiting.add(key);
       if (owner.operator === 'geometry.rod-simulation' && input === 'pullDirection'
-        && (node.operator === 'geometry.clip-time' || node.operator === 'image.timeline-time')) {
+        && (node.operator === 'geometry.clip-time' || node.operator === 'geometry.motion-time' || node.operator === 'image.timeline-time')) {
         throw new Error('Rod Pull Direction is a fixed rest-state field; use Pull Start and Pull Time to move pinned points.');
       }
       let register: number;
@@ -460,6 +470,10 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         register = emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: Number.isFinite(context.time) ? context.time! : 0 }, 'timeline-time');
       } else if (node.operator === 'geometry.clip-time') {
         register = emit(constant(node.id, Number.isFinite(context.simulationTime) ? context.simulationTime! : 0), 'clip-time');
+      } else if (node.operator === 'geometry.motion-time') {
+        register = emit(constant(node.id, motionTime(context.simulationTime ?? 0,
+          finite(read(node, 'duration'), 'Duration'), finite(read(node, 'attack'), 'Acceleration'),
+          finite(read(node, 'release'), 'Deceleration'))), `motion-time:${node.id}`);
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {

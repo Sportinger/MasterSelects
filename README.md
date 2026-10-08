@@ -220,3 +220,5 @@ softness, stable opacity variation and inexpensive velocity streaks; their Trans
 mode and opacity composite against the shared scene.
 
 Keyframe curve drags coalesce pointer updates; bulk easing edits publish once and preserve unrelated keyframe data. Clip/keyframe drag previews defer project encoding until release, and editing existing keyframe values retains their easing.
+
+Weave circulation supports an independent integrated Motion Time clock for smooth starts and stops; see [Weave](docs/Features/Weave.md#independent-eased-circulation).

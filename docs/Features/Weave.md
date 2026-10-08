@@ -21,7 +21,7 @@ Node contracts are listed in the [Node Catalog](./Node-Catalog.md#curve-graphs-w
 
 Geometry graphs allow 1,024 nodes and 4,096 edges, including expanded reusable
 compositions. Expansion uses the graph's own domain budget and reports that domain
-and its limits on overflow. Each per-point field still has a separate 512-instruction
+and its limits on overflow. Each per-point field still has a separate 640-instruction
 limit, so additional formation stages do not lift the shader complexity guard.
 The field compiler shares identical pure expressions and cancels matching vector
 combine/split operations within each stage. Parameter owners remain independent:
@@ -667,3 +667,11 @@ Tracking rings, leaders and scene geometry remain untouched. The effect uses the
 existing annotation render pass, plus a small block draw only during active waves;
 there is no fullscreen post-process or frame-history dependency. Reverse seeks
 and export reproduce the same event. Zero strength restores the clean windows.
+
+### Independent eased circulation
+
+`Motion Time` supplies analytically integrated source seconds: acceleration from rest, constant-speed travel, then deceleration to rest. Duration, Acceleration and Deceleration are node parameters; invalid or overlapping intervals report an error. The clock is clamped outside its duration and is independent of playback history, so scrubbing and rendering agree.
+
+Knit Sphere and Closed Curve Flow accept an optional uniform **Motion Seconds** input. Without it they retain their source-time behavior. Connect Motion Time only to circulation branches to preserve the original timing of pulsation, formation, camera and other effects. Per-point generator clocks are rejected explicitly. An eased clock controls speed, not loop geometry: a matching final pose or whole-turn phase is still needed for a seamless loop.
+
+Composed geometry fields allow up to 640 instructions, including independent motion clocks alongside inherited forces.

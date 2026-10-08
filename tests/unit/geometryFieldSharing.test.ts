@@ -84,6 +84,6 @@ describe('geometry field expression sharing', () => {
   });
 
   it('still rejects genuinely large fields with their owner and instruction count', () => {
-    expect(() => compile(repeatedNoise(200, true), 199)).toThrow(/deform.offset.*instruction budget \(\d+\/512\)/);
+    expect(() => compile(repeatedNoise(250, true), 249)).toThrow(/deform.offset.*instruction budget \(\d+\/640\)/);
   });
 });
