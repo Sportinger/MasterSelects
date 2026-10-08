@@ -847,3 +847,19 @@ solver: morphing the path itself can still move material points. Scene transform
 scale curve-local distances. This stage currently uses the CPU evaluator; a GPU
 tail implementation is still required before inserting it after expensive GPU
 deformations in a playback-sensitive graph.
+
+
+### Authored scan text cues
+
+**Text Cues (JSON)** assigns timed content to existing scan cards. Supply an ordered array of `{ "start": 0, "end": 5, "panels": [["STATUS", "FIRST LINE", "SECOND LINE", "THIRD LINE"]] }`. Times are source seconds and use inclusive starts/exclusive ends. Cues may leave gaps; gaps restore the ordinary readouts. Each cue accepts 1–12 panels, with exactly four ASCII rows of at most 20 characters. Panels repeat across card indices when there are fewer panels than cards. Authored rows replace the changing telemetry and coordinate slots, including camera-locked cards; headings leave space for the animated lock icon.
+
+A cue may also contain `"headlines": [{ "text": "A question?", "header": "OBSERVER", "footer": "LIVE" }]`. At most two headlines can appear together, each with up to 32 printable Unicode characters and 20-column ASCII header/footer. They reuse the shaped cream headline atlas, progressive decode, independent text motion and intro scale/distance settings. The first multilingual Intro Titles keep priority until their phrases finish. Only the current phrase set is rasterized, keeping the atlas bounded independently of the number of cues.
+
+Headline cards are selected deterministically at cue start, preferring already visible, unlocked cards with the greatest remaining overlap. Selection stays fixed through the cue and across seeks. Cue text does not extend an appearance, remove occlusion or guarantee a full cue's visibility: choose suitable card lifetimes or a tracking hold for an uninterrupted reading interval. Existing rings, tracking acquisition, card colors, locks and sound-event timing keep their own controls. The transport rejects overlapping/out-of-order intervals, unknown fields, oversized text and more headlines than available cards instead of silently trimming them. Limits: 64 cues, 32,768 JSON characters and source times through 36,000 seconds. Empty text preserves existing projects.
+
+
+### Sequential final material tracking
+
+Set **Final Target Hold End** later than **Final Target Start** to enable a closing target handoff. Card 0 begins at Start; every subsequent card follows after **Final Target Card Delay**. Each interpolates its current moving target toward **Final Target Strand / Final Material Position** during **Final Target Travel**, then adopts **Final Target Color** only on arrival. Position accepts node-driven values, wraps in both directions and is sampled from final GPU strand positions. Feed the same material coordinate that controls a colored yarn section to keep the marker on that section. No point readback or CPU deformation is introduced.
+
+The existing appearance covering each handoff is extended through Hold End, followed by the regular intro/outro duration. Other appearances retain their ordinary schedule; this is a hold interval, not a global clip-duration limit. The hold must fit all delays and travel. An end no later than start disables the feature for older projects. Acquired final targets suppress the released-target red warning groups and accents; ordinary tracking stays unchanged before acquisition. Tracking diagnostic readiness uses 0–1 for released acquisition and 2 for the final target. Large cream headline words keep their authored typography.

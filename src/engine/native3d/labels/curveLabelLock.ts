@@ -12,7 +12,7 @@ export function curveLabelLocks(spec:CurveLabelSpec):CurveLabelLockEvent[] {
   const key=[spec.count,spec.cycle,spec.dutyCycle,spec.transition,spec.introSpread,
     spec.lifetimeVariation,spec.scheduleSeed,spec.holdCount,spec.holdStart,spec.holdEnd,
     spec.lockCount,spec.lockStart,spec.lockInterval,spec.lockDuration,spec.stackCount,spec.stackStart,spec.stackEnd,
-    spec.stackStagger,spec.earlyLockCount,spec.earlyLockStart,spec.earlyLockEnd].join(':');
+    spec.finalStart,spec.finalEnd,spec.finalStagger,spec.stackStagger,spec.earlyLockCount,spec.earlyLockStart,spec.earlyLockEnd].join(':');
   const cached=schedules.get(key);if(cached)return cached;
   const events:CurveLabelLockEvent[]=[],duration=LOCK_DOCK_SECONDS+spec.lockDuration+LOCK_RELEASE_SECONDS;
   const overlapsStack=(start:number,end:number)=>spec.stackCount>0&&start<curveLabelStackEnd(spec)&&end>spec.stackStart;

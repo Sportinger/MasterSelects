@@ -8,16 +8,23 @@ fn along(start:f32,count:f32,u:f32)->vec3f {
  return mix(points[u32(start+low)].position.xyz,points[u32(start+min(low+1.,count-1.))].position.xyz,fract(at));
 }
 fn selected(a:vec4f)->vec3f {return mix(points[u32(a.x)].position.xyz,points[u32(a.y)].position.xyz,a.z);}
+fn finishTracking(card:u32,position:vec3f,ready:f32)->vec4f {
+ let blend=finalTargetBlend(card);
+ if(blend<=0.){return vec4f(position,ready);}
+ let arrived=blend>=1.;
+ return vec4f(mix(position,selected(p.finalAnchor),blend),select(ready,2.,arrived));
+}
 @compute @workgroup_size(16) fn track(@builtin(global_invocation_id) id:vec3u){
  let card=id.x;if(card>=u32(p.arrangement.w)){return;}
  let a=anchors[card*4u];let b=anchors[card*4u+1u];let ranges=anchors[card*4u+2u];
+ if(finalTargetBlend(card)>=1.){tracked[card]=vec4f(selected(p.finalAnchor),2.);return;}
  var destination=selected(b);var ready=select(0.,1.,p.tracking.x>=.999);
  if(p.tracking.x>0.&&p.animation.z>0.&&card<u32(round(p.arrangement.w*p.tracking.z))){
    let total=arrayLength(&topology);
    // At full release the final curve is no longer a parent/reference. Comparing
    // its sampled polyline against itself invents separation from chord error.
    if(p.tracking.y>=1.&&u32(ranges.x)==topology[total-1u].x){
-     tracked[card]=vec4f(mix(selected(a),destination,p.tracking.x),ready);return;
+     tracked[card]=finishTracking(card,mix(selected(a),destination,p.tracking.x),ready);return;
    }
    let firstRemaining=min(total-1u,u32(floor(p.tracking.y*f32(total-1u)))+1u);
    // Compare against every remaining parent curve, so an attached outer stitch does not look detached.
@@ -49,5 +56,5 @@ fn selected(a:vec4f)->vec3f {return mix(points[u32(a.x)].position.xyz,points[u32
      destination=mix(destination,along(ranges.x,ranges.y,fract(bestU+spread+1.)),p.animation.z);
    }
  }
- tracked[card]=vec4f(mix(selected(a),destination,p.tracking.x),ready);
+ tracked[card]=finishTracking(card,mix(selected(a),destination,p.tracking.x),ready);
 }

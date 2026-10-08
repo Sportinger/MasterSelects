@@ -240,3 +240,7 @@ Curve Scan Labels supports exact material anchors and amber opening rings that r
 Scan intros combine detailed readouts with cream multilingual text on independently moving 3D planes, progressively decode characters, switch languages briefly, then return to normal readouts.
 
 Weave scan cards support material anchors for an authored tracking hold, with projected card bounds kept in frame while the yarn moves.
+
+Curve Scan Labels accepts authored text cues with timed four-line readouts and Unicode headlines, reusing existing cards and preserving their tracking and appearance schedules.
+
+Curve Scan Labels can hand off sequentially to a shared moving material target, hold their final appearances longer, and recolor each card on acquisition. See [Weave](docs/Features/Weave.md).

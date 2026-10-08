@@ -30,6 +30,7 @@ function next(spec:CurveLabelSpec,card:number,birth:number,cycle:number):CurveLa
   pause=Math.max(0,pause);
   const windows:Array<[number,number]>=[];
   if(card<spec.holdCount&&spec.holdEnd>spec.holdStart)windows.push([spec.holdStart,spec.holdEnd]);
+  if(spec.finalEnd>spec.finalStart)windows.push([spec.finalStart+card*spec.finalStagger,spec.finalEnd]);
   const stack=curveLabelStackWindow(spec,card);if(stack)windows.push(stack);
   for(const [start,end] of windows.toSorted((a,b)=>a[0]-b[0]))
     if(birth<=start-spec.transition&&birth+visible+pause>=start-spec.transition)
@@ -40,11 +41,11 @@ function next(spec:CurveLabelSpec,card:number,birth:number,cycle:number):CurveLa
 export function curveLabelEpisode(spec:CurveLabelSpec,time:number,card:number):CurveLabelEpisode {
   if(!Number.isFinite(time)&&time!==-Infinity)throw new Error('Curve Scan Labels: schedule time must be finite.');
   const birth=opening(spec,card);
-  if(spec.lifetimeVariation===0&&!(card<spec.holdCount&&spec.holdEnd>spec.holdStart)&&!curveLabelStackWindow(spec,card)){
+  if(!(spec.finalEnd>spec.finalStart)&&spec.lifetimeVariation===0&&!(card<spec.holdCount&&spec.holdEnd>spec.holdStart)&&!curveLabelStackWindow(spec,card)){
     const cycle=Math.max(0,Math.floor((time-birth)/spec.cycle));
     return {birth:birth+cycle*spec.cycle,period:spec.cycle,visible:spec.cycle*spec.dutyCycle,cycle};
   }
-  const key=[card,spec.count,spec.cycle,spec.dutyCycle,spec.transition,spec.introSpread,spec.lifetimeVariation,spec.scheduleSeed,spec.holdCount,spec.holdStart,spec.holdEnd,spec.stackCount,spec.stackStart,spec.stackEnd,spec.stackStagger].join(':');
+  const key=[card,spec.count,spec.cycle,spec.dutyCycle,spec.transition,spec.introSpread,spec.lifetimeVariation,spec.scheduleSeed,spec.holdCount,spec.holdStart,spec.holdEnd,spec.stackCount,spec.stackStart,spec.stackEnd,spec.stackStagger,spec.finalStart,spec.finalEnd,spec.finalStagger].join(':');
   let episodes=schedules.get(key);
   if(!episodes){episodes=[next(spec,card,birth,0)];schedules.set(key,episodes);if(schedules.size>48)schedules.delete(schedules.keys().next().value!);}
   while(episodes.at(-1)!.birth+episodes.at(-1)!.period<=time){

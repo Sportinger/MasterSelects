@@ -7,7 +7,7 @@
  let letters=2u+u32(glitchRandom(seed+1.)*3.);
  let threshold=(f32(group)+glitchRandom(seed+2.)*.45)/6.;
  let growth=smoothstep(threshold,threshold+.07,p.tracking.y);
- let acquired=tracked[card].w>=.999&&p.tracking.x>0.
+ let acquired=tracked[card].w>=.999&&tracked[card].w<1.5&&p.tracking.x>0.
    &&card<u32(round(p.arrangement.w*p.tracking.z));
  let q=corner(vertex);
  let size=vec2f(.045+.024*glitchRandom(seed+3.),.18+.10*glitchRandom(seed+4.));

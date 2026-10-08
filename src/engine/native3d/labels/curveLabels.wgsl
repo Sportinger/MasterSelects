@@ -15,8 +15,11 @@ fn markerAnchor(card:u32)->vec3f {
  let a=anchors[card*4u];let b=anchors[card*4u+1u];
  let radiusA=mix(points[u32(a.x)].normal.w,points[u32(a.y)].normal.w,a.z);
  let radiusB=mix(points[u32(b.x)].normal.w,points[u32(b.y)].normal.w,b.z);
+ let c=p.finalAnchor;
+ var radius=mix(radiusA,radiusB,p.tracking.x);
+ if(c.w>.5){radius=mix(radius,mix(points[u32(c.x)].normal.w,points[u32(c.y)].normal.w,c.z),finalTargetBlend(card));}
  let center=anchor(card);let toward=p.liveEye.xyz-center;
- return center+toward/max(length(toward),1e-6)*p.liveForward.w*max(0.,mix(radiusA,radiusB,p.tracking.x));
+ return center+toward/max(length(toward),1e-6)*p.liveForward.w*max(0.,radius);
 }
 fn flicker(t:f32,seed:f32)->f32 {
  let i=floor(t);let f=fract(t);let a=fract(sin(i*12.9898+seed)*43758.5453);
@@ -24,6 +27,7 @@ fn flicker(t:f32,seed:f32)->f32 {
  return mix(a,b,f*f*(3.-2.*f));
 }
 fn signalColor(card:u32,base:vec3f)->vec3f {
+ if(tracked[card].w>1.5){return p.finalColor.rgb;}
  let seed=f32(card)*7.173+1.;let wave=flicker(p.clock.x*6.7,seed)*.7+flicker(p.clock.x*13.1,seed+9.)*.3;
  let orange=vec3f(1.,.38,.055);let red=vec3f(1.,.055,.025);
  if(card<u32(round(p.arrangement.w*p.tracking.z))){
@@ -149,6 +153,12 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  if(glitchRandom(glitchTick(card)+f32(slot)*7.)<disturbance*.45&&code!=32u){code=33u+u32(glitchRandom(f32(slot)+glitchTick(card)+3.)*58.);}
  let glyph=clamp(code,32u,127u)-32u;let q=corner(vertex);
  var position=vec2f(-.445+(f32(col)+q.x)*.0445,.39-(f32(row)+q.y)*.208)*select(1.,.76,roundCard(card));
+ // Authored headings retain all 20 columns while leaving room for the lock icon.
+ if(row==0u&&(glyphs[glyphIndex]&4096u)!=0u){
+   let inset=select(1.,.76,roundCard(card));
+   let locked=vec2f(-.23+(f32(col)+q.x)*.0335,.39-q.y*.156)*inset;
+   position=mix(position,locked,cameraLockAmount(card));
+ }
  if(p.motion.z>.5&&row>0u){position.x+=sin(p.clock.x*.8+f32(card)*1.3+f32(row))*.006;}
  if(p.motion.z>.5&&card%4u>=2u){position.y*=p.metrics.y/max(cardMetrics(card).y,.001);}
  if(introCard(card)){
@@ -163,7 +173,7 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  position+=windowGlitchOffset(card,group);
  var out:Out;out.position=p.vp*vec4f(cardPoint(card,position,copy),1);out.glitch=disturbance;out.kind=1u;out.weight=0.;out.tint=signalColor(card,p.color.rgb);
  let phase=cardPhase(card);
- out.accent=select(0.,smoothstep(1.2,1.5,phase)*(1.-smoothstep(3.5,3.8,phase)),accent);
+ out.accent=select(0.,smoothstep(1.2,1.5,phase)*(1.-smoothstep(3.5,3.8,phase)),accent&&tracked[card].w<1.5);
  let face=select(select(0u,card%3u,p.motion.z>.5),3u,bold);
  out.uv=(vec2f(f32(glyph%16u),f32(glyph/16u+face*6u))+q)/vec2f(16,24);
  out.alpha=fade(card)*echoAlpha(card,copy)*smoothstep(.60,1.,life(card));return out;

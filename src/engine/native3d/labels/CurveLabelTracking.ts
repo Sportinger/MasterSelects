@@ -1,3 +1,4 @@
+import {curveLabelFinalUniforms} from './curveLabelFinalTarget';
 import type {CurveSet} from '../../../services/operators/geometry/geometryEvaluation';
 import type {CurveLabelSpec} from '../../../services/operators/geometry/curveLabels';
 import {curveLabelTrackingInputs} from './curveLabelTrackingInputs';
@@ -30,7 +31,7 @@ export class CurveLabelTracking {
       const b=device.createBuffer({size:values.byteLength,usage:usage|GPUBufferUsage.COPY_DST});temporary.push(b);
       device.queue.writeBuffer(b,0,values as Float32Array<ArrayBuffer>);return b;
     };
-    const values=new Float32Array(124);values[63]=spec.count;
+    const values=new Float32Array(136);values[63]=spec.count;values[64]=time;values.set(curveLabelFinalUniforms(curves.starts,curves.counts,spec),124);
     values.set([spec.retarget,spec.releaseProgress,spec.followShare,spec.depthSpread],72);values[78]=spec.detachedFocus;
     const read=device.createBuffer({size:spec.count*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
     try{

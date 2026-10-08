@@ -1,3 +1,4 @@
+import {parseCurveLabelTextCues} from './curveLabelTextCues';
 import {parseCurveLabelIntro} from './curveLabelIntro';
 import { parseCurveLabelAnchors } from './curveLabelAnchors';
 import type { OperatorDefinition, OperatorParameter, OperatorValue } from '../../../types/operatorGraph';
@@ -32,6 +33,12 @@ export const CURVE_LABEL_NUMBERS = [
   ['stackStagger', 'Stack Card Delay (s)', 0, 0, 3, .1],
   ['transition', 'Intro / Outro (s)', .45, .05, .5, .01],
   ['dutyCycle', 'Visible Cycle Fraction', .72, .25, 1, .01],
+  ['finalStart', 'Final Target Start (s)', 0, 0, 36000, .01],
+  ['finalEnd', 'Final Target Hold End (s)', 0, 0, 36000, .01],
+  ['finalStagger', 'Final Target Card Delay (s)', .35, 0, 5, .01],
+  ['finalTransition', 'Final Target Travel (s)', .6, .05, 5, .01],
+  ['finalStrand', 'Final Target Strand', 0, 0, 65535, 1],
+  ['finalPosition', 'Final Material Position', 0, -100000, 100000, .001],
   ['retarget', 'Released Tracking Blend', 0, 0, 1, .01],
   ['detachedFocus', 'Detached Section Focus', 0, 0, 1, .01],
   ['releaseProgress', 'Released Curve Fraction', 0, 0, 1, .01],
@@ -57,17 +64,19 @@ export const CURVE_LABEL_NUMBERS = [
   ['drift', 'Floating Motion', .65, 0, 2, .01], ['avoidance', 'Avoid Curves', 1, 0, 1, .01],
 ] as const;
 export type CurveLabelNumber = typeof CURVE_LABEL_NUMBERS[number][0];
-export type CurveLabelSpec = Record<CurveLabelNumber, number> & { color: string; markerColor: string; titles: string; anchorOverrides?: string; holdAnchors?: string; introTitles?: string; style: 'uniform' | 'mixed' };
+export type CurveLabelSpec = Record<CurveLabelNumber, number> & { color: string; markerColor: string; finalColor?: string; titles: string; anchorOverrides?: string; holdAnchors?: string; introTitles?: string; textCues?: string; style: 'uniform' | 'mixed' };
 const params: OperatorParameter[] = CURVE_LABEL_NUMBERS.map(([id,label,value,min,max,step]) =>
   ({id,label,type:'number',default:value,min,max,step,animatable:true}));
 export const CURVE_LABEL_OPERATOR: OperatorDefinition = {
   id:'geometry.curve-labels',version:1,label:'Curve Scan Labels',
-  description:'Adds true 3D outline cards and rings linked to final GPU curve points. Cards float, tilt and seek free screen space around projected curves, including crossing to the clearer side; they follow the animated camera with a time-sampled delay; numeric readouts show world coordinates. Bypass removes only labels. Curve indices wrap around available strands. Place before Strand Render. Titles: up to six ASCII labels separated by |. Anchor Overrides: zero-based card:strand@material-position entries separated by |; explicit positions follow the moving material and do not replace released tracking. Held Material Anchors uses the same syntax for the complete appearance covering Tracking Hold Start/End; these cards remain within the frame during the hold. Amber Opening Rings colors the first scheduled markers amber during their initial episode. Rings, leaders and cards share the same intro and outro timing. Intro Titles replaces the first two initial readouts with bold cream Unicode phrases with a brief grapheme decode: | separates cards, > separates quick language variants. Locked Cards per Side reserves lower left/right stacks during Stack Lock Start/End, extending their appearances and superseding overlapping individual locks. Stack Card Delay shifts each card’s docking and release; Start/End refer to the first card. Early Camera Locks chooses separate visible episodes within Early Locks Start/End. Warning Text Groups adds growing bold red exclamation groups only after released-target acquisition. Intro scale and camera distance enlarge those cards; text has independent depth and gentle 3D motion.',
+  description:'Adds true 3D outline cards and rings linked to final GPU curve points. Cards float, tilt and seek free screen space around projected curves, including crossing to the clearer side; they follow the animated camera with a time-sampled delay; numeric readouts show world coordinates. Bypass removes only labels. Curve indices wrap around available strands. Place before Strand Render. Titles: up to six ASCII labels separated by |. Anchor Overrides: zero-based card:strand@material-position entries separated by |; explicit positions follow the moving material and do not replace released tracking. Held Material Anchors uses the same syntax for the complete appearance covering Tracking Hold Start/End; these cards remain within the frame during the hold. Amber Opening Rings colors the first scheduled markers amber during their initial episode. Rings, leaders and cards share the same intro and outro timing. Intro Titles replaces the first two initial readouts with bold cream Unicode phrases with a brief grapheme decode: | separates cards, > separates quick language variants. Locked Cards per Side reserves lower left/right stacks during Stack Lock Start/End, extending their appearances and superseding overlapping individual locks. Stack Card Delay shifts each card’s docking and release; Start/End refer to the first card. Early Camera Locks chooses separate visible episodes within Early Locks Start/End. Warning Text Groups adds growing bold red exclamation groups only after released-target acquisition. Intro scale and camera distance enlarge those cards; text has independent depth and gentle 3D motion. Text Cues accepts ordered JSON start/end seconds, panels of four ASCII rows (20 columns), and up to two Unicode headlines with text/header/footer. Content replaces readouts, including locked cards, without changing their existing lifetimes or tracking. Initial Intro Titles retain priority. Final Target Hold End greater than Final Target Start enables sequential material-target acquisition; cards extend their current appearance through the hold and change to Final Target Color only on arrival. Final Material Position wraps and accepts a node-driven moving material coordinate.',
   inputs:[{id:'curves',label:'Curves',type:'curves',required:true,contract:{formats:[STRAND_CURVES_FORMAT]}},
     ...params.map(p=>({id:p.id,label:p.label,type:'number' as const}))],
   outputs:[{id:'curves',label:'Curves',type:'curves',contract:{formats:[STRAND_CURVES_FORMAT]}}],
   parameters:[...params,{id:'style',label:'Card Style',type:'select',default:'uniform',options:[{value:'uniform',label:'Uniform'},{value:'mixed',label:'Mixed shapes and fonts'}],animatable:false},{id:'color',label:'Color',type:'color',default:'#b7d4d0'},
+    {id:'finalColor',label:'Final Target Color',type:'color',default:'#aa55ff'},
     {id:'markerColor',label:'Tracking Ring Color',type:'color',default:'#b7d4d0'},
+    {id:'textCues',label:'Text Cues (JSON)',type:'text',default:'',maxLength:32768,animatable:false},
     {id:'introTitles',label:'Intro Titles',type:'text',default:'',maxLength:512,animatable:false},
     {id:'anchorOverrides',label:'Anchor Overrides',type:'text',default:'',maxLength:512,animatable:false},
     {id:'holdAnchors',label:'Held Material Anchors',type:'text',default:'',maxLength:512,animatable:false},
@@ -79,11 +88,16 @@ export const CURVE_LABEL_OPERATOR: OperatorDefinition = {
 export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec {
   const out:Record<string,unknown>={};
   for(const [id,label,initial,min,max] of CURVE_LABEL_NUMBERS){
-    const value=read(id)??(['openingMarkers','introScale','introDistance','introTextDepth','introTextMotion','introTextOpacity','stackCount','stackStart','stackEnd','stackStagger','earlyLockCount','earlyLockStart','earlyLockEnd','alertGroups'].includes(id)?initial:undefined);
+    const value=read(id)??(['finalStart','finalEnd','finalStagger','finalTransition','finalStrand','finalPosition','openingMarkers','introScale','introDistance','introTextDepth','introTextMotion','introTextOpacity','stackCount','stackStart','stackEnd','stackStagger','earlyLockCount','earlyLockStart','earlyLockEnd','alertGroups'].includes(id)?initial:undefined);
     if(typeof value!=='number'||!Number.isFinite(value)||value<min||value>max)throw new Error(`Curve Scan Labels: ${label} must be ${min}–${max}.`);
-    if(['count','firstStrand','strandStep','scheduleSeed','holdCount','lockCount','openingMarkers','stackCount','earlyLockCount','alertGroups'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
+    if(['finalStrand','count','firstStrand','strandStep','scheduleSeed','holdCount','lockCount','openingMarkers','stackCount','earlyLockCount','alertGroups'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
     out[id]=value;
   }
+  if(Number(out.finalEnd)>Number(out.finalStart)&&Number(out.finalEnd)-Number(out.finalStart)<(Number(out.count)-1)*Number(out.finalStagger)+Number(out.finalTransition))
+    throw new Error('Curve Scan Labels: final hold must include every card delay and target travel.');
+  const finalColor=read('finalColor')??'#aa55ff';
+  if(typeof finalColor!=='string'||!/^#[\da-f]{6}$/i.test(finalColor))throw new Error('Curve Scan Labels: use a six-digit final target color.');
+  out.finalColor=finalColor;
   if(Number(out.stackCount)>0&&(Number(out.stackCount)*2>Number(out.count)||Number(out.stackEnd)-Number(out.stackStart)<1.5))
     throw new Error('Curve Scan Labels: camera stacks need enough cards for both sides and an interval of at least 1.5 seconds.');
   if(Number(out.earlyLockCount)>0&&Number(out.earlyLockEnd)-Number(out.earlyLockStart)<Number(out.earlyLockCount)*(Number(out.lockDuration)+1.2)+(Number(out.earlyLockCount)-1)*.3)
@@ -99,6 +113,12 @@ export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec 
   if(typeof color!=='string'||!/^#[\da-f]{6}$/i.test(color))throw new Error('Curve Scan Labels: use a six-digit hex color.');
   if(typeof titles!=='string'||!titles.trim()||titles.length>160||!/^[\x20-\x7e]+$/.test(titles))throw new Error('Curve Scan Labels: titles need 1–160 ASCII characters, separated by |.');
   if(titles.split('|').some(title=>!title.trim()||title.length>20))throw new Error('Curve Scan Labels: each title needs 1–20 characters.');
+  const textCues=read('textCues')??'';
+  if(typeof textCues!=='string')throw new Error('Curve Scan Labels: Text Cues must be JSON text.');
+  const cues=parseCurveLabelTextCues(textCues);
+  if(cues.some(cue=>(cue.headlines?.length??0)>Number(out.count)))
+    throw new Error('Curve Scan Labels: Text Cues cannot show more headlines than Cards.');
+  out.textCues=textCues;
   const introTitles=read('introTitles')??'';
   if(typeof introTitles!=='string')throw new Error('Curve Scan Labels: Intro Titles must be text.');
   parseCurveLabelIntro(introTitles);out.introTitles=introTitles;
@@ -116,6 +136,6 @@ export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec 
 export function isCurveLabels(value:unknown):value is CurveLabelSpec {
   if(!value||typeof value!=='object')return false;
   const v=value as Record<string,OperatorValue>;
-  if(Object.keys(v).some(key=>!['color','markerColor','titles','style','anchorOverrides','holdAnchors','introTitles',...CURVE_LABEL_NUMBERS.map(p=>p[0])].includes(key)))return false;
+  if(Object.keys(v).some(key=>!['finalColor','color','markerColor','titles','style','anchorOverrides','holdAnchors','introTitles','textCues',...CURVE_LABEL_NUMBERS.map(p=>p[0])].includes(key)))return false;
   try{readCurveLabels(id=>v[id]);return true;}catch{return false;}
 }
