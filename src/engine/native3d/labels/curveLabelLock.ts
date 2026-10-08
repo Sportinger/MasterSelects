@@ -1,7 +1,7 @@
 import type { CurveLabelSpec } from '../../../services/operators/geometry/curveLabels';
 import { curveLabelEpisode, scanRandom } from './curveLabelSchedule';
 
-import {LOCK_DOCK_SECONDS,LOCK_RELEASE_SECONDS,dockingEase as smooth,curveLabelStackLocks} from './curveLabelStack';
+import {LOCK_DOCK_SECONDS,LOCK_RELEASE_SECONDS,dockingEase as smooth,curveLabelStackLocks,curveLabelStackEnd} from './curveLabelStack';
 export {LOCK_DOCK_SECONDS,LOCK_RELEASE_SECONDS} from './curveLabelStack';
 export interface CurveLabelLockEvent { card:number; event:number; start:number; end:number; corner:number }
 export interface CurveLabelLockState extends CurveLabelLockEvent { amount:number; age:number }
@@ -11,21 +11,20 @@ const schedules=new Map<string,CurveLabelLockEvent[]>();
 export function curveLabelLocks(spec:CurveLabelSpec):CurveLabelLockEvent[] {
   const key=[spec.count,spec.cycle,spec.dutyCycle,spec.transition,spec.introSpread,
     spec.lifetimeVariation,spec.scheduleSeed,spec.holdCount,spec.holdStart,spec.holdEnd,
-    spec.lockCount,spec.lockStart,spec.lockInterval,spec.lockDuration,spec.stackCount,spec.stackStart,spec.stackEnd].join(':');
+    spec.lockCount,spec.lockStart,spec.lockInterval,spec.lockDuration,spec.stackCount,spec.stackStart,spec.stackEnd,
+    spec.stackStagger,spec.earlyLockCount,spec.earlyLockStart,spec.earlyLockEnd].join(':');
   const cached=schedules.get(key);if(cached)return cached;
   const events:CurveLabelLockEvent[]=[],duration=LOCK_DOCK_SECONDS+spec.lockDuration+LOCK_RELEASE_SECONDS;
-  for(let event=0;event<spec.lockCount;event++){
-    const nominal=Math.max(spec.lockStart+event*spec.lockInterval,(events.at(-1)?.end??-1)+.3);
-    if(spec.stackCount>0&&nominal<spec.stackEnd&&nominal+duration>spec.stackStart)continue;
-    const deadline=spec.lockStart+event*spec.lockInterval+spec.lockInterval*.4;
+  const overlapsStack=(start:number,end:number)=>spec.stackCount>0&&start<curveLabelStackEnd(spec)&&end>spec.stackStart;
+  const choose=(event:number,nominal:number,deadline:number,latestEnd=Infinity)=>{
     const candidates:CurveLabelLockEvent[]=[];
     for(let card=0;card<spec.count;card++){
       let episode=curveLabelEpisode(spec,nominal,card);
       while(episode.birth<deadline){
         const start=Math.max(nominal,episode.birth+spec.transition),end=start+duration;
-        if(start<=deadline&&end<=episode.birth+episode.visible-spec.transition
-          &&!(spec.stackCount>0&&start<spec.stackEnd&&end>spec.stackStart)){
-          candidates.push({card,event,start,end,corner:(event+spec.scheduleSeed)%4});break;
+        if(start<=deadline&&end<=latestEnd&&end<=episode.birth+episode.visible-spec.transition
+          &&!overlapsStack(start,end)){
+          candidates.push({card,event,start,end,corner:((event+spec.scheduleSeed)%4+4)%4});break;
         }
         episode=curveLabelEpisode(spec,episode.birth+episode.period+1e-7,card);
       }
@@ -33,6 +32,19 @@ export function curveLabelLocks(spec:CurveLabelSpec):CurveLabelLockEvent[] {
     const selected=candidates.toSorted((a,b)=>a.start-b.start||
       scanRandom(a.card+event*71+spec.scheduleSeed*97)-scanRandom(b.card+event*71+spec.scheduleSeed*97))[0];
     if(selected)events.push(selected);
+  };
+  const earlyCount=spec.earlyLockCount??0;
+  for(let event=0;event<earlyCount;event++){
+    const slot=(spec.earlyLockEnd-spec.earlyLockStart)/earlyCount;
+    const nominal=Math.max(spec.earlyLockStart+event*slot,(events.at(-1)?.end??-1)+.3);
+    const latestEnd=spec.earlyLockStart+(event+1)*slot;
+    choose(-100+event,nominal,latestEnd-duration,latestEnd);
+  }
+  for(let event=0;event<spec.lockCount;event++){
+    const nominal=Math.max(spec.lockStart+event*spec.lockInterval,(events.at(-1)?.end??-1)+.3);
+    if(overlapsStack(nominal,nominal+duration))continue;
+    const deadline=spec.lockStart+event*spec.lockInterval+spec.lockInterval*.4;
+    choose(event,nominal,deadline);
   }
   schedules.set(key,events);if(schedules.size>32)schedules.delete(schedules.keys().next().value!);
   return events;

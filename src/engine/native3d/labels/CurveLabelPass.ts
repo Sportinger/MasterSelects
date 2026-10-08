@@ -80,17 +80,18 @@ export class CurveLabelPass {
       const markerLift=((strandRender.profile?.radius??0)+(strandRender.width??0))*worldMatrixScale(layer.worldMatrix);
       data.set([...live.forward,markerLift],96);data.set([...live.position,spec.holdAnchors?.trim()?spec.holdCount:0],100);
       data.set(lock?[lock.card,lock.amount,lock.age,lock.corner]:[-1,0,0,0],104);
-      const missingLocks=spec.lockCount-curveLabelLocks(spec).length;
-      const lockWarning=`${layer.layerId}:locks:${spec.lockCount}:${spec.cycle}:${spec.dutyCycle}:${spec.lockDuration}`;
-      if(missingLocks>0&&!(spec.stackCount>0)&&!this.warned.has(lockWarning)){
-        log.warn('Curve Scan Labels: some camera locks need longer visible card lifetimes.',{layerId:layer.layerId,missingLocks});this.warned.add(lockWarning);
+      const missingLocks=spec.lockCount+(spec.earlyLockCount??0)-curveLabelLocks(spec).length;
+      const missingEarly=(spec.earlyLockCount??0)-curveLabelLocks(spec).filter(event=>event.event<0).length;
+      const lockWarning=`${layer.layerId}:locks:${spec.lockCount}:${spec.earlyLockCount}:${spec.cycle}:${spec.dutyCycle}:${spec.lockDuration}`;
+      if((missingEarly>0||(missingLocks>0&&!(spec.stackCount>0)))&&!this.warned.has(lockWarning)){
+        log.warn('Curve Scan Labels: some camera locks need longer visible card lifetimes or a wider lock interval.',{layerId:layer.layerId,missingLocks,missingEarly});this.warned.add(lockWarning);
       }
       const intro=curveLabelIntroState(spec,time),hasIntro=intro.some(item=>item.card>=0);
       const headlineAtlas=hasIntro?this.headlineAtlases.get(device,parseCurveLabelIntro(spec.introTitles??'').flat()):null;
       data.set([intro[0]?.card??-1,intro[1]?.card??-1,spec.introScale??1.4,spec.introDistance??.78],108);
       data.set([intro[0]?.row??0,intro[1]?.row??0,intro[0]?.pulse??0,intro[1]?.pulse??0],112);
       data.set([spec.introTextDepth??.02,spec.introTextMotion??.4,headlineAtlas?.height??256,(spec.introTextOpacity??1)*layer.opacity],116);
-      data.set([spec.stackCount??0,spec.stackStart??13,spec.stackEnd??21,0],120);
+      data.set([spec.stackCount??0,spec.stackStart??13,spec.stackEnd??21,spec.stackStagger??0],120);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
       const {anchors,ranges:rangeData}=curveLabelTrackingInputs(curves,spec,time);

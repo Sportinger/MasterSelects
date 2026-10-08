@@ -44,7 +44,7 @@ export function curveLabelEpisode(spec:CurveLabelSpec,time:number,card:number):C
     const cycle=Math.max(0,Math.floor((time-birth)/spec.cycle));
     return {birth:birth+cycle*spec.cycle,period:spec.cycle,visible:spec.cycle*spec.dutyCycle,cycle};
   }
-  const key=[card,spec.count,spec.cycle,spec.dutyCycle,spec.transition,spec.introSpread,spec.lifetimeVariation,spec.scheduleSeed,spec.holdCount,spec.holdStart,spec.holdEnd,spec.stackCount,spec.stackStart,spec.stackEnd].join(':');
+  const key=[card,spec.count,spec.cycle,spec.dutyCycle,spec.transition,spec.introSpread,spec.lifetimeVariation,spec.scheduleSeed,spec.holdCount,spec.holdStart,spec.holdEnd,spec.stackCount,spec.stackStart,spec.stackEnd,spec.stackStagger].join(':');
   let episodes=schedules.get(key);
   if(!episodes){episodes=[next(spec,card,birth,0)];schedules.set(key,episodes);if(schedules.size>48)schedules.delete(schedules.keys().next().value!);}
   while(episodes.at(-1)!.birth+episodes.at(-1)!.period<=time){

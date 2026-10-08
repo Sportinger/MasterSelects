@@ -1,3 +1,4 @@
+import {curveLabelStackWindow} from '../../src/engine/native3d/labels/curveLabelStack';
 import {curveLabelActiveLocks,curveLabelLock,curveLabelLocks,curveLabelLockReadouts,LOCK_DOCK_SECONDS,LOCK_RELEASE_SECONDS} from '../../src/engine/native3d/labels/curveLabelLock';
 import {describe,it,expect} from 'vitest';
 import {CURVE_LABEL_OPERATOR,readCurveLabels} from '../../src/services/operators/geometry/curveLabels';
@@ -87,6 +88,27 @@ describe('brief camera locks within existing appearances',()=>{
 });
 
 describe('lower camera stacks',()=>{
+ it('stages each docking and release separately while retaining every card appearance',()=>{
+  const s={...spec(),stackCount:3,stackStart:13,stackEnd:21,stackStagger:1};
+  for(let card=0;card<6;card++){
+   expect(curveLabelStackWindow(s,card)).toEqual([13+card,21+card]);
+   for(let time=13+card;time<21+card;time+=.2)
+    expect(curveLabelReveal(s,time,curveLabelEpisode(s,time,card)).reveal).toBe(1);
+  }
+  expect(curveLabelActiveLocks(s,13.5).map(e=>e.card)).toEqual([0]);
+  expect(curveLabelActiveLocks(s,18.5).map(e=>e.card)).toEqual([0,1,2,3,4,5]);
+  expect(curveLabelActiveLocks(s,23.5).map(e=>e.card)).toEqual([3,4,5]);
+  expect(curveLabelActiveLocks(s,26)).toEqual([]);
+ });
+ it('fits early individual locks into separate visible slots before stacks begin',()=>{
+  const s={...spec(),cycle:20,dutyCycle:1,introSpread:0,lifetimeVariation:0,
+   earlyLockCount:2,earlyLockStart:5,earlyLockEnd:13,stackCount:3,stackStart:13,stackEnd:21,stackStagger:1};
+  const events=curveLabelLocks(s).filter(event=>event.event<0);
+  expect(events).toHaveLength(2);
+  expect(events[0].start).toBe(5);expect(events[1].start).toBe(9);
+  expect(events.every(event=>event.end<=13)).toBe(true);
+  expect(curveLabelLock(s,4.99)).toBeUndefined();
+ });
  it('keeps six differently scheduled cards visible while stacked, including adjacent material holds',()=>{
   const s={...spec(),holdCount:4,stackCount:3,stackStart:13,stackEnd:21};
   for(let t=13;t<=21;t+=1/60)for(let card=0;card<6;card++)

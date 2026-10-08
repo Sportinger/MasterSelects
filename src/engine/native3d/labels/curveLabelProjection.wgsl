@@ -45,16 +45,20 @@ fn cardRotation(card:u32)->vec3f {
  let range=max(p.glitch.w,.07*p.motion.x);
  return vec3f(yaw*range,pitch*range,roll)*envelope;
 }
+fn cameraStackDelay(card:u32)->f32 {return f32(card)*p.stack.w;}
+fn cameraStackStart(card:u32)->f32 {
+ return p.stack.y+select(f32(card/2u)*.08,cameraStackDelay(card),p.stack.w>0.);
+}
 fn cameraStackAmount(card:u32)->f32 {
  if(f32(card)>=p.stack.x*2.||p.stack.z<=p.stack.y){return 0.;}
- let start=p.stack.y+f32(card/2u)*.08;
- return rotationEase((p.clock.x-start)/.5)*rotationEase((p.stack.z-p.clock.x)/.7);
+ let start=cameraStackStart(card);let end=p.stack.z+cameraStackDelay(card);
+ return rotationEase((p.clock.x-start)/.5)*rotationEase((end-p.clock.x)/.7);
 }
 fn cameraLockAmount(card:u32)->f32 {
  return max(cameraStackAmount(card),select(0.,p.lock.y,abs(f32(card)-p.lock.x)<.1));
 }
 fn cameraLockAge(card:u32)->f32 {
- return select(p.lock.z,p.clock.x-p.stack.y-f32(card/2u)*.08,cameraStackAmount(card)>0.);
+ return select(p.lock.z,p.clock.x-cameraStackStart(card),cameraStackAmount(card)>0.);
 }
 // Reserve the full (differently sized) footprints from the bottom upward.
 fn cameraStackMetrics(card:u32)->vec3f {
@@ -70,7 +74,8 @@ fn cameraStackMetrics(card:u32)->vec3f {
 // Translate their entire tilted plane in live screen-up; their orientation and depth lag remain intact.
 fn aboveCameraStacks(card:u32,center:vec3f,right:vec3f,up:vec3f)->vec3f {
  if(p.stack.x<=0.||f32(card)<p.stack.x*2.){return vec3f(0);}
- let amount=rotationEase((p.clock.x-p.stack.y+.3)/.8)*rotationEase((p.stack.z-p.clock.x)/.7);
+ let end=p.stack.z+max(0.,p.stack.x*2.-1.)*p.stack.w;
+ let amount=rotationEase((p.clock.x-p.stack.y+.3)/.8)*rotationEase((end-p.clock.x)/.7);
  if(amount<=0.){return vec3f(0);}
  let clip=p.vp*vec4f(center,1);if(clip.w<=.001){return vec3f(0);}
  let metrics=cardMetrics(card);

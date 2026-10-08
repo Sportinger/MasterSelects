@@ -23,9 +23,13 @@ export const CURVE_LABEL_NUMBERS = [
   ['lockStart', 'First Camera Lock (s)', 10, 0, 36000, .1],
   ['lockInterval', 'Camera Lock Interval (s)', 18, 6, 120, .1],
   ['lockDuration', 'Camera Lock Hold (s)', 2.5, 2, 3, .1],
+  ['earlyLockCount', 'Early Camera Locks', 0, 0, 3, 1],
+  ['earlyLockStart', 'Early Locks Start (s)', 5, 0, 36000, .1],
+  ['earlyLockEnd', 'Early Locks End (s)', 13, 0, 36000, .1],
   ['stackCount', 'Locked Cards per Side', 0, 0, 3, 1],
   ['stackStart', 'Stack Lock Start (s)', 13, 0, 36000, .1],
   ['stackEnd', 'Stack Lock End (s)', 21, 0, 36000, .1],
+  ['stackStagger', 'Stack Card Delay (s)', 0, 0, 3, .1],
   ['transition', 'Intro / Outro (s)', .45, .05, .5, .01],
   ['dutyCycle', 'Visible Cycle Fraction', .72, .25, 1, .01],
   ['retarget', 'Released Tracking Blend', 0, 0, 1, .01],
@@ -57,7 +61,7 @@ const params: OperatorParameter[] = CURVE_LABEL_NUMBERS.map(([id,label,value,min
   ({id,label,type:'number',default:value,min,max,step,animatable:true}));
 export const CURVE_LABEL_OPERATOR: OperatorDefinition = {
   id:'geometry.curve-labels',version:1,label:'Curve Scan Labels',
-  description:'Adds true 3D outline cards and rings linked to final GPU curve points. Cards float, tilt and seek free screen space around projected curves, including crossing to the clearer side; they follow the animated camera with a time-sampled delay; numeric readouts show world coordinates. Bypass removes only labels. Curve indices wrap around available strands. Place before Strand Render. Titles: up to six ASCII labels separated by |. Anchor Overrides: zero-based card:strand@material-position entries separated by |; explicit positions follow the moving material and do not replace released tracking. Held Material Anchors uses the same syntax for the complete appearance covering Tracking Hold Start/End; these cards remain within the frame during the hold. Amber Opening Rings colors the first scheduled markers amber during their initial episode. Rings, leaders and cards share the same intro and outro timing. Intro Titles replaces the first two initial readouts with bold cream Unicode phrases with a brief grapheme decode: | separates cards, > separates quick language variants. Locked Cards per Side reserves lower left/right stacks during Stack Lock Start/End, extending their appearances and superseding overlapping individual locks. Intro scale and camera distance enlarge those cards; text has independent depth and gentle 3D motion.',
+  description:'Adds true 3D outline cards and rings linked to final GPU curve points. Cards float, tilt and seek free screen space around projected curves, including crossing to the clearer side; they follow the animated camera with a time-sampled delay; numeric readouts show world coordinates. Bypass removes only labels. Curve indices wrap around available strands. Place before Strand Render. Titles: up to six ASCII labels separated by |. Anchor Overrides: zero-based card:strand@material-position entries separated by |; explicit positions follow the moving material and do not replace released tracking. Held Material Anchors uses the same syntax for the complete appearance covering Tracking Hold Start/End; these cards remain within the frame during the hold. Amber Opening Rings colors the first scheduled markers amber during their initial episode. Rings, leaders and cards share the same intro and outro timing. Intro Titles replaces the first two initial readouts with bold cream Unicode phrases with a brief grapheme decode: | separates cards, > separates quick language variants. Locked Cards per Side reserves lower left/right stacks during Stack Lock Start/End, extending their appearances and superseding overlapping individual locks. Stack Card Delay shifts each card’s docking and release; Start/End refer to the first card. Early Camera Locks chooses separate visible episodes within Early Locks Start/End. Intro scale and camera distance enlarge those cards; text has independent depth and gentle 3D motion.',
   inputs:[{id:'curves',label:'Curves',type:'curves',required:true,contract:{formats:[STRAND_CURVES_FORMAT]}},
     ...params.map(p=>({id:p.id,label:p.label,type:'number' as const}))],
   outputs:[{id:'curves',label:'Curves',type:'curves',contract:{formats:[STRAND_CURVES_FORMAT]}}],
@@ -74,13 +78,15 @@ export const CURVE_LABEL_OPERATOR: OperatorDefinition = {
 export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec {
   const out:Record<string,unknown>={};
   for(const [id,label,initial,min,max] of CURVE_LABEL_NUMBERS){
-    const value=read(id)??(['openingMarkers','introScale','introDistance','introTextDepth','introTextMotion','introTextOpacity','stackCount','stackStart','stackEnd'].includes(id)?initial:undefined);
+    const value=read(id)??(['openingMarkers','introScale','introDistance','introTextDepth','introTextMotion','introTextOpacity','stackCount','stackStart','stackEnd','stackStagger','earlyLockCount','earlyLockStart','earlyLockEnd'].includes(id)?initial:undefined);
     if(typeof value!=='number'||!Number.isFinite(value)||value<min||value>max)throw new Error(`Curve Scan Labels: ${label} must be ${min}–${max}.`);
-    if(['count','firstStrand','strandStep','scheduleSeed','holdCount','lockCount','openingMarkers','stackCount'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
+    if(['count','firstStrand','strandStep','scheduleSeed','holdCount','lockCount','openingMarkers','stackCount','earlyLockCount'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
     out[id]=value;
   }
   if(Number(out.stackCount)>0&&(Number(out.stackCount)*2>Number(out.count)||Number(out.stackEnd)-Number(out.stackStart)<1.5))
     throw new Error('Curve Scan Labels: camera stacks need enough cards for both sides and an interval of at least 1.5 seconds.');
+  if(Number(out.earlyLockCount)>0&&Number(out.earlyLockEnd)-Number(out.earlyLockStart)<Number(out.earlyLockCount)*(Number(out.lockDuration)+1.2)+(Number(out.earlyLockCount)-1)*.3)
+    throw new Error('Curve Scan Labels: widen the early-lock interval to fit the holds, docking, release and gaps.');
   if(Number(out.depthSpread)+Number(out.depthMotion)>.8)throw new Error('Curve Scan Labels: combined depth spread and travel must be at most 0.8 to keep cards in front of the camera.');
   const style=read('style');
   if(style!=='uniform'&&style!=='mixed')throw new Error('Curve Scan Labels: choose uniform or mixed card style.');

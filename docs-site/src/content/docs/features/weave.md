@@ -761,3 +761,21 @@ This mode runs the existing tracking compute pass against the already prepared G
 Opaque WebCodecs/HTMLVideo export now matches preview coverage on GPU readback:
 soft dust and thin yarn RGB are not attenuated again by residual compositor alpha.
 See [Export](/docs/features/export/) for the readback and stacked-alpha contracts.
+
+### Sequential camera locks
+
+**Stack Card Delay (s)** offsets each card's docking and release independently,
+alternating left/right. Start/End describe the first card; later cards use the
+same hold duration shifted by their index times the delay. A one-second delay
+with six cards and Start/End 13/21 docks at 13–18 seconds and finishes releasing
+at 21–26 seconds. The appearance schedule, lock ticker, GPU placement and reserved
+screen area follow these per-card windows. Zero retains the previous compact
+row stagger.
+
+**Early Camera Locks** chooses separate existing visible episodes inside **Early
+Locks Start/End**, before the ordinary recurring lock schedule. Two locks in
+5–13 seconds occupy different slots, never starting before 5 seconds. A requested
+window must fit the dock/hold/release durations and gaps. If card lifetimes or
+reserved stacks prevent an early lock, the renderer reports it explicitly.
+Changing stack timing changes appearance cues; pre-rendered sound tracks need
+regeneration separately.
