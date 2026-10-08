@@ -44,9 +44,11 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
     [curves('curves', true), { id: 'strength', label: 'Strength', type: 'number' }], [curves()], [number('radius', 'Contact Radius', 0.02, 0.0005, 10, 0.001), number('strength', 'Strength', 1, 0, 1),
       number('iterations', 'Iterations', 24, 1, 128, 1, false), number('smoothing', 'Correction Smoothing', 0.35, 0, 1)],
     { bypass: 'passthrough' }),
-  operator('geometry.curve-flow', 'Closed Curve Flow', 'Moves material points along an existing closed path. Unlike forming new loops, the stitch path stays fixed while yarn and its colors circulate. Requires a repeated endpoint; linearly resamples positions and radius scales.',
-    [curves('curves', true), { id: 'time', label: 'Motion Seconds', type: 'number' }], [curves()], [number('speed', 'Turns per Second', 0.05, -10, 10, 0.01),
-      number('phase', 'Phase', 0, -1000, 1000, 0.01)], { bypass: 'passthrough' }),
+  operator('geometry.curve-flow', 'Closed Curve Flow', 'Moves material points along an existing closed path. Unlike forming new loops, the stitch path stays fixed while yarn and its colors circulate. Requires a repeated endpoint; linearly resamples positions and radius scales. Flow Units selects legacy point-index turns or actual curve-local distance. Distance mode maintains travel speed through uneven sample spacing and different loop lengths; changing shape can still move points independently of circulation.',
+    [curves('curves', true), { id: 'time', label: 'Motion Seconds', type: 'number' }], [curves()], [{ id: 'units', label: 'Flow Units', type: 'select', default: 'turns', options: [
+      { value: 'turns', label: 'Turns (point indices)' }, { value: 'distance', label: 'Curve Distance' }] },
+      number('speed', 'Travel per Second', 0.05, -10, 10, 0.01),
+      number('phase', 'Travel Offset', 0, -1000, 1000, 0.01)], { bypass: 'passthrough' }),
   operator('geometry.close-curve', 'Close Curve', 'Connects each open strand end back to its own start through a smooth return bow. Offset places the back of the bow relative to the endpoint midpoint. Place before Rod Simulation for a physically closed rope. This closes the geometry; it does not loop the animation.',
     [curves('curves', true)], [curves()], [
       { id: 'offset', label: 'Return Offset', type: 'vector', default: [0, 0, -1], animatable: false },

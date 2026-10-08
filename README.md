@@ -227,6 +227,8 @@ Curve Scan Labels supports independently randomized appearances, shared intro/ou
 
 Scan-window glitch waves include emissive fragments, warped outlines and text sizes, and curved connection lines with fixed endpoints. Intro readouts face the camera with brief multilingual decoding; optional bold red warning groups accumulate only after released-strand targets are acquired.
 
+Closed Curve Flow optionally measures travel in curve-local distance instead of point-index turns, keeping circulation independent of uneven vertex spacing.
+
 Weave Motion Time also provides a normalized forward loop phase for eased cyclic material motion without an end-of-shot rewind.
 
 Scan overlays use a slower three-second diagonal glitch front with reduced spatial width and separate per-card aftershocks.

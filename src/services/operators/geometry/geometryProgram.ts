@@ -50,7 +50,7 @@ export type GeometryStage =
   | { kind: 'set-position'; nodeId: string; position?: GeometryField; offset?: GeometryField }
   | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField }
   | ({ kind: 'curve-contact'; nodeId: string } & CurveContactSpec)
-  | { kind: 'curve-flow'; nodeId: string; phase: number }
+  | { kind: 'curve-flow'; nodeId: string; phase: number; distance?: boolean }
   /** Curves on the cloth simulated by `cloth` at source time `time` (seconds). */
   | { kind: 'surface-bind'; nodeId: string; height: number; cloth: ClothSpec; time: number }
   /** The incoming curves simulated as rods from their rest state, at source time `time` (seconds). See rodSolver.ts. */
@@ -322,8 +322,10 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       stages.push({ kind: 'close-curve', nodeId: node.id, offset: offset.map(value => finite(value, 'Return offset')) as [number, number, number],
         handle: Math.max(0, finite(read(node, 'handle'), 'End handles')), points: Math.round(finite(read(node, 'points'), 'Return points')) });
     } else if (node.operator === 'geometry.curve-flow') {
+      const units = read(node, 'units');
+      if (units !== 'turns' && units !== 'distance') throw new Error('Closed Curve Flow: unknown Flow Units.');
       stages.push({ kind: 'curve-flow', nodeId: node.id, phase: finite(read(node, 'phase'), 'Flow phase')
-        + finite(read(node, 'speed'), 'Flow speed') * motionClock(node) });
+        + finite(read(node, 'speed'), 'Flow speed') * motionClock(node), ...(units === 'distance' ? { distance: true } : {}) });
     } else if (node.operator === 'geometry.curve-contact') {
       const influence = compileField(node, 'strength', 'scalar');
       if (influence && (influence.instructions.length !== 1 || influence.instructions[0].operation !== 'constant'))

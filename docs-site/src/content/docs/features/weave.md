@@ -829,3 +829,21 @@ clamped; a looping caller wraps time itself.
 
 This governs parameter travel, not physical distance on changing-length curves.
 Morphing geometry can still move even when its circulation is slow.
+
+### Closed Curve Flow travel units
+
+**Flow Units → Curve Distance** interprets Travel per Second and Travel Offset
+in curve-local length units. It builds cumulative segment lengths and samples the
+shifted distance with a binary search, preserving the incoming material spacing.
+Unequally spaced vertices and differently sized loops therefore receive the same
+travel distance. Radius scales interpolate with the sampled path; the repeated
+endpoint stays exact. Zero-length segments and completely collapsed loops remain
+finite. Non-finite travel values are rejected explicitly.
+
+The default **Turns (point indices)** retains previous projects' behavior. A
+Motion Seconds input can supply the independent eased clock in either mode.
+Distance is measured on the current path, not through a tension or inextensibility
+solver: morphing the path itself can still move material points. Scene transforms
+scale curve-local distances. This stage currently uses the CPU evaluator; a GPU
+tail implementation is still required before inserting it after expensive GPU
+deformations in a playback-sensitive graph.

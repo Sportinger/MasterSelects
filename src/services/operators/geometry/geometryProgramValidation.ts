@@ -110,7 +110,8 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
         || (stage.points as number) < 8 || (stage.points as number) > 4096) return false;
       points += (stage.points as number) * strands;
     } else if (stage.kind === 'curve-flow') {
-      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase']) || !finite(stage.phase)) return false;
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase', 'distance']) || !finite(stage.phase)
+        || (stage.distance !== undefined && typeof stage.distance !== 'boolean')) return false;
     } else if (stage.kind === 'curve-contact') {
       if (index === 0 || points > CONTACT_POINT_LIMIT || !exactKeys(stage, ['kind', 'nodeId', 'radius', 'iterations', 'smoothing', 'strength'])
         || (stage.strength !== undefined && (!finite(stage.strength) || stage.strength < 0 || stage.strength > 1))
