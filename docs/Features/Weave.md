@@ -62,14 +62,19 @@ with render-worker packets and is resolved in the owning nested composition.
 **Floating Motion** adds independent slow drift, yaw, pitch and roll, even when
 a card already has a clear position. **Floating Speed** slows that motion without
 reducing its extent; zero holds the ambient pose. **Avoid Curves** builds a small soft occupancy
-field from projected GPU points. Cards seek clearer space, including crossing to the
-opposite side when their height band is crowded, preserving clear areas such as
-the upper left even when the lower left is occupied. They retain loose vertical
-neighborhoods but may overlap one another. A continuous weighted average over a
-fixed candidate neighborhood replaces iterative position hunting, reducing jitter
-from small strand changes. This is a soft layout preference,
-not a collision guarantee; densely filled images may still contain overlaps. The
-layout is recomputed from source time and geometry, with no playback-history state.
+field from projected GPU points. A separable spatial blur suppresses narrow gaps
+and individual moving strands before cards choose space. Unlocked cards search a
+7×9 grid across the whole live camera image, including upper corners and the
+opposite side; they are no longer constrained to their original row. Candidate
+positions are solved back into each lagged 3D plane, retaining depth and rotation.
+The complete projected card footprint contributes occupancy and frame-edge costs.
+Continuous weights and stable per-card preferences reduce position hunting; locked
+cards retain their camera slots and avoidance fades out during docking.
+This is a soft layout preference, not a collision guarantee: cards may overlap
+one another or the subject when space is scarce. Spatial smoothing reduces
+sensitivity to fine strand motion; it is not a temporal speed limit. Layout is
+recomputed from source time and geometry with no playback-history state, CPU
+readback, or extra geometry evaluation.
 **Preferred Row Spacing** is fitted to the available frame; oversized card/count
 combinations report a validation error.
 
