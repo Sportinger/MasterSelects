@@ -89,7 +89,7 @@ export class StrandBufferCache {
     const rods = candidate && !this.rodFailures.has(candidate.topology) ? candidate : null;
     let fields = chain || rods || spatialColor ? null : pointFieldChain(program.stages);
     const prefix = fields ? evaluateGeometryProgram({ ...program, stages: fields.restStages }) : undefined;
-    const fieldTopology = fields && prefix ? JSON.stringify([prefix.positions.length, [...prefix.starts], [...prefix.counts], fields.fields.code]) : '';
+    const fieldTopology = fields && prefix ? JSON.stringify([prefix.positions.length, [...prefix.starts], [...prefix.counts], fields.fields.code, !!fields.flow]) : '';
     if (this.fieldFailures.has(fieldTopology) || !prefix?.positions.length) fields = null;
     let stages = chain ? chain.restStages : rods ? rods.restStages : fields ? fields.restStages : program.stages;
     let topology = chain ? JSON.stringify(stages) : rods ? rods.topology : fields ? fieldTopology : signature;
@@ -133,7 +133,7 @@ export class StrandBufferCache {
     }
     let fieldsReady = true;
     if (fields && buffers.fields) {
-      const ready = buffers.fields.prepare(prefix!, fields.fields, signature, fields.contact);
+      const ready = buffers.fields.prepare(prefix!, fields.fields, signature, fields.contact, fields.flow);
       fieldsReady = !!ready;
       if (ready) {
         buffers.positions = ready.positions; buffers.extent = ready.extent; buffers.segmentLength = ready.segmentLength;

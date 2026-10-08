@@ -844,9 +844,15 @@ The default **Turns (point indices)** retains previous projects' behavior. A
 Motion Seconds input can supply the independent eased clock in either mode.
 Distance is measured on the current path, not through a tension or inextensibility
 solver: morphing the path itself can still move material points. Scene transforms
-scale curve-local distances. This stage currently uses the CPU evaluator; a GPU
-tail implementation is still required before inserting it after expensive GPU
-deformations in a playback-sensitive graph.
+scale curve-local distances. As the final modifier of a GPU point-field chain,
+Closed Curve Flow now runs on the GPU in either unit mode, optionally before a
+final Curve Contacts stage. It reuses GPU arc lengths and a persistent packed-point
+snapshot, resamples position/radius, then rebuilds strand frames and bounds. Only
+the existing two metrics per strand are read back. Open input loops are reported
+explicitly through that same readback; CPU fallback retains the same closed-input
+requirement. An intervening unsupported stage or spatial material field keeps the
+existing CPU path. This does not make deformation-induced motion inextensible or
+integrate historical lengths of a changing path; author those shape clocks separately.
 
 
 ### Authored scan text cues

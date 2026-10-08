@@ -33,7 +33,10 @@ describe('GPU tails of geometry programs', () => {
     expect(pointFieldChain(animated)!.fields.code).toBe(result.fields.code);
     expect(pointFieldChain(animated)!.fields.constants).not.toEqual(result.fields.constants);
     expect(pointFieldChain(stages.slice(0, 1))).toBeNull();
-    expect(pointFieldChain([...stages, { kind: 'curve-flow', nodeId: 'last', phase: 0 }])).toBeNull();
+    const flowed=pointFieldChain([...stages, { kind: 'curve-flow', nodeId: 'last', phase: 0 }])!;
+    expect(flowed.restStages).toEqual(result.restStages);
+    expect(flowed.fields.code).toBe(result.fields.code);
+    expect(flowed.flow?.phase).toBe(0);
     const unsupported = structuredClone(stages);
     (unsupported[3] as Extract<GeometryStage, { kind: 'set-position' }>).offset!.instructions[0].operation = 'not-a-gpu-operation';
     expect(pointFieldChain(unsupported)).toBeNull();
@@ -49,6 +52,19 @@ describe('GPU tails of geometry programs', () => {
     expect(gpu.restStages).toEqual(plain.restStages);
     expect(gpu.fields.code).toBe(plain.fields.code);
     expect(pointFieldChain([...stages, contact, { kind: 'curve-flow', nodeId: 'flow', phase: .2 }])).toBeNull();
+  });
+
+  it('keeps distance flow on the GPU, including identity fields and following contacts', () => {
+    const source: GeometryStage = { kind:'curve-line',nodeId:'source',points:9,length:1,axis:0 };
+    const flow: GeometryStage = { kind:'curve-flow',nodeId:'flow',phase:-.25,distance:true };
+    const contact: GeometryStage = { kind:'curve-contact',nodeId:'contact',radius:.02,iterations:8,smoothing:.4,strength:.5 };
+    const direct=pointFieldChain([source,flow])!;
+    expect(direct.restStages).toEqual([source]);expect(direct.flow).toEqual(flow);
+    expect(direct.fields.constants).toEqual([]);
+    const later=pointFieldChain([source,{...flow,phase:.5},contact])!;
+    expect(later.restStages).toEqual(direct.restStages);expect(later.fields.code).toBe(direct.fields.code);
+    expect(later.contact).toEqual(contact);expect(later.flow?.phase).toBe(.5);
+    expect(pointFieldChain([flow])).toBeNull();
   });
 
   it('runs Thread Along and the yarn radius of the default weave on the GPU, keeping the rest curves fixed', () => {

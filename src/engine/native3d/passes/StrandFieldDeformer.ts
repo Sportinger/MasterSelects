@@ -1,3 +1,4 @@
+import type { StrandCurveFlow } from './StrandCurveFlowPass';
 import type { CurveSet } from '../../../services/operators/geometry/geometryEvaluation';
 import { recordTemporalPreparation } from '../../../effects/time/temporalResourcePreparation';
 import type { StrandFieldCode } from './strandFieldShader';
@@ -23,6 +24,7 @@ export class StrandFieldDeformer {
   ready?: StrandFieldSnapshot;
   failed = false;
   private contact?: StrandContactProjector;
+  private flowScratch?: GPUBuffer;
   private pending?: Promise<void>;
   private disposed = false;
   private input?: CurveSet;
@@ -64,7 +66,7 @@ export class StrandFieldDeformer {
     device.queue.writeBuffer(this.contexts, 0, contexts); device.queue.writeBuffer(this.ranges, 0, ranges);
   }
 
-  prepare(curves: CurveSet, fields: StrandFieldCode, signature: string, contact?: CurveContactSpec): StrandFieldSnapshot | undefined {
+  prepare(curves: CurveSet, fields: StrandFieldCode, signature: string, contact?: CurveContactSpec, flow?: StrandCurveFlow): StrandFieldSnapshot | undefined {
     if (this.disposed || this.failed) return undefined;
     if (this.ready?.signature === signature && !this.pending) return this.ready;
     if (!this.pending) {
@@ -88,8 +90,9 @@ export class StrandFieldDeformer {
         }
         if (fields.constants.length) device.queue.writeBuffer(this.constants, 0, Float32Array.from(fields.constants));
         if (contact) this.contact ??= new StrandContactProjector(device, curves.positions.length / 3);
+        if (flow && !this.flowScratch) this.flowScratch = device.createBuffer({ size: target.size, label: 'strand-flow-snapshot', usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
         this.executor.submit(device, fields, [this.params, this.rest, this.contexts, this.ranges, this.constants, target, this.metrics],
-          curves.positions.length / 3, curves.counts.length, this.readback, temporary, contact ? { projector: this.contact!, spec: contact } : undefined);
+          curves.positions.length / 3, curves.counts.length, this.readback, temporary, contact ? { projector: this.contact!, spec: contact } : undefined, flow ? { spec: flow, scratch: this.flowScratch! } : undefined);
       } catch (error) { submissionError = error; }
       const validation = device.popErrorScope();
       this.pending = (async () => {
@@ -98,12 +101,14 @@ export class StrandFieldDeformer {
         if (this.disposed) return;
         await this.readback.mapAsync(GPUMapMode.READ);
         const data = new Float32Array(this.readback.getMappedRange());
-        let extent = 0, length = 0, segments = 0;
+        let extent = 0, length = 0, segments = 0, invalidFlow = -1;
         for (let strand = 0; strand < curves.counts.length; strand++) {
+          if (data[strand * 2] < 0) invalidFlow = strand;
           extent = Math.max(extent, data[strand * 2]); length += data[strand * 2 + 1];
           segments += Math.max(0, curves.counts[strand] - 1);
         }
         this.readback.unmap();
+        if (invalidFlow >= 0) throw new Error(`Closed Curve Flow requires closed curves with a repeated endpoint (strand ${invalidFlow}).`);
         if (!Number.isFinite(extent + length)) throw new Error('Non-finite curve field geometry');
         if (!this.disposed) this.ready = { signature, positions: target, extent, segmentLength: segments ? length / segments : 0, curves };
       })().catch(error => {
@@ -123,6 +128,7 @@ export class StrandFieldDeformer {
     // Retire scratch only after already submitted work is complete.
     if (this.contact) void this.device.queue.onSubmittedWorkDone().then(() => this.contact?.dispose());
     temporary.push(...this.outputs, this.rest, this.contexts, this.ranges, this.params, this.metrics, this.readback);
+    if (this.flowScratch) temporary.push(this.flowScratch);
     if (this.constants) temporary.push(this.constants);
   }
 }

@@ -1,3 +1,4 @@
+import { StrandCurveFlowPass, type StrandCurveFlow } from './StrandCurveFlowPass';
 import shader from '../shaders/StrandPointFields.wgsl?raw';
 import { FIELD_FUNCTIONS_WGSL } from '../../../services/operators/fields/fieldFunctionsWgsl';
 import type { StrandFieldCode } from './strandFieldShader';
@@ -14,6 +15,7 @@ export class StrandFieldExecutor {
   private layout?: GPUBindGroupLayout;
   private pipelines = new Map<string, Pipelines>();
   private frames = new StrandFramesPass();
+  private flow = new StrandCurveFlowPass();
 
   private initialize(device: GPUDevice): void {
     if (this.device === device) return;
@@ -40,7 +42,7 @@ export class StrandFieldExecutor {
 
   /** Buffers in shader binding order. Submission precedes all draws of the resulting snapshot. */
   submit(device: GPUDevice, fields: StrandFieldCode, buffers: GPUBuffer[], points: number, strands: number,
-    readback: GPUBuffer, temporaries: GPUBuffer[], contact?: { projector: StrandContactProjector; spec: CurveContactSpec }): void {
+    readback: GPUBuffer, temporaries: GPUBuffer[], contact?: { projector: StrandContactProjector; spec: CurveContactSpec }, flow?: { spec: StrandCurveFlow; scratch: GPUBuffer }): void {
     this.initialize(device);
     const pipelines = this.pipelineFor(device, fields);
     const groups = Math.ceil(points / 256), width = Math.min(groups, device.limits.maxComputeWorkgroupsPerDimension);
@@ -52,6 +54,14 @@ export class StrandFieldExecutor {
     pass.setPipeline(pipelines.deform); pass.setBindGroup(0, group);
     pass.dispatchWorkgroups(width, Math.ceil(groups / width));
     this.frames.encode(device, pass, buffers[3], strands, buffers[5], temporaries);
+    let validateFlow: ((pass: GPUComputePassEncoder) => void) | undefined;
+    if (flow) {
+      pass.end();
+      validateFlow = this.flow.encode(device, encoder, buffers[5], flow.scratch, buffers[3], buffers[2], buffers[6],
+        points, strands, flow.spec, temporaries);
+      pass = encoder.beginComputePass();
+      this.frames.encode(device, pass, buffers[3], strands, buffers[5], temporaries);
+    }
     if (contact) {
       pass.end();
       contact.projector.encode(encoder, buffers[5], buffers[2], buffers[3], contact.spec);
@@ -60,10 +70,11 @@ export class StrandFieldExecutor {
     }
     pass.setPipeline(pipelines.measure); pass.setBindGroup(0, group);
     pass.dispatchWorkgroups(statsWidth, Math.ceil(statsGroups / statsWidth));
+    validateFlow?.(pass);
     pass.end();
     encoder.copyBufferToBuffer(buffers[6], 0, readback, 0, strands * 8);
     device.queue.submit([encoder.finish()]);
   }
 
-  dispose(): void { this.pipelines.clear(); this.frames.dispose(); this.layout = undefined; this.device = undefined; }
+  dispose(): void { this.pipelines.clear(); this.frames.dispose(); this.flow.dispose(); this.layout = undefined; this.device = undefined; }
 }
