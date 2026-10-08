@@ -59,7 +59,7 @@ export class CurveLabelPass {
       const data=new Float32Array(120);
       data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix),0);data.set(layer.worldMatrix,16);
       data.set([...follow.right,halfWidth],32);data.set([...follow.up,halfHeight],36);
-      data.set([...follow.forward,0],40);data.set([...follow.position,0],44);
+      data.set([...follow.forward,spec.holdEnd],40);data.set([...follow.position,spec.holdStart],44);
       data.set([camera.viewport.width,camera.viewport.height,spec.ringWeight,spec.leaderWeight],48);
       const colorValue=parseInt(spec.color.slice(1),16);
       data.set([(colorValue>>16&255)/255,(colorValue>>8&255)/255,(colorValue&255)/255,spec.opacity*layer.opacity],52);
@@ -77,7 +77,7 @@ export class CurveLabelPass {
       data.set([...live.up,liveDistance/Math.max(1e-5,Math.abs(live.projectionY))],92);
       const strandRender=layer.strands.program.render!;
       const markerLift=((strandRender.profile?.radius??0)+(strandRender.width??0))*worldMatrixScale(layer.worldMatrix);
-      data.set([...live.forward,markerLift],96);data.set([...live.position,0],100);
+      data.set([...live.forward,markerLift],96);data.set([...live.position,spec.holdAnchors?.trim()?spec.holdCount:0],100);
       data.set(lock?[lock.card,lock.amount,lock.age,lock.corner]:[-1,0,0,0],104);
       const missingLocks=spec.lockCount-curveLabelLocks(spec).length;
       const lockWarning=`${layer.layerId}:locks:${spec.lockCount}:${spec.cycle}:${spec.dutyCycle}:${spec.lockDuration}`;
@@ -91,8 +91,8 @@ export class CurveLabelPass {
       data.set([spec.introTextDepth??.02,spec.introTextMotion??.4,headlineAtlas?.height??256,(spec.introTextOpacity??1)*layer.opacity],116);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
-      const sourceAnchors=curveLabelAnchors(curves.starts,curves.counts,spec);
-      const targetAnchors=curveLabelAnchors(curves.starts,curves.counts,spec,true),anchors=new Float32Array(spec.count*16);
+      const sourceAnchors=curveLabelAnchors(curves.starts,curves.counts,spec,false,time);
+      const targetAnchors=curveLabelAnchors(curves.starts,curves.counts,spec,true,time),anchors=new Float32Array(spec.count*16);
       let maxCopies=0;
       for(let card=0;card<spec.count;card++){
         anchors.set(sourceAnchors.subarray(card*4,card*4+4),card*16);

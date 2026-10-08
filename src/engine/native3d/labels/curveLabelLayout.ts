@@ -5,9 +5,10 @@ import {changingCurveReadouts} from './curveLabelReadout';
 import type { CurveLabelSpec } from '../../../services/operators/geometry/curveLabels';
 export const LABEL_COLUMNS=20, LABEL_ROWS=4, LABEL_GLYPHS=LABEL_COLUMNS*LABEL_ROWS;
 /** Stable topology references; animation positions are read from the GPU, never read back to JS. */
-export function curveLabelAnchors(starts:Uint32Array,counts:Uint32Array,spec:CurveLabelSpec,followReleased=false):Float32Array {
+export function curveLabelAnchors(starts:Uint32Array,counts:Uint32Array,spec:CurveLabelSpec,followReleased=false,time=0):Float32Array {
   const out=new Float32Array(spec.count*4);
   const overrides=followReleased?[]:parseCurveLabelAnchors(spec.anchorOverrides??'');
+  const held=followReleased?[]:parseCurveLabelAnchors(spec.holdAnchors??'');
   for(let card=0;card<spec.count;card++){
     const total=Math.max(1,starts.length),followers=Math.round(spec.count*spec.followShare);
     const progress=Math.max(0,(spec.releaseProgress-spec.releaseMargin)/(1-spec.releaseMargin));
@@ -15,7 +16,11 @@ export function curveLabelAnchors(starts:Uint32Array,counts:Uint32Array,spec:Cur
     const destination=card<followers
       ?Math.min(released,Math.floor(card*(total-1)/Math.max(1,followers-1)))
       :Math.max(released,total-1-(card-followers));
-    const override=overrides.find(value=>value.card===card);
+    const episode=held.length?curveLabelEpisode(spec,time,card):null;
+    // Change material targets only between appearances, never halfway through a
+    // visible episode. A held target stays fixed on its moving yarn until outro.
+    const inHold=episode&&episode.birth<=spec.holdStart&&episode.birth+episode.visible>=spec.holdEnd;
+    const override=(inHold?held.find(value=>value.card===card):undefined)??overrides.find(value=>value.card===card);
     const strand=override?override.strand%total:followReleased?destination:(spec.firstStrand+card*spec.strandStep)%total;
     const phase=spec.start+card*spec.step,u=override?.u??(phase<=1?phase:phase%1);
     const point=u*Math.max(0,(counts[strand]??1)-1),index=Math.floor(point);

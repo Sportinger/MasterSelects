@@ -49,12 +49,12 @@ export const CURVE_LABEL_NUMBERS = [
   ['drift', 'Floating Motion', .65, 0, 2, .01], ['avoidance', 'Avoid Curves', 1, 0, 1, .01],
 ] as const;
 export type CurveLabelNumber = typeof CURVE_LABEL_NUMBERS[number][0];
-export type CurveLabelSpec = Record<CurveLabelNumber, number> & { color: string; markerColor: string; titles: string; anchorOverrides?: string; introTitles?: string; style: 'uniform' | 'mixed' };
+export type CurveLabelSpec = Record<CurveLabelNumber, number> & { color: string; markerColor: string; titles: string; anchorOverrides?: string; holdAnchors?: string; introTitles?: string; style: 'uniform' | 'mixed' };
 const params: OperatorParameter[] = CURVE_LABEL_NUMBERS.map(([id,label,value,min,max,step]) =>
   ({id,label,type:'number',default:value,min,max,step,animatable:true}));
 export const CURVE_LABEL_OPERATOR: OperatorDefinition = {
   id:'geometry.curve-labels',version:1,label:'Curve Scan Labels',
-  description:'Adds true 3D outline cards and rings linked to final GPU curve points. Cards float, tilt and seek free screen space around projected curves, including crossing to the clearer side; they follow the animated camera with a time-sampled delay; numeric readouts show world coordinates. Bypass removes only labels. Curve indices wrap around available strands. Place before Strand Render. Titles: up to six ASCII labels separated by |. Anchor Overrides: zero-based card:strand@material-position entries separated by |; explicit positions follow the moving material and do not replace released tracking. Amber Opening Rings colors the first scheduled markers amber during their initial episode. Rings, leaders and cards share the same intro and outro timing. Intro Titles replaces the first two initial readouts with bold white Unicode phrases: | separates cards, > separates later glitching language variants. Intro scale and camera distance enlarge those cards; text has independent depth and gentle 3D motion.',
+  description:'Adds true 3D outline cards and rings linked to final GPU curve points. Cards float, tilt and seek free screen space around projected curves, including crossing to the clearer side; they follow the animated camera with a time-sampled delay; numeric readouts show world coordinates. Bypass removes only labels. Curve indices wrap around available strands. Place before Strand Render. Titles: up to six ASCII labels separated by |. Anchor Overrides: zero-based card:strand@material-position entries separated by |; explicit positions follow the moving material and do not replace released tracking. Held Material Anchors uses the same syntax for the complete appearance covering Tracking Hold Start/End; these cards remain within the frame during the hold. Amber Opening Rings colors the first scheduled markers amber during their initial episode. Rings, leaders and cards share the same intro and outro timing. Intro Titles replaces the first two initial readouts with bold white Unicode phrases: | separates cards, > separates later glitching language variants. Intro scale and camera distance enlarge those cards; text has independent depth and gentle 3D motion.',
   inputs:[{id:'curves',label:'Curves',type:'curves',required:true,contract:{formats:[STRAND_CURVES_FORMAT]}},
     ...params.map(p=>({id:p.id,label:p.label,type:'number' as const}))],
   outputs:[{id:'curves',label:'Curves',type:'curves',contract:{formats:[STRAND_CURVES_FORMAT]}}],
@@ -62,6 +62,7 @@ export const CURVE_LABEL_OPERATOR: OperatorDefinition = {
     {id:'markerColor',label:'Tracking Ring Color',type:'color',default:'#b7d4d0'},
     {id:'introTitles',label:'Intro Titles',type:'text',default:'',maxLength:512,animatable:false},
     {id:'anchorOverrides',label:'Anchor Overrides',type:'text',default:'',maxLength:512,animatable:false},
+    {id:'holdAnchors',label:'Held Material Anchors',type:'text',default:'',maxLength:512,animatable:false},
     {id:'titles',label:'Scan Labels',type:'text',default:'FIBER TRACK|FLOW SCAN|LOOP ANALYSIS|MOTION FIELD|YARN SIGNAL|STRUCTURE',maxLength:160,animatable:false}],
   runtime:'builtin',invalidates:'appearance',state:'stateless',addable:true,implementation:'shared',consumers:['Weave'],bypass:'passthrough',
 };
@@ -92,11 +93,17 @@ export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec 
   const anchorOverrides=read('anchorOverrides')??'';
   if(typeof anchorOverrides!=='string')throw new Error('Curve Scan Labels: Anchor Overrides must be text.');
   parseCurveLabelAnchors(anchorOverrides);out.anchorOverrides=anchorOverrides;
+  const holdAnchors=read('holdAnchors')??'';
+  if(typeof holdAnchors!=='string')throw new Error('Curve Scan Labels: Held Material Anchors must be text.');
+  const held=parseCurveLabelAnchors(holdAnchors);
+  if(held.length&&(Number(out.holdEnd)<=Number(out.holdStart)||held.some(a=>a.card>=Number(out.holdCount)||a.card>=Number(out.count))))
+    throw new Error('Curve Scan Labels: Held Material Anchors need an ordered tracking hold interval and card indices below Held Tracking Cards and Cards.');
+  out.holdAnchors=holdAnchors;
   out.color=color;out.markerColor=markerColor;out.titles=titles;return out as CurveLabelSpec;
 }
 export function isCurveLabels(value:unknown):value is CurveLabelSpec {
   if(!value||typeof value!=='object')return false;
   const v=value as Record<string,OperatorValue>;
-  if(Object.keys(v).some(key=>!['color','markerColor','titles','style','anchorOverrides','introTitles',...CURVE_LABEL_NUMBERS.map(p=>p[0])].includes(key)))return false;
+  if(Object.keys(v).some(key=>!['color','markerColor','titles','style','anchorOverrides','holdAnchors','introTitles',...CURVE_LABEL_NUMBERS.map(p=>p[0])].includes(key)))return false;
   try{readCurveLabels(id=>v[id]);return true;}catch{return false;}
 }

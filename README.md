@@ -236,3 +236,5 @@ Weave’s Final Stillness control can leave only tiny residual circulation in th
 Curve Scan Labels supports exact material anchors and amber opening rings that respect randomized card order and appear with their cards.
 
 Scan intros can use large white multilingual headlines on independently moving 3D text planes, then return to normal readouts.
+
+Weave scan cards support material anchors for an authored tracking hold, with projected card bounds kept in frame while the yarn moves.

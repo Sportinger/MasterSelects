@@ -20,6 +20,28 @@ const graph=()=>{
   g.edges.push({id:'labels-in',from:edge.from,output:'curves',to:'labels',input:'curves'});edge.from='labels';return g;
 };
 describe('Curve Scan Labels',()=>{
+  it('uses held material anchors for a complete held appearance without changing opening or released anchors',()=>{
+    const s={...spec(),count:4,holdCount:4,holdStart:22,holdEnd:27,
+      holdAnchors:'0:2@0.94 | 1:4@0.86 | 2:6@0.80 | 3:8@0.74',anchorOverrides:'0:1@0.25'};
+    const starts=Uint32Array.from({length:13},(_,i)=>i*101),counts=new Uint32Array(13).fill(101);
+    expect(curveLabelAnchors(starts,counts,s,false,1)[3]).toBe(1);
+    for(const t of [22,24,27,23]) {
+      const a=curveLabelAnchors(starts,counts,s,false,t);
+      expect(Array.from({length:4},(_,i)=>a[i*4+3])).toEqual([2,4,6,8]);
+      for(let card=0;card<4;card++)expect(curveLabelLife(s,t,card).reveal).toBeCloseTo(1,12);
+      expect(curveLabelAnchors(starts,counts,s,true,t)).toEqual(curveLabelAnchors(starts,counts,{...s,holdAnchors:''},true,t));
+    }
+    const episode=curveLabelEpisode(s,24,0);
+    expect(curveLabelAnchors(starts,counts,s,false,episode.birth+.001)[3]).toBe(2);
+    expect(curveLabelAnchors(starts,counts,s,false,episode.birth+episode.visible-.001)[3]).toBe(2);
+    expect(curveLabelAnchors(starts,counts,s,false,episode.birth+episode.period+.001)[3]).toBe(1);
+    expect(isCurveLabels(s)).toBe(true);
+    expect(isCurveLabels({...s,holdCount:2})).toBe(false);
+    expect(isCurveLabels({...s,holdStart:27,holdEnd:22})).toBe(false);
+    const g=graph();g.nodes.find(n=>n.id==='labels')!.constants={holdCount:4,holdStart:22,holdEnd:27,holdAnchors:s.holdAnchors};
+    const p=compileGeometryGraph(g,geometryParameterReader({}));expect(p.render!.labels!.holdAnchors).toBe(s.holdAnchors);
+    expect(isGeometryProgram(JSON.parse(JSON.stringify(p)))).toBe(true);
+  });
   it('shapes whole multilingual intro phrases on the actual first two cards, only in their first episodes',()=>{
     const introTitles='Kunst? > art > कला | Kann weg.';
     expect(parseCurveLabelIntro(introTitles)).toEqual([['KUNST?','ART','कला'],['KANN WEG.']]);

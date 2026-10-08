@@ -43,10 +43,11 @@ fn sidePressure(card:u32)->f32 {
  let difference=(left-right)/128.;
  return sign(difference)*smoothstep(.04,.22,abs(difference));
 }
-// Close intro headlines need their projected footprint, including depth and tilt,
-// rather than the ordinary camera-plane width, to remain inside the first shot.
-fn containIntro(card:u32,initial:vec2f)->vec2f {
- if(!introCard(card)){return initial;}
+// Intro and priority tracking cards need their full projected footprint, including
+// depth and tilt, kept in frame. Blend the hold correction to avoid a position snap.
+fn containCard(card:u32,initial:vec2f)->vec2f {
+ let amount=select(heldCardAmount(card),1.,introCard(card));
+ if(amount<=0.){return initial;}
  var shift=initial;
  for(var iteration=0;iteration<3;iteration++){
    var low=vec2f(1e10);var high=vec2f(-1e10);
@@ -66,7 +67,7 @@ fn containIntro(card:u32,initial:vec2f)->vec2f {
    if(abs(determinant)<1e-6){return shift;}
    shift+=vec2f(correction.x*y.y-correction.y*y.x,x.x*correction.y-x.y*correction.x)/determinant;
  }
- return shift;
+ return mix(initial,shift,amount);
 }
 @compute @workgroup_size(16) fn arrange(@builtin(global_invocation_id) id:vec3u){
  let card=id.x;if(card>=u32(p.arrangement.w)){return;}
@@ -101,5 +102,5 @@ fn containIntro(card:u32,initial:vec2f)->vec2f {
    shift=sum/max(total,.0001);
  }
 
- offsets[card]=vec4f(containIntro(card,shift),0,0);
+ offsets[card]=vec4f(containCard(card,shift),0,0);
 }

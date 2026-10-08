@@ -35,8 +35,8 @@ fn signalColor(card:u32,base:vec3f)->vec3f {
 }
 fn cardPoint(card:u32,q:vec2f,copy:u32)->vec3f {
  let trail=f32(copy)*(1.-cameraLockAmount(card));
- return projectedCardPoint(card,q,offsets[card].xy)+p.forward.xyz*p.arrangement.z*.045*trail
-   +p.right.xyz*p.right.w*.022*trail+p.up.xyz*p.up.w*.014*trail;
+ return projectedCardPoint(card,q,offsets[card].xy)+heldCardOffset(card,p.forward.xyz*p.arrangement.z*.045*trail
+   +p.right.xyz*p.right.w*.022*trail+p.up.xyz*p.up.w*.014*trail);
 }
 fn windowPoint(card:u32,q:vec2f,copy:u32)->vec3f {
  return cardPoint(card,glitchGeometry(q,windowGlitch(card),glitchTick(card)),copy);
@@ -87,7 +87,7 @@ fn corner(vertex:u32)->vec2f {
  if(item==34u){a=windowPoint(card,vec2f(-.53,.5),copy);b=windowPoint(card,vec2f(-.53,.32),copy);}
  if(item==35u){a=windowPoint(card,vec2f(.53,-.5),copy);b=windowPoint(card,vec2f(.53,-.32),copy);}
  if(item>=36u&&item<100u){
-   let joint=cardPoint(card,vec2f(-side*.5,0),copy);let elbow=joint-p.right.xyz*side*p.right.w*.1;
+   let joint=cardPoint(card,vec2f(-side*.5,0),copy);let elbow=joint-heldCardOffset(card,p.right.xyz*side*p.right.w*.1);
    let local=item-36u;let second=local>=32u;let segment=local%32u;
    let start=select(trackedPoint,elbow,second);let end=select(elbow,joint,second);
    a=glitchLeaderPoint(card,start,end,f32(segment)/32.);

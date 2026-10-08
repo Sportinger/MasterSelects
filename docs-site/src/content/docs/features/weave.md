@@ -736,3 +736,10 @@ Intro text has its own opacity (while still following the layer opacity), so whi
 Motion Time can turn **Motion Seconds** smoothly from forward to backward: set **Turn Start** to source seconds (default `-1` disables it), and choose **Turn Duration**. Signed speed crosses zero halfway through that interval and then follows the negative original speed envelope. The turn is integrated against acceleration and Final Stillness, so accumulated time never jumps and seeking needs no simulation history. Invalid intervals report an error.
 
 **Loop Phase stays forward and still ends at 1**, independently of the direction turn. Use seconds for a return-stage circulation and the phase for a closed periodic path that must continue through the loop seam. Reversing a clock does not itself guarantee continuity when morphing between two different shapes.
+
+
+### Material anchors during a tracking hold
+
+**Held Material Anchors** uses the same `card:strand@u | …` syntax as Anchor Overrides, for the cards inside **Held Tracking Cards**. These targets apply to the complete appearance that covers Tracking Hold Start/End, from intro through outro, so changing anchors cannot jump halfway through an appearance. The material coordinates stay fixed while the yarn moves through its geometry. Opening anchors and later released-strand targets remain independent. The interval must be ordered and each override must address an existing held card.
+
+During the hold, the full projected footprint of these cards is kept within the image, including their rotation and depth. Held card planes also move toward the camera while retaining their projected size, so the inspected yarn does not hide the readout. The correction enters and leaves smoothly; ordinary cards keep their unrestricted camera lag. This does not make a material point visible through foreground geometry: use several appropriately spaced targets when tracking yarn through interlocking meshes.

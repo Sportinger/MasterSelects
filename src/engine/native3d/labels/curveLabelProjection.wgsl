@@ -6,6 +6,16 @@ struct Params {
 struct Point { position:vec4f, normal:vec4f, tangent:vec4f }
 fn roundCard(card:u32)->bool {return p.motion.z>.5&&(card%4u==1u||card%4u==2u);}
 fn introCard(card:u32)->bool {return p.intro.z>0.&&(abs(f32(card)-p.intro.x)<.1||abs(f32(card)-p.intro.y)<.1);}
+// Spare uniform components carry hold start/end/count; ordinary cards keep full camera lag.
+fn heldCardAmount(card:u32)->f32 {
+ if(f32(card)>=p.liveEye.w||p.forward.w<=p.eye.w){return 0.;}
+ return smoothstep(p.eye.w-p.clock.z,p.eye.w,p.clock.x)*(1.-smoothstep(p.forward.w,p.forward.w+p.clock.z,p.clock.x));
+}
+fn heldCardOffset(card:u32,delta:vec3f)->vec3f {
+ let perspective=length(vec3f(p.vp[0].w,p.vp[1].w,p.vp[2].w))>.1;
+ let nearer=select(delta-p.liveForward.xyz*dot(delta,p.liveForward.xyz)*.8,delta*.2,perspective);
+ return mix(delta,nearer,heldCardAmount(card));
+}
 fn cardMetrics(card:u32)->vec2f {
  let introScale=select(1.,p.intro.z,introCard(card));
  if(p.motion.z<.5){return p.metrics.xy*introScale;}
@@ -52,7 +62,10 @@ fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
  let tiltedUp=p.up.xyz*cos(pitch)+normal*sin(pitch);
  let right=tiltedRight*cos(roll)+tiltedUp*sin(roll);
  let up=tiltedUp*cos(roll)-tiltedRight*sin(roll);
- let floating=center+right*q.x*p.right.w*cardMetrics(card).x+up*q.y*p.up.w*cardMetrics(card).y;
+ var floating=center+right*q.x*p.right.w*cardMetrics(card).x+up*q.y*p.up.w*cardMetrics(card).y;
+ // Bring held cards toward the camera without enlarging their projected footprint.
+ // They retain their tilted 3D planes, but no longer sit behind the inspected yarn.
+ floating=p.liveEye.xyz+heldCardOffset(card,floating-p.liveEye.xyz);
  let amount=cameraLockAmount(card);
  if(amount<=0.){return floating;}
  let dimensions=cardMetrics(card);
