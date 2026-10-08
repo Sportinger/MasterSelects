@@ -61,18 +61,18 @@ fn occupied(footprint:CardFootprint)->f32 {
    sum+=value;peak=max(peak,value);
  }}return sum/35.*.65+peak*.35;
 }
-// Solve a screen-space target back into the lagged 3D card plane. Searching in
+// Solve a screen-space destination back into the lagged 3D card plane. Searching in
 // source row coordinates cannot reach free corners after camera pans or depth drift.
-fn shiftToScreen(card:u32,target:vec2f,initial:vec2f)->vec2f {
+fn shiftToScreen(card:u32,destination:vec2f,initial:vec2f)->vec2f {
  var shift=initial;
  for(var step=0;step<2;step++){
    let c=p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift),1);
    let dx=(p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift+vec2f(.01,0)),1)-c)/.01;
    let dy=(p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift+vec2f(0,.01)),1)-c)/.01;
-   let x=dx.xy-target*dx.w;let y=dy.xy-target*dy.w;
+   let x=dx.xy-destination*dx.w;let y=dy.xy-destination*dy.w;
    let determinant=x.x*y.y-x.y*y.x;
    if(abs(determinant)<1e-6){return shift;}
-   let error=target*c.w-c.xy;
+   let error=destination*c.w-c.xy;
    shift+=clamp(vec2f(error.x*y.y-error.y*y.x,x.x*error.y-x.y*error.x)/determinant,vec2f(-2),vec2f(2));
  }return shift;
 }
@@ -115,8 +115,8 @@ fn containCard(card:u32,initial:vec2f)->vec2f {
    let preferred=clamp(origin+vec2f(0,(rotationRandom(f32(card)*13.+7.)-.5)*.65),vec2f(-.8),vec2f(.8));
    var sum=vec2f(0);var total=0.;
    for(var y=0;y<9;y++){for(var x=0;x<7;x++){
-     let target=vec2f(-.8+f32(x)*1.6/6.,-.8+f32(y)*.2);
-     let candidate=shiftToScreen(card,target,drift);
+     let destination=vec2f(-.8+f32(x)*1.6/6.,-.8+f32(y)*.2);
+     let candidate=shiftToScreen(card,destination,drift);
      let footprint=cardFootprint(card,candidate);
      let actual=footprint.center.xy/max(.001,footprint.center.w);
      let distance=actual-preferred;
