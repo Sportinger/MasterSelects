@@ -51,6 +51,18 @@ const NON_ATOMIC_EDITOR_TOOL_NAMES = new Set([
   'undo',
 ]);
 
+/**
+ * Atomic editor tools that the private kernel's pinned capability catalog does
+ * not list yet. They stay reachable through the shared dispatcher (dev bridge,
+ * console, FlashBoard direct surfaces) but are kept out of the Fast V2 catalog,
+ * so `HOSTED_AGENT_FAST_V2_EDITOR_TOOL_CATALOG_DIGEST` keeps matching the
+ * kernel pin. Removing a name here changes that digest and must ship together
+ * with the kernel's new pin and a kernel category for the tool.
+ */
+export const KERNEL_PIN_PENDING_EDITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'duplicateComposition',
+]);
+
 const CANDIDATE_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] = [
   ...timelineToolDefinitions,
   ...clipToolDefinitions,
@@ -80,6 +92,7 @@ const CANDIDATE_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] = [
 export const ATOMIC_EDITOR_TOOL_DEFINITIONS: readonly ToolDefinition[] =
   CANDIDATE_EDITOR_TOOL_DEFINITIONS.filter((tool) => (
     !NON_ATOMIC_EDITOR_TOOL_NAMES.has(tool.function.name)
+    && !KERNEL_PIN_PENDING_EDITOR_TOOL_NAMES.has(tool.function.name)
   ));
 
 const ATOMIC_EDITOR_TOOL_NAMES = new Set(

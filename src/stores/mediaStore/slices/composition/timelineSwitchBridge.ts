@@ -13,7 +13,7 @@ import {
   calculateSyncedPlayhead,
   getCompositionSwitchDirection,
 } from './timelineNavigationPlanner';
-import { syncTransitionCompositionTimelineToParent } from './transitionCompositionSync';
+import { mirrorTimelineDataIntoComposition } from './activeTimelineSync';
 
 type MediaSliceSet = (
   partial: Partial<MediaState> | ((state: MediaState) => Partial<MediaState>)
@@ -55,15 +55,7 @@ export async function doSetActiveComposition(
     }
     const timelineData = timelineStore.getSerializableState();
     set((state) => ({
-      compositions: syncTransitionCompositionTimelineToParent(
-        state.compositions.map((c) =>
-          c.id === currentActiveId
-            ? { ...c, duration: timelineData.duration, timelineData }
-            : c
-        ),
-        currentActiveId,
-        timelineData,
-      ),
+      compositions: mirrorTimelineDataIntoComposition(state.compositions, currentActiveId, timelineData),
     }));
     compositionRenderer.invalidateCompositionAndParents(currentActiveId);
   }

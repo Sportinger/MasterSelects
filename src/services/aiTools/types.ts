@@ -61,7 +61,7 @@ export const MODIFYING_TOOLS = new Set([
   'cutRangesFromClip',
   // Media tools
   'createMediaFolder', 'renameMediaItem', 'deleteMediaItem', 'moveMediaItems',
-  'createComposition', 'importLocalFiles', 'addCompositionClip',
+  'createComposition', 'duplicateComposition', 'importLocalFiles', 'addCompositionClip',
   'createStressTestProjectFixture',
   'executeBatch',
   'addStoryboardScene', 'updateStoryboardScene',

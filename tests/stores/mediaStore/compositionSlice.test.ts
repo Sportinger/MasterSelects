@@ -885,6 +885,9 @@ describe('compositionSlice', () => {
       duration: 300,
       backgroundColor: '#112233',
     });
+    // comp-1 is active: the settings dialog sets the live timeline duration too,
+    // and duplicating the active composition copies its live timeline.
+    useTimelineStore.setState({ duration: 300, durationLocked: true });
     const dup = store.getState().duplicateComposition('comp-1');
     expect(dup).not.toBeNull();
     expect(dup!.width).toBe(2560);

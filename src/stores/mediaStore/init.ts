@@ -15,7 +15,7 @@ import { audioAnalyzer } from '../../services/audioAnalyzer';
 import { compositionAudioMixer } from '../../services/compositionAudioMixer';
 import { proxyFrameCache } from '../../services/proxyFrameCache';
 import { audioExtractor } from '../../engine/audio/AudioExtractor';
-import { syncTransitionCompositionTimelineToParent } from './slices/composition/transitionCompositionSync';
+import { mirrorTimelineDataIntoComposition } from './slices/composition/activeTimelineSync';
 import { initializeRemoteColorGradeCoordinator } from '../../services/colorGrades/remoteColorGradeCoordinator';
 import { createRemoteColorGradeMediaPatch } from '../../services/colorGrades/remoteColorGradeMediaState';
 import { readTimelineRuntimeState } from '../../services/timeline/timelineRuntimeCoordinator';
@@ -205,15 +205,7 @@ function saveTimelineToActiveComposition(options: SaveTimelineToActiveCompositio
       didUpdate = true;
       signatures.set(activeCompositionId, nextSignature);
       return {
-        compositions: syncTransitionCompositionTimelineToParent(
-          state.compositions.map((c: Composition) =>
-            c.id === activeCompositionId
-              ? { ...c, duration: timelineData.duration, timelineData }
-              : c
-          ),
-          activeCompositionId,
-          timelineData,
-        ),
+        compositions: mirrorTimelineDataIntoComposition(state.compositions, activeCompositionId, timelineData),
       };
     });
 

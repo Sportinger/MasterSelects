@@ -319,7 +319,7 @@ Panel FPS column read this value. Export-panel FPS overrides are export-only.
 ### Composition Operations
 ```typescript
 createComposition(name, settings?)   // Create with optional overrides
-duplicateComposition(id)             // Creates "Name Copy"
+duplicateComposition(id, { name? })  // Deep copy, default name "Name Copy"
 removeComposition(id)                // Delete
 updateComposition(id, updates)       // Update settings
 openCompositionTab(id, options?)     // Edit in timeline (with animation)
@@ -329,6 +329,29 @@ setActiveComposition(id)             // Switch active composition
 getActiveComposition()               // Get current composition
 getOpenCompositions()                // List open tabs
 ```
+
+### Duplicating Compositions
+Duplicate (context menu or `Ctrl+D`), copy/paste, and the AI tool
+`duplicateComposition` share one store action:
+- Duplicating the **active** composition copies its live timeline. The stored
+  `timelineData` of the active composition is only a mirror that the
+  composition switch and the 30-second timeline autosave refresh, so the action
+  serializes the live timeline (the same `getSerializableState` the switch and
+  project save use) and refreshes the original's mirror in the same write. While
+  a timeline restore or project sync holds the store-sync guard it falls back to
+  the stored timeline and logs a warning; the AI tool waits for the guard first.
+- The copy is a deep clone: editing it never changes the original. Clip, track,
+  keyframe, effect, mask, and transition ids are kept because they are scoped
+  per composition (the repository keys clips as `clip:<compositionId>:<clipId>`,
+  and nested rendering derives runtime ids from the parent clip), so motion
+  parents (`parentClipId`), linked clips, keyframes, text, motion-shape
+  appearance stacks, composition graphs, and track visibility stay valid as is.
+- The compositions the source privately owns (transition compositions, their
+  legacy backups, legacy caption compositions) are cloned for the copy and
+  retargeted to it, so editing a transition in the copy leaves the original's
+  transition untouched. Nested user-visible compositions stay shared references.
+- Transition and caption compositions cannot be duplicated on their own; the
+  action logs the reason and the AI tool returns it as an error.
 
 ### Tab System
 - Compositions open as tabs in the timeline

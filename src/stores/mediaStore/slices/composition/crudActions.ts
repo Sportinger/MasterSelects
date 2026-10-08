@@ -3,63 +3,21 @@ import type { Composition } from '../../types';
 import { useSettingsStore } from '../../../settingsStore';
 import { useTimelineStore } from '../../../timeline';
 import { generateId } from '../../helpers/importPipeline';
-import type { CompositionActions } from '../compositionSlice';
+import type { CompositionActions, CompositionDuplicateOptions } from '../compositionSlice';
+import { Logger } from '../../../../services/logger';
 import {
   invalidateCompositionDurationDependents,
+  mirrorTimelineDataIntoComposition,
+  readActiveTimelineSnapshot,
   syncActiveTimelineNestedCompReferences,
   syncInactiveCompositionNestedReferences,
 } from './activeTimelineSync';
+import { describeCompositionDuplicateBlocker, planCompositionDuplicate } from './compositionDuplicate';
+import { collectPrivateChildCompositionIds } from './privateCompositionTree';
 import { createDefaultCompositionTimelineData, lockTimelineDuration } from './timelineDataPlanner';
 import { adjustClipTransformsOnResize } from './resizeTransforms';
 
-function stripTransitionCompositionIds(timelineData: Composition['timelineData']): Composition['timelineData'] {
-  if (!timelineData) return timelineData;
-  return {
-    ...structuredClone(timelineData),
-    clips: timelineData.clips.map((clip) => ({
-      ...clip,
-      transitionIn: clip.transitionIn ? { ...clip.transitionIn, compositionId: undefined } : undefined,
-      transitionOut: clip.transitionOut ? { ...clip.transitionOut, compositionId: undefined } : undefined,
-    })),
-  };
-}
-
-function collectTransitionCompositionDescendantIds(
-  compositions: readonly Composition[],
-  rootId: string,
-): Set<string> {
-  const ids = new Set<string>();
-  const pending = [rootId];
-  while (pending.length > 0) {
-    const parentId = pending.pop()!;
-    const parentComposition = compositions.find((composition) => composition.id === parentId);
-    const backupCompositionId = parentComposition?.transitionComp?.legacyBackupCompositionId;
-    if (backupCompositionId && !ids.has(backupCompositionId)) {
-      ids.add(backupCompositionId);
-      pending.push(backupCompositionId);
-    }
-    for (const clip of parentComposition?.timelineData?.clips ?? []) {
-      for (const transition of [clip.transitionIn, clip.transitionOut]) {
-        if (transition?.compositionId && !ids.has(transition.compositionId)) {
-          ids.add(transition.compositionId);
-          pending.push(transition.compositionId);
-        }
-      }
-    }
-    for (const composition of compositions) {
-      const isPrivateTransitionChild =
-        composition.transitionComp?.kind === 'transition-comp'
-        && composition.transitionComp.parentCompositionId === parentId;
-      const isPrivateCaptionChild =
-        composition.captionComp?.kind === 'caption-comp'
-        && composition.captionComp.parentCompositionId === parentId;
-      if ((!isPrivateTransitionChild && !isPrivateCaptionChild) || ids.has(composition.id)) continue;
-      ids.add(composition.id);
-      pending.push(composition.id);
-    }
-  }
-  return ids;
-}
+const log = Logger.create('CompositionCrud');
 
 function stripRemovedTransitionCompositionRefs(
   composition: Composition,
@@ -117,31 +75,74 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
     return comp;
   },
 
-  duplicateComposition: (id: string) => {
-    const original = get().compositions.find((c) => c.id === id);
-    if (!original) return null;
-    if (
-      original.transitionComp?.kind === 'transition-comp'
-      || original.captionComp?.kind === 'caption-comp'
-    ) return null;
+  duplicateComposition: (id: string, options?: CompositionDuplicateOptions) => {
+    const state = get();
+    const blocker = describeCompositionDuplicateBlocker(
+      state.compositions.find((c) => c.id === id),
+      id,
+    );
+    if (blocker) {
+      log.warn('Composition duplicate refused', { compositionId: id, reason: blocker });
+      return null;
+    }
 
-    const duplicate: Composition = {
-      ...original,
-      id: generateId(),
-      name: `${original.name} Copy`,
-      createdAt: Date.now(),
-      timelineData: stripTransitionCompositionIds(original.timelineData),
-      transitionComp: undefined,
-      captionComp: undefined,
-    };
+    // The stored timelineData of the active composition is only a lagging
+    // mirror of the live timeline. When the source (or one of its private
+    // transition/caption compositions) is active, snapshot the live timeline
+    // and copy that, refreshing the original's mirror in the same write.
+    const activeId = state.activeCompositionId;
+    const sourcesActiveTimeline = activeId !== null && (
+      activeId === id || collectPrivateChildCompositionIds(state.compositions, id).has(activeId)
+    );
+    let sourceCompositions: readonly Composition[] = state.compositions;
+    let writesMirror = false;
+    if (sourcesActiveTimeline) {
+      const snapshot = readActiveTimelineSnapshot();
+      if (snapshot.kind === 'live') {
+        sourceCompositions = mirrorTimelineDataIntoComposition(state.compositions, activeId, snapshot.timelineData);
+        writesMirror = snapshot.mayWriteMirror;
+      } else {
+        log.warn('Duplicating the stored timeline of the active composition', {
+          compositionId: activeId,
+          reason: snapshot.reason,
+        });
+      }
+    }
 
-    set((state) => ({ compositions: [...state.compositions, duplicate] }));
-    return duplicate;
+    const requestedName = options?.name?.trim();
+    let plan: ReturnType<typeof planCompositionDuplicate>;
+    try {
+      plan = planCompositionDuplicate({
+        compositions: sourceCompositions,
+        sourceId: id,
+        name: requestedName || `${state.compositions.find((c) => c.id === id)!.name} Copy`,
+        createId: generateId,
+        createdAt: Date.now(),
+      });
+    } catch (error) {
+      log.warn('Composition duplicate failed', { compositionId: id, error });
+      return null;
+    }
+    if (plan.droppedTransitionCompositionIds.length > 0) {
+      log.warn('Duplicate dropped references to missing transition compositions', {
+        compositionId: id,
+        missingCompositionIds: plan.droppedTransitionCompositionIds,
+      });
+    }
+
+    set({
+      compositions: [
+        ...(writesMirror ? sourceCompositions : state.compositions),
+        plan.duplicate,
+        ...plan.privateCopies,
+      ],
+    });
+    return plan.duplicate;
   },
 
   removeComposition: (id: string) => {
     const stateBeforeRemoval = get();
-    const removedIds = collectTransitionCompositionDescendantIds(
+    const removedIds = collectPrivateChildCompositionIds(
       stateBeforeRemoval.compositions,
       id,
     );

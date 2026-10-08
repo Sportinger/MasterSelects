@@ -13,22 +13,22 @@ import {
 
 const log = Logger.create('AITool:Media');
 
-interface MutationEntityRef {
+export interface MutationEntityRef {
   kind: MutationEntityKind;
   id: string;
 }
 
-interface MutationEntities {
+export interface MutationEntities {
   created: MutationEntityRef[];
   updated: MutationEntityRef[];
   deleted: MutationEntityRef[];
 }
 
-function mediaEntityRef(type: 'mediaItem' | 'composition' | 'folder', id: string): MutationEntityRef {
+export function mediaEntityRef(type: 'mediaItem' | 'composition' | 'folder', id: string): MutationEntityRef {
   return { kind: type, id };
 }
 
-function createMediaMutationEnvelope(
+export function createMediaMutationEnvelope(
   entities: MutationEntities,
   ...timelineEnvelopes: Array<ReturnType<typeof describeMutationEntities>>
 ) {
@@ -61,7 +61,7 @@ function createMediaMutationEnvelope(
   };
 }
 
-function emptyMutationEntities(): MutationEntities {
+export function emptyMutationEntities(): MutationEntities {
   return { created: [], updated: [], deleted: [] };
 }
 
