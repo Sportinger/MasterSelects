@@ -246,7 +246,7 @@ try{
  @compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id:vec3u){
    let points=array<vec2f,3>(vec2f(1,1),vec2f(0),vec2f(-1,-1));
    let arrival=glitchArrival(points[id.x]);let recovery=glitchRecovery(id.x);
-   result[id.x]=vec4f(arrival,recovery,glitchEnvelope(.25,arrival,recovery),glitchEnvelope(3.01,arrival,recovery));
+   result[id.x]=vec4f(arrival,recovery,glitchEnvelope(.25,arrival,recovery),glitchEnvelope(6.01,arrival,recovery));
  }`});
  const wavePipeline=device.createComputePipeline({layout:'auto',compute:{module:waveModule,entryPoint:'main'}});
  const waveOutput=device.createBuffer({size:48,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
@@ -257,17 +257,17 @@ try{
    {binding:0,resource:{buffer:uniform}},{binding:2,resource:{buffer:waveOutput}}]}));wavePass.dispatchWorkgroups(3);wavePass.end();
  waveEncoder.copyBufferToBuffer(waveOutput,0,waveRead,0,48);device.queue.submit([waveEncoder.finish()]);await waveRead.mapAsync(GPUMapMode.READ);
  const waveSamples=Array.from(new Float32Array(waveRead.getMappedRange()));waveRead.unmap();waveRead.destroy();waveOutput.destroy();
- if(waveSamples[0]!==0||waveSamples[4]!==.5||waveSamples[8]!==1||waveSamples[2]<=0||waveSamples[6]!==0||waveSamples[10]!==0)
-   throw new Error('Glitch front did not travel top-right to bottom-left in one second');
+ if(waveSamples[0]!==0||waveSamples[4]!==1.5||waveSamples[8]!==3||waveSamples[2]<=0||waveSamples[6]!==0||waveSamples[10]!==0)
+   throw new Error('Glitch front did not travel top-right to bottom-left in three seconds');
  const recoveries=[waveSamples[1],waveSamples[5],waveSamples[9]];
  if(recoveries.some(t=>t<1||t>2)||new Set(recoveries).size!==3||[waveSamples[3],waveSamples[7],waveSamples[11]].some(v=>v!==0))
    throw new Error('Glitch recovery is not independently bounded to one–two seconds');
- spec.glitchStrength=1;const disrupted=await draw(12.65),disruptedAgain=await draw(12.65);
- spec.glitchStrength=0;const clean=await draw(12.65);
+ spec.glitchStrength=1;const disrupted=await draw(13.8),disruptedAgain=await draw(13.8);
+ spec.glitchStrength=0;const clean=await draw(13.8);
  const changed=clean.filter((v,i)=>Math.abs(v-disrupted[i])>.01).length;
  if(changed<100||disrupted.some((v,i)=>v!==disruptedAgain[i]))throw new Error(`Missing or nondeterministic window glitch: ${changed}`);
  // Leader curves now morph near the ring; verify their fixed attachments separately below.
- spec.glitchStrength=1;const recovered=await draw(15.1);spec.glitchStrength=0;const cleanAfter=await draw(15.1);
+ spec.glitchStrength=1;const recovered=await draw(18.1);spec.glitchStrength=0;const cleanAfter=await draw(18.1);
  if(recovered.some((v,i)=>v!==cleanAfter[i]))throw new Error('Glitch did not fully recover');
  const glowingPixels=disrupted.filter((v,i)=>i%4!==3&&v>1.05).length;
  if(glowingPixels<20)throw new Error(`Window glitch lacks emissive accents: ${glowingPixels}`);
@@ -285,7 +285,7 @@ try{
  const shapePipeline=device.createComputePipeline({layout:'auto',compute:{module:shapeModule,entryPoint:'main'}});
  const shapeData=new Float32Array(108);shapeData.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));
  shapeData.set([1,0,0,1],32);shapeData.set([0,1,0,1],36);shapeData.set([0,0,-1,0],40);shapeData.set([0,0,8,0],44);
- shapeData.set([.43,.13,1,6],56);shapeData.set([0,.3,5,1],60);shapeData[64]=12.65;shapeData[76]=1;shapeData.set([.65,0,1,0],84);device.queue.writeBuffer(uniform,0,shapeData);
+ shapeData.set([.43,.13,1,6],56);shapeData.set([0,.3,5,1],60);shapeData[64]=13.8;shapeData[76]=1;shapeData.set([1.8,0,1,0],84);device.queue.writeBuffer(uniform,0,shapeData);
  const zeroOffset=device.createBuffer({size:16,usage:GPUBufferUsage.STORAGE});
  const shapeOut=device.createBuffer({size:14*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
  const shapeRead=device.createBuffer({size:14*16,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});

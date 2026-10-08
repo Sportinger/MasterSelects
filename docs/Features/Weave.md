@@ -703,3 +703,7 @@ This diagnostic does no extra draw or readback during normal playback. It curren
 ### Closing an eased circulation loop
 
 Motion Time supplies both integrated **Motion Seconds** and a normalized **Loop Phase (0–1)**. Phase completes exactly one forward turn across Duration with the same acceleration/deceleration envelope. Multiply it by an integer number of turns for a cyclic path with matching endpoints; do not multiply accumulated seconds by a falling envelope, which reverses motion. Apply a common phase before each harmonic of a periodic path to move material along that path instead of changing its shape. Neither output changes other animation clocks or guarantees constant world-space speed on an unevenly parameterized curve.
+
+### Narrow scan disturbance front
+
+The diagonal scan disturbance crosses the viewport in three seconds, every twelve seconds. Its bright front uses half the former high-intensity spatial extent (the old envelope above 80%); travel time and spatial width are independent. A quieter, individually timed one-to-two-second aftershock follows each card, without prolonging the bright front. Tracking anchors remain attached throughout.

@@ -102,7 +102,7 @@ export class CurveLabelPass {
         depthStencilAttachment:{view:depth,depthLoadOp:'load',depthStoreOp:'store'}});
       pass.setBindGroup(0,group);pass.setPipeline(this.lines!);pass.draw(6,spec.count*(132+36*maxCopies));
       pass.setPipeline(this.text!);pass.draw(6,spec.count*LABEL_GLYPHS*(maxCopies+1));
-      if(spec.glitchStrength>0&&glitch.age>=0&&glitch.age<=3){pass.setPipeline(this.blocks!);pass.draw(6,spec.count*6*(maxCopies+1));}
+      if(spec.glitchStrength>0&&glitch.age>=0&&glitch.age<=6){pass.setPipeline(this.blocks!);pass.draw(6,spec.count*6*(maxCopies+1));}
       if(lock&&lock.amount>0){pass.setPipeline(this.lockIcon!);pass.draw(6,20);}
       pass.end();
     }

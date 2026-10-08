@@ -228,3 +228,5 @@ Curve Scan Labels supports independently randomized appearances, shared intro/ou
 Scan-window glitch waves include emissive fragments, warped outlines and text sizes, and curved connection lines with fixed endpoints.
 
 Weave Motion Time also provides a normalized forward loop phase for eased cyclic material motion without an end-of-shot rewind.
+
+Scan overlays use a slower three-second diagonal glitch front with reduced spatial width and separate per-card aftershocks.

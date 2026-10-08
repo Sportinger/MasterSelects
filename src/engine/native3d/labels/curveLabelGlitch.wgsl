@@ -1,14 +1,22 @@
-// One second from top-right to bottom-left in the CURRENT camera view.
+// Three seconds from top-right to bottom-left in the CURRENT camera view.
 // Window geometry/text and leader curves use these helpers; tracking anchors remain intact.
 fn glitchRandom(seed:f32)->f32 {return fract(sin(seed*12.9898+78.233)*43758.5453);}
-fn glitchArrival(ndc:vec2f)->f32 {return clamp((2.-ndc.x-ndc.y)*.25,0.,1.);}
+fn glitchArrival(ndc:vec2f)->f32 {return clamp((2.-ndc.x-ndc.y)*.25,0.,1.)*3.;}
 fn glitchRecovery(card:u32)->f32 {return 1.+glitchRandom(f32(card)*17.+p.glitch.y*71.+4.);}
 fn glitchEnvelope(age:f32,arrival:f32,recovery:f32)->f32 {
  let local=age-arrival;
- return smoothstep(0.,.035,local)*pow(clamp(1.-local/recovery,0.,1.),1.35);
+ // Half the former bright disturbance's spatial extent, at one third its speed.
+ // Keep the quieter 1–2 s aftershock separate so it cannot broaden the bright front.
+ let legacyBrightWidth=(1.-pow(.8,1./1.35))*recovery;
+ let frontDuration=legacyBrightWidth*.5*3.;
+ let enter=smoothstep(0.,.035*1.5,local);
+ let front=1.-smoothstep(frontDuration*.65,frontDuration,local);
+ let tailAge=max(0.,local-frontDuration);
+ let tail=.38*pow(clamp(1.-tailAge/recovery,0.,1.),1.35);
+ return enter*max(front,tail);
 }
 fn windowGlitch(card:u32)->f32 {
- if(p.glitch.z<=0.||p.glitch.x<0.||p.glitch.x>3.){return 0.;}
+ if(p.glitch.z<=0.||p.glitch.x<0.||p.glitch.x>6.){return 0.;}
  let center=p.vp*vec4f(projectedCardPoint(card,vec2f(0),offsets[card].xy),1);
  if(center.w<=.001){return 0.;}
  return glitchEnvelope(p.glitch.x,glitchArrival(center.xy/center.w),glitchRecovery(card))*p.glitch.z;
