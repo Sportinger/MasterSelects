@@ -1,3 +1,4 @@
+import {curveLabelLock,curveLabelLocks} from './curveLabelLock';
 import {curveLabelEpisode} from './curveLabelSchedule';
 import {curveLabelGlitchEvent} from './curveLabelGlitch';
 import glitchShader from './curveLabelGlitch.wgsl?raw';
@@ -24,6 +25,7 @@ export class CurveLabelPass {
   private lines?:GPURenderPipeline;
   private text?:GPURenderPipeline;
   private blocks?:GPURenderPipeline;
+  private lockIcon?:GPURenderPipeline;
   private layout?:GPUBindGroupLayout;
   private readonly warned=new Set<string>();
   render(device:GPUDevice,encoder:GPUCommandEncoder,color:GPUTextureView,depth:GPUTextureView,
@@ -47,7 +49,7 @@ export class CurveLabelPass {
       const distance=follow.orthographic?1:spec.depth;
       const halfWidth=distance/Math.max(1e-5,Math.abs(follow.projectionX)),halfHeight=distance/Math.max(1e-5,Math.abs(follow.projectionY));
       const pixelScale=camera.viewport.height/Math.max(1,camera.referenceSize?.height??camera.viewport.height);
-      const data=new Float32Array(88);
+      const data=new Float32Array(108);
       data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix),0);data.set(layer.worldMatrix,16);
       data.set([...follow.right,halfWidth],32);data.set([...follow.up,halfHeight],36);
       data.set([...follow.forward,0],40);data.set([...follow.position,0],44);
@@ -62,6 +64,17 @@ export class CurveLabelPass {
       data.set([(markerColor>>16&255)/255,(markerColor>>8&255)/255,(markerColor&255)/255,spec.trackingGlow],80);
       const glitch=curveLabelGlitchEvent(time);
       data.set([glitch.age,glitch.event,spec.glitchStrength,spec.rotationRange*Math.PI/180],84);
+      const lock=curveLabelLock(spec,time),live=curveLabelCameraFrame(camera);
+      const liveDistance=live.orthographic?1:spec.depth;
+      data.set([...live.right,liveDistance/Math.max(1e-5,Math.abs(live.projectionX))],88);
+      data.set([...live.up,liveDistance/Math.max(1e-5,Math.abs(live.projectionY))],92);
+      data.set([...live.forward,0],96);data.set([...live.position,0],100);
+      data.set(lock?[lock.card,lock.amount,lock.age,lock.corner]:[-1,0,0,0],104);
+      const missingLocks=spec.lockCount-curveLabelLocks(spec).length;
+      const lockWarning=`${layer.layerId}:locks:${spec.lockCount}:${spec.cycle}:${spec.dutyCycle}:${spec.lockDuration}`;
+      if(missingLocks>0&&!this.warned.has(lockWarning)){
+        log.warn('Curve Scan Labels: some camera locks need longer visible card lifetimes.',{layerId:layer.layerId,missingLocks});this.warned.add(lockWarning);
+      }
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
       const sourceAnchors=curveLabelAnchors(curves.starts,curves.counts,spec);
@@ -90,6 +103,7 @@ export class CurveLabelPass {
       pass.setBindGroup(0,group);pass.setPipeline(this.lines!);pass.draw(6,spec.count*(132+36*maxCopies));
       pass.setPipeline(this.text!);pass.draw(6,spec.count*LABEL_GLYPHS*(maxCopies+1));
       if(spec.glitchStrength>0&&glitch.age>=0&&glitch.age<=3){pass.setPipeline(this.blocks!);pass.draw(6,spec.count*6*(maxCopies+1));}
+      if(lock&&lock.amount>0){pass.setPipeline(this.lockIcon!);pass.draw(6,20);}
       pass.end();
     }
   }
@@ -104,7 +118,7 @@ export class CurveLabelPass {
       vertex:{module,entryPoint},fragment:{module,entryPoint:'fragment',targets:[{format:'rgba16float',blend:{
         color:{srcFactor:'one',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}}}]},
       primitive:{topology:'triangle-list'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less-equal'}});
-    this.lines=pipeline('lines');this.text=pipeline('text');this.blocks=pipeline('blocks');
+    this.lines=pipeline('lines');this.text=pipeline('text');this.blocks=pipeline('blocks');this.lockIcon=pipeline('lockIcon');
   }
-  dispose():void{this.tracking.dispose();this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.blocks=undefined;this.layout=undefined;this.warned.clear();}
+  dispose():void{this.tracking.dispose();this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.blocks=undefined;this.lockIcon=undefined;this.layout=undefined;this.warned.clear();}
 }

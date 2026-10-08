@@ -685,3 +685,10 @@ Window Echoes now produces 6–20 parallel copies for occasional 2.4–4.8-secon
 ### Emissive scan-window glitches
 
 The diagonal 12-second glitch wave now warps window outlines, shears them into bands and changes groups of glyphs in size. Bright RGB fringes, local shader halos and short rectangular/orbital wireframe fragments strengthen the effect without a fullscreen blur pass. Connection lines morph through subdivided three-dimensional loops, retaining their exact point/card attachments and returning to straight leaders after the wave. Tracking ring positions and scene geometry remain unchanged.
+
+
+### Camera alignment and brief camera locks
+
+Window Rotation uses smooth independent excursions up to the configured angle, followed by a camera-parallel rest. Yaw, pitch and roll all settle with zero angular velocity; depth travel and position drift continue. Camera Follow retains its sampled delay during fast camera moves and catches up after the camera settles. Seeking evaluates the same pose without a playback-history simulation.
+
+**Camera Locks** optionally schedules a limited number of short corner docks. **First Camera Lock**, **Camera Lock Interval** and **Camera Lock Hold** control the timing; a hold lasts 2–3 seconds, with a 500-ms dock and a 700-ms release. The scheduler chooses an existing fully visible appearance near each requested time, keeping intro/outro sounds and card lifetimes unchanged. If no card stays visible long enough, the renderer logs the missing lock count so the lifetime can be increased. A docked card uses the current camera pose exactly, temporarily overriding delayed floating position/rotation. A closing padlock, brief lock flash and rapidly scrolling priority text identify the state. Release restores normal readouts, camera lag and floating motion. This is a raster annotation pass, with no physics simulation or geometry readback.

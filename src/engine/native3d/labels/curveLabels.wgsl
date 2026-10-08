@@ -25,7 +25,7 @@ fn signalColor(card:u32,base:vec3f)->vec3f {
  return mix(base,orange,amount);
 }
 fn cardPoint(card:u32,q:vec2f,copy:u32)->vec3f {
- let trail=f32(copy);
+ let trail=f32(copy)*(1.-cameraLockAmount(card));
  return projectedCardPoint(card,q,offsets[card].xy)+p.forward.xyz*p.arrangement.z*.045*trail
    +p.right.xyz*p.right.w*.022*trail+p.up.xyz*p.up.w*.014*trail;
 }
@@ -35,7 +35,7 @@ fn windowPoint(card:u32,q:vec2f,copy:u32)->vec3f {
 fn echoAlpha(card:u32,copy:u32)->f32 {
  if(copy==0u){return 1.;}
  let decor=anchors[card*4u+3u];
- return select(0.,decor.y*.65*pow(.90,f32(copy-1u)),f32(copy)<=decor.x);
+ return select(0.,decor.y*.65*pow(.90,f32(copy-1u)),f32(copy)<=decor.x)*(1.-cameraLockAmount(card));
 }
 fn cardPhase(card:u32)->f32 {
  return max(0.,p.clock.x-anchors[card*4u].w);
@@ -150,6 +150,34 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  var out:Out;out.position=p.vp*vec4f(windowPoint(card,position,copy),1);out.uv=corner(vertex);out.kind=select(3u,4u,sphere);
  out.weight=0.;out.glitch=amount;out.accent=0.;out.tint=mix(vec3f(.1,.9,1.),vec3f(1.,.16,.25),glitchRandom(seed+6.));
  out.alpha=fade(card)*echoAlpha(card,copy)*amount*.85*select(0.,1.,glitchRandom(seed+11.)<.3+amount*.65)*smoothstep(.6,1.,life(card));return out;
+}
+// Twenty line pieces form an animated shackle, body and keyhole in card-local space.
+@vertex fn lockIcon(@builtin(vertex_index) vertex:u32,@builtin(instance_index) item:u32)->Out {
+ let card=u32(max(0.,p.lock.x));let amount=cameraLockAmount(card);
+ let corners=array<vec2f,5>(vec2f(-.07,-.04),vec2f(.07,-.04),vec2f(.07,.05),vec2f(-.07,.05),vec2f(-.07,-.04));
+ var a=vec2f(0);var b=vec2f(0);
+ if(item<4u){a=corners[item];b=corners[item+1u];}
+ else if(item<16u){
+   let angle=f32(item-4u)*3.14159265/12.;let next=angle+3.14159265/12.;
+   let open=(1.-amount)*.085;
+   a=vec2f(cos(angle)*.052+open,.05+sin(angle)*.073+open);
+   b=vec2f(cos(next)*.052+open,.05+sin(next)*.073+open);
+ }else{
+   let angle=f32(item-16u)*6.2831853/4.;let next=angle+6.2831853/4.;
+   a=vec2f(cos(angle),sin(angle))*.014;b=vec2f(cos(next),sin(next))*.014;
+ }
+ let inset=select(1.,.76,roundCard(card));let center=vec2f(-.36,.285)*inset;
+ // Correct for each window's aspect, so even square and circular cards have a clear padlock.
+ let aspect=p.up.w*cardMetrics(card).y/max(p.right.w*cardMetrics(card).x,.001);
+ a=center+a*vec2f(aspect,1.);b=center+b*vec2f(aspect,1.);
+ let ca=p.vp*vec4f(cardPoint(card,a,0u),1);let cb=p.vp*vec4f(cardPoint(card,b,0u),1);
+ let direction=(cb.xy/max(cb.w,.001)-ca.xy/max(ca.w,.001))*p.viewport.xy;
+ let normal=vec2f(-direction.y,direction.x)/max(length(direction),.001);let q=corner(vertex);
+ let weight=max(1.,p.metrics.z*1.4);let spread=weight*3.;var clip=mix(ca,cb,q.x);
+ clip=vec4f(clip.xy+normal*(q.y-.5)*spread*2./p.viewport.xy*clip.w,clip.zw);
+ var out:Out;out.position=clip;out.uv=vec2f(q.x,(q.y-.5)*spread);out.kind=0u;out.weight=weight;out.accent=0.;out.glitch=0.;
+ out.tint=mix(p.color.rgb,vec3f(1.,.86,.24),amount)*(1.+exp(-pow((p.lock.z-.5)/.11,2.)));
+ out.alpha=fade(card)*smoothstep(0.,.2,amount);return out;
 }
 @fragment fn fragment(in:Out)->@location(0) vec4f {
  var coverage=1.;

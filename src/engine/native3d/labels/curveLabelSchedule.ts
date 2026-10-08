@@ -52,6 +52,7 @@ export function curveLabelReveal(spec:CurveLabelSpec,time:number,episode:CurveLa
 }
 export interface CurveLabelCue { card:number; cycle:number; kind:'intro'|'outro'; time:number }
 export function curveLabelCues(spec:CurveLabelSpec,start:number,end:number):CurveLabelCue[] {
+  if(!Number.isFinite(start)||!Number.isFinite(end)||end<start)throw new Error('Curve Scan Labels: cue range must be finite and ordered.');
   const events:CurveLabelCue[]=[];
   for(let card=0;card<spec.count;card++){
     let episode=curveLabelEpisode(spec,start,card);

@@ -1,3 +1,4 @@
+import {curveLabelLock,curveLabelLocks,curveLabelLockReadouts,LOCK_DOCK_SECONDS,LOCK_RELEASE_SECONDS} from '../../src/engine/native3d/labels/curveLabelLock';
 import {describe,it,expect} from 'vitest';
 import {CURVE_LABEL_OPERATOR,readCurveLabels} from '../../src/services/operators/geometry/curveLabels';
 import {curveLabelCues,curveLabelEpisode,curveLabelReveal} from '../../src/engine/native3d/labels/curveLabelSchedule';
@@ -42,5 +43,45 @@ describe('independent scan appearances and audio cue schedule',()=>{
   for(const time of [42,1,58,22,12,42])for(let card=0;card<12;card++)curveLabelEpisode(s,time,card);
   expect(curveLabelCues(s,0,59)).toEqual(cues);
   expect(()=>curveLabelEpisode(s,Infinity,0)).toThrow(/finite/);
+ });
+});
+
+
+describe('brief camera locks within existing appearances',()=>{
+ it('selects three separate visible cards without moving any appearance/audio boundaries',()=>{
+  const base=spec(),s={...base,lockCount:3},events=curveLabelLocks(s);
+  expect(events).toHaveLength(3);
+  expect(curveLabelCues(s,0,59)).toEqual(curveLabelCues(base,0,59));
+  expect(new Set(events.map(e=>e.corner)).size).toBe(3);
+  for(const e of events){
+   expect(e.start).toBeGreaterThanOrEqual(s.lockStart+e.event*s.lockInterval);
+   expect(e.end).toBeLessThan(59);
+   for(let t=e.start;t<e.end;t+=.05){
+    expect(curveLabelReveal(s,t,curveLabelEpisode(s,t,e.card)).reveal).toBe(1);
+    if(t>=e.start+LOCK_DOCK_SECONDS&&t<=e.end-LOCK_RELEASE_SECONDS)expect(curveLabelLock(s,t)?.amount).toBe(1);
+   }
+   expect(e.end-e.start-LOCK_DOCK_SECONDS-LOCK_RELEASE_SECONDS).toBeCloseTo(2.5);
+   expect(curveLabelLock(s,e.start)?.amount).toBe(0);
+   expect(curveLabelLock(s,e.start+.001)!.amount).toBeLessThan(1e-6);
+   expect(curveLabelLock(s,e.end-.001)!.amount).toBeLessThan(1e-6);
+   expect(curveLabelLock(s,e.end)).toBeUndefined();
+  }
+  for(let i=1;i<events.length;i++)expect(events[i].start).toBeGreaterThan(events[i-1].end);
+ });
+ it('restores readouts, scrubs deterministically and scrolls distinct rapid text during the lock',()=>{
+  const s={...spec(),lockCount:3},e=curveLabelLocks(s)[1],t=e.start+1;
+  const lock=curveLabelLock(s,t)!;
+  const rows=curveLabelLockReadouts(lock);
+  expect(rows[0]).toContain('LOCK');expect(rows).toHaveLength(4);
+  expect(curveLabelLockReadouts(curveLabelLock(s,t+.1)!)[1]).not.toBe(rows[1]);
+  curveLabelLock(s,58);curveLabelLock(s,0);
+  expect(curveLabelLock(s,t)).toEqual(lock);
+  expect(curveLabelLock(s,e.end+.001)).toBeUndefined();
+  expect(curveLabelLocks({...s,cycle:1,dutyCycle:.25})).toHaveLength(0);
+ });
+ it('rejects unbounded cue queries instead of entering an infinite scheduling loop',()=>{
+  expect(()=>curveLabelCues(spec(),0,Infinity)).toThrow(/finite/);
+  expect(()=>curveLabelCues(spec(),3,2)).toThrow(/ordered/);
+  expect(()=>curveLabelLock(spec(),NaN)).toThrow(/finite/);
  });
 });

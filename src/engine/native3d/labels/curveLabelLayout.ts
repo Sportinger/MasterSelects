@@ -1,3 +1,4 @@
+import {curveLabelLock,curveLabelLockReadouts} from './curveLabelLock';
 import {curveLabelEpisode,curveLabelReveal} from './curveLabelSchedule';
 import {changingCurveReadouts} from './curveLabelReadout';
 import type { CurveLabelSpec } from '../../../services/operators/geometry/curveLabels';
@@ -29,7 +30,13 @@ export function curveLabelLife(spec:CurveLabelSpec,time:number,card:number):{pha
 /** Coordinate slots (256+) are formatted in the shader from the current world-space anchor. */
 export function curveLabelGlyphs(spec:CurveLabelSpec,time:number):Uint32Array {
   const out=new Uint32Array(spec.count*LABEL_GLYPHS).fill(32),titles=spec.titles.toUpperCase().split('|').filter(Boolean);
+  const lock=curveLabelLock(spec,time);
   for(let card=0;card<spec.count;card++){
+    if(lock?.card===card&&lock.amount>.01){
+      curveLabelLockReadouts(lock).forEach((row,r)=>{for(let c=0;c<Math.min(LABEL_COLUMNS,row.length);c++)
+        out[card*LABEL_GLYPHS+r*LABEL_COLUMNS+c]=row.charCodeAt(c)+(r===0?2048:0);});
+      continue;
+    }
     const {cycle}=curveLabelEpisode(spec,time,card);
     const readout=changingCurveReadouts(titles[(cycle+card)%titles.length]??'FIBER TRACK',time,card,spec.textScramble),title=readout.title;
     const rows=[title,`NODE ${String(card+1).padStart(2,'0')}  /  ${readout.status}`,'X +000.00  Y +000.00','Z +000.00  /  LIVE'];

@@ -36,7 +36,7 @@ describe('Curve Scan Labels',()=>{
     expect(()=>compileGeometryGraph(g,geometryParameterReader({}))).toThrow('uniform');
   });
   it('reports malformed settings rather than silently dropping labels',()=>{
-    for(const invalid of [{lag:NaN},{count:1.2},{color:'blue'},{markerColor:'yellow'},{trackingGlow:2},{glitchStrength:2},{leaderWeight:0},{ringWeight:9},{titles:'ä'},{titles:'|EMPTY'},{width:50},{count:12,height:.4},{avoidance:2},{drift:-1},{style:'unknown'},{transition:.6},{dutyCycle:0},{depthSpread:.6,depthMotion:.6}])
+    for(const invalid of [{lag:NaN},{lockCount:1.5},{lockCount:17},{lockDuration:4},{lockInterval:0},{count:1.2},{color:'blue'},{markerColor:'yellow'},{trackingGlow:2},{glitchStrength:2},{leaderWeight:0},{ringWeight:9},{titles:'ä'},{titles:'|EMPTY'},{width:50},{count:12,height:.4},{avoidance:2},{drift:-1},{style:'unknown'},{transition:.6},{dutyCycle:0},{depthSpread:.6,depthMotion:.6}])
       expect(isCurveLabels({...spec(),...invalid})).toBe(false);
   });
   it('keeps anchors on their selected variable-length strands, including wrapping',()=>{
@@ -78,6 +78,17 @@ describe('Curve Scan Labels',()=>{
     expect(pose(10.1).position[0]).toBe(0);
     expect(pose(11).position[0]).toBeGreaterThan(0);expect(pose(11).position[0]).toBeLessThan(5);
     expect(pose(13).position[0]).toBe(5);
+  });
+
+  it('returns to the exact current camera orientation after a rapid turn settles',()=>{
+    const cam=(t:number)=>{const a=t<10?0:1.1;return {viewMatrix:Float32Array.of(Math.cos(a),0,-Math.sin(a),0,0,1,0,0,Math.sin(a),0,Math.cos(a),0,0,0,-8,1),
+      projectionMatrix:Float32Array.of(2,0,0,0,0,2,0,0,0,0,1,1,0,0,0,1),cameraPosition:{x:0,y:0,z:8}} as SceneCamera;};
+    const layers=[{kind:'strands',strands:{program:{render:{labels:{...spec(),lag:1.8}}}}}] as SceneStrandLayer[];
+    const pose=(t:number)=>withCurveLabelCameras(cam(t),layers,t,cam).curveLabelCameras!['1.8'];
+    expect(pose(10.1).right[0]).toBeCloseTo(1);
+    expect(pose(12).right[0]).toBeGreaterThan(Math.cos(1.1));
+    expect(pose(15).right[0]).toBeCloseTo(Math.cos(1.1));
+    expect(pose(15).right[2]).toBeCloseTo(Math.sin(1.1));
   });
 
   it('preserves mixed styles in transported programs and animates highlighted title words',()=>{
