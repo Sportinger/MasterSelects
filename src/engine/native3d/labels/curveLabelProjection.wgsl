@@ -1,17 +1,19 @@
 struct Params {
   vp:mat4x4f, world:mat4x4f, right:vec4f, up:vec4f, forward:vec4f, eye:vec4f,
   viewport:vec4f, color:vec4f, metrics:vec4f, arrangement:vec4f, clock:vec4f, motion:vec4f, tracking:vec4f, animation:vec4f, marker:vec4f, glitch:vec4f,
-  liveRight:vec4f, liveUp:vec4f, liveForward:vec4f, liveEye:vec4f, lock:vec4f,
+  liveRight:vec4f, liveUp:vec4f, liveForward:vec4f, liveEye:vec4f, lock:vec4f, intro:vec4f, headline:vec4f, headlineMotion:vec4f,
 }
 struct Point { position:vec4f, normal:vec4f, tangent:vec4f }
 fn roundCard(card:u32)->bool {return p.motion.z>.5&&(card%4u==1u||card%4u==2u);}
+fn introCard(card:u32)->bool {return p.intro.z>0.&&(abs(f32(card)-p.intro.x)<.1||abs(f32(card)-p.intro.y)<.1);}
 fn cardMetrics(card:u32)->vec2f {
- if(p.motion.z<.5){return p.metrics.xy;}
+ let introScale=select(1.,p.intro.z,introCard(card));
+ if(p.motion.z<.5){return p.metrics.xy*introScale;}
  let phase=fract(f32(card)*.618034+.17);
  let size=vec2f(mix(.78,1.18,phase),mix(.82,1.3,fract(phase+.37)));
  var metrics=p.metrics.xy*mix(vec2f(1),size,p.motion.w);
  if(card%4u>=2u){metrics.y=metrics.x*p.right.w/max(p.up.w,.0001);}
- return metrics;
+ return metrics*introScale;
 }
 fn labelRowSpacing()->f32 {
  let rows=ceil(p.arrangement.w*.5);
@@ -38,11 +40,12 @@ fn cameraLockAmount(card:u32)->f32 {
 }
 fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
  let rows=ceil(p.arrangement.w*.5);let row=f32(card/2u);let side=select(-1.,1.,card%2u==1u);
- let depth=p.arrangement.z*(1.+sin(f32(card)*2.399963+.5)*p.tracking.w
+ let introDistance=select(1.,p.intro.w,introCard(card));
+ let depth=introDistance*p.arrangement.z*(1.+sin(f32(card)*2.399963+.5)*p.tracking.w
    +sin(p.clock.x*p.animation.x*.32+f32(card)*1.91)*p.animation.y);
  let center=p.eye.xyz+p.forward.xyz*depth
-   +p.right.xyz*p.right.w*(side*p.arrangement.x+shift.x)
-   +p.up.xyz*p.up.w*(((rows-1.)*.5-row)*labelRowSpacing()+shift.y);
+   +p.right.xyz*p.right.w*introDistance*(side*p.arrangement.x+shift.x)
+   +p.up.xyz*p.up.w*introDistance*(((rows-1.)*.5-row)*labelRowSpacing()+shift.y);
  let rotation=cardRotation(card);let yaw=rotation.x;let pitch=rotation.y;let roll=rotation.z;
  let tiltedRight=p.right.xyz*cos(yaw)+p.forward.xyz*sin(yaw);
  let normal=p.forward.xyz*cos(yaw)-p.right.xyz*sin(yaw);

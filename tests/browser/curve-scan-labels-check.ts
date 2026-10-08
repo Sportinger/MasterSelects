@@ -1,3 +1,4 @@
+import {curveLabelIntroState} from '../../src/engine/native3d/labels/curveLabelIntro';
 import {probeStrandIds} from './strandIdsGpuProbe';
 import {curveLabelLocks} from '../../src/engine/native3d/labels/curveLabelLock';
 import {curveLabelEpisode,curveLabelCues} from '../../src/engine/native3d/labels/curveLabelSchedule';
@@ -39,7 +40,7 @@ try{
   const clear=encoder.beginRenderPass({colorAttachments:[{view:hdr.createView(),loadOp:'clear',storeOp:'store',clearValue:[0,0,0,0]}],depthStencilAttachment:{view:depth.createView(),depthLoadOp:'clear',depthStoreOp:'store',depthClearValue}});clear.end();
   labels.render(device,encoder,hdr.createView(),depth.createView(),[plan],camera,time,temporary);
   const read=device.createBuffer({size:width*height*8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
-  encoder.copyTextureToBuffer({texture:hdr},{buffer:read,bytesPerRow:width*8},[width,height]);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
+  encoder.copyTextureToBuffer({texture:hdr},{buffer:read,bytesPerRow:width*8},[width,height]);device.queue.submit([encoder.finish()]);labels.afterSubmit();await read.mapAsync(GPUMapMode.READ);
   const values=Array.from(new Uint16Array(read.getMappedRange()),half);read.unmap();read.destroy();temporary.forEach(b=>b.destroy());return values;
  };
 
@@ -80,6 +81,20 @@ try{
  result.markerSurface={buried:alphaSum(buried),surface:alphaSum(onSurface),foreground:alphaSum(hiddenBehindOther)};
 
  Object.assign(spec,initial);
+
+ const headlineOriginal={...spec};
+ Object.assign(spec,{introSpread:5,lifetimeVariation:1,scheduleSeed:17,introTitles:'KUNST? > ART > कला | KANN WEG.'});
+ const whiteCount=(pixels:number[])=>pixels.reduce((count,n,i)=>count+(i%4===0&&n>.9&&pixels[i+1]>.9&&pixels[i+2]>.9?1:0),0);
+ const headlineEarly=await draw(.6);
+ const firstIntro=curveLabelEpisode(spec,0,0),hindiTime=firstIntro.birth+firstIntro.visible*.84;
+ const hindi=await draw(hindiTime),hindiState=curveLabelIntroState(spec,hindiTime);
+ const movingHeadline=await draw(2.1);spec.introTextMotion=0;spec.introTextDepth=0;const flatHeadline=await draw(2.1);
+ const headlineDepthDifference=movingHeadline.reduce((count,n,i)=>count+(Math.abs(n-flatHeadline[i])>.1?1:0),0);
+ const lateHeadlines=await draw(40);spec.introTitles='';const ordinaryLate=await draw(40);
+ if(whiteCount(headlineEarly)<100||whiteCount(hindi)<50||hindiState[0].row!==2||headlineDepthDifference<100||lateHeadlines.some((n,i)=>n!==ordinaryLate[i]))
+   throw new Error('Headlines must render white shaped words, change language, move independently in depth and end after the first episode.');
+ result.headlines={earlyWhite:whiteCount(headlineEarly),hindiWhite:whiteCount(hindi),hindiState,headlineDepthDifference};
+ Object.assign(spec,headlineOriginal);
  const first=await draw();
  // Change only GPU positions; the CPU rest curve remains unchanged.
  packed[0]=.8;packed[12]=.8;device.queue.writeBuffer(positions,0,packed);
@@ -88,7 +103,7 @@ try{
  const shifted=Math.round(width/2+.8*camera.projectionMatrix[0]/8*width/2);
  // A projected obstacle must move a card toward clear space, reproducibly.
  const avoidance=new CurveLabelAvoidance();
- const uniform=device.createBuffer({size:108*4,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+ const uniform=device.createBuffer({size:120*4,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
  const obstacle=new Float32Array(12*81);
  for(let y=0;y<9;y++)for(let x=0;x<9;x++){
    const i=(y*9+x)*12;obstacle[i]=(-.70+(x-4)*.012)*8/camera.projectionMatrix[0];
@@ -96,7 +111,7 @@ try{
  }
  const cloud=device.createBuffer({size:obstacle.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(cloud,0,obstacle);
  const placement=async(strength:number,time:number,source=cloud,pointCount=81,cardCount=2)=>{
-   const data=new Float32Array(108);data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));data.set(identity,16);
+   const data=new Float32Array(120);data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));data.set(identity,16);
    data.set([1,0,0,5/camera.projectionMatrix[0]],32);data.set([0,1,0,5/camera.projectionMatrix[5]],36);
    data.set([0,0,-1,0],40);data.set([0,0,8,0],44);data.set([.43,.13,1,6],56);
    data.set([.74,.48,5,cardCount],60);data.set([time,8,0,0],64);data.set([.65,strength,0,0],68);data[76]=1;device.queue.writeBuffer(uniform,0,data);
@@ -180,7 +195,7 @@ try{
  const depthPipeline=device.createComputePipeline({layout:'auto',compute:{module:depthModule,entryPoint:'probe'}});
  const poseBuffer=device.createBuffer({size:6*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
  const probeDepth=async(time:number)=>{
-   const data=new Float32Array(108);data.set([1,0,0,1],32);data.set([0,1,0,1],36);data.set([0,0,-1,0],40);data.set([0,0,8,0],44);
+   const data=new Float32Array(120);data.set([1,0,0,1],32);data.set([0,1,0,1],36);data.set([0,0,-1,0],40);data.set([0,0,8,0],44);
    data.set([.43,.11,1,6],56);data.set([.74,.3,5,6],60);data[64]=time;data[75]=.26;data[76]=1;data[77]=.3;device.queue.writeBuffer(uniform,0,data);
    const encoder=device.createCommandEncoder(),pass=encoder.beginComputePass();pass.setPipeline(depthPipeline);
    pass.setBindGroup(0,device.createBindGroup({layout:depthPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:poseBuffer}}]}));pass.dispatchWorkgroups(6);pass.end();
@@ -197,7 +212,7 @@ try{
  const rotationPipeline=device.createComputePipeline({layout:'auto',compute:{module:rotationModule,entryPoint:'probe'}});
  const angles=device.createBuffer({size:12*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
  const probeRotation=async(time:number)=>{
-  const data=new Float32Array(108);data[64]=time;data[68]=.65;data[76]=.35;data[87]=Math.PI/4;device.queue.writeBuffer(uniform,0,data);
+  const data=new Float32Array(120);data[64]=time;data[68]=.65;data[76]=.35;data[87]=Math.PI/4;device.queue.writeBuffer(uniform,0,data);
   const encoder=device.createCommandEncoder(),pass=encoder.beginComputePass();pass.setPipeline(rotationPipeline);
   pass.setBindGroup(0,device.createBindGroup({layout:rotationPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:angles}}]}));pass.dispatchWorkgroups(12);pass.end();
   const read=device.createBuffer({size:192,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});encoder.copyBufferToBuffer(angles,0,read,0,192);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
@@ -230,7 +245,7 @@ try{
   const right=[Math.cos(yaw),0,-Math.sin(yaw)],forward=[-Math.sin(yaw),0,-Math.cos(yaw)],eye=[3,2,10];
   const view=Float32Array.of(right[0],0,-forward[0],0,0,1,0,0,right[2],0,-forward[2],0,
     -(right[0]*eye[0]+right[2]*eye[2]),-eye[1],forward[0]*eye[0]+forward[2]*eye[2],1);
-  const d=new Float32Array(108);d.set(multiplyMat4(camera.projectionMatrix,view));
+  const d=new Float32Array(120);d.set(multiplyMat4(camera.projectionMatrix,view));
   d.set([1,0,0,5/camera.projectionMatrix[0]],32);d.set([0,1,0,5/camera.projectionMatrix[5]],36);
   d.set([0,0,-1,0],40);d.set([0,0,8,0],44);d.set([.43,.11,1,6],56);d.set([.74,.3,5,12],60);
   d[64]=20;d[68]=.65;d[75]=.3;d[76]=.35;d[77]=.3;d[87]=Math.PI/4;
@@ -253,7 +268,7 @@ try{
  let q=cardMetrics(id.x);dimensions[id.x]=vec4f(q.x*p.right.w,q.y*p.up.w,0,0);}`});
  const metricPipeline=device.createComputePipeline({layout:'auto',compute:{module:metricModule,entryPoint:'probe'}});
  const dims=device.createBuffer({size:64,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
- const metricData=new Float32Array(108);metricData[35]=2;metricData[39]=5;metricData.set([.43,.11,1,6],56);metricData[70]=1;metricData[71]=.85;device.queue.writeBuffer(uniform,0,metricData);
+ const metricData=new Float32Array(120);metricData[35]=2;metricData[39]=5;metricData.set([.43,.11,1,6],56);metricData[70]=1;metricData[71]=.85;device.queue.writeBuffer(uniform,0,metricData);
  const metricEncoder=device.createCommandEncoder(),metricPass=metricEncoder.beginComputePass();metricPass.setPipeline(metricPipeline);
  metricPass.setBindGroup(0,device.createBindGroup({layout:metricPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:dims}}]}));metricPass.dispatchWorkgroups(4);metricPass.end();
  const metricRead=device.createBuffer({size:64,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});metricEncoder.copyBufferToBuffer(dims,0,metricRead,0,64);device.queue.submit([metricEncoder.finish()]);await metricRead.mapAsync(GPUMapMode.READ);
@@ -266,7 +281,7 @@ try{
  const selections=device.createBuffer({size:64,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(selections,0,Float32Array.of(0,1,0,0,0,1,0,8,0,4,4,4,0,0,0,0));
  const topology=device.createBuffer({size:16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(topology,0,Uint32Array.of(0,4,4,4));
  const track=async(blend:number)=>{
-   const data=new Float32Array(108);data[63]=1;data[72]=blend;data[74]=1;data[78]=1;device.queue.writeBuffer(uniform,0,data);
+   const data=new Float32Array(120);data[63]=1;data[72]=blend;data[74]=1;data[78]=1;device.queue.writeBuffer(uniform,0,data);
    const encoder=device.createCommandEncoder(),temporary:GPUBuffer[]=[];const output=tracker.encode(device,encoder,uniform,trackingPoints,selections,topology,1,temporary);
    const read=device.createBuffer({size:16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});encoder.copyBufferToBuffer(output,0,read,0,16);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
    const values=[...new Float32Array(read.getMappedRange())];read.unmap();read.destroy();temporary.forEach(b=>b.destroy());return values;
@@ -321,7 +336,7 @@ try{
    else {result[i]=vec4f(windowGlyphScale(0u,f32(i-10u)),0,0,0);}
  }`});
  const shapePipeline=device.createComputePipeline({layout:'auto',compute:{module:shapeModule,entryPoint:'main'}});
- const shapeData=new Float32Array(108);shapeData.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));
+ const shapeData=new Float32Array(120);shapeData.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));
  shapeData.set([1,0,0,1],32);shapeData.set([0,1,0,1],36);shapeData.set([0,0,-1,0],40);shapeData.set([0,0,8,0],44);
  shapeData.set([.43,.13,1,6],56);shapeData.set([0,.3,5,1],60);shapeData[64]=13.8;shapeData[76]=1;shapeData.set([1.8,0,1,0],84);device.queue.writeBuffer(uniform,0,shapeData);
  const zeroOffset=device.createBuffer({size:16,usage:GPUBufferUsage.STORAGE});

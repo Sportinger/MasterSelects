@@ -1,5 +1,7 @@
+import {parseCurveLabelIntro} from '../../src/services/operators/geometry/curveLabelIntro';
+import {curveLabelIntroState} from '../../src/engine/native3d/labels/curveLabelIntro';
 import {parseCurveLabelAnchors} from '../../src/services/operators/geometry/curveLabelAnchors';
-import {curveLabelOpeningRank} from '../../src/engine/native3d/labels/curveLabelSchedule';
+import {curveLabelEpisode,curveLabelOpeningRank} from '../../src/engine/native3d/labels/curveLabelSchedule';
 import {changingCurveReadouts} from '../../src/engine/native3d/labels/curveLabelReadout';
 import {curveLabelDecoration} from '../../src/engine/native3d/labels/curveLabelDecoration';
 import {describe,it,expect} from 'vitest';
@@ -18,6 +20,24 @@ const graph=()=>{
   g.edges.push({id:'labels-in',from:edge.from,output:'curves',to:'labels',input:'curves'});edge.from='labels';return g;
 };
 describe('Curve Scan Labels',()=>{
+  it('shapes whole multilingual intro phrases on the actual first two cards, only in their first episodes',()=>{
+    const introTitles='Kunst? > art > कला | Kann weg.';
+    expect(parseCurveLabelIntro(introTitles)).toEqual([['KUNST?','ART','कला'],['KANN WEG.']]);
+    const s={...spec(),count:12,height:.11,lifetimeVariation:1,scheduleSeed:17,introSpread:5,introTitles};
+    const initial=curveLabelIntroState(s,0);expect(initial.map(v=>v.card)).toEqual([0,10]);expect(initial.map(v=>v.row)).toEqual([0,3]);
+    const episode=curveLabelEpisode(s,0,0);
+    const at=(fraction:number)=>curveLabelIntroState(s,episode.birth+episode.visible*fraction)[0];
+    expect(at(.4)).toMatchObject({row:0,pulse:0});
+    expect(at(.55)).toMatchObject({row:1,pulse:expect.closeTo(1,6)});
+    expect(at(.8).row).toBe(2);expect(at(.99).card).toBe(0);expect(at(1).card).toBe(-1);
+    const late=curveLabelIntroState(s,50);expect(late.every(v=>v.card===-1)).toBe(true);
+    expect(curveLabelIntroState(s,0)).toEqual(initial);
+    const g=graph();g.nodes.find(n=>n.id==='labels')!.constants={introTitles};
+    const program=compileGeometryGraph(g,geometryParameterReader({}));expect(program.render!.labels!.introTitles).toBe(introTitles);
+    expect(isGeometryProgram(JSON.parse(JSON.stringify(program)))).toBe(true);
+    for(const invalid of ['one||two','one>','a|b|c','x'.repeat(33),'line\nnext'])expect(()=>parseCurveLabelIntro(invalid)).toThrow(/Intro Titles/);
+  });
+
   it('pins chosen cards to exact material coordinates without changing released destinations',()=>{
     const s={...spec(),count:3,firstStrand:0,strandStep:1,start:.4,step:.1,anchorOverrides:'0:1@0.25 | 2:0@1'};
     const starts=Uint32Array.of(0,5),counts=Uint32Array.of(5,9);

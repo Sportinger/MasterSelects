@@ -1,3 +1,7 @@
+import headlineShader from './curveLabelHeadlines.wgsl?raw';
+import {CurveLabelHeadlineCache} from './CurveLabelHeadlineAtlas';
+import {curveLabelIntroState} from './curveLabelIntro';
+import {parseCurveLabelIntro} from '../../../services/operators/geometry/curveLabelIntro';
 import {curveLabelLock,curveLabelLocks} from './curveLabelLock';
 import {curveLabelEpisode,curveLabelOpeningRank} from './curveLabelSchedule';
 import {curveLabelGlitchEvent} from './curveLabelGlitch';
@@ -22,6 +26,9 @@ export class CurveLabelPass {
   private readonly tracking=new CurveLabelTracking();
   private readonly avoidance=new CurveLabelAvoidance();
   private atlas?:CurveLabelAtlas;
+  private readonly headlineAtlases=new CurveLabelHeadlineCache();
+  private headlineLayout?:GPUBindGroupLayout;
+  private headline?:GPURenderPipeline;
   private lines?:GPURenderPipeline;
   private text?:GPURenderPipeline;
   private blocks?:GPURenderPipeline;
@@ -49,7 +56,7 @@ export class CurveLabelPass {
       const distance=follow.orthographic?1:spec.depth;
       const halfWidth=distance/Math.max(1e-5,Math.abs(follow.projectionX)),halfHeight=distance/Math.max(1e-5,Math.abs(follow.projectionY));
       const pixelScale=camera.viewport.height/Math.max(1,camera.referenceSize?.height??camera.viewport.height);
-      const data=new Float32Array(108);
+      const data=new Float32Array(120);
       data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix),0);data.set(layer.worldMatrix,16);
       data.set([...follow.right,halfWidth],32);data.set([...follow.up,halfHeight],36);
       data.set([...follow.forward,0],40);data.set([...follow.position,0],44);
@@ -77,6 +84,11 @@ export class CurveLabelPass {
       if(missingLocks>0&&!this.warned.has(lockWarning)){
         log.warn('Curve Scan Labels: some camera locks need longer visible card lifetimes.',{layerId:layer.layerId,missingLocks});this.warned.add(lockWarning);
       }
+      const intro=curveLabelIntroState(spec,time),hasIntro=intro.some(item=>item.card>=0);
+      const headlineAtlas=hasIntro?this.headlineAtlases.get(device,parseCurveLabelIntro(spec.introTitles??'').flat()):null;
+      data.set([intro[0]?.card??-1,intro[1]?.card??-1,spec.introScale??1.4,spec.introDistance??.78],108);
+      data.set([intro[0]?.row??0,intro[1]?.row??0,intro[0]?.pulse??0,intro[1]?.pulse??0],112);
+      data.set([spec.introTextDepth??.02,spec.introTextMotion??.4,headlineAtlas?.height??256,(spec.introTextOpacity??1)*layer.opacity],116);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
       const sourceAnchors=curveLabelAnchors(curves.starts,curves.counts,spec);
@@ -105,6 +117,12 @@ export class CurveLabelPass {
         depthStencilAttachment:{view:depth,depthLoadOp:'load',depthStoreOp:'store'}});
       pass.setBindGroup(0,group);pass.setPipeline(this.lines!);pass.draw(6,spec.count*(132+36*maxCopies));
       pass.setPipeline(this.text!);pass.draw(6,spec.count*LABEL_GLYPHS*(maxCopies+1));
+      if(headlineAtlas){
+        pass.setBindGroup(1,device.createBindGroup({layout:this.headlineLayout!,entries:[
+          {binding:0,resource:headlineAtlas.texture.createView()},{binding:1,resource:headlineAtlas.sampler},
+          {binding:2,resource:{buffer:headlineAtlas.bounds}}]}));
+        pass.setPipeline(this.headline!);pass.draw(6,2);
+      }
       if(spec.glitchStrength>0&&glitch.age>=0&&glitch.age<=6){pass.setPipeline(this.blocks!);pass.draw(6,spec.count*6*(maxCopies+1));}
       if(lock&&lock.amount>0){pass.setPipeline(this.lockIcon!);pass.draw(6,20);}
       pass.end();
@@ -116,12 +134,20 @@ export class CurveLabelPass {
     this.layout=device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}},
       ...[1,2,3].map(binding=>({binding,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage' as const}})),
       {binding:4,visibility:GPUShaderStage.FRAGMENT,texture:{}},{binding:5,visibility:GPUShaderStage.FRAGMENT,sampler:{}},{binding:6,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}},{binding:7,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}}]});
-    const module=device.createShaderModule({label:'curve-scan-labels',code:common+'\n'+shader+'\n'+glitchShader});
+    const module=device.createShaderModule({label:'curve-scan-labels',code:common+'\n'+shader+'\n'+glitchShader+'\n'+headlineShader});
+    this.headlineLayout=device.createBindGroupLayout({entries:[
+      {binding:0,visibility:GPUShaderStage.FRAGMENT,texture:{}},{binding:1,visibility:GPUShaderStage.FRAGMENT,sampler:{}},
+      {binding:2,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}}]});
+    this.headline=device.createRenderPipeline({layout:device.createPipelineLayout({bindGroupLayouts:[this.layout!,this.headlineLayout]}),
+      vertex:{module,entryPoint:'headlineVertex'},fragment:{module,entryPoint:'headlineFragment',targets:[{format:'rgba16float',blend:{
+        color:{srcFactor:'one',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}}}]},
+      primitive:{topology:'triangle-list'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less-equal'}});
     const pipeline=(entryPoint:string)=>device.createRenderPipeline({layout:device.createPipelineLayout({bindGroupLayouts:[this.layout!]}),
       vertex:{module,entryPoint},fragment:{module,entryPoint:'fragment',targets:[{format:'rgba16float',blend:{
         color:{srcFactor:'one',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}}}]},
       primitive:{topology:'triangle-list'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less-equal'}});
     this.lines=pipeline('lines');this.text=pipeline('text');this.blocks=pipeline('blocks');this.lockIcon=pipeline('lockIcon');
   }
-  dispose():void{this.tracking.dispose();this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.blocks=undefined;this.lockIcon=undefined;this.layout=undefined;this.warned.clear();}
+  afterSubmit():void{this.headlineAtlases.afterSubmit();}
+  dispose():void{this.headlineAtlases.dispose();this.headline=undefined;this.headlineLayout=undefined;this.tracking.dispose();this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.blocks=undefined;this.lockIcon=undefined;this.layout=undefined;this.warned.clear();}
 }

@@ -721,3 +721,11 @@ Curve Scan Labels accepts **Anchor Overrides** such as `0:4@0.18 | 10:2@0.6`. Ca
 Tracking rings and their leader origins sit on the camera-facing yarn envelope instead of the buried centerline, using the profile radius, per-point radius scale and layer scale. Foreground geometry still depth-occludes them; coordinate readouts continue to describe the actual curve point.
 
 Rings trace their circumference during the shared intro, at constant radius and line thickness. The outro retracts the same path in reverse. An analytic ring stroke keeps the glow smooth without overlapping segment halos.
+
+### Multilingual 3D intro headlines
+
+**Intro Titles** replaces the first two cards' initial readouts with bold white headlines. Use `KUNST? > ART > कला | KANN WEG.`: `|` separates the two cards, `>` separates language variants. Whole phrases are shaped as Unicode text rather than individual ASCII glyphs. The first phrase remains through the first 55% of the episode; later phrases change with a short slice/chromatic text glitch. Subsequent card episodes return to ordinary scan readouts. Empty Intro Titles preserves regular cards.
+
+**Intro Card Scale** and **Intro Camera Distance** make these cards larger and closer while retaining camera lag and free-space placement. **Intro Text Depth** separates the text plane from the frame; **Intro Text Motion** adds independent slow 3D drift and rotation. Atlas resources stay outside project data and retire after GPU submission, including multiple label layers.
+
+Intro text has its own opacity (while still following the layer opacity), so white headlines remain bright over dimmer frames. Intro placement contains the enlarged projected card footprint within the shot, including depth and tilt. Readout separators are omitted during the headline episode.

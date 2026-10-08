@@ -43,6 +43,31 @@ fn sidePressure(card:u32)->f32 {
  let difference=(left-right)/128.;
  return sign(difference)*smoothstep(.04,.22,abs(difference));
 }
+// Close intro headlines need their projected footprint, including depth and tilt,
+// rather than the ordinary camera-plane width, to remain inside the first shot.
+fn containIntro(card:u32,initial:vec2f)->vec2f {
+ if(!introCard(card)){return initial;}
+ var shift=initial;
+ for(var iteration=0;iteration<3;iteration++){
+   var low=vec2f(1e10);var high=vec2f(-1e10);
+   for(var corner=0u;corner<4u;corner++){
+     let q=vec2f(select(-.59,.59,corner%2u==1u),select(-.59,.59,corner>=2u));
+     let clip=p.vp*vec4f(projectedCardPoint(card,q,shift),1);
+     if(clip.w<=.001){return shift;}
+     low=min(low,clip.xy/clip.w);high=max(high,clip.xy/clip.w);
+   }
+   let correction=max(vec2f(-.94)-low,vec2f(0))-max(high-vec2f(.94),vec2f(0));
+   if(length(correction)<.0001){break;}
+   let center=p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift),1);
+   let dx=p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift+vec2f(.01,0)),1);
+   let dy=p.vp*vec4f(projectedCardPoint(card,vec2f(0),shift+vec2f(0,.01)),1);
+   let x=(dx.xy/dx.w-center.xy/center.w)/.01;let y=(dy.xy/dy.w-center.xy/center.w)/.01;
+   let determinant=x.x*y.y-x.y*y.x;
+   if(abs(determinant)<1e-6){return shift;}
+   shift+=vec2f(correction.x*y.y-correction.y*y.x,x.x*correction.y-x.y*correction.x)/determinant;
+ }
+ return shift;
+}
 @compute @workgroup_size(16) fn arrange(@builtin(global_invocation_id) id:vec3u){
  let card=id.x;if(card>=u32(p.arrangement.w)){return;}
  let rows=ceil(p.arrangement.w*.5);let row=f32(card/2u);let side=select(-1.,1.,card%2u==1u);
@@ -76,5 +101,5 @@ fn sidePressure(card:u32)->f32 {
    shift=sum/max(total,.0001);
  }
 
- offsets[card]=vec4f(shift,0,0);
+ offsets[card]=vec4f(containIntro(card,shift),0,0);
 }

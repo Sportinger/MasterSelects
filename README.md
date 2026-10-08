@@ -234,3 +234,5 @@ Scan overlays use a slower three-second diagonal glitch front with reduced spati
 Weave’s Final Stillness control can leave only tiny residual circulation in the last seconds, while preserving the start timing and forward loop closure.
 
 Curve Scan Labels supports exact material anchors and amber opening rings that respect randomized card order and appear with their cards.
+
+Scan intros can use large white multilingual headlines on independently moving 3D text planes, then return to normal readouts.

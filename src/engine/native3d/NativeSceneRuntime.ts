@@ -646,6 +646,7 @@ export class NativeSceneRuntime {
     (this.strandIds??=new StrandIdCapture()).remember(targetKey,{device,plans:strandPlans,camera,depth:this.sceneDepthView,time:layerSpaceEffects?.timelineTimeSeconds??0});
     this.pathTrace.afterSubmit(device);
     this.rasterSubSamples.afterSubmit(device);
+    this.curveLabels?.afterSubmit();
     readTimings();
     void device.queue.onSubmittedWorkDone()
       .then(() => {

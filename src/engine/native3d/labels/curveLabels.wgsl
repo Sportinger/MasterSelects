@@ -97,6 +97,7 @@ fn corner(vertex:u32)->vec2f {
  }
  if(item<32u){drawn=clamp(smoothstep(.28,.80,reveal)*32.-f32(item),0.,1.);}
  if(item>=32u&&item<=35u){drawn=smoothstep(.70,.95,reveal);}
+ if(introCard(card)&&item>=32u&&item<36u){drawn=0.;}
  if(item<36u){
    let offset=windowGlitchOffset(card,f32(item/4u));
    let shift=cardPoint(card,offset,copy)-cardPoint(card,vec2f(0),copy);a+=shift;b+=shift;
@@ -156,7 +157,7 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  out.accent=select(0.,smoothstep(1.2,1.5,phase)*(1.-smoothstep(3.5,3.8,phase)),accent);
  let face=select(select(0u,card%3u,p.motion.z>.5),3u,bold);
  out.uv=(vec2f(f32(glyph%16u),f32(glyph/16u+face*6u))+q)/vec2f(16,24);
- out.alpha=fade(card)*echoAlpha(card,copy)*smoothstep(.60,1.,life(card));return out;
+ out.alpha=fade(card)*echoAlpha(card,copy)*smoothstep(.60,1.,life(card))*select(1.,0.,introCard(card));return out;
 }
 @vertex fn blocks(@builtin(vertex_index) vertex:u32,@builtin(instance_index) instance:u32)->Out {
  let count=u32(p.arrangement.w);let card=(instance/6u)%count;let copy=(instance/6u)/count;let block=instance%6u;
