@@ -654,3 +654,16 @@ layer's projected image. Preview, nested compositions, and export preserve the
 same interpolated effect stack. Disabled, detached, audio and other geometry
 generators are excluded. The worker scene path explicitly declines these stacks
 until it can carry them, rather than silently dropping the effects.
+
+### Window glitch wave
+
+**Window Glitch Wave** (0–1, off by default, keyframeable/node-driven) affects only
+readout windows and their echo copies. A one-second screen-space wave starts at
+the top-right and reaches the bottom-left at 12, 24, 36… seconds of composition
+time. Each card's disturbance decays over its own deterministic 1–2-second
+recovery, with RGB splitting, displaced text groups/outlines, brief glyph errors,
+and small colored blocks. Coordinates retain their real underlying values.
+Tracking rings, leaders and scene geometry remain untouched. The effect uses the
+existing annotation render pass, plus a small block draw only during active waves;
+there is no fullscreen post-process or frame-history dependency. Reverse seeks
+and export reproduce the same event. Zero strength restores the clean windows.

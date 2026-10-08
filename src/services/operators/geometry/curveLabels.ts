@@ -24,6 +24,7 @@ export const CURVE_LABEL_NUMBERS = [
   ['motionSpeed', 'Floating Speed', 1, 0, 2, .01],
   ['fontVariation', 'Font Size Variation', 0, 0, 1, .01],
   ['boldFlashes', 'Brief Bold Flashes', 0, 0, 1, .01],
+  ['glitchStrength', 'Window Glitch Wave', 0, 0, 1, .01],
   ['textScramble', 'Changing Readouts', 0, 0, 1, .01],
   ['echoStrength', 'Window Echoes', 0, 0, 1, .01],
   ['sizeVariation', 'Size Variation', .4, 0, 1, .01],

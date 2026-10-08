@@ -1,3 +1,4 @@
+import glitchShader from '../../src/engine/native3d/labels/curveLabelGlitch.wgsl?raw';
 import {curveLabelDecoration} from '../../src/engine/native3d/labels/curveLabelDecoration';
 import projectionShader from '../../src/engine/native3d/labels/curveLabelProjection.wgsl?raw';
 import {CurveLabelTracking} from '../../src/engine/native3d/labels/CurveLabelTracking';
@@ -46,7 +47,7 @@ try{
  const shifted=Math.round(width/2+.8*camera.projectionMatrix[0]/8*width/2);
  // A projected obstacle must move a card toward clear space, reproducibly.
  const avoidance=new CurveLabelAvoidance();
- const uniform=device.createBuffer({size:84*4,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
+ const uniform=device.createBuffer({size:88*4,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST});
  const obstacle=new Float32Array(12*81);
  for(let y=0;y<9;y++)for(let x=0;x<9;x++){
    const i=(y*9+x)*12;obstacle[i]=(-.70+(x-4)*.012)*8/camera.projectionMatrix[0];
@@ -54,7 +55,7 @@ try{
  }
  const cloud=device.createBuffer({size:obstacle.byteLength,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(cloud,0,obstacle);
  const placement=async(strength:number,time:number,source=cloud,pointCount=81,cardCount=2)=>{
-   const data=new Float32Array(84);data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));data.set(identity,16);
+   const data=new Float32Array(88);data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix));data.set(identity,16);
    data.set([1,0,0,5/camera.projectionMatrix[0]],32);data.set([0,1,0,5/camera.projectionMatrix[5]],36);
    data.set([0,0,-1,0],40);data.set([0,0,8,0],44);data.set([.43,.13,1,6],56);
    data.set([.74,.48,5,cardCount],60);data.set([time,8,0,0],64);data.set([.65,strength,0,0],68);data[76]=1;device.queue.writeBuffer(uniform,0,data);
@@ -131,7 +132,7 @@ try{
  const depthPipeline=device.createComputePipeline({layout:'auto',compute:{module:depthModule,entryPoint:'probe'}});
  const poseBuffer=device.createBuffer({size:6*16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
  const probeDepth=async(time:number)=>{
-   const data=new Float32Array(84);data.set([1,0,0,1],32);data.set([0,1,0,1],36);data.set([0,0,-1,0],40);data.set([0,0,8,0],44);
+   const data=new Float32Array(88);data.set([1,0,0,1],32);data.set([0,1,0,1],36);data.set([0,0,-1,0],40);data.set([0,0,8,0],44);
    data.set([.43,.11,1,6],56);data.set([.74,.3,5,6],60);data[64]=time;data[75]=.26;data[76]=1;data[77]=.3;device.queue.writeBuffer(uniform,0,data);
    const encoder=device.createCommandEncoder(),pass=encoder.beginComputePass();pass.setPipeline(depthPipeline);
    pass.setBindGroup(0,device.createBindGroup({layout:depthPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:poseBuffer}}]}));pass.dispatchWorkgroups(6);pass.end();
@@ -148,7 +149,7 @@ try{
  let q=cardMetrics(id.x);dimensions[id.x]=vec4f(q.x*p.right.w,q.y*p.up.w,0,0);}`});
  const metricPipeline=device.createComputePipeline({layout:'auto',compute:{module:metricModule,entryPoint:'probe'}});
  const dims=device.createBuffer({size:64,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
- const metricData=new Float32Array(84);metricData[35]=2;metricData[39]=5;metricData.set([.43,.11,1,6],56);metricData[70]=1;metricData[71]=.85;device.queue.writeBuffer(uniform,0,metricData);
+ const metricData=new Float32Array(88);metricData[35]=2;metricData[39]=5;metricData.set([.43,.11,1,6],56);metricData[70]=1;metricData[71]=.85;device.queue.writeBuffer(uniform,0,metricData);
  const metricEncoder=device.createCommandEncoder(),metricPass=metricEncoder.beginComputePass();metricPass.setPipeline(metricPipeline);
  metricPass.setBindGroup(0,device.createBindGroup({layout:metricPipeline.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:uniform}},{binding:1,resource:{buffer:dims}}]}));metricPass.dispatchWorkgroups(4);metricPass.end();
  const metricRead=device.createBuffer({size:64,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});metricEncoder.copyBufferToBuffer(dims,0,metricRead,0,64);device.queue.submit([metricEncoder.finish()]);await metricRead.mapAsync(GPUMapMode.READ);
@@ -161,23 +162,55 @@ try{
  const selections=device.createBuffer({size:64,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(selections,0,Float32Array.of(0,1,0,0,0,1,0,8,0,4,4,4,0,0,0,0));
  const topology=device.createBuffer({size:16,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_DST});device.queue.writeBuffer(topology,0,Uint32Array.of(0,4,4,4));
  const track=async(blend:number)=>{
-   const data=new Float32Array(84);data[63]=1;data[72]=blend;data[74]=1;data[78]=1;device.queue.writeBuffer(uniform,0,data);
+   const data=new Float32Array(88);data[63]=1;data[72]=blend;data[74]=1;data[78]=1;device.queue.writeBuffer(uniform,0,data);
    const encoder=device.createCommandEncoder(),temporary:GPUBuffer[]=[];const output=tracker.encode(device,encoder,uniform,trackingPoints,selections,topology,1,temporary);
    const read=device.createBuffer({size:16,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});encoder.copyBufferToBuffer(output,0,read,0,16);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
    const values=[...new Float32Array(read.getMappedRange())];read.unmap();read.destroy();temporary.forEach(b=>b.destroy());return values;
  };
  const approaching=await track(.5),acquired=await track(1);
  if(approaching[3]!==0||acquired[0]<2.5||acquired[3]<.99)throw new Error(`Detached target/color gate failed: ${approaching}, ${acquired}`);
- result.detachedTracking={approaching,acquired};tracker.dispose();trackingPoints.destroy();selections.destroy();topology.destroy();uniform.destroy();
+ result.detachedTracking={approaching,acquired};tracker.dispose();trackingPoints.destroy();selections.destroy();topology.destroy();
 
  const error=await device.popErrorScope();if(error)throw new Error(error.message);
+ // Test the actual shader envelope at screen-space corners and at the center.
+ const waveModule=device.createShaderModule({code:projectionShader+'\n'+glitchShader+`
+ @group(0) @binding(0) var<uniform> p:Params;
+ @group(0) @binding(1) var<storage,read> offsets:array<vec4f>;
+ @group(0) @binding(2) var<storage,read_write> result:array<vec4f>;
+ @compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id:vec3u){
+   let points=array<vec2f,3>(vec2f(1,1),vec2f(0),vec2f(-1,-1));
+   let arrival=glitchArrival(points[id.x]);let recovery=glitchRecovery(id.x);
+   result[id.x]=vec4f(arrival,recovery,glitchEnvelope(.25,arrival,recovery),glitchEnvelope(3.01,arrival,recovery));
+ }`});
+ const wavePipeline=device.createComputePipeline({layout:'auto',compute:{module:waveModule,entryPoint:'main'}});
+ const waveOutput=device.createBuffer({size:48,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+ const waveRead=device.createBuffer({size:48,usage:GPUBufferUsage.MAP_READ|GPUBufferUsage.COPY_DST});
+ const waveEncoder=device.createCommandEncoder(),wavePass=waveEncoder.beginComputePass();
+ // Unused bindings disappear from the automatic layout.
+ wavePass.setPipeline(wavePipeline);wavePass.setBindGroup(0,device.createBindGroup({layout:wavePipeline.getBindGroupLayout(0),entries:[
+   {binding:0,resource:{buffer:uniform}},{binding:2,resource:{buffer:waveOutput}}]}));wavePass.dispatchWorkgroups(3);wavePass.end();
+ waveEncoder.copyBufferToBuffer(waveOutput,0,waveRead,0,48);device.queue.submit([waveEncoder.finish()]);await waveRead.mapAsync(GPUMapMode.READ);
+ const waveSamples=Array.from(new Float32Array(waveRead.getMappedRange()));waveRead.unmap();waveRead.destroy();waveOutput.destroy();
+ if(waveSamples[0]!==0||waveSamples[4]!==.5||waveSamples[8]!==1||waveSamples[2]<=0||waveSamples[6]!==0||waveSamples[10]!==0)
+   throw new Error('Glitch front did not travel top-right to bottom-left in one second');
+ const recoveries=[waveSamples[1],waveSamples[5],waveSamples[9]];
+ if(recoveries.some(t=>t<1||t>2)||new Set(recoveries).size!==3||[waveSamples[3],waveSamples[7],waveSamples[11]].some(v=>v!==0))
+   throw new Error('Glitch recovery is not independently bounded to one–two seconds');
+ spec.glitchStrength=1;const disrupted=await draw(12.65),disruptedAgain=await draw(12.65);
+ spec.glitchStrength=0;const clean=await draw(12.65);
+ const changed=clean.filter((v,i)=>Math.abs(v-disrupted[i])>.01).length;
+ if(changed<100||disrupted.some((v,i)=>v!==disruptedAgain[i]))throw new Error(`Missing or nondeterministic window glitch: ${changed}`);
+ if(Math.abs(markerEnergy(disrupted,shifted)-markerEnergy(clean,shifted))>.01)throw new Error('Glitch disturbed the tracking ring');
+ spec.glitchStrength=1;const recovered=await draw(15.1);spec.glitchStrength=0;const cleanAfter=await draw(15.1);
+ if(recovered.some((v,i)=>v!==cleanAfter[i]))throw new Error('Glitch did not fully recover');
+ result.windowGlitch={changed,recoveries,waveSamples,deterministic:true,recovered:true};
  const a=markerEnergy(first,width/2),b=markerEnergy(second,width/2),c=markerEnergy(second,shifted);
  if(!(a>b+12&&c>20))throw new Error(`Marker did not follow GPU positions: ${a}, ${b}, ${c}`);
  if(second.some((v,i)=>v!==repeated[i]))throw new Error('Repeated frame changed');
  const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;document.body.append(canvas);
  const ctx=canvas.getContext('2d')!,image=ctx.createImageData(width,height);second.forEach((v,i)=>image.data[i]=Math.round(Math.max(0,Math.min(1,v))*255));ctx.putImageData(image,0,0);
  Object.assign(result,{success:true,markerBefore:a,oldPositionAfter:b,newPositionAfter:c,deterministic:true,image:canvas.toDataURL()});
- labels.dispose();hdr.destroy();depth.destroy();positions.destroy();device.destroy();
+ uniform.destroy();labels.dispose();hdr.destroy();depth.destroy();positions.destroy();device.destroy();
 }catch(error){Object.assign(result,{success:false,error:String(error)});}
 document.querySelector('#result')!.textContent=JSON.stringify({...result,image:undefined},null,2);
 document.title=result.success?'PASS · Curve Scan Labels':'FAIL · Curve Scan Labels';

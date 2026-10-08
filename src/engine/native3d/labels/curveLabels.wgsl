@@ -7,7 +7,7 @@
 @group(0) @binding(6) var<storage,read> offsets:array<vec4f>;
 @group(0) @binding(7) var<storage,read> tracked:array<vec4f>;
 struct Out { @builtin(position) position:vec4f, @location(0) uv:vec2f,
- @location(1) alpha:f32, @location(2) @interpolate(flat) kind:u32, @location(3) @interpolate(flat) accent:f32, @location(4) @interpolate(flat) tint:vec3f, @location(5) @interpolate(flat) weight:f32 }
+ @location(1) alpha:f32, @location(2) @interpolate(flat) kind:u32, @location(3) @interpolate(flat) accent:f32, @location(4) @interpolate(flat) tint:vec3f, @location(5) @interpolate(flat) weight:f32, @location(6) @interpolate(flat) glitch:f32 }
 fn anchor(card:u32)->vec3f {return (p.world*vec4f(tracked[card].xyz,1)).xyz;}
 fn flicker(t:f32,seed:f32)->f32 {
  let i=floor(t);let f=fract(t);let a=fract(sin(i*12.9898+seed)*43758.5453);
@@ -74,6 +74,10 @@ fn corner(vertex:u32)->vec2f {
  }
  if(item<32u){drawn=clamp(smoothstep(.28,.80,reveal)*32.-f32(item),0.,1.);}
  if(item>=32u&&item<=35u){drawn=smoothstep(.70,.95,reveal);}
+ if(item<36u){
+   let offset=windowGlitchOffset(card,f32(item/4u));
+   let shift=cardPoint(card,offset,copy)-cardPoint(card,vec2f(0),copy);a+=shift;b+=shift;
+ }
  b=mix(a,b,drawn);
  var ca=p.vp*vec4f(a,1);var cb=p.vp*vec4f(b,1);
  if(item>=38u){
@@ -87,9 +91,9 @@ fn corner(vertex:u32)->vec2f {
  let isTracker=item>=36u;
  let weight=p.metrics.z*select(select(1.,p.viewport.w,isTracker),p.viewport.z,item>=38u);
  let haloRadius=max(p.metrics.z*3.,weight*1.5);
- var clip=mix(ca,cb,q.x);let spread=max(.7,weight)*2.+select(0.,haloRadius*6.,isTracker&&p.marker.w>0.);
+ var clip=mix(ca,cb,q.x);let spread=max(.7,weight)*2.+select(0.,haloRadius*6.,isTracker&&p.marker.w>0.)+select(windowGlitch(card)*max(1.,weight)*4.,0.,isTracker);
  clip=vec4f(clip.xy+normal*(q.y-.5)*spread*2./p.viewport.xy*clip.w,clip.zw);
- var out:Out;out.position=clip;out.uv=vec2f(q.x,(q.y-.5)*spread);out.kind=select(0u,2u,isTracker);out.weight=weight;out.accent=0.;out.tint=signalColor(card,select(p.color.rgb,p.marker.rgb,item>=38u));
+ var out:Out;out.position=clip;out.uv=vec2f(q.x,(q.y-.5)*spread);out.glitch=select(windowGlitch(card),0.,isTracker);out.kind=select(0u,2u,isTracker);out.weight=weight;out.accent=0.;out.tint=signalColor(card,select(p.color.rgb,p.marker.rgb,item>=38u));
  out.alpha=fade(card)*echoAlpha(card,copy)*select(0.,1.,(copy==0u||item<36u)&&drawn>.0001&&ca.w>.001&&cb.w>.001&&!(roundCard(card)&&(item==34u||item==35u)));return out;
 }
 fn coordinateGlyph(code:u32,position:vec3f)->u32 {
@@ -103,21 +107,35 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
 @vertex fn text(@builtin(vertex_index) vertex:u32,@builtin(instance_index) instance:u32)->Out {
  let card=(instance/80u)%u32(p.arrangement.w);let copy=(instance/80u)/u32(p.arrangement.w);let slot=instance%80u;let glyphIndex=card*80u+slot;let row=slot/20u;let col=slot%20u;
  let accent=(glyphs[glyphIndex]&1024u)!=0u;let bold=accent||(glyphs[glyphIndex]&2048u)!=0u||(anchors[card*4u+3u].z>.5&&row==0u);var code=glyphs[glyphIndex]%1024u;if(code>=256u){code=coordinateGlyph(code,anchor(card));}
+ let disturbance=windowGlitch(card);
+ // Temporary display corruption leaves the underlying coordinate values untouched.
+ if(glitchRandom(glitchTick(card)+f32(slot)*7.)<disturbance*.22&&code!=32u){code=33u+u32(glitchRandom(f32(slot)+glitchTick(card)+3.)*58.);}
  let glyph=clamp(code,32u,127u)-32u;let q=corner(vertex);
  var position=vec2f(-.445+(f32(col)+q.x)*.0445,.39-(f32(row)+q.y)*.208)*select(1.,.76,roundCard(card));
  if(p.motion.z>.5&&row>0u){position.x+=sin(p.clock.x*.8+f32(card)*1.3+f32(row))*.006;}
  if(p.motion.z>.5&&card%4u>=2u){position.y*=p.metrics.y/max(cardMetrics(card).y,.001);}
  position*=1.+(fract(f32(card)*.618034+.1)*2.-1.)*.12*p.animation.w;
- var out:Out;out.position=p.vp*vec4f(cardPoint(card,position,copy),1);out.kind=1u;out.weight=0.;out.tint=signalColor(card,p.color.rgb);
+ position+=windowGlitchOffset(card,f32(row*4u+col/5u));
+ var out:Out;out.position=p.vp*vec4f(cardPoint(card,position,copy),1);out.glitch=disturbance;out.kind=1u;out.weight=0.;out.tint=signalColor(card,p.color.rgb);
  let phase=cardPhase(card);
  out.accent=select(0.,smoothstep(1.2,1.5,phase)*(1.-smoothstep(3.5,3.8,phase)),accent);
  let face=select(select(0u,card%3u,p.motion.z>.5),3u,bold);
  out.uv=(vec2f(f32(glyph%16u),f32(glyph/16u+face*6u))+q)/vec2f(16,24);
  out.alpha=fade(card)*echoAlpha(card,copy)*smoothstep(.60,1.,life(card));return out;
 }
+@vertex fn blocks(@builtin(vertex_index) vertex:u32,@builtin(instance_index) instance:u32)->Out {
+ let count=u32(p.arrangement.w);let card=(instance/6u)%count;let copy=(instance/6u)/count;let block=instance%6u;
+ let seed=glitchTick(card)+f32(block)*37.;let amount=windowGlitch(card);
+ let center=vec2f(glitchRandom(seed)-.5,glitchRandom(seed+2.)-.5)*.72;
+ let extent=vec2f(.06+glitchRandom(seed+4.)*.24,.015+glitchRandom(seed+8.)*.075);
+ let position=center+(corner(vertex)-.5)*extent;
+ var out:Out;out.position=p.vp*vec4f(cardPoint(card,position,copy),1);out.uv=corner(vertex);out.kind=3u;
+ out.weight=0.;out.glitch=0.;out.accent=0.;out.tint=mix(vec3f(.1,.9,1.),vec3f(1.,.16,.25),glitchRandom(seed+6.));
+ out.alpha=fade(card)*echoAlpha(card,copy)*amount*.48*select(0.,1.,glitchRandom(seed+11.)<amount*.65)*smoothstep(.6,1.,life(card));return out;
+}
 @fragment fn fragment(in:Out)->@location(0) vec4f {
  var coverage=1.;
- if(in.kind!=1u){
+ if(in.kind==0u||in.kind==2u){
    coverage=clamp(in.weight*.5+.5-abs(in.uv.y),0.,1.);
    if(in.kind==2u&&p.marker.w>0.){
      let radius=max(p.metrics.z*3.,in.weight*1.5);
@@ -126,6 +144,22 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
      coverage=coverage+(1.-coverage)*halo;
    }
  }
- else{coverage=textureSampleLevel(atlas,atlasSampler,in.uv,0.).a;}
+ else if(in.kind==1u){
+   coverage=textureSampleLevel(atlas,atlasSampler,in.uv,0.).a;
+   if(in.glitch>.001){
+     let grid=vec2f(16,24);let cell=floor(in.uv*grid);let inset=vec2f(.001)/grid;
+     let offset=vec2f(in.glitch*.009,0.);
+     let red=textureSampleLevel(atlas,atlasSampler,clamp(in.uv-offset,cell/grid+inset,(cell+1.)/grid-inset),0.).a;
+     let blue=textureSampleLevel(atlas,atlasSampler,clamp(in.uv+offset,cell/grid+inset,(cell+1.)/grid-inset),0.).a;
+     let channels=vec3f(red,coverage,blue);let alpha=max(red,max(coverage,blue))*in.alpha;
+     return vec4f(channels*mix(in.tint,vec3f(1),in.glitch*.65)*in.alpha,alpha);
+   }
+ }
+ if(in.kind==0u&&in.glitch>.001){
+   let split=in.glitch*max(1.,in.weight)*1.8;
+   let red=clamp(in.weight*.5+.5-abs(in.uv.y-split),0.,1.);
+   let blue=clamp(in.weight*.5+.5-abs(in.uv.y+split),0.,1.);
+   let channels=vec3f(red,coverage,blue);return vec4f(channels*mix(in.tint,vec3f(1),in.glitch*.65)*in.alpha,max(red,max(coverage,blue))*in.alpha);
+ }
  let alpha=in.alpha*coverage;return vec4f(mix(in.tint,vec3f(1.,.15,.11),in.accent*(1.-p.tracking.x))*alpha,alpha);
 }

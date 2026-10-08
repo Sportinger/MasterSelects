@@ -1,3 +1,5 @@
+import {curveLabelGlitchEvent} from './curveLabelGlitch';
+import glitchShader from './curveLabelGlitch.wgsl?raw';
 import {curveLabelDecoration} from './curveLabelDecoration';
 import common from './curveLabelProjection.wgsl?raw';
 import { CurveLabelTracking } from './CurveLabelTracking';
@@ -20,6 +22,7 @@ export class CurveLabelPass {
   private atlas?:CurveLabelAtlas;
   private lines?:GPURenderPipeline;
   private text?:GPURenderPipeline;
+  private blocks?:GPURenderPipeline;
   private layout?:GPUBindGroupLayout;
   private readonly warned=new Set<string>();
   render(device:GPUDevice,encoder:GPUCommandEncoder,color:GPUTextureView,depth:GPUTextureView,
@@ -43,7 +46,7 @@ export class CurveLabelPass {
       const distance=follow.orthographic?1:spec.depth;
       const halfWidth=distance/Math.max(1e-5,Math.abs(follow.projectionX)),halfHeight=distance/Math.max(1e-5,Math.abs(follow.projectionY));
       const pixelScale=camera.viewport.height/Math.max(1,camera.referenceSize?.height??camera.viewport.height);
-      const data=new Float32Array(84);
+      const data=new Float32Array(88);
       data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix),0);data.set(layer.worldMatrix,16);
       data.set([...follow.right,halfWidth],32);data.set([...follow.up,halfHeight],36);
       data.set([...follow.forward,0],40);data.set([...follow.position,0],44);
@@ -56,6 +59,8 @@ export class CurveLabelPass {
       data.set([spec.motionSpeed,spec.depthMotion,spec.detachedFocus,spec.fontVariation],76);
       const markerColor=parseInt(spec.markerColor.slice(1),16);
       data.set([(markerColor>>16&255)/255,(markerColor>>8&255)/255,(markerColor&255)/255,spec.trackingGlow],80);
+      const glitch=curveLabelGlitchEvent(time);
+      data.set([glitch.age,glitch.event,spec.glitchStrength,0],84);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
       const sourceAnchors=curveLabelAnchors(curves.starts,curves.counts,spec);
@@ -82,7 +87,9 @@ export class CurveLabelPass {
       const pass=encoder.beginRenderPass({label:'curve-scan-labels',colorAttachments:[{view:color,loadOp:'load',storeOp:'store'}],
         depthStencilAttachment:{view:depth,depthLoadOp:'load',depthStoreOp:'store'}});
       pass.setBindGroup(0,group);pass.setPipeline(this.lines!);pass.draw(6,spec.count*70*(maxCopies+1));
-      pass.setPipeline(this.text!);pass.draw(6,spec.count*LABEL_GLYPHS*(maxCopies+1));pass.end();
+      pass.setPipeline(this.text!);pass.draw(6,spec.count*LABEL_GLYPHS*(maxCopies+1));
+      if(spec.glitchStrength>0&&glitch.age>=0&&glitch.age<=3){pass.setPipeline(this.blocks!);pass.draw(6,spec.count*6*(maxCopies+1));}
+      pass.end();
     }
   }
   private ensure(device:GPUDevice):void {
@@ -91,12 +98,12 @@ export class CurveLabelPass {
     this.layout=device.createBindGroupLayout({entries:[{binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}},
       ...[1,2,3].map(binding=>({binding,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage' as const}})),
       {binding:4,visibility:GPUShaderStage.FRAGMENT,texture:{}},{binding:5,visibility:GPUShaderStage.FRAGMENT,sampler:{}},{binding:6,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}},{binding:7,visibility:GPUShaderStage.VERTEX,buffer:{type:'read-only-storage'}}]});
-    const module=device.createShaderModule({label:'curve-scan-labels',code:common+'\n'+shader});
+    const module=device.createShaderModule({label:'curve-scan-labels',code:common+'\n'+shader+'\n'+glitchShader});
     const pipeline=(entryPoint:string)=>device.createRenderPipeline({layout:device.createPipelineLayout({bindGroupLayouts:[this.layout!]}),
       vertex:{module,entryPoint},fragment:{module,entryPoint:'fragment',targets:[{format:'rgba16float',blend:{
         color:{srcFactor:'one',dstFactor:'one-minus-src-alpha'},alpha:{srcFactor:'one',dstFactor:'one-minus-src-alpha'}}}]},
       primitive:{topology:'triangle-list'},depthStencil:{format:'depth24plus',depthWriteEnabled:false,depthCompare:'less-equal'}});
-    this.lines=pipeline('lines');this.text=pipeline('text');
+    this.lines=pipeline('lines');this.text=pipeline('text');this.blocks=pipeline('blocks');
   }
-  dispose():void{this.tracking.dispose();this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.layout=undefined;this.warned.clear();}
+  dispose():void{this.tracking.dispose();this.avoidance.dispose();this.atlas?.dispose();this.atlas=undefined;this.device=undefined;this.lines=undefined;this.text=undefined;this.blocks=undefined;this.layout=undefined;this.warned.clear();}
 }

@@ -36,7 +36,7 @@ describe('Curve Scan Labels',()=>{
     expect(()=>compileGeometryGraph(g,geometryParameterReader({}))).toThrow('uniform');
   });
   it('reports malformed settings rather than silently dropping labels',()=>{
-    for(const invalid of [{lag:NaN},{count:1.2},{color:'blue'},{markerColor:'yellow'},{trackingGlow:2},{leaderWeight:0},{ringWeight:9},{titles:'ä'},{titles:'|EMPTY'},{width:50},{count:12,height:.4},{avoidance:2},{drift:-1},{style:'unknown'},{transition:.6},{dutyCycle:0},{depthSpread:.6,depthMotion:.6}])
+    for(const invalid of [{lag:NaN},{count:1.2},{color:'blue'},{markerColor:'yellow'},{trackingGlow:2},{glitchStrength:2},{leaderWeight:0},{ringWeight:9},{titles:'ä'},{titles:'|EMPTY'},{width:50},{count:12,height:.4},{avoidance:2},{drift:-1},{style:'unknown'},{transition:.6},{dutyCycle:0},{depthSpread:.6,depthMotion:.6}])
       expect(isCurveLabels({...spec(),...invalid})).toBe(false);
   });
   it('keeps anchors on their selected variable-length strands, including wrapping',()=>{
