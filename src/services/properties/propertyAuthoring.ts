@@ -198,6 +198,12 @@ export function validatePropertyAuthoringValue(
     if (descriptor.ui?.max !== undefined && value > descriptor.ui.max) {
       throw new Error(`${descriptor.path} must be at most ${descriptor.ui.max}`);
     }
+    if (descriptor.ui?.minMagnitude !== undefined && Math.abs(value) < descriptor.ui.minMagnitude) {
+      throw new Error(
+        `${descriptor.path} must be at least ${descriptor.ui.minMagnitude} or at most `
+        + `-${descriptor.ui.minMagnitude}; ${value} is too close to 0`,
+      );
+    }
     return value;
   }
 
@@ -276,11 +282,15 @@ export function describePropertyAuthoringDescriptor(
     descriptor.ui.min !== undefined
     || descriptor.ui.max !== undefined
     || descriptor.ui.step !== undefined
+    || descriptor.ui.minMagnitude !== undefined
   )
     ? {
         ...(descriptor.ui.min !== undefined ? { min: descriptor.ui.min } : {}),
         ...(descriptor.ui.max !== undefined ? { max: descriptor.ui.max } : {}),
         ...(descriptor.ui.step !== undefined ? { step: descriptor.ui.step } : {}),
+        ...(descriptor.ui.minMagnitude !== undefined
+          ? { minMagnitude: descriptor.ui.minMagnitude }
+          : {}),
       }
     : undefined;
 

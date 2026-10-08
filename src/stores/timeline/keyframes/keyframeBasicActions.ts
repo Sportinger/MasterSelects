@@ -14,7 +14,7 @@ import {
   resolveSpeedMutationTarget,
   synchronizeAllFollowingAudioSpeedKeyframes,
 } from '../helpers/linkedClipSpeed';
-import { finalizeLinkedSpeedKeyframeMutation, isValidSpeedKeyframeValue } from './linkedSpeedKeyframeState';
+import { acceptSpeedKeyframeValue, finalizeLinkedSpeedKeyframeMutation } from './linkedSpeedKeyframeState';
 import { normalizeTimelinePropertyValue } from './keyframePropertyValue';
 import { clipLocalToKeyframeTime } from '../../../services/flock/time/flockKeyframeTime';
 import { applyEasingCurveToKeyframes } from './keyframeEasingCurves';
@@ -38,7 +38,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
   addKeyframe: (clipId, property, value, time, easing = 'linear') => {
     const { clips, tracks, playheadPosition, clipKeyframes, invalidateCache } = get();
     if (property === 'speed') {
-      if (!isValidSpeedKeyframeValue(value)) return;
+      if (!acceptSpeedKeyframeValue(value, clipId)) return;
       const speedTarget = resolveSpeedMutationTarget(clips, clipId);
       if (speedTarget && speedTarget.leader.id !== clipId) {
         get().addKeyframe(speedTarget.leader.id, property, value, time, easing);
@@ -141,7 +141,7 @@ export const createKeyframeBasicActions: SliceCreator<KeyframeBasicActions> = (s
         const nextValue = baseNormalizedUpdates.value === undefined
           ? k.value
           : normalizeTimelinePropertyValue(nextProperty, baseNormalizedUpdates.value);
-        if (nextProperty === 'speed' && !isValidSpeedKeyframeValue(nextValue)) return k;
+        if (nextProperty === 'speed' && !acceptSpeedKeyframeValue(nextValue, clipId)) return k;
         invalidationTargets.push({ clipId, property: k.property });
         if (baseNormalizedUpdates.property) {
           invalidationTargets.push({ clipId, property: baseNormalizedUpdates.property });

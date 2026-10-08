@@ -6,6 +6,7 @@ import type {
   PropertyDescriptor,
 } from '../../types/propertyRegistry';
 import type { PropertyRegistry } from './PropertyRegistry';
+import { CLIP_SPEED_MIN_MULTIPLIER } from '../../stores/timeline/helpers/linkedClipSpeed';
 
 type TransformPatch = Omit<Partial<TimelineClip['transform']>, 'position' | 'anchor' | 'scale' | 'rotation'> & {
   position?: Partial<TimelineClip['transform']['position']>;
@@ -201,7 +202,15 @@ export function registerTransformProperties(registry: PropertyRegistry): void {
       valueType: 'number',
       animatable: true,
       defaultValue: 1,
-      ui: { min: -8, max: 8, step: 0.01, aliases: ['time stretch', 'playback speed'] },
+      // Negative speeds play in reverse. The timeline store rejects speeds
+      // closer to 0 than CLIP_SPEED_MIN_MULTIPLIER, so authoring says so.
+      ui: {
+        min: -8,
+        max: 8,
+        minMagnitude: CLIP_SPEED_MIN_MULTIPLIER,
+        step: 0.01,
+        aliases: ['time stretch', 'playback speed'],
+      },
       read: (clip) => clip.speed ?? 1,
       write: (clip, value) => ({ ...clip, speed: value as number }),
     },
