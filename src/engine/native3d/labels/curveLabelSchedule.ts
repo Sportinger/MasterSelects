@@ -6,12 +6,16 @@ export function scanRandom(seed:number):number {
   let n=seed|0;n=Math.imul(n^(n>>>16),0x21f0aaad);n=Math.imul(n^(n>>>15),0x735a2d97);
   return ((n^(n>>>15))>>>0)/4294967296;
 }
-function opening(spec:CurveLabelSpec,card:number):number {
+export function curveLabelOpeningRank(spec:CurveLabelSpec,card:number):number {
   let rank=card;
   if(spec.lifetimeVariation>0){
     const order=Array.from({length:spec.count},(_,i)=>i).toSorted((a,b)=>scanRandom(a+spec.scheduleSeed*97)-scanRandom(b+spec.scheduleSeed*97));
     rank=order.indexOf(card);
   }
+  return rank;
+}
+function opening(spec:CurveLabelSpec,card:number):number {
+  const rank=curveLabelOpeningRank(spec,card);
   return spec.introSpread>0?spec.introSpread*Math.log2(rank+1)/Math.log2(Math.max(2,spec.count)):-rank*.173*spec.cycle;
 }
 const schedules=new Map<string,CurveLabelEpisode[]>();

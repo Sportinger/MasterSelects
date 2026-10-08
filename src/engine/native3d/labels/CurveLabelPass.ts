@@ -1,5 +1,5 @@
 import {curveLabelLock,curveLabelLocks} from './curveLabelLock';
-import {curveLabelEpisode} from './curveLabelSchedule';
+import {curveLabelEpisode,curveLabelOpeningRank} from './curveLabelSchedule';
 import {curveLabelGlitchEvent} from './curveLabelGlitch';
 import glitchShader from './curveLabelGlitch.wgsl?raw';
 import {curveLabelDecoration} from './curveLabelDecoration';
@@ -8,7 +8,7 @@ import { CurveLabelTracking } from './CurveLabelTracking';
 import { CurveLabelAvoidance } from './CurveLabelAvoidance';
 import shader from './curveLabels.wgsl?raw';
 import type { SceneCamera } from '../../scene/types';
-import type { PreparedStrandLayer } from '../passes/StrandPass';
+import { worldMatrixScale, type PreparedStrandLayer } from '../passes/StrandPass';
 import { curveLabelCameraFrame } from '../../scene/curveLabelCamera';
 import { multiplyMat4 } from '../../scene/SceneTransformUtils';
 import { CurveLabelAtlas } from './CurveLabelAtlas';
@@ -68,7 +68,9 @@ export class CurveLabelPass {
       const liveDistance=live.orthographic?1:spec.depth;
       data.set([...live.right,liveDistance/Math.max(1e-5,Math.abs(live.projectionX))],88);
       data.set([...live.up,liveDistance/Math.max(1e-5,Math.abs(live.projectionY))],92);
-      data.set([...live.forward,0],96);data.set([...live.position,0],100);
+      const strandRender=layer.strands.program.render!;
+      const markerLift=((strandRender.profile?.radius??0)+(strandRender.width??0))*worldMatrixScale(layer.worldMatrix);
+      data.set([...live.forward,markerLift],96);data.set([...live.position,0],100);
       data.set(lock?[lock.card,lock.amount,lock.age,lock.corner]:[-1,0,0,0],104);
       const missingLocks=spec.lockCount-curveLabelLocks(spec).length;
       const lockWarning=`${layer.layerId}:locks:${spec.lockCount}:${spec.cycle}:${spec.dutyCycle}:${spec.lockDuration}`;
@@ -85,7 +87,8 @@ export class CurveLabelPass {
         anchors.set(targetAnchors.subarray(card*4,card*4+4),card*16+4);
         const timing=curveLabelEpisode(spec,time,card);anchors[card*16+3]=timing.birth;anchors[card*16+7]=timing.visible;
         const decoration=curveLabelDecoration(spec,time,card);
-        anchors.set([decoration.copies,decoration.fade,decoration.bold,0],card*16+12);maxCopies=Math.max(maxCopies,decoration.copies);
+        const openingMarker=timing.cycle===0&&curveLabelOpeningRank(spec,card)<(spec.openingMarkers??0);
+        anchors.set([decoration.copies,decoration.fade,decoration.bold,openingMarker?1:0],card*16+12);maxCopies=Math.max(maxCopies,decoration.copies);
         const target=targetAnchors[card*4+3],reference=curves.starts.length-1;
         anchors.set([curves.starts[target],curves.counts[target],curves.starts[reference],curves.counts[reference]],card*16+8);
       }

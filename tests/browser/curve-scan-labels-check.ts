@@ -34,14 +34,52 @@ try{
  const plan={layer:{layerId:'fixture',opacity:1,worldMatrix:identity,strands:{program:{render:{labels:spec}}}},buffers:{positions,curves}} as PreparedStrandLayer;
  const labels=new CurveLabelPass();
  const half=(bits:number)=>{const e=(bits>>10)&31,m=bits&1023;return(bits>>15?-1:1)*(e===0?m*2**-24:(1+m/1024)*2**(e-15));};
- const draw=async(time=2)=>{
+ const draw=async(time=2,depthClearValue=1)=>{
   const encoder=device.createCommandEncoder(),temporary:GPUBuffer[]=[];
-  const clear=encoder.beginRenderPass({colorAttachments:[{view:hdr.createView(),loadOp:'clear',storeOp:'store',clearValue:[0,0,0,0]}],depthStencilAttachment:{view:depth.createView(),depthLoadOp:'clear',depthStoreOp:'store',depthClearValue:1}});clear.end();
+  const clear=encoder.beginRenderPass({colorAttachments:[{view:hdr.createView(),loadOp:'clear',storeOp:'store',clearValue:[0,0,0,0]}],depthStencilAttachment:{view:depth.createView(),depthLoadOp:'clear',depthStoreOp:'store',depthClearValue}});clear.end();
   labels.render(device,encoder,hdr.createView(),depth.createView(),[plan],camera,time,temporary);
   const read=device.createBuffer({size:width*height*8,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
   encoder.copyTextureToBuffer({texture:hdr},{buffer:read,bytesPerRow:width*8},[width,height]);device.queue.submit([encoder.finish()]);await read.mapAsync(GPUMapMode.READ);
   const values=Array.from(new Uint16Array(read.getMappedRange()),half);read.unmap();read.destroy();temporary.forEach(b=>b.destroy());return values;
  };
+
+ const initial={...spec};
+ Object.assign(spec,{introSpread:5,lifetimeVariation:1,scheduleSeed:17,openingMarkers:0});
+ const noOpeningRings=await draw(0);
+ spec.openingMarkers=2;const beforeOpening=await draw(0),openingRings=await draw(.06),openingRepeat=await draw(.06);
+ const openingAlpha=openingRings.reduce((sum,n,i)=>sum+(i%4===3?n:0),0);
+ const hiddenAlpha=noOpeningRings.reduce((sum,n,i)=>sum+(i%4===3?n:0),0);
+ let stray=0,amber=0;
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+   const i=(y*width+x)*4;
+   if(Math.hypot(x-width/2,y-height/2)>18)stray+=openingRings[i+3];
+   if(openingRings[i]>openingRings[i+1]&&openingRings[i+1]>openingRings[i+2]&&openingRings[i+3]>.2)amber++;
+ }
+ if(hiddenAlpha!==0||beforeOpening.some(n=>n!==0)||openingAlpha<5||amber<5||openingRings.some((n,i)=>n!==openingRepeat[i]))
+   throw new Error('Opening markers must remain hidden until their card intro, then show amber rings deterministically.');
+ result.openingMarkers={openingAlpha,hiddenAlpha,stray,amber};
+ const fullRing=await draw(.22);
+ const perimeter=(pixels:number[])=>{let sum=0;for(let y=height/2-9;y<height/2+10;y++)for(let x=width/2-9;x<width/2+10;x++){
+   const radius=Math.hypot(x+.5-width/2,y+.5-height/2);
+   if(radius>=5&&radius<=7)sum+=pixels[(y*width+x)*4+3];
+ }return sum;};
+ const partialPerimeter=perimeter(openingRings),fullPerimeter=perimeter(fullRing);
+ if(partialPerimeter<2||fullPerimeter<partialPerimeter*2)throw new Error('Rings must trace a fixed-radius circumference before completing the circle.');
+ result.ringTrace={partialPerimeter,fullPerimeter};
+
+ const centerDepth=(camera.projectionMatrix[10]*-8+camera.projectionMatrix[14])/8;
+ const skinDepth=(camera.projectionMatrix[10]*-7.75+camera.projectionMatrix[14])/7.75;
+ const buried=await draw(.06,(centerDepth+skinDepth)/2);
+ plan.layer.strands.program.render!.profile={plies:3,fibers:7,radius:.3,plyTwist:5,fiberTwist:-11};
+ const onSurface=await draw(.06,(centerDepth+skinDepth)/2);
+ const hiddenBehindOther=await draw(.06,.9);
+ delete plan.layer.strands.program.render!.profile;
+ const alphaSum=(v:number[])=>{let sum=0;for(let y=height/2-9;y<height/2+10;y++)for(let x=width/2-9;x<width/2+10;x++)sum+=v[(y*width+x)*4+3];return sum;};
+ if(alphaSum(buried)>.01||alphaSum(onSurface)<5||alphaSum(hiddenBehindOther)>.01)
+   throw new Error('Tracking rings must clear their own yarn surface but remain occluded by foreground geometry.');
+ result.markerSurface={buried:alphaSum(buried),surface:alphaSum(onSurface),foreground:alphaSum(hiddenBehindOther)};
+
+ Object.assign(spec,initial);
  const first=await draw();
  // Change only GPU positions; the CPU rest curve remains unchanged.
  packed[0]=.8;packed[12]=.8;device.queue.writeBuffer(positions,0,packed);

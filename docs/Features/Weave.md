@@ -711,3 +711,13 @@ The diagonal scan disturbance crosses the viewport in three seconds, every twelv
 ### Lingering near rest
 
 Motion Time’s **Final Stillness** (integer 1–4, default 1) shapes only the deceleration speed: it raises the remaining smooth speed to that power. Higher values approach near-rest earlier while preserving the chosen stopping time and the entire acceleration/cruise portion. Motion Seconds integrates this envelope analytically, without frame history; Loop Phase normalizes its changed distance back to one full turn. Invalid powers fail explicitly. Shape morphs driven by another clock remain independent and need their own settling curve if their motion must also stop gently.
+
+### Exact scan anchors and opening rings
+
+Curve Scan Labels accepts **Anchor Overrides** such as `0:4@0.18 | 10:2@0.6`. Card and strand indices start at zero; the value after `@` is the material position from 0 to 1. These anchors follow the final GPU-deformed strand, preserve different curve point counts, and leave released-tracking destinations unchanged. Unspecified cards retain First Strand / Strand Step / Curve Position settings. Strand indices wrap just like the regular selection. Malformed or duplicate entries produce an error.
+
+**Amber Opening Rings** selects the first N cards in the actual appearance order, including randomized schedules. Their amber rings appear together with each card's leader and intro, never in advance. They fade with their first episode; later episodes use the regular ring color and acquired-target alerts. Set 0 to preserve the previous behavior.
+
+Tracking rings and their leader origins sit on the camera-facing yarn envelope instead of the buried centerline, using the profile radius, per-point radius scale and layer scale. Foreground geometry still depth-occludes them; coordinate readouts continue to describe the actual curve point.
+
+Rings trace their circumference during the shared intro, at constant radius and line thickness. The outro retracts the same path in reverse. An analytic ring stroke keeps the glow smooth without overlapping segment halos.

@@ -9,6 +9,15 @@
 struct Out { @builtin(position) position:vec4f, @location(0) uv:vec2f,
  @location(1) alpha:f32, @location(2) @interpolate(flat) kind:u32, @location(3) @interpolate(flat) accent:f32, @location(4) @interpolate(flat) tint:vec3f, @location(5) @interpolate(flat) weight:f32, @location(6) @interpolate(flat) glitch:f32 }
 fn anchor(card:u32)->vec3f {return (p.world*vec4f(tracked[card].xyz,1)).xyz;}
+// Mark the near yarn surface, not its buried centerline. Keep ordinary scene
+// depth testing so unrelated foreground strands can still occlude the marker.
+fn markerAnchor(card:u32)->vec3f {
+ let a=anchors[card*4u];let b=anchors[card*4u+1u];
+ let radiusA=mix(points[u32(a.x)].normal.w,points[u32(a.y)].normal.w,a.z);
+ let radiusB=mix(points[u32(b.x)].normal.w,points[u32(b.y)].normal.w,b.z);
+ let center=anchor(card);let toward=p.liveEye.xyz-center;
+ return center+toward/max(length(toward),1e-6)*p.liveForward.w*max(0.,mix(radiusA,radiusB,p.tracking.x));
+}
 fn flicker(t:f32,seed:f32)->f32 {
  let i=floor(t);let f=fract(t);let a=fract(sin(i*12.9898+seed)*43758.5453);
  let b=fract(sin((i+1.)*12.9898+seed)*43758.5453);
@@ -57,8 +66,10 @@ fn corner(vertex:u32)->vec2f {
  let echo=max(instance,count*132u)-count*132u;
  let card=select((echo/36u)%count,instance/132u,primary);
  let copy=select(1u+(echo/36u)/count,0u,primary);
- let item=select(echo%36u,instance%132u,primary);let trackedPoint=anchor(card);
+ let item=select(echo%36u,instance%132u,primary);let trackedPoint=markerAnchor(card);
  let reveal=life(card);var drawn=1.;
+ let openingMarker=anchors[card*4u+3u].w>.5&&item>=100u;
+
  let side=select(-1.,1.,card%2u==1u);var a=windowPoint(card,vec2f(-.5,.5),copy);var b=windowPoint(card,vec2f(.5,.5),copy);
  if(item<32u){
    if(roundCard(card)){
@@ -93,11 +104,19 @@ fn corner(vertex:u32)->vec2f {
  b=mix(a,b,drawn);
  var ca=p.vp*vec4f(a,1);var cb=p.vp*vec4f(b,1);
  if(item>=100u){
-   let center=p.vp*vec4f(trackedPoint,1);let angle=f32(item-100u)*6.28318530718/32.;let next=angle+6.28318530718/32.;
-   ca=center;cb=center;drawn=smoothstep(0.,.18,reveal);
-   ca=vec4f(center.xy+vec2f(cos(angle),sin(angle))*p.metrics.w*mix(.45,1.,drawn)*2./p.viewport.xy*center.w,center.zw);
-   cb=vec4f(center.xy+vec2f(cos(next),sin(next))*p.metrics.w*mix(.45,1.,drawn)*2./p.viewport.xy*center.w,center.zw);
+   // One analytic quad avoids overlapping segment halos and spiky, overbright joins.
+   let center=p.vp*vec4f(trackedPoint,1);let weight=p.metrics.z*p.viewport.z;
+   let haloRadius=max(p.metrics.z*3.,weight*1.5);
+   let extent=p.metrics.w+weight*.5+1.+select(0.,haloRadius*3.,p.marker.w>0.);
+   let uv=(corner(vertex)-.5)*extent*2.;
+   var ring:Out;ring.position=vec4f(center.xy+uv*2./p.viewport.xy*center.w,center.zw);
+   ring.uv=uv;ring.kind=5u;ring.weight=weight;ring.accent=0.;
+   ring.glitch=smoothstep(.02,.38,reveal);
+   ring.tint=signalColor(card,select(p.marker.rgb,vec3f(1.,.70,.16),openingMarker));
+   ring.alpha=fade(card)*select(0.,1.,item==100u&&center.w>.001&&ring.glitch>0.);
+   return ring;
  }
+
  let q=corner(vertex);let ndca=ca.xy/max(ca.w,1e-5);let ndcb=cb.xy/max(cb.w,1e-5);
  let direction=(ndcb-ndca)*p.viewport.xy;let len=max(length(direction),1e-5);let normal=vec2f(-direction.y,direction.x)/len;
  let isTracker=item>=36u;
@@ -105,7 +124,7 @@ fn corner(vertex:u32)->vec2f {
  let haloRadius=max(p.metrics.z*3.,weight*1.5);
  var clip=mix(ca,cb,q.x);let spread=max(.7,weight)*2.+select(0.,haloRadius*6.,isTracker&&p.marker.w>0.)+select(windowGlitch(card)*max(6.,weight*16.),0.,isTracker);
  clip=vec4f(clip.xy+normal*(q.y-.5)*spread*2./p.viewport.xy*clip.w,clip.zw);
- var out:Out;out.position=clip;out.uv=vec2f(q.x,(q.y-.5)*spread);out.glitch=select(windowGlitch(card),0.,isTracker);out.kind=select(0u,2u,isTracker);out.weight=weight;out.accent=0.;out.tint=signalColor(card,select(p.color.rgb,p.marker.rgb,item>=100u));
+ var out:Out;out.position=clip;out.uv=vec2f(q.x,(q.y-.5)*spread);out.glitch=select(windowGlitch(card),0.,isTracker);out.kind=select(0u,2u,isTracker);out.weight=weight;out.accent=0.;out.tint=signalColor(card,select(select(p.color.rgb,p.marker.rgb,item>=100u),vec3f(1.,.70,.16),openingMarker));
  out.alpha=fade(card)*echoAlpha(card,copy)*select(0.,1.,(copy==0u||item<36u)&&drawn>.0001&&ca.w>.001&&cb.w>.001&&!(roundCard(card)&&(item==34u||item==35u)));return out;
 }
 fn coordinateGlyph(code:u32,position:vec3f)->u32 {
@@ -180,6 +199,17 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  out.alpha=fade(card)*smoothstep(0.,.2,amount);return out;
 }
 @fragment fn fragment(in:Out)->@location(0) vec4f {
+ if(in.kind==5u){
+   let radius=length(in.uv);let distance=abs(radius-p.metrics.w);
+   var coverage=clamp(in.weight*.5+.5-distance,0.,1.);
+   if(p.marker.w>0.){
+     let haloRadius=max(p.metrics.z*3.,in.weight*1.5);let edge=max(0.,distance-in.weight*.5);
+     coverage+=(1.-coverage)*exp(-2.*edge*edge/(haloRadius*haloRadius))*.38*p.marker.w;
+   }
+   let angle=(atan2(in.uv.y,in.uv.x)+6.28318530718)%6.28318530718;
+   let trim=select(clamp((in.glitch*6.28318530718-angle)*max(p.metrics.w,1.)+.5,0.,1.),1.,in.glitch>=.99999);
+   let alpha=in.alpha*coverage*trim;return vec4f(in.tint*alpha,alpha);
+ }
  var coverage=1.;
  if(in.kind==0u||in.kind==2u){
    coverage=clamp(in.weight*.5+.5-abs(in.uv.y),0.,1.);

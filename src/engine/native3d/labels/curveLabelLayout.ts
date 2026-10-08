@@ -1,3 +1,4 @@
+import {parseCurveLabelAnchors} from '../../../services/operators/geometry/curveLabelAnchors';
 import {curveLabelLock,curveLabelLockReadouts} from './curveLabelLock';
 import {curveLabelEpisode,curveLabelReveal} from './curveLabelSchedule';
 import {changingCurveReadouts} from './curveLabelReadout';
@@ -6,6 +7,7 @@ export const LABEL_COLUMNS=20, LABEL_ROWS=4, LABEL_GLYPHS=LABEL_COLUMNS*LABEL_RO
 /** Stable topology references; animation positions are read from the GPU, never read back to JS. */
 export function curveLabelAnchors(starts:Uint32Array,counts:Uint32Array,spec:CurveLabelSpec,followReleased=false):Float32Array {
   const out=new Float32Array(spec.count*4);
+  const overrides=followReleased?[]:parseCurveLabelAnchors(spec.anchorOverrides??'');
   for(let card=0;card<spec.count;card++){
     const total=Math.max(1,starts.length),followers=Math.round(spec.count*spec.followShare);
     const progress=Math.max(0,(spec.releaseProgress-spec.releaseMargin)/(1-spec.releaseMargin));
@@ -13,8 +15,9 @@ export function curveLabelAnchors(starts:Uint32Array,counts:Uint32Array,spec:Cur
     const destination=card<followers
       ?Math.min(released,Math.floor(card*(total-1)/Math.max(1,followers-1)))
       :Math.max(released,total-1-(card-followers));
-    const strand=followReleased?destination:(spec.firstStrand+card*spec.strandStep)%total;
-    const phase=spec.start+card*spec.step,u=phase<=1?phase:phase%1;
+    const override=overrides.find(value=>value.card===card);
+    const strand=override?override.strand%total:followReleased?destination:(spec.firstStrand+card*spec.strandStep)%total;
+    const phase=spec.start+card*spec.step,u=override?.u??(phase<=1?phase:phase%1);
     const point=u*Math.max(0,(counts[strand]??1)-1),index=Math.floor(point);
     out.set([(starts[strand]??0)+index,(starts[strand]??0)+Math.min(index+1,(counts[strand]??1)-1),point-index,strand],card*4);
   }

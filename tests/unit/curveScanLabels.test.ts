@@ -1,3 +1,5 @@
+import {parseCurveLabelAnchors} from '../../src/services/operators/geometry/curveLabelAnchors';
+import {curveLabelOpeningRank} from '../../src/engine/native3d/labels/curveLabelSchedule';
 import {changingCurveReadouts} from '../../src/engine/native3d/labels/curveLabelReadout';
 import {curveLabelDecoration} from '../../src/engine/native3d/labels/curveLabelDecoration';
 import {describe,it,expect} from 'vitest';
@@ -16,6 +18,33 @@ const graph=()=>{
   g.edges.push({id:'labels-in',from:edge.from,output:'curves',to:'labels',input:'curves'});edge.from='labels';return g;
 };
 describe('Curve Scan Labels',()=>{
+  it('pins chosen cards to exact material coordinates without changing released destinations',()=>{
+    const s={...spec(),count:3,firstStrand:0,strandStep:1,start:.4,step:.1,anchorOverrides:'0:1@0.25 | 2:0@1'};
+    const starts=Uint32Array.of(0,5),counts=Uint32Array.of(5,9);
+    const a=curveLabelAnchors(starts,counts,s);
+    expect([...a.slice(0,4)]).toEqual([7,8,0,1]);
+    expect([...a.slice(8,12)]).toEqual([4,4,0,0]);
+    expect(curveLabelAnchors(starts,counts,s,true)).toEqual(curveLabelAnchors(starts,counts,{...s,anchorOverrides:''},true));
+    const g=graph();g.nodes.find(n=>n.id==='labels')!.constants={anchorOverrides:s.anchorOverrides,openingMarkers:2};
+    const program=compileGeometryGraph(g,geometryParameterReader({}));
+    expect(program.render!.labels).toMatchObject({anchorOverrides:s.anchorOverrides,openingMarkers:2});
+    expect(isGeometryProgram(JSON.parse(JSON.stringify(program)))).toBe(true);
+  });
+  it('rejects ambiguous or invalid anchors and keeps older transported labels compatible',()=>{
+    for(const value of ['0:2@.5|0:1@.4','12:0@.5','0:65536@0','0:2@1.1','0:-1@0','NaN:0@.2','0:1@Infinity','1:2@.3|'])
+      expect(()=>parseCurveLabelAnchors(value)).toThrow(/Curve Scan Labels/);
+    expect(parseCurveLabelAnchors('')).toEqual([]);
+    const old={...spec()};delete (old as Partial<typeof old>).openingMarkers;delete old.anchorOverrides;
+    expect(isCurveLabels(old)).toBe(true);
+    expect(isCurveLabels({...spec(),anchorOverrides:'not an anchor'})).toBe(false);
+  });
+  it('uses actual randomized opening order for the first visible markers',()=>{
+    const s={...spec(),count:12,height:.11,lifetimeVariation:1,scheduleSeed:17,introSpread:5};
+    const order=Array.from({length:12},(_,i)=>i).toSorted((a,b)=>curveLabelOpeningRank(s,a)-curveLabelOpeningRank(s,b));
+    expect(order.slice(0,2)).toEqual([0,10]);
+    for(let i=1;i<order.length;i++)expect(curveLabelTiming(s,order[i]).birth).toBeGreaterThan(curveLabelTiming(s,order[i-1]).birth);
+  });
+
   it('preserves geometry stages and round-trips render metadata through the transported program',()=>{
     const base=compileGeometryGraph(createWaveStrandsGraph(),geometryParameterReader({}));
     const result=compileGeometryGraph(graph(),geometryParameterReader({}));

@@ -1,3 +1,4 @@
+import { parseCurveLabelAnchors } from './curveLabelAnchors';
 import type { OperatorDefinition, OperatorParameter, OperatorValue } from '../../../types/operatorGraph';
 import { STRAND_CURVES_FORMAT } from './curveFormat';
 
@@ -31,6 +32,7 @@ export const CURVE_LABEL_NUMBERS = [
   ['depthSpread', 'Depth Spread', 0, 0, .6, .01],
   ['depthMotion', 'Depth Travel', 0, 0, .6, .01],
   ['introSpread', 'Opening Build-up (s)', 0, 0, 30, .1],
+  ['openingMarkers', 'Amber Opening Rings', 0, 0, 12, 1],
   ['motionSpeed', 'Floating Speed', 1, 0, 2, .01],
   ['fontVariation', 'Font Size Variation', 0, 0, 1, .01],
   ['boldFlashes', 'Brief Bold Flashes', 0, 0, 1, .01],
@@ -41,17 +43,18 @@ export const CURVE_LABEL_NUMBERS = [
   ['drift', 'Floating Motion', .65, 0, 2, .01], ['avoidance', 'Avoid Curves', 1, 0, 1, .01],
 ] as const;
 export type CurveLabelNumber = typeof CURVE_LABEL_NUMBERS[number][0];
-export type CurveLabelSpec = Record<CurveLabelNumber, number> & { color: string; markerColor: string; titles: string; style: 'uniform' | 'mixed' };
+export type CurveLabelSpec = Record<CurveLabelNumber, number> & { color: string; markerColor: string; titles: string; anchorOverrides?: string; style: 'uniform' | 'mixed' };
 const params: OperatorParameter[] = CURVE_LABEL_NUMBERS.map(([id,label,value,min,max,step]) =>
   ({id,label,type:'number',default:value,min,max,step,animatable:true}));
 export const CURVE_LABEL_OPERATOR: OperatorDefinition = {
   id:'geometry.curve-labels',version:1,label:'Curve Scan Labels',
-  description:'Adds true 3D outline cards and rings linked to final GPU curve points. Cards float, tilt and seek free screen space around projected curves, including crossing to the clearer side; they follow the animated camera with a time-sampled delay; numeric readouts show world coordinates. Bypass removes only labels. Curve indices wrap around available strands. Place before Strand Render. Titles: up to six ASCII labels separated by |.',
+  description:'Adds true 3D outline cards and rings linked to final GPU curve points. Cards float, tilt and seek free screen space around projected curves, including crossing to the clearer side; they follow the animated camera with a time-sampled delay; numeric readouts show world coordinates. Bypass removes only labels. Curve indices wrap around available strands. Place before Strand Render. Titles: up to six ASCII labels separated by |. Anchor Overrides: zero-based card:strand@material-position entries separated by |; explicit positions follow the moving material and do not replace released tracking. Amber Opening Rings colors the first scheduled markers amber during their initial episode. Rings, leaders and cards share the same intro and outro timing.',
   inputs:[{id:'curves',label:'Curves',type:'curves',required:true,contract:{formats:[STRAND_CURVES_FORMAT]}},
     ...params.map(p=>({id:p.id,label:p.label,type:'number' as const}))],
   outputs:[{id:'curves',label:'Curves',type:'curves',contract:{formats:[STRAND_CURVES_FORMAT]}}],
   parameters:[...params,{id:'style',label:'Card Style',type:'select',default:'uniform',options:[{value:'uniform',label:'Uniform'},{value:'mixed',label:'Mixed shapes and fonts'}],animatable:false},{id:'color',label:'Color',type:'color',default:'#b7d4d0'},
     {id:'markerColor',label:'Tracking Ring Color',type:'color',default:'#b7d4d0'},
+    {id:'anchorOverrides',label:'Anchor Overrides',type:'text',default:'',maxLength:512,animatable:false},
     {id:'titles',label:'Scan Labels',type:'text',default:'FIBER TRACK|FLOW SCAN|LOOP ANALYSIS|MOTION FIELD|YARN SIGNAL|STRUCTURE',maxLength:160,animatable:false}],
   runtime:'builtin',invalidates:'appearance',state:'stateless',addable:true,implementation:'shared',consumers:['Weave'],bypass:'passthrough',
 };
@@ -60,9 +63,9 @@ export const CURVE_LABEL_OPERATOR: OperatorDefinition = {
 export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec {
   const out:Record<string,unknown>={};
   for(const [id,label,,min,max] of CURVE_LABEL_NUMBERS){
-    const value=read(id);
+    const value=read(id)??(id==='openingMarkers'?0:undefined);
     if(typeof value!=='number'||!Number.isFinite(value)||value<min||value>max)throw new Error(`Curve Scan Labels: ${label} must be ${min}–${max}.`);
-    if(['count','firstStrand','strandStep','scheduleSeed','holdCount','lockCount'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
+    if(['count','firstStrand','strandStep','scheduleSeed','holdCount','lockCount','openingMarkers'].includes(id)&&!Number.isInteger(value))throw new Error(`Curve Scan Labels: ${label} must be an integer.`);
     out[id]=value;
   }
   if(Number(out.depthSpread)+Number(out.depthMotion)>.8)throw new Error('Curve Scan Labels: combined depth spread and travel must be at most 0.8 to keep cards in front of the camera.');
@@ -76,11 +79,14 @@ export function readCurveLabels(read:(id:string)=>OperatorValue):CurveLabelSpec 
   if(typeof color!=='string'||!/^#[\da-f]{6}$/i.test(color))throw new Error('Curve Scan Labels: use a six-digit hex color.');
   if(typeof titles!=='string'||!titles.trim()||titles.length>160||!/^[\x20-\x7e]+$/.test(titles))throw new Error('Curve Scan Labels: titles need 1–160 ASCII characters, separated by |.');
   if(titles.split('|').some(title=>!title.trim()||title.length>20))throw new Error('Curve Scan Labels: each title needs 1–20 characters.');
+  const anchorOverrides=read('anchorOverrides')??'';
+  if(typeof anchorOverrides!=='string')throw new Error('Curve Scan Labels: Anchor Overrides must be text.');
+  parseCurveLabelAnchors(anchorOverrides);out.anchorOverrides=anchorOverrides;
   out.color=color;out.markerColor=markerColor;out.titles=titles;return out as CurveLabelSpec;
 }
 export function isCurveLabels(value:unknown):value is CurveLabelSpec {
   if(!value||typeof value!=='object')return false;
   const v=value as Record<string,OperatorValue>;
-  if(Object.keys(v).some(key=>!['color','markerColor','titles','style',...CURVE_LABEL_NUMBERS.map(p=>p[0])].includes(key)))return false;
+  if(Object.keys(v).some(key=>!['color','markerColor','titles','style','anchorOverrides',...CURVE_LABEL_NUMBERS.map(p=>p[0])].includes(key)))return false;
   try{readCurveLabels(id=>v[id]);return true;}catch{return false;}
 }
