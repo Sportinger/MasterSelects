@@ -2,7 +2,7 @@ import headlineShader from './curveLabelHeadlines.wgsl?raw';
 import {CurveLabelHeadlineCache} from './CurveLabelHeadlineAtlas';
 import {curveLabelIntroState} from './curveLabelIntro';
 import {parseCurveLabelIntro} from '../../../services/operators/geometry/curveLabelIntro';
-import {curveLabelLock,curveLabelLocks} from './curveLabelLock';
+import {curveLabelLock,curveLabelLocks,curveLabelActiveLocks} from './curveLabelLock';
 import {curveLabelEpisode,curveLabelOpeningRank} from './curveLabelSchedule';
 import {curveLabelGlitchEvent} from './curveLabelGlitch';
 import glitchShader from './curveLabelGlitch.wgsl?raw';
@@ -56,7 +56,7 @@ export class CurveLabelPass {
       const distance=follow.orthographic?1:spec.depth;
       const halfWidth=distance/Math.max(1e-5,Math.abs(follow.projectionX)),halfHeight=distance/Math.max(1e-5,Math.abs(follow.projectionY));
       const pixelScale=camera.viewport.height/Math.max(1,camera.referenceSize?.height??camera.viewport.height);
-      const data=new Float32Array(120);
+      const data=new Float32Array(124);
       data.set(multiplyMat4(camera.projectionMatrix,camera.viewMatrix),0);data.set(layer.worldMatrix,16);
       data.set([...follow.right,halfWidth],32);data.set([...follow.up,halfHeight],36);
       data.set([...follow.forward,spec.holdEnd],40);data.set([...follow.position,spec.holdStart],44);
@@ -81,7 +81,7 @@ export class CurveLabelPass {
       data.set(lock?[lock.card,lock.amount,lock.age,lock.corner]:[-1,0,0,0],104);
       const missingLocks=spec.lockCount-curveLabelLocks(spec).length;
       const lockWarning=`${layer.layerId}:locks:${spec.lockCount}:${spec.cycle}:${spec.dutyCycle}:${spec.lockDuration}`;
-      if(missingLocks>0&&!this.warned.has(lockWarning)){
+      if(missingLocks>0&&!(spec.stackCount>0)&&!this.warned.has(lockWarning)){
         log.warn('Curve Scan Labels: some camera locks need longer visible card lifetimes.',{layerId:layer.layerId,missingLocks});this.warned.add(lockWarning);
       }
       const intro=curveLabelIntroState(spec,time),hasIntro=intro.some(item=>item.card>=0);
@@ -89,6 +89,7 @@ export class CurveLabelPass {
       data.set([intro[0]?.card??-1,intro[1]?.card??-1,spec.introScale??1.4,spec.introDistance??.78],108);
       data.set([intro[0]?.row??0,intro[1]?.row??0,intro[0]?.pulse??0,intro[1]?.pulse??0],112);
       data.set([spec.introTextDepth??.02,spec.introTextMotion??.4,headlineAtlas?.height??256,(spec.introTextOpacity??1)*layer.opacity],116);
+      data.set([spec.stackCount??0,spec.stackStart??13,spec.stackEnd??21,0],120);
       const uniform=buffer(data,GPUBufferUsage.UNIFORM);
       const offsets=this.avoidance.encode(device,encoder,uniform,buffers.positions,curves.positions.length/3,spec.count,spec.avoidance,temporary);
       const sourceAnchors=curveLabelAnchors(curves.starts,curves.counts,spec,false,time);
@@ -124,7 +125,7 @@ export class CurveLabelPass {
         pass.setPipeline(this.headline!);pass.draw(6,2);
       }
       if(spec.glitchStrength>0&&glitch.age>=0&&glitch.age<=6){pass.setPipeline(this.blocks!);pass.draw(6,spec.count*6*(maxCopies+1));}
-      if(lock&&lock.amount>0){pass.setPipeline(this.lockIcon!);pass.draw(6,20);}
+      if(curveLabelActiveLocks(spec,time).some(event=>event.amount>0)){pass.setPipeline(this.lockIcon!);pass.draw(6,20*spec.count);}
       pass.end();
     }
   }

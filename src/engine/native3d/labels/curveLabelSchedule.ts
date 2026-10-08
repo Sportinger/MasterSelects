@@ -1,3 +1,4 @@
+import {curveLabelStackWindow} from './curveLabelStack';
 import type { CurveLabelSpec } from '../../../services/operators/geometry/curveLabels';
 
 export interface CurveLabelEpisode { birth:number; period:number; visible:number; cycle:number }
@@ -27,20 +28,23 @@ function next(spec:CurveLabelSpec,card:number,birth:number,cycle:number):CurveLa
   // Preserve a complete intro/outro even for a short randomized appearance.
   visible=Math.max(Math.min(2*spec.transition,baseline),visible);
   pause=Math.max(0,pause);
-  if(card<spec.holdCount&&spec.holdEnd>spec.holdStart
-    &&birth<=spec.holdStart-spec.transition&&birth+visible+pause>=spec.holdStart-spec.transition)
-    visible=Math.max(visible,spec.holdEnd+spec.transition-birth);
+  const windows:Array<[number,number]>=[];
+  if(card<spec.holdCount&&spec.holdEnd>spec.holdStart)windows.push([spec.holdStart,spec.holdEnd]);
+  const stack=curveLabelStackWindow(spec,card);if(stack)windows.push(stack);
+  for(const [start,end] of windows.toSorted((a,b)=>a[0]-b[0]))
+    if(birth<=start-spec.transition&&birth+visible+pause>=start-spec.transition)
+      visible=Math.max(visible,end+spec.transition-birth);
   return {birth,visible,period:visible+pause,cycle};
 }
 /** One schedule is shared by CPU text, GPU reveal and offline audio cue generation. */
 export function curveLabelEpisode(spec:CurveLabelSpec,time:number,card:number):CurveLabelEpisode {
   if(!Number.isFinite(time)&&time!==-Infinity)throw new Error('Curve Scan Labels: schedule time must be finite.');
   const birth=opening(spec,card);
-  if(spec.lifetimeVariation===0&&!(card<spec.holdCount&&spec.holdEnd>spec.holdStart)){
+  if(spec.lifetimeVariation===0&&!(card<spec.holdCount&&spec.holdEnd>spec.holdStart)&&!curveLabelStackWindow(spec,card)){
     const cycle=Math.max(0,Math.floor((time-birth)/spec.cycle));
     return {birth:birth+cycle*spec.cycle,period:spec.cycle,visible:spec.cycle*spec.dutyCycle,cycle};
   }
-  const key=[card,spec.count,spec.cycle,spec.dutyCycle,spec.transition,spec.introSpread,spec.lifetimeVariation,spec.scheduleSeed,spec.holdCount,spec.holdStart,spec.holdEnd].join(':');
+  const key=[card,spec.count,spec.cycle,spec.dutyCycle,spec.transition,spec.introSpread,spec.lifetimeVariation,spec.scheduleSeed,spec.holdCount,spec.holdStart,spec.holdEnd,spec.stackCount,spec.stackStart,spec.stackEnd].join(':');
   let episodes=schedules.get(key);
   if(!episodes){episodes=[next(spec,card,birth,0)];schedules.set(key,episodes);if(schedules.size>48)schedules.delete(schedules.keys().next().value!);}
   while(episodes.at(-1)!.birth+episodes.at(-1)!.period<=time){

@@ -1,7 +1,7 @@
 struct Params {
   vp:mat4x4f, world:mat4x4f, right:vec4f, up:vec4f, forward:vec4f, eye:vec4f,
   viewport:vec4f, color:vec4f, metrics:vec4f, arrangement:vec4f, clock:vec4f, motion:vec4f, tracking:vec4f, animation:vec4f, marker:vec4f, glitch:vec4f,
-  liveRight:vec4f, liveUp:vec4f, liveForward:vec4f, liveEye:vec4f, lock:vec4f, intro:vec4f, headline:vec4f, headlineMotion:vec4f,
+  liveRight:vec4f, liveUp:vec4f, liveForward:vec4f, liveEye:vec4f, lock:vec4f, intro:vec4f, headline:vec4f, headlineMotion:vec4f, stack:vec4f,
 }
 struct Point { position:vec4f, normal:vec4f, tangent:vec4f }
 fn roundCard(card:u32)->bool {return p.motion.z>.5&&(card%4u==1u||card%4u==2u);}
@@ -45,8 +45,45 @@ fn cardRotation(card:u32)->vec3f {
  let range=max(p.glitch.w,.07*p.motion.x);
  return vec3f(yaw*range,pitch*range,roll)*envelope;
 }
+fn cameraStackAmount(card:u32)->f32 {
+ if(f32(card)>=p.stack.x*2.||p.stack.z<=p.stack.y){return 0.;}
+ let start=p.stack.y+f32(card/2u)*.08;
+ return rotationEase((p.clock.x-start)/.5)*rotationEase((p.stack.z-p.clock.x)/.7);
+}
 fn cameraLockAmount(card:u32)->f32 {
- return select(0.,p.lock.y,abs(f32(card)-p.lock.x)<.1);
+ return max(cameraStackAmount(card),select(0.,p.lock.y,abs(f32(card)-p.lock.x)<.1));
+}
+fn cameraLockAge(card:u32)->f32 {
+ return select(p.lock.z,p.clock.x-p.stack.y-f32(card/2u)*.08,cameraStackAmount(card)>0.);
+}
+// Reserve the full (differently sized) footprints from the bottom upward.
+fn cameraStackMetrics(card:u32)->vec3f {
+ let side=card%2u;var total=0.;var preceding=0.;
+ for(var row=0u;row<u32(p.stack.x);row++){
+   let height=cardMetrics(row*2u+side).y;
+   total+=height;if(row<card/2u){preceding+=height+.08;}
+ }
+ let scale=min(1.,1.05/max(.01,total+.08*max(0.,p.stack.x-1.)));
+ return vec3f(cardMetrics(card)*scale,(-.90+(preceding+cardMetrics(card).y*.5)*scale));
+}
+// Keep ordinary floating cards out of the temporarily reserved lower columns.
+// Translate their entire tilted plane in live screen-up; their orientation and depth lag remain intact.
+fn aboveCameraStacks(card:u32,center:vec3f,right:vec3f,up:vec3f)->vec3f {
+ if(p.stack.x<=0.||f32(card)<p.stack.x*2.){return vec3f(0);}
+ let amount=rotationEase((p.clock.x-p.stack.y+.3)/.8)*rotationEase((p.stack.z-p.clock.x)/.7);
+ if(amount<=0.){return vec3f(0);}
+ let clip=p.vp*vec4f(center,1);if(clip.w<=.001){return vec3f(0);}
+ let metrics=cardMetrics(card);
+ let r=p.vp*vec4f(right*p.right.w*metrics.x*.59,0);
+ let u=p.vp*vec4f(up*p.up.w*metrics.y*.59,0);
+ let extent=(abs(r.y)+abs(u.y)+abs(clip.y/clip.w)*(abs(r.w)+abs(u.w)))/max(.001,clip.w-abs(r.w)-abs(u.w));
+ let topLeft=cameraStackMetrics(u32(p.stack.x-1.)*2u);
+ let topRight=cameraStackMetrics(u32(p.stack.x-1.)*2u+1u);
+ let ceiling=max(topLeft.z+topLeft.y*.5,topRight.z+topRight.y*.5)+.08;
+ let lift=max(0.,ceiling+extent-clip.y/clip.w)*amount;
+ let perspective=length(vec3f(p.vp[0].w,p.vp[1].w,p.vp[2].w))>.1;
+ let units=p.liveUp.w*select(1.,clip.w/max(.001,p.arrangement.z),perspective);
+ return p.liveUp.xyz*(lift*units);
 }
 fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
  let rows=ceil(p.arrangement.w*.5);let row=f32(card/2u);let side=select(-1.,1.,card%2u==1u);
@@ -62,7 +99,7 @@ fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
  let tiltedUp=p.up.xyz*cos(pitch)+normal*sin(pitch);
  let right=tiltedRight*cos(roll)+tiltedUp*sin(roll);
  let up=tiltedUp*cos(roll)-tiltedRight*sin(roll);
- var floating=center+right*q.x*p.right.w*cardMetrics(card).x+up*q.y*p.up.w*cardMetrics(card).y;
+ var floating=center+aboveCameraStacks(card,center,right,up)+right*q.x*p.right.w*cardMetrics(card).x+up*q.y*p.up.w*cardMetrics(card).y;
  // Bring held cards toward the camera without enlarging their projected footprint.
  // They retain their tilted 3D planes, but no longer sit behind the inspected yarn.
  floating=p.liveEye.xyz+heldCardOffset(card,floating-p.liveEye.xyz);
@@ -70,9 +107,17 @@ fn projectedCardPoint(card:u32,q:vec2f,shift:vec2f)->vec3f {
  if(amount<=0.){return floating;}
  let dimensions=cardMetrics(card);
  let corner=vec2f(select(-1.,1.,u32(p.lock.w)%2u==1u),select(1.,-1.,u32(p.lock.w)>=2u));
- let location=corner*(vec2f(.92)-dimensions*.5);
- let locked=p.liveEye.xyz+p.liveForward.xyz*p.arrangement.z
-   +p.liveRight.xyz*p.liveRight.w*(location.x+q.x*dimensions.x)
-   +p.liveUp.xyz*p.liveUp.w*(location.y+q.y*dimensions.y);
+ var size=dimensions;var location=corner*(vec2f(.92)-size*.5);
+ let stacked=cameraStackAmount(card)>0.;
+ if(stacked){
+   let metrics=cameraStackMetrics(card);size=metrics.xy;
+   location=vec2f(side*(.92-size.x*.5),metrics.z);
+ }
+ // Stacks sit in front of the inspected object, preserving their screen footprint.
+ let perspective=length(vec3f(p.vp[0].w,p.vp[1].w,p.vp[2].w))>.1;
+ let lateral=select(1.,.2,stacked&&perspective);let depthFactor=select(1.,.2,stacked);
+ let locked=p.liveEye.xyz+p.liveForward.xyz*p.arrangement.z*depthFactor
+   +p.liveRight.xyz*p.liveRight.w*(location.x+q.x*size.x)*lateral
+   +p.liveUp.xyz*p.liveUp.w*(location.y+q.y*size.y)*lateral;
  return mix(floating,locked,amount);
 }

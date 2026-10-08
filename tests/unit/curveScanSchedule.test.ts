@@ -1,4 +1,4 @@
-import {curveLabelLock,curveLabelLocks,curveLabelLockReadouts,LOCK_DOCK_SECONDS,LOCK_RELEASE_SECONDS} from '../../src/engine/native3d/labels/curveLabelLock';
+import {curveLabelActiveLocks,curveLabelLock,curveLabelLocks,curveLabelLockReadouts,LOCK_DOCK_SECONDS,LOCK_RELEASE_SECONDS} from '../../src/engine/native3d/labels/curveLabelLock';
 import {describe,it,expect} from 'vitest';
 import {CURVE_LABEL_OPERATOR,readCurveLabels} from '../../src/services/operators/geometry/curveLabels';
 import {curveLabelCues,curveLabelEpisode,curveLabelReveal} from '../../src/engine/native3d/labels/curveLabelSchedule';
@@ -83,5 +83,32 @@ describe('brief camera locks within existing appearances',()=>{
   expect(()=>curveLabelCues(spec(),0,Infinity)).toThrow(/finite/);
   expect(()=>curveLabelCues(spec(),3,2)).toThrow(/ordered/);
   expect(()=>curveLabelLock(spec(),NaN)).toThrow(/finite/);
+ });
+});
+
+describe('lower camera stacks',()=>{
+ it('keeps six differently scheduled cards visible while stacked, including adjacent material holds',()=>{
+  const s={...spec(),holdCount:4,stackCount:3,stackStart:13,stackEnd:21};
+  for(let t=13;t<=21;t+=1/60)for(let card=0;card<6;card++)
+    expect(curveLabelReveal(s,t,curveLabelEpisode(s,t,card)).reveal).toBe(1);
+  for(let t=22;t<=27;t+=.1)for(let card=0;card<4;card++)
+    expect(curveLabelReveal(s,t,curveLabelEpisode(s,t,card)).reveal).toBe(1);
+  expect(curveLabelCues(s,13,21).filter(c=>c.card<6)).toEqual([]);
+  const before=curveLabelCues(s,0,59);
+  curveLabelEpisode(s,58,0);curveLabelEpisode(s,2,0);
+  expect(curveLabelCues(s,0,59)).toEqual(before);
+ });
+ it('docks both lower columns with a smooth stagger and releases all six at the interval end',()=>{
+  const s={...spec(),lockCount:3,stackCount:3,stackStart:13,stackEnd:21};
+  expect(curveLabelActiveLocks(s,16).map(e=>e.card)).toEqual([0,1,2,3,4,5]);
+  const states=curveLabelActiveLocks(s,16);
+  expect(states.every(e=>e.amount===1)).toBe(true);
+  expect(states.map(e=>e.corner)).toEqual([2,3,2,3,2,3]);
+  expect(curveLabelActiveLocks(s,13).every(e=>e.amount===0)).toBe(true);
+  expect(curveLabelActiveLocks(s,13.001)[0].amount).toBeLessThan(1e-6);
+  expect(curveLabelActiveLocks(s,20.999).every(e=>e.amount<1e-6)).toBe(true);
+  expect(curveLabelActiveLocks(s,21)).toEqual([]);
+  expect(curveLabelLocks(s).every(e=>e.start>=21||e.end<=13)).toBe(true);
+  expect(curveLabelActiveLocks(s,16)).toEqual(states);
  });
 });

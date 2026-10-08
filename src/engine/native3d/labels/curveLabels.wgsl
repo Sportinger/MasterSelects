@@ -181,8 +181,8 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  out.alpha=fade(card)*echoAlpha(card,copy)*amount*.85*select(0.,1.,glitchRandom(seed+11.)<.3+amount*.65)*smoothstep(.6,1.,life(card));return out;
 }
 // Twenty line pieces form an animated shackle, body and keyhole in card-local space.
-@vertex fn lockIcon(@builtin(vertex_index) vertex:u32,@builtin(instance_index) item:u32)->Out {
- let card=u32(max(0.,p.lock.x));let amount=cameraLockAmount(card);
+@vertex fn lockIcon(@builtin(vertex_index) vertex:u32,@builtin(instance_index) instance:u32)->Out {
+ let card=instance/20u;let item=instance%20u;let amount=cameraLockAmount(card);
  let corners=array<vec2f,5>(vec2f(-.07,-.04),vec2f(.07,-.04),vec2f(.07,.05),vec2f(-.07,.05),vec2f(-.07,-.04));
  var a=vec2f(0);var b=vec2f(0);
  if(item<4u){a=corners[item];b=corners[item+1u];}
@@ -205,7 +205,7 @@ fn coordinateGlyph(code:u32,position:vec3f)->u32 {
  let weight=max(1.,p.metrics.z*1.4);let spread=weight*3.;var clip=mix(ca,cb,q.x);
  clip=vec4f(clip.xy+normal*(q.y-.5)*spread*2./p.viewport.xy*clip.w,clip.zw);
  var out:Out;out.position=clip;out.uv=vec2f(q.x,(q.y-.5)*spread);out.kind=0u;out.weight=weight;out.accent=0.;out.glitch=0.;
- out.tint=mix(p.color.rgb,vec3f(1.,.86,.24),amount)*(1.+exp(-pow((p.lock.z-.5)/.11,2.)));
+ out.tint=mix(p.color.rgb,vec3f(1.,.86,.24),amount)*(1.+exp(-pow((cameraLockAge(card)-.5)/.11,2.)));
  out.alpha=fade(card)*smoothstep(0.,.2,amount);return out;
 }
 @fragment fn fragment(in:Out)->@location(0) vec4f {
