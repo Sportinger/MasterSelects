@@ -1,3 +1,4 @@
+import {authoredCurveLabelGlyphs} from './curveLabelTypography';
 import {curveLabelTextState} from './curveLabelTextState';
 import {parseCurveLabelAnchors} from '../../../services/operators/geometry/curveLabelAnchors';
 import {curveLabelActiveLocks,curveLabelLockReadouts} from './curveLabelLock';
@@ -44,7 +45,7 @@ export function curveLabelGlyphs(spec:CurveLabelSpec,time:number):Uint32Array {
     const lock=locks.find(item=>item.card===card);
     const authored=text.rows.get(card),opening=intro.find(item=>item.card===card&&item.pulse>-1);
     if(authored&&!opening){
-      authored.forEach((row,r)=>{for(let c=0;c<row.length;c++)out[card*LABEL_GLYPHS+r*LABEL_COLUMNS+c]=row.charCodeAt(c)+(r===0?2048+4096:0);});
+      out.set(authoredCurveLabelGlyphs(authored,card,spec.style==='mixed'?spec.fontVariation:0),card*LABEL_GLYPHS);
       continue;
     }
     if(lock?.card===card&&lock.amount>.01&&!opening){

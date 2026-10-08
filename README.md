@@ -240,3 +240,5 @@ Scan intros combine detailed readouts with cream multilingual text on independen
 Weave scan cards support material anchors for an authored tracking hold, with projected card bounds kept in frame while the yarn moves.
 
 Curve Scan Labels accepts authored text cues with timed four-line readouts and Unicode headlines, reusing existing cards and preserving their tracking and appearance schedules.
+
+Authored scan readouts use stronger text with fitted word-level bold, size and occasional italic variation while retaining their existing colors.
