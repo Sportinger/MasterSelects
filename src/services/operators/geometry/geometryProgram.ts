@@ -1,4 +1,4 @@
-import { motionTime } from './motionTime';
+import { motionPhase, motionTime } from './motionTime';
 import { readCurveLabels, CURVE_LABEL_NUMBERS, type CurveLabelSpec } from './curveLabels';
 import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
 import { expandOperatorCompositions } from '../operatorComposition';
@@ -471,9 +471,9 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       } else if (node.operator === 'geometry.clip-time') {
         register = emit(constant(node.id, Number.isFinite(context.simulationTime) ? context.simulationTime! : 0), 'clip-time');
       } else if (node.operator === 'geometry.motion-time') {
-        register = emit(constant(node.id, motionTime(context.simulationTime ?? 0,
+        register = emit(constant(node.id, (output === 'phase' ? motionPhase : motionTime)(context.simulationTime ?? 0,
           finite(read(node, 'duration'), 'Duration'), finite(read(node, 'attack'), 'Acceleration'),
-          finite(read(node, 'release'), 'Deceleration'))), `motion-time:${node.id}`);
+          finite(read(node, 'release'), 'Deceleration'))), `motion-time:${node.id}:${output}`);
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {

@@ -56,8 +56,8 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
     [], [{ id: 'position', label: 'Position', type: 'vec3' }]),
   operator('geometry.clip-time', 'Clip Time', 'Seconds of source time of the clip that hosts the effect: 0 where the clip starts, continuing across splits. Cloth runs on the same clock.',
     [], [{ id: 'value', label: 'Seconds', type: 'number' }]),
-  operator('geometry.motion-time', 'Motion Time', 'Integrated source-time clock: starts at rest, smoothly reaches normal speed after Acceleration, then slows to rest during Deceleration before Duration. Connect only to motion that should ease; other clocks stay independent. Frozen outside the interval; scrubbing and export are deterministic. Acceleration and Deceleration must not overlap.',
-    [], [{ id: 'value', label: 'Motion Seconds', type: 'number' }], [
+  operator('geometry.motion-time', 'Motion Time', 'Integrated source-time clock: starts at rest, smoothly reaches normal speed after Acceleration, then slows to rest during Deceleration before Duration. Connect only to motion that should ease; other clocks stay independent. Frozen outside the interval; scrubbing and export are deterministic. Acceleration and Deceleration must not overlap. Loop Phase advances monotonically from 0 to 1 over the full interval: multiply it by whole turns for a periodic loop without rewinding elapsed motion.',
+    [], [{ id: 'value', label: 'Motion Seconds', type: 'number' }, { id: 'phase', label: 'Loop Phase (0–1)', type: 'number' }], [
       number('duration', 'Duration', 59, 0.001, 36000, 0.01),
       number('attack', 'Acceleration', 5, 0, 36000, 0.01),
       number('release', 'Deceleration', 5, 0, 36000, 0.01)]),

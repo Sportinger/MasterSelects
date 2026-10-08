@@ -14,3 +14,8 @@ export function motionTime(time: number, duration: number, attack: number, relea
   }
   return t - attack / 2;
 }
+
+/** One monotone turn over the complete eased interval, for cyclic motion that must close at the end. */
+export function motionPhase(time: number, duration: number, attack: number, release: number): number {
+  return motionTime(time, duration, attack, release) / motionTime(duration, duration, attack, release);
+}

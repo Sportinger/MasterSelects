@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
-import { motionTime } from '../../src/services/operators/geometry/motionTime';
+import { motionPhase, motionTime } from '../../src/services/operators/geometry/motionTime';
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { geometryParameterReader, validateWeaveGraph } from '../../src/services/operators/geometry/weaveGraph';
 
@@ -18,6 +18,30 @@ const at = (time: number) => motionTime(time, 59, 5, 5);
 const speed = (time: number) => (at(time + 0.0001) - at(time - 0.0001)) / 0.0002;
 
 describe('independent integrated motion clock', () => {
+  it('closes a periodic path by completing a forward turn, never rewinding the elapsed clock', () => {
+    const phase = (t: number) => motionPhase(t, 59, 5, 5);
+    expect(phase(-1)).toBe(0); expect(phase(60)).toBe(1);
+    for (let t = 0; t < 59; t += .1) expect(phase(t + .1)).toBeGreaterThanOrEqual(phase(t));
+    for (const t of [0, 59]) expect(Math.abs(phase(t + .001) - phase(t - .001)) / .002).toBeLessThan(1e-8);
+    const path = (u: number, t: number) => [Math.cos((u + phase(t)) * Math.PI * 6 + .7), Math.sin((u + phase(t)) * Math.PI * 4 + .7)];
+    for (let i = 0; i < 100; i++) {
+      const a = path(i / 100, 0), b = path(i / 100, 59);
+      expect(Math.hypot(a[0] - b[0], a[1] - b[1])).toBeLessThan(1e-13);
+    }
+  });
+  it('compiles the normalized phase and seconds as separate animated outputs', () => {
+    const g = graph();
+    g.edges[0].output = 'phase';
+    g.nodes.push({ id: 'radius', operator: 'geometry.yarn-profile', operatorVersion: 1, bindings: {} });
+    g.edges.find(e => e.id === 'curves')!.to = 'radius';
+    g.edges.push({ id: 'profile', from: 'radius', output: 'curves', to: 'render', input: 'curves' },
+      { id: 'seconds', from: 'clock', output: 'value', to: 'radius', input: 'radius' });
+    expect(validateWeaveGraph(g)).toEqual([]);
+    const p = compileGeometryGraph(g, geometryParameterReader({}), undefined, { simulationTime: 59 });
+    expect(p.stages[0]).toMatchObject({ kind: 'knit-sphere', phase: expect.closeTo(.05, 12) });
+    const field = p.stages.find(s => s.kind === 'yarn-profile')?.radius;
+    expect(field?.instructions[field.output].value).toBe(54);
+  });
   it('starts and ends at rest, reaches normal speed at five seconds and never reverses', () => {
     expect(speed(0)).toBeCloseTo(0, 7);
     expect(speed(59)).toBeCloseTo(0, 7);
