@@ -43,6 +43,33 @@ strands or particles over transparent canvas simply because the preview displays
 that canvas as black. Geometry behind opaque objects remains occluded. This
 per-layer mixing is a Raster feature, not a change to physical path tracing.
 
+## Curve Particle Wake
+
+Insert **Curve Particle Wake** before **Strand Render** for small, sharp,
+creme-colored 3D particles peeling into damped curling trails. Connect **Pulse
+Phase** to an unwrapped cycle count and **Pulse Rate** to the same frequency as
+an animated curve wave. **Wave Delay**, **Wave Origin** and **Wave Length Scale**
+match a wave whose local phase is `2π * phase − (origin − z / scale) * delay`.
+Pulse Rate 0 disables the wake. Particles release near the contraction peak, with seeded per-particle timing,
+size and brightness variation. **Opacity** can fade the wake during formation or
+at a loop boundary. **Drift Speed**, **Drift Damping** and **Curl Amount/Rate**
+control its slow local −Z trail; **Surface Offset** starts it outside the yarn.
+
+The pass reads existing final GPU strand positions and writes depth-tested,
+unlit additive sprites. It needs no second geometry evaluation, neighbor search,
+particle-state readback or simulation warm-up. Numeric parameters accept uniform
+node connections and keyframes; point-varying controls are rejected explicitly.
+The optional render metadata is validated across worker transport. Bypassing
+the node preserves the source curves, materials and scan labels.
+
+This is a deterministic, current-shape wake approximation: particles do not
+remember an earlier world-space birth position when the source deforms or moves.
+It does not simulate fluid, collisions or optical scattering. Raster preview and
+export use the same pass; with path tracing it remains a raster overlay, not
+path-traced geometry. Sprites have antialiased hard edges and no own blur; the
+scene's optional physical-camera depth-of-field still applies to the final
+scene. Counts are explicitly limited to 65,536 per layer.
+
 ## Curve Scan Labels
 
 Insert **Curve Scan Labels** before **Strand Render** to annotate a curve layer

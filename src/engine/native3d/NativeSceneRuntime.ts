@@ -1,4 +1,5 @@
 import { StrandIdCapture } from './passes/StrandIdCapture';
+import { CurveWakePass } from './wake/CurveWakePass';
 import { CurveLabelPass } from './labels/CurveLabelPass';
 import { Logger } from '../../services/logger';
 import { flockGpuTimings } from '../flock/gpu/FlockGpuTimings';
@@ -96,6 +97,7 @@ export class NativeSceneRuntime {
   private slitScanSurfaces?: SlitScanSceneSurfaces;
   private strandImageEffects?: StrandProjectedEffects;
   private curveLabels?: CurveLabelPass;
+  private curveWake?: CurveWakePass;
   private strandIds?: StrandIdCapture;
   captureStrandIds(clipId:string,time:number) {return (this.strandIds??=new StrandIdCapture()).capture(this.strandPass,clipId,time);}
   captureStrandTracking(clipId:string,time:number) {return (this.strandIds??=new StrandIdCapture()).captureTracking(clipId,time);}
@@ -114,6 +116,7 @@ export class NativeSceneRuntime {
     this.strandIds?.clear();
     this.strandPass.dispose();this.strandPass=new StrandPass(()=>this.host.requestRender?.());
     this.curveLabels?.dispose(); this.curveLabels = undefined;
+    this.curveWake?.dispose(); this.curveWake = undefined;
     this.depthOfField?.dispose();
     this.depthOfField = undefined;
     this.flockPass?.dispose?.();
@@ -305,6 +308,7 @@ export class NativeSceneRuntime {
     this.slitScanSurfaces?.destroy(); this.slitScanSurfaces = undefined;
     this.strandImageEffects?.destroy(); this.strandImageEffects = undefined;
     this.curveLabels?.dispose(); this.curveLabels = undefined;
+    this.curveWake?.dispose(); this.curveWake = undefined;
     this.modelRuntimeCache.clear();
   }
 
@@ -610,6 +614,10 @@ export class NativeSceneRuntime {
     }
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'transparent', temporaryBuffers,
       pathTraced)) return null;
+    if (strandPlans.some(plan => plan.layer.strands.program.render?.wake)) {
+      (this.curveWake ??= new CurveWakePass()).render(device, commandEncoder, this.sceneView, this.sceneDepthView,
+        strandPlans, camera, temporaryBuffers);
+    }
     if (strandPlans.some(plan => plan.layer.strands.program.render?.labels)) {
       (this.curveLabels ??= new CurveLabelPass()).render(device, commandEncoder, this.sceneView, this.sceneDepthView,
         strandPlans, camera, layerSpaceEffects?.timelineTimeSeconds ?? 0, temporaryBuffers);

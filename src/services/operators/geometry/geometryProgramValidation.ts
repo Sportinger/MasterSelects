@@ -1,3 +1,4 @@
+import { isCurveWake } from './curveWake';
 import { isCurveLabels } from './curveLabels';
 import { pointwiseOperation, type PointwiseValueType } from '../fields/pointwiseOperations';
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
@@ -140,12 +141,13 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     if (points > CURVE_POINT_LIMIT || strands > CURVE_STRAND_LIMIT) return false;
   }
   const render = value.render;
-  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'colorField', 'antialiasing', 'profile', 'flyaways', 'subdivision', 'materials', 'labels'])
+  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'colorField', 'antialiasing', 'profile', 'flyaways', 'subdivision', 'materials', 'labels', 'wake'])
     || typeof render.nodeId !== 'string'
     || !finite(render.width) || render.width < 0 || typeof render.color !== 'string' || render.color.length > 32
     || (render.antialiasing !== undefined && render.antialiasing !== 'coverage4x' && render.antialiasing !== 'analytic')
     || (render.subdivision !== undefined && (!Number.isInteger(render.subdivision) || (render.subdivision as number) < 1 || (render.subdivision as number) > 16))
     || (render.labels !== undefined && !isCurveLabels(render.labels))
+    || (render.wake !== undefined && !isCurveWake(render.wake))
     || (render.materials !== undefined && !isFiberMaterialList(render.materials)))) return false;
   if (record(render) && render.colorField !== undefined && (!isField(render.colorField)
     || render.colorField.instructions[render.colorField.output].type !== 'vec3')) return false;

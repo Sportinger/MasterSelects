@@ -1,4 +1,5 @@
 import { motionPhase, motionTime } from './motionTime';
+import { readCurveWake, CURVE_WAKE_NUMBERS, type CurveWakeSpec } from './curveWake';
 import { readCurveLabels, CURVE_LABEL_NUMBERS, type CurveLabelSpec } from './curveLabels';
 import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
 import { expandOperatorCompositions } from '../operatorComposition';
@@ -82,13 +83,13 @@ export interface GeometryFiberMaterial {
 }
 /** `subdivision`: path tracer pieces per curve segment; `materials`: Fiber Materials in chain order. */
 export interface GeometryStrandRender { nodeId: string; width: number; color: string; colorField?: GeometryField; antialiasing?: StrandAntialiasing; profile?: YarnProfile;
-  labels?: CurveLabelSpec; flyaways?: YarnFlyaways; subdivision?: number; materials?: GeometryFiberMaterial[] }
+  wake?: CurveWakeSpec; labels?: CurveLabelSpec; flyaways?: YarnFlyaways; subdivision?: number; materials?: GeometryFiberMaterial[] }
 export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStrandRender; pointCount: number; strandCount: number }
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit', 'geometry.knit-sphere', 'geometry.knit-cycle', 'geometry.knit-passage']);
-const MODIFIERS = new Set(['geometry.curve-labels', 'geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
+const MODIFIERS = new Set(['geometry.curve-wake', 'geometry.curve-labels', 'geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
   'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend', 'geometry.curve-contact', 'geometry.curve-flow', 'geometry.close-curve', 'material.fiber']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
 export const knotCurveCount = (shape: number) => KNOT_SHAPES[shape] === 'reef' ? 2 : 1;
@@ -239,6 +240,18 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       stages.push({ kind: 'rod-simulation', nodeId: node.id, rod: compileRodSpec(graph, node, read), ...(pins ? { pins } : {}),
         ...(pullStart ? { pullStart } : {}), ...(pullDirection ? { pullDirection } : {}), ...(form ? { form } : {}),
         time: Math.max(0, timeOffset + sourceTime * timeScale) });
+    } else if (node.operator === 'geometry.curve-wake') {
+      if (render?.wake) throw new Error('Use one Curve Particle Wake node per strand layer.');
+      const uniforms = new Map<string, number>();
+      for (const [id] of CURVE_WAKE_NUMBERS) {
+        const field = compileField(node, id, 'scalar');
+        if (!field) continue;
+        if (field.instructions.length !== 1 || field.instructions[0].operation !== 'constant')
+          throw new Error(`Curve Particle Wake ${id} must be uniform, not a per-point field.`);
+        uniforms.set(id, field.instructions[0].value ?? 0);
+      }
+      const wake = readCurveWake(id => uniforms.get(id) ?? read(node, id));
+      if (render) render.wake = wake;
     } else if (node.operator === 'geometry.curve-labels') {
       if (render?.labels) throw new Error('Use one Curve Scan Labels node per strand layer.');
       const uniforms = new Map<string, number>();

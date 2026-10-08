@@ -1,3 +1,4 @@
+import { CURVE_WAKE_OPERATOR } from './curveWake';
 import { CURVE_LABEL_OPERATOR } from './curveLabels';
 import type { OperatorDefinition, OperatorParameter, OperatorPort } from '../../../types/operatorGraph';
 import { WEAVE_OPERATORS } from './weaveOperators';
@@ -32,6 +33,7 @@ export const CURVE_STRAND_LIMIT = 65_536;
 
 export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
   CURVE_LABEL_OPERATOR,
+  CURVE_WAKE_OPERATOR,
   operator('geometry.curve-line', 'Curve Line', 'Creates one straight curve of evenly spaced points centered on the origin; Points sets the resolution.',
     [], [curves()], [number('points', 'Points', 2000, 2, 65_536, 1, false), number('length', 'Length', 2, 0, 100), axis('z')]),
   operator('geometry.strand-array', 'Strand Array', 'Repeats every incoming curve Count times, spaced evenly along Axis and centered on the original.',
