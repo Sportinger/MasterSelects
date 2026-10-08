@@ -4,6 +4,8 @@ import type { SceneCamera } from '../../src/engine/scene/types';
 import { projectNativeSceneLayers } from '../../src/services/render/workerGpuNativeSceneProjection';
 import { buildWorkerGpuFrameStackProjectionRequest } from '../../src/services/render/workerGpuFrameStackHostProjection';
 import { projectWorkerGpuFrameStack } from '../../src/services/render/workerGpuFrameStackProjector';
+import { buildStrandsLayerSources } from '../../src/services/operators/geometry/strandsLayerSource';
+import { createWaveStrandsGraph } from '../../src/services/operators/geometry/weaveGraph';
 import { nativeSceneFixture } from '../fixtures/workerNativeScene';
 
 const fixture = nativeSceneFixture();
@@ -48,6 +50,13 @@ describe('host shared native scene projection', () => {
   it('keeps the original layer array for a 2D-only stack', () => {
     const layers = [layer('flat')];
     expect(buildWorkerGpuFrameStackProjectionRequest(input(layers)).layers).toBe(layers);
+  });
+
+  it('declines downstream strand effects instead of silently losing them during transport', () => {
+    const yarn = layer('yarn', true);
+    yarn.source = buildStrandsLayerSources({ id:'yarn', effects:[{ id:'weave',name:'Weave',type:'weave',enabled:true,params:{},operatorGraph:createWaveStrandsGraph() }] }, 0, [])[0].source;
+    yarn.effects = [{ id:'glow',name:'Glow',type:'glow',enabled:true,params:{amount:3} }];
+    expect(() => buildWorkerGpuFrameStackProjectionRequest(input([yarn]))).toThrow('post-projection effects');
   });
 
   it('rejects an unsupported 3D source rather than dropping it', () => {

@@ -646,3 +646,11 @@ Particle sprite softness and particle velocity streaks remain independent. Exist
 keep physical processing enabled unless explicitly bypassed. Raster focus blur is a bounded
 screen-space approximation; it is not equivalent to path-traced lens sampling, and the
 jellyfish project currently leaves it bypassed while its export appearance is under review.
+
+### Downstream image effects
+
+Image effects placed after Weave (for example Glow) operate on that strand
+layer's projected image. Preview, nested compositions, and export preserve the
+same interpolated effect stack. Disabled, detached, audio and other geometry
+generators are excluded. The worker scene path explicitly declines these stacks
+until it can carry them, rather than silently dropping the effects.

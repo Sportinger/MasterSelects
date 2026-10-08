@@ -27,7 +27,7 @@ import { buildMotionAdjustmentLayerFromBase } from '../../services/layerBuilder/
 import { bindTerrainLayer } from '../../services/planarTracking/terrainLayerBindings';
 import { buildFlockLayerSource, flockSourceTimeFromClipTime } from '../../services/layerBuilder/layerBuilderFlockLayers';
 import { buildStrandsOverlayLayers } from '../../services/layerBuilder/layerBuilderStrandsLayers';
-import { buildStrandsLayerSources } from '../../services/operators/geometry/strandsLayerSource';
+import { buildStrandsLayerSources, strandPostProjectionEffects } from '../../services/operators/geometry/strandsLayerSource';
 import { useTimelineStore } from '../../stores/timeline';
 
 const log = Logger.create('ExportLayerBuilder');
@@ -282,7 +282,7 @@ function buildExportLayerForClip(
     if (source) return { ...baseLayerProps, source, effects: [], is3D: true };
     // An empty generator host can carry a Weave effect instead of a swarm.
     const strands = buildStrandsLayerSources(clip, clipLocalTime, keyframes)[0];
-    return strands ? { ...baseLayerProps, source: strands.source, effects: [], is3D: true } : null;
+    return strands ? { ...baseLayerProps, source: strands.source, effects: strandPostProjectionEffects(baseLayerProps.effects, strands.effectId), is3D: true } : null;
   }
   // Handle Gaussian Splat clips (native WebGPU)
   if (clip.source?.type === 'gaussian-splat') {

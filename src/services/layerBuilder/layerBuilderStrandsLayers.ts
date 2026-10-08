@@ -1,6 +1,6 @@
 import type { BlendMode, Keyframe, Layer, TimelineClip } from '../../types';
 import { useTimelineStore } from '../../stores/timeline';
-import { buildStrandsLayerSources, renderingWeaveEffects } from '../operators/geometry/strandsLayerSource';
+import { buildStrandsLayerSources, renderingWeaveEffects, strandPostProjectionEffects } from '../operators/geometry/strandsLayerSource';
 import { getClipTimeInfo } from './FrameContext';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
@@ -22,6 +22,7 @@ export function buildLayerBuilderStrandsLayers({ clip, layerIndex, ctx, transfor
     `${ctx.activeCompId}_${layerIndex}_${clip.id}_strands`,
     ctx.getInterpolatedTransform(clip.id, timeInfo.clipLocalTime),
   );
+  const effects = ctx.getInterpolatedEffects(clip.id, timeInfo.clipLocalTime);
   return sources.map(({ effectId, source }) => ({
     id: `${ctx.activeCompId}_layer_${layerIndex}_${clip.id}_strands_${effectId}`,
     name: clip.name,
@@ -30,7 +31,7 @@ export function buildLayerBuilderStrandsLayers({ clip, layerIndex, ctx, transfor
     opacity: transform.opacity,
     blendMode: transform.blendMode as BlendMode,
     source,
-    effects: [],
+    effects: strandPostProjectionEffects(effects, effectId),
     position: transform.position,
     anchor: transform.anchor,
     scale: transform.scale,
@@ -44,5 +45,5 @@ export function buildStrandsOverlayLayers(baseLayer: Layer, clip: TimelineClip, 
   keyframes: readonly Keyframe[] | undefined): Layer[] {
   if (baseLayer.source?.type === 'strands') return [];
   return buildStrandsLayerSources(clip, clipLocalTime, keyframes)
-    .map(({ effectId, source }) => ({ ...baseLayer, id: `${baseLayer.id}_strands_${effectId}`, source, effects: [], is3D: true }));
+    .map(({ effectId, source }) => ({ ...baseLayer, id: `${baseLayer.id}_strands_${effectId}`, source, effects: strandPostProjectionEffects(baseLayer.effects, effectId), is3D: true }));
 }
