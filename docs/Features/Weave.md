@@ -45,30 +45,36 @@ per-layer mixing is a Raster feature, not a change to physical path tracing.
 
 ## Curve Particle Wake
 
-Insert **Curve Particle Wake** before **Strand Render** for small, sharp,
-creme-colored 3D particles peeling into damped curling trails. Connect **Pulse
-Phase** to an unwrapped cycle count and **Pulse Rate** to the same frequency as
-an animated curve wave. **Wave Delay**, **Wave Origin** and **Wave Length Scale**
-match a wave whose local phase is `2π * phase − (origin − z / scale) * delay`.
-Pulse Rate 0 disables the wake. Particles release near the contraction peak, with seeded per-particle timing,
-size and brightness variation. **Opacity** can fade the wake during formation or
-at a loop boundary. **Drift Speed**, **Drift Damping** and **Curl Amount/Rate**
-control its slow local −Z trail; **Surface Offset** starts it outside the yarn.
+Insert **Curve Particle Wake** before **Strand Render** for depth-tested 3D
+particles peeling from existing GPU yarn curves. Connect **Pulse Phase** to an
+unwrapped cycle count and **Pulse Rate** to the same frequency as the curve
+wave. **Wave Delay**, **Wave Origin** and **Wave Length Scale** match the local
+phase `2π * phase − (origin − z / scale) * delay`. Rate 0 disables emission.
 
-The pass reads existing final GPU strand positions and writes depth-tested,
-unlit additive sprites. It needs no second geometry evaluation, neighbor search,
-particle-state readback or simulation warm-up. Numeric parameters accept uniform
-node connections and keyframes; point-varying controls are rejected explicitly.
-The optional render metadata is validated across worker transport. Bypassing
-the node preserves the source curves, materials and scan labels.
+Each particle retains an independent world position and velocity on the GPU.
+At birth, **Motion Inheritance** transfers source velocity (capped at two world
+units per second before scaling). **Drift Damping** slows the impulse;
+**Curl Amount/Rate** controls a smooth water-like flow. **Drift Speed** adds a
+local −Z birth impulse and a weaker persistent current. **Surface Offset**
+places births outside the yarn. No second geometry evaluation or readback is
+needed; there is no fluid pressure or collision solve.
 
-This is a deterministic, current-shape wake approximation: particles do not
-remember an earlier world-space birth position when the source deforms or moves.
-It does not simulate fluid, collisions or optical scattering. Raster preview and
-export use the same pass; with path tracing it remains a raster overlay, not
-path-traced geometry. Sprites have antialiased hard edges and no own blur; the
-scene's optional physical-camera depth-of-field still applies to the final
-scene. Counts are explicitly limited to 65,536 per layer.
+**Pixel Size** 1–4 draws crisp pixel-aligned squares; 0 retains world-radius
+round dots. **Light Intensity** controls additive brightness. In pixel mode,
+**Opacity** and lifetime reduce particle density, preserving the brightness of
+surviving pixels. Positions still use real 3D projection and scene depth.
+Counts support up to 262,144 particles per layer. Numeric parameters accept
+uniform node connections and keyframes; invalid or point-varying inputs report
+errors. Legacy metadata without the new display controls remains accepted.
+
+State is isolated by render target and layer. Repeated renders at the same
+source time do not advance it. Topology/count/seed changes, reverse playback,
+and jumps over half a second reseed from the current curve shape; historical
+geometry is not replayed. Continuous playback preserves detached particles,
+but seeks and different sampling cadences can produce different trails.
+Raster preview and export share the pass; path tracing uses it as a raster
+overlay. Particles have no own blur, although optional scene-wide physical
+camera depth of field still applies. Bypass preserves yarn and scan labels.
 
 ## Curve Scan Labels
 

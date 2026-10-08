@@ -32,6 +32,7 @@ describe('Curve Particle Wake', () => {
     graph.edges.push(edge);
     const program = compileGeometryGraph(graph, geometryParameterReader({}), undefined, { simulationTime: 3.25 });
     expect(program.render?.wake?.pulsePhase).toBe(3.25);
+    expect(program.render?.wake?.time).toBe(3.25);
     edge.from = 'info'; edge.output = 'u';
     expect(() => compileGeometryGraph(graph, geometryParameterReader({}))).toThrow(/must be uniform/);
   });
@@ -39,7 +40,11 @@ describe('Curve Particle Wake', () => {
   it('validates transport and rejects invalid limits instead of silently clamping', () => {
     const spec = readCurveWake(() => undefined);
     expect(isCurveWake(spec)).toBe(true);
-    for (const patch of [{ count: 1.5 }, { count: 65537 }, { pulseRate: -1 }, { drag: 0 }, { opacity: NaN }, { color: 'red' }, { gpuBuffer: {} }])
+    expect(isCurveWake({ ...spec, count: 100000, pixelSize: 1, intensity: 8, inherit: .6 })).toBe(true);
+    const { pixelSize, intensity, inherit, ...legacy } = spec;
+    expect(isCurveWake(legacy)).toBe(true);
+    expect([pixelSize, intensity, inherit]).toEqual([0, 1, .65]);
+    for (const patch of [{ count: 1.5 }, { count: 262145 }, { pixelSize: .5 }, { time: NaN }, { pulseRate: -1 }, { drag: 0 }, { opacity: NaN }, { color: 'red' }, { gpuBuffer: {} }])
       expect(isCurveWake({ ...spec, ...patch })).toBe(false);
   });
 });

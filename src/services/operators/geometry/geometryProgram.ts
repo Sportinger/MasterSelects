@@ -251,7 +251,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         uniforms.set(id, field.instructions[0].value ?? 0);
       }
       const wake = readCurveWake(id => uniforms.get(id) ?? read(node, id));
-      if (render) render.wake = wake;
+      if (render) render.wake = { ...wake, time: context.simulationTime ?? context.time ?? 0 };
     } else if (node.operator === 'geometry.curve-labels') {
       if (render?.labels) throw new Error('Use one Curve Scan Labels node per strand layer.');
       const uniforms = new Map<string, number>();

@@ -195,6 +195,7 @@ export class NativeSceneRuntime {
     this.slitScanSurfaces?.releaseTarget(targetKey);
     this.strandImageEffects?.releaseTarget(targetKey);this.strandIds?.forget(targetKey);
     this.faceCablePass.releaseTarget(targetKey);
+    this.curveWake?.releaseTarget(targetKey);
   }
 
   getGizmoOverlayView(targetKey: string = 'main'): GPUTextureView | null {
@@ -616,7 +617,7 @@ export class NativeSceneRuntime {
       pathTraced)) return null;
     if (strandPlans.some(plan => plan.layer.strands.program.render?.wake)) {
       (this.curveWake ??= new CurveWakePass()).render(device, commandEncoder, this.sceneView, this.sceneDepthView,
-        strandPlans, camera, temporaryBuffers);
+        strandPlans, camera, temporaryBuffers, targetKey, resourcesReady);
     }
     if (strandPlans.some(plan => plan.layer.strands.program.render?.labels)) {
       (this.curveLabels ??= new CurveLabelPass()).render(device, commandEncoder, this.sceneView, this.sceneDepthView,
