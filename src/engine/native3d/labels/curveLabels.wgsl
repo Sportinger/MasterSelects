@@ -42,6 +42,27 @@ fn cardPoint(card:u32,q:vec2f,copy:u32)->vec3f {
  return placedCardPoint(card,q,offsets[card].xy,offsets[card].z)+heldCardOffset(card,p.forward.xyz*p.arrangement.z*.045*trail
    +p.right.xyz*p.right.w*.022*trail+p.up.xyz*p.up.w*.014*trail);
 }
+// Keep the short terminal arm proportional to its actual tilted card, rather
+// than the delayed camera's half-width. Screen-space caps also cover near/locked cards.
+fn leaderElbow(joint:vec3f,opposite:vec3f,trackedPoint:vec3f)->vec3f {
+ let outward=joint-opposite;
+ let width=length(outward);
+ if(width<1e-6){return joint;}
+ let arm=min(width*.14,length(trackedPoint-joint)*.25);
+ let candidate=joint+outward/width*arm;
+ let a=p.vp*vec4f(joint,1);let b=p.vp*vec4f(candidate,1);
+ let other=p.vp*vec4f(opposite,1);let marker=p.vp*vec4f(trackedPoint,1);
+ if(a.w<=.001||b.w<=.001||other.w<=.001||marker.w<=.001){return joint;}
+ let pixels=p.viewport.xy*.5;let origin=a.xy/a.w;
+ let screenWidth=length((other.xy/other.w-origin)*pixels);
+ let gap=length((marker.xy/marker.w-origin)*pixels);
+ let maximum=min(min(screenWidth*.14,gap*.25),p.viewport.y*.015);
+ let projected=length((b.xy/b.w-origin)*pixels);
+ let fraction=clamp(maximum/max(projected,1e-6),0.,1.);
+ // Perspective-correct shortening: the measured fraction is in screen space.
+ let amount=fraction*a.w/max(mix(b.w,a.w,fraction),1e-6);
+ return mix(joint,candidate,clamp(amount,0.,1.));
+}
 fn windowPoint(card:u32,q:vec2f,copy:u32)->vec3f {
  return cardPoint(card,glitchGeometry(q,windowGlitch(card),glitchTick(card)),copy);
 }
@@ -91,7 +112,8 @@ fn corner(vertex:u32)->vec2f {
  if(item==34u){a=windowPoint(card,vec2f(-.53,.5),copy);b=windowPoint(card,vec2f(-.53,.32),copy);}
  if(item==35u){a=windowPoint(card,vec2f(.53,-.5),copy);b=windowPoint(card,vec2f(.53,-.32),copy);}
  if(item>=36u&&item<100u){
-   let joint=cardPoint(card,vec2f(-side*.5,0),copy);let elbow=joint-heldCardOffset(card,p.right.xyz*side*p.right.w*.1);
+   let joint=cardPoint(card,vec2f(-side*.5,0),copy);
+   let elbow=leaderElbow(joint,cardPoint(card,vec2f(side*.5,0),copy),trackedPoint);
    let local=item-36u;let second=local>=32u;let segment=local%32u;
    let start=select(trackedPoint,elbow,second);let end=select(elbow,joint,second);
    a=glitchLeaderPoint(card,start,end,f32(segment)/32.);
