@@ -1,6 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorDefinition, OperatorEndpoint, OperatorGroup } from '../../types/operatorGraph';
 import { getOperatorComposition } from './operatorCompositionRegistry';
-import { IMAGE_EFFECT_GRAPH_LIMITS } from './effectGraphLimits';
+import { effectGraphLimits } from './effectGraphLimits';
 
 const key = (endpoint: OperatorEndpoint) => `${endpoint.nodeId}:${endpoint.portId}`;
 const compositionSignature = (node: BoundOperatorNode) => JSON.stringify(Object.entries(node)
@@ -63,6 +63,7 @@ export function compositionBoundary(graph: EffectOperatorGraph, definition: Oper
 export function expandOperatorCompositions(source: EffectOperatorGraph): EffectOperatorGraph {
   if (!source.nodes.some(node => getOperatorComposition(node.operator))) return source;
   const graph = structuredClone(source);
+  const limits = effectGraphLimits(graph.domain);
   const depths = new Map<string, number>();
   for (;;) {
     const instance = graph.nodes.find(node => getOperatorComposition(node.operator));
@@ -103,8 +104,8 @@ export function expandOperatorCompositions(source: EffectOperatorGraph): EffectO
     const storedInstance = { ...instance, composition: { ...instance.composition, nodeIds: ids, layout: instance.composition?.layout ?? {} } };
     (graph.groups ??= []).push({ id: groupId, label: definition.label, color: '#799ab4', nodeIds: Object.values(ids),
       ...(parent ? { parentId: parent.id } : {}), collapsedByDefault: true, composition: { instance: storedInstance, position } });
-    if (graph.nodes.length > IMAGE_EFFECT_GRAPH_LIMITS.nodes || graph.edges.length > IMAGE_EFFECT_GRAPH_LIMITS.edges) {
-      throw new Error('Expanded composition exceeds the image graph budget.');
+    if (graph.nodes.length > limits.nodes || graph.edges.length > limits.edges) {
+      throw new Error(`Expanded composition exceeds the ${graph.domain ?? 'legacy'} graph budget (${limits.nodes} nodes, ${limits.edges} edges).`);
     }
   }
 }

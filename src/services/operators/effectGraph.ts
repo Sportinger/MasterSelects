@@ -31,8 +31,10 @@ export const usesLiteralNodeParameters = (domain: EffectOperatorGraph['domain'])
 export function validateEffectGraph(graph: EffectOperatorGraph, allowIncomplete = false): string[] {
   const limits = effectGraphLimits(graph?.domain);
   if (graph?.version !== 1 || (graph.schemaVersion !== undefined && graph.schemaVersion !== 1)
-    || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout
-    || graph.nodes.length > limits.nodes || graph.edges.length > limits.edges) return ['Invalid operator graph.'];
+    || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || !graph.layout) return ['Invalid operator graph.'];
+  if (graph.nodes.length > limits.nodes || graph.edges.length > limits.edges) {
+    return [`Operator graph exceeds the ${graph.domain ?? 'legacy'} graph budget: ${graph.nodes.length}/${limits.nodes} nodes, ${graph.edges.length}/${limits.edges} edges.`];
+  }
   if (graph.nodes.some(n => !n || typeof n !== 'object') || graph.edges.some(e => !e || typeof e !== 'object')) return ['Invalid graph entries.'];
   try { graph = expandOperatorCompositions(graph); } catch (error) { return [String(error)]; }
   if (Object.values(graph.layout).some(p => !p || !Number.isFinite(p.x) || !Number.isFinite(p.y))) return ['Invalid node position.'];

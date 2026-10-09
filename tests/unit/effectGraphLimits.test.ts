@@ -42,6 +42,16 @@ function nestedImageSelectionGraph(depth: number): EffectOperatorGraph {
 }
 
 describe('effect graph persisted limits', () => {
+  it('distinguishes malformed structure from a graph exceeding its domain budget', () => {
+    const graph = largeImageGraph(0);
+    expect(validateEffectGraph({ ...graph, nodes: {} as never })).toEqual(['Invalid operator graph.']);
+    expect(validateEffectGraph({ ...graph, version: 2 as 1 })).toEqual(['Invalid operator graph.']);
+    graph.edges = Array(IMAGE_EFFECT_GRAPH_LIMITS.edges + 1).fill(graph.edges[0]);
+    expect(validateEffectGraph(graph)).toEqual([
+      'Operator graph exceeds the image graph budget: 4/512 nodes, 2049/2048 edges.',
+    ]);
+  });
+
   it('accepts image graphs beyond the legacy node and edge caps', () => {
     const graph = largeImageGraph(150);
     expect(graph.nodes.length).toBeGreaterThan(LEGACY_EFFECT_GRAPH_LIMITS.nodes);
@@ -54,12 +64,12 @@ describe('effect graph persisted limits', () => {
     while (nodes.nodes.length <= IMAGE_EFFECT_GRAPH_LIMITS.nodes) {
       const id = `extra-${nodes.nodes.length}`; nodes.nodes.push(value(id)); nodes.layout[id] = { x: 0, y: 0 };
     }
-    expect(validateEffectGraph(nodes)).toEqual(['Invalid operator graph.']);
+    expect(validateEffectGraph(nodes)).toEqual([expect.stringContaining('graph budget:')]);
     const edges = largeImageGraph(0);
     edges.edges = Array.from({ length: IMAGE_EFFECT_GRAPH_LIMITS.edges + 1 }, (_, index) => ({
       id: `overflow-${index}`, from: 'frame', output: 'image', to: 'output', input: 'image',
     }));
-    expect(validateEffectGraph(edges)).toEqual(['Invalid operator graph.']);
+    expect(validateEffectGraph(edges)).toEqual([expect.stringContaining('graph budget:')]);
   });
 
   it('rejects unreachable over-budget data before full and preview compilation', () => {
@@ -87,7 +97,7 @@ describe('effect graph persisted limits', () => {
   it('retains the original cap outside the image, Analog and scene domains', () => {
     const graph = largeImageGraph(61); // 65 nodes, below the image cap but above the legacy cap.
     for (const domain of ['voxel', 'cables', undefined] as const)
-      expect(validateEffectGraph({ ...graph, domain })).toEqual(['Invalid operator graph.']);
+      expect(validateEffectGraph({ ...graph, domain })).toEqual([expect.stringContaining('graph budget:')]);
   });
 
   it('bounds the scene and geometry domains by their own cap', () => {
@@ -98,7 +108,7 @@ describe('effect graph persisted limits', () => {
         const id = `scene-extra-${graph.nodes.length}`;
         graph.nodes.push(value(id)); graph.layout[id] = { x: 0, y: 0 };
       }
-      expect(validateEffectGraph(graph)).toEqual(['Invalid operator graph.']);
+      expect(validateEffectGraph(graph)).toEqual([expect.stringContaining('graph budget:')]);
     }
   });
 
@@ -109,7 +119,7 @@ describe('effect graph persisted limits', () => {
       const id = `analog-extra-${graph.nodes.length}`;
       graph.nodes.push(value(id)); graph.layout[id] = { x: 0, y: 0 };
     }
-    expect(validateEffectGraph(graph)).toEqual(['Invalid operator graph.']);
+    expect(validateEffectGraph(graph)).toEqual([expect.stringContaining('graph budget:')]);
   });
 
   it('keeps duplicate, cycle, and malformed connection checks fail-closed', () => {

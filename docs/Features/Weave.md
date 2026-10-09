@@ -15,6 +15,18 @@ the graph, values and keyframes. The graph is edited on the unified Nodes canvas
 values exposed from it appear in the clip's **Effects** tab, grouped by node group.
 Node contracts are listed in the [Node Catalog](./Node-Catalog.md#curve-graphs-weave).
 
+## Saved graph compatibility
+
+Weave graphs support up to 1,024 nodes and 4,096 connections. Reusable groups
+expand against these geometry limits rather than the smaller image graph budget.
+Large saved graphs reopen with their authored nodes, wiring, layout and parameters
+intact. Graphs exceeding a domain limit report their node/connection counts and
+supported limits instead of a generic invalid-graph error. Per-field instruction
+limits remain independent; raising the saved graph limit does not raise them.
+The compiler reuses identical pure expressions within a field, preserving separate
+animated parameter and clock identities. Remaining field-budget failures identify
+the affected node/input and instruction count.
+
 ## Default graph
 
 A new Weave effect starts with a plain weave of fuzzy three-ply yarns on a sail

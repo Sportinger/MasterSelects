@@ -3,6 +3,9 @@ import { geometryOwnerOperators, geometryParameterReader, validateWeaveGraph } f
 import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { evaluateFieldColumn } from '../../src/services/operators/geometry/curveFieldColumns';
+import { GEOMETRY_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
+import { migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import type { Effect } from '../../src/types/effects';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 function graph(detail = 3.5, strength = 0.18, evolution?: number): EffectOperatorGraph {
@@ -31,6 +34,45 @@ function field(points: number[][], detail = 3.5, strength = 0.18, evolution?: nu
 }
 
 describe('reusable Curl Noise geometry node group', () => {
+  it('reopens a large Weave graph without losing nodes, layout or parameters', () => {
+    const source = expandOperatorCompositions(graph(3.5, .18, .2));
+    // Edited groups cannot be packed back into a shared preset, as in authored projects.
+    delete source.groups;
+    while (source.nodes.length < 599) {
+      const id = `control-${source.nodes.length}`;
+      source.nodes.push({ id, operator: 'values.number', operatorVersion: 1, bindings: {}, constants: { value: 1 } });
+      source.layout[id] = { x: source.nodes.length * 10, y: 0 };
+    }
+    const original: Effect = { id: 'large-weave', type: 'weave', name: 'Weave', enabled: true,
+      params: { stableParameter: 42 }, operatorGraph: source };
+    const saved = JSON.parse(JSON.stringify(original)) as Effect;
+    const restored = migratePersistedEffectOperatorGraph(saved);
+    expect(restored.operatorGraph).toMatchObject(source);
+    expect(restored.params).toEqual(original.params);
+    expect(migratePersistedEffectOperatorGraph(JSON.parse(JSON.stringify(restored)))).toEqual(restored);
+    expect(compileGeometryGraph(restored.operatorGraph!, geometryParameterReader(restored.params)).pointCount).toBe(4);
+    expect(saved).toEqual(original);
+  });
+
+  it('uses the geometry budget for expanded compositions and still rejects overflow', () => {
+    const source = graph(3.5, .18, .2);
+    const expansionGrowth = expandOperatorCompositions(source).nodes.length - source.nodes.length;
+    const fillTo = (total: number) => {
+      while (source.nodes.length + expansionGrowth < total) {
+        const id = `control-${source.nodes.length}`;
+        source.nodes.push({ id, operator: 'values.number', operatorVersion: 1, bindings: {}, constants: { value: 1 } });
+        source.layout[id] = { x: 0, y: 0 };
+      }
+    };
+    fillTo(600);
+    expect(validateWeaveGraph(source)).toEqual([]);
+    expect(expandOperatorCompositions(source).nodes).toHaveLength(600);
+    expect(compileGeometryGraph(source, geometryParameterReader({})).pointCount).toBe(4);
+    expect(() => expandOperatorCompositions({ ...source, domain: 'image' })).toThrow(/image graph budget/);
+    fillTo(GEOMETRY_EFFECT_GRAPH_LIMITS.nodes + 1);
+    expect(() => expandOperatorCompositions(source)).toThrow(/geometry graph budget/);
+  });
+
   it('is discoverable, expands into supported nodes, and survives pack/save/load', () => {
     expect(geometryOwnerOperators().find(op => op.id === 'field.curl-noise3d')?.composition).toBeDefined();
     const source = graph(), expanded = expandOperatorCompositions(source);

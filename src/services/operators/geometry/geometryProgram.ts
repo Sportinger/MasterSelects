@@ -380,7 +380,37 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     const linked = sourceOf(owner, input);
     if (!linked) return undefined;
     const instructions: PointwiseInstruction[] = [], registers = new Map<string, number>(), visiting = new Set<string>();
-    const emit = (instruction: PointwiseInstruction) => instructions.push(foldConstant(instruction, instructions)) - 1;
+    // Instructions are pure within this point/stage. Reused compositions often lower
+    // identical samples and constants under different node IDs; evaluate them once.
+    const expressions = new Map<string, number>(), animated = new Set<number>();
+    const emit = (instruction: PointwiseInstruction, parameterIdentity?: string): number => {
+      const changes = parameterIdentity !== undefined || instruction.inputs.some(input => animated.has(input));
+      const folded = foldConstant(instruction, instructions);
+      if (instruction.operation === 'multiply-scalar') {
+        for (const [factor, other] of [[0, 1], [1, 0]]) {
+          const index = instruction.inputs[factor];
+          if (!animated.has(index) && instructions[index].operation === 'constant' && instructions[index].value === 1) {
+            return instruction.inputs[other];
+          }
+        }
+      }
+      if (folded.operation === 'split-component') {
+        const source = instructions[folded.inputs[0]];
+        if (source.operation === 'combine-vector') return source.inputs[folded.value!];
+      }
+      // Equal values at one frame do not make independent animated sources equivalent.
+      // Share their expressions by provenance, never by the current folded number.
+      const identity = changes ? instruction : folded;
+      const literal = changes && identity.operation === 'constant' ? parameterIdentity
+        : Object.is(identity.value, -0) ? '-0' : String(identity.value);
+      const signature = `${identity.operation}:${identity.type}:${literal}:${identity.inputs.join(',')}`;
+      const existing = expressions.get(signature);
+      if (existing !== undefined) return existing;
+      const index = instructions.push(folded) - 1;
+      expressions.set(signature, index);
+      if (changes) animated.add(index);
+      return index;
+    };
     const visit = (node: BoundOperatorNode, output: string): number => {
       const key = `${node.id}:${output}`, cached = registers.get(key);
       if (cached !== undefined) return cached;
@@ -405,12 +435,12 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
           return Math.max(0, index);
         });
       } else if (node.operator === 'values.number' || node.operator === 'values.integer') {
-        register = emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: finite(read(node, 'value'), 'Value') });
+        register = literal(node, 'value');
         if (node.operator === 'values.integer') register = emit({ nodeId: node.id, operation: 'trunc-scalar', type: 'scalar', inputs: [register] });
       } else if (node.operator === 'image.timeline-time') {
-        register = emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: Number.isFinite(context.time) ? context.time! : 0 });
+        register = emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: Number.isFinite(context.time) ? context.time! : 0 }, 'timeline-time');
       } else if (node.operator === 'geometry.clip-time') {
-        register = emit(constant(node.id, Number.isFinite(context.simulationTime) ? context.simulationTime! : 0));
+        register = emit(constant(node.id, Number.isFinite(context.simulationTime) ? context.simulationTime! : 0), 'clip-time');
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {
@@ -422,8 +452,11 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     /** A parameter-backed input: a number becomes one constant, a vector three combined constants. */
     function literal(node: BoundOperatorNode, parameter: string): number {
       const value = read(node, parameter);
-      if (!Array.isArray(value)) return emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: finite(value, parameter) });
-      const components = value.map(component => emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: finite(component, parameter) }));
+      const binding = node.bindings[parameter];
+      const identity = binding ? `parameter:${JSON.stringify(binding)}` : undefined;
+      if (!Array.isArray(value)) return emit(constant(node.id, finite(value, parameter)), identity);
+      const components = value.map((component, index) => emit(constant(node.id, finite(component, parameter)),
+        identity === undefined ? undefined : `${identity}:${index}`));
       return emit({ nodeId: node.id, operation: 'combine-vector', type: `vec${components.length}` as 'vec2' | 'vec3' | 'vec4', inputs: components });
     }
     const output = visit(linked.node, linked.output);
@@ -432,7 +465,9 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       throw new Error(`${getEffectOperator(owner.operator)?.label}: ${input} needs a ${type === 'vec3' ? 'Vector 3' : 'Number'}.`);
     }
     const field = pruneField({ instructions, output });
-    if (field.instructions.length > GEOMETRY_FIELD_INSTRUCTION_LIMIT) throw new Error('Geometry field exceeds its instruction budget.');
+    if (field.instructions.length > GEOMETRY_FIELD_INSTRUCTION_LIMIT) {
+      throw new Error(`Geometry field at ${owner.id}.${input} exceeds its instruction budget (${field.instructions.length}/${GEOMETRY_FIELD_INSTRUCTION_LIMIT}).`);
+    }
     return field;
   }
 }
