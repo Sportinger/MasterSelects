@@ -1,3 +1,4 @@
+import type { GptImage25Background } from './kieAi/gptImage25';
 export interface VideoProvider {
   id: string;
   name: string;
@@ -91,6 +92,7 @@ export interface GenerationReferenceMedia {
 }
 
 export interface TextToImageParams {
+  background?: GptImage25Background;
   provider: string;
   prompt: string;
   negativePrompt?: string;

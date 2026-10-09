@@ -4,6 +4,16 @@ import { getCatalogEntry } from '../../src/services/flashboard/FlashBoardModelCa
 import { createDefaultFlashBoardComposer } from '../../src/stores/flashboardStore/defaults';
 
 describe('AI Studio generation request', () => {
+  it('preserves GPT Image 2.5 background and rejects reference truncation and invalid size pairs', () => {
+    const entry = getCatalogEntry('cloud', 'gpt-image-2-5-flare-image-to-image')!;
+    const composer = { ...createDefaultFlashBoardComposer(), providerId: entry.providerId,
+      draftPrompt: 'Isolate the tree', mode: 'transparent', imageSize: '2K', aspectRatio: '1:1', referenceMediaFileIds: ['ref-1'] };
+    expect(buildAIStudioGenerationRequest(composer, entry).request).toMatchObject({mode: 'transparent', imageSize: '2K', referenceMediaFileIds: ['ref-1']});
+    expect(buildAIStudioGenerationRequest({...composer, referenceMediaFileIds: Array(17).fill('ref')}, entry).error).toContain('16');
+    expect(buildAIStudioGenerationRequest({...composer, aspectRatio: '27:16'}, entry).error).toContain('1K');
+    expect(buildAIStudioGenerationRequest({...composer, referenceMediaFileIds: []}, entry).error).toContain('reference');
+  });
+
   it('requires a prompt for the default image model', () => {
     const composer = createDefaultFlashBoardComposer();
     const entry = getCatalogEntry(composer.service!, composer.providerId!);

@@ -1,3 +1,4 @@
+import { isGptImage25Provider, GPT_IMAGE_25_BACKGROUNDS } from '../kieAi/gptImage25';
 import { cloudAiService } from '../cloudAiService';
 import type {
   TextToVideoParams,
@@ -461,6 +462,9 @@ async function runImageJob({
   }
 
   const catalogEntry = getCatalogEntry(request.service, request.providerId);
+  if (isGptImage25Provider(request.providerId) && (request.referenceMediaFileIds?.length ?? 0) > (catalogEntry?.maxReferenceImages ?? 0)) {
+    throw new Error('Choose a GPT Image 2.5 Edit model and use at most 16 reference images.');
+  }
   const effectiveReferenceMediaFileIds = typeof catalogEntry?.maxReferenceImages === 'number'
     ? (request.referenceMediaFileIds ?? []).slice(0, catalogEntry.maxReferenceImages)
     : (request.referenceMediaFileIds ?? []);
@@ -485,6 +489,8 @@ async function runImageJob({
     negativePrompt: request.negativePrompt,
     aspectRatio: request.aspectRatio,
     resolution: request.imageSize,
+    background: isGptImage25Provider(request.providerId)
+      ? GPT_IMAGE_25_BACKGROUNDS.find(value => value === request.mode) ?? 'auto' : undefined,
     outputFormat: 'png' as const,
     imageInputs: referenceImageInputs.length > 0 ? referenceImageInputs : undefined,
   };

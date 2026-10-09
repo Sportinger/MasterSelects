@@ -1,3 +1,4 @@
+import { isGptImage25Provider, GPT_IMAGE_25_1K_ONLY_RATIOS } from '../../../services/kieAi/gptImage25';
 import {
   useCallback,
   useEffect,
@@ -343,13 +344,13 @@ export function AIStudioGenerationBar() {
     }
     if (!selectedEntry) return [];
     if (activePopover === 'aspect') {
-      return selectedEntry.aspectRatios.map((value) => ({
+      return selectedEntry.aspectRatios.filter(value => !isGptImage25Provider(selectedEntry.providerId) || (composer.imageSize ?? '1K') === '1K' || !GPT_IMAGE_25_1K_ONLY_RATIOS.includes(value)).map((value) => ({
         id: value, label: value, aspectRatio: value, active: value === composer.aspectRatio,
         onSelect: () => { updateComposer({ aspectRatio: value }); setActivePopover(null); },
       }));
     }
     if (activePopover === 'imageSize') {
-      return (selectedEntry.imageSizes ?? []).map((value) => ({
+      return (selectedEntry.imageSizes ?? []).filter(value => !isGptImage25Provider(selectedEntry.providerId) || value === '1K' || !GPT_IMAGE_25_1K_ONLY_RATIOS.includes(composer.aspectRatio ?? 'auto')).map((value) => ({
         id: value, label: value, active: value === composer.imageSize,
         onSelect: () => { updateComposer({ imageSize: value }); setActivePopover(null); },
       }));

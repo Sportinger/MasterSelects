@@ -1,3 +1,4 @@
+import { isGptImage25Provider, GPT_IMAGE_25_1K_ONLY_RATIOS } from '../../../services/kieAi/gptImage25';
 import {
   getFlashBoardPriceEstimate,
 } from '../../../services/flashboard/FlashBoardPricing';
@@ -139,7 +140,7 @@ export function buildFlashBoardParameterOptions({
 
   return {
     aspectOptions: isParameterPopover(activePopover, 'aspect') && selectedEntry
-      ? selectedEntry.aspectRatios.map((ratio) => ({
+      ? selectedEntry.aspectRatios.filter(ratio => !isGptImage25Provider(providerId) || imageSize === '1K' || !GPT_IMAGE_25_1K_ONLY_RATIOS.includes(ratio)).map((ratio) => ({
         id: ratio,
         label: ratio,
         active: aspectRatio === ratio,
@@ -166,7 +167,7 @@ export function buildFlashBoardParameterOptions({
       }))
       : [],
     imageSizeOptions: isParameterPopover(activePopover, 'imageSize') && selectedEntry?.imageSizes?.length
-      ? selectedEntry.imageSizes.map((optionImageSize) => ({
+      ? selectedEntry.imageSizes.filter(size => !isGptImage25Provider(providerId) || size === '1K' || !GPT_IMAGE_25_1K_ONLY_RATIOS.includes(aspectRatio)).map((optionImageSize) => ({
         id: optionImageSize,
         label: optionImageSize,
         active: imageSize === optionImageSize,

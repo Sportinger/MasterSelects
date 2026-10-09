@@ -1,3 +1,4 @@
+import { getGptImage25ValidationError } from '../../../services/kieAi/gptImage25';
 import {
   DEFAULT_ELEVENLABS_OUTPUT_FORMAT,
   DEFAULT_ELEVENLABS_VOICE_SETTINGS,
@@ -36,6 +37,13 @@ export function buildAIStudioGenerationRequest(
   const promptOptional = entry.requiresPrompt === false
     || (isSunoRequest && sunoCustomMode && sunoInstrumental);
   if (!prompt && !promptOptional) return { error: 'Enter a prompt first.' };
+
+  const imageError = getGptImage25ValidationError({
+    provider: entry.providerId, prompt, aspectRatio: composer.aspectRatio,
+    resolution: composer.imageSize, background: composer.mode,
+    imageInputs: composer.referenceMediaFileIds,
+  });
+  if (imageError) return { error: imageError };
 
   const referenceMediaFileIds = composer.referenceMediaFileIds
     .slice(0, entry.maxReferenceMedia ?? entry.maxReferenceImages ?? Number.POSITIVE_INFINITY);

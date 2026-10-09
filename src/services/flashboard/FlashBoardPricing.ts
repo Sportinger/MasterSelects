@@ -1,3 +1,4 @@
+import { GPT_IMAGE_25_USD_PRICING } from '../kieAi/gptImage25';
 import type { FlashBoardGenerationRequest } from '../../stores/flashboardStore/types';
 import { calculateKieAiCost } from '../kieAi/catalog';
 import { estimateHostedElevenLabsSpeechCredits, type ElevenLabsModelRates } from '../elevenLabsService';
@@ -11,6 +12,7 @@ export const KIEAI_SUNO_VENDOR_CREDITS = 12;
 export const FLASHBOARD_PRICING_VERSION = 'flashboard-pricing-2026-07-30-v1';
 
 export const KIEAI_IMAGE_USD_PRICING: Record<string, Record<string, number>> = {
+  ...GPT_IMAGE_25_USD_PRICING,
   'nano-banana-2': {
     '1K': 0.04,
     '2K': 0.06,

@@ -1,3 +1,4 @@
+import { GPT_IMAGE_25_MODELS, GPT_IMAGE_25_BACKGROUNDS, getGptImage25ValidationError, type GptImage25Background } from '../../../src/services/kieAi/gptImage25';
 import {
   calculateHostedImageCost,
   calculateHostedKlingCost,
@@ -28,6 +29,7 @@ export interface HostedKlingCapabilities {
 
 const SPECIAL_VIDEO_PROVIDERS = new Set(['veo-3.1', 'runway-video', 'topaz/video-upscale']);
 const IMAGE_PROVIDERS = new Set([
+  ...GPT_IMAGE_25_MODELS.map(model => model.id),
   'nano-banana-2',
   'nano-banana-pro',
   'gpt-image-2-text-to-image',
@@ -206,7 +208,10 @@ export function normalizeHostedImageParams(value: unknown): HostedImageParams | 
     return null;
   }
 
-  return {
+  const background = typeof value.background === 'string' ? value.background : undefined;
+  if (background !== undefined && !GPT_IMAGE_25_BACKGROUNDS.some(mode => mode === background)) return null;
+  const params: HostedImageParams = {
+    ...(background ? { background: background as GptImage25Background } : {}),
     aspectRatio: typeof value.aspectRatio === 'string' && value.aspectRatio.trim() ? value.aspectRatio.trim() : '1:1',
     imageInputs: imageInputs?.length ? imageInputs : undefined,
     negativePrompt: typeof value.negativePrompt === 'string' && value.negativePrompt.trim() ? value.negativePrompt.trim() : undefined,
@@ -215,6 +220,7 @@ export function normalizeHostedImageParams(value: unknown): HostedImageParams | 
     provider,
     resolution: typeof value.resolution === 'string' && value.resolution.trim() ? value.resolution.trim() : '1K',
   };
+  return getGptImage25ValidationError(params) ? null : params;
 }
 
 export function normalizeHostedSunoParams(value: unknown): HostedSunoParams | null {

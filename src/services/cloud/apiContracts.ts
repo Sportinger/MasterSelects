@@ -1,3 +1,4 @@
+import type { GptImage25Background } from '../kieAi/gptImage25';
 import type {
   ElevenLabsCreateSpeechParams,
   ElevenLabsModel,
@@ -229,6 +230,7 @@ export interface CloudAiVideoRequest {
   idempotencyKey?: string;
   params?: {
     aspectRatio?: string;
+    background?: GptImage25Background;
     duration?: number;
     endImageUrl?: string;
     imageInputs?: string[];

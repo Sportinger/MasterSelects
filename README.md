@@ -18,6 +18,8 @@ On desktop Linux, Vulkan troubleshooting appears only when WebGPU initialization
 
 The Text inspector edits selected text clips together: numeric values change by the same delta, while fonts, colors and alignment apply to the selection. The font field supports mouse-wheel font selection. See [Text Clips](docs/Features/Text-Clips.md#editing-selected-text-clips).
 
+AI Studio offers **GPT Image 2.5 Flare and Sunburst** through Kie.ai for generation and reference-image editing, with 1K/2K/4K output and Auto/Opaque/Transparent backgrounds. See [AI Studio](docs/Features/AI-Studio.md#gpt-image-25).
+
 ## What you can make
 
 | Workspace | Highlights |

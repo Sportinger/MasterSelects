@@ -97,6 +97,19 @@ describe('cloudAiService billing sync', () => {
     resetAccountStore();
   });
 
+  it('forwards GPT Image 2.5 transparent background and syncs the hosted image charge', async () => {
+    createVideoMock.mockResolvedValue({ creditBalance: 164, data: { taskId: 'image_25' }, ok: true });
+    await expect(cloudAiService.createTextToImage({
+      provider: 'gpt-image-2-5-flare-text-to-image', prompt: 'An isolated tree',
+      resolution: '1K', aspectRatio: '1:1', background: 'transparent',
+    }, 'image-25-request')).resolves.toBe('image_25');
+    expect(createVideoMock).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: 'image-25-request',
+      params: expect.objectContaining({ background: 'transparent', resolution: '1K', outputType: 'image' }),
+    }));
+    expect(useAccountStore.getState().creditBalance).toBe(164);
+  });
+
   it('updates accountStore immediately after hosted video creation', async () => {
     createVideoMock.mockResolvedValue({
       creditBalance: 160,

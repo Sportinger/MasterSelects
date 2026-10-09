@@ -53,3 +53,31 @@ The existing FlashBoard provider and billing boundary is unchanged: hosted jobs 
 ---
 
 [Back to Index](./README.md)
+
+
+## GPT Image 2.5
+
+The image model picker includes **GPT Image 2.5 Flare**, **Flare Edit**,
+**Sunburst** and **Sunburst Edit**, using Kie.ai's hosted API. Flare is the
+faster everyday option; Sunburst targets more precise generation and editing.
+Existing models and the saved/default model selection remain available.
+
+- Resolution: 1K, 2K or 4K. Aspect ratios 27:16, 16:27, 9:8 and 8:9 are
+  restricted to 1K; the parameter menus show compatible combinations.
+- Background: Auto, Opaque or Transparent, saved with the generation settings.
+  For transparent 2K/4K output, describe an isolated subject without backdrop,
+  scenery or shadow; editing prompts should explicitly request extraction and
+  preservation of transparency, as Kie.ai documents.
+- Edit models require 1–16 reference images. Generation-only models reject
+  references; switch to the matching Edit model. Prompts allow up to 20,000
+  characters. Invalid requests are rejected before provider submission.
+- At the checked Kie.ai rates of $0.03/$0.05/$0.08 per 1K/2K/4K image,
+  MasterSelects' existing 6× hosted-credit multiplier gives **36/60/96 credits**.
+  UI estimates and the server charge use the same model-specific rate table.
+- Requests use the existing authenticated hosted generation, polling, refund,
+  import and project persistence paths. No browser-side provider key is needed.
+
+Provider contracts and pricing checked on 2026-10-09:
+[Kie.ai model page](https://kie.ai/gpt-image-2-5),
+[Flare API](https://docs.kie.ai/market/gpt/gpt-image-2-5-flare-text-to-image),
+[Sunburst Edit API](https://docs.kie.ai/market/gpt/gpt-image-2-5-sunburst-image-to-image).

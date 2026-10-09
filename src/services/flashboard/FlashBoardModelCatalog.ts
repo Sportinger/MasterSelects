@@ -1,3 +1,4 @@
+import { GPT_IMAGE_25_MODELS, GPT_IMAGE_25_ASPECT_RATIOS, GPT_IMAGE_25_RESOLUTIONS, GPT_IMAGE_25_BACKGROUNDS } from '../kieAi/gptImage25';
 import type { CatalogEntry } from './types';
 import { DEFAULT_ELEVENLABS_MODEL_ID } from '../../stores/flashboardStore/defaults';
 import { DEFAULT_SUNO_MODEL_ID, SUNO_MODEL_IDS, SUNO_PROVIDER_ID, SUNO_SOUNDS_PROVIDER_ID } from '../sunoContracts';
@@ -30,6 +31,19 @@ const NANO_BANANA_IMAGE_SIZES = ['1K', '2K', '4K'];
 const KLING_MODE_LABELS = { std: '720p', pro: '1080p', '4K': '4K' };
 const VEO_MODE_LABELS = { veo3_fast: 'Fast', veo3: 'Quality', veo3_lite: 'Lite' };
 const HOSTED_KIE_IMAGE_ENTRIES: CatalogEntry[] = [
+  ...GPT_IMAGE_25_MODELS.map((model): CatalogEntry => ({
+    service: 'cloud', providerId: model.id, name: model.name,
+    description: model.id.includes('flare') ? 'Fast GPT Image 2.5 generation and editing via Kie.ai' : 'GPT Image 2.5 for precise image generation and editing via Kie.ai',
+    versions: ['latest'], modes: [...GPT_IMAGE_25_BACKGROUNDS],
+    modeLabels: { auto: 'Auto background', opaque: 'Opaque', transparent: 'Transparent' },
+    modeControlLabel: 'Background', durations: [], aspectRatios: GPT_IMAGE_25_ASPECT_RATIOS,
+    imageSizes: GPT_IMAGE_25_RESOLUTIONS,
+    supportsTextToVideo: false, supportsImageToVideo: false, supportsTextToImage: true,
+    supportsGenerateAudio: false, supportsMultiShot: false, outputType: 'image',
+    maxReferenceImages: model.edit ? 16 : 0, maxReferenceMedia: model.edit ? 16 : 0,
+    requiresReferenceMedia: model.edit, requiredReferenceMediaType: model.edit ? 'image' : undefined,
+    promptRefinerProfile: model.edit ? 'gpt-image-edit' : 'gpt-image',
+  })),
   {
     service: 'cloud',
     providerId: 'nano-banana-2',

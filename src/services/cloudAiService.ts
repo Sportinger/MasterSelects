@@ -1,3 +1,4 @@
+import { getGptImage25ValidationError } from './kieAi/gptImage25';
 import { cloudApi, type CloudAiChatRequest, type CloudAiGatewayEnvelope, type CloudAiVideoRequest } from './cloudApi';
 import { resolveAiAccess, type AiAccessDecision, type AiAccessInput } from './aiAccess';
 import type {
@@ -376,6 +377,8 @@ export const cloudAiService = {
     }
   },
   async createTextToImage(params: TextToImageParams, idempotencyKey?: string): Promise<string> {
+    const validationError = getGptImage25ValidationError(params);
+    if (validationError) throw new Error(validationError);
     const requestKey = idempotencyKey ?? createHostedGenerationIdempotencyKey();
     const activityId = `image:${requestKey}`;
     beginCreditActivity({ feature: 'AI image', id: activityId, targetId: 'flashboard-credit-activity-anchor' });
@@ -386,6 +389,7 @@ export const cloudAiService = {
       params: {
         aspectRatio: params.aspectRatio,
         imageInputs: params.imageInputs,
+        background: params.background,
         negativePrompt: params.negativePrompt,
         outputFormat: params.outputFormat,
         outputType: 'image',
