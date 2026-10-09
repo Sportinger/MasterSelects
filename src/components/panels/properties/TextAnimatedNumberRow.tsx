@@ -1,12 +1,17 @@
+import { useContext, useRef } from 'react';
+import { TextSelectionContext } from './TextSelectionContext';
+import { captureTextNumberGesture, editTextNumber, type TextNumberGesture } from './textSelectionEditing';
 import { useTimelineStore } from '../../../stores/timeline';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
 import { TEXT_NUMERIC_PARAMETERS, type TextNumericParameter } from '../../../services/text/textAnimation';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
-import { KeyframeToggle } from './shared';
+import { TextSelectionKeyframeToggle } from './TextSelectionKeyframeToggle';
 
 export function TextAnimatedNumberRow({ clipId, parameter, baseValue, defaultValue, disabled = false, animatable = true }: {
   clipId: string; parameter: TextNumericParameter; baseValue: number; defaultValue: number; disabled?: boolean; animatable?: boolean;
 }) {
+  const selection = useContext(TextSelectionContext);
+  const gesture = useRef<TextNumberGesture | null>(null);
   const property = `text.${parameter}` as const, definition = TEXT_NUMERIC_PARAMETERS[parameter];
   const value = useTimelineStore(state => {
     const clip = state.clips.find(item => item.id === clipId);
@@ -20,10 +25,11 @@ export function TextAnimatedNumberRow({ clipId, parameter, baseValue, defaultVal
   return <ResolveInspectorNumberRow label={definition.label} value={value} defaultValue={defaultValue}
     min={sliderMin} max={sliderMax} numberMin={definition.min} numberMax={definition.max}
     hardMin={definition.min} hardMax={definition.max} step={definition.step}
-    disabled={disabled || locked} onChange={next => {
+    disabled={disabled || locked}
+    onDragStart={() => { gesture.current = captureTextNumberGesture(useTimelineStore.getState(), clipId, selection, parameter, animatable); }}
+    onDragEnd={() => { gesture.current = null; }}
+    onChange={next => {
       if (disabled || locked) return;
-      const state = useTimelineStore.getState();
-      if (animatable) state.setPropertyValue(clipId, property, next);
-      else state.updateTextProperties(clipId, { [parameter]: next });
-    }} keyframeToggle={animatable && !disabled && !locked ? <KeyframeToggle clipId={clipId} property={property} value={value} /> : undefined} />;
+      editTextNumber(useTimelineStore.getState(), clipId, selection, parameter, next, animatable, gesture.current);
+    }} keyframeToggle={animatable && !disabled && !locked ? <TextSelectionKeyframeToggle clipId={clipId} parameter={parameter} value={value} /> : undefined} />;
 }

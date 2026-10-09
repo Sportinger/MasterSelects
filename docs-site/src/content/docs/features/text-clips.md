@@ -43,6 +43,29 @@ Captions without exposing any caption-specific source, timing, line, or word-
 highlight settings.
 Area-text bounds can be keyframed from the Area Text section.
 
+## Editing selected text clips
+
+The timeline Text inspector applies typography, fill, stroke, paragraph/area-text,
+reveal and shadow edits to all selected, unlocked 2D text clips. The active clip
+supplies the displayed values. Numeric edits add the same difference to every
+clip: sizes 40/60/80 become 50/70/90 when the active size increases by 10.
+Each result stays within the control's supported range. Font weight, font style,
+colors, alignment and switches use the chosen value for every target. Changing
+font family preserves each clip's weight where supported, otherwise choosing the
+nearest available weight. Text content and value-token links remain individual.
+A selection hint shows how many editable text clips are affected; non-text clips
+and locked tracks are excluded, and export locks disable editing.
+
+Animated numeric values use each clip's local playhead time and its existing
+keyframe/recording behavior. Numeric and area-bounds stopwatch actions also apply
+to the selection. Group edits undo together; a numeric drag remains one undo step.
+The node inspector keeps its explicit single-clip scope.
+
+Hover the closed **Font family** field and use the mouse wheel to step through
+fonts and preview them immediately, including on the selected text clips. The
+opened list scrolls normally without changing the font until an option is
+chosen. Other Text dropdowns do not opt into wheel selection.
+
 ## Animated Numbers (`{value}` tokens)
 
 Text content can print a live number that changes every frame, so counters and

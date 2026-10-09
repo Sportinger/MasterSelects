@@ -3,10 +3,12 @@
  * Inspired by After Effects / professional NLE text panels
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useContext } from 'react';
 import { createTextBoundsPathProperty } from '../../types/animationProperties';
 import type { Keyframe } from '../../types/keyframes';
 import type { TextClipProperties } from '../../types/text';
+import { TextSelectionContext } from './properties/TextSelectionContext';
+import { editTextSelection, getTextEditTargets, type EditableTextClip } from './properties/textSelectionEditing';
 import { useTimelineStore } from '../../stores/timeline';
 import { DEFAULT_TEXT_PROPERTIES } from '../../stores/timeline/constants';
 import { googleFontsService, POPULAR_FONTS } from '../../services/googleFontsService';
@@ -135,37 +137,29 @@ function StopwatchIcon() {
 
 function TextBoundsPathKeyframeToggle({
   clipId,
-  textProperties,
   canvasSize,
 }: {
   clipId: string;
-  textProperties: TextClipProperties;
   canvasSize: { width: number; height: number };
 }) {
+  const selection = useContext(TextSelectionContext);
   const property = createTextBoundsPathProperty();
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes.get(clipId) ?? EMPTY_KEYFRAMES);
   const recordingEnabled = useTimelineStore(state => state.keyframeRecordingEnabled.has(`${clipId}:${property}`));
   const hasPathKeyframes = clipKeyframes.some(keyframe => keyframe.property === property);
-  const { addTextBoundsPathKeyframe, toggleKeyframeRecording, disableTextBoundsPathKeyframes } = useTimelineStore.getState();
-
-  const addPathKeyframe = useCallback(() => {
-    const bounds = resolveTextBoundsPath(textProperties, canvasSize.width, canvasSize.height);
-    const pathValue = getTextBoundsPathValue(bounds);
-    addTextBoundsPathKeyframe(clipId, pathValue);
-    if (!recordingEnabled && !hasPathKeyframes) {
-      toggleKeyframeRecording(clipId, property);
-    }
-  }, [
-    addTextBoundsPathKeyframe,
-    canvasSize.height,
-    canvasSize.width,
-    clipId,
-    hasPathKeyframes,
-    property,
-    recordingEnabled,
-    textProperties,
-    toggleKeyframeRecording,
-  ]);
+  const editBoundsKeyframes = (disable: boolean) => {
+    const state = useTimelineStore.getState();
+    editTextSelection(state, clipId, selection, clip => {
+      const bounds = resolveTextBoundsPath(clip.textProperties, canvasSize.width, canvasSize.height);
+      const value = getTextBoundsPathValue(bounds);
+      if (disable) state.disableTextBoundsPathKeyframes(clip.id, value);
+      else {
+        const enableRecording = !state.isRecording(clip.id, property) && !state.hasKeyframes(clip.id, property);
+        state.addTextBoundsPathKeyframe(clip.id, value);
+        if (enableRecording) state.toggleKeyframeRecording(clip.id, property);
+      }
+    });
+  };
 
   return (
     <button
@@ -174,13 +168,13 @@ function TextBoundsPathKeyframeToggle({
       title={recordingEnabled || hasPathKeyframes ? 'Add Text Bounds keyframe (right-click to disable)' : 'Add Text Bounds keyframe'}
       onClick={(event) => {
         event.stopPropagation();
-        addPathKeyframe();
+        editBoundsKeyframes(false);
+        if (event.detail > 0) event.currentTarget.blur();
       }}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        const bounds = resolveTextBoundsPath(textProperties, canvasSize.width, canvasSize.height);
-        disableTextBoundsPathKeyframes(clipId, getTextBoundsPathValue(bounds));
+        editBoundsKeyframes(true);
       }}
     >
       <StopwatchIcon />
@@ -190,6 +184,7 @@ function TextBoundsPathKeyframeToggle({
 
 interface TextTabProps {
   disabled?: boolean;
+  editSelection?: boolean;
   scope?: 'all' | 'content' | 'typography' | 'layout' | 'fill' | 'stroke' | 'shadow';
   clipId: string;
   textProperties: TextClipProperties;
@@ -212,8 +207,18 @@ export function TextTab({
   selectionPills = false,
   scope = 'all',
   disabled = false,
+  editSelection = false,
 }: TextTabProps) {
-  const { updateTextProperties } = useTimelineStore();
+  const updateTextProperties = useTimelineStore(state => state.updateTextProperties);
+  const locked = useTimelineStore(state => state.isExporting || state.tracks.some(track => track.locked
+    && track.id === state.clips.find(clip => clip.id === clipId)?.trackId));
+  const selectionCount = useTimelineStore(state => getTextEditTargets(state, clipId, editSelection).length);
+  const edit = useCallback((action: (clip: EditableTextClip, primary: EditableTextClip) => void) => {
+    if (!disabled) editTextSelection(useTimelineStore.getState(), clipId, editSelection, action);
+  }, [clipId, disabled, editSelection]);
+  const update = useCallback((props: Partial<TextClipProperties>) => {
+    edit(clip => useTimelineStore.getState().updateTextProperties(clip.id, props));
+  }, [edit]);
   // The draft belongs to one clip: a selection change must never commit the
   // previous clip's text into the newly selected clip.
   const [draft, setDraft] = useState({ clipId, text: textProperties.text });
@@ -226,14 +231,14 @@ export function TextTab({
 
   // Debounced text update - 50ms for near-instant preview
   useEffect(() => {
-    if (liveText || disabled || draft.clipId !== clipId) return;
+    if (liveText || disabled || locked || draft.clipId !== clipId) return;
     const timer = setTimeout(() => {
       if (draft.text !== textProperties.text) {
         updateTextProperties(clipId, { text: draft.text });
       }
     }, 50);
     return () => clearTimeout(timer);
-  }, [liveText, disabled, draft, clipId, textProperties.text, updateTextProperties]);
+  }, [liveText, disabled, locked, draft, clipId, textProperties.text, updateTextProperties]);
 
   // Load font when component mounts
   useEffect(() => {
@@ -253,8 +258,8 @@ export function TextTab({
     key: K,
     value: TextClipProperties[K]
   ) => {
-    updateTextProperties(clipId, { [key]: value } as Partial<TextClipProperties>);
-  }, [clipId, updateTextProperties]);
+    update({ [key]: value } as Partial<TextClipProperties>);
+  }, [update]);
 
   // Get available weights for selected font
   const availableWeights = googleFontsService.getAvailableWeights(textProperties.fontFamily);
@@ -271,63 +276,53 @@ export function TextTab({
   const textBox = resolveTextBoxRect(textProperties, canvasWidth, canvasHeight);
   const boxEnabled = textProperties.boxEnabled === true;
 
-  const updateTextBoxEnabled = useCallback((enabled: boolean) => {
-    if (!enabled) {
-      updateTextProperties(clipId, { boxEnabled: false });
-      return;
-    }
-
-    const box = resolveTextBoxRect(textProperties, canvasWidth, canvasHeight);
-    updateTextProperties(clipId, {
+  const writeBox = useCallback((clip: EditableTextClip, box: typeof textBox) => {
+    useTimelineStore.getState().updateTextProperties(clip.id, {
       boxEnabled: true,
-      boxX: Math.round(box.x),
-      boxY: Math.round(box.y),
-      boxWidth: Math.round(box.width),
-      boxHeight: Math.round(box.height),
+      boxX: Math.round(box.x), boxY: Math.round(box.y),
+      boxWidth: Math.round(box.width), boxHeight: Math.round(box.height),
       textBounds: createTextBoundsFromRect(box, canvasWidth, canvasHeight, undefined, { clampToCanvas: false }),
     });
-  }, [canvasHeight, canvasWidth, clipId, textProperties, updateTextProperties]);
+  }, [canvasWidth, canvasHeight]);
+
+  const updateTextBoxEnabled = useCallback((enabled: boolean) => {
+    if (!enabled) { update({ boxEnabled: false }); return; }
+    edit(clip => {
+      // Preserve each clip's existing custom bounds when enabling area text.
+      if (clip.textProperties.textBounds?.vertices.length) {
+        useTimelineStore.getState().updateTextProperties(clip.id, { boxEnabled: true });
+      } else writeBox(clip, resolveTextBoxRect(clip.textProperties, canvasWidth, canvasHeight));
+    });
+  }, [edit, update, writeBox, canvasWidth, canvasHeight]);
 
   const updateTextBoxRect = useCallback((patch: Partial<typeof textBox>) => {
-    const nextBox = {
-      ...textBox,
-      ...patch,
-    };
-    updateTextProperties(clipId, {
-      boxEnabled: true,
-      boxX: Math.round(nextBox.x),
-      boxY: Math.round(nextBox.y),
-      boxWidth: Math.round(nextBox.width),
-      boxHeight: Math.round(nextBox.height),
-      textBounds: createTextBoundsFromRect(nextBox, canvasWidth, canvasHeight, undefined, { clampToCanvas: false }),
+    edit((clip, primary) => {
+      const anchor = resolveTextBoxRect(primary.textProperties, canvasWidth, canvasHeight);
+      const box = resolveTextBoxRect(clip.textProperties, canvasWidth, canvasHeight);
+      for (const key of Object.keys(patch) as (keyof typeof textBox)[]) {
+        const min = key === 'width' || key === 'height' ? 24 : -100000;
+        box[key] = Math.max(min, Math.min(100000, Math.round(box[key]) + patch[key]! - Math.round(anchor[key])));
+      }
+      writeBox(clip, box);
     });
-  }, [canvasHeight, canvasWidth, clipId, textBox, updateTextProperties]);
+  }, [edit, writeBox, canvasWidth, canvasHeight]);
 
   const straightenTextBounds = useCallback(() => {
-    const currentBox = resolveTextBoxRect(textProperties, canvasWidth, canvasHeight);
-    updateTextProperties(clipId, {
-      boxEnabled: true,
-      boxX: Math.round(currentBox.x),
-      boxY: Math.round(currentBox.y),
-      boxWidth: Math.round(currentBox.width),
-      boxHeight: Math.round(currentBox.height),
-      textBounds: createTextBoundsFromRect(currentBox, canvasWidth, canvasHeight, undefined, { clampToCanvas: false }),
+    edit(clip => {
+      writeBox(clip, resolveTextBoxRect(clip.textProperties, canvasWidth, canvasHeight));
+      useTimelineStore.getState().recordTextBoundsPathKeyframe(clip.id);
     });
-    useTimelineStore.getState().recordTextBoundsPathKeyframe(clipId);
-  }, [canvasHeight, canvasWidth, clipId, textProperties, updateTextProperties]);
+  }, [edit, writeBox, canvasWidth, canvasHeight]);
 
   const changeFontFamily = (newFamily: string) => {
     const weights = googleFontsService.getAvailableWeights(newFamily);
-    if (!weights.includes(textProperties.fontWeight)) {
+    edit(clip => {
+      const weight = clip.textProperties.fontWeight;
       const nearest = weights.reduce((previous, current) => (
-        Math.abs(current - textProperties.fontWeight) < Math.abs(previous - textProperties.fontWeight)
-          ? current
-          : previous
+        Math.abs(current - weight) < Math.abs(previous - weight) ? current : previous
       ));
-      updateTextProperties(clipId, { fontFamily: newFamily, fontWeight: nearest });
-      return;
-    }
-    updateProp('fontFamily', newFamily);
+      useTimelineStore.getState().updateTextProperties(clip.id, { fontFamily: newFamily, fontWeight: nearest });
+    });
   };
 
   const colorControl = (
@@ -359,7 +354,12 @@ export function TextTab({
   );
 
   return (
-    <div className={`tt tt--inspector transform-tab-compact${compact ? ' tt--compact' : ''}`}>
+    <TextSelectionContext.Provider value={editSelection}>
+    <fieldset disabled={disabled || locked} className="tt-edit-fields">
+    <div onClick={event => {
+      if (event.detail > 0 && event.target instanceof Element) event.target.closest<HTMLButtonElement>('button:not([role="combobox"]):not([role="option"])')?.blur();
+    }} className={`tt tt--inspector transform-tab-compact${compact ? ' tt--compact' : ''}`}>
+      {selectionCount > 1 && <p className="properties-hint">Editing {selectionCount} text clips. Numeric changes are relative; content stays with this clip.</p>}
       {!hideContent && (scope === 'all' || scope === 'content') && (
         <ResolveInspectorSection indicator="none" title="Content">
           <ResolveInspectorRow label="Text">
@@ -373,7 +373,7 @@ export function TextTab({
               value={liveText ? 'Live from transcript' : localText}
             />
           </ResolveInspectorRow>
-          {!liveText && <TextValueControls clipId={clipId} textProperties={textProperties} disabled={disabled} />}
+          {!liveText && <TextSelectionContext.Provider value={false}><TextValueControls clipId={clipId} textProperties={textProperties} disabled={disabled || locked} /></TextSelectionContext.Provider>}
         </ResolveInspectorSection>
       )}
 
@@ -382,8 +382,10 @@ export function TextTab({
         <ResolveInspectorRow label="Font">
           <InspectorSelect
             ariaLabel="Font family"
+            wheelSelection
+            disabled={disabled || locked}
             onChange={changeFontFamily}
-            onReset={() => updateTextProperties(clipId, {
+            onReset={() => update({
               fontFamily: defaultProperties.fontFamily,
               fontWeight: defaultProperties.fontWeight,
             })}
@@ -468,7 +470,7 @@ export function TextTab({
         defaultOpen={boxEnabled}
         enabled={boxEnabled}
         headerActions={boxEnabled ? (
-          <TextBoundsPathKeyframeToggle clipId={clipId} textProperties={textProperties} canvasSize={{ width: canvasWidth, height: canvasHeight }} />
+          <TextBoundsPathKeyframeToggle clipId={clipId} canvasSize={{ width: canvasWidth, height: canvasHeight }} />
         ) : undefined}
         onEnabledChange={updateTextBoxEnabled}
         title="Area Text"
@@ -510,5 +512,7 @@ export function TextTab({
           clipId={clipId} parameter={parameter} baseValue={textProperties[parameter]} defaultValue={defaultProperties[parameter]} disabled={disabled} animatable={!liveText} />)}
       </ResolveInspectorSection>}
     </div>
+    </fieldset>
+    </TextSelectionContext.Provider>
   );
 }

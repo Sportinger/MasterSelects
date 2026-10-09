@@ -16,6 +16,8 @@ On desktop Linux, Vulkan troubleshooting appears only when WebGPU initialization
 
 *Face Cables combines face tracking, animated controls, and optional scene depth. See the [feature guide](docs/Features/README.md) for this and other workflows.*
 
+The Text inspector edits selected text clips together: numeric values change by the same delta, while fonts, colors and alignment apply to the selection. The font field supports mouse-wheel font selection. See [Text Clips](docs/Features/Text-Clips.md#editing-selected-text-clips).
+
 ## What you can make
 
 | Workspace | Highlights |

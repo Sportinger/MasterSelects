@@ -117,6 +117,7 @@ export function PropertiesClipTabContent({
         {activeTab === 'hook' && selectedHookId && <HookTab hookId={selectedHookId} />}
         {activeTab === 'text' && isTextClip && selectedClip.source?.type === 'text' && selectedClip.textProperties && (
           <TextTab
+            editSelection
             clipId={selectedClip.id}
             textProperties={selectedClip.textProperties}
             compact

@@ -10,6 +10,8 @@ import type { MediaState } from '../../src/stores/mediaStore/types';
 import { encodeAggregate, entityKey } from '../../src/services/project/repository/domains/jsonBoundary';
 import { encodeCompositionClip } from '../../src/services/project/repository/domains/projectDomains';
 import * as serialization from '../../src/services/project/projectCompositionSerialization';
+import { DEFAULT_TEXT_PROPERTIES } from '../../src/stores/timeline/constants';
+import { editTextSelection } from '../../src/components/panels/properties/textSelectionEditing';
 import { createMockClip, createMockKeyframe } from '../helpers/mockData';
 
 vi.mock('../../src/services/project/repository/transaction/editorHistory', () => ({ refreshEditorHistoryAvailability: () => Promise.resolve() }));
@@ -22,8 +24,8 @@ afterEach(() => {
   for (const token of tokens.splice(0)) if (ownsEditorTransaction(token)) cancelEditorTransaction(token);
   cleanup?.(); cleanup = undefined; vi.restoreAllMocks();
 });
-function fixture() {
-  const clips = [createMockClip({ id: 'a' }), createMockClip({ id: 'b' })];
+function fixture(text = false) {
+  const clips = ['a', 'b'].map(id => createMockClip({ id, ...(text ? { source: { type: 'text' }, textProperties: { ...DEFAULT_TEXT_PROPERTIES } } : {}) }));
   const key = createMockKeyframe({ id: 'k', clipId: 'a', easing: 'ease-in-out' });
   const timeline = createStore<TimelineStore>()(withRepositoryStoreMutation('timeline', () => ({
     clips, tracks: [], clipKeyframes: new Map([['a', [key]]]), markers: [], videoBakeRegions: [], duration: 10,
@@ -120,4 +122,21 @@ describe('gesture preview persistence', () => {
     expect(f.timeline.getState().clips.map(c => c.id)).toEqual(['a', 'b']);
     expect(f.timeline.getState().clipKeyframes.get('a')![0]).toBe(f.key);
   });
+});
+
+
+it('commits a multi-text inspector edit as one repository revision outside an input event', async () => {
+  const f = fixture(true);
+  f.timeline.setState({ selectedClipIds: new Set(['a', 'b']) });
+  await f.coordinator.flush();
+  vi.mocked(f.storage.publishRevision).mockClear();
+  editTextSelection(f.timeline.getState(), 'a', true, clip => {
+    f.timeline.setState({ clips: f.timeline.getState().clips.map(current => current.id === clip.id
+      ? { ...current, textProperties: { ...current.textProperties!, fontFamily: 'Lato' } } : current) });
+  });
+  await f.coordinator.flush();
+  expect(f.timeline.getState().clips.map(clip => clip.textProperties?.fontFamily)).toEqual(['Lato', 'Lato']);
+  expect(f.storage.publishRevision).toHaveBeenCalledTimes(1);
+  const revision = vi.mocked(f.storage.publishRevision).mock.calls[0][0];
+  expect(revision.changes.filter(change => JSON.stringify(change).includes('Lato'))).toHaveLength(2);
 });

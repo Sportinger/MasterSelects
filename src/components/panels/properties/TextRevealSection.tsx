@@ -1,3 +1,6 @@
+import { useContext } from 'react';
+import { TextSelectionContext } from './TextSelectionContext';
+import { editTextSelection } from './textSelectionEditing';
 import type { TextClipProperties, TextRevealMode } from '../../../types/text';
 import { useTimelineStore } from '../../../stores/timeline';
 import { normalizeTextRevealMode, TEXT_REVEAL_MODE_LABELS, TEXT_REVEAL_MODES } from '../../../services/text/textReveal';
@@ -9,11 +12,14 @@ import { TextAnimatedNumberRow } from './TextAnimatedNumberRow';
 export function TextRevealSection({ clipId, textProperties, disabled, animatable }: {
   clipId: string; textProperties: TextClipProperties; disabled: boolean; animatable: boolean;
 }) {
+  const selection = useContext(TextSelectionContext);
   const mode = normalizeTextRevealMode(textProperties.revealMode);
   const hasRevealKeys = useTimelineStore(state => (state.clipKeyframes.get(clipId) ?? []).some(key => key.property === 'text.reveal'));
   const active = hasRevealKeys || (textProperties.reveal ?? 1) < 1;
   const update = (updates: Partial<TextClipProperties>) => {
-    if (!disabled) useTimelineStore.getState().updateTextProperties(clipId, updates);
+    if (!disabled) editTextSelection(useTimelineStore.getState(), clipId, selection, clip => {
+      useTimelineStore.getState().updateTextProperties(clip.id, updates);
+    });
   };
   const usesCursor = mode === 'typewriter' || mode === 'decode';
   return (

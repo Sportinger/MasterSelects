@@ -1,5 +1,25 @@
 @layer features {
 
+.tt-edit-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.tt :is(button, input[type="color"]) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tt :is(button, input[type="color"]):focus:not(:focus-visible) {
+  outline: none;
+}
+
+.tt :is(.tt-align-row button, .tt-small-action, .tt-color-swatch):focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Text Tab (embedded in PropertiesPanel) */
 /* ========== TEXT TAB (Compact AE-style) ========== */
 .tt {
