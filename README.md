@@ -16,7 +16,7 @@ On desktop Linux, Vulkan troubleshooting appears only when WebGPU initialization
 
 *Face Cables combines face tracking, animated controls, and optional scene depth. See the [feature guide](docs/Features/README.md) for this and other workflows.*
 
-The Text inspector edits selected text clips together: numeric values change by the same delta, while fonts, colors and alignment apply to the selection. The font field supports mouse-wheel font selection. See [Text Clips](docs/Features/Text-Clips.md#editing-selected-text-clips).
+The Text inspector edits selected text clips together: numeric values change by the same delta, while fonts, colors and alignment apply to the selection. The font field supports mouse-wheel font selection. Static text/image previews return to idle after each requested redraw while playback is paused. See [Text Clips](docs/Features/Text-Clips.md#editing-selected-text-clips).
 
 AI Studio offers **GPT Image 2.5 Flare and Sunburst** through Kie.ai for generation and reference-image editing, with 1K/2K/4K output and Auto/Opaque/Transparent backgrounds. See [AI Studio](docs/Features/AI-Studio.md#gpt-image-25).
 
@@ -154,7 +154,7 @@ Its [space-time slice](docs/Features/Slit-Scan-3D.md#space-time-slice-observed-d
 | --- | --- |
 | <a href="docs/images/node-graph-detail.png"><img src="docs/images/node-graph-detail.png" alt="Connected nodes with image and depth previews" width="320"></a> | <a href="docs/images/node-graph-overview.png"><img src="docs/images/node-graph-overview.png" alt="Large connected node graph" width="320"></a> |
 
-Import video, audio, images, animations, 3D assets, and Premiere Pro projects. Export video, audio, still frames, and interchange formats. FAST export waits for the exact decoded source frame, including reordered frames that arrive after additional samples; multi-clip speed ramps prefetch at their animated source time. Browser, operating system, and GPU support affect available codecs and performance. See [media import](docs/Features/Media-Panel.md) and [export](docs/Features/Export.md).
+Import video, audio, images, animations, 3D assets, and Premiere Pro projects. Drag files or folders anywhere over the editor for a full-workspace blue drop indicator: drops go to Media, while drops on the Timeline place clips directly. Export video, audio, still frames, and interchange formats. FAST export waits for the exact decoded source frame, including reordered frames that arrive after additional samples; multi-clip speed ramps prefetch at their animated source time. Browser, operating system, and GPU support affect available codecs and performance. See [media import](docs/Features/Media-Panel.md) and [export](docs/Features/Export.md).
 
 The [Notebook](docs/Features/Documents.md) is a continuous writing surface for notes and screenplays. Passages can receive labels, scene ranges, comments and media links after writing; imported PDFs retain an original-page view.
 

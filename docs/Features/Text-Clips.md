@@ -4,6 +4,8 @@
 
 Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and then treated like regular timeline layers for compositing, effects, masks, transforms, and keyframes.
 
+Paused previews containing only static text, images or solids redraw when requested, then immediately return to idle. Playback, scrubbing, continuously animated effects and video decoder settling retain their render cadence; changing text still refreshes the preview immediately.
+
 ## Creation
 
 - Text clips are added through the timeline text action and require a video track.

@@ -231,6 +231,39 @@ describe('RenderLoop watchdog', () => {
     }
   });
 
+  it('renders paused text/image timelines only once per request, including periodic UI wakes', () => {
+    const callbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { callbacks.push(cb); return callbacks.length; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => now);
+    const onRender = vi.fn();
+    const loop = new RenderLoop({ recordRafGap: vi.fn(), resetPerSecondCounters: vi.fn() } as never,
+      { isRecovering: () => false, isExporting: () => false, onRender });
+    const tick = () => { now += 1000 / 60; callbacks.shift()!(now); };
+    try {
+      loop.start();
+      tick();
+      for (let i = 0; i < 120; i++) tick();
+      expect(onRender).toHaveBeenCalledTimes(1);
+      expect(loop.getIsIdle()).toBe(true);
+      for (let i = 0; i < 8; i++) {
+        loop.requestRender();
+        for (let frame = 0; frame < 15; frame++) tick();
+      }
+      expect(onRender).toHaveBeenCalledTimes(9);
+      // Changes published during a draw must get their own follow-up frame.
+      onRender.mockImplementationOnce(() => loop.requestRender());
+      loop.requestRender(); tick(); tick(); tick();
+      expect(onRender).toHaveBeenCalledTimes(11);
+      loop.setContinuousRender(true);
+      for (let i = 0; i < 10; i++) tick();
+      expect(onRender).toHaveBeenCalledTimes(21);
+      loop.setContinuousRender(false); tick();
+      expect(loop.getIsIdle()).toBe(true);
+    } finally { loop.stop(); vi.unstubAllGlobals(); }
+  });
+
   it('allows a paused active video preview hold to enter idle after the timeout', () => {
     const rafCallbacks: FrameRequestCallback[] = [];
     const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {

@@ -157,6 +157,17 @@ export class RenderLoop {
         }
       }
 
+      // Text, images and solids have no decoder to settle. A wake needs one
+      // frame, not a full second of redundant composites. Periodic UI updates
+      // used to keep this grace period alive indefinitely at display cadence.
+      if (!playbackRenderActive && !scrubRenderActive && !this.continuousRender
+        && !this.idleSuppressed && !this.hasActiveVideo && this.renderCount > 0
+        && !this.renderRequested) {
+        this.isIdle = true;
+        this.animationId = requestAnimationFrame(loop);
+        return;
+      }
+
       this.renderRequested = false;
 
       // Skip during device recovery

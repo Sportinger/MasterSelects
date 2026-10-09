@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useRef, type Dispatch, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react';
 import { Logger } from '../../../../services/logger';
-import { importProjectDocument, isDocumentImportCandidate } from '../../../../services/documents/importDocument';
-import { useDocumentsStore } from '../../../../stores/documentsStore';
 import { mediaNeedsRelink } from '../../../../services/project/relinkMedia';
 import { useMediaStore, type MediaFolder, type ProjectItem } from '../../../../stores/mediaStore';
 import {
@@ -11,7 +9,7 @@ import {
   createExternalDragPayloadForProjectItem,
   setExternalDragPayload,
 } from '../../../timeline/utils/externalDragSession';
-import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../dropImport';
+import { importProjectDrop } from '../importProjectDrop';
 import { isImportedMediaFileItem } from '../itemTypeGuards';
 import { planBatchExportMediaDragIds } from './batchExportMediaDrag';
 import { useMediaPanelTouchTimelineDrag } from './useMediaPanelTouchTimelineDrag';
@@ -230,30 +228,8 @@ export function useMediaPanelDragDropMarquee({
   }, [removeExternalOverGuards, removeNativeDragGuards]);
 
   const handleExternalDropImport = useCallback(async (dataTransfer: DataTransfer, targetParentId: string | null): Promise<string[]> => {
-    const droppedFiles = await collectDroppedMediaFiles(dataTransfer);
-
-    if (droppedFiles.length === 0) {
-      return [];
-    }
-
-    const documentRecords = droppedFiles.filter(record => isDocumentImportCandidate(record.file));
-    const mediaRecords = droppedFiles.filter(record => !isDocumentImportCandidate(record.file));
-    for (const record of documentRecords) {
-      try {
-        const parsed = await importProjectDocument(record.file);
-        useDocumentsStore.getState().importDocument(record.file.name, parsed.kind, parsed.blocks,
-          parsed.source, undefined, parsed.screenplayTitlePage);
-      } catch (error) {
-        log.warn('Document import failed', { name: record.file.name, error });
-        window.alert(`Could not import ${record.file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
-    }
-    if (!mediaRecords.length) return [];
-    const imported = await importDroppedMediaFiles(mediaRecords, targetParentId, {
-      createFolder,
-      existingFolders: folders,
-      importFiles,
-      importFilesWithHandles,
+    const imported = await importProjectDrop(dataTransfer, targetParentId, {
+      createFolder, existingFolders: folders, importFiles, importFilesWithHandles,
     });
     return getImportedDropItemIds(imported, targetParentId);
   }, [createFolder, folders, importFiles, importFilesWithHandles]);

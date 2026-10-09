@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
 import { flushSync } from 'react-dom';
+import { EditorFileDrop } from './components/common/EditorFileDrop';
 import { Toolbar } from './components/common/Toolbar';
 import { WorkspaceBar } from './components/common/WorkspaceBar';
 import { DockContainer } from './components/dock';
@@ -532,6 +533,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
       <DockContainer detachedWindowsReady={!isProjectBootPending} />
       <WorkspaceBar />
       <TouchGooLayer />
+      {isProjectOpen && !isProjectBootPending && !isStartLayout && <EditorFileDrop />}
       {!isProjectBootPending && shouldShowEditorProjectSelection(
         initialExperience,
         isProjectOpen,

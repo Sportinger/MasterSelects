@@ -97,7 +97,9 @@ Click the **+ Add** button for creating new items:
 - **Motion Shape** - Rectangle, Ellipse, Polygon, or Star (placed in auto-created "Motion Shapes" folder)
 
 #### Drag and Drop
-- Drag files directly from the OS file explorer into the Media Panel
+- Drag files or folders from the OS anywhere over the open editor: a large blue overlay covers the workspace.
+- Drop outside the Timeline to import into Media and reveal the Media Panel. Drops inside the Media Panel preserve folder and Board placement.
+- Drop on the Timeline to place clips there using its existing track/position preview. Internal clip and media drags keep their usual behavior.
 - Paste clipboard images or files with `Ctrl+V` while the Media Panel is hovered
 - Paste a copied video link (YouTube and other `yt-dlp` sites) with `Ctrl+V` to open the in-panel download dialog with thumbnail and resolution choices ([Media Downloads](/features/download-panel/#url-paste))
 - Drag folders directly into the panel; nested folders are recreated inside the project

@@ -1,0 +1,27 @@
+.editor-file-drop-overlay {
+  position: fixed;
+  inset: 8px;
+  z-index: 10000;
+  pointer-events: none;
+  border: 3px dashed var(--accent-color, #4a90e2);
+  border-radius: 12px;
+  background: rgba(45, 126, 230, 0.24);
+  display: grid;
+  place-items: center;
+}
+.editor-file-drop-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: min(600px, 90vw);
+  padding: 36px;
+  color: #fff;
+  background: rgba(20, 64, 120, 0.94);
+  border-radius: 16px;
+  text-align: center;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.25);
+}
+.editor-file-drop-message strong { font-size: 24px; }
+.editor-file-drop-message span { font-size: 14px; }
+body:has(.editor-file-drop-overlay) .media-panel-drop-overlay { display: none; }
