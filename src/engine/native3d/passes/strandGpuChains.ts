@@ -1,7 +1,9 @@
+import type { StrandCurveFlow } from './StrandCurveFlowPass';
+import type { CurveContactSpec } from '../../../services/operators/geometry/curveContacts';
 import type { GeometryStage } from '../../../services/operators/geometry/geometryProgram';
 import type { RodStage } from '../../../services/operators/geometry/rodCurves';
 import type { StrandThreadParams } from './StrandSurfaceBinder';
-import { strandRadiusFieldCode, strandRodFieldCode, type StrandFieldCode } from './strandFieldShader';
+import { strandRadiusFieldCode, strandRodFieldCode, strandPointFieldCode, type StrandFieldCode } from './strandFieldShader';
 
 /**
  * The tails of a geometry program the GPU evaluates per frame. Everything before a tail is
@@ -61,4 +63,22 @@ export function rodChain(stages: readonly GeometryStage[]): RodChain | null {
   try { fields = strandRodFieldCode(stages.slice(at + 1)); } catch { return null; }
   const rod = stages[at] as RodStage, { time: _time, ...setup } = rod, restStages = stages.slice(0, at);
   return { rod, fields, restStages, topology: `${JSON.stringify(restStages)}\n${JSON.stringify(setup)}` };
+}
+
+/** A topology-preserving tail, shared by any curve generator, without requiring a simulation. */
+export interface PointFieldChain { fields: StrandFieldCode; restStages: GeometryStage[]; contact?: CurveContactSpec; flow?: StrandCurveFlow }
+export function pointFieldChain(stages: readonly GeometryStage[]): PointFieldChain | null {
+  const last = stages.at(-1);
+  const contact = last?.kind === 'curve-contact' ? last : undefined;
+  const beforeContact = contact ? stages.slice(0, -1) : stages;
+  const final = beforeContact.at(-1);
+  const flow = final?.kind === 'curve-flow' ? final : undefined;
+  const body = flow ? beforeContact.slice(0, -1) : beforeContact;
+  if (!body.length || body.at(-1)?.kind === 'curve-contact') return null;
+  let at = body.length;
+  while (at > 1 && ['set-position', 'yarn-profile'].includes(body[at - 1].kind)) at--;
+  const tail = body.slice(at);
+  if (!flow && !tail.some(stage => stage.kind === 'set-position' || stage.kind === 'yarn-profile' && stage.radius)) return null;
+  try { return { fields: strandPointFieldCode(tail), restStages: body.slice(0, at), contact, flow }; }
+  catch { return null; }
 }

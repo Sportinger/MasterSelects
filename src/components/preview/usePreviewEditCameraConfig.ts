@@ -42,6 +42,7 @@ export interface EditCameraOrthoFrame {
 }
 
 export type SceneNavCameraValues = {
+  orbitPivot?: SceneVector3;
   positionX?: number;
   positionY?: number;
   positionZ?: number;

@@ -8,7 +8,9 @@ export const ANALOG_SIGNAL_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 256
 export const SCENE_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 256, edges: 1024 };
 /** Multiple editable force compositions and formation stages; individual fields stay bounded below. */
 export const GEOMETRY_EFFECT_GRAPH_LIMITS: EffectGraphLimits = { nodes: 1024, edges: 4096 };
-export const GEOMETRY_FIELD_INSTRUCTION_LIMIT = 512;
+// Independent formation, circulation and inherited force branches need bounded headroom.
+// These are generated expressions, not a fixed-size GPU register array.
+export const GEOMETRY_FIELD_INSTRUCTION_LIMIT = 640;
 /** Expanded lexical scopes are bounded independently from the persisted graph. */
 export const IMAGE_SCOPED_INSTRUCTION_LIMIT = 2048;
 

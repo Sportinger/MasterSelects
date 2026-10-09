@@ -20,6 +20,13 @@ asynchronously through the storage worker. A successful logical edit is not
 itself a disk acknowledgement. Save status distinguishes pending operations,
 confirmed operations and failures. Failed writes remain pending for retry.
 
+Clip-value and keyframe drags keep their intermediate values in the live timeline. An owned
+gesture reserves the affected clip aggregates and keeps only their original immutable values;
+it does not encode every pointer sample into repository entities or composition snapshots.
+Release encodes the final state and saves one revision. Cancellation restores the initial values
+without saving intermediate samples, while unrelated clip edits stay independent. Structural edits
+within the same gesture flush the current preview before taking the normal mutation path.
+
 Filesystem head checks discover the commit folder freshly before and after a
 publication. Each discovery enumerates that folder once and pages through a
 bounded filename snapshot, rather than rescanning it for every page. Independent
@@ -93,6 +100,12 @@ split into bounded structural blocks. Checkpoints limit reconstruction work;
 unchanged entities and blobs are reused. A small clip edit does not serialize
 every clip in the project.
 
+Large workspace redo-preference maps also use bounded immutable blocks. Sessions
+read both legacy inline cursors and blocked cursors, preserving every remembered
+branch choice without allowing a long editing history to exceed the 1 MiB record
+limit. The blocks remain reachable through the navigation head and are validated
+and retained with it during recovery and history archive creation.
+
 Checkpoint records live in the immutable segments and map entity IDs to existing
 records; they do not duplicate media. New revisions link their checkpoint
 directly. The checkpoint interval is 128 content revisions or 4 MiB of changes,
@@ -100,13 +113,22 @@ and its counters survive reopening. Loading a selected revision uses its branch'
 applicable checkpoint plus subsequent changes, including when another branch
 has a newer checkpoint.
 
-Reconstructing the current state and validating the repository are separate
-steps. Opening still validates the retained commit history; checkpoints alone
-do not make that validation independent of history size. A bounded cache reuses
-validated records within each commit, so a checkpoint with many dependencies
-does not repeatedly decode and hash its parent record. Each new opening checks
-the authoritative bytes again. The loading indicator reports import, recovery
-and activation separately.
+Saving also writes a bounded startup cache into `.masterselects/cache/startup/`
+inside the project folder. Two alternating slots and a browser-local checksum
+attestation prevent an interrupted write from replacing the last complete cache.
+It is refreshed at save/flush boundaries, never for intermediate drag samples;
+unchanged saves do not rewrite it. No project archive must be selected manually.
+
+Opening automatically uses this cache when the same browser/location retains its
+attestation and every previously validated history file still has the same size
+and modification time. Current entity records retain SHA-256 validation when read;
+older unchanged history does not undergo another full byte audit. Publications
+added after the snapshot are validated and applied, rather than reverting to the
+cached version. A changed/missing file, damaged cache, lost browser index, or fork
+at older ancestry falls back to complete history validation. Backends without
+file modification identities keep that full-validation path. All history and
+media remain in place; the cache is disposable and is not a backup or an archive.
+The loading indicator reports recovery and activation separately.
 
 Published segments remain immutable. The history cache and history panel page
 limits do not delete older on-disk revisions. Workspace views use two bounded
@@ -129,8 +151,9 @@ write ownership can be opened read-only.
 IndexedDB is a derived metadata index for revision, branch and named-version
 queries. Repository records remain authoritative.
 Completed commit indexes are retained on reload instead of clearing and
-rewriting every history row. Recovery still validates authoritative bytes;
-missing or interrupted index builds are replayed before being marked complete.
+rewriting every history row. Cold recovery validates authoritative bytes; a valid startup cache reuses its
+locally attested history validation. Missing or interrupted index builds are
+replayed before being marked complete.
 Commit paths are discovered in one paged scan per opening, rather than listing
 the entire history folder again for every revision.
 Independent commit manifests use bounded parallel reads, and filesystem recovery

@@ -1,3 +1,6 @@
+import { motionPhase, motionTime } from './motionTime';
+import { readCurveWake, CURVE_WAKE_NUMBERS, type CurveWakeSpec } from './curveWake';
+import { readCurveLabels, CURVE_LABEL_NUMBERS, type CurveLabelSpec } from './curveLabels';
 import { GEOMETRY_FIELD_INSTRUCTION_LIMIT } from '../effectGraphLimits';
 import { expandOperatorCompositions } from '../operatorComposition';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorValue } from '../../../types/operatorGraph';
@@ -48,7 +51,7 @@ export type GeometryStage =
   | { kind: 'set-position'; nodeId: string; position?: GeometryField; offset?: GeometryField }
   | { kind: 'yarn-profile'; nodeId: string; radius?: GeometryField }
   | ({ kind: 'curve-contact'; nodeId: string } & CurveContactSpec)
-  | { kind: 'curve-flow'; nodeId: string; phase: number }
+  | { kind: 'curve-flow'; nodeId: string; phase: number; distance?: boolean }
   /** Curves on the cloth simulated by `cloth` at source time `time` (seconds). */
   | { kind: 'surface-bind'; nodeId: string; height: number; cloth: ClothSpec; time: number }
   /** The incoming curves simulated as rods from their rest state, at source time `time` (seconds). See rodSolver.ts. */
@@ -80,13 +83,13 @@ export interface GeometryFiberMaterial {
 }
 /** `subdivision`: path tracer pieces per curve segment; `materials`: Fiber Materials in chain order. */
 export interface GeometryStrandRender { nodeId: string; width: number; color: string; colorField?: GeometryField; antialiasing?: StrandAntialiasing; profile?: YarnProfile;
-  flyaways?: YarnFlyaways; subdivision?: number; materials?: GeometryFiberMaterial[] }
+  wake?: CurveWakeSpec; labels?: CurveLabelSpec; flyaways?: YarnFlyaways; subdivision?: number; materials?: GeometryFiberMaterial[] }
 export interface GeometryProgram { stages: GeometryStage[]; render?: GeometryStrandRender; pointCount: number; strandCount: number }
 /** Resolves a node parameter (literal, effect parameter or keyframed value) for the evaluation time. */
 export type GeometryParameterReader = (node: BoundOperatorNode, parameter: string) => OperatorValue;
 
 const GENERATORS = new Set(['geometry.curve-line', 'weave.pattern', 'geometry.knot', 'geometry.celtic-knot', 'geometry.knit', 'geometry.knit-sphere', 'geometry.knit-cycle', 'geometry.knit-passage']);
-const MODIFIERS = new Set(['geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
+const MODIFIERS = new Set(['geometry.curve-wake', 'geometry.curve-labels', 'geometry.strand-array', 'geometry.set-position', 'geometry.yarn-profile', 'geometry.flyaways', 'geometry.surface-bind',
   'geometry.thread-along', 'geometry.rod-simulation', 'geometry.extend', 'geometry.curve-contact', 'geometry.curve-flow', 'geometry.close-curve', 'material.fiber']);
 /** Curves of a knot generator: two ropes for the reef knot, one closed curve otherwise. */
 export const knotCurveCount = (shape: number) => KNOT_SHAPES[shape] === 'reef' ? 2 : 1;
@@ -160,6 +163,15 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
     if (!linked) throw new Error(`${getEffectOperator(node.operator)?.label ?? node.operator}: connect ${input}.`);
     return linked;
   };
+  function motionClock(node: BoundOperatorNode): number {
+    const field = compileField(node, 'time', 'scalar');
+    if (!field) return node.operator === 'geometry.knit-sphere'
+      ? (Number.isFinite(context.simulationTime) ? context.simulationTime! : 0)
+      : context.simulationTime ?? context.time ?? 0;
+    if (field.instructions.length !== 1 || field.instructions[0].operation !== 'constant')
+      throw new Error(`${getEffectOperator(node.operator)?.label}: Motion Seconds must be uniform, not per-point.`);
+    return finite(field.instructions[0].value ?? 0, 'Motion Seconds');
+  }
   let render: GeometryStrandRender | undefined;
   let head: BoundOperatorNode | undefined;
   if (target) head = nodes.get(target);
@@ -228,6 +240,30 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       stages.push({ kind: 'rod-simulation', nodeId: node.id, rod: compileRodSpec(graph, node, read), ...(pins ? { pins } : {}),
         ...(pullStart ? { pullStart } : {}), ...(pullDirection ? { pullDirection } : {}), ...(form ? { form } : {}),
         time: Math.max(0, timeOffset + sourceTime * timeScale) });
+    } else if (node.operator === 'geometry.curve-wake') {
+      if (render?.wake) throw new Error('Use one Curve Particle Wake node per strand layer.');
+      const uniforms = new Map<string, number>();
+      for (const [id] of CURVE_WAKE_NUMBERS) {
+        const field = compileField(node, id, 'scalar');
+        if (!field) continue;
+        if (field.instructions.length !== 1 || field.instructions[0].operation !== 'constant')
+          throw new Error(`Curve Particle Wake ${id} must be uniform, not a per-point field.`);
+        uniforms.set(id, field.instructions[0].value ?? 0);
+      }
+      const wake = readCurveWake(id => uniforms.get(id) ?? read(node, id));
+      if (render) render.wake = { ...wake, time: context.simulationTime ?? context.time ?? 0 };
+    } else if (node.operator === 'geometry.curve-labels') {
+      if (render?.labels) throw new Error('Use one Curve Scan Labels node per strand layer.');
+      const uniforms = new Map<string, number>();
+      for (const [id] of CURVE_LABEL_NUMBERS) {
+        const field = compileField(node, id, 'scalar');
+        if (!field) continue;
+        if (field.instructions.length !== 1 || field.instructions[0].operation !== 'constant')
+          throw new Error(`Curve Scan Labels ${id} must be uniform, not a per-point field.`);
+        uniforms.set(id, field.instructions[0].value ?? 0);
+      }
+      const labels = readCurveLabels(id => uniforms.get(id) ?? read(node, id));
+      if (render) render.labels = labels;
     } else if (node.operator === 'material.fiber') {
       const colorField = compileField(node, 'color', 'vec3'), roughnessField = compileField(node, 'roughness', 'scalar');
       const melaninField = compileField(node, 'melanin', 'scalar'), selection = compileField(node, 'selection', 'selection');
@@ -260,7 +296,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         roundness: finite(read(node, 'roundness'), 'Roundness') });
     } else if (node.operator === 'geometry.knit-sphere') {
       const spec = Object.fromEntries(KNIT_SPHERE_KEYS.map(key => [key, finite(read(node, key), key)])) as unknown as KnitSphereSpec;
-      const time = Number.isFinite(context.simulationTime) ? context.simulationTime! : 0;
+      const time = motionClock(node);
       spec.phase += time * finite(read(node, 'speed'), 'Speed');
       if (!isKnitSphereSpec({ ...spec })) throw new Error('Knit Sphere parameters are outside their supported ranges.');
       spec.phase = ((spec.phase % 1) + 1) % 1;
@@ -299,10 +335,18 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       stages.push({ kind: 'close-curve', nodeId: node.id, offset: offset.map(value => finite(value, 'Return offset')) as [number, number, number],
         handle: Math.max(0, finite(read(node, 'handle'), 'End handles')), points: Math.round(finite(read(node, 'points'), 'Return points')) });
     } else if (node.operator === 'geometry.curve-flow') {
+      const units = read(node, 'units');
+      if (units !== 'turns' && units !== 'distance') throw new Error('Closed Curve Flow: unknown Flow Units.');
       stages.push({ kind: 'curve-flow', nodeId: node.id, phase: finite(read(node, 'phase'), 'Flow phase')
-        + finite(read(node, 'speed'), 'Flow speed') * (context.simulationTime ?? context.time ?? 0) });
+        + finite(read(node, 'speed'), 'Flow speed') * motionClock(node), ...(units === 'distance' ? { distance: true } : {}) });
     } else if (node.operator === 'geometry.curve-contact') {
-      stages.push({ kind: 'curve-contact', nodeId: node.id, radius: finite(read(node, 'radius'), 'Contact radius'),
+      const influence = compileField(node, 'strength', 'scalar');
+      if (influence && (influence.instructions.length !== 1 || influence.instructions[0].operation !== 'constant'))
+        throw new Error('Curve Contact Strength must be uniform: connect a value or clock envelope, not a per-point field.');
+      const strength = finite(influence ? influence.instructions[0].value ?? 0 : read(node, 'strength') ?? 1, 'Contact strength');
+      if (strength < 0 || strength > 1) throw new Error('Curve Contact strength must be between 0 and 1.');
+      // Omitting a disabled solve also restores the ordinary GPU deformation chain.
+      if (strength > 0) stages.push({ kind: 'curve-contact', nodeId: node.id, strength, radius: finite(read(node, 'radius'), 'Contact radius'),
         iterations: Math.round(finite(read(node, 'iterations'), 'Contact iterations')), smoothing: finite(read(node, 'smoothing'), 'Contact smoothing') });
     } else if (node.operator === 'geometry.extend') {
       stages.push({ kind: 'extend', nodeId: node.id, length: Math.max(0, finite(read(node, 'length'), 'Extend length')),
@@ -417,7 +461,7 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
       if (visiting.has(key)) throw new Error('Cycles are not supported.');
       visiting.add(key);
       if (owner.operator === 'geometry.rod-simulation' && input === 'pullDirection'
-        && (node.operator === 'geometry.clip-time' || node.operator === 'image.timeline-time')) {
+        && (node.operator === 'geometry.clip-time' || node.operator === 'geometry.motion-time' || node.operator === 'image.timeline-time')) {
         throw new Error('Rod Pull Direction is a fixed rest-state field; use Pull Start and Pull Time to move pinned points.');
       }
       let register: number;
@@ -441,6 +485,14 @@ export function compileGeometryGraph(graph: EffectOperatorGraph, read: GeometryP
         register = emit({ nodeId: node.id, operation: 'constant', type: 'scalar', inputs: [], value: Number.isFinite(context.time) ? context.time! : 0 }, 'timeline-time');
       } else if (node.operator === 'geometry.clip-time') {
         register = emit(constant(node.id, Number.isFinite(context.simulationTime) ? context.simulationTime! : 0), 'clip-time');
+      } else if (node.operator === 'geometry.motion-time') {
+        const args = [context.simulationTime ?? 0, finite(read(node, 'duration'), 'Duration'),
+          finite(read(node, 'attack'), 'Acceleration'), finite(read(node, 'release'), 'Deceleration'),
+          finite(read(node, 'stopPower'), 'Final Stillness')] as const;
+        const minimumSpeed = finite(read(node, 'minimumSpeed'), 'Minimum Speed');
+        const seconds = motionTime(...args, finite(read(node, 'turnStart'), 'Turn Start'),
+          finite(read(node, 'turnDuration'), 'Turn Duration'), minimumSpeed);
+        register = emit(constant(node.id, output === 'phase' ? motionPhase(...args, minimumSpeed) : seconds), `motion-time:${node.id}:${output}`);
       } else if (node.operator === 'geometry.position') {
         register = emit({ nodeId: node.id, operation: 'position', type: 'vec3', inputs: [] });
       } else if (node.operator === 'geometry.curve-info' && CURVE_INFO_OUTPUTS[output]) {

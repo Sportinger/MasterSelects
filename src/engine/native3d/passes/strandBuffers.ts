@@ -4,10 +4,14 @@ import { clothGridAt } from '../../../services/operators/geometry/clothSurface';
 import { rodRestFor, rodStepAt } from '../../../services/operators/geometry/rodCurves';
 import { packStrandPoints, STRAND_POINT_FLOATS } from './strandFrames';
 import { StrandSurfaceBinder, type StrandRestCurves } from './StrandSurfaceBinder';
-import { rodChain, surfaceBindChain, type RodChain } from './strandGpuChains';
+import { rodChain, surfaceBindChain, pointFieldChain, type RodChain } from './strandGpuChains';
 import { RodGpuSimulation } from '../rods/RodGpuSimulation';
 import { evaluateFiberAttributes, fiberAttributesKey, fiberAttributesTrivial } from '../../../services/operators/geometry/fiberMaterialAttributes';
 import { packStrandColors, strandColorNeedsPositions } from './strandColors';
+import { StrandFieldExecutor } from './StrandFieldExecutor';
+import { StrandFieldDeformer } from './StrandFieldDeformer';
+import { Logger } from '../../../services/logger';
+const log = Logger.create('StrandBufferCache');
 
 /** Segment flags above the 30-bit point index: the strand continues before / after the segment. */
 export const SEGMENT_HAS_PREVIOUS = 0x80000000;
@@ -51,6 +55,7 @@ export interface StrandBuffers {
   extent: number;
   rest?: StrandRestCurves & { extent: number; lift: number };
   rods?: RodGpuSimulation;
+  fields?: StrandFieldDeformer;
   /** CPU curves the buffers were built from (rest curves for GPU-bound layers); fields read them. */
   curves?: CurveSet;
   /** Fiber Material attributes per point (fiberMaterialAttributes.ts); absent when one plain material covers all. */
@@ -62,6 +67,10 @@ export interface StrandBuffers {
 export class StrandBufferCache {
   private readonly cache = new Map<string, StrandBuffers>();
   private readonly binder = new StrandSurfaceBinder();
+  private readonly fieldExecutor = new StrandFieldExecutor();
+  private readonly fieldFailures = new Set<string>();
+  private readonly requestRender: () => void;
+  constructor(requestRender: () => void = () => {}) { this.requestRender = requestRender; }
   /** Rod topologies the GPU could not take (device limits); they stay on the CPU. */
   private readonly rodFailures = new Set<string>();
 
@@ -73,18 +82,36 @@ export class StrandBufferCache {
     // Position-dependent colors must see the same final curves as the renderer.
     // Material colors (strand index, u, constants) can use rest coordinates and keep GPU simulation.
     const colorField = program.render?.colorField;
-    const spatialColor = strandColorNeedsPositions(colorField);
+    const spatialColor = strandColorNeedsPositions(colorField) || !!program.render?.materials?.some(material =>
+      [material.colorField, material.roughnessField, material.melaninField, material.selection].some(strandColorNeedsPositions));
     const chain = spatialColor ? null : surfaceBindChain(program.stages);
     const candidate = chain || spatialColor ? null : rodChain(program.stages);
     const rods = candidate && !this.rodFailures.has(candidate.topology) ? candidate : null;
-    const stages = chain ? chain.restStages : rods ? rods.restStages : program.stages;
-    const topology = chain ? JSON.stringify(stages) : rods ? rods.topology : signature;
+    let fields = chain || rods || spatialColor ? null : pointFieldChain(program.stages);
+    const prefix = fields ? evaluateGeometryProgram({ ...program, stages: fields.restStages }) : undefined;
+    const fieldTopology = fields && prefix ? JSON.stringify([prefix.positions.length, [...prefix.starts], [...prefix.counts], fields.fields.code, !!fields.flow]) : '';
+    if (this.fieldFailures.has(fieldTopology) || !prefix?.positions.length) fields = null;
+    let stages = chain ? chain.restStages : rods ? rods.restStages : fields ? fields.restStages : program.stages;
+    let topology = chain ? JSON.stringify(stages) : rods ? rods.topology : fields ? fieldTopology : signature;
     let buffers = this.cache.get(layer.layerId);
+    if (buffers?.fields?.failed && topology === buffers.topology) {
+      this.fieldFailures.add(topology);
+      fields = null; stages = program.stages; topology = signature;
+    }
     if (!buffers || buffers.topology !== topology) {
       if (buffers) this.retire(buffers, temporaryBuffers);
-      const curves = evaluateGeometryProgram({ ...program, stages });
+      const curves = fields ? prefix! : evaluateGeometryProgram({ ...program, stages });
       buffers = (rods && this.buildRods(device, layer.layerId, curves, rods))
-        ?? this.build(device, layer.layerId, rods ? evaluateGeometryProgram(program) : curves, signature, rods ? signature : topology, !!chain);
+        ?? this.build(device, layer.layerId, rods ? evaluateGeometryProgram(program) : curves, signature, rods ? signature : topology, !!chain, !!fields);
+      if (fields) {
+        try { buffers.fields = new StrandFieldDeformer(device, curves, buffers.positions, this.fieldExecutor, this.requestRender); }
+        catch (error) {
+          log.warn('GPU curve fields unavailable; using CPU evaluation', error);
+          this.fieldFailures.add(topology); this.retire(buffers, temporaryBuffers);
+          fields = null; stages = program.stages; topology = signature;
+          buffers = this.build(device, layer.layerId, evaluateGeometryProgram(program), signature, topology, false);
+        }
+      }
     }
     if (rods && buffers.rods && buffers.signature !== signature) {
       const { step, alpha } = rodStepAt(rods.rod);
@@ -104,8 +131,17 @@ export class StrandBufferCache {
       buffers.extent = Math.max(buffers.rest!.extent, reach) + lift * Math.abs(bind.height);
       buffers.signature = signature;
     }
-    this.updateAttributes(device, layer, buffers, temporaryBuffers);
-    const colorSignature = colorField ? JSON.stringify([chain || rods ? topology : signature, colorField]) : undefined;
+    let fieldsReady = true;
+    if (fields && buffers.fields) {
+      const ready = buffers.fields.prepare(prefix!, fields.fields, signature, fields.contact, fields.flow);
+      fieldsReady = !!ready;
+      if (ready) {
+        buffers.positions = ready.positions; buffers.extent = ready.extent; buffers.segmentLength = ready.segmentLength;
+        buffers.signature = ready.signature; buffers.curves = ready.curves;
+      }
+    }
+    if (fieldsReady) this.updateAttributes(device, layer, buffers, temporaryBuffers);
+    const colorSignature = colorField ? JSON.stringify([chain || rods || fields ? topology : signature, colorField]) : undefined;
     if (buffers.colorSignature !== colorSignature) {
       if (buffers.colors) temporaryBuffers.push(buffers.colors);
       buffers.colors = undefined;
@@ -124,7 +160,7 @@ export class StrandBufferCache {
       this.cache.delete(oldest);
       this.retire(retired, temporaryBuffers);
     }
-    return buffers.segmentCount ? buffers : null;
+    return fieldsReady && buffers.segmentCount ? buffers : null;
   }
 
   /** Uploads the per-point Fiber Material attributes when their fields changed. */
@@ -147,7 +183,7 @@ export class StrandBufferCache {
     buffers.attributesKey = key;
   }
 
-  private build(device: GPUDevice, layerId: string, curves: CurveSet, signature: string, topology: string, gpuBind: boolean): StrandBuffers {
+  private build(device: GPUDevice, layerId: string, curves: CurveSet, signature: string, topology: string, gpuBind: boolean, gpuFields = false): StrandBuffers {
     const segments = strandSegmentStarts(curves.starts, curves.counts);
     const upload = (data: Float32Array | Uint32Array, label: string) => {
       const buffer = device.createBuffer({ size: Math.max(16, Math.ceil(data.byteLength / 4) * 4),
@@ -166,9 +202,9 @@ export class StrandBufferCache {
       lift = Math.max(lift, Math.abs(positions[index + 2]));
     }
     const pointBytes = (positions.length / 3) * STRAND_POINT_FLOATS * 4;
-    return { signature: gpuBind ? '' : signature, topology, segmentCount: segments.length, curves,
+    return { signature: gpuBind || gpuFields ? '' : signature, topology, segmentCount: segments.length, curves,
       segmentLength: segments.length ? length / segments.length : 0, extent,
-      positions: gpuBind
+      positions: gpuBind || gpuFields
         ? device.createBuffer({ size: Math.max(16, pointBytes), usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC, label: `native-strands-points-${layerId}` })
         : upload(packStrandPoints(curves), `native-strands-points-${layerId}`),
       segments: upload(segments, `native-strands-segments-${layerId}`),
@@ -199,7 +235,9 @@ export class StrandBufferCache {
   }
 
   private retire(buffers: StrandBuffers, temporaryBuffers: GPUBuffer[]): void {
-    temporaryBuffers.push(buffers.positions, buffers.segments);
+    temporaryBuffers.push(buffers.segments);
+    if (buffers.fields) buffers.fields.retire(temporaryBuffers);
+    else temporaryBuffers.push(buffers.positions);
     if (buffers.attributes) temporaryBuffers.push(buffers.attributes);
     if (buffers.colors) temporaryBuffers.push(buffers.colors);
     if (buffers.rest) temporaryBuffers.push(buffers.rest.rest, buffers.rest.ranges, buffers.rest.arcs);
@@ -207,15 +245,12 @@ export class StrandBufferCache {
   }
 
   dispose(): void {
-    for (const buffers of this.cache.values()) {
-      buffers.positions.destroy(); buffers.segments.destroy(); buffers.attributes?.destroy();
-      buffers.colors?.destroy();
-      buffers.rest?.rest.destroy(); buffers.rest?.ranges.destroy(); buffers.rest?.arcs.destroy();
-      const retired: GPUBuffer[] = [];
-      buffers.rods?.retire(retired);
-      retired.forEach(buffer => buffer.destroy());
-    }
+    const retired: GPUBuffer[] = [];
+    for (const buffers of this.cache.values()) this.retire(buffers, retired);
+    retired.forEach(buffer => buffer.destroy());
     this.cache.clear();
     this.binder.dispose();
+    this.fieldExecutor.dispose();
+    this.fieldFailures.clear();
   }
 }

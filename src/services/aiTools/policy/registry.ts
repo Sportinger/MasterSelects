@@ -172,6 +172,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['getNodeDefinitions', readOnly()],
   ['getYouTubeVideos', readOnly()],
   ['captureFrame', readOnly()],
+  ['captureStrandMap', { ...readOnly(), allowedCallers: ['devBridge', 'console', 'internal'] }],
   ['getCutPreviewQuad', readOnly()],
   ['getFramesAtTimes', allowKernelOperation(readOnly())],
   ['inspectMediaGenerationModel', kernelOperationOnly(readOnly())],

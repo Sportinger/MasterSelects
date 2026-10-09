@@ -52,6 +52,8 @@ export interface NavigationPayload {
   revisionId: string;
   revision: RecordReference;
   redoPreferences: Record<string, string>;
+  /** Large cursors split their branch choices across bounded immutable records. */
+  redoPreferenceBlocks?: RecordReference[];
 }
 export interface SegmentDescriptor { segmentId: string; hash: ContentHash; length: number; }
 export interface CommitReference { commitId: string; hash: ContentHash; }
@@ -102,7 +104,7 @@ export interface RepositoryBackend {
   read(path: string, offset?: number, length?: number, signal?: AbortSignal): Promise<Uint8Array>;
   /** Browser-managed File/Blob without assembling a whole-file JS buffer. */
   readBlob?(path: string, signal?: AbortSignal): Promise<Blob | null>;
-  stat(path: string): Promise<{ length: number } | null>;
+  stat(path: string): Promise<{ length: number; modifiedTime?: number } | null>;
   writeNew(path: string, chunks: AsyncIterable<Uint8Array>, signal?: AbortSignal): Promise<void>;
   replaceViewSlot(path: string, chunks: AsyncIterable<Uint8Array>, signal?: AbortSignal): Promise<void>;
   removeUnpublished(path: string): Promise<void>;

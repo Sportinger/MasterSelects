@@ -1,3 +1,4 @@
+import { handleCaptureStrandMap } from './strandCapture';
 import type { useTimelineStore } from '../../../stores/timeline';
 import type { CallerContext } from '../policy';
 import type { ToolResult } from '../types';
@@ -206,6 +207,7 @@ export const timelineHandlers: Readonly<Record<string, TimelineHandler>> = {
   startClipTranscription: handleStartClipTranscription,
   repairClipTranscript: handleRepairClipTranscript,
   captureFrame: handleCaptureFrame,
+  captureStrandMap: handleCaptureStrandMap,
   getCutPreviewQuad: handleGetCutPreviewQuad,
   getFramesAtTimes: handleGetFramesAtTimes,
   runPixelParticleDisintegrateQa: async (args) => handleRunPixelParticleDisintegrateQa(args),

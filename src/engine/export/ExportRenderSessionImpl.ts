@@ -1,4 +1,5 @@
 import { stackExportAlpha } from './stackExportAlpha';
+import { opaqueExportPixels } from './opaqueExportPixels';
 import type {
   ExportFrameCapture,
   ExportRenderFrameInput,
@@ -35,6 +36,8 @@ export interface ExportRenderSessionOptions {
   readonly width: number;
   readonly height: number;
   readonly stackedAlpha: boolean;
+  /** Opaque video output must match the canvas output shader, including on readback fallback. */
+  readonly readbackAlpha?: 'preserve' | 'opaque';
   readonly preferZeroCopy: boolean;
   readonly host?: ExportRenderHostPort;
   readonly frameDecorator?: ExportRenderFrameDecorator;
@@ -206,6 +209,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
   private readonly height: number;
   private readonly compositionId: string;
   private readonly stackedAlpha: boolean;
+  private readonly readbackAlpha: 'preserve' | 'opaque';
   private readonly preferZeroCopy: boolean;
   private readonly host: ExportRenderHostPort;
   private readonly frameDecorator?: ExportRenderFrameDecorator;
@@ -224,6 +228,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     this.width = options.width;
     this.height = options.height;
     this.stackedAlpha = options.stackedAlpha;
+    this.readbackAlpha = options.readbackAlpha ?? 'preserve';
     this.preferZeroCopy = options.preferZeroCopy;
     this.host = options.host ?? exportRenderHostPort;
     this.frameDecorator = options.frameDecorator;
@@ -413,6 +418,13 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       );
     }
 
+    // WebCodecs' ordinary video output is opaque, just like output.wgsl.
+    // Do this before both preview publication and encoding,
+    // while retaining the original alpha plane for stacked/native-alpha output.
+    if (!this.stackedAlpha && this.readbackAlpha === 'opaque') {
+      pixels = opaqueExportPixels(pixels);
+    }
+
     return {
       kind: 'rgba-pixels',
       pixels,
@@ -445,7 +457,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     let current = layers;
     for (let progress = getNativeSceneExportProgress(frameIndex); progress && !progress.complete; progress = getNativeSceneExportProgress(frameIndex)) {
       if (this.signal.aborted) throw new DOMException('Export cancelled', 'AbortError');
-      input.onSampling?.({ stage: progress.denoising ? 'denoising' : 'sampling', samples: progress.samples, targetSamples: progress.targetSamples });
+      input.onSampling?.({ stage: progress.denoising ? 'denoising' : 'sampling', samples: progress.samples, targetSamples: progress.targetSamples, denoiseEnabled: progress.denoiseEnabled ?? progress.denoising });
       await progress.gpuDone;
       // Motion blur: the next shutter slice shows the scene a little later in the frame.
       if (progress.timeOffset !== offset && input.layersAtTime) {
@@ -458,11 +470,25 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
       // Let OIDN tiles and other queued tasks run, and leave the GPU a short gap so the rest of the
       // system (desktop compositor, other apps) stays responsive during a long path traced export.
       await new Promise(resolve => setTimeout(resolve, EXPORT_SAMPLE_GAP_MS));
-      this.host.render(current, frameContext);
+      // Shutter slices can request fresh geometry just like the first sample.
+      for (let attempt = 0; ; attempt++) {
+        const finish = collectTemporalPreparations(input.frameStepSeconds, input.framesRemaining);
+        let pending: Promise<unknown>[];
+        try { this.host.render(current, { ...frameContext, timelineTimeSeconds: input.time + offset }); }
+        finally { pending = finish(); }
+        if (!pending.length) break;
+        if (attempt >= 8) throw new Error('Temporal effect resources did not settle for the export sample.');
+        await awaitTemporalPreparations(pending, this.signal);
+      }
     }
     if (offset !== 0) this.host.setRenderTimeOverride(input.time);
-    input.onSampling?.({ stage: 'encoding', samples: getNativeSceneExportProgress(frameIndex)?.samples ?? 0,
-      targetSamples: getNativeSceneExportProgress(frameIndex)?.targetSamples ?? 0 });
+    const completed = getNativeSceneExportProgress(frameIndex);
+    // Ordinary raster frames have no accumulation report. Do not invent a 0/0
+    // sampling phase that appears during capture and disappears after each frame.
+    if (completed && (completed.targetSamples > 1 || completed.denoiseEnabled)) {
+      input.onSampling?.({ stage: 'encoding', samples: completed.samples, targetSamples: completed.targetSamples,
+        denoiseEnabled: completed.denoiseEnabled ?? false });
+    }
     return performance.now() - started;
   }
 

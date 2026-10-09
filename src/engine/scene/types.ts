@@ -44,6 +44,8 @@ export interface SceneLayerBase {
   maskInvert?: boolean;
   /** Effects evaluated on the source texture before its 3D world transform. */
   layerSpaceEffects?: Effect[];
+  /** Image effects applied after rasterizing this owner's geometry. */
+  postProjectionEffects?: Effect[];
   /** Source clock and masks must survive the image-to-scene boundary. */
   temporalSource?: import('../../effects/time/temporalClipSource').TemporalClipSource;
   sourceMasks?: readonly import('../../types/masks').ClipMask[];
@@ -169,6 +171,7 @@ export interface SceneCameraConfig {
 }
 
 export interface SceneCamera {
+  curveLabelCameras?: Record<string, import('./curveLabelCamera').CurveLabelCameraFrame>;
   viewMatrix: Float32Array;
   projectionMatrix: Float32Array;
   cameraPosition: SceneVector3;

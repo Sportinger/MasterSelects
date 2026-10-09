@@ -2,11 +2,14 @@ import type { CurveSet } from './geometryEvaluation';
 import { RodContacts, type RodSegments } from './rodContacts';
 
 export const CONTACT_POINT_LIMIT = 16_384;
-export interface CurveContactSpec { radius: number; iterations: number; smoothing: number }
+export interface CurveContactSpec { radius: number; iterations: number; smoothing: number; strength?: number }
 
 /** Frame-local capsule projection. No integration, friction, or playback-order-dependent state. */
 export function separateCurveContacts(curves: CurveSet, spec: CurveContactSpec): CurveSet {
   const { positions, starts, counts } = curves;
+  const strength = spec.strength ?? 1;
+  if (!Number.isFinite(strength) || strength < 0 || strength > 1) throw new Error('Curve Contact strength must be between 0 and 1.');
+  if (strength === 0) return curves;
   if (positions.length / 3 > CONTACT_POINT_LIMIT) throw new Error(`Curve Contact supports up to ${CONTACT_POINT_LIMIT} points.`);
   if (!positions.length || spec.radius <= 0) return curves;
   const source: number[] = [], map = new Uint32Array(positions.length / 3), ranges: { start: number; count: number; closed: boolean }[] = [];
@@ -61,6 +64,9 @@ export function separateCurveContacts(curves: CurveSet, spec: CurveContactSpec):
     if (penetration < spec.radius * 0.001) break;
   }
   const output = new Float32Array(positions.length);
-  for (let i = 0; i < map.length; i++) output.set(p.subarray(map[i] * 3, map[i] * 3 + 3), i * 3);
+  for (let i = 0; i < map.length; i++) for (let axis = 0; axis < 3; axis++) {
+    const at = map[i] * 3 + axis;
+    output[i * 3 + axis] = original[at] + strength * (p[at] - original[at]);
+  }
   return { ...curves, positions: output };
 }

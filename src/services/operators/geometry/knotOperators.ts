@@ -4,7 +4,7 @@ const number = (id: string, label: string, value: number, min: number, max: numb
   ({ id, label, type: 'number', default: value, min, max, step, animatable });
 const generator = (id: string, variant: string, label: string, description: string, parameters: OperatorParameter[]): OperatorDefinition =>
   ({ id, version: 1, label, description, inputs: [], outputs: [{ id: 'curves', label: 'Curves', type: 'curves', contract: { formats: ['strand-curves'] } }],
-    parameters, family: 'geometry.curve-generator', variant, invalidates: 'appearance', runtime: 'builtin', state: 'stateless',
+    parameters, ...(id === 'geometry.knit-sphere' ? { inputs: [{ id: 'time', label: 'Motion Seconds', type: 'number' as const }] } : {}), family: 'geometry.curve-generator', variant, invalidates: 'appearance', runtime: 'builtin', state: 'stateless',
     addable: true, implementation: 'shared', consumers: ['Weave'] });
 
 /** General knot curve generators; their curves feed Yarn Profile, Thread Along or any curve modifier. */

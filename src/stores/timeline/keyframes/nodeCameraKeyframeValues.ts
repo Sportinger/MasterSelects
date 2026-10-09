@@ -94,6 +94,9 @@ export function normalizeCameraSettingValue(
   if (key === 'fov') {
     return Math.max(10, Math.min(140, value));
   }
+  if (key === 'shakeAmount') return Math.max(0, Math.min(20, value));
+  if (key === 'shakeFrequency') return Math.max(.1, Math.min(30, value));
+  if (key === 'shakeSeed') return Math.max(0, Math.min(9999, Math.round(value)));
   if (key === 'exposure') return Math.max(-16, Math.min(16, value));
   if (key === 'fStop') return Math.max(0, Math.min(64, value));
   if (key === 'focusDistance') return Math.max(0, value);

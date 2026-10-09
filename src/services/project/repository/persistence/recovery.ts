@@ -1,5 +1,7 @@
 import { rememberRecoveredHead } from './checkpointDiscovery';
 import { recoveryReadCache } from './recoveryReadCache';
+import { readNavigationPreferences } from './navigationPreferences';
+import type { NavigationPayload } from '../contracts';
 import { iterateRevisionChanges } from './revisionChanges';
 import { REPOSITORY_LIMITS, RepositoryError, type CommitManifest, type CommitReference, type RecordReference, type RepositoryBackend, type RepositoryDescriptor, type RepositoryRecord, type RevisionPayload, type SegmentDescriptor } from '../contracts';
 import { readRecord, segmentRecords } from '../segments/recordSegment';
@@ -115,10 +117,11 @@ export async function validateCommit(backend: RepositoryBackend, commit: CommitM
         for (const ref of [change.before, change.after]) if (ref && (await readValidated(ref)).kind !== 'object') throw new RepositoryError('corrupt', 'Changeset reference has wrong record kind');
       }
     } else if (record.kind === 'navigation') {
-      const data = record.payload as unknown as { revision: RecordReference; revisionId: string; workspaceId: string; sequence: number };
+      const data = record.payload as unknown as NavigationPayload;
       if (!data || !data.workspaceId || !Number.isSafeInteger(data.sequence) || !data.revision) throw new RepositoryError('corrupt', 'Malformed navigation payload');
       const revision = await readValidated(data.revision);
       if (revision.kind !== 'revision' || (revision.payload as unknown as RevisionPayload).revisionId !== data.revisionId) throw new RepositoryError('corrupt', 'Navigation revision identity mismatch');
+      await readNavigationPreferences(data, readValidated);
     }
   };
   const verifyPublished = async (ref: RecordReference): Promise<void> => {
@@ -171,7 +174,7 @@ export async function validateCommit(backend: RepositoryBackend, commit: CommitM
 }
 
 /** Discovery uses one paged scan per recovery, retaining only paths and immutable manifests. */
-export async function recoverRepository(backend: RepositoryBackend, descriptor: RepositoryDescriptor, signal?: AbortSignal, visit?: (commit: CommitManifest) => Promise<void>, confirmed?: RecoveryResult, sessionProofs?: RecoveryProofs): Promise<RecoveryResult> {
+export async function recoverRepository(backend: RepositoryBackend, descriptor: RepositoryDescriptor, signal?: AbortSignal, visit?: (commit: CommitManifest) => Promise<void>, confirmed?: RecoveryResult, sessionProofs?: RecoveryProofs, knownCommits?: ReadonlySet<string>): Promise<RecoveryResult> {
   const authoritativeBackend = backend;
   backend = recoveryReadCache(backend);
   const proofs: RecoveryProofs = sessionProofs ?? { segments: new Map(), blobs: new Set() };
@@ -189,7 +192,7 @@ export async function recoverRepository(backend: RepositoryBackend, descriptor: 
   await Promise.all(Array.from({ length: Math.min(8, discovered.length) }, async () => {
     while (nextManifest < discovered.length) {
       const path = discovered[nextManifest++]; signal?.throwIfAborted();
-      if (manifests.has(path)) continue;
+      if (manifests.has(path) || knownCommits?.has(path)) continue;
       try { manifests.set(path, await readCommit(backend, path, signal)); }
       catch (error) { if (signal?.aborted) throw error; warn(`Damaged publication retained: ${path}`); }
     }

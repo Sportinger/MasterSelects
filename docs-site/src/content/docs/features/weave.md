@@ -13,6 +13,10 @@ including an empty host clip: the strands are drawn as an extra 3D layer above t
 clip with the clip's transform. Disabling the effect hides the strands and keeps
 the graph, values and keyframes. The graph is edited on the unified Nodes canvas;
 values exposed from it appear in the clip's **Effects** tab, grouped by node group.
+These instance-owned values are also registered as numeric animatable properties:
+property search and atomic keyframe authoring use their saved labels, ranges and
+steps. Unexposing a value removes it from property discovery without changing other
+effect instances or catalog-owned parameter contracts.
 Node contracts are listed in the [Node Catalog](/features/node-catalog/#curve-graphs-weave).
 
 ## Saved graph compatibility
@@ -22,10 +26,176 @@ expand against these geometry limits rather than the smaller image graph budget.
 Large saved graphs reopen with their authored nodes, wiring, layout and parameters
 intact. Graphs exceeding a domain limit report their node/connection counts and
 supported limits instead of a generic invalid-graph error. Per-field instruction
-limits remain independent; raising the saved graph limit does not raise them.
+limits remain independent at 640 instructions; raising the saved graph limit does not raise them.
 The compiler reuses identical pure expressions within a field, preserving separate
 animated parameter and clock identities. Remaining field-budget failures identify
 the affected node/input and instruction count.
+
+
+## Raster layer blending
+
+Strand layers use their Transform **Blend Mode** (including Multiply, Screen and
+Difference) inside a shared Raster 3D scene. Each custom-blend layer is rendered
+separately against the existing scene depth, then mixed with the scene using the
+same blend functions as Flock particles and timeline layers. Clip opacity is
+applied once. Projected effects such as Glow remain confined to their own layer.
+Normal full-opacity layers retain the direct rendering path.
+
+Blend modes affect overlapping visible pixels; Multiply does not darken isolated
+strands or particles over transparent canvas simply because the preview displays
+that canvas as black. Geometry behind opaque objects remains occluded. This
+per-layer mixing is a Raster feature, not a change to physical path tracing.
+
+## Curve Particle Wake
+
+Insert **Curve Particle Wake** before **Strand Render** for depth-tested 3D
+particles peeling from existing GPU yarn curves. Connect **Pulse Phase** to an
+unwrapped cycle count and **Pulse Rate** to the same frequency as the curve
+wave. **Wave Delay**, **Wave Origin** and **Wave Length Scale** match the local
+phase `2π * phase − (origin − z / scale) * delay`. Rate 0 disables emission.
+
+Each particle retains an independent world position and velocity on the GPU.
+At birth, **Motion Inheritance** transfers source velocity (capped at two world
+units per second before scaling). **Drift Damping** slows the impulse;
+**Curl Amount/Rate** controls a smooth water-like flow. **Drift Speed** adds a
+local −Z birth impulse and a weaker persistent current. **Surface Offset**
+places births outside the yarn. No second geometry evaluation or readback is
+needed; there is no fluid pressure or collision solve.
+
+**Stroke Vortex Strength** adds pulse-born rolling eddies in the local radial/
+trailing plane. They peel sideways from the yarn, retain their world-space
+birth orientation and drift outward as they decay. **Stroke Vortex Radius**
+sets their extent in source units; **Stroke Vortex Decay** controls persistence.
+Nearby births use smoothly varying radii; bounded inherited source speed also
+modulates the eddy strength. Finite cores prevent a velocity singularity.
+The advection uses up to eight short local steps per render to resolve rolls;
+this is an art-directed wake, not a pressure-solving fluid simulation. Vortex
+strength defaults to zero for existing projects. New metadata is optional for
+older saved programs.
+
+**Pixel Size** 1–4 draws crisp pixel-aligned squares; 0 retains world-radius
+round dots. **Light Intensity** controls additive brightness. In pixel mode,
+**Opacity** and lifetime reduce particle density, preserving the brightness of
+surviving pixels. Positions still use real 3D projection and scene depth.
+Counts support up to 262,144 particles per layer. Numeric parameters accept
+uniform node connections and keyframes; invalid or point-varying inputs report
+errors. Legacy metadata without the new display controls remains accepted.
+
+State is isolated by render target and layer. Repeated renders at the same
+source time do not advance it. Topology/count/seed changes, reverse playback,
+and jumps over half a second reseed from the current curve shape; historical
+geometry is not replayed. Continuous playback preserves detached particles,
+but seeks and different sampling cadences can produce different trails.
+Raster preview and export share the pass; path tracing uses it as a raster
+overlay. Particles have no own blur, although optional scene-wide physical
+camera depth of field still applies. Bypass preserves yarn and scan labels.
+
+## Curve Scan Labels
+
+Insert **Curve Scan Labels** before **Strand Render** to annotate a curve layer
+with up to twelve transparent 3D outline cards, leader lines, and tracking rings.
+The markers read the final GPU curve positions, including procedural motion and
+contacts; enabling the cards does not rerun the geometry or read positions back to
+the CPU. X/Y/Z readouts show world coordinates. Scan titles cycle independently;
+edit the pipe-separated ASCII titles in the node (1–20 characters per title).
+
+Cards occupy alternating left/right slots relative to the camera. **Camera Follow**
+sets a delay in seconds; their world position and orientation follow sampled past
+camera poses. The same timeline time yields the same layout when seeking backwards,
+playing, or exporting. This follows the animated timeline camera; a static edit-view
+camera has no recorded earlier motion to lag behind. The camera-pose data also travels
+with render-worker packets and is resolved in the owning nested composition.
+
+**Floating Motion** adds independent slow drift, yaw, pitch and roll, even when
+a card already has a clear position. **Floating Speed** slows that motion without
+reducing its extent; zero holds the ambient pose. **Avoid Curves** builds a small soft occupancy
+field from projected GPU points. A separable spatial blur suppresses narrow gaps
+and individual moving strands before cards choose space. Unlocked cards search a
+7×9 grid across the whole live camera image, including upper corners and the
+opposite side; they are no longer constrained to their original row. Candidate
+positions translate the lagged card in the live image plane, retaining its depth
+and rotation. This avoids unstable inversion when the lagged plane is edge-on.
+The complete projected card footprint contributes occupancy and frame-edge costs.
+Continuous weights and stable per-card preferences reduce position hunting; locked
+cards retain their camera slots and avoidance fades out during docking.
+Six bounded GPU separation rounds also account for the projected bounds of other
+visible cards. Visibility weights follow the shared intro/outro schedule, so
+hidden windows do not reserve space. Locked cards remain fixed obstacles; floating
+cards yield around them, preferring routes with less yarn occupancy. Tilted card
+footprints include a reading margin, and both sides of each pair see the same
+layout snapshot before a round advances. Smaller separation steps reduce lateral
+pressure. Congested floating cards can yield up to 55% of their camera distance
+along their center sightline; perspective makes their fixed world-size planes
+appear smaller. Clear, large foreground cards retain their authored size and
+rotation. Orthographic cameras retain apparent size while moving the plane deeper.
+There is no hard shared height ceiling above stacks: only visible locked card
+footprints reserve space, avoiding a flat constraint that trapped free cards and
+made the placement inversion singular.
+This is a soft layout preference, not a collision guarantee: cards may overlap
+one another or the subject when space is scarce. Spatial smoothing reduces
+sensitivity to fine strand motion; it is not a temporal speed limit. Layout is
+recomputed from source time and geometry with no playback-history state, CPU
+readback, or extra geometry evaluation.
+**Preferred Row Spacing** is fitted to the available frame; oversized card/count
+combinations report a validation error.
+
+**Card Style → Mixed** combines rectangular, oval, circular and square outlines, three typefaces and
+per-card sizes controlled by **Size Variation**. Every card retains its text; headings
+type in, numerical rows drift slightly, and rotating first-word accents turn bold red.
+These accents are a scan graphic, not event or fault detection. Circles and squares
+have equal physical side extents, even in portrait compositions. **Font Size Variation**
+varies the text scale; roughly one in four cards emphasizes a changing word.
+**Brief Bold Flashes** adds occasional 180 ms heading pulses. **Changing Readouts**
+periodically scrambles selected headings and status words for up to 240 ms, then
+resolves a new word. Other cards remain steady; X/Y/Z slots retain their actual values. **Window Echoes**
+occasionally duplicates a visible window 3–10 times along camera depth for 1–3 seconds,
+with faded parallel outlines and text. Leader lines and target rings are not duplicated.
+The effect is deterministic and omits episodes when the visible lifetime is too short;
+no duplicate draw instances are issued when no echo is active. **Marker Line Weight**
+changes tracking-circle thickness independently of the card and leader lines.
+**Tracking Ring Color** sets their independent base color; target-acquisition alerts
+override it with the same red/orange signal as the card. Line weight stays constant
+through introduction and alert changes. **Leader Line Weight** separately thickens
+connecting lines. **Tracking Glow** adds a soft colored halo to rings and leaders
+inside their existing raster draw; text stays sharp. It requires no extra render
+pass, fullscreen blur, or path tracing. At zero, the halo is disabled and line
+quads retain their original size.
+
+Cards have staggered lifetimes. **Visible Cycle Fraction** leaves an offscreen pause
+between appearances; **Intro / Outro** (50–500 ms, default 450 ms) draws the marker
+and leader toward the card, then its outline and text. The outro runs the same
+sequence backwards. Short cycles shorten both transitions to fit. Keyframe
+**Camera Follow** down temporarily to let cards catch up during a camera move.
+**Opening Build-up** introduces the first card immediately and each subsequent card
+at shorter intervals over the chosen duration; zero uses ongoing staggered cycles.
+**Depth Spread** distributes planes in front of and behind their common camera
+distance, preserving physical size so parallax and apparent size vary. **Depth Travel**
+adds independent smooth movement along camera depth at **Floating Speed**. Spread
+and travel together must stay at or below 0.8, keeping every plane ahead of its
+follow camera.
+
+**Side Position**, **Preferred Row Spacing**, **Card Width/Height**, and **Camera Distance**
+control placement. **First Strand / Strand Step** wrap over available curves;
+**First Curve Position / Curve Position Step** choose normalized positions along
+them. Numeric parameters accept keyframes or uniform node inputs. Per-point fields
+are rejected with an explanation. **Opacity**, line width, marker size, color, and
+scan-cycle length control the look. Bypass removes the annotations, preserving the
+original strand image. Cards are unlit, depth-tested geometry and remain separate
+from the strand's Glow or other projected effects.
+
+**Released Tracking Blend** switches anchors from their normal strand selection to
+an ordered release pool. **Released Curve Fraction** is the normalized release
+front across curve indices. **Released Pool Margin** delays the candidate pool
+relative to that front so barely-started strands are not selected too early;
+**Released Tracker Share** chooses how many cards follow
+that pool. Remaining cards attach to the last unreleased curves. Drive these values
+from the same release graph as the geometry. Until enough curves are released,
+several markers can share one curve at different positions. **Detached Section Focus** finds the portion furthest from the remaining parent
+curves on the GPU, instead of anchoring to a still-attached stitch. Alert colors start
+only after the tracking blend arrives and that portion is measurably separated.
+Released cards flicker between red and orange with deterministic irregular timing; remaining cards gain
+orange as the release fraction increases. After all curves release, they follow the
+last curves rather than inventing a remaining parent.
 
 ## Default graph
 
@@ -102,12 +272,35 @@ scale. Set Contact Radius to cover the outer yarn bundle, including fiber width 
 a small allowance for spline interpolation. Iterations controls contact convergence;
 Correction Smoothing spreads displacement without smoothing away the input stitches.
 The modifier preserves point IDs, per-point colors and closed seams, and supports up
-to 16,384 points. It evaluates deterministically at each requested frame on the CPU.
+to 16,384 points. A final contact modifier after GPU-compatible Set Position and
+Yarn Profile fields runs on the GPU: per-layer scratch buffers, a stable sorted
+capsule grid, simultaneous contact projection and welded ring endpoints. Each
+iteration uses four parallel sweeps to propagate neighboring corrections. Animated
+fields remain on the GPU and export waits for the exact requested geometry through
+the shared preparation barrier. Only bounds and length metrics return to the CPU.
+The solve is frame-local, so seeking does not replay simulation history. Unsupported
+stage orders or position-dependent material colors retain CPU evaluation; GPU
+validation failures log a warning and fall back to CPU. Parallel projection and the
+sequential CPU solver can converge differently in crowded knots; increase Iterations
+when necessary. Neither solver guarantees a topologically collision-free transition.
+Strength blends the positional correction from zero to one and accepts an animated
+parameter or a uniform clock/value input. Zero removes the solve from the compiled
+program, retaining the original positions and the usual GPU deformation path.
+This allows contact correction only during an unfolding interval; per-point
+Strength fields are rejected explicitly. Partial strength can leave overlap.
 This is geometric contact projection, not a dynamic simulation: it does not conserve
 length, prevent tunneling between frames or calculate temporal friction. Finite
 iterations can leave residual overlaps in crowded configurations; flyaway hairs are
 decorative and do not collide. Use Rod Simulation for integrated rod dynamics and
 friction with a fixed rest shape.
+
+In Raster rendering, image effects after Weave (including Glow) process each
+strand layer's own projected image before it joins the shared 3D scene. The layer
+retains its depth and opacity; other strand and particle layers are not included
+in its effect input. Generated halo pixels outside the strands occupy the far
+plane. Glow expands alpha coverage and accounts for source coverage, so its halo
+survives transparent backgrounds. Per-layer projected strand stacks currently
+apply to Raster; mixed path-traced scenes do not gain this per-object image pass.
 
 Strand Render accepts an optional **Color** vector field (RGB, 0 to 1), replacing
 its uniform color. Curve Info's Curve Param and Strand Index can drive gradients
@@ -464,3 +657,294 @@ Saved Weave graphs with missing required input cables reopen as editable drafts,
 with the connection error shown in Nodes. Nodes and existing cables are retained;
 structurally invalid connections remain validation errors. Completing the wiring
 through the graph editor restores rendering.
+
+
+### GPU curve fields
+
+Trailing **Set Position** and **Yarn Profile** fields run on WebGPU for ordinary
+curve generators as well as simulated rods. This includes the reusable **Curl
+Noise**, **Curl Noise (Evolving)** and Noise compositions, masks, waves and radius
+fields; their existing graphs and saved project format are unchanged. The shared
+pointwise WGSL compiler executes modifiers in graph order. Generators and earlier
+stages that alter topology or require CPU geometry remain on the CPU.
+
+Animated constants reuse compute pipelines; animated input curves reuse buffers
+while their point/strand topology stays the same. Position, frames and radius
+remain GPU-resident. Only two measurements per strand (extent and arc length)
+return to the CPU for shadows and subdivision selection. Preview retains the last
+complete geometry while the next snapshot is prepared, which may introduce one
+preparation interval of visual latency. Export waits for the requested snapshot,
+including on backwards seeks, rather than capturing the previous preview frame.
+
+Position-dependent strand colors or Fiber Material color, roughness, melanin and
+selection fields retain CPU evaluation so they read the final deformed positions.
+Unsupported field operations and GPU preparation failures also retain the CPU
+path. Changing preview resolution reduces raster work, not the number of authored
+curve points. Performance depends on both curve complexity and GPU fill cost. At a fixed time,
+the completed curve buffers are reused during camera navigation. Unchanged Solid
+host textures are also reused across main and target previews; changing their
+color or dimensions refreshes the upload.
+
+The browser regression at `tests/browser/weave-point-fields-gpu-check.html`
+compares positions, radius, frames and bounds against the CPU reference, including
+animated input, topology changes, export preparation and the jellyfish preset.
+
+### Raster camera depth of field
+
+The Physical Camera f-Stop and Focus Distance controls now work in Raster preview as well.
+A bounded pair of 37-tap separable HDR passes uses the shared scene depth and the thin-lens circle of confusion;
+it does not repeat geometry evaluation. f-Stop 0 disables it with no extra texture/pass.
+Focus Distance 0 follows the camera target. The blur radius is bounded to 18 output pixels.
+Orthographic cameras and path-traced output bypass this approximation. Transparent surfaces
+inherit the underlying raster depth; it cannot reconstruct hidden or multiple transparent layers.
+Particle sprite softness provides independent soft appearance for those layers.
+Foreground gathers include clear pixels behind thin strands and spread into neighboring
+pixels even when those pixels are in focus, so yarn silhouettes soften as well as solid interiors.
+The camera inspector explicitly shows when f-stop 0 disables depth of field.
+
+Camera numeric properties, including aperture and focus, are registered for the shared
+property authoring and keyframe path. Lens keyframes preserve camera framing and movement.
+
+The **Physical Camera** section has a persistent bypass switch. Off skips exposure,
+custom tone mapping, depth of field and camera shutter processing in preview and export,
+without changing the stored lens parameters, their keyframes or the camera's pose/FOV.
+Particle sprite softness and particle velocity streaks remain independent. Existing projects
+keep physical processing enabled unless explicitly bypassed. Raster focus blur is a bounded
+screen-space approximation; it is not equivalent to path-traced lens sampling, and the
+jellyfish project currently leaves it bypassed while its export appearance is under review.
+
+### Downstream image effects
+
+Image effects placed after Weave (for example Glow) operate on that strand
+layer's projected image. Preview, nested compositions, and export preserve the
+same interpolated effect stack. Disabled, detached, audio and other geometry
+generators are excluded. The worker scene path explicitly declines these stacks
+until it can carry them, rather than silently dropping the effects.
+
+### Window glitch wave
+
+**Window Glitch Wave** (0–1, off by default, keyframeable/node-driven) affects only
+readout windows and their echo copies. A one-second screen-space wave starts at
+the top-right and reaches the bottom-left at 12, 24, 36… seconds of composition
+time. Each card's disturbance decays over its own deterministic 1–2-second
+recovery, with RGB splitting, displaced text groups/outlines, brief glyph errors,
+and small colored blocks. Coordinates retain their real underlying values.
+Tracking rings, leaders and scene geometry remain untouched. The effect uses the
+existing annotation render pass, plus a small block draw only during active waves;
+there is no fullscreen post-process or frame-history dependency. Reverse seeks
+and export reproduce the same event. Zero strength restores the clean windows.
+
+### Independent eased circulation
+
+`Motion Time` supplies analytically integrated source seconds: acceleration from rest, constant-speed travel, then deceleration to rest. Duration, Acceleration and Deceleration are node parameters; invalid or overlapping intervals report an error. The clock is clamped outside its duration and is independent of playback history, so scrubbing and rendering agree.
+
+Knit Sphere and Closed Curve Flow accept an optional uniform **Motion Seconds** input. Without it they retain their source-time behavior. Connect Motion Time only to circulation branches to preserve the original timing of pulsation, formation, camera and other effects. Per-point generator clocks are rejected explicitly. An eased clock controls speed, not loop geometry: a matching final pose or whole-turn phase is still needed for a seamless loop.
+
+Composed geometry fields allow up to 640 instructions, including independent motion clocks alongside inherited forces.
+
+### Independent scan-window appearances
+
+Curve Scan Labels offers **Lifetime Variation** and **Appearance Seed** for reproducible, independent visible durations and pauses, including a shuffled opening order. Opening Build-up retains its accelerating stagger. CPU text, GPU reveal and the exported `curveLabelCues` intro/outro schedule use the same episode boundaries; seeking does not resample randomness. A **Tracking Hold Start/End** interval keeps the first **Held Tracking Cards** fully revealed, overriding their random pauses without a hard visibility jump. This controls visibility timing, not whether the camera can see their anchors.
+
+Window Echoes now produces 6–20 parallel copies for occasional 2.4–4.8-second episodes (limited by the visible interval), with a longer hold and an 800-ms tail fade. Distant copies retain enough opacity to remain visible. **Window Rotation** adds smooth, independent yaw/pitch targets up to 45 degrees, separately from camera lag and spatial drift.
+
+### Emissive scan-window glitches
+
+The diagonal 12-second glitch wave now warps window outlines, shears them into bands and changes groups of glyphs in size. Bright RGB fringes, local shader halos and short rectangular/orbital wireframe fragments strengthen the effect without a fullscreen blur pass. Connection lines morph through subdivided three-dimensional loops, retaining their exact point/card attachments and returning to straight leaders after the wave. Tracking ring positions and scene geometry remain unchanged.
+
+
+### Camera alignment and brief camera locks
+
+Window Rotation uses smooth independent excursions up to the configured angle, followed by a camera-parallel rest. Yaw, pitch and roll all settle with zero angular velocity; depth travel and position drift continue. Camera Follow retains its sampled delay during fast camera moves and catches up after the camera settles. Seeking evaluates the same pose without a playback-history simulation.
+
+**Camera Locks** optionally schedules a limited number of short corner docks. **First Camera Lock**, **Camera Lock Interval** and **Camera Lock Hold** control the timing; a hold lasts 2–3 seconds, with a 500-ms dock and a 700-ms release. The scheduler chooses an existing fully visible appearance near each requested time, keeping intro/outro sounds and card lifetimes unchanged. If no card stays visible long enough, the renderer logs the missing lock count so the lifetime can be increased. A docked card uses the current camera pose exactly, temporarily overriding delayed floating position/rotation. A closing padlock, brief lock flash and rapidly scrolling priority text identify the state. Release restores normal readouts, camera lag and floating motion. This is a raster annotation pass, with no physics simulation or geometry readback.
+
+
+### Visible material-coordinate diagnostic
+
+The dev-only `captureStrandMap` diagnostic reads a paused, currently rendered strand clip without changing its materials. It reuses the raster fiber geometry and final GPU positions, checks the scene depth for occlusion, and renders exact integer IDs into a separate attachment. The false-color PNG distinguishes strands by hue and alternates material-position bands. Exact `strand` and normalized `u` values come from up to 32 requested image pixels or bounded visible candidates, independently of lighting, tone mapping, Glow and image compression. Those coordinates refer to material points and follow their subsequent motion; they are not fixed world-space positions.
+
+This diagnostic does no extra draw or readback during normal playback. It currently requires a matching main-thread native scene frame and returns an explicit error for unavailable/stale frames or worker-only scenes. Capture is limited to 4 megapixels and rejects concurrent playback/seek changes. It is excluded from the provider/kernel tool catalog.
+
+### Closing an eased circulation loop
+
+Motion Time supplies both integrated **Motion Seconds** and a normalized **Loop Phase (0–1)**. Phase completes exactly one forward turn across Duration with the same acceleration/deceleration envelope. Multiply it by an integer number of turns for a cyclic path with matching endpoints; do not multiply accumulated seconds by a falling envelope, which reverses motion. Apply a common phase before each harmonic of a periodic path to move material along that path instead of changing its shape. Neither output changes other animation clocks or guarantees constant world-space speed on an unevenly parameterized curve.
+
+### Narrow scan disturbance front
+
+The diagonal scan disturbance crosses the viewport in three seconds, every twelve seconds. Its bright front uses half the former high-intensity spatial extent (the old envelope above 80%); travel time and spatial width are independent. A quieter, individually timed one-to-two-second aftershock follows each card, without prolonging the bright front. Tracking anchors remain attached throughout.
+
+### Lingering near rest
+
+Motion Time’s **Final Stillness** (integer 1–4, default 1) shapes only the deceleration speed: it raises the remaining smooth speed to that power. Higher values approach near-rest earlier while preserving the chosen stopping time and the entire acceleration/cruise portion. Motion Seconds integrates this envelope analytically, without frame history; Loop Phase normalizes its changed distance back to one full turn. Invalid powers fail explicitly. Shape morphs driven by another clock remain independent and need their own settling curve if their motion must also stop gently.
+
+### Exact scan anchors and opening rings
+
+Curve Scan Labels accepts **Anchor Overrides** such as `0:4@0.18 | 10:2@0.6`. Card and strand indices start at zero; the value after `@` is the material position from 0 to 1. These anchors follow the final GPU-deformed strand, preserve different curve point counts, and leave released-tracking destinations unchanged. Unspecified cards retain First Strand / Strand Step / Curve Position settings. Strand indices wrap just like the regular selection. Malformed or duplicate entries produce an error.
+
+**Amber Opening Rings** selects the first N cards in the actual appearance order, including randomized schedules. Their amber rings appear together with each card's leader and intro, never in advance. They fade with their first episode; later episodes use the regular ring color and acquired-target alerts. Set 0 to preserve the previous behavior.
+
+Tracking rings and their leader origins sit on the camera-facing yarn envelope instead of the buried centerline, using the profile radius, per-point radius scale and layer scale. Foreground geometry still depth-occludes them; coordinate readouts continue to describe the actual curve point.
+
+Rings trace their circumference during the shared intro, at constant radius and line thickness. The outro retracts the same path in reverse. An analytic ring stroke keeps the glow smooth without overlapping segment halos.
+
+### Multilingual 3D intro headlines
+
+**Intro Titles** places bold multilingual text inside the first two detailed readout cards. Use `KUNST? > ART > कला | KANN WEG. > CAN GO. > À JETER.`: `|` separates cards, `>` separates language variants. Each phrase decodes from changing characters over about 420 ms, rests briefly, and switches after about 1.05 seconds. Whole grapheme clusters settle together, including punctuation and Indic combining marks. After the last phrase a short fade returns to ordinary readouts; the existing card, ring and intro/outro audio schedule stays intact. Short card episodes compress these timings. Empty Intro Titles preserves regular cards.
+
+**Intro Card Scale** and **Intro Camera Distance** make these cards larger and closer while retaining camera lag and free-space placement. **Intro Text Depth** separates the text plane from the frame; **Intro Text Motion** adds independent slow 3D drift and rotation. Warm cream text has a subtle vertical gradient and a one-sample offset shadow, surrounded by small optical/material readouts, separators and a moving progress accent. Text opacity remains independent of the dimmer frame while respecting layer opacity.
+
+Decode variants are rasterized once per phrase set, with whole-line Unicode shaping, into a bounded two-column software atlas (at most 1024×7168 for the maximum 16 phrases). Playback only selects atlas tiles; it does not re-rasterize text per frame. Atlas resources stay outside project data and retire after GPU submission, including multiple label layers. Intro placement contains the enlarged projected card footprint within the shot, including depth and tilt.
+
+
+### Smooth direction changes
+
+Motion Time can turn **Motion Seconds** smoothly from forward to backward: set **Turn Start** to source seconds (default `-1` disables it), and choose **Turn Duration**. Signed speed crosses zero halfway through that interval and then follows the negative original speed envelope. The turn is integrated against acceleration and Final Stillness, so accumulated time never jumps and seeking needs no simulation history. Invalid intervals report an error.
+
+**Loop Phase stays forward and still ends at 1**, independently of the direction turn. Use seconds for a return-stage circulation and the phase for a closed periodic path that must continue through the loop seam. Reversing a clock does not itself guarantee continuity when morphing between two different shapes.
+
+
+### Material anchors during a tracking hold
+
+**Held Material Anchors** uses the same `card:strand@u | …` syntax as Anchor Overrides, for the cards inside **Held Tracking Cards**. These targets apply to the complete appearance that covers Tracking Hold Start/End, from intro through outro, so changing anchors cannot jump halfway through an appearance. The material coordinates stay fixed while the yarn moves through its geometry. Opening anchors and later released-strand targets remain independent. The interval must be ordered and each override must address an existing held card.
+
+During the hold, the full projected footprint of these cards is kept within the image, including their rotation and depth. Held card planes also move toward the camera while retaining their projected size, so the inspected yarn does not hide the readout. The correction enters and leaves smoothly; ordinary cards keep their unrestricted camera lag. This does not make a material point visible through foreground geometry: use several appropriately spaced targets when tracking yarn through interlocking meshes.
+
+
+### Stacked camera locks
+
+**Locked Cards per Side** reserves up to three cards in each lower screen corner between **Stack Lock Start/End**. Cards dock with a slight row stagger, show their own animated padlock and fast priority readout, stay aligned to the live camera, then return smoothly to their floating planes. Sizes remain varied: the placement sums each column's actual card heights and gaps, scaling the column when needed to fit the lower region without overlapping the stacked card footprints. The stack planes move nearer while preserving their screen size, so the inspected object does not hide their text. Other floating planes avoid the visible locked footprints through the shared placement solver, retaining their orientation lag and optionally yielding in depth when crowded.
+
+The stack interval extends these cards' shared appearance schedule, including intro/outro audio cues; regenerate pre-rendered cue audio after changing it. Existing material tracking holds can follow or overlap a stack. Individual brief locks that overlap the reserved interval are skipped. Zero cards per side disables stacks and preserves older projects; an enabled stack requires enough cards for both sides and at least 1.5 seconds to dock and release.
+
+
+### Inspecting actual tracking acquisition
+
+The dev-only `captureStrandMap` diagnostic also accepts `mode: "tracking"`. On a paused, current main-thread preview frame it returns each card's selected source/target strand, exact GPU tracking position and acquisition readiness, appearance reveal and projected pixel position. Readiness is the same separation test used by the alert tint; it can be used to audit or bake matching acquisition sounds. A projected position is not proof of visibility through foreground yarn.
+
+This mode runs the existing tracking compute pass against the already prepared GPU strands and reads back only the small per-card result. It creates no material PNG, does not evaluate geometry on the CPU, and adds no readback to ordinary playback or export. Missing topology, missing labels, stale frames, playback or a composition/time change during capture return explicit errors. The tool remains read-only and excluded from provider/chat discovery.
+
+Opaque WebCodecs/HTMLVideo export now matches preview coverage on GPU readback:
+soft dust and thin yarn RGB are not attenuated again by residual compositor alpha.
+See [Export](/features/export/) for the readback and stacked-alpha contracts.
+
+### Sequential camera locks
+
+**Stack Card Delay (s)** offsets each card's docking and release independently,
+alternating left/right. Start/End describe the first card; later cards use the
+same hold duration shifted by their index times the delay. A one-second delay
+with six cards and Start/End 13/21 docks at 13–18 seconds and finishes releasing
+at 21–26 seconds. The appearance schedule, lock ticker, GPU placement and reserved
+screen area follow these per-card windows. Zero retains the previous compact
+row stagger.
+
+**Early Camera Locks** chooses separate existing visible episodes inside **Early
+Locks Start/End**, before the ordinary recurring lock schedule. Two locks in
+5–13 seconds occupy different slots, never starting before 5 seconds. A requested
+window must fit the dock/hold/release durations and gaps. If card lifetimes or
+reserved stacks prevent an early lock, the renderer reports it explicitly.
+Changing stack timing changes appearance cues; pre-rendered sound tracks need
+regeneration separately.
+
+### Readable intro planes and released-strand warning text
+
+The first two intro planes face almost parallel to the live camera while retaining
+position lag and a small residual tilt. Their independent text depth moves along
+the viewing ray, keeping off-axis headlines beneath the upper separator rather
+than shifting them toward the frame edge. Main words sit slightly below the
+card center. Four or more language variants use at most 650 ms each (including
+letter decoding); shorter appearances compress the slots to fit all variants.
+
+**Warning Text Groups** adds up to six groups of two to four large bold red
+exclamation marks inside each released-target card. Their deterministic locations
+vary by card and appearance, with individual flicker. More groups fade in as
+Released Curve Fraction increases. They use the same GPU acquisition gate as the
+red alert tint; cards still tracking the parent do not receive these warnings.
+The existing bold glyph atlas is reused, with bounded geometry and no extra
+readback, simulation or per-frame text rasterization. Zero disables the feature.
+
+### Minimum circulation speed
+
+**Motion Time → Minimum Speed** optionally keeps a small fraction of normal
+speed at the beginning and end. Zero retains the previous full stop; 0.005 means
+0.5 percent, and one disables the speed ramps. The acceleration/deceleration
+intervals and Final Stillness still shape the remaining speed. Both outputs use
+the integrated envelope; Loop Phase is normalized to exactly 0–1, including the
+extra distance, so a periodic path still closes. The optional direction turn also
+reverses the minimum speed of Motion Seconds. Outside Duration the clock stays
+clamped; a looping caller wraps time itself.
+
+This governs parameter travel, not physical distance on changing-length curves.
+Morphing geometry can still move even when its circulation is slow.
+
+### Closed Curve Flow travel units
+
+**Flow Units → Curve Distance** interprets Travel per Second and Travel Offset
+in curve-local length units. It builds cumulative segment lengths and samples the
+shifted distance with a binary search, preserving the incoming material spacing.
+Unequally spaced vertices and differently sized loops therefore receive the same
+travel distance. Radius scales interpolate with the sampled path; the repeated
+endpoint stays exact. Zero-length segments and completely collapsed loops remain
+finite. Non-finite travel values are rejected explicitly.
+
+The default **Turns (point indices)** retains previous projects' behavior. A
+Motion Seconds input can supply the independent eased clock in either mode.
+Distance is measured on the current path, not through a tension or inextensibility
+solver: morphing the path itself can still move material points. Scene transforms
+scale curve-local distances. As the final modifier of a GPU point-field chain,
+Closed Curve Flow now runs on the GPU in either unit mode, optionally before a
+final Curve Contacts stage. It reuses GPU arc lengths and a persistent packed-point
+snapshot, resamples position/radius, then rebuilds strand frames and bounds. Only
+the existing two metrics per strand are read back. Open input loops are reported
+explicitly through that same readback; CPU fallback retains the same closed-input
+requirement. An intervening unsupported stage or spatial material field keeps the
+existing CPU path. This does not make deformation-induced motion inextensible or
+integrate historical lengths of a changing path; author those shape clocks separately.
+
+
+### Authored scan text cues
+
+**Text Cues (JSON)** assigns timed content to existing scan cards. Supply an ordered array of `{ "start": 0, "end": 5, "panels": [["STATUS", "FIRST LINE", "SECOND LINE", "THIRD LINE"]] }`. Times are source seconds and use inclusive starts/exclusive ends. Cues may leave gaps; gaps restore the ordinary readouts. Each cue accepts 1–12 panels, with exactly four ASCII rows of at most 20 characters. Panels repeat across card indices when there are fewer panels than cards. Authored rows replace the changing telemetry and coordinate slots, including camera-locked cards; headings leave space for the animated lock icon.
+
+A cue may also contain `"headlines": [{ "text": "A question?", "header": "OBSERVER", "footer": "LIVE" }]`. At most two headlines can appear together, each with up to 32 printable Unicode characters and 20-column ASCII header/footer. They reuse the shaped cream headline atlas, progressive decode and independent text motion while retaining the existing card layout. The first multilingual Intro Titles keep priority until their phrases finish. Only the current phrase set is rasterized, keeping the atlas bounded independently of the number of cues.
+
+Headline cards are selected deterministically at cue start, preferring already visible, unlocked cards with the greatest remaining overlap. Selection stays fixed through the cue and across seeks. Cue text does not extend an appearance, remove occlusion or guarantee a full cue's visibility: choose suitable card lifetimes or a tracking hold for an uninterrupted reading interval. Existing rings, tracking acquisition, card colors, locks and sound-event timing keep their own controls. The transport rejects overlapping/out-of-order intervals, unknown fields, oversized text and more headlines than available cards instead of silently trimming them. Limits: 64 cues, 32,768 JSON characters and source times through 36,000 seconds. Empty text preserves existing projects.
+
+
+### Sequential final material tracking
+
+Set **Final Target Hold End** later than **Final Target Start** to enable a closing target handoff. Card 0 begins at Start; every subsequent card follows after **Final Target Card Delay**. Each interpolates its current moving target toward **Final Target Strand / Final Material Position** during **Final Target Travel**, then adopts **Final Target Color** only on arrival. Position accepts node-driven values, wraps in both directions and is sampled from final GPU strand positions. Feed the same material coordinate that controls a colored yarn section to keep the marker on that section. No point readback or CPU deformation is introduced.
+
+The existing appearance covering each handoff is extended through Hold End, followed by the regular intro/outro duration. Other appearances retain their ordinary schedule; this is a hold interval, not a global clip-duration limit. The hold must fit all delays and travel. An end no later than start disables the feature for older projects. Acquired final targets suppress the released-target red warning groups and accents; ordinary tracking stays unchanged before acquisition. Tracking diagnostic readiness uses 0–1 for released acquisition and 2 for the final target. Large cream headline words keep their authored typography.
+
+
+### Bounded scan leader elbows
+
+The short terminal arm of each tracking leader follows its card's actual rotated edge. Its length is capped at 14% of the projected card width, 25% of the projected marker-to-card gap, and 1.5% of viewport height, using perspective-correct shortening. Nearby, camera-locked and foreground cards therefore cannot inherit an oversized arm from the delayed camera distance. Rings, target positions, line weight and the authored glitch deformation stay unchanged.
+
+
+### Stable edge regions for floating labels
+
+The placement field now fills each horizontal yarn silhouette with continuous prefix/suffix maxima before spatial blurring. Internal gaps between moving strands are no longer treated as card-sized free holes. Free cards use stable ranks distributed over continuously weighted free perimeter length, including the upper and lower sides. They no longer average distant left/right free candidates into the subject between them. The mutual-separation solver may stay in place when every displacement would return it behind the silhouette. Existing depth relief and authored large foreground cards remain available. Placement is still a stateless spatial solution, not a guaranteed temporal velocity bound.
+
+Later authored text-cue headlines now replace only the text on their existing card. They do not reapply the initial intro scale, camera-distance change, camera-facing override or special placement; this prevents the 11.5-second headline cue from abruptly resizing/repositioning its card and pushing its neighbors. The original first two introduction cards retain those layout settings. Scheduled glitch waves remain independent.
+
+
+### Continuous perimeter allocation and directional tracking
+
+Scan-card placement now allocates stable ranks over the continuously weighted free viewport perimeter, instead of choosing one winning slot. The inverse cumulative distribution does not jump between unrelated equal-cost minima. Docked cards release their former free slots gradually with their docking amount, so lower camera stacks no longer also reserve unused upper positions. Invisible free cards keep their slots to avoid reshuffling whenever a card appears. This remains a stateless placement solve; it is not a temporal velocity limiter.
+
+**Directional Tracking Focus** is an optional, animatable source-anchor adjustment for the first **Focused Tracking Cards**. **Focus Axis** selects local +X/+Y/+Z/-X/-Y/-Z (0–5). The GPU finds a soft circular mean around that curve extremity and interpolates along the original polyline; rings do not float between unrelated points. Broad or ambiguous extrema retain the existing anchor. Released and final material targets keep priority. Animate focus in and out gently to distribute targets across a chosen part of an object.
+
+### Terminal scan-card exit and added roll
+
+**Final Exit Start** >= 0 enables a terminal exit. **Final Exit Spread** staggers cards in a deterministic seeded order. Each leader retracts from its tracked curve toward its card over **Leader Retraction**, with the ring disappearing at the start. Only then does the card run its own **Final Card Exit** animation. No later scan cycle can make it reappear. Default -1 preserves recurring appearances. Keep the final tracking hold and layer opacity through this interval. Existing audio stems are independent.
+
+**Added Roll** is a keyframeable/node-driven angular offset on floating planes. Camera locks still override the floating pose. It can carry a small delayed copy of an authored object turn without changing the camera or strand geometry.
+
+
+### Readout word typography
+
+Scan readouts use a higher-density five-face atlas with stronger medium-weight mono/sans base text, heavy emphasis and italic serif variants. Atlas glyphs share a consistent baseline and fitted italic overhang.
+
+For authored Text Cues in **Mixed** style, **Font Size Variation** controls deterministic word-level emphasis: one or two eligible words per card are bold and up to 18% larger, with an occasional separate italic word. Headers and numeric/data rows retain their grid. Enlarged words have fitted advances and spaces inside the existing line width. Zero variation or Uniform style disables authored word variation. Text colors, target-acquisition tints, opacity and timing are unchanged.

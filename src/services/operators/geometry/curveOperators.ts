@@ -1,3 +1,5 @@
+import { CURVE_WAKE_OPERATOR } from './curveWake';
+import { CURVE_LABEL_OPERATOR } from './curveLabels';
 import type { OperatorDefinition, OperatorParameter, OperatorPort } from '../../../types/operatorGraph';
 import { WEAVE_OPERATORS } from './weaveOperators';
 import { FIELD_OPERATORS } from './fieldOperators';
@@ -30,6 +32,8 @@ export const CURVE_POINT_LIMIT = 1_048_576;
 export const CURVE_STRAND_LIMIT = 65_536;
 
 export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
+  CURVE_LABEL_OPERATOR,
+  CURVE_WAKE_OPERATOR,
   operator('geometry.curve-line', 'Curve Line', 'Creates one straight curve of evenly spaced points centered on the origin; Points sets the resolution.',
     [], [curves()], [number('points', 'Points', 2000, 2, 65_536, 1, false), number('length', 'Length', 2, 0, 100), axis('z')]),
   operator('geometry.strand-array', 'Strand Array', 'Repeats every incoming curve Count times, spaced evenly along Axis and centered on the original.',
@@ -38,13 +42,15 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
   operator('geometry.set-position', 'Set Position', 'Moves each curve point: a connected Position replaces it, then a connected Offset is added. Inputs are evaluated per point.',
     [curves('curves', true), { id: 'position', label: 'Position', type: 'vec3' }, { id: 'offset', label: 'Offset', type: 'vec3' }], [curves()], [],
     { bypass: 'passthrough' }),
-  operator('geometry.curve-contact', 'Curve Contact', 'Separates overlapping yarn capsules after animated deformations. Radius is the outer contact radius and follows an upstream Yarn Profile radius scale. More iterations reduce residual overlaps. Place after all position modifiers. Frame-local correction, without temporal friction; decorative flyaways are not collision bodies. Supports up to 16384 points.',
-    [curves('curves', true)], [curves()], [number('radius', 'Contact Radius', 0.02, 0.0005, 10, 0.001),
+  operator('geometry.curve-contact', 'Curve Contact', 'Separates overlapping yarn capsules after animated deformations. Radius is the outer contact radius and follows an upstream Yarn Profile radius scale. More iterations reduce residual overlaps. Strength fades the correction; zero skips all contact work. Connect a uniform value or clock envelope, not a per-point field. Place after all position modifiers. Frame-local correction, without temporal friction; decorative flyaways are not collision bodies. Supports up to 16384 active points.',
+    [curves('curves', true), { id: 'strength', label: 'Strength', type: 'number' }], [curves()], [number('radius', 'Contact Radius', 0.02, 0.0005, 10, 0.001), number('strength', 'Strength', 1, 0, 1),
       number('iterations', 'Iterations', 24, 1, 128, 1, false), number('smoothing', 'Correction Smoothing', 0.35, 0, 1)],
     { bypass: 'passthrough' }),
-  operator('geometry.curve-flow', 'Closed Curve Flow', 'Moves material points along an existing closed path. Unlike forming new loops, the stitch path stays fixed while yarn and its colors circulate. Requires a repeated endpoint; linearly resamples positions and radius scales.',
-    [curves('curves', true)], [curves()], [number('speed', 'Turns per Second', 0.05, -10, 10, 0.01),
-      number('phase', 'Phase', 0, -1000, 1000, 0.01)], { bypass: 'passthrough' }),
+  operator('geometry.curve-flow', 'Closed Curve Flow', 'Moves material points along an existing closed path. Unlike forming new loops, the stitch path stays fixed while yarn and its colors circulate. Requires a repeated endpoint; linearly resamples positions and radius scales. Flow Units selects legacy point-index turns or actual curve-local distance. Distance mode maintains travel speed through uneven sample spacing and different loop lengths; changing shape can still move points independently of circulation.',
+    [curves('curves', true), { id: 'time', label: 'Motion Seconds', type: 'number' }], [curves()], [{ id: 'units', label: 'Flow Units', type: 'select', default: 'turns', options: [
+      { value: 'turns', label: 'Turns (point indices)' }, { value: 'distance', label: 'Curve Distance' }] },
+      number('speed', 'Travel per Second', 0.05, -10, 10, 0.01),
+      number('phase', 'Travel Offset', 0, -1000, 1000, 0.01)], { bypass: 'passthrough' }),
   operator('geometry.close-curve', 'Close Curve', 'Connects each open strand end back to its own start through a smooth return bow. Offset places the back of the bow relative to the endpoint midpoint. Place before Rod Simulation for a physically closed rope. This closes the geometry; it does not loop the animation.',
     [curves('curves', true)], [curves()], [
       { id: 'offset', label: 'Return Offset', type: 'vector', default: [0, 0, -1], animatable: false },
@@ -54,6 +60,15 @@ export const CURVE_OPERATORS: readonly OperatorDefinition[] = [
     [], [{ id: 'position', label: 'Position', type: 'vec3' }]),
   operator('geometry.clip-time', 'Clip Time', 'Seconds of source time of the clip that hosts the effect: 0 where the clip starts, continuing across splits. Cloth runs on the same clock.',
     [], [{ id: 'value', label: 'Seconds', type: 'number' }]),
+  operator('geometry.motion-time', 'Motion Time', 'Integrated source-time clock: starts at rest, smoothly reaches normal speed after Acceleration, then slows to rest during Deceleration before Duration. Connect only to motion that should ease; other clocks stay independent. Frozen outside the interval; scrubbing and export are deterministic. Acceleration and Deceleration must not overlap. Optional Direction Turn slows Motion Seconds through zero at the middle of Turn Duration, then runs backwards. Turn Start -1 disables it. The turn must finish within Duration. Loop Phase always advances monotonically from 0 to 1, independently of the turn: multiply it by whole turns for a periodic loop without rewinding its seam. Final Stillness 2–4 makes the end of deceleration progressively quieter without changing the acceleration or the stopping time. Minimum Speed sets an optional fraction of normal speed at both ends (0 means full rest), while Loop Phase still closes at 1. This sets parameter travel, not world-space speed along changing curve lengths.',
+    [], [{ id: 'value', label: 'Motion Seconds', type: 'number' }, { id: 'phase', label: 'Loop Phase (0–1)', type: 'number' }], [
+      number('duration', 'Duration', 59, 0.001, 36000, 0.01),
+      number('attack', 'Acceleration', 5, 0, 36000, 0.01),
+      number('release', 'Deceleration', 5, 0, 36000, 0.01),
+      number('stopPower', 'Final Stillness', 1, 1, 4, 1, false),
+      number('minimumSpeed', 'Minimum Speed', 0, 0, 1, 0.001, false),
+      number('turnStart', 'Turn Start (-1 off)', -1, -1, 36000, 0.1, false),
+      number('turnDuration', 'Turn Duration', 1, 0.001, 36000, 0.1, false)]),
   operator('geometry.curve-info', 'Curve Info', 'Per-point curve data: Curve Param runs from 0 to 1 along each curve; indices count from 0.',
     [], [{ id: 'u', label: 'Curve Param', type: 'number' }, { id: 'point', label: 'Point Index', type: 'number' },
       { id: 'strand', label: 'Strand Index', type: 'number' }, { id: 'points', label: 'Point Count', type: 'number' },

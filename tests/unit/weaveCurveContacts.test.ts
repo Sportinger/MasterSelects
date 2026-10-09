@@ -6,12 +6,58 @@ import { compileGeometryGraph } from '../../src/services/operators/geometry/geom
 import { isGeometryProgram } from '../../src/services/operators/geometry/geometryProgramValidation';
 import type { CurveSet } from '../../src/services/operators/geometry/geometryEvaluation';
 import { flowClosedCurves } from '../../src/services/operators/geometry/curveFlow';
+import { pointFieldChain } from '../../src/engine/native3d/passes/strandGpuChains';
+import { migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { validateEffectGraph } from '../../src/services/operators/effectGraph';
 
 const spec = { radius: 0.02, iterations: 64, smoothing: 0.35 };
 const crossing = (): CurveSet => ({ positions: Float32Array.of(-1, 0, 0, 1, 0, 0, 0, -1, 0, 0, 1, 0),
   starts: Uint32Array.of(0, 2), counts: Uint32Array.of(2, 2) });
 
 describe('frame-local curve contacts', () => {
+  it('fades corrections without altering the input and bypasses zero strength exactly', () => {
+    const input = crossing(), full = separateCurveContacts(input, spec);
+    const half = separateCurveContacts(input, { ...spec, strength: .5 });
+    expect(separateCurveContacts(input, { ...spec, strength: 0 })).toBe(input);
+    full.positions.forEach((value, i) => expect(half.positions[i]).toBeCloseTo((input.positions[i] + value) / 2, 6));
+    expect(() => separateCurveContacts(input, { ...spec, strength: NaN })).toThrow('strength');
+  });
+
+  it('accepts clock envelopes, restores GPU deformations at zero, and rejects per-point strength', () => {
+    const graph = createWaveStrandsGraph();
+    graph.nodes.push({ id: 'contact', operator: 'geometry.curve-contact', operatorVersion: 1, bindings: {}, constants: spec },
+      { id: 'clock', operator: 'geometry.clip-time', operatorVersion: 1, bindings: {} });
+    graph.edges.find(edge => edge.to === 'render' && edge.input === 'curves')!.from = 'contact';
+    graph.edges.push({ id: 'to-contact', from: 'set-position', output: 'curves', to: 'contact', input: 'curves' },
+      { id: 'strength', from: 'clock', output: 'value', to: 'contact', input: 'strength' });
+    expect(validateEffectGraph(graph)).toEqual([]);
+    const zero = compileGeometryGraph(graph, geometryParameterReader({}), undefined, { simulationTime: 0 });
+    expect(zero.stages.some(stage => stage.kind === 'curve-contact')).toBe(false);
+    expect(pointFieldChain(zero.stages)).not.toBeNull();
+    const half = compileGeometryGraph(graph, geometryParameterReader({}), undefined, { simulationTime: .5 });
+    expect(half.stages.at(-1)).toMatchObject({ kind: 'curve-contact', strength: .5 });
+    expect(isGeometryProgram(half)).toBe(true);
+    Object.assign(half.stages.at(-1)!, { strength: 2 });
+    expect(isGeometryProgram(half)).toBe(false);
+    Object.assign(graph.edges.at(-1)!, { from: 'info', output: 'u' });
+    expect(() => compileGeometryGraph(graph, geometryParameterReader({}))).toThrow('must be uniform');
+  });
+  it.each(['canonical', 'legacy'])('reopens a saved %s contact-strength connection without losing its control', storage => {
+    const graph = createWaveStrandsGraph();
+    graph.nodes.push({ id: 'contact', operator: 'geometry.curve-contact', operatorVersion: 1, bindings: {}, constants: spec },
+      { id: 'strength', operator: 'values.number', operatorVersion: 1, bindings: { value: 'contactStrength' } });
+    graph.edges.find(edge => edge.to === 'render' && edge.input === 'curves')!.from = 'contact';
+    graph.edges.push({ id: 'curves-contact', from: 'set-position', output: 'curves', to: 'contact', input: 'curves' },
+      { id: 'strength-contact', from: 'strength', output: 'value', to: 'contact', input: 'strength' });
+    const effect = migratePersistedEffectOperatorGraph({ id: 'weave', name: 'Weave', type: 'weave', enabled: true,
+      params: { contactStrength: .5, ...(storage === 'legacy' ? { operatorGraph: JSON.stringify(graph) } : {}) },
+      ...(storage === 'canonical' ? { operatorGraph: JSON.parse(JSON.stringify(graph)) } : {}) });
+    expect(effect.operatorGraph?.edges).toEqual(graph.edges);
+    expect(effect.operatorGraph?.incomplete).toBeUndefined();
+    const program = compileGeometryGraph(effect.operatorGraph!, geometryParameterReader(effect.params));
+    expect(program.stages.at(-1)).toMatchObject({ kind: 'curve-contact', strength: .5 });
+    expect(effect.params.contactStrength).toBe(.5);
+  });
   it('flows material around a closed path with a seamless wrap and preserves radius coordinates', () => {
     const input = { positions: Float32Array.of(0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0),
       starts: Uint32Array.of(0), counts: Uint32Array.of(5), radius: Float32Array.of(0.2, 0.4, 0.6, 0.8, 0.2) };

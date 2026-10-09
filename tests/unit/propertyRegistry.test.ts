@@ -39,6 +39,29 @@ function createRegistry(): PropertyRegistry {
 }
 
 describe('PropertyRegistry', () => {
+  it('discovers, resolves and writes saved instance-owned graph controls without leaking across effects', () => {
+    const registry = createRegistry();
+    const clip = makeClip({ effects: [{ id: 'weave-one', type: 'weave', name: 'Yarn', enabled: true,
+      params: { unfold_value: 0.25 }, operatorGraph: { version: 1, domain: 'geometry', edges: [], layout: {},
+        nodes: [{ id: 'unfold', operator: 'values.number', operatorVersion: 1,
+          bindings: { value: 'unfold_value' }, constants: { value: 0 },
+          exposed: { label: 'Unfold', min: 0, max: 1, step: 0.001 } }] } }] });
+    const saved = JSON.parse(JSON.stringify(clip)) as TimelineClip;
+    const path = 'effect.weave-one.unfold_value';
+    const listed = registry.getAllDescriptors(saved).find(descriptor => descriptor.path === path);
+    expect(listed).toMatchObject({ label: 'Unfold', animatable: true, valueType: 'number', defaultValue: 0,
+      ui: { min: 0, max: 1, step: 0.001 } });
+    expect(registry.getDescriptor(path, saved)?.path).toBe(listed?.path);
+    expect(registry.readValue(saved, path)).toBe(0.25);
+    const updated = registry.writeValue(saved, path, 0.8);
+    expect(updated.effects[0].params.unfold_value).toBe(0.8);
+    expect(saved.effects[0].params.unfold_value).toBe(0.25);
+    expect(registry.getDescriptor('effect.weave-two.unfold_value', saved)).toBeUndefined();
+    delete saved.effects[0].operatorGraph!.nodes[0].exposed;
+    expect(registry.getDescriptor(path, saved)).toBeUndefined();
+    expect(registry.getAllDescriptors(saved).some(descriptor => descriptor.path === path)).toBe(false);
+  });
+
   it('describes and writes transform properties without mutating the source clip', () => {
     const registry = createRegistry();
     const clip = makeClip({ transform: makeTransform({ position: { x: 12, y: 0, z: 0 } }) });

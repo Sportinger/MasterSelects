@@ -15,6 +15,7 @@ interface PreviewSize {
 }
 
 interface SceneNavCameraValues {
+  orbitPivot?: { x: number; y: number; z: number };
   positionX?: number;
   positionY?: number;
   positionZ?: number;
@@ -228,6 +229,7 @@ export function usePreviewSceneNavigationPointerEffects({
       }
 
       applyNavigationCameraValues(navigationSceneNavClip, {
+        orbitPivot: { x: pivotX, y: pivotY, z: pivotZ },
         positionX: nextPosition.x,
         positionY: nextPosition.y,
         positionZ: nextPosition.z,

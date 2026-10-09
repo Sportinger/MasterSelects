@@ -13,6 +13,8 @@ import { useEngineStore } from '../../src/stores/engineStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { TimelineClip } from '../../src/types';
+import { DEFAULT_CAMERA_LENS } from '../../src/types/renderSettings';
+import { splitNestedDomain } from '../../src/services/project/repository/domains/nestedOwnership';
 
 const initialEngineState = useEngineStore.getState();
 const initialMediaState = useMediaStore.getState();
@@ -23,6 +25,32 @@ describe('SceneCameraUtils', () => {
     useEngineStore.setState(initialEngineState);
     useMediaStore.setState(initialMediaState);
     useTimelineStore.setState(initialTimelineState);
+  });
+
+  it('bypasses physical processing without erasing lens curves, framing or durable settings', () => {
+    const settings = { fov: 60, near: .1, far: 1000, physicalCameraEnabled: false,
+      exposure: 2, toneMapping: 'aces' as const, fStop: .5, focusDistance: 3, shutterAngle: 180 };
+    const clip = { id: 'bypass-camera', trackId: 'camera-track', startTime: 0, duration: 10,
+      transform: { position: { x: 0, y: 0, z: 4 }, scale: { x: 1, y: 1, z: 1 },
+        rotation: { x: 0, y: 0, z: 0 }, opacity: 1, blendMode: 'normal' },
+      source: { type: 'camera', cameraSettings: settings } } as TimelineClip;
+    useMediaStore.setState({ activeCompositionId: null, compositions: [] });
+    useTimelineStore.setState({ tracks: [{ id: 'camera-track', type: 'video', visible: true }], clips: [clip],
+      clipKeyframes: new Map([[clip.id, [
+        { id: 'focus-a', clipId: clip.id, property: 'camera.focusDistance', time: 0, value: 2, easing: 'linear' },
+        { id: 'focus-b', clipId: clip.id, property: 'camera.focusDistance', time: 10, value: 6, easing: 'linear' },
+      ]]]) });
+    const off = resolveRenderableSharedSceneCamera({ width: 1920, height: 1080 }, 5);
+    expect(off.lens).toEqual({ ...DEFAULT_CAMERA_LENS, toneMapping: 'standard' });
+    expect(splitNestedDomain(settings, 'ProjectSceneCameraSettings').content).toEqual(settings);
+    useTimelineStore.setState({ clips: [{ ...clip, source: { ...clip.source!,
+      cameraSettings: { ...settings, physicalCameraEnabled: true } } }] });
+    const on = resolveRenderableSharedSceneCamera({ width: 1920, height: 1080 }, 5);
+    expect(on.lens).toMatchObject({ exposure: 2, toneMapping: 'aces', fStop: .5, focusDistance: 4, shutterAngle: 180 });
+    expect(on.cameraPosition).toEqual(off.cameraPosition);
+    expect(on.projectionMatrix).toEqual(off.projectionMatrix);
+    expect(settings.physicalCameraEnabled).toBe(false);
+    expect(useTimelineStore.getState().clipKeyframes.get(clip.id)).toHaveLength(2);
   });
 
   it('resolves the selected scene-nav camera clip through the generic compatibility selector', () => {

@@ -44,10 +44,10 @@ export function strandRadiusFieldCode(fields: readonly GeometryField[]): StrandF
  * Both inputs of Set Position read the same incoming point, matching geometryEvaluation.
  * This is a render deformation; rod contacts still run in the unmodified simulation space.
  */
-export function strandRodFieldCode(stages: readonly GeometryStage[]): StrandFieldCode {
+export function strandPointFieldCode(stages: readonly GeometryStage[], functionName = 'strandPoint'): StrandFieldCode {
   const constants: number[] = [], functions: string[] = [], body: string[] = [];
   const read = (field: GeometryField, type: string) => {
-    const name = `rodField${functions.length}`;
+    const name = `pointField${functions.length}`;
     functions.push(fieldFunction(name, field, constants, type));
     return `${name}(ctx)`;
   };
@@ -58,7 +58,12 @@ export function strandRodFieldCode(stages: readonly GeometryStage[]): StrandFiel
       const target = stage.position ? read(stage.position, 'vec3f') : 'ctx.position';
       const offset = stage.offset ? read(stage.offset, 'vec3f') : 'vec3f(0.0)';
       body.push(`  ctx.position = ${target} + ${offset};`);
-    } else throw new Error('Unsupported GPU rod output modifier.');
+    } else throw new Error('Unsupported GPU curve modifier.');
   });
-  return { code: `${functions.join('\n\n')}\n\nfn strandRodPoint(input: FieldContext, scale: f32) -> vec4f {\n  var ctx = input;\n  var radius = scale;\n${body.join('\n')}\n  return vec4f(ctx.position, radius);\n}`, constants };
+  return { code: `${functions.join('\n\n')}\n\nfn ${functionName}(input: FieldContext, scale: f32) -> vec4f {\n  var ctx = input;\n  var radius = scale;\n${body.join('\n')}\n  return vec4f(ctx.position, radius);\n}`, constants };
+}
+
+/** Compatibility entry point for post-simulation rod deformation. */
+export function strandRodFieldCode(stages: readonly GeometryStage[]): StrandFieldCode {
+  return strandPointFieldCode(stages, 'strandRodPoint');
 }

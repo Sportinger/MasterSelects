@@ -1,4 +1,5 @@
 import { prepareStructuralPublication, type StructuralPointer } from './structuralPublication';
+import { draftNavigationRecords } from '../persistence/navigationPreferences';
 import { ReadonlyWorkspace } from '../persistence/ReadonlyWorkspace';
 import { REPOSITORY_LIMITS, RepositoryError } from '../contracts';
 import type { EntityDTO, EntityKey, JsonValue, MetadataPage, RecordReference, RepositoryProjection, RepositoryRecord, RevisionMetadata } from '../contracts';
@@ -116,7 +117,7 @@ export class WorkerCoordinatorStorage implements CoordinatorStorage {
       if (draft.checkpoint) { checkpoints.push(`${prefix}checkpoint`); break; }
     }
     const count = revisionIds.length, last = items[count - 1]!;
-    records.push(this.navigationRecord(last.revision.revisionId, revisionIds[count - 1]!, workspaceId, last.redo, last.sequence));
+    records.push(...draftNavigationRecords(last.revision.revisionId, revisionIds[count - 1]!, workspaceId, last.redo, last.sequence));
     const result = await this.publish({
       batchId: count === 1 ? first.revision.transactionId : `${first.revision.transactionId}..${last.revision.transactionId}`,
       firstOperation: first.sequence, lastOperation: last.sequence,
@@ -207,11 +208,6 @@ export class WorkerCoordinatorStorage implements CoordinatorStorage {
     state.checkpointBytes = checkpoint ? 0 : nextCheckpointBytes;
     return { records, checkpoint, bytes: changeBytes };
   }
-  private navigationRecord(revisionId: string, reference: string | RecordReference, workspaceId: string,
-    redo: Readonly<Record<string, string>>, sequence: number): DraftRecord {
-    return { id: 'navigation', kind: 'navigation', schemaVersion: 1,
-      payload: json({ workspaceId, sequence, revisionId, revision: typeof reference === 'string' ? local(reference) : reference, redoPreferences: redo }), references: [reference], blobs: [] };
-  }
   readReaderNavigation(workspaceId: string): JsonValue | null { return this.readerWorkspace?.read(`navigation:${workspaceId}`) ?? null; }
   async publishNavigation(revisionId: string, workspaceId: string, redo: Readonly<Record<string, string>>, sequence: number): Promise<void> {
     if (this.readerWorkspace) {
@@ -221,7 +217,7 @@ export class WorkerCoordinatorStorage implements CoordinatorStorage {
     }
     const reference = await this.reference(revisionId);
     await this.publish({ batchId: `navigation-${workspaceId}-${sequence}`, firstOperation: sequence, lastOperation: sequence,
-      records: [this.navigationRecord(revisionId, reference, workspaceId, redo, sequence)], heads: { [`navigation:${workspaceId}`]: 'navigation' } });
+      records: draftNavigationRecords(revisionId, reference, workspaceId, redo, sequence), heads: { [`navigation:${workspaceId}`]: 'navigation' } });
     await this.bindProjection(revisionId);
   }
   async publishMetadata(key: string, value: JsonValue, sequence: number, dependencies: { references?: RecordReference[]; blobs?: import('../contracts').BlobReference[] } = {}): Promise<void> {

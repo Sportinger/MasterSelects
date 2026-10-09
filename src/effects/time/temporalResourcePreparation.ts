@@ -3,6 +3,7 @@ let exportFrameStep: number | undefined;
 let exportFramesRemaining: number | undefined;
 export const temporalExportFrameStep = () => exportFrameStep;
 export const temporalExportFramesRemaining = () => exportFramesRemaining;
+export const hasPendingTemporalPreparations = () => (collecting?.size ?? 0) > 0;
 export const isCollectingTemporalPreparations = () => collecting !== undefined;
 
 /** Collect only resources requested by one synchronous render, not unrelated tabs/owners. */

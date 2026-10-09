@@ -24,7 +24,7 @@ describe('repository browser backends', () => {
     const rootLookup = vi.fn(async () => metadata);
     const root = { getDirectoryHandle: rootLookup } as unknown as FileSystemDirectoryHandle;
     const backend = directoryBackend(root, 'fixture');
-    expect(await backend.stat('.masterselects/segments/a.msseg')).toEqual({ length: 2 });
+    expect(await backend.stat('.masterselects/segments/a.msseg')).toMatchObject({ length: 2, modifiedTime: expect.any(Number) });
     expect([...await backend.read('.masterselects/segments/a.msseg')]).toEqual([1, 2]);
     files['a.msseg'] = new Uint8Array([3, 4]);
     expect([...await backend.read('.masterselects/segments/a.msseg')]).toEqual([3, 4]);
@@ -47,6 +47,14 @@ describe('repository browser backends', () => {
     expect(first.paths).toHaveLength(128); expect(second.paths).toHaveLength(128); expect(last.paths).toHaveLength(44);
     expect(new Set([...first.paths,...second.paths,...last.paths]).size).toBe(300);
     expect(last.nextCursor).toBeNull();
+  });
+  it('allows only the two startup-cache slots through the repository write boundary', async () => {
+    vi.stubGlobal('navigator', {});
+    const backend = directoryBackend(directory({}), 'fixture');
+    const bytes = () => (async function* () { yield new Uint8Array([1]); })();
+    // These pass path validation and reach the independent owner check.
+    for (const slot of ['a', 'b']) await expect(backend.replaceViewSlot(`.masterselects/cache/startup/${slot}.json`, bytes())).rejects.toMatchObject({ code: 'ownership' });
+    await expect(backend.replaceViewSlot('.masterselects/cache/other.json', bytes())).rejects.toMatchObject({ code: 'permission' });
   });
   it('rejects unbounded reads and path escapes', async () => {
     vi.stubGlobal('navigator', {});

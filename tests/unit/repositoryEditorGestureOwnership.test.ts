@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { useFrameCoalescedDrag } from '../../src/components/timeline/hooks/useFrameCoalescedDrag';
 
 const runtime = vi.hoisted(() => ({ session: {} as object | null, live: new Set<object>(),
   explicit: null as object | null, reader: (() => null) as () => object | null,
@@ -37,6 +39,26 @@ afterEach(() => {
   window.dispatchEvent(new Event('blur')); target.remove(); vi.useRealTimers(); vi.unstubAllGlobals();
 });
 describe('editor input gesture lifetime', () => {
+  it('keeps coalesced drag updates in the original gesture after event dispatch ends', async () => {
+    const tokens: unknown[] = [];
+    const { result, unmount } = renderHook(() => useFrameCoalescedDrag(() => {
+      tokens.push(runtime.explicit);
+    }));
+    target.addEventListener('mousemove', () => result.current.push());
+    target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    await Promise.resolve();
+    await act(flushFrame);
+    target.dispatchEvent(new MouseEvent('mousemove', { bubbles: true }));
+    target.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    await Promise.resolve();
+    await act(flushFrame);
+    expect(tokens).toHaveLength(2);
+    expect(tokens[0]).toBeTruthy();
+    expect(tokens[1]).toBe(tokens[0]);
+    expect(runtime.begin).toHaveBeenCalledOnce();
+    expect(runtime.commit).toHaveBeenCalledOnce();
+    unmount();
+  });
   it('finishes one wheel burst after a bounded idle interval without requiring focus', async () => {
     const edit = vi.fn();
     target.addEventListener('wheel', () => requestAnimationFrame(bindEditorGestureCallback(edit)));

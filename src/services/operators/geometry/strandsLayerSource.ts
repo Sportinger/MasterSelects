@@ -72,3 +72,11 @@ export function buildStrandsLayerSources(clip: Pick<TimelineClip, 'id' | 'effect
     }
   });
 }
+
+/** Preserve the sampled downstream image stack on every generated strand layer. */
+export function strandPostProjectionEffects(effects: readonly Effect[], ownerId: string): Effect[] {
+  const owner = effects.findIndex(effect => effect.id === ownerId);
+  if (owner < 0) return [];
+  return effects.slice(owner + 1).filter(effect => effect.enabled && !effect.detached
+    && effect.type !== WEAVE_EFFECT_TYPE && effect.type !== 'flocking' && !effect.type.startsWith('audio-'));
+}

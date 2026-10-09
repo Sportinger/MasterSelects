@@ -324,6 +324,7 @@ export const KeyframeFields = {
   "value": { class: 'content', owner: 'timeline' },
   "pathValue": { class: 'content', owner: 'timeline' },
   "easing": { class: 'content', owner: 'timeline' },
+  "cameraOrbitPivot": { class: 'content', owner: 'timeline' },
   "rotationInterpolation": { class: 'content', owner: 'timeline' },
   "handleIn": { class: 'content', owner: 'timeline' },
   "handleOut": { class: 'content', owner: 'timeline' },

@@ -175,6 +175,9 @@ export const ProjectRulerLaneFields = {
 } as const satisfies FieldOwnershipMap<ProjectRulerLane>;
 
 export const ProjectSceneCameraSettingsFields = {
+  "shakeAmount": { class: 'content', owner: 'timeline' },
+  "shakeFrequency": { class: 'content', owner: 'timeline' },
+  "shakeSeed": { class: 'content', owner: 'timeline' },
   "fov": { class: 'content', owner: 'timeline' },
   "near": { class: 'content', owner: 'timeline' },
   "far": { class: 'content', owner: 'timeline' },
@@ -184,6 +187,7 @@ export const ProjectSceneCameraSettingsFields = {
   "toneMapping": { class: 'content', owner: 'timeline' },
   "fStop": { class: 'content', owner: 'timeline' },
   "focusDistance": { class: 'content', owner: 'timeline' },
+  "physicalCameraEnabled": { class: 'content', owner: 'timeline' },
   "shutterAngle": { class: 'content', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<ProjectSceneCameraSettings>;
 

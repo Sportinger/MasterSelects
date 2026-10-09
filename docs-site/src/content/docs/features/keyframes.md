@@ -269,7 +269,23 @@ The data model also supports `bezier` easing. A keyframe becomes Bezier-driven o
 Rotation keyframes also expose a segment path option in the right-click context menu:
 
 - Shortest Path: rotate through the smallest angular difference. Camera clips use this by default.
-- Continuous / Orbit: preserve the raw angle delta, so values like `1x + 0deg` produce a full 360-degree turn. Camera positions recorded with Preview Orbit follow the circular path around the shared world pivot instead of cutting straight between the keyed eye positions.
+- Continuous / Orbit: preserve the raw angle delta, so values like `1x + 0deg` produce a full 360-degree turn. Camera positions recorded with Preview Orbit follow the recorded world pivot, including off-centre objects and off-axis framing, instead of cutting straight between the keyed eye positions.
+
+For a camera move, set a pose keyframe, move the playhead, orbit in the normal
+camera preview, then set the next pose keyframe. Switch a **rotation keyframe at
+the start** of the segment to **Continuous / Orbit**. Preview navigation also
+updates keyed camera channels automatically. The arriving pose saves the gesture's
+pivot independently of the outgoing path mode; switching back to Shortest Path
+restores the direct connection. The pivot survives project save/reload and keyframe
+copy/paste. Panning or FPS-looking at that time clears the recorded orbit intent.
+The temporary Edit camera only changes the viewport and does not record timeline
+camera motion.
+
+Older look-at orbits can recover their shared target from the two camera poses.
+Ambiguous older moves retain their keyed positions and log that no pivot could be
+recovered; record the second pose with Preview Orbit to make the pivot explicit.
+Two poses define the angular interpolation, including unwrapped full turns, not
+every intermediate mouse gesture. Use additional pose keys for a freeform route.
 
 Like easing, the rotation path is stored on the keyframe that starts the segment leading into the next keyframe. This lets one camera move use shortest-path aiming while the next segment performs a deliberate orbit.
 
@@ -326,3 +342,25 @@ every keyframe. Sparse rows keep their existing DOM controls.
 Interpolation shares a weakly cached property/time index for each immutable
 keyframe array and finds adjacent keys by binary search. Editing or undoing
 creates a new array and therefore a fresh index; old indexes can be collected.
+
+
+### Responsive curve editing
+
+Curve editors and timeline diamonds coalesce pointer movements to the latest position once per
+animation frame. Mouse release flushes the last pending position before committing; global graph
+Escape/blur cancellation discards queued movement and restores the existing transaction.
+Easing and rotation-interpolation menu selections update all selected targets in one store action.
+Global curve transaction samples stage their keyframe operations before a single publication and
+cache invalidation. Unchanged clip keyframe arrays are retained, and transaction change detection
+skips those arrays instead of serializing the entire timeline on every pointer event.
+These changes reduce main-thread authoring work; they do not move the entire render engine to a worker.
+
+Editing/re-recording a value at an existing keyframe preserves its easing, hold flag and Bezier
+handles unless an easing is explicitly supplied. This includes inspector and timeline pen edits;
+new keyframes still default to linear.
+
+With repository storage, clip-value and keyframe drag samples stay in the live timeline until the
+gesture ends. The repository reserves each touched clip, retains its initial immutable values,
+and encodes the final values once at commit, creating one undo/save revision. Cancellation restores
+the original values without saving the previews. Unrelated clip edits remain independent. Structural
+edits interleaved with a gesture flush its preview through the normal transactional path first.

@@ -1,3 +1,4 @@
+import { getCameraDescriptorForPath, getCameraDescriptorsForClip } from './cameraProperties';
 
 import type { PropertyRegistry } from './PropertyRegistry';
 import { propertyRegistry } from './PropertyRegistry';
@@ -20,6 +21,8 @@ import { getTextDescriptorForPath, getTextDescriptorsForClip } from './textPrope
 
 export function registerCoreProperties(registry: PropertyRegistry = propertyRegistry): PropertyRegistry {
   registerTransformProperties(registry);
+  registry.registerResolver('camera', getCameraDescriptorForPath);
+  registry.registerProvider('camera', getCameraDescriptorsForClip);
   registry.registerResolver('text', getTextDescriptorForPath);
   registry.registerProvider('text', getTextDescriptorsForClip);
   registerEffectTemplates(registry);

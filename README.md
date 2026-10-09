@@ -1,5 +1,7 @@
 # MasterSelects
 
+Preview GPU submissions are bounded so heavy scenes coalesce playback and scrub requests to the current playhead instead of building a queue of stale frames. Export and RAM-preview generation retain every requested frame.
+
 Development automation can open an authorized project folder by disk path with
 the confirmed `openLocalProject` bridge operation (Native Helper required).
 
@@ -122,11 +124,13 @@ The **Compact** toggle wraps top-level effects into roughly square arrangements 
 
 Development builds also offer an optional [native OptiX preview](tools/native-helper/optix/README.md) for fiber scenes. Its persistent CUDA/OptiX worker retains geometry, updates the camera with small packets and refines still images from the center outward. The separate comparison view reports WebGPU/native GPU, initialization and transfer timings. Native preview requires the matching helper; video export continues to use WebGPU.
 
-Built-in Weave presets preserve the **Four-Yarn Knit Ring** study, **Endless Knit Band**, and the earlier **Wave Strands** graph as editable effects in Nodes → Effect presets. **Jellyfish — Video Reconstruction** approximates a recorded yarn sculpture: yarn circulates through a fixed knitting window while a localized pulse starts at the knitted head and travels through the long return loops at full strength. Tail Inset draws the resting return loops inward behind the domed head; reusable **Curl Noise** nodes send the loose loops into irregular swirls in all three axes. Two masked fields travel in opposite directions along the two sides, with independent shape evolution. Head Wobble adds gentle motion over the dome, while Tail Soft Noise gives individual yarns different smooth bends, with a rear transition that stays smooth during long playback. Return Length extends the free loops independently of the head. Body Length, Return Length, Tail Inset, Irregularity, Return Flow, Curl Strength, Curl Detail, Curl Evolution, Head Wobble, Tail Soft Noise, Soft Motion, Yarn Circulation, Pulse Rate and Pulse Strength are editable; the fields keep evolving while circulation and pulse repeat every 20 source seconds. Saved Curl Noise graphs retain their original input contract; unfinished Weave wiring reopens as an editable draft. Linux video export reads compositor pixels to avoid silently black GPU-canvas captures. These presets remain available without browser storage.
+Built-in Weave presets preserve the **Four-Yarn Knit Ring** study, **Endless Knit Band**, and the earlier **Wave Strands** graph as editable effects in Nodes → Effect presets. **Jellyfish — Video Reconstruction** approximates a recorded yarn sculpture: yarn circulates through a fixed knitting window while a localized pulse starts at the knitted head and travels through the long return loops at full strength. Tail Inset draws the resting return loops inward behind the domed head; reusable **Curl Noise** nodes send the loose loops into irregular swirls in all three axes. Two masked fields travel in opposite directions along the two sides, with independent shape evolution. Head Wobble adds gentle motion over the dome, while Tail Soft Noise gives individual yarns different smooth bends, with a rear transition that stays smooth during long playback. Return Length extends the free loops independently of the head. Body Length, Return Length, Tail Inset, Irregularity, Return Flow, Curl Strength, Curl Detail, Curl Evolution, Head Wobble, Tail Soft Noise, Soft Motion, Yarn Circulation, Pulse Rate and Pulse Strength are editable; the fields keep evolving while circulation and pulse repeat every 20 source seconds. Saved Curl Noise graphs retain their original input contract; unfinished Weave wiring reopens as an editable draft. Linux video export reads compositor pixels to avoid silently black GPU-canvas captures; opaque output preserves preview brightness for soft dust and thin yarn without applying coverage twice. These presets remain available without browser storage.
 
 Saved Weave graphs support up to 1,024 nodes and 4,096 connections, including expanded reusable groups; repeated pure field expressions share work while animated inputs remain independent. Load errors identify the actual graph or field size and limit.
 
 Knit Sphere's band height can gather all rings into one connected knitting patch. Preview camera orbit drags follow the pointer vertically as well as horizontally.
+Curve Scan Labels add GPU-anchored tracking rings, leader lines and transparent 3D readout cards that float, search the full camera image for clearer space using a smoothed strand occupancy field and mutual spacing between visible cards, with softer lateral separation and limited depth retreat when crowded, and follow the animated camera with deterministic position and rotation lag. Staggered lifetimes draw cards and their connecting lines in and out in at most 500 ms. Mixed shapes, depth travel, brief bold flashes and occasional spatial window echoes vary the readouts; detached-strand alerts wait until the new target is acquired. Downstream image effects such as Glow are retained on generated strand layers in preview and export. Rings and leaders have independent thickness controls and an optional soft raster glow without a fullscreen blur. Optional diagonal glitch waves sweep only the readout windows every 12 seconds, followed by individual one-to-two-second recoveries.
+
 Strand Render also accepts per-point RGB fields for gradients and alternating color bands with independent offsets per yarn.
 Material-coordinate yarn colors retain GPU cloth and rod simulation; spatial color fields use the final CPU-deformed positions. Yarn Profile Surface Feed moves fiber detail along a curve without changing its centerline. Legacy parameter graphs remain isolated per effect.
 Curve Contact separates overlapping yarn capsules after procedural deformation while preserving closed rings and their color coordinates.
@@ -134,6 +138,8 @@ Closed Curve Flow circulates yarn material along fixed stitch paths, independent
 Experimental Knit Cycle Guides drive closed yarn bands through separate forming and release zones in one forward-time rod solve.
 Close Curve adds a smooth return bow to each open yarn, creating closed ropes for Rod Simulation; geometric closure alone does not loop the motion.
 Rod Simulation's Pull Direction field moves selected pins on open or closed ropes along fixed normalized directions; zero vectors hold supports still. Build and map the closed ring before the solve for coupled tension and contacts. This enables tension studies, not repeated needle-driven stitch formation.
+Ordinary curve generators also run trailing Set Position and Yarn Profile fields on the GPU, reusing the existing Curl/Noise nodes. Preview keeps the last completed geometry while the next frame is prepared; export waits for exact geometry and bounds. Position-dependent material fields retain the CPU path. Paused camera navigation reuses unchanged solid textures instead of uploading them on every redraw.
+
 Set Position after Rod Simulation deforms the result on the GPU, for example bending a stitch animation into a ring while preserving its original simulation.
 
 [Slit Scan](docs/Features/Effects.md#slit-scan) starts with 3D geometry bypassed. It can match its time factor to the source frame rate and sample count, and optionally compensate motion between decoded frames in resident GPU history with adjustable flow strength.
@@ -167,6 +173,9 @@ Open [masterselects.com](https://www.masterselects.com/), import a clip, and dra
 
 Projects [save continuously](docs/Features/Project-Persistence.md), with durable branching history. **Ctrl/Cmd+S** waits for pending content, history navigation and workspace changes to reach storage; named versions are separate from Save.
 Filesystem saves page through one bounded filename snapshot per fresh history-folder check, avoiding repeated physical scans as history grows.
+Large redo-preference lists are stored in bounded blocks so long editing histories can continue saving without dropping remembered branches. Saves also keep a checked startup cache in the project folder; reopening reuses unchanged history and applies any newer edits automatically.
+
+[Weave](docs/Features/Weave.md) supports fading Curve Contact corrections for selected animation intervals and evaluates final contacts after procedural fields on the GPU. Single-sample Raster exports show steady frame progress without a sample/denoise indicator. Raster strand layers keep their own projected image effects, including Glow on transparent backgrounds, and apply Transform blend modes within shared 3D scenes.
 
 Chrome or Edge on desktop is a good starting point. Editing and rendering run locally in the browser; hosted AI and media generation use external services and may require credits. Local AI features may download models on first use. MasterSelects is under active development, so keep backups of important projects.
 
@@ -198,3 +207,53 @@ MasterSelects is licensed under **AGPL-3.0-only**. Commercial use is permitted u
 Linked clips selected together now share a contour outline in the timeline, following their outer edges instead of highlighting every clip individually.
 
 Projects assume saved media locations are available and open sources only when needed for preview, playback, editing or export. Unused media are not scanned on reload; only failed source access requests relinking. See [project persistence](docs/Features/Project-Repository.md).
+
+Camera **Continuous / Orbit** keyframes retain the actual Preview Orbit pivot, including off-centre objects and off-axis framing. Saved projects and copied camera keys preserve it; **Shortest Path** restores the direct move. See [camera rotation paths](docs/Features/Keyframes.md#rotation-path).
+
+Exposed values in editable effect graphs participate in property search and keyframe authoring, including their per-instance labels and slider ranges. See [Weave](docs/Features/Weave.md).
+
+Weave supports larger multi-stage formation graphs: reusable compositions respect the geometry graph budget, while per-point shader instruction limits remain separate.
+Repeated pure geometry expressions share shader work within a stage, allowing reused motion graphs without duplicating identical samples.
+
+Export uses Raster by default; Render Quality can opt into Path Traced or follow the composition.
+
+Raster 3D cameras support depth-buffer-based focus blur and a Physical Camera bypass. Flock particles include Gaussian
+softness, stable opacity variation and inexpensive velocity streaks; their Transform blend
+mode and opacity composite against the shared scene.
+
+Keyframe curve drags coalesce pointer updates; bulk easing edits publish once and preserve unrelated keyframe data. Clip/keyframe drag previews defer project encoding until release, and editing existing keyframe values retains their easing.
+
+Weave circulation supports an independent integrated Motion Time clock for smooth starts and stops, with an optional matching minimum speed at both loop endpoints; see [Weave](docs/Features/Weave.md#independent-eased-circulation).
+
+Curve Scan Labels supports independently randomized appearances, shared intro/outro cue timing, tracking hold intervals, 6–20-copy echo trails and smooth window rotations up to 45 degrees that return to camera-parallel rest. Optional brief corner locks show an animated padlock and fast priority ticker before releasing the card back into space; timed lower-side stacks can hold up to three differently sized cards per side without overlapping their reserved footprints, with optional per-card docking/release delays and separate early lock slots. A dev-only visible-material map identifies strand indices and moving material coordinates directly from depth-tested GPU fibers; its compact tracking mode also exposes the actual GPU target-acquisition state for diagnostic and sound-cue alignment.
+
+Scan-window glitch waves include emissive fragments, warped outlines and text sizes, and curved connection lines with fixed endpoints. Intro readouts face the camera with brief multilingual decoding; optional bold red warning groups accumulate only after released-strand targets are acquired.
+
+Closed Curve Flow optionally measures travel in curve-local distance instead of point-index turns, keeping circulation independent of uneven vertex spacing.
+
+Weave Motion Time also provides a normalized forward loop phase for eased cyclic material motion without an end-of-shot rewind.
+
+Scan overlays use a slower three-second diagonal glitch front with reduced spatial width and separate per-card aftershocks.
+
+Weave’s Final Stillness control can leave only tiny residual circulation in the last seconds. An optional integrated direction turn can reverse circulation smoothly while the separate loop phase keeps its forward closure.
+
+Curve Scan Labels supports exact material anchors and amber opening rings that respect randomized card order and appear with their cards.
+
+Scan intros combine detailed readouts with cream multilingual text on independently moving 3D planes, progressively decode characters, switch languages briefly, then return to normal readouts.
+
+Weave scan cards support material anchors for an authored tracking hold, with projected card bounds kept in frame while the yarn moves.
+
+Curve Scan Labels accepts authored text cues with timed four-line readouts and Unicode headlines, reusing existing cards and preserving their tracking and appearance schedules.
+
+Curve Scan Labels can hand off sequentially to a shared moving material target, hold their final appearances longer, and recolor each card on acquisition. See [Weave](docs/Features/Weave.md).
+
+Curve Particle Wake adds depth-tested GPU particles to yarn curves, with inherited motion, pulse-born sideways vortices, damped world-space trails and a crisp one-pixel mode. Continuous playback retains detached particles; timeline jumps reseed them from the current shape. See [Weave](docs/Features/Weave.md#curve-particle-wake).
+
+Closed Curve Flow supports GPU point-field tails in turns or curve-distance units, including a following contact stage.
+
+Scan tracking leaders use short card-relative elbows, bounded in screen space even for near and camera-locked panels.
+
+Scan labels search contiguous free edge regions around a filled yarn silhouette; later text headlines preserve the existing card layout.
+
+
+Camera clips support additive, keyframeable shake without changing their authored orbit path or requiring physical lens effects. Scan cards distribute free positions along the viewport perimeter, support directional curve anchors, and can retract leaders before a staggered final exit. Floating planes accept an added roll curve; authored readouts support fitted word-level bold, size and occasional italic variation while retaining their colors.

@@ -34,6 +34,7 @@ export function projectNativeSceneLayers(input: WorkerGpuNativeSceneProjectionIn
   if (!scene.length) throw new Error('Worker native scene contains no drawable layers');
   const layers: WorkerGpuNativeSceneLayer[] = scene.map(layer => {
     if (layer.layerSpaceEffects?.length || layer.surfacePlan) throw new Error('Worker native scene surface effects are not admitted yet');
+    if (layer.postProjectionEffects?.length) throw new Error('Worker native scene post-projection effects require the main renderer');
     const base = { layerId: layer.layerId, clipId: layer.clipId, worldMatrix: Array.from(layer.worldMatrix), opacity: layer.opacity };
     if (layer.kind === 'primitive') return { ...base, kind: 'primitive', meshType: layer.meshType, wireframe: layer.wireframe };
     if (layer.kind === 'light') {

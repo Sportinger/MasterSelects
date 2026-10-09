@@ -4,6 +4,8 @@ export interface NativeSceneExportProgress {
   samples: number;
   targetSamples: number;
   denoising: boolean;
+  /** The renderer actually plans a denoise pass for this frame. */
+  denoiseEnabled?: boolean;
   /** Sampled to the target (or the time limit, or every pixel converged) and denoised if requested. */
   complete: boolean;
   /** Resolves when the GPU finished this render (the exporter waits before the next one). */

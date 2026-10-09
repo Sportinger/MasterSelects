@@ -15,10 +15,10 @@ function isDynamicCanvas(canvas: HTMLCanvasElement): boolean {
   return Boolean(canvas.dataset.masterselectsDynamic);
 }
 
-// Text rasters are only drawn by the text renderer, which bumps the canvas version
-// on every draw; other dynamic canvases are redrawn in place without a version.
+// Text and solid runtimes bump the canvas version on every draw. Other dynamic
+// canvases may be redrawn in place without a version and must still upload.
 function isVersionedCanvas(canvas: HTMLCanvasElement): boolean {
-  return canvas.dataset.masterselectsDynamic === 'text';
+  return canvas.dataset.masterselectsDynamic === 'text' || canvas.dataset.masterselectsDynamic === 'solid';
 }
 
 export class TextureManager {

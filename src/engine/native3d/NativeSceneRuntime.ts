@@ -1,7 +1,11 @@
+import { StrandIdCapture } from './passes/StrandIdCapture';
+import { CurveWakePass } from './wake/CurveWakePass';
+import { CurveLabelPass } from './labels/CurveLabelPass';
 import { Logger } from '../../services/logger';
 import { flockGpuTimings } from '../flock/gpu/FlockGpuTimings';
 import { SlitScanSceneSurfaces } from './sceneRenderer/SlitScanSceneSurfaces';
-import { isCollectingTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
+import { StrandProjectedEffects } from './sceneRenderer/StrandProjectedEffects';
+import { hasPendingTemporalPreparations, isCollectingTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
 import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
 import { DEFAULT_GAUSSIAN_SPLAT_SETTINGS } from '../gaussian/types';
 import { resolveSharedSplatSceneKey } from '../scene/runtime/SharedSplatRuntimeUtils';
@@ -48,6 +52,7 @@ import {
   getModelSequencePreloadOptions,
   prepareModelLayerForRender,
 } from './sceneRenderer/modelSequence';
+import { RasterDepthOfField } from './sceneRenderer/rasterDepthOfField';
 import { SceneToneMap } from './sceneRenderer/sceneToneMap';
 import { PathTraceRuntime } from './pathtrace/runtime/PathTraceRuntime';
 import { collectPathTraceInputs, NO_STRAND_SHADOWS } from './sceneRenderer/pathTracedFrame';
@@ -74,6 +79,7 @@ export class NativeSceneRuntime {
   private sceneDepthView: GPUTextureView | null = null;
   private readonly sceneTargets = new Map<string, SceneTargets>();
   private readonly toneMap = new SceneToneMap();
+  private depthOfField?: RasterDepthOfField;
   private readonly pathTrace = new PathTraceRuntime(() => this.host.requestRender?.());
   private readonly rasterSubSamples = new RasterSubSampleAccumulator();
   private readonly planePass = new PlanePass();
@@ -82,13 +88,20 @@ export class NativeSceneRuntime {
   private readonly gizmoPass = new GizmoPass();
   private readonly splatPass = new SplatPass();
   private readonly voxelPass = new VoxelPass();
-  private readonly strandPass = new StrandPass();
+  private strandPass = new StrandPass(() => this.host.requestRender?.());
   private flockPass: FlockPass;
   private readonly effectorCompute = new EffectorCompute();
   private readonly modelRuntimeCache = new ModelRuntimeCache();
   private readonly lastRenderableModelSequenceUrls = new Map<string, string>();
   private readonly layerSpaceEffectRenderer = new LayerSpaceEffectRenderer();
   private slitScanSurfaces?: SlitScanSceneSurfaces;
+  private strandImageEffects?: StrandProjectedEffects;
+  private curveLabels?: CurveLabelPass;
+  private curveWake?: CurveWakePass;
+  private strandIds?: StrandIdCapture;
+  captureStrandIds(clipId:string,time:number) {return (this.strandIds??=new StrandIdCapture()).capture(this.strandPass,clipId,time);}
+  captureStrandTracking(clipId:string,time:number) {return (this.strandIds??=new StrandIdCapture()).captureTracking(clipId,time);}
+  hasProjectedStrandEffects(targetKey = 'main'): boolean { return this.strandImageEffects?.hasApplied(targetKey) ?? false; }
   private readonly stopIrradianceListener: () => void;
   constructor(host: NativeSceneHost) {
     this.host = host;
@@ -100,6 +113,13 @@ export class NativeSceneRuntime {
   /** Rebind environment callbacks after HMR while retaining device/session state. */
   setHost(host: NativeSceneHost): void {
     this.host = host;
+    this.strandIds?.clear();
+    this.strandPass.dispose();this.strandPass=new StrandPass(()=>this.host.requestRender?.());
+    this.curveLabels?.dispose(); this.curveLabels = undefined;
+    this.curveWake?.dispose(); this.curveWake = undefined;
+    this.depthOfField?.dispose();
+    this.depthOfField = undefined;
+    this.flockPass?.dispose?.();
     this.flockPass = new FlockPass(() => this.host.flockRuntime());
     if (this.slitScanSurfaces?.setHost) this.slitScanSurfaces.setHost(host);
     else if (this.slitScanSurfaces) {
@@ -149,10 +169,12 @@ export class NativeSceneRuntime {
       targets.depthTexture.destroy();
       this.sceneTargets.delete(key);
       this.toneMap.releaseTarget(key);
+      this.depthOfField?.releaseTarget(key);
       this.pathTrace.releaseTarget(key);
       this.rasterSubSamples.releaseTarget(key);
       this.layerSpaceEffectRenderer.releaseTarget(key);
       this.slitScanSurfaces?.releaseTarget(key);
+      this.strandImageEffects?.releaseTarget(key);this.strandIds?.forget(key);
       this.faceCablePass.releaseTarget(key);
     }
   }
@@ -166,11 +188,14 @@ export class NativeSceneRuntime {
     targets.depthTexture.destroy();
     this.sceneTargets.delete(targetKey);
     this.toneMap.releaseTarget(targetKey);
+    this.depthOfField?.releaseTarget(targetKey);
     this.pathTrace.releaseTarget(targetKey);
     this.rasterSubSamples.releaseTarget(targetKey);
     this.layerSpaceEffectRenderer.releaseTarget(targetKey);
     this.slitScanSurfaces?.releaseTarget(targetKey);
+    this.strandImageEffects?.releaseTarget(targetKey);this.strandIds?.forget(targetKey);
     this.faceCablePass.releaseTarget(targetKey);
+    this.curveWake?.releaseTarget(targetKey);
   }
 
   getGizmoOverlayView(targetKey: string = 'main'): GPUTextureView | null {
@@ -268,6 +293,7 @@ export class NativeSceneRuntime {
     this.sceneDepthView = null;
     this.sceneDisplayView = null;
     this.toneMap.dispose();
+    this.depthOfField?.dispose();
     this.pathTrace.dispose();
     this.rasterSubSamples.dispose();
     this.stopIrradianceListener();
@@ -276,10 +302,14 @@ export class NativeSceneRuntime {
     this.faceCablePass.dispose();
     this.meshPass.dispose();
     this.voxelPass.dispose();
-    this.strandPass.dispose();
+    this.strandPass.dispose();this.strandIds?.clear();
+    this.flockPass.dispose();
     this.gizmoPass.dispose();
     this.layerSpaceEffectRenderer.destroy();
     this.slitScanSurfaces?.destroy(); this.slitScanSurfaces = undefined;
+    this.strandImageEffects?.destroy(); this.strandImageEffects = undefined;
+    this.curveLabels?.dispose(); this.curveLabels = undefined;
+    this.curveWake?.dispose(); this.curveWake = undefined;
     this.modelRuntimeCache.clear();
   }
 
@@ -409,7 +439,9 @@ export class NativeSceneRuntime {
     });
     // Path traced frames replace the mesh, plane, voxel and strand passes (and write scene depth for
     // the layers still rasterized over them); a scene beyond the device limits falls back to raster.
-    const pathTraced = engine === 'path-traced' && !!options?.renderSettings && this.pathTrace.render({
+    // An export retry must not accumulate a placeholder or the previous geometry frame.
+    const resourcesReady = !options?.exportFrame || !hasPendingTemporalPreparations();
+    const pathTraced = resourcesReady && engine === 'path-traced' && !!options?.renderSettings && this.pathTrace.render({
       device, encoder: commandEncoder, targetKey, camera, lights: lightLayers, sceneView: this.sceneView, sceneDepthView: this.sceneDepthView,
       settings: options.renderSettings, exportFrame: options.exportFrame, realtime: realtimePlayback, temporaries: temporaryBuffers,
       ...collectPathTraceInputs(device, { strandPlans, meshLayers: nativeMeshLayers, planeLayers, meshPass: this.meshPass, planePass: this.planePass,
@@ -473,7 +505,9 @@ export class NativeSceneRuntime {
 
     if (!pathTraced && !this.voxelPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, readyVoxels, camera, temporaryBuffers)) return null;
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'opaque', temporaryBuffers, pathTraced)) return null;
-    if (!pathTraced && !this.strandPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, strandShadows, camera, temporaryBuffers)) return null;
+    if (pathTraced) this.strandImageEffects?.releaseTarget(targetKey);
+    else if (!(this.strandImageEffects ??= new StrandProjectedEffects()).render(targetKey, this.strandPass,
+      device, commandEncoder, this.sceneView, this.sceneDepthView, strandShadows, camera, temporaryBuffers, layerSpaceEffects)) return null;
 
     for (const layer of sortedLayers) {
       const renderSettings = layer.gaussianSplatSettings?.render ?? DEFAULT_GAUSSIAN_SPLAT_SETTINGS.render;
@@ -581,6 +615,14 @@ export class NativeSceneRuntime {
     }
     if (!this.flockPass.render(device, commandEncoder, this.sceneView, this.sceneDepthView, flockPlans, camera, 'transparent', temporaryBuffers,
       pathTraced)) return null;
+    if (strandPlans.some(plan => plan.layer.strands.program.render?.wake)) {
+      (this.curveWake ??= new CurveWakePass()).render(device, commandEncoder, this.sceneView, this.sceneDepthView,
+        strandPlans, camera, temporaryBuffers, targetKey, resourcesReady);
+    }
+    if (strandPlans.some(plan => plan.layer.strands.program.render?.labels)) {
+      (this.curveLabels ??= new CurveLabelPass()).render(device, commandEncoder, this.sceneView, this.sceneDepthView,
+        strandPlans, camera, layerSpaceEffects?.timelineTimeSeconds ?? 0, temporaryBuffers);
+    }
     const gizmoLayer = gizmo
       ? [...planeLayers, ...voxelLayers, ...flockLayers, ...strandLayers, ...nativeMeshLayers, ...layers, ...lightLayers].find((layer) => layer.clipId === gizmo.clipId) ??
         (gizmo.worldMatrix && gizmo.worldTransform
@@ -604,13 +646,17 @@ export class NativeSceneRuntime {
     )) {
       return null;
     }
-    if (subSample) this.rasterSubSamples.accumulate(device, commandEncoder, targetKey, this.sceneTexture, options!.exportFrame!, subSample, temporaryBuffers);
-    this.toneMap.render(device, commandEncoder, targetKey, this.sceneView, this.sceneDisplayView, camera.lens,
+    if (subSample && resourcesReady) this.rasterSubSamples.accumulate(device, commandEncoder, targetKey, this.sceneTexture, options!.exportFrame!, subSample, temporaryBuffers);
+    const focusedView = (this.depthOfField ??= new RasterDepthOfField()).render(
+      device, commandEncoder, targetKey, this.sceneView, this.sceneDepthView, camera, engine);
+    this.toneMap.render(device, commandEncoder, targetKey, focusedView, this.sceneDisplayView, camera.lens,
       options?.renderSettings?.engine ?? 'raster');
     const readTimings = gpuTimings.resolve(commandEncoder, `render:${targetKey}`);
     device.queue.submit([commandEncoder.finish()]);
+    (this.strandIds??=new StrandIdCapture()).remember(targetKey,{device,plans:strandPlans,camera,depth:this.sceneDepthView,time:layerSpaceEffects?.timelineTimeSeconds??0});
     this.pathTrace.afterSubmit(device);
     this.rasterSubSamples.afterSubmit(device);
+    this.curveLabels?.afterSubmit();
     readTimings();
     void device.queue.onSubmittedWorkDone()
       .then(() => {

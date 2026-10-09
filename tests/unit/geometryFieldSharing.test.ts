@@ -3,7 +3,7 @@ import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { compileGeometryGraph } from '../../src/services/operators/geometry/geometryProgram';
 import { geometryParameterReader } from '../../src/services/operators/geometry/weaveGraph';
 import { evaluateFieldColumn } from '../../src/services/operators/geometry/curveFieldColumns';
-import { strandRodFieldCode } from '../../src/engine/native3d/passes/strandFieldShader';
+import { strandPointFieldCode } from '../../src/engine/native3d/passes/strandFieldShader';
 
 function repeatedNoise(count: number, distinct = false, bound = false): EffectOperatorGraph {
   const g: EffectOperatorGraph = { version: 1, domain: 'geometry', nodes: [], edges: [], layout: {} };
@@ -48,7 +48,7 @@ describe('geometry field expression sharing', () => {
     const repeated = compile(repeatedNoise(100)), single = compile(repeatedNoise(1));
     expect(repeated.field.instructions.filter(i => i.operation === 'noise3')).toHaveLength(1);
     for (let i = 0; i < 2; i++) expect((repeated.value(i) as number[])[0]).toBeCloseTo((single.value(i) as number[])[0] * 100, 8);
-    expect(() => strandRodFieldCode(repeated.stages)).not.toThrow();
+    expect(() => strandPointFieldCode(repeated.stages)).not.toThrow();
   });
 
   it('keeps animated parameter owners independent even when values coincide', () => {
@@ -57,8 +57,8 @@ describe('geometry field expression sharing', () => {
     const common = compile(repeatedNoise(1)), special = compile(repeatedNoise(1, false, true), 17);
     for (let i = 0; i < 2; i++) expect((changed.value(i) as number[])[0]).toBeCloseTo((common.value(i) as number[])[0] * 99 + (special.value(i) as number[])[0], 8);
     expect(compile(g).field).toEqual(unchanged.field);
-    const code = strandRodFieldCode(unchanged.stages).code;
-    for (const value of [0, 1, 1.3, 17, 42]) expect(strandRodFieldCode(compile(g, value).stages).code).toBe(code);
+    const code = strandPointFieldCode(unchanged.stages).code;
+    for (const value of [0, 1, 1.3, 17, 42]) expect(strandPointFieldCode(compile(g, value).stages).code).toBe(code);
   });
 
   it('keeps clock-derived folded expressions stable across numeric collisions', () => {
@@ -73,7 +73,7 @@ describe('geometry field expression sharing', () => {
     for (const simulationTime of [0, .5, .65, 1, 21, 1 / 30]) {
       const p = compileGeometryGraph(g, geometryParameterReader({}), undefined, { simulationTime });
       const stages = p.stages.filter(s => s.kind === 'set-position');
-      const lowered = strandRodFieldCode(stages);
+      const lowered = strandPointFieldCode(stages);
       code ??= lowered.code;
       expect(lowered.code).toBe(code);
       const field = stages[0].offset!;
@@ -84,6 +84,6 @@ describe('geometry field expression sharing', () => {
   });
 
   it('still rejects genuinely large fields with their owner and instruction count', () => {
-    expect(() => compile(repeatedNoise(200, true), 199)).toThrow(/deform.offset.*instruction budget \(\d+\/512\)/);
+    expect(() => compile(repeatedNoise(250, true), 249)).toThrow(/deform.offset.*instruction budget \(\d+\/640\)/);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { LayerRenderData } from '../../src/engine/core/types';
 import { collectScene3DLayers } from '../../src/engine/scene/SceneLayerCollector';
 import { sceneCompositeStyle } from '../../src/engine/scene/sceneEffectRouting';
+import type { SceneFlockLayer } from '../../src/engine/scene/types';
 import type { Effect } from '../../src/types';
 
 const cable: Effect = { id: 'cable', name: 'Cables', type: 'face-cables', enabled: true, params: { scene3D: true, sceneData: 'saved' } };
@@ -14,6 +15,22 @@ function data(id: string, type: 'video' | 'light', effects: Effect[] = []): Laye
 const collect = (layers: LayerRenderData[]) => collectScene3DLayers(layers, { width: 640, height: 480 });
 
 describe('3D effect routing', () => {
+  it('does not apply isolated flock opacity a second time when compositing the scene', () => {
+    const flock = data('dust', 'video'); flock.layer.opacity = .5; flock.layer.blendMode = 'multiply';
+    expect(sceneCompositeStyle([flock], [{ kind:'flock',layerId:'dust',opacity:.5,blendMode:'multiply' } as SceneFlockLayer], false))
+      .toMatchObject({ opacity:1,blendMode:'multiply' });
+  });
+  it('keeps a strand stack on its own image without applying it or clip opacity twice', () => {
+    const strand = data('yarn', 'video', [brightness]);
+    strand.layer.source = { type: 'strands', strands: {} as never };
+    strand.layer.opacity = .4;
+    for (const layers of [[strand], [strand, data('particles', 'video')]]) {
+      const scene = collect(layers);
+      expect(scene.find(layer => layer.kind === 'strands')?.postProjectionEffects).toEqual([brightness]);
+      expect(sceneCompositeStyle(layers, scene, true, true)).toMatchObject({ effects: [], opacity: 1 });
+    }
+    expect(sceneCompositeStyle([strand], collect([strand]), true, false).effects).toEqual([brightness]);
+  });
   it.each(['time-surface', 'motion-surface'])('keeps each Slit Scan %s downstream stack on its own projected image and applies opacity once', geometryMode => {
     const slit: Effect = { id: 'slit', name: 'Slit Scan', type: 'slit-scan', enabled: true, params: { geometryMode } };
     const layer = data('surface', 'video', [slit, brightness]);

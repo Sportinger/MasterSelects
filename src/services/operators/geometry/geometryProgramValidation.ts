@@ -1,3 +1,5 @@
+import { isCurveWake } from './curveWake';
+import { isCurveLabels } from './curveLabels';
 import { pointwiseOperation, type PointwiseValueType } from '../fields/pointwiseOperations';
 import { CURVE_POINT_LIMIT, CURVE_STRAND_LIMIT } from './curveOperators';
 import { CURVE_CONTEXT_OPERATIONS, knotCurveCount, knotPointCount, weavePatternPointCount, type GeometryField, type GeometryProgram } from './geometryProgram';
@@ -109,9 +111,11 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
         || (stage.points as number) < 8 || (stage.points as number) > 4096) return false;
       points += (stage.points as number) * strands;
     } else if (stage.kind === 'curve-flow') {
-      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase']) || !finite(stage.phase)) return false;
+      if (index === 0 || !exactKeys(stage, ['kind', 'nodeId', 'phase', 'distance']) || !finite(stage.phase)
+        || (stage.distance !== undefined && typeof stage.distance !== 'boolean')) return false;
     } else if (stage.kind === 'curve-contact') {
-      if (index === 0 || points > CONTACT_POINT_LIMIT || !exactKeys(stage, ['kind', 'nodeId', 'radius', 'iterations', 'smoothing'])
+      if (index === 0 || points > CONTACT_POINT_LIMIT || !exactKeys(stage, ['kind', 'nodeId', 'radius', 'iterations', 'smoothing', 'strength'])
+        || (stage.strength !== undefined && (!finite(stage.strength) || stage.strength < 0 || stage.strength > 1))
         || !finite(stage.radius) || stage.radius < 0.0005 || stage.radius > 10 || !finite(stage.smoothing) || stage.smoothing < 0 || stage.smoothing > 1
         || !Number.isInteger(stage.iterations) || (stage.iterations as number) < 1 || (stage.iterations as number) > 128) return false;
     } else if (stage.kind === 'yarn-profile') {
@@ -137,11 +141,13 @@ export function isGeometryProgram(value: unknown): value is GeometryProgram {
     if (points > CURVE_POINT_LIMIT || strands > CURVE_STRAND_LIMIT) return false;
   }
   const render = value.render;
-  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'colorField', 'antialiasing', 'profile', 'flyaways', 'subdivision', 'materials'])
+  if (render !== undefined && (!record(render) || !exactKeys(render, ['nodeId', 'width', 'color', 'colorField', 'antialiasing', 'profile', 'flyaways', 'subdivision', 'materials', 'labels', 'wake'])
     || typeof render.nodeId !== 'string'
     || !finite(render.width) || render.width < 0 || typeof render.color !== 'string' || render.color.length > 32
     || (render.antialiasing !== undefined && render.antialiasing !== 'coverage4x' && render.antialiasing !== 'analytic')
     || (render.subdivision !== undefined && (!Number.isInteger(render.subdivision) || (render.subdivision as number) < 1 || (render.subdivision as number) > 16))
+    || (render.labels !== undefined && !isCurveLabels(render.labels))
+    || (render.wake !== undefined && !isCurveWake(render.wake))
     || (render.materials !== undefined && !isFiberMaterialList(render.materials)))) return false;
   if (record(render) && render.colorField !== undefined && (!isField(render.colorField)
     || render.colorField.instructions[render.colorField.output].type !== 'vec3')) return false;

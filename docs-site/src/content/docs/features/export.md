@@ -36,7 +36,26 @@ FCPXML is exposed as a selectable export container for NLE interchange.
 - Lower in the panel, `Advanced Video`, `Advanced Audio`, and `Range & Summary` sections provide raw-value access.
 - Export settings, presets, and the batch queue live in `exportStore` and are restored with the project. They are not timeline undo/redo history entries.
 
+### Opaque preview/export parity
+
+WebCodecs and HTMLVideo video exports preserve the compositor's displayed RGB when
+using GPU readback (including the Linux canvas-capture fallback). Ordinary output
+sets alpha to opaque before publishing the export preview or passing pixels to the
+encoder, matching the normal preview output shader. Partially transparent dust,
+soft glows and thin strands are therefore not multiplied by their coverage a
+second time. Stacked-alpha output keeps its separate coverage plane, and image or
+native-alpha consumers retain their existing readback contract.
+
 ### Render Quality
+
+Single-sample Raster exports show frame progress only, without a flashing sample
+counter. Multi-sample renders keep their sample progress visible between frames;
+Denoise appears only when the renderer has enabled that pass. Raster sub-samples
+also improve edge antialiasing with the physical camera bypassed; one sub-sample
+means one ordinary render, not path tracing.
+
+**Raster is the default for new exports.** Choose Path Traced explicitly, or choose
+Composition to follow its render engine. Saved explicit choices remain intact.
 
 **Render Quality** sets how 3D scenes are rendered for export: the engine
 (composition setting or override), raster sub-samples (jittered antialiasing, and
@@ -45,7 +64,9 @@ per pixel, an adaptive threshold (pixels stop once their error is below it, afte
 samples), a time limit per frame and OIDN denoising. Path traced frames render
 bit-identically across exports. The progress shows a second level for the current
 frame: samples → denoise → encode, with the remaining time. See
-[Path Tracing](/features/path-tracing/).
+[Path Tracing](/features/path-tracing/). Export samples wait for pending geometry before
+accumulating, including motion-blur time slices, so placeholder frames are never
+counted as completed samples. Diagnostics include the render quality and render time.
 
 ### Export Presets
 

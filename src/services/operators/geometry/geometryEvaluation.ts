@@ -147,7 +147,7 @@ function evaluateStages(stages: readonly GeometryStage[], initial?: CurveSet, ke
     } else if (stage.kind === 'surface-bind') {
       curves = { ...curves, positions: bindToCloth(curves.positions, clothGridAt(stage.cloth, stage.time), stage.height) };
     } else if (stage.kind === 'curve-flow') {
-      curves = flowClosedCurves(curves, stage.phase);
+      curves = flowClosedCurves(curves, stage.phase, stage.distance);
     } else if (stage.kind === 'curve-contact') {
       curves = separateCurveContacts(curves, stage);
     } else if (stage.kind === 'rod-simulation') {

@@ -26,6 +26,7 @@ import {
   fullFrameFocalLengthMmToFov,
 } from '../../../utils/cameraLens';
 import { CameraSettingsSection } from './transformTab/CameraSettingsSection';
+import { CameraShakeSection } from './transformTab/CameraShakeSection';
 import { CameraLensSection } from './transformTab/CameraLensSection';
 import { LiveInputTab } from './LiveInputTab';
 import { OptionsSection } from './transformTab/OptionsSection';
@@ -485,6 +486,13 @@ export function TransformTab({
         <CameraLensSection
           clipId={clipId}
           settings={cameraSettings}
+          onEnabledChange={(physicalCameraEnabled) => {
+            const current = useTimelineStore.getState().clips.find(candidate => candidate.id === clipId);
+            if (current?.source?.type === 'camera') {
+              updateClip(clipId, { source: { ...current.source, cameraSettings: { ...DEFAULT_SCENE_CAMERA_SETTINGS,
+                ...current.source.cameraSettings, physicalCameraEnabled } } });
+            }
+          }}
           onBatchEnd={handleBatchEnd}
           onBatchStart={handleBatchStart}
           onPropertyChange={handlePropertyChange}
@@ -495,6 +503,9 @@ export function TransformTab({
           }}
         />
       )}
+
+      {usesCameraControls && <CameraShakeSection clipId={clipId} settings={cameraSettings}
+        onBatchStart={handleBatchStart} onBatchEnd={handleBatchEnd} onPropertyChange={handlePropertyChange} />}
 
       <ResolveTransformSection
         clipId={clipId}

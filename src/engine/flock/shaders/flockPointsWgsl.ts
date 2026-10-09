@@ -59,11 +59,11 @@ fn spriteCorner(vi: u32) -> vec2f {
   return quadCorner(vi);
 }
 
-fn pointVertex(vi: u32, simPos: vec3f, color: vec3f, sizeRnd: f32, visibility: f32) -> PointOut {
+fn pointVertex(vi: u32, simPos: vec3f, color: vec3f, sizeRnd: f32, visibility: f32, velocity: vec3f) -> PointOut {
   var out: PointOut;
   let clip = toClip(simPos);
   let corner = spriteCorner(vi);
-  let size = max(0.0, br.size * (1.0 + br.sizeVariance * (sizeRnd * 2.0 - 1.0)));
+  let size = max(0.0, br.size * (1.0 + br.sizeVariance * (sizeRnd * 2.0 - 1.0))) * (1.0 + 2.0 * br.ext0.w);
   var coverage = 1.0;
   if (br.sizeMode < 0.5) {
     let referenceSize = size * rb.frame.viewport.y / 1080.0;
@@ -77,8 +77,28 @@ fn pointVertex(vi: u32, simPos: vec3f, color: vec3f, sizeRnd: f32, visibility: f
     let projectedPx = radius * 2.0 * rb.frame.focalPx / max(clip.w, 1e-3);
     coverage = clamp(projectedPx * projectedPx, 0.02, 1.0);
   }
+  // Stretch a soft ellipse along projected particle velocity. The one-pass
+  // approximation preserves brightness as its area grows and is stable at rest.
+  var motionCoverage = 1.0;
+  if (br.ext1.y > 0.0 && clip.w > 1e-4) {
+    let past = toClip(simPos - velocity * br.ext1.y);
+    if (past.w > 1e-4) {
+      let delta = (clip.xy / clip.w - past.xy / past.w) * rb.frame.viewport * 0.5;
+      let lengthPx = min(length(delta), 96.0);
+      if (lengthPx > 0.01) {
+        let axis = normalize(delta);
+        let side = vec2f(-axis.y, axis.x);
+        let original = (out.clip.xy / out.clip.w - clip.xy / clip.w) * rb.frame.viewport * 0.5;
+        let radius = max(length(original) / max(length(corner), 1e-5), 0.5);
+        let ellipse = axis * corner.x * (radius + lengthPx * 0.5) + side * corner.y * radius;
+        out.clip = vec4f(clip.xy + ellipse * 2.0 / rb.frame.viewport * clip.w, clip.zw);
+        motionCoverage = radius / (radius + lengthPx * 0.5);
+      }
+    }
+  }
   out.uv = corner;
-  out.color = vec4f(color, br.opacity * distanceFade(clip.w) * coverage);
+  let individuality = 1.0 - br.ext1.x * fract(sizeRnd * 17.731 + 0.137);
+  out.color = vec4f(color, br.opacity * individuality * motionCoverage * distanceFade(clip.w) * coverage / (1.0 + br.ext0.w));
   out.viewDir = normalize(rb.frame.cameraPos - toWorld(simPos));
   out.visibility = visibility;
   return out;
@@ -90,7 +110,11 @@ fn fsPoints(in: PointOut) -> @location(0) vec4f {
   let shape = u32(br.shape);
   var a = 0.0;
   if (shape == 0u) { a = 1.0 - smoothstep(0.75, 1.0, d); }
-  else if (shape == 1u) { a = min(1.0, 1.35 * exp(-2.4 * d * d)) * (1.0 - smoothstep(0.85, 1.0, d)); }
+  else if (shape == 1u) {
+    let legacy = min(1.0, 1.35 * exp(-2.4 * d * d)) * (1.0 - smoothstep(0.85, 1.0, d));
+    let gaussian = exp(-4.5 * d * d) * (1.0 - smoothstep(0.92, 1.0, d));
+    a = mix(legacy, gaussian, br.ext0.w);
+  }
   else if (shape == 2u) { a = 1.0 - smoothstep(0.85, 1.0, max(abs(in.uv.x), abs(in.uv.y))); }
   else if (shape == 3u) { a = 1.0 - smoothstep(0.1, 0.22, abs(d - 0.72)); }
   else { let s = abs(in.uv.x * in.uv.y); a = (1.0 - smoothstep(0.02, 0.09, s)) * (1.0 - smoothstep(0.7, 1.0, d)); }
@@ -142,7 +166,7 @@ fn vsPoints(@builtin(vertex_index) vi: u32, @builtin(instance_index) instIdx: u3
   let color = branchColorAt(stateCur[particleSlot(s.parent)], s.simPos, s.uv);
   var visibility = 1.0;
   if (pointsLit()) { visibility = shadowVisibility(s.simPos); }
-  return pointVertex(vi, s.simPos, color, s.sizeRnd, visibility);
+  return pointVertex(vi, s.simPos, color, s.sizeRnd, visibility, stateCur[particleSlot(s.parent)].vel);
 }
 
 @vertex
@@ -179,7 +203,7 @@ fn vsPointsCached(@builtin(vertex_index) vi: u32, @builtin(instance_index) instI
   var visibility = 1.0;
   if (pointsLit()) { visibility = recordVisibility(record.packed); }
   let sizeRnd = select(stateCur[particleSlot(instIdx / max(1u, u32(br.children)))].rnd, flockHash01(instIdx, 911u), br.children > 1.0);
-  return pointVertex(vi, record.pos, unpack4x8unorm(record.packed).rgb, sizeRnd, visibility);
+  return pointVertex(vi, record.pos, unpack4x8unorm(record.packed).rgb, sizeRnd, visibility, stateCur[particleSlot(instIdx / max(1u, u32(br.children)))].vel);
 }
 
 @vertex

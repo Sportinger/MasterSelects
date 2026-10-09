@@ -54,3 +54,19 @@ describe('Flock point render quality', () => {
     expect(exported[46]).toBe(preview[46]);
   });
 });
+
+describe('Flock soft motion sprites', () => {
+  it('keeps old presets unchanged and carries new keyframeable appearance values into the GPU contract', () => {
+    const old = new Float32Array(packBranch(points(), {}).data);
+    expect(Array.from(old.slice(47, 50))).toEqual([0, 0, 0]);
+    const data = new Float32Array(packBranch(points({ shape: 'soft', softness: 1, opacityVariance: .8, shutterSeconds: .06 }), {}).data);
+    expect(data[47]).toBe(1); expect(data[48]).toBeCloseTo(.8); expect(data[49]).toBeCloseTo(.06);
+  });
+  it('keeps expanded halos and motion streaks out of bounded compute kernels and triangle optimizations', () => {
+    for (const change of [{ softness: 1 }, { opacityVariance: .8 }, { shutterSeconds: .1 }]) {
+      const branch = points({ shape: 'soft', size: 1, blend: 'opaque', ...change });
+      expect(flockPointUsesCompute(branch, 1080)).toBe(false);
+      expect(flockPointUsesTriangles(branch, 1080)).toBe(false);
+    }
+  });
+});

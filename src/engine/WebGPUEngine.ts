@@ -1,7 +1,4 @@
-// WebGPU Rendering Engine - Thin Facade
-// Orchestrates: PerformanceStats, RenderTargetManager, OutputWindowManager,
-//               RenderLoop, LayerCollector, Compositor, NestedCompRenderer
-
+import { renderWithPreviewBackpressure } from './engineCore/previewGpuBackpressure';
 import type { ModelSequenceData } from '../types/mediaSequences';
 import type { Layer, EngineStats } from './core/types';
 // OutputWindow type no longer needed — state lives in renderTargetStore
@@ -490,7 +487,8 @@ export class WebGPUEngine {
     layers: Layer[],
     frameContext?: import('../services/render/renderHostTypes').RenderSurfaceFrameContext,
   ): void {
-    this.renderDispatcher?.render(layers, frameContext);
+    renderWithPreviewBackpressure(this.context.getDevice(), this.exportCanvasManager.shouldSkipPreviewOutput(),
+      () => this.renderDispatcher?.render(layers, frameContext), () => this.requestRender());
   }
 
   setRenderTimeOverride(time: number | null): void {

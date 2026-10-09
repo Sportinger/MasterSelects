@@ -1,4 +1,5 @@
 import { ReadonlyWorkspace } from './persistence/ReadonlyWorkspace';
+import { readNavigationPreferences } from './persistence/navigationPreferences';
 import { RepositoryError } from './contracts';
 import type { EntityDTO, JsonValue, NavigationPayload, RepositoryDescriptor, RepositoryProjection, RepositoryRecord } from './contracts';
 import type { RepositoryLocation, StorageOpenResult, RepositoryOpenProgress } from './storageWorkerProtocol';
@@ -60,7 +61,8 @@ export class RepositorySession {
       if (cursor) {
 
         const projection = await client.request<RepositoryProjection>({ type: 'projection', reference: cursor.revision, generation: 1 }, options.signal);
-        coordinator.restore(projection, opening.recovery.operationSequence, cursor.redoPreferences);
+        const redo = await readNavigationPreferences(cursor, reference => client.request<RepositoryRecord>({ type: 'record', reference }, options.signal));
+        coordinator.restore(projection, opening.recovery.operationSequence, redo);
 
         await storage.bindProjection(cursor.revisionId, options.signal, cursor.revision);
 

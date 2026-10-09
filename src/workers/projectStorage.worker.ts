@@ -231,7 +231,10 @@ async function execute(request: StorageRequest, signal: AbortSignal): Promise<un
       if (!views || !owner) throw new RepositoryError('ownership', 'Repository views are read-only');
       return views.update(request.key, request.value);
     }
-    case 'view-flush': return owner ? views?.flush(request.views) : undefined;
+    case 'view-flush': {
+      if (owner) { await views?.flush(request.views); await persistence?.saveStartupCache(); }
+      return;
+    }
     case 'hash-source': {
       requireBackend();
       if (!(request.blob instanceof Blob)) throw new RepositoryError('corrupt', 'Source verification requires a Blob');

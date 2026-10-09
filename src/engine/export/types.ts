@@ -65,6 +65,7 @@ export interface ExportFrameSampling {
   stage: 'sampling' | 'denoising' | 'encoding';
   samples: number;
   targetSamples: number;
+  denoiseEnabled?: boolean;
 }
 
 // ============ INTERNAL STATE ============

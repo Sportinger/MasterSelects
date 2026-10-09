@@ -210,6 +210,7 @@ export class FrameExporter {
       stackedAlpha: !!this.settings.stackedAlpha,
       codec: this.settings.codec,
       container: this.settings.container,
+      renderQuality: this.settings.renderQuality,
     });
     exportDiagnostics.annotate({
       requestedAudio,
@@ -291,6 +292,7 @@ export class FrameExporter {
       height,
       stackedAlpha: !!this.settings.stackedAlpha,
       preferZeroCopy: zeroCopySurfaceAdmission.admitted,
+      readbackAlpha: 'opaque',
       frameDecorator: this.settings.frameDecorator,
     });
     this.renderSession = renderSession;
@@ -442,6 +444,7 @@ export class FrameExporter {
         const timestampMicros = Math.round(frame * (1_000_000 / fps));
         const durationMicros = Math.round(1_000_000 / fps);
 
+        let frameSampling: ExportFrameSampling | undefined;
         let capture: ExportRenderSessionFrameCapture;
         try {
           capture = await renderSession.renderFrame({
@@ -460,7 +463,10 @@ export class FrameExporter {
               await waitForAllVideosReady(subContext, this.clipStates, this.parallelDecoder, this.useParallelDecode);
               return buildLayersAtTime(subContext, this.clipStates, this.parallelDecoder, this.useParallelDecode);
             },
-            onSampling: (sampling) => onProgress(this.samplingProgress(frame, totalFrames, time, frameStart, sampling, shouldExportAudio)),
+            onSampling: (sampling) => {
+              frameSampling = sampling;
+              onProgress(this.samplingProgress(frame, totalFrames, time, frameStart, sampling, shouldExportAudio));
+            },
           });
         } catch (error) {
           if (error instanceof ExportFrameCaptureUnavailableError) {
@@ -533,6 +539,7 @@ export class FrameExporter {
           currentFrame: frame + 1,
           totalFrames,
           percent: videoPercent,
+          ...(frameSampling ? { frameSampling } : {}),
           estimatedTimeRemaining: (remainingFrames * avgFrameTime) / 1000,
           currentTime: time,
           ...(shouldExportAudio ? { audioPhase: 'complete' as const, audioPercent: 100 } : {}),

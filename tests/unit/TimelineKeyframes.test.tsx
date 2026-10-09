@@ -1,3 +1,5 @@
+import { useTimelineStore } from '../../src/stores/timeline';
+import { animationFrameClock } from '../helpers/animationFrameClock';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { RefObject } from 'react';
@@ -5,6 +7,9 @@ import { TimelineKeyframes } from '../../src/components/timeline/TimelineKeyfram
 import type { TimelineKeyframesProps } from '../../src/components/timeline/types';
 import type { AnimatableProperty, Keyframe } from '../../src/types';
 import { createMockClip, createMockKeyframe } from '../helpers/mockData';
+
+let frames: ReturnType<typeof animationFrameClock>;
+beforeEach(() => { frames = animationFrameClock(); });
 
 describe('TimelineKeyframes', () => {
   let timelineEl: HTMLDivElement;
@@ -57,7 +62,8 @@ describe('TimelineKeyframes', () => {
     });
     const keyframes = providedKeyframes ?? [leftKeyframe, rightKeyframe];
     const clipKeyframes: TimelineKeyframesProps['clipKeyframes'] = new Map([[clip.id, keyframes]]);
-    const onUpdateKeyframe = vi.fn();
+    const onUpdateKeyframe = vi.spyOn(useTimelineStore.getState(), 'updateKeyframes');
+    const onApplyEasing = vi.spyOn(useTimelineStore.getState(), 'applyKeyframeEasingCurve');
 
     const renderResult = render(
       <TimelineKeyframes
@@ -72,7 +78,7 @@ describe('TimelineKeyframes', () => {
         onSelectKeyframe={vi.fn()}
         onMoveKeyframe={onMoveKeyframe}
         onDeleteKeyframes={onDeleteKeyframes}
-        onUpdateKeyframe={onUpdateKeyframe}
+        onUpdateKeyframe={vi.fn()}
         onToggleCurveExpanded={onToggleCurveExpanded}
         timeToPixel={(time) => time * 20}
         pixelToTime={(pixel) => pixel / 20}
@@ -89,6 +95,7 @@ describe('TimelineKeyframes', () => {
       onDeleteKeyframes,
       onToggleCurveExpanded,
       onUpdateKeyframe,
+      onApplyEasing,
     };
   }
 
@@ -108,13 +115,13 @@ describe('TimelineKeyframes', () => {
   });
 
   it('applies last-keyframe easing changes to the visible incoming segment', () => {
-    const { container, onUpdateKeyframe, leftKeyframe } = renderKeyframes();
+    const { container, onApplyEasing, leftKeyframe } = renderKeyframes();
     const diamonds = container.querySelectorAll('.keyframe-diamond');
 
     fireEvent.contextMenu(diamonds[1], { clientX: 80, clientY: 40 });
     fireEvent.click(screen.getByText('Ease Out'));
 
-    expect(onUpdateKeyframe).toHaveBeenCalledWith(leftKeyframe.id, { easing: 'ease-out' });
+    expect(onApplyEasing).toHaveBeenCalledExactlyOnceWith([leftKeyframe.id], null, 'ease-out');
   });
 
   it('deletes the right-clicked keyframe from the context menu', () => {
@@ -174,7 +181,7 @@ describe('TimelineKeyframes', () => {
     fireEvent.contextMenu(diamonds[0], { clientX: 80, clientY: 40 });
     fireEvent.click(screen.getByText('Shortest Path'));
 
-    expect(onUpdateKeyframe).toHaveBeenCalledWith(firstKeyframe.id, { rotationInterpolation: 'shortest' });
+    expect(onUpdateKeyframe).toHaveBeenCalledWith([firstKeyframe.id], { rotationInterpolation: 'shortest' });
   });
 
   it('highlights every visible keyframe when its property row is hovered', () => {
@@ -220,6 +227,7 @@ describe('TimelineKeyframes', () => {
     expect(onToggleCurveExpanded).toHaveBeenCalledWith('video-1', 'opacity');
     fireEvent.mouseDown(canvas, { clientX: 50, clientY: 10, button: 0 });
     fireEvent.mouseMove(window, { clientX: 70, clientY: 10 });
+    frames.flush();
     fireEvent.mouseUp(window);
     expect(onMoveKeyframe).toHaveBeenCalledWith('dense-60', 3.5);
   });
@@ -243,6 +251,7 @@ describe('TimelineKeyframes', () => {
 
     fireEvent.mouseDown(diamonds[0], { button: 0, clientX: 20 });
     fireEvent.mouseMove(window, { clientX: 78, shiftKey: true });
+    frames.flush();
 
     expect(onMoveKeyframe).toHaveBeenLastCalledWith('kf-left', 4);
   });
@@ -299,7 +308,7 @@ describe('TimelineKeyframes', () => {
         } as DOMRect;
       });
 
-      const { container, onUpdateKeyframe } = renderKeyframes();
+      const { container, onApplyEasing } = renderKeyframes();
       const diamonds = container.querySelectorAll('.keyframe-diamond');
 
       fireEvent.contextMenu(diamonds[1], { clientX: 95, clientY: 90 });
@@ -314,7 +323,7 @@ describe('TimelineKeyframes', () => {
       expect(documentMouseDown).not.toHaveBeenCalled();
 
       fireEvent.click(option);
-      expect(onUpdateKeyframe).toHaveBeenCalled();
+      expect(onApplyEasing).toHaveBeenCalled();
     } finally {
       document.removeEventListener('mousedown', documentMouseDown);
       Object.defineProperty(window, 'innerWidth', { configurable: true, value: originalInnerWidth });

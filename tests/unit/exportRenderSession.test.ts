@@ -93,6 +93,9 @@ import {
   ExportRenderSessionImpl,
 } from '../../src/engine/export/ExportRenderSessionImpl';
 
+import { reportNativeSceneExportProgress, clearNativeSceneExportProgress } from '../../src/engine/native3d/sceneRenderer/sceneExportProgress';
+import { DEFAULT_EXPORT_RENDER_QUALITY } from '../../src/types/renderSettings';
+
 const layers = [{ id: 'layer-a' }] as unknown as Layer[];
 
 function createSession(preferZeroCopy = true): ExportRenderSessionImpl {
@@ -142,6 +145,18 @@ beforeEach(() => {
 });
 
 describe('ExportRenderSessionImpl', () => {
+  it('does not emit fake 0/0 sampling progress for single-sample raster export', async () => {
+    clearNativeSceneExportProgress();
+    const host = createInjectedHost(), onSampling = vi.fn();
+    const session = new ExportRenderSessionImpl({ runId: 'raster-progress', compositionId: 'composition-a',
+      width: 320, height: 180, stackedAlpha: false, preferZeroCopy: false, host });
+    await session.begin();
+    await session.renderFrame({ time: 0, layers, renderQuality: DEFAULT_EXPORT_RENDER_QUALITY, onSampling });
+    expect(host.readPixels).toHaveBeenCalledOnce();
+    expect(onSampling).not.toHaveBeenCalled();
+    session.dispose();
+  });
+
   it('waits for temporal decoding, rerenders the same frame, and only then captures', async () => {
     const host = createInjectedHost();
     const session = new ExportRenderSessionImpl({ runId: 'temporal', compositionId: 'composition-a',
@@ -165,6 +180,37 @@ describe('ExportRenderSessionImpl', () => {
     expect(remaining).toEqual([7, 7]);
     expect(temporalExportFramesRemaining()).toBeUndefined();
     session.dispose();
+  });
+
+  it('waits for geometry at the next shutter slice before capturing its completed samples', async () => {
+    const host = createInjectedHost();
+    const session = new ExportRenderSessionImpl({ runId: 'shutter', compositionId: 'composition-a',
+      width: 320, height: 180, stackedAlpha: false, preferZeroCopy: false, host });
+    await session.begin();
+    let release!: () => void, entered!: () => void;
+    const preparing = new Promise<void>(resolve => { release = resolve; });
+    const requested = new Promise<void>(resolve => { entered = resolve; });
+    vi.mocked(host.render).mockImplementationOnce(() => {
+      reportNativeSceneExportProgress({ frameIndex: 0, samples: 1, targetSamples: 2,
+        complete: false, denoising: false, timeOffset: .01 });
+    }).mockImplementationOnce(() => {
+      recordTemporalPreparation(preparing); entered();
+    }).mockImplementationOnce(() => {
+      reportNativeSceneExportProgress({ frameIndex: 0, samples: 2, targetSamples: 2,
+        complete: true, denoising: false, timeOffset: 0 });
+    });
+    const layersAtTime = vi.fn(async () => layers), onSampling = vi.fn();
+    const capture = session.renderFrame({ time: 2, layers, frameStepSeconds: 1 / 30,
+      renderQuality: { ...DEFAULT_EXPORT_RENDER_QUALITY, rasterSubSamples: 2 }, layersAtTime, onSampling });
+    await requested;
+    expect(host.readPixels).not.toHaveBeenCalled();
+    release(); await capture;
+    expect(host.render).toHaveBeenCalledTimes(3);
+    expect(vi.mocked(host.render).mock.calls[2][1]?.timelineTimeSeconds).toBe(2.01);
+    expect(layersAtTime).toHaveBeenCalledWith(2.01);
+    expect(onSampling).toHaveBeenLastCalledWith({ stage: 'encoding', samples: 2, targetSamples: 2, denoiseEnabled: false });
+    expect(host.readPixels).toHaveBeenCalledTimes(1);
+    session.dispose(); clearNativeSceneExportProgress();
   });
 
   it('rejects a failed temporal resource without capturing a placeholder', async () => {
@@ -266,7 +312,7 @@ describe('ExportRenderSessionImpl', () => {
     const pixels = Uint8ClampedArray.of(40, 80, 120, 64, 10, 20, 30, 255);
     vi.mocked(host.readPixels).mockResolvedValue(pixels);
     const session = new ExportRenderSessionImpl({ runId: 'linux-alpha', compositionId: 'comp',
-      width: 2, height: 1, stackedAlpha: true, preferZeroCopy: true, host });
+      width: 2, height: 1, stackedAlpha: true, readbackAlpha: 'opaque', preferZeroCopy: true, host });
     await session.begin();
     expect(session.usesZeroCopy).toBe(false);
     const capture = await session.renderFrame({ time: 0, layers });
@@ -276,6 +322,35 @@ describe('ExportRenderSessionImpl', () => {
     expect([...capture.pixels]).toEqual([40, 80, 120, 255, 10, 20, 30, 255, 64, 64, 64, 255, 255, 255, 255, 255]);
     expect(pixels[3]).toBe(64);
     expect(host.createVideoFrameFromExport).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])('captures opaque readback, including failed canvas capture (%s)', async (canvasCaptureFails) => {
+    const host = createInjectedHost();
+    const pixels = Uint8ClampedArray.of(12, 9, 6, 32, 220, 210, 180, 255);
+    vi.mocked(host.readPixels).mockResolvedValue(pixels);
+    vi.mocked(host.initExportCanvas).mockReturnValue(canvasCaptureFails);
+    const session = new ExportRenderSessionImpl({ runId: 'opaque-readback', compositionId: 'comp',
+      width: 2, height: 1, stackedAlpha: false, readbackAlpha: 'opaque',
+      preferZeroCopy: canvasCaptureFails, host });
+    await session.begin();
+    const capture = await session.renderFrame({ time: 0, layers });
+    if (capture.kind !== 'rgba-pixels') throw new Error('Expected readback');
+    expect([...capture.pixels]).toEqual([12, 9, 6, 255, 220, 210, 180, 255]);
+    expect(pixels[3]).toBe(32);
+    session.dispose();
+  });
+
+  it('preserves alpha for native-alpha and image consumers by default', async () => {
+    const host = createInjectedHost();
+    const pixels = Uint8ClampedArray.of(12, 9, 6, 32);
+    vi.mocked(host.readPixels).mockResolvedValue(pixels);
+    const session = new ExportRenderSessionImpl({ runId: 'alpha-readback', compositionId: 'comp',
+      width: 1, height: 1, stackedAlpha: false, preferZeroCopy: false, host });
+    await session.begin();
+    const capture = await session.renderFrame({ time: 0, layers });
+    if (capture.kind !== 'rgba-pixels') throw new Error('Expected readback');
+    expect([...capture.pixels]).toEqual([12, 9, 6, 32]);
+    session.dispose();
   });
 
   it('passes an injected export host into mask texture sync', async () => {

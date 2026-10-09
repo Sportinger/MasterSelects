@@ -259,7 +259,8 @@ export function collectScene3DLayers(
 
     if (base.kind === 'strands') {
       if (source?.strands) {
-        result.push({ ...base, kind: 'strands', strands: source.strands });
+        result.push({ ...base, kind: 'strands', strands: source.strands,
+          postProjectionEffects: (layer.effects ?? []).filter(effect => effect.enabled && effect.type !== 'weave') });
       }
       continue;
     }

@@ -1,3 +1,5 @@
+import { applyCameraShake } from './cameraUtils/cameraShake';
+import { recordedOrbitPivot, inferOrbitPivot, interpolateOrbitEye, warnMissingOrbitPivot } from './cameraUtils/orbitKeyframePath';
 import { useMediaStore } from '../../stores/mediaStore';
 import { normalizeCameraLens } from '../native3d/pathtrace/contracts/ptTypes';
 import { selectSceneNavClipId, useEngineStore } from '../../stores/engineStore';
@@ -13,7 +15,6 @@ import { lookAt, orthographic, perspective } from './cameraUtils/projectionMatri
 import {
   addVector,
   crossVector,
-  dotVector,
   lerpVector,
   normalizeVector,
   quaternionFromCameraBasis,
@@ -120,15 +121,6 @@ function cameraPoseSegmentUsesContinuousRotation(
   return false;
 }
 
-function getCameraOrbitRadius(frame: ReturnType<typeof resolveOrbitCameraFrame>): number | null {
-  const offset = subtractVector(frame.eye, frame.center);
-  const radius = Math.hypot(offset.x, offset.y, offset.z);
-  if (radius <= CAMERA_POSE_TIME_EPSILON) return null;
-
-  const outward = scaleVector(offset, 1 / radius);
-  return dotVector(outward, frame.forward) < -0.999 ? radius : null;
-}
-
 function getCameraPoseInterpolationT(
   keyframes: Keyframe[],
   startTime: number,
@@ -225,9 +217,12 @@ function buildPoseInterpolatedCameraConfigFromClip(
     clipLocalTime,
   );
   if (usesContinuousRotation) {
-    const startRadius = getCameraOrbitRadius(startFrame);
-    const endRadius = getCameraOrbitRadius(endFrame);
-    if (startRadius === null || endRadius === null) return null;
+    const pivot = recordedOrbitPivot(keyframes, segment.endTime) ?? inferOrbitPivot(startFrame, endFrame);
+    if (!pivot) {
+      const delta = subtractVector(startFrame.eye, endFrame.eye);
+      if (Math.hypot(delta.x, delta.y, delta.z) > 1e-6) warnMissingOrbitPivot(cameraClip.id, segment.startTime, segment.endTime);
+      return null;
+    }
 
     const currentTransform = resolveSceneClipTransform(
       cameraClip,
@@ -244,11 +239,13 @@ function buildPoseInterpolatedCameraConfigFromClip(
       settings,
       viewport,
     );
-    const radius = startRadius + (endRadius - startRadius) * t;
+    const eye = interpolateOrbitEye(startFrame, endFrame, currentFrame, pivot, t);
+    const offset = subtractVector(eye, pivot);
+    const lookDistance = Math.max(1e-6, Math.hypot(offset.x, offset.y, offset.z));
 
     return {
-      position: addVector(currentFrame.center, scaleVector(currentFrame.forward, -radius)),
-      target: currentFrame.center,
+      position: eye,
+      target: addVector(eye, scaleVector(currentFrame.forward, lookDistance)),
       up: currentFrame.cameraUp,
       fov: cameraSettings.fov,
       near: cameraSettings.near,
@@ -301,6 +298,9 @@ function buildCameraPoseConfigFromClip(
   }
 
   const clipLocalTime = timelineTime - cameraClip.startTime;
+  const cameraSettings = resolveSceneClipCameraSettings(cameraClip, clipLocalTime, context);
+  const finish = (config: SceneCameraConfig) => applyCameraShake(
+    applySceneCameraLiveOverride(config, liveOverride, viewport), cameraSettings, clipLocalTime);
   const poseInterpolatedConfig = buildPoseInterpolatedCameraConfigFromClip(
     cameraClip,
     clipLocalTime,
@@ -308,11 +308,10 @@ function buildCameraPoseConfigFromClip(
     context,
   );
   if (poseInterpolatedConfig) {
-    return applySceneCameraLiveOverride(poseInterpolatedConfig, liveOverride, viewport);
+    return finish(poseInterpolatedConfig);
   }
 
   const transform = resolveSceneClipTransform(cameraClip, clipLocalTime, timelineTime, context);
-  const cameraSettings = resolveSceneClipCameraSettings(cameraClip, clipLocalTime, context);
   const defaultDistance = getSharedSceneDefaultCameraDistance(cameraSettings.fov);
   const pose = resolveOrbitCameraPose(
     {
@@ -329,7 +328,7 @@ function buildCameraPoseConfigFromClip(
     viewport,
   );
 
-  return applySceneCameraLiveOverride({
+  return finish({
     position: pose.eye,
     target: pose.target,
     up: pose.up,
@@ -337,7 +336,7 @@ function buildCameraPoseConfigFromClip(
     near: pose.near,
     far: pose.far,
     applyDefaultDistance: false,
-  }, liveOverride, viewport);
+  });
 }
 
 function hasLiveOverrideVector(vector: SceneCameraLiveOverride[keyof SceneCameraLiveOverride]): boolean {
