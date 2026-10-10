@@ -10,6 +10,8 @@ import type { CanvasMessage, CanvasScene, CanvasTransport, CanvasTheme, CanvasVi
 import { dragUpdatesFirst } from '../../src/components/panels/nodes/canvas/rendering/canvasNodeDrag';
 
 vi.mock('../../src/components/panels/nodes/canvas/rendering/paintNodeCanvas', () => ({ paintBase: vi.fn(), paintOverlay: vi.fn() }));
+// Exercise the worker contract independently of the test host's Linux fallback.
+vi.mock('../../src/utils/canvasPlatform', () => ({ prefersSoftwareTimelineCanvas: () => false }));
 const view: CanvasView = { zoom: 1, panX: 0, panY: 0, width: 1000, height: 700, ratio: 2 };
 const theme: CanvasTheme = { background: '#111', card: '#222', text: '#fff', muted: '#aaa', border: '#444', accent: '#79b8fa' };
 const scene: CanvasScene = { nodes: [], cables: [], groups: [], plugs: [] };

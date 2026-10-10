@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from 'zustand';
 import type { Composition, MediaState } from '../../../src/stores/mediaStore/types';
-import type { SerializableClip, TimelineClip, TimelineTrack } from '../../../src/types';
+import type { SerializableClip, TimelineClip, TimelineTrack } from '../../../src/types/timeline';
 import type { TextClipProperties } from '../../../src/types/text';
 import { createDefaultMotionLayerDefinition } from '../../../src/types/motionDesign';
 import { createCompositionSlice, type CompositionActions } from '../../../src/stores/mediaStore/slices/compositionSlice';

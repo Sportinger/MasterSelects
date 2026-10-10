@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { executeAITool } from '../../src/services/aiTools';
 import {
@@ -108,7 +108,11 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     getHistoryStateView().clearHistory();
   });
 
-  afterEach(() => {
+  afterEach(async () => {
+    // Tool feedback opens the inspector after 50 ms and then lazily imports the dock.
+    // Drain that work before jsdom is torn down and the stores are reset.
+    await new Promise(resolve => setTimeout(resolve, 60));
+    await vi.dynamicImportSettled();
     if (getHistoryStateView().batchId !== null) {
       getHistoryStateView().cancelBatch();
     }

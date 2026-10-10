@@ -5,7 +5,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { RefObject } from 'react';
 import { TimelineKeyframes } from '../../src/components/timeline/TimelineKeyframes';
 import type { TimelineKeyframesProps } from '../../src/components/timeline/types';
-import type { AnimatableProperty, Keyframe } from '../../src/types';
+import type { AnimatableProperty, Keyframe } from '../../src/types/keyframes';
 import { createMockClip, createMockKeyframe } from '../helpers/mockData';
 
 let frames: ReturnType<typeof animationFrameClock>;

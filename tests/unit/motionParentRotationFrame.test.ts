@@ -24,7 +24,9 @@ import {
   SCENE_PARENT_POSITION_FRAME,
 } from '../../src/utils/parentPositionFrame';
 import { composeTransforms, resolveClipParentPositionFrame } from '../../src/utils/transformComposition';
-import type { ClipTransform, Keyframe, TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
+import type { ClipTransform } from '../../src/types/timelineCore';
+import type { Keyframe } from '../../src/types/keyframes';
 import { createMockClip, createMockTransform } from '../helpers/mockData';
 
 /**

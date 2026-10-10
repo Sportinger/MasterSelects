@@ -864,7 +864,7 @@ reported below the Glow parameters in the inspector instead of being applied
 silently. Default settings cost about 16 + 16 prefilter taps plus 6 × 38 ring
 taps per pixel and two full-resolution `rgba16float` textures per Glow instance.
 
-Saved projects keep their parameters. Their untouched saved Glow graph (any
+Saved projects keep their parameters. Both the original and alpha-aware single-pass recipes upgrade to the prefiltered graph; custom wiring and edited constants remain unchanged. Their untouched saved Glow graph (any
 packed, folded or laid-out form of the original single-pass recipe) is upgraded
 to the new recipe on load; graphs whose nodes, wiring, exposed values or folder
 bypasses were edited are kept exactly as authored and keep the legacy sampling.

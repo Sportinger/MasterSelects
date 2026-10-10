@@ -1,3 +1,4 @@
+import { createMockClip } from '../helpers/mockData';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -57,6 +58,8 @@ describe('property value right-click reset', () => {
   });
 
   it('uses canonical regular-text defaults for numeric, font, and color controls', () => {
+    useTimelineStore.setState({ clips: [createMockClip({ id: 'text-1', source: { type: 'text' },
+      textProperties: { ...DEFAULT_TEXT_PROPERTIES, fontFamily: 'Inter', fontWeight: 700, fontSize: 150, color: '#ff0000' } })] });
     render(
       <TextTab
         clipId="text-1"

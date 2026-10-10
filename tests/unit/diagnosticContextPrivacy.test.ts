@@ -13,7 +13,7 @@ describe('diagnostic context', () => {
 
   it('carries no source commit outside a production build', () => {
     const context = collectDiagnosticContext();
-    expect(context.sourceRevision).toBeUndefined();
-    expect(context.releaseId).toBeUndefined();
+    expect(context.sourceRevision).toBeNull();
+    expect(context.releaseId).toBeNull();
   });
 });

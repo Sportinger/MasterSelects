@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createStore } from 'zustand';
 import type { MediaState, MediaFile, Composition } from '../../../src/stores/mediaStore/types';
-import type { SerializableClip, TimelineClip } from '../../../src/types';
+import type { SerializableClip, TimelineClip } from '../../../src/types/timeline';
 import { createCompositionSlice, type CompositionActions } from '../../../src/stores/mediaStore/slices/compositionSlice';
 import { createSlotSlice, type SlotActions } from '../../../src/stores/mediaStore/slices/slotSlice';
 import { createMultiLayerSlice, type MultiLayerActions } from '../../../src/stores/mediaStore/slices/multiLayerSlice';

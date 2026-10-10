@@ -100,4 +100,24 @@ export const currentWorkflowGetStateHardTargets = [
   // controls' two heap-source snapshots (not Zustand); keep them visible here.
   { path: 'src/effects/generate/memoryLeak/MemoryLeakControls.tsx', maxCurrentHits: 4 },
   { path: 'src/effects/generate/memoryLeak/memorySource.ts', maxCurrentHits: 1 },
+  // October integration: action-time file drops and selection edits, render settings,
+  // marker/rig evaluation, and scene-stream execution read the current editor state.
+  // These exact caps remain reduction targets, not broad adapter exemptions.
+  { path: 'src/components/common/EditorFileDrop.tsx', maxCurrentHits: 2 },
+  { path: 'src/components/panels/media/importProjectDrop.ts', maxCurrentHits: 1 },
+  { path: 'src/components/panels/properties/TextSelectionKeyframeToggle.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/panels/properties/transformTab/TransformNodeSourceActions.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/preview/compositionRenderSettings.ts', maxCurrentHits: 1 },
+  { path: 'src/effects/generate/stickFigure/StickFigureActionLane.tsx', maxCurrentHits: 1 },
+  { path: 'src/effects/generate/stickFigure/StickFigureControls.tsx', maxCurrentHits: 2 },
+  { path: 'src/engine/native3d/sceneRenderer/sceneRenderOptionsResolver.ts', maxCurrentHits: 1 },
+  { path: 'src/services/parameterSources/markerParameterRuntime.ts', maxCurrentHits: 2 },
+  { path: 'src/services/rig/choreographyValidation.ts', maxCurrentHits: 1 },
+  { path: 'src/services/rig/stickFigureActionRuntime.ts', maxCurrentHits: 2 },
+  { path: 'src/services/rig/stickFigureActions.ts', maxCurrentHits: 6 },
+  { path: 'src/services/rig/stickFigureContacts.ts', maxCurrentHits: 4 },
+  { path: 'src/services/rig/stickFigureJointRuntime.ts', maxCurrentHits: 3 },
+  { path: 'src/services/scenes/sceneDocuments.ts', maxCurrentHits: 5 },
+  { path: 'src/services/scenes/sceneStreamExecutor.ts', maxCurrentHits: 9 },
+  { path: 'src/stores/timeline/helpers/activeCompositionSize.ts', maxCurrentHits: 1 },
 ] as const;

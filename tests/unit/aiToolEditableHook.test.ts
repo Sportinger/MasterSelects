@@ -20,6 +20,8 @@ import { useMediaStore, type Composition } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import type { TimelineClip } from '../../src/types/timeline';
 
+import { textRenderer } from '../../src/services/textRenderer';
+
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();
 let mediaState: ReturnType<typeof useMediaStore.getState>;
@@ -64,6 +66,13 @@ function resetTimeline(): void {
 
 describe('manageEditableHook', () => {
   beforeEach(() => {
+    // Every generated clip owns its canvas; disposal must not resize other clips' rasters.
+    vi.mocked(textRenderer.createCanvas).mockImplementation((width = 1920, height = 1080) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      return canvas;
+    });
     compositionSequence = 0;
     const composition: Composition = {
       id: 'hook-composition',

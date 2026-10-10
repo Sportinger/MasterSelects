@@ -18,9 +18,11 @@ type RenderPassEntry = {
 };
 type NativeSceneRendererTestAccess = NativeSceneRenderer & {
   sceneView: GPUTextureView;
+  sceneDisplayView: GPUTextureView;
   sceneTargets: Map<string, {
     texture: GPUTexture;
     view: GPUTextureView;
+    displayView: GPUTextureView;
     gizmoTexture: GPUTexture;
     gizmoView: GPUTextureView;
     depthTexture: GPUTexture;
@@ -376,7 +378,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
     const targets = (renderer as NativeSceneRendererTestAccess).sceneTargets;
 
     expect(targets.size).toBe(2);
-    expect(targets.get('main')?.view).toBe(mainView);
+    expect(targets.get('main')?.displayView).toBe(mainView);
     expect(mainViewAgain).toBe(mainView);
     expect(targets.get('main')?.texture.destroy).not.toHaveBeenCalled();
 
@@ -402,7 +404,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
     const targets = (renderer as NativeSceneRendererTestAccess).sceneTargets.get('main');
     const gizmoPass = renderPasses.find((entry) => entry.descriptor.label === 'native-scene-gizmo-pass');
 
-    expect(sceneView).toBe(targets?.view);
+    expect(sceneView).toBe(targets?.displayView);
     expect(renderer.getGizmoOverlayView()).toBe(targets?.gizmoView);
     expect(gizmoPass?.descriptor.colorAttachments[0]).toMatchObject({
       view: targets?.gizmoView,
@@ -426,7 +428,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
     expect(mockGaussianRenderer.beginFrame).toHaveBeenCalledTimes(1);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(4);
 
@@ -435,7 +437,8 @@ describe('NativeSceneRenderer shared depth contract', () => {
     );
     expect(depthTextureCall).toBeTruthy();
 
-    expect(renderPasses).toHaveLength(1);
+    expect(renderPasses).toHaveLength(2);
+    expect(renderPasses[1]?.descriptor.label).toBe('native-scene-tone-map');
     expect(renderPasses[0]?.descriptor.label).toBe('native-scene-clear-pass');
     expect(renderPasses[0]?.descriptor.depthStencilAttachment).toMatchObject({
       depthClearValue: 1,
@@ -501,12 +504,13 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
     expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledTimes(1);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(2);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-plane-opaque-pass',
+      'native-scene-tone-map',
     ]);
     const planeUniform = readUniformWrite(device.queue.writeBuffer.mock.calls[0]);
     expect(planeUniform[16]).toBeCloseTo(1);
@@ -549,7 +553,7 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
     expect(device.queue.copyExternalImageToTexture).toHaveBeenCalledWith(
       { source: videoFrame },
       expect.anything(),
@@ -573,10 +577,11 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-plane-transparent-pass',
+      'native-scene-tone-map',
     ]);
     const planeUniform = readUniformWrite(device.queue.writeBuffer.mock.calls[0]);
     expect(planeUniform[16]).toBeCloseTo(0.6);
@@ -606,10 +611,11 @@ describe('NativeSceneRenderer shared depth contract', () => {
       maskTextureManager as never,
     );
 
-    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-plane-transparent-pass',
+      'native-scene-tone-map',
     ]);
     const planeUniform = readUniformWrite(device.queue.writeBuffer.mock.calls[0]);
     expect(planeUniform[18]).toBe(1);
@@ -810,11 +816,12 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(2);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-mesh-opaque-pass',
+      'native-scene-tone-map',
     ]);
 
     const meshPass = renderPasses[1]?.pass;
@@ -838,11 +845,12 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(2);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-mesh-opaque-pass',
+      'native-scene-tone-map',
     ]);
 
     const meshPass = renderPasses[1]?.pass;
@@ -881,11 +889,12 @@ describe('NativeSceneRenderer shared depth contract', () => {
       false,
     );
 
-    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(result).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
     expect(mockGaussianRenderer.renderToTexture).toHaveBeenCalledTimes(2);
     expect(renderPasses.map((entry) => entry.descriptor.label)).toEqual([
       'native-scene-clear-pass',
       'native-scene-mesh-opaque-pass',
+      'native-scene-tone-map',
     ]);
 
     const meshPass = renderPasses[1]?.pass;
@@ -941,8 +950,8 @@ describe('NativeSceneRenderer shared depth contract', () => {
     const first = renderer.renderScene(device, [firstLayer], makeCamera(), [], true);
     const second = renderer.renderScene(device, [secondLayer], makeCamera(), [], true);
 
-    expect(first).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
-    expect(second).toEqual((renderer as NativeSceneRendererTestAccess).sceneView);
+    expect(first).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
+    expect(second).toEqual((renderer as NativeSceneRendererTestAccess).sceneDisplayView);
   });
 
   it('throttles realtime model sequence loading so playback does not queue every GLB frame', async () => {

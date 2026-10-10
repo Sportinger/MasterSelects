@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createStore } from 'zustand';
 import type { Composition, MediaState } from '../../src/stores/mediaStore/types';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 import { createCompositionSlice, type CompositionActions } from '../../src/stores/mediaStore/slices/compositionSlice';
 import { withProjectStoreSyncGuard } from '../../src/services/project/projectStoreSyncGuard';
 import { useTimelineStore } from '../../src/stores/timeline';

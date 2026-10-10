@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { planPastedKeyframes } from '../../src/stores/timeline/clipboard/clipboardKeyframeTransfer';
 import { createMockClip, createMockKeyframe } from '../helpers/mockData';
-import type { AnimatableProperty } from '../../src/types';
+import type { AnimatableProperty } from '../../src/types/keyframes';
 
 const targetClip = createMockClip({ id: 'audio', source: { type: 'audio' }, duration: 10 });
 const key = (time: number, value: number, property: AnimatableProperty = 'effect.volume.volume') => createMockKeyframe({

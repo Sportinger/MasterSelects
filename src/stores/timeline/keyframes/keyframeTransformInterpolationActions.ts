@@ -28,7 +28,11 @@ type KeyframeTransformInterpolationActions = Pick<
   | 'getSourceTimeForClip'
 >;
 
-export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeTransformInterpolationActions> = (_set, get) => ({
+// Hoisted because composition/parameter-source services can initialize the timeline while this module loads.
+export function createKeyframeTransformInterpolationActions(
+  ...[_set, get]: Parameters<SliceCreator<KeyframeTransformInterpolationActions>>
+): KeyframeTransformInterpolationActions {
+  return {
   getInterpolatedTransform: (clipId, clipLocalTime) => {
     const { clips, clipKeyframes } = get();
     const clip = clips.find(c => c.id === clipId);
@@ -153,4 +157,5 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
 
     return calculateSourceTime(keyframes, clipLocalTime, defaultSpeed);
   },
-});
+  };
+}

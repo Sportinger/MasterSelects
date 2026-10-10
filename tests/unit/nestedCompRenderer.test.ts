@@ -31,7 +31,8 @@ const { mockNativeSceneRenderer } = vi.hoisted(() => ({
   mockNativeSceneRenderer: {
     isInitialized: true,
     initialize: vi.fn(async () => true),
-    renderScene: vi.fn(() => ({ label: 'nested-shared-scene-view' })),
+    hasProjectedStrandEffects: vi.fn(() => false),
+      renderScene: vi.fn(() => ({ label: 'nested-shared-scene-view' })),
   },
 }));
 

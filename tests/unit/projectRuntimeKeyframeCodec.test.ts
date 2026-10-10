@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { convertRuntimeProjectClip } from '../../src/services/project/projectCompositionSerialization';
 import { encodeCompositionClip } from '../../src/services/project/repository/domains/projectDomains';
 import { decodeAggregate, entityKey } from '../../src/services/project/repository/domains/jsonBoundary';
-import type { TimelineClip, Keyframe } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
+import type { Keyframe } from '../../src/types/keyframes';
 
 function runtimeClip(): TimelineClip {
   return { id: 'clip', trackId: 'video', name: 'Fade clip', startTime: 0, duration: 10, inPoint: 0, outPoint: 10,

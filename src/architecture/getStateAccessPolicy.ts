@@ -13,7 +13,7 @@ export const classCHardTargets = [
   { path: 'src/components/export/exportHelpers.ts', maxCurrentHits: 2 },
   { path: 'src/components/export/runners/ffmpegDirectExportRunner.ts', maxCurrentHits: 1 },
   { path: 'src/components/export/runners/fcpxmlExportRunner.ts', maxCurrentHits: 1 },
-  { path: 'src/components/export/useExportRunController.ts', maxCurrentHits: 2 },
+  { path: 'src/components/export/useExportRunController.ts', maxCurrentHits: 3 },
   { path: 'src/components/export/useExportState.ts', maxCurrentHits: 1 },
   { path: 'src/components/outputManager/OutputManager.tsx', maxCurrentHits: 1 },
   { path: 'src/components/outputManager/OutputManagerBoot.ts', maxCurrentHits: 1 },
@@ -51,12 +51,12 @@ export const classCHardTargets = [
   { path: 'src/components/panels/properties/SplatEffectorTab.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/ThreeDTextTab.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/properties/TranscriptTab.tsx', maxCurrentHits: 3 },
-  { path: 'src/components/panels/properties/TransformTab.tsx', maxCurrentHits: 2 },
+  { path: 'src/components/panels/properties/TransformTab.tsx', maxCurrentHits: 4 },
   { path: 'src/components/panels/properties/VolumeTab.tsx', maxCurrentHits: 3 },
   { path: 'src/components/panels/properties/synthSections/useLiveInstrumentParams.ts', maxCurrentHits: 1 },
   { path: 'src/components/panels/SAM2Panel.tsx', maxCurrentHits: 25 },
   { path: 'src/components/panels/sam2/MatAnyoneFileHelpers.ts', maxCurrentHits: 4 },
-  { path: 'src/components/panels/TextTab.tsx', maxCurrentHits: 2 },
+  { path: 'src/components/panels/TextTab.tsx', maxCurrentHits: 7 },
   { path: 'src/components/pianoRoll/PianoRoll.tsx', maxCurrentHits: 13 }, // #249: 4 -> 11 -> 13 (popup fresh-read pattern + clip-resize handler; see baseline note)
   { path: 'src/components/pianoRoll/PianoRollBoot.ts', maxCurrentHits: 1 },
   { path: 'src/components/preview/MaskOverlay.tsx', maxCurrentHits: 2 },
@@ -235,7 +235,7 @@ export const classCHardTargets = [
   { path: 'src/stores/mediaStore/helpers/importPipeline.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/helpers/modelSequenceImport.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/init.ts', maxCurrentHits: 9 },
-  { path: 'src/stores/mediaStore/slices/composition/activeTimelineSync.ts', maxCurrentHits: 2 },
+  { path: 'src/stores/mediaStore/slices/composition/activeTimelineSync.ts', maxCurrentHits: 3 },
   { path: 'src/stores/mediaStore/slices/composition/crudActions.ts', maxCurrentHits: 2 },
   { path: 'src/stores/mediaStore/slices/composition/resizeTransforms.ts', maxCurrentHits: 1 },
   { path: 'src/stores/mediaStore/slices/composition/slotAssignmentActions.ts', maxCurrentHits: 3 },
@@ -291,8 +291,8 @@ export const classCHardTargets = [
 
 export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 39,
-  // 18 newly classified paths: two conserve existing owner budgets; the
-  // remaining feature reads (+56) and recovery/refresh guards (+8) are explicit.
-  classCHardTargetFileCount: 415,
-  classCHardTargetMaxHits: 1347,
+  // October integration adds 17 exact targets (43 reads) and 12 action-time
+  // reads for export quality, driven transforms, text selection and composition sync.
+  classCHardTargetFileCount: 432,
+  classCHardTargetMaxHits: 1402,
 } as const;

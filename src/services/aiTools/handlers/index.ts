@@ -577,6 +577,7 @@ export function getRegisteredToolHandlerNames(): string[] {
     // executeBatch is dispatched by the outer app tool executor.
     'executeBatch',
     'getTimelineAnalysis',
+    'getStreamProtocol', 'listScenes', 'runEditorStream',
     'verifyTimelineInvariants',
     ...Object.keys(timelineHandlers),
     ...Object.keys(mediaHandlers),

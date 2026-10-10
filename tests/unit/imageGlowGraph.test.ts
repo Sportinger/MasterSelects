@@ -1,3 +1,4 @@
+import { createLegacyAlphaGlowGraph } from '../../src/services/operators/legacyAlphaGlowGraph';
 import { describe, expect, it } from 'vitest';
 import { createDefaultGlowGraph, createLegacyGlowGraph } from '../../src/services/operators/glowEffectGraph';
 import { upgradeGlowGraph } from '../../src/services/operators/glowGraphUpgrade';
@@ -205,6 +206,16 @@ describe('glow graph ownership and migration', () => {
     const persisted = migratePersistedEffectOperatorGraph(effect);
     expect(computational(persisted.operatorGraph!)).toEqual(computational(createDefaultGlowGraph()));
     expect(compileImageOperatorGraph(expandOperatorCompositions(persisted.operatorGraph!), DEFAULTS).passes).toHaveLength(3);
+  });
+
+  it('upgrades alpha-aware single-pass graphs while retaining authored modifications', () => {
+    const legacy = createLegacyAlphaGlowGraph();
+    for (const saved of [legacy, packOperatorCompositions(recognizeOperatorCompositions(legacy))]) {
+      expect(computational(upgradeGlowGraph(saved))).toEqual(computational(createDefaultGlowGraph()));
+    }
+    const edited = createLegacyAlphaGlowGraph();
+    edited.nodes.find(node => node.id === 'ten')!.constants = { value: 8 };
+    expect(upgradeGlowGraph(edited)).toBe(edited);
   });
 
   it('keeps edited legacy graphs, bypassed folders and incomplete drafts as authored', () => {

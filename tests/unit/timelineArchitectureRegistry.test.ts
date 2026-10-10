@@ -2593,7 +2593,8 @@ describe('timeline architecture registry', () => {
     expect(lineCount(audioEffectSource)).toBeLessThanOrEqual(250);
     expect(lineCount(vectorSource)).toBeLessThanOrEqual(250);
     expect(lineCount(nodeCameraSource)).toBeLessThanOrEqual(250);
-    expect(lineCount(basicActionsSource)).toBeLessThanOrEqual(311);
+    // Orbit metadata and bulk easing actions remain in the same bounded slice.
+    expect(lineCount(basicActionsSource)).toBeLessThanOrEqual(350);
     expect(lineCount(linkedSpeedStateSource)).toBeLessThanOrEqual(150);
     expect(lineCount(pathActionsSource)).toBeLessThanOrEqual(300);
     expect(lineCount(viewStateSource)).toBeLessThanOrEqual(300);

@@ -31,7 +31,8 @@ describe('packed geometry field evaluation', () => {
       const program = compileGeometryGraph(createJellyfishReferenceGraph(), geometryParameterReader({}), undefined, { time, simulationTime: time });
       const fields = program.stages.flatMap(stage => stage.kind === 'set-position' ? [stage.position, stage.offset]
         : stage.kind === 'yarn-profile' ? [stage.radius] : []).filter((f): f is GeometryField => !!f);
-      expect(fields.some(f => f.instructions.length > 300)).toBe(true);
+      // Common-expression sharing reduces instruction counts; require a spatial field, not duplicated work.
+      expect(fields.some(f => f.instructions.some(item => item.operation === 'position') && f.instructions.length > 1)).toBe(true);
       for (const field of fields) expect(result(field)).toEqual(expected(field));
     }
   });

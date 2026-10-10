@@ -12,7 +12,7 @@ import {
 import { useEngineStore } from '../../src/stores/engineStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
-import type { TimelineClip } from '../../src/types';
+import type { TimelineClip } from '../../src/types/timeline';
 import { DEFAULT_CAMERA_LENS } from '../../src/types/renderSettings';
 import { splitNestedDomain } from '../../src/services/project/repository/domains/nestedOwnership';
 

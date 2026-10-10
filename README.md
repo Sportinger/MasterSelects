@@ -261,3 +261,5 @@ Scan labels search contiguous free edge regions around a filled yarn silhouette;
 
 
 Camera clips support additive, keyframeable shake without changing their authored orbit path or requiring physical lens effects. Scan cards distribute free positions along the viewport perimeter, support directional curve anchors, and can retract leaders before a staggered final exit. Floating planes accept an added roll curve; authored readouts support fitted word-level bold, size and occasional italic variation while retaining their colors.
+
+Compositions duplicate as independent deep copies of the current timeline. Glow uses prefiltered circular sampling, including upgrades for untouched saved single-pass graphs.

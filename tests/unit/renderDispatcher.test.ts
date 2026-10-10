@@ -636,6 +636,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(true);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
     };
 
@@ -753,6 +754,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
       getGizmoOverlayView: vi.fn(() => ({ label: 'scene-gizmo-view' })),
     };
@@ -859,6 +861,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
       getGizmoOverlayView: vi.fn(() => ({ label: 'scene-gizmo-view' })),
     };
@@ -937,6 +940,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
     };
     const colorCorrection = createRuntimeColorGrade();
@@ -999,6 +1003,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-view' })),
     };
     const layerData = [{
@@ -1051,6 +1056,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-sequence-view' })),
     };
     useTimelineStore.setState({ isDraggingPlayhead: true });
@@ -1121,6 +1127,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(true);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-sequence-view' })),
     };
     useTimelineStore.setState({
@@ -1195,6 +1202,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn()
         .mockReturnValueOnce({ label: 'shared-scene-frame-1' })
         .mockReturnValueOnce(null),
@@ -1274,6 +1282,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn()
         .mockReturnValueOnce({ label: 'shared-scene-frame-1' })
         .mockReturnValueOnce(null),
@@ -1345,6 +1354,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(true);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn()
         .mockReturnValueOnce({ label: 'shared-scene-frame-0' })
         .mockReturnValueOnce(null),
@@ -1408,6 +1418,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(true);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-sequence-view' })),
     };
     useTimelineStore.setState({
@@ -1472,6 +1483,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-mixed-view' })),
     };
 
@@ -1576,6 +1588,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-video-view' })),
     };
 
@@ -1648,6 +1661,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-text-view' })),
     };
 
@@ -1739,6 +1753,7 @@ describe('RenderDispatcher empty playback hold', () => {
     const { dispatcher, deps } = createDispatcher(false);
     deps.sceneRenderer = {
       isInitialized: true,
+      hasProjectedStrandEffects: vi.fn(() => false),
       renderScene: vi.fn(() => ({ label: 'shared-scene-model-view' })),
     };
 
