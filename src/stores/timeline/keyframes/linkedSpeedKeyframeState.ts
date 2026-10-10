@@ -1,4 +1,5 @@
 import type { Keyframe } from '../../../types/keyframes';
+import { Logger } from '../../../services/logger';
 import type { TimelineClip } from '../../../types/timeline';
 import {
   CLIP_SPEED_MAX_MULTIPLIER,
@@ -12,6 +13,8 @@ import {
   type AudioKeyframeInvalidationTarget,
 } from './audioEffectKeyframeValues';
 
+const log = Logger.create('SpeedKeyframes');
+
 interface LinkedSpeedKeyframeMutationState {
   clipKeyframes: Map<string, Keyframe[]>;
   clips?: TimelineClip[];
@@ -22,6 +25,18 @@ export function isValidSpeedKeyframeValue(value: number): boolean {
   return Number.isFinite(value) &&
     magnitude >= CLIP_SPEED_MIN_MULTIPLIER &&
     magnitude <= CLIP_SPEED_MAX_MULTIPLIER;
+}
+
+/** Validates a speed keyframe value and reports a rejection instead of dropping it silently. */
+export function acceptSpeedKeyframeValue(value: number, clipId: string): boolean {
+  if (isValidSpeedKeyframeValue(value)) return true;
+  log.warn('Speed keyframe rejected: its magnitude must lie within the clip speed range', {
+    clipId,
+    value,
+    minMagnitude: CLIP_SPEED_MIN_MULTIPLIER,
+    maxMagnitude: CLIP_SPEED_MAX_MULTIPLIER,
+  });
+  return false;
 }
 
 function followingAudioSpeedInvalidationTargets(

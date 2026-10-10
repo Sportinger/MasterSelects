@@ -11,6 +11,7 @@ import {
   buildNestedCompositionSourceLayer,
   buildNestedLayerBase,
   buildNestedMotionSourceLayer,
+  evaluateLiveMappedClipTransform,
   getNestedClipKeyframes,
   getNestedClipSourceTime,
 } from './layerBuilderNestedLayers';
@@ -22,7 +23,6 @@ import {
   type BuildNestedCompLayerParams,
 } from './layerBuilderNestedCompositionLayer';
 import { buildMotionAdjustmentLayerFromBase } from './layerBuilderMotionAdjustment';
-import { evaluateParentedClipTransform } from './parentTransformEvaluation';
 import {
   getNestedClipContinuityKey,
   getNestedPreviewRootTrackKey,
@@ -57,6 +57,9 @@ function buildNestedClipLayer(
   const nestedLayerBase = buildNestedLayerBase(nestedClip, nestedClipLocalTime, {
     clips: params.parentTransformClips ?? params.clip.nestedClips ?? [],
     timelineTime: params.parentTransformTimelineTime ?? params.clipTime,
+    // A transient transition composition is not stored; it takes the active size.
+    compositionSize: ctx.compositionById.get(params.clip.compositionId ?? '')
+      ?? ctx.compositionById.get(ctx.activeCompId),
   });
   if (!nestedLayerBase) return null;
   const { baseLayer, keyframes } = nestedLayerBase;
@@ -207,18 +210,7 @@ export function buildLayerBuilderNestedCompLayer(
 ): Layer | null {
   const { clip, ctx } = params;
   const timeInfo = getClipTimeInfo(ctx, clip);
-  const mappedEvaluation = clip.transitionSourceMap?.version === 2
-    ? evaluateParentedClipTransform({
-        clip,
-        clips: ctx.clips ?? [clip],
-        clipLocalTime: timeInfo.visualClipLocalTime,
-        parentTimelineTime: clip.startTime + timeInfo.visualClipLocalTime,
-        getKeyframes: candidate => {
-          const contextKeyframes = ctx.getClipKeyframes?.(candidate.id);
-          return contextKeyframes?.length ? contextKeyframes : getNestedClipKeyframes(candidate);
-        },
-      })
-    : undefined;
+  const mappedEvaluation = evaluateLiveMappedClipTransform(clip, ctx, timeInfo.visualClipLocalTime);
   if (mappedEvaluation && !mappedEvaluation.ok) return null;
   const mappedAnimation = mappedEvaluation?.mappedAnimation;
   const nestedLayers = buildLayerBuilderNestedLayers({

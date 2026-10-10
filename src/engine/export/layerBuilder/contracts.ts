@@ -55,6 +55,8 @@ export interface FrameContextLike {
   frameTolerance: number;
   outputWidth?: number;
   outputHeight?: number;
+  /** Pixel size of the exported composition; parent rotation is rigid in it. */
+  compositionSize?: { width: number; height: number };
   clipsAtTime: TimelineClip[];
   renderClipsAtTime?: TimelineClip[];
   compositionClips?: readonly TimelineClip[];

@@ -1,7 +1,47 @@
 // Transform composition utility for parent-child clip relationships
 // Composes parent and child transforms like After Effects parenting
 
-import type { ClipTransform } from '../types';
+import type { ClipTransform, TimelineClip } from '../types';
+import { Logger } from '../services/logger';
+import { resolveTransformPositionUnitMode } from '../services/properties/propertyAuthoring';
+import {
+  createCompositionParentPositionFrame,
+  isValidCompositionPixelSize,
+  rotateParentPositionOffset,
+  SCENE_PARENT_POSITION_FRAME,
+  type CompositionPixelSize,
+  type ParentPositionFrame,
+} from './parentPositionFrame';
+
+const log = Logger.create('TransformComposition');
+const MAX_MISSING_SIZE_WARNINGS = 32;
+const missingSizeWarnings = new Set<string>();
+
+/**
+ * Picks the frame of a parented child's position offset: scene units for
+ * effective-3D clips, the owning composition's pixel aspect for 2D clips. A 2D
+ * child without a known composition size falls back to a square frame and says
+ * so once per clip, because its rotated offset cannot be aspect-corrected.
+ */
+export function resolveClipParentPositionFrame(
+  clip: Pick<TimelineClip, 'id' | 'is3D' | 'source'>,
+  compositionSize: CompositionPixelSize | null | undefined,
+): ParentPositionFrame {
+  if (resolveTransformPositionUnitMode(clip) === 'scene-units') {
+    return SCENE_PARENT_POSITION_FRAME;
+  }
+  if (
+    !isValidCompositionPixelSize(compositionSize)
+    && !missingSizeWarnings.has(clip.id)
+    && missingSizeWarnings.size < MAX_MISSING_SIZE_WARNINGS
+  ) {
+    missingSizeWarnings.add(clip.id);
+    log.warn('Parented 2D clip has no composition size; parent rotation uses a square frame', {
+      clipId: clip.id,
+    });
+  }
+  return createCompositionParentPositionFrame(compositionSize);
+}
 
 /**
  * Composes parent and child transforms.
@@ -12,27 +52,31 @@ import type { ClipTransform } from '../types';
  * - So child position should NOT be multiplied by parent scale
  *
  * - Position: Parent position + rotated child position, including the parent's
- *   uniform Scale All value so children follow the same group-scale motion
+ *   uniform Scale All value so children follow the same group-scale motion.
+ *   The offset is rotated in `frame` (visible space, renderer direction), so
+ *   a rotated parent turns its children rigidly on any composition aspect.
  * - Scale: Child scale is multiplied by parent scale
  * - Rotation: Child rotation is added to parent rotation
  * - Opacity: Child opacity stays local and is never inherited
  */
 export function composeTransforms(
   parent: ClipTransform,
-  child: ClipTransform
+  child: ClipTransform,
+  frame: ParentPositionFrame,
 ): ClipTransform {
-  // Convert parent Z rotation to radians for position rotation
-  const parentRotZ = (parent.rotation.z * Math.PI) / 180;
-
   // Uniform Scale All represents hierarchy/group scale. Apply it to the child
   // offset before rotation so the child follows the same motion around the
   // parent anchor. Independent X/Y scale remains local UV deformation; using
   // it here would make parenting depend on media/source aspect corrections.
   const parentUniformScale = parent.scale.all ?? 1;
-  const scaledChildX = child.position.x * parentUniformScale;
-  const scaledChildY = child.position.y * parentUniformScale;
-  const rotatedX = scaledChildX * Math.cos(parentRotZ) - scaledChildY * Math.sin(parentRotZ);
-  const rotatedY = scaledChildX * Math.sin(parentRotZ) + scaledChildY * Math.cos(parentRotZ);
+  const rotated = rotateParentPositionOffset(
+    {
+      x: child.position.x * parentUniformScale,
+      y: child.position.y * parentUniformScale,
+    },
+    parent.rotation.z,
+    frame,
+  );
 
   return {
     // Opacity is intentionally clip-local. Pick-whip parenting controls only
@@ -45,8 +89,8 @@ export function composeTransforms(
     // Position: Parent position + rotated child position
     // Scale All affects hierarchy offsets; source-specific X/Y scale does not.
     position: {
-      x: parent.position.x + rotatedX,
-      y: parent.position.y + rotatedY,
+      x: parent.position.x + rotated.x,
+      y: parent.position.y + rotated.y,
       z: parent.position.z + child.position.z,
     },
 

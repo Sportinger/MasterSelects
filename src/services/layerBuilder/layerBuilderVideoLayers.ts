@@ -17,8 +17,7 @@ import { getFinalOpacity, getLayerSourceMetadata } from './layerBuilderVideoSour
 import { addLayerBuilderMaskProperties, withLayerBuilderMaskProperties } from './layerBuilderLayerPostProcessing';
 import type { TransformCache } from './TransformCache';
 import type { FrameContext } from './types';
-import { getNestedClipKeyframes } from './layerBuilderNestedLayers';
-import { evaluateParentedClipTransform } from './parentTransformEvaluation';
+import { evaluateLiveMappedClipTransform } from './layerBuilderNestedLayers';
 import { decorateLayerBuilderVideoEffects } from './layerBuilderVideoEffects';
 import { applyMappedProxyLayer } from './layerBuilderMappedProxyLayer';
 type BuildVideoLayerParams = {
@@ -86,18 +85,7 @@ export function buildLayerBuilderVideoLayer(params: BuildTimelineVideoLayerParam
   const timeInfo = getClipTimeInfo(ctx, clip);
   const visualClipTime = timeInfo.visualClipTime;
   const visualClipLocalTime = timeInfo.visualClipLocalTime;
-  const mappedEvaluation = clip.transitionSourceMap?.version === 2
-    ? evaluateParentedClipTransform({
-        clip,
-        clips: ctx.clips ?? [clip],
-        clipLocalTime: visualClipLocalTime,
-        parentTimelineTime: clip.startTime + visualClipLocalTime,
-        getKeyframes: candidate => {
-          const contextKeyframes = ctx.getClipKeyframes?.(candidate.id);
-          return contextKeyframes?.length ? contextKeyframes : getNestedClipKeyframes(candidate);
-        },
-      })
-    : undefined;
+  const mappedEvaluation = evaluateLiveMappedClipTransform(clip, ctx, visualClipLocalTime);
   if (mappedEvaluation && !mappedEvaluation.ok) return null;
   const mappedAnimation = mappedEvaluation?.mappedAnimation;
   const mediaFile = getMediaFileForClip(ctx, clip);

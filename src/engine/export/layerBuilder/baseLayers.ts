@@ -13,6 +13,7 @@ import { evaluateTransitionRenderState } from '../../../utils/transitionRenderIn
 import { evaluateCompositionClipEffects, evaluateCompositionClipMasks } from '../../../services/compositionRender/keyframeEvaluation';
 import { resolveTransitionRecipeBlendMode } from '../../../services/timeline/transitionRecipeBlendWindows';
 import { evaluateParentedClipTransform } from '../../../services/layerBuilder/parentTransformEvaluation';
+import { compositionPixelSizeOf, type CompositionPixelSize } from '../../../utils/parentPositionFrame';
 import type { BaseLayerPropsLike, FrameContextLike } from './contracts';
 
 const log = Logger.create('ExportLayerBuilder');
@@ -40,6 +41,10 @@ export function buildBaseLayerProps(
         clips: ctx.compositionClips ?? ctx.renderClipsAtTime ?? ctx.clipsAtTime,
         clipLocalTime,
         parentTimelineTime: ctx.time,
+        // Same normalized layout as the preview; a differing export aspect
+        // stretches the whole frame instead of re-arranging parented groups.
+        compositionSize: ctx.compositionSize
+          ?? compositionPixelSizeOf({ width: ctx.outputWidth, height: ctx.outputHeight }),
         getKeyframes: getClipKeyframes,
       })
     : undefined;
@@ -134,6 +139,8 @@ export function buildNestedBaseLayer(
   parentContext: {
     clips: readonly TimelineClip[];
     timelineTime: number;
+    /** Pixel size of the composition that owns `clips`. */
+    compositionSize?: CompositionPixelSize;
   } = {
     clips: [nestedClip],
     timelineTime: nestedClip.startTime + nestedClipLocalTime,
@@ -144,6 +151,7 @@ export function buildNestedBaseLayer(
     clips: parentContext.clips,
     clipLocalTime: nestedClipLocalTime,
     parentTimelineTime: parentContext.timelineTime,
+    compositionSize: parentContext.compositionSize,
     getKeyframes: getClipKeyframes,
   });
   if (!evaluated.ok) return null;

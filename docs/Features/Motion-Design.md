@@ -34,6 +34,7 @@ Motion Design is native MasterSelects timeline content, not an embedded external
 - Random, noise, oscillator, and radial-field modifiers support deterministic seeds, ordered editing, and rectangle/ellipse falloff references.
 - Image and frozen-video texture fills are available in the appearance editor and AI tool surface; replicated tiles reuse decoded source frames by reuse key.
 - Motion Null creation, Pick Whip parenting, and atomic create-null-and-parent operations preserve 2D child world transforms. Motion groups are not supported.
+- A rotated Motion Null turns its children rigidly in composition pixels and in the compositor's direction (positive `rotation.z` is counter-clockwise on screen). Structure evaluations carry the owning `compositionSize` (`{ width, height }`, optional, square when omitted, rejected as `MD6_PARENT_EVALUATION_INVALID` when malformed); the timeline adapter, preview transform drags, and the viewport Null handle always pass it, and the viewport handle draws its crosshair arms in the same direction.
 - Adjustment layers operate on lower layers through the shared compositor path. Brightness, Contrast, Saturation, Invert, and Gaussian Blur are the supported 1.0 effect matrix.
 - The shape properties tab includes reusable templates and expressions. Templates are categorized and applied with dependency validation; expressions are parsed and evaluated without arbitrary code execution.
 - Motion Design is always on.

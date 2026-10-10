@@ -124,20 +124,25 @@ describe('MD6 Motion Null viewport controller', () => {
     expect(result.controller.version).toBe(MOTION_NULL_VIEWPORT_CONTROLLER_VERSION);
     expect(result.controller.timelineTime).toBe(3);
     expect(result.controller.localTransform.position).toEqual({ x: 0.2, y: 0.1 });
-    expect(result.controller.worldTransform.position.x).toBeCloseTo(-0.1);
-    expect(result.controller.worldTransform.position.y).toBeCloseTo(0.2);
+    // The Scale All offset (0.4, 0.2) is (384, 108) px in the 1920x1080
+    // composition; +90 deg turns it counter-clockwise on screen to (108, -384) px.
+    expect(result.controller.worldTransform.position.x).toBeCloseTo(0.1 + 108 / 960);
+    expect(result.controller.worldTransform.position.y).toBeCloseTo(-0.2 - 384 / 540);
     expect(result.controller.worldTransform.scale).toEqual({ all: 1, x: 2.25, y: 0.75 });
     expect(result.controller.worldTransform.rotationZ).toBe(105);
     expect(result.controller.worldTransform.opacity).toBeCloseTo(0.8);
-    expect(result.controller.position).toMatchObject({
-      composition: { x: 864, y: 648 },
-      screen: { x: 532, y: 374 },
-      insideComposition: true,
-    });
-    expect(result.controller.handle.geometry.center).toEqual({ x: 532, y: 374 });
+    expect(result.controller.position.composition.x).toBeCloseTo(1164);
+    expect(result.controller.position.composition.y).toBeCloseTo(48);
+    expect(result.controller.position.screen.x).toBeCloseTo(682);
+    expect(result.controller.position.screen.y).toBeCloseTo(74);
+    expect(result.controller.position.insideComposition).toBe(true);
+    expect(result.controller.handle.geometry.center).toEqual(result.controller.position.screen);
     expect(result.controller.handle.geometry.rotationDegrees).toBe(105);
-    expect(result.controller.handle.geometry.xAxis.from.x)
-      .not.toBe(result.controller.handle.geometry.xAxis.to.x);
+    // Positive rotation turns counter-clockwise on the Y-down screen, like the compositor.
+    const xArm = result.controller.handle.geometry.xAxis;
+    const radians = 105 * Math.PI / 180;
+    expect(xArm.to.x - result.controller.handle.geometry.center.x).toBeCloseTo(10 * Math.cos(radians));
+    expect(xArm.to.y - result.controller.handle.geometry.center.y).toBeCloseTo(-10 * Math.sin(radians));
     expect(result.controller.handle).toMatchObject({
       render: true,
       interactive: true,
@@ -221,18 +226,20 @@ describe('MD6 Motion Null viewport controller', () => {
     expect(drag.intent.delta.composition).toEqual({ x: 192, y: 108 });
     expect(drag.intent.delta.world.x).toBeCloseTo(0.2);
     expect(drag.intent.delta.world.y).toBeCloseTo(0.2);
-    expect(drag.intent.delta.local.x).toBeCloseTo(0.1);
-    expect(drag.intent.delta.local.y).toBeCloseTo(-0.1);
-    expect(drag.intent.to.local.x).toBeCloseTo(0.3);
-    expect(drag.intent.to.local.y).toBeCloseTo(0);
-    expect(drag.intent.to.world.x).toBeCloseTo(0.1);
-    expect(drag.intent.to.world.y).toBeCloseTo(0.4);
+    // The (192, 108) px world delta undone by the parent's +90 deg is
+    // (-108, 192) px in parent space, halved by the parent Scale All of 2.
+    expect(drag.intent.delta.local.x).toBeCloseTo(-108 / 960 / 2);
+    expect(drag.intent.delta.local.y).toBeCloseTo(192 / 540 / 2);
+    expect(drag.intent.to.local.x).toBeCloseTo(0.2 - 108 / 960 / 2);
+    expect(drag.intent.to.local.y).toBeCloseTo(0.1 + 192 / 540 / 2);
+    expect(drag.intent.to.world.x).toBeCloseTo(0.1 + 108 / 960 + 0.2);
+    expect(drag.intent.to.world.y).toBeCloseTo(-0.2 - 384 / 540 + 0.2);
     expect(drag.intent.propertyValues[0]).toMatchObject({
       property: 'position.x',
       fromValue: 0.2,
     });
-    expect(drag.intent.propertyValues[0].toValue).toBeCloseTo(0.3);
-    expect(drag.intent.localTransformPatch.position.y).toBeCloseTo(0);
+    expect(drag.intent.propertyValues[0].toValue).toBeCloseTo(0.2 - 108 / 960 / 2);
+    expect(drag.intent.localTransformPatch.position.y).toBeCloseTo(0.1 + 192 / 540 / 2);
     expect(drag.intent.previewWorldTransform.scale).toEqual({ all: 1, x: 2.25, y: 0.75 });
     expect(drag.intent.history).toEqual({
       mode: 'single-entry',

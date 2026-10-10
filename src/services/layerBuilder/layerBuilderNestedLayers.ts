@@ -10,7 +10,11 @@ import { getEffectiveScale } from '../../utils/transformScale';
 import { evaluateTransitionRenderState } from '../../utils/transitionRenderInterpolation';
 import { evaluateCompositionClipEffects, evaluateCompositionClipMasks } from '../compositionRender/keyframeEvaluation';
 import { resolveTransitionRecipeBlendMode } from '../timeline/transitionRecipeBlendWindows';
-import { evaluateParentedClipTransform } from './parentTransformEvaluation';
+import {
+  evaluateParentedClipTransform,
+  type ParentTransformEvaluationResult,
+} from './parentTransformEvaluation';
+import type { CompositionPixelSize } from '../../utils/parentPositionFrame';
 import type { FrameContext } from './types';
 import type { TerrainProjectionDescriptor } from '../../types/terrainAttachment';
 
@@ -32,12 +36,37 @@ export function getNestedClipKeyframes(nestedClip: TimelineClip): Keyframe[] {
   return embeddedKeyframes ? [...embeddedKeyframes] : storeKeyframes ?? [];
 }
 
+/**
+ * Exact-frame parent chain of a live-timeline clip whose animation is
+ * transition-mapped. Positions belong to the active composition.
+ */
+export function evaluateLiveMappedClipTransform(
+  clip: TimelineClip,
+  ctx: FrameContext,
+  clipLocalTime: number,
+): ParentTransformEvaluationResult | undefined {
+  if (clip.transitionSourceMap?.version !== 2) return undefined;
+  return evaluateParentedClipTransform({
+    clip,
+    clips: ctx.clips ?? [clip],
+    clipLocalTime,
+    parentTimelineTime: clip.startTime + clipLocalTime,
+    compositionSize: ctx.compositionById.get(ctx.activeCompId),
+    getKeyframes: candidate => {
+      const contextKeyframes = ctx.getClipKeyframes?.(candidate.id);
+      return contextKeyframes?.length ? contextKeyframes : getNestedClipKeyframes(candidate);
+    },
+  });
+}
+
 export function buildNestedLayerBase(
   nestedClip: TimelineClip,
   nestedClipLocalTime: number,
   parentContext: {
     clips: readonly TimelineClip[];
     timelineTime: number;
+    /** Pixel size of the composition that owns `clips`. */
+    compositionSize?: CompositionPixelSize;
   } = {
     clips: [nestedClip],
     timelineTime: nestedClip.startTime + nestedClipLocalTime,
@@ -48,6 +77,7 @@ export function buildNestedLayerBase(
     clips: parentContext.clips,
     clipLocalTime: nestedClipLocalTime,
     parentTimelineTime: parentContext.timelineTime,
+    compositionSize: parentContext.compositionSize,
     getKeyframes: getNestedClipKeyframes,
   });
   if (!evaluated.ok) return null;

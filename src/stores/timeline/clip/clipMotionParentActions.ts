@@ -7,6 +7,7 @@ import {
 import type { TimelineClip, TimelineTrack } from '../../../types/timeline';
 import { captureSnapshot } from '../../historyStore';
 import { DEFAULT_TRANSFORM } from '../constants';
+import { getActiveCompositionPixelSize } from '../helpers/activeCompositionSize';
 import type { ClipActionContext } from './clipActionContext';
 
 const log = Logger.create('ClipMotionParentActions');
@@ -107,8 +108,10 @@ export function setClipParentAction(
   }
   const compositionId = clips.find(candidate => candidate.id === clipId)?.compositionId
     ?? 'timeline:active';
+  const compositionSize = getActiveCompositionPixelSize();
   const result = planTimelineMotionParentMutation({
     compositionId,
+    compositionSize,
     clips,
     clipKeyframes,
     timelineTime: getPlayheadPosition(playheadPosition),
@@ -125,6 +128,7 @@ export function setClipParentAction(
   }
   const applied = applyTimelineMotionStructurePlan({
     compositionId,
+    compositionSize,
     clips,
     clipKeyframes,
     plan: result.plan,

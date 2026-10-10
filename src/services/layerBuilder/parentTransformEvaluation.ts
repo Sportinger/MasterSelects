@@ -1,7 +1,8 @@
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type { ClipTransform, Keyframe, TimelineClip } from '../../types';
 import { getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
-import { composeTransforms } from '../../utils/transformComposition';
+import { composeTransforms, resolveClipParentPositionFrame } from '../../utils/transformComposition';
+import type { CompositionPixelSize } from '../../utils/parentPositionFrame';
 import { applyVideoInspectorTransformBypass } from '../videoInspector/sectionBypass';
 import { applyParameterSourcesToTransform } from '../parameterSources/parameterSourceRendering';
 import {
@@ -42,6 +43,12 @@ export interface ParentTransformEvaluationInput {
   /** Exact same-composition time used for every ancestor in the chain. */
   parentTimelineTime: number;
   getKeyframes: (clip: TimelineClip) => readonly Keyframe[] | undefined;
+  /**
+   * Pixel size of the composition that owns `clips`. 2D positions are
+   * normalized against it, so parent rotation needs it to stay rigid on
+   * non-square compositions. Pass `undefined` only when it is truly unknown.
+   */
+  compositionSize: CompositionPixelSize | undefined;
 }
 
 function buildBaseTransform(clip: TimelineClip): ClipTransform {
@@ -161,7 +168,11 @@ export function evaluateParentedClipTransform(
         visiting.delete(clip.id);
         return parentTransform;
       }
-      worldTransform = composeTransforms(parentTransform, ownTransform);
+      worldTransform = composeTransforms(
+        parentTransform,
+        ownTransform,
+        resolveClipParentPositionFrame(clip, input.compositionSize),
+      );
     }
 
     visiting.delete(clip.id);

@@ -1,10 +1,20 @@
 import { describe, it, expect } from 'vitest';
 import { composeTransforms, wouldCreateCycle } from '../../src/utils/transformComposition';
+import { SCENE_PARENT_POSITION_FRAME } from '../../src/utils/parentPositionFrame';
 import { createMockTransform } from '../helpers/mockData';
+
+/**
+ * Effective-3D scene units: isotropic, +Y up, rotation.z counter-clockwise.
+ * 2D composition-pixel parenting is covered in motionParentRotationFrame.test.ts.
+ */
+const composeInScene = (
+  parent: Parameters<typeof composeTransforms>[0],
+  child: Parameters<typeof composeTransforms>[1],
+) => composeTransforms(parent, child, SCENE_PARENT_POSITION_FRAME);
 
 // ─── composeTransforms ─────────────────────────────────────────────────────
 
-describe('composeTransforms', () => {
+describe('composeTransforms in isotropic Y-up scene units', () => {
   it('identity parent → child unchanged', () => {
     const identity = createMockTransform();
     const child = createMockTransform({
@@ -15,7 +25,7 @@ describe('composeTransforms', () => {
       blendMode: 'multiply',
     });
 
-    const result = composeTransforms(identity, child);
+    const result = composeInScene(identity, child);
     expect(result.opacity).toBeCloseTo(0.5, 5);
     expect(result.position.x).toBeCloseTo(10, 5);
     expect(result.position.y).toBeCloseTo(20, 5);
@@ -32,7 +42,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ position: { x: 100, y: 200, z: 0 } });
     const child = createMockTransform({ position: { x: 10, y: 20, z: 5 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.position.x).toBeCloseTo(110, 5);
     expect(result.position.y).toBeCloseTo(220, 5);
     expect(result.position.z).toBeCloseTo(5, 5);
@@ -42,7 +52,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 0, y: 0, z: 90 } });
     const child = createMockTransform({ position: { x: 10, y: 0, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // 90° rotation: (10, 0) → (0, 10)
     expect(result.position.x).toBeCloseTo(0, 3);
     expect(result.position.y).toBeCloseTo(10, 3);
@@ -52,7 +62,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 0, y: 0, z: 180 } });
     const child = createMockTransform({ position: { x: 10, y: 0, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // 180° rotation: (10, 0) → (-10, 0)
     expect(result.position.x).toBeCloseTo(-10, 3);
     expect(result.position.y).toBeCloseTo(0, 3);
@@ -62,7 +72,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ scale: { x: 2, y: 3 } });
     const child = createMockTransform({ scale: { x: 0.5, y: 2 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.scale.x).toBeCloseTo(1, 5);
     expect(result.scale.y).toBeCloseTo(6, 5);
   });
@@ -71,7 +81,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ scale: { all: 2, x: 1.5, y: 0.5, z: 3 } });
     const child = createMockTransform({ scale: { all: 0.25, x: 2, y: 4, z: 0.5 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.scale.all).toBeCloseTo(0.5, 5);
     expect(result.scale.x).toBeCloseTo(3, 5);
     expect(result.scale.y).toBeCloseTo(2, 5);
@@ -82,7 +92,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 10, y: 20, z: 30 } });
     const child = createMockTransform({ rotation: { x: 5, y: 10, z: 15 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.rotation.x).toBeCloseTo(15, 5);
     expect(result.rotation.y).toBeCloseTo(30, 5);
     expect(result.rotation.z).toBeCloseTo(45, 5);
@@ -92,7 +102,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ opacity: 0.5 });
     const child = createMockTransform({ opacity: 0.6 });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.opacity).toBeCloseTo(0.6, 5);
   });
 
@@ -100,7 +110,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ blendMode: 'screen' });
     const child = createMockTransform({ blendMode: 'multiply' });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.blendMode).toBe('multiply');
   });
 
@@ -110,7 +120,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 0, y: 0, z: 270 } });
     const child = createMockTransform({ position: { x: 10, y: 0, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // 270° rotation: (10, 0) → (0, -10)
     expect(result.position.x).toBeCloseTo(0, 3);
     expect(result.position.y).toBeCloseTo(-10, 3);
@@ -120,7 +130,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 0, y: 0, z: 45 } });
     const child = createMockTransform({ position: { x: 10, y: 0, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // 45° rotation: (10, 0) → (10*cos45, 10*sin45) ≈ (7.071, 7.071)
     const expected = 10 * Math.cos(Math.PI / 4);
     expect(result.position.x).toBeCloseTo(expected, 3);
@@ -131,7 +141,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 0, y: 0, z: -90 } });
     const child = createMockTransform({ position: { x: 10, y: 0, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // -90° rotation: (10, 0) → (0, -10)
     expect(result.position.x).toBeCloseTo(0, 3);
     expect(result.position.y).toBeCloseTo(-10, 3);
@@ -141,7 +151,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 0, y: 0, z: 360 } });
     const child = createMockTransform({ position: { x: 10, y: 5, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // 360° = full circle, position should be unchanged
     expect(result.position.x).toBeCloseTo(10, 3);
     expect(result.position.y).toBeCloseTo(5, 3);
@@ -151,7 +161,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 0, y: 0, z: 90 } });
     const child = createMockTransform({ position: { x: 10, y: 5, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // 90° rotation: (10, 5) → (-5, 10)
     expect(result.position.x).toBeCloseTo(-5, 3);
     expect(result.position.y).toBeCloseTo(10, 3);
@@ -166,7 +176,7 @@ describe('composeTransforms', () => {
     });
     const child = createMockTransform({ position: { x: 10, y: 0, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // Rotated: (10, 0) → (0, 10), then add parent position (100, 200)
     expect(result.position.x).toBeCloseTo(100, 3);
     expect(result.position.y).toBeCloseTo(210, 3);
@@ -178,7 +188,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ position: { x: 0, y: 0, z: 3 } });
     const child = createMockTransform({ position: { x: 0, y: 0, z: 7 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.position.z).toBeCloseTo(10, 5);
   });
 
@@ -189,7 +199,7 @@ describe('composeTransforms', () => {
     });
     const child = createMockTransform({ position: { x: 0, y: 0, z: 3 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // Z is simple addition, not rotated
     expect(result.position.z).toBeCloseTo(8, 5);
   });
@@ -200,7 +210,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ position: { x: -50, y: -100, z: -2 } });
     const child = createMockTransform({ position: { x: 30, y: 60, z: 1 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.position.x).toBeCloseTo(-20, 5);
     expect(result.position.y).toBeCloseTo(-40, 5);
     expect(result.position.z).toBeCloseTo(-1, 5);
@@ -212,7 +222,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ scale: { x: 0, y: 0 } });
     const child = createMockTransform({ scale: { x: 5, y: 10 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.scale.x).toBeCloseTo(0, 5);
     expect(result.scale.y).toBeCloseTo(0, 5);
   });
@@ -221,7 +231,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ scale: { x: 2, y: 3 } });
     const child = createMockTransform({ scale: { x: 0, y: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.scale.x).toBeCloseTo(0, 5);
     expect(result.scale.y).toBeCloseTo(0, 5);
   });
@@ -230,7 +240,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ scale: { x: -1, y: 1 } });
     const child = createMockTransform({ scale: { x: 2, y: 3 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.scale.x).toBeCloseTo(-2, 5);
     expect(result.scale.y).toBeCloseTo(3, 5);
   });
@@ -239,7 +249,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ scale: { x: -1, y: -1 } });
     const child = createMockTransform({ scale: { x: -2, y: -3 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.scale.x).toBeCloseTo(2, 5);
     expect(result.scale.y).toBeCloseTo(3, 5);
   });
@@ -248,7 +258,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ scale: { x: 0.1, y: 0.1 } });
     const child = createMockTransform({ scale: { x: 0.1, y: 0.1 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.scale.x).toBeCloseTo(0.01, 5);
     expect(result.scale.y).toBeCloseTo(0.01, 5);
   });
@@ -259,7 +269,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ opacity: 0 });
     const child = createMockTransform({ opacity: 0.8 });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.opacity).toBeCloseTo(0.8, 5);
   });
 
@@ -267,7 +277,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ opacity: 0.8 });
     const child = createMockTransform({ opacity: 0 });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.opacity).toBeCloseTo(0, 5);
   });
 
@@ -275,7 +285,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ opacity: 1 });
     const child = createMockTransform({ opacity: 1 });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.opacity).toBeCloseTo(1, 5);
   });
 
@@ -283,7 +293,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ opacity: 0.01 });
     const child = createMockTransform({ opacity: 0.01 });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.opacity).toBeCloseTo(0.01, 5);
   });
 
@@ -293,7 +303,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: -10, y: -20, z: -30 } });
     const child = createMockTransform({ rotation: { x: 5, y: 10, z: 15 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.rotation.x).toBeCloseTo(-5, 5);
     expect(result.rotation.y).toBeCloseTo(-10, 5);
     expect(result.rotation.z).toBeCloseTo(-15, 5);
@@ -303,7 +313,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 200, y: 300, z: 350 } });
     const child = createMockTransform({ rotation: { x: 200, y: 100, z: 50 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // Rotation addition can exceed 360; it is not clamped
     expect(result.rotation.x).toBeCloseTo(400, 5);
     expect(result.rotation.y).toBeCloseTo(400, 5);
@@ -314,7 +324,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 0, y: 0, z: 0 } });
     const child = createMockTransform({ rotation: { x: 45, y: 90, z: 180 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.rotation.x).toBeCloseTo(45, 5);
     expect(result.rotation.y).toBeCloseTo(90, 5);
     expect(result.rotation.z).toBeCloseTo(180, 5);
@@ -326,7 +336,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ blendMode: 'overlay' });
     const child = createMockTransform({ blendMode: 'normal' });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.blendMode).toBe('normal');
   });
 
@@ -334,7 +344,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ blendMode: 'normal' });
     const child = createMockTransform({ blendMode: 'normal' });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.blendMode).toBe('normal');
   });
 
@@ -344,7 +354,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ scale: { x: 2, y: 3 } });
     const child = createMockTransform({ position: { x: 100, y: 200, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.position.x).toBeCloseTo(100, 5);
     expect(result.position.y).toBeCloseTo(200, 5);
   });
@@ -356,7 +366,7 @@ describe('composeTransforms', () => {
     });
     const child = createMockTransform({ position: { x: 10, y: 0, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // Uniformly scale (10, 0) to (30, 0), then rotate it by 90°.
     expect(result.position.x).toBeCloseTo(0, 3);
     expect(result.position.y).toBeCloseTo(30, 3);
@@ -380,7 +390,7 @@ describe('composeTransforms', () => {
       rotation: { x: 5, y: 10, z: 45 },
     });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // Opacity: child remains independent from parent
     expect(result.opacity).toBeCloseTo(0.5, 5);
     // BlendMode: child wins
@@ -411,7 +421,7 @@ describe('composeTransforms', () => {
     });
     const identity = createMockTransform();
 
-    const result = composeTransforms(parent, identity);
+    const result = composeInScene(parent, identity);
     expect(result.opacity).toBeCloseTo(1, 5);
     // BlendMode: child (normal) takes precedence over parent
     expect(result.blendMode).toBe('normal');
@@ -429,7 +439,7 @@ describe('composeTransforms', () => {
     const a = createMockTransform();
     const b = createMockTransform();
 
-    const result = composeTransforms(a, b);
+    const result = composeInScene(a, b);
     expect(result.opacity).toBeCloseTo(1, 5);
     expect(result.blendMode).toBe('normal');
     expect(result.position.x).toBeCloseTo(0, 5);
@@ -448,7 +458,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ rotation: { x: 90, y: 90, z: 0 } });
     const child = createMockTransform({ position: { x: 10, y: 20, z: 0 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     // Only Z rotation is used for position rotation; x and y rotation are ignored for position
     expect(result.position.x).toBeCloseTo(10, 5);
     expect(result.position.y).toBeCloseTo(20, 5);
@@ -477,9 +487,9 @@ describe('composeTransforms', () => {
     });
 
     // Compose grandparent + parent first
-    const intermediate = composeTransforms(grandparent, parent);
+    const intermediate = composeInScene(grandparent, parent);
     // Then compose with child
-    const result = composeTransforms(intermediate, child);
+    const result = composeInScene(intermediate, child);
 
     // Scale: 2 * 0.5 * 1 = 1
     expect(result.scale.x).toBeCloseTo(1, 5);
@@ -501,7 +511,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ position: { x: 10000, y: -10000, z: 500 } });
     const child = createMockTransform({ position: { x: 5000, y: 5000, z: 250 } });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.position.x).toBeCloseTo(15000, 0);
     expect(result.position.y).toBeCloseTo(-5000, 0);
     expect(result.position.z).toBeCloseTo(750, 0);
@@ -511,7 +521,7 @@ describe('composeTransforms', () => {
     const parent = createMockTransform({ opacity: 0.001 });
     const child = createMockTransform({ opacity: 0.001 });
 
-    const result = composeTransforms(parent, child);
+    const result = composeInScene(parent, child);
     expect(result.opacity).toBeCloseTo(0.001, 8);
   });
 });

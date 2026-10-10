@@ -8,6 +8,7 @@ import { layerBuilder } from '../../services/layerBuilder';
 import { Logger } from '../../services/logger';
 import { cancelHistoryBatch, endBatch, startBatch } from '../historyStore';
 import { useMediaStore } from '../mediaStore';
+import { getActiveCompositionPixelSize } from './helpers/activeCompositionSize';
 import {
   applyTimelineMotionCreateNullPlan,
   applyTimelineMotionCreateNullAndParentSelectedPlan,
@@ -153,8 +154,10 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
       normalizedName,
     );
     const compositionId = getActiveMotionCompositionId();
+    const compositionSize = getActiveCompositionPixelSize();
     const planned = planTimelineMotionCreateNull({
       compositionId,
+      compositionSize,
       clips: state.clips,
       clipKeyframes: state.clipKeyframes,
       timelineTime: startTime,
@@ -168,6 +171,7 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
     }
     const applied = applyTimelineMotionCreateNullPlan({
       compositionId,
+      compositionSize,
       clips: state.clips,
       clipKeyframes: state.clipKeyframes,
       timelineTime: startTime,
@@ -239,8 +243,10 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
       Math.max(0.001, nullEndTime - nullStartTime),
     );
     const compositionId = getActiveMotionCompositionId();
+    const compositionSize = getActiveCompositionPixelSize();
     const planned = planTimelineMotionCreateNullAndParentSelected({
       compositionId,
+      compositionSize,
       clips: state.clips,
       clipKeyframes: state.clipKeyframes,
       timelineTime,
@@ -255,6 +261,7 @@ export const createMotionClipSlice: SliceCreator<MotionClipActions> = (set, get)
     }
     const applied = applyTimelineMotionCreateNullAndParentSelectedPlan({
       compositionId,
+      compositionSize,
       clips: state.clips,
       clipKeyframes: state.clipKeyframes,
       timelineTime,

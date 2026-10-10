@@ -8,6 +8,7 @@ import { getEffectiveScale } from '../../utils/transformScale';
 import type { FrameContext } from './types';
 import { buildTransitionNestedCompositionLayer } from './transitionNestedCompositionLayer';
 import { evaluateParentedClipTransform } from './parentTransformEvaluation';
+import { compositionPixelSizeOf } from '../../utils/parentPositionFrame';
 
 function matchesLinkedClipId(clipId: string, baseId: string): boolean {
   return clipId === baseId || clipId.startsWith(`${baseId}:`);
@@ -88,6 +89,7 @@ function applyNestedTransitionParentTransforms(input: {
       clips,
       clipLocalTime: nestedComposition.currentTime! - transitionClip.startTime,
       parentTimelineTime: input.parentTime,
+      compositionSize: compositionPixelSizeOf(input.transitionComposition),
       getKeyframes: candidate => {
         const contextKeyframes = input.ctx.getClipKeyframes?.(candidate.id);
         if (contextKeyframes?.length) return contextKeyframes;
@@ -102,7 +104,7 @@ function applyNestedTransitionParentTransforms(input: {
       position: evaluated.transform.position,
       scale: getEffectiveScale(evaluated.transform.scale),
       rotation: typeof layer.rotation === 'number'
-        ? evaluated.transform.rotation.z
+        ? evaluated.transform.rotation.z * Math.PI / 180
         : {
             x: evaluated.transform.rotation.x * Math.PI / 180,
             y: evaluated.transform.rotation.y * Math.PI / 180,

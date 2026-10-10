@@ -165,6 +165,7 @@ describe('MD6 parent transform builder parity', () => {
       clips: [grandparent, parent, child],
       clipLocalTime: 2,
       parentTimelineTime: 4,
+      compositionSize: undefined,
       getKeyframes: candidate => keyframes.get(candidate.id),
     });
     expect(evaluated).toMatchObject({ ok: true, transform: { position: { x: 125 } } });
@@ -174,6 +175,7 @@ describe('MD6 parent transform builder parity', () => {
       clips: [child],
       clipLocalTime: 2,
       parentTimelineTime: 4,
+      compositionSize: undefined,
       getKeyframes: () => [],
     })).toMatchObject({ ok: false, reason: 'missing-parent', parentClipId: parent.id });
 
@@ -183,6 +185,7 @@ describe('MD6 parent transform builder parity', () => {
       clips: [cyclicParent, child],
       clipLocalTime: 2,
       parentTimelineTime: 4,
+      compositionSize: undefined,
       getKeyframes: () => [],
     })).toMatchObject({ ok: false, reason: 'cycle' });
   });

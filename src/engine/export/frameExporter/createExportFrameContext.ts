@@ -4,6 +4,7 @@ import { createTransitionMediaDurationResolver } from '../../../stores/timeline/
 import { createTransitionSourceClip, DEFAULT_TRANSITION_PLACEMENT, findActiveTransitionPlanForTrack,
   type ActiveTransitionPlan } from '../../../stores/timeline/editOperations/transitionPlanner';
 import type { FrameContext } from '../types';
+import { compositionPixelSizeOf } from '../../../utils/parentPositionFrame';
 
 /** One immutable authored-state view and one set of lookup maps per exported frame. */
 export function createExportFrameContext(time: number, fps: number, frameTolerance: number, width: number, height: number,
@@ -24,7 +25,10 @@ export function createExportFrameContext(time: number, fps: number, frameToleran
     const incoming = createTransitionSourceClip(transition.incomingClip, transition.plan.incoming, time);
     renderClipsById.set(outgoing.id, outgoing); renderClipsById.set(incoming.id, incoming);
   }
-  return { time, fps, frameTolerance, outputWidth: width, outputHeight: height, clipsAtTime,
+  const compositionSize = compositionPixelSizeOf(
+    media.compositions.find(composition => composition.id === media.activeCompositionId),
+  );
+  return { time, fps, frameTolerance, outputWidth: width, outputHeight: height, compositionSize, clipsAtTime,
     renderClipsAtTime: [...renderClipsById.values()], compositionClips: state.clips,
     trackMap, clipsByTrack, transitionParticipantsByTrack, mediaFiles: media.files, mediaCompositions: media.compositions,
     getInterpolatedTransform: state.getInterpolatedTransform, getInterpolatedEffects: state.getInterpolatedEffects,

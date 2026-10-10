@@ -307,6 +307,13 @@ Speed is a first-class animatable property in the UI.
 
 This means speed keyframes can create ramps, reversals, and mixed-rate playback within a single clip.
 
+Speed values must keep a magnitude of at least `0.1` (`CLIP_SPEED_MIN_MULTIPLIER`);
+negative values play in reverse. The `speed` property descriptor declares this as
+`range.minMagnitude`, so `addKeyframe` and other authoring tools reject `0` or
+`0.01` with an explicit message instead of reporting an unwritten keyframe, and
+the store logs a `Speed keyframe rejected` warning when any caller passes such a
+value.
+
 ---
 
 ## Track Expansion

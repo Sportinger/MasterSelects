@@ -4,7 +4,8 @@ import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { DEFAULT_SCENE_CAMERA_SETTINGS, type SceneCameraSettings } from '../../stores/mediaStore/types';
 import { getInterpolatedClipCameraSettings, getInterpolatedClipTransform } from '../../utils/keyframeInterpolation';
 import { applyParameterSourcesToTransform } from '../../services/parameterSources/parameterSourceRendering';
-import { composeTransforms } from '../../utils/transformComposition';
+import { composeTransforms, resolveClipParentPositionFrame } from '../../utils/transformComposition';
+import type { CompositionPixelSize } from '../../utils/parentPositionFrame';
 
 export interface SceneTimelineContext {
   clips: TimelineClip[];
@@ -13,6 +14,8 @@ export interface SceneTimelineContext {
   compositionId?: string | null;
   sceneNavClipId?: string | null;
   previewCameraOverride?: SceneCameraConfig | null;
+  /** Owning composition size; only 2D clips parented in a scene need it. */
+  compositionSize?: CompositionPixelSize;
 }
 
 function buildBaseTransform(clip: TimelineClip): ClipTransform {
@@ -47,7 +50,7 @@ export function resolveSceneClipTransform(
   clip: TimelineClip,
   clipLocalTime: number,
   timelineTime: number,
-  context: Pick<SceneTimelineContext, 'clips' | 'clipKeyframes'>,
+  context: Pick<SceneTimelineContext, 'clips' | 'clipKeyframes' | 'compositionSize'>,
 ): ClipTransform {
   const keyframes = context.clipKeyframes?.get(clip.id) ?? [];
   const baseTransform = buildBaseTransform(clip);
@@ -74,7 +77,11 @@ export function resolveSceneClipTransform(
     timelineTime,
     context,
   );
-  return composeTransforms(parentTransform, ownTransform);
+  return composeTransforms(
+    parentTransform,
+    ownTransform,
+    resolveClipParentPositionFrame(clip, context.compositionSize),
+  );
 }
 
 export function resolveSceneClipCameraSettings(

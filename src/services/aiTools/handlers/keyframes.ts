@@ -190,7 +190,10 @@ export async function handleAddKeyframe(
         keyframe.storedTime,
       );
       if (!actual) {
-        throw new Error(`Keyframe was not written: ${keyframe.clipId}/${keyframe.property}`);
+        throw new Error(
+          `Keyframe was not written: ${keyframe.clipId}/${keyframe.property}; the timeline rejected `
+          + `stored value ${keyframe.storedValue} at ${keyframe.storedTime}s (see the property range in getMotionCapabilities)`,
+        );
       }
       const status = keyframe.existingKeyframeId ? 'updated' : 'created';
       return {

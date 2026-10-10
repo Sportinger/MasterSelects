@@ -48,6 +48,7 @@ export interface PropertyAuthoringDescriptorView {
     min?: number;
     max?: number;
     step?: number;
+    minMagnitude?: number;
   };
   unit?: string;
   storageUnit?: string;
@@ -75,6 +76,8 @@ export interface PropertyDescriptor<T = PropertyValue> {
   ui?: {
     min?: number;
     max?: number;
+    /** Smallest allowed absolute value; values closer to zero are rejected. */
+    minMagnitude?: number;
     step?: number;
     unit?: string;
     aliases?: string[];

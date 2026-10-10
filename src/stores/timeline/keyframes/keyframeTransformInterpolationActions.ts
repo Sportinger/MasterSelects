@@ -8,7 +8,8 @@ import {
   getInterpolatedClipTransform,
 } from '../../../utils/keyframeInterpolation';
 import { calculateSourceTime, getSpeedAtTime } from '../../../utils/speedIntegration';
-import { composeTransforms } from '../../../utils/transformComposition';
+import { composeTransforms, resolveClipParentPositionFrame } from '../../../utils/transformComposition';
+import { getActiveCompositionPixelSize } from '../helpers/activeCompositionSize';
 import {
   applyVideoInspectorSpeedBypass,
   applyVideoInspectorTransformBypass,
@@ -80,7 +81,11 @@ export const createKeyframeTransformInterpolationActions: SliceCreator<KeyframeT
         const requestedTimelineTime = clip.startTime + clipLocalTime;
         const parentLocalTime = requestedTimelineTime - parentClip.startTime;
         const parentTransform = get().getInterpolatedTransform(clip.parentClipId, parentLocalTime);
-        return composeTransforms(parentTransform, ownTransform);
+        return composeTransforms(
+          parentTransform,
+          ownTransform,
+          resolveClipParentPositionFrame(clip, getActiveCompositionPixelSize()),
+        );
       }
     }
 
