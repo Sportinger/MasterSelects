@@ -19,6 +19,7 @@ export {
   handleStartMediaAnalysis,
   handleStartMediaTranscription,
 } from './media/library';
+export { handleDuplicateComposition } from './media/compositionDuplicate';
 export {
   handleImportLocalFiles,
   handleListLocalFiles,

@@ -612,6 +612,7 @@ const TOOL_POLICY_MAP = new Map<string, ToolPolicyEntry>([
   ['renameMediaItem', mutatingLow()],
   ['moveMediaItems', mutatingLow()],
   ['createComposition', mutatingLow()],
+  ['duplicateComposition', mutatingLow()],
   ['addMarker', mutatingLow()],
   ['createRig', mutatingLow()],
   ['createSolidClip', mutatingLow()],

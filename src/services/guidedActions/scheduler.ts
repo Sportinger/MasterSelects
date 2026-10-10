@@ -55,6 +55,7 @@ const PROPERTY_EDIT_TOOLS = new Set([
 const CREATION_TOOLS = new Set([
   'createTrack',
   'createComposition',
+  'duplicateComposition',
   'createMediaFolder',
   'addEffect',
   'addTransition',

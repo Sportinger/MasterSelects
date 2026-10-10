@@ -12,9 +12,19 @@ export interface CompositionSwitchOptions {
   playFromTime?: number;
 }
 
+export interface CompositionDuplicateOptions {
+  /** Name of the copy; defaults to "<name> Copy". */
+  name?: string;
+}
+
 export interface CompositionActions {
   createComposition: (name: string, settings?: Partial<Composition>) => Composition;
-  duplicateComposition: (id: string) => Composition | null;
+  /**
+   * Deep-copy a composition and the compositions it privately owns. The active
+   * composition is copied from its live timeline. Returns null (with a logged
+   * reason) for unknown, transition, or caption compositions.
+   */
+  duplicateComposition: (id: string, options?: CompositionDuplicateOptions) => Composition | null;
   removeComposition: (id: string) => void;
   updateComposition: (id: string, updates: Partial<Composition>) => void;
   setActiveComposition: (id: string | null) => void;

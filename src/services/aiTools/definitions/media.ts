@@ -249,6 +249,32 @@ export const mediaToolDefinitions: ToolDefinition[] = [
   {
     type: 'function',
     function: {
+      name: 'duplicateComposition',
+      description: 'Duplicate a composition, e.g. to keep the current state as a version before further edits. The copy is a deep copy in the same folder: clips keep their ids, motion parent links, keyframes, effects, masks, text, motion-shape appearances, transitions, and track visibility; the composition\'s private transition and caption compositions are copied with it. Duplicating the active composition copies its live timeline. Returns the copy\'s id, name, and clip/track counts next to the source counts. Transition and caption compositions cannot be duplicated on their own.',
+      parameters: {
+        type: 'object',
+        properties: {
+          compositionId: {
+            type: 'string',
+            description: 'ID of the composition to duplicate (getMediaItems lists composition IDs; getTimelineState shows the active one).',
+          },
+          name: {
+            type: 'string',
+            description: 'Name of the copy (default: "<source name> Copy").',
+          },
+          open: {
+            type: 'boolean',
+            description: 'Open the copy in the timeline afterwards (default: false, the current composition stays active).',
+          },
+        },
+        required: ['compositionId'],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'importLocalFiles',
       description: 'Import local files from disk into the media panel. Provide absolute file paths. Uses the dev bridge in development or the Native Helper in production. Known timeline media import as legacy media; other files import as SignalAssets. Can optionally place legacy media or SignalAssets on the timeline with full control over track and position.',
       parameters: {

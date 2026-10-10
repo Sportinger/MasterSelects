@@ -369,7 +369,7 @@ See [MuScriptor Music-to-MIDI](./MuScriptor.md) for the complete runtime, mappin
 
 ### Tool Registry (parity-gated)
 
-The exported registry holds 234 tool definitions. Hosted chat uses
+The exported registry holds 240 tool definitions. Hosted chat uses
 the policy-eligible definitions, prioritized and capped at 128; the dev bridge
 can additionally reach explicitly registered diagnostics-only tools.
 `tests/unit/aiToolRegistryParity.test.ts` checks coverage; non-chat asymmetries are explicit.
@@ -446,6 +446,16 @@ copied into every project-context snapshot.
 
 ### Media Listing And Multicam Tools
 
+- `duplicateComposition` deep-copies a composition (for example to keep the
+  current state as a version) into the same folder, optionally under a new
+  `name` and opened afterwards (`open`). The active composition is copied from
+  its live timeline; the result reports the copy's id, name, and clip/track
+  counts next to the source counts, and transition or caption compositions fail
+  with a reason. It is reachable through the dev bridge and the Direct tool
+  surface; it is not yet part of the kernel's digest-pinned Fast V2 catalog
+  (`KERNEL_PIN_PENDING_EDITOR_TOOL_NAMES`), which needs a lockstep kernel pin
+  update, and it does not take one of the 128 provider slots of the FlashBoard
+  chat path. Details: [Media Panel](./Media-Panel.md#duplicating-compositions).
 - `getMediaItems` lists the whole media panel, subfolders included, with each
   file's `folderPath` and per-type `fileCounts`; `folderId` narrows it to one
   subtree, `recursive: false` restores the one-folder listing, and

@@ -62,12 +62,16 @@ const FLASHBOARD_CHAT_PRIORITY_TOOL_NAMES = new Set([
 
 // Playback simulation probes are verification tools rather than editing tools; they
 // yield provider slots to editing tools first (they stay reachable via the dev bridge).
+// Project-organization tools added after the provider cap filled up are deferred too,
+// so they do not silently push an existing editing tool (e.g. addMaskPathKeyframe)
+// past the cap; they stay reachable via the dev bridge and the Direct tool surface.
 const FLASHBOARD_CHAT_DEFERRED_TOOL_NAMES = new Set([
   'simulateScrub',
   'simulateFrameKeypresses',
   'simulatePlayback',
   'simulatePlaybackPulses',
   'simulatePlaybackPath',
+  'duplicateComposition',
 ]);
 
 const eligibleFlashBoardChatTools = AI_TOOLS.filter((tool) => (
