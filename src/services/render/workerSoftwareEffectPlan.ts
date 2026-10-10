@@ -308,8 +308,9 @@ function effectFilterPart(
         threshold: finiteEffectNumber(effect.params.threshold, 0.7935),
         radius: Math.max(0, finiteEffectNumber(effect.params.radius, 1)),
         softness: Math.max(0.001, finiteEffectNumber(effect.params.softness, 0.496)),
-        rings: Math.max(1, Math.min(32, Math.round(finiteEffectNumber(effect.params.rings, 6.85)))),
-        samplesPerRing: Math.max(4, Math.min(64, Math.round(finiteEffectNumber(effect.params.samplesPerRing, 17.95)))),
+        // Clamped and truncated by the shared Glow sampling contract, like the GPU graph.
+        rings: finiteEffectNumber(effect.params.rings, 6.85),
+        samplesPerRing: finiteEffectNumber(effect.params.samplesPerRing, 17.95),
       });
       return '';
     case 'scanlines':

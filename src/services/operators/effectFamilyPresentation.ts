@@ -7,8 +7,9 @@ const cache = new WeakMap<EffectOperatorGraph, Map<string, EffectOperatorGraph>>
 const literal = (node: BoundOperatorNode) => node.operator.startsWith('values.') && !!node.constants && !Object.keys(node.bindings).length;
 const literalKey = (node: BoundOperatorNode) => JSON.stringify([node.operator, node.operatorVersion ?? 1, node.constants, node.enabled, node.bypassed]);
 
-/** Matching allows only duplicated immutable leaves introduced by exact composition extraction. */
-function matchesDefault(source: EffectOperatorGraph, original: EffectOperatorGraph): boolean {
+/** Matching allows only duplicated immutable leaves introduced by exact composition extraction.
+ * Presentation (layout, folders, packed compositions) is ignored; node fields and wiring must match. */
+export function matchesEffectRecipe(source: EffectOperatorGraph, original: EffectOperatorGraph): boolean {
   const actual = expandOperatorCompositions(source);
   const expectedNodes = original.nodes.filter(node => !literal(node)), actualNodes = actual.nodes.filter(node => !literal(node));
   if (expectedNodes.length !== actualNodes.length || expectedNodes.some(node => !actualNodes.some(value => value.id === node.id && sameCompositionNode(value, node)))) return false;
@@ -57,7 +58,7 @@ export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed:
   const cached = cache.get(source)?.get(type); if (cached) return cached;
   let original = originals.get(type);
   if (!original) { original = createDefault(); originals.set(type, original); }
-  if (!matchesDefault(source, original)) return composed;
+  if (!matchesEffectRecipe(source, original)) return composed;
   const originalNodes = new Map(original.nodes.map(node => [node.id, node]));
   const labels = { controls: 'Parameters', constants: 'Constants', sources: 'Coordinates & Resources', ...plan.labels };
   const members = new Map<string, string[]>();
@@ -74,7 +75,8 @@ export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed:
       const sharedStages: Record<string, string> = {
         'glyph.cell-grid': 'grid', 'glyph.tone-index': 'index', 'glyph.atlas-alpha': 'atlas', 'feedback.decay-max-rgba': 'feedback',
         'color.soft-bright-pass': 'bright', 'color.sobel-magnitude': 'gradient', 'sampling.bounded-count': 'count',
-        'sampling.normalize-rgba': type === 'sharpen' || type === 'box-blur' ? 'average' : 'finish',
+        // Glow normalizes inside each prefilter pass; its stage follows the owning pass, not the final resolve.
+        'sampling.normalize-rgba': type === 'sharpen' || type === 'box-blur' ? 'average' : type === 'glow' ? '' : 'finish',
         'sampling.texel-offset.vec2': 'sampling', 'sampling.gaussian-weight.vec2': 'weight', 'coordinates.centered-scale.vec2': 'sampling',
       };
       const shared = sharedStages[node.operator];

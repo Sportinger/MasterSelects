@@ -9,7 +9,7 @@ import { MOTION_IMAGE_WGSL } from './motionImageWgsl';
 import { IMAGE_BAYER_4_WGSL } from './imagePatternSemantics';
 import { emitImageSegmentSortWgsl, IMAGE_SEGMENT_SORT_WGSL } from './imageOperatorSegmentSortWgsl';
 import { emitImageQuadtreeWgsl } from './imageOperatorQuadtreeWgsl';
-import { imageScopeReadsPrimaryInput } from './imageOperatorScopes';
+import { imageSampleScopeNeedsSource, imageScopeReadsPrimaryInput } from './imageOperatorScopes';
 import { IMAGE_MARCHING_SQUARES_TOPOLOGY_WGSL } from './imageOperatorTopologyWgsl';
 
 const hash = (value: string) => {
@@ -55,7 +55,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation === 'derivative-fine' ? `vec2f(dpdxFine(${args[0]}), dpdyFine(${args[0]}))`
       : item.operation === 'derivative-coarse' ? `vec2f(dpdxCoarse(${args[0]}), dpdyCoarse(${args[0]}))`
       : item.operation === 'sample-image'
-        ? `evaluateImageScope${item.value}(sampleImageGraphSource(${args[0]}), ${contextCallArgs(args[0])}${reducerCallArgs(item.value!)})`
+        ? `evaluateImageScope${item.value}(${imageSampleScopeNeedsSource(instructions, item.value!) ? `sampleImageGraphSource(${args[0]})` : 'vec4f(0.0)'}, ${contextCallArgs(args[0])}${reducerCallArgs(item.value!)})`
       : item.operation === 'load-image'
         ? `evaluateImageScope${item.value}(${imageScopeReadsPrimaryInput(instructions, item.value!) ? `loadImageGraphSource(imageGraphPixelCoordinate(${args[0]}, inputResolution))` : 'vec4f(0.0)'}, (vec2f(imageGraphPixelCoordinate(${args[0]}, inputResolution)) + 0.5) / inputResolution, imageGraphPixelCoordinate(${args[0]}, inputResolution)${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''}${reducerCallArgs(item.value!)})`
       : item.operation === 'kernel-sum' ? `imageKernelReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`

@@ -37,11 +37,17 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^(negative-t|weight|t-half)/.test(id) ? 'weight' : 'sampling',
   };
   if (type === 'glow') return {
-    labels: { count: 'Ring & Sample Counts', sampling: 'Ring Sampling', weight: 'Ring Weight', bright: 'Bright Pass', finish: 'Glow Resolve & Alpha' },
-    stage: ({ id }) => /^(rings-|samples-)/.test(id) ? 'count'
-      : /^(ring-progress|gaussian-sigma|ring-weight)/.test(id) ? 'weight'
-        : /^(threshold-|sample-luma|sample-bright|bright-sample)/.test(id) ? 'bright'
-          : /^(uv|resolution|kernel-index|index-components|ring$|angle|direction|ring-radius|width-reciprocal|radius-|offset|sample-uv|sample$)/.test(id) ? 'sampling' : 'finish',
+    labels: { count: 'Ring & Sample Counts', spacing: 'Sample Spacing & Prefilter Size', taps: 'Horizontal Prefilter Taps',
+      bright: 'Bright Pass', horizontal: 'Horizontal Prefilter', vertical: 'Vertical Prefilter', sampling: 'Ring Sampling',
+      weight: 'Ring Weight', finish: 'Glow Resolve & Alpha' },
+    stage: ({ id }) => /^(rings-|samples-|ring-circumference|sample-share$)/.test(id) ? 'count'
+      : /^(ring-step|outer-arc-ratio|spacing-ratio|sample-spacing|prefilter-)/.test(id) ? 'spacing'
+        : /^horizontal-(index|tap|offset|sample-uv|weight$)/.test(id) ? 'taps'
+          : /^(threshold-|sample$|sample-luma|sample-bright|bright-sample|sample-split|sample-alpha|light-sample)/.test(id) ? 'bright'
+            : /^horizontal-/.test(id) ? 'horizontal'
+              : /^(vertical-|prefiltered-cache$)/.test(id) ? 'vertical'
+                : /^(ring-progress|gaussian-sigma|ring-weight|sample-weight)/.test(id) ? 'weight'
+                  : /^(index-components|ring$|ring-stagger|angle|direction|ring-radius|ring-offset|ring-sample)/.test(id) ? 'sampling' : 'finish',
   };
   if (type === 'edge-detect') return {
     labels: { sampling: 'Neighbor Luminance', gradient: 'Sobel Gradient', finish: 'Edge Output' },

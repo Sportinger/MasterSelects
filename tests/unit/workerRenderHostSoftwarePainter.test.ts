@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkerRenderSoftwareFrame } from '../../src/services/render/workerRenderHostRuntimeCommands';
 import { drawWorkerSoftwareLayer } from '../../src/services/render/workerRenderHostSoftwarePainter';
 import { createWorkerSoftwareFeedbackStore } from '../../src/services/render/workerSoftwareFeedbackEffects';
+import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from '../../src/services/render/workerSoftwareGlow';
 
 function baseContext() {
   return {
@@ -675,55 +676,17 @@ describe('worker software painter', () => {
       255, 255, 255, 255,
       0, 0, 0, 255,
     ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        glowAdjustments: [{
-          amount: 0.5,
-          threshold: 0.2,
-          radius: 0.05,
-          softness: 0.8,
-          rings: 1,
-          samplesPerRing: 4,
-        }],
-      },
-    );
+    const adjustment = { amount: 0.5, threshold: 0.2, radius: 0.05, softness: 0.8, rings: 1, samplesPerRing: 4 };
+    const outputPixels = drawLayerWithPixels(inputPixels, 3, 1, { brightness: 0, glowAdjustments: [adjustment] });
 
-    const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
-    const smoothstep = (edge0: number, edge1: number, value: number): number => {
-      const t = clamp01((value - edge0) / (edge1 - edge0));
-      return t * t * (3 - 2 * t);
-    };
-    const sampleAt = (uvX: number): number => {
-      const index = Math.max(0, Math.min(2, Math.round(clamp01(uvX) * 2)));
-      return [0, 1, 0][index] ?? 0;
-    };
-    const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      const color = sampleAt(uvX);
-      const ringWeight = Math.exp(-(1 * 1) / (2 * 1.1 * 1.1));
-      const ringRadius = 1 * 0.05 * (1 / 3) * 10;
-      let glow = 0;
-      let weightTotal = 0;
-      for (let sampleIndex = 0; sampleIndex < 4; sampleIndex += 1) {
-        const angle = sampleIndex * Math.PI * 2 / 4 + 0.5;
-        const sample = sampleAt(uvX + Math.cos(angle) * ringRadius);
-        glow += sample * smoothstep(0.1, 0.3, sample) * ringWeight;
-        weightTotal += ringWeight;
-      }
-      glow += color * smoothstep(0.1, 0.3, color) * 2;
-      weightTotal += 2;
-      return Math.round(clamp01(color + (glow / weightTotal)) * 255);
-    };
-
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      expectedAtX(0), expectedAtX(0), expectedAtX(0), 255,
-      expectedAtX(1), expectedAtX(1), expectedAtX(1), 255,
-      expectedAtX(2), expectedAtX(2), expectedAtX(2), 255,
-    ]);
+    // The shared Glow contract (bright pass, separable prefilter, ring resolve) is checked against the
+    // editable GPU graph in imageGlowGraph.test.ts; here the painter must route every pixel through it.
+    const glow = prepareWorkerSoftwareGlow(inputPixels, 3, 1, adjustment);
+    const expected = [0, 1, 2].flatMap(x => applyWorkerSoftwareGlow(glow, inputPixels, x, 0).map(value => Math.round(value * 255)));
+    expect(outputPixels ? Array.from(outputPixels) : null).toEqual(expected);
+    // Neighborhood: the dark neighbours pick up light from the bright centre pixel.
+    expect(expected[0]).toBeGreaterThan(0);
+    expect(expected[8]).toBeGreaterThan(0);
   });
 
   it('applies acuarela as a worker feedback pass', () => {
