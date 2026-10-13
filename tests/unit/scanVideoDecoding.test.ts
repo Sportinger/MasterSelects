@@ -49,6 +49,39 @@ beforeEach(() => {
 afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); });
 
 describe('scan decoder fallback', () => {
+  it('preserves portrait 4K dimensions and awaits frame persistence before progress', async () => {
+    const sequence: string[] = [];
+    await sampleScanVideoWithTimes(file, { ...options, maxResolution: null,
+      onFrame: async frame => { await Promise.resolve(); sequence.push(frame.file.name); },
+      onProgress: current => { sequence.push(`progress-${current}`); },
+    });
+    expect([canvas.width, canvas.height]).toEqual([2160, 3840]);
+    expect(context.drawImage).toHaveBeenCalledWith(expect.anything(), -1920, -1080, 3840, 2160);
+    expect(sequence).toEqual(['portrait-frame-001.jpg', 'progress-1', 'portrait-frame-002.jpg', 'progress-2']);
+  });
+
+  it('stops extraction and releases the decoder when saving a frame fails', async () => {
+    await expect(sampleScanVideoWithTimes(file, { ...options, maxResolution: null,
+      onFrame: async () => { throw new Error('Disk full'); },
+    })).rejects.toThrow('Disk full');
+    expect(request).toHaveBeenCalledOnce();
+    expect(release).toHaveBeenCalledOnce();
+  });
+
+  it('preserves native source dimensions and streams native frames too', async () => {
+    vi.spyOn(HTMLVideoElement.prototype, 'videoWidth', 'get').mockReturnValue(2160);
+    vi.spyOn(HTMLVideoElement.prototype, 'videoHeight', 'get').mockReturnValue(3840);
+    vi.spyOn(HTMLMediaElement.prototype, 'currentTime', 'set').mockImplementation(function (this: HTMLMediaElement) {
+      queueMicrotask(() => this.dispatchEvent(new Event('seeked')));
+    });
+    context.drawImage.mockImplementation(() => {});
+    const onFrame = vi.fn();
+    await sampleScanVideoWithTimes(file, { ...options, maxResolution: null, onFrame });
+    expect([canvas.width, canvas.height]).toEqual([2160, 3840]);
+    expect(onFrame).toHaveBeenCalledTimes(2);
+    expect(shared.acquire).not.toHaveBeenCalled();
+  });
+
   it.each([0, 90, 180, 270])('extracts browser-unavailable video with %i degree orientation', async (angle) => {
     rotation = angle;
     const progress = vi.fn();

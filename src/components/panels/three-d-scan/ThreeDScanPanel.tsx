@@ -6,8 +6,6 @@ import {
   IconPhoto,
   IconPlayerPause,
   IconPlayerPlay,
-  IconTrash,
-  IconX,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import {
@@ -17,11 +15,7 @@ import {
   probeScanGpuCapability,
   type ScanGpuCapability,
 } from '../../../services/photogrammetry/scanCapability';
-import {
-  analyzeScanImages,
-  mergeScanSourceFiles,
-  type ScanImageAnalysis,
-} from '../../../services/photogrammetry/scanSourceAnalysis';
+import { scanSourceManager } from '../../../services/photogrammetry/scanSourceRuntime';
 import {
   inspectColmapDataset,
   type ColmapDatasetInspection,
@@ -48,11 +42,8 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { resolveMediaFileSourceFile } from '../../../stores/mediaStore/slices/fileManage/sourceResolution';
 import { useTimelineStore } from '../../../stores/timeline';
 import { CameraSolveWorkspace } from './CameraSolveWorkspace';
+import { ScanSourcePhotos } from './ScanSourcePhotos';
 import './ThreeDScanPanel.css';
-
-interface ScanSourceRow extends ScanImageAnalysis {
-  previewUrl: string;
-}
 
 const MIN_RECOMMENDED_PHOTOS = 20;
 const MOBILE_VIDEO_FRAME_COUNT = 24;
@@ -86,10 +77,11 @@ function GaussianSplatWorkspace() {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const datasetInputRef = useRef<HTMLInputElement>(null);
   const splatInputRef = useRef<HTMLInputElement>(null);
-  const previewUrlsRef = useRef(new Set<string>());
   const datasetFilesRef = useRef<File[]>([]);
   const cameraResultOpeningRef = useRef(false);
-  const [sources, setSources] = useState<ScanSourceRow[]>([]);
+  const sourceState = useSyncExternalStore(scanSourceManager.subscribe, scanSourceManager.getSnapshot, scanSourceManager.getSnapshot);
+  const sources = sourceState.photos;
+  const solveSource = sourceState.source;
   const [gpu, setGpu] = useState<ScanGpuCapability>(getCheckingScanGpuCapability);
   const [dataset, setDataset] = useState<ColmapDatasetInspection | null>(null);
   const [preset, setPreset] = useState<BrushTrainingPreset>('preview');
@@ -108,12 +100,11 @@ function GaussianSplatWorkspace() {
   const cameraSolvingActive = cameraJob.isStarting || Boolean(cameraSolving && ![
     'completed', 'cancelled', 'error',
   ].includes(cameraSolving.phase));
-  const [isInspecting, setIsInspecting] = useState(false);
+  const isInspecting = sourceState.busy;
   const [videoProgress, setVideoProgress] = useState<{ current: number; total: number } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [solveSource, setSolveSource] = useState<CameraSolveSourceContext | null>(null);
   const brushTrainingBlocked = gpu.status === 'limited';
 
   useEffect(() => {
@@ -127,62 +118,35 @@ function GaussianSplatWorkspace() {
     return () => { active = false; };
   }, []);
 
-  useEffect(() => () => {
-    previewUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-    previewUrlsRef.current.clear();
-  }, []);
-
-  const appendPhotos = useCallback(async (
-    candidateFiles: File[],
-    sourceContext: CameraSolveSourceContext | null = null,
-  ) => {
-    const merged = mergeScanSourceFiles(sources.map((source) => source.file), candidateFiles);
-    const rejected = [
-      merged.duplicates ? `${merged.duplicates} duplicate${merged.duplicates === 1 ? '' : 's'}` : '',
-      merged.unsupported ? `${merged.unsupported} unsupported file${merged.unsupported === 1 ? '' : 's'}` : '',
-    ].filter(Boolean).join(' and ');
-    setNotice(rejected ? `Skipped ${rejected}.` : null);
-    if (merged.files.length === 0) return;
-
+  const invalidateReconstruction = useCallback(() => {
     setDataset(null);
-    setSolveSource(sources.length === 0 ? sourceContext : null);
     datasetFilesRef.current = [];
     cameraSolvingManager.reset();
     brushTrainingManager.reset();
-    setIsInspecting(true);
-    try {
-      const analyses = await analyzeScanImages(merged.files);
-      const rows = analyses.map((analysis) => {
-        const previewUrl = URL.createObjectURL(analysis.file);
-        previewUrlsRef.current.add(previewUrl);
-        return { ...analysis, previewUrl };
-      });
-      setSources((current) => [...current, ...rows].toSorted((a, b) => a.file.name.localeCompare(b.file.name)));
-    } finally {
-      setIsInspecting(false);
-    }
-  }, [sources]);
-
-  const removeSource = useCallback((key: string) => {
-    setSolveSource(null);
-    setSources((current) => current.filter((source) => {
-      if (source.key !== key) return true;
-      URL.revokeObjectURL(source.previewUrl);
-      previewUrlsRef.current.delete(source.previewUrl);
-      return false;
-    }));
   }, []);
 
-  const clearSources = useCallback(() => {
-    cameraSolvingManager.reset();
-    sources.forEach((source) => {
-      URL.revokeObjectURL(source.previewUrl);
-      previewUrlsRef.current.delete(source.previewUrl);
-    });
-    setSources([]);
-    setSolveSource(null);
+  const sourceProjectRef = useRef(sourceState.projectKey);
+  useEffect(() => {
+    if (sourceProjectRef.current === sourceState.projectKey) return;
+    sourceProjectRef.current = sourceState.projectKey;
+    setDataset(null); datasetFilesRef.current = [];
     setNotice(null);
-  }, [sources]);
+  }, [sourceState.projectKey]);
+
+  const appendPhotos = useCallback(async (candidateFiles: File[]) => {
+    if (cameraSolvingActive || videoProgress || isInspecting) return;
+    invalidateReconstruction();
+    try { setNotice(await scanSourceManager.append(candidateFiles)); }
+    catch (error) { setNotice(describeError(error)); }
+  }, [cameraSolvingActive, videoProgress, isInspecting, invalidateReconstruction]);
+
+  const removeSource = useCallback(async (key?: string) => {
+    if (cameraSolvingActive || videoProgress || isInspecting) return;
+    invalidateReconstruction();
+    setNotice(null);
+    try { await scanSourceManager.remove(key); }
+    catch (error) { setNotice(describeError(error)); }
+  }, [cameraSolvingActive, videoProgress, isInspecting, invalidateReconstruction]);
 
   const selectedTimelineVideo = useMemo(() => {
     const selectedClips = timelineClips.filter((candidate) => selectedClipIds.has(candidate.id));
@@ -211,35 +175,38 @@ function GaussianSplatWorkspace() {
     sourceLabel = file?.name,
     sourceContext: Omit<CameraSolveSourceContext, 'sampleTimes'> | null = null,
   ) => {
-    if (!file) return;
+    if (!file || cameraSolvingActive || videoProgress || isInspecting) return;
     const frameCount = gpu.isMobile ? MOBILE_VIDEO_FRAME_COUNT : DESKTOP_VIDEO_FRAME_COUNT;
+    const signal = scanSourceManager.signal;
+    const group = crypto.randomUUID();
+    invalidateReconstruction();
     setVideoProgress({ current: 0, total: frameCount });
     setNotice(null);
     try {
+      const rangeDuration = range ? Math.max(0.001, range.endTime - range.startTime) : 1;
       const frames = await sampleScanVideoWithTimes(file, {
         frameCount,
-        maxResolution: gpu.isMobile ? 960 : 1_600,
+        maxResolution: null,
         startTime: range?.startTime,
         endTime: range?.endTime,
+        signal,
+        onFrame: async (frame) => {
+          signal.throwIfAborted();
+          await scanSourceManager.append([frame.file], sourceContext ? {
+            ...sourceContext,
+            sampleTimes: [Math.max(0, Math.min(
+              sourceContext.clipDuration ?? rangeDuration,
+              ((frame.sourceTime - (range?.startTime ?? 0)) / rangeDuration) * (sourceContext.clipDuration ?? rangeDuration),
+            ))],
+          } : null, group);
+        },
         onProgress: (current, total) => setVideoProgress({ current, total }),
       });
-      const rangeDuration = range ? Math.max(0.001, range.endTime - range.startTime) : 1;
-      await appendPhotos(frames.map((frame) => frame.file), sourceContext ? {
-        ...sourceContext,
-        sampleTimes: frames.map((frame) => (
-          Math.max(0, Math.min(
-            sourceContext.clipDuration ?? rangeDuration,
-            ((frame.sourceTime - (range?.startTime ?? 0)) / rangeDuration) * (sourceContext.clipDuration ?? rangeDuration),
-          ))
-        )),
-      } : null);
-      setNotice(`Extracted ${frames.length} frames from ${sourceLabel ?? file.name} locally.`);
+      setNotice(`Extracted ${frames.length} original-resolution frames from ${sourceLabel ?? file.name}.`);
     } catch (error) {
-      setNotice(describeError(error));
-    } finally {
-      setVideoProgress(null);
-    }
-  }, [appendPhotos, gpu.isMobile]);
+      if (!signal.aborted) setNotice(describeError(error));
+    } finally { setVideoProgress(null); }
+  }, [gpu.isMobile, cameraSolvingActive, videoProgress, isInspecting, invalidateReconstruction]);
 
   const addSelectedTimelineVideo = useCallback(async () => {
     if (!selectedTimelineVideo) {
@@ -289,6 +256,7 @@ function GaussianSplatWorkspace() {
     const files = sources
       .filter((source) => source.quality !== 'error')
       .map((source) => source.file);
+    if (isInspecting || videoProgress) return;
     if (files.length < 8) {
       setNotice('Camera solving needs at least 8 decodable overlapping photos.');
       return;
@@ -317,15 +285,17 @@ function GaussianSplatWorkspace() {
     } finally {
       cameraResultOpeningRef.current = false;
     }
-  }, [gpu.isMobile, openDatasetFiles, solveSource, sources]);
+  }, [gpu.isMobile, openDatasetFiles, solveSource, sources, isInspecting, videoProgress]);
 
   useEffect(() => {
     if (dataset || !cameraJob.hasResult || cameraResultOpeningRef.current) return;
+    const result = cameraSolvingManager.getResult();
+    if (sourceState.updatedAt && result && result.createdAt < sourceState.updatedAt) return;
     const files = cameraSolvingManager.getResultFiles();
     if (!files) return;
     cameraResultOpeningRef.current = true;
     void openDatasetFiles(files).finally(() => { cameraResultOpeningRef.current = false; });
-  }, [cameraJob.hasResult, dataset, openDatasetFiles]);
+  }, [cameraJob.hasResult, dataset, openDatasetFiles, sourceState.updatedAt]);
 
   const mediaDatasetArchive = useMemo(
     () => mediaFiles.toReversed().find((file) => /\.zip$/i.test(file.name)),
@@ -445,6 +415,10 @@ function GaussianSplatWorkspace() {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setIsDragActive(false);
       }}
       onDrop={handleDrop}
+      onPointerUpCapture={(event) => {
+        const control = (event.target as HTMLElement).closest('button, select');
+        if (control instanceof HTMLElement) control.blur();
+      }}
     >
       <input
         ref={photoInputRef}
@@ -513,14 +487,14 @@ function GaussianSplatWorkspace() {
           )}
           <button
             className="btn btn-sm"
-            disabled={!selectedTimelineVideo}
+            disabled={!selectedTimelineVideo || isInspecting || !!videoProgress || cameraSolvingActive}
             onClick={() => void addSelectedTimelineVideo()}
             title={selectedTimelineVideo ? `Extract frames from ${selectedTimelineVideo.clip.name}` : 'Select a timeline video clip'}
           >
             Timeline
           </button>
-          <button className="btn btn-sm" onClick={() => videoInputRef.current?.click()}>+ Video</button>
-          <button className="btn btn-sm scan-add-button" onClick={() => photoInputRef.current?.click()}>+ Add photos</button>
+          <button className="btn btn-sm" disabled={isInspecting || !!videoProgress || cameraSolvingActive} title="Extract frames at original resolution" onClick={() => videoInputRef.current?.click()}>+ Video</button>
+          <button className="btn btn-sm scan-add-button" disabled={isInspecting || !!videoProgress || cameraSolvingActive} onClick={() => photoInputRef.current?.click()}>+ Add photos</button>
         </div>
       </div>
 
@@ -544,7 +518,7 @@ function GaussianSplatWorkspace() {
               <strong>Drop object photos or a video here</strong>
               <span>Use a slow orbit with the subject still and fully visible</span>
               <div className="scan-empty-actions">
-                <button className="btn btn-sm" disabled={!selectedTimelineVideo} onClick={() => void addSelectedTimelineVideo()}>
+                <button className="btn btn-sm" disabled={!selectedTimelineVideo || isInspecting || !!videoProgress || cameraSolvingActive} onClick={() => void addSelectedTimelineVideo()}>
                   Use timeline clip
                 </button>
                 {mediaDatasetArchive && (
@@ -555,38 +529,9 @@ function GaussianSplatWorkspace() {
             </div>
           ) : (
             <>
-              {sources.length > 0 && (
-                <section className="scan-section">
-                  <div className="scan-section-heading">
-                    <div><strong>Source photos</strong><span>{goodPhotoCount} ready · {sources.length - goodPhotoCount} need attention</span></div>
-                    <button className="scan-icon-button" onClick={clearSources} title="Clear photos"><IconTrash size={15} /></button>
-                  </div>
-                  <div className="scan-photo-list">
-                    {sources.map((source) => (
-                      <div className="scan-photo-row" key={source.key}>
-                        <img src={source.previewUrl} alt="" loading="lazy" decoding="async" />
-                        <div className="scan-photo-name"><strong>{source.file.name}</strong><span>{source.width} × {source.height} · {source.megapixels.toFixed(1)} MP</span></div>
-                        <span className={`scan-quality ${source.quality}`} title={source.note}>
-                          {source.quality === 'good' ? <IconCheck size={14} /> : <IconAlertTriangle size={14} />}
-                        </span>
-                        <button className="scan-icon-button" onClick={() => removeSource(source.key)} title="Remove photo"><IconX size={14} /></button>
-                      </div>
-                    ))}
-                  </div>
-                  <p className="scan-inline-note">
-                    Camera poses are solved locally from overlapping features. Nothing is uploaded.
-                  </p>
-                  {!dataset && (
-                    <button
-                      className="btn btn-export scan-train-button"
-                      disabled={!photoReady || cameraSolvingActive}
-                      onClick={() => void solveCameraPoses()}
-                    >
-                      {cameraSolvingActive ? 'Solving camera poses…' : 'Solve camera poses locally'}
-                    </button>
-                  )}
-                </section>
-              )}
+              <ScanSourcePhotos sources={sources} busy={isInspecting || !!videoProgress || cameraSolvingActive}
+                goodPhotoCount={goodPhotoCount} canSolve={photoReady} showSolve={!dataset}
+                solving={cameraSolvingActive} onRemove={removeSource} onSolve={solveCameraPoses} />
 
               {!dataset && (cameraJob.isStarting || cameraSolving || cameraJob.error) && (
                 <section className={`scan-section scan-training ${cameraSolving?.phase ?? 'loading-runtime'}`}>
@@ -688,6 +633,15 @@ function GaussianSplatWorkspace() {
         </span>
       </footer>
 
+      <div className="scan-inline-note scan-source-persistence" role="status">
+        {sourceState.error ?? (sourceState.busy
+          ? 'Saving or restoring source photos…'
+          : sourceState.persistence === 'project'
+            ? `${sources.length} source photos saved in project · Video extraction: original resolution`
+            : 'Open a project to save source photos · Video extraction: original resolution')}
+        {sourceState.error && <button className="btn btn-sm" disabled={sourceState.busy}
+          onClick={() => void scanSourceManager.retry().catch(error => setNotice(describeError(error)))}>Retry</button>}
+      </div>
       {notice && <div className="scan-notice" role="status">{notice}</div>}
       {(isInspecting || videoProgress) && (
         <div className="scan-busy">

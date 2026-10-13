@@ -37,6 +37,11 @@
 .scan-mode-body { flex: 1 1 auto; min-width: 0; min-height: 0; overflow: hidden; }
 .scan-mode-body[hidden] { display: none; }
 
+.three-d-tools-panel :is(button, select) { -webkit-tap-highlight-color: transparent; }
+.three-d-tools-panel :is(button, select):focus:not(:focus-visible) { outline: none; box-shadow: none; }
+.three-d-tools-panel :is(button, select):focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; }
+.scan-source-persistence { flex: 0 0 auto; padding: 4px 8px; margin: 0; }
+
 .three-d-scan-panel {
   display: flex;
   flex-direction: column;

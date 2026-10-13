@@ -97,3 +97,24 @@ export async function analyzeScanImages(
   await Promise.all(Array.from({ length: Math.min(concurrency, files.length) }, worker));
   return results;
 }
+
+/** Keep full-size source bytes, but never decode every 4K image into the list UI. */
+export async function createScanSourcePreview(analysis: ScanImageAnalysis): Promise<string> {
+  if (analysis.quality === 'error') return '';
+  const scale = Math.min(1, 160 / Math.max(analysis.width, analysis.height));
+  const width = Math.max(1, Math.round(analysis.width * scale));
+  const height = Math.max(1, Math.round(analysis.height * scale));
+  const bitmap = await createImageBitmap(analysis.file, {
+    imageOrientation: 'from-image', resizeWidth: width, resizeHeight: height,
+  });
+  try {
+    const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not create a scan thumbnail.');
+    context.drawImage(bitmap, 0, 0);
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(
+      result => result ? resolve(result) : reject(new Error('Could not encode a scan thumbnail.')), 'image/jpeg', 0.8,
+    ));
+    return URL.createObjectURL(blob);
+  } finally { bitmap.close(); }
+}

@@ -51,7 +51,7 @@ export async function sampleScanSourceFrames(
         }
         const rotation = ((surface.rotation % 360) + 360) % 360;
         if (![0, 90, 180, 270].includes(rotation)) throw new Error('Unsupported scan video rotation.');
-        const scale = Math.min(1, options.maxResolution / Math.max(width, height));
+        const scale = options.maxResolution === null ? 1 : Math.min(1, options.maxResolution / Math.max(width, height));
         canvas.width = Math.max(1, Math.round(width * scale));
         canvas.height = Math.max(1, Math.round(height * scale));
         const sideways = rotation === 90 || rotation === 270;
@@ -75,6 +75,8 @@ export async function sampleScanSourceFrames(
       const index = frames.length;
       frames.push({ file: new File([blob], `${baseName}-frame-${String(index + 1).padStart(3, '0')}.jpg`,
         { type: 'image/jpeg', lastModified: file.lastModified + index + 1 }), sourceTime });
+      await options.onFrame?.(frames[frames.length - 1]);
+      options.signal?.throwIfAborted();
       options.onProgress?.(frames.length, times.length);
     }
     return frames;

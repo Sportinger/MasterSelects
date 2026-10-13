@@ -32,6 +32,10 @@ AI Studio offers **GPT Image 2.5 Flare and Sunburst** through Kie.ai for generat
 | **3D** | Combine footage, models, lights, cameras, Gaussian splats, and particle effects. |
 | **AI** | Ask the in-app agent to edit the timeline or generate media. Nodes and cables appear beside Preview as individual AI instructions arrive. AI Studio keeps Chat and Generation free of a floating credit banner. |
 
+Gaussian Splat video extraction preserves source resolution and saves each completed
+frame in the open project before camera solving. Source photos restore automatically
+after reload; the panel reports save failures and memory-only sessions.
+
 [3D Scan](docs/Features/3D-Scan.md) extracts frames from H.265 phone videos through the shared HEVC decoder when browser playback cannot supply images, preserving portrait rotation and source timestamps.
 
 Waveform previews, pyramid analysis, and cache unpacking run in dedicated workers. Large timelines reuse saved source waveforms after refresh, share results across split clips, and limit background analysis updates. Decoding and waveform generation do not hold the project save barrier. See [Audio Intelligence](docs/Features/Audio-Intelligence.md).

@@ -4,13 +4,16 @@ const log = Logger.create('ScanVideo');
 
 export interface ScanVideoSampleOptions {
   frameCount: number;
-  maxResolution: number;
+  /** null preserves the decoded source dimensions. */
+  maxResolution: number | null;
   startTime?: number;
   endTime?: number;
   frameRate?: number;
   jpegQuality?: number;
   signal?: AbortSignal;
   onProgress?: (current: number, total: number) => void;
+  /** Await persistence before requesting another frame or reporting progress. */
+  onFrame?: (frame: SampledScanVideoFrame) => void | Promise<void>;
 }
 
 export interface SampledScanVideoFrame {
@@ -123,7 +126,7 @@ export async function sampleScanVideoWithTimes(
 ): Promise<SampledScanVideoFrame[]> {
   options.signal?.throwIfAborted();
   if (!isSupportedScanVideo(file)) throw new Error('Choose a browser-decodable video file.');
-  if (!Number.isFinite(options.maxResolution) || options.maxResolution < 1) {
+  if (options.maxResolution !== null && (!Number.isFinite(options.maxResolution) || options.maxResolution < 1)) {
     throw new Error('Choose a positive frame resolution.');
   }
   const sourceUrl = URL.createObjectURL(file);
@@ -160,7 +163,7 @@ export async function sampleScanVideoWithTimes(
     const sourceWidth = video.videoWidth;
     const sourceHeight = video.videoHeight;
     if (sourceWidth <= 0 || sourceHeight <= 0) throw new Error('This video does not expose a usable frame size.');
-    const scale = Math.min(1, options.maxResolution / Math.max(sourceWidth, sourceHeight));
+    const scale = options.maxResolution === null ? 1 : Math.min(1, options.maxResolution / Math.max(sourceWidth, sourceHeight));
     canvas.width = Math.max(1, Math.round(sourceWidth * scale));
     canvas.height = Math.max(1, Math.round(sourceHeight * scale));
     const context = canvas.getContext('2d', { alpha: false });
@@ -172,6 +175,7 @@ export async function sampleScanVideoWithTimes(
       await seekVideo(video, times[index], options.signal);
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       const blob = await canvasToJpeg(canvas, options.jpegQuality ?? 0.9);
+      options.signal?.throwIfAborted();
       frames.push({
         file: new File(
           [blob],
@@ -180,6 +184,8 @@ export async function sampleScanVideoWithTimes(
         ),
         sourceTime: times[index],
       });
+      await options.onFrame?.(frames[frames.length - 1]);
+      options.signal?.throwIfAborted();
       options.onProgress?.(index + 1, times.length);
     }
     return frames;

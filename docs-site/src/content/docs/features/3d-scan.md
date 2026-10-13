@@ -20,11 +20,24 @@ stages:
 ## Sources
 
 The panel follows the compact header, row density, empty-state, and status-bar
-language of the Media Panel. Sources remain browser-local runtime objects and
-are not written into durable project state.
+language of the Media Panel. The Gaussian Splat workspace retains source photos
+in the open project immediately, before camera solving. Each completed video
+frame is saved before extraction advances. Reloading or reopening that project
+restores the source list automatically, including unfinished capture sets.
+Original file bytes are required project artifacts under the logical
+`RAW/scan-sources/` namespace, with `manifest.json` recording names, order, and
+source timing. They are included in repository persistence rather than kept as
+reproducible cache. Runtime Files and object URLs remain outside durable stores.
+Without an open project, the panel explicitly reports that photos are memory-only.
+Failed writes remain visible with a Retry action; they are never reported as saved.
+Removing or clearing photos updates the saved list and retires only its generated
+project copies, leaving original input media untouched.
 
 - Add JPEG, PNG, WebP, AVIF, HEIC, or HEIF images with the picker or drag/drop.
-- Drop a browser-decodable video or use **+ Video** to extract frames locally.
+- Drop a video or use **+ Video** to extract frames locally at original decoded
+  resolution in Gaussian Splat (including portrait orientation). There is no
+  1600-pixel source cap. The small list thumbnails do not change the saved images.
+  Existing reduced images must be extracted again to recover original detail.
 - Select a video clip in the Timeline and press **Timeline**. The source trim
   represented by the clip's in/out points is respected.
 - Camera Solve exposes separate **Samples** and **Resolution** controls. Sample
@@ -47,7 +60,9 @@ portrait phone recordings retain their orientation and aspect ratio. The fallbac
 keeps one source lease for the job, copies each borrowed frame before encoding,
 and records its actual source timestamp for camera solving. Cancellation releases
 the lease; decoding and encoding failures remain visible in the scan panel.
-No video or extracted photo is uploaded.
+No video or extracted photo is uploaded. Camera matching still uses reduced
+working images; Gaussian Splat training retains its separately selected training
+resolution. Original extraction does not override those compute budgets.
 
 ## Camera Solve and Poses
 
