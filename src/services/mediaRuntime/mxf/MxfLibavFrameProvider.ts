@@ -12,8 +12,6 @@ import {
   type CodecPacketReader,
 } from '../codec/CodecFrameProviderBase';
 import type {
-  LibavDecodeWorkerRequest,
-  LibavDecodeWorkerResponse,
   LibavWorkerCodec,
 } from '../../../workers/libavDecodeWorker';
 import { MxfPacketSource, type MxfPacket } from './MxfPacketSource';
@@ -33,7 +31,8 @@ const CODEC_FOR_ID: Record<MxfLibavIntraCodecId, LibavWorkerCodec> = {
   'mxf:mpeg2-intra': 'mpeg2video',
 };
 
-export type LibavOpenRequest = Extract<LibavDecodeWorkerRequest, { type: 'open' }>;
+import { LibavWorker, type LibavOpenRequest } from '../codec/LibavWorker';
+export { LibavWorker, type LibavOpenRequest } from '../codec/LibavWorker';
 
 /** Worker open parameters derived from the MXF picture descriptor. */
 export function createLibavOpenRequest(
@@ -66,131 +65,6 @@ export function planLibavWorkerCount(policy: DecodeSessionPolicy, width: number,
   return Math.max(1, Math.min(wanted, cores - 1));
 }
 
-export class LibavWorker {
-  private readonly worker: Worker;
-  private readonly pending = new Map<number, {
-    resolve: (frame: VideoFrame) => void;
-    reject: (error: Error) => void;
-  }>();
-  private opened: Promise<void>;
-  private terminated = false;
-  /** Long-GOP stream state (feed/drain). */
-  private unackedFeeds = 0;
-  private readonly feedWaiters: (() => void)[] = [];
-  private readonly drainWaiters = new Map<number, () => void>();
-  onStreamFrame: ((frame: VideoFrame) => void) | null = null;
-  onStreamError: ((error: Error) => void) | null = null;
-
-  constructor(open: LibavOpenRequest) {
-    this.worker = new Worker(new URL('../../../workers/libavDecodeWorker.ts', import.meta.url), {
-      type: 'module',
-      name: 'libav-decode',
-    });
-    let resolveOpen!: () => void;
-    let rejectOpen!: (error: Error) => void;
-    this.opened = new Promise<void>((resolve, reject) => { resolveOpen = resolve; rejectOpen = reject; });
-    this.worker.onmessage = (event: MessageEvent<LibavDecodeWorkerResponse>) => {
-      const message = event.data;
-      if (message.type === 'opened') {
-        resolveOpen();
-      } else if (message.type === 'stream-frame') {
-        if (this.onStreamFrame) this.onStreamFrame(message.frame);
-        else closeVideoFrame(message.frame);
-      } else if (message.type === 'fed') {
-        this.unackedFeeds = Math.max(0, this.unackedFeeds - 1);
-        this.feedWaiters.shift()?.();
-      } else if (message.type === 'drained') {
-        this.drainWaiters.get(message.id)?.();
-        this.drainWaiters.delete(message.id);
-      } else if (message.type === 'frame') {
-        const entry = this.pending.get(message.id);
-        if (!entry) { closeVideoFrame(message.frame); return; }
-        this.pending.delete(message.id);
-        entry.resolve(message.frame);
-      } else if (message.id === null) {
-        const error = new Error(message.error);
-        rejectOpen(error);
-        this.onStreamError?.(error);
-      } else {
-        const entry = this.pending.get(message.id);
-        this.pending.delete(message.id);
-        entry?.reject(new Error(message.error));
-      }
-    };
-    this.worker.onerror = (event) => {
-      const error = new Error(`libavcodec worker error: ${event.message}`);
-      rejectOpen(error);
-      for (const entry of this.pending.values()) entry.reject(error);
-      this.pending.clear();
-    };
-    this.worker.postMessage(open);
-  }
-
-  get queueSize(): number {
-    return this.pending.size + this.unackedFeeds;
-  }
-
-  feed(packet: MxfPacket): void {
-    if (this.terminated) return;
-    const copy = packet.data.slice();
-    const request: LibavDecodeWorkerRequest = {
-      type: 'feed',
-      packet: copy.buffer as ArrayBuffer,
-      timestampUs: packet.microsecondTimestamp,
-    };
-    this.unackedFeeds += 1;
-    this.worker.postMessage(request, [request.packet]);
-  }
-
-  waitForFeedAck(): Promise<void> {
-    if (this.unackedFeeds === 0) return Promise.resolve();
-    return new Promise((resolve) => this.feedWaiters.push(resolve));
-  }
-
-  drain(id: number): Promise<void> {
-    if (this.terminated) return Promise.resolve();
-    return new Promise((resolve) => {
-      this.drainWaiters.set(id, resolve);
-      this.worker.postMessage({ type: 'drain', id } satisfies LibavDecodeWorkerRequest);
-    });
-  }
-
-  resetStream(): void {
-    if (!this.terminated) this.worker.postMessage({ type: 'reset' } satisfies LibavDecodeWorkerRequest);
-  }
-
-  ready(): Promise<void> {
-    return this.opened;
-  }
-
-  decode(id: number, packet: MxfPacket): Promise<VideoFrame> {
-    if (this.terminated) return Promise.reject(new Error('libavcodec worker terminated'));
-    const copy = packet.data.slice();
-    const request: LibavDecodeWorkerRequest = {
-      type: 'decode',
-      id,
-      packet: copy.buffer as ArrayBuffer,
-      timestampUs: packet.microsecondTimestamp,
-      durationUs: packet.microsecondDuration,
-    };
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.worker.postMessage(request, [request.packet]);
-    });
-  }
-
-  terminate(): void {
-    if (this.terminated) return;
-    this.terminated = true;
-    const error = new Error('libavcodec worker terminated');
-    for (const entry of this.pending.values()) entry.reject(error);
-    this.pending.clear();
-    for (const waiter of this.feedWaiters.splice(0)) waiter();
-    for (const waiter of this.drainWaiters.values()) waiter();
-    this.drainWaiters.clear();
-    this.worker.terminate();
-  }
-}
 
 export class MxfLibavFrameProvider extends CodecFrameProviderBase<MxfPacket, MxfLibavFrameProviderOptions> {
   readonly backend = 'mxf-libav' as const;

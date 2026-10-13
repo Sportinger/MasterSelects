@@ -1,3 +1,4 @@
+import { createHevcFrameProvider, type HevcFrameProvider } from '../hevc/HevcFrameProvider';
 import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, UrlSource, VideoSampleSink } from 'mediabunny';
 import type { VideoSample } from 'mediabunny';
 import { surfaceFrameIndex, type SurfaceFrameStamp } from '../../planarTracking/surfaceFrameReader';
@@ -13,23 +14,25 @@ export interface SourceFrameSurface extends SurfaceFrameStamp {
 export async function openSourceFrameReader(asset: SourceFrameAsset, signal: AbortSignal) {
   const input = new Input({ formats: ALL_FORMATS, source: asset.file?.size
     ? new BlobSource(asset.file, { maxCacheSize: 16 * 1024 * 1024 }) : new UrlSource(asset.url) });
+  let hevc: HevcFrameProvider | null = null;
   let cursor: AsyncIterableIterator<VideoSample> | undefined;
   let lastTime = -Infinity;
   let closed = false;
   const stop = async () => {
+    hevc?.pause();
     const previous = cursor; cursor = undefined; lastTime = -Infinity;
     await previous?.return?.();
   };
   const close = () => {
     if (closed) return;
-    closed = true; void stop().catch(() => undefined); input.dispose();
+    closed = true; void hevc?.destroyAsync(); void stop().catch(() => undefined); input.dispose();
     signal.removeEventListener('abort', close);
   };
   signal.addEventListener('abort', close, { once: true });
   try {
     signal.throwIfAborted();
     const track = await input.getPrimaryVideoTrack();
-    if (!track || !await track.canDecode()) throw new Error('Source video cannot be decoded.');
+    if (!track || (track.codec !== 'hevc' && !await track.canDecode())) throw new Error('Source video cannot be decoded.');
     const packets = new EncodedPacketSink(track);
     const stamps: SurfaceFrameStamp[] = [];
     for await (const packet of packets.packets(undefined, undefined, { metadataOnly: true })) {
@@ -41,6 +44,26 @@ export async function openSourceFrameReader(asset: SourceFrameAsset, signal: Abo
     }
     const frames = stamps.toSorted((a, b) => a.time - b.time).filter((s, i, all) => i === 0 || s.time > all[i - 1].time);
     if (!frames.length) throw new Error('Source has no timestamped video frames.');
+    if (track.codec === 'hevc') {
+      const file = asset.file ?? new File([await (await fetch(asset.url, { signal })).blob()], `${asset.id}.mp4`);
+      hevc = await createHevcFrameProvider({ sourceId: `source-frames:${asset.id}`, file, policy: 'background' });
+      if (!hevc || closed) { void hevc?.destroyAsync(); throw new Error('HEVC source decoder is unavailable.'); }
+      return {
+        frames, rotation: track.rotation, width: track.displayWidth, height: track.displayHeight, close, idle: stop,
+        async *read(times: readonly number[]): AsyncGenerator<SourceFrameSurface> {
+          for (const time of times) {
+            signal.throwIfAborted();
+            const stamp = frames[Math.max(0, surfaceFrameIndex(frames, time))];
+            await hevc!.seekExact(stamp.time);
+            signal.throwIfAborted();
+            const frame = hevc!.getCurrentFrame()?.clone();
+            if (!frame) throw new Error(`No HEVC source frame at ${stamp.time}.`);
+            try { yield { frame, ...stamp, rotation: track.rotation, width: track.displayWidth, height: track.displayHeight }; }
+            finally { frame.close(); }
+          }
+        },
+      };
+    }
     const sink = new VideoSampleSink(track);
     return {
       frames, rotation: track.rotation, width: track.displayWidth, height: track.displayHeight, close, idle: stop,

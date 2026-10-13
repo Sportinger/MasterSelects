@@ -82,7 +82,7 @@ export const createMediaThumbnailActions: MediaSliceCreator<Pick<FileManageActio
         const sourceFile = !thumbnailUrl ? await resolveMediaFileSourceFile(mediaFile) : null;
 
         if (!thumbnailUrl && sourceFile) {
-          const generatedThumbnail = await createThumbnail(sourceFile, mediaFile.type);
+          const generatedThumbnail = await createThumbnail(sourceFile, mediaFile.type, mediaFile);
           thumbnailUrl = options.force
             ? await createManagedThumbnailUrl(mediaFile.id, generatedThumbnail)
             : await handleThumbnailDedup(mediaFile.fileHash, generatedThumbnail, mediaFile.id);

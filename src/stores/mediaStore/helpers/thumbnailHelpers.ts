@@ -1,3 +1,4 @@
+import { drawCodecFrame } from '../../../services/mediaRuntime/codec/drawCodecFrame';
 import { getRenderableImageBlob } from '../../../services/rawImage/rawImageDecode';
 // Thumbnail creation and deduplication
 
@@ -23,7 +24,7 @@ const isBlobUrl = (value?: string): value is string => typeof value === 'string'
 export async function createThumbnail(
   file: File,
   type: 'video' | 'image',
-  videoMetadata?: { videoCodecId?: string; duration?: number },
+  videoMetadata?: { videoCodecId?: string; duration?: number; rotation?: number },
 ): Promise<string | undefined> {
   return new Promise((resolve, reject) => {
     if (type === 'image') {
@@ -47,6 +48,7 @@ export async function createThumbnail(
                 frame,
                 frame.displayWidth || frame.codedWidth,
                 frame.displayHeight || frame.codedHeight,
+                videoMetadata?.rotation ?? 0,
               );
             } finally {
               frame.close();
@@ -222,8 +224,10 @@ async function drawThumbnailFromSource(
   source: CanvasImageSource,
   sourceWidth: number,
   sourceHeight: number,
+  rotation = 0,
 ): Promise<string | undefined> {
-  const size = getThumbnailCanvasSize(sourceWidth, sourceHeight);
+  const swapsAxes = rotation === 90 || rotation === 270;
+  const size = getThumbnailCanvasSize(swapsAxes ? sourceHeight : sourceWidth, swapsAxes ? sourceWidth : sourceHeight);
   const canvas = document.createElement('canvas');
   canvas.width = size.width;
   canvas.height = size.height;
@@ -233,7 +237,7 @@ async function drawThumbnailFromSource(
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'medium';
-  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  drawCodecFrame(ctx, source, canvas.width, canvas.height, rotation);
   return canvasToThumbnailUrl(canvas);
 }
 

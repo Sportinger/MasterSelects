@@ -11,6 +11,7 @@ import { getMxfUnsupportedReason, isMxfCodecId } from '../mediaMetadata/mxf/mxfM
 export type { CodecProviderBackend };
 
 export type RuntimeFrameProviderPlan =
+  | { backend: 'hevc'; codecId: string }
   | { backend: 'turbores'; fourCC: TurboResProResFourCC }
   | { backend: 'hap'; fourCC: HapVideoFourCC }
   | { backend: 'mxf-avc'; codecId: MxfAvcCodecId }
@@ -18,7 +19,7 @@ export type RuntimeFrameProviderPlan =
   | { backend: 'default'; reason: 'not-prores' | 'turbores-disabled' }
   | { backend: 'unsupported'; reason: 'prores-raw' | 'mxf-unsupported-essence' | 'mxf-decoder-unavailable' };
 
-const CODEC_PROVIDER_BACKENDS: readonly CodecProviderBackend[] = ['turbores', 'hap', 'mxf-avc', 'mxf-libav'];
+const CODEC_PROVIDER_BACKENDS: readonly CodecProviderBackend[] = ['turbores', 'hap', 'mxf-avc', 'mxf-libav', 'hevc'];
 
 export type MxfAvcCodecId = 'mxf:avc-intra' | 'mxf:avc-lgop';
 /** Intra essence decoded by the LGPL libavcodec WASM worker pool. */
@@ -50,6 +51,10 @@ export function selectRuntimeFrameProviderPlan(options: {
   videoCodecId: string | undefined;
   turboResEnabled: boolean;
 }): RuntimeFrameProviderPlan {
+  // HEVC prüft WebCodecs beim Öffnen; fehlende/defekte Decoder nutzen WASM.
+  if (/^(?:hvc1|hev1)(?:\.|$)|^hevc$/i.test(options.videoCodecId ?? '')) {
+    return { backend: 'hevc', codecId: options.videoCodecId! };
+  }
   // HAP has no browser-native fallback decoder, so the HAP provider is the
   // only playback path and is not feature-gated.
   // Namespaced MXF essence ids never fall back to the browser decoder: HTMLVideoElement

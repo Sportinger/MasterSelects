@@ -1,3 +1,4 @@
+import { drawCodecFrame } from '../services/mediaRuntime/codec/drawCodecFrame';
 interface InitRequest {
   type: 'init';
   width: number;
@@ -10,6 +11,7 @@ interface EncodeRequest {
   requestId: number;
   frameIndex: number;
   frame: VideoFrame;
+  rotation?: number;
 }
 
 type WorkerRequest = InitRequest | EncodeRequest;
@@ -85,7 +87,7 @@ workerScope.onmessage = async (event) => {
 
   try {
     const drawStart = performance.now();
-    ctx.drawImage(message.frame, 0, 0, canvas.width, canvas.height);
+    drawCodecFrame(ctx, message.frame, canvas.width, canvas.height, message.rotation ?? 0);
     const drawMs = performance.now() - drawStart;
     message.frame.close();
 

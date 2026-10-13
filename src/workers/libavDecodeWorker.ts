@@ -5,12 +5,14 @@
 //  - `feed`/`drain`/`reset`: stateful long-GOP stream; frames come out in display
 //    order stamped with the packet timestamps (MPEG-2 Long GOP).
 
-export type LibavWorkerCodec = 'dnxhd' | 'mpeg2video';
+export type LibavWorkerCodec = 'dnxhd' | 'mpeg2video' | 'hevc';
 
 export type LibavDecodeWorkerRequest =
   | {
       type: 'open';
       codec: LibavWorkerCodec;
+      description?: Uint8Array;
+      colorSpace?: VideoColorSpaceInit;
       /** Emit 8-bit I420/I422 even for 10-bit essence (Canvas2D consumers). */
       eightBit: boolean;
       visibleRect: { x: number; y: number; width: number; height: number } | null;
@@ -87,11 +89,14 @@ async function loadModule(): Promise<LibavModule> {
   return module;
 }
 
-function openDecoder(m: LibavModule, codec: LibavWorkerCodec): number {
+function openDecoder(m: LibavModule, codec: LibavWorkerCodec, description?: Uint8Array): number {
   const name = new TextEncoder().encode(`${codec}\0`);
   const namePtr = m._dec_malloc(name.length);
   m.HEAPU8.set(name, namePtr);
-  const handle = m._dec_open(namePtr, 0, 0, 1);
+  const extraPtr = description?.length ? m._dec_malloc(description.length) : 0;
+  if (extraPtr && description) m.HEAPU8.set(description, extraPtr);
+  const handle = m._dec_open(namePtr, extraPtr, description?.length ?? 0, 1);
+  if (extraPtr) m._dec_free(extraPtr);
   m._dec_free(namePtr);
   if (!handle) throw new Error(`libavcodec could not open ${codec}`);
   return handle;
@@ -176,7 +181,7 @@ function buildFrame(m: LibavModule, timestampUs: number, durationUs: number): Vi
     layout,
     timestamp: timestampUs,
     ...(durationUs > 0 ? { duration: durationUs } : {}),
-    colorSpace: {
+    colorSpace: options!.colorSpace ?? {
       primaries: options!.colorMatrix === 'bt709' ? 'bt709' : 'smpte170m',
       transfer: options!.colorMatrix === 'bt709' ? 'bt709' : 'smpte170m',
       matrix: options!.colorMatrix,
@@ -240,7 +245,7 @@ self.onmessage = async (event: MessageEvent<LibavDecodeWorkerRequest>) => {
       const m = await loadModule();
       if (decoder) m._dec_close(decoder);
       options = request;
-      decoder = openDecoder(m, request.codec);
+      decoder = openDecoder(m, request.codec, request.description);
       post({ type: 'opened' });
     } else if (request.type === 'decode') {
       if (!module || !decoder) throw new Error('libavcodec decoder is not open');

@@ -105,6 +105,7 @@ export async function processImport(params: ImportParams): Promise<ImportResult>
   const thumbnailPromise = generateThumbnail && type === 'video'
     ? infoPromise.then((metadata) => createThumbnail(file, 'video', {
         videoCodecId: 'videoCodecId' in metadata ? metadata.videoCodecId : undefined,
+        rotation: 'rotation' in metadata ? metadata.rotation : undefined,
         duration: metadata.duration,
       }))
     : generateThumbnail && type === 'image'

@@ -1,3 +1,4 @@
+import { drawCodecFrame } from '../../../services/mediaRuntime/codec/drawCodecFrame';
 import {
   forwardRef,
   useEffect,
@@ -48,6 +49,8 @@ export const CodecSourceMonitorCanvas = forwardRef<
   CodecSourceMonitorCanvasProps
 >(function CodecSourceMonitorCanvas(props, ref) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const hasSourceAudio = /^hvc1|^hev1|^hevc/i.test(props.videoCodecId) && props.file.hasAudio !== false;
   const providerRef = useRef<RuntimeFrameProvider | null>(null);
   const currentTimeRef = useRef(0);
   const playbackEndRef = useRef(0);
@@ -58,6 +61,7 @@ export const CodecSourceMonitorCanvas = forwardRef<
     onPlayingChange: props.onPlayingChange,
     onTimeChange: props.onTimeChange,
   });
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useLayoutEffect(() => {
@@ -74,7 +78,8 @@ export const CodecSourceMonitorCanvas = forwardRef<
     const context = canvas.getContext('2d');
     if (!context) return;
     try {
-      context.drawImage(frame, 0, 0, canvas.width, canvas.height);
+      drawCodecFrame(context, frame, canvas.width, canvas.height, providerRef.current?.getSourceRotationDegrees?.() ?? 0);
+      setLoading(false);
     } catch (drawError) {
       setError(drawError instanceof Error ? drawError.message : String(drawError));
     }
@@ -82,6 +87,7 @@ export const CodecSourceMonitorCanvas = forwardRef<
 
   const pause = () => {
     playingRef.current = false;
+    audioRef.current?.pause();
     providerRef.current?.pause();
     if (frameRequestRef.current) {
       cancelAnimationFrame(frameRequestRef.current);
@@ -93,7 +99,10 @@ export const CodecSourceMonitorCanvas = forwardRef<
   const tick = (clockMs: number) => {
     if (!playingRef.current) return;
     const anchor = playbackAnchorRef.current;
-    const nextTime = anchor.sourceTime + Math.max(0, clockMs - anchor.clockMs) / 1000;
+    const audio = audioRef.current;
+    const nextTime = audio && !audio.paused && audio.readyState >= 2
+      ? audio.currentTime
+      : anchor.sourceTime + Math.max(0, clockMs - anchor.clockMs) / 1000;
     if (nextTime >= playbackEndRef.current) {
       currentTimeRef.current = playbackEndRef.current;
       providerRef.current?.seek(playbackEndRef.current);
@@ -113,6 +122,7 @@ export const CodecSourceMonitorCanvas = forwardRef<
       currentTimeRef.current = safeTime;
       playbackAnchorRef.current = { clockMs: performance.now(), sourceTime: safeTime };
       providerRef.current?.scrubSeek?.(safeTime);
+      if (audioRef.current) audioRef.current.currentTime = safeTime;
     },
     play(startSeconds, endSeconds) {
       const safeStart = Math.max(0, startSeconds);
@@ -129,6 +139,10 @@ export const CodecSourceMonitorCanvas = forwardRef<
       };
       if (!playingRef.current) {
         playingRef.current = true;
+        if (audioRef.current) {
+          audioRef.current.currentTime = currentTimeRef.current;
+          void audioRef.current.play().catch(() => setError('Die Audio-Wiedergabe konnte nicht gestartet werden.'));
+        }
         callbacksRef.current.onPlayingChange(true);
         frameRequestRef.current = requestAnimationFrame(tick);
       }
@@ -144,7 +158,7 @@ export const CodecSourceMonitorCanvas = forwardRef<
       canvasRef.current.height = size.height;
     }
     queueMicrotask(() => {
-      if (!disposed) setError(null);
+      if (!disposed) { setError(null); setLoading(true); }
     });
     const ownerId = `source-monitor:${props.file.id}`;
     const source = bindSourceRuntimeForOwner({
@@ -183,7 +197,7 @@ export const CodecSourceMonitorCanvas = forwardRef<
       }
       providerRef.current = provider;
       provider.seek(currentTimeRef.current);
-    });
+    }).catch(err => { if (!disposed) setError(err instanceof Error ? err.message : String(err)); });
 
     return () => {
       disposed = true;
@@ -191,10 +205,17 @@ export const CodecSourceMonitorCanvas = forwardRef<
       providerRef.current = null;
       releaseClipSourceRuntime({ id: ownerId, source });
     };
-  }, [props.file, props.sourceFile, props.videoCodecId]);
+  }, [props.file.id, props.sourceFile, props.videoCodecId]);
 
   return (
     <>
+      {hasSourceAudio && <audio ref={audioRef} src={props.file.audioProxyUrl || props.file.url} preload="auto"
+        onLoadedMetadata={() => {
+          const audio = audioRef.current;
+          if (!audio) return;
+          audio.currentTime = currentTimeRef.current;
+          if (playingRef.current) void audio.play().catch(() => setError('Die Audio-Wiedergabe konnte nicht gestartet werden.'));
+        }} />}
       <canvas
         ref={canvasRef}
         className="source-monitor-video source-monitor-codec-canvas"
@@ -202,6 +223,7 @@ export const CodecSourceMonitorCanvas = forwardRef<
         onClick={props.onTogglePlayback}
         aria-label={`Source preview: ${props.file.name}`}
       />
+      {loading && !error && <div className="source-monitor-provider-error" role="status">Video wird geladen …</div>}
       {error && <div className="source-monitor-provider-error" role="status">{error}</div>}
     </>
   );

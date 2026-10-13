@@ -1,3 +1,4 @@
+import { providerFramePresentation } from './providerFramePresentation';
 import type { Layer, LayerRenderData } from '../../core/types';
 import { flags } from '../../featureFlags';
 import { hasParticleRenderEffect, splitLayerEffects } from '../layerEffectStack';
@@ -231,12 +232,10 @@ export class WebCodecsLayerCollector {
         this.status.setWebCodecsInfo(frameProvider?.getDebugInfo?.() ?? undefined);
         this.status.markHasVideo();
         return {
-          layer,
+          ...providerFramePresentation(layer, runtimeFrame, runtimeProvider ?? frameProvider),
           isVideo: true,
           externalTexture: extTex,
           textureView: null,
-          sourceWidth: runtimeFrame.displayWidth,
-          sourceHeight: runtimeFrame.displayHeight,
           displayedMediaTime,
           targetMediaTime,
           previewPath: 'webcodecs',

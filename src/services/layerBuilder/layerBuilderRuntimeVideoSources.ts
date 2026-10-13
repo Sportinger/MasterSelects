@@ -107,9 +107,13 @@ export function resolveRuntimeLayerBuilderVideoSource(params: {
     return null;
   }
 
+  const frame = presentedVisualProvider?.getCurrentFrame();
+  const rotation = presentedVisualProvider?.getSourceRotationDegrees?.() ?? 0;
+  const swapsAxes = rotation === 90 || rotation === 270;
   return {
     source: {
       type: 'video',
+      videoRotation: presentedVisualProvider?.getSourceRotationDegrees?.() ?? 0,
       videoElement: htmlVideoElement,
       mediaTime: targetTime,
       webCodecsPlayer: presentedVisualProvider,
@@ -125,8 +129,8 @@ export function resolveRuntimeLayerBuilderVideoSource(params: {
         : {}),
     },
     intrinsicSize: {
-      width: htmlVideoElement?.videoWidth,
-      height: htmlVideoElement?.videoHeight,
+      width: htmlVideoElement?.videoWidth || (frame ? (swapsAxes ? frame.displayHeight : frame.displayWidth) : undefined),
+      height: htmlVideoElement?.videoHeight || (frame ? (swapsAxes ? frame.displayWidth : frame.displayHeight) : undefined),
     },
   };
 }

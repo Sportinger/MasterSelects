@@ -1,3 +1,4 @@
+import { createHevcFrameProvider } from '../hevc/HevcFrameProvider';
 // Backend descriptors for codec-specific frame providers. Playback creation,
 // resource admission, and export reporting read from here instead of branching
 // on backend names, so a new backend is one entry plus its provider class.
@@ -222,7 +223,25 @@ const mxfLibavDescriptor: CodecProviderDescriptor = {
   decodeOneFrame: (file, plan, timeSeconds) => decodeOneFrameWithProvider(mxfLibavDescriptor, file, plan, timeSeconds),
 };
 
+const hevcDescriptor: CodecProviderDescriptor = {
+  backend: 'hevc', logName: 'HEVC',
+  resourceLabel: 'HEVC adaptive frame provider', exportResourceLabel: 'HEVC export frame provider',
+  describePlan: plan => ({ codecId: plan.backend === 'hevc' ? plan.codecId : undefined }),
+  estimateHeapBytes: runtime => {
+    const width = runtime.metadata.codedWidth ?? runtime.metadata.width ?? 1920;
+    const height = runtime.metadata.codedHeight ?? runtime.metadata.height ?? 1080;
+    return 64 * 1024 * 1024 + width * height * 3 * 16;
+  },
+  resourceTags: (_runtime, policy) => ['runtime-playback', policy, 'hevc'],
+  create: params => createHevcFrameProvider({
+    sourceId: params.sourceId, file: params.file, policy: params.policy,
+    eightBit: params.outputProfile === 'sdr', onFrame: params.onFrame, onError: params.onError,
+  }),
+  decodeOneFrame: (file, plan, timeSeconds) => decodeOneFrameWithProvider(hevcDescriptor, file, plan, timeSeconds),
+};
+
 const DESCRIPTORS: Record<CodecProviderBackend, CodecProviderDescriptor> = {
+  hevc: hevcDescriptor,
   turbores: turboResDescriptor,
   hap: hapDescriptor,
   'mxf-avc': mxfAvcDescriptor,

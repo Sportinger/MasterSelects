@@ -1,3 +1,4 @@
+import { drawCodecFrame } from '../mediaRuntime/codec/drawCodecFrame';
 import { BATCH_SIZE, THUMB_HEIGHT, THUMB_QUALITY, THUMB_WIDTH } from './constants';
 import { ThumbnailMemoryTier } from './memoryTier';
 import { ThumbnailPersistentTier } from './persistentTier';
@@ -189,7 +190,7 @@ export class ThumbnailGenerator {
             await provider.seekExact(seekTime);
             const frame = provider.getCurrentFrame();
             if (!frame) throw new Error('Frame provider returned no current frame');
-            ctx.drawImage(frame, 0, 0, THUMB_WIDTH, THUMB_HEIGHT);
+            drawCodecFrame(ctx, frame, THUMB_WIDTH, THUMB_HEIGHT, provider.getSourceRotationDegrees?.() ?? 0);
             blob = await new Promise<Blob>((resolve, reject) => {
               canvas.toBlob(
                 (value) => value ? resolve(value) : reject(new Error('toBlob failed')),

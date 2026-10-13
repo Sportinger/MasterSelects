@@ -373,6 +373,7 @@ Duplicate (context menu or `Ctrl+D`), copy/paste, and the AI tool
 - Changes in nested comp reflect in parent timeline
 
 ### Source Monitor
+- H.265/HEVC MP4/MOV files use the shared adaptive decoder for import thumbnails, hover playback and the source monitor. See [HEVC decoding](/features/hevc-decoding/).
 - Double-click a video or image file to open it in the source monitor
 - Double-clicking a completed AI Studio generation tile opens its imported media through the same Source Monitor path.
 - Image source monitor sessions include a `CROP` button. Applying a crop imports a new image beside the source, prefixed as `CROP <original name>`; in Board view the new node is placed beside the original node.

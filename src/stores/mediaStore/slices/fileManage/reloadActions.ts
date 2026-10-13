@@ -49,7 +49,7 @@ export const createMediaReloadActions: MediaSliceCreator<Pick<
 
     if (refreshThumbnail) {
       const generatedThumbnail = mediaFile.type === 'image' || mediaFile.type === 'video'
-        ? await createThumbnail(mediaFile.file, mediaFile.type)
+        ? await createThumbnail(mediaFile.file, mediaFile.type, mediaFile)
         : undefined;
       if (mediaFile.type === 'image') {
         thumbnailUrl = await createManagedThumbnailUrl(id, generatedThumbnail);

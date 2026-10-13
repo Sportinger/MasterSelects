@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Builds a pure-LGPL libavcodec WASM decoder (no libavformat, no GPL, no pthreads).
 # Runs inside the emscripten/emsdk container. Usage: ./build.sh <decoders,comma,separated>
-#   docker run --rm -v "$PWD:/w" -w /w emscripten/emsdk:3.1.50 bash build.sh mpeg2video,dnxhd,h264
+#   docker run --rm -v "$PWD:/w" -w /w emscripten/emsdk:3.1.50 bash build.sh mpeg2video,dnxhd,h264,hevc
 set -euo pipefail
-DECODERS="${1:-mpeg2video,dnxhd,h264}"
-PARSERS="${2:-h264,mpegvideo}"
+DECODERS="${1:-mpeg2video,dnxhd,h264,hevc}"
+PARSERS="${2:-h264,hevc,mpegvideo}"
 FFMPEG_TAG="${FFMPEG_TAG:-n7.1.1}"  # commit db69d06eeeab4f46da15030a80d539efb4503ca8
 WORK="${WORK:-/tmp/build}"; mkdir -p "$WORK"; cd "$WORK"
 [ -d ffmpeg ] || git clone --depth 1 --branch "$FFMPEG_TAG" https://github.com/FFmpeg/FFmpeg.git ffmpeg
@@ -21,8 +21,20 @@ git rev-parse HEAD > "${OUTDIR:-/w}/FFMPEG_REVISION"
 make -j"$(nproc)" install
 I="${PREFIX:-/opt/ffmpeg}"
 cd "${OUTDIR:-/w}"
+mkdir -p out
 EXP='["_dec_open","_dec_send","_dec_receive","_dec_flush","_dec_close","_dec_width","_dec_height","_dec_pix_fmt","_dec_pts","_dec_interlaced","_dec_tff","_dec_plane","_dec_stride","_dec_malloc","_dec_free"]'
 emcc -O3 -msimd128 shim.c -I"$I/include" -L"$I/lib" -lavcodec -lavutil \
   -sMODULARIZE=1 -sEXPORT_ES6=1 -sENVIRONMENT=worker,node -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=64MB \
   -sEXPORTED_FUNCTIONS="$EXP" -sEXPORT_NAME=createLibavcodec -sFILESYSTEM=0 -o out/libavcodec.js
+# Emscripten 3.1.50 importiert das Node-Modul sonst auch im Browser statisch.
+python3 - <<'PY_GLUE'
+from pathlib import Path
+p = Path('out/libavcodec.js')
+s = p.read_text()
+s = s.replace("import { createRequire } from 'module';\nconst require = createRequire(import.meta.url);",
+    "// Node-Abhängigkeiten nur unter Node laden; Browser-Worker brauchen sie nicht.\n"
+    "const require = typeof process === 'object' && process.versions?.node\n"
+    "  ? (await import('module')).createRequire(import.meta.url) : undefined;")
+p.write_text(s)
+PY_GLUE
 ls -la out

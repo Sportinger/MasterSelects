@@ -1,3 +1,4 @@
+import { providerFramePresentation } from './providerFramePresentation';
 import type { Layer, LayerRenderData } from '../../core/types';
 import { scrubSettleState } from '../../../services/scrubSettleState';
 import { wcPipelineMonitor } from '../../../services/wcPipelineMonitor';
@@ -138,12 +139,10 @@ export function collectProviderFrame(options: {
       context.status.setWebCodecsInfo(frameProvider.getDebugInfo?.() ?? undefined);
       context.status.markHasVideo();
       return {
-        layer,
+        ...providerFramePresentation(layer, frame, frameProvider),
         isVideo: true,
         externalTexture: extTex,
         textureView: null,
-        sourceWidth: frame.displayWidth,
-        sourceHeight: frame.displayHeight,
         displayedMediaTime,
         targetMediaTime,
         previewPath: 'webcodecs',
@@ -179,12 +178,10 @@ export function collectProviderFrame(options: {
         context.status.setDecoder('WebCodecs');
         context.status.markHasVideo();
         return {
-          layer,
+          ...providerFramePresentation(layer, bridgeFrame, clipProvider),
           isVideo: true,
           externalTexture: extTex,
           textureView: null,
-          sourceWidth: bridgeFrame.displayWidth,
-          sourceHeight: bridgeFrame.displayHeight,
           displayedMediaTime: getFrameTimestampSeconds(bridgeFrame.timestamp, layer.source?.mediaTime),
           targetMediaTime: layer.source?.mediaTime,
           previewPath: 'webcodecs',

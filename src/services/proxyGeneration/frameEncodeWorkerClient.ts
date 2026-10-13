@@ -64,7 +64,7 @@ export class ProxyFrameEncodeWorkerClient {
     });
   }
 
-  async encode(frameIndex: number, frame: VideoFrame): Promise<EncodedProxyImageFrame> {
+  async encode(frameIndex: number, frame: VideoFrame, rotation = 0): Promise<EncodedProxyImageFrame> {
     if (this.disposed) {
       throw new Error('Proxy frame encoder worker was disposed');
     }
@@ -81,6 +81,7 @@ export class ProxyFrameEncodeWorkerClient {
             requestId,
             frameIndex,
             frame,
+            rotation,
           },
           [frame as unknown as Transferable]
         );

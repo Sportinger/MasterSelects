@@ -94,7 +94,7 @@ The source monitor shows a raw media file in the preview panel instead of the co
 
 ### Behavior
 
-- Video sources always use the panel-local HTML `<video>` path in this branch.
+- Regular video sources use the panel-local HTML `<video>` path. Codec providers handle ProRes, HAP, MXF and HEVC; [HEVC](/features/hevc-decoding/) verifies native decoding and falls back to WASM automatically, including source audio and container rotation.
 - Audio sources use a panel-local audio playback path with waveform display and scrubbing.
 - Images render through a plain `<img>` element in the same panel surface.
 - Supports images, but images do not show transport controls.
@@ -108,7 +108,7 @@ The source monitor shows a raw media file in the preview panel instead of the co
 
 ### Limitation
 
-- The source monitor is a playback aid, not a WebGPU preview target. It does not use the composition render path or the shared WebCodecs preview/runtime selection logic.
+- The source monitor is a playback aid, not a WebGPU composition target. Codec-backed sources share the runtime provider selection, while regular HTML sources retain their panel-local playback.
 
 ---
 

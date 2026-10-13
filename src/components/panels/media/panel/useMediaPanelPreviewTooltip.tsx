@@ -1,3 +1,6 @@
+import { CodecHoverPreview } from '../CodecHoverPreview';
+import { isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../../../../services/mediaRuntime/providerSelection';
+import { flags } from '../../../../engine/featureFlags';
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
 import type { Composition, MediaFile, ProjectItem } from '../../../../stores/mediaStore';
@@ -15,6 +18,7 @@ const VIEWPORT_PADDING = 8;
 
 interface MediaPanelPreviewTooltipState {
   composition: Composition | null;
+  codecFile?: MediaFile;
   isVideo: boolean;
   itemId: string;
   left: number;
@@ -160,6 +164,9 @@ export function useMediaPanelPreviewTooltip({
 
     const next = {
       composition,
+      codecFile: isImportedMediaFileItem(item) && item.type === 'video' && !item.proxyVideoUrl
+        && isCodecProviderPlan(selectRuntimeFrameProviderPlan({ videoCodecId: item.videoCodecId, turboResEnabled: flags.turboResProRes }))
+        ? item : undefined,
       isVideo: isImportedMediaFileItem(item) && item.type === 'video',
       itemId: item.id,
       liveInputId,
@@ -215,6 +222,8 @@ export function useMediaPanelPreviewTooltip({
             className="media-panel-live-preview"
             liveInputId={tooltip.liveInputId}
           />
+        ) : tooltip.codecFile ? (
+          <CodecHoverPreview file={tooltip.codecFile} />
         ) : tooltip.isVideo ? (
           <video
             src={tooltip.src}

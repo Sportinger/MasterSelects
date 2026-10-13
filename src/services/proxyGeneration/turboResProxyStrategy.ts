@@ -1,3 +1,4 @@
+import { drawCodecFrame } from '../mediaRuntime/codec/drawCodecFrame';
 import type { SceneCutAnalysis } from '../../types/sceneCutAnalysis';
 import { readIsobmffMetadata } from '../mediaMetadata/isobmffMetadata';
 import { isMxfFile, readMxfMediaMetadata } from '../mediaMetadata/mxf/mxfMediaMetadata';
@@ -31,13 +32,14 @@ async function encodeFrameOnMainThread(
   frame: VideoFrame,
   width: number,
   height: number,
+  rotation: number,
 ): Promise<Blob> {
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('Could not create TurboRes proxy canvas');
-  context.drawImage(frame, 0, 0, width, height);
+  drawCodecFrame(context, frame, width, height, rotation);
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => blob ? resolve(blob) : reject(new Error('TurboRes proxy JPEG encode failed')),
@@ -108,11 +110,11 @@ export async function generateTurboResProxy(params: {
         try {
           if (encodeWorker) {
             ownedFrame = frame.clone();
-            const encoded = await encodeWorker.encode(frameIndex, ownedFrame);
+            const encoded = await encodeWorker.encode(frameIndex, ownedFrame, provider?.getSourceRotationDegrees?.() ?? 0);
             ownedFrame = null;
             await params.saveFrame({ frameIndex, blob: encoded.blob });
           } else {
-            const blob = await encodeFrameOnMainThread(frame, outputWidth, outputHeight);
+            const blob = await encodeFrameOnMainThread(frame, outputWidth, outputHeight, provider?.getSourceRotationDegrees?.() ?? 0);
             await params.saveFrame({ frameIndex, blob });
           }
           savedFrameIndices.add(frameIndex);
