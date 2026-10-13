@@ -9,7 +9,7 @@ import { createImageClipPlaceholder, loadImageMedia } from './addImageClip';
 import { createLottieClipPlaceholder, loadLottieMedia } from './addLottieClip';
 import { createRiveClipPlaceholder, loadRiveMedia } from './addRiveClip';
 import { createModelClipPlaceholder, loadModelMedia } from './addModelClip';
-import { createGaussianSplatClipPlaceholder, loadGaussianSplatMedia } from './addGaussianSplatClip';
+import { createGaussianSplatClipPlaceholder, gaussianSplatMediaRuntimeKey, loadGaussianSplatMedia } from './addGaussianSplatClip';
 import { applyAddClipOptions } from './addClipOptions';
 import { generateLinkedClipIds } from '../helpers/idGenerator';
 import { readLottieMetadata } from '../../../services/vectorAnimation/lottieMetadata';
@@ -287,11 +287,7 @@ export async function applyAddClipAction(
       gaussianSplatSequence: sourceMediaFile?.gaussianSplatSequence,
       gaussianSplatUrl: sourceMediaFile?.url,
       gaussianSplatFileName: sourceMediaFile?.name ?? file.name,
-      gaussianSplatRuntimeKey:
-        sourceMediaFile?.projectPath ??
-        sourceMediaFile?.absolutePath ??
-        sourceMediaFile?.filePath ??
-        sourceMediaFile?.url,
+      gaussianSplatRuntimeKey: gaussianSplatMediaRuntimeKey(sourceMediaFile),
     }), options);
     clip.mediaFileId = mediaFileId;
     set({ clips: [...get().clips, clip] });

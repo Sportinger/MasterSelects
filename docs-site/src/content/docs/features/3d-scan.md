@@ -124,19 +124,33 @@ Gaussians.
 
 ## WebGPU Training
 
-Training opens **Live training** directly in the editor's main Preview. The
-same transient splat scene refreshes about every five seconds while visible;
-**Live in Preview** reopens it after **Back to timeline**. **Auto update** only
-controls preview snapshots, not training. Text COLMAP datasets expose their
-training camera views with previous/next controls; the selected viewpoint stays
-fixed across updates. Other datasets use a stable scene overview.
+Training shows its splat live on the timeline. The first training snapshot is
+imported as `<dataset>-training.ply` and placed on a new track together with a
+Training Camera at the first captured pose (text COLMAP datasets). About every
+five seconds while the clip is in the active composition and the editor tab is
+visible, a new snapshot replaces that clip's GPU scene in place: the clip, its
+settings, and the scene camera stay untouched, so the normal Preview camera can
+orbit, dolly, and keyframe while the splat improves. The previous scene stays
+visible until the next one is parsed, and a load of the stale intermediate media
+file can never overwrite a newer live scene. The panel reports the step shown on
+the timeline and any failed update; training continues regardless.
+
+On completion the final PLY enters Media as `<dataset>-trained.ply`. It is
+uploaded before the live clip switches to it, and the intermediate
+`-training.ply` item is removed when no other clip uses it. Deleting the live
+media item stops placement for that job; **Show on timeline** brings it back,
+also when only the clip was deleted. After a reload, a restored checkpoint
+updates an existing `-training.ply` clip but never adds a clip by itself.
+Binary COLMAP datasets are normalized from the fixed sparse point cloud, so
+every snapshot, checkpoint, and final export of one run shares one transform.
 
 Snapshots are serialized between training batches, including while paused, so
 readback never borrows the WASM training instance concurrently with a training
-step. Preview errors remain visible and do not cancel training. Closing the view
-stops polling; cancelling/resetting the job releases the channel and transient
-snapshot. Project switches reset the job as before. No intermediate snapshots
-are imported into Media, added to the timeline, or stored in project history.
+step. Timeline update errors remain visible and do not cancel training.
+Polling stops while the live clip is not shown; cancelling/resetting the job
+releases the channel and transient snapshot. Project switches reset the job as
+before. Only the first and the final snapshot become Media items; the live
+updates in between are runtime-only and do not enter project history.
 Training checkpoints are saved as required `RAW/scan-training/` project data
 about every 15 seconds, independently of the visible panel, and on pause and
 completion. The manifest is published only after both the exact training dataset
@@ -148,8 +162,8 @@ checkpoint instead of silently continuing the wrong reconstruction.
 **Resume** reloads the saved splats as Brush `init.ply` and continues at the saved
 `start-iter`. Brush reinitializes its optimizer; this is model/iteration resume,
 not a bit-exact optimizer/GPU-memory restore. Only steps after the last saved
-checkpoint can be lost on an abrupt reload. The completed result still enters
-Media/timeline with **Add splat to Media**, including after reopening the project.
+checkpoint can be lost on an abrupt reload. **Add splat to Media** remains for
+completed results without a live clip, including after reopening the project.
 
 Completed Camera Solve datasets are also required RAW artifacts, automatically
 rediscovered when the project opens. Legacy cache-only solves migrate on first
@@ -158,8 +172,8 @@ stage requires solving again from the retained original photos.
 Switching editor tabs, hiding Preview, or unmounting 3D Scan does not stop either
 job. Reattaching the solved dataset to the panel preserves the training owner;
 only an explicit dataset change/reset/cancel or project switch replaces it.
-The preview uses the editor's Gaussian renderer, bounded canvas resolution, and
-retains only the latest PLY; snapshot readback adds some training overhead.
+The live clip uses the editor's normal Gaussian renderer and retains only the
+latest PLY; snapshot readback adds some training overhead.
 
 Training uses the Apache-2.0
 [Brush](https://github.com/ArthurBrussee/brush) `brush-js` runtime at revision

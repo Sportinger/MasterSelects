@@ -81,6 +81,15 @@ function resolveClipGaussianSplatFile(
   );
 }
 
+/** Scene key of a non-sequence splat clip; the GPU renderer and splat cache are keyed by it. */
+export function resolveGaussianSplatClipRuntimeKey(clip: TimelineClip): string {
+  return clip.source?.gaussianSplatRuntimeKey ??
+    clip.source?.gaussianSplatFileHash ??
+    clip.source?.gaussianSplatFileName ??
+    clip.source?.gaussianSplatUrl ??
+    clip.id;
+}
+
 export function buildGaussianSplatSourcePayload(
   clip: TimelineClip,
   clipLocalTime: number,
@@ -100,11 +109,7 @@ export function buildGaussianSplatSourcePayload(
     gaussianSplatRuntimeKey: getGaussianSplatSequenceFrameRuntimeKey(
       gaussianSplatSequence,
       clipLocalTime,
-      clip.source?.gaussianSplatRuntimeKey ??
-        clip.source?.gaussianSplatFileHash ??
-        clip.source?.gaussianSplatFileName ??
-        clip.source?.gaussianSplatUrl ??
-        clip.id,
+      resolveGaussianSplatClipRuntimeKey(clip),
     ),
     gaussianSplatSequence,
     gaussianSplatSettings: clip.source?.gaussianSplatSettings

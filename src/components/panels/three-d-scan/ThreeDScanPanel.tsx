@@ -34,6 +34,7 @@ import {
 import { brushTrainingManager } from '../../../services/photogrammetry/brushTrainingManager';
 import { placeSplatOnTimeline } from '../../../services/photogrammetry/placeSplatOnTimeline';
 import { brushPreviewRuntime } from '../../../services/photogrammetry/brushPreviewRuntime';
+import { scanSplatFile } from '../../../services/photogrammetry/BrushTimelineSplat';
 import {
   isSupportedScanVideo,
   sampleScanVideoWithTimes,
@@ -349,11 +350,7 @@ function GaussianSplatWorkspace() {
     setIsExporting(true);
     setNotice(null);
     try {
-      const bytes = await brushTrainingManager.exportPly();
-      const safeName = trainingJob.datasetName.replace(/[^a-z0-9_.-]+/gi, '-').replace(/^-+|-+$/g, '') || 'browser-scan';
-      const buffer = new ArrayBuffer(bytes.byteLength);
-      new Uint8Array(buffer).set(bytes);
-      const file = new File([buffer], `${safeName}-trained.ply`, { type: 'application/octet-stream' });
+      const file = scanSplatFile(await brushTrainingManager.exportPly(), trainingJob.datasetName, 'trained');
       const imported = await importGaussianSplat(file);
       const camera = brushPreviewRuntime.getSnapshot().cameraPath;
       await placeSplatOnTimeline(file, imported, camera);

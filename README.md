@@ -36,8 +36,8 @@ Gaussian Splat video extraction preserves source resolution and saves each compl
 frame in the open project before camera solving. Source photos restore automatically
 after reload; the panel reports save failures and memory-only sessions.
 
-Gaussian-splat training can be watched directly in the main Preview, with live
-intermediate splats and fixed training-camera views. Camera results and training
+Gaussian-splat training places its splat on the timeline and refreshes it in
+place while training, so the normal Preview camera can orbit the improving scene. Camera results and training
 checkpoints restore automatically; training resumes from saved splats and step
 with a fresh optimizer, and keeps running when the Scan panel is hidden.
 

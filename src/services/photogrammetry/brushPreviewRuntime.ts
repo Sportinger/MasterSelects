@@ -1,7 +1,6 @@
 import type { SolvedCameraPath } from './cameraSolvePoses';
 export interface BrushPreviewSnapshot {
   connected: boolean;
-  visible: boolean;
   updating: boolean;
   cameraPath: SolvedCameraPath | null;
   bytes: Uint8Array<ArrayBuffer> | null;
@@ -10,10 +9,10 @@ export interface BrushPreviewSnapshot {
   error: string | null;
   warning: string | null;
 }
-const empty = (): BrushPreviewSnapshot => ({ connected: false, visible: false, updating: false, cameraPath: null, bytes: null, iteration: 0,
+const empty = (): BrushPreviewSnapshot => ({ connected: false, updating: false, cameraPath: null, bytes: null, iteration: 0,
   revision: 0, error: null, warning: null });
 
-/** Transient preview data. No intermediate PLYs enter Media, undo, or project storage. */
+/** Latest training snapshot. The timeline live splat and checkpoints consume it. */
 export class BrushPreviewRuntime {
   private channel: BroadcastChannel | null = null;
   private channelId: string | null = null;
@@ -25,12 +24,11 @@ export class BrushPreviewRuntime {
   subscribe = (listener: () => void) => {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };
   };
-  setVisible(visible: boolean): void { this.update({ ...this.state, visible }); }
   connect(id: string, cameraPath: SolvedCameraPath | null = null): void {
     this.disconnect();
     const channel = new BroadcastChannel(`brush-preview:${id}`);
     this.channel = channel; this.channelId = id;
-    this.update({ ...empty(), connected: true, visible: true, updating: true, cameraPath });
+    this.update({ ...empty(), connected: true, updating: true, cameraPath });
     channel.onmessage = event => {
       if (this.channel !== channel) return;
       this.pending = false;
@@ -48,7 +46,7 @@ export class BrushPreviewRuntime {
   }
   restore(bytes: Uint8Array<ArrayBuffer>, iteration: number, cameraPath: SolvedCameraPath | null): void {
     this.disconnect();
-    this.update({ ...empty(), connected: true, visible: true, bytes, iteration, cameraPath, revision: 1 });
+    this.update({ ...empty(), connected: true, bytes, iteration, cameraPath, revision: 1 });
   }
   request(): void {
     if (!this.channel) return;
