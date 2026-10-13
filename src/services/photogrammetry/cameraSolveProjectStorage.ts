@@ -1,5 +1,6 @@
-import { zipSync } from 'fflate';
-import { projectFileService } from '../project';
+import { captureRepositoryDomainPublication } from '../project/repository/artifacts/RepositoryDomainPublication';
+import type { ScanSourceStorage } from './scanSourceProjectStorage';
+import { packScanDataset } from './scanDatasetArchive';
 import { extractColmapDatasetArchive } from './colmapDatasetArchive';
 import type {
   CameraSolveDataset,
@@ -12,16 +13,13 @@ const ARCHIVE_FILE = 'camera-solve-latest.zip';
 const MANIFEST_FILE = 'camera-solve-latest.json';
 
 interface StoredCameraSolveManifest {
-  version: 1;
+  version: 1 | 2;
+  archivePath?: string;
   id: string;
   createdAt: number;
   datasetName: string;
   registeredSourceIndices: number[];
   source: CameraSolveSourceContext | null;
-}
-
-async function fileBytes(file: File): Promise<Uint8Array> {
-  return new Uint8Array(await file.arrayBuffer());
 }
 
 function findDatasetFile(files: File[], fileName: string): File | undefined {
@@ -45,55 +43,40 @@ async function reconstructModel(
   };
 }
 
-export async function persistLatestCameraSolve(dataset: CameraSolveDataset): Promise<boolean> {
-  if (!projectFileService.isProjectOpen()) return false;
-  const entries = await Promise.all(dataset.files.map(async (file) => [
-    virtualFilePath(file),
-    await fileBytes(file),
-  ] as const));
-  // JPEG frames are already compressed. Store mode keeps project persistence fast
-  // and avoids a long main-thread recompression pass after solving finishes.
-  const archive = zipSync(Object.fromEntries(entries), { level: 0 });
+export async function persistLatestCameraSolve(dataset: CameraSolveDataset,
+  storage: ScanSourceStorage | null = captureRepositoryDomainPublication()): Promise<boolean> {
+  if (!storage) return false;
+  const archivePath = `scan-solves/${crypto.randomUUID()}/dataset.zip`;
+  const archive = await packScanDataset(dataset.files);
   const manifest: StoredCameraSolveManifest = {
-    version: 1,
-    id: dataset.id,
-    createdAt: dataset.createdAt,
-    datasetName: dataset.model.datasetName,
-    registeredSourceIndices: dataset.model.registeredSourceIndices,
+    version: 2, archivePath, id: dataset.id, createdAt: dataset.createdAt,
+    datasetName: dataset.model.datasetName, registeredSourceIndices: dataset.model.registeredSourceIndices,
     source: dataset.source,
   };
-  const archiveBuffer = new ArrayBuffer(archive.byteLength);
-  new Uint8Array(archiveBuffer).set(archive);
-  const archiveSaved = await projectFileService.writeFile(
-    'CACHE_ARTIFACTS',
-    ARCHIVE_FILE,
-    new Blob([archiveBuffer], { type: 'application/zip' }),
-  );
-  if (!archiveSaved) return false;
-  return projectFileService.writeFile(
-    'CACHE_ARTIFACTS',
-    MANIFEST_FILE,
-    JSON.stringify(manifest, null, 2),
-  );
+  if (!await storage.writeFile('RAW', archivePath, archive)) throw new Error('Could not save the camera-solve dataset.');
+  if (!await storage.writeFile('RAW', MANIFEST_FILE, JSON.stringify(manifest))) throw new Error('Could not save the camera-solve manifest.');
+  return true;
 }
 
-export async function loadLatestCameraSolve(): Promise<CameraSolveDataset | null> {
-  if (!projectFileService.isProjectOpen()) return null;
-  const [manifestFile, archiveFile] = await Promise.all([
-    projectFileService.readFile('CACHE_ARTIFACTS', MANIFEST_FILE),
-    projectFileService.readFile('CACHE_ARTIFACTS', ARCHIVE_FILE),
-  ]);
-  if (!manifestFile || !archiveFile) return null;
+export async function loadLatestCameraSolve(storage: ScanSourceStorage | null = captureRepositoryDomainPublication()): Promise<CameraSolveDataset | null> {
+  if (!storage) return null;
+  const current = await storage.readFile('RAW', MANIFEST_FILE);
+  const manifestFile = current ?? await storage.readFile('CACHE_ARTIFACTS', MANIFEST_FILE);
+  if (!manifestFile) return null;
   const manifest = JSON.parse(await manifestFile.text()) as StoredCameraSolveManifest;
-  if (manifest.version !== 1 || !Array.isArray(manifest.registeredSourceIndices)) return null;
-  const archive = new File([archiveFile], ARCHIVE_FILE, { type: 'application/zip' });
-  const files = await extractColmapDatasetArchive(archive);
+  if (![1, 2].includes(manifest.version) || !Array.isArray(manifest.registeredSourceIndices)
+    || !manifest.registeredSourceIndices.every(value => Number.isSafeInteger(value) && value >= 0)
+    || !Number.isFinite(manifest.createdAt)) throw new Error('Invalid saved camera solve.');
+  if (current && (manifest.version !== 2 || !/^scan-solves\/[a-zA-Z0-9-]+\/dataset\.zip$/.test(manifest.archivePath ?? ''))) {
+    throw new Error('Invalid saved camera-solve archive path.');
+  }
+  const archiveFile = await storage.readFile(current ? 'RAW' : 'CACHE_ARTIFACTS', current ? manifest.archivePath! : ARCHIVE_FILE);
+  if (!archiveFile) throw new Error('The saved camera-solve dataset is missing.');
+  const files = await extractColmapDatasetArchive(new File([archiveFile], ARCHIVE_FILE, { type: 'application/zip' }));
   const model = await reconstructModel(files, manifest);
-  return model ? {
-    id: manifest.id,
-    createdAt: manifest.createdAt,
-    files,
-    model,
-    source: manifest.source,
-  } : null;
+  if (!model) throw new Error('The saved camera model is incomplete.');
+  const result: CameraSolveDataset = { id: manifest.id, createdAt: manifest.createdAt, files, model, source: manifest.source };
+  // Upgrade legacy cache-only solves on first successful read.
+  if (!current) await persistLatestCameraSolve(result, storage);
+  return result;
 }

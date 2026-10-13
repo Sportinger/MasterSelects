@@ -36,6 +36,12 @@ Gaussian Splat video extraction preserves source resolution and saves each compl
 frame in the open project before camera solving. Source photos restore automatically
 after reload; the panel reports save failures and memory-only sessions.
 
+Gaussian-splat training can be watched directly in the main Preview, with live
+intermediate splats and fixed training-camera views. Camera results and training
+checkpoints restore automatically; training resumes from saved splats and step
+with a fresh optimizer, and keeps running when the Scan panel is hidden.
+
+
 [3D Scan](docs/Features/3D-Scan.md) extracts frames from H.265 phone videos through the shared HEVC decoder when browser playback cannot supply images, preserving portrait rotation and source timestamps.
 
 Waveform previews, pyramid analysis, and cache unpacking run in dedicated workers. Large timelines reuse saved source waveforms after refresh, share results across split clips, and limit background analysis updates. Decoding and waveform generation do not hold the project save barrier. See [Audio Intelligence](docs/Features/Audio-Intelligence.md).
@@ -269,3 +275,7 @@ Scan labels search contiguous free edge regions around a filled yarn silhouette;
 Camera clips support additive, keyframeable shake without changing their authored orbit path or requiring physical lens effects. Scan cards distribute free positions along the viewport perimeter, support directional curve anchors, and can retract leaders before a staggered final exit. Floating planes accept an added roll curve; authored readouts support fitted word-level bold, size and occasional italic variation while retaining their colors.
 
 Compositions duplicate as independent deep copies of the current timeline. Glow uses prefiltered circular sampling, including upgrades for untouched saved single-pass graphs.
+
+Trained scan imports retain their capture orientation and include a Training Camera for matching the live training view.
+
+Browser camera solving rejects inconsistent 3D feature tracks before they can corrupt later poses or splat training.

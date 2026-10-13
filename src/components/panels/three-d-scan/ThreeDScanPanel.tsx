@@ -1,11 +1,10 @@
+import { ScanTrainingProgress } from './ScanTrainingProgress';
 import {
   IconAlertTriangle,
   IconBox,
   IconCheck,
   IconFolderOpen,
   IconPhoto,
-  IconPlayerPause,
-  IconPlayerPlay,
 } from '@tabler/icons-react';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type DragEvent } from 'react';
 import {
@@ -34,6 +33,7 @@ import {
 } from '../../../services/photogrammetry/brushRuntime';
 import { brushTrainingManager } from '../../../services/photogrammetry/brushTrainingManager';
 import { placeSplatOnTimeline } from '../../../services/photogrammetry/placeSplatOnTimeline';
+import { brushPreviewRuntime } from '../../../services/photogrammetry/brushPreviewRuntime';
 import {
   isSupportedScanVideo,
   sampleScanVideoWithTimes,
@@ -232,7 +232,7 @@ function GaussianSplatWorkspace() {
     });
   }, [addVideo, selectedTimelineVideo]);
 
-  const openDatasetFiles = useCallback(async (files: File[]) => {
+  const openDatasetFiles = useCallback(async (files: File[], preserveTraining = false) => {
     try {
       setNotice(null);
       const archive = files.length === 1 && isColmapDatasetArchive(files[0]) ? files[0] : null;
@@ -241,7 +241,7 @@ function GaussianSplatWorkspace() {
         : files;
       const handle = createVirtualDirectoryHandle(datasetFiles);
       const inspection = await inspectColmapDataset(handle);
-      brushTrainingManager.reset();
+      if (!preserveTraining) brushTrainingManager.reset();
       datasetFilesRef.current = datasetFiles;
       setDataset(inspection);
       if (inspection.status === 'invalid') setNotice(inspection.message);
@@ -278,7 +278,7 @@ function GaussianSplatWorkspace() {
     }
     cameraResultOpeningRef.current = true;
     try {
-      const inspection = await openDatasetFiles(result.files);
+      const inspection = await openDatasetFiles(result.files, true);
       if (inspection?.status === 'valid') {
         setNotice(`Solved ${inspection.imageCount} camera views locally. Ready for GPU training.`);
       }
@@ -294,7 +294,7 @@ function GaussianSplatWorkspace() {
     const files = cameraSolvingManager.getResultFiles();
     if (!files) return;
     cameraResultOpeningRef.current = true;
-    void openDatasetFiles(files).finally(() => { cameraResultOpeningRef.current = false; });
+    void openDatasetFiles(files, true).finally(() => { cameraResultOpeningRef.current = false; });
   }, [cameraJob.hasResult, dataset, openDatasetFiles, sourceState.updatedAt]);
 
   const mediaDatasetArchive = useMemo(
@@ -335,18 +335,14 @@ function GaussianSplatWorkspace() {
     if (inspection.status !== 'valid' || gpu.status !== 'ready' || brushTrainingBlocked) return;
     brushTrainingManager.reset();
     setNotice(null);
-    await brushTrainingManager.start(datasetFilesRef.current, trainingPreset, inspection.name);
+    await brushTrainingManager.start(datasetFilesRef.current, trainingPreset, inspection.name, sourceState.updatedAt);
     const error = brushTrainingManager.getSnapshot().error;
     if (error) setNotice(error);
-  }, [brushTrainingBlocked, gpu.status]);
+  }, [brushTrainingBlocked, gpu.status, sourceState.updatedAt]);
 
   const startTraining = useCallback(async () => {
     if (dataset) await launchTraining(dataset, preset);
   }, [dataset, launchTraining, preset]);
-
-  const resetTraining = useCallback(() => {
-    brushTrainingManager.reset();
-  }, []);
 
   const addTrainingToMedia = useCallback(async () => {
     if (!trainingJob.datasetName) return;
@@ -359,8 +355,9 @@ function GaussianSplatWorkspace() {
       new Uint8Array(buffer).set(bytes);
       const file = new File([buffer], `${safeName}-trained.ply`, { type: 'application/octet-stream' });
       const imported = await importGaussianSplat(file);
-      await placeSplatOnTimeline(file, imported);
-      setNotice(`${file.name} is in Media and on the timeline.`);
+      const camera = brushPreviewRuntime.getSnapshot().cameraPath;
+      await placeSplatOnTimeline(file, imported, camera);
+      setNotice(`${file.name} is in Media and on the timeline${camera ? ' with its training camera' : ''}.`);
     } catch (error) {
       setNotice(describeError(error));
     } finally {
@@ -402,9 +399,6 @@ function GaussianSplatWorkspace() {
   const datasetReady = dataset?.status === 'valid';
   const canTrain = datasetReady && gpu.status === 'ready' && !brushTrainingBlocked
     && !training && !trainingJob.isStarting && !cameraSolvingActive;
-  const progress = training
-    ? Math.min(100, (training.iteration / Math.max(1, training.totalIterations)) * 100)
-    : 0;
 
   return (
     <div
@@ -572,7 +566,7 @@ function GaussianSplatWorkspace() {
                   <label className="scan-preset-row">
                     <span>Preset</span>
                     <select value={preset} onChange={(event) => setPreset(event.target.value as BrushTrainingPreset)}>
-                      <option value="preview">Preview · 720p / 40K splats</option>
+                      <option value="preview">Draft · 500 steps / every 4th image</option>
                       <option value="mobile">Mobile · 720p / 60K splats</option>
                       <option value="balanced">Balanced · 960p / 100K splats</option>
                       <option value="quality">Quality · 1080p / 120K splats</option>
@@ -601,25 +595,8 @@ function GaussianSplatWorkspace() {
                 </section>
               )}
 
-              {training && (
-                <section className={`scan-section scan-training ${training.phase}`}>
-                  <div className="scan-section-heading"><div><strong>{phaseLabel(training)}</strong><span>{training.iteration.toLocaleString()} / {training.totalIterations.toLocaleString()} steps</span></div><IconBox size={18} /></div>
-                  <div className="scan-progress"><span style={{ width: `${progress}%` }} /></div>
-                  <div className="scan-metrics">
-                    <span><strong>{training.splatCount.toLocaleString()}</strong> splats</span>
-                    <span><strong>{training.trainViews}</strong> views</span>
-                    <span><strong>{training.psnr?.toFixed(2) ?? '—'}</strong> PSNR</span>
-                  </div>
-                  {training.warning && <p className="scan-inline-note warning">{training.warning}</p>}
-                  <div className="scan-training-actions">
-                    {training.phase === 'training' && <button className="btn btn-sm" onClick={() => brushTrainingManager.pause()}><IconPlayerPause size={13} /> Pause</button>}
-                    {training.phase === 'paused' && <button className="btn btn-sm" onClick={() => brushTrainingManager.resume()}><IconPlayerPlay size={13} /> Resume</button>}
-                    {!['completed', 'cancelled', 'error'].includes(training.phase) && <button className="btn btn-sm" onClick={() => brushTrainingManager.cancel()}>Cancel</button>}
-                    {['cancelled', 'error'].includes(training.phase) && <button className="btn btn-sm" onClick={resetTraining}>Reset</button>}
-                    {training.phase === 'completed' && <button className="btn btn-export" disabled={isExporting} onClick={() => void addTrainingToMedia()}>{isExporting ? 'Creating PLY…' : 'Add splat to Media'}</button>}
-                  </div>
-                </section>
-              )}
+              {training && <ScanTrainingProgress job={trainingJob} label={phaseLabel(training)}
+                isExporting={isExporting} onExport={addTrainingToMedia} />}
             </>
           )}
         </main>
@@ -642,6 +619,7 @@ function GaussianSplatWorkspace() {
         {sourceState.error && <button className="btn btn-sm" disabled={sourceState.busy}
           onClick={() => void scanSourceManager.retry().catch(error => setNotice(describeError(error)))}>Retry</button>}
       </div>
+      {trainingJob.error && !training && <div className="scan-notice" role="alert">{trainingJob.error}</div>}
       {notice && <div className="scan-notice" role="status">{notice}</div>}
       {(isInspecting || videoProgress) && (
         <div className="scan-busy">

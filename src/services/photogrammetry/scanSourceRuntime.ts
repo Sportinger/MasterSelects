@@ -16,7 +16,12 @@ const synchronize = () => {
   if (nextKey !== projectKey) {
     cameraSolvingManager.reset(); brushTrainingManager.reset(); projectKey = nextKey;
   }
-  void scanSourceManager.activate(storage, nextKey);
+  void scanSourceManager.activate(storage, nextKey).then(async () => {
+    if (!storage || !nextKey || projectKey !== nextKey) return;
+    await cameraSolvingManager.loadLatest();
+    if (projectKey !== nextKey) return;
+    await brushTrainingManager.restoreSaved(storage, nextKey, scanSourceManager.getSnapshot().updatedAt);
+  });
 };
 const unsubscribe = subscribeRepositoryLifecycle(synchronize);
 synchronize();

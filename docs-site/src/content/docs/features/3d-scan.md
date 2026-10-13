@@ -124,6 +124,43 @@ Gaussians.
 
 ## WebGPU Training
 
+Training opens **Live training** directly in the editor's main Preview. The
+same transient splat scene refreshes about every five seconds while visible;
+**Live in Preview** reopens it after **Back to timeline**. **Auto update** only
+controls preview snapshots, not training. Text COLMAP datasets expose their
+training camera views with previous/next controls; the selected viewpoint stays
+fixed across updates. Other datasets use a stable scene overview.
+
+Snapshots are serialized between training batches, including while paused, so
+readback never borrows the WASM training instance concurrently with a training
+step. Preview errors remain visible and do not cancel training. Closing the view
+stops polling; cancelling/resetting the job releases the channel and transient
+snapshot. Project switches reset the job as before. No intermediate snapshots
+are imported into Media, added to the timeline, or stored in project history.
+Training checkpoints are saved as required `RAW/scan-training/` project data
+about every 15 seconds, independently of the visible panel, and on pause and
+completion. The manifest is published only after both the exact training dataset
+and immutable PLY checkpoint exist. Save failures remain visible and offer Retry.
+Reloading automatically restores a matching checkpoint as paused, or restores a
+completed splat for preview/export. Changed source photos invalidate an older
+checkpoint instead of silently continuing the wrong reconstruction.
+
+**Resume** reloads the saved splats as Brush `init.ply` and continues at the saved
+`start-iter`. Brush reinitializes its optimizer; this is model/iteration resume,
+not a bit-exact optimizer/GPU-memory restore. Only steps after the last saved
+checkpoint can be lost on an abrupt reload. The completed result still enters
+Media/timeline with **Add splat to Media**, including after reopening the project.
+
+Completed Camera Solve datasets are also required RAW artifacts, automatically
+rediscovered when the project opens. Legacy cache-only solves migrate on first
+read. An unfinished camera solve remains a runtime job; reloading during that
+stage requires solving again from the retained original photos.
+Switching editor tabs, hiding Preview, or unmounting 3D Scan does not stop either
+job. Reattaching the solved dataset to the panel preserves the training owner;
+only an explicit dataset change/reset/cancel or project switch replaces it.
+The preview uses the editor's Gaussian renderer, bounded canvas resolution, and
+retains only the latest PLY; snapshot readback adds some training overhead.
+
 Training uses the Apache-2.0
 [Brush](https://github.com/ArthurBrussee/brush) `brush-js` runtime at revision
 `8b7f5c6c0638892204b540d9aced219f62fc2192`. The runtime is loaded only when
@@ -201,3 +238,9 @@ it does not create a separate camera clip or run dense reconstruction. See
   splat preview. Playback diagnostics confirmed that a temporary slowdown was
   stale HMR decoder/render state and cleared after rebuilding the browser
   runtime on reload.
+
+### Trained scene framing
+
+Adding a trained splat with readable camera poses also adds a Training Camera at the first captured pose. The scan uses the loader’s existing COLMAP-to-editor conversion without a second PLY orientation flip; existing camera clips are preserved. This matches the live training view’s geometry and lens. A different composition aspect ratio reveals a wider or narrower field of view; it does not rescale the model axes. The 500-step draft preset samples every fourth image and is explicitly labeled as a draft, with limited detail and unreliable views outside the captured camera path.
+
+Camera solving now validates every extension of a 3D feature track against its projected image position. Features cannot be reassigned between points, and a point cannot own multiple features in the same view. Conflicting COLMAP tracks fail explicitly instead of entering training. Results created by the older unchecked track propagation need a new solve and training run; continuing their learned splats cannot repair the underlying geometry.

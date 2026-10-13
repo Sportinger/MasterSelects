@@ -1,3 +1,4 @@
+import { attachBrushPreview } from './brushPreviewWorker';
 import {
   BRUSH_PRESET_CONFIG,
   type BrushTrainingSnapshot,
@@ -47,6 +48,7 @@ interface BrushWorkerScope {
 
 const workerScope = self as unknown as BrushWorkerScope;
 let training: BrushTrainingBinding | null = null;
+let closePreview: (() => void) | null = null;
 let snapshot: BrushTrainingSnapshot | null = null;
 let active = false;
 let paused = false;
@@ -93,6 +95,7 @@ async function initializeBrushApp(app: BrushAppBinding): Promise<void> {
 function freeTraining() {
   if (!training || freed) return;
   freed = true;
+  closePreview?.(); closePreview = null;
   try {
     training.free();
   } catch {
@@ -129,10 +132,16 @@ async function start(request: Extract<BrushWorkerRequest, { type: 'start' }>) {
 
   emit({ phase: 'loading-dataset' });
   colmapPointsBuffer = await readColmapPointsForBrush(request.entries);
-  const handle = createVirtualDirectoryHandleFromEntries(request.entries);
+  // Brush prefers init.ply over COLMAP points when continuing an existing model.
+  const root = request.entries[0]?.path.split('/')[0] ?? 'dataset';
+  const entries = request.resumePly
+    ? [...request.entries.filter(entry => !/\.ply$/i.test(entry.path)), { file: request.resumePly, path: `${root}/init.ply` }]
+    : request.entries;
+  const handle = createVirtualDirectoryHandleFromEntries(entries);
   training = app.startTrainingFromDirectory(handle, async (initial) => ({
     ...initial,
     'total-train-iters': preset.totalIterations,
+    'start-iter': request.resumeIteration ?? 0,
     'refine-every': preset.refineEvery,
     'growth-stop-iter': preset.growthStopIteration,
     'growth-grad-threshold': preset.growthGradientThreshold,
@@ -147,6 +156,9 @@ async function start(request: Extract<BrushWorkerRequest, { type: 'start' }>) {
     'mean-noise-weight': preset.meanNoiseWeight,
     'ssim-weight': preset.ssimWeight,
   }));
+  if (request.previewChannelId) {
+    closePreview = attachBrushPreview(training, request.previewChannelId, 0, colmapPointsBuffer);
+  }
   send({ type: 'started' });
 
   const kinds = module.BrushMessageKind;

@@ -6,6 +6,8 @@ import {
   type BrushWorkerRequest,
   type BrushWorkerResponse,
 } from './brushTrainingContract';
+import { readBrushPreviewCameras } from './brushPreviewCameras';
+import { brushPreviewRuntime } from './brushPreviewRuntime';
 import { virtualFilePath } from './virtualDirectoryHandle';
 
 export type {
@@ -54,6 +56,7 @@ export async function startBrushTraining(
   files: File[],
   preset: BrushTrainingPreset,
   onUpdate: (snapshot: BrushTrainingSnapshot) => void,
+  resume?: { iteration: number; ply: File },
 ): Promise<BrushTrainingController> {
   if (files.length === 0) throw new Error('The COLMAP dataset has no files to train.');
 
@@ -68,6 +71,7 @@ export async function startBrushTraining(
   let startedSettled = false;
   let finishedSettled = false;
   let terminated = false;
+  let previewChannelId: string | null = null;
   let cancelTimer: ReturnType<typeof setTimeout> | null = null;
   let resolveFinished!: () => void;
   let resolveStarted!: () => void;
@@ -97,6 +101,7 @@ export async function startBrushTraining(
     terminated = true;
     if (cancelTimer) clearTimeout(cancelTimer);
     worker.terminate();
+    if (previewChannelId) brushPreviewRuntime.disconnect(previewChannelId);
   };
   const fail = (message: string) => {
     emit({ ...lastSnapshot, phase: 'error', warning: message });
@@ -149,7 +154,10 @@ export async function startBrushTraining(
   const post = (message: BrushWorkerRequest) => {
     if (!terminated) worker.postMessage(message);
   };
-  post({ type: 'start', assetBaseUrl: assetBaseUrl(), entries, preset });
+  previewChannelId = crypto.randomUUID();
+  brushPreviewRuntime.connect(previewChannelId, await readBrushPreviewCameras(files));
+  post({ type: 'start', assetBaseUrl: assetBaseUrl(), entries, preset, previewChannelId,
+    resumeIteration: resume?.iteration, resumePly: resume?.ply });
 
   const controller: BrushTrainingController = {
     pause() {

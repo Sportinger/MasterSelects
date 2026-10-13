@@ -1,3 +1,4 @@
+import { BrushTrainingLivePreview } from './BrushTrainingLivePreview';
 import type React from 'react';
 import { useSyncExternalStore } from 'react';
 import { rotoPreview } from '../../services/roto/rotoPreview';
@@ -253,6 +254,7 @@ export function PreviewCanvasMount({
   });
   return (
     <>
+      {isEditableSource && !isExporting && <BrushTrainingLivePreview />}
       {sourceMonitorActive && sourceMonitorFile && (
         <SourceMonitor
           file={sourceMonitorFile}
