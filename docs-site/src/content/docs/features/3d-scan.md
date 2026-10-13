@@ -39,6 +39,14 @@ are not written into durable project state.
 
 Frame extraction uses a muted local `HTMLVideoElement`, waits for
 `canplaythrough`, seeks each sample, and encodes through a temporary canvas.
+If the browser rejects the video or reports no image dimensions (including
+audio-only playback of unsupported H.265), extraction uses the shared source
+frame service with the existing HEVC native/WASM decoder fallback. This applies
+to both scan workspaces. Container rotation is applied to extracted JPEGs, so
+portrait phone recordings retain their orientation and aspect ratio. The fallback
+keeps one source lease for the job, copies each borrowed frame before encoding,
+and records its actual source timestamp for camera solving. Cancellation releases
+the lease; decoding and encoding failures remain visible in the scan panel.
 No video or extracted photo is uploaded.
 
 ## Camera Solve and Poses
