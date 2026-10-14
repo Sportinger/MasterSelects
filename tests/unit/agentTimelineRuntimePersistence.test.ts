@@ -130,7 +130,9 @@ describe('AgentTimelineRuntimePersistence', () => {
       ] };
       listener();
       await vi.advanceTimersByTimeAsync(350);
-      expect(listAudioArtifacts.mock.calls.map(call => call[0])).toEqual(['media-a']);
+      // The debounce timer queues behind the previous asynchronous write;
+      // advancing fake timers does not finish its real hashing/storage work.
+      await vi.waitFor(() => expect(listAudioArtifacts.mock.calls.map(call => call[0])).toEqual(['media-a']));
 
       listAudioArtifacts.mockClear();
       snapshot = { ...snapshot, projectScope: 'project-b' };
