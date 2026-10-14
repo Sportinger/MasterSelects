@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-14",
+    "type": "improve",
+    "title": "MasterSelects 3.1.9",
+    "description": "3D Scan reliability update: HEVC sources retain original-resolution frames, training splats update live on the timeline with a matching camera, and saved checkpoints resume after reopening a project. GPU allocation failures are handled safely, and security updates refresh browser and Native Helper dependencies.",
+    "section": "Release"
+  },
+  {
     "date": "2026-09-26",
     "type": "new",
     "title": "MasterSelects 3.1.8",
