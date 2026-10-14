@@ -5,6 +5,7 @@ import { canonicalBytes, hashBytes, parseJson } from '../segments/canonical';
 export const TRANSPORT_LIMITS = { chunkBytes: 256 * 1024, jsonBytes: 32 * 1024 * 1024, zipOutputBytes: 8 * 1024 * 1024, zipEntries: 100000 } as const;
 export function safePath(path: string): string {
   const normalized = path.replaceAll('\\', '/');
+  // eslint-disable-next-line no-control-regex -- Archive paths must reject ASCII control characters.
   if (!normalized || normalized.startsWith('/') || normalized.split('/').some(part => !part || part === '.' || part === '..') || /^[a-z]:/i.test(normalized) || /[\x00-\x1f]/.test(normalized)) throw new RepositoryError('corrupt', 'Unsafe transport path');
   return normalized;
 }

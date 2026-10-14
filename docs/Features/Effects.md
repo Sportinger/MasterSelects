@@ -59,6 +59,10 @@ uses source coordinates. Shape settings and the tracking asset persist normally.
 The separate [Space-time slice](Slit-Scan-3D.md#space-time-slice-observed-depth)
 representation uses baked per-time depth and color rather than a time relief.
 
+DIS motion analysis drains both GPU allocation error scopes and preserves the
+original allocation error. Invalid forward or reverse flow textures are released
+and never retained as usable cache entries.
+
 **Motion compensation** (section switch, `DIS optical flow · resident history`) removes
 temporal seams at their source instead of blurring them. Each decoded frame the
 sampler picks is shifted along cached DIS optical flow to the exact requested time,
@@ -1411,8 +1415,7 @@ preview (scene camera from an active Camera clip), the Edit view, and the
 the 2D-canvas copy, so real video frames drive the height field. Synthetic
 scene layers use the viewport dimensions plus source-pixel scale compensation,
 preventing portrait media from becoming a stretched, window-like slab in the
-3D editor. Remaining
-notes are tracked in `docs/ongoing/Voxel-Relief-Orbit-3D.md`.
+3D editor.
 
 Wall-clock animated effects can also set `requiresContinuousRender`. The engine keeps rendering live frames for active continuous effects while the playhead is parked, and it bypasses RAM Preview frame reuse so the animated output does not freeze.
 

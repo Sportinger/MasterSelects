@@ -17,7 +17,7 @@ import { VexFlowScoreRenderer } from '../../services/score/render/VexFlowScoreRe
 import { ScoreHitTester } from '../../services/score/render/ScoreHitTester';
 import { ensureScoreFontsInDocument } from '../../services/score/render/scoreFonts';
 import { Logger } from '../../services/logger';
-import { createObservableScoreEditorState } from './scoreEditorState';
+import { createObservableScoreEditorState, type ScoreEditorState } from './scoreEditorState';
 import { ScoreRenderCoordinator } from './ScoreRenderCoordinator';
 import { ScoreSelectionController } from './ScoreSelectionController';
 import { ScorePaletteController } from './ScorePaletteController';
@@ -238,19 +238,22 @@ export function ScoreEditor({ clipId }: ScoreEditorProps) {
     lastSyncedRef.current = scoreData;
 
     const state = observable.state;
-    if (state.selectedNoteId && !stack.engine.getNote(state.selectedNoteId)) state.selectedNoteId = null;
-    if (state.selectedTupletId && !stack.engine.getTuplet(state.selectedTupletId)) state.selectedTupletId = null;
+    const patch: Partial<ScoreEditorState> = {};
+    if (state.selectedNoteId && !stack.engine.getNote(state.selectedNoteId)) patch.selectedNoteId = null;
+    if (state.selectedTupletId && !stack.engine.getTuplet(state.selectedTupletId)) patch.selectedTupletId = null;
     if (state.selectedAccidentalNoteId && !stack.engine.getNote(state.selectedAccidentalNoteId)) {
-      state.selectedAccidentalNoteId = null;
-      state.selectedAccidentalType = null;
+      patch.selectedAccidentalNoteId = null;
+      patch.selectedAccidentalType = null;
     }
     if (state.selectedArticulationNoteId && !stack.engine.getNote(state.selectedArticulationNoteId)) {
-      state.selectedArticulationNoteId = null;
-      state.selectedArticulationType = null;
+      patch.selectedArticulationNoteId = null;
+      patch.selectedArticulationType = null;
     }
     if (state.selectedTieFromNoteId && !stack.engine.getNote(state.selectedTieFromNoteId)) {
-      state.selectedTieFromNoteId = null;
+      patch.selectedTieFromNoteId = null;
     }
+
+    observable.update(patch);
 
     stack.renderCoordinator.renderScore();
   }, [scoreData, ready, clipName, observable]);

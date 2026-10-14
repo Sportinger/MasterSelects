@@ -25,9 +25,9 @@ async function renderOnce(device: GPUDevice, hdrUrl: string): Promise<{ bytes: U
   const exportFrame: NativeSceneExportFrame = { frameIndex: 7, quality: QUALITY, frameDuration: 1 / 30 };
   const settings = { ...DEFAULT_COMPOSITION_RENDER_SETTINGS, engine: 'path-traced' as const };
   const started = performance.now();
-  let view: GPUTextureView | null = null, calls = 0;
+  let calls = 0;
   for (;;) {
-    view = runtime.renderScene(device, scene.layers, scene.camera, [], false, null, null, 'main', undefined, { renderSettings: settings, exportFrame });
+    runtime.renderScene(device, scene.layers, scene.camera, [], false, null, null, 'main', undefined, { renderSettings: settings, exportFrame });
     calls++;
     const progress = getNativeSceneExportProgress(exportFrame.frameIndex);
     await (progress?.gpuDone ?? device.queue.onSubmittedWorkDone());

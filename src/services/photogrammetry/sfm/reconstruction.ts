@@ -10,6 +10,7 @@ import {
   triangulateMatch,
 } from './geometry';
 import { OpenCvFeatureClient } from './opencvFeatureClient';
+import { assignmentMap, attachObservation, canAttachObservation, featurePoint } from './observationTracks';
 import type {
   CameraPose,
   FeatureMatch,
@@ -71,10 +72,6 @@ const ORIGIN_POSE: CameraPose = {
   rotation: [1, 0, 0, 0, 1, 0, 0, 0, 1],
   translation: { x: 0, y: 0, z: 0 },
 };
-
-function featurePoint(frame: FrameFeatures, featureIndex: number): Point2 {
-  return { x: frame.points[featureIndex * 2], y: frame.points[featureIndex * 2 + 1] };
-}
 
 function featureColor(frame: FrameFeatures, featureIndex: number): [number, number, number] {
   return [
@@ -187,21 +184,6 @@ async function selectInitialPair(
   return best;
 }
 
-function assignmentMap(assignments: Map<number, Map<number, number>>, frameIndex: number): Map<number, number> {
-  let map = assignments.get(frameIndex);
-  if (!map) {
-    map = new Map();
-    assignments.set(frameIndex, map);
-  }
-  return map;
-}
-
-function addObservation(point: SparsePoint, frameIndex: number, featureIndex: number): void {
-  if (!point.observations.some((observation) => observation.frameIndex === frameIndex)) {
-    point.observations.push({ frameIndex, featureIndex });
-  }
-}
-
 function tryCreatePoint(
   points: SparsePoint[],
   assignments: Map<number, Map<number, number>>,
@@ -217,12 +199,13 @@ function tryCreatePoint(
   const secondAssignments = assignmentMap(assignments, secondFrame.sourceIndex);
   const existing = firstAssignments.get(match.first) ?? secondAssignments.get(match.second);
   if (existing !== undefined) {
-    firstAssignments.set(match.first, existing);
-    secondAssignments.set(match.second, existing);
     const point = points[existing];
-    if (point) {
-      addObservation(point, firstFrame.sourceIndex, match.first);
-      addObservation(point, secondFrame.sourceIndex, match.second);
+    // Descriptor similarity alone cannot extend a 3D track. Never overwrite
+    // another point's feature ownership or attach a geometrically wrong match.
+    if (point && canAttachObservation(point, existing, firstFrame, firstPose, match.first, assignments, focal, principal)
+      && canAttachObservation(point, existing, secondFrame, secondPose, match.second, assignments, focal, principal)) {
+      attachObservation(point, existing, firstFrame, firstPose, match.first, assignments, focal, principal);
+      attachObservation(point, existing, secondFrame, secondPose, match.second, assignments, focal, principal);
     }
     return;
   }
@@ -267,14 +250,11 @@ function attachKnownMatches(
   principal: Point2,
 ): void {
   const firstAssignments = assignmentMap(assignments, firstFrame.sourceIndex);
-  const secondAssignments = assignmentMap(assignments, secondFrame.sourceIndex);
   for (const match of matches) {
     const pointIndex = firstAssignments.get(match.first);
     const point = pointIndex === undefined ? undefined : points[pointIndex];
     if (pointIndex === undefined || !point) continue;
-    if (reprojectionError(secondPose, point.position, featurePoint(secondFrame, match.second), focal, principal) > 3.5) continue;
-    secondAssignments.set(match.second, pointIndex);
-    addObservation(point, secondFrame.sourceIndex, match.second);
+    attachObservation(point, pointIndex, secondFrame, secondPose, match.second, assignments, focal, principal);
   }
 }
 
@@ -327,14 +307,12 @@ async function registerFrame(
       inlierCount: estimate?.inlierIndices.length ?? 0,
     };
   }
-  const secondAssignments = assignmentMap(assignments, secondFrame.sourceIndex);
   for (const index of estimate.inlierIndices) {
     const featureIndex = correspondenceFeatures[index];
     const pointIndex = correspondencePointIndices[index];
     const point = points[pointIndex];
     if (featureIndex === undefined || pointIndex === undefined || !point) continue;
-    secondAssignments.set(featureIndex, pointIndex);
-    addObservation(point, secondFrame.sourceIndex, featureIndex);
+    attachObservation(point, pointIndex, secondFrame, estimate.pose, featureIndex, assignments, focal, principal);
   }
   for (const anchor of anchors) {
     attachKnownMatches(anchor.matches, anchor.frame, secondFrame, estimate.pose, points, assignments, focal, principal);

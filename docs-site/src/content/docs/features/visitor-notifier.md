@@ -111,5 +111,5 @@ Important values:
 
 ## Related Features
 
-- Hosted AI Setup
+- [Kernel Client](/features/kernel-client/)
 - [Security](/features/security/)

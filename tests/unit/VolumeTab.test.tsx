@@ -222,7 +222,7 @@ describe('VolumeTab', () => {
   });
 
   it('creates the legacy volume effect only when the user edits volume', () => {
-    const { container } = render(<VolumeTab clipId="clip-1" effects={[]} />);
+    render(<VolumeTab clipId="clip-1" effects={[]} />);
     const volumeControl = screen.getByLabelText('Audio volume');
     expect(volumeControl).not.toBeNull();
 

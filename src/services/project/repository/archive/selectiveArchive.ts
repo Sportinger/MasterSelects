@@ -49,7 +49,6 @@ export async function prepareArchive(source: RepositoryBackend, sourceDescriptor
   await writeJson(target, 'project.msrepo.json', descriptor, options.signal);
   let bindingHead: RecordReference | null = null;
   const knownSources = new Set<string>();
-  let transplant: RecordTransplant;
   const onRecord = async (record: RepositoryRecord): Promise<void> => {
     if (record.kind === 'journal' && options.journals === 'none') throw new RepositoryError('conflict', 'Selected content depends on a journal excluded by the export selection');
     if (options.media !== 'self-contained' || record.kind !== 'object') return;
@@ -66,7 +65,7 @@ export async function prepareArchive(source: RepositoryBackend, sourceDescriptor
       knownSources.add(key); if (knownSources.size > 128) knownSources.delete(knownSources.values().next().value!);
     }
   };
-  transplant = new RecordTransplant(source, target, descriptor, owner, { signal: options.signal, onRecord });
+  const transplant = new RecordTransplant(source, target, descriptor, owner, { signal: options.signal, onRecord });
   const heads: Record<string, RecordReference> = {};
   let selectedRevisionId: string | null = null;
   const checkpoints: RecordReference[] = [];

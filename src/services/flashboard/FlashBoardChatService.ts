@@ -43,10 +43,6 @@ export {
   getOpenAiReasoningEffortOptions,
   isOpenAiReasoningEffortSupported,
 } from './FlashBoardChatConfig';
-export {
-  buildFlashBoardChatSystemPrompt,
-  FLASHBOARD_CHAT_SYSTEM_PROMPT,
-} from './FlashBoardChatPrompt';
 export type { FlashBoardChatRunRecord } from './FlashBoardChatRunAudit';
 
 export async function sendFlashBoardChatMessage(request: FlashBoardChatRequest): Promise<string> {

@@ -385,8 +385,7 @@ leaks into their saved factory state.
 The migration is intentionally incremental. The Transform inspector is the
 first complete component family; remaining inspector sections and editor
 workspaces continue to use compatibility mappings until their Resolve-style
-counterparts land. Active implementation scope and acceptance gates are tracked
-in [`docs/ongoing/Resolve-20-UI-Parity.md`](../ongoing/Resolve-20-UI-Parity.md).
+counterparts land. See [Node Workspace](Node-Workspace.md) for the graph workspace controls.
 
 ---
 

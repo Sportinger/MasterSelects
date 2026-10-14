@@ -37,6 +37,7 @@ export function parseCurveLabelTextCues(value:string):readonly CurveLabelTextCue
         if(!item||typeof item!=='object'||Array.isArray(item))fail('headlines must be objects.');
         const h=item as Record<string,unknown>;
         if(Object.keys(h).some(key=>!['text','header','footer'].includes(key))||
+  // eslint-disable-next-line no-control-regex -- Headline validation deliberately rejects ASCII control characters.
           typeof h.text!=='string'||!h.text.trim()||[...h.text].length>32||/[\x00-\x1f\x7f]/.test(h.text)||!line(h.header)||!line(h.footer))
           fail('headlines need printable Unicode text (1–32 characters) and ASCII header/footer rows (up to 20).');
       }

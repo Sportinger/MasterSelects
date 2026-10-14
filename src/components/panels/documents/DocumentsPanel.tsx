@@ -132,6 +132,7 @@ export function DocumentsPanel() {
   };
   const exportText = () => {
     if (!active) return;
+  // eslint-disable-next-line no-control-regex -- Filename sanitization deliberately removes ASCII control characters.
     const name = displayTitle(active).replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_');
     download(new Blob([active.blocks.map(block => block.text).join('\n\n')],
       { type: 'text/plain;charset=utf-8' }), `${name}.txt`);

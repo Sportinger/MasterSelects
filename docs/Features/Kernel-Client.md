@@ -185,3 +185,10 @@ committing a mutation; `read-only` forbids mutation locally.
 Production Fast uses the same-origin `/api/kernel/*` Cloudflare boundary.
 Production Direct uses `/api/direct-codex/ws`, which relays through the private
 kernel origin configured by `KERNEL_ORIGIN` to the loopback-only app-server.
+
+## Public source boundary
+
+The editor carries bounded user requests, context, and deterministic tool contracts.
+Provider system prompts and task playbooks are maintained in the private kernel;
+unused browser prompt builders are not shipped. Boundary tests also reject tracked
+private planning paths and retired browser prompt modules.

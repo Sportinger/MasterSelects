@@ -42,8 +42,7 @@ describe('ASCII image graph', () => {
     });
   });
 
-  it.each([{ colorMode: 'source' as const, invert: false }, { colorMode: 'duotone' as const, invert: true }])
-  ('matches legacy cell, ramp, atlas alpha and $colorMode ink with invert=$invert', scenario => {
+  it.each([{ colorMode: 'source' as const, invert: false }, { colorMode: 'duotone' as const, invert: true }])('matches legacy cell, ramp, atlas alpha and $colorMode ink with invert=$invert', scenario => {
     const params = { amount: .75, cellSize: 10, ...scenario, colorA: '#204060', colorB: '#e0c080',
       rampPreset: 'standard', customRamp: '', fontFamily: 'monospace', fontWeight: 600 };
     const uv: [number, number] = [.3, .7], resolution: [number, number] = [40, 20], colorA = [0x20 / 255, 0x40 / 255, 0x60 / 255], colorB = [0xe0 / 255, 0xc0 / 255, 0x80 / 255];

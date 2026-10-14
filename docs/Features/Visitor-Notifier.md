@@ -109,5 +109,5 @@ Important values:
 
 ## Related Features
 
-- [Hosted AI Setup](../cloudflare-hosted-ai-setup.md)
+- [Kernel Client](Kernel-Client.md)
 - [Security](./Security.md)

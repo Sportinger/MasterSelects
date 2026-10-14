@@ -28,8 +28,7 @@ describe('halftone image graph factories', () => {
     expect(definition.params.scale.default).toBe(14);
   });
 
-  it.each([['halftone', 'circle'], ['pattern-halftone', 'circle'], ['pattern-halftone', 'diamond'], ['pattern-halftone', 'line']] as const)
-  ('matches the %s/%s reference operation order', (type, shape) => {
+  it.each([['halftone', 'circle'], ['pattern-halftone', 'circle'], ['pattern-halftone', 'diamond'], ['pattern-halftone', 'line']] as const)('matches the %s/%s reference operation order', (type, shape) => {
     const definition = type === 'halftone' ? halftone : patternHalftone;
     const params = { scale: 9.5, amount: .73, angle: 31, colorA: '#111827', colorB: '#f8fafc', shape };
     const plan = compileImageOperatorGraph(createDefaultHalftoneGraph(type), params, { parameterSchema: definition.params });

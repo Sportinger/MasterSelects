@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement, type MouseEvent as ReactMouseEvent } from 'react';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react';
 import { useClipTrim } from '../../src/components/timeline/hooks/useClipTrim';
 import { createWorkerDrawableClips, getTimelineClipCanvasTrimExtent, resolveClipGeometry } from '../../src/components/timeline/utils/timelineClipCanvasClipGeometry';
 import type { TimelineEditOperation } from '../../src/stores/timeline/editOperations/types';
@@ -231,24 +231,20 @@ describe('Right-edge trim gesture, canvas and commit', () => {
       clips = result.clips;
       return { success: result.warnings.length === 0, warnings: result.warnings };
     });
-    let latest!: ReturnType<typeof useClipTrim>;
     const clipMap = new Map(clips.map(c => [c.id, c]));
-    function Harness() {
-      latest = useClipTrim({ clipMap, tracks: [track], isExporting: false,
+    const { result } = renderHook(() => useClipTrim({ clipMap, tracks: [track], isExporting: false,
         activeTimelineToolId: tool, selectedClipIds: new Set([target.id]), snappingEnabled: true,
         playheadPosition: 7, frameRate: 30, selectClip: vi.fn(),
-        applyTimelineEditOperation: commit, setTimelineToolPreview: preview, pixelToTime: px => px / 100 });
-      return createElement('div', { 'data-testid': 'trim',
-        onMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => latest.handleTrimStart(event, target.id, 'right') });
-    }
-    const view = render(createElement(Harness));
+        applyTimelineEditOperation: commit, setTimelineToolPreview: preview, pixelToTime: px => px / 100 }));
+    const view = render(createElement('div', { 'data-testid': 'trim',
+        onMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => result.current.handleTrimStart(event, target.id, 'right') }));
     fireEvent.mouseDown(view.getByTestId('trim'), { clientX: 700 });
     return {
       target, commit, preview, clips: () => clips,
       move(end: number) {
         fireEvent.mouseMove(document, { clientX: end * 100 });
         act(() => nextFrame?.(0));
-        const props = { trackId: target.trackId, clipTrim: latest.clipTrim };
+        const props = { trackId: target.trackId, clipTrim: result.current.clipTrim };
         const geometry = resolveClipGeometry(target, props);
         expect(createWorkerDrawableClips([target], props)[0].duration).toBe(geometry.duration);
         expect(getTimelineClipCanvasTrimExtent(target, props)).toBeGreaterThanOrEqual(geometry.startTime + geometry.duration);

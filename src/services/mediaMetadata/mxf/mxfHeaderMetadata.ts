@@ -106,7 +106,7 @@ export function isMetadataSetKey(key: string): boolean {
   return key.startsWith('060e2b34') && key.slice(8, 12) === '0253';
 }
 
-/** Index table segments are sets too (0d.01.02.01.01.10.01.00) but are not header metadata. */
+/** Index table segments are sets too (0d.01.02.01.01.10.01.00) but are not header metadata. */
 export function isIndexSegmentKey(key: string): boolean {
   return isMetadataSetKey(key) && key.slice(16, 32) === '0d01020101100100';
 }

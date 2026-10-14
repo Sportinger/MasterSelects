@@ -123,7 +123,7 @@ export async function buildMxfPcmWavBlobFromSource(source: MxfPacketSource, opti
     const blobs: Blob[] = [];
     let parts: ArrayBuffer[] = [];
     let partBytes = 0;
-    let current = new Int16Array(PART_TARGET_BYTES / 2);
+    const current = new Int16Array(PART_TARGET_BYTES / 2);
     let currentLength = 0;
     let totalFrames = 0;
 

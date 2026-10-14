@@ -165,11 +165,10 @@ async function run() {
       // Path traced: accumulate to PT_SAMPLES through the same runtime, then the debug views.
       const settings = { ...DEFAULT_COMPOSITION_RENDER_SETTINGS, engine: 'path-traced' as const, stillSamples: PT_SAMPLES };
       const ptStarted = performance.now();
-      let calls = 0, ptView: GPUTextureView | null = null;
+      let ptView: GPUTextureView | null = null;
       while (performance.now() - ptStarted < PT_TIMEOUT_MS) {
         ptView = runtime.renderScene(device, scene.layers, scene.camera, [], false, null, null, 'main', undefined, { renderSettings: settings });
         await device.queue.onSubmittedWorkDone();
-        calls++;
         const status = getPtStatus('main');
         if (status?.state === 'fallback') throw new Error(`${scene.id}: path tracer fell back: ${status.fallbackReason}`);
         if (status && status.samples >= PT_SAMPLES && status.state !== 'denoising') break;

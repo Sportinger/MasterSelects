@@ -7,10 +7,9 @@ const open: LibavOpenRequest = { type: 'open', codec: 'hevc', eightBit: false, v
 const packet = { data: new Uint8Array([1]), timestamp: 0, duration: 1,
   microsecondTimestamp: 0, microsecondDuration: 1_000_000 };
 beforeEach(() => {
-  vi.stubGlobal('Worker', class {
-    onmessage = () => {}; onerror = () => {}; terminate = vi.fn(); postMessage = vi.fn();
-    constructor() { transport = this; }
-  });
+  const stub = { onmessage: (_event: any) => {}, onerror: (_event: any) => {}, terminate: vi.fn(), postMessage: vi.fn() };
+  transport = stub;
+  vi.stubGlobal('Worker', vi.fn(function () { return stub; }));
 });
 afterEach(() => vi.unstubAllGlobals());
 

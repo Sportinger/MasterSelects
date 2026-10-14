@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  security-tests:
+  lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,14 +18,32 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+
+  security-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
       - run: npm run build
+      - run: npx vitest run tests/unit/publicRepositoryBoundary.test.ts
       - run: npm run test:kernel-boundary
       - run: npm run test:normal-path-boundary
       - run: npm run test
-      - run: npm audit --audit-level=high
-        continue-on-error: true
-      - run: npm --prefix docs-site audit --audit-level=high
-        continue-on-error: true
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: npm audit --package-lock-only --audit-level=high
+      - run: npm --prefix docs-site audit --package-lock-only --audit-level=high
+        if: ${{ !cancelled() }}
 
   native-helper-security:
     runs-on: ubuntu-latest

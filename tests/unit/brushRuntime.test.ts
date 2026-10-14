@@ -1,3 +1,4 @@
+import { brushPreviewRuntime } from '../../src/services/photogrammetry/brushPreviewRuntime';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   startBrushTraining,
@@ -49,6 +50,7 @@ function trainingSnapshot(update: Partial<BrushTrainingSnapshot> = {}): BrushTra
 }
 
 afterEach(() => {
+  brushPreviewRuntime.disconnect();
   FakeWorker.instances = [];
   vi.unstubAllGlobals();
 });
@@ -56,11 +58,13 @@ afterEach(() => {
 describe('Brush worker runtime', () => {
   it('runs controls and PLY export across a dedicated worker', async () => {
     vi.stubGlobal('Worker', FakeWorker);
+    vi.stubGlobal('BroadcastChannel', class { onmessage = null; postMessage() {} close() {} });
     const file = new File(['image'], 'frame.jpg');
     Object.defineProperty(file, 'webkitRelativePath', { value: 'dataset/images/frame.jpg' });
     const updates: BrushTrainingSnapshot[] = [];
 
     const controllerPromise = startBrushTraining([file], 'preview', (snapshot) => updates.push(snapshot));
+    await Promise.resolve();
     const worker = FakeWorker.instances[0];
     expect(worker.posted[0]).toMatchObject({
       type: 'start',

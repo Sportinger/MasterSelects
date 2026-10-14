@@ -71,7 +71,7 @@ for new architecture.
   provider prompts, categories, fast-path selection, or orchestration.
 - Focused cross-repository tests keep the public and private pins synchronized.
 
-## Related implementation plan
+## Public client contract
 
-See
-[Normal Path Progressive Editor Tools Plan](../ongoing/Normal-Path-Progressive-Editor-Tools-Plan.md).
+See [Kernel Client](../Features/Kernel-Client.md) for transport and debugging.
+Provider prompts and implementation plans are maintained privately.

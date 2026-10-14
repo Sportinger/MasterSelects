@@ -22,8 +22,8 @@
     "social:validate": "node tools/social-automation/cli.mjs validate",
     "social:preview": "node tools/social-automation/cli.mjs preview",
     "social:dispatch": "node tools/social-automation/cli.mjs dispatch",
-    "build": "tsc -b && vite build && npm run docs:build",
-    "build:deploy": "vite build && npm run docs:build",
+    "build": "tsc -b && node --max-old-space-size=8192 node_modules/vite/bin/vite.js build && npm run docs:build",
+    "build:deploy": "node --max-old-space-size=8192 node_modules/vite/bin/vite.js build && npm run docs:build",
     "docs:build": "npm --prefix docs-site install --no-audit --no-fund && npm --prefix docs-site run build",
     "docs:build:head": "npm --prefix docs-site install --no-audit --no-fund && npm --prefix docs-site run build:head",
     "cf:migrate:local": "wrangler d1 migrations apply DB --local",
@@ -137,7 +137,7 @@
     "wrangler": "^4.76.0"
   },
   "overrides": {
-    "sharp": "^0.35.4",
-    "undici": "7.29.0"
+    "sharp": "^0.35.5",
+    "undici": "7.30.0"
   }
 }

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useClipTrim } from '../../src/components/timeline/hooks/useClipTrim';
 import { resolveClipGeometry } from '../../src/components/timeline/utils/timelineClipCanvasClipGeometry';
@@ -18,24 +18,20 @@ describe('Shift snapping during linked trim', () => {
     } as TimelineClip;
     const audio = { ...video, id: 'audio', trackId: 'a1', linkedClipId: 'video', source: { ...video.source, type: 'audio' } } as TimelineClip;
     const commit = vi.fn(() => ({ success: true, warnings: [] }));
-    let latest: ReturnType<typeof useClipTrim>;
-    function Harness() {
-      latest = useClipTrim({
+    const { result } = renderHook(() => useClipTrim({
         clipMap: new Map([[video.id, video], [audio.id, audio]]),
         tracks: [{ id: 'v1', type: 'video' }, { id: 'a1', type: 'audio' }] as TimelineTrack[],
         isExporting: false, activeTimelineToolId: 'select', selectedClipIds: new Set(['video', 'audio']),
         snappingEnabled: false, playheadPosition: edge === 'left' ? 2 : 8, frameRate: 30,
         selectClip: vi.fn(), applyTimelineEditOperation: commit, setTimelineToolPreview: vi.fn(),
         pixelToTime: (pixel) => pixel / 100,
-      });
-      return <div data-testid="handle" onMouseDown={(event) => latest.handleTrimStart(event, video.id, edge)} />;
-    }
-    const { getByTestId } = render(<Harness />);
+      }));
+    const { getByTestId } = render(<div data-testid="handle" onMouseDown={(event) => result.current.handleTrimStart(event, video.id, edge)} />);
     const clientX = edge === 'left' ? 193 : -193;
     const move = (shiftKey: boolean) => {
       fireEvent.mouseMove(document, { clientX, shiftKey });
       act(() => nextFrame?.(0));
-      const trim = latest!.clipTrim!;
+      const trim = result.current.clipTrim!;
       expect(trim.includeLinked).toBe(true);
       const v = resolveClipGeometry(video, { trackId: 'v1', clipTrim: trim });
       const a = resolveClipGeometry(audio, { trackId: 'a1', clipTrim: trim });

@@ -1,3 +1,5 @@
+import { captureRepositoryDomainPublication } from '../project/repository/artifacts/RepositoryDomainPublication';
+import { isScratchRepository } from '../project/repository/lifecycle/editorRepositoryLifecycle';
 import type {
   CameraSolveDataset,
   CameraSolveSourceContext,
@@ -161,6 +163,7 @@ export class CameraSolvingManager {
     maxImageSide: number,
     source: CameraSolveSourceContext | null,
   ): Promise<CameraSolveDataset | null> {
+    const storage = isScratchRepository() ? null : captureRepositoryDomainPublication();
     const controller = this.starter(files, datasetName, maxImageSide, (solving) => {
       if (jobId !== this.jobId) return;
       this.update({ ...this.snapshot, sampling: null, solving, isStarting: false });
@@ -172,7 +175,10 @@ export class CameraSolvingManager {
       this.result = result;
       this.controller = null;
       this.update({ ...this.snapshot, isStarting: false, hasResult: true, persistence: 'memory' });
-      const saved = await persistLatestCameraSolve(result).catch(() => false);
+      const saved = await persistLatestCameraSolve(result, storage).catch(error => {
+        if (jobId === this.jobId) this.update({ ...this.snapshot, error: `Camera solve is memory-only: ${describeError(error)}` });
+        return false;
+      });
       if (jobId === this.jobId && saved) {
         this.update({ ...this.snapshot, persistence: 'project' });
       }
@@ -198,7 +204,7 @@ export class CameraSolvingManager {
   }
 
   async loadLatest(): Promise<CameraSolveDataset | null> {
-    if (this.controller) return this.result;
+    if (this.controller || this.samplingController || this.result || this.snapshot.isStarting) return this.result;
     const jobId = ++this.jobId;
     this.update({ ...this.snapshot, isStarting: true, error: null });
     try {

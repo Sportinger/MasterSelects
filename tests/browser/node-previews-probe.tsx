@@ -33,7 +33,8 @@ async function startRenderer(report: (value: string) => void) {
   const textures = Array.from({ length: 5 }, () => device.createTexture({ size: [180, 320], format: 'rgba8unorm', usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_DST }));
   device.queue.copyExternalImageToTexture({ source: image }, { texture: textures[0] }, [180, 320]);
   const views = textures.map(texture => texture.createView()), sampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear' });
-  let active = true, start = performance.now(), frames = 0, totalMs = 0, maxMs = 0;
+  const start = performance.now();
+  let active = true, frames = 0, totalMs = 0, maxMs = 0;
   const timer = setInterval(() => {
     if (!active || document.hidden) return;
     const before = performance.now(), state = useTimelineStore.getState(), current = state.clips[0];

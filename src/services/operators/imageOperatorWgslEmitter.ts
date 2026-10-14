@@ -98,7 +98,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
   const isLazySelect = (item: ImagePlanInstruction) => item.operation === 'select-image' || item.operation === 'select-lazy-scalar';
   const selectScopeIds = new Set(instructions.filter(isLazySelect).flatMap(item => item.inputs.slice(1)));
   const scopedLines = (scope: number, indent: string): string[] => instructions.flatMap((item, index) => item.scope !== scope ? []
-    : [isLazySelect(item) ? renderSelect(index, indent) : expressions[index].replace(/^  /gm, indent)]);
+    : [isLazySelect(item) ? renderSelect(index, indent) : expressions[index].replace(/^ {2}/gm, indent)]);
   function renderSelect(index: number, indent: string): string {
     const item = instructions[index], condition = `v${item.inputs[0]}`, branch = (scope: number) => [
       ...scopedLines(scope, `${indent}  `), `${indent}  v${index} = v${sampleScopes.find(candidate => candidate.id === scope)!.output};`,

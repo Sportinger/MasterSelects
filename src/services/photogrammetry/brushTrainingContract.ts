@@ -117,6 +117,9 @@ export type BrushWorkerRequest =
       assetBaseUrl: string;
       entries: BrushDatasetEntry[];
       preset: BrushTrainingPreset;
+      previewChannelId?: string;
+      resumeIteration?: number;
+      resumePly?: File;
     }
   | { type: 'pause' }
   | { type: 'resume' }

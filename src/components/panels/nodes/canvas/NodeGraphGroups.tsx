@@ -1,5 +1,5 @@
 import { workspaceClipOwner } from '../../../../services/nodeGraph/unified/workspaceIds';
-﻿import './NodeGraphGroups.css';
+import './NodeGraphGroups.css';
 import { memo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import type { NodeGraph, NodeGraphNode, NodeGroupSize } from '../../../../types/nodeGraph';
 import { nodeGroupBounds } from './groupBounds';

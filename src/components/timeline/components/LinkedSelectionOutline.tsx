@@ -21,11 +21,11 @@ export function LinkedSelectionOutline({ clips, tracks, clipDrag, clipTrim, time
   const clipDragPreview = useTimelineStore(state => state.clipDragPreview);
   const color = useSettingsStore(state => state.theme === 'resolve' ? '#ef4b3f' : '#ffffff');
   let top = 0;
-  const layouts = new Map(tracks.map(track => {
-    const layout = { top, height: getTrackBaseHeight(track) };
+  const layouts = new Map<string, { top: number; height: number }>();
+  for (const track of tracks) {
+    layouts.set(track.id, { top, height: getTrackBaseHeight(track) });
     top += getTrackHeight(track);
-    return [track.id, layout] as const;
-  }));
+  }
   return <svg aria-hidden="true" width="100%" height="100%" style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 100, overflow: 'visible' }}>
     {getLinkedSelectionGroups(clips, selectedIds).map(group => {
       const rects: SelectionRect[] = [];

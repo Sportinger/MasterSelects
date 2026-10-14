@@ -1,12 +1,19 @@
+import { Logger } from '../logger';
+
+const log = Logger.create('ScanVideo');
+
 export interface ScanVideoSampleOptions {
   frameCount: number;
-  maxResolution: number;
+  /** null preserves the decoded source dimensions. */
+  maxResolution: number | null;
   startTime?: number;
   endTime?: number;
   frameRate?: number;
   jpegQuality?: number;
   signal?: AbortSignal;
   onProgress?: (current: number, total: number) => void;
+  /** Await persistence before requesting another frame or reporting progress. */
+  onFrame?: (frame: SampledScanVideoFrame) => void | Promise<void>;
 }
 
 export interface SampledScanVideoFrame {
@@ -66,6 +73,7 @@ function waitForEvent(
   timeoutMs = 20_000,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (signal?.aborted) { reject(signal.reason); return; }
     const timeout = window.setTimeout(() => finish(new Error(`Video ${eventName} timed out.`)), timeoutMs);
     const onEvent = () => finish();
     const onError = () => finish(new Error('The browser could not decode this video.'));
@@ -85,6 +93,8 @@ function waitForEvent(
 }
 
 async function waitForVideoReady(video: HTMLVideoElement, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  if (video.error) throw new Error('The browser could not decode this video.');
   if (video.readyState < HTMLMediaElement.HAVE_METADATA) {
     await waitForEvent(video, 'loadedmetadata', signal);
   }
@@ -114,7 +124,11 @@ export async function sampleScanVideoWithTimes(
   file: File,
   options: ScanVideoSampleOptions,
 ): Promise<SampledScanVideoFrame[]> {
+  options.signal?.throwIfAborted();
   if (!isSupportedScanVideo(file)) throw new Error('Choose a browser-decodable video file.');
+  if (options.maxResolution !== null && (!Number.isFinite(options.maxResolution) || options.maxResolution < 1)) {
+    throw new Error('Choose a positive frame resolution.');
+  }
   const sourceUrl = URL.createObjectURL(file);
   const video = document.createElement('video');
   video.muted = true;
@@ -125,7 +139,19 @@ export async function sampleScanVideoWithTimes(
 
   try {
     video.load();
-    await waitForVideoReady(video, options.signal);
+    try {
+      await waitForVideoReady(video, options.signal);
+      if (video.videoWidth <= 0 || video.videoHeight <= 0) {
+        throw new Error('The browser did not decode a video image.');
+      }
+    } catch (error) {
+      options.signal?.throwIfAborted();
+      log.info('Using the shared source decoder for scan frames', {
+        reason: error instanceof Error ? error.message : String(error),
+      });
+      const { sampleScanSourceFrames } = await import('./scanSourceFrames');
+      return await sampleScanSourceFrames(file, options);
+    }
     const times = planVideoSampleTimes(
       video.duration,
       options.frameCount,
@@ -137,7 +163,7 @@ export async function sampleScanVideoWithTimes(
     const sourceWidth = video.videoWidth;
     const sourceHeight = video.videoHeight;
     if (sourceWidth <= 0 || sourceHeight <= 0) throw new Error('This video does not expose a usable frame size.');
-    const scale = Math.min(1, options.maxResolution / Math.max(sourceWidth, sourceHeight));
+    const scale = options.maxResolution === null ? 1 : Math.min(1, options.maxResolution / Math.max(sourceWidth, sourceHeight));
     canvas.width = Math.max(1, Math.round(sourceWidth * scale));
     canvas.height = Math.max(1, Math.round(sourceHeight * scale));
     const context = canvas.getContext('2d', { alpha: false });
@@ -149,6 +175,7 @@ export async function sampleScanVideoWithTimes(
       await seekVideo(video, times[index], options.signal);
       context.drawImage(video, 0, 0, canvas.width, canvas.height);
       const blob = await canvasToJpeg(canvas, options.jpegQuality ?? 0.9);
+      options.signal?.throwIfAborted();
       frames.push({
         file: new File(
           [blob],
@@ -157,6 +184,8 @@ export async function sampleScanVideoWithTimes(
         ),
         sourceTime: times[index],
       });
+      await options.onFrame?.(frames[frames.length - 1]);
+      options.signal?.throwIfAborted();
       options.onProgress?.(index + 1, times.length);
     }
     return frames;

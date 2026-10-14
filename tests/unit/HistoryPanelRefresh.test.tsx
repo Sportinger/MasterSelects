@@ -1,5 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import type { CoordinatorStatus } from '../../src/services/project/repository/transaction/ProjectTransactionCoordinator';
 import type { HistoryPage } from '../../src/services/project/repository/history/RepositoryHistoryReader';
 import { HistoryPanel } from '../../src/components/panels/HistoryPanel';

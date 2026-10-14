@@ -5,23 +5,23 @@ import { bindEditorGestureCallback } from '../../../services/project/repository/
 export function useFrameCoalescedDrag<T extends unknown[]>(onMove: (...args: T) => void) {
   const latest = useRef(onMove);
   latest.current = onMove;
+  const frame = useRef<number | null>(null);
+  const pending = useRef<(() => void) | null>(null);
   const queue = useMemo(() => {
-    let frame: number | null = null;
-    let pending: (() => void) | null = null;
     const cancel = () => {
-      if (frame !== null) cancelAnimationFrame(frame);
-      frame = null;
-      pending = null;
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+      frame.current = null;
+      pending.current = null;
     };
     const flush = () => {
-      const apply = pending;
+      const apply = pending.current;
       cancel();
       apply?.();
     };
     return {
       push: (...args: T) => {
-        pending = bindEditorGestureCallback(() => latest.current(...args));
-        if (frame === null) frame = requestAnimationFrame(flush);
+        pending.current = bindEditorGestureCallback(() => latest.current(...args));
+        if (frame.current === null) frame.current = requestAnimationFrame(flush);
       },
       flush,
       cancel,

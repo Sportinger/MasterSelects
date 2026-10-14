@@ -6,6 +6,7 @@ import { Logger } from '../../../services/logger';
 import { NativeHelperClient } from '../../../services/nativeHelper/NativeHelperClient';
 import { useEngineStore, type GaussianSplatLoadPhase } from '../../../stores/engineStore';
 import { getGaussianSplatGpuRenderer } from '../../gaussian/core/GaussianSplatGpuRenderer';
+import { getReplacedSplatSceneAsset, getSplatSceneReplacementRevision } from '../../gaussian/core/splatSceneReplacement';
 import { loadGaussianSplatAssetCached, type GaussianSplatLoadProgress } from '../../gaussian/loaders';
 import type { GaussianSplatSceneLoadRequest } from './gaussianSequenceFacet';
 
@@ -222,8 +223,20 @@ export class GaussianSplatSceneLoader {
   ): Promise<void> {
     if (this.splatLoadingClips.has(request.sceneKey)) return;
     this.splatLoadingClips.add(request.sceneKey);
+    const replacementRevision = getSplatSceneReplacementRevision(request.sceneKey);
 
     try {
+      const replaced = getReplacedSplatSceneAsset(request.sceneKey);
+      if (replaced?.frames[0]?.buffer) {
+        // Live-replaced scenes (e.g. running training) outrank their stale media file.
+        renderer.uploadScene(request.sceneKey, {
+          splatCount: replaced.frames[0].buffer.splatCount,
+          data: replaced.frames[0].buffer.data,
+        });
+        useEngineStore.getState().clearGaussianSplatLoadProgress(request.sceneKey);
+        this.deps.requestRender();
+        return;
+      }
       let file = request.file;
       let loadStartPercent = 0.02;
       if (!file) {
@@ -256,6 +269,13 @@ export class GaussianSplatSceneLoader {
         },
       });
 
+      if (getSplatSceneReplacementRevision(request.sceneKey) !== replacementRevision) {
+        log.info('Skipped stale gaussian splat load; the scene was replaced while parsing', {
+          sceneKey: request.sceneKey,
+        });
+        useEngineStore.getState().clearGaussianSplatLoadProgress(request.sceneKey);
+        return;
+      }
       if (asset?.frames[0]?.buffer) {
         if (asset.metadata?.boundingBox) {
           this.splatSceneBounds.set(request.sceneKey, asset.metadata.boundingBox);

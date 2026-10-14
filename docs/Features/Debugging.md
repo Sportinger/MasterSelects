@@ -359,9 +359,9 @@ belong under `tests/playwright/campaigns/`. Historical CRLF-archive references a
 exact-Git references remain separate. Validate each against its declared source
 bytes, rather than normalizing a changed checkout to make a check pass.
 
-The private execution ledger in `docs/ongoing/Adaptive-Quality-Execution.md` records
-which checks actually ran and which native, deployment and recovery proofs remain
-missing. Internal producer/receiver adapters reside in the separate Social service;
+Qualification reports must record which checks actually ran and which native,
+deployment and recovery proofs remain missing. Internal producer/receiver adapters
+reside in the separate Social service;
 synthetic adapter reports never substitute for observed editor failures.
 
 Complete Pages artifact checks additionally live in

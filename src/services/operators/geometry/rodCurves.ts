@@ -27,7 +27,7 @@ const simulations = new Map<string, { rest: RodRest; simulation?: RodSimulation 
  * call: when reaching the frame needs more, nothing is simulated and RodSimulationDeferred is thrown.
  */
 export function simulateRodCurves(stage: RodStage, curves: CurveSet, inputKey: string, budget = Infinity): CurveSet {
-  const { time, ...setup } = stage;
+  const { time: _time, ...setup } = stage;
   const key = `${inputKey}\n${JSON.stringify(setup)}`;
   let entry = simulations.get(key);
   if (entry) simulations.delete(key);

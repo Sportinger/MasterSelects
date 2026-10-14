@@ -132,5 +132,4 @@ matrix:
 4. 1080p/4K single-source, overlap, scrub-storm, export, and memory recovery.
 5. Explicit product messaging for RGBA8/HDR limitations and interlaced media.
 
-The detailed living plan and evidence log is
-[`docs/ongoing/TurboRes-ProRes-Browser-Decode-Integration-Plan.md`](../ongoing/TurboRes-ProRes-Browser-Decode-Integration-Plan.md).
+See [Temporal frame access](../architecture/Temporal-Frame-Access.md) for the shared source-frame contract.

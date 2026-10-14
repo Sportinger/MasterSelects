@@ -26,6 +26,7 @@ export interface StabilizedBrushPly {
 
 const SH_C0 = 0.28209479177387814;
 const HEADER_PROBE_BYTES = 64 * 1024;
+const MIN_FRAME_POINTS = 8;
 
 function readUint64(view: DataView, offset: number): number {
   return view.getUint32(offset, true) + view.getUint32(offset + 4, true) * 0x1_0000_0000;
@@ -130,6 +131,13 @@ function quantile(sorted: number[], fraction: number): number {
   return sorted[index];
 }
 
+function robustBounds(sortedAxes: number[][]): { min: number[]; max: number[]; extent: number } {
+  const tail = sortedAxes[0].length >= 200 ? 0.005 : 0;
+  const min = sortedAxes.map((values) => quantile(values, tail));
+  const max = sortedAxes.map((values) => quantile(values, 1 - tail));
+  return { min, max, extent: Math.max(...max.map((value, axis) => value - min[axis]), 1e-6) };
+}
+
 export function stabilizeBrushPly(bytes: Uint8Array, colmapPointsBuffer: ArrayBuffer): StabilizedBrushPly {
   const points = parseColmapPoints(colmapPointsBuffer);
   const layout = parsePlyLayout(bytes);
@@ -206,12 +214,9 @@ export function stabilizeBrushPly(bytes: Uint8Array, colmapPointsBuffer: ArrayBu
     });
     maxLogScales.push(Math.max(...scales.map((property) => view.getFloat32(base + property.offset, true))));
   }
-  axes.forEach((values) => values.sort((a, b) => a - b));
+  const sortedAxes = axes.map((values) => values.toSorted((a, b) => a - b));
   const sortedScales = maxLogScales.toSorted((a, b) => a - b);
-  const tail = layout.vertexCount >= 200 ? 0.005 : 0;
-  const robustMin = axes.map((values) => quantile(values, tail));
-  const robustMax = axes.map((values) => quantile(values, 1 - tail));
-  const robustExtent = Math.max(...robustMax.map((value, axis) => value - robustMin[axis]), 1e-6);
+  const { min: robustMin, max: robustMax, extent: robustExtent } = robustBounds(sortedAxes);
   const scaleOutlierThreshold = Math.max(
     quantile(sortedScales, 0.99) + 2,
     quantile(sortedScales, 0.5) + 6,
@@ -226,8 +231,15 @@ export function stabilizeBrushPly(bytes: Uint8Array, colmapPointsBuffer: ArrayBu
     if (positionOutlier || maxLogScales[index] > scaleOutlierThreshold) discard(index, base);
   }
 
-  const center = robustMin.map((value, axis) => (value + robustMax[axis]) * 0.5);
-  const largestExtent = robustExtent;
+  // Normalize from the fixed COLMAP cloud when it is usable: every export of one
+  // training run (live updates, checkpoints, final result) then shares one
+  // transform, so the scene does not jump as densification moves the splats.
+  const frame = points.length >= MIN_FRAME_POINTS
+    ? robustBounds([points.map((point) => point.x), points.map((point) => point.y), points.map((point) => point.z)]
+      .map((values) => values.toSorted((a, b) => a - b)))
+    : { min: robustMin, max: robustMax, extent: robustExtent };
+  const center = frame.min.map((value, axis) => (value + frame.max[axis]) * 0.5);
+  const largestExtent = frame.extent;
   const normalizationScale = largestExtent > 1e-6 ? 2 / largestExtent : 1;
   const logNormalizationScale = Math.log(normalizationScale);
   for (let index = 0; index < layout.vertexCount; index += 1) {

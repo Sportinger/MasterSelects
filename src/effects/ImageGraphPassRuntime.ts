@@ -45,8 +45,7 @@ export class ImageGraphPassRuntime {
 
   constructor(device: GPUDevice) {
     this.device = device;
-    const owner = this;
-    void device.lost.then(() => owner.dispose());
+    void device.lost.then(() => this.dispose());
   }
 
   createBatch(): ImageGraphPassBatch { return { encoded: new Map(), resources: new Map(), transientTextures: [] }; }

@@ -26,8 +26,8 @@ Feature docs: one page per feature under `docs/Features/`, index at
 ## 1. Shared-workspace ground rules
 
 Several agents (typically 3) plus the user work in this repository at the same
-time. The main folder (`C:\Users\admin\Documents\MasterSelects-Public`) is
-shared; every agent task gets its own branch and worktree (branch model below).
+time. The main `MasterSelects-Public` folder is shared on both Linux and Windows;
+every agent task gets its own branch and worktree (branch model below).
 
 ### Branch model (decision 2026-10-04, user)
 
@@ -40,6 +40,8 @@ shared; every agent task gets its own branch and worktree (branch model below).
 - **Start every task** on a new `task/<short-name>` branch from the current
   `local`, in its own worktree next to the main folder:
   `git worktree add -b task/<short-name> ../MasterSelects-tasks/<short-name> local`.
+  If this checkout has no `local` branch, fetch `origin` and use `origin/master`
+  as the task base. Do not create or switch an owner branch as task setup.
   Install dependencies there with a real `npm ci`; never link or junction
   `node_modules` from the main folder (a forced worktree removal once deleted
   the real packages through such a link).
@@ -145,7 +147,9 @@ implementation choices, or mandatory user testing.
    live end-to-end chat run and audit review (section 5). The user does not need
    to watch or approve the test run.
 5. **Finish without another approval round.** Update the matching feature docs
-   and `README.md` when product behavior changes. Once the relevant checks pass,
+   when product behavior changes. Keep `README.md` a concise product overview:
+   update it only when the overview, setup, or public entry points change; put
+   implementation details and fixes in the matching feature docs. Once the relevant checks pass,
    commit on your task branch using an English, one-line conventional message
    and explicit file paths. User confirmation is not a prerequisite. Report the
    branch, what changed, the verification result, and any material limitation

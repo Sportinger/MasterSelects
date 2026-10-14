@@ -69,7 +69,7 @@ ffmpeg-wasm-build/build.log
 # Terminal state (Claude Code)
 .terminal_*
 
-# Agent instructions must stay tracked in the private repository
+# Shared agent instructions are part of the public contributor documentation
 !AGENTS.md
 !CLAUDE.md
 
@@ -161,6 +161,8 @@ public/instruments/gm/**/*.json
 # Internal planning documents stay local (public repo publishes features/evidence, not plans)
 docs/plans/
 docs/completed/plans/
+docs/ongoing/
+/plan.md
 
 # Local TLS certificates for LAN device testing (private keys - never commit)
 .certs/

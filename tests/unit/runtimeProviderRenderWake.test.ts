@@ -154,8 +154,7 @@ describe('runtime provider render wakes during multicam playback', () => {
     expect(state.requestNewFrameRender).toHaveBeenCalledOnce();
   });
 
-  it.each(['interactive-scrub:camera-b:media:b', 'interactive-track:parent:camera-b:media:b'])
-    ('does not throttle an unrelated or nested session: %s', (sessionKey) => {
+  it.each(['interactive-scrub:camera-b:media:b', 'interactive-track:parent:camera-b:media:b'])('does not throttle an unrelated or nested session: %s', (sessionKey) => {
       createCodecProviderRenderCallbacks({
         sourceId: 'media:b', sessionKey, mediaFileId: 'b', policy: 'interactive',
       }, 'MXF', {}).onFrame();

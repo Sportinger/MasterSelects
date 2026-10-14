@@ -1,3 +1,4 @@
+import { allocateDisGpuResource } from './disGpuAllocation';
 import { DIS_FLOW_WGSL } from './disFlowShaders';
 import type { ResidentMotionFrames } from './residentMotionFrames';
 
@@ -35,16 +36,9 @@ export class DisFlowGpu {
     const names: Stage[] = ['extract','downsample','search','densify','storeFlow'];
     const pipelines = await Promise.all(names.map(entryPoint => device.createComputePipelineAsync({
       label: `DIS ${entryPoint}`, layout: 'auto', compute: { module, entryPoint } })));
-    device.pushErrorScope('out-of-memory'); device.pushErrorScope('validation');
-    let gpu: DisFlowGpu | undefined;
-    try {
-      gpu = new DisFlowGpu(device,width,height,Object.fromEntries(names.map((name,i) => [name,pipelines[i]])) as Record<Stage,GPUComputePipeline>);
-    } finally {
-      const errors = await Promise.all([device.popErrorScope(),device.popErrorScope()]);
-      const error = errors.find(Boolean);
-      if (error) { gpu?.destroy(); throw new Error(`DIS scratch: ${error.message}`); }
-    }
-    return gpu!;
+    return allocateDisGpuResource(device, 'DIS scratch',
+      () => new DisFlowGpu(device, width, height, Object.fromEntries(names.map((name, i) => [name, pipelines[i]])) as Record<Stage, GPUComputePipeline>),
+      gpu => gpu.destroy());
   }
 
   private texture(width: number, height: number) {

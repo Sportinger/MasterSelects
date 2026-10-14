@@ -37,6 +37,8 @@ export async function generateWaveformForClipAction(
   options: GenerateClipAudioAnalysisOptions = {},
 ): Promise<void> {
   const { get, set } = context;
+  // The initial update runs before assignment; its guard must still see undefined.
+  // eslint-disable-next-line prefer-const
   let activeJobId: string | undefined;
   const updateClips = (updater: Parameters<typeof updateDerivedTimelineClips>[0]): void => {
     const currentUpdater: typeof updater = clips => {

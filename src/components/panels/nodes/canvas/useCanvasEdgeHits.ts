@@ -48,7 +48,7 @@ export function useCanvasEdgeHits(options: {
     if (hovered.current === edgeId) return;
     hovered.current = edgeId;
     hover.current?.(edgeId);
-    if (canvas.current) canvas.current.style.cursor = edgeId ? 'pointer' : '';
+    canvas.current?.style.setProperty('cursor', edgeId ? 'pointer' : '');
   }, [canvas, hover]);
 
   const tolerance = useCallback(() => HIT_TOLERANCE_PX / Math.max(1e-6, visual.current.zoom), [visual]);

@@ -1,3 +1,4 @@
+import { allocateDisGpuResource } from './disGpuAllocation';
 import { DisFlowGpu } from './DisFlowGpu';
 import type { ResidentMotionFrames } from './residentMotionFrames';
 import type { ResolvedImageGraphExternalResource } from '../_shared/imageGraphExternalResources';
@@ -92,21 +93,14 @@ export class DisMotionCache {
         : 'DIS · ready · memory only (project cache unavailable)';
       this.onStatus?.(this.progress);
     };
-    if (!this.volume) {
-      this.device.pushErrorScope('out-of-memory'); this.device.pushErrorScope('validation');
-      try {
-        this.volume = this.device.createTexture({ label: 'DIS cached source flow',
-          size: [snapshot.width*snapshot.columns,snapshot.height*snapshot.rows,snapshot.layers],format: 'rgba16float',
-          usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST });
-      } finally {
-        const checks = await Promise.all([this.device.popErrorScope(),this.device.popErrorScope()]);
-        const error = checks.find(Boolean); if (error) throw new Error(`DIS allocation: ${error.message}`);
-      }
-    }
-    if (this.bidirectional && !this.backwardVolume) {
-      this.backwardVolume = this.device.createTexture({ label: 'DIS cached reverse correspondences',
+    const allocateVolume = (label: string) => allocateDisGpuResource(this.device, label,
+      () => this.device.createTexture({ label,
         size: [snapshot.width*snapshot.columns,snapshot.height*snapshot.rows,snapshot.layers], format: 'rgba16float',
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST });
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.COPY_DST }),
+      texture => texture.destroy());
+    if (!this.volume) this.volume = await allocateVolume('DIS cached source flow');
+    if (this.bidirectional && !this.backwardVolume) {
+      this.backwardVolume = await allocateVolume('DIS cached reverse correspondences');
     }
     for (let i = 0; i < missing.length; i++) {
       if (this.disposed) return;

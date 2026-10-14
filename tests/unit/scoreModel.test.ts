@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { ScoreModel } from '../../src/services/score/ScoreModel'
-import { createTuplet, getNotesInTuplet, refillTupletRemainder, deleteTuplet, getTupletAtBeat, getTuplet } from '../../src/services/score/tupletOps'
+import { createTuplet, getNotesInTuplet, refillTupletRemainder } from '../../src/services/score/tupletOps'
 import type { NoteParams } from '../../src/types/scoreClip'
 import { fracCreate as frac, fracCompare } from '../../src/services/score/fraction'
 

@@ -46,7 +46,7 @@ per clip: adding Flocking again selects the existing effect.
 - AI tools: `addEffect` with `effectType: "flocking"` adds a swarm to an existing
   clip; every flock tool accepts any clip with a Flocking effect.
 
-Plan and acceptance criteria: `docs/ongoing/Flocking-Clips-And-Node-Graphs-Plan.md`.
+See [Node Workspace](/features/node-workspace/) for graph editing and shared controls.
 
 ---
 

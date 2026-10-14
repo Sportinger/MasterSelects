@@ -25,6 +25,16 @@ export interface AddGaussianSplatClipParams {
   gaussianSplatRuntimeKey?: string;
 }
 
+/** Runtime (scene) key a splat clip takes from its media file when it is added. */
+export function gaussianSplatMediaRuntimeKey(media: {
+  projectPath?: string;
+  absolutePath?: string;
+  filePath?: string;
+  url?: string;
+} | undefined): string | undefined {
+  return media?.projectPath ?? media?.absolutePath ?? media?.filePath ?? media?.url;
+}
+
 /**
  * Create placeholder gaussian splat clip immediately.
  * Auto-sets is3D=true so it renders via the 3D pipeline.

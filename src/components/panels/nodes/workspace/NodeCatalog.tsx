@@ -14,7 +14,7 @@ const CATEGORY_ORDER: readonly string[] = [...NODE_CATEGORIES.map(category => ca
 const rank = (category: string) => { const index = CATEGORY_ORDER.indexOf(category); return index < 0 ? CATEGORY_ORDER.length : index; };
 
 export function NodeCatalog({ width }: { width: number }) {
-  const entries = useMemo(listNodeCatalog, []);
+  const entries = useMemo(() => listNodeCatalog(), []);
   const advanced = useSettingsStore(state => state.nodeAdvancedCatalog);
   const setAdvanced = useSettingsStore(state => state.setNodeAdvancedCatalog);
   const [query, setQuery] = useState(''), [domain, setDomain] = useState('');

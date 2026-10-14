@@ -47,8 +47,7 @@ export function ScoreToolbar({ observable, palette, selection, renderScore, clea
           className={btn(state.selectedTool === 'entry')}
           title="Note entry tool (N)"
           onClick={() => {
-            state.selectedTool = 'entry';
-            state.selectedNoteId = null;
+            observable.update({ selectedTool: 'entry', selectedNoteId: null });
             renderScore();
           }}
         >
@@ -59,7 +58,7 @@ export function ScoreToolbar({ observable, palette, selection, renderScore, clea
           className={btn(state.selectedTool === 'selection')}
           title="Selection tool (Esc)"
           onClick={() => {
-            state.selectedTool = 'selection';
+            observable.update({ selectedTool: 'selection' });
             selection.selectNote(state.selectedNoteId);
             clearPreview();
             renderScore();

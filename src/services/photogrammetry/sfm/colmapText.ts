@@ -78,10 +78,17 @@ export function createColmapTextModel(reconstruction: SparseReconstruction): {
     '',
   ].join('\n');
 
+  const validPoints = reconstruction.points.filter((point) => validPointObservations(point, registered).length >= 2);
   const pointByObservation = new Map<string, number>();
-  reconstruction.points.forEach((point) => {
+  validPoints.forEach((point) => {
+    const views = new Set<number>();
     validPointObservations(point, registered).forEach((observation) => {
-      pointByObservation.set(`${observation.frameIndex}:${observation.featureIndex}`, point.id);
+      const key = `${observation.frameIndex}:${observation.featureIndex}`;
+      if (pointByObservation.has(key) || views.has(observation.frameIndex)) {
+        throw new Error('Camera solve contains conflicting observation tracks. Solve again before training.');
+      }
+      views.add(observation.frameIndex);
+      pointByObservation.set(key, point.id);
     });
   });
   const observationIndices = new Map<string, number>();
@@ -117,7 +124,6 @@ export function createColmapTextModel(reconstruction: SparseReconstruction): {
   }
   imageLines.push('');
 
-  const validPoints = reconstruction.points.filter((point) => validPointObservations(point, registered).length >= 2);
   const pointLines = [
     '# 3D point list with one line of data per point:',
     '#   POINT3D_ID, X, Y, Z, R, G, B, ERROR, TRACK[] as (IMAGE_ID, POINT2D_IDX)',

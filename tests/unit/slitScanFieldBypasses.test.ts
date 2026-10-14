@@ -1,7 +1,7 @@
 import { withSlitScanFieldGroups } from '../../src/services/operators/slitScanFieldGroups';
 import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { createDefaultSlitScanGraph } from '../../src/services/operators/slitScanEffectGraph';
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { getDefaultParams } from '../../src/effects';
 import { effectOperatorGraph, effectOperatorCompileContext } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
@@ -20,9 +20,9 @@ describe('time field inspector bypasses', () => {
   it('exposes a valid independent bypass boundary for every new processing section', () => {
     const { graph } = prepare({});
     for (const id of ['time-map', 'field-shaping', 'field-combination', 'field-noise', 'field-motion', 'rgb-time']) {
-      const group = graph.groups?.find(group => group.id === id)!;
+      const group = graph.groups?.find(group => group.id === id);
       expect(group, id).toBeDefined();
-      expect(operatorGroupBypassRoutes(graph, group), id).toBeDefined();
+      expect(operatorGroupBypassRoutes(graph, group!), id).toBeDefined();
     }
   });
   it('adds the same boundaries to saved expanded compositions and survives packing', () => {

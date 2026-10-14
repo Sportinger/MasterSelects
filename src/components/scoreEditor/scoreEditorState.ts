@@ -70,6 +70,8 @@ export interface ObservableScoreEditorState {
   subscribe(listener: () => void): () => void;
   /** Monotonic version for useSyncExternalStore snapshots. */
   getVersion(): number;
+  /** Publish changes from React event handlers and synchronization effects. */
+  update(patch: Partial<ScoreEditorState>): void;
 }
 
 /** Wrap a fresh EditorState in a change-notifying Proxy (Vue-reactive stand-in). */
@@ -89,6 +91,7 @@ export function createObservableScoreEditorState(): ObservableScoreEditorState {
 
   return {
     state,
+    update: patch => { Object.assign(state, patch); },
     subscribe(listener) {
       listeners.add(listener);
       return () => listeners.delete(listener);

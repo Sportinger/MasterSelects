@@ -64,8 +64,6 @@ export const motionDesignRefactorLanes = [
       'src/services/render/workerPresentingRenderHostPort.ts',
       'src/services/renderScheduler.ts',
       'src/services/aiTools/**motionDesign*',
-      'src/services/flashboard/FlashBoardChatPrompt.ts',
-      'src/services/flashboard/FlashBoardChatPlaybooks.ts',
       'tests/unit/motionDesignArchitectureRegistry.test.ts',
       'tests/unit/motionFrameStateContractFreeze.test.ts',
       'tests/unit/motionFrameRuntimeIntegration.test.ts',

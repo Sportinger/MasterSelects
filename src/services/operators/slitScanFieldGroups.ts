@@ -1,5 +1,5 @@
 import { compositionGroupInterface } from './operatorComposition';
-﻿import type { EffectOperatorGraph, OperatorEndpoint, OperatorGroup } from '../../types/operatorGraph';
+import type { EffectOperatorGraph, OperatorEndpoint, OperatorGroup } from '../../types/operatorGraph';
 
 /** Inspector switches are the same persisted group bypasses as the node canvas. */
 export function withSlitScanFieldGroups(original: EffectOperatorGraph): EffectOperatorGraph {
