@@ -12,9 +12,9 @@ On desktop Linux, Vulkan troubleshooting appears only when WebGPU initialization
 
 [Open the editor](https://www.masterselects.com/) · [Documentation](https://www.masterselects.com/docs/) · [Discord](https://discord.com/invite/K8dApzG3XC) · [Report an issue](https://github.com/Sportinger/MasterSelects/issues)
 
-![Face Cables effect in MasterSelects](docs/images/screenshot-face-cables.png)
+[![Node graph with connected effects and live previews in MasterSelects](docs/images/node-graph-overview.png)](docs/images/node-graph-overview.png)
 
-*Face Cables combines face tracking, animated controls, and optional scene depth. See the [feature guide](docs/Features/README.md) for this and other workflows.*
+*Build effects from connected nodes with live previews. Explore the [Node Workspace](docs/Features/Node-Workspace.md).*
 
 The Text inspector edits selected text clips together: numeric values change by the same delta, while fonts, colors and alignment apply to the selection. The font field supports mouse-wheel font selection. Static text/image previews return to idle after each requested redraw while playback is paused. See [Text Clips](docs/Features/Text-Clips.md#editing-selected-text-clips).
 
