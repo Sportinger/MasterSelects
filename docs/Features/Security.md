@@ -185,6 +185,20 @@ Local editor tool execution does not itself write to `chat_logs`.
 
 ---
 
+## Continuous Integration
+
+The security workflow runs lint, the production build, architecture boundary
+tests, all unit tests across six shards, and secret scanning. Unit-test jobs
+fetch the original reference video from Git LFS before testing its seek index.
+
+Both npm lockfile audits fail on high or critical vulnerabilities. The Native
+Helper runs its Rust tests and a mandatory `cargo audit`; vulnerability findings
+fail the job instead of being ignored. Advisory warnings remain visible in the
+log. Its TLS dependency is locked to rustls 0.23.46 or later to address the
+October 2026 rustls advisories.
+
+---
+
 ## Reporting Issues
 
 If you discover a security vulnerability:
