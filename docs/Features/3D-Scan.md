@@ -149,6 +149,10 @@ Polling stops while the live clip is not shown; cancelling/resetting the job
 releases the channel and transient snapshot. Project switches reset the job as
 before. Only the first and the final snapshot become Media items; the live
 updates in between are runtime-only and do not enter project history.
+
+`BrushTimelineSplat` keeps job logic independent of editor stores. Its exact
+`brushTimelineSplatRuntime` adapter supplies store access, while render requests
+go through `renderHostPort` so they reach the selected render host.
 Training checkpoints are saved as required `RAW/scan-training/` project data
 about every 15 seconds, independently of the visible panel, and on pause and
 completion. The manifest is published only after both the exact training dataset

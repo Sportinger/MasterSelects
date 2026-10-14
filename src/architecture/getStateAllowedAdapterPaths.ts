@@ -40,6 +40,8 @@ export const allowedAdapterPaths = [
   'src/engine/render/dispatcher/targetPreviewRenderer.ts',
   'src/services/storyboard/variants/materializationRuntime.ts',
   'src/services/storyboard/variants/rangeCommitRuntime.ts',
+  // Exact store wiring for the dependency-injected, store-free BrushTimelineSplat owner.
+  'src/services/photogrammetry/brushTimelineSplatRuntime.ts',
   'src/stores/storyboardStore/index.ts',
   'src/editorBoot.ts',
 ] as const;

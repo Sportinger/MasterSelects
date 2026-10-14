@@ -53,7 +53,7 @@ export class GaussianSplatSceneLoader {
     }
 
     if (renderer.hasScene(options.sceneKey)) {
-      useEngineStore.getState().clearGaussianSplatLoadProgress(options.sceneKey);
+      this.clearGaussianSplatLoadProgress(options.sceneKey);
       return true;
     }
 
@@ -107,10 +107,12 @@ export class GaussianSplatSceneLoader {
     });
   }
 
-  private clearGaussianSplatLoadProgressSoon(sceneKey: string, delayMs: number): void {
-    globalThis.setTimeout(() => {
+  private clearGaussianSplatLoadProgress(sceneKey: string, delayMs = 0): void {
+    const clear = () => {
       useEngineStore.getState().clearGaussianSplatLoadProgress(sceneKey);
-    }, delayMs);
+    };
+    if (delayMs > 0) globalThis.setTimeout(clear, delayMs);
+    else clear();
   }
 
   private mapGaussianAssetLoadProgress(
@@ -233,7 +235,7 @@ export class GaussianSplatSceneLoader {
           splatCount: replaced.frames[0].buffer.splatCount,
           data: replaced.frames[0].buffer.data,
         });
-        useEngineStore.getState().clearGaussianSplatLoadProgress(request.sceneKey);
+        this.clearGaussianSplatLoadProgress(request.sceneKey);
         this.deps.requestRender();
         return;
       }
@@ -273,7 +275,7 @@ export class GaussianSplatSceneLoader {
         log.info('Skipped stale gaussian splat load; the scene was replaced while parsing', {
           sceneKey: request.sceneKey,
         });
-        useEngineStore.getState().clearGaussianSplatLoadProgress(request.sceneKey);
+        this.clearGaussianSplatLoadProgress(request.sceneKey);
         return;
       }
       if (asset?.frames[0]?.buffer) {
@@ -301,7 +303,7 @@ export class GaussianSplatSceneLoader {
           totalBytes: loadFile.size,
           message: 'Splat scene loaded',
         });
-        this.clearGaussianSplatLoadProgressSoon(request.sceneKey, 350);
+        this.clearGaussianSplatLoadProgress(request.sceneKey, 350);
         log.info('Gaussian splat scene uploaded', {
           clipId: request.clipId ?? request.sceneKey,
           sceneKey: request.sceneKey,
@@ -320,7 +322,7 @@ export class GaussianSplatSceneLoader {
         percent: 1,
         message: err instanceof Error ? err.message : 'Failed to load gaussian splat scene',
       });
-      this.clearGaussianSplatLoadProgressSoon(request.sceneKey, 1500);
+      this.clearGaussianSplatLoadProgress(request.sceneKey, 1500);
     } finally {
       this.splatLoadingClips.delete(request.sceneKey);
     }

@@ -14,6 +14,8 @@ function inspect(source: Buffer) {
 it('repairs only the reference seek table while preserving all encoded media and timing', async () => {
   const original = await readFile('fixtures/playwright-reference-project/media/x-rays-safe.mp4')
   const originalHash = createHash('sha256').update(original).digest('hex')
+  expect(originalHash, 'Fetch the original fixture with git lfs pull before running this test')
+    .toBe('0eebf268d7abfed511cdcbf04bb588b0d192bbe27751d8cf0c34d3734ec52be6')
   const prepared = prepareReferenceVideoSeekIndex(original)
   const before = inspect(original)
   const after = inspect(prepared)
@@ -21,7 +23,6 @@ it('repairs only the reference seek table while preserving all encoded media and
   const start = table.start!
   const end = start + table.size
 
-  expect(originalHash).toBe('0eebf268d7abfed511cdcbf04bb588b0d192bbe27751d8cf0c34d3734ec52be6')
   expect(createHash('sha256').update(original).digest('hex')).toBe(originalHash)
   expect(prepared.byteLength).toBe(original.byteLength)
   expect(prepared.subarray(0, start).equals(original.subarray(0, start))).toBe(true)

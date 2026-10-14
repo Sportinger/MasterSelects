@@ -12,7 +12,7 @@ export async function placeSplatOnTimeline(file: File, imported: MediaFile, trai
   const startTime = timeline.playheadPosition;
   const duration = 10;
   const splatTrackId = timeline.addTrack('video');
-  const clipId = await useTimelineStore.getState().addClip(
+  const clipId = await timeline.addClip(
     splatTrackId,
     file,
     startTime,
@@ -42,21 +42,21 @@ export async function placeSplatOnTimeline(file: File, imported: MediaFile, trai
     // Scene cameras resolve from the bottom-most visible video track. Keep the
     // previous cameras intact, but make the newly imported capture view active.
     const bottomTrack = useTimelineStore.getState().tracks.filter(track => track.type === 'video' && track.id !== cameraTrackId).at(-1);
-    if (bottomTrack) useTimelineStore.getState().reorderTrack(cameraTrackId, bottomTrack.id, true);
-    const cameraId = useTimelineStore.getState().addCameraClip(cameraTrackId, startTime, duration, true);
+    if (bottomTrack) updatedTimeline.reorderTrack(cameraTrackId, bottomTrack.id, true);
+    const cameraId = updatedTimeline.addCameraClip(cameraTrackId, startTime, duration, true);
     if (!cameraId) throw new Error('The training camera could not be placed on the timeline.');
     const camera = useTimelineStore.getState().clips.find(candidate => candidate.id === cameraId)!;
-    useTimelineStore.getState().updateClip(cameraId, {
+    updatedTimeline.updateClip(cameraId, {
       name: 'Training Camera',
       source: { ...camera.source!, cameraSettings: { ...camera.source?.cameraSettings,
         fov: trainingCamera.fovDegrees, near: 0.001, far: 1000,
         resolutionWidth: trainingCamera.width, resolutionHeight: trainingCamera.height } },
     });
-    useTimelineStore.getState().updateClipTransform(cameraId, { position: pose.position, rotation: pose.rotation });
+    updatedTimeline.updateClipTransform(cameraId, { position: pose.position, rotation: pose.rotation });
   } else if (!hasCamera) {
     const cameraTrackId = updatedTimeline.addTrack('video');
-    useTimelineStore.getState().addCameraClip(cameraTrackId, startTime, duration, true);
+    updatedTimeline.addCameraClip(cameraTrackId, startTime, duration, true);
   }
-  useTimelineStore.getState().selectClip(clipId);
+  updatedTimeline.selectClip(clipId);
   return clipId;
 }

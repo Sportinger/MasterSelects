@@ -1,10 +1,10 @@
-import { engine } from '../../engine/WebGPUEngine';
 import { forgetSplatSceneReplacement, replaceGaussianSplatScene } from '../../engine/gaussian/core/splatSceneReplacement';
 import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { gaussianSplatMediaRuntimeKey } from '../../stores/timeline/clip/addGaussianSplatClip';
 import { resolveGaussianSplatClipRuntimeKey } from '../layerBuilder/layerBuilder3dSources';
 import { Logger } from '../logger';
+import { renderHostPort } from '../render/renderHostPort';
 import { BrushTimelineSplat, type BrushTimelineSplatDeps } from './BrushTimelineSplat';
 import { brushPreviewRuntime } from './brushPreviewRuntime';
 import { brushTrainingManager } from './brushTrainingManager';
@@ -65,7 +65,7 @@ export function createBrushTimelineSplatDeps(): BrushTimelineSplatDeps {
     removeMediaIfUnused,
     replaceScene: replaceGaussianSplatScene,
     forgetScene: forgetSplatSceneReplacement,
-    requestRender: () => engine.requestRender(),
+    requestRender: () => renderHostPort.requestRender(),
     log: (message, data) => log.info(message, data),
     setInterval: (callback, ms) => { const timer = setInterval(callback, ms); return () => clearInterval(timer); },
     isDocumentVisible: () => typeof document === 'undefined' || document.visibilityState !== 'hidden',

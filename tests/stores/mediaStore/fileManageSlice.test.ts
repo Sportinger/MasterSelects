@@ -1222,7 +1222,7 @@ describe('MediaStore - File Management', () => {
       expect(result).toBe(true);
       expect(updated.url).toBe('blob:http://localhost/refreshed-file');
       expect(updated.thumbnailUrl).toBe('blob:http://localhost/refreshed-thumb');
-      expect(thumbnailMocks.createThumbnail).toHaveBeenCalledWith(file.file, 'image');
+      expect(thumbnailMocks.createThumbnail).toHaveBeenCalledWith(file.file, 'image', file);
       expect(thumbnailMocks.createManagedThumbnailUrl).toHaveBeenCalledWith(
         'img-1',
         'blob:http://localhost/refreshed-thumb'

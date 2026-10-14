@@ -290,7 +290,7 @@ export const classCHardTargets = [
 ] as const satisfies readonly GetStateClassCHardTarget[];
 
 export const getStateAccessPolicyBaselines = {
-  allowedAdapterPathCount: 39,
+  allowedAdapterPathCount: 40,
   // October integration adds 17 exact targets (43 reads) and 12 action-time
   // reads for export quality, driven transforms, text selection and composition sync.
   classCHardTargetFileCount: 432,

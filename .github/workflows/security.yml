@@ -43,6 +43,8 @@ jobs:
         shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
+      - name: Fetch the reference video used by unit tests
+        run: git lfs pull --include="fixtures/playwright-reference-project/media/x-rays-safe.mp4" --exclude=""
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
