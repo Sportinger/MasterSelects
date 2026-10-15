@@ -152,6 +152,37 @@ describe('downloadMediaFileInBrowser', () => {
     expect(urls.revokeObjectUrl).toHaveBeenCalledWith('blob:media-download');
   });
 
+  it.each(['NotFoundError', 'NotAllowedError'])('handles an asynchronously rejected file read (%s)', async name => {
+    const urls = installUrlSpies();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    vi.mocked(projectDB.getStoredHandle).mockResolvedValue({
+      kind: 'file', queryPermission: vi.fn().mockResolvedValue('granted'),
+      getFile: vi.fn().mockRejectedValue(new DOMException('Source unavailable', name)),
+    } as unknown as FileSystemFileHandle);
+    const item = { id: 'missing', name: 'Missing.mp4', hasFileHandle: true, url: '' };
+
+    await expect(downloadMediaFileInBrowser(item)).resolves.toBe(false);
+    expect(click).not.toHaveBeenCalled();
+    await expect(downloadMediaFileInBrowser({ ...item, url: 'blob:retained' })).resolves.toBe(true);
+    expect(click).toHaveBeenCalledOnce();
+    expect(urls.createObjectUrl).not.toHaveBeenCalled();
+  });
+
+  it('tries the retained file handle after a project read fails', async () => {
+    const urls = installUrlSpies();
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined);
+    vi.mocked(projectFileService.isProjectOpen).mockReturnValue(true);
+    vi.mocked(projectFileService.getFileFromRaw).mockRejectedValue(new DOMException('Missing directory', 'NotFoundError'));
+    const file = new File(['audio'], 'Retained.wav');
+    vi.mocked(projectDB.getStoredHandle).mockResolvedValue({
+      kind: 'file', queryPermission: vi.fn().mockResolvedValue('granted'), getFile: vi.fn().mockResolvedValue(file),
+    } as unknown as FileSystemFileHandle);
+    await expect(downloadMediaFileInBrowser({
+      id: 'retained', name: file.name, hasFileHandle: true, projectPath: 'Raw/Retained.wav', url: '',
+    })).resolves.toBe(true);
+    expect(urls.createObjectUrl).toHaveBeenCalledWith(file);
+  });
+
   it('marks project-backed and handle-backed media as browser-downloadable', () => {
     expect(canDownloadMediaFileInBrowser({
       file: undefined,

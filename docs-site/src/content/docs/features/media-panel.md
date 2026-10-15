@@ -469,7 +469,7 @@ Right-click on items or empty space for context options. On touch devices, eithe
 ### Single/Multi Selection
 - **Reference in AI Prompt** / **Unreference from AI Prompt** for selected image, video, and audio files
 - **Rename** (single selection only)
-- **Download** (single file selection, saves through the browser from the retained file/blob URL)
+- **Download** (single file selection, saves through the browser from the retained file/blob URL). If a stored source was moved or deleted, the download tries the retained URL and reports unavailable media when no fallback remains. Failed project/handle reads are caught and logged instead of escaping as an unhandled rejection.
 - **Crop** (single image selection, opens the source monitor directly in crop mode)
 - **Create Comp** (single image/video selection, creates a composition at the media resolution, opens it, and places the media at time 0)
 - **Extract First Frame** / **Extract Last Frame** (single video selection, imports the extracted PNG beside the source media)

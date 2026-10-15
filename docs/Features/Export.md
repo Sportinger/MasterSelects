@@ -44,6 +44,14 @@ soft glows and thin strands are therefore not multiplied by their coverage a
 second time. Stacked-alpha output keeps its separate coverage plane, and image or
 native-alpha consumers retain their existing readback contract.
 
+### Audio export cancellation
+
+Cancelling while the browser audio encoder flushes returns a cancelled run without
+an export error banner or duplicate runtime error reports. An `AbortError` is only
+treated as cancellation when this pipeline received an explicit cancel request;
+unexpected encoder failures still propagate. Encoders are also released when
+cancellation arrives during initialization or encoding fails.
+
 ### Render Quality
 
 Single-sample Raster exports show frame progress only, without a flashing sample

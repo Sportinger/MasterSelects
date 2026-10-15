@@ -597,6 +597,34 @@ describe('AudioExportPipeline audio preflight', () => {
     expect(clearCache).toHaveBeenCalledTimes(2);
   });
 
+  describe.each(['exportAudio', 'exportRawAudio'] as const)('%s cancellation errors', method => {
+    it.each([
+      { cancelled: true, name: 'AbortError', resolves: true },
+      { cancelled: false, name: 'AbortError', resolves: false },
+      { cancelled: true, name: 'EncodingError', resolves: false },
+    ])('handles $name with cancellation=$cancelled', async ({ cancelled, name, resolves }) => {
+      const clip = createClip({ trackId: audioTrack.id, source: { type: 'audio', audioElement: {} as HTMLAudioElement } });
+      useTimelineStore.setState({ clips: [clip], tracks: [audioTrack], clipKeyframes: new Map() });
+      const pipeline = new AudioExportPipeline() as AudioExportPipelineTestAccess;
+      const clearCache = vi.fn();
+      pipeline.extractor = { clearCache };
+      const failure = new DOMException('Pending audio operation failed', name);
+      pipeline.extractAllAudio = vi.fn(async () => {
+        if (cancelled) pipeline.cancel();
+        throw failure;
+      });
+      const errorLog = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+      const result = pipeline[method](0, 1);
+      if (resolves) {
+        await expect(result).resolves.toBeNull();
+        expect(errorLog).not.toHaveBeenCalled();
+      } else {
+        await expect(result).rejects.toBe(failure);
+      }
+      expect(clearCache).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it('reports audio buffers only while an export run is active', () => {
     const clip = createClip({
       id: 'reported-audio',

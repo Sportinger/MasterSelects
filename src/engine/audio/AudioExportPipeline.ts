@@ -192,6 +192,9 @@ export class AudioExportPipeline {
       return result;
 
     } catch (error) {
+      // Closing WebCodecs during an explicit cancel rejects an in-flight flush.
+      // An AbortError without our cancellation request is still a real failure.
+      if (this.cancelled && error instanceof DOMException && error.name === 'AbortError') return null;
       log.error('Export failed:', error);
       throw error;
     } finally {
@@ -292,6 +295,7 @@ export class AudioExportPipeline {
       return masteredBuffer;
 
     } catch (error) {
+      if (this.cancelled && error instanceof DOMException && error.name === 'AbortError') return null;
       log.error('Raw audio export failed:', error);
       throw error;
     } finally {

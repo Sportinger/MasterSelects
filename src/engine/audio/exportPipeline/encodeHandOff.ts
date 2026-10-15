@@ -33,16 +33,23 @@ export async function encodeExportAudio(options: EncodeExportAudioOptions): Prom
   });
   options.setEncoder(encoder);
 
-  const supported = await encoder.init();
-  if (!supported) {
-    throw new Error('The requested audio encoding is not supported in this browser');
+  try {
+    const supported = await encoder.init();
+    if (options.shouldCancel()) return null;
+    if (!supported) {
+      throw new Error('The requested audio encoding is not supported in this browser');
+    }
+
+    await encoder.encode(stereoBuffer, (progress) => {
+      options.onProgress?.(buildEncodingProgress(progress.percent));
+    }, options.shouldCancel);
+    if (options.shouldCancel()) return null;
+
+    const result = await encoder.finalize();
+    return options.shouldCancel() ? null : result;
+  } finally {
+    // Also release an encoder created after cancellation during async init, or
+    // left open by a failed encode/flush. Successful finalize already closes it.
+    encoder.cancel();
   }
-  if (options.shouldCancel()) return null;
-
-  await encoder.encode(stereoBuffer, (progress) => {
-    options.onProgress?.(buildEncodingProgress(progress.percent));
-  }, options.shouldCancel);
-  if (options.shouldCancel()) return null;
-
-  return await encoder.finalize();
 }

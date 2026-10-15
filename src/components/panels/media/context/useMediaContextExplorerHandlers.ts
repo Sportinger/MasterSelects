@@ -1,7 +1,10 @@
 import { useCallback } from 'react';
+import { Logger } from '../../../../services/logger';
 import type { MediaFile } from '../../../../stores/mediaStore';
 import { projectDB } from '../../../../services/projectDB';
 import { projectFileService } from '../../../../services/projectFileService';
+
+const log = Logger.create('MediaDownload');
 
 type MediaExplorerTarget = 'raw' | 'proxy';
 type BrowserDownloadMediaFile = Pick<MediaFile, 'file' | 'hasFileHandle' | 'id' | 'name' | 'projectPath' | 'url'>;
@@ -34,8 +37,12 @@ async function getDownloadFileFromProject(item: BrowserDownloadMediaFile): Promi
   }
 
   if (item.projectPath && projectFileService.isProjectOpen()) {
-    const result = await projectFileService.getFileFromRaw(item.projectPath);
-    if (result?.file) return result.file;
+    try {
+      const result = await projectFileService.getFileFromRaw(item.projectPath);
+      if (result?.file) return result.file;
+    } catch (error) {
+      log.warn('Project media could not be read for download; trying retained sources', error);
+    }
   }
 
   if (!item.hasFileHandle) {
@@ -57,8 +64,10 @@ async function getDownloadFileFromProject(item: BrowserDownloadMediaFile): Promi
       return null;
     }
 
-    return handle.getFile();
-  } catch {
+    // Await here so a deleted/moved file reaches this catch, not the UI event.
+    return await handle.getFile();
+  } catch (error) {
+    log.warn('Stored media handle could not be read for download; trying retained URL', error);
     return null;
   }
 }
@@ -108,7 +117,9 @@ export function useMediaContextExplorerHandlers({
     if (result.success) {
       alert(result.message);
     } else if (canDownloadMediaFileInBrowser(item)) {
-      await downloadMediaFileInBrowser(item);
+      if (!await downloadMediaFileInBrowser(item)) {
+        alert('Media source is not available for browser download.');
+      }
     }
     closeContextMenu();
   }, [closeContextMenu, showInExplorer]);
