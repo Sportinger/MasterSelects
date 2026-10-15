@@ -170,6 +170,7 @@ The private Fassandra console receives a reduced aggregate projection containing
 - active identities, sessions, signed-in users, and events per session;
 - returning identities over 30 days;
 - a sequential 30-day activation funnel from app open through import, edit, export start, and export completion;
+- a separate landing-view → mode-selection acquisition funnel, so direct editor entries are not excluded from activation;
 - export success rate and tutorial completions;
 - 14-day daily-active chart;
 - semantic edit actions and categories;
@@ -177,6 +178,55 @@ The private Fassandra console receives a reduced aggregate projection containing
 - opened panels and export kinds;
 - top event totals;
 - attributed app opens grouped by social source.
+- seven-day project-action reliability and playback-health aggregates (`reliability7d`), with availability and truncated-breakdown flags.
+
+### Activation and reliability interpretation
+
+`funnel30d` starts at `app_opened`, including direct editor links. Its five steps
+remain sequential and identity-based; the query uses `occurred_at` for ordering
+because a delivered batch shares `received_at`. `landingFunnel30d` separately
+counts landing views and subsequent mode selections. An absent landing event
+does not remove a real editor session. The import-based activation funnel does
+not describe workflows that only use generated content or existing projects.
+
+`reliability7d.projectActions` separates cancellations from failures, including
+historical `project_action_failed` records whose reason or code was `cancelled`.
+New lifecycle cancellations emit `project_action_cancelled`. Totals include
+distinct failed sessions and unclassified failures; the top 50 groups retain
+action, stage, code, backend, app version, build and platform. Groups can overlap
+in sessions: do not sum them into a unique-user total. These are event counts,
+not an action failure rate, because complete attempt denominators are absent.
+Repository machine codes distinguish ownership, conflicts, corruption and
+recovery budgets instead of collapsing them into unknown failures. Raw messages
+and file/project names are not product analytics properties.
+Folder-picker and OPFS access exceptions now propagate to lifecycle reporting;
+missing write support and native directory-creation failures throw structured
+errors instead of returning the same `false` as a dismissed picker. Historical
+records labelled `cancelled` may therefore include swallowed access failures;
+their exact causes cannot be reconstructed from that label alone.
+
+`reliability7d.previewHealth` aggregates only `kind=window` events, excluding
+black-alert/recovery events that would duplicate samples. FPS is sample-weighted;
+zero-sample/missing-FPS windows are invalid, not healthy. Groups include sessions,
+build, platform, decoder and renderer. Low-FPS windows are indicative windows with
+layers, a positive target and mean FPS below 80% of that target. Long sessions
+contribute more windows; use affected sessions alongside window totals. Legacy
+layers/targets describe the final sample, so historical comparisons are approximate.
+
+New preview telemetry version 2 adds per-sample target comparisons
+(`compared_samples`, `slow_samples`), idle samples, renderer, build ID and counter
+resets. A decoder/renderer change starts a new window. Drop-counter resets no
+longer erase earlier drops; unobserved/background gaps are not charged to the
+next visible window. Zero cadence remains zero instead of falling back to a
+larger positive rate. Pixel-health fields still require actual pixel samples;
+no synchronous GPU readback is introduced. Missing renderer/build context stays
+unknown for old events. Aggregates use one app-open context per analytics
+session without exposing session IDs or linking them to diagnostic identities.
+
+The Social brief includes these aggregates and failure-code/stage breakdowns;
+consumers can read them without access to customer or per-session records.
+Unavailable queries have `available: false`, while an available empty window
+has zero counts. No database migration is required.
 
 Signed-in activity is attributed through the server-side account ID. Anonymous users remain pseudonymous and can only be followed inside their ephemeral in-memory session. No fingerprint or durable anonymous identifier is created. Customer records, recent session details, and per-event identities are excluded from the Fassandra boundary. If the migration is missing, the Stats view reports analytics as unavailable.
 

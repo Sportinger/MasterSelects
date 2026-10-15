@@ -124,6 +124,36 @@ vi.mock('../../src/stores/midiStore', () => ({
 describe('project lifecycle auto sync', () => {
   afterEach(() => vi.unstubAllEnvs());
 
+  it('reports a dismissed project picker as cancellation rather than failure', async () => {
+    const { productAnalytics } = await import('../../src/services/productAnalytics');
+    const track = vi.spyOn(productAnalytics, 'track').mockImplementation(() => undefined);
+    const { createNewProject } = await import('../../src/services/project/projectLifecycle');
+    mocks.createProject.mockResolvedValueOnce(false);
+    try {
+      expect(await createNewProject('private project')).toBe(false);
+      expect(track).toHaveBeenCalledWith('project_action_cancelled', expect.objectContaining({
+        action: 'create', reason: 'cancelled', failure_code: 'cancelled', failure_stage: 'selection',
+      }));
+      expect(track).not.toHaveBeenCalledWith('project_action_failed', expect.anything());
+      expect(JSON.stringify(track.mock.calls)).not.toContain('private project');
+    } finally { track.mockRestore(); }
+  });
+
+  it('reports structured repository failures with the failing lifecycle stage', async () => {
+    const { productAnalytics } = await import('../../src/services/productAnalytics');
+    const track = vi.spyOn(productAnalytics, 'track').mockImplementation(() => undefined);
+    const { createNewProject } = await import('../../src/services/project/projectLifecycle');
+    const error = Object.assign(new Error('private file detail'), { name: 'RepositoryError', code: 'ownership' });
+    mocks.createProject.mockRejectedValueOnce(error);
+    try {
+      await expect(createNewProject('private project')).rejects.toBe(error);
+      expect(track).toHaveBeenCalledWith('project_action_failed', expect.objectContaining({
+        action: 'create', failure_code: 'storage_ownership', failure_stage: 'create',
+      }));
+      expect(JSON.stringify(track.mock.calls)).not.toContain('private');
+    } finally { track.mockRestore(); }
+  });
+
   it('allows development reloads without the browser confirmation', async () => {
     vi.stubEnv('DEV', true);
     const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');

@@ -338,6 +338,16 @@ export const PRODUCT_ANALYTICS_EVENT_DEFINITIONS = {
       runtime_bucket: durationBucket,
     },
   },
+  project_action_cancelled: {
+    properties: {
+      action: choice(['create', 'open', 'save'] as const),
+      backend: choice(['fsa', 'native'] as const),
+      failure_code: choice(['cancelled'] as const),
+      failure_stage: choice(PRODUCT_ANALYTICS_PROJECT_FAILURE_STAGES),
+      reason: choice(['cancelled'] as const),
+      runtime_bucket: durationBucket,
+    },
+  },
   media_import_started: {
     properties: {
       audio_count: count(),
@@ -413,6 +423,13 @@ export const PRODUCT_ANALYTICS_EVENT_DEFINITIONS = {
   },
   preview_health: {
     properties: {
+      build_id: identifier(32),
+      telemetry_version: count(10),
+      renderer: choice(['main', 'worker-shadow', 'worker-presenting', 'worker-only', 'worker-gpu-only', 'unknown'] as const),
+      compared_samples: count(86_400),
+      slow_samples: count(86_400),
+      idle_samples: count(86_400),
+      drop_resets: count(86_400),
       black_longest_s: count(86_400),
       black_s: count(86_400),
       decoder: identifier(32),

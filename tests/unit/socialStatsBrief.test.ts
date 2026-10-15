@@ -57,6 +57,9 @@ describe('createSocialStatsBrief', () => {
         dailyActive14d: [],
         featureEngagement7d: [],
         funnel30d: [],
+        landingFunnel30d: [{ step: 'landing_viewed', count: 2, conversionFromStart: 1, dropoffFromPrevious: 0 }],
+        reliability7d: { projectActions: { available: true, failed: 3, cancelled: 9 },
+          previewHealth: { available: true, windows: 20, sessions: 2 } },
         recentActivity: [{ accountEmail: 'customer@example.com' }],
         recentSessions: [{ accountEmail: 'customer@example.com' }],
         stats: {
@@ -75,6 +78,9 @@ describe('createSocialStatsBrief', () => {
     const serialized = JSON.stringify(brief);
 
     expect(brief.stats.registeredUsers).toBe(790);
+    expect(brief.productAnalytics.reliability7d?.projectActions).toMatchObject({ failed: 3, cancelled: 9 });
+    expect(brief.productAnalytics.reliability7d?.previewHealth).toMatchObject({ windows: 20, sessions: 2 });
+    expect(brief.productAnalytics.landingFunnel30d?.[0].count).toBe(2);
     expect(brief.cloudflare.deployments[0]).toEqual({
       branch: 'main',
       createdAt: '2026-08-26T18:00:00.000Z',

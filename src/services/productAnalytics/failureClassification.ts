@@ -8,6 +8,10 @@ export const PRODUCT_ANALYTICS_FAILURE_CODES = [
   'file_unreadable',
   'storage_quota',
   'storage_unavailable',
+  'storage_conflict',
+  'storage_ownership',
+  'storage_corrupt',
+  'storage_budget',
   'unsupported_format',
   'decode_failed',
   'encode_failed',
@@ -87,6 +91,16 @@ function describeError(error: unknown): ErrorDescriptor {
  * message is inspected only in memory and is never returned or transmitted.
  */
 export function classifyProductAnalyticsFailure(error: unknown): ProductAnalyticsFailureCode {
+  // Repository/worker errors preserve a bounded machine code. Prefer it over
+  // prose, which may be generic, localized or mention a different failure.
+  if (error instanceof Error && error.name === 'RepositoryError' && 'code' in error) {
+    const codes: Record<string, ProductAnalyticsFailureCode> = {
+      permission: 'permission_denied', quota: 'storage_quota', ownership: 'storage_ownership',
+      conflict: 'storage_conflict', corrupt: 'storage_corrupt', budget: 'storage_budget',
+      unsupported: 'unsupported_format', cancelled: 'cancelled', io: 'storage_unavailable',
+    };
+    if (typeof error.code === 'string' && Object.hasOwn(codes, error.code)) return codes[error.code];
+  }
   const { message, name } = describeError(error);
   const text = `${name} ${message}`;
 

@@ -14,6 +14,7 @@ import { closeEditorRepository, flushEditorRepository, getActiveRepositorySessio
 import { directoryForOpfs, isLegacyProjectLocation } from '../repository/lifecycle/repositoryLocations';
 import { requestLegacyImportTarget } from '../legacyImportTarget';
 import type { RepositoryLocation } from '../repository/storageWorkerProtocol';
+import { RepositoryError } from '../repository/contracts';
 
 const log = Logger.create('ProjectCore');
 export class ProjectCoreService {
@@ -36,12 +37,12 @@ export class ProjectCoreService {
     const opened = await this.loadProject(handle); if (opened) this.pendingHandle = null; return opened;
   }
   async createProject(name: string, preserveCurrent = false): Promise<boolean> {
-    if (!this.canWriteProjects()) return false;
-    const root = await acquireProjectRoot(resolveProjectRootMode()); if (!root) return false;
+    this.assertWritableProjects();
+    const root = await acquireProjectRoot(resolveProjectRootMode(), { throwOnFailure: true }); if (!root) return false;
     return this.createProjectInFolder(root, name, preserveCurrent);
   }
   async createProjectInFolder(parent: FileSystemDirectoryHandle, name: string, preserveCurrent = false): Promise<boolean> {
-    if (!this.canWriteProjects()) return false;
+    this.assertWritableProjects();
     await rememberProjectParent(parent);
     const handle = await parent.getDirectoryHandle(name, { create: true });
     const location: RepositoryLocation = resolveProjectRootMode() === 'opfs' ? { kind: 'opfs', path: name } : { kind: 'fsa', handle };
@@ -49,12 +50,13 @@ export class ProjectCoreService {
     await this.adoptSession(handle); return true;
   }
   /** Read-only OPFS (no writable streams) must fail before any folder or repository is created. */
-  private canWriteProjects(): boolean {
-    const error = getProjectWriteSupportError(); if (error) log.warn(error); return error === null;
+  private assertWritableProjects(): void {
+    const error = getProjectWriteSupportError();
+    if (error) { log.warn(error); throw new RepositoryError('unsupported', error); }
   }
   async openProject(): Promise<boolean> {
-    if (resolveProjectRootMode() !== 'fsa') return false;
-    const handle = await acquireProjectRoot('fsa'); return handle ? this.loadProject(handle) : false;
+    if (resolveProjectRootMode() !== 'fsa') throw new RepositoryError('unsupported', 'Project folder selection is unavailable');
+    const handle = await acquireProjectRoot('fsa', { throwOnFailure: true }); return handle ? this.loadProject(handle) : false;
   }
   async listStoredProjects(): Promise<string[]> {
     const root = await acquireProjectRoot('opfs', { throwOnFailure: true }); return root ? listProjectFolderNames(root) : [];

@@ -1,4 +1,6 @@
 import type { AppD1Database } from './env';
+import { loadProductFunnels, type ProductFunnelStep } from './productAnalyticsFunnels';
+import { loadProductReliabilityAnalytics, type ProductReliabilityAnalytics } from './productReliabilityAnalytics';
 import { loadExportRunAnalytics, type ExportRunAnalytics } from './exportRunAnalytics';
 
 interface SummaryRow {
@@ -20,21 +22,6 @@ interface CountRow {
 interface DailyRow {
   count: number;
   day: string;
-}
-
-interface FunnelRow {
-  count: number;
-  step: string;
-}
-
-interface FunnelSummaryRow {
-  app_opened: number;
-  export_completed: number;
-  export_started: number;
-  landing_option_selected: number;
-  landing_viewed: number;
-  media_import_completed: number;
-  timeline_edit_committed: number;
 }
 
 interface TutorialRow {
@@ -141,12 +128,9 @@ export interface ProductAnalyticsAdminSnapshot {
     viewers: number;
     views: number;
   }>;
-  funnel30d: Array<{
-    conversionFromStart: number;
-    count: number;
-    dropoffFromPrevious: number;
-    step: string;
-  }>;
+  funnel30d: ProductFunnelStep[];
+  landingFunnel30d?: ProductFunnelStep[];
+  reliability7d?: ProductReliabilityAnalytics;
   stats: {
     activeIdentities7d: number;
     appOpens7d: number;
@@ -327,6 +311,7 @@ export async function getProductAnalyticsAdminSnapshot(
       acquisitionCampaigns,
       acquisitionContent,
       exportRuns7d,
+      reliability7d,
     ] = await Promise.all([
       db.prepare(
         `SELECT
@@ -367,56 +352,7 @@ export async function getProductAnalyticsAdminSnapshot(
          GROUP BY day
          ORDER BY day ASC`
       ).all<DailyRow>(),
-      db.prepare(
-        `WITH base AS (
-           SELECT ${identitySql} AS identity, event_name, received_at
-           FROM product_analytics_events
-           WHERE julianday(received_at) >= julianday('now', '-30 days')
-         ),
-         landing AS (
-           SELECT identity, MIN(received_at) AS at FROM base
-           WHERE event_name = 'landing_viewed' GROUP BY identity
-         ),
-         selected AS (
-           SELECT base.identity, MIN(base.received_at) AS at FROM base
-           JOIN landing ON landing.identity = base.identity AND base.received_at >= landing.at
-           WHERE base.event_name = 'landing_option_selected' GROUP BY base.identity
-         ),
-         app AS (
-           SELECT base.identity, MIN(base.received_at) AS at FROM base
-           JOIN selected ON selected.identity = base.identity AND base.received_at >= selected.at
-           WHERE base.event_name = 'app_opened' GROUP BY base.identity
-         ),
-         imported AS (
-           SELECT base.identity, MIN(base.received_at) AS at FROM base
-           JOIN app ON app.identity = base.identity AND base.received_at >= app.at
-           WHERE base.event_name = 'media_import_completed' GROUP BY base.identity
-         ),
-         edited AS (
-           SELECT base.identity, MIN(base.received_at) AS at FROM base
-           JOIN imported ON imported.identity = base.identity AND base.received_at >= imported.at
-           WHERE base.event_name = 'timeline_edit_committed' GROUP BY base.identity
-         ),
-         export_started AS (
-           SELECT base.identity, MIN(base.received_at) AS at FROM base
-           JOIN edited ON edited.identity = base.identity AND base.received_at >= edited.at
-           WHERE base.event_name = 'export_started' GROUP BY base.identity
-         ),
-         export_completed AS (
-           SELECT base.identity, MIN(base.received_at) AS at FROM base
-           JOIN export_started ON export_started.identity = base.identity
-             AND base.received_at >= export_started.at
-           WHERE base.event_name = 'export_completed' GROUP BY base.identity
-         )
-         SELECT
-           (SELECT COUNT(*) FROM landing) AS landing_viewed,
-           (SELECT COUNT(*) FROM selected) AS landing_option_selected,
-           (SELECT COUNT(*) FROM app) AS app_opened,
-           (SELECT COUNT(*) FROM imported) AS media_import_completed,
-           (SELECT COUNT(*) FROM edited) AS timeline_edit_committed,
-           (SELECT COUNT(*) FROM export_started) AS export_started,
-           (SELECT COUNT(*) FROM export_completed) AS export_completed`
-      ).first<FunnelSummaryRow>(),
+      loadProductFunnels(db),
       loadDimension(db, ['panel_opened'], 'panel'),
       loadDimension(db, ['editor_control_committed'], 'control_id'),
       loadDimension(db, ['editor_control_committed'], 'item_id'),
@@ -520,26 +456,18 @@ export async function getProductAnalyticsAdminSnapshot(
       loadAttributedDimension(db, 'acquisition_campaign'),
       loadAttributedDimension(db, 'acquisition_content'),
       loadExportRunAnalytics(db),
+      loadProductReliabilityAnalytics(db),
     ]);
 
     const events7d = numberValue(summary?.events_7d);
     const sessions7d = numberValue(summary?.sessions_7d);
     const exportsStarted7d = numberValue(summary?.export_started_7d);
     const exportsCompleted7d = numberValue(summary?.export_completed_7d);
-    const funnelRows: FunnelRow[] = [
-      { count: numberValue(funnel?.landing_viewed), step: 'landing_viewed' },
-      { count: numberValue(funnel?.landing_option_selected), step: 'landing_option_selected' },
-      { count: numberValue(funnel?.app_opened), step: 'app_opened' },
-      { count: numberValue(funnel?.media_import_completed), step: 'media_import_completed' },
-      { count: numberValue(funnel?.timeline_edit_committed), step: 'timeline_edit_committed' },
-      { count: numberValue(funnel?.export_started), step: 'export_started' },
-      { count: numberValue(funnel?.export_completed), step: 'export_completed' },
-    ];
-    const funnelStart = numberValue(funnelRows[0]?.count);
-
     return {
       available: true,
       exportRuns7d,
+      reliability7d,
+      landingFunnel30d: funnel.landing,
       breakdowns: {
         acquisitionCampaigns: countRows(acquisitionCampaigns),
         acquisitionContent: countRows(acquisitionContent),
@@ -575,16 +503,7 @@ export async function getProductAnalyticsAdminSnapshot(
           views: numberValue(row.views),
         };
       }),
-      funnel30d: funnelRows.map((row, index) => {
-        const count = numberValue(row.count);
-        const previous = index === 0 ? count : numberValue(funnelRows[index - 1]?.count);
-        return {
-          conversionFromStart: funnelStart > 0 ? count / funnelStart : 0,
-          count,
-          dropoffFromPrevious: previous > 0 ? Math.max(0, 1 - count / previous) : 0,
-          step: row.step,
-        };
-      }),
+      funnel30d: funnel.editor,
       stats: {
         activeIdentities7d: numberValue(summary?.identities_7d),
         appOpens7d: numberValue(summary?.app_opens_7d),

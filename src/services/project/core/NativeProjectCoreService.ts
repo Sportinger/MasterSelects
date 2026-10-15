@@ -1,4 +1,5 @@
 import { updateEditorRepositoryProjectFields } from '../repository/transaction/editorRepositorySession';
+import { RepositoryError } from '../repository/contracts';
 import { NativeHelperClient } from '../../nativeHelper/NativeHelperClient';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 import { addRecentNativeProject, addRecentOpfsProject } from '../recentProjects';
@@ -19,11 +20,14 @@ export class NativeProjectCoreService {
   getPendingProjectName(): null { return null; }
   async requestPendingPermission(): Promise<boolean> { return false; }
   async createProject(name: string, preserveCurrent = false): Promise<boolean> {
-    const root = await NativeHelperClient.getProjectRoot(); return root ? this.createProjectAtPath(root, name, preserveCurrent) : false;
+    const root = await NativeHelperClient.getProjectRoot();
+    if (!root) throw new RepositoryError('io', 'Native project root is unavailable');
+    return this.createProjectAtPath(root, name, preserveCurrent);
   }
   async createProjectAtPath(parent: string, name: string, preserveCurrent = false): Promise<boolean> {
     const path = parent.replace(/[\\/]$/, '') + '/' + name;
-    await NativeHelperClient.grantPath(parent); if (!await NativeHelperClient.createDir(path)) return false;
+    await NativeHelperClient.grantPath(parent);
+    if (!await NativeHelperClient.createDir(path)) throw new RepositoryError('io', 'Native project directory could not be created');
     await createRepositoryAt({ kind: 'native', path }, name, preserveCurrent); await this.adoptSession(); return true;
   }
   async loadProject(path: string): Promise<boolean> {

@@ -130,6 +130,25 @@ describe('product analytics allowlist', () => {
 
 describe('privacy-safe failure classification', () => {
   it.each([
+    ['permission', 'permission_denied'], ['quota', 'storage_quota'], ['ownership', 'storage_ownership'],
+    ['conflict', 'storage_conflict'], ['corrupt', 'storage_corrupt'], ['budget', 'storage_budget'],
+    ['cancelled', 'cancelled'], ['io', 'storage_unavailable'], ['unsupported', 'unsupported_format'],
+  ])('classifies repository code %s before inspecting the error message', (code, expected) => {
+    const error = Object.assign(new Error('Private path /customers/project cannot be read'), { name: 'RepositoryError', code });
+    expect(classifyProductAnalyticsFailure(error)).toBe(expected);
+    expect(sanitizeProductAnalyticsProperties('project_action_failed', {
+      failure_code: expected, message: error.message, path: '/customers/project',
+    })).toEqual({ failure_code: expected });
+  });
+
+  it('accepts bounded cancellation metadata without arbitrary exception content', () => {
+    expect(sanitizeProductAnalyticsProperties('project_action_cancelled', {
+      action: 'open', failure_code: 'cancelled', failure_stage: 'selection', reason: 'cancelled',
+      runtime_bucket: '1_5s', message: 'private filename',
+    })).toEqual({ action: 'open', failure_code: 'cancelled', failure_stage: 'selection',
+      reason: 'cancelled', runtime_bucket: '1_5s' });
+  });
+  it.each([
     [new DOMException('The user aborted a request', 'AbortError'), 'cancelled'],
     [new DOMException('Permission denied', 'NotAllowedError'), 'permission_denied'],
     [new DOMException('The file cannot be read', 'NotReadableError'), 'file_unreadable'],

@@ -54,15 +54,13 @@ function createAnalyticsDb(queries: string[]): AppD1Database {
 }
 
 describe('product analytics admin snapshot', () => {
-  it('loads the seven-step funnel without exceeding the D1 compound-select limit', async () => {
+  it('starts the editor funnel at app open and exposes landing acquisition separately', async () => {
     const queries: string[] = [];
 
     const snapshot = await getProductAnalyticsAdminSnapshot(createAnalyticsDb(queries));
 
     expect(snapshot.available).toBe(true);
     expect(snapshot.funnel30d.map(({ count, step }) => ({ count, step }))).toEqual([
-      { count: 229, step: 'landing_viewed' },
-      { count: 34, step: 'landing_option_selected' },
       { count: 34, step: 'app_opened' },
       { count: 10, step: 'media_import_completed' },
       { count: 10, step: 'timeline_edit_committed' },
@@ -70,9 +68,14 @@ describe('product analytics admin snapshot', () => {
       { count: 1, step: 'export_completed' },
     ]);
 
+    expect(snapshot.landingFunnel30d?.map(({ count, step }) => ({ count, step }))).toEqual([
+      { count: 229, step: 'landing_viewed' }, { count: 34, step: 'landing_option_selected' },
+    ]);
+    expect(snapshot.funnel30d[0].conversionFromStart).toBe(1);
+
     const funnelQuery = queries.find((query) => query.includes('WITH base AS'));
     expect(funnelQuery).toBeDefined();
     expect(funnelQuery).not.toContain('UNION ALL');
-    expect(funnelQuery).toContain('(SELECT COUNT(*) FROM export_completed) AS export_completed');
+    expect(funnelQuery).toContain('(SELECT COUNT(*) FROM completed) AS export_completed');
   });
 });

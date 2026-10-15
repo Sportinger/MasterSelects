@@ -172,12 +172,13 @@ function trackProjectActionFailure(
   failureCode: ProductAnalyticsFailureCode,
   failureStage: ProductAnalyticsProjectFailureStage,
 ): void {
-  productAnalytics.track('project_action_failed', {
+  const cancelled = reason === 'cancelled' || failureCode === 'cancelled';
+  productAnalytics.track(cancelled ? 'project_action_cancelled' : 'project_action_failed', {
     action,
     backend: projectFileService.activeBackend,
-    failure_code: failureCode,
+    failure_code: cancelled ? 'cancelled' : failureCode,
     failure_stage: failureStage,
-    reason,
+    reason: cancelled ? 'cancelled' : reason,
     runtime_bucket: bucketRuntime(Date.now() - startedAt),
   });
 }
