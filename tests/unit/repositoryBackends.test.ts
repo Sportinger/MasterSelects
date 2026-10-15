@@ -15,6 +15,14 @@ function directory(files: Record<string, Uint8Array>): FileSystemDirectoryHandle
   } as unknown as FileSystemDirectoryHandle;
 }
 describe('repository browser backends', () => {
+  it('keeps readable OPFS handles read-only when writable streams are missing', async () => {
+    vi.stubGlobal('navigator', { locks: { request: vi.fn() } });
+    vi.stubGlobal('FileSystemFileHandle', class {});
+    const backend = directoryBackend(directory({ 'data.bin': new Uint8Array([7]) }), 'opfs:fixture');
+    expect(backend.capabilities.immutableWrites).toBe(false);
+    expect(await backend.acquireOwner('repo')).toBeNull();
+    expect([...await backend.read('data.bin')]).toEqual([7]);
+  });
   it('reuses directory handles during recovery while reading file contents freshly', async () => {
     vi.stubGlobal('navigator', {});
     const files = { 'a.msseg': new Uint8Array([1, 2]) };

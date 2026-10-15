@@ -7,7 +7,8 @@ import { editorRepositoryLifecycle as createLifecycle, type PrepareRepository } 
 import { activateRepositoryProjection } from '../transaction/editorProjectionActivation';
 import { startScheduledLinkedMediaConnection } from '../transaction/editorLinkedMediaConnection';
 import { captureEditorProjectDomains, flushEditorRepositoryViews, readEditorRepositoryWorkspace, installEditorRepositorySession, getEditorRepositorySourceVersion, applyEditorRepositoryResult } from '../transaction/editorRepositorySession';
-import { blockEditorContentPublication, publishEditorContentProjection } from '../transaction/editorPublication';
+import { holdEditorContentPublication, publishEditorContentProjection } from '../transaction/editorPublication';
+import { supportsRepositoryWritableStreams } from '../backends/directoryBackend';
 import { createRepositoryDomainPublication } from '../artifacts/createRepositoryDomainPublication';
 import { setRepositoryDomainPublication } from '../artifacts/RepositoryDomainPublication';
 import { createWorkerRepositoryArtifactStore } from '../artifacts/WorkerRepositoryArtifactStore';
@@ -75,9 +76,9 @@ const lifecycle = createLifecycle({
     await flushEditorRepositoryViews();
   },
   async barrier() {
-    blockEditorContentPublication();
+    const release = holdEditorContentPublication();
     return { release() { const projection = lifecycle.getSession()?.coordinator.getProjection();
-      publishEditorContentProjection({ generation: projection?.generation ?? 0, revisionId: projection?.revisionId ?? null }); } };
+      publishEditorContentProjection({ generation: projection?.generation ?? 0, revisionId: projection?.revisionId ?? null }); release(); } };
   },
   async activate(session, workspace) {
     const old = lifecycle.getSession(); setRepositoryDomainPublication(publicationFor(session));
@@ -123,6 +124,9 @@ export function isScratchRepository(): boolean { const session = getActiveReposi
 export async function ensureEditorScratchRepository(): Promise<void> {
   if (getActiveRepositorySession()) return;
   await lifecycle.ensureScratch(async () => {
+    if (typeof navigator.storage?.getDirectory !== 'function' || !supportsRepositoryWritableStreams()) {
+      throw new RepositoryError('unsupported', 'Browser recovery is unavailable. Update your browser before creating or editing projects.');
+    }
     const { backendForLocation, prepareNewRepository, prepareRepositoryOpen } = await import('./repositoryLocations');
     const location = { kind: 'opfs' as const, path: 'repository-scratch/' + repositoryWorkspaceId };
     const backend = await backendForLocation(location);

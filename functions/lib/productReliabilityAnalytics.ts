@@ -1,4 +1,5 @@
 import type { AppD1Database } from './env';
+import { loadProductOperationAnalytics, type ProductOperationAnalytics } from './productOperationAnalytics';
 
 interface ProjectIssueGroup {
   action: string;
@@ -35,6 +36,7 @@ interface PreviewHealthGroup {
 }
 
 export interface ProductReliabilityAnalytics {
+  operations: ProductOperationAnalytics;
   projectActions: {
     available: boolean;
     events: number;
@@ -161,6 +163,8 @@ async function loadPreviewHealth(db: AppD1Database): Promise<ProductReliabilityA
 }
 
 export async function loadProductReliabilityAnalytics(db: AppD1Database): Promise<ProductReliabilityAnalytics> {
-  const [projectActions, previewHealth] = await Promise.all([loadProjectActions(db), loadPreviewHealth(db)]);
-  return { projectActions, previewHealth };
+  const [projectActions, previewHealth, operations] = await Promise.all([
+    loadProjectActions(db), loadPreviewHealth(db), loadProductOperationAnalytics(db),
+  ]);
+  return { projectActions, previewHealth, operations };
 }

@@ -21,8 +21,41 @@ import { recoverRepository, validateCommit } from '../../src/services/project/re
 import { CommittedMetadataReader } from '../../src/services/project/repository/index/CommittedMetadataReader';
 import { commitPath } from '../../src/services/project/repository/persistence/publication';
 import { segmentPath } from '../../src/services/project/repository/segments/recordSegment';
+import { RepositoryJournalReader } from '../../src/services/project/repository/journal/RepositoryJournalReader';
 const descriptor: RepositoryDescriptor = { format: 'masterselects-repository', formatVersion: 1, repositoryId: 'fixture', lineageId: 'fixture-lineage', requiredReaderCapabilities: [], requiredWriterCapabilities: [] };
 const owner: RepositoryOwner = { writerEpoch: 'writer', assertOwned() {}, async release() {} };
+
+describe('bounded live journals', () => {
+  it('persists and reopens multi-megabyte evidence without blocking later journal writes', async () => {
+    const source = fixture();
+    const persistence = new RepositoryPersistence(source.backend, descriptor, owner, { sessionEpoch: 'journal-writer' });
+    const recovered = await persistence.recover();
+    let head: RecordReference | null = null;
+    const client = { error: null, async request(request: StorageRequest) {
+      if (request.type !== 'publish') throw new Error('Unexpected request');
+      const result = await persistence.publish(draftPublication(request.batch));
+      head = result.commit.heads.journal;
+      return result;
+    } } as unknown as StorageWorkerClient;
+    const storage = new WorkerCoordinatorStorage(client, { writable: true, locationId: 'fixture', writerEpoch: 'writer', recovery: recovered });
+    const value = { audit: 'frame 🎬 evidence\n'.repeat(130_000), calls: Array.from({ length: 300 }, (_, index) => ({ index, result: 'ok' })),
+      opaqueResult: { $repositoryEntity: 'literal-tool-result', nested: { $repositoryShape: 'array', blocks: ['literal'] } } };
+    await storage.publishJournal('audit/run', value, 1);
+    await storage.publishJournal('audit/next', { done: true }, 2);
+    const reopened = await recoverRepository(source.backend, descriptor);
+    expect(reopened.head).not.toBeNull();
+    const reader = new RepositoryJournalReader({ getHead: () => head, readRecord: ref => readRecord(source.backend, ref) });
+    expect(await reader.latest('audit/next')).toEqual({ done: true });
+    expect(await reader.latest('audit/run')).toEqual(value);
+  });
+
+  it('preserves a failed worker cause instead of reporting it as a read-only project', () => {
+    const failure = new RepositoryError('corrupt', 'Storage worker returned an unreadable response');
+    const storage = new WorkerCoordinatorStorage({ error: failure } as StorageWorkerClient,
+      { writable: true, locationId: 'fixture', recovery: { heads: {} } } as StorageOpenResult);
+    expect(() => storage.assertOwned()).toThrow(failure);
+  });
+});
 function fixture() {
   const files = new Map<string, Uint8Array>(); let failCommit = false; let reads = 0;
   const backend: RepositoryBackend = { locationId: 'fixture', capabilities: { rangeReads: true, immutableWrites: true, replaceViewSlots: true, ownership: true, durability: 'stream-close' },

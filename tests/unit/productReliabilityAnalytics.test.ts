@@ -59,6 +59,23 @@ describe('activation and acquisition funnels', () => {
   });
 });
 
+describe('operation outcomes', () => {
+  it('counts operations once and treats page departure as incomplete until a terminal result arrives', async () => {
+    const trace = (session: string, state: string, elapsed_ms: number, signal?: string) => event('workflow_operation', session,
+      { operation_id: 'run-shared', operation: 'export', stage: 'audio', state, elapsed_ms, signal });
+    trace('a', 'started', 0); trace('a', 'progress', 100); trace('a', 'interrupted', 300, 'page_hidden');
+    trace('a', 'completed', 500); // A completion can arrive before an older interrupted event is delivered.
+    trace('b', 'started', 0); trace('b', 'interrupted', 300, 'page_left');
+    trace('c', 'cancelled', 400, 'user_cancel');
+    const { operations } = await loadProductReliabilityAnalytics(db);
+    expect(operations.available).toBe(true);
+    expect(operations.groups).toHaveLength(3);
+    expect(operations.groups.find(group => group.outcome === 'completed')).toMatchObject({ operations: 1, sessions: 1 });
+    expect(operations.groups.find(group => group.outcome === 'incomplete')).toMatchObject({ operations: 1, signal: 'page_left' });
+    expect(operations.groups.find(group => group.outcome === 'cancelled')).toMatchObject({ operations: 1, signal: 'user_cancel' });
+  });
+});
+
 describe('project action reliability', () => {
   it('separates historical and new cancellations from failures without duplicating sessions', async () => {
     event('app_opened', 'a', { platform: 'linux', build_id: 'build-a' });

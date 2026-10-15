@@ -4,11 +4,15 @@ import './ToolbarSaveStatus.css';
 
 function readStatus() {
   const session = getActiveRepositorySession();
-  if (!session) return { phase: 'unsaved', label: 'Browser recovery', detail: 'Your project is kept in this browser. Choose Save to select where to store it.' };
-  const state = session.coordinator.getStatus(); const lifecycle = getRepositoryLifecycleState();
+  const lifecycle = getRepositoryLifecycleState();
+  if (!session) return lifecycle.error
+    ? { phase: 'failed', label: 'Recovery unavailable', detail: lifecycle.error + ' Changes are not saved in this browser.' }
+    : { phase: 'saving', label: 'Preparing recovery\u2026', detail: 'Browser recovery is starting. Changes are not saved yet.' };
+  const state = session.coordinator.getStatus();
   const local = session.location.kind === 'opfs' ? ' - Browser local' : '';
   if (!session.opening.writable) return { phase: 'unsaved', label: 'Read-only' + local, detail: 'This tab can browse history. Grant folder access or close the other writing tab before editing.' };
-  if (state.error || lifecycle.error) return { phase: 'failed', label: 'Save failed' + local, detail: state.error?.message ?? lifecycle.error ?? 'Click to retry saving.' };
+  const error = session.client?.error ?? state.error;
+  if (error || lifecycle.error) return { phase: 'failed', label: 'Save failed' + local, detail: error?.message ?? lifecycle.error ?? 'Click to retry saving.' };
   if (state.confirmedSequence < state.appliedSequence || state.queuedBytes > 0) return { phase: 'saving', label: 'Saving\u2026' + local, detail: 'Saving your project changes.' };
   if (isScratchRepository()) return { phase: 'saved', label: 'Browser recovery', detail: 'Your project is saved in this browser. Choose Save to select a project folder.' };
   return { phase: 'saved', label: 'Saved' + local, detail: 'Your changes are saved. Press Ctrl+S to save your current workspace too.' };

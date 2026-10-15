@@ -196,6 +196,22 @@ const durationBucket = choice([
   '15m_plus',
 ] as const);
 
+export const OPERATION_STAGES = ['selection', 'create', 'load', 'sync', 'save', 'preparing', 'rendering', 'video', 'audio', 'muxing', 'encoding', 'download', 'unknown'] as const;
+export const OPERATION_CONTEXT_EVENTS = ['app_opened', 'project_created', 'project_opened', 'project_action_failed', 'project_action_cancelled', 'media_import_completed', 'media_import_failed', 'playback_started', 'playback_stopped', 'export_started', 'export_completed', 'export_failed', 'export_cancelled'] as const;
+const operationProperties = {
+  operation_id: identifier(80),
+  operation: choice(['project_create', 'project_open', 'export'] as const),
+  stage: choice(OPERATION_STAGES),
+  state: choice(['started', 'progress', 'completed', 'cancelled', 'failed', 'interrupted', 'resumed'] as const),
+  signal: choice(['user_cancel', 'picker_cancel', 'runner_no_result', 'exception', 'page_hidden', 'page_left', 'page_cached', 'page_visible'] as const),
+  progress_bucket: count(10),
+  step: count(100),
+  elapsed_ms: count(86_400_000),
+  stage_elapsed_ms: count(86_400_000),
+  failure_code: choice(PRODUCT_ANALYTICS_FAILURE_CODES),
+  preceding_events: { kind: 'string', maximumLength: 240, pattern: new RegExp(`^(?:${OPERATION_CONTEXT_EVENTS.join('|')})(?:>(?:${OPERATION_CONTEXT_EVENTS.join('|')})){0,7}$`) },
+} as const satisfies Readonly<Record<string, ProductAnalyticsPropertyRule>>;
+
 const exportProperties = {
   container: identifier(24),
   duration_bucket: choice(['under_10s', '10_60s', '1_5m', '5_30m', '30m_plus'] as const),
@@ -208,6 +224,7 @@ const exportProperties = {
 } as const satisfies Readonly<Record<string, ProductAnalyticsPropertyRule>>;
 
 export const PRODUCT_ANALYTICS_EVENT_DEFINITIONS = {
+  workflow_operation: { properties: operationProperties },
   landing_viewed: {
     properties: {
       entry_source: choice(['direct', 'navigation', 'return'] as const),

@@ -55,6 +55,7 @@ export class RenderLoop {
 
   // Health monitoring - detect frozen render loop
   private lastSuccessfulRender = 0;
+  private lastCadenceRender = 0;
   private watchdogTimer: ReturnType<typeof setInterval> | null = null;
   private renderCount = 0;
   // Hidden tabs pause requestAnimationFrame, so render gaps accumulated there
@@ -99,19 +100,15 @@ export class RenderLoop {
     this.isRunning = true;
     this.lastActivityTime = performance.now();
     this.lastSuccessfulRender = performance.now();
+    this.lastCadenceRender = 0;
     this.isIdle = false;
     this.renderCount = 0;
     this.playbackNextRenderTime = 0;
     log.info('Starting');
 
-    let lastTimestamp = 0;
-
     const loop = (timestamp: number) => {
       if (!this.isRunning) return;
 
-      const rafGap = lastTimestamp > 0 ? timestamp - lastTimestamp : 0;
-      lastTimestamp = timestamp;
-      let renderedFrameGap = rafGap;
       let didRender = false;
 
       if (
@@ -124,6 +121,9 @@ export class RenderLoop {
 
       const playbackRenderActive = this.isPlaying && this.timelineVisualDemand;
       const scrubRenderActive = this.isScrubbing && this.timelineVisualDemand;
+      const measureCadence = (playbackRenderActive || scrubRenderActive || this.continuousRender)
+        && (typeof document === 'undefined' || !document.hidden);
+      if (!measureCadence) this.lastCadenceRender = 0;
       const pausedPreviewHoldActive =
         !playbackRenderActive &&
         !scrubRenderActive &&
@@ -243,9 +243,6 @@ export class RenderLoop {
           }
         }
         this.lastRenderTime = timestamp;
-        if (previousRenderTime > 0) {
-          renderedFrameGap = timeSinceLastRender;
-        }
       }
 
       // Call render callback (unless exporting). Clear the fresh-frame signal
@@ -257,10 +254,6 @@ export class RenderLoop {
           this.newFrameReady = false;
           const rendered = this.callbacks.onRender(frameReason) !== false;
           if (rendered) {
-            const previousSuccessfulRender = this.lastSuccessfulRender;
-            if (previousSuccessfulRender > 0 && timestamp >= previousSuccessfulRender) {
-              renderedFrameGap = timestamp - previousSuccessfulRender;
-            }
             this.lastSuccessfulRender = timestamp;
             this.renderCount++;
             didRender = true;
@@ -273,8 +266,11 @@ export class RenderLoop {
 
       // Record rendered-frame cadence for stats. The RAF loop itself may keep
       // ticking at display rate while playback is intentionally frame-limited.
-      if (didRender) {
-        this.performanceStats.recordRafGap(renderedFrameGap, this.isScrubbing);
+      if (didRender && measureCadence) {
+        if (this.lastCadenceRender > 0) {
+          this.performanceStats.recordRafGap(timestamp - this.lastCadenceRender, this.isScrubbing);
+        }
+        this.lastCadenceRender = timestamp;
       }
 
       // Reset per-second counters
@@ -326,6 +322,7 @@ export class RenderLoop {
   }
 
   private readonly handleVisibilityChange = (): void => {
+    this.lastCadenceRender = 0;
     this.watchdogStallBaseline = performance.now();
     this.watchdogSawHiddenDocument = document.hidden;
   };
@@ -462,6 +459,7 @@ export class RenderLoop {
   }
 
   setIsPlaying(playing: boolean): void {
+    if (this.isPlaying !== playing) this.lastCadenceRender = 0;
     this.isPlaying = playing;
     this.playbackNextRenderTime = 0;
     if (playing && this.idleSuppressed) {

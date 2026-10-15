@@ -59,6 +59,29 @@ function createLoop() {
 afterEach(() => vi.restoreAllMocks());
 
 describe('RenderLoop watchdog', () => {
+  it('does not count pause time or a hidden-tab interval as dropped playback frames', () => {
+    const callbacks: FrameRequestCallback[] = [];
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => { callbacks.push(callback); return callbacks.length; });
+    vi.stubGlobal('cancelAnimationFrame', vi.fn());
+    const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(false);
+    const recordRafGap = vi.fn();
+    const loop = new RenderLoop({ recordRafGap, resetPerSecondCounters: vi.fn() } as never,
+      { onRender: () => true, isRecovering: () => false, isExporting: () => false });
+    const tick = (at: number) => callbacks.shift()!(at);
+    try {
+      loop.start(); loop.setIsPlaying(true);
+      tick(1000); tick(1040);
+      expect(recordRafGap).toHaveBeenLastCalledWith(40, false);
+      loop.setIsPlaying(false); tick(2000); tick(62_000);
+      loop.setIsPlaying(true); tick(62_100); tick(62_140);
+      hidden.mockReturnValue(true); document.dispatchEvent(new Event('visibilitychange'));
+      hidden.mockReturnValue(false); document.dispatchEvent(new Event('visibilitychange'));
+      tick(120_100); tick(120_140);
+      expect(recordRafGap.mock.calls.map(args => args[0])).toEqual([40, 40, 40]);
+      loop.stop(); callbacks.length = 0; loop.start(); tick(180_100); tick(180_140);
+      expect(recordRafGap.mock.calls.map(args => args[0])).toEqual([40, 40, 40, 40]);
+    } finally { loop.stop(); vi.unstubAllGlobals(); }
+  });
   it('presents asynchronously decoded playback frames without postponing the next clock sample', () => {
     const callbacks: FrameRequestCallback[] = [];
     vi.stubGlobal('requestAnimationFrame', vi.fn((callback: FrameRequestCallback) => {

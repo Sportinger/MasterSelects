@@ -1,3 +1,4 @@
+import { useExportRunAnalytics } from './useExportRunAnalytics';
 import { withTimelineLinkedMedia } from '../../services/project/repository/transaction/editorLinkedMediaConnection';
 import { useCallback, useRef } from 'react';
 import { ExportSubmissionGate } from './ExportSubmissionGate';
@@ -27,14 +28,9 @@ import { createStoryboardAnimaticExportFrameDecorator } from '../../services/sto
 import { resolveStoryboardExportGuard } from '../../services/storyboard/animatic/exportPolicy';
 import type { StoryboardAnimaticRenderMode } from '../../services/storyboard/animatic/types';
 import {
-  beginExportAnalytics,
-  bucketFps,
-  bucketResolution,
-  bucketTimelineDuration,
   cancelExportAnalytics,
   completeExportAnalytics,
   failExportAnalytics,
-  type AnalyticsExportRun,
 } from '../../services/productAnalytics';
 
 const log = Logger.create('ExportRunController');
@@ -68,7 +64,7 @@ export function useExportRunController({
   const ffmpegAudioPipelineRef = useRef<AudioExportPipeline | null>(null);
   const exportRenderSessionRef = useRef<ExportRenderSessionImpl | null>(null);
   const audioOnlyCancelledRef = useRef(false);
-  const activeAnalyticsRunRef = useRef<AnalyticsExportRun | null>(null);
+  const { activeAnalyticsRunRef, startAnalyticsRun, clearAnalyticsRun, setProgress, setFfmpegProgress, setExportPhase } = useExportRunAnalytics(exportState);
   const storyboardClips = useTimelineStore((state) => state.clips);
   const storyboardTracks = useTimelineStore((state) => state.tracks);
   const storyboardMediaFiles = useMediaStore((state) => state.files);
@@ -84,7 +80,7 @@ export function useExportRunController({
     gifLoopCount, gifTransparency, gifAlphaThreshold, gifBayerScale,
     includeAlpha, stackedAlpha, includeAudio, audioOnlyFormat, audioSampleRate,
     audioBitrate, normalizeAudio, videoEnabled, visualMode, imageFormat, imageQuality,
-    isExporting, setIsExporting, setProgress, setFfmpegProgress, setExportPhase,
+    isExporting, setIsExporting,
     setError, exporter, setExporter, isFFmpegReady, loadFFmpeg,
   } = exportState;
   const preserveNativeAlpha = includeAlpha && supportsNativeVideoAlpha({
@@ -106,34 +102,6 @@ export function useExportRunController({
       },
       exportSettings.useInOut,
     );
-  }, []);
-
-  const startAnalyticsRun = useCallback((input: {
-    container: string;
-    encoder: string;
-    endTime: number;
-    fps: number;
-    height: number;
-    kind: 'audio' | 'fcpxml' | 'gif' | 'image_sequence' | 'still' | 'video';
-    startTime: number;
-    width: number;
-  }) => {
-    const run = beginExportAnalytics({
-      container: input.container,
-      duration_bucket: bucketTimelineDuration(Math.max(0, input.endTime - input.startTime)),
-      encoder: input.encoder,
-      fps_bucket: bucketFps(input.fps),
-      kind: input.kind,
-      resolution_bucket: bucketResolution(input.width, input.height),
-    });
-    activeAnalyticsRunRef.current = run;
-    return run;
-  }, []);
-
-  const clearAnalyticsRun = useCallback((run: AnalyticsExportRun) => {
-    if (activeAnalyticsRunRef.current?.id === run.id) {
-      activeAnalyticsRunRef.current = null;
-    }
   }, []);
 
   const createStoryboardFrameDecorator = useCallback((renderWidth: number, renderHeight: number) => {
@@ -217,6 +185,7 @@ export function useExportRunController({
       });
 
       if (result) {
+        analyticsRun.trace?.stage('download');
         downloadBlob(result.blob, result.filename);
         completeExportAnalytics(analyticsRun);
       } else {
@@ -236,7 +205,7 @@ export function useExportRunController({
 
   const handleCancel = useCallback(() => {
     if (activeAnalyticsRunRef.current) {
-      cancelExportAnalytics(activeAnalyticsRunRef.current);
+      cancelExportAnalytics(activeAnalyticsRunRef.current, 'user_cancel');
       activeAnalyticsRunRef.current = null;
     }
     if (!videoEnabled) {
@@ -301,6 +270,7 @@ export function useExportRunController({
       });
 
       if (result) {
+        analyticsRun.trace?.stage('download');
         downloadBlob(result.blob, result.filename);
         completeExportAnalytics(analyticsRun);
       } else {
@@ -358,6 +328,7 @@ export function useExportRunController({
       });
 
       if (result) {
+        analyticsRun.trace?.stage('download');
         downloadBlob(result.blob, result.filename);
         completeExportAnalytics(analyticsRun);
       } else {
@@ -489,6 +460,7 @@ export function useExportRunController({
       });
 
       if (result.kind === 'download') {
+        analyticsRun.trace?.stage('download');
         downloadBlob(result.blob, result.filename);
         completeExportAnalytics(analyticsRun);
       } else if (result.kind === 'cancelled') {
@@ -567,6 +539,7 @@ export function useExportRunController({
       });
 
       if (result) {
+        analyticsRun.trace?.stage('download');
         downloadBlob(result.blob, result.filename);
         completeExportAnalytics(analyticsRun);
       } else {
@@ -623,6 +596,7 @@ export function useExportRunController({
       });
 
       if (result?.kind === 'zip') {
+        analyticsRun.trace?.stage('download');
         downloadBlob(result.blob, result.filename);
       }
       if (result) completeExportAnalytics(analyticsRun);

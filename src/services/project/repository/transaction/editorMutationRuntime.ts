@@ -254,7 +254,8 @@ const boundary: StoreMutationBoundary = {
     if (_domain === 'timeline' && preparation.prepared) projectTimelineMutationToComposition(preparation.before as TimelineStore, after as TimelineStore);
     for (const { id, value } of preparation.plan.journals) {
       if (JSON.stringify(runtime.journalValues.get(id)) === JSON.stringify(value)) continue;
-      runtime.journalValues.set(id, structuredClone(value)); session().coordinator.appendJournal(id, value);
+      session().coordinator.appendJournal(id, value);
+      runtime.journalValues.set(id, structuredClone(value));
     }
     for (const view of preparation.plan.views) {
       queueEditorRepositoryView(view.key, view.value);

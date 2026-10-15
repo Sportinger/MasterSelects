@@ -91,9 +91,13 @@ describe('toolbar persistent save status', () => {
 
   it('does not present an uncreated project as saved', () => {
     render(<ToolbarSaveStatus onSave={vi.fn()} />);
-    expect(label()).toBe('Browser recovery');
-    expect(button().dataset.phase).toBe('unsaved');
-    expect(button().title).toContain('Choose Save');
+    expect(label()).toBe('Preparing recovery…');
+    expect(button().title).toContain('not saved yet');
+    state.lifecycleError = 'Browser writing is unsupported';
+    refresh();
+    expect(label()).toBe('Recovery unavailable');
+    expect(button().dataset.phase).toBe('failed');
+    expect(button().title).toContain('Changes are not saved');
   });
 
   it('labels the browser scratch repository as recovery instead of a saved project', () => {

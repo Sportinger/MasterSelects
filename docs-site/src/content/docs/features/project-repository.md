@@ -286,3 +286,28 @@ editing.
 Provider orchestration remains outside the editor repository. The editor owns
 deterministic domain mutations, transaction authorization, runtime restoration
 and the durable records produced by those operations.
+
+## Recovery and writer failure handling
+
+Browser backends advertise writing only when writable file streams and Web Locks
+are available. Older WebKit with readable OPFS but no `createWritable` can read
+repositories without being treated as a writer. Scratch recovery rejects that
+unsupported capability before creating a project. The toolbar shows preparing
+recovery until a session exists, and recovery unavailable after failure; it never
+claims browser recovery has saved a project without a repository session. This
+is a capability guard, not a synchronous-access-handle fallback for older Safari.
+
+Session handoff holds an outer publication barrier across projection activation
+and writer installation. Inner activation cannot release it early. Layouts may
+restore geometry during activation/read-only viewing, but cannot create tracks,
+change track visibility, or insert a camera then. Interactive tutorials wait for
+a writable repository before opening their history batch. Content guards remain
+in force for explicit edit attempts against read-only projects.
+
+Live journals larger than 256 KiB use the bounded aggregate representation already
+used by imported journals. Individual string/array/object blocks and mapping pages
+remain below the record limit; the logical value is reconstructed on read. Queue
+and logical-read budgets remain enforced. Rejected journal enqueue attempts do
+not enter the editor's deduplication cache, so the same value can be retried.
+Storage worker faults retain their actual code and message instead of being
+reported as generic read-only ownership failures.

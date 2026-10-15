@@ -21,6 +21,8 @@ import { DEFAULT_TRACKS, useTimelineStore } from '../../src/stores/timeline';
 import { useSettingsStore } from '../../src/stores/settingsStore';
 import type { DockLayout, DockNode, DockTabGroup, PanelType } from '../../src/types/dock';
 import { createMockClip } from '../helpers/mockData';
+import { holdEditorContentPublication } from '../../src/services/project/repository/transaction/editorPublication';
+import { applySavedTimelineLayout, activate3DEditSceneCamera } from '../../src/stores/dockStore/timelineLayoutAdapter';
 
 function findTabGroup(node: DockNode, groupId: string): DockTabGroup | null {
   if (node.kind === 'tab-group') {
@@ -34,6 +36,18 @@ function panelTypes(group: DockTabGroup | null): PanelType[] {
 }
 
 describe('dock store saved layouts', () => {
+  it('restores view geometry without changing authored tracks or adding cameras during activation', () => {
+    const tracks = useTimelineStore.getState().tracks.map(track => ({ ...track }));
+    const release = holdEditorContentPublication();
+    try {
+      applySavedTimelineLayout({ trackTypeCounts: { video: 8 }, trackTypeVisibility: { video: false }, trackTypeHeights: { video: 120 } });
+      expect(activate3DEditSceneCamera()).toBeNull();
+      expect(useTimelineStore.getState().tracks.map(({ id, visible }) => ({ id, visible })))
+        .toEqual(tracks.map(({ id, visible }) => ({ id, visible })));
+      expect(useTimelineStore.getState().tracks.find(track => track.type === 'video')?.height).toBe(120);
+      expect(useTimelineStore.getState().clips).toHaveLength(0);
+    } finally { release(); }
+  });
   it('renames legacy Color Nodes tabs without changing custom titles or the general Nodes panel', () => {
     const layout: DockLayout = { root: { kind: 'tab-group', id: 'nodes', activeIndex: 1, panels: [
       { id: 'general', type: 'node-workspace', title: 'Nodes' },

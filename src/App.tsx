@@ -1,6 +1,7 @@
 // WebVJ Mixer - Main Application
 
-import { useState, useCallback, useEffect, useLayoutEffect, useRef, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect, useLayoutEffect, useRef, useSyncExternalStore, lazy, Suspense } from 'react';
+import { isEditorRepositoryWritable, subscribeEditorWriteAvailability } from './services/project/repository/transaction/editorWriteAvailability';
 import { flushSync } from 'react-dom';
 import { EditorFileDrop } from './components/common/EditorFileDrop';
 import { Toolbar } from './components/common/Toolbar';
@@ -97,6 +98,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
 
   // === ALL HOOKS MUST BE CALLED BEFORE ANY EARLY RETURNS ===
   useTrackingAssetActions();
+  const repositoryWritable = useSyncExternalStore(subscribeEditorWriteAvailability, isEditorRepositoryWritable);
 
   const loadSavedLayout = useDockStore((s) => s.loadSavedLayout);
   const isStartLayout = useDockStore((s) => (
@@ -567,7 +569,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
               onComplete={handleTutorialSetupComplete}
             />
           )}
-          {activeInteractiveCampaign ? (
+          {activeInteractiveCampaign && repositoryWritable ? (
             <InteractiveTutorialOverlay
               key={`interactive-${activeInteractiveCampaign.id}`}
               campaign={activeInteractiveCampaign}

@@ -1,5 +1,6 @@
 import { prepareStructuralPublication, type StructuralPointer } from './structuralPublication';
 import { draftNavigationRecords } from '../persistence/navigationPreferences';
+import { draftJournalAggregate } from '../journal/draftJournalAggregate';
 import { ReadonlyWorkspace } from '../persistence/ReadonlyWorkspace';
 import { REPOSITORY_LIMITS, RepositoryError } from '../contracts';
 import type { EntityDTO, EntityKey, JsonValue, MetadataPage, RecordReference, RepositoryProjection, RepositoryRecord, RevisionMetadata } from '../contracts';
@@ -43,7 +44,8 @@ export class WorkerCoordinatorStorage implements CoordinatorStorage {
     this.owned = opening.writable; this.heads = { ...opening.recovery.heads };
   }
   assertOwned(): void {
-    if (!this.owned || this.client.errorCode) throw new RepositoryError('ownership', 'Repository writer is unavailable or read-only');
+    if (this.client.error) throw this.client.error;
+    if (!this.owned) throw new RepositoryError('ownership', 'This project is read-only. Close the other writing tab or grant folder access before editing.');
   }
   private rememberRevision(id: string, reference: RecordReference): void {
     this.revisionReferences.delete(id); this.revisionReferences.set(id, reference);
@@ -240,8 +242,10 @@ export class WorkerCoordinatorStorage implements CoordinatorStorage {
       storedValue = { ...value, manifestReference: local('manifest') };
       references.push('manifest');
     }
+    const aggregate = draftJournalAggregate(storedValue);
+    records.push(...aggregate.records);
     records.push({ id: 'journal', kind: 'journal', schemaVersion: 1,
-      payload: json({ id, value: storedValue, previous: previous ?? null }), references, blobs: dependencies.blobs ?? [] });
+      payload: json({ id, value: aggregate.value, previous: previous ?? null }), references: [...references, ...aggregate.references], blobs: dependencies.blobs ?? [] });
     await this.publish({ batchId: `journal-${sequence}-${id}`, firstOperation: sequence, lastOperation: sequence,
       records, heads: { journal: 'journal' } });
   }

@@ -1,3 +1,4 @@
+import { beginOperationTrace, type OperationTrace } from '../productAnalytics/operationTrace';
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
 // Project Lifecycle — create, open, close, auto-sync
 
@@ -168,11 +169,14 @@ function registerAutoSyncDisposer(disposer: unknown): void {
 function trackProjectActionFailure(
   action: 'create' | 'open' | 'save',
   startedAt: number,
+  trace: OperationTrace,
   reason: 'cancelled' | 'storage_error' | 'unknown',
   failureCode: ProductAnalyticsFailureCode,
   failureStage: ProductAnalyticsProjectFailureStage,
 ): void {
   const cancelled = reason === 'cancelled' || failureCode === 'cancelled';
+  trace.stage(failureStage);
+  trace.finish(cancelled ? 'cancelled' : 'failed', cancelled ? 'picker_cancel' : 'exception', failureCode);
   productAnalytics.track(cancelled ? 'project_action_cancelled' : 'project_action_failed', {
     action,
     backend: projectFileService.activeBackend,
@@ -188,34 +192,37 @@ function trackProjectActionFailure(
  */
 export async function createNewProject(name: string): Promise<boolean> {
   const startedAt = Date.now();
+  const trace = beginOperationTrace('project_create', 'create');
   let failureStage: ProductAnalyticsProjectFailureStage = 'create';
   try {
     // Create project folder on filesystem first
     const success = await projectFileService.createProject(name, true);
     if (!success) {
-      trackProjectActionFailure('create', startedAt, 'cancelled', 'cancelled', 'selection');
+      trackProjectActionFailure('create', startedAt, trace, 'cancelled', 'cancelled', 'selection');
       return false;
     }
 
     // Now sync current store state into the newly created project
     // This overwrites the empty initial project data with actual user edits
-    failureStage = 'sync';
+    failureStage = 'sync'; trace.stage('sync');
     await syncStoresToProject();
-    failureStage = 'save';
+    failureStage = 'save'; trace.stage('save');
     const saved = await projectFileService.saveProject();
     if (saved) {
+      trace.finish('completed');
       productAnalytics.track('project_created', {
         backend: projectFileService.activeBackend,
         runtime_bucket: bucketRuntime(Date.now() - startedAt),
       });
     } else {
-      trackProjectActionFailure('save', startedAt, 'storage_error', 'storage_unavailable', 'save');
+      trackProjectActionFailure('save', startedAt, trace, 'storage_error', 'storage_unavailable', 'save');
     }
     return saved;
   } catch (error) {
     trackProjectActionFailure(
       failureStage === 'save' ? 'save' : 'create',
       startedAt,
+      trace,
       failureStage === 'save' ? 'storage_error' : 'unknown',
       classifyProductAnalyticsFailure(error),
       failureStage,
@@ -251,29 +258,32 @@ async function createBlankProjectWith(
   createFolder: () => Promise<boolean>,
 ): Promise<BlankProjectCreationResult> {
   const startedAt = Date.now();
+  const trace = beginOperationTrace('project_create', 'create');
   let failureStage: ProductAnalyticsProjectFailureStage = 'create';
   try {
     const folderCreated = await createFolder();
     if (!folderCreated) {
-      trackProjectActionFailure('create', startedAt, 'cancelled', 'cancelled', 'selection');
+      trackProjectActionFailure('create', startedAt, trace, 'cancelled', 'cancelled', 'selection');
       return 'not-created';
     }
 
-    failureStage = 'save';
+    failureStage = 'save'; trace.stage('save');
     const saved = await projectFileService.saveProject();
     if (saved) {
+      trace.finish('completed');
       productAnalytics.track('project_created', {
         backend: projectFileService.activeBackend,
         runtime_bucket: bucketRuntime(Date.now() - startedAt),
       });
     } else {
-      trackProjectActionFailure('save', startedAt, 'storage_error', 'storage_unavailable', 'save');
+      trackProjectActionFailure('save', startedAt, trace, 'storage_error', 'storage_unavailable', 'save');
     }
     return saved ? 'created' : 'save-failed';
   } catch (error) {
     trackProjectActionFailure(
       failureStage === 'save' ? 'save' : 'create',
       startedAt,
+      trace,
       failureStage === 'save' ? 'storage_error' : 'unknown',
       classifyProductAnalyticsFailure(error),
       failureStage,
@@ -287,18 +297,20 @@ async function createBlankProjectWith(
  */
 export async function openExistingProject(): Promise<boolean> {
   const startedAt = Date.now();
+  const trace = beginOperationTrace('project_open', 'selection');
   let failureStage: ProductAnalyticsProjectFailureStage = 'selection';
   try {
     const success = await projectFileService.openProject();
     if (!success) {
-      trackProjectActionFailure('open', startedAt, 'cancelled', 'cancelled', 'selection');
+      trackProjectActionFailure('open', startedAt, trace, 'cancelled', 'cancelled', 'selection');
       return false;
     }
 
     // Load project data to stores
-    failureStage = 'load';
+    failureStage = 'load'; trace.stage('load');
     await loadProjectToStores();
 
+    trace.finish('completed');
     productAnalytics.track('project_opened', {
       backend: projectFileService.activeBackend,
       runtime_bucket: bucketRuntime(Date.now() - startedAt),
@@ -310,6 +322,7 @@ export async function openExistingProject(): Promise<boolean> {
     trackProjectActionFailure(
       'open',
       startedAt,
+      trace,
       failureStage === 'load' ? 'storage_error' : 'unknown',
       classifyProductAnalyticsFailure(error),
       failureStage,
@@ -324,15 +337,17 @@ export async function openExistingProject(): Promise<boolean> {
  */
 export async function openStoredProject(name: string): Promise<boolean> {
   const startedAt = Date.now();
+  const trace = beginOperationTrace('project_open', 'load');
   try {
     const success = await projectFileService.openStoredProject(name);
     if (!success) {
-      trackProjectActionFailure('open', startedAt, 'storage_error', 'storage_unavailable', 'load');
+      trackProjectActionFailure('open', startedAt, trace, 'storage_error', 'storage_unavailable', 'load');
       return false;
     }
 
     await loadProjectToStores();
 
+    trace.finish('completed');
     productAnalytics.track('project_opened', {
       backend: projectFileService.activeBackend,
       runtime_bucket: bucketRuntime(Date.now() - startedAt),
@@ -344,6 +359,7 @@ export async function openStoredProject(name: string): Promise<boolean> {
     trackProjectActionFailure(
       'open',
       startedAt,
+      trace,
       'storage_error',
       classifyProductAnalyticsFailure(error),
       'load',

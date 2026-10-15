@@ -10,6 +10,7 @@ import {
 import { productAnalytics } from './index';
 import { startPreviewHealthSession, stopPreviewHealthSession } from '../previewHealth/previewHealthTelemetry';
 import { classifyTimelineEdit } from './timelineEditClassification';
+import { beginOperationTrace, type OperationTrace, type OperationSignal } from './operationTrace';
 
 export type AnalyticsDurationBucket =
   | 'under_1s'
@@ -153,6 +154,7 @@ export interface AnalyticsExportRun {
   id: string;
   properties: ProductAnalyticsProperties;
   startedAt: number;
+  trace?: OperationTrace;
 }
 
 const finalizedExportRuns = new Set<string>();
@@ -165,16 +167,19 @@ export function beginExportAnalytics(properties: Omit<ProductAnalyticsProperties
     id,
     properties: { ...properties, run_id: id },
     startedAt: Date.now(),
+    trace: beginOperationTrace('export', 'preparing', id),
   };
   productAnalytics.track('export_started', run.properties);
   return run;
 }
 
 export function completeExportAnalytics(run: AnalyticsExportRun): void {
+  run.trace?.finish('completed');
   finalizeExportAnalytics(run, 'export_completed');
 }
 
-export function cancelExportAnalytics(run: AnalyticsExportRun): void {
+export function cancelExportAnalytics(run: AnalyticsExportRun, signal: OperationSignal = 'runner_no_result'): void {
+  run.trace?.finish('cancelled', signal);
   finalizeExportAnalytics(run, 'export_cancelled');
 }
 
@@ -183,6 +188,7 @@ export function failExportAnalytics(
   error: unknown,
   failureStage: ProductAnalyticsExportFailureStage = 'processing',
 ): void {
+  run.trace?.finish('failed', 'exception', classifyProductAnalyticsFailure(error));
   finalizeExportAnalytics(run, 'export_failed', {
     error_category: classifyExportError(error),
     failure_code: classifyProductAnalyticsFailure(error),

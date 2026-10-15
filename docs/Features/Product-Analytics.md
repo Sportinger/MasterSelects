@@ -245,3 +245,35 @@ memory for the current page, including development HMR, and still notifies
 subscribers so opting out clears the queued events. GPC/Do Not Track continue
 to override an enabled preference. A successful later write returns reads to
 persistent storage. A failed write cannot guarantee persistence across a reload.
+
+## Operation traces and observed interruptions
+
+`workflow_operation` records project creation/opening and export milestones with
+an ephemeral operation ID, a bounded stage, elapsed and stage elapsed milliseconds,
+and (when supplied by the export runner) progress in ten-percent buckets. The
+trace also carries at most eight preceding allowlisted event names, without their
+properties. No project name, file path, content, user-entered text, or raw exception
+is added to product analytics. Existing preference, DNT/GPC and server sanitization
+apply to these events too. No schema migration is needed.
+
+A trace has one terminal result. Export cancellation distinguishes the Cancel
+button (`user_cancel`) from a runner returning no output (`runner_no_result`);
+a cancelled project picker is `picker_cancel`. Exceptions carry the existing
+classified failure code. Export phase/progress callbacks are observed synchronously
+so cancellation retains the latest supplied progress even before React rerenders.
+Project phases describe the enclosing lifecycle step; they do not claim an exact
+internal filesystem instruction or media-decoder substep.
+
+Visibility and pagehide signals are observations: `page_hidden`, `page_left`, or
+`page_cached`. They do not prove cancellation, a crash, or the user's motivation.
+A cached page can resume and complete its operation. Abrupt process termination
+may deliver no final event. Events flush with keepalive when the page hides;
+delivery is best effort. Progress emissions are capped at 101 milestones per
+operation, in addition to the existing delivery queue limits.
+
+`reliability7d.operations` groups one result per session/operation in the admin
+snapshot and brief. A terminal result takes precedence over delayed lifecycle
+events; a trace without one is `incomplete`, never automatically a failure or
+user cancellation. Groups expose stage, observed signal, failure code, version,
+counts and elapsed time, with explicit availability/truncation flags. New evidence
+starts after deployment; historical events cannot supply missing stages.

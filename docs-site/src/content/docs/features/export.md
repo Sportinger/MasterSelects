@@ -450,3 +450,9 @@ On desktop Linux, WebCodecs export captures compositor pixels by GPU readback.
 This avoids silently black frames from GPU-canvas capture on Mesa, and supports
 stacked alpha (RGB above alpha-as-luma). Rendering remains on WebGPU; readback
 adds a GPU-to-CPU copy.
+
+Export diagnostics retain the latest runner phase and ten-percent progress bucket
+under an ephemeral operation ID. The Cancel button and a runner returning no
+output are separate observed signals. Tab visibility/pagehide records remain
+nonterminal observations. See [Product analytics](/features/product-analytics/#operation-traces-and-observed-interruptions)
+for privacy, delivery limits, and interpretation of incomplete runs.

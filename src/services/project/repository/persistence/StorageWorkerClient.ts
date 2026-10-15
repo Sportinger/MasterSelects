@@ -130,4 +130,5 @@ export class StorageWorkerClient {
     return this.closing;
   }
   get errorCode(): RepositoryErrorCode | null { return this.fault?.code ?? null; }
+  get error(): RepositoryError | null { return this.fault; }
 }

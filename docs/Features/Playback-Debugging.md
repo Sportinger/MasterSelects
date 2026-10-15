@@ -174,3 +174,12 @@ This isolates whether the problem is in decode, render scheduling, target routin
 - `src/components/preview/SourceMonitor.tsx`
 - `src/services/aiTools/bridge.ts`
 - `src/services/nativeHelper/NativeHelperClient.ts`
+
+## Cadence measurement across pauses
+
+Render-loop cadence samples compare successful presentations only while playback,
+scrubbing, or continuous rendering requires frames and the tab is visible.
+Pausing or changing visibility resets that comparison baseline. The first frame
+after resuming is not compared against a frame shown minutes earlier. Paused
+preview refreshes therefore do not inflate playback drop counts. This corrects
+measurement; it does not establish the cause of slow playback on older builds.

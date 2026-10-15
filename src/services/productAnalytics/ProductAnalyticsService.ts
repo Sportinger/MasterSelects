@@ -1,6 +1,7 @@
 import { APP_VERSION } from '../../version';
 import {
   sanitizeProductAnalyticsProperties,
+  OPERATION_CONTEXT_EVENTS,
   type ProductAnalyticsEventName,
   type ProductAnalyticsProperties,
 } from './catalog';
@@ -35,6 +36,8 @@ function createEventId(prefix: string): string {
 export class ProductAnalyticsService {
   private readonly sessionId = createEventId('session');
   private readonly queue: QueuedProductAnalyticsEvent[] = [];
+  private readonly recentEvents: string[] = [];
+  getRecentEventNames(): string { return this.recentEvents.join('>'); }
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private flushPromise: Promise<void> | null = null;
   private disposed = false;
@@ -44,6 +47,7 @@ export class ProductAnalyticsService {
     this.unsubscribePreference = subscribeProductAnalyticsPreference(() => {
       if (!isProductAnalyticsEnabled()) {
         this.queue.splice(0);
+        this.recentEvents.splice(0);
         this.clearFlushTimer();
       }
     });
@@ -59,6 +63,11 @@ export class ProductAnalyticsService {
     properties: ProductAnalyticsProperties = {},
   ): void {
     if (this.disposed || !isProductAnalyticsEnabled()) return;
+
+    if ((OPERATION_CONTEXT_EVENTS as readonly string[]).includes(name)) {
+      this.recentEvents.push(name);
+      if (this.recentEvents.length > 8) this.recentEvents.shift();
+    }
 
     this.queue.push({
       appVersion: APP_VERSION,

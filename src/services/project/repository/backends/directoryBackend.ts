@@ -1,6 +1,11 @@
 import { RepositoryError, type RepositoryBackend, type RepositoryOwner, type CommitReference } from '../contracts';
 import { acquireBrowserOwner } from './browserOwner';
 
+export function supportsRepositoryWritableStreams(): boolean {
+  return typeof FileSystemFileHandle !== 'undefined'
+    && typeof FileSystemFileHandle.prototype.createWritable === 'function';
+}
+
 export function repositoryPath(path: string): string[] {
   const parts = path.split('/');
   if (!path || parts.some(part => !part || part === '.' || part === '..' || /[\\:\0]/.test(part))) throw new RepositoryError('permission', 'Invalid repository path');
@@ -29,7 +34,8 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
     const listing = listings.get(id);
     if (listing) { listingBytes -= listing.bytes; listings.delete(id); }
   };
-  const writable = hasWritePermission && Boolean(navigator.locks) && !locationId.startsWith('fsa-readonly:');
+  const writable = hasWritePermission && supportsRepositoryWritableStreams()
+    && Boolean(navigator.locks) && !locationId.startsWith('fsa-readonly:');
   async function parent(path: string, create = false) {
     const parts = repositoryPath(path); const name = parts.pop()!; let directory = root;
     let prefix = '';
@@ -92,7 +98,14 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
         try { await directory.getFileHandle(name); existing = true; } catch (error) { if (!(error instanceof DOMException) || error.name !== 'NotFoundError') throw error; }
         if (existing && !replace) throw new RepositoryError('conflict', `Immutable file already exists: ${path}`);
         const file = await directory.getFileHandle(name, { create: true });
-        const stream = await file.createWritable({ keepExistingData: false });
+        let stream: FileSystemWritableFileStream;
+        try {
+          if (typeof file.createWritable !== 'function') throw new RepositoryError('unsupported', 'This browser cannot write project files. Update your browser before editing.');
+          stream = await file.createWritable({ keepExistingData: false });
+        } catch (error) {
+          if (!existing) await directory.removeEntry(name).catch(() => {});
+          throw error;
+        }
         try {
           for await (const chunk of chunks) {
             checkAbort(signal); await owner.assertOwned();

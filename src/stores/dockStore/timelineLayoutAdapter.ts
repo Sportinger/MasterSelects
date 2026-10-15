@@ -3,6 +3,8 @@ import type {
   SavedDockTimelineTrackSlotLayout,
 } from '../../types/dock';
 import { useTimelineStore } from '../timeline';
+import { canLayoutChangeProjectContent } from '../../services/project/repository/transaction/editorWriteAvailability';
+import { Logger } from '../../services/logger';
 import {
   cleanupSavedTimelineLayout,
   TIMELINE_TRACK_TYPES,
@@ -89,7 +91,9 @@ export function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | und
     return;
   }
 
-  ensureTimelineTrackTypeCounts(cleaned);
+  const canChangeContent = canLayoutChangeProjectContent();
+  if (canChangeContent) ensureTimelineTrackTypeCounts(cleaned);
+  else Logger.create('DockLayout').info('Restoring layout geometry only while project content is unavailable for editing');
 
   const timelineStore = useTimelineStore.getState();
   if (cleaned.audioDisplayMode) {
@@ -153,6 +157,9 @@ export function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | und
     }
   }
 
+  // Track visibility and track creation are authored content, unlike row heights.
+  // A layout restored during project activation must not overwrite the incoming project.
+  if (!canChangeContent) return;
   const exactTrackVisibilityIds = new Set(Object.keys(cleaned.trackVisibility ?? {}));
   if (cleaned.trackVisibility) {
     const currentTrackIds = new Set(useTimelineStore.getState().tracks.map((track) => track.id));
@@ -198,6 +205,10 @@ export function applySavedTimelineLayout(timeline: SavedDockTimelineLayout | und
 }
 
 export function activate3DEditSceneCamera(): string | null {
+  if (!canLayoutChangeProjectContent()) {
+    Logger.create('DockLayout').info('Scene camera activation waits for a writable project');
+    return null;
+  }
   const timeline = useTimelineStore.getState();
   const cameras = timeline.clips
     .filter((clip) => clip.source?.type === 'camera')
