@@ -6,6 +6,83 @@ title: "Effects"
 
 MasterSelects has a modular GPU effect system built around registered effect modules, shared WGSL utilities, and a compositor pipeline that can run inline color ops without extra passes.
 
+## Apply an effect to a clip
+
+Select a video clip in the timeline, open **Properties → Effects**, then expand
+**+ Add Effect**. Type a name such as `blur` to narrow the catalog. The thumbnails
+preview each look using the selected clip, so you can compare treatments before
+applying one. Click **Gaussian Blur** to add it to the clip's effect stack.
+
+<figure class="docs-shot">
+
+<div class="docs-shot-stage">
+
+![Big Buck Bunny in the preview beside the Effects catalog filtered to blur, with six live effect thumbnails.](/docs/assets/workflows/effects-catalog-detail.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
+<defs><marker id="effects-catalog-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M840 65 L903 18" marker-end="url(#effects-catalog-detail-arrow)" />
+<circle class="docs-shot-number" cx="840" cy="65" r="18" /><text x="840" y="65" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M655 167 L811 167" marker-end="url(#effects-catalog-detail-arrow)" />
+<circle class="docs-shot-number" cx="655" cy="167" r="18" /><text x="655" y="167" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M655 275 L903 270" marker-end="url(#effects-catalog-detail-arrow)" />
+<circle class="docs-shot-number" cx="655" cy="275" r="18" /><text x="655" y="275" class="docs-shot-number-text">3</text>
+</svg>
+</div>
+
+<figcaption>1 — Open Effects. 2 — Search for blur under + Add Effect. 3 — Click Gaussian Blur to apply it. The main preview still shows the untreated clip here.</figcaption>
+</figure>
+
+### Adjust and compare
+
+The applied effect appears below the catalog. **Radius** controls the amount of
+Gaussian blur; this example uses **10**. Drag the numeric value, or double-click
+it to type a precise value. The reset arrow beside the parameter restores its
+default. The diamond adds a keyframe at the current playhead position.
+
+<figure class="docs-shot">
+
+<div class="docs-shot-stage">
+
+![Gaussian Blur enabled with Radius 10; the Big Buck Bunny frame is visibly softened.](/docs/assets/workflows/effects-blur-after-detail.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
+<defs><marker id="effects-blur-after-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M650 278 L760 278" marker-end="url(#effects-blur-after-detail-arrow)" />
+<circle class="docs-shot-number" cx="650" cy="278" r="18" /><text x="650" y="278" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M855 165 L939 211" marker-end="url(#effects-blur-after-detail-arrow)" />
+<circle class="docs-shot-number" cx="855" cy="165" r="18" /><text x="855" y="165" class="docs-shot-number-text">2</text>
+</svg>
+</div>
+
+<figcaption>1 — Edit Radius (10 here) to control the blur. 2 — Click the enabled checkmark to bypass the effect. The softened preview is the result of the active effect.</figcaption>
+</figure>
+
+Click the effect header's **Bypass effect** control to compare with the original.
+The effect stays in the stack with its settings; its header dims and the preview
+returns to the unblurred image. Re-enable it to keep editing. Use the red remove
+button only when you want to delete the effect from the stack.
+
+<figure class="docs-shot">
+
+<div class="docs-shot-stage">
+
+![The same Big Buck Bunny frame with Gaussian Blur bypassed, a dimmed effect header and the original sharp preview.](/docs/assets/workflows/effects-blur-before-detail.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
+<defs><marker id="effects-blur-before-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M850 162 L940 211" marker-end="url(#effects-blur-before-detail-arrow)" />
+<circle class="docs-shot-number" cx="850" cy="162" r="18" /><text x="850" y="162" class="docs-shot-number-text">1</text>
+</svg>
+</div>
+
+<figcaption>1 — Click the dimmed bypass control to enable the effect again. Compare the sharp eyes, fur and grass at the same playhead position; the settings are preserved.</figcaption>
+</figure>
+
+*Example footage: © 2008 Blender Foundation / [Big Buck Bunny](https://peach.blender.org/),
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Screenshots show an
+excerpt resized for the demonstration; the enabled example adds Gaussian blur.*
+
 ## At A Glance
 
 Color numeric channels, Hue Shift's Shift and Gaussian Blur's Radius share

@@ -79,7 +79,7 @@ function convert(markdown, { title }) {
     }
     // Shared images move into the site's public/ folder.
     if (clean.startsWith('assets/')) {
-      return `${imagePrefix}[${label}](/${clean}${suffix})`;
+      return `${imagePrefix}[${label}](/docs/${clean}${suffix})`;
     }
     // Repository-internal destinations are not public documentation routes.
     // Keep their readable labels without linking to the frozen public repo.

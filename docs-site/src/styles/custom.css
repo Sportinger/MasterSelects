@@ -43,3 +43,53 @@
   --sl-color-accent: hsl(224, 100%, 52%);
   --sl-color-accent-high: hsl(224, 80%, 30%);
 }
+
+/* Screenshots retain their aspect ratio and readable captions on every viewport. */
+.sl-markdown-content .docs-shot {
+  margin: 1.5rem 0 2rem;
+  min-width: 0;
+}
+.sl-markdown-content .docs-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: .5rem;
+}
+.sl-markdown-content .docs-shot > p { margin: 0; }
+.sl-markdown-content .docs-shot figcaption {
+  margin-top: .65rem;
+  color: var(--sl-color-gray-2);
+  font-size: .875rem;
+  line-height: 1.55;
+}
+@media (min-width: 60rem) {
+  .sl-markdown-content .docs-shot--detail { max-width: 27rem; }
+}
+
+/* Vector callouts identify real controls without changing screenshot content. */
+.sl-markdown-content .docs-shot-stage { position: relative; }
+.sl-markdown-content .docs-shot-stage > p { margin: 0; }
+.sl-markdown-content .docs-shot-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.docs-shot-arrow {
+  fill: none;
+  stroke: #ffd54a;
+  stroke-width: 4;
+  filter: drop-shadow(0 1px 2px #000);
+}
+.docs-shot-number { fill: #ffd54a; stroke: #161616; stroke-width: 2; }
+.docs-shot-number-text {
+  fill: #111;
+  font: 700 22px system-ui, sans-serif;
+  text-anchor: middle;
+  dominant-baseline: central;
+}

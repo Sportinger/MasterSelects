@@ -16,7 +16,7 @@ The route owns its fixture parameters locally and does not read project state. I
 
 ## Documentation Image
 
-![Flex EQ visual QA grid](/assets/flex-eq/flex-eq-visual-qa.png)
+![Flex EQ visual QA grid](/docs/assets/flex-eq/flex-eq-visual-qa.png)
 
 The screenshot source is `docs/Features/assets/docs-screenshot-manifest.json`.
 Run the dev server first, then regenerate it with:

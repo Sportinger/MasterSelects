@@ -217,7 +217,7 @@ When recording is enabled:
 
 ### Curve Editor
 
-![Bezier curve editor with selected keyframe handles](/assets/keyframes/bezier-curve-editor.png)
+![Bezier curve editor with selected keyframe handles](/docs/assets/keyframes/bezier-curve-editor.png)
 
 - Double-click a property row or keyframe diamond to open Graph mode.
 - Graph mode shows the selected clip's animated numeric properties as selectable curve series; only one property is expanded in the track header at a time.
