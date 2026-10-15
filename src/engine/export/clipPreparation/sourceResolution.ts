@@ -69,15 +69,15 @@ export function getFastModeFileSizeStats(
   return { totalBytes, largestBytes, largestClipName, uniqueSourceCount: countedSources.size };
 }
 
-export async function resolveClipExportFile(
+async function* exportFileCandidates(
   clip: TimelineClip,
   mediaFile?: MediaFile | null
-): Promise<File | null> {
+): AsyncGenerator<{ file: File; origin: string }> {
   const mediaFileId = clip.mediaFileId || clip.source?.mediaFileId || '';
   const projectHandle = await getStoredProjectFileHandle(mediaFileId);
   if (projectHandle) {
     try {
-      return await projectHandle.getFile();
+      yield { file: await projectHandle.getFile(), origin: 'project handle' };
     } catch (e) {
       log.warn(`Project RAW handle failed for ${clip.name}:`, e);
     }
@@ -93,7 +93,7 @@ export async function resolveClipExportFile(
       try {
         const result = await projectFileService.getFileFromRaw(candidatePath);
         if (result) {
-          return result.file;
+          yield { file: result.file, origin: 'project RAW' };
         }
       } catch (e) {
         log.warn(`Project RAW file load failed for ${clip.name} at ${candidatePath}:`, e);
@@ -106,20 +106,29 @@ export async function resolveClipExportFile(
     : null;
   if (storedHandle) {
     try {
-      return await storedHandle.getFile();
+      yield { file: await storedHandle.getFile(), origin: 'media handle' };
     } catch (e) {
       log.warn(`Media file handle failed for ${clip.name}:`, e);
     }
   }
 
   if (mediaFile?.file) {
-    return mediaFile.file;
+    yield { file: mediaFile.file, origin: 'media file' };
   }
 
   if (clip.file) {
-    return clip.file;
+    yield { file: clip.file, origin: 'clip file' };
   }
 
+}
+
+// HTMLVideo preparation only needs a File; FAST export must also verify that
+// its bytes are readable before it stops searching the candidate chain.
+export async function resolveClipExportFile(
+  clip: TimelineClip,
+  mediaFile?: MediaFile | null
+): Promise<File | null> {
+  for await (const candidate of exportFileCandidates(clip, mediaFile)) return candidate.file;
   return null;
 }
 
@@ -127,36 +136,37 @@ export async function loadClipFileData(
   clip: TimelineClip,
   mediaFile?: MediaFile | null
 ): Promise<ArrayBuffer | null> {
-  let fileData: ArrayBuffer | null = null;
-
-  const resolvedFile = await resolveClipExportFile(clip, mediaFile);
-  if (!fileData && resolvedFile) {
+  const attemptedFiles = new Set<File>();
+  for await (const { file, origin } of exportFileCandidates(clip, mediaFile)) {
+    if (attemptedFiles.has(file)) continue;
+    attemptedFiles.add(file);
     try {
-      fileData = await resolvedFile.arrayBuffer();
-    } catch (e) {
-      log.warn(`Resolved export file access failed for ${clip.name}:`, e);
+      const data = await file.arrayBuffer();
+      if (data.byteLength > 0) return data;
+      log.warn(`Empty export file for ${clip.name} (${origin}); trying the next source`);
+    } catch (error) {
+      log.warn(`Resolved export file access failed for ${clip.name} (${origin}):`, error);
     }
   }
 
-  if (!fileData && mediaFile?.url) {
+  const video = clip.source?.videoElement;
+  const urls = new Set([mediaFile?.url, video?.currentSrc, video?.src].filter((url): url is string => Boolean(url)));
+  for (const url of urls) {
     try {
-      const response = await fetch(mediaFile.url);
-      fileData = await response.arrayBuffer();
-    } catch (e) {
-      log.warn(`Media blob URL fetch failed for ${clip.name}:`, e);
+      const response = await fetch(url);
+      if (!response.ok) {
+        log.warn(`Export source request failed for ${clip.name}: HTTP ${response.status}`);
+        continue;
+      }
+      const data = await response.arrayBuffer();
+      if (data.byteLength > 0) return data;
+      log.warn(`Empty export source response for ${clip.name}; trying the next source`);
+    } catch (error) {
+      log.warn(`Export source URL fetch failed for ${clip.name}:`, error);
     }
   }
 
-  if (!fileData && clip.source?.videoElement?.src) {
-    try {
-      const response = await fetch(clip.source.videoElement.src);
-      fileData = await response.arrayBuffer();
-    } catch (e) {
-      log.warn(`Video src fetch failed for ${clip.name}:`, e);
-    }
-  }
-
-  return fileData;
+  return null;
 }
 
 export async function loadClipFileDataCached(
