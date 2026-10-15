@@ -1,3 +1,4 @@
+import { reportShaderCompilation } from '../../core/shaderCompilationDiagnostics';
 import type { SplatGraphOperation } from '../../../types/splatGraph';
 import shader from './splatGraphCompute.wgsl?raw';
 
@@ -35,7 +36,7 @@ export class SplatGraphCompute {
     if (cached) return cached.output;
     if (!this.pipeline) {
       const module = device.createShaderModule({ code: shader, label: 'Splat graph compute shader' });
-      void module.getCompilationInfo().then(info => { for (const message of info.messages) if (message.type === 'error') console.error('SplatGraph shader', message.lineNum, message.message); });
+      void reportShaderCompilation(module, 'SplatGraphCompute', 'Splat graph compute shader');
       this.pipeline = device.createComputePipeline({ label: 'Splat graph compute', layout: 'auto', compute: { module, entryPoint: 'main' } });
     }
     const index = this.cursor++;

@@ -1,3 +1,4 @@
+import { reportShaderCompilation } from '../../core/shaderCompilationDiagnostics';
 import { Logger } from '../../../services/logger';
 
 const log = Logger.create('PathTrace');
@@ -14,14 +15,7 @@ export function ptShaderModule(device: GPUDevice, label: string, code: string): 
   let module = cache.get(code);
   if (!module) {
     module = device.createShaderModule({ label, code });
-    void module.getCompilationInfo?.().then(info => {
-      const errors = info.messages.filter(message => message.type === 'error');
-      if (errors.length) {
-        const lines = code.split(/\r?\n/);
-        log.error(`${label}: shader compilation failed: ${errors.map(message =>
-          `${message.lineNum}:${message.linePos} ${message.message} | ${lines[message.lineNum - 1]?.trim() ?? ''}`).join(' || ')}`);
-      }
-    });
+    void reportShaderCompilation(module, 'PathTrace', label, code);
     cache.set(code, module);
   }
   return module;

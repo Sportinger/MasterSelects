@@ -1,4 +1,4 @@
-import { Logger } from '../../services/logger';
+import { reportShaderCompilation } from '../../engine/core/shaderCompilationDiagnostics';
 import { footstepCandidates, placeAnalysisCard, endingCandidateShift } from './footstepCandidates';
 import shader from './denseTerrain.wgsl?raw';
 import projectionShader from './terrainContentProjection.wgsl?raw';
@@ -38,12 +38,8 @@ export class DenseTerrainPipeline {
     this.device=device;
     const module=device.createShaderModule({label:'Dense terrain projection',code:shader+decisionShader+searchShader});
     const projectionModule=device.createShaderModule({label:'Terrain content projection',code:projectionShader});
-    void module.getCompilationInfo().then(info=>{
-      for(const message of info.messages)if(message.type==='error')Logger.create('DenseTerrain').error(`Shader line ${message.lineNum}: ${message.message}`);
-    });
-    void projectionModule.getCompilationInfo().then(info=>{
-      for(const message of info.messages)if(message.type==='error')Logger.create('DenseTerrain').error(`Projection shader line ${message.lineNum}: ${message.message}`);
-    });
+    void reportShaderCompilation(module, 'DenseTerrain', 'Dense terrain projection');
+    void reportShaderCompilation(projectionModule, 'DenseTerrain', 'Terrain content projection');
     this.layout=device.createBindGroupLayout({entries:[
       {binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform'}},
       {binding:1,visibility:GPUShaderStage.FRAGMENT,sampler:{}},

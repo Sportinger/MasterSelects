@@ -1,3 +1,4 @@
+import { reportShaderCompilation } from '../../core/shaderCompilationDiagnostics';
 import idShader from '../shaders/StrandIds.wgsl?raw';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../sceneRenderer/constants';
 import type { SceneCamera, SceneLayer3DData, SceneLightLayer, SceneStrandLayer } from '../../scene/types';
@@ -184,10 +185,7 @@ export class StrandPass {
       { binding: 8, visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
     ] });
     const module = device.createShaderModule({ code: STRAND_SCENE_SHADER, label: 'native-strands' });
-    void module.getCompilationInfo?.().then(info => {
-      const errors = info.messages.filter(message => message.type === 'error');
-      if (errors.length) log.error('Strand shader compilation failed', errors.map(message => `${message.lineNum}:${message.linePos} ${message.message}`));
-    });
+    void reportShaderCompilation(module, 'StrandPass', 'native-strands');
     const layout = device.createPipelineLayout({ bindGroupLayouts: [this.layout] });
     const vertex = { module, entryPoint: 'strandVertex' };
     const primitive: GPUPrimitiveState = { topology: 'triangle-list', cullMode: 'none' };

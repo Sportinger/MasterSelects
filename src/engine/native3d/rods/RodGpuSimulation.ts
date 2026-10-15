@@ -1,3 +1,4 @@
+import { reportShaderCompilation } from '../../core/shaderCompilationDiagnostics';
 import { knitCycleGuideTable, CYCLE_GUIDE_POINTS, CYCLE_GUIDE_PHASES } from '../../../services/operators/geometry/knitCycleGuides';
 import { Logger } from '../../../services/logger';
 import solverShader from '../shaders/RodSolver.wgsl?raw';
@@ -45,7 +46,7 @@ function devicePipelines(device: GPUDevice): DevicePipelines {
   const solverLayout = device.createBindGroupLayout({ label: 'rod-solver', entries: [entry(0, 'uniform'), entry(1, 'uniform', true),
     entry(2, 'read-only-storage'), entry(3, 'storage'), entry(4, 'storage'), entry(5, 'storage'), entry(6, 'storage'), entry(7, 'read-only-storage')] });
   const module = device.createShaderModule({ label: 'rod-solver', code: solverShader.replace('//@cycle-guide', cycleShader).replace('//@motion-guard', motionGuardShader) });
-  void module.getCompilationInfo().then(info => { for (const message of info.messages) if (message.type === 'error') Logger.create('RodGpuSimulation').error(message.message); });
+  void reportShaderCompilation(module, 'RodGpuSimulation', 'rod-solver');
   const layout = device.createPipelineLayout({ bindGroupLayouts: [solverLayout] });
   device.pushErrorScope('validation');
   const solver = Object.fromEntries(SOLVER_ENTRIES.map(name => [name,

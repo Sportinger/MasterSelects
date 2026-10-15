@@ -1,3 +1,4 @@
+import { reportShaderCompilation } from '../../core/shaderCompilationDiagnostics';
 import { Logger } from '../../../services/logger';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../../native3d/sceneRenderer/constants';
 import {
@@ -77,12 +78,7 @@ function storage(binding: number, visibility: number, readOnly: boolean): GPUBin
 /** Shader compile/validation diagnostics are otherwise invisible to Logger readers. */
 export function createCheckedModule(device: GPUDevice, code: string, label: string): GPUShaderModule {
   const module = device.createShaderModule({ code, label });
-  void module.getCompilationInfo?.().then((info) => {
-    const errors = info.messages.filter((message) => message.type === 'error');
-    if (errors.length > 0) {
-      log.error(`WGSL compile errors in ${label}`, errors.slice(0, 6).map((message) => `${message.lineNum}:${message.linePos} ${message.message}`));
-    }
-  }).catch(() => undefined);
+  void reportShaderCompilation(module, 'FlockGpuPipelines', label);
   return module;
 }
 

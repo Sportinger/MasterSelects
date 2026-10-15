@@ -417,9 +417,24 @@ An explicitly cancelled clip/face analysis restores its prior analysis state and
 
 Device-loss diagnostics include `expected`. WebGPUContext marks devices immediately before intentional destruction during teardown or a power-preference change. Only a marked device reporting reason `destroyed` is recorded as INFO; unmarked destruction and all other loss reasons remain ERROR. The marker is held weakly in runtime diagnostics state and survives development module reloads. Historical records without the marker cannot establish whether a device was intentionally destroyed.
 
+Shader compilation diagnostics in the path tracer, strands, face cables, rod solver,
+splat graph, terrain and flock pipelines use a shared guarded query. A rejected
+`getCompilationInfo()` call (for example, `Instance dropped` after GPU loss) is
+reported as a warning with the component, shader label and original reason instead
+of escaping as an unhandled rejection. Actual shader compilation errors still log
+their line/column; path-tracer reports also retain the source line. This prevents
+secondary diagnostic failures; it does not repair the underlying GPU/driver loss.
+
 ## Copying-sort startup compatibility
 
 `main.tsx` loads `runtime/arrayCopySorting.ts` immediately after boot diagnostics and before the UI graph. It installs `Array.prototype.toSorted` only when unavailable, preserving native implementations and sorting a fresh dense array rather than mutating application state. This addresses the observed missing-method startup errors in Chrome 109 sessions; it does not supply missing GPU, storage or media APIs. The isolated-browser check removes the native method before navigation and verifies the editor shell renders without a `toSorted` error. Unit coverage includes frozen state, stable equal-key order, sparse arrays, array-like inputs, custom iterators/species and invalid arguments.
+
+`projectStorage.worker.ts` loads the same compatibility module before its repository
+imports. Workers have their own JavaScript globals and do not inherit the main
+window's polyfills. This prevents canonical record serialization and scratch
+recovery from failing with `Object.keys(...).toSorted is not a function` in older
+worker runtimes. The worker-entry regression check removes the native method and
+serializes a nested recovery record without loading the UI entry point.
 
 ## Optional credential storage recovery
 

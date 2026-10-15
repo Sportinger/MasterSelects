@@ -1,3 +1,4 @@
+import '../runtime/arrayCopySorting';
 import { attestWritableRepositoryLocation } from '../services/project/repository/backends/repositoryLocationIdentity';
 import { readCommit, commitPath } from '../services/project/repository/persistence/publication';
 import { CommittedMetadataReader } from '../services/project/repository/index/CommittedMetadataReader';

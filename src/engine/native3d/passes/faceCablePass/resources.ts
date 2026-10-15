@@ -1,6 +1,6 @@
 import shader from '../../shaders/FaceCableScene.wgsl?raw';
 import { SCENE_COLOR_FORMAT, SCENE_DEPTH_FORMAT } from '../../sceneRenderer/constants';
-import { Logger } from '../../../../services/logger';
+import { reportShaderCompilation } from '../../../core/shaderCompilationDiagnostics';
 
 export const CABLE_SCENE_UNIFORM_FLOATS = 32 + 4 * 32 + 4 + 400 + 8;
 export const CABLE_SCENE_VERTEX_LAYOUT: GPUVertexBufferLayout = {
@@ -19,10 +19,7 @@ export function createCableSceneResources(device: GPUDevice) {
     { binding: 4, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth', viewDimension: '2d-array' } },
   ] });
   const module = device.createShaderModule({ code: shader, label: 'native-face-cables' });
-  void module.getCompilationInfo?.().then(info => {
-    const errors = info.messages.filter(m => m.type === 'error');
-    if (errors.length) Logger.create('FaceCablePass').error('Scene shader compilation failed', errors.map(m => `${m.lineNum}:${m.linePos} ${m.message}`));
-  });
+  void reportShaderCompilation(module, 'FaceCablePass', 'native-face-cables');
   const pipeline = device.createRenderPipeline({ label: 'native-face-cables',
     layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
     vertex: { module, entryPoint: 'mainVertex', buffers: [CABLE_SCENE_VERTEX_LAYOUT] },
