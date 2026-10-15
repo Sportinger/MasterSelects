@@ -245,3 +245,13 @@ Timeline context-menu Copy Color/Paste Color copies the grade and its `color.*` 
 ## Compatibility And Migration
 
 Generic color effects and the Color tab are separate. Existing effect arrays continue to render through the generic effects pipeline.
+
+
+### Read-only project inspection
+
+The Color entry in the Effects inspector follows repository write availability.
+Removing, bypassing, reordering and editing the grade or toggling its nodes are
+disabled while the project is read-only, activating, out of recovery capacity or
+has lost its storage worker. Expanding the entry and opening the graph remain
+available for inspection. Controls update when write availability changes;
+keyboard focus remains visible and pointer activation releases transient focus.

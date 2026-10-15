@@ -120,3 +120,35 @@ describe('repository lifecycle handoff', () => {
     expect(lifecycle.getState().error).toContain('cannot activate');
   });
 });
+
+
+describe('save retries', () => {
+  it('retries the failed queue before capture, inside the serialized lifecycle', async () => {
+    const target = fakeSession('retry'); const order: string[] = [];
+    let failed = true;
+    target.coordinator.getStatus = vi.fn(() => ({ error: failed ? new Error('Read failed') : null })) as never;
+    target.coordinator.retry = vi.fn(async () => { order.push('retry'); failed = false; });
+    target.coordinator.flush = vi.fn(async () => { order.push('flush'); if (failed) throw new Error('Read failed'); });
+    vi.spyOn(RepositorySession, 'open').mockResolvedValue(target);
+    const lifecycle = new RepositoryLifecycle({ async barrier() { return { release() {} }; }, async activate() {}, install() {},
+      async beforeReceipt() { order.push('capture'); if (failed) throw new Error('Recovery queue full'); },
+    });
+    await lifecycle.open(prepared('retry'));
+    await lifecycle.flush({ retry: true });
+    expect(order).toEqual(['retry', 'capture', 'flush']);
+    order.length = 0; await lifecycle.flush({ retry: true });
+    expect(order).toEqual(['capture', 'flush']);
+  });
+  it('keeps a failed retry visible and never captures or confirms new changes', async () => {
+    const target = fakeSession('still-failed');
+    const failure = new Error('Disk still unavailable');
+    target.coordinator.getStatus = vi.fn(() => ({ error: failure })) as never;
+    target.coordinator.retry = vi.fn(async () => { throw failure; });
+    const capture = vi.fn();
+    vi.spyOn(RepositorySession, 'open').mockResolvedValue(target);
+    const lifecycle = new RepositoryLifecycle({ async barrier() { return { release() {} }; }, async activate() {}, install() {}, beforeReceipt: capture });
+    await lifecycle.open(prepared('still-failed'));
+    await expect(lifecycle.flush({ retry: true })).rejects.toBe(failure);
+    expect(capture).not.toHaveBeenCalled();
+  });
+});

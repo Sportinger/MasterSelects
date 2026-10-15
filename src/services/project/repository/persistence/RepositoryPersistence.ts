@@ -108,7 +108,9 @@ export class RepositoryPersistence {
   }
   private async publishQueued(batch: PublicationBatch, signal?: AbortSignal): Promise<PublicationResult> {
     const complete = this.completed.get(batch.batchId); if (complete) return complete;
-    if (this.fatalError && !this.pending) throw this.fatalError;
+    // A failed owner check, discovery read or preparation may leave no prepared
+    // publication. Retry those steps against disk again. The operation-gap and
+    // immutable-head checks below still prevent later writes skipping the failure.
     if (!this.recovered) await this.recover(signal);
     await this.owner.assertOwned();
     if (this.pending && this.pending.commit.batchId !== batch.batchId) throw new RepositoryError('io', 'Previous publication needs retry before later operations');

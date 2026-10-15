@@ -1,4 +1,23 @@
 @layer features {
+/* These viewports are panned by editor transforms, never native scrolling.
+   overflow:hidden still lets focus/scrollIntoView move them independently of
+   our ruler and hit testing. clip keeps that second scroll offset at zero. */
+.timeline-container :is(
+  .timeline-body,
+  .timeline-body-content,
+  .timeline-scroll-wrapper,
+  .timeline-track-stack,
+  .timeline-track-section,
+  .timeline-section-viewport,
+  .timeline-section-tracks,
+  .timeline-global-overlays,
+  .timeline-range-marker-overlays
+) {
+  min-width: 0;
+  min-height: 0;
+  overflow: clip;
+}
+
 /* Timeline tracks area */
 .timeline-tracks {
   flex: 1;

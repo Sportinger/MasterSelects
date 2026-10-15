@@ -2,7 +2,7 @@ import { RepositoryError, type BlobReference, type RepositoryErrorCode } from '.
 import type { NativeCommandRequest, NativeBlobRequest, StorageFailure, StorageRequest, StorageSuccess, StorageOpenProgress, RepositoryOpenProgress } from '../storageWorkerProtocol';
 import type { NativeRepositoryClient } from '../backends/nativeBackend';
 
-interface PendingRequest { resolve: (value: unknown) => void; reject: (error: unknown) => void; removeAbort: () => void; }
+interface PendingRequest { type: StorageRequest['type']; resolve: (value: unknown) => void; reject: (error: unknown) => void; removeAbort: () => void; }
 export class StorageWorkerClient {
   readonly sessionEpoch = crypto.randomUUID();
   private readonly worker: Worker;
@@ -11,6 +11,8 @@ export class StorageWorkerClient {
   private closing: Promise<void> | null = null;
   private readonly nativeLeases = new Map<string, string>();
   private fault: RepositoryError | null = null;
+  private phase: 'startup' | 'opening' | 'ready' = 'startup';
+  private readonly faultListeners = new Set<() => void>();
   private readonly nativeClient?: NativeRepositoryClient;
   private readonly onOpenProgress?: (progress: RepositoryOpenProgress) => void;
   constructor(nativeClient?: NativeRepositoryClient, onOpenProgress?: (progress: RepositoryOpenProgress) => void) {
@@ -20,7 +22,9 @@ export class StorageWorkerClient {
     this.worker.onmessage = event => {
       const progress = event.data as StorageOpenProgress;
       if (progress.type === 'open-progress') {
-        if (progress.sessionEpoch === this.sessionEpoch && !this.closed) this.onOpenProgress?.(progress.progress);
+        if (progress.sessionEpoch === this.sessionEpoch && !this.closed) {
+          this.phase = 'opening'; this.onOpenProgress?.(progress.progress);
+        }
         return;
       }
       const message = event.data as StorageSuccess | StorageFailure | NativeCommandRequest | NativeBlobRequest;
@@ -32,16 +36,26 @@ export class StorageWorkerClient {
       const request = this.pending.get(response.requestId);
       if (!request) return;
       this.pending.delete(response.requestId); request.removeAbort();
-      if (response.ok) request.resolve(response.data);
+      if (response.ok) {
+        if (request.type === 'open') this.phase = 'ready';
+        request.resolve(response.data);
+      }
       else request.reject(new RepositoryError(response.error.code, response.error.message));
     };
-    this.worker.onerror = event => this.fail(new RepositoryError('io', event.message || 'Project storage worker failed'));
-    this.worker.onmessageerror = () => this.fail(new RepositoryError('corrupt', 'Project worker response could not be decoded'));
+    this.worker.onerror = event => this.fail(new RepositoryError('io', this.failureMessage(event.message || 'Project storage worker failed')));
+    this.worker.onmessageerror = () => this.fail(new RepositoryError('corrupt', this.failureMessage('Project worker response could not be decoded')));
   }
+  private failureMessage(message: string): string {
+    // Protocol names only: never include project names, file paths or request data.
+    const operations = [...new Set([...this.pending.values()].map(request => request.type))].toSorted().join(', ') || 'idle';
+    return `${message} (storage phase: ${this.phase}; operations: ${operations})`;
+  }
+  subscribeFailure(listener: () => void): () => void { this.faultListeners.add(listener); return () => this.faultListeners.delete(listener); }
   private fail(error: RepositoryError): void {
     this.fault = error;
     for (const request of this.pending.values()) { request.removeAbort(); request.reject(error); }
     this.pending.clear();
+    for (const listener of this.faultListeners) listener();
   }
   private async forwardNative(message: NativeCommandRequest | NativeBlobRequest): Promise<void> {
     try {
@@ -72,7 +86,7 @@ export class StorageWorkerClient {
         this.pending.delete(requestId); signal?.removeEventListener('abort', abort);
         reject(new RepositoryError('cancelled', 'Project storage request cancelled'));
       };
-      this.pending.set(requestId, { resolve: value => resolve(value as T), reject, removeAbort: () => signal?.removeEventListener('abort', abort) });
+      this.pending.set(requestId, { type: request.type, resolve: value => resolve(value as T), reject, removeAbort: () => signal?.removeEventListener('abort', abort) });
       signal?.addEventListener('abort', abort, { once: true });
       try { this.worker.postMessage({ requestId, sessionEpoch: this.sessionEpoch, request }, transfer); }
       catch (error) { this.pending.delete(requestId); signal?.removeEventListener('abort', abort); reject(error); }

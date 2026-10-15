@@ -105,9 +105,12 @@ export class RepositoryLifecycle {
       throw error;
     });
   }
-  flush(): Promise<OperationReceipt | null> {
+  flush(options: { retry?: boolean } = {}): Promise<OperationReceipt | null> {
     return this.enqueue(async () => {
       const session = this.active; if (!session) return null;
+      // Drain accepted changes before capturing more workspace/content. A full
+      // recovery queue must not prevent the Save gesture from retrying its writer.
+      if (options.retry && session.coordinator.getStatus().error) await session.coordinator.retry();
       await this.hooks.beforeReceipt?.(session);
       const receipt = session.coordinator.receipt(); await session.coordinator.flush(receipt);
       return receipt;

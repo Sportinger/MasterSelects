@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { TimelineClip } from '../../../types/timeline';
 import { getActiveColorVersion, isColorGradeNode } from '../../../types/colorCorrection';
 import { useTimelineStore } from '../../../stores/timeline';
@@ -6,9 +6,11 @@ import { useDockStore } from '../../../stores/dockStore';
 import { requestNodeWorkspaceView } from '../../../services/nodeGraph/nodeWorkspaceNavigation';
 import { ColorNodeParameterControls } from '../color/ColorNodeParameterControls';
 import { ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
+import { isEditorRepositoryWritable, subscribeEditorWriteAvailability } from '../../../services/project/repository/transaction/editorWriteAvailability';
 
 /** A view of the existing clip grade, not another entry in clip.effects. */
 export function ColorGraphEffectEntry({ clip, visualEffectCount }: { clip: TimelineClip; visualEffectCount: number }) {
+  const writable = useSyncExternalStore(subscribeEditorWriteAvailability, isEditorRepositoryWritable);
   const setEnabled = useTimelineStore(state => state.setColorCorrectionEnabled);
   const setStackIndex = useTimelineStore(state => state.setColorCorrectionStackIndex);
   const removeColor = useTimelineStore(state => state.removeColorCorrection);
@@ -22,7 +24,11 @@ export function ColorGraphEffectEntry({ clip, visualEffectCount }: { clip: Timel
   const nodes = version?.nodes.filter(isColorGradeNode) ?? [];
   const stackIndex = Math.min(visualEffectCount, Math.max(0, Math.trunc(clip.colorCorrection?.stackIndex ?? 0)));
 
-  return <div className={`effect-item color-graph-effect-entry ${!enabled ? 'bypassed' : ''}`}>
+  return <div className={`effect-item color-graph-effect-entry ${!enabled ? 'bypassed' : ''}`}
+    onPointerUp={event => {
+      const button = (event.target as HTMLElement).closest('button');
+      if (button && document.activeElement === button) button.blur();
+    }}>
     <div className="effect-header">
       <span className="effect-drag-handle color-effect-order" title="Color position in the effect stack">&#x2630;</span>
       <button type="button" className="effect-collapse-toggle" aria-expanded={!collapsed}
@@ -31,6 +37,7 @@ export function ColorGraphEffectEntry({ clip, visualEffectCount }: { clip: Timel
         <span className="effect-name">Color</span>
       </button>
       <button type="button" className={`effect-bypass-btn ${!enabled ? 'bypassed' : ''}`}
+        disabled={!writable}
         aria-label={enabled ? 'Bypass Color' : 'Enable Color'} aria-pressed={enabled}
         title={enabled ? 'Bypass Color' : 'Enable Color'} onClick={() => setEnabled(clip.id, !enabled)}>
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2">
@@ -40,17 +47,18 @@ export function ColorGraphEffectEntry({ clip, visualEffectCount }: { clip: Timel
       </button>
       <button type="button" className="effect-bypass-btn" aria-label="Open Color Graph in Nodes" title="Open Color Graph in Nodes"
         onClick={() => { requestNodeWorkspaceView(clip.id, 'color'); activatePanelType('node-workspace'); }}>Nodes</button>
-      <button type="button" className="effect-bypass-btn" disabled={stackIndex === 0} aria-label="Move Color up"
+      <button type="button" className="effect-bypass-btn" disabled={!writable || stackIndex === 0} aria-label="Move Color up"
         title="Move Color earlier" onClick={() => setStackIndex(clip.id, stackIndex - 1)}>&uarr;</button>
-      <button type="button" className="effect-bypass-btn" disabled={stackIndex >= visualEffectCount} aria-label="Move Color down"
+      <button type="button" className="effect-bypass-btn" disabled={!writable || stackIndex >= visualEffectCount} aria-label="Move Color down"
         title="Move Color later" onClick={() => setStackIndex(clip.id, stackIndex + 1)}>&darr;</button>
       <button type="button" className="btn btn-sm btn-danger" aria-label="Remove Color" title="Remove Color"
+        disabled={!writable}
         onClick={() => removeColor(clip.id)}>&times;</button>
     </div>
     {!collapsed && <div className="effect-params">
       {version && nodes.map(node => <ResolveInspectorSection key={`${version.id}:${node.id}`} title={node.name}
-        enabled={node.enabled !== false} onEnabledChange={next => setNodeEnabled(clip.id, node.id, next)}>
-        <ColorNodeParameterControls clip={clip} versionId={version.id} node={node} disabled={!enabled || node.enabled === false} />
+        enabled={node.enabled !== false} onEnabledChange={writable ? next => setNodeEnabled(clip.id, node.id, next) : undefined}>
+        <ColorNodeParameterControls clip={clip} versionId={version.id} node={node} disabled={!writable || !enabled || node.enabled === false} />
       </ResolveInspectorSection>)}
       {!nodes.length && <p className="effect-info">{version ? 'No correction nodes. Add one in Nodes.' : 'Enable Color to initialize the grade.'}</p>}
     </div>}

@@ -8,6 +8,7 @@ import type { StorageWorkerClient } from '../../src/services/project/repository/
 import type { StorageRequest, StorageOpenResult } from '../../src/services/project/repository/storageWorkerProtocol';
 import { materializeEntityReferences } from '../../src/services/project/repository/persistence/projection';
 import { readRecord } from '../../src/services/project/repository/segments/recordSegment';
+import { ProjectTransactionCoordinator } from '../../src/services/project/repository/transaction/ProjectTransactionCoordinator';
 import { REPOSITORY_LIMITS } from '../../src/services/project/repository/contracts';
 import { materializeProjection } from '../../src/services/project/repository/persistence/projection';
 import { segmentRecords } from '../../src/services/project/repository/segments/recordSegment';
@@ -358,4 +359,67 @@ describe('wide imported checkpoint validation', () => {
     const damaged = source.files.get(path)!.slice(); damaged[damaged.length - 1] ^= 1; source.files.set(path, damaged);
     await expect(validateCommit(source.backend, published.commit, descriptor)).rejects.toMatchObject({ code: 'corrupt' });
   }, 30000);
+});
+
+
+describe('storage failure recovery', () => {
+  it('retries an early transient read failure without permitting later operations to skip it', async () => {
+    const source = fixture();
+    const persistence = new RepositoryPersistence(source.backend, descriptor, owner, { sessionEpoch: 'retry-read' });
+    await persistence.recover();
+    const readFailure = new DOMException('Cached file state changed', 'InvalidStateError');
+    vi.spyOn(source.backend, 'list').mockRejectedValueOnce(readFailure);
+    await expect(persistence.publish(initial())).rejects.toBe(readFailure);
+    // The failed batch has not even produced segments yet.
+    expect(source.files.size).toBe(0);
+    await expect(persistence.publish({ batchId: 'skip', firstOperation: 2, lastOperation: 2, records: [], heads: {} }))
+      .rejects.toThrow('Publication operation gap');
+    const saved = await persistence.publish(initial());
+    expect((await recoverRepository(source.backend, descriptor)).head).toEqual(saved.reference);
+    expect((await persistence.materializeProjection(saved.records.get('root')!)).entities.get('value')?.value).toEqual({ persisted: true });
+    expect(await persistence.publish(initial())).toEqual(saved);
+  });
+
+  it('drains an almost-full recovery queue after a transient failure and retains accepted edits on reopen', async () => {
+    const source = fixture();
+    const persistence = new RepositoryPersistence(source.backend, descriptor, owner, { sessionEpoch: 'queue-retry' });
+    const recovery = await persistence.recover();
+    const client = { error: null, async request(request: StorageRequest) {
+      if (request.type === 'publish') return persistence.publish(draftPublication(request.batch));
+      if (request.type === 'record') return readRecord(source.backend, request.reference);
+      if (request.type === 'view-flush') return;
+      throw new Error(`Unexpected request ${request.type}`);
+    } } as unknown as StorageWorkerClient;
+    const storage = new WorkerCoordinatorStorage(client, { writable: true, locationId: 'fixture', writerEpoch: 'writer', recovery });
+    const coordinator = new ProjectTransactionCoordinator('fixture', 'workspace', storage, { canActivate: () => true, async activate() {} });
+    const edit = (step: number) => {
+      const token = coordinator.begin(`Edit ${step}`);
+      try {
+        coordinator.write(token, 'curve-block', { type: 'curve', schemaVersion: 1, value: { step, data: 'x'.repeat(128 * 1024) }, references: [], blobs: [] });
+        coordinator.commit(token);
+      } catch (error) { if (coordinator.owns(token)) coordinator.cancel(token); throw error; }
+    };
+    vi.spyOn(source.backend, 'list').mockRejectedValueOnce(new DOMException('Cached file state changed', 'InvalidStateError'));
+    edit(0);
+    await expect(coordinator.flush()).rejects.toThrow('Cached file state changed');
+    let accepted = 0;
+    for (let step = 1; step < 150; step++) {
+      try { edit(step); accepted = step; }
+      catch (error) { expect(error).toMatchObject({ code: 'budget' }); break; }
+    }
+    expect(accepted).toBeGreaterThan(100);
+    const pending = coordinator.getStatus();
+    expect(pending.queuedBytes).toBeGreaterThan(31 * 1024 * 1024);
+    expect(pending.queuedBytes).toBeLessThanOrEqual(REPOSITORY_LIMITS.queueBytes);
+    expect(coordinator.getEntities().get('curve-block')?.value).toMatchObject({ step: accepted });
+    await coordinator.retry(); await coordinator.flush();
+    expect(coordinator.getStatus()).toMatchObject({ queuedBytes: 0, error: null, confirmedSequence: pending.appliedSequence });
+    edit(accepted + 1); await coordinator.flush();
+    const reopened = await recoverRepository(source.backend, descriptor);
+    expect(reopened.warnings).toEqual([]);
+    const navigation = await readRecord(source.backend, reopened.heads['navigation:workspace']);
+    const revision = (navigation.payload as unknown as { revision: RecordReference }).revision;
+    const projection = await materializeProjection(source.backend, revision, reopened.checkpoints);
+    expect(projection.entities.get('curve-block')?.value).toMatchObject({ step: accepted + 1 });
+  }, 120000);
 });

@@ -17,13 +17,16 @@ export function canLayoutChangeProjectContent(): boolean {
 
 export function subscribeEditorWriteAvailability(listener: () => void): () => void {
   let unsubscribeCoordinator = () => {};
+  let unsubscribeFailure = () => {};
   const bind = () => {
     unsubscribeCoordinator();
+    unsubscribeFailure();
     unsubscribeCoordinator = getEditorRepositorySession()?.coordinator.subscribe(listener) ?? (() => {});
+    unsubscribeFailure = getEditorRepositorySession()?.client.subscribeFailure(listener) ?? (() => {});
     listener();
   };
   const unsubscribeSession = subscribeEditorRepositorySession(bind);
   const unsubscribePublication = subscribeEditorContentPublication(listener);
   bind();
-  return () => { unsubscribeCoordinator(); unsubscribeSession(); unsubscribePublication(); };
+  return () => { unsubscribeCoordinator(); unsubscribeFailure(); unsubscribeSession(); unsubscribePublication(); };
 }

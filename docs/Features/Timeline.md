@@ -422,7 +422,7 @@ The toolbar and wheel gestures drive playback and navigation:
 - Unselected clips keep persistent white edge brackets: each vertical edge has short top and bottom caps that fade inward, so adjacent clips form a visible `][` cut marker without obscuring thumbnails or waveforms. Selected clips retain the complete white outline.
 - `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. While zooming in near either lane edge, a magnetic 48 px edge zone preserves the corresponding visible time boundary so the nearby beginning or end is not pushed offscreen. Timeline zoom remains contained behind the dedicated navigator instead of exposing a second native panel scrollbar. Faster wheel gestures use larger zoom steps.
 - `Shift+Scroll` pans horizontally.
-- Vertical scroll snaps to track boundaries.
+- Vertical scroll snaps to track boundaries. The timeline frame and section viewports cannot acquire a second native browser scroll offset through focus or `scrollIntoView`; only the editor’s section scrolling and navigator move the tracks. This keeps track headers, clip hit testing and the ruler aligned after panel/layout changes.
 - `Ctrl+Shift+Scroll` or `Cmd+Shift+Scroll` toggles slot-grid view.
 - The toolbar also exposes a dedicated slot-grid toggle button that flips between timeline bars and the 12x4 grid icon.
 - The Navigation/Marking tool flyout exposes Marker, In Point, and Out Point commands for the current playhead position.

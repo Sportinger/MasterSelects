@@ -104,9 +104,9 @@ export const openEditorRepository = (prepare: PrepareRepository) => lifecycle.op
 export const closeEditorRepository = () => lifecycle.close();
 export async function flushEditorRepository(): Promise<boolean> {
   if (!getActiveRepositorySession()?.opening.writable) throw new RepositoryError('ownership', 'Read-only project cannot publish a save');
-  await lifecycle.flush(); return true;
+  await lifecycle.flush({ retry: true }); return true;
 }
-export async function retryEditorRepository(): Promise<void> { await getActiveRepositorySession()?.coordinator.retry(); await lifecycle.flush(); }
+export async function retryEditorRepository(): Promise<void> { await lifecycle.flush({ retry: true }); }
 export function readEditorRepositoryProject(): ProjectFile | null {
   const session = getActiveRepositorySession(); if (!session) return null;
   return decodeProjectDomains(session.coordinator.getProjection().entities, projectWorkspace);

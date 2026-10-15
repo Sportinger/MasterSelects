@@ -309,3 +309,26 @@ and logical-read budgets remain enforced. Rejected journal enqueue attempts do
 not enter the editor's deduplication cache, so the same value can be retried.
 Storage worker faults retain their actual code and message instead of being
 reported as generic read-only ownership failures.
+
+
+### Retrying older storage failures
+
+Save retries a failed coordinator queue before capturing further workspace changes.
+This ordering also works when the 32 MiB recovery queue is almost full. A transient
+owner/discovery/preparation failure that happened before a physical publication was
+prepared can be retried; it no longer permanently poisons the writer. Operation
+sequence, ownership, immutable-file verification and unique-head checks still run
+on retry. Persistent failures remain visible and accepted edits stay pending.
+
+Regression coverage exercises a transient `InvalidStateError`, a blocked queue
+filled to its budget, refusal of an excess edit, retry, subsequent edits and a
+fresh repository reopen. A separate format regression recreates the old oversized
+navigation record with 14,000 branch choices and checks that the existing chunked
+representation saves and reopens the same choices intact. These are reproductions
+of failure paths, not recovery of the original users' project files.
+
+Fatal worker errors now include the storage phase (startup, opening or ready) and
+pending protocol operation names. No request payload or project path is added.
+Writer availability subscribers are notified immediately, including while the
+worker is idle. A dead worker is not silently replaced while it may have pending
+writes; the original error remains available for diagnostics.

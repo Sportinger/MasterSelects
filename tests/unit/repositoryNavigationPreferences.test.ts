@@ -4,7 +4,7 @@ import { RepositoryPersistence } from '../../src/services/project/repository/per
 import { draftPublication } from '../../src/services/project/repository/persistence/draftPublication';
 import { draftNavigationRecords, readNavigationPreferences } from '../../src/services/project/repository/persistence/navigationPreferences';
 import { canonicalBytes } from '../../src/services/project/repository/segments/canonical';
-import { readRecord, segmentRecords } from '../../src/services/project/repository/segments/recordSegment';
+import { readRecord, segmentRecords, SegmentBuilder } from '../../src/services/project/repository/segments/recordSegment';
 import { materializeEntityReferences, materializeProjection } from '../../src/services/project/repository/persistence/projection';
 import { WorkerCoordinatorStorage } from '../../src/services/project/repository/transaction/WorkerCoordinatorStorage';
 import { RepositorySession } from '../../src/services/project/repository/RepositorySession';
@@ -64,6 +64,11 @@ describe('bounded navigation preferences', () => {
     const f = await fixture(), storage = new WorkerCoordinatorStorage(f.client, f.opening());
     const redo = Object.fromEntries(Array.from({ length: 14000 }, (_, i) => [`00000000-0000-0000-0000-${String(i).padStart(12, '0')}`, crypto.randomUUID()]));
     expect(canonicalBytes(redo).length).toBeGreaterThan(REPOSITORY_LIMITS.recordBytes);
+    // Reproduce the pre-chunking format from the affected 3.1.8 build using the
+    // same data. The physical writer rejected it before a commit could exist.
+    const legacy = { kind: 'navigation' as const, schemaVersion: 1 as const,
+      payload: { workspaceId: 'workspace', sequence: 1, revisionId: 'r0', redoPreferences: redo }, references: [], blobs: [] };
+    await expect(new SegmentBuilder().add(legacy)).rejects.toThrow('Record exceeds bounded aggregate limit');
     await storage.publishRevision({ revisionId: 'r0', transactionId: 'tx0', parentRevisionId: null, label: 'Initial', source: 'test', createdAt: 0,
       changes: [{ entityKey: 'value', before: null, after: { type: 'fixture', schemaVersion: 1, value: 'kept', references: [], blobs: [] } }] }, 'workspace', redo, 1);
     const recovered = await f.reopen();
