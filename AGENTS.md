@@ -56,9 +56,20 @@ every agent task gets its own branch and worktree (branch model below).
   worktree in the browser.
 - **Finish** with all commits on your task branch and report the branch name.
   The owner merges task branches into `local` and `local` into `master`;
-  agents merge, push, or delete branches only on explicit request. Remove a
-  worktree only after the owner confirms its branch is merged, with a plain
-  `git worktree remove <path>` (never `--force` without inspecting it first).
+  agents merge and push only on explicit request.
+- **Clean up after merging** (decision 2026-10-16, user): agents may remove
+  their completed task worktree and delete its local `task/*` branch without
+  another confirmation once all its commits are included in the integration
+  branch (`local`, `master`, or freshly fetched `origin/master`). Verify this
+  with `git merge-base --is-ancestor <task-branch> <integration-branch>` and
+  inspect the worktree for tracked, untracked, and ignored files. Preserve
+  local data, notes, and secrets outside the worktree before removal; stop
+  only its own development processes. Use plain `git worktree remove <path>`
+  and `git branch -d <task-branch>` from a retained worktree; never force
+  removal or deletion to bypass a failed safety check. An unmerged task stays
+  available. Leave other agents' active work and the owner's integration
+  branches intact. Removing other agents' worktrees or remote branches still
+  requires an explicit request. Report which branches were removed.
 - **Fixes from Fassandra arrive on `master`.** Keep `local` current by merging
   `origin/master` into it (owner, or an agent on request) and start new task
   branches from the updated `local`.

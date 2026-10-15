@@ -13,6 +13,14 @@ Never commit secrets or kernel code. Work on your own `task/<short-name>`
 branch in its own worktree, never on `local` or `master` in the main folder
 (branch model in section 1 of `AGENTS.md`).
 
+After merging a completed task, follow the cleanup rule in section 1 of
+`AGENTS.md`: verify that all task commits are in the integration branch,
+inspect tracked, untracked, and ignored files, preserve local data, and remove
+the task worktree with `git worktree remove` followed by `git branch -d`.
+No further confirmation is required for your own completed, merged task.
+Never force cleanup or remove another agent's active work; remote branch
+removal still requires an explicit request.
+
 ## Nodes and effects: improve them whenever you touch them
 
 Whenever dev work touches nodes, effects, operators, the stick-figure rig, or
