@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-16",
+    "type": "fix",
+    "title": "MasterSelects 3.2.0",
+    "description": "Cancelling audio export during encoder finalization no longer produces false export errors. Audio encoders are released after cancellation or failure, and browser media downloads handle moved or deleted source files with a retained-source fallback and clear unavailable-media feedback.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-14",
     "type": "improve",
     "title": "MasterSelects 3.1.9",
