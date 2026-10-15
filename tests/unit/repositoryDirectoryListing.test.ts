@@ -6,6 +6,12 @@ import { hashBytes } from '../../src/services/project/repository/segments/canoni
 afterEach(() => vi.unstubAllGlobals());
 
 function fixture(count = 1100, names?: string[], writable = false) {
+  if (writable) {
+    // Ownership also requires browser support for writable file streams.
+    vi.stubGlobal('FileSystemFileHandle', class {
+      createWritable() { throw new Error('Head conflict must reject before opening a writable stream'); }
+    });
+  }
   vi.stubGlobal('navigator', writable ? { locks: { request: async (_name: string, _options: unknown, callback: (lock: object) => Promise<void>) => callback({}) } } : {});
   const files = names ?? Array.from({ length: count }, (_, index) => `commit-${String(index).padStart(5, '0')}.json`);
   let enumerations = 0;
