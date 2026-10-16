@@ -2,6 +2,13 @@
   {
     "date": "2026-10-16",
     "type": "fix",
+    "title": "MasterSelects 3.2.1",
+    "description": "Returning from a nested composition restores the parent preview correctly, including deeply nested timelines. Offscreen track rows now release their rendering resources even in sections with eight or fewer tracks, reducing timeline work while preserving scrolling and active editing gestures.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-16",
+    "type": "fix",
     "title": "MasterSelects 3.2.0",
     "description": "Cancelling audio export during encoder finalization no longer produces false export errors. Audio encoders are released after cancellation or failure, and browser media downloads handle moved or deleted source files with a retained-source fallback and clear unavailable-media feedback.",
     "section": "Release"
