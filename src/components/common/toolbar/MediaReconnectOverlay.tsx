@@ -3,13 +3,13 @@ import { createPortal } from 'react-dom';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
 import { requestRelinkDialog } from '../../../services/project/relinkDialogRuntime';
-import { mediaFoldersNeedingAccess, reconnectMedia, type MediaReconnectProgress, type MediaReconnectResult } from '../../../services/project/mediaReconnect';
+import { MAX_FILE_ACCESS_PROMPTS, mediaFilesNeedingAccess, mediaFoldersNeedingAccess, reconnectMedia, type MediaReconnectProgress, type MediaReconnectResult } from '../../../services/project/mediaReconnect';
 import { isLinkedMediaConnectionRunning, subscribeLinkedMediaConnection } from '../../../services/project/repository/transaction/editorLinkedMediaConnection';
 import { getEditorRepositorySession, subscribeEditorRepositorySession } from '../../../services/project/repository/transaction/editorMutationRuntime';
 import '../ProjectNameDialog.css';
 import './RepositoryArchiveDialog.css';
 
-type DirectoryPicker = (options?: { id?: string; mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
+type DirectoryPicker = (options?: { id?: string; mode?: 'read' | 'readwrite'; startIn?: FileSystemHandle }) => Promise<FileSystemDirectoryHandle>;
 const PHASES: Record<MediaReconnectProgress['phase'], string> = { access: 'Allowing folder access', connect: 'Connecting media', search: 'Searching media folders', relink: 'Relinking media' };
 
 /**
@@ -22,6 +22,9 @@ export function MediaReconnectHost() {
   const [connecting, setConnecting] = useState(isLinkedMediaConnectionRunning());
   const [dismissed, setDismissed] = useState<object | null>(null);
   const [folders, setFolders] = useState<string[]>([]);
+  // Offline media with a saved file location: re-allowed directly, and the folder picker starts there.
+  const [knownFiles, setKnownFiles] = useState<string[]>([]);
+  const lastKnownLocation = useRef<FileSystemHandle | undefined>(undefined);
   const [busy, setBusy] = useState<MediaReconnectProgress | null>(null);
   const [result, setResult] = useState<MediaReconnectResult | null>(null);
   const titleId = useId(); const dialog = useRef<HTMLDivElement>(null);
@@ -31,8 +34,10 @@ export function MediaReconnectHost() {
   const visible = Boolean(session) && offline > 0 && !connecting && dismissed !== session || busy !== null;
   useEffect(() => {
     if (!visible) return;
-    void mediaFoldersNeedingAccess().then(roots => {
+    void Promise.all([mediaFoldersNeedingAccess(), mediaFilesNeedingAccess()]).then(([roots, files]) => {
       setFolders(roots.map(root => root.name));
+      setKnownFiles(files.map(file => file.name));
+      lastKnownLocation.current = files[0]?.handle ?? roots[0]?.handle ?? undefined;
       // Folders that are still allowed need no prompt, so search them before asking for anything.
       if (roots.length === 0 && session && autoSearchedSession.current !== session) {
         autoSearchedSession.current = session;
@@ -43,22 +48,25 @@ export function MediaReconnectHost() {
   useEffect(() => { if (visible) dialog.current?.querySelector<HTMLElement>('[data-primary]')?.focus(); }, [visible, busy]);
   if (!visible) return null;
   const close = () => { if (!busy) { setDismissed(session); setResult(null); } };
-  async function run(chosenFolder?: FileSystemDirectoryHandle) {
+  async function run(chosenFolder?: FileSystemDirectoryHandle, requestFileAccess = false) {
     setResult(null); setBusy({ phase: 'access', done: 0, total: 0 });
-    try { setResult(await reconnectMedia(progress => setBusy(progress), chosenFolder)); }
+    try { setResult(await reconnectMedia(progress => setBusy(progress), chosenFolder, { requestFileAccess })); }
     finally { setBusy(null); }
   }
   const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
   async function chooseFolder() {
     if (!picker) return;
-    try { await run(await picker({ id: 'ms-media-reconnect', mode: 'read' })); }
+    const startIn = lastKnownLocation.current;
+    try { await run(await picker({ id: 'ms-media-reconnect', mode: 'read', ...(startIn ? { startIn } : {}) })); }
     catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) throw error; }
   }
   const done = Boolean(result && !result.missing);
   const stillMissing = Boolean(result?.missing);
-  // Known folders only need the browser prompt again; otherwise the user shows where the media live.
+  // Known folders and saved file locations only need the browser prompt again; otherwise the user shows where the media live.
+  const fileAccess = knownFiles.length > 0 && knownFiles.length <= MAX_FILE_ACCESS_PROMPTS;
+  const oneClick = (folders.length > 0 || fileAccess) && !stillMissing;
   const primary = done ? { label: 'Done', action: close }
-    : folders.length > 0 && !stillMissing ? { label: 'Reconnect media', action: () => { void run(); } }
+    : oneClick ? { label: 'Reconnect media', action: () => { void run(undefined, true); } }
     : picker ? { label: 'Choose folder…', action: () => { void chooseFolder(); } }
     : { label: 'Relink manually…', action: () => { close(); requestRelinkDialog(); } };
   const status = busy ? `${PHASES[busy.phase]}${busy.total ? ` ${busy.done.toLocaleString()} / ${busy.total.toLocaleString()}` : ''}…`
@@ -69,9 +77,9 @@ export function MediaReconnectHost() {
       <div className="project-name-dialog-accent" />
       <h2 id={titleId}>Reconnect media</h2>
       <p>{offline.toLocaleString()} media files are offline.{' '}
-        {folders.length && !stillMissing ? `Allow access to “${folders.join('”, “')}” once to reconnect them.`
-          : 'Choose the folder that contains them. MasterSelects finds and reconnects the files automatically.'}</p>
-      {folders.length > 0 && !stillMissing && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a reload.</p>}
+        {oneClick ? `Allow access to “${[...folders, ...(fileAccess ? knownFiles : [])].join('”, “')}” once to reconnect them.`
+          : `Choose the folder that contains them. MasterSelects finds and reconnects the files automatically.${knownFiles.length ? ` The folder picker opens where “${knownFiles[0]}” was last found.` : ''}`}</p>
+      {oneClick && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a reload.</p>}
       {status && <p role="status" aria-live="polite">{status}</p>}
       {result?.deniedFolders.length ? <p role="alert">Access was not granted for “{result.deniedFolders.join('”, “')}”.</p> : null}
       <div className="repository-archive-actions">

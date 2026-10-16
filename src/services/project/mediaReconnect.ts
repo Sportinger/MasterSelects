@@ -5,6 +5,8 @@ import { createRelinkCandidateMapFromHandles, findRelinkMatch, setRelinkHandleSo
 import { getProjectMediaSourceRootStates, requestProjectMediaSourceRootAccess, registerProjectMediaSourceRoot, type ProjectMediaSourceRootState } from './mediaSourceRoots';
 import { connectOfflineLinkedMedia } from './repository/transaction/editorLinkedMediaConnection';
 import { runEditorBatch } from './repository/transaction/editorMutationRuntime';
+import { fileSystemService } from '../fileSystemService';
+import { projectDB } from '../projectDB';
 
 const log = Logger.create('MediaReconnect');
 type IterableDirectoryHandle = FileSystemDirectoryHandle & { values(): AsyncIterableIterator<FileSystemDirectoryHandle | FileSystemFileHandle> };
@@ -13,6 +15,34 @@ export interface MediaReconnectProgress { phase: 'access' | 'connect' | 'search'
 export interface MediaReconnectResult { connected: number; relinked: number; missing: number; deniedFolders: string[]; }
 
 export function offlineMediaFiles(): MediaFile[] { return useMediaStore.getState().files.filter(mediaNeedsRelink); }
+
+/** Beyond this, one folder choice beats a browser prompt per file. */
+export const MAX_FILE_ACCESS_PROMPTS = 8;
+type PermissionFileHandle = FileSystemFileHandle & {
+  queryPermission?: (descriptor?: { mode?: 'read' }) => Promise<PermissionState>;
+  requestPermission?: (descriptor?: { mode?: 'read' }) => Promise<PermissionState>;
+};
+export interface MediaFileAccessState { mediaId: string; name: string; handle: FileSystemFileHandle; }
+
+async function storedMediaFileHandle(mediaId: string): Promise<FileSystemFileHandle | null> {
+  const handle = fileSystemService.getFileHandle(mediaId)
+    ?? await projectDB.getStoredHandle(`media_${mediaId}`).catch(() => undefined);
+  return handle?.kind === 'file' ? handle as FileSystemFileHandle : null;
+}
+
+/**
+ * Offline media imported as single files (picker/drop) keep their exact saved file location.
+ * After a reload that location only needs the browser prompt again, not a folder search.
+ */
+export async function mediaFilesNeedingAccess(): Promise<MediaFileAccessState[]> {
+  const states = await Promise.all(offlineMediaFiles().map(async (media): Promise<MediaFileAccessState | null> => {
+    const handle = await storedMediaFileHandle(media.id);
+    if (!handle) return null;
+    const permission = await (handle as PermissionFileHandle).queryPermission?.({ mode: 'read' }).catch(() => 'denied' as const) ?? 'granted';
+    return permission === 'denied' ? null : { mediaId: media.id, name: media.name, handle };
+  }));
+  return states.filter((state): state is MediaFileAccessState => state !== null);
+}
 /** Known media folders whose browser access lapsed (e.g. after a reload); one click restores them. */
 export async function mediaFoldersNeedingAccess(): Promise<ProjectMediaSourceRootState[]> {
   return (await getProjectMediaSourceRootStates()).filter(root => root.handle && root.permission !== 'granted');
@@ -36,12 +66,27 @@ async function collectFolder(root: FileSystemDirectoryHandle, rootId: string, in
  * nothing is saved), then search allowed folders for the rest and relink unique matches as one revision.
  * Must start inside the click handler: browser permission prompts need its user activation.
  */
-export async function reconnectMedia(onProgress: (progress: MediaReconnectProgress) => void, chosenFolder?: FileSystemDirectoryHandle): Promise<MediaReconnectResult> {
+export async function reconnectMedia(
+  onProgress: (progress: MediaReconnectProgress) => void,
+  chosenFolder?: FileSystemDirectoryHandle,
+  options: { requestFileAccess?: boolean } = {},
+): Promise<MediaReconnectResult> {
   const deniedFolders: string[] = [];
   const pending = await mediaFoldersNeedingAccess();
+  // Saved single-file locations are re-allowed in the same click; a chosen folder already covers them.
+  const files = options.requestFileAccess && !chosenFolder
+    ? (await mediaFilesNeedingAccess()).slice(0, MAX_FILE_ACCESS_PROMPTS) : [];
+  const total = pending.length + files.length;
   for (const [index, root] of pending.entries()) {
-    onProgress({ phase: 'access', done: index, total: pending.length });
+    onProgress({ phase: 'access', done: index, total });
     if (!await requestProjectMediaSourceRootAccess(root)) deniedFolders.push(root.name);
+  }
+  for (const [index, { handle, name }] of files.entries()) {
+    onProgress({ phase: 'access', done: pending.length + index, total });
+    try {
+      const permission = await (handle as PermissionFileHandle).requestPermission?.({ mode: 'read' });
+      if (permission && permission !== 'granted') log.info('File access was not granted', { name });
+    } catch (error) { log.warn('Could not request file access', { name, error }); }
   }
   if (chosenFolder) await registerProjectMediaSourceRoot(chosenFolder);
 

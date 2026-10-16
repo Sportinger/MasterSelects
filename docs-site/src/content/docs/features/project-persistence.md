@@ -53,6 +53,12 @@ access to that project's known media source folders in the same click, before
 the project loads, so linked media reconnect without a separate step. Media
 that still lack access are offered in the Reconnect media dialog; choosing
 "Allow on every visit" in the browser prompt avoids the prompt after reloads.
+Media imported as single files (picker or drop) keep their exact saved file
+location. The dialog's single "Reconnect media" click re-allows those files
+directly (up to 8 browser prompts) instead of asking for a folder. With more
+files, or when no saved location is left, "Choose folder…" opens the picker in
+the folder where an offline file was last found; the chosen folder becomes a
+known media folder, so later reloads need only the one-click re-allow.
 If browser storage was
 cleared, select the existing project folder again. The filesystem directory
 can still exist even when its cached browser handle has been lost.
