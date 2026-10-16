@@ -49,6 +49,60 @@ Shared Number, Oscillator and scalar math nodes can drive numeric splat paramete
 Effect parameters remain keyframeable through the common effect inspector; mesh reconstruction
 settings are deliberately not animated. Time-dependent nodes use clip-local media time.
 
+**Conveyor, Falloff Box, Release and Ring Bend** are small reusable splat operators that
+compose into flowing "materialize / dematerialize" loops (for example a street that runs
+through a fixed window, or rolls around the inside of a ring):
+
+- **Conveyor** (`splat.conveyor`) scrolls splats along a source-local axis (0/1/2 = X/Y/Z)
+  at Speed units per second and wraps them into Wrap start .. Wrap start + Wrap length.
+  It is closed form, so seeking is exact; the loop repeats every Wrap length / |Speed| s.
+  Downstream nodes read its loop period and flow direction. **Travel** adds a keyframeable
+  distance: keyframe it with Speed 0 for slow starts and ramps without jumps, or offset it to
+  place the content seam (where the scan's end meets its start) behind the camera.
+- **Falloff Box** (`splat.falloff-box`) writes a per-splat release weight: 0 inside the solid
+  half-size around Center, rising to 1 across Feather on each axis, with Edge jitter for a
+  frayed front. A huge half-size ignores an axis; several boxes combine by maximum.
+- **Release** (`splat.release`) lets weighted splats fly. It reuses the shared force nodes:
+  **Turbulence** becomes a divergence-free curl field (strength, frequency), **Gravity** pulls
+  toward local -Y for positive strength (like Particle Simulation; negative lifts in Y-up
+  captures), **Drag** shortens flights. Flight distance varies per splat so particles stream
+  in ribbons with a long tail of far flights, each splat swirls at its own scale through a
+  two-octave field, and Stream with motion sweeps them along the conveyor flow (negative values drift against it). Particle size
+  and Particle glow shape the particles; Fade 1 dissolves them away, Fade 0 keeps released
+  splats as a scattered cloud they materialize from. **Cycle** 1 turns release into a round trip:
+  the amount follows each splat's progress through the gap between leaving and re-entering the
+  conveyor window (0 at both edges, maximal halfway), so splats that fly off on the exit side
+  drift through space and land back on their own places on the entry side. Lateral falloff
+  still frays the sides. **Linger** reshapes the trip: fly out fast, hold far out while drifting
+  with the gap, then come back slowly at first and faster and faster until the splat snaps into
+  place. In Cycle the trip begins Feather before the window's exit edge, so the strip dissolves
+  over a long stretch while the entry stays crisp; **Dissolve spread** gives every splat its own
+  departure time along that stretch. **Quality** sets the curl path steps per splat and frame:
+  2-3 keep camera fly-throughs fluid in the preview, 10 is the export default. **Particle density**
+  keeps only a seeded share of released splats as particles; the rest fade out while leaving.
+  Splats at alpha <= 1/255 are skipped by the visibility cull (they were invisible anyway), so a
+  dense strip with a sparse particle cloud costs little sorting and drawing. Moving splat graphs
+  (conveyor, release, particles, position noise) now use the visibility cull in the interactive
+  preview as well; its draw count lags one frame behind the GPU counter, which is invisible for
+  continuous motion. Precise frames (export) still sort and draw every splat. Pair it with a closed Ring Bend; an open ring warns, because splats
+  would jump across the gap at the wrap seam. The curl field circles exactly once per
+  conveyor loop, so the animation stays seamless.
+- **Ring Bend** (`splat.ring-bend`) rolls a strip along X or Z onto the inside of a ring whose
+  center lies Radius from Ground height along local Y (negative Radius for Y-down captures).
+  |Radius| = Wrap length / 2pi closes a full ring; put the wrap seam inside the released zone.
+  **Bend** (0..1, keyframeable) scales the curvature, so a flat strip curls into the ring smoothly
+  while the point at Center stays in place. Content higher than the ring center would fold
+  through the axis; it fades out within 35 % of the radius of the axis instead, so skies and
+  tall surroundings disappear gracefully as the world curls.
+  **Keep released outside** lets splats released by an upstream Release move only outward from
+  their place and pushes them behind the ring surface while they leave, so flights never crowd
+  the view from inside the ring; settled splats keep their place.
+
+All four move splat centers, so they force GPU depth sorting and end source-crop compaction
+like particles. The `SplatGraph` logger warns once per setting when a Release has no upstream
+Falloff Box, a Ring Bend uses axis Y, or a Falloff Box window along the conveyor axis reaches
+the wrap seam or lies outside the wrap range.
+
 Radii are **linear local units**, not the logarithmic scales in some training PLY files.
 **Sphere Crop** is a reusable splat operator with Center X/Y/Z, Radius and Soft edge.
 It hides splat centers outside a source-local sphere without deleting source data;

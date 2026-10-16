@@ -31,6 +31,7 @@ describe('splat graph sorting policy', () => {
     expect(run([{ kind: 'particles', values: [] }]).forceGpuSort).toBe(true);
     expect(mocks.order).not.toHaveBeenCalled();
     expect(run([{ kind: 'noise', values: [0] }]).forceGpuSort).toBe(true);
+    for (const kind of ['conveyor', 'release', 'ring-bend'] as const) expect(run([{ kind, values: [2, 1, -10, 20] }]).forceGpuSort).toBe(true);
   });
   it('preserves precise export sorting and falls back when the worker cannot initialize', () => {
     expect(run([], true).forceGpuSort).toBe(true);

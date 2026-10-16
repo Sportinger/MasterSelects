@@ -370,7 +370,8 @@ Still-image export renders the current composited frame through an export render
 
 1. Prepare clips and runtimes for the selected export mode.
 2. Seek all clips to each export time.
-3. Build layers for that frame.
+3. Build layers for that frame. Export layers carry the same transform as the preview, including
+   the clip anchor (pivot); anchored 3D clips such as splats therefore render in the same place.
 4. Render procedural motion shapes, nested compositions, transitions, and supported 3D assets, then composite through the GPU engine.
 5. Capture a `VideoFrame` from the export canvas when possible, otherwise fall back to pixel readback.
 6. Encode and mux the file.

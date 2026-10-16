@@ -30,6 +30,31 @@ export const SPLAT_OPERATORS: readonly OperatorDefinition[] = [
     inputs: [{ id: 'acceleration', label: 'Acceleration Y', type: 'number' }], outputs: [{ id: 'force', label: 'Gravity', type: 'force' }], bypass: 'mute', addable: false },
   { ...op('drag', 'Drag', 'Exponential velocity damping, independent of playback frame rate.', [number('coefficient', 'Drag', 0.4, 0, 10)]),
     inputs: [{ id: 'coefficient', label: 'Drag', type: 'number' }], outputs: [{ id: 'drag', label: 'Drag', type: 'drag' }], bypass: 'mute', addable: false },
+  op('conveyor', 'Conveyor', 'Scroll splats along a local axis (0 X, 1 Y, 2 Z) and wrap them into Wrap start .. Wrap start + Wrap length. Exact when seeking; repeats every Wrap length / |Speed| seconds. Travel adds a keyframeable distance for speed ramps and for placing the content seam; with Speed 0 the motion follows Travel alone. Downstream Release streams along this motion.', [
+    number('axis', 'Axis: X / Y / Z', 2, 0, 2, 1), number('speed', 'Speed (units/s)', 1, -1000, 1000), number('start', 'Wrap start', -10, -10000, 10000), number('length', 'Wrap length', 20, 0.01, 20000),
+    number('travel', 'Travel (keyframeable distance; animate with Speed 0 for ramps)', 0, -1000000, 1000000),
+  ]),
+  op('falloff-box', 'Falloff Box', 'Release weight for Release: 0 inside the solid half-size around Center, rising to 1 across Feather on each axis. Use a huge half-size to ignore an axis. Several boxes combine by maximum.', [
+    ...['x', 'y', 'z'].map(id => number(`center${id.toUpperCase()}`, `Center ${id.toUpperCase()}`, 0, -10000, 10000)),
+    ...['x', 'y', 'z'].map(id => number(`half${id.toUpperCase()}`, `Solid half-size ${id.toUpperCase()}`, id === 'z' ? 3 : 1000, 0, 100000)),
+    ...['x', 'y', 'z'].map(id => number(`feather${id.toUpperCase()}`, `Feather ${id.toUpperCase()}`, 3, 0.001, 10000)),
+    number('jitter', 'Edge jitter', 0.6, 0, 2),
+  ]),
+  { ...op('release', 'Release', 'Weighted splats (from an upstream Falloff Box) fly along a curl field from the connected Turbulence, rise or fall with Gravity (positive pulls toward local -Y, like Particle Simulation), shorten with Drag, stream along an upstream Conveyor (negative Stream drifts against it), shrink, glow and fade (Fade 0 keeps them as a scattered cloud they fly in from). Cycle 1 turns release into a round trip: a splat leaving the conveyor window drifts out through the gap and lands back on its own place as the strip re-enters; pair it with a closed Ring Bend. Closed form: exact when seeking and seamless per conveyor loop.', [
+    number('flight', 'Flight distance', 6, 0, 1000), number('stream', 'Stream with motion (negative: against it)', 0.5, -10, 10), number('particleSize', 'Particle size', 0.3, 0, 1), number('glow', 'Particle glow', 0.3, 0, 8), number('seed', 'Seed', 7, 0, 999, 1),
+    number('fade', 'Fade (0 keeps released splats as a scattered cloud)', 1, 0, 1),
+    number('cycle', 'Cycle (round trip back to its place; needs Conveyor + Falloff Box)', 0, 0, 1),
+    number('linger', 'Linger (Cycle: fly out fast, hold far out, accelerate back)', 0, 0, 1),
+    number('dissolve', 'Dissolve spread (Linger: staggered departures along the exit)', 0, 0, 1),
+    number('quality', 'Quality (curl path steps; 2-3 for fast preview, 10 for export)', 10, 1, 12, 1),
+    number('density', 'Particle density (share of released splats that fly; the rest fade and are culled)', 1, 0, 1),
+  ]), inputs: [splats('splats'), { id: 'turbulenceField', label: 'Turbulence', type: 'force' }, { id: 'gravityField', label: 'Gravity', type: 'force' }, { id: 'dragField', label: 'Drag', type: 'drag' },
+    ...['flight', 'stream', 'particleSize', 'glow', 'seed', 'fade', 'cycle', 'linger', 'dissolve', 'quality', 'density'].map(id => ({ id, label: id, type: 'number' as const }))] },
+  op('ring-bend', 'Ring Bend', 'Roll splats along axis X (0) or Z (2) onto the inside of a ring whose center lies Radius from Ground height along local Y (negative Radius for Y-down captures): the strip curves up ahead of and behind Center. Radius 0 or Bend 0 is flat; content that would fold through the ring axis fades out near it; Bend animates the curl smoothly around Center; |Radius| = conveyor Wrap length / 2pi closes a full ring. Keep released outside lets splats released upstream move only outward from their place and pushes them behind the ring surface as they leave, so flights stay out of the view from inside.', [
+    number('axis', 'Axis: X / Z', 2, 0, 2, 1), number('center', 'Center', 0, -10000, 10000), number('radius', 'Radius (negative: toward -Y)', 30, -100000, 100000), number('ground', 'Ground height (local Y)', 0, -10000, 10000),
+    number('keepOutside', 'Keep released outside (after Release)', 0, 0, 1),
+    number('bend', 'Bend (0 flat .. 1 full Radius; keyframe to curl the strip)', 1, 0, 1),
+  ]),
   op('camera-fade', 'Camera Fade', 'Reduce radius and opacity smoothly in a sphere around the active scene camera. Distances are world units.', [number('radius', 'Clear radius', 0.2, 0, 100), number('transition', 'Transition', 0.5, 0.001, 100)]),
   op('sphere-crop', 'Sphere Crop', 'Keep splat centers inside a sphere in source-local coordinates. Fade inward from the radius with Soft edge; bypass restores the input. Source data is unchanged.', [
     ...['x', 'y', 'z'].map(id => number(id, `Center ${id.toUpperCase()}`, 0, -10000, 10000)),

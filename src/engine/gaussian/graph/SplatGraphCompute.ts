@@ -2,7 +2,10 @@ import { reportShaderCompilation } from '../../core/shaderCompilationDiagnostics
 import type { SplatGraphOperation } from '../../../types/splatGraph';
 import shader from './splatGraphCompute.wgsl?raw';
 
-const codes: Record<SplatGraphOperation['kind'], number> = { limit: 1, scale: 2, rotate: 3, color: 4, select: 5, noise: 6, particles: 7, 'camera-fade': 8, 'sphere-crop': 9 };
+const codes: Record<SplatGraphOperation['kind'], number> = { limit: 1, scale: 2, rotate: 3, color: 4, select: 5, noise: 6, particles: 7, 'camera-fade': 8, 'sphere-crop': 9, conveyor: 10, 'falloff-box': 11, release: 12, 'ring-bend': 13 };
+/** Operations that move splat centers need fresh depth order and cannot share pre-motion crops. */
+export const movesSplatCenters = (op: SplatGraphOperation) =>
+  ['particles', 'conveyor', 'release', 'ring-bend'].includes(op.kind) || (op.kind === 'noise' && op.values[0] === 0);
 export function prepareSplatSampling(operations: SplatGraphOperation[], sourceCount: number, budget = 0) {
   const selection = operations.findIndex(op => op.kind === 'select');
   const fraction = selection >= 0 ? operations[selection].values[0] : 1;
@@ -14,8 +17,14 @@ export function prepareSplatSampling(operations: SplatGraphOperation[], sourceCo
 }
 export function packSplatOperations(operations: SplatGraphOperation[]): Float32Array {
   if (operations.length > 24) throw new Error('Splat operation budget exceeded.');
-  const data = new Float32Array(24 * 12);
-  operations.forEach((op, i) => { data[i * 12] = codes[op.kind]; data.set(op.values, i * 12 + 4); });
+  // Each operation is header + a + b + c: the header's first lane is the code, values 0-7 fill a/b,
+  // values 8-11 fill c and values 12-14 use the spare header lanes.
+  const data = new Float32Array(24 * 16);
+  operations.forEach((op, i) => {
+    if (op.values.length > 15) throw new Error(`Splat operation ${op.kind} packs at most 15 values.`);
+    data[i * 16] = codes[op.kind]; data.set(op.values.slice(0, 8), i * 16 + 4);
+    data.set(op.values.slice(8, 12), i * 16 + 12); data.set(op.values.slice(12), i * 16 + 1);
+  });
   return data;
 }
 interface Slot { output: GPUBuffer; uniform: GPUBuffer; operations: GPUBuffer; capacity: number }
@@ -46,7 +55,7 @@ export class SplatGraphCompute {
       slot = { capacity: count,
         output: device.createBuffer({ size: count * 56, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
         uniform: device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
-        operations: device.createBuffer({ size: 24 * 48, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }),
+        operations: device.createBuffer({ size: 24 * 64, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }),
       }; this.slots[index] = slot;
     }
     const data = new Float32Array(28); const ints = new Uint32Array(data.buffer);

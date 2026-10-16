@@ -121,6 +121,8 @@ export function buildBaseLayerProps(
       y: ((transform.rotation?.y ?? 0) * Math.PI) / 180,
       z: ((transform.rotation?.z ?? 0) * Math.PI) / 180,
     },
+    // Same pivot as the preview layer builders; without it anchored 3D clips render elsewhere.
+    ...(transform.anchor ? { anchor: transform.anchor } : {}),
     sourceRect: clip.sourceRect ? { ...clip.sourceRect } : undefined,
     ...(mappedAnimation?.masks?.some(mask => mask.enabled !== false)
       ? { maskClipId: clip.id, maskInvert: false, masks: mappedAnimation.masks }
@@ -195,6 +197,7 @@ export function buildNestedBaseLayer(
       y: ((transform.rotation?.y || 0) * Math.PI) / 180,
       z: ((transform.rotation?.z || 0) * Math.PI) / 180,
     },
+    ...(transform.anchor ? { anchor: transform.anchor } : {}),
     sourceRect: nestedClip.sourceRect ? { ...nestedClip.sourceRect } : undefined,
     ...(masks?.some(mask => mask.enabled !== false)
       ? { maskClipId: nestedClip.id, maskInvert: false, masks }

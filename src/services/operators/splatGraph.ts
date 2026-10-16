@@ -4,6 +4,33 @@ import type { BoundOperatorNode, SceneOperatorGraph } from '../../types/operator
 import type { SplatGraphBranch, SplatGraphOperation } from '../../types/splatGraph';
 import { SPLAT_OPERATORS } from './splatOperators';
 import { expandOperatorCompositions } from './operatorComposition';
+import { Logger } from '../logger';
+
+const log = Logger.create('SplatGraph');
+const reported = new Set<string>();
+/** Chains that render but cannot behave as configured must say why instead of failing silently. */
+export function splatChainWarnings(operations: SplatGraphOperation[]): string[] {
+  const warnings: string[] = [];
+  operations.forEach((op, i) => {
+    const before = operations.slice(0, i);
+    if (op.kind === 'release' && !before.some(o => o.kind === 'falloff-box')) warnings.push('Release has no upstream Falloff Box; no splat is released.');
+    if (op.kind === 'release' && op.values[10] > 0 && !before.some(o => o.kind === 'conveyor')) warnings.push('Release Cycle needs an upstream Conveyor; it falls back to the falloff weight.');
+    if (op.kind === 'release' && op.values[10] > 0) {
+      const conveyor = before.findLast(o => o.kind === 'conveyor'), bend = operations.slice(i + 1).find(o => o.kind === 'ring-bend');
+      if (conveyor && bend && bend.values[2] !== 0 && Math.abs(Math.abs(bend.values[2]) * 2 * Math.PI - conveyor.values[3]) > conveyor.values[3] * 0.01) {
+        warnings.push(`Release Cycle with an open Ring Bend: splats jump across the gap at the wrap seam. Use Radius ${(conveyor.values[3] / (2 * Math.PI)).toFixed(3)} to close the ring.`);
+      }
+    }
+    if (op.kind === 'ring-bend' && op.values[0] === 1 && op.values[2] !== 0) warnings.push('Ring Bend needs axis X (0) or Z (2); it is ignored for axis Y.');
+    if (op.kind !== 'falloff-box') return;
+    const conveyor = before.findLast(o => o.kind === 'conveyor');
+    if (!conveyor) return;
+    const [axis, , start, length] = conveyor.values, reach = op.values[3 + axis] + op.values[6 + axis], center = op.values[axis];
+    if (center < start || center >= start + length) warnings.push(`Falloff Box center ${center} lies outside the conveyor wrap range ${start}..${start + length}; the window stays empty.`);
+    else if (2 * reach >= length) warnings.push(`Falloff Box window ${2 * reach} along the conveyor axis is not shorter than Wrap length ${length}; splats wrap visibly inside it.`);
+  });
+  return warnings;
+}
 
 export { defaultSplatGraph } from './splatGraphComposition';
 
@@ -28,6 +55,18 @@ export function compileSplatGraph(definition: SceneOperatorGraph, time = 0): Spl
     const upstream = ops(parent(node, 'splats'), visited); if (!upstream || node.bypassed) return upstream;
     if (upstream.length >= 24) throw new Error('Use at most 24 attribute operations per branch.');
     let v = values(node); if (node.operator === 'splat.limit' && v[0] > v[1]) throw new Error('Minimum radius exceeds maximum radius.');
+    if (node.operator === 'splat.release') {
+      // Shared force nodes: Turbulence becomes the curl field, Gravity lifts (negative) or sinks, Drag shortens flights.
+      v = [v[0], v[1], v[2], v[3], 0, 1, 0, 0, v[4], v[5], v[6], v[7], v[8], v[9], v[10]];
+      for (const [port, operator, indexes] of [
+        ['turbulenceField', 'forces.turbulence', [4, 5]], ['gravityField', 'forces.gravity', [6]], ['dragField', 'forces.drag', [7]],
+      ] as const) {
+        const field = parent(node, port);
+        if (!field || field.bypassed) continue;
+        if (field.operator !== operator) throw new Error(`Connect ${operator} to ${port}.`);
+        values(field).forEach((value, i) => { v[indexes[i]] = value; });
+      }
+    }
     if (node.operator === 'splat.particles') {
       v = [v[0], v[1], v[2], 0, 2, 0, v[3], 0];
       for (const [port, operator, indexes] of [
@@ -66,6 +105,7 @@ export function compileSplatGraph(definition: SceneOperatorGraph, time = 0): Spl
       if (node.operator !== 'splat.render') throw new Error('Connect a Gaussian surface or reconstructed mesh to the output.');
       const operations = ops(parent(node, 'splats')); if (!operations) return;
       result.push({ id: `${node.id}-${result.length}`, outputNodeId: node.id, operations, applyClipTransform: transform, budget: values(node)[0] });
+      for (const warning of splatChainWarnings(operations)) if (!reported.has(warning)) { reported.add(warning); log.warn(warning); }
     }
     if (result.length > 8) throw new Error('Use at most eight rendered splat branches.');
   };

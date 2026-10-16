@@ -376,9 +376,12 @@ export class GaussianSplatGpuRenderer {
       const { canUseWorkerSort, usedWorkerSort } = workerSortFrame;
       let drawCount = workerSortFrame.drawCount;
 
+      // Moving graphs cull too in the interactive preview: the draw count lags one frame behind the
+      // GPU counter, which is invisible for continuous motion and skips faded or off-screen splats.
+      // Precise (export) frames keep sorting every splat.
       if (
         !canUseWorkerSort &&
-        !precise && !graphMovesPoints &&
+        !precise &&
         this.visibilityPass.isInitialized &&
         effectiveSplatCount > CULL_THRESHOLD
       ) {
@@ -428,7 +431,7 @@ export class GaussianSplatGpuRenderer {
         effectiveSplatCount,
         drawCount,
         canUseWorkerSort,
-        precise: precise || graphMovesPoints,
+        precise: precise || (graphMovesPoints && !hasValidatedCullResult),
         hasValidatedCullResult,
         sortFrequency: graphMovesPoints ? 1 : sortFrequency,
         viewMatrix: camera.viewMatrix,

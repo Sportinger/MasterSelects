@@ -1,4 +1,4 @@
-import { SplatGraphCompute, prepareSplatSampling } from './SplatGraphCompute';
+import { SplatGraphCompute, movesSplatCenters, prepareSplatSampling } from './SplatGraphCompute';
 import { SplatCropCache } from './SplatCropCache';
 import { SplatBranchSortCache } from './SplatBranchSortCache';
 import type { SplatGraphBranch } from '../../../types/splatGraph';
@@ -17,7 +17,7 @@ export class SplatGraphPass {
     const sampling = prepareSplatSampling(operations, count, branch?.budget);
     const cropped = source ? this.crops.prepare(device, id, source, count, sampling, operations) : undefined;
     const outputCount = cropped?.count ?? sampling.count;
-    const moving = operations.some(op => op.kind === 'particles' || (op.kind === 'noise' && op.values[0] === 0));
+    const moving = operations.some(movesSplatCenters);
     const remapped = !!cropped || sampling.remapped;
     if (source && remapped && !moving && !precise && outputCount > 0) {
       scene = this.ordering.prepare(device, layout, id, branch?.id ?? 'surface', source, scene, count, sampling, cropped?.indices);

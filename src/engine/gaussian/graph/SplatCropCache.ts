@@ -1,10 +1,11 @@
 import type { SplatGraphOperation } from '../../../types/splatGraph';
+import { movesSplatCenters } from './SplatGraphCompute';
 
 /** Crops before motion can be evaluated once against immutable source centers. */
 export function sourceSphereCrops(operations: SplatGraphOperation[]): number[][] {
   const crops: number[][] = [];
   for (const op of operations) {
-    if (op.kind === 'particles' || (op.kind === 'noise' && op.values[0] === 0)) break;
+    if (movesSplatCenters(op)) break;
     if (op.kind === 'sphere-crop') crops.push(op.values);
   }
   return crops;
