@@ -59,7 +59,9 @@ export async function stageEditorTimeline(current: TimelineStore, media: MediaSt
     if (active) publishRuntimePatch(patch);
   };
   const buffer = createLoadStateRestoreBuffer(set);
-  const mediaContext = { ...media, getActiveComposition: () => composition } as Parameters<typeof createLoadStateGeneratedClip>[0]['mediaStore'];
+  // Cycle detection must start at the destination, not the previously open child.
+  const mediaContext = { ...media, activeCompositionId: composition?.id ?? null,
+    getActiveComposition: () => composition } as Parameters<typeof createLoadStateGeneratedClip>[0]['mediaStore'];
   try {
   for (const serializedClip of data?.clips ?? []) {
     if (!isCurrentTimelineSession()) throw new RepositoryError('cancelled', 'Timeline staging cancelled');

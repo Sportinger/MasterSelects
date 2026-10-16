@@ -162,7 +162,7 @@ export const TimelineSectionTrackRows = memo(function TimelineSectionTrackRows({
 
         return (
           <TimelineTrackViewport key={track.id}
-            enabled={sectionTracks.length > 8}
+            enabled
             forceVisible={Boolean(trackClipDrag || trackClipTrim || trackClipFade
               || activeTrackResizeId === track.id || isCompositionTrackMorphing)}
             height={getSectionTrackHeight(track, sectionKind)} trackId={track.id}>
