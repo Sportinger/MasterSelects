@@ -12,10 +12,14 @@ export class SplatGraphPass {
   private ordering = new SplatBranchSortCache();
   execute(device: GPUDevice, encoder: GPUCommandEncoder, layout: GPUBindGroupLayout, id: string,
     scene: SplatSceneGpuResources, buffer: GPUBuffer, count: number, source: Float32Array | undefined,
-    branch: SplatGraphBranch | undefined, time: number, world: Float32Array, camera: SplatCameraParams, precise: boolean) {
+    branch: SplatGraphBranch | undefined, time: number, world: Float32Array, camera: SplatCameraParams, precise: boolean,
+    lod?: { indices: GPUBuffer; count: number }) {
     const operations = branch?.operations ?? [];
-    const sampling = prepareSplatSampling(operations, count, branch?.budget);
-    const cropped = source ? this.crops.prepare(device, id, source, count, sampling, operations) : undefined;
+    // A streamed LOD scene draws the pool slots of its current levels; its budget replaces Select/budget sampling.
+    const sampling = lod ? { count: lod.count, offset: 0, remapped: true, operations: operations.filter(op => op.kind !== 'select') }
+      : prepareSplatSampling(operations, count, branch?.budget);
+    const cropped = lod ? { buffer: lod.indices, count: lod.count, indices: undefined }
+      : source ? this.crops.prepare(device, id, source, count, sampling, operations) : undefined;
     const outputCount = cropped?.count ?? sampling.count;
     const moving = operations.some(movesSplatCenters);
     const remapped = !!cropped || sampling.remapped;

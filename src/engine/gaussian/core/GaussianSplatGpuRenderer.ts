@@ -1,4 +1,6 @@
 import { SplatShBinding } from './splatRenderer/shBinding';
+import { DEFAULT_LOD_BUDGET, SplatLodScene } from '../lod/SplatLodScene';
+import type { LodPackage } from '../lod/lodPackage';
 import { SplatGraphPass } from '../graph/SplatGraphPass';
 import { SplatMeshPass } from '../graph/SplatMeshPass';
 import { Logger } from '../../../services/logger';
@@ -76,6 +78,8 @@ export class GaussianSplatGpuRenderer {
   private cameraBindGroupLayout: GPUBindGroupLayout | null = null;
   private shBindGroupLayout: GPUBindGroupLayout | null = null; private shBinding = new SplatShBinding();
   private sceneCache: Map<string, SplatSceneGpuResources> = new Map();
+  /** Streamed LOD scenes; their pool is also in sceneCache. */
+  private lodScenes = new Map<string, SplatLodScene>();
   private cameraUniformPool: SplatCameraUniformResource[] = [];
   private cameraUniformCursor = 0;
   private renderTargetPool!: SplatRenderTargetPool;
@@ -108,6 +112,7 @@ export class GaussianSplatGpuRenderer {
     legacy.graphCompute?.dispose(); delete legacy.graphCompute; legacy.cropCache?.dispose(); delete legacy.cropCache;
     this.graphPass?.dispose(); this.graphPass = new SplatGraphPass(); this.meshPass ??= new SplatMeshPass();
     Object.setPrototypeOf(this.meshPass, SplatMeshPass.prototype);
+    this.lodScenes ??= new Map(); for (const lod of this.lodScenes.values()) Object.setPrototypeOf(lod, SplatLodScene.prototype);
     // These passes keep the prototype and field layout of the module version that built
     // them; rebuild them so hot updates take effect. Their old GPU objects are dropped, not
     // destroyed, because an unsubmitted encoder may still reference them.
@@ -206,11 +211,7 @@ export class GaussianSplatGpuRenderer {
         this.sortPass.initialize(this.device, data.splatCount);
       }
 
-      log.debug('Uploaded scene', {
-        clipId,
-        splatCount: data.splatCount,
-        bufferSize: getSplatBufferByteSize(data.splatCount),
-      });
+      log.debug('Uploaded scene', { clipId, splatCount: data.splatCount, bufferSize: getSplatBufferByteSize(data.splatCount) });
       return true;
     } catch (err) {
       log.error('Failed to upload scene', { clipId, error: err });
@@ -218,8 +219,25 @@ export class GaussianSplatGpuRenderer {
     }
   }
 
+  /** Upload a streamed LOD package: resolves once its coarsest level is drawable; finer levels stream per frame. */
+  async uploadLodScene(clipId: string, pkg: LodPackage, onChunk: () => void): Promise<boolean> {
+    if (!this._initialized || !this.device || !this.splatDataBindGroupLayout) return false;
+    const lod = new SplatLodScene(this.device, this.splatDataBindGroupLayout, clipId, pkg, DEFAULT_LOD_BUDGET, onChunk);
+    await lod.loadBase();
+    this.releaseScene(clipId);
+    this.lodScenes.set(clipId, lod); this.sceneCache.set(clipId, lod.scene);
+    this.sortPass.initialize(this.device, lod.scene.splatCount);
+    return true;
+  }
+
+  /** Wait until streamed LOD scenes hold every chunk their last view asked for (precise export). */
+  async waitForLodStreaming(timeoutMs?: number): Promise<boolean> {
+    return (await Promise.all([...this.lodScenes.values()].map(lod => lod.whenIdle(timeoutMs)))).every(Boolean);
+  }
+
   /** Release GPU resources for a clip */
   releaseScene(clipId: string): void {
+    this.lodScenes.get(clipId)?.dispose(); this.lodScenes.delete(clipId);
     this.graphPass.release(clipId);
     this.meshPass.release(clipId);
     // Sorted-index buffers are retired, not destroyed: a recorded pass may still use them.
@@ -285,15 +303,7 @@ export class GaussianSplatGpuRenderer {
         const target = resolveSplatRenderTarget(this.renderTargetPool, this.lastRenderTargets, clipId, viewport, options.outputView);
         return this.meshPass.render(this.device, commandEncoder, clipId, options.graphBranch.mesh, camera, worldMatrix, target, options);
       }
-      const cameraBindGroup = this.writeCameraUniforms(
-        camera,
-        worldMatrix,
-        layerOpacity,
-        depthAlphaCutoff,
-        splatScale,
-        nearPlane,
-        farPlane,
-      );
+      const cameraBindGroup = this.writeCameraUniforms(camera, worldMatrix, layerOpacity, depthAlphaCutoff, splatScale, nearPlane, farPlane);
       if (!cameraBindGroup) {
         return null;
       }
@@ -353,9 +363,10 @@ export class GaussianSplatGpuRenderer {
       }
 
       if (maxSplats > 0) activeSplatCount = Math.min(activeSplatCount, maxSplats);
+      const lod = this.lodScenes.get(clipId)?.prepare(camera.viewMatrix, worldMatrix, options?.graphBranch, clipLocalTime, maxSplats);
       const graph = this.graphPass.execute(this.device, commandEncoder, this.splatDataBindGroupLayout!, clipId,
         scene, activeSplatBuffer, activeSplatCount, activeSplatBuffer === scene.splatBuffer ? this.meshPass.getSource(clipId) : undefined,
-        options?.graphBranch, clipLocalTime, worldMatrix, camera, precise);
+        options?.graphBranch, clipLocalTime, worldMatrix, camera, precise, lod);
       scene = graph.scene; activeSplatBuffer = graph.buffer; activeSplatCount = graph.count;
       const graphMovesPoints = graph.forceGpuSort;
       const effectiveSplatCount = maxSplats > 0
@@ -401,8 +412,7 @@ export class GaussianSplatGpuRenderer {
             hasValidatedCullResult = true;
           }
 
-          // Kick off async readback for next frame's draw count using a dedicated
-          // staging buffer so multiple active clips do not race on shared readback state.
+          // Async readback of next frame's draw count, own staging buffer per clip (no shared state).
           const readbackBuffer = this.device.createBuffer({
             size: 4,
             usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
@@ -551,6 +561,8 @@ export class GaussianSplatGpuRenderer {
       log.debug('Disposed scene buffer', { clipId });
     }
     this.sceneCache.clear();
+    for (const lod of this.lodScenes.values()) lod.dispose();
+    this.lodScenes.clear();
     this.drawStreams.clear();
     this.lastRenderDebug.clear();
     this.lastRenderTargets.clear();
@@ -647,30 +659,10 @@ export class GaussianSplatGpuRenderer {
     return set.pipelineWithDepth!;
   }
 
-  private writeCameraUniforms(
-    camera: SplatCameraParams,
-    worldMatrix: Float32Array,
-    layerOpacity: number,
-    depthAlphaCutoff: number,
-    splatScale: number,
-    nearPlane: number,
-    farPlane: number,
-  ): GPUBindGroup | null {
-    if (!this.device) return null;
-    const resource = this.getCameraUniformResource();
-    if (!resource) return null;
-
-    return writeSplatCameraUniforms(
-      this.device,
-      resource,
-      camera,
-      worldMatrix,
-      layerOpacity,
-      depthAlphaCutoff,
-      splatScale,
-      nearPlane,
-      farPlane,
-    );
+  private writeCameraUniforms(camera: SplatCameraParams, worldMatrix: Float32Array, layerOpacity: number,
+    depthAlphaCutoff: number, splatScale: number, nearPlane: number, farPlane: number): GPUBindGroup | null {
+    const resource = this.device ? this.getCameraUniformResource() : null;
+    return resource ? writeSplatCameraUniforms(this.device!, resource, camera, worldMatrix, layerOpacity, depthAlphaCutoff, splatScale, nearPlane, farPlane) : null;
   }
 }
 

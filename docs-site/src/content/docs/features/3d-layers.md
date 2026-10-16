@@ -294,7 +294,28 @@ Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas
   with the camera-to-splat direction in the scan's own space, like PlayCanvas. Splat graph
   outputs carry each output splat's source id, so sampled, cropped and moving branches keep their
   SH. Per-splat rotations applied by graph nodes (for example Ring Bend) do not rotate the SH.
-  Convert with SH kept (`splat-transform` without `-H 0`) to use this.
+  Convert with SH kept (`splat-transform` without `-H 0`) to use this. Loaders turn every scene
+  into the editor's Y-up basis (Y and Z negated); SH stays in the capture basis, so the shader
+  mirrors the view direction back before evaluating it.
+- **Streamed LOD packages** (`*.lod.zip`, SuperSplat-style level of detail): build one from a
+  large PLY with `node scripts/build-splat-lod.mjs <in.ply> <out.lod.zip> [--levels 5] [--leaf
+  65536]` (needs `splat-transform` 3.x, e.g. `SPLAT_TRANSFORM=path/to/splat-transform`). It
+  decimates to 100/50/25/12.5/6.25 %, partitions the full level into a kd-tree of leaves and
+  stores raw chunks per leaf and level (with SH) in an uncompressed zip with a PlayCanvas-style
+  `lod-meta.json`. The renderer loads the coarsest level of every leaf first (the scene is
+  drawable after a few hundred ms), then streams finer chunks straight from the file with
+  `Blob.slice`, nearest leaves first, three at a time, into a fixed GPU page pool. Levels follow
+  PlayCanvas' rule (level k covers distances 3^(k-1)..3^k of a global scale, leaves behind the
+  camera count five times farther) and the scale is searched so the splat budget (Gaussian tab
+  `maxSplats`, `0` = 4 million like SuperSplat) is filled without being exceeded. Distances use
+  the leaf centers after the Conveyor wrap and Ring Bend of the clip's splat graph, so detail
+  follows content to where it is drawn. A leaf keeps its old level until the new chunk is
+  uploaded; under pool pressure a leaf moving away drops to a resident coarser level so its
+  chunk can be evicted (least recently used; the coarsest level stays pinned). Thumbnails,
+  bounds and other whole-asset consumers see the coarsest level. `.lod.zip` gets the same
+  default orientation as PLY. Diagnostics: `Logger.enable('SplatLod')` logs each new draw list
+  (splats, leaves per level, resident chunks, free pages); clamped pools, overflowing budgets,
+  full pools and failed chunk reads are warnings.
 - Sequence splats follow the same shared runtime contract and preload nearby frames without replacing foreground playback with repeated loading overlays.
 - PLY/splat sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Imported splats and numbered splat sequences store media-panel stats: container label, file size, per-frame splat count, and total sequence splat count.
@@ -379,6 +400,7 @@ The Transform tab is context-sensitive:
 | `.spz` | Supported | Loaded through `@playcanvas/splat-transform`. |
 | `.sog` / `.zip` | Supported | Loaded through the bundled SOG/zip reader path. |
 | `.lcc` | Supported | The first returned LOD table is used. |
+| `.lod.zip` | Supported | MasterSelects streamed LOD package from `scripts/build-splat-lod.mjs`; finer levels stream per view. |
 
 ## Limitations
 

@@ -126,6 +126,9 @@ Nested preview and export account for each composition wrapper's start time and 
 - If a required video cannot be admitted within the media budget, preparation reports the failure before rendering.
 - Waits for ready state and a fresh frame before capture. A temporarily unavailable nested source triggers the export readiness retry; an older preview composition texture is never accepted as the current export frame.
 - Is slower than fast mode, but it is the explicit compatibility choice for difficult files or timing cases.
+- Streamed LOD splats (`*.lod.zip`) choose their chunks while a frame is drawn. Before each frame
+  the export waits (up to 30 s, then logs a warning) until every chunk the previous frame asked
+  for is resident, so detail trails the export camera by one nearly identical frame.
 
 ---
 

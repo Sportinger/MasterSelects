@@ -228,7 +228,8 @@ fn vs_main(
     let toSplat = pos - sh.cameraLocal.xyz;
     let toSplatLength = length(toSplat);
     if (toSplatLength > 0.0) {
-      color = max(color + evaluateSh(shSourceIds[splatIdx], toSplat / toSplatLength), vec3f(0.0));
+      // Loaders negate Y and Z of positions (basis correction); SH coefficients stay in the capture basis.
+      color = max(color + evaluateSh(shSourceIds[splatIdx], toSplat / toSplatLength * vec3f(1.0, -1.0, -1.0)), vec3f(0.0));
     }
   }
   let alpha = splatData[base + 13u];

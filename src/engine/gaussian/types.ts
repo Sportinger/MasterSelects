@@ -146,7 +146,8 @@ export function shouldDefaultFlipGaussianSplatOrientation(
   },
 ): boolean {
   const resolvedFileName = getGaussianSplatSourceFileName(options.fileName, options.sequence);
-  return !!resolvedFileName && /\.ply$/i.test(resolvedFileName);
+  // LOD packages (scripts/build-splat-lod.mjs) keep their source PLY's Y-down coordinates.
+  return !!resolvedFileName && /\.(ply|lod\.zip)$/i.test(resolvedFileName);
 }
 
 export function resolveGaussianSplatSettingsForSource(

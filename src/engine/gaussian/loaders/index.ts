@@ -19,6 +19,7 @@ import {
   GaussianSplatParseWorkerUnavailableError,
   loadGaussianSplatAssetInWorker,
 } from './gaussianSplatParseWorkerClient.ts';
+import { loadLodPreviewAsset, lodPackageMetadata, openLodPackage } from '../lod/lodPackage.ts';
 
 const log = Logger.create('GaussianLoader');
 
@@ -39,6 +40,8 @@ export async function loadGaussianSplatAsset(
   format?: GaussianSplatFormat,
   options?: GaussianSplatLoadOptions,
 ): Promise<GaussianSplatAsset> {
+  const lodPackage = /\.zip$/i.test(file.name) ? await openLodPackage(file) : null;
+  if (lodPackage) return loadLodPreviewAsset(lodPackage, file);
   if (!canUseGaussianSplatParseWorker()) {
     return loadGaussianSplatAssetOnCurrentThread(file, format, options);
   }
@@ -104,6 +107,8 @@ export async function parseGaussianSplatHeader(
   file: File,
   format?: GaussianSplatFormat,
 ): Promise<GaussianSplatMetadata> {
+  const lodPackage = /\.zip$/i.test(file.name) ? await openLodPackage(file) : null;
+  if (lodPackage) return lodPackageMetadata(lodPackage);
   return parseHeader(file, format);
 }
 
