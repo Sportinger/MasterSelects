@@ -117,7 +117,10 @@ Saving also writes a bounded startup cache into `.masterselects/cache/startup/`
 inside the project folder. Two alternating slots and a browser-local checksum
 attestation prevent an interrupted write from replacing the last complete cache.
 It is refreshed at save/flush boundaries, never for intermediate drag samples;
-unchanged saves do not rewrite it. No project archive must be selected manually.
+unchanged saves do not rewrite it. A writable open that had to validate history
+beyond the cache also writes it right after opening, so a project closed without
+saving is slow to open at most once, not on every later open. No project archive
+must be selected manually.
 
 Opening automatically uses this cache when the same browser/location retains its
 attestation and every previously validated history file still has the same size

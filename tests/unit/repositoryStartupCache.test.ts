@@ -32,6 +32,16 @@ describe('automatic project startup cache',()=>{
   last=await reopened.publish(batch(21,previous));
   const newer=await f.writer().recover();expect(newer.operationSequence).toBe(21);expect(newer.head).toEqual(last.reference);
  });
+ it('lets a slow full validation snapshot itself so the next open is fast without an explicit save',async()=>{
+  const f=fixture(),writer=f.writer();await writer.recover();let previous=null;
+  for(let i=1;i<=20;i++){const last=await writer.publish(batch(i,previous));previous={reference:last.records.get('revision')!,id:'revision-'+i};}
+  // Closed without saving: no startup snapshot exists, so this open validates the full history.
+  expect(f.files.has(startupCachePath('a'))).toBe(false);
+  const cold=f.writer();const coldStart=f.reads();await cold.recover();const coldReads=f.reads()-coldStart;
+  await cold.saveStartupCache(); // What the storage worker now does right after opening.
+  const warmStart=f.reads();expect((await f.writer().recover()).operationSequence).toBe(20);
+  expect(f.reads()-warmStart).toBeLessThan(coldReads/2);
+ });
  it('rejects changed immutable bytes, copied cache attestations, and truncated slots',async()=>{
   const f=fixture(),writer=f.writer();await writer.recover();const first=await writer.publish(batch(1));await writer.saveStartupCache();
   expect(await readStartupCache(f.backend,descriptor,f.index)).not.toBeNull();

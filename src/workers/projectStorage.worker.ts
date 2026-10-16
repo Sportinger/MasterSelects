@@ -142,6 +142,9 @@ async function open(request: Extract<StorageRequest, { type: 'open' }>, signal: 
       openingRecovery = false;
 
       indexPhase = indexedReady ? 'ready' : 'fallback';
+      // Pay a full history validation once: snapshot the confirmed state now instead of at the next
+      // explicit save, so an unsaved close does not make every later open slow. No-op when current.
+      void persistence.saveStartupCache();
       views = new WorkspaceViewStore(backend, owner, descriptor.repositoryId, request.workspaceId);
     } else {
       indexedReady = false; indexPhase = 'fallback';
