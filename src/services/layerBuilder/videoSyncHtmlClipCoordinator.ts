@@ -14,6 +14,8 @@ import { syncReverseOrNonstandardPlayback } from './videoSyncHtmlReversePlayback
 import { syncHtmlTransitionSourceHold } from './videoSyncHtmlTransitionHold';
 import type { VideoSyncHtmlSeekState } from './videoSyncHtmlSeekState';
 import type { VideoSyncWarmupState } from './videoSyncWarmupState';
+import { registerTimelineVideoPlaybackStopper } from '../timeline/timelineVideoPlaybackStopper';
+import { pausePlaybackVideosNow } from './videoSyncPlaybackStopPause';
 
 type PitchPreservingVideo = HTMLVideoElement & {
   preservesPitch: boolean;
@@ -77,12 +79,12 @@ export type VideoSyncHtmlClipCoordinatorDeps = {
 
 export class VideoSyncHtmlClipCoordinator {
   private static readonly PLAYBACK_STOP_SEEK_THRESHOLD = 0.05;
-  private static readonly PLAYBACK_STOP_SNAP_MAX_DELTA = 0.5;
 
   private readonly deps: VideoSyncHtmlClipCoordinatorDeps;
 
   constructor(deps: VideoSyncHtmlClipCoordinatorDeps) {
     this.deps = deps;
+    registerTimelineVideoPlaybackStopper(() => pausePlaybackVideosNow(deps));
   }
 
   syncHtmlClipVideo(clip: TimelineClip, ctx: FrameContext, clipVideoElement: HTMLVideoElement): void {
@@ -350,14 +352,12 @@ export class VideoSyncHtmlClipCoordinator {
       const newPlayheadPos = localStopTime === undefined
         ? currentPlayhead : clip.startTime + localStopTime;
       const playheadDelta = newPlayheadPos - currentPlayhead;
-      const videoAdvanced = playheadDelta > 0.01;
-      const videoLaggedBehindPlayhead =
-        playheadDelta < -VideoSyncHtmlClipCoordinator.PLAYBACK_STOP_SEEK_THRESHOLD;
-      const videoLagWithinTolerance = playheadDelta < -0.01 && !videoLaggedBehindPlayhead;
-      const shouldSnapPlayheadToStopFrame =
-        playheadDelta <= VideoSyncHtmlClipCoordinator.PLAYBACK_STOP_SNAP_MAX_DELTA;
+      // The stop position belongs to the playhead: a video that ran ahead or lagged is seeked back to it.
+      const videoOffPlayhead = Math.abs(playheadDelta) > VideoSyncHtmlClipCoordinator.PLAYBACK_STOP_SEEK_THRESHOLD;
+      const shouldSnapPlayheadToStopFrame = Math.abs(playheadDelta) > 0.01 && !videoOffPlayhead;
       const handoffReleased = clipVideoElement !== actualVideo;
-      if (videoLaggedBehindPlayhead ||
+      if (videoOffPlayhead) vfPipelineMonitor.record('vf_stop_resync', { clipId: clip.id, offsetMs: Math.round(playheadDelta * 1000) });
+      if (videoOffPlayhead ||
           (localStopTime === undefined && !videoHasTargetFrame(actualVideo, timeInfo.clipTime))) {
         if (handoffReleased) {
           this.deps.setHandoff(clip.id, actualVideo);
@@ -366,7 +366,7 @@ export class VideoSyncHtmlClipCoordinator {
           clip.id,
           handoffReleased ? clipVideoElement : actualVideo,
           timeInfo.clipTime,
-          { playbackStopLag: 'true' },
+          { playbackStopOffsetMs: String(Math.round(playheadDelta * 1000)) },
           'playback-stop'
         );
         renderHostPort.requestNewFrameRender();
@@ -380,7 +380,7 @@ export class VideoSyncHtmlClipCoordinator {
       ) {
         renderHostPort.ensureVideoFrameCached(actualVideo, clip.id);
       }
-      if ((videoAdvanced || videoLagWithinTolerance) && shouldSnapPlayheadToStopFrame) {
+      if (shouldSnapPlayheadToStopFrame) {
         playheadState.position = newPlayheadPos;
         useTimelineStore.setState({ playheadPosition: newPlayheadPos });
       }

@@ -25,6 +25,7 @@ import {
   persistTimelineTrackHeaderWidth,
 } from './viewPreferences';
 import { stopTimelineAudioPlayback } from '../../services/audio/timelineAudioPlaybackStopper';
+import { stopTimelineVideoPlayback } from '../../services/timeline/timelineVideoPlaybackStopper';
 import { clipAudioAnalysisJobService } from '../../services/audio/ClipAudioAnalysisJobService';
 import { setTimelineWaveformWarmupPlaybackSuppressed } from '../../services/timeline/timelineWaveformPlaybackGate';
 import { trackPlaybackStarted, trackPlaybackStopped } from '../../services/productAnalytics';
@@ -220,6 +221,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
     // Reset playback speed to normal when pausing
     // So that Space (play/pause toggle) plays forward again
     set({ isPlaying: false, playbackSpeed: 1, playheadPosition: currentPosition, playbackWarmup: null });
+    stopTimelineVideoPlayback();
     renderHostPort.setIsPlaying(false);
     renderHostPort.requestNewFrameRender();
   },
@@ -238,6 +240,7 @@ export const createPlaybackSlice: SliceCreator<PlaybackActions> = (set, get) => 
       playbackWarmup: null,
       scrollX: stopPosition === 0 ? 0 : scrollX,
     });
+    stopTimelineVideoPlayback();
     renderHostPort.setIsPlaying(false);
     renderHostPort.requestNewFrameRender();
   },

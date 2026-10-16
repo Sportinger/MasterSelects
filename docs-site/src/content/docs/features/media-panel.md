@@ -688,6 +688,9 @@ On project load and in the Relink dialog, missing files are matched case-insensi
 
 Premiere-linked sources participate in the same scan. Relinking an attached proxy stores it separately from the unavailable original, and source selection can switch between them without changing timeline clip identity or creating duplicate media items.
 
+### Reconnect by importing again
+Importing a file (file input, drop, picker, or handle import) whose name matches a disconnected media item reconnects that item, and every disconnected duplicate of the same source, instead of adding another media entry. The normal relink validation (size and fingerprint) runs first; a file with different bytes is imported as new media. Items no clip currently uses count as disconnected here too. This covers files imported without a persistent browser handle, which go offline after a reload in projects without a project folder.
+
 ### Double-Click Reload
 Double-clicking a file that has lost access triggers a single-file reload attempt with permission request.
 

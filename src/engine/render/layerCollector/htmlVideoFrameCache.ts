@@ -37,25 +37,50 @@ export function getSafeLastFrameFallback(
   return deps.scrubbingCache?.getLastFrameNearTime(video, targetTime, tolerance) ?? null;
 }
 
+// Only live imports refresh the last-frame slot; scrub-cache frames do not.
+// A hold must still prefer the cached frame nearest the target (usually the
+// one just displayed), or a 4K scrub/playback stall flashes back to an older
+// live capture.
+const HOLD_CACHE_SEARCH_FRAMES = 30;
+
+function preferNearerCachedHoldFrame(
+  frame: CachedHtmlVideoFrame | null,
+  video: HTMLVideoElement,
+  deps: LayerCollectorDeps,
+  targetTime: number | undefined
+): CachedHtmlVideoFrame | null {
+  if (targetTime === undefined || !Number.isFinite(targetTime)) return frame;
+  const frameDistance = frame?.mediaTime === undefined
+    ? Number.POSITIVE_INFINITY
+    : Math.abs(frame.mediaTime - targetTime);
+  if (frameDistance <= 1 / 60) return frame;
+  const cached = deps.scrubbingCache?.getNearestCachedFrameEntry(video.src, targetTime, HOLD_CACHE_SEARCH_FRAMES);
+  if (!cached || Math.abs(cached.mediaTime - targetTime) >= frameDistance) return frame;
+  return { view: cached.view, width: video.videoWidth, height: video.videoHeight, mediaTime: cached.mediaTime };
+}
+
 export function getDragHoldFrame(
   layer: Layer,
   video: HTMLVideoElement,
-  deps: LayerCollectorDeps
+  deps: LayerCollectorDeps,
+  targetTime?: number
 ): CachedHtmlVideoFrame | null {
   if (!layer.sourceClipId) {
     return null;
   }
-  return deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
+  const lastFrame = deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
+  return preferNearerCachedHoldFrame(lastFrame, video, deps, targetTime);
 }
 
 export function getPlaybackStallHoldFrame(
   layer: Layer,
   video: HTMLVideoElement,
-  deps: LayerCollectorDeps
+  deps: LayerCollectorDeps,
+  targetTime?: number
 ): CachedHtmlVideoFrame | null {
   const ownerMatched = deps.scrubbingCache?.getLastFrame(video, layer.sourceClipId) ?? null;
   if (ownerMatched) {
-    return ownerMatched;
+    return preferNearerCachedHoldFrame(ownerMatched, video, deps, targetTime);
   }
 
   const cachedOwner = deps.scrubbingCache?.getLastFrameOwner?.(video);
@@ -64,7 +89,7 @@ export function getPlaybackStallHoldFrame(
   }
 
   const lastFrame = deps.scrubbingCache?.getLastFrame(video) ?? null;
-  return lastFrame;
+  return preferNearerCachedHoldFrame(lastFrame, video, deps, targetTime);
 }
 
 export function scheduleBackgroundScrubPreload(

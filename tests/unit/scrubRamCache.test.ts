@@ -144,6 +144,27 @@ describe('two-tier scrub cache', () => {
     cache.clear();
     expect(cache.getRamSnapshot().bytes).toBe(0);
   });
+  it('keeps searching resident neighbours while a RAM-only neighbour uploads', async () => {
+    pixelCanvas();
+    const { cache, device } = gpu();
+    cache.setRamBudget(8192);
+    for (let i = 0; i < 200; i++) {
+      cache.addFrameFromSource(source, 'video', i / 30, 2, 2);
+      await Promise.resolve(); await Promise.resolve();
+    }
+    // The oldest frames were evicted from the GPU tier and only live in RAM.
+    // Two frames before the oldest resident one misses, its RAM neighbours
+    // upload, but the search must still return the resident frame.
+    const residentFrame = 200 - cache.getSnapshot().count;
+    expect(residentFrame).toBeGreaterThan(2);
+    const target = (residentFrame - 2) / 30;
+    // The resident neighbour is the frame just displayed, so it is the most recently used.
+    expect(cache.getCachedFrameEntry('video', residentFrame / 30)).not.toBe(null);
+    const before = device.queue.writeTexture.mock.calls.length;
+    const nearest = cache.getNearestCachedFrameEntry('video', target, 6);
+    expect(nearest?.mediaTime).toBeCloseTo(residentFrame / 30, 2);
+    expect(device.queue.writeTexture.mock.calls.length).toBeGreaterThan(before);
+  });
   it('never publishes failed GPU allocations and discards in-flight work after clear', async () => {
     const { cache, device, textures } = gpu();
     device.popErrorScope.mockResolvedValueOnce(null).mockResolvedValueOnce({ message: 'OOM' } as GPUError);

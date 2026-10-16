@@ -414,6 +414,7 @@ The toolbar and wheel gestures drive playback and navigation:
 - `I` and `O` set in/out points.
 - `X` clears in/out.
 - Stop returns the playhead to the In point when one is set; otherwise it returns to timeline start.
+- Pause and Stop freeze playing timeline videos in the same task, before the next (possibly slow, e.g. 4K) render. The playhead keeps the stop position; a video element that ran past or lagged behind it is seeked back to the playhead (`vf_stop_resync` in the VF pipeline) instead of moving the playhead to the video's time. Only sub-tolerance offsets (≤ 50 ms) snap the playhead onto the decoded frame.
 - `M` adds a marker at the playhead.
 - Right-clicking a marker opens marker transport and MIDI actions.
 - Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.

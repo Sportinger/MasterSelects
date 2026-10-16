@@ -231,6 +231,10 @@ export class ScrubTextureCache {
     }
 
     const baseFrame = frameIndexForTime(time);
+    // A RAM-only neighbour starts its GPU upload but must not end the search:
+    // the frame just displayed is often a resident neighbour one step further,
+    // and returning null here made playback fall back to a much older frame.
+    let ramUploadStarted = false;
     for (let distance = 1; distance <= maxDistanceFrames; distance++) {
       const previousKey = getScrubbingKey(videoSrc, (baseFrame - distance) / SCRUB_CACHE_FPS);
       const previous = this.cache.get(previousKey);
@@ -243,9 +247,10 @@ export class ScrubTextureCache {
       if (next) {
         return this.touchEntry(nextKey, next);
       }
+      if (ramUploadStarted) continue;
       for (const key of [previousKey, nextKey]) {
         const pixels = this.ram.get(key);
-        if (pixels) { this.upload(key, pixels, pixels.width, pixels.height); return null; }
+        if (pixels) { this.upload(key, pixels, pixels.width, pixels.height); ramUploadStarted = true; break; }
       }
     }
 

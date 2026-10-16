@@ -12,6 +12,7 @@ export type VFPipelineEventType =
   // Sync
   | 'vf_play'            // video.play() in VF path
   | 'vf_pause'           // video.pause() in VF path
+  | 'vf_stop_resync'     // stopped video was off the playhead and is seeked back to it
   | 'vf_seek_fast'       // fastSeek() during drag scrub
   | 'vf_seek_precise'    // currentTime = X (exact seek)
   | 'vf_seek_done'       // seeked event / RVFC callback

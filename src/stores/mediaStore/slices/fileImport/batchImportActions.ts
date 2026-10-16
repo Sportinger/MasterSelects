@@ -24,6 +24,7 @@ import {
 } from './placeholderLifecycle';
 import { splitModelSequenceEntries } from './sequencePlanning';
 import { fileImportLog as log } from './log';
+import { reconnectOfflineMediaFromImport } from './offlineMediaImportReconnect';
 import {
   importPremiereProject,
   isPremiereProjectFile,
@@ -374,8 +375,14 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
   importFiles: async (files: FileList | File[], parentId?: string | null) => {
     const binding = captureEditorAsyncMutation('Import media batch');
     const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
-    const fileArray = Array.from(files);
-    return withProjectArtifactWriteBatch(() => withMediaImportAnalytics(fileArray, 'input_or_drop', async (analytics) => {
+    const offlineReconnect = await reconnectOfflineMediaFromImport(
+      Array.from(files).map((file) => ({ file })),
+      () => baseGet().files,
+    );
+    binding.assertCurrent();
+    const fileArray = offlineReconnect.remaining.map(({ file }) => file);
+    if (fileArray.length === 0) return offlineReconnect.reconnected;
+    const imported = await withProjectArtifactWriteBatch(() => withMediaImportAnalytics(fileArray, 'input_or_drop', async (analytics) => {
       const premiereProjects = fileArray.filter(isPremiereProjectFile);
       const regularFiles = fileArray.filter((file) => !isPremiereProjectFile(file));
       const imported: FileImportResult[] = [];
@@ -397,20 +404,25 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
 
       return imported;
     }));
+    return [...offlineReconnect.reconnected, ...imported];
   },
 
   importFilesWithPicker: async () => {
     const binding = captureEditorAsyncMutation('Import media batch');
     const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
-    const result = await fileSystemService.pickFiles();
+    const picked = await fileSystemService.pickFiles();
     binding.assertCurrent();
-    if (!result || result.length === 0) {
+    if (!picked || picked.length === 0) {
       trackMediaImportPickerCancelled();
       return [];
     }
+    const offlineReconnect = await reconnectOfflineMediaFromImport(picked, () => baseGet().files);
+    binding.assertCurrent();
+    const result = offlineReconnect.remaining;
+    if (result.length === 0) return offlineReconnect.reconnected;
 
     const selectedFiles = result.map(({ file }) => file);
-    return withProjectArtifactWriteBatch(() => withMediaImportAnalytics(selectedFiles, 'picker', async (analytics) => {
+    const imported = await withProjectArtifactWriteBatch(() => withMediaImportAnalytics(selectedFiles, 'picker', async (analytics) => {
       const imported: FileImportResult[] = [];
       const premiereProjects = result.filter(({ file }) => isPremiereProjectFile(file)).map(({ file }) => file);
       const regularFiles = result.filter(({ file }) => !isPremiereProjectFile(file));
@@ -432,13 +444,18 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
 
       return imported;
     }));
+    return [...offlineReconnect.reconnected, ...imported];
   },
 
-  importFilesWithHandles: async (filesWithHandles, parentId?: string | null) => {
+  importFilesWithHandles: async (requestedFilesWithHandles, parentId?: string | null) => {
     const binding = captureEditorAsyncMutation('Import media batch');
     const { set, get } = bindEditorAsyncStore(baseSet, baseGet, binding);
+    const offlineReconnect = await reconnectOfflineMediaFromImport(requestedFilesWithHandles, () => baseGet().files);
+    binding.assertCurrent();
+    const filesWithHandles = offlineReconnect.remaining;
+    if (filesWithHandles.length === 0) return offlineReconnect.reconnected;
     const selectedFiles = filesWithHandles.map(({ file }) => file);
-    return withProjectArtifactWriteBatch(() => withMediaImportAnalytics(selectedFiles, 'handles', async (analytics) => {
+    const imported = await withProjectArtifactWriteBatch(() => withMediaImportAnalytics(selectedFiles, 'handles', async (analytics) => {
       const imported: FileImportResult[] = [];
       const premiereProjects = filesWithHandles
         .filter(({ file }) => isPremiereProjectFile(file))
@@ -465,5 +482,6 @@ export const createBatchFileImportActions: MediaSliceCreator<Pick<
 
       return imported;
     }));
+    return [...offlineReconnect.reconnected, ...imported];
   },
 });

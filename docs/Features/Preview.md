@@ -34,6 +34,13 @@ Allocations evict older entries first. Catchable CPU capture failures lower the
 effective RAM budget for the current cache owner; Settings reports the reduction.
 GPU error scopes prevent failed uploads from becoming visible cache entries and
 reduce the GPU budget on out-of-memory errors. Device loss clears both tiers.
+
+A neighbour that lives only in the RAM tier starts its GPU upload without ending
+the nearest-frame search, so a resident frame a few steps further still answers
+the current render. HTML-video hold paths (`emergency-hold`, `same-clip-hold`,
+`playback-stall-hold`) likewise prefer the cached frame nearest the target over
+the last live capture. Without this, fast 4K scrubbing or a playback stall could
+flash back to a frame up to a second old.
 These safeguards do not guarantee recovery from a browser/process-level memory
 termination. Capturing CPU pixels adds readback work, and restoring them adds a
 GPU upload; the setting does not pre-decode an entire timeline.

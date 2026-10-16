@@ -123,7 +123,7 @@ function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerR
       (!hasConfirmedPresentedFrame || Math.abs(lastPresentedTime - targetTime) > 0.05));
   const cacheSearchDistanceFrames = isDragging ? 10 : 6;
   const lastSameClipFrame = filterPausedHtmlTargetFrame(
-    getDragHoldFrame(layer, video, deps),
+    getDragHoldFrame(layer, video, deps, shouldGuardPausedTargetFrames ? undefined : targetTime),
     targetTime,
     shouldGuardPausedTargetFrames
   );
@@ -445,7 +445,7 @@ function collectReadyHtmlVideoFallback(request: HtmlVideoCollectRequest): LayerR
     };
   }
   if (deps.isPlaying) {
-    const anyFrame = getPlaybackStallHoldFrame(layer, video, deps);
+    const anyFrame = getPlaybackStallHoldFrame(layer, video, deps, targetTime);
     if (anyFrame) {
       controller.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, lastPresentedTime);
       controller.setDecoder('HTMLVideo(cached)');

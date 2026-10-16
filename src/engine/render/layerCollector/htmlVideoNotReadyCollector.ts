@@ -33,7 +33,7 @@ export function collectNotReadyHtmlVideo(
     isExporting: deps.isExporting,
   });
   const lastSameClipFrame = filterPausedHtmlTargetFrame(
-    getDragHoldFrame(layer, video, deps),
+    getDragHoldFrame(layer, video, deps, shouldGuardPausedTargetFrames ? undefined : targetTime),
     targetTime,
     shouldGuardPausedTargetFrames
   );
@@ -144,7 +144,7 @@ export function collectNotReadyHtmlVideo(
     };
   }
   if (deps.isPlaying) {
-    const anyFrame = getPlaybackStallHoldFrame(layer, video, deps);
+    const anyFrame = getPlaybackStallHoldFrame(layer, video, deps, targetTime);
     if (anyFrame) {
       controller.traceScrubPath(layer, 'playback-stall-hold', video, targetTime, deps.scrubbingCache?.getLastPresentedTime(video));
       controller.setDecoder('HTMLVideo(cached)');

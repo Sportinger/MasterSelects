@@ -1736,6 +1736,85 @@ describe('VideoSyncManager paused WebCodecs provider selection', () => {
     }
   });
 
+  it('keeps the stop position when the video element ran past the playhead', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    const manager = createManager();
+    mockRenderHostMode('main');
+    const previousPlayheadPosition = useTimelineStore.getState().playheadPosition;
+    const { clip, ctx, video } = createLazyVideoClip('clip-stop-overshoot', {
+      currentTime: 1.5,
+      paused: false,
+      seeking: false,
+      readyState: 4,
+      duration: 10,
+      played: { length: 1 } as TimeRanges,
+      pause: vi.fn() as HTMLVideoElement['pause'],
+      play: vi.fn(() => Promise.resolve()) as HTMLVideoElement['play'],
+      playbackRate: 1,
+      src: 'blob:clip-stop-overshoot',
+    });
+
+    try {
+      ctx.isPlaying = true;
+      ctx.playheadPosition = 1.5;
+      ctx.getSourceTimeForClip = () => 1.5;
+      manager.syncClipVideo(clip, ctx);
+      testEngine.markVideoFramePresented.mockClear();
+
+      // A slow 4K frame let the element keep playing ~250 ms past the stop.
+      useTimelineStore.setState({ playheadPosition: 2 });
+      const pausedCtx = {
+        ...ctx,
+        isPlaying: false,
+        playheadPosition: 2,
+        getSourceTimeForClip: () => 2,
+      } as FrameContext;
+      video.currentTime = 2.25;
+
+      manager.syncClipVideo(clip, pausedCtx);
+
+      expect(useTimelineStore.getState().playheadPosition).toBe(2);
+      expect(video.currentTime).toBe(2);
+      expect(testEngine.markVideoFramePresented).not.toHaveBeenCalledWith(video, 2.25, clip.id);
+    } finally {
+      useTimelineStore.setState({ playheadPosition: previousPlayheadPosition });
+    }
+  });
+
+  it('pauses playing timeline videos synchronously when the timeline pauses', () => {
+    flags.useFullWebCodecsPlayback = false;
+
+    createManager();
+    const previousState = useTimelineStore.getState();
+    const pause = vi.fn(function (this: HTMLVideoElement) {
+      setVideoState(this, { paused: true });
+    });
+    const { clip, video } = createLazyVideoClip('clip-stop-sync', {
+      currentTime: 1.5,
+      paused: false,
+      readyState: 4,
+      duration: 10,
+      pause,
+      src: 'blob:clip-stop-sync',
+    });
+
+    try {
+      useTimelineStore.setState({ clips: [clip], isPlaying: true, playheadPosition: 1.5 });
+      useTimelineStore.getState().pause();
+
+      expect(pause).toHaveBeenCalledTimes(1);
+      expect(video.currentTime).toBe(1.5);
+      expect(useTimelineStore.getState().playheadPosition).toBe(1.5);
+    } finally {
+      useTimelineStore.setState({
+        clips: previousState.clips,
+        isPlaying: false,
+        playheadPosition: previousState.playheadPosition,
+      });
+    }
+  });
+
   it('captures the running Android HTML frame before pausing its decoder surface', () => {
     flags.useFullWebCodecsPlayback = false;
     const originalNavigator = globalThis.navigator;
