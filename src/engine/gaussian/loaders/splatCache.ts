@@ -165,7 +165,7 @@ class SplatCacheImpl {
       // Replace with empty typed array — keeps the reference valid but frees memory
       (frame.buffer as { data: Float32Array }).data = new Float32Array(0);
       if (frame.buffer.shData) {
-        (frame.buffer as { shData: Float32Array | undefined }).shData = undefined;
+        (frame.buffer as { shData: Uint32Array | undefined }).shData = undefined;
       }
     }
   }

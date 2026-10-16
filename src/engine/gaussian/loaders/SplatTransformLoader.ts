@@ -25,6 +25,7 @@ import type {
 } from './types.ts';
 import { FLOATS_PER_SPLAT, SH_C0 } from './types.ts';
 import { buildMetadata, computeBoundingBox, normalizeQuaternion, sigmoid } from './normalize.ts';
+import { packSphericalHarmonics } from './shPacking.ts';
 
 const BLOB_CHUNK_SIZE = 4 * 1024 * 1024;
 type BlobReadProgressReporter = (loadedBytes: number, totalBytes: number) => void;
@@ -308,15 +309,8 @@ function convertTableToAsset(
     });
 
   const shDegree = inferShDegree(shColumns.length);
-  let shData: Float32Array | undefined;
-  if (shColumns.length > 0) {
-    shData = new Float32Array(splatCount * shColumns.length);
-    for (let i = 0; i < splatCount; i += 1) {
-      for (let j = 0; j < shColumns.length; j += 1) {
-        shData[i * shColumns.length + j] = valueAt(shColumns[j].data, i);
-      }
-    }
-  }
+  // 8-bit per-splat-scaled packing keeps all three bands at ~52 bytes per splat instead of 180.
+  const packedSh = packSphericalHarmonics(shColumns, splatCount, (column, index) => valueAt(column.data, index));
 
   const boundingBox = computeBoundingBox(data, splatCount);
   const metadata = buildMetadata(
@@ -334,7 +328,8 @@ function convertTableToAsset(
   const buffer: GaussianSplatBuffer = {
     data,
     splatCount,
-    shData,
+    shData: packedSh?.data,
+    shCoeffsPerChannel: packedSh?.coeffsPerChannel,
     shDegree,
   };
 

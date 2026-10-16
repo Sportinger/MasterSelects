@@ -292,9 +292,11 @@ export class GaussianSplatSceneLoader {
           totalBytes: loadFile.size,
           message: 'Uploading splat scene',
         });
+        const loaded = asset.frames[0].buffer;
         renderer.uploadScene(request.sceneKey, {
-          splatCount: asset.frames[0].buffer.splatCount,
-          data: asset.frames[0].buffer.data,
+          splatCount: loaded.splatCount,
+          data: loaded.data,
+          ...(loaded.shData && loaded.shCoeffsPerChannel ? { sh: { data: loaded.shData, coeffsPerChannel: loaded.shCoeffsPerChannel } } : {}),
         });
         this.setGaussianSplatLoadProgress(request, {
           phase: 'complete',

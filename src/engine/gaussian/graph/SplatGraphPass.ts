@@ -22,14 +22,16 @@ export class SplatGraphPass {
     if (source && remapped && !moving && !precise && outputCount > 0) {
       scene = this.ordering.prepare(device, layout, id, branch?.id ?? 'surface', source, scene, count, sampling, cropped?.indices);
     }
+    let sourceIds: GPUBuffer | undefined;
     if (outputCount > 0 && (operations.length || remapped)) {
       const v = camera.viewMatrix;
       const eye = { x: -(v[0] * v[12] + v[1] * v[13] + v[2] * v[14]), y: -(v[4] * v[12] + v[5] * v[13] + v[6] * v[14]), z: -(v[8] * v[12] + v[9] * v[13] + v[10] * v[14]) };
-      buffer = this.compute.execute(device, encoder, buffer, outputCount, sampling.operations, time, world, eye, count, sampling.offset, sampling.remapped, cropped?.buffer);
+      const result = this.compute.execute(device, encoder, buffer, outputCount, sampling.operations, time, world, eye, count, sampling.offset, sampling.remapped, cropped?.buffer);
+      buffer = result.output; sourceIds = result.ids;
     }
     // Remapping changes indices, not positions. Use the matching worker whenever available.
     const forceGpuSort = moving || (remapped && (!source || precise || !scene.workerSorter || !scene.workerSortedBindGroup));
-    return { scene, buffer, count: outputCount, forceGpuSort };
+    return { scene, buffer, count: outputCount, forceGpuSort, sourceIds };
   }
   beginFrame() { this.compute.beginFrame(); this.crops.beginFrame(); this.ordering.beginFrame(); }
   release(id: string) { this.crops.release(id); this.ordering.release(id); }

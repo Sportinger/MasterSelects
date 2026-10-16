@@ -184,13 +184,15 @@ describe('GaussianSplatGpuRenderer camera uniforms', () => {
     expect(device.createBuffer).toHaveBeenCalledWith(expect.objectContaining({
       label: 'splat-camera-uniforms-1',
     }));
-    expect(writeBuffer.mock.calls[0]?.[0]).not.toBe(writeBuffer.mock.calls[1]?.[0]);
-    expect((writeBuffer.mock.calls[0]?.[2] as Float32Array)[54]).toBeCloseTo(2.5);
-    expect((writeBuffer.mock.calls[1]?.[2] as Float32Array)[54]).toBeCloseTo(1);
-    expect((writeBuffer.mock.calls[0]?.[2] as Float32Array)[56]).toBeCloseTo(3);
-    expect((writeBuffer.mock.calls[0]?.[2] as Float32Array)[57]).toBeCloseTo(80);
-    expect((writeBuffer.mock.calls[1]?.[2] as Float32Array)[56]).toBeCloseTo(0.01);
-    expect((writeBuffer.mock.calls[1]?.[2] as Float32Array)[57]).toBeCloseTo(1000);
+    // SH parameter slots are written between draws too; only compare the camera uniform writes.
+    const cameraWrites = writeBuffer.mock.calls.filter(call => call[2] instanceof Float32Array && call[2].length > 57);
+    expect(cameraWrites[0]?.[0]).not.toBe(cameraWrites[1]?.[0]);
+    expect((cameraWrites[0]?.[2] as Float32Array)[54]).toBeCloseTo(2.5);
+    expect((cameraWrites[1]?.[2] as Float32Array)[54]).toBeCloseTo(1);
+    expect((cameraWrites[0]?.[2] as Float32Array)[56]).toBeCloseTo(3);
+    expect((cameraWrites[0]?.[2] as Float32Array)[57]).toBeCloseTo(80);
+    expect((cameraWrites[1]?.[2] as Float32Array)[56]).toBeCloseTo(0.01);
+    expect((cameraWrites[1]?.[2] as Float32Array)[57]).toBeCloseTo(1000);
 
     const firstCameraBindGroup = renderPasses[0]?.setBindGroup.mock.calls.find(
       ([slot]) => slot === 1,

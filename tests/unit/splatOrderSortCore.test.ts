@@ -46,6 +46,12 @@ describe('splatOrderSortCore', () => {
     expect(result.count).toBe(3);
   });
 
+  it('sorts by radial camera distance so a far edge splat is drawn before a nearer centered one', () => {
+    // View depth would order the centered splat (z -5) first; radial distance puts the edge splat (~10) first.
+    const centers = buildSplatCenters(makeSplatData([[0, 0, -5], [10, 0, -1]]), 2);
+    expect([...sortSplatOrderByDepth(centers, IDENTITY, 2).order]).toEqual([1, 0]);
+  });
+
   it('respects requested count so maxSplats budgets are sorted consistently', () => {
     const centers = buildSplatCenters(makeSplatData([
       [0, 0, -2],

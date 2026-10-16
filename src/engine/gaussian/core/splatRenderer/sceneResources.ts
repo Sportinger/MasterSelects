@@ -3,6 +3,7 @@ import {
   createIdentityIndexBuffer,
   createSplatDataBindGroup,
   createSplatDataBuffer,
+  createSplatShBuffer,
   reuseSplatDataBindGroup,
   type CachedSplatDataBindGroup,
   type UploadableSplatData,
@@ -15,6 +16,9 @@ interface SceneResourceLogger {
 export interface SplatSceneGpuResources {
   splatBuffer: GPUBuffer;
   splatCount: number;
+  /** Packed SH coefficients and their per-channel count (0 without SH). */
+  shBuffer: GPUBuffer | null;
+  shCoeffsPerChannel: number;
   /** Identity index buffer: [0, 1, 2, ..., splatCount-1] */
   identityIndexBuffer: GPUBuffer;
   /** Bind group for the render pipeline (splatData + identityIndices) */
@@ -65,9 +69,12 @@ export function createSplatSceneResources(
     });
   }
 
+  const shBuffer = createSplatShBuffer(device, clipId, data);
   return {
     splatBuffer,
     splatCount: data.splatCount,
+    shBuffer,
+    shCoeffsPerChannel: shBuffer ? data.sh!.coeffsPerChannel : 0,
     identityIndexBuffer,
     bindGroup,
     framesSinceSort: 0,
@@ -80,6 +87,7 @@ export function createSplatSceneResources(
 /** Destroy all GPU handles owned by a splat scene cache entry. */
 export function releaseSplatSceneResources(scene: SplatSceneGpuResources): void {
   scene.splatBuffer.destroy();
+  scene.shBuffer?.destroy();
   scene.identityIndexBuffer.destroy();
   scene.workerSorter?.destroy();
 }

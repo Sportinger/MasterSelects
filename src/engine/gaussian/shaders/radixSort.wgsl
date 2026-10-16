@@ -71,9 +71,9 @@ fn computeDepthKeys(@builtin(global_invocation_id) gid: vec3u) {
   // Transform to shared-scene world space first, then into view space.
   let worldPos = params.worldMatrix * vec4f(pos, 1.0);
   let viewPos = params.viewMatrix * worldPos;
-  // Visible points in our right-handed view have negative z.
-  // Negate it so farther splats produce larger positive depths and sort first.
-  let depth = -viewPos.z;
+  // Radial camera distance (as SuperSplat): unlike view depth it does not reorder splats at the
+  // screen edges when the camera only rotates. Farther splats get larger values and sort first.
+  let depth = length(viewPos.xyz);
 
   // Convert to sortable key (back-to-front: far splats get smaller keys)
   keys[idx] = floatToSortKey(depth);

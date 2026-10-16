@@ -1,3 +1,4 @@
+import { SplatShBinding } from './splatRenderer/shBinding';
 import { SplatGraphPass } from '../graph/SplatGraphPass';
 import { SplatMeshPass } from '../graph/SplatMeshPass';
 import { Logger } from '../../../services/logger';
@@ -73,6 +74,7 @@ export class GaussianSplatGpuRenderer {
   private pipelineWithDepthWriteMask: GPURenderPipeline | null = null;
   private splatDataBindGroupLayout: GPUBindGroupLayout | null = null;
   private cameraBindGroupLayout: GPUBindGroupLayout | null = null;
+  private shBindGroupLayout: GPUBindGroupLayout | null = null; private shBinding = new SplatShBinding();
   private sceneCache: Map<string, SplatSceneGpuResources> = new Map();
   private cameraUniformPool: SplatCameraUniformResource[] = [];
   private cameraUniformCursor = 0;
@@ -465,6 +467,8 @@ export class GaussianSplatGpuRenderer {
       ));
       passEncoder.setBindGroup(0, renderBindGroup);
       passEncoder.setBindGroup(1, cameraBindGroup);
+      passEncoder.setBindGroup(2, this.shBinding.bind(this.device, this.shBindGroupLayout!, scene.shBuffer, scene.shCoeffsPerChannel,
+        graph.sourceIds ?? scene.identityIndexBuffer, camera.viewMatrix, worldMatrix));
 
       recordSplatRenderDebug(log, this.renderDebugLoggedClips, this.lastRenderDebug, {
         branchId: options?.graphBranch?.id,
@@ -504,7 +508,7 @@ export class GaussianSplatGpuRenderer {
    * rewound and buffers retired by growth are destroyed here.
    */
   beginFrame(): void {
-    this.graphPass.beginFrame(); this.meshPass.beginFrame(); this.sortPass.beginFrame();
+    this.graphPass.beginFrame(); this.meshPass.beginFrame(); this.sortPass.beginFrame(); this.shBinding.beginFrame();
     this.visibilityPass.beginFrame(); this.particleCompute.beginFrame(); this.effectorCompute.beginFrame();
     this.drawStreams.beginFrame((streamKey) => this.sortPass.release(streamKey));
     if (this.renderTargetPool) {
@@ -582,7 +586,7 @@ export class GaussianSplatGpuRenderer {
 
     // Wave 4: Dispose sort + cull passes
     this.visibilityPass.dispose();
-    this.sortPass.dispose();
+    this.sortPass.dispose(); this.shBinding.dispose();
 
     // Nullify pipelines and layouts (they don't need explicit destruction)
     this.pipeline = null;
@@ -599,6 +603,7 @@ export class GaussianSplatGpuRenderer {
     const bundle = createSplatRenderPipelines(this.device);
     this.splatDataBindGroupLayout = bundle.splatDataBindGroupLayout;
     this.cameraBindGroupLayout = bundle.cameraBindGroupLayout;
+    this.shBindGroupLayout = bundle.shBindGroupLayout;
     this.pipeline = bundle.pipeline;
     this.pipelineWithDepth = bundle.pipelineWithDepth;
     this.pipelineWithDepthWrite = bundle.pipelineWithDepthWrite;

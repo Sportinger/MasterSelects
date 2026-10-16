@@ -27,22 +27,24 @@ export function packSplatOperations(operations: SplatGraphOperation[]): Float32A
   });
   return data;
 }
-interface Slot { output: GPUBuffer; uniform: GPUBuffer; operations: GPUBuffer; capacity: number }
+interface Slot { output: GPUBuffer; ids: GPUBuffer; uniform: GPUBuffer; operations: GPUBuffer; capacity: number }
+/** Graph output plus the source splat id of every output splat (for per-source data such as SH). */
+export interface SplatGraphComputeResult { output: GPUBuffer; ids: GPUBuffer }
 /** Per-render-call slots prevent queue writes for another branch/view corrupting encoded work. */
 export class SplatGraphCompute {
   private pipeline?: GPUComputePipeline;
   private emptyIndices?: GPUBuffer;
   private slots: Slot[] = [];
   private cursor = 0;
-  private prepared: { source: GPUBuffer; sourceIndices?: GPUBuffer; encoder: GPUCommandEncoder; key: string; output: GPUBuffer }[] = [];
+  private prepared: { source: GPUBuffer; sourceIndices?: GPUBuffer; encoder: GPUCommandEncoder; key: string; result: SplatGraphComputeResult }[] = [];
   beginFrame() { this.cursor = 0; this.prepared = []; }
   execute(device: GPUDevice, encoder: GPUCommandEncoder, source: GPUBuffer, count: number, operations: SplatGraphOperation[], time: number,
-    world: Float32Array, camera: { x: number; y: number; z: number }, sourceCount = count, offset = 0, remapped = false, sourceIndices?: GPUBuffer): GPUBuffer {
+    world: Float32Array, camera: { x: number; y: number; z: number }, sourceCount = count, offset = 0, remapped = false, sourceIndices?: GPUBuffer): SplatGraphComputeResult {
     // Color and depth share the exact attributes, including particle integration.
     // Restrict reuse to one encoder so the producing dispatch is always ordered first.
     const key = JSON.stringify([count, operations, time, Array.from(world), camera, sourceCount, offset, remapped]);
     const cached = this.prepared.find(entry => entry.source === source && entry.sourceIndices === sourceIndices && entry.encoder === encoder && entry.key === key);
-    if (cached) return cached.output;
+    if (cached) return cached.result;
     if (!this.pipeline) {
       const module = device.createShaderModule({ code: shader, label: 'Splat graph compute shader' });
       void reportShaderCompilation(module, 'SplatGraphCompute', 'Splat graph compute shader');
@@ -51,9 +53,10 @@ export class SplatGraphCompute {
     const index = this.cursor++;
     let slot = this.slots[index];
     if (!slot || slot.capacity < count) {
-      if (slot) { slot.output.destroy(); slot.uniform.destroy(); slot.operations.destroy(); }
+      if (slot) { slot.output.destroy(); slot.ids.destroy(); slot.uniform.destroy(); slot.operations.destroy(); }
       slot = { capacity: count,
         output: device.createBuffer({ size: count * 56, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC }),
+        ids: device.createBuffer({ size: Math.max(4, count * 4), usage: GPUBufferUsage.STORAGE }),
         uniform: device.createBuffer({ size: 112, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
         operations: device.createBuffer({ size: 24 * 64, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST }),
       }; this.slots[index] = slot;
@@ -62,10 +65,11 @@ export class SplatGraphCompute {
     data.set(world); data.set([camera.x, camera.y, camera.z, 1, time], 16); ints[21] = count; ints[22] = operations.length; ints[23] = sourceCount; ints[24] = sourceIndices ? 2 : remapped ? 1 : 0; ints[25] = offset;
     device.queue.writeBuffer(slot.uniform, 0, data); device.queue.writeBuffer(slot.operations, 0, packSplatOperations(operations).buffer as ArrayBuffer);
     const indices = sourceIndices ?? (this.emptyIndices ??= device.createBuffer({ size: 4, usage: GPUBufferUsage.STORAGE }));
-    const bind = device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [source, slot.output, slot.uniform, slot.operations, indices].map((buffer, binding) => ({ binding, resource: { buffer } })) });
+    const bind = device.createBindGroup({ layout: this.pipeline.getBindGroupLayout(0), entries: [source, slot.output, slot.uniform, slot.operations, indices, slot.ids].map((buffer, binding) => ({ binding, resource: { buffer } })) });
     const pass = encoder.beginComputePass({ label: 'Splat attribute graph' }); pass.setPipeline(this.pipeline); pass.setBindGroup(0, bind); pass.dispatchWorkgroups(Math.ceil(count / 256)); pass.end();
-    this.prepared.push({ source, sourceIndices, encoder, key, output: slot.output });
-    return slot.output;
+    const result = { output: slot.output, ids: slot.ids };
+    this.prepared.push({ source, sourceIndices, encoder, key, result });
+    return result;
   }
-  dispose() { for (const s of this.slots) { s.output.destroy(); s.uniform.destroy(); s.operations.destroy(); } this.emptyIndices?.destroy(); this.emptyIndices = undefined; this.slots = []; this.prepared = []; this.cursor = 0; this.pipeline = undefined; }
+  dispose() { for (const s of this.slots) { s.output.destroy(); s.ids.destroy(); s.uniform.destroy(); s.operations.destroy(); } this.emptyIndices?.destroy(); this.emptyIndices = undefined; this.slots = []; this.prepared = []; this.cursor = 0; this.pipeline = undefined; }
 }

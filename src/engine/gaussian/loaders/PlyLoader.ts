@@ -14,6 +14,7 @@ import type {
 } from './types.ts';
 import { FLOATS_PER_SPLAT, SH_C0 } from './types.ts';
 import { computeBoundingBox, sigmoid, normalizeQuaternion, buildMetadata } from './normalize.ts';
+import { packSphericalHarmonics } from './shPacking.ts';
 
 const log = Logger.create('PlyLoader');
 
@@ -438,10 +439,13 @@ export async function loadPly(file: File, options: GaussianSplatLoadOptions = {}
     header.shDegree,
   );
 
+  const shCoeffs = shData ? shData.length / Math.max(1, splatCount) : 0;
+  const packedSh = shData ? packSphericalHarmonics(Array.from({ length: shCoeffs }, (_, j) => j), splatCount, (j, i) => shData[i * shCoeffs + j]) : undefined;
   const buffer: GaussianSplatBuffer = {
     data,
     splatCount,
-    shData,
+    shData: packedSh?.data,
+    shCoeffsPerChannel: packedSh?.coeffsPerChannel,
     shDegree: header.shDegree,
   };
 

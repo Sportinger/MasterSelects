@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import shaderSource from '../../src/engine/gaussian/shaders/radixSort.wgsl?raw';
 
 describe('radixSort.wgsl', () => {
-  it('sorts splats by positive camera distance instead of raw negative view-space z', () => {
-    expect(shaderSource).toContain('let depth = -viewPos.z;');
+  it('sorts splats by radial camera distance so rotating the camera does not reorder edge splats', () => {
+    expect(shaderSource).toContain('let depth = length(viewPos.xyz);');
   });
 
   it('pads non-power-of-two sort tails with sentinel keys', () => {

@@ -282,6 +282,17 @@ Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas
 - The Gaussian tab exposes native renderer information together with `maxSplats`, `sortFrequency`, `splatScale`, `orientationPreset`, `nearPlane`, and `farPlane`. `splatScale` changes each gaussian's covariance without moving its center; `maxSplats` caps the rendered budget (`0` is unlimited); `sortFrequency` controls the realtime depth-order refresh cadence (`0` disables refresh); and the near/far values slice only that splat object in camera-space depth.
 - Gaussian splats participate in scene cameras, object transforms, object-level effectors, preview, nested compositions, export, preload, and readiness checks through the same native shared-scene path.
 - Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Paused preview and Edit mode honor the configured sort cadence, and obsolete worker results are discarded when a newer object/camera transform has already requested another order. Precise export can fall back to the existing GPU sort path.
+- Rendering matches SuperSplat/PlayCanvas quality choices: the 2D covariance low-pass is
+  0.075 px² (PlayCanvas' 0.3 in its doubled focal units), splats are dropped only when their
+  half-extent stays under about one pixel, and both the worker and the GPU sorter order splats by
+  radial camera distance, so rotating the camera does not reorder splats at the screen edges.
+- View-dependent color: spherical harmonics bands 1-3 (`f_rest_*`, e.g. from `.ply`, `.sog`,
+  `.spz`) are kept at load time in a compact layout (per-splat float scale plus one byte per
+  coefficient, about 52 bytes per splat for all three bands) and evaluated in the vertex shader
+  with the camera-to-splat direction in the scan's own space, like PlayCanvas. Splat graph
+  outputs carry each output splat's source id, so sampled, cropped and moving branches keep their
+  SH. Per-splat rotations applied by graph nodes (for example Ring Bend) do not rotate the SH.
+  Convert with SH kept (`splat-transform` without `-H 0`) to use this.
 - Sequence splats follow the same shared runtime contract and preload nearby frames without replacing foreground playback with repeated loading overlays.
 - PLY/splat sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Imported splats and numbered splat sequences store media-panel stats: container label, file size, per-frame splat count, and total sequence splat count.

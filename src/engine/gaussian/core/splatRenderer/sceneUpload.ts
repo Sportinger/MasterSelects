@@ -3,9 +3,24 @@ export interface UploadableSplatData {
   /** Canonical Float32Array: 14 floats per splat
    *  [x,y,z, sx,sy,sz, rw,rx,ry,rz, r,g,b, opacity] */
   data: Float32Array;
+  /** Optional packed spherical harmonics (bands 1-3), see loaders/shPacking.ts. */
+  sh?: { data: Uint32Array; coeffsPerChannel: number };
 }
 
 export const FLOATS_PER_SPLAT = 14;
+
+/** GPU copy of the packed SH coefficients; null when the asset has none. */
+export function createSplatShBuffer(device: GPUDevice, clipId: string, data: UploadableSplatData): GPUBuffer | null {
+  const sh = data.sh;
+  if (!sh || sh.coeffsPerChannel <= 0 || sh.data.length === 0) return null;
+  const buffer = device.createBuffer({
+    size: sh.data.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    label: `splat-sh-${clipId}`,
+  });
+  device.queue.writeBuffer(buffer, 0, sh.data.buffer, sh.data.byteOffset, sh.data.byteLength);
+  return buffer;
+}
 
 export function getExpectedSplatFloatCount(splatCount: number): number {
   return splatCount * FLOATS_PER_SPLAT;
