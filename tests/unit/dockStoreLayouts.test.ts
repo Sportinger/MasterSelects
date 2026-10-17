@@ -125,10 +125,10 @@ describe('dock store saved layouts', () => {
 
     expect(panelTypes(leftGroup)).toEqual(['media', 'ai-studio', 'node-workspace']);
     expect(panelTypes(previewGroup)).toEqual(['preview']);
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'export', 'color-controls']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'layers', 'export', 'color-controls']);
     expect(leftGroup?.panels[1]?.title).toBe('AI Studio');
-    expect(rightGroup?.panels[2]?.title).toBe('Coloring');
-    expect(rightGroup?.activeIndex).toBe(1);
+    expect(rightGroup?.panels[3]?.title).toBe('Coloring');
+    expect(rightGroup?.activeIndex).toBe(2);
     expect(panelTypes(timelineGroup)).toEqual(['timeline']);
 
     const timeline = useTimelineStore.getState();
@@ -284,7 +284,7 @@ describe('dock store saved layouts', () => {
 
     let layout = useDockStore.getState().layout;
     let rightGroup = findTabGroup(layout.root, 'right-group');
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'layers', 'color-controls']);
     expect(layout.floatingPanels).toHaveLength(1);
     expect(layout.floatingPanels[0]).toMatchObject({
       panel: { id: 'export', type: 'export' },
@@ -303,7 +303,7 @@ describe('dock store saved layouts', () => {
     expect(layout.floatingPanels).toEqual([]);
     expect(panelTypes(previewGroup)).toEqual(['preview', 'export']);
     expect(previewGroup?.activeIndex).toBe(1);
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'layers', 'color-controls']);
   });
 
   it('docks a floating panel when its floating tab is dragged onto a drop target', () => {
@@ -340,7 +340,7 @@ describe('dock store saved layouts', () => {
       panel: { id: 'export', type: 'export', title: 'Export' },
       returnGroupId: 'right-group',
     });
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'layers', 'color-controls']);
     expect(layout.floatingPanels).toEqual([]);
     expect(useDockStore.getState().browserWindowPanels).toEqual([windowPanel]);
 
@@ -359,7 +359,7 @@ describe('dock store saved layouts', () => {
     rightGroup = findTabGroup(layout.root, 'right-group');
     expect(panelTypes(previewGroup)).toEqual(['preview', 'export']);
     expect(previewGroup?.activeIndex).toBe(1);
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'layers', 'color-controls']);
     expect(useDockStore.getState().browserWindowPanels).toEqual([]);
   });
 
@@ -385,7 +385,7 @@ describe('dock store saved layouts', () => {
 
     const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
     expect(useDockStore.getState().browserWindowPanels).toEqual([windowPanel]);
-    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'color-controls']);
+    expect(panelTypes(rightGroup)).toEqual(['clip-properties', 'layers', 'color-controls']);
   });
 
   it('loads the authored full-height media layout only for Resolve Video', () => {
@@ -405,10 +405,11 @@ describe('dock store saved layouts', () => {
     ]);
     expect(panelTypes(findTabGroup(layout.root, 'right-group'))).toEqual([
       'clip-properties',
+      'layers',
       'color-controls',
       'export',
     ]);
-    expect(findTabGroup(layout.root, 'right-group')?.panels[1]?.title).toBe('Coloring');
+    expect(findTabGroup(layout.root, 'right-group')?.panels[2]?.title).toBe('Coloring');
     expect(layout.panelZoom['clip-properties']).toBe(1);
 
     useSettingsStore.setState({ theme: 'dark' });
@@ -500,7 +501,7 @@ describe('dock store saved layouts', () => {
     useDockStore.getState().changePanelType('clip-properties', 'audio-mixer');
 
     const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
-    expect(panelTypes(rightGroup)).toEqual(['audio-mixer', 'export', 'color-controls']);
+    expect(panelTypes(rightGroup)).toEqual(['audio-mixer', 'layers', 'export', 'color-controls']);
     expect(rightGroup?.activeIndex).toBe(0);
     expect(useDockStore.getState().isPanelTypeVisible('clip-properties')).toBe(false);
     expect(useDockStore.getState().isPanelTypeVisible('audio-mixer')).toBe(true);
@@ -510,7 +511,7 @@ describe('dock store saved layouts', () => {
     useDockStore.getState().changePanelType('clip-properties', 'discover');
 
     const rightGroup = findTabGroup(useDockStore.getState().layout.root, 'right-group');
-    expect(panelTypes(rightGroup)).toEqual(['discover', 'export', 'color-controls']);
+    expect(panelTypes(rightGroup)).toEqual(['discover', 'layers', 'export', 'color-controls']);
     expect(rightGroup?.activeIndex).toBe(0);
   });
 

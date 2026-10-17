@@ -79,6 +79,7 @@ export function DockPanelContent({ panel, allowPanelMaximize = false }: DockPane
             panelId={panel.id}
             source={normalizePreviewPanelSource(previewData)}
             showTransparencyGrid={previewData?.showTransparencyGrid ?? false}
+            showRulers={previewData?.showRulers ?? false}
             showTransport
             initialEdit={previewData}
           />

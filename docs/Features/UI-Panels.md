@@ -134,7 +134,7 @@ MasterSelects registers 18 dockable editor panel types, plus the Slot Grid overl
 | **Timeline** | `timeline` | Multi-track editor and playback surface |
 | **Media** | `media` | Media browser, folders, and project items |
 | **Properties** | `clip-properties` | Unified clip inspector |
-| **Layers** | `layers` | Photoshop-style layer stack of the active composition (see [Image Mode](./Image-Mode.md)) |
+| **Layers** | `layers` | Layer view of the active composition (all layers of an image document, or the clips at the playhead) with each layer's masks and effect stack (see [Image Mode](./Image-Mode.md)) |
 | **History** | `history` | Undo/redo history |
 | **Annotations** | `annotations` | Timed notes on the active composition and its source media, mirrored as ruler bars (see [Annotations](./Annotations.md)) |
 | **Audio Mixer** | `audio-mixer` | Track and master audio controls |
@@ -594,7 +594,7 @@ The built-in `VIDEO EDIT` layout is the default desktop layout; its left tab gro
 
 - Left column: Media / Transitions tabs
 - Center: Preview
-- Right column: Properties, Export, History (Export active)
+- Right column: Properties, Layers, Export, Coloring (Export active)
 - Bottom: Timeline
 
 Its timeline defaults to balanced video/audio focus with two visible 70 px video tracks and one visible 48 px compact audio track, so audio headers keep the bottom pan rail visible without showing the inline volume fader.

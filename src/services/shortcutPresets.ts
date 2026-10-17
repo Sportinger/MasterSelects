@@ -86,6 +86,7 @@ export const ACTION_META: ShortcutActionMeta[] = [
   { id: 'view.toggleCurveMode', label: 'Toggle Timeline / Graph View', category: 'Panels' },
   // Preview
   { id: 'preview.editMode', label: 'Toggle Edit Mode', category: 'Preview' },
+  { id: 'preview.toggleRulers', label: 'Toggle Rulers', category: 'Preview' },
   { id: 'preview.slot1', label: 'Preview Slot 1', category: 'Preview' },
   { id: 'preview.slot2', label: 'Preview Slot 2', category: 'Preview' },
   { id: 'preview.slot3', label: 'Preview Slot 3', category: 'Preview' },
@@ -186,6 +187,7 @@ const BASE_MAP: ShortcutMap = {
   'edit.rippleOverwriteSource': [],
   // Preview
   'preview.editMode': [{ key: 'tab' }],
+  'preview.toggleRulers': [{ key: 'r', shift: true }],
   'preview.slot1': [{ key: '1' }],
   'preview.slot2': [{ key: '2' }],
   'preview.slot3': [{ key: '3' }],

@@ -49,6 +49,7 @@ import { usePreviewRenderTargetRegistration } from './usePreviewRenderTargetRegi
 import { usePreviewSceneNavigation } from './usePreviewSceneNavigation';
 import { usePreviewSourceConfig } from './usePreviewSourceConfig';
 import { usePreviewViewGeometry } from './usePreviewViewGeometry';
+import { usePreviewCanvasZoom } from './usePreviewCanvasZoom';
 import { usePreviewViewport } from './usePreviewViewport';
 import { usePreviewWheelHandler } from './usePreviewWheelHandler';
 import { usePreviewInitialEditCameraView } from './usePreviewInitialEditCameraView';
@@ -86,11 +87,12 @@ interface PreviewProps {
   panelId: string;
   source: PreviewPanelSource;
   showTransparencyGrid: boolean; // per-tab transparency toggle
+  showRulers?: boolean; // per-tab pixel rulers
   showTransport?: boolean;
   initialEdit?: Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>;
 }
 
-export function Preview({ panelId, source, showTransparencyGrid, showTransport = false, initialEdit }: PreviewProps) {
+export function Preview({ panelId, source, showTransparencyGrid, showRulers = false, showTransport = false, initialEdit }: PreviewProps) {
   const { isEngineReady } = useEngine();
   // NOTE: these are store actions (stable references) — safe to destructure once.
   const { addKeyframe, hasKeyframes, isRecording } = useTimelineStore.getState();
@@ -167,6 +169,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     closeSourceMonitor,
     compositions,
     displayedCompId,
+    displayedCompIsStill,
     effectiveResolution,
     isEditableSource,
     setPanelSource,
@@ -176,10 +179,12 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     sourceMonitorPlaybackRequestId,
     stableRenderSource,
     toggleTransparency,
+    toggleRulers,
   } = usePreviewSourceConfig({
     panelId,
     source,
     showTransparencyGrid,
+    showRulers,
     tracks,
   });
   const { previewQuality, setPreviewQuality } = useSettingsStore(useShallow(s => ({
@@ -662,9 +667,15 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     isPreviewShortcutTarget,
     sceneNavEnabled,
     setEditMode,
+    toggleRulers,
     viewNavigationEnabled,
   });
 
+  const canvasZoom = usePreviewCanvasZoom({
+    enabled: displayedCompIsStill && !sourceMonitorActive && !usesPanelSizedEditViewport,
+    fittedWidth: canvasSize.width, compositionWidth: effectiveResolution.width, viewZoom, setViewZoom, setViewPan,
+  });
+  const rulersVisible = showRulers && !sourceMonitorActive && !usesPanelSizedEditViewport;
   const { canvasInContainer, viewTransform } = usePreviewViewGeometry({
     canvasSize,
     containerSize,
@@ -797,7 +808,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     sceneNavClipId, sceneNavEnabled, sceneObjectOverlaySelectedClipId, selectClip,
     selectedClip, selectedTextBounds, selectedTextLayer, setPropertyValue, setPreviewQuality,
     setQualityOpen, setTextTyping, showPlaybackWaiter,
-    showBottomControls: !showTransport, sceneObjectOverlayEnabled,
+    showBottomControls: !showTransport, rulersVisible, sceneObjectOverlayEnabled,
     showSceneObjectOverlay, showTransparencyGrid, sourceMonitorActive, sourceMonitorFile,
     sourceMonitorPlaybackRequestId, textClipEditMode, textPreviewEditorEnabled,
     textTypingActive, toggleTransparency, tracks, updateTextBoundsVertex,
@@ -831,7 +842,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
   return (
     <PreviewTransportPortalContext.Provider value={transportPortalContext}>
       <div
-      className={`preview-container${maskNavigationMode ? ' mask-navigation-mode' : ''}${showTransport ? ' has-transport' : ''}${showTransport && !playbackControlsVisible ? ' transport-collapsed' : ''}`}
+      className={`preview-container${maskNavigationMode ? ' mask-navigation-mode' : ''}${showTransport ? ' has-transport' : ''}${showTransport && !playbackControlsVisible ? ' transport-collapsed' : ''}${rulersVisible ? ' has-rulers' : ''}`}
       ref={containerRef}
       data-preview-panel-id={panelId}
       data-preview-editable={isEditableSource ? 'true' : 'false'}
@@ -936,6 +947,10 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
           sourceMonitorActive={sourceMonitorActive}
           setPreviewQuality={setPreviewQuality}
           showTransparencyGrid={showTransparencyGrid}
+          showRulers={showRulers}
+          onToggleRulers={toggleRulers}
+          canvasZoom={canvasZoom}
+          compositionSize={effectiveResolution}
         />
       )}
       </div>

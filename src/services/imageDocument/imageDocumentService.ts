@@ -216,3 +216,11 @@ export function deleteImageLayer(clipId: string): void {
     timeline.removeClip(clipId);
   }
 }
+
+/** Select a layer and show its effects or masks in the Properties panel. */
+export function openLayerProperties(clipId: string, tab: 'effects' | 'masks'): void {
+  useTimelineStore.getState().selectClip(clipId);
+  useDockStore.getState().activatePanelType('clip-properties');
+  // The Properties panel may mount with this activation; let it subscribe first.
+  window.setTimeout(() => window.dispatchEvent(new CustomEvent('openPropertiesTab', { detail: { tab } })), 50);
+}

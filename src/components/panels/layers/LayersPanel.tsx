@@ -1,4 +1,13 @@
 import { useMemo, useRef, useState, type DragEvent } from 'react';
+import {
+  IconCamera,
+  IconDownload,
+  IconFilePlus,
+  IconPhotoPlus,
+  IconSquareFilled,
+  IconTrash,
+  IconTypography,
+} from '@tabler/icons-react';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { ResolveInspectorNumberRow } from '../properties/resolveInspector/ResolveInspectorNumberRow';
 import { BLEND_MODE_GROUPS, formatBlendModeName } from '../properties/sharedConstants';
@@ -11,12 +20,12 @@ import {
   createImageDocumentFromCurrentFrame,
   deleteImageLayer,
   exportActiveImageAsPng,
+  openLayerProperties,
 } from '../../../services/imageDocument/imageDocumentService';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { BlendMode } from '../../../types/blendMode';
-import { DownloadIcon, NewDocumentIcon, PlusImageIcon, SolidIcon, TextIcon, TrashIcon } from './LayerIcons';
-import { LayerRow } from './LayerRow';
+import { LayerRow, type LayerRowActions } from './LayerRow';
 import { NewImageForm } from './NewImageForm';
 import './LayersPanel.css';
 
@@ -47,6 +56,7 @@ export function LayersPanel() {
   const [dropTarget, setDropTarget] = useState<{ trackId: string; position: 'above' | 'below' } | null>(null);
   const [fileDropActive, setFileDropActive] = useState(false);
   const [showNewImage, setShowNewImage] = useState(false);
+  const [expandedClipIds, setExpandedClipIds] = useState<ReadonlySet<string>>(() => new Set());
   const fileInput = useRef<HTMLInputElement>(null);
 
   if (!composition || showNewImage) {
@@ -71,11 +81,26 @@ export function LayersPanel() {
   }
 
   const timeline = useTimelineStore.getState();
-  const selectLayer = (clipId: string, additive: boolean) => timeline.selectClip(clipId, additive);
-  const dropOnRow = (sourceTrackId: string, targetTrackId: string) => {
-    const position = dropTarget?.trackId === targetTrackId ? dropTarget.position : 'above';
-    setDropTarget(null);
-    if (sourceTrackId !== targetTrackId) timeline.reorderTrack(sourceTrackId, targetTrackId, position === 'below');
+  const rowActions: LayerRowActions = {
+    onSelect: (clipId, additive) => timeline.selectClip(clipId, additive),
+    onToggleVisible: (trackId, visible) => timeline.setTrackVisible(trackId, visible),
+    onToggleLocked: (trackId, locked) => timeline.setTrackLocked(trackId, locked),
+    onRename: (clipId, name) => timeline.updateClip(clipId, { name }),
+    onDragOverRow: (trackId, position) => setDropTarget({ trackId, position }),
+    onDropOnRow: (sourceTrackId, targetTrackId) => {
+      const position = dropTarget?.trackId === targetTrackId ? dropTarget.position : 'above';
+      setDropTarget(null);
+      if (sourceTrackId !== targetTrackId) timeline.reorderTrack(sourceTrackId, targetTrackId, position === 'below');
+    },
+    onToggleExpanded: (clipId) => setExpandedClipIds((previous) => {
+      const next = new Set(previous);
+      if (!next.delete(clipId)) next.add(clipId);
+      return next;
+    }),
+    onOpenProperties: openLayerProperties,
+    onToggleMask: (clipId, maskId, enabled) => timeline.updateMask(clipId, maskId, { enabled }),
+    onToggleEffect: (clipId, effectId, enabled) => timeline.setClipEffectEnabled(clipId, effectId, enabled),
+    onReorderEffect: (clipId, effectId, newIndex) => timeline.reorderClipEffect(clipId, effectId, newIndex),
   };
   const handlePanelDragOver = (event: DragEvent<HTMLDivElement>) => {
     if (!event.dataTransfer.types.includes('Files')) return;
@@ -102,7 +127,7 @@ export function LayersPanel() {
       <div className="layers-header">
         <div className="layers-title">
           <strong title={composition.name}>{composition.name}</strong>
-          <span>{composition.width} × {composition.height}{still ? '' : ' · video'}</span>
+          <span>{composition.width} × {composition.height}{still ? '' : ' · at playhead'}</span>
         </div>
         <button
           aria-label="New image"
@@ -111,8 +136,19 @@ export function LayersPanel() {
           title="New image"
           type="button"
         >
-          <NewDocumentIcon />
+          <IconFilePlus aria-hidden="true" size={16} />
         </button>
+        {!still && (
+          <button
+            aria-label="Image from this frame"
+            className="layers-icon-button"
+            onClick={() => runAction('Image from frame', createImageDocumentFromCurrentFrame)}
+            title="Image from this frame"
+            type="button"
+          >
+            <IconCamera aria-hidden="true" size={16} />
+          </button>
+        )}
         <button
           aria-label="Save as PNG"
           className="layers-icon-button"
@@ -120,18 +156,9 @@ export function LayersPanel() {
           title="Save as PNG"
           type="button"
         >
-          <DownloadIcon />
+          <IconDownload aria-hidden="true" size={16} />
         </button>
       </div>
-
-      {!still && (
-        <div className="layers-notice">
-          <span>Video composition: showing the layers at the playhead.</span>
-          <button onClick={() => runAction('Image from frame', createImageDocumentFromCurrentFrame)} type="button">
-            Image from this frame
-          </button>
-        </div>
-      )}
 
       {selectedLayer && (
         <div className="layers-blend">
@@ -163,15 +190,11 @@ export function LayersPanel() {
         )}
         {layers.map((layer) => (
           <LayerRow
+            actions={rowActions}
             dropPosition={dropTarget?.trackId === layer.track.id ? dropTarget.position : null}
+            expanded={expandedClipIds.has(layer.clip.id)}
             key={layer.clip.id}
             layer={layer}
-            onDragOverRow={(trackId, position) => setDropTarget({ trackId, position })}
-            onDropOnRow={dropOnRow}
-            onRename={(clipId, name) => timeline.updateClip(clipId, { name })}
-            onSelect={selectLayer}
-            onToggleLocked={(trackId, locked) => timeline.setTrackLocked(trackId, locked)}
-            onToggleVisible={(trackId, visible) => timeline.setTrackVisible(trackId, visible)}
             selected={selectedClipIds.has(layer.clip.id)}
           />
         ))}
@@ -179,13 +202,13 @@ export function LayersPanel() {
 
       <div className="layers-toolbar">
         <button aria-label="Add image layer" className="layers-icon-button" onClick={() => fileInput.current?.click()} title="Add image layer" type="button">
-          <PlusImageIcon />
+          <IconPhotoPlus aria-hidden="true" size={16} />
         </button>
         <button aria-label="Add text layer" className="layers-icon-button" onClick={() => runAction('Text layer', addTextLayer)} title="Add text layer" type="button">
-          <TextIcon />
+          <IconTypography aria-hidden="true" size={16} />
         </button>
         <button aria-label="Add color layer" className="layers-icon-button" onClick={() => addSolidLayer()} title="Add color layer" type="button">
-          <SolidIcon />
+          <IconSquareFilled aria-hidden="true" size={15} />
         </button>
         <span className="layers-toolbar-spacer" />
         <button
@@ -196,7 +219,7 @@ export function LayersPanel() {
           title="Delete layer"
           type="button"
         >
-          <TrashIcon />
+          <IconTrash aria-hidden="true" size={16} />
         </button>
       </div>
       <input

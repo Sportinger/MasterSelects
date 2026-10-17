@@ -206,6 +206,13 @@ RAM preview is implemented by `RamPreviewEngine` and the timeline RAM preview sl
 
 ---
 
+## Rulers And Still-Image Zoom
+
+- Every dock preview has pixel rulers along its top and left edges. Toggle them with the ruler button in the viewer tools or `Shift+R`. The choice is stored per preview panel (`showRulers`); the Image workspace opens with rulers on.
+- Rulers count composition pixels from the canvas origin. They follow zoom and pan, tint the canvas span, and mark the pointer position. They are SVG (`PreviewRulers.tsx`, ticks from `previewRulerTicks.ts`) and ignore pointer input.
+- Rulers are hidden in the Source Monitor and in panel-sized 3D camera edit views, where screen space does not map to composition pixels.
+- When the displayed composition is an image document (`still`), the scrubber and playback row are replaced by a zoom bar: composition size, zoom out, **Fit**, **1:1** (actual pixels), zoom in, and the zoom level relative to the composition's pixels (`PreviewCanvasZoomBar.tsx`, `usePreviewCanvasZoom.ts`).
+
 ## Edit Mode
 
 Edit mode is a canvas overlay for layer transforms.

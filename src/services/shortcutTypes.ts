@@ -79,6 +79,7 @@ export type ShortcutActionId =
   | 'view.toggleCurveMode'
   // Preview
   | 'preview.editMode'
+  | 'preview.toggleRulers'
   | 'preview.slot1'
   | 'preview.slot2'
   | 'preview.slot3'

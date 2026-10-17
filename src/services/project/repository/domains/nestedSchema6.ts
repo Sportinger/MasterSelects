@@ -50,7 +50,7 @@ export const schemas6: Record<string, DomainSchema> = {
 "n647": {"fields":{"id":{"class":"content","owner":"timeline","node":null},"type":{"class":"content","owner":"timeline","node":"n648"},"title":{"class":"content","owner":"timeline","node":null},"data":{"class":"content","owner":"timeline","node":"n649"}}},
 "n648": {"variants":[]},
 "n649": {"variants":["n650","n656","n659","n661","n664","n666"]},
-"n650": {"fields":{"source":{"class":"content","owner":"timeline","node":"n651"},"compositionId":{"class":"content","owner":"timeline","node":null},"showTransparencyGrid":{"class":"content","owner":"timeline","node":null},"initialEditMode":{"class":"content","owner":"timeline","node":null},"initialEditCameraView":{"class":"content","owner":"timeline","node":"n655"},"showTransport":{"class":"content","owner":"timeline","node":null}}},
+"n650": {"fields":{"source":{"class":"content","owner":"timeline","node":"n651"},"compositionId":{"class":"content","owner":"timeline","node":null},"showTransparencyGrid":{"class":"content","owner":"timeline","node":null},"showRulers":{"class":"content","owner":"timeline","node":null},"initialEditMode":{"class":"content","owner":"timeline","node":null},"initialEditCameraView":{"class":"content","owner":"timeline","node":"n655"},"showTransport":{"class":"content","owner":"timeline","node":null}}},
 "n651": {"variants":["n652","n653","n654"]},
 "n652": {"fields":{"type":{"class":"content","owner":"timeline","node":null}}},
 "n653": {"fields":{"type":{"class":"content","owner":"timeline","node":null},"compositionId":{"class":"content","owner":"timeline","node":null}}},

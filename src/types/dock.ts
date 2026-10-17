@@ -46,6 +46,7 @@ export interface PreviewPanelData {
   source?: PreviewPanelSource;
   compositionId?: string | null; // legacy: null = active composition
   showTransparencyGrid?: boolean; // per-tab transparency grid toggle (default false)
+  showRulers?: boolean; // per-tab pixel rulers (default false)
   initialEditMode?: boolean;
   /**
    * Camera of an initial 3D edit view. With `initialEditMode` and no camera

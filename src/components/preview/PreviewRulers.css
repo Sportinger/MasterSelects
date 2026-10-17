@@ -1,0 +1,62 @@
+.preview-rulers {
+  position: absolute;
+  inset: 0;
+  /* Above the edit overlay (18), below the floating toolbar (20). */
+  z-index: 19;
+  pointer-events: none;
+}
+
+.preview-ruler {
+  position: absolute;
+  top: 0;
+  left: 0;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-family: var(--font-family);
+  font-size: 8.5px;
+}
+
+.preview-ruler-horizontal {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.preview-ruler-vertical {
+  border-right: 1px solid var(--border-color);
+}
+
+.preview-ruler line {
+  stroke: currentColor;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.preview-ruler text {
+  fill: currentColor;
+  user-select: none;
+}
+
+.preview-ruler-canvas-span {
+  fill: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.preview-ruler .preview-ruler-pointer {
+  stroke: var(--accent);
+}
+
+.preview-ruler-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  background: var(--bg-tertiary);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* Keep the floating preview toolbar clear of the rulers. */
+.preview-container.has-rulers .preview-controls {
+  top: 26px;
+  left: 26px;
+}

@@ -35,7 +35,7 @@ export const IMAGE_EDIT_LAYOUT: DockLayout = {
                 id: 'image-preview',
                 type: 'preview',
                 title: 'Preview',
-                data: { initialEditMode: true, showTransparencyGrid: true },
+                data: { initialEditMode: true, showTransparencyGrid: true, showRulers: true },
               },
             ],
             activeIndex: 0,

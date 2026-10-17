@@ -231,6 +231,7 @@ export const PreviewPanelDataFields = {
   "source": { class: 'content', owner: 'timeline' },
   "compositionId": { class: 'content', owner: 'timeline' },
   "showTransparencyGrid": { class: 'content', owner: 'timeline' },
+  "showRulers": { class: 'content', owner: 'timeline' },
   "initialEditMode": { class: 'content', owner: 'timeline' },
   "initialEditCameraView": { class: 'content', owner: 'timeline' },
   "showTransport": { class: 'content', owner: 'timeline' },

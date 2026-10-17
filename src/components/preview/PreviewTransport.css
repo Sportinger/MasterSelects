@@ -252,3 +252,33 @@
   }
 }
 }
+
+/* Outline tabler icons keep their stroke look. */
+.preview-transport svg.tabler-icon-ruler-2,
+.preview-transport svg.tabler-icon-zoom-in,
+.preview-transport svg.tabler-icon-zoom-out {
+  fill: none;
+}
+
+.preview-canvas-zoom-bar {
+  min-height: 34px;
+}
+
+.preview-canvas-zoom-size {
+  grid-column: 1;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.preview-transport button.preview-canvas-zoom-text {
+  width: auto;
+  min-width: 34px;
+  padding: 0 7px;
+  font: inherit;
+  font-size: var(--font-xs);
+  font-weight: var(--font-semibold);
+}
