@@ -39,6 +39,7 @@ export const BUILT_IN_PANEL_TYPES: PanelType[] = [
   'scope-histogram',
   'scope-vectorscope',
   'layers',
+  'tools',
 ];
 export const VALID_PANEL_TYPES = new Set(BUILT_IN_PANEL_TYPES);
 const PANEL_CONFIG_LOOKUP = PANEL_CONFIGS as Partial<Record<PanelType, PanelConfig>>;

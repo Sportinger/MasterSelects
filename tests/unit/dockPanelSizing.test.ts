@@ -103,4 +103,26 @@ describe('dock fixed panel sizing', () => {
     group.activeIndex = 1;
     expect(getDirectChildMinimumSize(group, 'width', 150)).toBe(360);
   });
+
+  it('fixes the Tools strip width only while it has a group of its own', () => {
+    const alone: DockNode = {
+      kind: 'tab-group',
+      id: 'tools-alone',
+      panels: [{ id: 'tools', type: 'tools', title: 'Tools' }],
+      activeIndex: 0,
+    };
+    const shared: DockNode = {
+      kind: 'tab-group',
+      id: 'tools-shared',
+      panels: [
+        { id: 'media', type: 'media', title: 'Media' },
+        { id: 'tools', type: 'tools', title: 'Tools' },
+      ],
+      activeIndex: 1,
+    };
+
+    expect(getDockNodeFixedSize(alone, 'width')).toBe(40);
+    expect(getDockNodeFixedSize(shared, 'width')).toBeNull();
+    expect(getDockNodeFixedFloor(shared, 'width')).toBe(0);
+  });
 });

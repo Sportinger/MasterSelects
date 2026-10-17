@@ -50,6 +50,7 @@ import { usePreviewSceneNavigation } from './usePreviewSceneNavigation';
 import { usePreviewSourceConfig } from './usePreviewSourceConfig';
 import { usePreviewViewGeometry } from './usePreviewViewGeometry';
 import { PREVIEW_RULER_SIZE } from './PreviewRulers';
+import { usePreviewCanvasToolPointer } from './usePreviewCanvasToolPointer';
 import { usePreviewGuideSnapPoints } from './usePreviewGuideSnapPoints';
 import { usePreviewCanvasZoom } from './usePreviewCanvasZoom';
 import { usePreviewViewport } from './usePreviewViewport';
@@ -615,6 +616,16 @@ export function Preview({ panelId, source, showTransparencyGrid, showRulers = fa
     viewZoom,
   });
 
+  const { canvasInContainer, viewTransform } = usePreviewViewGeometry({
+    canvasSize,
+    containerSize,
+    viewNavigationEnabled,
+    viewPan,
+    viewZoom,
+  });
+  const { activeCanvasTool, handleCanvasToolClick } = usePreviewCanvasToolPointer({
+    containerRef, containerSize, canvasInContainer, compositionSize: effectiveResolution, viewZoom, viewPan, setViewZoom, setViewPan,
+  });
   const {
     handleMouseDown,
     handleMouseMove,
@@ -656,6 +667,8 @@ export function Preview({ panelId, source, showTransparencyGrid, showRulers = fa
     stopGaussianFpsLook,
     stopGaussianKeyboardMovement,
     viewPan,
+    handToolActive: activeCanvasTool === 'hand',
+    handleCanvasToolClick,
   });
 
   const { handleContextMenu, handleAuxClick, setPanelEditMode } = usePreviewPanelInputBindings({
@@ -678,13 +691,6 @@ export function Preview({ panelId, source, showTransparencyGrid, showRulers = fa
     enabled: displayedCompIsStill && !sourceMonitorActive && !usesPanelSizedEditViewport,
     fittedSize: canvasSize, containerSize, rulerInset: rulersVisible ? PREVIEW_RULER_SIZE : 0,
     compositionWidth: effectiveResolution.width, viewZoom, setViewZoom, setViewPan,
-  });
-  const { canvasInContainer, viewTransform } = usePreviewViewGeometry({
-    canvasSize,
-    containerSize,
-    viewNavigationEnabled,
-    viewPan,
-    viewZoom,
   });
 
   // Edit mode helpers (bounding box calculation, hit testing, cursor mapping)
@@ -846,7 +852,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showRulers = fa
   return (
     <PreviewTransportPortalContext.Provider value={transportPortalContext}>
       <div
-      className={`preview-container${maskNavigationMode ? ' mask-navigation-mode' : ''}${showTransport ? ' has-transport' : ''}${showTransport && !playbackControlsVisible ? ' transport-collapsed' : ''}${rulersVisible ? ' has-rulers' : ''}`}
+      className={`preview-container${maskNavigationMode ? ' mask-navigation-mode' : ''}${showTransport ? ' has-transport' : ''}${showTransport && !playbackControlsVisible ? ' transport-collapsed' : ''}${rulersVisible ? ' has-rulers' : ''}${viewNavigationEnabled ? ` canvas-tool-${activeCanvasTool}` : ''}${isPanning ? ' is-panning' : ''}`}
       ref={containerRef}
       data-preview-panel-id={panelId}
       data-preview-editable={isEditableSource ? 'true' : 'false'}

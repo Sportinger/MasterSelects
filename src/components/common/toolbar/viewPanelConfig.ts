@@ -16,6 +16,7 @@ const VIEW_CORE_PANEL_TYPE_ORDER: PanelType[] = [
   'curves',
   'clip-properties',
   'layers',
+  'tools',
   'history',
   'annotations',
   'stats',

@@ -1,8 +1,8 @@
 import { useMemo, type Dispatch, type SetStateAction } from 'react';
 
-const ZOOM_STEP = 1.25;
-const MAX_VIEW_ZOOM = 150;
-const MIN_VIEW_ZOOM = 0.1;
+export const PREVIEW_ZOOM_STEP = 1.25;
+export const MAX_VIEW_ZOOM = 150;
+export const MIN_VIEW_ZOOM = 0.1;
 
 export interface PreviewCanvasZoom {
   /** Displayed size relative to the composition's pixels, in percent. */
@@ -62,8 +62,8 @@ export function usePreviewCanvasZoom({
         setViewPan({ x: rulerInset / 2, y: rulerInset / 2 });
       },
       actualPixels: () => zoomTo(compositionWidth / fittedWidth),
-      zoomIn: () => zoomTo(viewZoom * ZOOM_STEP),
-      zoomOut: () => zoomTo(viewZoom / ZOOM_STEP),
+      zoomIn: () => zoomTo(viewZoom * PREVIEW_ZOOM_STEP),
+      zoomOut: () => zoomTo(viewZoom / PREVIEW_ZOOM_STEP),
     };
   }, [compositionWidth, containerSize.height, containerSize.width, enabled, fittedHeight, fittedWidth, rulerInset, setViewPan, setViewZoom, viewZoom]);
 }

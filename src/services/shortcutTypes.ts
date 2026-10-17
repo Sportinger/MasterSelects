@@ -40,6 +40,7 @@ export type ShortcutActionId =
   | 'tool.navigationGroup'
   | 'tool.hand'
   | 'tool.zoom'
+  | 'tool.text'
   | 'tool.penKeyframe'
   | 'tool.midiDraw'
   | 'edit.splitAtPlayhead'

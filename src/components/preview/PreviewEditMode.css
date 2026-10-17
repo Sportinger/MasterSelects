@@ -607,3 +607,21 @@
   outline-offset: -1px;
 }
 }
+
+/* Canvas tools from the Tools panel override the overlay's inline handle cursor. */
+.preview-container.canvas-tool-hand .preview-overlay-fullscreen {
+  cursor: grab !important;
+}
+
+.preview-container.canvas-tool-hand.is-panning .preview-overlay-fullscreen,
+.preview-container.is-panning .preview-overlay-fullscreen {
+  cursor: grabbing !important;
+}
+
+.preview-container.canvas-tool-zoom .preview-overlay-fullscreen {
+  cursor: zoom-in !important;
+}
+
+.preview-container.canvas-tool-text .preview-overlay-fullscreen {
+  cursor: text !important;
+}

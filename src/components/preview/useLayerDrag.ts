@@ -1,5 +1,5 @@
 // Layer drag logic: move/scale layers in edit mode with document-level listeners + overlay drawing
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { AnimatableProperty, Layer, TimelineClip, TimelineTrack } from '../../types';
 import {
@@ -237,8 +237,9 @@ export function useLayerDrag({
     clearOwnedTransformPreview();
   }, [clearOwnedTransformPreview]);
 
-  // Draw overlay with bounding boxes (full-container overlay)
-  useEffect(() => {
+  // Draw overlay with bounding boxes (full-container overlay). A layout effect
+  // paints it in the same frame as a pan or zoom of the canvas.
+  useLayoutEffect(() => {
     if (!editMode || !overlayRef.current) return;
 
     const ctx = overlayRef.current.getContext('2d');

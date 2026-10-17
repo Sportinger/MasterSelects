@@ -29,13 +29,19 @@ function splitUsesDimension(node: Extract<DockNode, { kind: 'split' }>, dimensio
   return (node.direction === 'horizontal' ? 'width' : 'height') === dimension;
 }
 
+// A fixed panel sizes only a group of its own. Sharing a tab group with
+// flexible panels, it would squeeze them whenever its tab is active.
+function getSoleFixedCandidate(node: Extract<DockNode, { kind: 'tab-group' }>) {
+  return node.panels.length === 1 ? node.panels[0] : undefined;
+}
+
 export function getDockNodeFixedSize(
   node: DockNode,
   dimension: DockDimension,
   overrides?: DockFixedSizeOverrides,
 ): number | null {
   if (node.kind === 'tab-group') {
-    const activePanel = node.panels[node.activeIndex];
+    const activePanel = getSoleFixedCandidate(node);
     if (!activePanel) return null;
     const override = overrides?.[activePanel.type]?.[dimension];
     if (override !== undefined) return override;
@@ -59,7 +65,7 @@ export function getDockNodeFixedFloor(
   overrides?: DockFixedSizeOverrides,
 ): number {
   if (node.kind === 'tab-group') {
-    const activePanel = node.panels[node.activeIndex];
+    const activePanel = getSoleFixedCandidate(node);
     if (!activePanel) return 0;
     const override = overrides?.[activePanel.type]?.[dimension];
     if (override !== undefined) return override;

@@ -136,6 +136,7 @@ MasterSelects registers 18 dockable editor panel types, plus the Slot Grid overl
 | **Timeline** | `timeline` | Multi-track editor and playback surface |
 | **Media** | `media` | Media browser, folders, and project items |
 | **Properties** | `clip-properties` | Unified clip inspector |
+| **Tools** | `tools` | One tool strip for all workspaces: canvas tools for the Preview, or the Timeline's tool groups when the timeline was clicked last (see [Tools panel](#tools-panel)) |
 | **Layers** | `layers` | Layer view of the active composition (all layers of an image document, or the clips at the playhead) with each layer's masks and effect stack (see [Image Mode](/features/image-mode/)) |
 | **History** | `history` | Undo/redo history |
 | **Annotations** | `annotations` | Timed notes on the active composition and its source media, mirrored as ruler bars (see [Annotations](/features/annotations/)) |
@@ -606,7 +607,7 @@ The built-in `AUDIO EDIT` layout keeps Timeline above Media, Audio Mixer, and Pr
 
 The built-in `3D EDIT` layout keeps four independent Preview panels in a 2x2 grid above the Timeline, with Media and Properties/Export/History on the right. The previews open directly in Edit mode as Front, Side, Top, and Perspective views. Loading the layout keeps the current playhead when it is already covered by a camera clip, jumps to the earliest camera when cameras exist elsewhere in the composition, and creates one composition-length camera only when none exists.
 
-The built-in `IMAGE` layout edits still images: Media/AI Studio/AI Segment on the left, the Preview as a 2D edit canvas with the transparency grid in the center, and Layers/History above Properties/Coloring/Export on the right, without a timeline. See [Image Mode](/features/image-mode/).
+The built-in `IMAGE` layout edits still images: the Tools strip at the left edge, Media/AI Studio/AI Segment next to it, the Preview as a 2D edit canvas with the transparency grid in the center, and Layers/History above Properties/Coloring/Export on the right, without a timeline. See [Image Mode](/features/image-mode/).
 
 Medium and Mobile are presentation modifiers above the selected named layout rather than separate layout entries (`src/stores/dockStore/overLayoutMode.ts`, `src/components/dock/useOverLayoutSync.ts`). The bottom workspace bar exposes a **Medium** toggle and a **Mobile** toggle beside **Layouts** while continuing to highlight the underlying Video, Audio, 3D, Color, Image, or custom layout. The two modifiers stack: Medium alone applies the Medium editing arrangement (and the `app--medium-experience` styling) over the base workspace, Mobile alone applies the compact phone/tablet arrangement, and Medium plus Mobile applies the Medium-Mobile timeline skin (`src/components/timeline/MediumMobileTimeline.css`) in which the main timeline controls move from the ruler strip into the timebar, the mobile action bubbles are suppressed, and the Preview split uses Medium-specific ratios. Changing the base layout while a modifier is active immediately reapplies the matching arrangement; turning the modifiers off restores the saved panel and timeline arrangement from before they were entered. That pre-modifier snapshot lives in memory only, so after a page reload turning the modifiers off restores the factory arrangement of the base layout instead. Its horizontal/portrait arrangement is selected internally from the active composition aspect. On each entry into either Mobile arrangement, the Preview split is fitted once to the active composition; subsequent divider changes remain under user control until Mobile or the underlying layout is entered again. Detected phones, tablets, and other coarse-pointer devices enter Mobile automatically, but the same toggle can explicitly return them to desktop mode. Browser widths at or below the compact breakpoint follow `Settings -> General -> Automatically use Mobile layout when space is limited` and can likewise be overridden from the workspace bar. In the Video workspace and both internal Mobile factories, AI Studio occupies the left-side position formerly used by Discover, while Coloring occupies the right-side position formerly used by AI Studio.
 
@@ -787,6 +788,22 @@ Initializing WebGPU... during preview initialization
 ## Touch Devices
 
 Phones and tablets use the same docked editor shell as desktop browsers; Mobile is a responsive dock layout, not a separate editor implementation. Coarse-pointer devices, narrow browser windows, and portrait compositions can activate it automatically when the default-on setting is enabled. The internal horizontal/portrait choice is intentionally hidden behind the single `MOBILE` toolbar entry. Project hydration preserves the active device-managed Mobile dock tree, including its Properties group, instead of replacing it with a stale saved project layout. Touch-specific input support stays inside the shared timeline and panels: one-tap native media import, direct clip move and trim, ruler/playhead scrubbing, two-finger timeline zoom, long-press context menus positioned above the finger, double-tap Media Panel context menus, responsive Media Panel-to-Timeline dragging after a brief intent window, fast initial swipes reserved for native Classic Media-list scrolling, immediately captured dock splitters when the visible divider is touched, one-finger 3D orbit, and continuous two-finger camera dolly.
+
+## Tools Panel
+
+The `tools` panel (`src/components/panels/tools/`) is a 40 px strip of tool buttons, like Photoshop's toolbar. It is in the Image layout and can be added to any other layout from the Editing panel menu.
+
+- **Target:** it follows the surface clicked last. Clicking a Preview shows the canvas tools; clicking the Timeline shows the Timeline's tool groups. Two small buttons at the top switch the target by hand; they only appear while a Timeline panel is open.
+- **Canvas tools** (`src/stores/canvasToolStore.ts`, `src/services/canvasTools.ts`), active while the Preview is in Edit mode:
+  - **Move** (`V`): select, move and scale layers as before.
+  - **Hand** (`H`): a left drag pans the view. Middle drag and Alt-drag still pan with any tool.
+  - **Zoom** (`Z`): a click zooms in around the pointer, Alt-click zooms out.
+  - **Text** (`T`): a click places a text layer at that point, selects it and returns to Move.
+  - **Rectangle, ellipse and pen mask** (`R`, `E`, `P`): start drawing a mask on the selected layer and open the Properties Masks tab, whose overlay draws it. They are disabled without a selected layer.
+  - **AI Segment** opens the AI Segment panel and turns on click-to-segment when its model is loaded.
+- **Timeline tools:** one button per tool group (selection, cut, trim, placement, navigation) showing the group's current tool. A click calls the same `activateTimelineToolGroup` as the Timeline's own palette, so both stay in sync.
+- Tool keys are captured only while the canvas is the target, so the Timeline keeps its keys when it is the target. While the Masks tab is open, its own mask shortcuts take precedence.
+- A panel with a fixed size (Tools, the Color workspace's clip strip and mini timeline) keeps that size only in a tab group of its own. Docked as a tab next to other panels, the group stays resizable (`dockPanelSizing.ts`).
 
 ---
 

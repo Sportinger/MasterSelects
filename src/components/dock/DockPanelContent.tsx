@@ -50,6 +50,7 @@ const DocumentsPanel = lazy(() => import('../panels/documents/DocumentsPanel').t
 const MediaDiscoveryPanel = lazy(() => import('../panels/media-discovery/MediaDiscoveryPanel').then(m => ({ default: m.MediaDiscoveryPanel })));
 const ThreeDScanPanel = lazy(() => import('../panels/three-d-scan/ThreeDScanPanel').then(m => ({ default: m.ThreeDScanPanel })));
 const LayersPanel = lazy(() => import('../panels/layers/LayersPanel').then(m => ({ default: m.LayersPanel })));
+const ToolsPanel = lazy(() => import('../panels/tools/ToolsPanel').then(m => ({ default: m.ToolsPanel })));
 const CurvesPanel = lazy(() => import('../panels/curves/CurvesPanel').then(m => ({ default: m.CurvesPanel })));
 
 const DEFAULT_MULTI_PREVIEW_DATA: MultiPreviewPanelData = {
@@ -175,6 +176,8 @@ export function DockPanelContent({ panel, allowPanelMaximize = false }: DockPane
       return <Suspense fallback={<PanelLoading />}><TransitionsPanel /></Suspense>;
     case 'layers':
       return <Suspense fallback={<PanelLoading />}><LayersPanel /></Suspense>;
+    case 'tools':
+      return <Suspense fallback={<PanelLoading />}><ToolsPanel /></Suspense>;
     case 'scene-description':
       return <Suspense fallback={<PanelLoading />}><SceneDescriptionPanel /></Suspense>;
     case 'scope-waveform':

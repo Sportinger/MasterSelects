@@ -1,0 +1,90 @@
+.tools-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  padding: 6px 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+}
+
+.tools-panel-targets {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tools-panel-targets .tools-panel-button {
+  width: 28px;
+  height: 22px;
+}
+
+.tools-panel-button {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tools-panel-button svg {
+  fill: none;
+}
+
+.tools-panel-button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.tools-panel-button.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--text-primary);
+}
+
+.tools-panel-button:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.tools-panel-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.tools-panel-separator {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-color);
+}
+
+/* The Tools column is 40 px wide: keep its tab compact. */
+.dock-tab-pane[data-active-panel-type='tools'] .dock-tab-add {
+  display: none;
+}
+
+.dock-tab-pane[data-active-panel-type='tools'] .dock-tab {
+  min-width: 0;
+  padding: 0 4px;
+}
+
+.dock-tab-pane[data-active-panel-type='tools'] .dock-tab-title {
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: clip;
+}

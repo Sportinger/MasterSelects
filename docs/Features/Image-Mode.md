@@ -32,6 +32,8 @@ The factory layout `factory-image-edit`
 (`src/stores/dockStore/imageLayoutDefaults.ts`) is the **Image** button in the
 bottom workspace bar:
 
+- **Left edge:** the Tools strip (Move, Hand, Zoom, Text, mask tools, AI
+  Segment). See [UI Panels](./UI-Panels.md#tools-panel).
 - **Left:** Media, AI Studio, AI Segment.
 - **Center:** Preview as the canvas. It opens in 2D edit mode with the
   transparency grid. A preview with `initialEditMode` and no
@@ -133,12 +135,13 @@ Controls:
 | Layers panel, mask and effect child rows | `src/components/panels/layers/` |
 | Preview rulers and still-image zoom bar | `src/components/preview/PreviewRulers.tsx`, `previewRulerTicks.ts`, `PreviewCanvasZoomBar.tsx`, `usePreviewCanvasZoom.ts` |
 | Guides | `src/services/compositionGuides.ts`, `src/components/preview/PreviewGuides.tsx`, `usePreviewGuideDrag.ts`, `previewGuideMath.ts` |
+| Tools strip and canvas tools | `src/components/panels/tools/`, `src/stores/canvasToolStore.ts`, `src/services/canvasTools.ts`, `src/components/preview/usePreviewCanvasToolPointer.ts` |
 | Layer sync without a Timeline panel | `src/components/common/HeadlessLayerSync.tsx`, `src/components/timeline/hooks/timelineLayerSyncOwners.ts` |
 
 ## Limitations
 
-- **No pixel tools yet:** there is no brush, eraser, clone, healing, or
-  marquee, lasso or magic-wand selection. Masks are vector masks; the SAM2
+- **No pixel tools yet:** the Tools strip has no brush, eraser, clone,
+  healing, or marquee, lasso or magic-wand selection. Masks are vector masks; the SAM2
   brush in AI Segment paints a matte prompt.
 - No PSD import or export.
 - Layer groups are not shown, although tracks already carry `parentTrackId`.
@@ -147,5 +150,6 @@ Controls:
 
 Tests: `tests/unit/imageDocumentLayers.test.ts`, `tests/unit/previewRulerTicks.test.ts`,
 `tests/unit/previewGuides.test.ts`, `tests/unit/timelineLayerSyncOwners.test.tsx`,
+`tests/unit/ToolsPanel.test.tsx`, `tests/unit/dockPanelSizing.test.ts` (Tools width),
 `tests/unit/dockStoreLayouts.test.ts` (Image layout),
 `tests/unit/projectCompositionDurationPersistence.test.ts` (still flag, guides).
