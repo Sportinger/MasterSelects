@@ -357,6 +357,8 @@ export interface Composition extends MediaItem {
    * (one clip per video track) span the whole locked duration.
    */
   still?: boolean;
+  /** Ruler guides in composition pixels, shown and snapped to in the Preview. */
+  guides?: import('../../types/compositionGuides').CompositionGuide[];
 }
 
 // Folder for organization

@@ -278,6 +278,7 @@ export function convertCompositions(compositions: Composition[]): ProjectComposi
       multicam: comp.multicam ? structuredClone(comp.multicam) : undefined,
       renderSettings: comp.renderSettings ? structuredClone(comp.renderSettings) : undefined,
       still: comp.still === true ? true : undefined,
+      guides: comp.guides?.length ? comp.guides.map((guide) => ({ ...guide })) : undefined,
       tracks,
       clips,
       videoBakeRegions: timelineData?.videoBakeRegions

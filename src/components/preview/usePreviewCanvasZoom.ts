@@ -15,8 +15,11 @@ export interface PreviewCanvasZoom {
 
 interface UsePreviewCanvasZoomOptions {
   enabled: boolean;
-  /** Fitted (zoom 1) canvas width in CSS pixels. */
-  fittedWidth: number;
+  /** Fitted (zoom 1) canvas size in CSS pixels. */
+  fittedSize: { width: number; height: number };
+  containerSize: { width: number; height: number };
+  /** Rulers along the top and left edge; Fit keeps the canvas clear of them. */
+  rulerInset: number;
   compositionWidth: number;
   viewZoom: number;
   setViewZoom: Dispatch<SetStateAction<number>>;
@@ -26,12 +29,16 @@ interface UsePreviewCanvasZoomOptions {
 /** Image-style zoom commands for the preview canvas; zooms around the view center. */
 export function usePreviewCanvasZoom({
   enabled,
-  fittedWidth,
+  fittedSize,
+  containerSize,
+  rulerInset,
   compositionWidth,
   viewZoom,
   setViewZoom,
   setViewPan,
 }: UsePreviewCanvasZoomOptions): PreviewCanvasZoom | null {
+  const fittedWidth = fittedSize.width;
+  const fittedHeight = fittedSize.height;
   return useMemo(() => {
     if (!enabled || !(fittedWidth > 0) || !(compositionWidth > 0)) return null;
     const zoomTo = (nextZoom: number) => {
@@ -43,12 +50,20 @@ export function usePreviewCanvasZoom({
     return {
       percent: Math.round((fittedWidth * viewZoom / compositionWidth) * 100),
       fit: () => {
-        setViewZoom(1);
-        setViewPan({ x: 0, y: 0 });
+        const availableWidth = containerSize.width - rulerInset;
+        const availableHeight = containerSize.height - rulerInset;
+        if (rulerInset <= 0 || !(availableWidth > 0 && availableHeight > 0 && fittedHeight > 0)) {
+          setViewZoom(1);
+          setViewPan({ x: 0, y: 0 });
+          return;
+        }
+        // Fit into the area right of and below the rulers, centered there.
+        setViewZoom(Math.min(availableWidth / fittedWidth, availableHeight / fittedHeight));
+        setViewPan({ x: rulerInset / 2, y: rulerInset / 2 });
       },
       actualPixels: () => zoomTo(compositionWidth / fittedWidth),
       zoomIn: () => zoomTo(viewZoom * ZOOM_STEP),
       zoomOut: () => zoomTo(viewZoom / ZOOM_STEP),
     };
-  }, [compositionWidth, enabled, fittedWidth, setViewPan, setViewZoom, viewZoom]);
+  }, [compositionWidth, containerSize.height, containerSize.width, enabled, fittedHeight, fittedWidth, rulerInset, setViewPan, setViewZoom, viewZoom]);
 }

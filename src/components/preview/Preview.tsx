@@ -49,6 +49,8 @@ import { usePreviewRenderTargetRegistration } from './usePreviewRenderTargetRegi
 import { usePreviewSceneNavigation } from './usePreviewSceneNavigation';
 import { usePreviewSourceConfig } from './usePreviewSourceConfig';
 import { usePreviewViewGeometry } from './usePreviewViewGeometry';
+import { PREVIEW_RULER_SIZE } from './PreviewRulers';
+import { usePreviewGuideSnapPoints } from './usePreviewGuideSnapPoints';
 import { usePreviewCanvasZoom } from './usePreviewCanvasZoom';
 import { usePreviewViewport } from './usePreviewViewport';
 import { usePreviewWheelHandler } from './usePreviewWheelHandler';
@@ -671,11 +673,12 @@ export function Preview({ panelId, source, showTransparencyGrid, showRulers = fa
     viewNavigationEnabled,
   });
 
+  const rulersVisible = showRulers && !sourceMonitorActive && !usesPanelSizedEditViewport;
   const canvasZoom = usePreviewCanvasZoom({
     enabled: displayedCompIsStill && !sourceMonitorActive && !usesPanelSizedEditViewport,
-    fittedWidth: canvasSize.width, compositionWidth: effectiveResolution.width, viewZoom, setViewZoom, setViewPan,
+    fittedSize: canvasSize, containerSize, rulerInset: rulersVisible ? PREVIEW_RULER_SIZE : 0,
+    compositionWidth: effectiveResolution.width, viewZoom, setViewZoom, setViewPan,
   });
-  const rulersVisible = showRulers && !sourceMonitorActive && !usesPanelSizedEditViewport;
   const { canvasInContainer, viewTransform } = usePreviewViewGeometry({
     canvasSize,
     containerSize,
@@ -706,13 +709,14 @@ export function Preview({ panelId, source, showTransparencyGrid, showRulers = fa
       getLayerProjectionTransform,
     });
 
+  const guideSnapPoints = usePreviewGuideSnapPoints(rulersVisible ? displayedCompId : null, canvasSize, effectiveResolution);
   // Layer drag logic (move/scale, overlay drawing, document-level listeners)
   const { isDragging, dragMode, dragHandle, hoverHandle, handleOverlayMouseDown, handleOverlayMouseMove, handleOverlayMouseUp } =
     useLayerDrag({
       editMode: layerTransformMode, overlayRef, canvasSize, canvasInContainer, viewZoom,
       layers, clips, tracks, selectedLayerId, selectedClipId,
       selectClip, selectLayer, hasKeyframes, setPropertyValue, updateClipTransform, updateLayer,
-      calculateLayerBounds, findLayersAtPosition, findHandleAtPosition,
+      calculateLayerBounds, findLayersAtPosition, findHandleAtPosition, guideSnapPoints,
     });
 
   const motionPathLayer = useMemo(

@@ -211,9 +211,20 @@ RAM preview is implemented by `RamPreviewEngine` and the timeline RAM preview sl
 ## Rulers And Still-Image Zoom
 
 - Every dock preview has pixel rulers along its top and left edges. Toggle them with the ruler button in the viewer tools or `Shift+R`. The choice is stored per preview panel (`showRulers`); the Image workspace opens with rulers on.
-- Rulers count composition pixels from the canvas origin. They follow zoom and pan, tint the canvas span, and mark the pointer position. They are SVG (`PreviewRulers.tsx`, ticks from `previewRulerTicks.ts`) and ignore pointer input.
+- Rulers count composition pixels from the canvas origin. They follow zoom and pan, tint the canvas span, and mark the pointer position. The pointer marker is measured against the rulers' own box, because their parent element is `display: contents`. They are SVG (`PreviewRulers.tsx`, ticks from `previewRulerTicks.ts`).
 - Rulers are hidden in the Source Monitor and in panel-sized 3D camera edit views, where screen space does not map to composition pixels.
-- When the displayed composition is an image document (`still`), the scrubber and playback row are replaced by a zoom bar: composition size, zoom out, **Fit**, **1:1** (actual pixels), zoom in, and the zoom level relative to the composition's pixels (`PreviewCanvasZoomBar.tsx`, `usePreviewCanvasZoom.ts`).
+- When the displayed composition is an image document (`still`), the scrubber and playback row are replaced by a zoom bar: composition size, zoom out, **Fit**, **1:1** (actual pixels), zoom in, and the zoom level relative to the composition's pixels (`PreviewCanvasZoomBar.tsx`, `usePreviewCanvasZoom.ts`). With rulers on, **Fit** places the canvas in the area right of and below the rulers.
+
+### Guides
+
+Guides are cyan lines across the preview, like Photoshop guides. They belong to the composition (`Composition.guides`, composition pixels, `src/types/compositionGuides.ts`), so they are saved with the project, undoable and shared by every preview of that composition.
+
+- **Create:** drag down out of the top ruler for a horizontal guide, or right out of the left ruler for a vertical guide. A readout shows the position.
+- **Move:** drag a guide. Positions are whole composition pixels; holding Shift snaps to the canvas edges and center.
+- **Remove:** drag a guide back onto its ruler or out of the preview (the readout says **Remove guide**), or focus it and press Delete or Backspace. The × in the ruler corner clears all guides of the composition.
+- **Keyboard:** guides are focusable sliders. The arrow keys along the guide's axis nudge it by 1 px, with Shift by 10 px. Escape cancels a drag.
+- Guides show and hide together with the rulers (`Shift+R`). While visible, moving a layer in Edit mode always snaps its edges and center to them; Shift adds the canvas and layer targets.
+- A drag writes the composition once on release, so each guide drag is one undo step (`usePreviewGuideDrag.ts`, `src/services/compositionGuides.ts`). Invalid stored guides are dropped with a warning on load.
 
 ## Edit Mode
 
@@ -236,7 +247,8 @@ Edit mode is a canvas overlay for layer transforms.
 - Camera Edit mode uses an independent editor camera with a 35 mm default, initially offset so the timeline camera is visible as an object. Navigating the editor view never changes the timeline camera; dragging the timeline camera's object gizmo updates its output live in every normal Preview.
 - The projected timeline-camera frame in camera Edit mode is a world-space object drawn from the camera's FOV/mm and Resolution X/Y. It becomes smaller with distance, wide lenses draw a larger front frame, tele lenses draw a smaller one, and the frame aspect follows the camera resolution.
 - Edit views can render a projected world grid that follows camera-view animation instead of snapping as a screen overlay. The grid plane matches the edit view: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`.
-- Holding Shift while dragging a layer in Edit mode enables snapping for that drag. The layer can snap to composition edges/center and to the bounds of other visible layers; without Shift, layer movement stays free.
+- Holding Shift while dragging a layer in Edit mode enables snapping for that drag. The layer can snap to composition edges/center and to the bounds of other visible layers. Visible ruler guides snap without Shift; otherwise layer movement stays free.
+- Hit-testing and handles use the render layers that the Timeline panel syncs. In layouts without a Timeline panel (the Image workspace), `EditorPlaybackRuntimeHost` runs the same layer sync headlessly (`HeadlessLayerSync.tsx`, `timelineLayerSyncOwners.ts`).
 
 ### Scene Camera Navigation
 

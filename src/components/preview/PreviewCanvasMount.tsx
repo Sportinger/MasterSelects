@@ -438,6 +438,7 @@ export function PreviewCanvasMount({
           <PreviewRulers
             canvasInContainer={canvasInContainer}
             compositionHeight={effectiveResolution.height}
+            compositionId={displayedCompId ?? null}
             compositionWidth={effectiveResolution.width}
             containerSize={containerSize}
           />

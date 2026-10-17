@@ -1,5 +1,6 @@
 import { useAutoFeatures } from './useAutoFeatures';
 import { useLayerSync } from './useLayerSync';
+import { useRegisterTimelineLayerSyncOwner } from './timelineLayerSyncOwners';
 import { usePlayheadSnap } from './usePlayheadSnap';
 import { useTimelineKeyboard } from './useTimelineKeyboard';
 
@@ -118,6 +119,7 @@ export function useTimelinePlaybackSideEffectsController({
     cancelRamPreview,
   });
 
+  useRegisterTimelineLayerSyncOwner();
   useLayerSync({
     playheadPosition,
     clips,

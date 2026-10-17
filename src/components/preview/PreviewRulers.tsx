@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { IconX } from '@tabler/icons-react';
+import { clearCompositionGuides } from '../../services/compositionGuides';
+import { useMediaStore } from '../../stores/mediaStore';
 import { computeRulerTicks } from './previewRulerTicks';
+import { PreviewGuides } from './PreviewGuides';
+import type { GuideViewport } from './previewGuideMath';
+import { usePreviewGuideDrag } from './usePreviewGuideDrag';
 import './PreviewRulers.css';
 
 export const PREVIEW_RULER_SIZE = 18;
@@ -10,12 +16,32 @@ interface PreviewRulersProps {
   containerSize: { width: number; height: number };
   compositionWidth: number;
   compositionHeight: number;
+  /** Composition whose guides are shown and edited; null disables guides. */
+  compositionId: string | null;
 }
 
-/** Photoshop-style pixel rulers along the top and left preview edges, in composition pixels. */
-export function PreviewRulers({ canvasInContainer, containerSize, compositionWidth, compositionHeight }: PreviewRulersProps) {
+/**
+ * Photoshop-style pixel rulers along the top and left preview edges, in
+ * composition pixels. Dragging out of a ruler creates a guide.
+ */
+export function PreviewRulers({ canvasInContainer, containerSize, compositionWidth, compositionHeight, compositionId }: PreviewRulersProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+  const guides = useMediaStore((state) => (
+    compositionId ? state.compositions.find((composition) => composition.id === compositionId)?.guides : undefined
+  ));
+  const viewport = useMemo<GuideViewport>(() => ({
+    canvasInContainer,
+    containerSize,
+    compositionWidth,
+    compositionHeight,
+  }), [canvasInContainer, compositionHeight, compositionWidth, containerSize]);
+  const { drag, startCreate, startMove } = usePreviewGuideDrag({
+    rootRef,
+    compositionId,
+    viewport,
+    rulerSize: PREVIEW_RULER_SIZE,
+  });
   const scaleX = compositionWidth > 0 ? canvasInContainer.width / compositionWidth : 0;
   const scaleY = compositionHeight > 0 ? canvasInContainer.height / compositionHeight : 0;
   const horizontal = useMemo(
@@ -28,10 +54,13 @@ export function PreviewRulers({ canvasInContainer, containerSize, compositionWid
   );
 
   useEffect(() => {
-    const host = rootRef.current?.parentElement;
-    if (!host) return;
+    const root = rootRef.current;
+    // The parent can be `display: contents` with an empty rect, so measure
+    // against the rulers' own box, which covers the preview container.
+    const host = root?.parentElement;
+    if (!root || !host) return;
     const move = (event: PointerEvent) => {
-      const rect = host.getBoundingClientRect();
+      const rect = root.getBoundingClientRect();
       setPointer({ x: event.clientX - rect.left, y: event.clientY - rect.top });
     };
     const leave = () => setPointer(null);
@@ -45,10 +74,23 @@ export function PreviewRulers({ canvasInContainer, containerSize, compositionWid
 
   if (!(scaleX > 0 && scaleY > 0)) return null;
   const size = PREVIEW_RULER_SIZE;
+  const marker = drag?.pointer ?? pointer;
+  const guidesEditable = compositionId !== null;
+  const guideCount = guides?.length ?? 0;
 
   return (
-    <div aria-hidden="true" className="preview-rulers" ref={rootRef}>
-      <svg className="preview-ruler preview-ruler-horizontal" height={size} width={containerSize.width}>
+    <div className="preview-rulers" ref={rootRef}>
+      {compositionId && (
+        <PreviewGuides compositionId={compositionId} drag={drag} guides={guides ?? []} onStartMove={startMove} viewport={viewport} />
+      )}
+      <svg
+        aria-hidden="true"
+        className={`preview-ruler preview-ruler-horizontal${guidesEditable ? ' guide-source' : ''}`}
+        height={size}
+        onPointerDown={guidesEditable ? (event) => startCreate(event, 'horizontal') : undefined}
+        width={containerSize.width}
+      >
+        <title>Drag down to add a horizontal guide</title>
         <rect className="preview-ruler-canvas-span" height={size} width={Math.max(0, canvasInContainer.width)} x={canvasInContainer.x} y={0} />
         {horizontal.map((tick) => (
           <g key={tick.value}>
@@ -56,9 +98,16 @@ export function PreviewRulers({ canvasInContainer, containerSize, compositionWid
             {tick.major && <text x={tick.offset + 3} y={9}>{tick.value}</text>}
           </g>
         ))}
-        {pointer && <line className="preview-ruler-pointer" x1={pointer.x} x2={pointer.x} y1={0} y2={size} />}
+        {marker && <line className="preview-ruler-pointer" x1={marker.x} x2={marker.x} y1={0} y2={size} />}
       </svg>
-      <svg className="preview-ruler preview-ruler-vertical" height={containerSize.height} width={size}>
+      <svg
+        aria-hidden="true"
+        className={`preview-ruler preview-ruler-vertical${guidesEditable ? ' guide-source' : ''}`}
+        height={containerSize.height}
+        onPointerDown={guidesEditable ? (event) => startCreate(event, 'vertical') : undefined}
+        width={size}
+      >
+        <title>Drag right to add a vertical guide</title>
         <rect className="preview-ruler-canvas-span" height={Math.max(0, canvasInContainer.height)} width={size} x={0} y={canvasInContainer.y} />
         {vertical.map((tick) => (
           <g key={tick.value}>
@@ -68,9 +117,21 @@ export function PreviewRulers({ canvasInContainer, containerSize, compositionWid
             )}
           </g>
         ))}
-        {pointer && <line className="preview-ruler-pointer" x1={0} x2={size} y1={pointer.y} y2={pointer.y} />}
+        {marker && <line className="preview-ruler-pointer" x1={0} x2={size} y1={marker.y} y2={marker.y} />}
       </svg>
-      <div className="preview-ruler-corner" />
+      {guideCount > 0 && compositionId ? (
+        <button
+          aria-label={`Clear ${guideCount} guide${guideCount === 1 ? '' : 's'}`}
+          className="preview-ruler-corner preview-ruler-clear"
+          onClick={() => clearCompositionGuides(compositionId)}
+          title="Clear guides"
+          type="button"
+        >
+          <IconX aria-hidden="true" size={11} stroke={2} />
+        </button>
+      ) : (
+        <div aria-hidden="true" className="preview-ruler-corner" />
+      )}
     </div>
   );
 }

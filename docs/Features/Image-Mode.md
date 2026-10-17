@@ -102,7 +102,10 @@ Controls:
 ## Preview
 
 - The Image workspace preview opens with pixel rulers (`Shift+R` toggles
-  them).
+  them). Drag out of a ruler to create a guide; layers snap to visible guides
+  while you move them. See [Preview](./Preview.md#guides).
+- The workspace has no Timeline panel, so `EditorPlaybackRuntimeHost` syncs
+  the render layers that preview hit-testing and transform handles use.
 - For image documents the time transport is replaced by a zoom bar with Fit,
   1:1, zoom steps and the zoom level. See [Preview](./Preview.md#rulers-and-still-image-zoom).
 
@@ -129,6 +132,8 @@ Controls:
 | Workspace layout | `src/stores/dockStore/imageLayoutDefaults.ts` |
 | Layers panel, mask and effect child rows | `src/components/panels/layers/` |
 | Preview rulers and still-image zoom bar | `src/components/preview/PreviewRulers.tsx`, `previewRulerTicks.ts`, `PreviewCanvasZoomBar.tsx`, `usePreviewCanvasZoom.ts` |
+| Guides | `src/services/compositionGuides.ts`, `src/components/preview/PreviewGuides.tsx`, `usePreviewGuideDrag.ts`, `previewGuideMath.ts` |
+| Layer sync without a Timeline panel | `src/components/common/HeadlessLayerSync.tsx`, `src/components/timeline/hooks/timelineLayerSyncOwners.ts` |
 
 ## Limitations
 
@@ -141,5 +146,6 @@ Controls:
   a timeline, over the Image workspace.
 
 Tests: `tests/unit/imageDocumentLayers.test.ts`, `tests/unit/previewRulerTicks.test.ts`,
+`tests/unit/previewGuides.test.ts`, `tests/unit/timelineLayerSyncOwners.test.tsx`,
 `tests/unit/dockStoreLayouts.test.ts` (Image layout),
-`tests/unit/projectCompositionDurationPersistence.test.ts` (still flag).
+`tests/unit/projectCompositionDurationPersistence.test.ts` (still flag, guides).
