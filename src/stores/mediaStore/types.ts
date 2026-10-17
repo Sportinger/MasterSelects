@@ -352,6 +352,11 @@ export interface Composition extends MediaItem {
   multicam?: import('../../types/multicam').CompositionMulticam;
   /** Render engine of the native 3D scene and its preview quality; absent means raster. */
   renderSettings?: import('../../types/renderSettings').CompositionRenderSettings;
+  /**
+   * Image document edited in the Image workspace: one still frame whose layers
+   * (one clip per video track) span the whole locked duration.
+   */
+  still?: boolean;
 }
 
 // Folder for organization

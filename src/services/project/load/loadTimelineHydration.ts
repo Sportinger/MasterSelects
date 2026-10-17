@@ -468,6 +468,7 @@ export function convertProjectCompositionToStore(
       annotations: pc.annotations ? structuredClone(pc.annotations) : undefined,
       multicam: pc.multicam ? structuredClone(pc.multicam) : undefined,
       renderSettings: pc.renderSettings ? normalizeCompositionRenderSettings(pc.renderSettings) : undefined,
+      still: pc.still === true ? true : undefined,
       timelineData,
     };
   });

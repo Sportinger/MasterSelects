@@ -1,0 +1,252 @@
+.layers-panel {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: var(--font-sm);
+}
+
+.layers-panel.file-drop {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+.layers-panel :is(.layers-header, .layers-notice, .layers-list, .layers-toolbar, .layers-start) :is(button, input) {
+  min-width: 0;
+  font: inherit;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 5px 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.layers-panel :is(.layers-header, .layers-notice, .layers-list, .layers-toolbar, .layers-start) button { cursor: pointer; }
+.layers-panel :is(.layers-header, .layers-notice, .layers-list, .layers-toolbar, .layers-start) button:disabled { opacity: 0.45; cursor: default; }
+.layers-panel :is(.layers-header, .layers-notice, .layers-list, .layers-toolbar, .layers-start) button:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.layers-panel :is(.layers-header, .layers-notice, .layers-list, .layers-toolbar, .layers-start) :is(button, input):focus:not(:focus-visible),
+.layers-row:focus:not(:focus-visible) { outline: none; }
+.layers-panel :is(.layers-header, .layers-notice, .layers-list, .layers-toolbar, .layers-start) :is(button, input):focus-visible,
+.layers-row:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+
+.layers-panel .layers-icon-button.layers-icon-button {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-color: transparent;
+  background: transparent;
+}
+
+.layers-header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.layers-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.layers-title strong,
+.layers-title span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.layers-title strong { font-weight: var(--font-semibold); }
+.layers-title span { font-size: var(--font-xs); color: var(--text-muted); }
+
+.layers-notice {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: var(--font-xs);
+  color: var(--text-muted);
+}
+
+.layers-blend {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.layers-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.layers-empty {
+  padding: 18px 12px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}
+
+.layers-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.layers-row:hover { background: var(--bg-hover); }
+.layers-row.selected { background: color-mix(in srgb, var(--accent) 18%, var(--bg-secondary)); }
+.layers-row.hidden-layer .layers-thumbnail,
+.layers-row.hidden-layer .layers-name { opacity: 0.45; }
+.layers-row.drop-above::before,
+.layers-row.drop-below::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.layers-row.drop-above::before { top: -1px; }
+.layers-row.drop-below::after { bottom: -1px; }
+
+.layers-thumbnail {
+  flex: none;
+  width: 44px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm, 3px);
+  background:
+    repeating-conic-gradient(var(--bg-tertiary) 0 25%, var(--bg-secondary) 0 50%) 0 0 / 8px 8px;
+  color: var(--text-muted);
+}
+
+.layers-thumbnail-swatch {
+  width: 100%;
+  height: 100%;
+}
+
+.layers-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.layers-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.layers-name span,
+.layers-name small {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.layers-name small { font-size: var(--font-xs); color: var(--text-muted); }
+.layers-name input { width: 100%; padding: 2px 4px; }
+
+.layers-panel .layers-row .layers-lock { color: var(--text-muted); }
+.layers-panel .layers-row .layers-lock.active { color: var(--text-primary); }
+@media (hover: hover) {
+  .layers-row:not(:hover):not(.selected) .layers-lock:not(.active):not(:focus-visible) { opacity: 0; }
+}
+
+.layers-toolbar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.layers-toolbar-spacer { flex: 1; }
+
+.layers-start {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  overflow: auto;
+}
+
+.layers-start h3 {
+  margin: 0;
+  font-size: var(--font-md, 13px);
+  font-weight: var(--font-semibold);
+}
+
+.layers-field {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: var(--font-xs);
+}
+
+.layers-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.layers-field-pair .layers-field { grid-template-columns: 18px minmax(0, 1fr); }
+
+.layers-panel .layers-start .layers-primary-button {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--accent) 25%, var(--bg-secondary));
+}
+
+.layers-start-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-color);
+}
+
+.layers-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+}

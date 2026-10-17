@@ -69,6 +69,7 @@ export const createCompositionCrudActions: MediaSliceCreator<Pick<
       }),
       transitionComp: settings?.transitionComp ? structuredClone(settings.transitionComp) : undefined,
       captionComp: settings?.captionComp ? structuredClone(settings.captionComp) : undefined,
+      still: settings?.still === true ? true : undefined,
     };
 
     set((state) => ({ compositions: [...state.compositions, comp] }));

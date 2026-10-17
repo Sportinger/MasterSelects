@@ -2,6 +2,7 @@ import {
   FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
   FACTORY_COLOR_LAYOUT_ID,
+  FACTORY_IMAGE_EDIT_LAYOUT_ID,
   FACTORY_MOBILE_LAYOUT_ID,
   FACTORY_START_LAYOUT_ID,
   FACTORY_VIDEO_EDIT_LAYOUT_ID,
@@ -78,6 +79,16 @@ export function WorkspacePageIcon({ layoutId, size = 20 }: WorkspacePageIconProp
         <circle cx="5.4" cy="14.4" fill="#d4a445" r="1.7" />
         <circle cx="5.2" cy="9" fill="#e05751" r="1.7" />
         <circle cx="12" cy="12" fill="#8a8d8c" r="1.7" />
+      </svg>
+    );
+  }
+
+  if (layoutId === FACTORY_IMAGE_EDIT_LAYOUT_ID) {
+    return (
+      <svg {...svgProps}>
+        <rect height="15" rx="2" stroke="currentColor" strokeWidth="1.4" width="18" x="3" y="4.5" />
+        <path d="m4.2 17.6 5.3-6 3.6 3.9 2.3-2.4 4.4 4.5" stroke="#58c884" strokeLinejoin="round" strokeWidth="1.4" />
+        <circle cx="16" cy="9" fill="#f1c94b" r="1.7" />
       </svg>
     );
   }

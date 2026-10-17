@@ -6,6 +6,7 @@ import {
   FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
   FACTORY_COLOR_LAYOUT_ID,
+  FACTORY_IMAGE_EDIT_LAYOUT_ID,
   FACTORY_LIVE_LAYOUT_ID,
   FACTORY_MOBILE_LAYOUT_ID,
   FACTORY_MEDIUM_EDIT_LAYOUT_ID,
@@ -162,6 +163,19 @@ describe('dock store saved layouts', () => {
       'timeline',
     ]);
     expect(useTimelineStore.getState().trackHeaderWidth).toBe(164);
+  });
+
+  it('opens the Image workspace with a 2D edit canvas, layers, and no timeline', () => {
+    useDockStore.getState().loadSavedLayout(FACTORY_IMAGE_EDIT_LAYOUT_ID);
+
+    const state = useDockStore.getState();
+    expect(state.activeSavedLayoutId).toBe(FACTORY_IMAGE_EDIT_LAYOUT_ID);
+    const preview = findTabGroup(state.layout.root, 'preview-group')?.panels[0];
+    expect(preview).toMatchObject({ type: 'preview', data: { initialEditMode: true, showTransparencyGrid: true } });
+    expect(preview?.data).not.toHaveProperty('initialEditCameraView');
+    expect(panelTypes(findTabGroup(state.layout.root, 'image-layers-group'))).toEqual(['layers', 'history']);
+    expect(panelTypes(findTabGroup(state.layout.root, 'right-group'))).toEqual(['clip-properties', 'color-controls', 'export']);
+    expect(JSON.stringify(state.layout.root)).not.toContain('"type":"timeline"');
   });
 
   it('uses the scene-focused monitor, program, analytics, and chat structure for Live', () => {
@@ -840,6 +854,7 @@ describe('dock store saved layouts', () => {
       FACTORY_AUDIO_EDIT_LAYOUT_ID,
       FACTORY_3D_EDIT_LAYOUT_ID,
       FACTORY_COLOR_LAYOUT_ID,
+      FACTORY_IMAGE_EDIT_LAYOUT_ID,
       FACTORY_LIVE_LAYOUT_ID,
       FACTORY_START_LAYOUT_ID,
     ]);

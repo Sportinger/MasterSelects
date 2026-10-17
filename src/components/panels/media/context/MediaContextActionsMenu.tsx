@@ -233,6 +233,16 @@ export function MediaContextActionsMenu({
             </div>
           )}
 
+          {!multiSelect && isImageFile && mediaFile && (
+            <div className="context-menu-item" onClick={() => {
+              void import('../../../../services/imageDocument/imageDocumentService')
+                .then(({ openMediaFileAsImageDocument }) => openMediaFileAsImageDocument(mediaFile));
+              onClose();
+            }}>
+              Edit as Image
+            </div>
+          )}
+
           {!multiSelect && canCreateCompositionFromSelection && (
             <div className="context-menu-item" onClick={() => { void onCreateCompositionFromItem(composition ?? mediaFile!); }}>
               Create Comp

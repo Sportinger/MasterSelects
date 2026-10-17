@@ -235,7 +235,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
   const activeCameraClipAtPlayhead = useActiveCameraClipAtPlayhead(clips, tracks, playheadPosition);
   const editCameraModeActive = Boolean(
     isEditableSource && editMode && !maskPanelActive
-    && (initialEdit?.initialEditMode || activeCameraClipAtPlayhead),
+    && ((initialEdit?.initialEditMode && initialEdit.initialEditCameraView !== undefined) || activeCameraClipAtPlayhead),
   );
   const usesPanelSizedEditViewport = !maskPanelActive
     && (editCameraModeActive || previewCameraOverride !== null);

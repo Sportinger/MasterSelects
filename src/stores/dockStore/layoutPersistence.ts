@@ -21,6 +21,7 @@ import {
   FACTORY_3D_EDIT_LAYOUT_ID,
   FACTORY_AUDIO_EDIT_LAYOUT_ID,
   FACTORY_COLOR_LAYOUT_ID,
+  FACTORY_IMAGE_EDIT_LAYOUT_ID,
   FACTORY_LIVE_LAYOUT_ID,
   FACTORY_MOBILE_LAYOUT_ID,
   FACTORY_MEDIUM_EDIT_LAYOUT_ID,
@@ -32,6 +33,7 @@ import {
   VALID_PANEL_TYPES,
 } from './panelRegistry';
 import { LIVE_LAYOUT } from './liveLayoutDefaults';
+import { IMAGE_EDIT_LAYOUT } from './imageLayoutDefaults';
 import { findTabGroupById } from './layoutTree';
 
 interface NormalizedDockPanel {
@@ -314,7 +316,9 @@ export function mergeFactoryDockLayouts(savedLayouts: SavedDockLayout[]): SavedD
                       ? applyFactory3DEditPreviewDefaults(factoryDefault?.layout ?? savedLayout.layout)
                       : factoryId === FACTORY_LIVE_LAYOUT_ID
                         ? LIVE_LAYOUT
-                        : savedLayout.layout,
+                        : factoryId === FACTORY_IMAGE_EDIT_LAYOUT_ID
+                          ? IMAGE_EDIT_LAYOUT
+                          : savedLayout.layout,
           factory: true,
           favorite: savedLayout.favorite === true,
         });

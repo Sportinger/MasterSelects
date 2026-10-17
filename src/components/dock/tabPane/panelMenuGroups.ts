@@ -16,6 +16,7 @@ const PANEL_MENU_GROUP_DEFINITIONS: readonly PanelMenuGroup[] = [
       'timeline',
       'curves',
       'media',
+      'layers',
       'clip-properties',
       'history',
       'annotations',

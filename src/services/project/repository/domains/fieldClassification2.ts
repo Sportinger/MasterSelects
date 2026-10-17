@@ -394,6 +394,7 @@ export const ProjectCompositionFields = {
   "annotations": { class: 'content', owner: 'timeline' },
   "multicam": { class: 'content', owner: 'timeline' },
   "renderSettings": { class: 'content', owner: 'timeline' },
+  "still": { class: 'content', owner: 'timeline' },
   "tracks": { class: 'content', owner: 'timeline' },
   "clips": { class: 'content', owner: 'timeline' },
   "videoBakeRegions": { class: 'content', owner: 'timeline' },

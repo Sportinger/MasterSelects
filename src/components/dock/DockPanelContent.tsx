@@ -49,6 +49,7 @@ const AnnotationsPanel = lazy(() => import('../panels/annotations/AnnotationsPan
 const DocumentsPanel = lazy(() => import('../panels/documents/DocumentsPanel').then(m => ({ default: m.DocumentsPanel })));
 const MediaDiscoveryPanel = lazy(() => import('../panels/media-discovery/MediaDiscoveryPanel').then(m => ({ default: m.MediaDiscoveryPanel })));
 const ThreeDScanPanel = lazy(() => import('../panels/three-d-scan/ThreeDScanPanel').then(m => ({ default: m.ThreeDScanPanel })));
+const LayersPanel = lazy(() => import('../panels/layers/LayersPanel').then(m => ({ default: m.LayersPanel })));
 const CurvesPanel = lazy(() => import('../panels/curves/CurvesPanel').then(m => ({ default: m.CurvesPanel })));
 
 const DEFAULT_MULTI_PREVIEW_DATA: MultiPreviewPanelData = {
@@ -171,6 +172,8 @@ export function DockPanelContent({ panel, allowPanelMaximize = false }: DockPane
       return <Suspense fallback={<PanelLoading />}><SAM2Panel /></Suspense>;
     case 'transitions':
       return <Suspense fallback={<PanelLoading />}><TransitionsPanel /></Suspense>;
+    case 'layers':
+      return <Suspense fallback={<PanelLoading />}><LayersPanel /></Suspense>;
     case 'scene-description':
       return <Suspense fallback={<PanelLoading />}><SceneDescriptionPanel /></Suspense>;
     case 'scope-waveform':

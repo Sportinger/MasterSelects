@@ -219,6 +219,7 @@ Edit mode is a canvas overlay for layer transforms.
 - Two-finger pinch cancels an active one-finger orbit and changes edit-view zoom or camera distance continuously from the live finger spacing, without fixed zoom steps. In both 2D and 3D Preview Edit modes its touch zoom delta is amplified to four times the normal preview pinch rate.
 - 2D transform, text, and mask editing preserve the composition resolution and aspect ratio; only camera/3D edit views use the full panel viewport for an independent perspective.
 - Moving or scaling a layer publishes a transient render transform once per animation frame, so the canvas and edit handles stay live without rewriting the durable clip, mask state, or RAM-preview caches. The final transform is committed as one history batch when the pointer is released.
+- A dock preview with `initialEditMode` starts in Edit mode. With `initialEditCameraView` it opens a 3D camera edit view (3D workspace); without one it opens 2D canvas edit mode (Image workspace, see [Image Mode](./Image-Mode.md)).
 - Multiple preview panels can mix edit and non-edit views at the same time. Camera and object changes update every visible view immediately, while each panel keeps its own perspective.
 - 3D object handles remain visible across preview modes; selecting one activates the native 3D scene gizmo for that clip.
 - In camera Edit mode, the independent editor camera always orbits the scene origin `(0, 0, 0)`; timeline and viewport selection do not change its pivot.

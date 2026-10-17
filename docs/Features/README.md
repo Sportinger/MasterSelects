@@ -31,6 +31,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | **Vector Animation** | Lottie and Rive clips with canvas playback, bounce modes, render resolution overrides, keyframed state/data inputs, and export |
 | **Audio** | Timeline-native workstation audio with artifact-backed analysis, spectral editing, local music-to-MIDI, mixer, recording, and export parity |
 | **Screen Capture** | Browser-picker screen/window/tab recording with audio mixing, durable recovery, and optional timeline placement; the WebCodecs crop/scale tier is currently disabled |
+| **Image Mode** | [Still-image workspace](Image-Mode.md) with a layers panel, canvas edit mode, new-image presets, frame-to-image, and PNG save on the shared composition model |
 | **Live Inputs** | Parallel screen, camera/capture-device, and composition-feedback sources as timeline clips |
 | **Storyboard And MIDI** | Timeline storyboard scene cards and MIDI tracks/clips with tempo-aware editing and export support |
 | **Multicam And Batch Export** | Audio-synced multicam assembly and queued source-media batch export |
@@ -77,6 +78,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Slit Scan 3D](./Slit-Scan-3D.md) | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
 | [Memory Leak](./Memory-Leak.md) | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
 | [Color Correction](./Color-Correction.md) | Node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
+| [Image Mode](./Image-Mode.md) | Image documents as still compositions, Image workspace layout, Layers panel, entry points, and current limitations |
 | [Masks](./Masks.md) | Overlay mask editing, whole-path keyframes, feathering, and stored modes |
 | [Surface Tracking](./Surface-Tracking.md) | Reusable tracking assets, ordinary clip attachments, preview editing, sparse/dense geometry inspection, editable camera/mesh scenes, and native footprint sequences |
 | [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |

@@ -71,6 +71,16 @@ function projectComposition(
 }
 
 describe('project composition duration persistence', () => {
+  it('restores the image-document flag of still compositions', () => {
+    const [still, video] = convertProjectCompositionToStore([
+      { ...projectComposition(5, 5, true), still: true },
+      { ...projectComposition(10, 10, true), id: 'comp-2' },
+    ]);
+    expect(still.still).toBe(true);
+    expect(still.timelineData?.durationLocked).toBe(true);
+    expect(video.still).toBeUndefined();
+  });
+
   it('restores an explicitly locked video-length composition on its frame grid', () => {
     const [composition] = convertProjectCompositionToStore([
       projectComposition(4321.23356, 4321.23356, true),

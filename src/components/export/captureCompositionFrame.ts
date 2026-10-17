@@ -12,8 +12,18 @@ export function getCompositionFrameFilename(clipName: string | undefined, time: 
   return `${baseName.slice(0, 80)}_frame_${Math.max(0, time).toFixed(2).replace('.', '_')}s.jpg`;
 }
 
+const FRAME_FORMATS = {
+  jpg: { id: 'jpg', label: 'JPG', mimeType: 'image/jpeg', supportsAlpha: false, lossless: false },
+  png: { id: 'png', label: 'PNG', mimeType: 'image/png', supportsAlpha: true, lossless: true },
+} as const;
+
 /** Render the requested timeline frame at composition resolution, independent of preview quality. */
-export async function captureCompositionFrameJpegBlob(time: number): Promise<Blob | null> {
+export function captureCompositionFrameJpegBlob(time: number): Promise<Blob | null> {
+  return captureCompositionFrameBlob(time, 'jpg');
+}
+
+/** Same as the JPEG capture; PNG keeps the composition's transparency. */
+export async function captureCompositionFrameBlob(time: number, format: keyof typeof FRAME_FORMATS): Promise<Blob | null> {
   const timeline = useTimelineStore.getState();
   if (timeline.isExporting) throw new Error('Another export is already running.');
 
@@ -29,10 +39,8 @@ export async function captureCompositionFrameJpegBlob(time: number): Promise<Blo
     await prepareTimelineLinkedMedia();
     const result = await runStillImageExport({
       width, height, fps, exportTime: time,
-      filename: 'current-frame', imageFormat: 'jpg', imageQuality: 0.92,
-      selectedImageFormat: {
-        id: 'jpg', label: 'JPG', mimeType: 'image/jpeg', supportsAlpha: false, lossless: false,
-      },
+      filename: 'current-frame', imageFormat: format, imageQuality: 0.92,
+      selectedImageFormat: { ...FRAME_FORMATS[format] },
       renderSessionRef: { current: null },
       createRenderSession: options => new ExportRenderSessionImpl({
         ...options, compositionId: composition.id,

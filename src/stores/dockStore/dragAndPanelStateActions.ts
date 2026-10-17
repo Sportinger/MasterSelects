@@ -1,5 +1,5 @@
 import { useMediaStore } from '../mediaStore';
-import { DEFAULT_DRAG_STATE } from './layoutDefaults';
+import { DEFAULT_DRAG_STATE } from './dragStateDefaults';
 import { findTabGroupById } from './layoutTree';
 import type { DockSliceCreator, DragAndPanelStateActions } from './storeTypes';
 

@@ -9,7 +9,8 @@ import type { MediaPanelContextMenu } from '../context/types';
 import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../dropImport';
 import type { MediaPanelViewMode } from './types';
 import { useTimelineStore } from '../../../../stores/timeline';
-import { useDockStore } from '../../../../stores/dockStore';
+import { FACTORY_IMAGE_EDIT_LAYOUT_ID, useDockStore } from '../../../../stores/dockStore';
+import { enterImageWorkspace } from '../../../../services/imageDocument/imageDocumentService';
 import { isDockResizeActive } from '../../../dock/dockResizeDomState';
 import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
 import { isSyntheticTouchContextMenuEvent } from '../../../../hooks/useTouchContextMenu';
@@ -277,8 +278,11 @@ export function useMediaPanelSelectionCommands({
         toggleFolderExpanded(item.id);
       }
     } else if (item.type === 'composition') {
-      activatePanelType('timeline');
+      // Image documents edit in the Image workspace, which has no timeline.
+      const inImageWorkspace = useDockStore.getState().activeSavedLayoutId === FACTORY_IMAGE_EDIT_LAYOUT_ID;
+      if (!item.still && !inImageWorkspace) activatePanelType('timeline');
       await openCompositionTab(item.id, { skipAnimation: true });
+      if (item.still) enterImageWorkspace();
     } else if ('liveInput' in item && item.liveInput) {
       try {
         await liveInputRuntime.connect(item.id, item.liveInput);
