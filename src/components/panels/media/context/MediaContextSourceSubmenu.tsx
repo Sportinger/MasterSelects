@@ -1,7 +1,7 @@
 import type { MediaFile } from '../../../../stores/mediaStore';
 import { useMediaStore } from '../../../../stores/mediaStore';
 import type { MediaSourceSelection } from '../../../../types/mediaMetadata';
-import { selectMediaSource } from '../../../../services/project/linkedMediaSources';
+import { addLinkedMediaSourceFile, selectMediaSource } from '../../../../services/project/linkedMediaSources';
 import { requestRelinkDialog } from '../../../../services/project/relinkDialogRuntime';
 import { handleSubmenuHover, handleSubmenuLeave } from '../submenuPosition';
 
@@ -19,6 +19,18 @@ export function MediaContextSourceSubmenu({ mediaFile, onClose }: MediaContextSo
     const selected = await selectMediaSource(mediaFile.id, next);
     onClose();
     if (!selected && next.mode === 'linked') requestRelinkDialog();
+  };
+
+  const linkProxyFile = async () => {
+    onClose();
+    const picker = (window as unknown as { showOpenFilePicker?: (options?: object) => Promise<FileSystemFileHandle[]> }).showOpenFilePicker;
+    if (!picker) return;
+    try {
+      const [handle] = await picker({ multiple: false, types: [{ description: 'Video', accept: { 'video/*': ['.mp4', '.mov', '.m4v', '.mkv', '.webm'] } }] });
+      if (handle) await addLinkedMediaSourceFile(mediaFile.id, await handle.getFile(), handle);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
+    }
   };
 
   return (
@@ -48,6 +60,9 @@ export function MediaContextSourceSubmenu({ mediaFile, onClose }: MediaContextSo
             {source.role === 'proxy' ? 'Linked Proxy' : 'Linked Source'} · {source.name}
           </div>
         ))}
+        <div className="context-menu-item" onClick={() => { void linkProxyFile(); }}>
+          Link proxy file…
+        </div>
         <div className="context-menu-separator" />
         <div
           className="context-menu-item"

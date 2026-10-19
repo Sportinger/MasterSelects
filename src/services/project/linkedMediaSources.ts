@@ -38,6 +38,34 @@ export async function attachLinkedMediaSourceFile(
   return true;
 }
 
+/**
+ * Links another file (e.g. an H.264 copy of a codec the browser cannot decode in
+ * real time) to an existing media item and plays it. The original stays the media's
+ * identity and can be selected again under Media Source.
+ */
+export async function addLinkedMediaSourceFile(
+  mediaId: string,
+  file: File,
+  handle?: FileSystemFileHandle,
+  role: 'proxy' | 'alternate' = 'proxy',
+): Promise<string | null> {
+  const media = useMediaStore.getState().files.find((candidate) => candidate.id === mediaId);
+  if (!media) return null;
+  const existing = media.linkedSources?.find((source) => source.name === file.name);
+  const sourceId = existing?.id ?? `linked-${crypto.randomUUID()}`;
+  if (!existing) {
+    useMediaStore.setState((state) => ({
+      files: state.files.map((candidate) => candidate.id === mediaId
+        ? { ...candidate, linkedSources: [...(candidate.linkedSources ?? []), { id: sourceId, name: file.name, sourcePath: file.name, role }] }
+        : candidate),
+    }));
+    if (projectFileService.isProjectOpen()) projectFileService.markDirty();
+  }
+  if (!await attachLinkedMediaSourceFile(mediaId, sourceId, file, handle)) return null;
+  await selectMediaSource(mediaId, { mode: 'linked', sourceId });
+  return sourceId;
+}
+
 export async function selectMediaSource(
   mediaId: string,
   selection: MediaSourceSelection,

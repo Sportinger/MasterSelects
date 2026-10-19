@@ -178,6 +178,10 @@ records and archives.
 
 ## Media and relinking
 
+**Media Source → Link proxy file…** links another file to a video media item, for
+example an H.264 copy of a codec the browser cannot decode in real time. The original
+stays the media's identity; the linked file plays, and Media Source switches back.
+
 Original media can remain linked to its selected source location. A source-root
 identifier and relative path describe the binding; browser directory handles
 stay in local handle storage. The relink dialog and **Preferences > Import >

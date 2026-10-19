@@ -72,6 +72,7 @@ vi.mock('../../src/services/projectFileService', () => ({
 
 vi.mock('../../src/services/project/mediaObjectUrlManager', () => ({
   createPrimaryMediaObjectUrl: vi.fn(),
+  createRenderablePrimaryMediaObjectUrl: vi.fn(async () => 'blob:linked'),
 }));
 
 vi.mock('../../src/stores/mediaStore/slices/fileManageSlice', () => ({
@@ -131,5 +132,31 @@ describe('linked media source dirty state', () => {
 
     expect(mocks.mediaState.files[0]?.sourceSelection).toEqual({ mode: 'linked', sourceId: 'source-2' });
     expect(mocks.markDirty).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('linking a proxy file to existing media', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.mediaState.files = [{ id: 'a001' }];
+  });
+
+  it('adds the file as a linked proxy, keeps the original identity, and plays the proxy', async () => {
+    const { addLinkedMediaSourceFile } = await import('../../src/services/project/linkedMediaSources');
+    const file = new File(['h264'], 'A001 H264.mp4', { type: 'video/mp4' });
+    mocks.getLinked.mockImplementation(() => ({ file }));
+
+    const sourceId = await addLinkedMediaSourceFile('a001', file);
+
+    expect(sourceId).toMatch(/^linked-/);
+    expect(mocks.mediaState.files[0]).toMatchObject({
+      id: 'a001',
+      linkedSources: [{ id: sourceId, name: 'A001 H264.mp4', role: 'proxy' }],
+      sourceSelection: { mode: 'linked', sourceId },
+    });
+    expect(mocks.markDirty).toHaveBeenCalled();
+    // Linking the same file again reuses its entry.
+    await expect(addLinkedMediaSourceFile('a001', file)).resolves.toBe(sourceId);
+    expect((mocks.mediaState.files[0] as { linkedSources?: unknown[] }).linkedSources).toHaveLength(1);
   });
 });

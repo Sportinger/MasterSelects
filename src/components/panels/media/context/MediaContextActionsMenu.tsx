@@ -284,7 +284,7 @@ export function MediaContextActionsMenu({
             </div>
           )}
 
-          {!multiSelect && isVideoFile && mediaFile && Boolean(mediaFile.linkedSources?.length) && (
+          {!multiSelect && isVideoFile && mediaFile && (
             <MediaContextSourceSubmenu mediaFile={mediaFile} onClose={onClose} />
           )}
 
