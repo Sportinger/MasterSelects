@@ -63,7 +63,11 @@ folder; without one, the browser reopens the folder last chosen for media
 reconnects. Browsers only remember folders per site origin, so a new origin
 (for example a second dev port) asks for the folder once. A file relinked on its
 own records the known source folder that contains it, so a reopen finds it
-without asking again. A chosen
+without asking again. When a folder search finds several files for one media
+item and no saved path decides, the file named exactly like the media wins over
+files that only share an older saved file name (size and content are still
+verified). In a read-only tab (another tab writes the project) a chosen folder
+still reconnects the media for that tab; errors are shown in the dialog. A chosen
 folder that holds a known folder's saved media (for example the same drive after
 it was mounted elsewhere) takes that folder's place, so every saved location
 under it reconnects without a search.

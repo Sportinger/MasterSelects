@@ -196,6 +196,26 @@ describe('relink media matching', () => {
     expect(findRelinkMatch(mediaFile, candidates)).toEqual({ kind: 'single', candidate: right });
   });
 
+  it('prefers the file named like the media over a file matching only an older saved name', () => {
+    const mediaFile = {
+      id: 'media-video',
+      name: 'A001Premiere-Deu.Herb._3.mp4',
+      type: 'video',
+      parentId: null,
+      createdAt: 1,
+      url: '',
+      filePath: 'A001.mp4',
+    } as MediaFile;
+    const original = { ...candidate('A001Premiere-Deu.Herb._3.mp4'), relativePath: 'MS UTE/Originale/A001Premiere-Deu.Herb._3.mp4' };
+    const proxy = { ...candidate('A001.mp4'), relativePath: 'Ute_Marlene/Proxy/A001.mp4' };
+    const candidates: RelinkCandidateMap = new Map([
+      ['a001premiere-deu.herb._3.mp4', [original]],
+      ['a001.mp4', [proxy]],
+    ]);
+
+    expect(findRelinkMatch(mediaFile, candidates)).toEqual({ kind: 'single', candidate: original });
+  });
+
   it('leaves duplicate basenames unresolved when no path distinguishes them', () => {
     const mediaFile = {
       id: 'media-video',

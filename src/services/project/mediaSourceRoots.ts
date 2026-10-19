@@ -80,10 +80,15 @@ function persistRootDescriptor(
   const nextRoots = roots.some((entry) => entry.id === root.id)
     ? roots.map((entry) => entry.id === root.id ? root : entry)
     : [...roots, root];
-  projectFileService.updateProjectData({
-    mediaSourceFolders: [...new Set(nextRoots.map((entry) => entry.name))],
-    mediaSourceRoots: nextRoots,
-  });
+  try {
+    projectFileService.updateProjectData({
+      mediaSourceFolders: [...new Set(nextRoots.map((entry) => entry.name))],
+      mediaSourceRoots: nextRoots,
+    });
+  } catch (error) {
+    // A read-only tab (another tab writes the project) still uses the folder through its stored handle.
+    log.warn('Media folder is connected in this browser but could not be saved in the project', { root: root.name, error });
+  }
   // Opening the project after a reload re-allows these folders in the same click.
   const projectHandle = typeof projectFileService.getProjectHandle === 'function'
     ? projectFileService.getProjectHandle()

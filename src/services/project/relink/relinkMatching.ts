@@ -144,7 +144,12 @@ function findCandidate(values: string[], candidates: RelinkCandidateMap): Relink
     }
   }
 
-  return bestScore >= 2 && !tied ? best : undefined;
+  if (bestScore >= 2 && !tied) return best;
+  // No path decides: a file named exactly like the media (the first expected value) beats files that only
+  // share an older saved file name. Applying the match still verifies size and content.
+  const primary = (getBaseName(values[0]) ?? values[0])?.toLowerCase();
+  const named = [...matches].filter((candidate) => candidate.name.toLowerCase() === primary);
+  return named.length === 1 ? named[0] : undefined;
 }
 
 function getModelFrameExpectedNames(frame: ModelSequenceFrame): string[] {

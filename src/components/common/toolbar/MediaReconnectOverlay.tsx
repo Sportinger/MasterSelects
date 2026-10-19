@@ -30,6 +30,7 @@ export function MediaReconnectHost() {
   const [busy, setBusy] = useState<MediaReconnectProgress | null>(null);
   const [result, setResult] = useState<MediaReconnectResult | null>(null);
   const [choseFolder, setChoseFolder] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
   const titleId = useId(); const dialog = useRef<HTMLDivElement>(null);
   const autoSearchedSession = useRef<object | null>(null);
   useEffect(() => subscribeEditorRepositorySession(() => { setSession(getEditorRepositorySession()); setResult(null); setChoseFolder(false); }), []);
@@ -52,8 +53,9 @@ export function MediaReconnectHost() {
   if (!visible) return null;
   const close = () => { if (!busy) { setDismissed(session); setResult(null); } };
   async function run(chosenFolder?: FileSystemDirectoryHandle, requestFileAccess = false) {
-    setResult(null); setBusy({ phase: 'access', done: 0, total: 0 });
+    setResult(null); setFailure(null); setBusy({ phase: 'access', done: 0, total: 0 });
     try { setResult(await reconnectMedia(progress => setBusy(progress), chosenFolder, { requestFileAccess })); }
+    catch (error) { setFailure(error instanceof Error ? error.message : String(error)); }
     finally { setBusy(null); }
   }
   const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
@@ -90,6 +92,7 @@ export function MediaReconnectHost() {
           : `Choose the folder that contains ${offline === 1 ? 'it' : 'them'}; a whole drive works too. MasterSelects finds and reconnects the files automatically.${knownFiles.length ? ` The folder picker opens where “${knownFiles[0]}” was last found.` : ''}`}</p>
       {oneClick && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a reload.</p>}
       {status && <p role="status" aria-live="polite">{status}</p>}
+      {failure && <p role="alert">Reconnecting stopped: {failure}</p>}
       {result?.deniedFolders.length ? <p role="alert">Access was not granted for “{result.deniedFolders.join('”, “')}”.</p> : null}
       <div className="repository-archive-actions">
         <button data-primary disabled={busy !== null} onPointerUp={event => event.currentTarget.blur()} onClick={primary.action}>{primary.label}</button>
