@@ -79,8 +79,8 @@ class ElementFrameTap {
 }
 
 type AngleSourceRuntime =
-  | { kind: 'provider'; ownerId: string; runtimeSourceId: string; source: TimelineClip['source']; programSource?: Layer['source'] }
-  | { kind: 'element'; element: HTMLVideoElement; url: string; frames: ElementFrameTap };
+  | { kind: 'provider'; file: File; ownerId: string; runtimeSourceId: string; source: TimelineClip['source']; programSource?: Layer['source'] }
+  | { kind: 'element'; file: File; element: HTMLVideoElement; url: string; frames: ElementFrameTap };
 
 const runtimes = new Map<string, AngleSourceRuntime>();
 
@@ -111,7 +111,7 @@ function createRuntime(compositionId: string, angleIndex: number, angle: Multica
   });
   if (bound?.runtimeSourceId && isProviderBackedRuntimeSource(bound)) {
     // Same session key as the program clips on this camera's track.
-    return { kind: 'provider', ownerId, runtimeSourceId: bound.runtimeSourceId, source: getPreviewRuntimeSource(bound, angle.trackId) };
+    return { kind: 'provider', file: mediaFile.file, ownerId, runtimeSourceId: bound.runtimeSourceId, source: getPreviewRuntimeSource(bound, angle.trackId) };
   }
   if (bound?.runtimeSourceId) mediaRuntimeRegistry.releaseRuntime(bound.runtimeSourceId, ownerId);
   const element = document.createElement('video');
@@ -120,7 +120,7 @@ function createRuntime(compositionId: string, angleIndex: number, angle: Multica
   element.playsInline = true;
   element.preload = 'auto';
   element.src = url;
-  return { kind: 'element', element, url, frames: new ElementFrameTap(element) };
+  return { kind: 'element', file: mediaFile.file, element, url, frames: new ElementFrameTap(element) };
 }
 
 function releaseRuntime(runtime: AngleSourceRuntime): void {
@@ -138,7 +138,13 @@ function releaseRuntime(runtime: AngleSourceRuntime): void {
 function getRuntime(compositionId: string, angleIndex: number, angle: MulticamAngle, source: MulticamAngleSource): AngleSourceRuntime | null {
   const key = runtimeKey(compositionId, angleIndex, source);
   const existing = runtimes.get(key);
-  if (existing) return existing;
+  // A relinked, reconnected or linked-proxy file needs its own decoder path (e.g. HEVC -> H.264).
+  const currentFile = useMediaStore.getState().files.find((file) => file.id === source.mediaFileId)?.file;
+  if (existing && existing.file === currentFile) return existing;
+  if (existing) {
+    releaseRuntime(existing);
+    runtimes.delete(key);
+  }
   const created = createRuntime(compositionId, angleIndex, angle, source);
   if (created) runtimes.set(key, created);
   return created;

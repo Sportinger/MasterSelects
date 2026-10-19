@@ -3,14 +3,13 @@ import type { CompositionMulticam } from '../../src/types/multicam';
 import type { TimelineClip } from '../../src/types/timeline';
 import type { Layer } from '../../src/types/layers';
 
-const state = vi.hoisted(() => ({ providers: new Map<string, any>() }));
-vi.mock('../../src/stores/mediaStore', () => ({ useMediaStore: { getState: () => ({
-  files: ['one', 'two'].map(id => ({ id, file: new File([], `${id}.mxf`), duration: 100 })),
-}) } }));
+const state = vi.hoisted(() => ({ providers: new Map<string, any>(), files: [] as Array<{ id: string; file: File; duration: number }> }));
+vi.mock('../../src/stores/mediaStore', () => ({ useMediaStore: { getState: () => ({ files: state.files }) } }));
 vi.mock('../../src/services/mediaRuntime/clipBindings', () => ({
   bindSourceRuntimeForOwner: ({ source }: any) => ({ ...source, runtimeSourceId: source.mediaFileId, runtimeSessionKey: 'clip' }),
 }));
-vi.mock('../../src/services/mediaRuntime/registry', () => ({ mediaRuntimeRegistry: { releaseRuntime: vi.fn() } }));
+const registry = vi.hoisted(() => ({ releaseRuntime: vi.fn() }));
+vi.mock('../../src/services/mediaRuntime/registry', () => ({ mediaRuntimeRegistry: registry }));
 vi.mock('../../src/services/mediaRuntime/runtimePlayback', () => ({
   isProviderBackedRuntimeSource: () => true,
   getPreviewRuntimeSource: (source: any) => ({ ...source, runtimeSessionKey: `track:${source.runtimeSourceId}` }),
@@ -20,6 +19,7 @@ vi.mock('../../src/services/mediaRuntime/runtimePlayback', () => ({
 import { getMulticamAngleLayer, releaseMulticamAngles, syncMulticamAngles } from '../../src/services/multicam/multicamAngleRuntime';
 
 function setup() {
+  state.files = ['one', 'two'].map(id => ({ id, file: new File([], `${id}.mxf`), duration: 100 }));
   const provider = () => ({ currentTime: 0, isPlaying: false, seek: vi.fn(), pause: vi.fn(), advanceToTime: vi.fn() });
   const one = provider(); const two = provider(); const scrub = provider();
   state.providers.set('track:one', one); state.providers.set('track:two', two);
@@ -70,5 +70,18 @@ describe('multicam scrub decoder ownership', () => {
     expect(one.seek).not.toHaveBeenCalled();
     syncMulticamAngles({ ...args, programLayers: [{ ...args.programLayers[0], source: { ...args.programLayers[0].source!, mediaTime: 20 } }] });
     expect(one.seek).toHaveBeenCalledWith(10);
+  });
+
+  it('rebuilds a camera when its media plays another file, e.g. a linked H.264 proxy of an HEVC original', () => {
+    const { args, two } = setup();
+    syncMulticamAngles(args);
+    expect(two.seek).toHaveBeenCalledTimes(1);
+    registry.releaseRuntime.mockClear();
+    syncMulticamAngles(args);
+    expect(registry.releaseRuntime).not.toHaveBeenCalled();
+
+    state.files[1] = { ...state.files[1]!, file: new File([], 'two H264.mp4') };
+    syncMulticamAngles(args);
+    expect(registry.releaseRuntime).toHaveBeenCalledWith('two', expect.stringContaining('multicam-angle:comp:1:two'));
   });
 });
