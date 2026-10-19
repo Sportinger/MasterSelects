@@ -52,6 +52,8 @@ type RelinkPickerWindow = Window & typeof globalThis & {
   showOpenFilePicker: (options?: object) => Promise<FileSystemFileHandle[]>;
 };
 
+/** Shared with the reconnect dialog: without a remembered folder, Chrome reopens the last folder chosen for this id. */
+const RELINK_PICKER_ID = 'ms-media-reconnect';
 const IMAGE_FILE_PATTERN = /\.(?:avif|bmp|gif|heic|heif|jpe?g|png|tiff?|webp)$/i;
 const VIDEO_FILE_PATTERN = /\.(?:3gp|avi|m4v|mkv|mov|mp4|mpe?g|webm|wmv)$/i;
 
@@ -252,8 +254,9 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
       }
       try {
         handle = await (window as RelinkPickerWindow).showDirectoryPicker({
+          id: RELINK_PICKER_ID,
           mode: 'read',
-          startIn: 'videos',
+          ...(root.handle ? { startIn: root.handle } : {}),
         });
       } catch (error) {
         if (!isAbortError(error)) log.error('Source folder reconnect error', error);
@@ -298,9 +301,11 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
         return;
       }
 
+      const remembered = sourceRoots.find(root => root.handle)?.handle;
       const dirHandle = await (window as RelinkPickerWindow).showDirectoryPicker({
+        id: RELINK_PICKER_ID,
         mode: 'read',
-        startIn: 'videos',
+        ...(remembered ? { startIn: remembered } : {}),
       });
 
       if (dirHandle) {
@@ -311,7 +316,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
         log.error('Browse error', e);
       }
     }
-  }, [files, scanFolder]);
+  }, [files, scanFolder, sourceRoots]);
 
   // Handle picking individual file - allows multiple selection to relink several at once
   const handlePickFile = useCallback(async (fileStatus: FileStatus) => {

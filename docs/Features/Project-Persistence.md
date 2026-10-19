@@ -58,7 +58,12 @@ known media folder, so later reloads need only the one-click re-allow. The
 dialog offers exactly one action ("Reconnect media", "Choose folder…" or, after a
 folder left files missing, "Choose another folder…" with the missing names);
 Escape, the backdrop or the close icon postpone it, and single files stay
-relinkable from the Media panel. A chosen
+relinkable from the Media panel. Folder pickers start in the remembered media
+folder; without one, the browser reopens the folder last chosen for media
+reconnects. Browsers only remember folders per site origin, so a new origin
+(for example a second dev port) asks for the folder once. A file relinked on its
+own records the known source folder that contains it, so a reopen finds it
+without asking again. A chosen
 folder that holds a known folder's saved media (for example the same drive after
 it was mounted elsewhere) takes that folder's place, so every saved location
 under it reconnects without a search.

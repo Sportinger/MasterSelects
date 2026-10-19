@@ -4,6 +4,7 @@ import { useMediaStore } from '../../../stores/mediaStore';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
 import { requestRelinkDialog } from '../../../services/project/relinkDialogRuntime';
 import { MAX_FILE_ACCESS_PROMPTS, mediaFilesNeedingAccess, mediaFoldersNeedingAccess, reconnectMedia, type MediaReconnectProgress, type MediaReconnectResult } from '../../../services/project/mediaReconnect';
+import { getProjectMediaSourceRootStates } from '../../../services/project/mediaSourceRoots';
 import { isLinkedMediaConnectionRunning, subscribeLinkedMediaConnection } from '../../../services/project/repository/transaction/editorLinkedMediaConnection';
 import { getEditorRepositorySession, subscribeEditorRepositorySession } from '../../../services/project/repository/transaction/editorMutationRuntime';
 import '../ProjectNameDialog.css';
@@ -58,7 +59,8 @@ export function MediaReconnectHost() {
   const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
   async function chooseFolder() {
     if (!picker) return;
-    const startIn = lastKnownLocation.current;
+    // Start where the media were last found; a remembered folder still helps when its access has lapsed.
+    const startIn = lastKnownLocation.current ?? (await getProjectMediaSourceRootStates()).find(root => root.handle)?.handle ?? undefined;
     try { const folder = await picker({ id: 'ms-media-reconnect', mode: 'read', ...(startIn ? { startIn } : {}) }); setChoseFolder(true); await run(folder); }
     catch (error) { if (!(error instanceof DOMException && error.name === 'AbortError')) throw error; }
   }

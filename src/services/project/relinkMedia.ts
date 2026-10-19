@@ -32,6 +32,7 @@ import type {
 } from '../../types';
 import type { RelinkCandidate, RelinkMatch } from './relink/relinkMatching';
 import { attachLinkedMediaSourceFile } from './linkedMediaSources';
+import { resolveProjectMediaSourceLocation } from './mediaSourceRoots';
 import { getMediaSourceMismatch, readMediaSourceFingerprint } from './mediaSourceValidation';
 
 export {
@@ -275,6 +276,11 @@ async function applySingleRelink(
   const url = await createRenderablePrimaryMediaObjectUrl(mediaFile.id, restored.file, { revokeExisting: false });
   const sourceReplacementPatch = await createMediaSourceReplacementPatch(restored.file);
 
+  // A file picked on its own still lives under a known source folder; saving that pair lets a reopen find it.
+  const location = match.candidate.sourceRootId
+    ? { sourceRootId: match.candidate.sourceRootId, sourceRelativePath: match.candidate.relativePath }
+    : await resolveProjectMediaSourceLocation(match.candidate.handle);
+
   await invalidateRelinkSourceReplacementCaches(mediaFile);
   await storeHandle(mediaFile.id, restored.handle ?? match.candidate.handle);
   if (restored.handle) {
@@ -291,8 +297,8 @@ async function applySingleRelink(
       ?? match.candidate.name,
     absolutePath: match.candidate.absolutePath ?? mediaFile.absolutePath,
     projectPath: restored.projectPath ?? mediaFile.projectPath,
-    sourceRootId: match.candidate.sourceRootId ?? mediaFile.sourceRootId,
-    sourceRelativePath: match.candidate.relativePath ?? mediaFile.sourceRelativePath,
+    sourceRootId: location?.sourceRootId ?? mediaFile.sourceRootId,
+    sourceRelativePath: location?.sourceRelativePath ?? mediaFile.sourceRelativePath,
     fileSize: restored.file.size || mediaFile.fileSize,
   });
 
