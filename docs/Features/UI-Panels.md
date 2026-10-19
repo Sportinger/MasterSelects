@@ -476,6 +476,10 @@ Analysis settings disclosure, `AnalysisAudioSettings` lists the persisted age
 of VAD, alignment, markers, prosody, and room-tone artifacts and provides the
 same run/re-run or cancel control.
 
+The Media panel's Regenerate > Transcript entry names and uses the provider chosen
+in Settings > Transcription (for example Deepgram only), like the timeline clip
+menu; it no longer always runs Best Quality.
+
 Best Quality uses a fixed provider split: Deepgram supplies every displayed word
 and timestamp, while OpenAI supplies the speaker turns. The summary states
 these two roles directly.

@@ -10,6 +10,7 @@ import { collectDroppedMediaFiles, importDroppedMediaFiles } from '../dropImport
 import type { MediaPanelViewMode } from './types';
 import { useTimelineStore } from '../../../../stores/timeline';
 import { useDockStore } from '../../../../stores/dockStore';
+import { useSettingsStore } from '../../../../stores/settingsStore';
 import { isDockResizeActive } from '../../../dock/dockResizeDomState';
 import { liveInputRuntime } from '../../../../services/mediaRuntime/liveInputRuntime';
 import { isSyntheticTouchContextMenuEvent } from '../../../../hooks/useTouchContextMenu';
@@ -388,10 +389,11 @@ export function useMediaPanelSelectionCommands({
 
   const handleTranscribeMedia = useCallback((mediaFile: MediaFile) => {
     void import('../../../../services/clipTranscriber')
+      // The provider chosen in Settings > Transcription, as in the timeline clip menu.
       .then(({ transcribeMediaFile }) => transcribeMediaFile(
         mediaFile.id,
         'auto',
-        { provider: 'hybrid' },
+        { provider: useSettingsStore.getState().transcriptionProvider },
       ))
       .catch(error => log.warn('Failed to transcribe media source', {
         id: mediaFile.id,

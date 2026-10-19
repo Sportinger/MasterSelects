@@ -1,4 +1,13 @@
 import type { MediaFile } from '../../../../stores/mediaStore';
+import { useSettingsStore } from '../../../../stores/settingsStore';
+import type { TranscriptionProvider } from '../../../../stores/settingsStore';
+
+const TRANSCRIPT_PROVIDER_LABELS: Record<TranscriptionProvider, string> = {
+  local: 'Local Whisper',
+  openai: 'OpenAI',
+  deepgram: 'Deepgram',
+  hybrid: 'Best Quality',
+};
 import { handleSubmenuHover, handleSubmenuLeave } from '../submenuPosition';
 
 export interface MediaContextRegenerateSubmenuProps {
@@ -51,6 +60,7 @@ export function MediaContextRegenerateSubmenu({
   onAnalyzeMedia,
   onClose,
 }: MediaContextRegenerateSubmenuProps) {
+  const transcriptionProvider = useSettingsStore((state) => state.transcriptionProvider);
   return (
     <>
       <div className="context-menu-separator" />
@@ -115,9 +125,9 @@ export function MediaContextRegenerateSubmenu({
                 onTranscribeMedia(mediaFile);
               }}
             >
-              Transcript (Best Quality)
+              Transcript ({TRANSCRIPT_PROVIDER_LABELS[transcriptionProvider]})
               {mediaFile.transcriptStatus === 'transcribing'
-                ? ` (${mediaFile.transcriptFusionProgress?.providerProgress?.deepgram.percent ?? 0}%)`
+                ? ` (${mediaFile.transcriptFusionProgress?.providerProgress?.deepgram.percent ?? Math.round((mediaFile.transcriptCoverage ?? 0) * 100)}%)`
                 : mediaFile.transcriptStatus === 'ready'
                   ? ' (ready)'
                   : mediaFile.transcriptStatus === 'error'
