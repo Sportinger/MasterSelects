@@ -111,9 +111,40 @@ export function registerProjectMediaSourceRootDescriptor(
   );
 }
 
+/** Media whose saved location names a source root; a folder must hold one of them to take over that root. */
+export interface SavedSourceRootMedia { sourceRootId?: string; sourceRelativePath?: string }
+export interface SourceRootFolderCheck { holds: boolean; expectedPath?: string }
+
+async function folderHoldsFile(directory: FileSystemDirectoryHandle, relativePath: string): Promise<boolean> {
+  const segments = relativePath.split('/');
+  try {
+    let current = directory;
+    for (const segment of segments.slice(0, -1)) current = await current.getDirectoryHandle(segment);
+    await current.getFileHandle(segments.at(-1)!);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a chosen folder is a known root again. A root without saved media accepts any folder. */
+export async function checkSourceRootFolder(
+  handle: FileSystemDirectoryHandle,
+  rootId: string,
+  media: readonly SavedSourceRootMedia[],
+): Promise<SourceRootFolderCheck> {
+  const paths = [...new Set(media.filter((file) => file.sourceRootId === rootId)
+    .map((file) => normalizeProjectSourceRelativePath(file.sourceRelativePath))
+    .filter((path): path is string => Boolean(path)))];
+  if (paths.length === 0) return { holds: true };
+  for (const path of paths.slice(0, 8)) if (await folderHoldsFile(handle, path)) return { holds: true };
+  return { holds: false, expectedPath: paths[0] };
+}
+
 export async function registerProjectMediaSourceRoot(
   handle: FileSystemDirectoryHandle,
   preferredRootId?: string,
+  savedMedia?: readonly SavedSourceRootMedia[],
 ): Promise<ProjectMediaSourceRoot> {
   const roots = currentRoots();
   let matched = roots.find((root) => root.id === preferredRootId);
@@ -122,6 +153,16 @@ export async function registerProjectMediaSourceRoot(
     const projectFolder = await storedRootHandle(matched.id);
     if (!projectFolder || !await sameDirectory(projectFolder, handle)) matched = undefined;
   }
+  // Rebinding a root to a folder without its media would break every saved location under it.
+  const keepsSavedMedia = async (root: ProjectMediaSourceRoot) => {
+    if (!savedMedia) return true;
+    const stored = await storedRootHandle(root.id);
+    if (stored && await sameDirectory(stored, handle)) return true;
+    const check = await checkSourceRootFolder(handle, root.id, savedMedia);
+    if (!check.holds) log.info('Chosen folder does not hold the saved media of a known source folder; registered separately', { root: root.name, chosen: handle.name, expectedPath: check.expectedPath });
+    return check.holds;
+  };
+  if (matched && matched.id !== PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID && !await keepsSavedMedia(matched)) matched = undefined;
 
   for (const root of matched ? [] : roots) {
     if (root.name.toLocaleLowerCase() !== handle.name.toLocaleLowerCase()) continue;
@@ -133,6 +174,7 @@ export async function registerProjectMediaSourceRoot(
     if (!stored && !reusableByName && root.id !== PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID) reusableByName = root;
   }
 
+  if (reusableByName && !await keepsSavedMedia(reusableByName)) reusableByName = undefined;
   const root = matched ?? reusableByName ?? { id: createRootId(), name: handle.name };
   if (root.id !== PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID) await projectDB.storeHandle(handleKey(root.id), handle);
   return persistRootDescriptor({ ...root, name: handle.name }, roots);

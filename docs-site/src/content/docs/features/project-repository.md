@@ -136,7 +136,12 @@ The loading indicator reports recovery and activation separately.
 Published segments remain immutable. The history cache and history panel page
 limits do not delete older on-disk revisions. Workspace views use two bounded
 slots per view key, so playback and scrolling do not append permanent content
-commits.
+commits. Views live under `.masterselects/views/<workspace>/`; a browser keeps one
+workspace id across tabs and reloads (only one tab holds the repository writer
+lock). Keys a workspace has never stored fall back to the most recently written
+value of another workspace of the same repository, and only that workspace's own
+next write replaces them. The project workspace shape and its parts always come
+from one workspace.
 The project workspace shape is published after its referenced parts. If an older
 interrupted save already published an incomplete shape, opening uses the previous
 complete workspace slot while retaining the latest authored project and history.

@@ -29,6 +29,7 @@ vi.mock('../../src/services/projectFileService', () => ({
 }));
 
 import {
+  checkSourceRootFolder,
   normalizeProjectSourceRelativePath,
   readProjectMediaSourceFile,
   registerProjectMediaSourceRoot,
@@ -143,5 +144,33 @@ describe('media source roots', () => {
     expect(restored?.handle).toBe(clipHandle);
     expect(restored?.file.name).toBe('clip.mp4');
     expect(restored?.file.size).toBe(6);
+  });
+
+  it('keeps a known root when the chosen folder does not hold its saved media', async () => {
+    const remembered = directoryHandle('Videos');
+    mocks.projectData.mediaSourceRoots = [{ id: 'source-root:videos', name: 'Videos' }];
+    mocks.handles.set('media_source_root:source-root:videos', remembered);
+    const saved = [{ sourceRootId: 'source-root:videos', sourceRelativePath: 'MS UTE/Originale/Totale.MXF' }];
+    const unrelated = directoryHandle('Videos');
+
+    await expect(checkSourceRootFolder(unrelated, 'source-root:videos', saved))
+      .resolves.toEqual({ holds: false, expectedPath: 'MS UTE/Originale/Totale.MXF' });
+    const registered = await registerProjectMediaSourceRoot(unrelated, 'source-root:videos', saved);
+
+    expect(registered.id).not.toBe('source-root:videos');
+    expect(mocks.handles.get('media_source_root:source-root:videos')).toBe(remembered);
+  });
+
+  it('rebinds a known root to a moved folder that holds its saved media', async () => {
+    mocks.projectData.mediaSourceRoots = [{ id: 'source-root:videos', name: 'Videos' }];
+    mocks.handles.set('media_source_root:source-root:videos', directoryHandle('Videos'));
+    const saved = [{ sourceRootId: 'source-root:videos', sourceRelativePath: 'MS UTE/Originale/Totale.MXF' }];
+    const originals = directoryHandle('Originale', { files: { 'Totale.MXF': fileHandle('Totale.MXF') } });
+    const drive = directoryHandle('UTE_SHOW', { directories: { 'MS UTE': directoryHandle('MS UTE', { directories: { Originale: originals } }) } });
+
+    const registered = await registerProjectMediaSourceRoot(drive, 'source-root:videos', saved);
+
+    expect(registered).toEqual({ id: 'source-root:videos', name: 'UTE_SHOW' });
+    expect(mocks.handles.get('media_source_root:source-root:videos')).toBe(drive);
   });
 });

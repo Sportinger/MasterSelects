@@ -26,9 +26,13 @@ const publications = (import.meta.hot?.data?.repositoryPublications as WeakMap<R
 const workspaceId = (() => {
   // Render workers import this module through shared code but never open a repository.
   if (typeof sessionStorage === 'undefined') return crypto.randomUUID();
-  const key = 'ms.repository.workspace'; const stored = sessionStorage.getItem(key);
-  if (stored) return stored;
-  const id = crypto.randomUUID(); sessionStorage.setItem(key, id); return id;
+  // One workspace per browser, not per tab: saved media locations, layout and playhead live in it, and
+  // a closed tab must not orphan them. Only one tab owns a repository for writing at a time.
+  const key = 'ms.repository.workspace';
+  const read = (storage: Storage) => { try { return storage.getItem(key); } catch { return null; } };
+  const id = read(localStorage) ?? read(sessionStorage) ?? crypto.randomUUID();
+  for (const storage of [localStorage, sessionStorage]) { try { storage.setItem(key, id); } catch { /* storage unavailable */ } }
+  return id;
 })();
 export const repositoryWorkspaceId = workspaceId;
 function publicationFor(session: RepositorySession) {

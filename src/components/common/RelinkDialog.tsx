@@ -22,6 +22,7 @@ import {
   type RelinkMatch,
 } from '../../services/project/relinkMedia';
 import {
+  checkSourceRootFolder,
   getProjectMediaSourceRootStates,
   registerProjectMediaSourceRoot,
   registerProjectMediaSourceRootDescriptor,
@@ -222,7 +223,7 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
   ) => {
     setIsSearching(true);
     try {
-      const root = await registerProjectMediaSourceRoot(dirHandle, preferredRootId);
+      const root = await registerProjectMediaSourceRoot(dirHandle, preferredRootId, files);
       const foundFiles = await collectSourceRootFiles(dirHandle, root.id);
       log.debug(`Found ${foundFiles.size} files in ${dirHandle.name}`);
 
@@ -237,6 +238,8 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
 
   const handleReconnectSourceRoot = useCallback(async (root: ProjectMediaSourceRootState) => {
     let handle = await requestProjectMediaSourceRootAccess(root);
+    // A remembered folder that no longer holds its saved media (moved drive, wrong earlier choice) needs a new choice.
+    if (handle && !(await checkSourceRootFolder(handle, root.id, files)).holds) handle = null;
     if (!handle) {
       if (typeof (window as RelinkPickerWindow).showDirectoryPicker !== 'function') {
         const input = nativeFolderInputRef.current;
@@ -257,8 +260,11 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
         return;
       }
     }
+    const check = await checkSourceRootFolder(handle, root.id, files);
+    setFolderSelectionError(check.holds ? '' : `“${handle.name}” does not contain the saved media of “${root.name}” (for example “${check.expectedPath}”). `
+      + `Choose the folder that contains “${check.expectedPath?.split('/')[0]}”. Matching files in “${handle.name}” were still searched.`);
     await scanFolder(handle, root.id);
-  }, [scanFolder]);
+  }, [files, scanFolder]);
 
   // Handle browse button
   const handleBrowse = useCallback(async () => {
@@ -458,6 +464,11 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
   }, [fileStatuses, onClose]);
 
   const missingCount = fileStatuses.filter(s => s.status === 'missing').length;
+  // One saved path per known folder tells the user which folder to choose.
+  const savedRootPaths = new Map<string, string>();
+  for (const file of files) {
+    if (file.sourceRootId && file.sourceRelativePath && !savedRootPaths.has(file.sourceRootId)) savedRootPaths.set(file.sourceRootId, file.sourceRelativePath);
+  }
   const foundCount = fileStatuses.filter(s => s.status === 'found').length;
   const usesSafariFileFallback = typeof (window as RelinkPickerWindow).showOpenFilePicker !== 'function';
   const usesSafariFolderFallback = projectFileService.activeBackend !== 'native'
@@ -542,7 +553,10 @@ export function RelinkDialog({ onClose }: RelinkDialogProps) {
                   disabled={isSearching}
                   type="button"
                 >
-                  Reconnect {root.name}
+                  <span>Reconnect {root.name}</span>
+                  {savedRootPaths.get(root.id) && (
+                    <span className="relink-source-root-hint">contains {savedRootPaths.get(root.id)}</span>
+                  )}
                 </button>
               ))}
             </div>

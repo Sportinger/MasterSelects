@@ -58,7 +58,23 @@ location. The dialog's single "Reconnect media" click re-allows those files
 directly (up to 8 browser prompts) instead of asking for a folder. With more
 files, or when no saved location is left, "Choose folder…" opens the picker in
 the folder where an offline file was last found; the chosen folder becomes a
-known media folder, so later reloads need only the one-click re-allow.
+known media folder, so later reloads need only the one-click re-allow. A chosen
+folder that holds a known folder's saved media (for example the same drive after
+it was mounted elsewhere) takes that folder's place, so every saved location
+under it reconnects without a search.
+
+Saved media locations (source folder and relative path) are part of the
+browser's project workspace, together with layout and playhead. Every tab of a
+browser reuses one workspace, so closing the tab and reopening the project later
+keeps them. A workspace that has never stored a value (another browser, origin or
+machine) reads it from the most recently written workspace of the project
+instead of starting without media locations.
+
+The relink dialog shows each known source folder with one of its saved paths
+("contains …"), so the right folder is recognizable. A remembered folder that no
+longer holds its saved media, or a newly chosen folder without them, is not
+rebound to that source folder: the dialog names the folder that is needed and
+still searches the chosen one for matching files.
 If browser storage was
 cleared, select the existing project folder again. The filesystem directory
 can still exist even when its cached browser handle has been lost.

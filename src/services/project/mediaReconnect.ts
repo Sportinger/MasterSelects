@@ -2,7 +2,7 @@ import { useMediaStore, type MediaFile } from '../../stores/mediaStore';
 import { Logger } from '../logger';
 import { applyRelinkMatch, mediaNeedsRelink } from './relinkMedia';
 import { createRelinkCandidateMapFromHandles, findRelinkMatch, setRelinkHandleSource, type RelinkMatch } from './relink/relinkMatching';
-import { getProjectMediaSourceRootStates, requestProjectMediaSourceRootAccess, registerProjectMediaSourceRoot, type ProjectMediaSourceRootState } from './mediaSourceRoots';
+import { checkSourceRootFolder, getProjectMediaSourceRootStates, requestProjectMediaSourceRootAccess, registerProjectMediaSourceRoot, type ProjectMediaSourceRootState } from './mediaSourceRoots';
 import { connectOfflineLinkedMedia } from './repository/transaction/editorLinkedMediaConnection';
 import { runEditorBatch } from './repository/transaction/editorMutationRuntime';
 import { fileSystemService } from '../fileSystemService';
@@ -61,6 +61,17 @@ async function collectFolder(root: FileSystemDirectoryHandle, rootId: string, in
   await visit(root, '');
 }
 
+/** A chosen folder that holds a known folder's saved media takes its place, so saved locations resolve without a search. */
+async function registerChosenFolder(folder: FileSystemDirectoryHandle): Promise<void> {
+  const files = useMediaStore.getState().files;
+  let knownRootId: string | undefined;
+  for (const root of await getProjectMediaSourceRootStates()) {
+    if (!files.some(file => file.sourceRootId === root.id)) continue;
+    if ((await checkSourceRootFolder(folder, root.id, files)).holds) { knownRootId = root.id; break; }
+  }
+  await registerProjectMediaSourceRoot(folder, knownRootId, files);
+}
+
 /**
  * One user click: re-allow known folders, reconnect media whose location is already stored (runtime only,
  * nothing is saved), then search allowed folders for the rest and relink unique matches as one revision.
@@ -88,7 +99,7 @@ export async function reconnectMedia(
       if (permission && permission !== 'granted') log.info('File access was not granted', { name });
     } catch (error) { log.warn('Could not request file access', { name, error }); }
   }
-  if (chosenFolder) await registerProjectMediaSourceRoot(chosenFolder);
+  if (chosenFolder) await registerChosenFolder(chosenFolder);
 
   const connected = await connectOfflineLinkedMedia((done, total) => onProgress({ phase: 'connect', done, total }));
   let missing = offlineMediaFiles();

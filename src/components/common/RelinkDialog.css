@@ -156,8 +156,22 @@
 }
 
 .relink-source-root-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 100%;
   padding: 6px 10px;
   font-size: 11px;
+}
+
+.relink-source-root-hint {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--gray-250);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .relink-source-actions {
