@@ -28,6 +28,11 @@ Goal: import, preview, scrub, and export MXF files entirely in the browser throu
   current frame without caching clones (12 cached clones stalled 4K XAVC-L playback at ~7 fps).
 - **Playback start.** Codec-provider sources skip the `<video>` element warm-up; the element cannot
   open MXF and used to hold every play for the full one-second warm-up timeout.
+- **Nested compositions.** The composition renderer (nested comps, multicam angles) binds
+  codec-provider clips (MXF, HAP, TurboRes, HEVC) to the same decoder runtime as the timeline and
+  renders that runtime source; it used to open them in a `<video>` element, which cannot load MXF,
+  so nested MXF clips stayed black. An undecodable essence is logged as
+  `Composition video cannot be decoded` instead of a generic load failure.
 - **Codec provider backends.** Every codec backend is a descriptor in
   `src/services/mediaRuntime/codec/codecProviderDescriptors.ts` on top of
   `CodecFrameProviderBase` (latest-wins queue, epochs, prefetch, exact seek). Playback, thumbnails,

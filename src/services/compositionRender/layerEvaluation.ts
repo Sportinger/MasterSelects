@@ -182,7 +182,8 @@ export function buildEvaluatedClipLayer(params: {
   );
 
   let layerSource: EvaluatedLayer['source'] = null;
-  if (source.videoElement) {
+  // Codec-provider video (MXF, HAP, TurboRes, HEVC) has a decoder runtime instead of a video element.
+  if (source.videoElement || (source.type === 'video' && source.runtimeSourceId)) {
     layerSource = buildBackgroundVideoLayerSource(source, videoFrameSourceTime(timing), {
       ...playbackOptions,
       playbackRate: Math.abs(defaultSpeed),

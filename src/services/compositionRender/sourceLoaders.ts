@@ -5,6 +5,8 @@ import {
   bindSourceRuntimeForOwner,
   planSourceRuntimeBindingForOwner,
 } from '../mediaRuntime/clipBindings';
+import { describeUnsupportedProviderPlan, isCodecProviderPlan, selectRuntimeFrameProviderPlan } from '../mediaRuntime/providerSelection';
+import { flags } from '../../engine/featureFlags';
 import { startTimelineImageHydration, type TimelineImageHydrationHandle } from '../timeline/imageRuntimeHydrator';
 import { reservePlannedClipRuntimeResources } from '../timeline/runtimeResourceReporting';
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
@@ -70,7 +72,8 @@ export function loadVideoSource(
   sources: CompositionSources,
   clip: SerializableClip,
   file: File,
-  isSourcesCurrent: SourceCurrentCheck
+  isSourcesCurrent: SourceCurrentCheck,
+  videoCodecId?: string,
 ): Promise<void> {
   return new Promise((resolve) => {
     const runtimeOwnerId = getRuntimeOwnerId(sources.compositionId, clip.id);
@@ -79,6 +82,45 @@ export function loadVideoSource(
       mediaFileId: clip.mediaFileId,
       naturalDuration: clip.naturalDuration || clip.duration || 0,
     };
+    // MXF, HAP, TurboRes and HEVC decode through codec providers, exactly like the active timeline: an
+    // HTMLVideoElement cannot open them, so nested compositions with such clips used to render black.
+    const providerPlan = selectRuntimeFrameProviderPlan({ videoCodecId, turboResEnabled: flags.turboResProRes });
+    if (providerPlan.backend === 'unsupported') {
+      log.warn(`Composition video cannot be decoded: ${file.name}`, { clipId: clip.id, codec: describeUnsupportedProviderPlan(providerPlan) });
+      resolve();
+      return;
+    }
+    if (isCodecProviderPlan(providerPlan)) {
+      const runtimeSource = bindSourceRuntimeForOwner({
+        ownerId: runtimeOwnerId,
+        sessionOwnerId: runtimeOwnerId,
+        sessionPolicy: 'background',
+        source: plannedSource,
+        file,
+        mediaFileId: clip.mediaFileId,
+      });
+      if (!runtimeSource?.runtimeSourceId) {
+        log.warn(`Composition video has no decoder runtime: ${file.name}`, { clipId: clip.id, backend: providerPlan.backend });
+        resolve();
+        return;
+      }
+      const entry = {
+        clipId: clip.id,
+        compositionId: sources.compositionId,
+        type: 'video' as const,
+        file,
+        naturalDuration: plannedSource.naturalDuration,
+        runtimeSourceId: runtimeSource.runtimeSourceId,
+        runtimeSessionKey: runtimeSource.runtimeSessionKey,
+        runtimeOwnerId,
+        mediaFileId: clip.mediaFileId,
+      };
+      sources.clipSources.set(clip.id, entry);
+      reportCompositionSource(sources.compositionId, entry);
+      log.debug(`Video bound to ${providerPlan.backend} decoder: ${file.name}`);
+      resolve();
+      return;
+    }
     const runtimePlan = planSourceRuntimeBindingForOwner({
       ownerId: runtimeOwnerId,
       sessionOwnerId: runtimeOwnerId,

@@ -422,7 +422,8 @@ class CompositionRendererService {
             sources,
             serializableClip,
             mediaFile.file,
-            (currentSources) => this.isSourcesCurrent(currentSources)
+            (currentSources) => this.isSourcesCurrent(currentSources),
+            mediaFile.videoCodecId,
           ));
         }
       } else if (sourceType === 'image') {
