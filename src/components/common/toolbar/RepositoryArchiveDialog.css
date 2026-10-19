@@ -8,6 +8,9 @@
   .repository-archive-dialog :focus:not(:focus-visible) { outline:none; box-shadow:none; }
   .repository-archive-dialog :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   .repository-archive-actions { display:flex; justify-content:flex-end; gap:8px; }
+  .media-reconnect-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .repository-archive-dialog .media-reconnect-header .project-name-dialog-close { border:0; background:transparent; padding:0; }
+  .repository-archive-dialog .media-reconnect-header .project-name-dialog-close:hover:not(:disabled) { background:var(--bg-hover); color:var(--text-primary); }
 }
 
 @layer overlays {

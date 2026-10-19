@@ -58,7 +58,11 @@ location. The dialog's single "Reconnect media" click re-allows those files
 directly (up to 8 browser prompts) instead of asking for a folder. With more
 files, or when no saved location is left, "Choose folder…" opens the picker in
 the folder where an offline file was last found; the chosen folder becomes a
-known media folder, so later reloads need only the one-click re-allow. A chosen
+known media folder, so later reloads need only the one-click re-allow. The
+dialog offers exactly one action ("Reconnect media", "Choose folder…" or, after a
+folder left files missing, "Choose another folder…" with the missing names);
+Escape, the backdrop or the close icon postpone it, and single files stay
+relinkable from the Media panel. A chosen
 folder that holds a known folder's saved media (for example the same drive after
 it was mounted elsewhere) takes that folder's place, so every saved location
 under it reconnects without a search.
