@@ -311,8 +311,21 @@ function scheduleSourceRetry(): void {
   sourceRetryTimer = setTimeout(() => { sourceRetryTimer = null; if (runtime.session === pinned) scheduleEditorSourceIdentities(); }, sourceRetryDelay);
   sourceRetryDelay = Math.min(sourceRetryDelay * 2, 30000);
 }
+let sourceIdentityHolds = 0;
+/**
+ * Full-content hashing waits while media are reconnected: both read the same, often external, disk, and up
+ * to 32 parallel whole-file hashes slowed relinking hundreds of files to about one file per two seconds.
+ */
+export async function withSourceIdentitiesPaused<T>(action: () => Promise<T>): Promise<T> {
+  if (sourceIdentityHolds++ === 0) {
+    for (const [id, job] of runtime.sourceJobs) if (!job.complete) { job.controller.abort(); runtime.sourceJobs.delete(id); }
+  }
+  try { return await action(); }
+  finally { if (--sourceIdentityHolds === 0) scheduleEditorSourceIdentities(); }
+}
 export function scheduleEditorSourceIdentities(): void {
   const pinned = runtime.session; if (!pinned) return;
+  if (sourceIdentityHolds) return;
   if (!pinned.opening.writable) return;
   if (readEditorContentPublication().blocked) { scheduleSourceRetry(); return; }
   const state = getRepositoryStore('media')?.getState() as MediaState | undefined;

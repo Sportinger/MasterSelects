@@ -7,7 +7,8 @@ vi.mock('../../src/services/project/repository/transaction/storeMutationBoundary
   getRepositoryStore: (name: string) => name === 'media' ? { getState: () => mocks.state, setState: mocks.setState } : undefined,
   withRepositoryHydration: (run: () => unknown) => run(),
 }));
-vi.mock('../../src/services/project/repository/transaction/editorMutationRuntime', () => ({ getEditorRepositorySession: () => mocks.session }));
+vi.mock('../../src/services/project/repository/transaction/editorMutationRuntime', () => ({ getEditorRepositorySession: () => mocks.session,
+  withSourceIdentitiesPaused: <T>(action: () => Promise<T>) => action() }));
 vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({ readEditorRepositoryProject: () => ({ media: mocks.items }) }));
 vi.mock('../../src/services/project/load/loadMediaHydration', () => ({ convertProjectMediaToStore: async (items: Array<Record<string, unknown>>) => items.map(item => ({ ...item,
   file: new File(['data'], `${item.id}.mp4`), url: `blob:${item.id}`, hasFileHandle: true })) }));

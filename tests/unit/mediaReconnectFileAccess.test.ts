@@ -37,6 +37,7 @@ vi.mock('../../src/services/project/repository/transaction/editorLinkedMediaConn
   }),
 }));
 vi.mock('../../src/services/project/repository/transaction/editorMutationRuntime', () => ({
+  withSourceIdentitiesPaused: <T>(action: () => Promise<T>) => action(),
   runEditorBatch: async <T>(_label: string, action: () => Promise<T>) => action(),
 }));
 vi.mock('../../src/services/fileSystemService', () => ({ fileSystemService: { getFileHandle: () => undefined } }));

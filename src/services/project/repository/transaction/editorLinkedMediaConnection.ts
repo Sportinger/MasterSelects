@@ -5,7 +5,7 @@ import type { RepositorySession } from '../RepositorySession';
 import { convertProjectMediaToStore } from '../../load/loadMediaHydration';
 import { updateTimelineClips } from '../../../../stores/mediaStore/slices/fileManage/timelineClipReload';
 import { getRepositoryStore, withRepositoryHydration } from './storeMutationBoundary';
-import { getEditorRepositorySession } from './editorMutationRuntime';
+import { getEditorRepositorySession, withSourceIdentitiesPaused } from './editorMutationRuntime';
 import { Logger } from '../../../logger';
 import { restoreLinkedTimelineMedia } from './restoreLinkedTimelineMedia';
 import { prioritizeLinkedMedia } from './linkedMediaPriority';
@@ -84,10 +84,10 @@ function createDemandOpener(session: RepositorySession | null, items: readonly P
         const connected = await connect(item, current, file => batch.push(file), true);
         if (!current()) return false;
         finishLinkedMediaDemand(id);
-        if (connected) await applyConnectedMedia(batch); else markMissingLinkedMedia(id);
+        if (connected) await applyConnectedMedia(batch); else markMissingLinkedMedia([id]);
         return connected;
       } catch (error) {
-        if (current()) { finishLinkedMediaDemand(id); markMissingLinkedMedia(id); }
+        if (current()) { finishLinkedMediaDemand(id); markMissingLinkedMedia([id]); }
         log.warn('Saved media location unavailable', { id, error }); return false;
       } finally { const resume = waiters.shift(); if (resume) resume(); else active--; }
     })();
@@ -98,6 +98,7 @@ function observeDemand(session: RepositorySession): () => void {
   type Subscribable = { subscribe(listener: () => void): () => void };
   const timelineStore = getRepositoryStore('timeline'), mediaStore = getRepositoryStore('media');
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let checkedComposition: { id: string | null | undefined } | null = null;
   const update = () => {
     if (getEditorRepositorySession() !== session) return;
     const timeline = timelineStore?.getState() as TimelineStore | undefined;
@@ -109,6 +110,10 @@ function observeDemand(session: RepositorySession): () => void {
     for (const id of media.selectedIds) ids.add(id);
     if (media.sourceMonitorFileId) ids.add(media.sourceMonitorFileId);
     for (const id of ids) void requestLinkedMedia(id);
+    if (!checkedComposition || checkedComposition.id !== media.activeCompositionId) {
+      checkedComposition = { id: media.activeCompositionId };
+      void checkCompositionSources(session, timeline, media);
+    }
     if (timer) clearTimeout(timer);
     if (timeline.isPlaying) timer = setTimeout(update, 500);
   };
@@ -117,13 +122,41 @@ function observeDemand(session: RepositorySession): () => void {
   update();
   return () => { unsubscribeTimeline?.(); unsubscribeMedia?.(); if (timer) clearTimeout(timer); };
 }
-function markMissingLinkedMedia(id: string): void {
+/**
+ * After the sources at the playhead, every source of the opened composition (nested clips and multicam
+ * angles included) is opened in the background. Missing media then surface together, and the reconnect
+ * dialog waits for the check instead of reappearing for a few files at a time during playback.
+ */
+async function checkCompositionSources(session: RepositorySession, timeline: TimelineStore, media: MediaState): Promise<void> {
+  const multicam = media.compositions.find(comp => comp.id === media.activeCompositionId)?.multicam;
+  const ids = [...selectDemandedLinkedMedia(timeline.clips, 0, true, multicam)].filter(isLinkedMediaDeferred);
+  const current = () => getEditorRepositorySession() === session;
+  if (!ids.length || !current()) return;
+  running++; notify();
+  try {
+    const { readEditorRepositoryProject } = await import('../lifecycle/editorRepositoryLifecycle');
+    const wanted = new Set(ids);
+    const items = (readEditorRepositoryProject()?.media ?? []).filter(item => wanted.has(item.id));
+    // Found sources publish in batches and the rest go offline together: one store update per file
+    // re-rendered the whole editor hundreds of times and made the check crawl.
+    await withSourceIdentitiesPaused(() => connectAll(session, items, () => {}, true));
+    if (!current()) return;
+    const files = (getRepositoryStore('media')?.getState() as MediaState | undefined)?.files ?? [];
+    const missing = items.filter(item => isLinkedMediaDeferred(item.id) && !files.find(file => file.id === item.id)?.file).map(item => item.id);
+    for (const id of missing) finishLinkedMediaDemand(id);
+    markMissingLinkedMedia(missing);
+    if (missing.length) log.info('Composition sources checked', { checked: items.length, missing: missing.length });
+  } finally { running--; notify(); }
+}
+function markMissingLinkedMedia(ids: readonly string[]): void {
+  if (!ids.length) return;
+  const missing = new Set(ids);
   const mediaStore = getRepositoryStore('media'), timelineStore = getRepositoryStore('timeline');
   withRepositoryHydration(() => {
     if (mediaStore) mediaStore.setState({ files: [...(mediaStore.getState() as MediaState).files] });
     if (timelineStore) {
       const mark = (clips: TimelineStore['clips']): TimelineStore['clips'] => clips.map(clip => ({ ...clip,
-        ...(clip.source?.mediaFileId === id ? { needsReload: true, isLoading: false } : {}),
+        ...(clip.source?.mediaFileId && missing.has(clip.source.mediaFileId) ? { needsReload: true, isLoading: false } : {}),
         ...(clip.nestedClips ? { nestedClips: mark(clip.nestedClips) } : {}),
       }));
       timelineStore.setState({ clips: mark((timelineStore.getState() as TimelineStore).clips) });
@@ -142,7 +175,7 @@ export async function connectOfflineLinkedMedia(onProgress: (done: number, total
   const items = (readEditorRepositoryProject()?.media ?? []).filter(item => offline.has(item.id));
   return connectAll(session, items, (done, total) => onProgress(done, total));
 }
-async function connectAll(session: RepositorySession, items: readonly ProjectMedia[], progress: ConnectionProgress): Promise<number> {
+async function connectAll(session: RepositorySession, items: readonly ProjectMedia[], progress: ConnectionProgress, trustSavedLocation = false): Promise<number> {
   const timeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
   if (timeline) items = prioritizeLinkedMedia(items, timeline.clips, timeline.playheadPosition);
   const current = () => getEditorRepositorySession() === session;
@@ -163,7 +196,7 @@ async function connectAll(session: RepositorySession, items: readonly ProjectMed
     await Promise.all(Array.from({ length: Math.min(CONNECTION_CONCURRENCY, total) }, async () => {
       while (next < total && current()) {
         const item = items[next++];
-        try { if (await connect(item, current, hydrated => pending.push(hydrated))) online++; }
+        try { if (await connect(item, current, hydrated => pending.push(hydrated), trustSavedLocation)) online++; }
         catch (error) { log.warn('Could not connect linked media', { id: item.id, name: item.name, error }); }
         done++;
         // Publish the first sources promptly, then avoid hundreds of full media-list renders.

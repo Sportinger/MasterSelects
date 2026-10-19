@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   files: [{ id: 'totale', name: 'Totale.MXF' }, { id: 'jonas', name: 'Jonas1.MXF' }],
   reconnectMedia: vi.fn(),
-  session: {},
+  session: { opening: { writable: true } },
 }));
 
 vi.mock('../../src/stores/mediaStore', () => ({
@@ -53,5 +53,15 @@ describe('MediaReconnectHost', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Reconnect later' }));
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('tells a read-only tab to reconnect in the writing tab instead of failing', async () => {
+    mocks.session = { opening: { writable: false } };
+    try {
+      render(<MediaReconnectHost />);
+      await waitFor(() => expect(screen.getByRole('dialog').textContent).toContain('open for editing in another tab'));
+      expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['×', 'Reload this tab']);
+      expect(mocks.reconnectMedia).not.toHaveBeenCalled();
+    } finally { mocks.session = { opening: { writable: true } }; }
   });
 });

@@ -67,7 +67,14 @@ without asking again. When a folder search finds several files for one media
 item and no saved path decides, the file named exactly like the media wins over
 files that only share an older saved file name (size and content are still
 verified). In a read-only tab (another tab writes the project) a chosen folder
-still reconnects the media for that tab; errors are shown in the dialog. A chosen
+cannot save new media locations: its reconnect dialog says so and offers to reload
+the tab once the writing tab is closed. Opening a composition checks all of its
+sources in the background (nested clips and multicam angles included, the
+playhead first), so missing media surface together and the reconnect dialog
+appears once after the check instead of repeatedly during playback. Allowed
+folders are searched automatically, one search at a time, whenever media go
+offline that no search has looked for yet. Full-content source hashing pauses
+while media are reconnected, because both read the same, often external, disk. A chosen
 folder that holds a known folder's saved media (for example the same drive after
 it was mounted elsewhere) takes that folder's place, so every saved location
 under it reconnects without a search.

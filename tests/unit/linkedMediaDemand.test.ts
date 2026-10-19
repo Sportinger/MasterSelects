@@ -15,10 +15,12 @@ vi.mock('../../src/services/project/repository/transaction/storeMutationBoundary
   } : undefined,
   withRepositoryHydration: (run: () => unknown) => run(),
 }));
-vi.mock('../../src/services/project/repository/transaction/editorMutationRuntime', () => ({ getEditorRepositorySession: () => mocks.session }));
+vi.mock('../../src/services/project/repository/transaction/editorMutationRuntime', () => ({ getEditorRepositorySession: () => mocks.session,
+  withSourceIdentitiesPaused: <T>(action: () => Promise<T>) => action() }));
 vi.mock('../../src/services/project/load/loadMediaHydration', () => ({ convertProjectMediaToStore: mocks.hydrate }));
 vi.mock('../../src/services/project/repository/transaction/restoreLinkedTimelineMedia', () => ({ restoreLinkedTimelineMedia: mocks.restore }));
 vi.mock('../../src/stores/mediaStore/slices/fileManage/timelineClipReload', () => ({ updateTimelineClips: vi.fn() }));
+vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({ readEditorRepositoryProject: () => ({ media: mocks.media.files }) }));
 vi.mock('../../src/services/layerBuilder/PlayheadState', () => ({ playheadState: { isUsingInternalPosition: false } }));
 
 const clip = (id: string, startTime: number) => ({ id, mediaFileId: id, source: { type: 'video', mediaFileId: id }, startTime, duration: 10 }) as TimelineClip;
@@ -30,19 +32,28 @@ beforeEach(() => {
   mocks.hydrate.mockImplementation(async (items: Array<{ id: string }>) => items.map(item => ({ ...item, type: 'video', file: new File(['data'], item.id), url: `blob:${item.id}` })));
 });
 describe('saved media opened on demand', () => {
-  it('opens only current sources out of 500; seeking and selection request additional sources', async () => {
+  it('opens the current source first, then every composition source, but none of the other 500 library sources', async () => {
     scheduleLinkedMediaConnection(mocks.session as RepositorySession, mocks.media.files, false);
     expect(mocks.hydrate).not.toHaveBeenCalled(); expect(isLinkedMediaDeferred('source-499')).toBe(true);
     startScheduledLinkedMediaConnection();
-    await vi.waitFor(() => expect(mocks.media.files[0].file).toBeInstanceOf(File));
-    expect(mocks.hydrate).toHaveBeenCalledTimes(1);
-    expect(mocks.hydrate.mock.calls[0][1].trustSavedLocation).toBe(true);
-    mocks.timeline.playheadPosition = 105; for (const fn of mocks.listeners) fn();
     await vi.waitFor(() => expect(mocks.media.files[1].file).toBeInstanceOf(File));
+    expect(mocks.media.files[0].file).toBeInstanceOf(File);
+    expect(mocks.hydrate.mock.calls.map(call => call[0][0].id)).toEqual(['source-0', 'source-1']);
+    expect(mocks.hydrate.mock.calls[0][1].trustSavedLocation).toBe(true);
     mocks.media.selectedIds = ['source-99']; for (const fn of mocks.listeners) fn();
     await vi.waitFor(() => expect(mocks.media.files[99].file).toBeInstanceOf(File));
     expect(mocks.hydrate).toHaveBeenCalledTimes(3);
     expect(mocks.media.files[499].file).toBeUndefined(); expect(isLinkedMediaDeferred('source-499')).toBe(true);
+  });
+  it('checks the sources of a newly opened composition once', async () => {
+    scheduleLinkedMediaConnection(mocks.session as RepositorySession, mocks.media.files, false);
+    startScheduledLinkedMediaConnection();
+    await vi.waitFor(() => expect(mocks.hydrate).toHaveBeenCalledTimes(2));
+    mocks.timeline.clips = [clip('source-7', 500)]; mocks.media.activeCompositionId = 'second';
+    for (const fn of mocks.listeners) fn();
+    for (const fn of mocks.listeners) fn();
+    await vi.waitFor(() => expect(mocks.media.files[7].file).toBeInstanceOf(File));
+    expect(mocks.hydrate).toHaveBeenCalledTimes(3);
   });
   it('marks only a failed source offline and deduplicates concurrent requests', async () => {
     mocks.hydrate.mockResolvedValue([{}]);

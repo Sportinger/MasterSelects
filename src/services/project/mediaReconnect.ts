@@ -4,7 +4,7 @@ import { applyRelinkMatch, mediaNeedsRelink } from './relinkMedia';
 import { createRelinkCandidateMapFromHandles, findRelinkMatch, setRelinkHandleSource, type RelinkMatch } from './relink/relinkMatching';
 import { checkSourceRootFolder, getProjectMediaSourceRootStates, requestProjectMediaSourceRootAccess, registerProjectMediaSourceRoot, type ProjectMediaSourceRootState } from './mediaSourceRoots';
 import { connectOfflineLinkedMedia } from './repository/transaction/editorLinkedMediaConnection';
-import { runEditorBatch } from './repository/transaction/editorMutationRuntime';
+import { runEditorBatch, withSourceIdentitiesPaused } from './repository/transaction/editorMutationRuntime';
 import { fileSystemService } from '../fileSystemService';
 import { projectDB } from '../projectDB';
 
@@ -77,10 +77,17 @@ async function registerChosenFolder(folder: FileSystemDirectoryHandle): Promise<
  * nothing is saved), then search allowed folders for the rest and relink unique matches as one revision.
  * Must start inside the click handler: browser permission prompts need its user activation.
  */
-export async function reconnectMedia(
+export function reconnectMedia(
   onProgress: (progress: MediaReconnectProgress) => void,
   chosenFolder?: FileSystemDirectoryHandle,
   options: { requestFileAccess?: boolean } = {},
+): Promise<MediaReconnectResult> {
+  return withSourceIdentitiesPaused(() => reconnectMediaNow(onProgress, chosenFolder, options));
+}
+async function reconnectMediaNow(
+  onProgress: (progress: MediaReconnectProgress) => void,
+  chosenFolder: FileSystemDirectoryHandle | undefined,
+  options: { requestFileAccess?: boolean },
 ): Promise<MediaReconnectResult> {
   const deniedFolders: string[] = [];
   const pending = await mediaFoldersNeedingAccess();

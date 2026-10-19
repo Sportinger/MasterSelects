@@ -32,10 +32,14 @@ export function MediaReconnectHost() {
   const [choseFolder, setChoseFolder] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const titleId = useId(); const dialog = useRef<HTMLDivElement>(null);
-  const autoSearchedSession = useRef<object | null>(null);
+  // Allowed folders are searched again when media go offline that no search has looked for yet; one search at a time.
+  const autoSearched = useRef<{ session: object | null; names: Set<string> }>({ session: null, names: new Set() });
+  const searching = useRef(false);
   useEffect(() => subscribeEditorRepositorySession(() => { setSession(getEditorRepositorySession()); setResult(null); setChoseFolder(false); }), []);
   useEffect(() => subscribeLinkedMediaConnection(() => setConnecting(isLinkedMediaConnectionRunning())), []);
   const visible = Boolean(session) && offline > 0 && !connecting && dismissed !== session || busy !== null;
+  // Only the tab that writes the project can save new media locations.
+  const readOnly = Boolean(session && !session.opening.writable);
   useEffect(() => {
     if (!visible) return;
     void Promise.all([mediaFoldersNeedingAccess(), mediaFilesNeedingAccess()]).then(([roots, files]) => {
@@ -43,20 +47,24 @@ export function MediaReconnectHost() {
       setKnownFiles(files.map(file => file.name));
       lastKnownLocation.current = files[0]?.handle ?? roots[0]?.handle ?? undefined;
       // Folders that are still allowed need no prompt, so search them before asking for anything.
-      if (roots.length === 0 && session && autoSearchedSession.current !== session) {
-        autoSearchedSession.current = session;
+      if (autoSearched.current.session !== session) autoSearched.current = { session, names: new Set() };
+      const unsearched = offlineNames.split('\n').filter(name => name && !autoSearched.current.names.has(name));
+      if (roots.length === 0 && session && !readOnly && !searching.current && unsearched.length) {
+        for (const name of unsearched) autoSearched.current.names.add(name);
         void run();
       }
     });
-  }, [visible, offline, session]);
+  }, [visible, offlineNames, session, readOnly]);
   useEffect(() => { if (visible) dialog.current?.querySelector<HTMLElement>('[data-primary]')?.focus(); }, [visible, busy]);
   if (!visible) return null;
   const close = () => { if (!busy) { setDismissed(session); setResult(null); } };
   async function run(chosenFolder?: FileSystemDirectoryHandle, requestFileAccess = false) {
+    if (searching.current) return;
+    searching.current = true;
     setResult(null); setFailure(null); setBusy({ phase: 'access', done: 0, total: 0 });
     try { setResult(await reconnectMedia(progress => setBusy(progress), chosenFolder, { requestFileAccess })); }
     catch (error) { setFailure(error instanceof Error ? error.message : String(error)); }
-    finally { setBusy(null); }
+    finally { searching.current = false; setBusy(null); }
   }
   const picker = (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
   async function chooseFolder() {
@@ -71,7 +79,8 @@ export function MediaReconnectHost() {
   const fileAccess = knownFiles.length > 0 && knownFiles.length <= MAX_FILE_ACCESS_PROMPTS;
   const oneClick = (folders.length > 0 || fileAccess) && !stillMissing;
   // Exactly one action; Escape, the backdrop and the close icon postpone it. Single files stay relinkable in the Media panel.
-  const primary = oneClick ? { label: 'Reconnect media', action: () => { void run(undefined, true); } }
+  const primary = readOnly ? { label: 'Reload this tab', action: () => window.location.reload() }
+    : oneClick ? { label: 'Reconnect media', action: () => { void run(undefined, true); } }
     : picker ? { label: stillMissing && choseFolder ? 'Choose another folder…' : 'Choose folder…', action: () => { void chooseFolder(); } }
     : { label: 'Relink manually…', action: () => { close(); requestRelinkDialog(); } };
   const files = (count: number) => `${count.toLocaleString()} media ${count === 1 ? 'file is' : 'files are'}`;
@@ -88,9 +97,10 @@ export function MediaReconnectHost() {
           onPointerUp={event => event.currentTarget.blur()} onClick={close}>×</button>
       </div>
       <p>{files(offline)} offline.{' '}
-        {oneClick ? `Allow access to “${[...folders, ...(fileAccess ? knownFiles : [])].join('”, “')}” once to reconnect them.`
+        {readOnly ? 'This project is open for editing in another tab, so this tab cannot reconnect media. Reconnect them there, or close that tab and reload this one.'
+          : oneClick ? `Allow access to “${[...folders, ...(fileAccess ? knownFiles : [])].join('”, “')}” once to reconnect them.`
           : `Choose the folder that contains ${offline === 1 ? 'it' : 'them'}; a whole drive works too. MasterSelects finds and reconnects the files automatically.${knownFiles.length ? ` The folder picker opens where “${knownFiles[0]}” was last found.` : ''}`}</p>
-      {oneClick && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a reload.</p>}
+      {oneClick && !readOnly && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a reload.</p>}
       {status && <p role="status" aria-live="polite">{status}</p>}
       {failure && <p role="alert">Reconnecting stopped: {failure}</p>}
       {result?.deniedFolders.length ? <p role="alert">Access was not granted for “{result.deniedFolders.join('”, “')}”.</p> : null}
