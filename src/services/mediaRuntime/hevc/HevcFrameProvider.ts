@@ -89,7 +89,9 @@ export class HevcFrameProvider extends CodecFrameProviderBase<GopPacket, HevcFra
 
   private async decodeBounded(packet: GopPacket): Promise<VideoFrame> {
     if (!this.engine) throw new Error('HEVC-Decoder wurde geschlossen.');
-    return this.withLoadTimeout(this.engine.decodeFrame(packet.displayIndex), 'Videobild', closeVideoFrame);
+    // Playback may jump ahead when software decoding cannot keep up; seeks and export stay exact.
+    const mode = this.currentRequestMode() === 'advance' ? 'playback' : 'exact';
+    return this.withLoadTimeout(this.engine.decodeFrame(packet.displayIndex, mode), 'Videobild', closeVideoFrame);
   }
 
   protected decodePacketToFrame(packet: GopPacket): Promise<VideoFrame> { return this.decodeWithFallback(packet); }

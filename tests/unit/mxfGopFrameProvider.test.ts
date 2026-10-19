@@ -344,3 +344,47 @@ describe('MxfGopFrameProvider (long GOP reorder, key-frame restart)', () => {
     expect(liveFrames).toBe(0);
   });
 });
+
+describe('GopDecodeEngine playback on a decoder slower than real time', () => {
+  // Each performance.now() call advances the clock: restarts then measure far more than
+  // one 40 ms frame interval per decoded frame, like WASM HEVC at 1080p50.
+  function engineWithClock(msPerCall: number) {
+    let now = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => (now += msPerCall));
+    return new MxfGopEngine(createSyntheticSource(240), 'slow');
+  }
+  const indexOf = (frame: VideoFrame) => Math.round((frame.timestamp / 1e6) * FPS);
+
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('jumps ahead to the next key frame instead of restarting behind the playhead', async () => {
+    const engine = engineWithClock(60);
+    await engine.attachDecoder(async (callbacks) => new FakeHardwareDecoder(callbacks, 8));
+    const first = await engine.decodeFrame(30);
+    expect(indexOf(first)).toBe(30);
+    first.close();
+
+    // The playhead ran far ahead while decoding: playback shows the next key frame after it.
+    const jumped = await engine.decodeFrame(100, 'playback');
+    expect(indexOf(jumped)).toBe(108);
+    jumped.close();
+    expect(engine.stats).toMatchObject({ playbackJumps: 1, restartReasons: expect.objectContaining({ 'playback-jump': 1 }) });
+
+    // Seeks, scrubs and export stay frame exact.
+    const exact = await engine.decodeFrame(200);
+    expect(indexOf(exact)).toBe(200);
+    exact.close();
+    engine.close();
+  });
+
+  it('never jumps when the decoder keeps up with the frame rate', async () => {
+    const engine = engineWithClock(1);
+    await engine.attachDecoder(async (callbacks) => new FakeHardwareDecoder(callbacks, 8));
+    (await engine.decodeFrame(30)).close();
+    const frame = await engine.decodeFrame(100, 'playback');
+    expect(indexOf(frame)).toBe(100);
+    frame.close();
+    expect(engine.stats.playbackJumps).toBe(0);
+    engine.close();
+  });
+});

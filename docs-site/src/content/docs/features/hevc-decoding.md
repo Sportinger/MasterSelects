@@ -12,6 +12,19 @@ MP4/MOV sources tagged `hvc1` or `hev1` use the shared `hevc` frame provider. Th
 
 The WASM binary is fetched only for software decoding. No upload, external service, browser flags, or pre-conversion is required. Decode stays off the main thread. Main and Main10 4:2:0 output are supported; unsupported pixel formats report an error. Software decoding does not guarantee real-time 4K playback. This feature does not automatically create proxies.
 
+## Playback slower than real time
+
+Software decoding can be slower than the source frame rate (measured: 1080p50 HEVC at
+about 36 fps in WASM). The GOP engine measures the cost per frame of its restarts. When
+it is slower than real time and a playback request would restart behind the playhead,
+it jumps ahead to the next key frame instead (`playbackJumps` in `getStats`). The
+provider holds that picture until the playhead reaches it (`playbackHolds`), then
+decodes forward. Seeks, scrubbing and export stay frame exact. The playback health
+monitor does not purge a decoder that still advances this way: its pause plus exact
+seek cost another full GOP. Measured on a 100-minute 1080p50 HEVC clip: before, about
+4 frames in 10 s and a black preview with three automatic purges; after, about 12 preview
+updates per second without purges during playback.
+
 ## Shared consumers
 
 - Source monitor (including audio, seeking and rotation) and muted Media hover playback.

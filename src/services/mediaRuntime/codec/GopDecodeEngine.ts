@@ -43,6 +43,10 @@ export interface MxfGopEngineStats {
   restartReasons: Record<string, number>;
   requests: number;
   readyHits: number;
+  /** Playback restarts that jumped ahead to the next key frame (slow decoder). */
+  playbackJumps?: number;
+  /** Measured restart cost per frame (ms); above 1000/fps the decoder is slower than real time. */
+  restartMsPerFrame?: number | null;
   packetsFed: number;
   flushes: number;
   stalls: number;
@@ -107,6 +111,16 @@ export const MAX_GOP_DECODE_QUEUE = 4;
 const MAX_FORWARD_FEED = 48;
 /** Across a key frame, decode through up to this many units (~1 s) instead of resetting. */
 const MAX_DECODE_THROUGH = 25;
+/** How far past a playback target the next key frame may lie for a playback jump. */
+const MAX_PLAYBACK_JUMP = 600;
+
+/**
+ * `exact` decodes precisely the requested frame (seek, scrub, export). `playback` lets
+ * a decoder that is slower than real time jump forward to the next key frame instead
+ * of restarting behind every target: each such restart decoded a whole GOP, by which
+ * time the playhead had moved on again (1080p50 HEVC in WASM: ~4 frames in 10 s).
+ */
+export type GopDecodeMode = 'exact' | 'playback';
 
 interface PendingTarget {
   displayIndex: number;
@@ -137,6 +151,9 @@ export class GopDecodeEngine {
   private readWaits = 0;
   private readonly recentRestarts: RestartRecord[] = [];
   private openRestart: { record: RestartRecord; startedAt: number; fedAtStart: number } | null = null;
+  /** Measured restart cost per decoded frame (ms); null until a restart completed. */
+  private restartMsPerFrame: number | null = null;
+  private playbackJumps = 0;
   private closed = false;
   /** Incremented on every restart; packets read for an older generation are dropped. */
   private generation = 0;
@@ -179,6 +196,8 @@ export class GopDecodeEngine {
       restartReasons: { ...this.restartReasons },
       requests: this.requests,
       readyHits: this.readyHits,
+      playbackJumps: this.playbackJumps,
+      restartMsPerFrame: this.restartMsPerFrame === null ? null : Math.round(this.restartMsPerFrame * 10) / 10,
       packetsFed: this.packetsFed,
       flushes: this.flushes,
       stalls: this.stalls,
@@ -190,8 +209,8 @@ export class GopDecodeEngine {
   }
 
   /** Decodes the frame displayed at `displayIndex`; the caller owns the returned frame. */
-  decodeFrame(displayIndex: number): Promise<VideoFrame> {
-    const run = this.queue.then(() => this.decodeFrameNow(displayIndex));
+  decodeFrame(displayIndex: number, mode: GopDecodeMode = 'exact'): Promise<VideoFrame> {
+    const run = this.queue.then(() => this.decodeFrameNow(displayIndex, mode));
     this.queue = run.catch(() => undefined);
     return run;
   }
@@ -207,7 +226,23 @@ export class GopDecodeEngine {
     try { decoder?.close(); } catch { /* best-effort */ }
   }
 
-  private async decodeFrameNow(target: number): Promise<VideoFrame> {
+  /** Slower than the source frame rate, measured on completed restarts. */
+  private decodesSlowerThanRealTime(): boolean {
+    const fps = this.source.metadata.fps || 25;
+    return this.restartMsPerFrame !== null && this.restartMsPerFrame > 1000 / fps;
+  }
+
+  /** First key frame stored after the one that `target` depends on, within the jump limit. */
+  private nextKeyAfter(target: number, keyStored: number): number | null {
+    const last = Math.min(this.source.frameCount - 1, target + MAX_PLAYBACK_JUMP);
+    for (let display = target + 1; display <= last; display += 1) {
+      const key = this.source.keyframeStoredIndexFor(display);
+      if (key > keyStored) return key;
+    }
+    return null;
+  }
+
+  private async decodeFrameNow(target: number, mode: GopDecodeMode = 'exact'): Promise<VideoFrame> {
     const decoder = this.decoder;
     if (this.closed || !decoder) throw new Error(`${this.label} decoder is unavailable`);
 
@@ -230,11 +265,20 @@ export class GopDecodeEngine {
       && (keyStored <= this.nextStored || feedDistance <= MAX_DECODE_THROUGH)
       && feedDistance <= MAX_FORWARD_FEED;
     if (!canContinue) {
-      const reason = this.decoderError ? 'error'
+      const cause = this.decoderError ? 'error'
         : this.nextStored < 0 ? 'not-started'
           : target <= this.lastEmittedDisplay ? 'behind-output'
             : feedDistance > MAX_FORWARD_FEED ? 'far-ahead'
               : 'next-gop';
+      // A slow decoder chasing the playhead restarts at the next key frame instead: it
+      // comes out first, and the consumer holds it until the playhead catches up.
+      const jumpKey = mode === 'playback' && (cause === 'far-ahead' || cause === 'next-gop')
+        && this.decodesSlowerThanRealTime() ? this.nextKeyAfter(target, keyStored) : null;
+      const reason = jumpKey !== null ? 'playback-jump' : cause;
+      if (jumpKey !== null) {
+        this.playbackJumps += 1;
+        target = this.source.storedToDisplayIndex(jumpKey);
+      }
       this.restartReasons[reason] = (this.restartReasons[reason] ?? 0) + 1;
       const record: RestartRecord = {
         reason,
@@ -246,7 +290,7 @@ export class GopDecodeEngine {
       this.recentRestarts.push(record);
       if (this.recentRestarts.length > MAX_RESTART_RECORDS) this.recentRestarts.shift();
       const startedAt = performance.now();
-      this.restartAt(keyStored, decoder);
+      this.restartAt(jumpKey ?? keyStored, decoder);
       record.resetMs = Math.round(performance.now() - startedAt);
       this.openRestart = { record, startedAt, fedAtStart: this.packetsFed };
     }
@@ -319,6 +363,10 @@ export class GopDecodeEngine {
       if (restart) {
         restart.record.targetMs = Math.round(performance.now() - restart.startedAt);
         restart.record.fed = this.packetsFed - restart.fedAtStart;
+        // Jumps decode only up to a key frame and say nothing about sustained throughput.
+        if (restart.record.reason !== 'playback-jump' && restart.record.fed > 1) {
+          this.restartMsPerFrame = restart.record.targetMs / restart.record.fed;
+        }
         this.openRestart = null;
       }
       pending.resolve(frame);

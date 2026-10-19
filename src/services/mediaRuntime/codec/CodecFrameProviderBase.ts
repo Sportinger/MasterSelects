@@ -5,6 +5,7 @@
 // decode; everything else lives here so a new backend is only its decoder.
 
 import type { DecodeSessionPolicy, RuntimeFrameProvider, RuntimeFrameProviderBackend } from '../types';
+import { noteSlowCodecPlaybackProgress } from './slowCodecPlayback';
 
 export type CodecRequestMode = 'advance' | 'reverse' | 'seek' | 'scrub' | 'fast';
 
@@ -91,6 +92,9 @@ export abstract class CodecFrameProviderBase<
   private discardedFrameCount = 0;
   private decodeErrorCount = 0;
   private lastDecodeError: string | null = null;
+  /** Media time of a frame decoded ahead of the playhead (playback jump); held until reached. */
+  private playbackHoldUntil: number | null = null;
+  private playbackHolds = 0;
 
   constructor(options: TOptions) {
     this.options = options;
@@ -209,6 +213,7 @@ export abstract class CodecFrameProviderBase<
       reverseFrameCacheSize: 0,
       prefetchedFrameCount: this.prefetchedFrameCount,
       discardedFrameCount: this.discardedFrameCount,
+      playbackHolds: this.playbackHolds,
       lastDecodeLatencyMs: this.lastDecodeLatencyMs,
       ...this.getBackendDebugInfo(),
     };
@@ -414,10 +419,29 @@ export abstract class CodecFrameProviderBase<
     }
   }
 
+  /** Mode of the request being decoded: lets a GOP decoder trade exactness for motion during playback. */
+  protected currentRequestMode(): CodecRequestMode | null {
+    return this.activeRequest?.mode ?? null;
+  }
+
   private async decodeRequest(request: FrameRequest): Promise<void> {
     const packetSource = this.packetSource;
     if (!packetSource || !this.hasDecoder()) {
       throw new Error(`${this.label} provider is not loaded`);
+    }
+
+    // A slow decoder jumped to the next key frame: keep that picture until the playhead
+    // reaches it instead of decoding the frames in between again.
+    if (this.playbackHoldUntil !== null) {
+      if (request.mode === 'advance' && request.timeSeconds < this.playbackHoldUntil) {
+        this.playbackHolds += 1;
+        noteSlowCodecPlaybackProgress();
+        this.currentTime = request.timeSeconds;
+        this.pendingTime = null;
+        this.lastSatisfiedRequestSequence = request.sequence;
+        return;
+      }
+      this.playbackHoldUntil = null;
     }
 
     if (this.currentPacket && this.packetContainsTime(this.currentPacket, request.timeSeconds)) {
@@ -443,10 +467,18 @@ export abstract class CodecFrameProviderBase<
     }
 
     if (this.bufferedFuturePacket) this.clearBufferedFutureFrame();
-    const packet = await packetSource.getPacketAt(request.timeSeconds);
-    if (!packet) throw new Error(`No ${this.packetLabel} at ${request.timeSeconds.toFixed(3)}s`);
+    const requestedPacket = await packetSource.getPacketAt(request.timeSeconds);
+    if (!requestedPacket) throw new Error(`No ${this.packetLabel} at ${request.timeSeconds.toFixed(3)}s`);
 
-    const outputFrame = await this.decodePacket(packet);
+    const outputFrame = await this.decodePacket(requestedPacket);
+    if (request.mode === 'advance' && this.lastDecodeLatencyMs > requestedPacket.duration * 1000) {
+      noteSlowCodecPlaybackProgress();
+    }
+    // In playback a GOP decoder may answer with a later key frame; present it as what it is.
+    const outputTime = outputFrame.timestamp / 1e6;
+    const jumped = request.mode === 'advance' && outputTime > requestedPacket.timestamp + 1e-3;
+    const packet = jumped ? (await packetSource.getPacketAt(outputTime)) ?? requestedPacket : requestedPacket;
+    if (jumped) this.playbackHoldUntil = packet.timestamp;
     const newerRequestWaiting = this.pendingRequest !== null
       && this.pendingRequest.sequence > request.sequence;
     if (

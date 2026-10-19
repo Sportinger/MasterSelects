@@ -11,6 +11,11 @@ import {
 } from '../playbackDebugStats';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';
 import { wcPipelineMonitor } from '../wcPipelineMonitor';
+import { isSlowCodecPlaybackProgressing } from '../mediaRuntime/codec/slowCodecPlayback';
+import { Logger } from '../logger';
+
+const log = Logger.create('PlaybackHealth');
+let slowCodecFreezeNoted = false;
 
 export interface PreviewFreezeRecovery {
   clipId?: string;
@@ -29,6 +34,13 @@ export function classifyPreviewFreezeRecovery(params: {
   if (typeof document !== 'undefined' && document.hidden) return null;
   if (params.now - params.lastPlaybackPurgeAt < PLAYBACK_PURGE_COOLDOWN_MS) return null;
   if (params.healthVideos.length === 0) return null;
+  // A decoder slower than real time still advances; a purge would only add a GOP re-decode.
+  if (isSlowCodecPlaybackProgressing(params.now, PREVIEW_FREEZE_WINDOW_MS)) {
+    if (!slowCodecFreezeNoted) log.info('Preview advances in steps: a codec decoder is slower than real time, freeze recovery skipped');
+    slowCodecFreezeNoted = true;
+    return null;
+  }
+  slowCodecFreezeNoted = false;
 
   const playback = buildPlaybackDebugStats({
     decoder: params.decoder,
