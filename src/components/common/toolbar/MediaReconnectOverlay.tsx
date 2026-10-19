@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { mediaNeedsRelink } from '../../../services/project/relinkMedia';
 import { requestRelinkDialog } from '../../../services/project/relinkDialogRuntime';
-import { MAX_FILE_ACCESS_PROMPTS, mediaFilesNeedingAccess, mediaFoldersNeedingAccess, reconnectMedia, type MediaReconnectProgress, type MediaReconnectResult } from '../../../services/project/mediaReconnect';
+import { MAX_FILE_ACCESS_PROMPTS, getMediaReconnectProgress, mediaFilesNeedingAccess, mediaFoldersNeedingAccess, reconnectMedia, subscribeMediaReconnect, type MediaReconnectProgress, type MediaReconnectResult } from '../../../services/project/mediaReconnect';
 import { getProjectMediaSourceRootStates } from '../../../services/project/mediaSourceRoots';
 import { isLinkedMediaConnectionRunning, subscribeLinkedMediaConnection } from '../../../services/project/repository/transaction/editorLinkedMediaConnection';
 import { getEditorRepositorySession, subscribeEditorRepositorySession } from '../../../services/project/repository/transaction/editorMutationRuntime';
@@ -27,7 +27,19 @@ export function MediaReconnectHost() {
   // Offline media with a saved file location: re-allowed directly, and the folder picker starts there.
   const [knownFiles, setKnownFiles] = useState<string[]>([]);
   const lastKnownLocation = useRef<FileSystemHandle | undefined>(undefined);
-  const [busy, setBusy] = useState<MediaReconnectProgress | null>(null);
+  const [ownBusy, setBusy] = useState<MediaReconnectProgress | null>(null);
+  // Offline count when the current search started: everything gone from it since then was found.
+  const searchBaseline = useRef(0);
+  // A reconnect started elsewhere (relink dialog, tools) shows the same working view.
+  const [externalBusy, setExternalBusy] = useState<MediaReconnectProgress | null>(getMediaReconnectProgress());
+  useEffect(() => subscribeMediaReconnect(() => {
+    const progress = getMediaReconnectProgress();
+    setExternalBusy((previous) => {
+      if (!previous && progress) searchBaseline.current = useMediaStore.getState().files.filter(mediaNeedsRelink).length;
+      return progress;
+    });
+  }), []);
+  const busy = ownBusy ?? externalBusy;
   const [result, setResult] = useState<MediaReconnectResult | null>(null);
   const [choseFolder, setChoseFolder] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -41,8 +53,6 @@ export function MediaReconnectHost() {
   const visible = Boolean(session) && offline > 0 && dismissed !== session || busy !== null;
   // Folder states are read asynchronously; until then an automatic search may still start, so nothing is offered yet.
   const [foldersKnown, setFoldersKnown] = useState(false);
-  // Offline count when the current search started: everything gone from it since then was found.
-  const searchBaseline = useRef(0);
   // The automatic search calls the latest run() without re-running the folder lookup on every render.
   const autoRun = useRef<() => void>(() => {});
   // Only the tab that writes the project can save new media locations.
@@ -57,7 +67,7 @@ export function MediaReconnectHost() {
       // Folders that are still allowed need no prompt, so search them before asking for anything.
       if (autoSearched.current.session !== session) autoSearched.current = { session, names: new Set() };
       const unsearched = offlineNames.split('\n').filter(name => name && !autoSearched.current.names.has(name));
-      if (roots.length === 0 && session && !readOnly && !searching.current && unsearched.length) {
+      if (roots.length === 0 && session && !readOnly && !searching.current && !getMediaReconnectProgress() && unsearched.length) {
         for (const name of unsearched) autoSearched.current.names.add(name);
         autoRun.current();
       }
@@ -95,7 +105,8 @@ export function MediaReconnectHost() {
     : { label: 'Relink manually…', action: () => { close(); requestRelinkDialog(); } };
   const files = (count: number) => `${count.toLocaleString()} media ${count === 1 ? 'file is' : 'files are'}`;
   const missingNames = offlineNames.split('\n').slice(0, 3).join('”, “') + (offline > 3 ? '” …' : '”');
-  const status = result ? (result.missing ? `${files(result.missing)} still missing: “${missingNames}.` : 'All media are connected.') : null;
+  // Counts come from the live media list: a finished search's own number goes stale as soon as anything reconnects.
+  const status = result && offline > 0 ? `${files(offline)} still missing: “${missingNames}.` : null;
   // Working: checking the composition or searching folders. One large status, live counts, no buttons.
   const working = busy !== null || (!readOnly && (connecting || !foldersKnown));
   const found = busy ? Math.max(0, searchBaseline.current - offline) : 0;

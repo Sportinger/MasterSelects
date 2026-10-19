@@ -77,12 +77,22 @@ async function registerChosenFolder(folder: FileSystemDirectoryHandle): Promise<
  * nothing is saved), then search allowed folders for the rest and relink unique matches as one revision.
  * Must start inside the click handler: browser permission prompts need its user activation.
  */
-export function reconnectMedia(
+let runningProgress: MediaReconnectProgress | null = null;
+const runningListeners = new Set<() => void>();
+const publishRunning = (progress: MediaReconnectProgress | null) => { runningProgress = progress; for (const listener of runningListeners) listener(); };
+/** Progress of any running reconnect, including ones started outside the reconnect dialog. */
+export function getMediaReconnectProgress(): MediaReconnectProgress | null { return runningProgress; }
+export function subscribeMediaReconnect(listener: () => void): () => void { runningListeners.add(listener); return () => runningListeners.delete(listener); }
+
+export async function reconnectMedia(
   onProgress: (progress: MediaReconnectProgress) => void,
   chosenFolder?: FileSystemDirectoryHandle,
   options: { requestFileAccess?: boolean } = {},
 ): Promise<MediaReconnectResult> {
-  return withSourceIdentitiesPaused(() => reconnectMediaNow(onProgress, chosenFolder, options));
+  publishRunning({ phase: 'access', done: 0, total: 0 });
+  try {
+    return await withSourceIdentitiesPaused(() => reconnectMediaNow((progress) => { publishRunning(progress); onProgress(progress); }, chosenFolder, options));
+  } finally { publishRunning(null); }
 }
 async function reconnectMediaNow(
   onProgress: (progress: MediaReconnectProgress) => void,

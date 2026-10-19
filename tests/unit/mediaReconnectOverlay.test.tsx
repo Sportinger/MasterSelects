@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({
   files: [{ id: 'totale', name: 'Totale.MXF' }, { id: 'jonas', name: 'Jonas1.MXF' }],
   reconnectMedia: vi.fn(),
   session: { opening: { writable: true } },
+  external: null as null | { phase: string; done: number; total: number },
 }));
 
 vi.mock('../../src/stores/mediaStore', () => ({
@@ -17,6 +18,8 @@ vi.mock('../../src/services/project/mediaReconnect', () => ({
   mediaFilesNeedingAccess: async () => [],
   mediaFoldersNeedingAccess: async () => [],
   reconnectMedia: mocks.reconnectMedia,
+  getMediaReconnectProgress: () => mocks.external,
+  subscribeMediaReconnect: () => () => {},
 }));
 vi.mock('../../src/services/project/repository/transaction/editorLinkedMediaConnection', () => ({
   isLinkedMediaConnectionRunning: () => false,
@@ -82,5 +85,16 @@ describe('MediaReconnectHost', () => {
 
     await act(async () => { finish({ connected: 0, relinked: 0, missing: 2, deniedFolders: [] }); });
     await waitFor(() => expect(screen.getByRole('button', { name: 'Choose folder…' })).toBeTruthy());
+  });
+
+  it('shows the working view while a reconnect started elsewhere runs', async () => {
+    mocks.external = { phase: 'relink', done: 3, total: 8 };
+    mocks.reconnectMedia.mockReturnValue(new Promise(() => {}));
+    try {
+      render(<MediaReconnectHost />);
+      await waitFor(() => expect(screen.getByRole('dialog').textContent).toContain('Reconnecting media…'));
+      expect(screen.getByRole('dialog').textContent).toContain('Relinking media 3 / 8');
+      expect(screen.queryByRole('button', { name: /folder/ })).toBeNull();
+    } finally { mocks.external = null; }
   });
 });
