@@ -55,8 +55,11 @@ directly (up to 8 browser prompts) instead of asking for a folder. With more
 files, or when no saved location is left, "Choose folder…" opens the picker in
 the folder where an offline file was last found; the chosen folder becomes a
 known media folder, so later reloads need only the one-click re-allow. The
-dialog offers exactly one action ("Reconnect media", "Choose folder…" or, after a
-folder left files missing, "Choose another folder…" with the missing names);
+dialog shows one large animated status with live found and missing counts while it
+checks the composition or searches folders, without any button. Afterwards it
+offers exactly one action ("Reconnect media" when the browser needs a click to
+re-allow a folder, otherwise "Choose folder…", or "Choose another folder…" with
+the missing names after a chosen folder left files missing);
 Escape, the backdrop or the close icon postpone it, and single files stay
 relinkable from the Media panel. Folder pickers start in the remembered media
 folder; without one, the browser reopens the folder last chosen for media

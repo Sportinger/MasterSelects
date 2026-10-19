@@ -11,6 +11,19 @@
   .media-reconnect-header { display:flex; align-items:center; justify-content:space-between; gap:12px; }
   .repository-archive-dialog .media-reconnect-header .project-name-dialog-close { border:0; background:transparent; padding:0; }
   .repository-archive-dialog .media-reconnect-header .project-name-dialog-close:hover:not(:disabled) { background:var(--bg-hover); color:var(--text-primary); }
+  .media-reconnect-working { display:flex; flex-direction:column; gap:12px; padding:4px 0 2px; }
+  .media-reconnect-headline { display:flex; align-items:center; gap:12px; color:var(--text-primary); font-size:22px; font-weight:650; letter-spacing:-0.01em; }
+  .media-reconnect-spinner { width:20px; height:20px; flex:none; border:2px solid color-mix(in srgb, var(--accent) 25%, transparent); border-top-color:var(--accent); border-radius:50%; animation:media-reconnect-spin 0.8s linear infinite; }
+  .media-reconnect-progress { position:relative; height:6px; overflow:hidden; border-radius:3px; background:var(--bg-tertiary); }
+  .media-reconnect-progress span { position:absolute; inset:0 auto 0 0; width:0; border-radius:3px; background:var(--accent); transition:width 0.3s ease; }
+  .media-reconnect-progress.indeterminate span { width:35%; animation:media-reconnect-slide 1.2s ease-in-out infinite; }
+  .media-reconnect-counts { display:flex; gap:28px; color:var(--text-secondary); font-size:13px; }
+  .media-reconnect-counts strong { margin-right:6px; color:var(--text-primary); font-size:26px; font-weight:650; font-variant-numeric:tabular-nums; }
+  @keyframes media-reconnect-spin { to { transform:rotate(360deg); } }
+  @keyframes media-reconnect-slide { from { transform:translateX(-100%); } to { transform:translateX(290%); } }
+  @media (prefers-reduced-motion: reduce) {
+    .media-reconnect-spinner, .media-reconnect-progress.indeterminate span { animation:none; }
+  }
 }
 
 @layer overlays {

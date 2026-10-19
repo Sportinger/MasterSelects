@@ -64,4 +64,23 @@ describe('MediaReconnectHost', () => {
       expect(mocks.reconnectMedia).not.toHaveBeenCalled();
     } finally { mocks.session = { opening: { writable: true } }; }
   });
+
+  it('shows one large working status with found and missing counts and no button while it searches', async () => {
+    (window as { showDirectoryPicker?: unknown }).showDirectoryPicker = vi.fn();
+    let finish!: (result: unknown) => void;
+    mocks.reconnectMedia.mockImplementation((onProgress: (progress: unknown) => void) => {
+      onProgress({ phase: 'relink', done: 1, total: 2 });
+      return new Promise(resolve => { finish = resolve; });
+    });
+    render(<MediaReconnectHost />);
+
+    await waitFor(() => expect(screen.getByRole('dialog').textContent).toContain('Reconnecting media…'));
+    expect(screen.getByRole('dialog').textContent).toContain('0 found');
+    expect(screen.getByRole('dialog').textContent).toContain('2 missing');
+    expect(screen.getByRole('dialog').textContent).toContain('Relinking media 1 / 2');
+    expect(screen.queryByRole('button', { name: /folder/ })).toBeNull();
+
+    await act(async () => { finish({ connected: 0, relinked: 0, missing: 2, deniedFolders: [] }); });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Choose folder…' })).toBeTruthy());
+  });
 });
