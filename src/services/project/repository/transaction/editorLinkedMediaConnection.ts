@@ -65,7 +65,9 @@ export async function prepareTimelineLinkedMedia(): Promise<void> {
 }
 export async function withTimelineLinkedMedia<Args, Result>(run: (args: Args) => Promise<Result>, args: Args): Promise<Result> {
   await prepareTimelineLinkedMedia();
-  return run(args);
+  // Linked proxies (e.g. 1080p copies of 4K MXF) speed up playback only; exports use the originals.
+  const { withOriginalMediaSources } = await import('../../linkedMediaSources');
+  return withOriginalMediaSources(() => run(args));
 }
 
 function createDemandOpener(session: RepositorySession | null, items: readonly ProjectMedia[]) {

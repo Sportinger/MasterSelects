@@ -181,6 +181,9 @@ records and archives.
 **Media Source → Link proxy file…** links another file to a video media item, for
 example an H.264 copy of a codec the browser cannot decode in real time. The original
 stays the media's identity; the linked file plays, and Media Source switches back.
+Exports always render the originals: for the export run, media playing a linked
+proxy switch to their original and back afterwards (the saved choice is unchanged;
+an unreachable original keeps the proxy and logs a warning).
 
 Original media can remain linked to its selected source location. A source-root
 identifier and relative path describe the binding; browser directory handles

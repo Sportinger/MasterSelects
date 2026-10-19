@@ -12,6 +12,9 @@ const mocks = vi.hoisted(() => {
     mediaState,
     markDirty: vi.fn(),
     getLinked: vi.fn(),
+    getActive: vi.fn(),
+    getOriginal: vi.fn(),
+    setActive: vi.fn(),
     getStoredHandle: vi.fn(async () => undefined),
   };
 });
@@ -34,13 +37,13 @@ vi.mock('../../src/stores/timeline', () => ({
 
 vi.mock('../../src/services/mediaRuntime/linkedMediaSourceRuntime', () => ({
   linkedMediaSourceRuntime: {
-    getActive: vi.fn(),
-    getOriginal: vi.fn(),
+    getActive: mocks.getActive,
+    getOriginal: mocks.getOriginal,
     getLinked: mocks.getLinked,
     rememberOriginal: vi.fn(),
     setOriginal: vi.fn(),
     setLinked: vi.fn(),
-    setActive: vi.fn(),
+    setActive: mocks.setActive,
     clearActive: vi.fn(),
   },
 }));
@@ -158,5 +161,25 @@ describe('linking a proxy file to existing media', () => {
     // Linking the same file again reuses its entry.
     await expect(addLinkedMediaSourceFile('a001', file)).resolves.toBe(sourceId);
     expect((mocks.mediaState.files[0] as { linkedSources?: unknown[] }).linkedSources).toHaveLength(1);
+  });
+});
+
+describe('exports with linked proxies', () => {
+  it('render the original for the run and return to the proxy afterwards without changing the saved choice', async () => {
+    const { withOriginalMediaSources } = await import('../../src/services/project/linkedMediaSources');
+    const original = new File(['4k'], 'Totale.MXF');
+    const proxy = new File(['hd'], 'Totale Proxy1080.mp4');
+    mocks.mediaState.files = [{ id: 'totale', linkedSources: [{ id: 'p', role: 'proxy' } as never], sourceSelection: { mode: 'linked', sourceId: 'p' } }];
+    mocks.getActive.mockReturnValue({ kind: 'linked', sourceId: 'p' });
+    mocks.getOriginal.mockReturnValue({ file: original });
+    mocks.getLinked.mockReturnValue({ file: proxy });
+
+    let fileDuringExport: unknown;
+    await withOriginalMediaSources(async () => { fileDuringExport = (mocks.mediaState.files[0] as { file?: File }).file; });
+
+    expect(fileDuringExport).toBe(original);
+    expect((mocks.mediaState.files[0] as { file?: File }).file).toBe(proxy);
+    expect(mocks.mediaState.files[0]?.sourceSelection).toEqual({ mode: 'linked', sourceId: 'p' });
+    expect(mocks.setActive.mock.calls.map((call) => call[1])).toEqual([{ kind: 'original' }, { kind: 'linked', sourceId: 'p' }]);
   });
 });

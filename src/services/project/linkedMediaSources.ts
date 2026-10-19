@@ -11,6 +11,9 @@ import { createRenderablePrimaryMediaObjectUrl } from './mediaObjectUrlManager';
 import { updateTimelineClips } from '../../stores/mediaStore/slices/fileManageSlice';
 import { getMediaInfo } from '../../stores/mediaStore/helpers/mediaInfoHelpers';
 import { createThumbnail } from '../../stores/mediaStore/helpers/thumbnailHelpers';
+import { Logger } from '../logger';
+
+const log = Logger.create('LinkedMediaSources');
 
 let linkedThumbnailQueue: Promise<void> = Promise.resolve();
 
@@ -64,6 +67,36 @@ export async function addLinkedMediaSourceFile(
   if (!await attachLinkedMediaSourceFile(mediaId, sourceId, file, handle)) return null;
   await selectMediaSource(mediaId, { mode: 'linked', sourceId });
   return sourceId;
+}
+
+/**
+ * Exports render originals: a linked proxy only speeds up playback. Media playing a
+ * linked proxy switch to their original for the run and back afterwards. Runtime only:
+ * the saved source choice stays unchanged.
+ */
+export async function withOriginalMediaSources<T>(run: () => Promise<T>): Promise<T> {
+  const switched: Array<{ media: MediaFile; sourceId: string }> = [];
+  for (const media of useMediaStore.getState().files) {
+    const active = linkedMediaSourceRuntime.getActive(media.id);
+    if (active?.kind !== 'linked' || media.sourceSelection?.mode !== 'linked') continue;
+    if (media.linkedSources?.find((source) => source.id === active.sourceId)?.role !== 'proxy') continue;
+    const original = await resolveOriginal(media, false);
+    if (!original) {
+      log.warn('Export keeps a linked proxy because its original is not available', { media: media.name });
+      continue;
+    }
+    await activateRuntimeFile(media, original.file, media.sourceSelection, { kind: 'original' });
+    switched.push({ media, sourceId: active.sourceId });
+  }
+  try {
+    return await run();
+  } finally {
+    for (const { media, sourceId } of switched) {
+      const current = useMediaStore.getState().files.find((candidate) => candidate.id === media.id) ?? media;
+      const linked = await resolveLinked(current, sourceId, false);
+      if (linked) await activateRuntimeFile(current, linked.file, current.sourceSelection ?? { mode: 'linked', sourceId }, { kind: 'linked', sourceId });
+    }
+  }
 }
 
 export async function selectMediaSource(
