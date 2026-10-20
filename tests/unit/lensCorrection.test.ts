@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { lensCorrection, normalizeLensCorrection } from '../../src/effects/distort/lens-correction';
+import { lensCorrection, lensCorrectionWarnings, normalizeLensCorrection } from '../../src/effects/distort/lens-correction';
 import { getEffect, getDefaultParams, effectGroup } from '../../src/effects';
 import { CANON_24_105_PROFILE, lensProfileUniforms } from '../../src/effects/distort/lens-correction/lensProfile';
-import { lensOutputRadius } from '../../src/effects/distort/lens-correction/lensFrameFit';
+import { LENS_NO_FOLD, lensFoldRadius, lensOutputRadius, lensSourceRadius } from '../../src/effects/distort/lens-correction/lensFrameFit';
 
 describe('Lens Correction', () => {
   it('keeps legacy framing and fits barrel-distorted corners rather than zooming into them', () => {
@@ -32,6 +32,33 @@ describe('Lens Correction', () => {
       const mapped=outputRadius*Math.max(.05,(1+p[15]*(p[12]*r**3+p[13]*r**2+p[14]*r))*(1+p[0]*outputRadius**2+p[1]*outputRadius**4));
       expect(mapped).toBeCloseTo(radius,6);
     }
+  });
+  it('finds where strong barrel removal folds the picture back and leaves that area empty instead of mirroring it', () => {
+    const manual = (distortion: number, fineDistortion = 0) => ({ aspect: 1.5, centerX: .5, centerY: .5, cropFactor: 1, distortion, fineDistortion,
+      profile: lensProfileUniforms('manual', 24, 4, 1000) });
+    // r - 0.5 r^3 turns back at r = 1 / sqrt(1.5); r + f r^5 at r = (-1 / (5 f))^(1/4).
+    expect(lensFoldRadius(manual(-.5), 1)).toBeCloseTo(1 / Math.sqrt(1.5), 6);
+    expect(lensFoldRadius(manual(0, -.4), 1)).toBeCloseTo((1 / 2) ** .25, 6);
+    expect(lensFoldRadius(manual(-.2), 1)).toBe(LENS_NO_FOLD);
+    expect(lensFoldRadius(manual(.8), 4)).toBe(LENS_NO_FOLD);
+    // The packed fold radius sits in the formerly unused slot 11 and is in shader radius units.
+    expect(lensCorrection.packUniforms({ distortion: -50 }, 1500, 1000)![11]).toBeCloseTo(1 / Math.sqrt(1.5), 4);
+    expect(lensCorrection.packUniforms({ distortion: -20 }, 1500, 1000)![11]).toBe(LENS_NO_FOLD);
+    // Zooming out (Scale 60) reveals a fold that Scale 100 keeps outside the frame.
+    expect(lensCorrection.packUniforms({ distortion: -25, scale: 60 }, 1500, 1000)![11]).toBeCloseTo(1 / Math.sqrt(.75), 4);
+    // Inverse mapping stays on the monotonic branch; unreachable source radii answer the fold.
+    const geometry = manual(-.5), fold = lensFoldRadius(geometry, 2);
+    expect(lensOutputRadius(lensSourceRadius(.5, geometry), geometry, fold)).toBeCloseTo(.5, 9);
+    expect(lensOutputRadius(.9, geometry, fold)).toBe(fold);
+    // Fit Entire Photo frames the last visible ring rather than chasing an unreachable corner.
+    const fitted = lensCorrection.packUniforms({ distortion: -50, fitFullImage: true }, 1500, 1000)!;
+    expect(Number.isFinite(fitted[2])).toBe(true); expect(fitted[2]).toBeGreaterThan(.5); expect(fitted[2]).toBeLessThanOrEqual(1);
+  });
+  it('reports clamped values and folded corners instead of applying them silently', () => {
+    expect(lensCorrectionWarnings({ distortion: -10 })).toEqual([]);
+    expect(lensCorrectionWarnings({ distortion: -50 }).join(' ')).toContain('fold');
+    const clamped = lensCorrectionWarnings({ distortion: 250, vignette: NaN });
+    expect(clamped).toEqual(expect.arrayContaining([expect.stringContaining('distortion: 250 is outside -100..100; using 100'), expect.stringContaining('vignette: NaN')]));
   });
   it('bypasses profile and manual vignetting together while retaining geometry and stored settings', () => {
     const params={profile:CANON_24_105_PROFILE,focalLength:24,aperture:4,distortion:12,redFringe:2,vignette:35};

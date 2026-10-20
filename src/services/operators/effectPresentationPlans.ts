@@ -60,8 +60,12 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : includes('strength scaled clamped inverse invert selected rgba image', id) ? 'finish' : 'sampling',
   };
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
-    labels: { coordinates: type === 'wave' ? 'Wave Coordinates' : type === 'twirl' ? 'Twirl Coordinates' : 'Bulge Coordinates', sampling: 'Image Sampling' },
-    stage: ({ id }) => id === 'sample' ? 'sampling' : 'coordinates',
+    labels: { space: 'Centre, Shape & Radius', phase: 'Phase & Speed', edges: 'Frame Edges & Sampling',
+      coordinates: type === 'wave' ? 'Wave Displacement' : type === 'twirl' ? 'Twirl Angle' : 'Bulge & Pinch Curve' },
+    stage: ({ id }) => id === 'sample' || /^edge-/.test(id) ? 'edges'
+      : id === 'one-vec2' ? (type === 'wave' ? 'edges' : 'space')
+        : /^space-(moved-delta|sample-uv)$/.test(id) ? 'coordinates' : /^space-/.test(id) ? 'space'
+          : /^phase(-|$)/.test(id) ? 'phase' : 'coordinates',
   };
   if (['pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic'].includes(type)) return {
     labels: { coordinates: 'Grid & Coordinates', sampling: 'Image Sampling', finish: 'Color & Alpha' },

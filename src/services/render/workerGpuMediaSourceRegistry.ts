@@ -351,19 +351,19 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
         params.grainSpeed = finiteEffectNumber(effectParams.speed, 1);
         break;
       case 'wave':
-        params.waveAmplitudeX = finiteEffectNumber(effectParams.amplitudeX, 0.02);
-        params.waveAmplitudeY = finiteEffectNumber(effectParams.amplitudeY, 0.02);
-        params.waveFrequencyX = finiteEffectNumber(effectParams.frequencyX, 5);
-        params.waveFrequencyY = finiteEffectNumber(effectParams.frequencyY, 5);
+        params.waveAmplitudeX = finiteEffectNumber(effectParams.amplitudeX, 0.015);
+        params.waveAmplitudeY = finiteEffectNumber(effectParams.amplitudeY, 0.015);
+        params.waveFrequencyX = finiteEffectNumber(effectParams.frequencyX, 4);
+        params.waveFrequencyY = finiteEffectNumber(effectParams.frequencyY, 4);
         break;
       case 'twirl':
-        params.twirlAmount = finiteEffectNumber(effectParams.amount, 1);
+        params.twirlAmount = finiteEffectNumber(effectParams.amount, 2);
         params.twirlRadius = Math.max(0.0001, finiteEffectNumber(effectParams.radius, 0.5));
         params.twirlCenterX = finiteEffectNumber(effectParams.centerX, 0.5);
         params.twirlCenterY = finiteEffectNumber(effectParams.centerY, 0.5);
         break;
       case 'bulge':
-        params.bulgeAmount = finiteEffectNumber(effectParams.amount, 0.5);
+        params.bulgeAmount = finiteEffectNumber(effectParams.amount, 1.6);
         params.bulgeRadius = Math.max(0.0001, finiteEffectNumber(effectParams.radius, 0.5));
         params.bulgeCenterX = finiteEffectNumber(effectParams.centerX, 0.5);
         params.bulgeCenterY = finiteEffectNumber(effectParams.centerY, 0.5);

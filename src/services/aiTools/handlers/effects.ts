@@ -18,6 +18,15 @@ function deprecatedParamWarnings(effectType: string, params: Record<string, unkn
   return Object.keys(params ?? {}).flatMap(name => definitions[name]?.deprecated ? [`${name}: ${definitions[name].deprecated}`] : []);
 }
 
+/** Values the effect clamps or cannot show, judged on the effect's resulting parameters. */
+function effectParamWarnings(effectType: string, params: Record<string, unknown> | undefined): string[] {
+  const definition = getEffect(effectType);
+  if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings || !params) return [];
+  try {
+    return definition.paramWarnings(params as Record<string, number | boolean | string>);
+  } catch { return []; }
+}
+
 export async function handleListEffects(): Promise<ToolResult> {
   const categories = getCategoriesWithEffects();
   const data = categories.map(({ category, effects }) => ({
@@ -84,7 +93,8 @@ export async function handleAddEffect(
   }
 
   invalidateCache();
-  const warnings = deprecatedParamWarnings(effectType, customParams);
+  const warnings = [...deprecatedParamWarnings(effectType, customParams),
+    ...(customParams ? effectParamWarnings(effectType, { ...getDefaultParams(effectType), ...customParams }) : [])];
 
   return {
     success: true,
@@ -178,7 +188,7 @@ export async function handleUpdateEffect(
   // Visual feedback: select clip and open effects tab
   selectClipAndOpenTab(clipId, 'effects');
 
-  const warnings = deprecatedParamWarnings(effect.type, params);
+  const warnings = [...deprecatedParamWarnings(effect.type, params), ...effectParamWarnings(effect.type, { ...effect.params, ...params })];
   return {
     success: true,
     data: {

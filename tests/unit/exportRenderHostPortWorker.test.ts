@@ -1024,7 +1024,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
-      .toMatchObject({ waveAdjustments: [{ amplitudeX: 0.01, amplitudeY: 0.02, frequencyX: 4, frequencyY: 6 }] });
+      .toMatchObject({ imageOperatorPlans: [expect.any(Object)] });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
@@ -1074,7 +1074,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
-      .toMatchObject({ twirlAdjustments: [{ amount: 1.2, radius: 0.75, centerX: 0.5, centerY: 0.45 }] });
+      .toMatchObject({ imageOperatorPlans: [expect.any(Object)] });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
@@ -1087,7 +1087,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
-      .toMatchObject({ bulgeAdjustments: [{ amount: 1.4, radius: 0.6, centerX: 0.55, centerY: 0.5 }] });
+      .toMatchObject({ imageOperatorPlans: [expect.any(Object)] });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();

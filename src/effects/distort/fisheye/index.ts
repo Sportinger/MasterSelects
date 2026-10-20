@@ -5,7 +5,7 @@ import radialProjection from '../../_shared/radialProjection.wgsl?raw';
 import fisheyeShader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
 import { imageDegreesToRadians } from '../../../services/operators/imageAngleSemantics';
-import { normalizeFisheyeParameters } from './normalization';
+import { fisheyeParameterWarnings, normalizeFisheyeParameters } from './normalization';
 import { FISHEYE_PARAMS } from './parameters';
 
 const optionIndex = (id: 'projection' | 'edgeMode', value: string) =>
@@ -19,6 +19,7 @@ export const fisheye: EffectDefinition = {
   entryPoint: 'fisheyeFragment',
   uniformSize: 96,
   params: FISHEYE_PARAMS,
+  paramWarnings: fisheyeParameterWarnings,
   packUniforms: (params, width, height) => {
     const value = normalizeFisheyeParameters(params);
     const safeWidth = Math.max(1, width), safeHeight = Math.max(1, height);

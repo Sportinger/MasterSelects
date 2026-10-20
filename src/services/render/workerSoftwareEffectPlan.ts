@@ -8,6 +8,8 @@ import { isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 
+const GRAPH_ONLY_SOFTWARE_EFFECTS = new Set(['wave', 'twirl', 'bulge']);
+
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
   multiply: 'multiply',
@@ -100,25 +102,7 @@ interface MutableWorkerSoftwarePixelEffects {
   }[];
   scanlineAdjustments?: { density: number; opacity: number; speed: number }[];
   grainAdjustments?: { amount: number; size: number; speed: number }[];
-  waveAdjustments?: {
-    amplitudeX: number;
-    amplitudeY: number;
-    frequencyX: number;
-    frequencyY: number;
-  }[];
   kaleidoscopeAdjustments?: { segments: number; rotation: number }[];
-  twirlAdjustments?: {
-    amount: number;
-    radius: number;
-    centerX: number;
-    centerY: number;
-  }[];
-  bulgeAdjustments?: {
-    amount: number;
-    radius: number;
-    centerX: number;
-    centerY: number;
-  }[];
   fisheyeAdjustments?: {
     projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';
     strength: number;
@@ -327,38 +311,11 @@ function effectFilterPart(
         speed: finiteEffectNumber(effect.params.speed, 1),
       });
       return '';
-    case 'wave':
-      if (!canAddSourceResamplingEffect(pixelEffects)) return null;
-      (pixelEffects.waveAdjustments ??= []).push({
-        amplitudeX: finiteEffectNumber(effect.params.amplitudeX, 0.02),
-        amplitudeY: finiteEffectNumber(effect.params.amplitudeY, 0.02),
-        frequencyX: finiteEffectNumber(effect.params.frequencyX, 5),
-        frequencyY: finiteEffectNumber(effect.params.frequencyY, 5),
-      });
-      return '';
     case 'kaleidoscope':
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
       (pixelEffects.kaleidoscopeAdjustments ??= []).push({
         segments: Math.max(2, finiteEffectNumber(effect.params.segments, 6)),
         rotation: finiteEffectNumber(effect.params.rotation, 0),
-      });
-      return '';
-    case 'twirl':
-      if (!canAddSourceResamplingEffect(pixelEffects)) return null;
-      (pixelEffects.twirlAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 1),
-        radius: Math.max(0.0001, finiteEffectNumber(effect.params.radius, 0.5)),
-        centerX: finiteEffectNumber(effect.params.centerX, 0.5),
-        centerY: finiteEffectNumber(effect.params.centerY, 0.5),
-      });
-      return '';
-    case 'bulge':
-      if (!canAddSourceResamplingEffect(pixelEffects)) return null;
-      (pixelEffects.bulgeAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 0.5),
-        radius: Math.max(0.0001, finiteEffectNumber(effect.params.radius, 0.5)),
-        centerX: finiteEffectNumber(effect.params.centerX, 0.5),
-        centerY: finiteEffectNumber(effect.params.centerY, 0.5),
       });
       return '';
     case 'fisheye': {
@@ -460,8 +417,9 @@ function effectFilterPart(
 export function workerSoftwareEffectPlanForLayer(layer: Layer): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
+  // Wave, Twirl and Bulge have no hand-written software path: their graph is the only definition.
   const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
-    && (effect.operatorGraph || effect.params.operatorGraph !== undefined));
+    && (effect.operatorGraph || effect.params.operatorGraph !== undefined || GRAPH_ONLY_SOFTWARE_EFFECTS.has(effect.type)));
   if (hasPersistedImageGraph) {
     if (!activeEffects.every(effect => isImageGraphEffectType(effect.type))) return null;
     try {

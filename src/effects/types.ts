@@ -73,6 +73,13 @@ export interface FullscreenEffectDefinition {
     timelineTimeSeconds?: number,
   ) => Float32Array | null;
 
+  /**
+   * Optional: notes for values the renderer clamps, ignores or cannot show (e.g. an
+   * out-of-range number or a setting with no visible result). Tool results return them as
+   * warnings; effect inspectors may show them. Never silent about a degraded value.
+   */
+  paramWarnings?: (params: Record<string, number | boolean | string>) => string[];
+
   // Optional: Multi-pass for complex effects (blur, glow, etc.)
   passes?: number;
 

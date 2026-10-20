@@ -167,11 +167,11 @@ fn effectUv(sourceUv: vec2f) -> vec2f {
   if (abs(layer.bulgeAmount) > 0.000001) {
     let center = vec2f(layer.bulgeCenterX, layer.bulgeCenterY);
     let delta = uv - center;
-    let dist = length(delta);
-    let safeDist = max(dist, 0.0001);
-    let radius = max(layer.bulgeRadius, 0.0001);
-    let newDist = pow(safeDist / radius, layer.bulgeAmount) * radius;
-    uv = select(uv, center + delta / safeDist * newDist, dist < radius && dist > 0.0);
+    // Smooth Bulge & Pinch curve (uvDistortRecipes.ts); this fast path keeps Stretch to Frame and Clamp.
+    let r = length(delta) / max(layer.bulgeRadius, 0.0001);
+    let inside = max(1.0 - r * r, 0.0);
+    let beta = max(layer.bulgeAmount - 1.0, 0.0) * 1.232 - clamp(1.0 - layer.bulgeAmount, 0.0, 1.0) * 0.95;
+    uv = center + delta * exp(-beta * inside * inside);
   }
   if (layer.mirrorHorizontal == 1u && uv.x > 0.5) { uv.x = 1.0 - uv.x; }
   if (layer.mirrorVertical == 1u && uv.y > 0.5) { uv.y = 1.0 - uv.y; }

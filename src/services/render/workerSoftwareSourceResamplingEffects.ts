@@ -42,24 +42,6 @@ function mirrorEdgeUv(value: number): number {
   return wrapped > 1 ? 2 - wrapped : wrapped;
 }
 
-function applyWaveAdjustment(
-  sourceData: Uint8ClampedArray,
-  width: number,
-  height: number,
-  uvX: number,
-  uvY: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['waveAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  let sampleUvY = uvY + Math.sin(uvX * finiteNumber(adjustment.frequencyX, 5) * Math.PI * 2)
-    * finiteNumber(adjustment.amplitudeX, 0.02);
-  const sampleUvX = uvX + Math.sin(sampleUvY * finiteNumber(adjustment.frequencyY, 5) * Math.PI * 2)
-    * finiteNumber(adjustment.amplitudeY, 0.02);
-  sampleUvY = clamp01(sampleUvY);
-  return sampleRgba(sourceData, width, height, clamp01(sampleUvX), sampleUvY);
-}
-
 function applyKaleidoscopeAdjustment(
   sourceData: Uint8ClampedArray,
   width: number,
@@ -86,33 +68,6 @@ function applyKaleidoscopeAdjustment(
     clamp01(Math.cos(foldedAngle) * radius + 0.5),
     clamp01(Math.sin(foldedAngle) * radius + 0.5),
   );
-}
-
-function applyTwirlAdjustment(
-  sourceData: Uint8ClampedArray,
-  width: number,
-  height: number,
-  uvX: number,
-  uvY: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['twirlAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  const centerX = finiteNumber(adjustment.centerX, 0.5);
-  const centerY = finiteNumber(adjustment.centerY, 0.5);
-  const deltaX = uvX - centerX;
-  const deltaY = uvY - centerY;
-  const distance = Math.hypot(deltaX, deltaY);
-  const radius = Math.max(finiteNumber(adjustment.radius, 0.5), 0.0001);
-  if (distance >= radius) return sampleRgba(sourceData, width, height, uvX, uvY);
-
-  const factor = 1 - Math.min(distance / radius, 1);
-  const angle = finiteNumber(adjustment.amount, 1) * factor * factor;
-  const sine = Math.sin(angle);
-  const cosine = Math.cos(angle);
-  const sampleUvX = centerX + deltaX * cosine - deltaY * sine;
-  const sampleUvY = centerY + deltaX * sine + deltaY * cosine;
-  return sampleRgba(sourceData, width, height, clamp01(sampleUvX), clamp01(sampleUvY));
 }
 
 function applyMotionBlurAdjustment(
@@ -258,33 +213,6 @@ function applyZoomBlurAdjustment(
     b / samples,
     alpha / samples,
   ];
-}
-
-function applyBulgeAdjustment(
-  sourceData: Uint8ClampedArray,
-  width: number,
-  height: number,
-  uvX: number,
-  uvY: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['bulgeAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  const centerX = finiteNumber(adjustment.centerX, 0.5);
-  const centerY = finiteNumber(adjustment.centerY, 0.5);
-  const deltaX = uvX - centerX;
-  const deltaY = uvY - centerY;
-  const distance = Math.hypot(deltaX, deltaY);
-  const radius = Math.max(finiteNumber(adjustment.radius, 0.5), 0.0001);
-  if (distance >= radius || distance <= 0) return sampleRgba(sourceData, width, height, uvX, uvY);
-
-  const safeDistance = Math.max(distance, 0.0001);
-  const normalizedDistance = safeDistance / radius;
-  const factor = normalizedDistance ** finiteNumber(adjustment.amount, 0.5);
-  const newDistance = factor * radius;
-  const sampleUvX = centerX + (deltaX / safeDistance) * newDistance;
-  const sampleUvY = centerY + (deltaY / safeDistance) * newDistance;
-  return sampleRgba(sourceData, width, height, clamp01(sampleUvX), clamp01(sampleUvY));
 }
 
 type FisheyeAdjustment = NonNullable<
@@ -498,10 +426,7 @@ function applyFisheyeAdjustment(
 export function hasWorkerSoftwareSourceResamplingEffects(
   pixelEffects: WorkerRenderSoftwarePixelEffects | undefined,
 ): boolean {
-  return (pixelEffects?.waveAdjustments?.length ?? 0) > 0
-    || (pixelEffects?.kaleidoscopeAdjustments?.length ?? 0) > 0
-    || (pixelEffects?.twirlAdjustments?.length ?? 0) > 0
-    || (pixelEffects?.bulgeAdjustments?.length ?? 0) > 0
+  return (pixelEffects?.kaleidoscopeAdjustments?.length ?? 0) > 0
     || (pixelEffects?.fisheyeAdjustments?.length ?? 0) > 0
     || (pixelEffects?.motionBlurAdjustments?.length ?? 0) > 0
     || (pixelEffects?.radialBlurAdjustments?.length ?? 0) > 0
@@ -519,17 +444,8 @@ export function applyWorkerSoftwareSourceResamplingEffects(
   const uvX = (x + 0.5) / width;
   const uvY = (y + 0.5) / height;
   let output: readonly [number, number, number, number] | null = null;
-  for (const adjustment of pixelEffects.waveAdjustments ?? []) {
-    output = applyWaveAdjustment(sourceData, width, height, uvX, uvY, adjustment);
-  }
   for (const adjustment of pixelEffects.kaleidoscopeAdjustments ?? []) {
     output = applyKaleidoscopeAdjustment(sourceData, width, height, uvX, uvY, adjustment);
-  }
-  for (const adjustment of pixelEffects.twirlAdjustments ?? []) {
-    output = applyTwirlAdjustment(sourceData, width, height, uvX, uvY, adjustment);
-  }
-  for (const adjustment of pixelEffects.bulgeAdjustments ?? []) {
-    output = applyBulgeAdjustment(sourceData, width, height, uvX, uvY, adjustment);
   }
   for (const adjustment of pixelEffects.fisheyeAdjustments ?? []) {
     output = applyFisheyeAdjustment(sourceData, width, height, uvX, uvY, adjustment);

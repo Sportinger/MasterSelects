@@ -203,27 +203,9 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly size: number;
     readonly speed: number;
   }[];
-  readonly waveAdjustments?: readonly {
-    readonly amplitudeX: number;
-    readonly amplitudeY: number;
-    readonly frequencyX: number;
-    readonly frequencyY: number;
-  }[];
   readonly kaleidoscopeAdjustments?: readonly {
     readonly segments: number;
     readonly rotation: number;
-  }[];
-  readonly twirlAdjustments?: readonly {
-    readonly amount: number;
-    readonly radius: number;
-    readonly centerX: number;
-    readonly centerY: number;
-  }[];
-  readonly bulgeAdjustments?: readonly {
-    readonly amount: number;
-    readonly radius: number;
-    readonly centerX: number;
-    readonly centerY: number;
   }[];
   readonly fisheyeAdjustments?: readonly {
     readonly projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';

@@ -1,10 +1,14 @@
-// Twirl Effect Shader
+// Twirl: WGSL reference of the editable graph (services/operators/uvDistortRecipes.ts).
 
 struct TwirlParams {
-  amount: f32,
+  amount: f32,    // turn at the centre in radians, fading to 0 at the radius
   radius: f32,
   centerX: f32,
   centerY: f32,
+  shape: f32,
+  edges: f32,
+  width: f32,
+  height: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -13,26 +17,14 @@ struct TwirlParams {
 
 @fragment
 fn twirlFragment(input: VertexOutput) -> @location(0) vec4f {
+  let resolution = vec2f(params.width, params.height);
   let center = vec2f(params.centerX, params.centerY);
-  let delta = input.uv - center;
-  let dist = length(delta);
-
-  // Calculate twirled UV unconditionally to satisfy uniform control flow
-  let safeRadius = max(params.radius, 0.0001); // Avoid division by zero
-  let factor = 1.0 - min(dist / safeRadius, 1.0);
-  let angle = params.amount * factor * factor;
-
+  let scale = distortShapeScale(params.shape, resolution);
+  let p = (input.uv - center) * scale;
+  let falloff = 1.0 - min(length(p) / max(params.radius, 0.0001), 1.0);
+  let angle = params.amount * falloff * falloff;
   let s = sin(angle);
   let c = cos(angle);
-  let rotated = vec2f(
-    delta.x * c - delta.y * s,
-    delta.x * s + delta.y * c
-  );
-  let twirledUV = center + rotated;
-
-  // Use select to choose UV based on whether we're in the effect radius
-  let inRadius = dist < params.radius;
-  let finalUV = select(input.uv, twirledUV, inRadius);
-
-  return textureSample(inputTex, texSampler, finalUV);
+  let moved = vec2f(p.x * c - p.y * s, p.x * s + p.y * c);
+  return distortSampleEdges(inputTex, texSampler, center + moved / scale, params.edges, resolution);
 }
