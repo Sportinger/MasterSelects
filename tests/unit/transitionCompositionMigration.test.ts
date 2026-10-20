@@ -405,4 +405,50 @@ describe('transition composition load migration', () => {
     expect(clip.transitionRecipeBlendWindows).toEqual(projectComposition.clips[0].transitionRecipeBlendWindows);
     expect(composition.transitionComp?.sourceLayout).toBe('mapped-v3');
   });
+
+  it('upgrades a stored Crossfade composition on load without losing changes made inside it', () => {
+    const outgoing = clip('out', 0);
+    const incoming = clip('in', 2);
+    outgoing.transitionOut = { id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'in' };
+    incoming.transitionIn = { id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'out' };
+    const parent: Composition = {
+      id: 'parent', name: 'Parent', type: 'composition', parentId: null, createdAt: 1,
+      width: 1920, height: 1080, frameRate: 30, duration: 4, backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [outgoing, incoming], duration: 4 },
+    };
+    useMediaStore.setState({ compositions: [parent], activeCompositionId: 'parent', openCompositionIds: ['parent'] });
+    normalizeLoadedTransitionCompositions();
+
+    const outgoingId = 'transition-comp:transition-1:outgoing';
+    const created = useMediaStore.getState().compositions.find((composition) => composition.transitionComp?.kind === 'transition-comp')!;
+    // As saved before the recipe revision: old key, no outgoing fade, plus a title and a grade the user added inside.
+    const title = { ...clip('user-title', 0), trackId: 'user-track', name: 'Title' };
+    const grade = { id: 'user-grade', name: 'Brightness', type: 'brightness', enabled: true, params: { amount: 0.2 } } as SerializableClip['effects'][number];
+    const stale: Composition = {
+      ...created,
+      transitionComp: { ...created.transitionComp!, templateParamsKey: JSON.stringify({ params: [] }) },
+      timelineData: {
+        ...created.timelineData!,
+        clips: [
+          ...created.timelineData!.clips.map((candidate) => candidate.id === outgoingId
+            ? { ...candidate, keyframes: [], effects: [grade] }
+            : candidate),
+          title,
+        ],
+      },
+    };
+    useMediaStore.setState({
+      compositions: useMediaStore.getState().compositions.map((composition) => composition.id === stale.id ? stale : composition),
+    });
+
+    normalizeLoadedTransitionCompositions();
+
+    const upgraded = useMediaStore.getState().compositions.find((composition) => composition.id === stale.id)!;
+    const upgradedOutgoing = upgraded.timelineData!.clips.find((candidate) => candidate.id === outgoingId)!;
+    expect(upgraded.timelineData!.clips.map((candidate) => candidate.id)).toContain('user-title');
+    expect(upgradedOutgoing.effects).toEqual([grade]);
+    expect(upgradedOutgoing.keyframes?.filter((keyframe) => keyframe.property === 'opacity').map((keyframe) => keyframe.value))
+      .toEqual([1, 0]);
+    expect(JSON.parse(upgraded.transitionComp!.templateParamsKey!)).toEqual({ params: [], revision: [1, 1] });
+  });
 });

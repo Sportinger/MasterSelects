@@ -1,3 +1,5 @@
+import { WORKER_PRESENTER_PLUS_BLEND_WGSL } from './workerGpuPresenterBlendModes';
+
 export const VIDEO_FRAME_LAYER_COMPOSITE_SHADER = `
 struct VertexOutput { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 struct LayerParams {
@@ -319,7 +321,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let baseColor = textureSample(baseTexture, frameSampler, input.uv);
   let layerUv = effectUv(input.uv);
   let frameColor = applyColorEffects(sampleFrame(layerUv), input.uv);
-  let alpha = clamp(frameColor.a * clamp(layer.opacity, 0.0, 1.0), 0.0, 1.0);
+  let alpha = clamp(frameColor.a * clamp(layer.opacity, 0.0, 1.0), 0.0, 1.0);${WORKER_PRESENTER_PLUS_BLEND_WGSL}
   let blended = clampColor(blendRgb(baseColor.rgb, frameColor.rgb, layer.blendMode));
   let outAlpha = alpha + baseColor.a * (1.0 - alpha);
   return vec4f(mix(baseColor.rgb, blended, alpha), outAlpha);

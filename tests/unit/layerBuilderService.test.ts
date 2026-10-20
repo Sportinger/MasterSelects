@@ -508,6 +508,48 @@ describe('LayerBuilderService paused visual provider selection', () => {
     expect(nestedComposition?.sceneClips?.filter((clip) => clip.transitionSourceMap?.version === 2)).toHaveLength(2);
   });
 
+  it('dissolves two Screen clips plainly inside the transition and screens the result over the lower tracks', () => {
+    const service = new LayerBuilderService();
+    setSingleVideoTrackMediaState();
+    const screenClip = (id: string, startTime: number, inPoint: number, player: WebCodecsPlayerSlot) => ({
+      id,
+      trackId: 'track-v1',
+      name: `${id}.mp4`,
+      startTime,
+      duration: 8,
+      inPoint,
+      outPoint: inPoint + 8,
+      effects: [],
+      transform: { ...DEFAULT_TRANSFORM, blendMode: 'screen' as const },
+      source: { type: 'video' as const, naturalDuration: 10, webCodecsPlayer: player },
+      isLoading: false,
+    });
+    useTimelineStore.setState({
+      tracks: [{ id: 'track-v1', name: 'Video 1', type: 'video', visible: true, muted: false, solo: false }],
+      clips: [
+        { ...screenClip('clip-a', 0, 0, createTestWebCodecsPlayer(8)), transitionOut: { id: 'screen-fade', type: 'crossfade', duration: 2, linkedClipId: 'clip-b' } },
+        { ...screenClip('clip-b', 8, 1, createTestWebCodecsPlayer(1)), transitionIn: { id: 'screen-fade', type: 'crossfade', duration: 2, linkedClipId: 'clip-a' } },
+      ],
+      playheadPosition: 8.5,
+      isPlaying: false,
+      isDraggingPlayhead: false,
+      playbackSpeed: 1,
+    });
+
+    const layers = service.buildLayersFromStore();
+    const nested = layers[0]?.source?.nestedComposition?.layers ?? [];
+    // Preview names nested layers `nested-layer-<clip id>` and keeps a runtime id in sourceClipId.
+    const outgoing = nested.find((layer) => layer.id === 'nested-layer-transition-comp:screen-fade:outgoing');
+    const incoming = nested.find((layer) => layer.id === 'nested-layer-transition-comp:screen-fade:incoming');
+
+    expect(layers).toHaveLength(1);
+    expect(layers[0]).toMatchObject({ blendMode: 'screen', premultipliedAlpha: true, opacity: 1 });
+    expect(outgoing).toMatchObject({ blendMode: 'normal' });
+    expect(incoming).toMatchObject({ blendMode: 'plus' });
+    expect(outgoing?.opacity).toBeCloseTo(0.25);
+    expect(incoming?.opacity).toBeCloseTo(0.75);
+  });
+
   it('hydrates transition composition playback with parent clip runtime sources', () => {
     const service = new LayerBuilderService();
     const outgoingPlayer = createTestWebCodecsPlayer(9);

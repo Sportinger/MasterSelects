@@ -7,7 +7,9 @@ export const crossfade: TransitionDefinition = {
   id: 'crossfade',
   name: 'Crossfade',
   category: 'dissolve',
-  defaultDuration: 2,
+  // About one second, like the default dissolve in other editors: a centred
+  // transition then needs only half a second of extra footage on each side.
+  defaultDuration: 1,
   minDuration: 0.1,
   maxDuration: 5.0,
   description: 'Dissolve: the outgoing clip fades out while the incoming clip fades in',

@@ -1,31 +1,17 @@
 import type { ClipAudioRegionGainPreview, TimelineClip, TimelineTrack } from '../../types';
 import {
   createTransitionSourceClip,
-  DEFAULT_TRANSITION_PLACEMENT,
-  findActiveTransitionPlanForTrack,
-  planTransition,
   type ActiveTransitionPlan,
   type TransitionParticipantPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
-import { getCrossfadeAudioGains, getRuntimeTransition, transitionIncludesAudio } from '../../transitions';
+import { getCrossfadeAudioGains } from '../../transitions';
+import { getAudioCrossfadeProgress, planAudioCrossfadeFromClip } from '../audio/audioCrossfadePlanning';
 import { createLiveAudioRouteSettings } from '../audio/audioGraphRouteSettings';
 import { getClipAudioEditPreviewVolumeMultiplier } from '../audio/clipAudioEditPreview';
 import { proxyFrameCache } from '../proxyFrameCache';
 import { getClipTimeInfo } from './FrameContext';
 import { pauseAudioElement } from './audioTrackElementUtils';
 import type { AudioSyncState, AudioSyncTarget, FrameContext } from './types';
-
-const EPSILON = 1e-6;
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
-function getTransitionProgress(plan: ActiveTransitionPlan['plan'], time: number): number {
-  const duration = plan.bodyEnd - plan.bodyStart;
-  if (duration <= EPSILON) return 1;
-  return clamp01((time - plan.bodyStart) / duration);
-}
 
 function getCrossfadeAudioRouteSettings(
   ctx: FrameContext,
@@ -66,24 +52,20 @@ export class AudioTrackCrossfadeTransitionSync {
   }
 
   getActiveForTrack(ctx: FrameContext, track: TimelineTrack): ActiveTransitionPlan | null {
-    const getMediaDuration = (mediaFileId: string) => ctx.mediaFileById.get(mediaFileId)?.duration;
-    const directAudioCrossfade = findActiveTransitionPlanForTrack({
-      clips: ctx.clips,
-      trackId: track.id,
-      time: ctx.playheadPosition,
-      placement: DEFAULT_TRANSITION_PLACEMENT,
-      edgePolicy: 'hold',
-      getMediaDuration,
-    });
-    if (
-      directAudioCrossfade?.plan.transitionType === 'crossfade' &&
-      this.deps.isAudioSourceClip(directAudioCrossfade.outgoingClip) &&
-      this.deps.isAudioSourceClip(directAudioCrossfade.incomingClip)
-    ) {
-      return directAudioCrossfade;
+    const options = {
+      isAudioSourceClip: this.deps.isAudioSourceClip,
+      getMediaDuration: (mediaFileId: string) => ctx.mediaFileById.get(mediaFileId)?.duration,
+    };
+    for (const clip of ctx.clips) {
+      if (clip.transitionOut?.type !== 'crossfade') continue;
+      // The export renders the same pairs (exportAudioCrossfades) from this planner.
+      const pair = planAudioCrossfadeFromClip(clip, ctx.clips, options);
+      if (!pair || pair.outgoingClip.trackId !== track.id) continue;
+      if (ctx.playheadPosition >= pair.plan.bodyStart && ctx.playheadPosition < pair.plan.bodyEnd) {
+        return { plan: pair.plan, outgoingClip: pair.outgoingClip, incomingClip: pair.incomingClip };
+      }
     }
-
-    return this.getActiveLinkedVideoAudioCrossfadeForTrack(ctx, track, getMediaDuration);
+    return null;
   }
 
   sync({
@@ -101,8 +83,7 @@ export class AudioTrackCrossfadeTransitionSync {
     activeTransitionAudioClipIds: Set<string>;
     regionGainPreview: ClipAudioRegionGainPreview | null | undefined;
   }): void {
-    const progress = getTransitionProgress(activeTransition.plan, ctx.playheadPosition);
-    const gains = getCrossfadeAudioGains(progress);
+    const gains = getCrossfadeAudioGains(getAudioCrossfadeProgress(activeTransition.plan, ctx.playheadPosition));
     activeTransitionAudioClipIds.add(activeTransition.outgoingClip.id);
     activeTransitionAudioClipIds.add(activeTransition.incomingClip.id);
 
@@ -126,59 +107,6 @@ export class AudioTrackCrossfadeTransitionSync {
       canBeMaster: !state.masterSet,
       regionGainPreview,
     });
-  }
-
-  private getActiveLinkedVideoAudioCrossfadeForTrack(
-    ctx: FrameContext,
-    track: TimelineTrack,
-    getMediaDuration: (mediaFileId: string) => number | undefined,
-  ): ActiveTransitionPlan | null {
-    for (const outgoingVideo of ctx.clips) {
-      const transition = outgoingVideo.transitionOut;
-      if (!transition || transition.type !== 'crossfade') continue;
-
-      const definition = getRuntimeTransition(transition.type);
-      if (!transitionIncludesAudio(transition, definition)) continue;
-
-      const incomingVideo = ctx.clips.find(candidate => candidate.id === transition.linkedClipId);
-      if (!incomingVideo) continue;
-
-      const outgoingAudio = this.findLinkedAudioClipOnTrack(ctx, outgoingVideo, track.id);
-      const incomingAudio = this.findLinkedAudioClipOnTrack(ctx, incomingVideo, track.id);
-      if (!outgoingAudio || !incomingAudio) continue;
-
-      const plan = planTransition({
-        outgoingClip: outgoingAudio,
-        incomingClip: incomingAudio,
-        transitionType: 'crossfade',
-        requestedDuration: transition.duration,
-        params: transition.params,
-        placement: DEFAULT_TRANSITION_PLACEMENT,
-        edgePolicy: 'hold',
-        junctionTime: outgoingVideo.startTime + outgoingVideo.duration,
-        bodyOffset: transition.offset ?? 0,
-        getMediaDuration,
-      });
-      if (!plan) continue;
-
-      if (ctx.playheadPosition >= plan.bodyStart && ctx.playheadPosition < plan.bodyEnd) {
-        return { plan, outgoingClip: outgoingAudio, incomingClip: incomingAudio };
-      }
-    }
-
-    return null;
-  }
-
-  private findLinkedAudioClipOnTrack(
-    ctx: FrameContext,
-    clip: TimelineClip,
-    trackId: string,
-  ): TimelineClip | undefined {
-    if (!clip.linkedClipId) return undefined;
-    const linkedClip = ctx.clips.find(candidate => candidate.id === clip.linkedClipId);
-    return linkedClip?.trackId === trackId && this.deps.isAudioSourceClip(linkedClip)
-      ? linkedClip
-      : undefined;
   }
 
   private syncParticipant({

@@ -342,6 +342,7 @@ function createSourceLayer(
     transitionRender: renderLayer.transitionRender
       ? { ...renderLayer.transitionRender }
       : undefined,
+    ...(renderLayer.premultipliedAlpha ? { premultipliedAlpha: true } : {}),
   };
 }
 

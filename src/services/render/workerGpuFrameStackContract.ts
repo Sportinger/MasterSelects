@@ -242,6 +242,7 @@ const RENDER_LAYER_KEYS = [
   'maskInvert',
   'maskClipId',
   'transitionRender',
+  'premultipliedAlpha',
 ] as const;
 
 type UnknownRecord = Record<string, unknown>;
@@ -465,6 +466,10 @@ function assertRenderLayer(
   const blendMode = dataValue(record, 'blendMode', path, code);
   if (typeof blendMode !== 'string' || blendMode.length === 0) {
     fail(code, `${path}.blendMode`);
+  }
+  const premultipliedAlpha = optionalDataValue(record, 'premultipliedAlpha', path);
+  if (premultipliedAlpha !== undefined && typeof premultipliedAlpha !== 'boolean') {
+    fail(code, `${path}.premultipliedAlpha`);
   }
   assertFiniteVector(dataValue(record, 'position', path, code), ['x', 'y', 'z'], `${path}.position`, code);
   const scale = requirePlainRecord(dataValue(record, 'scale', path, code), `${path}.scale`, code);

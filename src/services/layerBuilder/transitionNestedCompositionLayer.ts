@@ -4,6 +4,7 @@ import type { Layer } from '../../types/layers';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 import type { TimelineTransition } from '../../types/timelineCore';
 import type { BackgroundVideoPlaybackOptions } from '../compositionRender/layerEvaluation';
+import { resolveTransitionCompositionBlend } from './transitionCompositionBlend';
 
 interface TransitionNestedCompositionRuntime {
   getComposition: (compositionId: string) => Composition | null | undefined;
@@ -37,13 +38,17 @@ export function createTransitionNestedCompositionLayer(params: {
     sceneTracks,
   } = params;
 
+  // The clips' shared blend mode (Screen, Multiply, …) blends the finished
+  // transition over the lower tracks instead of a transparent background.
+  const blend = resolveTransitionCompositionBlend({ transitionId: transition.id, composition, nestedLayers });
+
   return {
     id: `${layerIdPrefix}_transition_comp_${layerIndex}_${transition.id}`,
     name: composition.name,
     sourceClipId: transition.id,
     visible: true,
     opacity: 1,
-    blendMode: 'normal',
+    blendMode: blend.blendMode,
     // The transition composition is rendered by the compositor, whose output
     // is premultiplied; composite it as such over the lower tracks.
     premultipliedAlpha: true,
@@ -52,7 +57,7 @@ export function createTransitionNestedCompositionLayer(params: {
       mediaTime: compositionTime,
       nestedComposition: {
         compositionId: composition.id,
-        layers: nestedLayers,
+        layers: blend.nestedLayers,
         width: composition.width,
         height: composition.height,
         frameRate: composition.frameRate,

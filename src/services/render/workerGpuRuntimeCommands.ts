@@ -200,6 +200,8 @@ export interface WorkerGpuWebCodecsRenderLayer {
   readonly maskInvert?: boolean;
   readonly maskClipId?: string;
   readonly transitionRender?: WorkerGpuTransitionRenderState;
+  /** The source texture holds premultiplied colour (a composited transition composition). */
+  readonly premultipliedAlpha?: boolean;
 }
 
 export interface WorkerGpuWebCodecsFrameLayer {

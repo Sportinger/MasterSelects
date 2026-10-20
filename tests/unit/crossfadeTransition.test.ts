@@ -12,9 +12,11 @@ import {
   COMPOSITOR_UNIFORM_FLOAT_COUNT,
   writeLayerUniformData,
 } from '../../src/engine/pipeline/compositor/uniforms';
-import { findUnrenderedAudioCrossfades } from '../../src/engine/audio/exportPipeline/unrenderedAudioCrossfades';
 import { getCrossfadeAudioGains } from '../../src/transitions';
+import { resolveTransitionCompositionBlend } from '../../src/services/layerBuilder/transitionCompositionBlend';
+import { Logger } from '../../src/services/logger';
 import type { Composition } from '../../src/stores/mediaStore';
+import type { BlendMode } from '../../src/types/blendMode';
 import type { Layer } from '../../src/types/layers';
 import type { SerializableClip, TimelineClip } from '../../src/types/timeline';
 
@@ -22,7 +24,7 @@ vi.mock('../../src/services/compositionRenderer', () => ({
   compositionRenderer: { invalidateCompositionAndParents: vi.fn() },
 }));
 
-function serializableClip(id: string, startTime: number, opacity = 1): SerializableClip {
+function serializableClip(id: string, startTime: number, opacity = 1, blendMode: BlendMode = 'normal'): SerializableClip {
   return {
     id,
     trackId: 'track-1',
@@ -36,7 +38,7 @@ function serializableClip(id: string, startTime: number, opacity = 1): Serializa
     naturalDuration: 2,
     transform: {
       opacity,
-      blendMode: 'normal',
+      blendMode,
       position: { x: 0, y: 0, z: 0 },
       scale: { x: 1, y: 1, z: 1 },
       rotation: { x: 0, y: 0, z: 0 },
@@ -53,8 +55,16 @@ function timelineClip(clip: SerializableClip): TimelineClip {
   } as TimelineClip;
 }
 
-function buildComposition(type: string, outgoingOpacity = 1, incomingOpacity = 1): Composition {
-  const serializableClips = [serializableClip('out', 0, outgoingOpacity), serializableClip('in', 2, incomingOpacity)];
+function buildComposition(
+  type: string,
+  outgoingOpacity = 1,
+  incomingOpacity = 1,
+  blendModes: [BlendMode, BlendMode] = ['normal', 'normal'],
+): Composition {
+  const serializableClips = [
+    serializableClip('out', 0, outgoingOpacity, blendModes[0]),
+    serializableClip('in', 2, incomingOpacity, blendModes[1]),
+  ];
   const timelineClips = serializableClips.map(timelineClip);
   timelineClips[0].transitionOut = { id: 'transition-1', type, duration: 1, linkedClipId: 'in' };
   timelineClips[1].transitionIn = { id: 'transition-1', type, duration: 1, linkedClipId: 'out' };
@@ -127,26 +137,104 @@ describe('crossfade transition', () => {
     expect(opacityAt(source(buildComposition('dip-to-black', 1, 0.5), 'incoming'), 1)).toBeCloseTo(0.5);
   });
 
-  it('rebuilds stored crossfade compositions from before the recipe revision', () => {
+  it('upgrades stored crossfade compositions in place and keeps the user\'s changes inside them', () => {
     const current = buildComposition('crossfade');
-    const key = current.transitionComp?.templateParamsKey ?? '';
-    expect(JSON.parse(key)).toEqual({ params: [], recipeRevision: 1 });
-    // Transitions without a revision keep their former key, so their stored comps are reused.
-    expect(JSON.parse(buildComposition('wipe-left').transitionComp?.templateParamsKey ?? '')).toEqual({ params: [] });
+    expect(JSON.parse(current.transitionComp?.templateParamsKey ?? '')).toEqual({ params: [], revision: [1, 1] });
+    expect(JSON.parse(buildComposition('wipe-left').transitionComp?.templateParamsKey ?? '')).toEqual({ params: [], revision: [1, 0] });
 
-    const generated = {
-      timelineData: current.timelineData!,
-      link: { ...current.transitionComp!, materialized: true },
-    };
+    const generated = { timelineData: current.timelineData!, link: { ...current.transitionComp!, materialized: true } };
+    const outgoingId = 'transition-comp:transition-1:outgoing';
+    const userKeyframe = { id: 'kf_user_scale', clipId: outgoingId, property: 'scale.x' as const, time: 0.5, value: 1.2, easing: 'linear' as const };
+    const userEffect = { id: 'user-blur', name: 'Blur', type: 'blur', enabled: true, params: { radius: 4 } } as SerializableClip['effects'][number];
+    const titleClip = { ...serializableClip('user-title', 0), trackId: 'user-track', name: 'Title' };
+    // A composition from before the revision: old key, old recipe keyframes, plus edits made inside it.
     const stale: Composition = {
       ...current,
       transitionComp: { ...current.transitionComp!, templateParamsKey: JSON.stringify({ params: [] }) },
       timelineData: {
         ...current.timelineData!,
-        clips: current.timelineData!.clips.map((clip) => ({ ...clip, keyframes: [] })),
+        clips: [
+          ...current.timelineData!.clips.map((clip) => clip.id === outgoingId
+            ? { ...clip, keyframes: [userKeyframe], effects: [userEffect], transitionRecipeBlendWindows: undefined }
+            : { ...clip, transitionRecipeBlendWindows: undefined }),
+          titleClip,
+        ],
       },
     };
-    expect(reuseExistingTimelineData(stale, generated, true)).toBe(generated.timelineData);
+    Logger.clear();
+
+    const upgraded = reuseExistingTimelineData(stale, generated, true);
+    const upgradedOutgoing = upgraded.clips.find((clip) => clip.id === outgoingId)!;
+    const upgradedIncoming = upgraded.clips.find((clip) => clip.id === 'transition-comp:transition-1:incoming')!;
+
+    expect(upgraded).not.toBe(generated.timelineData);
+    expect(upgraded.clips.map((clip) => clip.id)).toContain('user-title');
+    expect(upgradedOutgoing.effects).toEqual([userEffect]);
+    expect(upgradedOutgoing.keyframes).toContainEqual(userKeyframe);
+    expect(opacityAt(upgradedOutgoing, 0.25)).toBeCloseTo(0.75);
+    expect(upgradedIncoming.transitionRecipeBlendWindows).toEqual([{ compStart: 0, compEnd: 1, blendMode: 'plus' }]);
+
+    // A parameter change still rebuilds the composition, and says so.
+    const changedParams = {
+      ...stale,
+      transitionComp: { ...stale.transitionComp!, templateParamsKey: JSON.stringify({ params: [['includeAudio', true]] }) },
+    };
+    expect(reuseExistingTimelineData(changedParams, generated, true)).toBe(generated.timelineData);
+    expect(Logger.search('changes made inside it were replaced').map((entry) => entry.data))
+      .toEqual([expect.objectContaining({ reason: 'transition parameters changed' })]);
+  });
+
+  it('carries the clips\' shared blend mode through the transition instead of a transparent background', () => {
+    const composition = buildComposition('crossfade', 1, 1, ['screen', 'screen']);
+    const layer = (id: string, blendMode: BlendMode, opacity: number) =>
+      ({ id, sourceClipId: id, blendMode, opacity, visible: true }) as Layer;
+    const nestedLayers = [
+      layer('transition-comp:transition-1:incoming', 'plus', 0.5),
+      layer('transition-comp:transition-1:outgoing', 'screen', 0.5),
+    ];
+    const transitionLayer = createTransitionNestedCompositionLayer({
+      transition: { id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'in' },
+      composition,
+      compositionTime: 0.5,
+      nestedLayers,
+      layerIndex: 0,
+      layerIdPrefix: 'test',
+    });
+    const nested = transitionLayer.source?.nestedComposition?.layers ?? [];
+
+    // Screen blends the finished dissolve over the lower tracks; inside, the clips dissolve plainly.
+    expect(transitionLayer.blendMode).toBe('screen');
+    expect(transitionLayer.premultipliedAlpha).toBe(true);
+    expect(nested.map((candidate) => candidate.blendMode)).toEqual(['plus', 'normal']);
+    expect(nested.map((candidate) => candidate.opacity)).toEqual([0.5, 0.5]);
+
+    // Multiply would turn black over the transparent composition background, so it moves out too.
+    expect(resolveTransitionCompositionBlend({
+      transitionId: 'transition-1',
+      composition: buildComposition('crossfade', 1, 1, ['multiply', 'multiply']),
+      nestedLayers: [layer('transition-comp:transition-1:outgoing', 'multiply', 1)],
+    })).toMatchObject({ blendMode: 'multiply', nestedLayers: [{ blendMode: 'normal' }] });
+    // Normal clips are untouched.
+    expect(resolveTransitionCompositionBlend({ transitionId: 'transition-1', composition: buildComposition('crossfade'), nestedLayers }))
+      .toMatchObject({ blendMode: 'normal', nestedLayers });
+  });
+
+  it('falls back to Normal for clips with different blend modes and says so', () => {
+    Logger.clear();
+    const warnings = () => Logger.search('different blend modes');
+    const resolution = resolveTransitionCompositionBlend({
+      transitionId: 'transition-mixed',
+      composition: buildComposition('crossfade', 1, 1, ['normal', 'screen']),
+      nestedLayers: [{ id: 'in', sourceClipId: 'transition-comp:transition-1:incoming', blendMode: 'screen', opacity: 1, visible: true } as Layer],
+    });
+    expect(resolution).toMatchObject({ blendMode: 'normal', fallback: 'mixed-blend-modes', nestedLayers: [{ blendMode: 'normal' }] });
+    expect(warnings()).toHaveLength(1);
+    resolveTransitionCompositionBlend({
+      transitionId: 'transition-mixed',
+      composition: buildComposition('crossfade', 1, 1, ['normal', 'screen']),
+      nestedLayers: [],
+    });
+    expect(warnings()).toHaveLength(1);
   });
 
   it('composites transition compositions as premultiplied sources', () => {
@@ -189,31 +277,5 @@ describe('crossfade transition', () => {
     expect(getCrossfadeAudioGains(-1)).toEqual({ outgoing: 1, incoming: 0 });
     expect(getCrossfadeAudioGains(2).incoming).toBe(1);
     expect(getCrossfadeAudioGains(Number.NaN)).toEqual({ outgoing: 1, incoming: 0 });
-  });
-
-  it('names audio crossfades the export does not render yet', () => {
-    const clip = (id: string, startTime: number, type: 'audio' | 'video', extra: Partial<TimelineClip> = {}) => ({
-      id, trackId: type, name: id, startTime, duration: 4, inPoint: 0, outPoint: 4,
-      source: { type }, effects: [], ...extra,
-    }) as unknown as TimelineClip;
-    const crossfade = (linkedClipId: string, includeAudio?: boolean) => ({
-      id: `x-${linkedClipId}`, type: 'crossfade' as const, duration: 2, linkedClipId,
-      ...(includeAudio === undefined ? {} : { params: { includeAudio } }),
-    });
-    const clips = [
-      clip('a1', 0, 'audio', { transitionOut: crossfade('a2') }),
-      clip('a2', 4, 'audio'),
-      clip('v1', 10, 'video', { linkedClipId: 'va1', transitionOut: crossfade('v2', true) }),
-      clip('v2', 14, 'video', { linkedClipId: 'va2' }),
-      clip('va1', 10, 'audio', { linkedClipId: 'v1' }),
-      clip('va2', 14, 'audio', { linkedClipId: 'v2' }),
-      clip('w1', 20, 'video', { linkedClipId: 'wa1', transitionOut: crossfade('w2', false) }),
-      clip('w2', 24, 'video', { linkedClipId: 'wa2' }),
-      clip('wa1', 20, 'audio', { linkedClipId: 'w1' }),
-      clip('wa2', 24, 'audio', { linkedClipId: 'w2' }),
-    ];
-    expect(findUnrenderedAudioCrossfades(clips, 0, 30).map(({ outgoingClipId, kind, junctionTime }) => [outgoingClipId, kind, junctionTime]))
-      .toEqual([['a1', 'audio-clips', 4], ['v1', 'linked-audio', 14]]);
-    expect(findUnrenderedAudioCrossfades(clips, 5.5, 12)).toEqual([]);
   });
 });

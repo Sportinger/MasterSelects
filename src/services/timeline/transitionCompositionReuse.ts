@@ -3,8 +3,12 @@ import type { ClipMask } from '../../types/masks';
 import type { Effect } from '../../types/effects';
 import type { CompositionTimelineData, SerializableClip } from '../../types/timeline';
 import type { TransitionCompositionLink } from '../../types/timelineCore';
+import { Logger } from '../logger';
 import { mergeGeneratedKeyframes } from './transitionCompositionKeyframes';
 import { mergeTransitionMarkers } from './transitionCompositionRecipeTemplate';
+import { compareTransitionTemplateParamsKeys } from './transitionTemplateParamsKey';
+
+const log = Logger.create('TransitionCompositionReuse');
 
 export function clone<T>(value: T): T {
   return structuredClone(value);
@@ -50,10 +54,39 @@ export function normalizeExistingTransitionTimelineData(
   };
 }
 
+/** Generated keyframes carry `<clipId>:kf:` ids; keyframes the user adds never do. */
+export function isGeneratedTransitionKeyframeId(clipId: string, keyframeId: string): boolean {
+  return keyframeId.startsWith(`${clipId}:kf:`);
+}
+
+/**
+ * Template upgrade of one linked clip: the recipe-owned content (generated
+ * keyframes, effects, masks and blend windows) is rebuilt; the user's own
+ * keyframes, effects, masks, grade and transform stay.
+ */
+function upgradeGeneratedClipContent(
+  refreshed: SerializableClip,
+  existing: SerializableClip,
+  generated: SerializableClip,
+): SerializableClip {
+  const isGenerated = (keyframe: { id: string }) => isGeneratedTransitionKeyframeId(existing.id, keyframe.id);
+  const keyframes = [
+    ...(existing.keyframes ?? []).filter((keyframe) => !isGenerated(keyframe)),
+    ...(generated.keyframes ?? []).filter(isGenerated),
+  ];
+  return {
+    ...refreshed,
+    effects: mergeGeneratedEffects(existing.effects, generated.effects),
+    masks: mergeGeneratedMasks(existing.masks, generated.masks),
+    keyframes: keyframes.length > 0 ? keyframes : undefined,
+  };
+}
+
 export function refreshLinkedSourceClip(
   existing: SerializableClip,
   generated: SerializableClip,
   syncTiming: boolean,
+  upgradeGeneratedContent = false,
 ): SerializableClip {
   const sourceSignatureChanged = getLinkedSourceSignature(existing) !== getLinkedSourceSignature(generated);
   const refreshed: SerializableClip = {
@@ -85,6 +118,7 @@ export function refreshLinkedSourceClip(
       ? clone(generated.transitionRecipeBlendWindows)
       : undefined,
   };
+  if (upgradeGeneratedContent) return upgradeGeneratedClipContent(refreshed, existing, generated);
   if (!sourceSignatureChanged) return refreshed;
 
   return {
@@ -165,6 +199,7 @@ export function isTransitionCompositionForPair(
 export function refreshLinkedSourceWindows(
   existing: CompositionTimelineData,
   generated: { timelineData: CompositionTimelineData; link: Omit<TransitionCompositionLink, 'parentCompositionId'> },
+  upgradeGeneratedContent = false,
 ): CompositionTimelineData {
   const existingClipsById = new Map(existing.clips.map((clip) => [clip.id, clip]));
   const generatedLinkedClips = generated.timelineData.clips.filter((clip) =>
@@ -179,13 +214,42 @@ export function refreshLinkedSourceWindows(
   const afterLinked = retainedClips.slice(insertAt);
   const refreshedLinkedClips = generatedLinkedClips.map((generatedClip) => {
     const existingClip = existingClipsById.get(generatedClip.id);
-    return existingClip ? refreshLinkedSourceClip(existingClip, generatedClip, true) : generatedClip;
+    return existingClip
+      ? refreshLinkedSourceClip(existingClip, generatedClip, true, upgradeGeneratedContent)
+      : generatedClip;
   });
 
   return {
     ...existing,
     clips: [...beforeLinked, ...refreshedLinkedClips, ...afterLinked],
   };
+}
+
+/** True when a stored composition holds changes the template would not recreate. */
+function hasChangesInsideComposition(
+  timelineData: CompositionTimelineData,
+  link: Pick<TransitionCompositionLink, 'linkedOutgoingClipId' | 'linkedIncomingClipId'>,
+): boolean {
+  return timelineData.clips.some((clip) => {
+    if (!isLinkedSourceClipId(clip.id, link)) return !clip.id.startsWith('transition-comp:');
+    return (clip.keyframes ?? []).some((keyframe) => !isGeneratedTransitionKeyframeId(clip.id, keyframe.id)) ||
+      (clip.effects ?? []).some((effect) => !isGeneratedTransitionEffect(effect)) ||
+      (clip.masks ?? []).some((mask) => !isGeneratedTransitionMask(mask));
+  });
+}
+
+function rebuildFromTemplate(
+  existing: Composition,
+  generated: { timelineData: CompositionTimelineData; link: Omit<TransitionCompositionLink, 'parentCompositionId'> },
+  reason: string,
+): CompositionTimelineData {
+  const details = { compositionId: existing.id, reason };
+  if (existing.timelineData && hasChangesInsideComposition(existing.timelineData, existing.transitionComp ?? generated.link)) {
+    log.warn('Rebuilt a transition composition from its template; changes made inside it were replaced', details);
+  } else {
+    log.info('Rebuilt a transition composition from its template', details);
+  }
+  return generated.timelineData;
 }
 
 export function reuseExistingTimelineData(
@@ -196,11 +260,21 @@ export function reuseExistingTimelineData(
   if (!existing?.timelineData) return generated.timelineData;
   if (existing.transitionComp?.sourceLayout !== 'mapped-v3') return existing.timelineData;
   if (materialized && !existing.transitionComp?.materialized) return generated.timelineData;
-  if (existing.transitionComp?.templateType !== generated.link.templateType) return generated.timelineData;
-  if (existing.transitionComp?.templateVersion !== generated.link.templateVersion) return generated.timelineData;
-  if (existing.transitionComp?.templateParamsKey !== generated.link.templateParamsKey) return generated.timelineData;
+  if (existing.transitionComp?.templateType !== generated.link.templateType) {
+    return rebuildFromTemplate(existing, generated, 'transition type changed');
+  }
+  if (existing.transitionComp?.templateVersion !== generated.link.templateVersion) {
+    return rebuildFromTemplate(existing, generated, 'template version changed');
+  }
+  const paramsChange = compareTransitionTemplateParamsKeys(
+    existing.transitionComp?.templateParamsKey,
+    generated.link.templateParamsKey,
+  );
+  if (paramsChange === 'params') {
+    return rebuildFromTemplate(existing, generated, 'transition parameters changed');
+  }
   const hasLinkedClips = existing.timelineData.clips.some((clip) => isLinkedSourceClipId(clip.id, generated.link));
-  if (!hasLinkedClips) return generated.timelineData;
+  if (!hasLinkedClips) return rebuildFromTemplate(existing, generated, 'the linked clips were removed');
 
   const needsTimelineNormalize =
     Math.abs((existing.timelineData.duration ?? 0) - generated.timelineData.duration) > 0.0001 ||
@@ -211,9 +285,16 @@ export function reuseExistingTimelineData(
   const timelineData = needsTimelineNormalize
     ? normalizeExistingTransitionTimelineData(existing, generated.timelineData.duration)
     : existing.timelineData;
+  const upgradeGeneratedContent = paramsChange === 'revision';
+  if (upgradeGeneratedContent) {
+    log.info('Upgraded the generated keyframes of a stored transition composition; changes made inside it are kept', {
+      compositionId: existing.id,
+      templateType: generated.link.templateType,
+    });
+  }
 
   return {
-    ...refreshLinkedSourceWindows(timelineData, generated),
+    ...refreshLinkedSourceWindows(timelineData, generated, upgradeGeneratedContent),
     markers: mergeTransitionMarkers(timelineData.markers, generated.link.parentTransitionId, 0, generated.timelineData.duration),
   };
 }

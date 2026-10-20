@@ -147,6 +147,7 @@ export function cloneWorkerGpuRenderLayer(layer: Layer): WorkerGpuWebCodecsRende
     maskInvert: layer.maskInvert,
     maskClipId: layer.maskClipId,
     transitionRender: layer.transitionRender ? { ...layer.transitionRender } : undefined,
+    ...(layer.premultipliedAlpha ? { premultipliedAlpha: true } : {}),
   };
 }
 

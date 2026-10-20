@@ -15,6 +15,7 @@ import {
   getSerializableClip,
 } from './transitionCompositionSourceClips';
 import { buildBakedDatamoshTimelineData } from './datamoshTransitionComposition';
+import { getTransitionTemplateParamsKey } from './transitionTemplateParamsKey';
 
 const TRANSITION_TEMPLATE_VERSION = 4;
 
@@ -39,17 +40,7 @@ export function resolveTransitionColor(
   return getTransitionParamString(transition, colorParam, color);
 }
 
-export function getTransitionTemplateParamsKey(
-  transition: TimelineTransition,
-  _outgoingClip: TimelineClip,
-  _incomingClip: TimelineClip,
-): string {
-  const recipeRevision = getRuntimeTransition(transition.type)?.recipeRevision;
-  return JSON.stringify({
-    params: Object.entries(transition.params ?? {}).toSorted(([a], [b]) => a.localeCompare(b)),
-    ...(recipeRevision ? { recipeRevision } : {}),
-  });
-}
+export { getTransitionTemplateParamsKey };
 
 export function buildOpacityKeyframesFromRecipe(
   recipe: readonly TransitionPrimitive[],

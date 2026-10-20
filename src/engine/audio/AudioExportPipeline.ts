@@ -1,6 +1,7 @@
 import { AudioExportSourceStage } from './exportPipeline/sourceStage';
 import { selectExportAudioClips } from './exportPipeline/clipSelection';
-import { findUnrenderedAudioCrossfades } from './exportPipeline/unrenderedAudioCrossfades';
+import { prepareExportAudioCrossfades, type ExportAudioCrossfadePreparation } from './exportPipeline/exportAudioCrossfades';
+import { readAudioExportMediaFiles } from '../../services/export/audioExportMediaStoreAdapter';
 /**
  * AudioExportPipeline - Orchestrates the complete audio export process
  *
@@ -116,11 +117,13 @@ export class AudioExportPipeline {
     this.sourceBufferStarts.clear();
     this.extractor.clearCache();
 
-    const { clips, tracks, clipKeyframes, masterAudioState } = useTimelineStore.getState();
+    const timeline = useTimelineStore.getState();
+    const { tracks, masterAudioState } = timeline;
     const duration = endTime - startTime;
 
     log.info(`Starting export: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s (${duration.toFixed(2)}s)`);
-    AudioExportPipeline.warnUnrenderedAudioCrossfades(clips, startTime, endTime);
+    const crossfades = AudioExportPipeline.prepareAudioCrossfades(timeline.clips, timeline.clipKeyframes, startTime, endTime);
+    const { clips, clipKeyframes } = crossfades;
 
     // 1. Find all clips with audio in the export range
     const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState);
@@ -160,7 +163,7 @@ export class AudioExportPipeline {
 
       // 4. Mix all tracks
       onProgress?.({ phase: 'mixing', percent: 0, message: 'Mixing tracks...' });
-      const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan);
+      const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan, crossfades.envelopes);
       const plannedMixBuffer = createAudioBufferLike(
         2,
         Math.ceil(duration * this.settings.sampleRate),
@@ -225,11 +228,13 @@ export class AudioExportPipeline {
     this.sourceBufferStarts.clear();
     this.extractor.clearCache();
 
-    const { clips, tracks, clipKeyframes, masterAudioState } = useTimelineStore.getState();
+    const timeline = useTimelineStore.getState();
+    const { tracks, masterAudioState } = timeline;
     const duration = endTime - startTime;
 
     log.info(`Starting raw audio export: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
-    AudioExportPipeline.warnUnrenderedAudioCrossfades(clips, startTime, endTime);
+    const crossfades = AudioExportPipeline.prepareAudioCrossfades(timeline.clips, timeline.clipKeyframes, startTime, endTime);
+    const { clips, clipKeyframes } = crossfades;
 
     // 1. Find all clips with audio in the export range
     const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState);
@@ -269,7 +274,7 @@ export class AudioExportPipeline {
 
       // 4. Mix all tracks
       onProgress?.({ phase: 'mixing', percent: 0, message: 'Mixing tracks...' });
-      const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan);
+      const trackData = this.prepareTrackData(audioClips, effectBuffers, tracks, startTime, audioGraphPlan, crossfades.envelopes);
       const plannedMixBuffer = createAudioBufferLike(
         2,
         Math.ceil(duration * this.settings.sampleRate),
@@ -513,13 +518,27 @@ export class AudioExportPipeline {
     return AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState).length > 0;
   }
 
-  /** The export cuts crossfaded audio at the edit point for now; say so instead of failing silently. */
-  private static warnUnrenderedAudioCrossfades(clips: TimelineClip[], startTime: number, endTime: number): void {
-    const crossfades = findUnrenderedAudioCrossfades(clips, startTime, endTime);
-    if (crossfades.length === 0) return;
-    log.warn(`${crossfades.length} audio crossfade(s) are not rendered in export yet; the exported audio cuts at the edit point`, {
-      junctions: crossfades.map(crossfade => Number(crossfade.junctionTime.toFixed(3))),
+  /** Audio crossfades render like preview; crossfades the export can render only partly are logged. */
+  private static prepareAudioCrossfades(
+    clips: TimelineClip[],
+    clipKeyframes: Map<string, Keyframe[]>,
+    startTime: number,
+    endTime: number,
+  ): ExportAudioCrossfadePreparation {
+    const mediaFiles = readAudioExportMediaFiles();
+    const crossfades = prepareExportAudioCrossfades({
+      clips,
+      clipKeyframes,
+      startTime,
+      endTime,
+      getMediaDuration: (mediaFileId) => mediaFiles.find((file) => file.id === mediaFileId)?.duration,
     });
+    for (const note of crossfades.notes) {
+      log.warn(note.reason === 'retimed-clip'
+        ? 'Audio crossfade on a retimed or reversed clip: it fades over the clips as cut, without extra footage'
+        : 'Audio crossfades inside a nested composition are not rendered; its mixdown cuts at the edit point', note);
+    }
+    return crossfades;
   }
 
   /**
@@ -598,9 +617,10 @@ export class AudioExportPipeline {
     buffers: Map<string, AudioBuffer>,
     tracks: TimelineTrack[],
     exportStartTime: number,
-    audioGraphPlan?: AudioGraphRenderPlan
+    audioGraphPlan?: AudioGraphRenderPlan,
+    crossfadeEnvelopes?: ExportAudioCrossfadePreparation['envelopes']
   ): AudioTrackData[] {
-    return prepareExportTrackData(clips, buffers, tracks, exportStartTime, audioGraphPlan);
+    return prepareExportTrackData(clips, buffers, tracks, exportStartTime, audioGraphPlan, crossfadeEnvelopes);
   }
 
   /**
