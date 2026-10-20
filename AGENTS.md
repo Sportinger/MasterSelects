@@ -348,8 +348,22 @@ Permanent architecture rules:
   add a decoder per requested frame. Source history and previous-output feedback
   are different contracts. The current Slit Scan integration is effect-specific:
   adding `image.sample-history` to another effect does not opt it into this path.
-- Product-source ceiling is 700 LOC per file. Splits must reduce real
-  coupling — no `helpers.ts`/`utils.ts` dumping grounds, no blind splits.
+- **File size: aim for ≤ 700 lines per product-source file.** This is a
+  design signal, not a hard limit.
+  - Below 700: fine.
+  - Slightly above (roughly up to 10 %, ~770 lines): fine if the module stays
+    cohesive and a split would only separate code that belongs together.
+  - Clearly above: split along real responsibilities (a separate concept,
+    pipeline stage, or domain), so each part can be understood and tested
+    on its own. No `helpers.ts`/`utils.ts` dumping grounds, no blind splits.
+  - Never game the count: no cramming several statements or a whole action
+    onto one line, no formatting tricks, no numbered files (`foo0.ts`,
+    `foo1.ts`, …) that split one concept. The count refers to normally
+    formatted code.
+  - Generated data is exempt if its generator is in the repository and the
+    file says so in a header comment.
+  - Existing oversized files: split them when you substantially rework them,
+    not just because you touched one line.
 - Runtime handles (File, Blob, object URLs, DOM/media elements,
   AudioContext, VideoFrame, ImageBitmap, GPU objects, decoders, workers,
   service singletons) stay out of durable stores, project data, and pure
