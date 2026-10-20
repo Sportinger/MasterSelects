@@ -44,8 +44,10 @@ export function getTransitionTemplateParamsKey(
   _outgoingClip: TimelineClip,
   _incomingClip: TimelineClip,
 ): string {
+  const recipeRevision = getRuntimeTransition(transition.type)?.recipeRevision;
   return JSON.stringify({
     params: Object.entries(transition.params ?? {}).toSorted(([a], [b]) => a.localeCompare(b)),
+    ...(recipeRevision ? { recipeRevision } : {}),
   });
 }
 
@@ -54,6 +56,8 @@ export function buildOpacityKeyframesFromRecipe(
   target: TransitionLayerTarget,
   clipId: string,
   duration: number,
+  /** Clip opacity the recipe scales; the mapped animation composes relative to it. */
+  baseOpacity = 1,
 ): Keyframe[] {
   const keyframes = recipe
     .filter((primitive): primitive is Extract<TransitionPrimitive, { kind: 'opacity' }> =>
@@ -65,11 +69,11 @@ export function buildOpacityKeyframesFromRecipe(
       const easing = primitive.curve ?? 'linear';
       return [
         {
-          ...makeKeyframe(clipId, 'opacity', start, primitive.from, easing),
+          ...makeKeyframe(clipId, 'opacity', start, primitive.from * baseOpacity, easing),
           id: `${clipId}:kf:opacity:${index}:start`,
         },
         {
-          ...makeKeyframe(clipId, 'opacity', Math.max(start, end), primitive.to, easing),
+          ...makeKeyframe(clipId, 'opacity', Math.max(start, end), primitive.to * baseOpacity, easing),
           id: `${clipId}:kf:opacity:${index}:end`,
         },
       ];
@@ -490,7 +494,7 @@ export function buildTransitionTimelineData(input: {
   const recipe = definition?.recipe ?? [];
   const isScene3D = definition?.renderMode === 'scene-3d-panel';
   const materializeRecipeClip = (clip: SerializableClip, target: 'outgoing' | 'incoming'): SerializableClip => {
-    const opacityKeyframes = buildOpacityKeyframesFromRecipe(recipe, target, clip.id, duration);
+    const opacityKeyframes = buildOpacityKeyframesFromRecipe(recipe, target, clip.id, duration, clip.transform.opacity);
     const transformKeyframes = buildTransformKeyframesFromRecipe(recipe, target, clip, duration);
     const effects = buildEffectMaterializationFromRecipe(recipe, target, clip.id, duration);
     const masks = buildMaskMaterializationFromRecipe(recipe, target, clip.id, duration, getTransitionSeed(transition));

@@ -1,5 +1,6 @@
 import { AudioExportSourceStage } from './exportPipeline/sourceStage';
 import { selectExportAudioClips } from './exportPipeline/clipSelection';
+import { findUnrenderedAudioCrossfades } from './exportPipeline/unrenderedAudioCrossfades';
 /**
  * AudioExportPipeline - Orchestrates the complete audio export process
  *
@@ -119,6 +120,7 @@ export class AudioExportPipeline {
     const duration = endTime - startTime;
 
     log.info(`Starting export: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s (${duration.toFixed(2)}s)`);
+    AudioExportPipeline.warnUnrenderedAudioCrossfades(clips, startTime, endTime);
 
     // 1. Find all clips with audio in the export range
     const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState);
@@ -227,6 +229,7 @@ export class AudioExportPipeline {
     const duration = endTime - startTime;
 
     log.info(`Starting raw audio export: ${startTime.toFixed(2)}s - ${endTime.toFixed(2)}s`);
+    AudioExportPipeline.warnUnrenderedAudioCrossfades(clips, startTime, endTime);
 
     // 1. Find all clips with audio in the export range
     const audioClips = AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState);
@@ -508,6 +511,15 @@ export class AudioExportPipeline {
     masterAudioState?: MasterAudioState
   ): boolean {
     return AudioExportPipeline.getClipsWithAudio(clips, tracks, startTime, endTime, masterAudioState).length > 0;
+  }
+
+  /** The export cuts crossfaded audio at the edit point for now; say so instead of failing silently. */
+  private static warnUnrenderedAudioCrossfades(clips: TimelineClip[], startTime: number, endTime: number): void {
+    const crossfades = findUnrenderedAudioCrossfades(clips, startTime, endTime);
+    if (crossfades.length === 0) return;
+    log.warn(`${crossfades.length} audio crossfade(s) are not rendered in export yet; the exported audio cuts at the edit point`, {
+      junctions: crossfades.map(crossfade => Number(crossfade.junctionTime.toFixed(3))),
+    });
   }
 
   /**

@@ -459,6 +459,13 @@ export interface TransitionDefinition {
 
   /** Serializable primitive recipe compiled by preview/export renderers */
   recipe: TransitionPrimitive[];
+
+  /**
+   * Bump when the recipe changes how stored transition compositions must look.
+   * It is part of the template key, so stored compositions of this type are
+   * rebuilt once instead of mixing new blend windows with old keyframes.
+   */
+  recipeRevision?: number;
 }
 
 /**

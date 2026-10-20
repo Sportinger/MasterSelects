@@ -7,7 +7,7 @@ import {
   type ActiveTransitionPlan,
   type TransitionParticipantPlan,
 } from '../../stores/timeline/editOperations/transitionPlanner';
-import { getRuntimeTransition, transitionIncludesAudio } from '../../transitions';
+import { getCrossfadeAudioGains, getRuntimeTransition, transitionIncludesAudio } from '../../transitions';
 import { createLiveAudioRouteSettings } from '../audio/audioGraphRouteSettings';
 import { getClipAudioEditPreviewVolumeMultiplier } from '../audio/clipAudioEditPreview';
 import { proxyFrameCache } from '../proxyFrameCache';
@@ -102,6 +102,7 @@ export class AudioTrackCrossfadeTransitionSync {
     regionGainPreview: ClipAudioRegionGainPreview | null | undefined;
   }): void {
     const progress = getTransitionProgress(activeTransition.plan, ctx.playheadPosition);
+    const gains = getCrossfadeAudioGains(progress);
     activeTransitionAudioClipIds.add(activeTransition.outgoingClip.id);
     activeTransitionAudioClipIds.add(activeTransition.incomingClip.id);
 
@@ -111,7 +112,7 @@ export class AudioTrackCrossfadeTransitionSync {
       track,
       clip: activeTransition.outgoingClip,
       participant: activeTransition.plan.outgoing,
-      volumeMultiplier: 1 - progress,
+      volumeMultiplier: gains.outgoing,
       canBeMaster: !state.masterSet,
       regionGainPreview,
     });
@@ -121,7 +122,7 @@ export class AudioTrackCrossfadeTransitionSync {
       track,
       clip: activeTransition.incomingClip,
       participant: activeTransition.plan.incoming,
-      volumeMultiplier: progress,
+      volumeMultiplier: gains.incoming,
       canBeMaster: !state.masterSet,
       regionGainPreview,
     });

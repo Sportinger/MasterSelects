@@ -99,6 +99,7 @@ import { zigZagBlocks } from './zigZagBlocks';
 
 export * from './groups';
 export { DATAMOSH_BAKE_FORMAT } from './datamosh';
+export { getCrossfadeAudioGains } from './crossfade';
 
 // Main transition registry
 export const TRANSITION_REGISTRY = new Map<TransitionType, TransitionDefinition>();

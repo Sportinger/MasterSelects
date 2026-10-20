@@ -439,6 +439,13 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let baseColor = textureSample(baseTexture, texSampler, input.uv);
   var layerColor = textureSample(layerTexture, texSampler, clamp(textureUV, vec2f(0.0), vec2f(1.0)));
 
+  // Low byte = blend mode; bit 8 = the layer texture is premultiplied (a composited
+  // transition composition). Straighten it so partial alpha is not applied twice.
+  let blendMode = layer.blendMode & 0xFFu;
+  if ((layer.blendMode & 0x100u) != 0u && layerColor.a > 0.0) {
+    layerColor = vec4f(layerColor.rgb / layerColor.a, layerColor.a);
+  }
+
   // Apply inline color effects (invert → brightness+contrast → saturation)
   // Zero-cost at defaults (brightness=0, contrast=1, saturation=1, invert=0)
   var ec = layerColor.rgb;
@@ -455,7 +462,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   var blended: vec3f;
   var finalAlpha: f32 = maskAlpha * layer.opacity;
 
-  switch (layer.blendMode) {
+  switch (blendMode) {
     // Normal modes
     case 0u: { blended = blendNormal(baseColor.rgb, layerColor.rgb); }
     case 1u: { blended = blendDissolve(baseColor.rgb, layerColor.rgb, input.uv, layer.opacity); finalAlpha = 1.0; }
@@ -515,6 +522,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
       blended = layerColor.rgb;
       finalAlpha = min(baseColor.a + layerColor.a * layer.opacity, 1.0);
     }
+    case 37u: { blended = layerColor.rgb; } // Plus (internal, see below)
     default: { blended = layerColor.rgb; }
   }
 
@@ -531,13 +539,20 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
 
   // For stencil/silhouette modes, handle differently
-  if (layer.blendMode >= 32u && layer.blendMode <= 35u) {
+  if (blendMode >= 32u && blendMode <= 35u) {
     // Stencil/Silhouette: multiply base by computed alpha
     return vec4f(blended * finalAlpha, finalAlpha);
   }
 
+  // Plus (Porter-Duff): the accumulator is premultiplied, so a dissolve adds
+  // outgoing·(1-t) and incoming·t, colour and alpha alike.
+  if (blendMode == 37u) {
+    let plusAlpha = select(finalAlpha, 0.0, outOfBounds);
+    return vec4f(min(baseColor.rgb + blended * plusAlpha, vec3f(1.0)), min(baseColor.a + plusAlpha, 1.0));
+  }
+
   // For alpha add mode
-  if (layer.blendMode == 36u) {
+  if (blendMode == 36u) {
     return vec4f(mix(baseColor.rgb, blended, layerColor.a * layer.opacity), finalAlpha);
   }
 

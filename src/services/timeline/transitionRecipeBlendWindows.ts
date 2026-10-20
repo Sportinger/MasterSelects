@@ -8,7 +8,7 @@ const BLEND_MODES = new Set<BlendMode>([
   'overlay', 'soft-light', 'hard-light', 'linear-light', 'vivid-light', 'pin-light', 'hard-mix',
   'difference', 'classic-difference', 'exclusion', 'subtract', 'divide',
   'hue', 'saturation', 'color', 'luminosity',
-  'stencil-alpha', 'stencil-luma', 'silhouette-alpha', 'silhouette-luma', 'alpha-add',
+  'stencil-alpha', 'stencil-luma', 'silhouette-alpha', 'silhouette-luma', 'alpha-add', 'plus',
 ]);
 
 function isValidWindow(window: unknown): window is TransitionRecipeBlendWindow {

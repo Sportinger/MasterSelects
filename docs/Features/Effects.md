@@ -1357,6 +1357,13 @@ They stay deterministic without bundled overlay video. `Additive Dissolve` and
 `Non-Additive Dissolve`
 use temporary transition blend windows on the incoming participant, so they
 stay in the same layer assembly path instead of adding one-off shaders.
+`Crossfade` is a true dissolve, outgoing·(1−t) + incoming·t: the outgoing clip
+fades out while the incoming clip is added with the internal `plus` blend mode
+(Porter-Duff plus, premultiplied colour and alpha), so clips with transparency
+(titles, keyed or scaled clips) no longer stay fully visible until the cut.
+Opaque full-frame clips give the same pixels as before. Its audio option uses
+equal-power gains in preview; the audio export does not render crossfades yet
+and logs a warning naming the affected edit points.
 
 The current user-facing suite is grouped by family in the Transitions panel and
 the transition-scoped Properties tab. It includes dissolve/dip, directional

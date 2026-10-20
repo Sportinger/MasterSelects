@@ -44,6 +44,9 @@ export function createTransitionNestedCompositionLayer(params: {
     visible: true,
     opacity: 1,
     blendMode: 'normal',
+    // The transition composition is rendered by the compositor, whose output
+    // is premultiplied; composite it as such over the lower tracks.
+    premultipliedAlpha: true,
     source: {
       type: 'image',
       mediaTime: compositionTime,
