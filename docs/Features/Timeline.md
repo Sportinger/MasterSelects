@@ -335,6 +335,7 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 - Vector animation clips inside nested comps render through the same canvas path used in the primary timeline and export flow.
 
 ### Transitions
+User guide with pictures: [Dissolve Transitions](./Transitions-Dissolve.md).
 - Transitions operate between adjacent clips on the same track.
 - The first-pass suite includes Crossfade, Dip to Black, Dip to White, Wipe Left, and Wipe Right.
 - Dragging a transition from the Transitions panel targets a clip junction. Hover preview shows the transition body, real source-handle coverage, and red hold-frame fallback coverage when the requested duration extends past available source material.

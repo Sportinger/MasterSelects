@@ -1361,9 +1361,18 @@ stay in the same layer assembly path instead of adding one-off shaders.
 fades out while the incoming clip is added with the internal `plus` blend mode
 (Porter-Duff plus, premultiplied colour and alpha), so clips with transparency
 (titles, keyed or scaled clips) no longer stay fully visible until the cut.
-Opaque full-frame clips give the same pixels as before. Its audio option uses
-equal-power gains in preview; the audio export does not render crossfades yet
-and logs a warning naming the affected edit points.
+Opaque full-frame clips give the same pixels as before. Clips that share a
+blend mode (Screen, Add, Multiply, …) keep it through the transition: they
+dissolve in Normal inside the transition composition, and the composition layer
+blends the result with their mode over the lower tracks
+(`transitionCompositionBlend`); clips with different modes fall back to Normal
+for the transition and log a warning. Its audio option uses equal-power gains
+in preview and export: both plan the same pairs (`audioCrossfadePlanning`), and
+the export extends the outgoing clip into its tail handle and the incoming clip
+into its head handle and applies the gains as Web Audio value curves. Retimed
+clips fade without handles, and crossfades inside nested compositions are not
+rendered; the export log names both. The default duration is 1 s.
+User guide with pictures: [Dissolve Transitions](./Transitions-Dissolve.md).
 
 The current user-facing suite is grouped by family in the Transitions panel and
 the transition-scoped Properties tab. It includes dissolve/dip, directional
