@@ -79,6 +79,8 @@ function setupMouseRouting(options: {
     editCameraOrthoViewActive: false,
     effectOrbitActive: false,
     endGaussianWheelBatch: vi.fn(),
+    // No canvas tool active: clicks continue to navigation and selection.
+    handleCanvasToolClick: vi.fn(() => false),
     viewNavigationEnabled: options.viewNavigationEnabled ?? false,
     gaussianFpsLookStart: { current: { clipId: null, x: 0, y: 0 } },
     gaussianOrbitStart,

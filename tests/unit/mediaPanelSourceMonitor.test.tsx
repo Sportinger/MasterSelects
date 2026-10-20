@@ -10,6 +10,8 @@ const dockMocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../../src/stores/dockStore', () => ({
+  // Opening a composition checks whether the Image workspace is active.
+  FACTORY_IMAGE_EDIT_LAYOUT_ID: 'factory-image-edit',
   useDockStore: Object.assign(vi.fn((selector: (state: unknown) => unknown) => selector({
     activatePanelType: dockMocks.activatePanelType,
   })), {

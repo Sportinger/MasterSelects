@@ -424,6 +424,8 @@ vi.mock('../../src/stores/mediaStore', () => {
   const state = {
     activeCompositionId: composition.id,
     compositions: [composition],
+    // Exports switch linked proxies to originals and read the media list first.
+    files: [],
     getActiveComposition: vi.fn(() => composition),
   };
   const useMediaStore = Object.assign(

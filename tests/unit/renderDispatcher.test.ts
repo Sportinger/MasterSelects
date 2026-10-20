@@ -18,6 +18,8 @@ const mockGaussianSplatRenderer = vi.hoisted(() => ({
   uploadScene: vi.fn(),
   releaseScene: vi.fn(),
   renderToTexture: vi.fn(() => ({ label: 'native-splat-view' })),
+  // Precise export waits for streamed LOD packages before rendering a frame.
+  waitForLodStreaming: vi.fn(async () => true),
 }));
 
 type RenderDispatcherTestAccess = {
