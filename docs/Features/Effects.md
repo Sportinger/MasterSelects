@@ -1423,6 +1423,40 @@ alpha handling such as dark rims. Effects that need clip context (masks, face
 landmarks, temporal source, tracking) render without it and are checked in the
 editor instead.
 
+### Effect graph pictures
+
+`?test=effect-graph&effect=<id>` shows an effect's default operator graph on the
+real Node Workspace canvas, read-only and without editor chrome: the clip graph
+of a freshly added effect, cropped to the effect and fitted to the window. Card
+titles use the canvas' enlarged overview lettering, so they stay readable when
+the picture is shown smaller. Parameters choose the level:
+`level=stages` (default, folders folded as when an effect is opened) or
+`level=all`; `open=a,b` opens folders by label slug, `parent/child` path or
+group id; `focus=folder` shows only one folder, with the flow layout it has
+inside the effect wrapped into rows (`rows=n` sets the count); `chain=1` keeps
+the clip source and output. Folder headers stay clickable for exploring.
+
+`scripts/effect-graph-shot.mjs` captures shots of that page in hardware-GPU
+Chrome as WebP (at most 1600 px wide and 200 KB) into
+`docs/Features/assets/effects/graphs/`, for example
+`node scripts/effect-graph-shot.mjs gaussian-blur 'box-blur?focus=horizontal-pass-premultiplied@box-blur-horizontal-pass'`
+with a Vite of the checkout running (`npx vite --port 5176 --strictPort`). A shot
+is `<effect>[?query][@file name]`; `--list` prints the folders of each effect.
+
+### Effect editor excerpts
+
+`scripts/effect-editor-shot.mjs <shot file>` shows where an effect's controls
+live: in a fresh project of hardware-GPU Chrome it puts an Effect Lab image on
+the timeline, adds the effect with the given parameters, opens Properties →
+Effects and captures the inspector with a strip of the preview as WebP (2× pixel
+density, at most 200 KB) into `docs/Features/assets/effects/editor/`. It prints
+the docs `<figure>` with numbered callouts on the named controls (parameter
+labels, `tab:Effects`, `bypass`, `remove`, `add` or `preview:x,y`) in the
+`docs-shot-overlay` style; `layout: "float"` sizes them for a picture beside the
+text. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
+`--only <name>` recaptures one shot. A control the script cannot find stops it
+with the card's text, so a renamed parameter does not silently drop a callout.
+
 ### When the GPU cannot build an effect
 
 Building a pipeline can fail on a device in three ways: an invalid shader or

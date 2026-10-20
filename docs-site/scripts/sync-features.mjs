@@ -90,21 +90,45 @@ function convert(markdown, { title }) {
   return `---\ntitle: "${safeTitle}"\n---\n\n${body}`;
 }
 
-fs.rmSync(astroCacheDir, { recursive: true, force: true });
-fs.rmSync(outDir, { recursive: true, force: true });
+// A running `astro dev` (recorded in .astro/dev.json) imports generated modules
+// from this cache and restarts with an empty content collection when its
+// settings vanish: clear the cache only when no dev server of this site runs.
+function devServerRunning() {
+  try {
+    const { pid } = JSON.parse(fs.readFileSync(path.join(astroCacheDir, 'dev.json'), 'utf8'));
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+if (!devServerRunning()) fs.rmSync(astroCacheDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
+// Pages are updated in place: a running `astro dev` watches these files, and
+// removing the whole folder would end those watches (the site then keeps
+// serving the previous text). Unchanged pages are not rewritten.
+function writeIfChanged(file, content) {
+  if (fs.existsSync(file) && fs.readFileSync(file, 'utf8') === content) return;
+  fs.writeFileSync(file, content);
+}
+
 let converted = 0;
+const written = new Set();
 for (const name of sourceFiles) {
   const markdown = readSourceFile(name, 'utf8');
   if (name === 'README.md') {
     fs.mkdirSync(path.dirname(overviewOut), { recursive: true });
-    fs.writeFileSync(overviewOut, convert(markdown, { title: 'Overview' }));
+    writeIfChanged(overviewOut, convert(markdown, { title: 'Overview' }));
     continue;
   }
   const outName = `${slugByFile.get(name)}.md`;
-  fs.writeFileSync(path.join(outDir, outName), convert(markdown, {}));
+  writeIfChanged(path.join(outDir, outName), convert(markdown, {}));
+  written.add(outName);
   converted += 1;
+}
+for (const name of fs.readdirSync(outDir)) {
+  if (!written.has(name)) fs.rmSync(path.join(outDir, name), { recursive: true, force: true });
 }
 
 const assetsSrc = path.join(featuresDir, 'assets');

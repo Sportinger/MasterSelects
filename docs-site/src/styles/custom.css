@@ -93,3 +93,22 @@
   text-anchor: middle;
   dominant-baseline: central;
 }
+
+/* Floating shots: the text runs beside the picture on wide screens and below it on phones.
+   Use <figure class="docs-shot docs-shot--float-right"> (or --float-left) around the image. */
+@media (min-width: 50rem) {
+  .sl-markdown-content .docs-shot--float-right,
+  .sl-markdown-content .docs-shot--float-left {
+    width: 58%;
+    margin-top: .35rem;
+    margin-bottom: 1rem;
+  }
+  .sl-markdown-content .docs-shot--float-right { float: right; margin-left: 1.5rem; }
+  .sl-markdown-content .docs-shot--float-left { float: left; margin-right: 1.5rem; }
+  .sl-markdown-content h2,
+  .sl-markdown-content h3,
+  .sl-markdown-content .docs-float-end { clear: both; }
+  /* Lists beside a floating shot keep their bullets clear of the picture. */
+  .sl-markdown-content .docs-shot--float-right ~ ul,
+  .sl-markdown-content .docs-shot--float-left ~ ul { display: flow-root; }
+}
