@@ -13,6 +13,7 @@ import { IndexedDBErrorDialog } from './components/common/IndexedDBErrorDialog';
 import { LinuxVulkanWarning } from './components/common/LinuxVulkanWarning';
 import { ProjectLoadProgressOverlay } from './components/common/ProjectLoadProgressOverlay';
 import { HistoryActionToast } from './components/common/HistoryActionToast';
+import { EditRejectedToast } from './components/common/EditRejectedToast';
 import { CameraSolveJobOverlay } from './components/common/CameraSolveJobOverlay';
 import { ShortcutDisplayOverlay } from './components/common/ShortcutDisplayOverlay';
 import { MuscriptorDialogHost } from './components/common/MuscriptorDialogHost';
@@ -554,6 +555,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
           <MuscriptorDialogHost />
           <SourceFitDialogHost />
           <HistoryActionToast notice={historyNotice} onDone={clearHistoryNotice} />
+          <EditRejectedToast />
           {showIndexedDBError && (
             <IndexedDBErrorDialog onClose={handleIndexedDBErrorClose} />
           )}

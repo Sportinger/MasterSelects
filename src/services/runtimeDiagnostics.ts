@@ -1,4 +1,5 @@
 import { redactObject, redactSecrets } from './security/redact';
+import { announceEditRejection, isEditRejection } from './editRejection';
 
 export type RuntimeDiagnosticLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
@@ -263,6 +264,20 @@ function describeResourceTarget(target: EventTarget | null): { tagName: string; 
   return { tagName, url: typeof url === 'string' ? url.slice(0, 500) : '' };
 }
 
+/** An edit the repository refused is shown to the person and kept as a warning, not reported as a crash. */
+function handleEditRejection(event: Event, error: unknown, source: RuntimeDiagnosticSource): boolean {
+  if (!isEditRejection(error)) return false;
+  event.preventDefault();
+  recordDiagnostic({
+    source,
+    level: 'WARN',
+    message: `Edit not applied: ${error.message}`,
+    details: { errorName: error.name, code: error.code },
+  });
+  announceEditRejection(error);
+  return true;
+}
+
 export function installRuntimeDiagnostics(): void {
   if (typeof window === 'undefined') return;
 
@@ -283,6 +298,7 @@ export function installRuntimeDiagnostics(): void {
   }
 
   window.addEventListener('error', (event) => {
+    if (handleEditRejection(event, event.error, 'window-error')) return;
     const details = getErrorDetails(event.error);
     recordDiagnostic({
       source: 'window-error',
@@ -315,6 +331,7 @@ export function installRuntimeDiagnostics(): void {
   }, true);
 
   window.addEventListener('unhandledrejection', (event) => {
+    if (handleEditRejection(event, event.reason, 'unhandledrejection')) return;
     const details = getErrorDetails(event.reason);
     recordDiagnostic({
       source: 'unhandledrejection',

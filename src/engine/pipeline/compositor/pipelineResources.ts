@@ -8,16 +8,22 @@ import {
 } from './copyShaders';
 import type { VideoRotationDegrees } from '../../webcodecs/videoTrackOrientation';
 import { EXTERNAL_COMPOSITE_SHADER } from './externalCompositeShader';
+import { supportsExternalTextures } from '../../texture/externalTextureSupport';
 
 export interface CompositorPipelineResources {
   compositePipeline: GPURenderPipeline;
-  externalCompositePipeline: GPURenderPipeline;
   copyPipeline: GPURenderPipeline;
+  compositeBindGroupLayout: GPUBindGroupLayout;
+  copyBindGroupLayout: GPUBindGroupLayout;
+  /** Null when the device cannot import external textures (Firefox). */
+  external: CompositorExternalPipelineResources | null;
+}
+
+export interface CompositorExternalPipelineResources {
+  externalCompositePipeline: GPURenderPipeline;
   externalCopyPipeline: GPURenderPipeline;
   externalCopyPipelines: ReadonlyMap<VideoRotationDegrees, GPURenderPipeline>;
-  compositeBindGroupLayout: GPUBindGroupLayout;
   externalCompositeBindGroupLayout: GPUBindGroupLayout;
-  copyBindGroupLayout: GPUBindGroupLayout;
   externalCopyBindGroupLayout: GPUBindGroupLayout;
 }
 
@@ -49,6 +55,39 @@ export function createCompositorPipelineResources(device: GPUDevice): Compositor
     primitive: { topology: 'triangle-list' },
   });
 
+  // Copy pipeline for regular textures (used for effect pre-processing)
+  const copyBindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
+      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
+    ],
+  });
+
+  const copyModule = device.createShaderModule({ code: COPY_SHADER });
+
+  const copyPipeline = device.createRenderPipeline({
+    layout: device.createPipelineLayout({
+      bindGroupLayouts: [copyBindGroupLayout],
+    }),
+    vertex: { module: copyModule, entryPoint: 'vertexMain' },
+    fragment: {
+      module: copyModule,
+      entryPoint: 'fragmentMain',
+      targets: [{ format: 'rgba8unorm' }],
+    },
+    primitive: { topology: 'triangle-list' },
+  });
+
+  return {
+    compositePipeline,
+    copyPipeline,
+    compositeBindGroupLayout,
+    copyBindGroupLayout,
+    external: supportsExternalTextures(device) ? createExternalPipelineResources(device) : null,
+  };
+}
+
+function createExternalPipelineResources(device: GPUDevice): CompositorExternalPipelineResources {
   // External composite pipeline (for direct video texture compositing - zero copy!)
   const externalCompositeBindGroupLayout = device.createBindGroupLayout({
     entries: [
@@ -69,29 +108,6 @@ export function createCompositorPipelineResources(device: GPUDevice): Compositor
     vertex: { module: externalCompositeModule, entryPoint: 'vertexMain' },
     fragment: {
       module: externalCompositeModule,
-      entryPoint: 'fragmentMain',
-      targets: [{ format: 'rgba8unorm' }],
-    },
-    primitive: { topology: 'triangle-list' },
-  });
-
-  // Copy pipeline for regular textures (used for effect pre-processing)
-  const copyBindGroupLayout = device.createBindGroupLayout({
-    entries: [
-      { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
-    ],
-  });
-
-  const copyModule = device.createShaderModule({ code: COPY_SHADER });
-
-  const copyPipeline = device.createRenderPipeline({
-    layout: device.createPipelineLayout({
-      bindGroupLayouts: [copyBindGroupLayout],
-    }),
-    vertex: { module: copyModule, entryPoint: 'vertexMain' },
-    fragment: {
-      module: copyModule,
       entryPoint: 'fragmentMain',
       targets: [{ format: 'rgba8unorm' }],
     },
@@ -148,14 +164,10 @@ export function createCompositorPipelineResources(device: GPUDevice): Compositor
   ]);
 
   return {
-    compositePipeline,
     externalCompositePipeline,
-    copyPipeline,
     externalCopyPipeline,
     externalCopyPipelines,
-    compositeBindGroupLayout,
     externalCompositeBindGroupLayout,
-    copyBindGroupLayout,
     externalCopyBindGroupLayout,
   };
 }

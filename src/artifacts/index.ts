@@ -20,6 +20,7 @@ export {
   sha256ArtifactInput,
 } from './hash';
 export { isArtifactManifest } from './guards';
+export { toSignalArtifact } from './signalArtifact';
 export type {
   ArtifactHashAlgorithm,
   ArtifactInput,

@@ -39,6 +39,17 @@
   white-space: nowrap;
 }
 
+/* Edit rejections carry a sentence that must stay readable. */
+.history-action-toast--notice {
+  animation-delay: 3500ms;
+}
+
+.history-action-toast--notice .history-action-toast-label {
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+  white-space: normal;
+}
+
 @keyframes history-action-toast-fade {
   from {
     opacity: 1;
