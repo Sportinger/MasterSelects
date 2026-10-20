@@ -107,6 +107,7 @@ import { flockRuntime } from '../../engine/flock/runtime/flockRuntimeApi';
 import { canResumeWorkerNativeScene } from './workerNativeSceneCatchUp';
 import { closeWorkerGpuFrameStackTransferables } from './workerGpuFrameStackContract';
 import { workerGpuOperatorProgramPresentationKey } from './workerGpuOperatorPipeline';
+import { trackGpuInitOutcome } from '../productAnalytics/gpuInitOutcome';
 
 const log = Logger.create('WorkerPresentingRenderHostPort');
 const WORKER_PRESENTING_TARGET_FPS = 60;
@@ -1033,10 +1034,12 @@ class WorkerPresentingRenderHostPortCore {
   }
 
   private async initializeWorker(): Promise<boolean> {
+    const startedAt = performance.now();
     const output = await this.withBridge((bridge) => (
       bridge.initialize('worker-presenting-render-host', this.presentationStrategy)
     ));
     const success = output?.accepted === true;
+    trackGpuInitOutcome({ host: 'worker', ready: success, failure: success ? null : 'worker_failed', startedAt });
     const engineStore = useEngineStore.getState();
     engineStore.setEngineReady(success);
     engineStore.setEngineInitFailed(!success, success ? undefined : 'Worker render host failed to initialize');

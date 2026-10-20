@@ -134,6 +134,11 @@ function roundMb(bytes: number | undefined): number | undefined {
     : undefined;
 }
 
+/** Real OS version and model from Chromium client hints, once resolved; null elsewhere. */
+export function getHighEntropyUserAgent(): Readonly<HighEntropyUserAgent> | null {
+  return highEntropyUserAgent;
+}
+
 /** Kicks off the asynchronous probes whose results later events should carry. */
 export function primeDiagnosticContext(): void {
   if (typeof navigator === 'undefined') return;

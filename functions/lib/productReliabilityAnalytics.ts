@@ -1,5 +1,6 @@
 import type { AppD1Database } from './env';
 import { loadProductOperationAnalytics, type ProductOperationAnalytics } from './productOperationAnalytics';
+import { loadGpuStartupAnalytics, type GpuStartupAnalytics } from './gpuStartupAnalytics';
 
 interface ProjectIssueGroup {
   action: string;
@@ -37,6 +38,8 @@ interface PreviewHealthGroup {
 
 export interface ProductReliabilityAnalytics {
   operations: ProductOperationAnalytics;
+  /** 30-day window, unlike the 7-day sections: startup outcomes are sparse. */
+  gpuStartup: GpuStartupAnalytics;
   projectActions: {
     available: boolean;
     events: number;
@@ -163,8 +166,8 @@ async function loadPreviewHealth(db: AppD1Database): Promise<ProductReliabilityA
 }
 
 export async function loadProductReliabilityAnalytics(db: AppD1Database): Promise<ProductReliabilityAnalytics> {
-  const [projectActions, previewHealth, operations] = await Promise.all([
-    loadProjectActions(db), loadPreviewHealth(db), loadProductOperationAnalytics(db),
+  const [projectActions, previewHealth, operations, gpuStartup] = await Promise.all([
+    loadProjectActions(db), loadPreviewHealth(db), loadProductOperationAnalytics(db), loadGpuStartupAnalytics(db),
   ]);
-  return { projectActions, previewHealth, operations };
+  return { projectActions, previewHealth, operations, gpuStartup };
 }

@@ -13,6 +13,7 @@ import { wcPipelineMonitor } from '../wcPipelineMonitor';
 import type { RamPreviewRenderEngine } from '../ramPreviewEngine';
 import type { RenderHostSelectionTelemetry } from './renderHostSelection';
 import { measureRenderPhaseCostsForResources } from './renderPhaseCostProbe';
+import { trackGpuInitOutcome } from '../productAnalytics/gpuInitOutcome';
 import type {
   RenderCaptureCanvas,
   RenderFrameCallback,
@@ -249,6 +250,7 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
   private async initializeEngine(): Promise<boolean> {
     let success = false;
     let failure: GPUInitializationFailure | null = null;
+    const startedAt = performance.now();
     try {
       success = await engine.initialize();
       failure = engine.getInitializationFailure();
@@ -256,6 +258,7 @@ export class MainFallbackRenderHostPort implements RenderHostPort {
       failure = 'initialization_failed';
       log.error('Failed to initialize renderer resources', error);
     }
+    trackGpuInitOutcome({ host: 'main', ready: success, failure, startedAt });
     const engineStore = useEngineStore.getState();
     engineStore.setEngineReady(success);
     if (success) {

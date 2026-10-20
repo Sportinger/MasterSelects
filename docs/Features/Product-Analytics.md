@@ -125,6 +125,7 @@ The allowlist in `src/services/productAnalytics/catalog.ts` currently covers:
 | Area | Events |
 |---|---|
 | Entry | landing viewed, app opened |
+| Startup | GPU startup outcome |
 | Privacy | analytics preference enabled |
 | Setup | setup started, background selected, completed, cancelled |
 | Tutorial | started, step viewed, completed, skipped, cancelled |
@@ -135,6 +136,21 @@ The allowlist in `src/services/productAnalytics/catalog.ts` currently covers:
 | Workspace | panel opened |
 | Billing | pricing viewed, checkout started, redirected, failed, returned |
 | Export | started, completed, failed, cancelled |
+
+`gpu_init_outcome` is sent once per page and render host when WebGPU startup
+ends (`src/services/productAnalytics/gpuInitOutcome.ts`, called from
+`mainFallbackRenderHostPort` and `workerPresentingRenderHostPort`): `ready` or
+`failed` with the failure code (`unsupported`, `adapter_unavailable`,
+`adapter_timeout`, `device_timeout`, `device_failed`, `initialization_failed`,
+`worker_failed`), whether `navigator.gpu` exists, a GPU vendor bucket
+(nvidia, amd, intel, apple, qualcomm, arm, imagination, samsung, microsoft,
+software, other, unknown; from adapter info, else the WebGL renderer name), the
+feature level, browser family and major version, in-app browser flag, OS major
+version (iOS from the user agent, Windows 10/11, Android and macOS from Chromium
+client hints), platform, device class and startup time in ms. Unlike error reports
+it also counts successes, so it gives the real startup failure rate per browser,
+OS and GPU family. GPU model names and driver versions are not sent here; they
+stay in the error-report context (`context.webgpu.startup`).
 
 Committed timeline edits carry fixed `action`, `operation`, `origin`, and `target` dimensions. This distinguishes, for example, a user moving a clip from an agent trimming a clip, without retaining the free-form history label.
 
@@ -193,6 +209,7 @@ The private Fassandra console receives a reduced aggregate projection containing
 - top event totals;
 - attributed app opens grouped by social source.
 - seven-day project-action reliability and playback-health aggregates (`reliability7d`), with availability and truncated-breakdown flags.
+- `reliability7d.gpuStartup` (30-day window, `functions/lib/gpuStartupAnalytics.ts`): sessions, ready, failed, failure rate and median startup time, plus groups by platform/device class, browser/major version/in-app, OS major, GPU vendor and failure code. Each analytics session counts once by its latest outcome, so a failed worker host followed by a working main host counts as ready.
 
 ### Activation and reliability interpretation
 

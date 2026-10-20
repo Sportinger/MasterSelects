@@ -139,3 +139,30 @@ describe('playback health aggregates', () => {
     expect(result.previewHealth.available).toBe(false);
   });
 });
+
+describe('GPU startup success rate', () => {
+  it('counts each session once by its latest outcome and breaks failures down', async () => {
+    const outcome = (session: string, properties: object, offset = 0) =>
+      event('gpu_init_outcome', session, properties, offset, now + offset);
+    outcome('linux-ff', { outcome: 'failed', failure: 'unsupported', platform: 'linux', browser: 'firefox', browser_major: 157, gpu_vendor: 'amd' });
+    outcome('win-ok', { outcome: 'ready', platform: 'windows', browser: 'chrome', browser_major: 141, os_major: 11, gpu_vendor: 'nvidia', init_ms: 300 });
+    outcome('mac-ok', { outcome: 'ready', platform: 'macos', browser: 'safari', browser_major: 26, gpu_vendor: 'apple', init_ms: 100 });
+    // A failed worker host followed by a working main host counts as ready.
+    outcome('retry', { outcome: 'failed', failure: 'worker_failed', host: 'worker', platform: 'windows', browser: 'chrome' });
+    outcome('retry', { outcome: 'ready', host: 'main', platform: 'windows', browser: 'chrome', init_ms: 500 }, 1000);
+    event('gpu_init_outcome', 'old', { outcome: 'failed', failure: 'unsupported', platform: 'ios' }, 0, now - 31 * 86400000);
+    const { gpuStartup } = await loadProductReliabilityAnalytics(db);
+    expect(gpuStartup).toMatchObject({ available: true, sessions: 4, ready: 3, failed: 1, failureRate: 0.25, medianInitMs: 300 });
+    expect(gpuStartup.groups.failure).toEqual([
+      expect.objectContaining({ failure: 'unsupported', platform: 'linux', browser: 'firefox', sessions: 1, failed: 1, failureRate: 1 }),
+    ]);
+    expect(gpuStartup.groups.platform.find(group => group.platform === 'windows')).toMatchObject({ sessions: 2, failed: 0 });
+    expect(gpuStartup.groups.gpuVendor[0]).toMatchObject({ platform: 'linux', gpuVendor: 'amd', failed: 1 });
+  });
+
+  it('reports an empty window without NaN', async () => {
+    const { gpuStartup } = await loadProductReliabilityAnalytics(db);
+    expect(gpuStartup).toMatchObject({ available: true, sessions: 0, failureRate: 0, medianInitMs: null });
+  });
+});
+

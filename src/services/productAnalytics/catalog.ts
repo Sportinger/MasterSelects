@@ -160,6 +160,36 @@ export const PRODUCT_ANALYTICS_CONTROL_INTERACTIONS = [
   'toggle',
 ] as const;
 
+export const PRODUCT_ANALYTICS_GPU_INIT_FAILURES = [
+  'unsupported',
+  'adapter_unavailable',
+  'adapter_timeout',
+  'device_timeout',
+  'device_failed',
+  'initialization_failed',
+  'worker_failed',
+] as const;
+
+export const PRODUCT_ANALYTICS_GPU_VENDORS = [
+  'nvidia',
+  'amd',
+  'intel',
+  'apple',
+  'qualcomm',
+  'arm',
+  'imagination',
+  'samsung',
+  'microsoft',
+  'software',
+  'other',
+  'unknown',
+] as const;
+
+export const PRODUCT_ANALYTICS_BROWSERS = ['chrome', 'edge', 'firefox', 'safari', 'samsung', 'opera', 'other'] as const;
+
+export type ProductAnalyticsGpuVendor = typeof PRODUCT_ANALYTICS_GPU_VENDORS[number];
+export type ProductAnalyticsBrowser = typeof PRODUCT_ANALYTICS_BROWSERS[number];
+
 export type ProductAnalyticsEditAction = typeof PRODUCT_ANALYTICS_EDIT_ACTIONS[number];
 export type ProductAnalyticsEditOperation = typeof PRODUCT_ANALYTICS_EDIT_OPERATIONS[number];
 export type ProductAnalyticsEditOrigin = typeof PRODUCT_ANALYTICS_EDIT_ORIGINS[number];
@@ -268,6 +298,25 @@ export const PRODUCT_ANALYTICS_EVENT_DEFINITIONS = {
       experience: choice(['editor', 'chat', 'medium'] as const),
       language: identifier(16),
       platform: choice(['windows', 'macos', 'linux', 'ios', 'android', 'other'] as const),
+    },
+  },
+  // One per page and render host: the real WebGPU startup success rate per
+  // browser, OS and GPU family. Error reports alone only see the failures.
+  gpu_init_outcome: {
+    properties: {
+      outcome: choice(['ready', 'failed'] as const),
+      failure: choice(PRODUCT_ANALYTICS_GPU_INIT_FAILURES),
+      host: choice(['main', 'worker'] as const),
+      webgpu_api: { kind: 'boolean' },
+      gpu_vendor: choice(PRODUCT_ANALYTICS_GPU_VENDORS),
+      feature_level: choice(['core', 'compatibility'] as const),
+      browser: choice(PRODUCT_ANALYTICS_BROWSERS),
+      browser_major: count(1_000),
+      in_app_browser: { kind: 'boolean' },
+      os_major: count(100),
+      platform: choice(['windows', 'macos', 'linux', 'ios', 'android', 'other'] as const),
+      device_class: choice(['desktop', 'tablet', 'mobile'] as const),
+      init_ms: count(120_000),
     },
   },
   analytics_preference_changed: {
