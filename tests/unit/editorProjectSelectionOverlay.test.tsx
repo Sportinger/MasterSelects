@@ -129,6 +129,15 @@ describe('Editor project selection overlay', () => {
     expect(onProjectSelected).toHaveBeenCalledOnce();
   });
 
+  // Production: the Qualle project failed with only "The project could not be opened." and no log.
+  it('names the reason when opening a project folder fails', async () => {
+    mocks.resolveProjectRootMode.mockReturnValue('fsa');
+    mocks.openExistingProject.mockRejectedValue(new Error('Unknown composition input: sample-energy-value.'));
+    render(<EditorProjectSelectionOverlay onProjectSelected={() => undefined} />);
+    fireEvent.click(screen.getByRole('button', { name: /Open existing/i }));
+    expect(await screen.findByText('The project could not be opened. Unknown composition input: sample-energy-value.')).toBeInTheDocument();
+  });
+
   it('shows the recovery reason without hiding the recent project', async () => {
     mocks.openRecentProject.mockRejectedValue(new Error('Saved folder access unavailable. Use Open existing.'));
     render(<EditorProjectSelectionOverlay onProjectSelected={() => undefined} />);

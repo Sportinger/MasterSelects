@@ -23,7 +23,18 @@ import {
 } from '../../services/projectSync';
 import { getProjectWriteSupportError, resolveProjectRootMode } from '../../services/project/core/projectRootAccess';
 import { validateProjectName } from './projectNameValidation';
+import { Logger } from '../../services/logger';
 import './EditorProjectSelectionOverlay.css';
+
+const log = Logger.create('ProjectSelection');
+
+/** A failed project action must say why, and must reach the error log; a bare
+ * "could not be opened" left both the person and production diagnostics blind. */
+function reportProjectActionError(action: string, error: unknown, fallback: string): string {
+  log.error(`Project ${action} failed`, error);
+  const reason = error instanceof Error ? error.message.trim() : '';
+  return reason && reason !== fallback ? `${fallback} ${reason}` : fallback;
+}
 
 const OVERLAY_EXIT_DURATION_MS = 200;
 
@@ -112,8 +123,8 @@ export function EditorProjectSelectionOverlay({
         return;
       }
       completeSelection();
-    } catch {
-      setError('The project could not be created.');
+    } catch (error) {
+      setError(reportProjectActionError('creation', error, 'The project could not be created.'));
     } finally {
       setBusyAction(null);
     }
@@ -135,8 +146,8 @@ export function EditorProjectSelectionOverlay({
       if (await openExistingProject()) {
         completeSelection();
       }
-    } catch {
-      setError('The project could not be opened.');
+    } catch (error) {
+      setError(reportProjectActionError('open', error, 'The project could not be opened.'));
     } finally {
       setBusyAction(null);
     }
@@ -152,8 +163,8 @@ export function EditorProjectSelectionOverlay({
         return;
       }
       setError(`"${name}" could not be opened.`);
-    } catch {
-      setError('The project could not be opened.');
+    } catch (error) {
+      setError(reportProjectActionError('open', error, 'The project could not be opened.'));
     } finally {
       setBusyAction(null);
     }
@@ -172,6 +183,8 @@ export function EditorProjectSelectionOverlay({
       await loadProjectToStores();
       completeSelection();
     } catch (error) {
+      // Recent-project errors are already written for people; show them as they are.
+      reportProjectActionError('recent open', error, 'The project could not be opened.');
       setError(error instanceof Error ? error.message : 'The project could not be opened.');
     } finally {
       setRecentProjects(projectFileService.getRecentProjects());

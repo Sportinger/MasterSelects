@@ -258,7 +258,15 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
 
 /** Converts the former JSON parameter into the canonical effect-owned field.
  * Canonical data always wins, but is still validated before it can enter runtime state. */
+/** Name the effect a failed migration belongs to; a bare graph error leaves the project unopenable without a clue. */
 export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
+  try { return migratePersistedEffectGraph(effect); } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(`Effect "${effect.name}" (${effect.type}): ${reason}`, { cause: error });
+  }
+}
+
+function migratePersistedEffectGraph(effect: Effect): Effect {
   const legacy = effect.params[EFFECT_GRAPH_PARAM];
   if (!hasEffectOperatorGraph(effect.type)) {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
