@@ -47,6 +47,60 @@ Shared Number, Oscillator and scalar math nodes can drive numeric splat paramete
 Effect parameters remain keyframeable through the common effect inspector; mesh reconstruction
 settings are deliberately not animated. Time-dependent nodes use clip-local media time.
 
+**Conveyor, Falloff Box, Release and Ring Bend** are small reusable splat operators that
+compose into flowing "materialize / dematerialize" loops (for example a street that runs
+through a fixed window, or rolls around the inside of a ring):
+
+- **Conveyor** (`splat.conveyor`) scrolls splats along a source-local axis (0/1/2 = X/Y/Z)
+  at Speed units per second and wraps them into Wrap start .. Wrap start + Wrap length.
+  It is closed form, so seeking is exact; the loop repeats every Wrap length / |Speed| s.
+  Downstream nodes read its loop period and flow direction. **Travel** adds a keyframeable
+  distance: keyframe it with Speed 0 for slow starts and ramps without jumps, or offset it to
+  place the content seam (where the scan's end meets its start) behind the camera.
+- **Falloff Box** (`splat.falloff-box`) writes a per-splat release weight: 0 inside the solid
+  half-size around Center, rising to 1 across Feather on each axis, with Edge jitter for a
+  frayed front. A huge half-size ignores an axis; several boxes combine by maximum.
+- **Release** (`splat.release`) lets weighted splats fly. It reuses the shared force nodes:
+  **Turbulence** becomes a divergence-free curl field (strength, frequency), **Gravity** pulls
+  toward local -Y for positive strength (like Particle Simulation; negative lifts in Y-up
+  captures), **Drag** shortens flights. Flight distance varies per splat so particles stream
+  in ribbons with a long tail of far flights, each splat swirls at its own scale through a
+  two-octave field, and Stream with motion sweeps them along the conveyor flow (negative values drift against it). Particle size
+  and Particle glow shape the particles; Fade 1 dissolves them away, Fade 0 keeps released
+  splats as a scattered cloud they materialize from. **Cycle** 1 turns release into a round trip:
+  the amount follows each splat's progress through the gap between leaving and re-entering the
+  conveyor window (0 at both edges, maximal halfway), so splats that fly off on the exit side
+  drift through space and land back on their own places on the entry side. Lateral falloff
+  still frays the sides. **Linger** reshapes the trip: fly out fast, hold far out while drifting
+  with the gap, then come back slowly at first and faster and faster until the splat snaps into
+  place. In Cycle the trip begins Feather before the window's exit edge, so the strip dissolves
+  over a long stretch while the entry stays crisp; **Dissolve spread** gives every splat its own
+  departure time along that stretch. **Quality** sets the curl path steps per splat and frame:
+  2-3 keep camera fly-throughs fluid in the preview, 10 is the export default. **Particle density**
+  keeps only a seeded share of released splats as particles; the rest fade out while leaving.
+  Splats at alpha <= 1/255 are skipped by the visibility cull (they were invisible anyway), so a
+  dense strip with a sparse particle cloud costs little sorting and drawing. Moving splat graphs
+  (conveyor, release, particles, position noise) now use the visibility cull in the interactive
+  preview as well; its draw count lags one frame behind the GPU counter, which is invisible for
+  continuous motion. Precise frames (export) still sort and draw every splat. Pair it with a closed Ring Bend; an open ring warns, because splats
+  would jump across the gap at the wrap seam. The curl field circles exactly once per
+  conveyor loop, so the animation stays seamless.
+- **Ring Bend** (`splat.ring-bend`) rolls a strip along X or Z onto the inside of a ring whose
+  center lies Radius from Ground height along local Y (negative Radius for Y-down captures).
+  |Radius| = Wrap length / 2pi closes a full ring; put the wrap seam inside the released zone.
+  **Bend** (0..1, keyframeable) scales the curvature, so a flat strip curls into the ring smoothly
+  while the point at Center stays in place. Content higher than the ring center would fold
+  through the axis; it fades out within 35 % of the radius of the axis instead, so skies and
+  tall surroundings disappear gracefully as the world curls.
+  **Keep released outside** lets splats released by an upstream Release move only outward from
+  their place and pushes them behind the ring surface while they leave, so flights never crowd
+  the view from inside the ring; settled splats keep their place.
+
+All four move splat centers, so they force GPU depth sorting and end source-crop compaction
+like particles. The `SplatGraph` logger warns once per setting when a Release has no upstream
+Falloff Box, a Ring Bend uses axis Y, or a Falloff Box window along the conveyor axis reaches
+the wrap seam or lies outside the wrap range.
+
 Radii are **linear local units**, not the logarithmic scales in some training PLY files.
 **Sphere Crop** is a reusable splat operator with Center X/Y/Z, Radius and Soft edge.
 It hides splat centers outside a source-local sphere without deleting source data;
@@ -228,6 +282,38 @@ Gaussian splat clips are imported through the SuperSplat-compatible `@playcanvas
 - The Gaussian tab exposes native renderer information together with `maxSplats`, `sortFrequency`, `splatScale`, `orientationPreset`, `nearPlane`, and `farPlane`. `splatScale` changes each gaussian's covariance without moving its center; `maxSplats` caps the rendered budget (`0` is unlimited); `sortFrequency` controls the realtime depth-order refresh cadence (`0` disables refresh); and the near/far values slice only that splat object in camera-space depth.
 - Gaussian splats participate in scene cameras, object transforms, object-level effectors, preview, nested compositions, export, preload, and readiness checks through the same native shared-scene path.
 - Realtime splat rendering uses a worker-backed back-to-front order buffer based on the SuperSplat/PlayCanvas sorter approach. Paused preview and Edit mode honor the configured sort cadence, and obsolete worker results are discarded when a newer object/camera transform has already requested another order. Precise export can fall back to the existing GPU sort path.
+- Rendering matches SuperSplat/PlayCanvas quality choices: the 2D covariance low-pass is
+  0.075 px² (PlayCanvas' 0.3 in its doubled focal units), splats are dropped only when their
+  half-extent stays under about one pixel, and both the worker and the GPU sorter order splats by
+  radial camera distance, so rotating the camera does not reorder splats at the screen edges.
+- View-dependent color: spherical harmonics bands 1-3 (`f_rest_*`, e.g. from `.ply`, `.sog`,
+  `.spz`) are kept at load time in a compact layout (per-splat float scale plus one byte per
+  coefficient, about 52 bytes per splat for all three bands) and evaluated in the vertex shader
+  with the camera-to-splat direction in the scan's own space, like PlayCanvas. Splat graph
+  outputs carry each output splat's source id, so sampled, cropped and moving branches keep their
+  SH. Per-splat rotations applied by graph nodes (for example Ring Bend) do not rotate the SH.
+  Convert with SH kept (`splat-transform` without `-H 0`) to use this. Loaders turn every scene
+  into the editor's Y-up basis (Y and Z negated); SH stays in the capture basis, so the shader
+  mirrors the view direction back before evaluating it.
+- **Streamed LOD packages** (`*.lod.zip`, SuperSplat-style level of detail): build one from a
+  large PLY with `node scripts/build-splat-lod.mjs <in.ply> <out.lod.zip> [--levels 5] [--leaf
+  65536]` (needs `splat-transform` 3.x, e.g. `SPLAT_TRANSFORM=path/to/splat-transform`). It
+  decimates to 100/50/25/12.5/6.25 %, partitions the full level into a kd-tree of leaves and
+  stores raw chunks per leaf and level (with SH) in an uncompressed zip with a PlayCanvas-style
+  `lod-meta.json`. The renderer loads the coarsest level of every leaf first (the scene is
+  drawable after a few hundred ms), then streams finer chunks straight from the file with
+  `Blob.slice`, nearest leaves first, three at a time, into a fixed GPU page pool. Levels follow
+  PlayCanvas' rule (level k covers distances 3^(k-1)..3^k of a global scale, leaves behind the
+  camera count five times farther) and the scale is searched so the splat budget (Gaussian tab
+  `maxSplats`, `0` = 4 million like SuperSplat) is filled without being exceeded. Distances use
+  the leaf centers after the Conveyor wrap and Ring Bend of the clip's splat graph, so detail
+  follows content to where it is drawn. A leaf keeps its old level until the new chunk is
+  uploaded; under pool pressure a leaf moving away drops to a resident coarser level so its
+  chunk can be evicted (least recently used; the coarsest level stays pinned). Thumbnails,
+  bounds and other whole-asset consumers see the coarsest level. `.lod.zip` gets the same
+  default orientation as PLY. Diagnostics: `Logger.enable('SplatLod')` logs each new draw list
+  (splats, leaves per level, resident chunks, free pages); clamped pools, overflowing budgets,
+  full pools and failed chunk reads are warnings.
 - Sequence splats follow the same shared runtime contract and preload nearby frames without replacing foreground playback with repeated loading overlays.
 - PLY/splat sequences imported into an open project are copied to `Raw/<sequence-name>/` using the original frame names; existing same-size frame files are reused instead of written again.
 - Imported splats and numbered splat sequences store media-panel stats: container label, file size, per-frame splat count, and total sequence splat count.
@@ -312,6 +398,7 @@ The Transform tab is context-sensitive:
 | `.spz` | Supported | Loaded through `@playcanvas/splat-transform`. |
 | `.sog` / `.zip` | Supported | Loaded through the bundled SOG/zip reader path. |
 | `.lcc` | Supported | The first returned LOD table is used. |
+| `.lod.zip` | Supported | MasterSelects streamed LOD package from `scripts/build-splat-lod.mjs`; finer levels stream per view. |
 
 ## Limitations
 

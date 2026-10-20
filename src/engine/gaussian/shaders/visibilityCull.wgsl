@@ -34,6 +34,11 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   }
 
   let base = idx * 14u;
+  // The draw shader discards alpha <= 1/255 even at full layer opacity; skip such splats here so
+  // fully faded splats (released particles, crops, fades) cost no sorting or drawing.
+  if (!(splatData[base + 13u] > 1.0 / 255.0)) {
+    return;
+  }
   let pos = vec3f(
     splatData[base + 0u],
     splatData[base + 1u],

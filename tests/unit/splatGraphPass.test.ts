@@ -31,10 +31,22 @@ describe('splat graph sorting policy', () => {
     expect(run([{ kind: 'particles', values: [] }]).forceGpuSort).toBe(true);
     expect(mocks.order).not.toHaveBeenCalled();
     expect(run([{ kind: 'noise', values: [0] }]).forceGpuSort).toBe(true);
+    for (const kind of ['conveyor', 'release', 'ring-bend'] as const) expect(run([{ kind, values: [2, 1, -10, 20] }]).forceGpuSort).toBe(true);
   });
   it('preserves precise export sorting and falls back when the worker cannot initialize', () => {
     expect(run([], true).forceGpuSort).toBe(true);
     expect(mocks.order).not.toHaveBeenCalled();
     expect(run([], false, false).forceGpuSort).toBe(true);
+  });
+  it('draws a streamed LOD scene through its pool slot list instead of budget sampling', () => {
+    mocks.compute.mockClear(); mocks.order.mockReset();
+    const indices = {} as GPUBuffer;
+    const result = new SplatGraphPass().execute({} as GPUDevice, {} as GPUCommandEncoder, {} as GPUBindGroupLayout,
+      'lod', scene, buffer, 1000, undefined, { id: 'surface', applyClipTransform: true, operations: [{ kind: 'select', values: [0.1, 0] }], budget: 5 },
+      1, new Float32Array(16), camera, false, { indices, count: 700 });
+    expect(result.count).toBe(700);
+    expect(result.forceGpuSort).toBe(true);
+    const call = mocks.compute.mock.calls[0] as unknown[];
+    expect(call[3]).toBe(700); expect(call[4]).toEqual([]); expect(call[11]).toBe(indices);
   });
 });

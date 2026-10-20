@@ -51,6 +51,7 @@ import { EmptyFrameRenderer } from './dispatcher/emptyFrameRenderer';
 import { ExportReadinessFacet } from './dispatcher/exportReadinessFacet';
 import { GaussianSequenceFacet, type GaussianSplatSceneLoadRequest } from './dispatcher/gaussianSequenceFacet';
 import { GaussianSplatSceneLoader } from './dispatcher/gaussianSplatSceneLoader';
+import { getGaussianSplatGpuRenderer } from '../gaussian/core/GaussianSplatGpuRenderer';
 import { SharedScene3DProcessor } from './dispatcher/sharedScene3DProcessor';
 import { TargetPreviewRenderer } from './dispatcher/targetPreviewRenderer';
 import { PreviewCompositeHold } from './dispatcher/previewCompositeHold';
@@ -189,6 +190,7 @@ export class RenderDispatcher {
         const { getFlockSimulationRegistry } = await import('../flock/runtime/FlockSimulationRegistry');
         await getFlockSimulationRegistry().prepareForExport(device, layers);
       },
+      waitForSplatLodStreaming: () => getGaussianSplatGpuRenderer().waitForLodStreaming(),
     });
     this.gaussianSequenceFacet = new GaussianSequenceFacet({
       resolveSceneKey: (clipId, runtimeKey) => resolveSharedSplatSceneKey({ clipId, runtimeKey }),

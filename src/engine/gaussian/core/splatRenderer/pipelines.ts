@@ -1,10 +1,12 @@
 import shaderSource from '../../shaders/gaussianSplat.wgsl?raw';
+import { createSplatShBindGroupLayout } from './shBinding';
 
 const SPLAT_DEPTH_FORMAT: GPUTextureFormat = 'depth24plus';
 
 export interface SplatRenderPipelineBundle {
   splatDataBindGroupLayout: GPUBindGroupLayout;
   cameraBindGroupLayout: GPUBindGroupLayout;
+  shBindGroupLayout: GPUBindGroupLayout;
   pipeline: GPURenderPipeline;
   pipelineWithDepth: GPURenderPipeline;
   pipelineWithDepthWrite: GPURenderPipeline;
@@ -45,14 +47,16 @@ export function createSplatRenderPipelines(device: GPUDevice, format: GPUTexture
     label: 'splat-camera-bind-group-layout',
   });
 
+  const shBindGroupLayout = createSplatShBindGroupLayout(device);
   const pipelineLayout = device.createPipelineLayout({
-    bindGroupLayouts: [splatDataBindGroupLayout, cameraBindGroupLayout],
+    bindGroupLayouts: [splatDataBindGroupLayout, cameraBindGroupLayout, shBindGroupLayout],
     label: 'gaussian-splat-pipeline-layout',
   });
 
   return {
     splatDataBindGroupLayout,
     cameraBindGroupLayout,
+    shBindGroupLayout,
     pipeline: createColorPipeline(device, pipelineLayout, shaderModule, format, 'gaussian-splat-render-pipeline'),
     pipelineWithDepth: createColorPipeline(
       device,

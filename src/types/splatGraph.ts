@@ -1,6 +1,6 @@
 /** Serializable splat processing instructions. GPU resources belong to the renderer. */
 export interface SplatGraphOperation {
-  kind: 'limit' | 'scale' | 'rotate' | 'color' | 'select' | 'noise' | 'particles' | 'camera-fade' | 'sphere-crop';
+  kind: 'limit' | 'scale' | 'rotate' | 'color' | 'select' | 'noise' | 'particles' | 'camera-fade' | 'sphere-crop' | 'conveyor' | 'falloff-box' | 'release' | 'ring-bend';
   values: number[];
 }
 

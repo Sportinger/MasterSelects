@@ -55,7 +55,7 @@ const EXACT: Record<string, NodeCategoryId> = {
   'splat.limit': 'splat-transform', 'splat.scale': 'splat-transform', 'splat.rotate': 'splat-transform',
   'splat.color': 'splat-attributes', 'splat.noise': 'splat-attributes', 'splat.select': 'splat-attributes', 'splat.merge': 'splat-attributes',
   'splat.camera-fade': 'splat-crop', 'splat.sphere-crop': 'splat-crop',
-  'splat.particles': 'particles', 'splat.particle-system': 'particles', 'splat.gravity': 'forces', 'splat.drag': 'forces', 'splat.turbulence': 'forces',
+  'splat.particles': 'particles', 'splat.conveyor': 'splat-transform', 'splat.release': 'particles', 'splat.falloff-box': 'splat-crop', 'splat.ring-bend': 'splat-transform', 'splat.particle-system': 'particles', 'splat.gravity': 'forces', 'splat.drag': 'forces', 'splat.turbulence': 'forces',
   'simulation.image-particles': 'particles', 'simulation.particle-release': 'particles', 'simulation.particle-motion': 'particles', 'simulation.rope': 'forces',
   'splat.surface': 'output', 'splat.render': 'output', 'splat.clean-surface': 'output', 'splat.ray-field': 'output', 'splat.mesh-overlay': 'output',
   // Flocking swarm graph.

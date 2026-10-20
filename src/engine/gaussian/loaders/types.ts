@@ -44,7 +44,9 @@ export interface GaussianSplatMetadata {
 export interface GaussianSplatBuffer {
   data: Float32Array;
   splatCount: number;
-  shData?: Float32Array;
+  /** Packed rest coefficients (bands 1-3); see shPacking.ts for the layout. */
+  shData?: Uint32Array;
+  shCoeffsPerChannel?: number;
   shDegree: number;
 }
 

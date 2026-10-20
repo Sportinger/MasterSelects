@@ -5,15 +5,59 @@ import { primitiveSplatGraph } from '../../src/services/operators/splatGraphDefa
 import { composeSplatGraph } from '../../src/services/operators/splatGraphComposition';
 import { SPLAT_COMPOSITIONS } from '../../src/services/operators/splatCompositions';
 import { describe, expect, it } from 'vitest';
-import { compileSplatGraph, defaultSplatGraph } from '../../src/services/operators/splatGraph';
+import { compileSplatGraph, defaultSplatGraph, splatChainWarnings } from '../../src/services/operators/splatGraph';
 import { validateSceneGraph, sceneGraphSupportsSource } from '../../src/services/operators/sceneGraph';
 import { connectEffectGraph } from '../../src/services/operators/effectGraph';
 import { expandSceneOperatorGraph } from '../../src/engine/scene/sceneGraphRuntime';
 import type { SceneSplatLayer } from '../../src/engine/scene/types';
 import { reconstructSplatMesh } from '../../src/engine/gaussian/graph/splatMesh';
-import { packSplatOperations, prepareSplatSampling } from '../../src/engine/gaussian/graph/SplatGraphCompute';
+import { movesSplatCenters, packSplatOperations, prepareSplatSampling } from '../../src/engine/gaussian/graph/SplatGraphCompute';
 
 describe('splat graph execution', () => {
+  it('compiles conveyor, falloff box, release with shared forces and ring bend as reusable operations', () => {
+    const d = defaultSplatGraph();
+    const node = (id: string, operator: string, constants: Record<string, number> = {}) => ({ id, operator, bindings: {}, bypassed: false, constants });
+    const conveyor = node('conveyor', 'splat.conveyor', { axis: 2, speed: 4, start: -60, length: 120, travel: 57 });
+    const falloff = node('falloff', 'splat.falloff-box', { centerX: -0.5, centerY: 0, centerZ: 0, halfX: 2.5, halfY: 1000, halfZ: 10, featherX: 3, featherY: 1, featherZ: 12, jitter: 0.6 });
+    const release = node('release', 'splat.release', { flight: 8, stream: 0.5, particleSize: 0.25, glow: 0.4, seed: 7, fade: 0.2, cycle: 1, linger: 0.8, dissolve: 0.5, quality: 3, density: 0.25 });
+    const bend = node('bend', 'splat.ring-bend', { axis: 2, center: 0, radius: 120 / (2 * Math.PI), ground: -4.5, keepOutside: 1, bend: 0.5 });
+    const turbulence = node('turb', 'forces.turbulence', { strength: 1.5, frequency: 0.35 });
+    const gravity = node('grav', 'forces.gravity', { strength: -1 });
+    d.graph.nodes.push(conveyor, falloff, release, bend, turbulence, gravity);
+    d.graph.edges.find(e => e.to === 'surface')!.from = 'bend';
+    const link = (from: string, to: string, input = 'splats', output = 'splats') => d.graph.edges.push({ id: `${from}-${to}-${input}`, from, output, to, input });
+    link('source', 'conveyor'); link('conveyor', 'falloff'); link('falloff', 'release'); link('release', 'bend');
+    link('turb', 'release', 'turbulenceField', 'force'); link('grav', 'release', 'gravityField', 'force');
+    expect(validateSceneGraph(d)).toEqual([]);
+    const operations = compileSplatGraph(d)[0].operations;
+    expect(operations.map(o => o.kind)).toEqual(['conveyor', 'falloff-box', 'release', 'ring-bend']);
+    expect(operations[0].values).toEqual([2, 4, -60, 120, 57]);
+    expect(operations[2].values).toEqual([8, 0.5, 0.25, 0.4, 1.5, 0.35, -1, 0, 7, 0.2, 1, 0.8, 0.5, 3, 0.25]);
+    expect(operations.every(movesSplatCenters)).toBe(operations.map(o => o.kind !== 'falloff-box').every(Boolean));
+    const packed = packSplatOperations(operations);
+    expect(Array.from(packed.slice(16, 32))).toEqual([11, 0, 0, 0, -0.5, 0, 0, 2.5, 1000, 10, 3, 1, 12, Math.fround(0.6), 0, 0]);
+    expect(Array.from(packed.slice(32, 48)).map(Math.fround)).toEqual([12, 0.5, 3, 0.25, 8, 0.5, 0.25, 0.4, 1.5, 0.35, -1, 0, 7, 0.2, 1, 0.8].map(Math.fround));
+    expect(splatChainWarnings(operations)).toEqual([]);
+    expect(operations[3].values).toEqual([2, 0, 120 / (2 * Math.PI), -4.5, 1, 0.5]);
+    turbulence.bypassed = true;
+    expect(compileSplatGraph(d)[0].operations[2].values.slice(4, 6)).toEqual([0, 1]);
+    expect(() => packSplatOperations([{ kind: 'release', values: new Array(16).fill(0) }])).toThrow(/at most 15/);
+    release.bypassed = true; falloff.bypassed = true; bend.bypassed = true;
+    expect(compileSplatGraph(d)[0].operations.map(o => o.kind)).toEqual(['conveyor']);
+  });
+  it('reports splat chains that cannot behave as configured instead of failing silently', () => {
+    const conveyor = { kind: 'conveyor' as const, values: [2, 4, -60, 120] };
+    const falloff = (center: number, half: number, feather: number) => ({ kind: 'falloff-box' as const, values: [0, 0, center, 1000, 1000, half, 1, 1, feather, 0.6] });
+    expect(splatChainWarnings([conveyor, falloff(0, 10, 12)])).toEqual([]);
+    expect(splatChainWarnings([conveyor, falloff(0, 40, 30)])[0]).toMatch(/wrap visibly/);
+    expect(splatChainWarnings([conveyor, falloff(90, 5, 5)])[0]).toMatch(/outside the conveyor wrap range/);
+    expect(splatChainWarnings([{ kind: 'release', values: [] }])[0]).toMatch(/no upstream Falloff Box/);
+    const cycle = { kind: 'release' as const, values: [8, 0.5, 0.3, 0.3, 0, 1, 0, 0, 7, 1, 1] };
+    expect(splatChainWarnings([falloff(0, 10, 12), cycle])[0]).toMatch(/needs an upstream Conveyor/);
+    expect(splatChainWarnings([conveyor, falloff(0, 10, 12), cycle, { kind: 'ring-bend', values: [2, 0, 30, 0] }])[0]).toMatch(/Use Radius 19.099/);
+    expect(splatChainWarnings([conveyor, falloff(0, 10, 12), cycle, { kind: 'ring-bend', values: [2, 0, 120 / (2 * Math.PI), 0] }])).toEqual([]);
+    expect(splatChainWarnings([{ kind: 'ring-bend', values: [1, 0, 30, 0] }])[0]).toMatch(/axis X \(0\) or Z \(2\)/);
+  });
   it('compiles a reusable sphere crop and restores the source stream when bypassed', () => {
     const d = defaultSplatGraph();
     const crop = { id: 'crop', operator: 'splat.sphere-crop', bindings: {}, constants: { x: 1, y: -2, z: 3, radius: 4, softness: 0.5 }, bypassed: false };
@@ -83,8 +127,8 @@ describe('splat graph execution', () => {
   it('packs simulation and noise parameters without overlapping neighboring operations', () => {
     const ops = compileSplatGraph(defaultSplatGraph(true))[2].operations;
     const packed = packSplatOperations(ops);
-    expect(packed[24]).toBe(7); expect(packed[28]).toBe(2); expect(packed[34]).toBe(42);
-    expect(packed[36]).toBe(8); expect(packed[41]).toBeCloseTo(0.5);
+    expect(packed[32]).toBe(7); expect(packed[36]).toBe(2); expect(packed[42]).toBe(42);
+    expect(packed[48]).toBe(8); expect(packed[53]).toBeCloseTo(0.5);
   });
   it('evaluates connected forces and removes their contribution when disconnected or bypassed', () => {
     const d = defaultSplatGraph(true);

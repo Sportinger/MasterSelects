@@ -12,13 +12,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
+/** Radial camera distance, matching the GPU sort key: stable while the camera only rotates. */
 function transformDepth(viewWorldMatrix: Float32Array, x: number, y: number, z: number): number {
-  const viewZ =
-    viewWorldMatrix[2] * x +
-    viewWorldMatrix[6] * y +
-    viewWorldMatrix[10] * z +
-    viewWorldMatrix[14];
-  return -viewZ;
+  const viewX = viewWorldMatrix[0] * x + viewWorldMatrix[4] * y + viewWorldMatrix[8] * z + viewWorldMatrix[12];
+  const viewY = viewWorldMatrix[1] * x + viewWorldMatrix[5] * y + viewWorldMatrix[9] * z + viewWorldMatrix[13];
+  const viewZ = viewWorldMatrix[2] * x + viewWorldMatrix[6] * y + viewWorldMatrix[10] * z + viewWorldMatrix[14];
+  return Math.hypot(viewX, viewY, viewZ);
 }
 
 function buildIdentityOrder(order: Uint32Array, count: number): Uint32Array {

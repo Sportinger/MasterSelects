@@ -22,6 +22,53 @@ struct CameraUniforms {
 // ── Sorted index buffer (optional — identity if unsorted) ───────────────────
 @group(0) @binding(1) var<storage, read> sortedIndices: array<u32>;
 
+// ── Spherical harmonics (bands 1-3) ─────────────────────────────────────────
+// Packed per source splat: word 0 = float bits of the largest |coefficient|, then one byte per
+// coefficient ((c / max) * 0.5 + 0.5) * 255, channel-major (all red, then green, then blue).
+struct ShParams {
+  cameraLocal: vec4f, // camera position in the splat source's own (scan) space
+  info: vec4u,        // x = coefficients per channel (0 = no SH), y = words per splat
+}
+@group(2) @binding(0) var<storage, read> shData: array<u32>;
+@group(2) @binding(1) var<storage, read> shSourceIds: array<u32>;
+@group(2) @binding(2) var<uniform> sh: ShParams;
+
+fn shCoefficient(base: u32, index: u32, scale: f32) -> f32 {
+  let word = shData[base + 1u + (index >> 2u)];
+  let byte = (word >> ((index & 3u) * 8u)) & 0xffu;
+  return (f32(byte) / 255.0 * 2.0 - 1.0) * scale;
+}
+
+fn shRgb(base: u32, index: u32, scale: f32) -> vec3f {
+  let n = sh.info.x;
+  return vec3f(shCoefficient(base, index, scale), shCoefficient(base, n + index, scale), shCoefficient(base, 2u * n + index, scale));
+}
+
+// Standard 3DGS evaluation with the camera-to-splat direction in source space (as PlayCanvas).
+fn evaluateSh(sourceId: u32, dir: vec3f) -> vec3f {
+  let base = sourceId * sh.info.y;
+  let scale = bitcast<f32>(shData[base]);
+  if (scale == 0.0) { return vec3f(0.0); }
+  let x = dir.x; let y = dir.y; let z = dir.z;
+  var result = 0.4886025119029199 * (-y * shRgb(base, 0u, scale) + z * shRgb(base, 1u, scale) - x * shRgb(base, 2u, scale));
+  if (sh.info.x < 8u) { return result; }
+  let xx = x * x; let yy = y * y; let zz = z * z; let xy = x * y; let yz = y * z; let xz = x * z;
+  result += 1.0925484305920792 * xy * shRgb(base, 3u, scale)
+    - 1.0925484305920792 * yz * shRgb(base, 4u, scale)
+    + 0.31539156525252005 * (2.0 * zz - xx - yy) * shRgb(base, 5u, scale)
+    - 1.0925484305920792 * xz * shRgb(base, 6u, scale)
+    + 0.5462742152960396 * (xx - yy) * shRgb(base, 7u, scale);
+  if (sh.info.x < 15u) { return result; }
+  result += -0.5900435899266435 * y * (3.0 * xx - yy) * shRgb(base, 8u, scale)
+    + 2.890611442640554 * xy * z * shRgb(base, 9u, scale)
+    - 0.4570457994644658 * y * (4.0 * zz - xx - yy) * shRgb(base, 10u, scale)
+    + 0.3731763325901154 * z * (2.0 * zz - 3.0 * xx - 3.0 * yy) * shRgb(base, 11u, scale)
+    - 0.4570457994644658 * x * (4.0 * zz - xx - yy) * shRgb(base, 12u, scale)
+    + 1.445305721320277 * z * (xx - yy) * shRgb(base, 13u, scale)
+    - 0.5900435899266435 * x * (xx - 3.0 * yy) * shRgb(base, 14u, scale);
+  return result;
+}
+
 // ── Vertex output / Fragment input ───────────────────────────────────────────
 struct VertexOutput {
   @builtin(position) position: vec4f,
@@ -105,11 +152,12 @@ fn projectCovariance(
   let T = W * J;
   let cov2d = transpose(T) * cov3d * T;
 
-  // Return upper-triangle of 2D covariance: (xx, xy, yy) with low-pass filter
+  // Return upper-triangle of 2D covariance: (xx, xy, yy) with low-pass filter. PlayCanvas/SuperSplat
+  // add 0.3 in their focal units (twice the pixel focal), i.e. 0.075 px^2; match that sharpness.
   return vec3f(
-    cov2d[0][0] + 0.3,
+    cov2d[0][0] + 0.075,
     cov2d[0][1],
-    cov2d[1][1] + 0.3,
+    cov2d[1][1] + 0.075,
   );
 }
 
@@ -175,7 +223,15 @@ fn vs_main(
   let scale = vec3f(splatData[base + 3u], splatData[base + 4u], splatData[base + 5u])
     * max(camera.layer.z, 0.01);
   let quat  = vec4f(splatData[base + 6u], splatData[base + 7u], splatData[base + 8u], splatData[base + 9u]);
-  let color = vec3f(splatData[base + 10u], splatData[base + 11u], splatData[base + 12u]);
+  var color = vec3f(splatData[base + 10u], splatData[base + 11u], splatData[base + 12u]);
+  if (sh.info.x > 0u) {
+    let toSplat = pos - sh.cameraLocal.xyz;
+    let toSplatLength = length(toSplat);
+    if (toSplatLength > 0.0) {
+      // Loaders negate Y and Z of positions (basis correction); SH coefficients stay in the capture basis.
+      color = max(color + evaluateSh(shSourceIds[splatIdx], toSplat / toSplatLength * vec3f(1.0, -1.0, -1.0)), vec3f(0.0));
+    }
+  }
   let alpha = splatData[base + 13u];
   let renderAlpha = alpha * clamp(camera.layer.x, 0.0, 1.0);
 
@@ -219,7 +275,7 @@ fn vs_main(
   let mid = 0.5 * (diagonal1 + diagonal2);
   let eigenRadius = length(vec2f((diagonal1 - diagonal2) * 0.5, offDiagonal));
   let lambda1 = mid + eigenRadius;
-  let lambda2 = max(mid - eigenRadius, 0.1);
+  let lambda2 = max(mid - eigenRadius, 0.025);
 
   if (!(lambda1 > 0.0) || !(lambda2 > 0.0) || !(renderAlpha > 1.0 / 255.0)) {
     return discardVertex();
@@ -228,7 +284,8 @@ fn vs_main(
   let viewportMin = min(1024.0, min(camera.viewport.x, camera.viewport.y));
   let axis1Length = 2.0 * min(sqrt(2.0 * lambda1), viewportMin);
   let axis2Length = 2.0 * min(sqrt(2.0 * lambda2), viewportMin);
-  if (axis1Length < 2.0 && axis2Length < 2.0) {
+  // Like SuperSplat, only drop splats whose half-extent stays under about one pixel.
+  if (axis1Length < 1.0 && axis2Length < 1.0) {
     return discardVertex();
   }
 

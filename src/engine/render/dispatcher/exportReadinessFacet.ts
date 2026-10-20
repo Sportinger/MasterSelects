@@ -9,6 +9,7 @@
 // spy/override point for tests and instrumentation.
 
 import type { Layer } from '../../core/types';
+import { Logger } from '../../../services/logger';
 import type { ModelSequenceData } from '../../../types/mediaSequences';
 import { useMediaStore } from '../../../stores/mediaStore';
 import { buildSharedSplatRuntimeRequest } from '../../scene/runtime/SharedSplatRuntimeUtils';
@@ -16,6 +17,7 @@ import type { GaussianSplatSceneLoadRequest } from './gaussianSequenceFacet';
 import type { FlockLayerSourceData } from '../../../services/flock/flockLayerSource';
 
 const MAX_EXPORT_LAYER_NESTING_DEPTH = 8;
+const log = Logger.create('ExportReadiness');
 
 interface ExportReadinessHost {
   getResolution: () => { width: number; height: number } | null;
@@ -24,6 +26,8 @@ interface ExportReadinessHost {
   ensureGaussianSplatSceneLoaded: (request: GaussianSplatSceneLoadRequest) => Promise<boolean>;
   /** Advances pinned flock export sessions; rejects invalid graphs or unsupported hosts. */
   ensureFlockLayersReady?: (layers: FlockLayerSourceData[]) => Promise<void>;
+  /** Waits for streamed splat LOD chunks requested by the previous frame; false on timeout. */
+  waitForSplatLodStreaming?: () => Promise<boolean>;
 }
 
 export class ExportReadinessFacet {
@@ -185,6 +189,11 @@ export class ExportReadinessFacet {
           failed.reason instanceof Error ? failed.reason.message : String(failed.reason)
         }`,
       );
+    }
+    // Streamed LOD splats pick their chunks while drawing, so each frame waits for what the previous
+    // (nearly identical) view requested; detail therefore trails the export camera by one frame.
+    if (nativeSplats.size > 0 && this.host.waitForSplatLodStreaming && !(await this.host.waitForSplatLodStreaming())) {
+      log.warn('Splat LOD chunks did not finish streaming in time; this export frame may show coarser detail.');
     }
   }
 

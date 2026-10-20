@@ -8,6 +8,7 @@ import { useEngineStore, type GaussianSplatLoadPhase } from '../../../stores/eng
 import { getGaussianSplatGpuRenderer } from '../../gaussian/core/GaussianSplatGpuRenderer';
 import { getReplacedSplatSceneAsset, getSplatSceneReplacementRevision } from '../../gaussian/core/splatSceneReplacement';
 import { loadGaussianSplatAssetCached, type GaussianSplatLoadProgress } from '../../gaussian/loaders';
+import { openLodPackage } from '../../gaussian/lod/lodPackage';
 import type { GaussianSplatSceneLoadRequest } from './gaussianSequenceFacet';
 
 const log = Logger.create('RenderDispatcher');
@@ -258,6 +259,19 @@ export class GaussianSplatSceneLoader {
       }
 
       const loadFile = file;
+      const lodPackage = /\.zip$/i.test(loadFile.name) ? await openLodPackage(loadFile) : null;
+      if (lodPackage) {
+        // Streamed LOD package: upload the coarsest level now, the renderer streams finer levels per view.
+        this.setGaussianSplatLoadProgress(request, { phase: 'uploading', percent: 0.5, totalBytes: loadFile.size, message: 'Streaming splat LOD' });
+        this.splatSceneBounds.set(request.sceneKey, lodPackage.bounds);
+        if (request.clipId && request.clipId !== request.sceneKey) this.splatSceneBounds.set(request.clipId, lodPackage.bounds);
+        await renderer.uploadLodScene(request.sceneKey, lodPackage, () => this.deps.requestRender());
+        this.setGaussianSplatLoadProgress(request, { phase: 'complete', percent: 1, totalBytes: loadFile.size, message: 'Splat LOD ready' });
+        this.clearGaussianSplatLoadProgress(request.sceneKey, 350);
+        log.info('Gaussian splat LOD scene ready', { sceneKey: request.sceneKey, levels: lodPackage.counts });
+        this.deps.requestRender();
+        return;
+      }
       const asset = await loadGaussianSplatAssetCached(request.sceneKey, loadFile, undefined, {
         maxSplats: request.maxSplats,
         onProgress: (progress) => {
@@ -292,9 +306,11 @@ export class GaussianSplatSceneLoader {
           totalBytes: loadFile.size,
           message: 'Uploading splat scene',
         });
+        const loaded = asset.frames[0].buffer;
         renderer.uploadScene(request.sceneKey, {
-          splatCount: asset.frames[0].buffer.splatCount,
-          data: asset.frames[0].buffer.data,
+          splatCount: loaded.splatCount,
+          data: loaded.data,
+          ...(loaded.shData && loaded.shCoeffsPerChannel ? { sh: { data: loaded.shData, coeffsPerChannel: loaded.shCoeffsPerChannel } } : {}),
         });
         this.setGaussianSplatLoadProgress(request, {
           phase: 'complete',
