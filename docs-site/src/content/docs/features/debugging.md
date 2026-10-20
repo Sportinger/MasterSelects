@@ -408,6 +408,33 @@ error. Requesting navigation is not proof that navigation completed; an unsaved-
 warning may cancel it. Preserve the original rejection so diagnostics and callers
 retain the actual module failure.
 
+Three more paths lead into the same recovery (`src/runtime/chunkLoadRecovery.ts`):
+
+- **React render errors.** A rejected `React.lazy` import is consumed by React and
+  reported as an uncaught render error that unmounts the root; no window hook sees
+  it. `main.tsx` passes such errors to `recoverFromChunkRenderError()`, so a failed
+  `App-<hash>.js` no longer leaves a blank page without a reload.
+- **Offline.** When `navigator.onLine` is false the reload waits for the `online`
+  event (`reload_waiting_online`) instead of failing again and spending the cooldown.
+  Mobile tabs resumed from the background hit this most.
+- **Failed CSS preloads** ("Unable to preload CSS for …") count as chunk failures.
+
+When the automatic reload is not possible (cooldown, unsaved project) or waits for
+the connection, a plain-DOM notice (`src/runtime/chunkRecoveryNotice.ts`, outside
+React so it survives an unmounted root) explains why and offers a Reload button.
+
+### Keeping old chunks available across deploys
+
+Cloudflare Pages serves only the files of the active deployment, so a tab opened
+before a deploy fails to lazy-load its old chunk names afterwards (404, unless the
+edge cache still holds them). Before every production deploy run
+`npm run deploy:retain-assets` after `npm run build:deploy`: it lists the last eight
+production deployments (`wrangler pages deployment list`), crawls each one's entry
+pages and `/assets/` chunks from its own `<id>.masterselects.pages.dev` URL and copies
+missing hashed files into `dist/assets`. Pages deduplicates uploads by hash, so the
+retained files add no upload cost; about 200 files per deployment are added. Old tabs
+then keep working until they reload; the recovery above covers anything older.
+
 ### Composition video-load failures
 
 `CompositionRenderer` video-load errors include `mediaErrorCode` (1 aborted, 2 network, 3 decode, 4 unsupported source, or null), `readyState`, `networkState`, `fileSize`, and `mimeType`, captured before cleanup resets the media element. These fields distinguish browser-reported failure classes; code 4 alone does not prove an unsupported codec, and a decode failure does not prove a corrupt file. No source URL or raw browser error message is added. Older events without these fields cannot be classified retroactively.
@@ -445,7 +472,7 @@ YouTube credential database initialization retries one `AbortError` before retur
 
 ### Protecting edits during chunk recovery
 
-Project auto-sync registers a lightweight veto for automatic chunk-error reloads while an open project is dirty or the workspace contains unsaved work before a project file exists. Projectless store edits survive repeated auto-sync setup and HMR; existing media, timeline clips and chat messages are also checked when no project is open. Hydration/save mirroring does not mark new edits. The boot module queries this without importing editor stores. A veto records `reload_deferred`, leaves the original import rejected, and consumes neither the reload flag nor the cooldown marker. Creating/saving a clean project allows subsequent recovery. Explicit project closure clears the transient edit marker. Teardown removes the guard. Manual navigation uses the same unsaved-work condition. No automatic save is started; this does not fix the failed network request or promise that a failed lazy component can retry without a later reload.
+Project auto-sync registers a lightweight veto for automatic chunk-error reloads while an open project is dirty or the workspace contains unsaved work before a project file exists. Projectless store edits survive repeated auto-sync setup and HMR; existing media, timeline clips and chat messages are also checked when no project is open. Hydration/save mirroring does not mark new edits. The boot module queries this without importing editor stores. A veto records `reload_deferred`, leaves the original import rejected, and consumes neither the reload flag nor the cooldown marker. Creating/saving a clean project allows subsequent recovery. Explicit project closure clears the transient edit marker. Teardown removes the guard. Manual navigation uses the same unsaved-work condition. No automatic save is started; this does not fix the failed network request or promise that a failed lazy component can retry without a later reload. Store changes made while the repository hydrates (`withRepositoryHydration`: restoring the scratch workspace at startup, projection activation, composition switches) do not count as projectless edits; before, every untouched editor vetoed chunk recovery and asked for confirmation on leave.
 
 ### TFLite initialization severity
 

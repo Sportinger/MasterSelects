@@ -56,7 +56,21 @@ the referrer is reduced to its origin), session ID
 (`sessionStorage`), device ID (`localStorage`), app version,
 browser/platform/device class, a context object (user agent, viewport, screen,
 CPU and RAM hints, JS heap, connection, online/visibility, uptime, WebGPU
-adapter, storage estimate) and the last 30 console/log breadcrumbs. Failure
+adapter, storage estimate) and the last 30 console/log breadcrumbs.
+On Chromium the context also carries the user-agent client hints that the
+frozen user agent hides (`userAgentData.platformVersion`, `model`,
+`architecture`, `bitness`, `fullVersionList`), so Windows 10/11, the macOS
+version and the Android model are known.
+
+`context.webgpu.startup` (`src/services/diagnostics/gpuStartupProbe.ts`) records
+what WebGPU startup tried: each adapter request with its result (`ok`, `null`,
+`timeout`, `rejected:<name>`) and duration, the adapter's vendor, architecture,
+fallback flag and feature level once one was obtained (so `requestDevice`
+failures carry it), and on failure the failure code, `isSecureContext` and the
+GPU name as WebGL reports it (`webgl`, via `src/services/render/webglAdapterHint.ts`).
+Before this, sessions without WebGPU or without an adapter had
+`webgpu.adapter: null` and no GPU identity at all. Firefox returns a coarse
+renderer name ("AMD Radeon R9 200 Series, or similar"). Failure
 codes are derived from the error name and stage (`javascript_error`,
 `unhandled_rejection`, `chunk_load_failed`, `react_render_error`,
 `network_unavailable`, `out_of_memory`, `storage_quota`, ...) instead of
