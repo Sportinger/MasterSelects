@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-20",
+    "type": "new",
+    "title": "MasterSelects 3.2.2",
+    "description": "New Image workspace for still images with a Layers panel, rulers, guides with layer snapping and a shared Tools panel. Gaussian splats render spherical harmonics, stream SuperSplat-style LOD packages and gain reusable conveyor, falloff box, release and ring bend nodes. Media can be linked to a proxy file, exports use the originals, and reconnecting offline media is simpler and works across tabs. Firefox WebGPU now renders video without validation errors, signal imports such as STL files succeed in saved projects, and edits refused in a read-only tab show a short notice instead of failing silently.",
+    "section": "Release"
+  },
+  {
     "date": "2026-10-16",
     "type": "fix",
     "title": "MasterSelects 3.2.1",
