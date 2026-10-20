@@ -111,7 +111,8 @@ alternative to cable dragging. A Keyframes source references a stored curve,
 not the already-modulated result. Combine it with an LFO through Add/Multiply;
 fan out one source through separate Remaps to control multiple parameters.
 Remap makes unit conversions explicit; Clamp supplies explicit limits. Blur
-Radius cannot be negative. Quality/iteration settings are not control targets.
+Radius cannot be negative; it is measured in pixels of a 1080p frame and scales with
+the rendered size. Quality/iteration settings are not control targets.
 
 An unwired LFO uses clip time: `offset + amplitude * sin(2π * (frequency * time + phase))`.
 Frequency is Hz; phase is cycles. Connect a Time node in Timeline mode to use the
@@ -296,16 +297,20 @@ These are also available from the inspector's **Add node** selector in other
 supported image-effect graphs. The parameter and constant folders are organization
 for the original effect, not separate processing blocks.
 
-The **Sampling** section provides **Texel Offset**, **Gaussian Weight**, and
-**Normalize by Weight**. These expand into existing vector, scalar and
-conversion operators. Exact matching formulas in Gaussian Blur, Box Blur and
-Sharpen become shared instances; edited formulas and user group boundaries are
-preserved. Gaussian Blur's original graph is organized into Radius & Sample Count,
-Kernel Sampling, Gaussian Weight, and Weighted Blur & Bypass, with frame input and
-output outside. The radius threshold and existing sampling/alpha arithmetic are
-unchanged. This is an organization/reuse upgrade, not a separable-blur optimization.
+The **Sampling** section provides **Texel Offset**, **Gaussian Weight**,
+**Normalize by Weight**, **Pair Tap Offsets** and **Merge Pair Weights**. These
+expand into existing vector, scalar and conversion operators. Exact matching
+formulas become shared instances; edited formulas and user group boundaries are
+preserved. Box and Gaussian Blur are separable two-pass graphs organized into
+Radius & Tap Count, Horizontal Pass (premultiplied), Vertical Pass and Straight
+Alpha Output; each pass uses one Pair Tap Offsets, two kernel weights and one
+Merge Pair Weights block, so another kernel (a tent, a custom curve) only replaces
+the two weight nodes. Motion, Radial and Zoom Blur are organized into Blur Range,
+Tap Counts & Box Length, Stage A (short box, cached), Stage B (coarse taps) and
+Straight Alpha Output. Details: [Effects → Editable blur kernels](./Effects.md#editable-blur-kernels).
+**Natural Logarithm** and **Ceiling** are available as scalar math nodes.
 
-The same organization now covers Box Blur/Sharpen, Motion/Radial/Zoom Blur,
+The same organization now covers Sharpen,
 Glow/Edge Detect, Wave/Twirl/Bulge, Pixelate/Mirror/RGB Split/Blockify/Block Mosaic,
 Brightness/Contrast/Saturation/Exposure/Levels/Temperature/Vibrance/Threshold/
 Posterize/Invert, and all 19 ASCII/Glyph variants (including ASCII Ghost).

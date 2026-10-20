@@ -152,6 +152,7 @@ Further reusable processing recipes are available in the same menu:
 | Category | Blocks | Boundary contract |
 | --- | --- | --- |
 | Sampling | Bounded Sample Count | Explicit count, minimum and maximum; integer truncation remains with the reducer. |
+| Sampling | Pair Tap Offsets; Merge Pair Weights | Sequence index, pairs per side and texel stride give the near/far texel offsets, a centre gate and the side; two kernel weights then merge into one linear-filtered tap (exact for any weights). Used by Box and Gaussian Blur. |
 | Coordinates | Scale From Center | Direction, scalar scale and center; no hidden UV or resolution source. |
 | Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. |
 | Color | Soft Bright Pass; Sobel Magnitude | Explicit threshold edges and image, or eight neighboring luminance values; no hidden sampling pass. |

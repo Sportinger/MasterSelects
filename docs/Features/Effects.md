@@ -837,22 +837,66 @@ one fullscreen pass.
 
 ### Editable blur kernels
 
-Untouched Box Blur/Sharpen and Motion/Radial/Zoom Blur graphs now have named
-sampling, weighting and resolve stages. Their compatible regions share Texel
-Offset, Gaussian Weight, Normalize Weighted RGBA, Bounded Sample Count and Scale
-From Center recipes. Reuse is exact-pattern based: different formulas retain
-their original operators, with sample order, bypass thresholds and alpha handling
-owned by the original graph.
+User guide with pictures: [Blur Effects](./Effects-Blur.md). The shared sampling
+contract lives in `src/effects/blur/blurSampling.ts`; the operator graphs
+(`blurEffectGraphs.ts`, `directionalBlurEffectGraphs.ts`), the WGSL references
+(`separableBlur.wgsl`, `directionalBlur.wgsl`) and the unit tests follow it.
 
-Gaussian Blur's original graph has four expandable areas: Radius & Sample Count,
-Kernel Sampling, Gaussian Weight, and Weighted Blur & Bypass. Shared Texel Offset,
-Gaussian Weight, and Normalize Weighted RGBA compositions expose their internal
-primitive nodes. Exact-pattern recognition also reuses compatible pieces in Box
-Blur and Sharpen without changing their formulas. Custom wiring/grouping is not
-replaced by the default presentation, and detached compositions stay local.
-The same blocks can be inserted through Reusable Nodes → Sampling in other image
-graphs; connect their explicit inputs, keeping kernel-index evaluation inside a
-reducer. This change does not introduce another GPU pass or change the blur curve.
+**Radius unit.** Box and Gaussian Radius are pixels on a 1080p frame (the shorter
+frame side counts as 1080 px) and scale with the rendered size. A half-quality
+preview, the export and a 4K composition therefore show the same blur relative to
+the picture; 1080p landscape, portrait and square projects keep their previous
+pixel sizes. Motion, Radial and Zoom were already relative to the frame.
+
+**Box and Gaussian (separable).** A premultiplied horizontal pass is cached as
+`rgba16float`, then a vertical pass reads it and restores straight alpha (two GPU
+passes). Each pass is a sequence of `2 * pairs + 1` taps: the centre texel plus
+pairs of texels merged into one linear-filtered tap at their weighted centre
+(shared blocks **Pair Tap Offsets** and **Merge Pair Weights**), which is exact for
+any kernel. Gaussian uses sigma = radius / 2 truncated at 3 sigma; at the old
+default (Radius 10, Samples 5) this matches the previous softness at 1080p, but
+without the old 11 × 11 tap grid that showed squares from radius ~10 upwards. The
+old grid grew with radius² / (3 × Samples); old projects with unusual Samples
+values change strength accordingly. Box gives full weight inside the radius plus a
+fractional edge tap, so integer radii match the old box exactly and animated radii
+no longer jump. Past 127 pairs per side (Gaussian Radius 50 above a ~3600 px short
+side) the pairs spread out instead of truncating the kernel. Cost at 1080p: about
+`0.75 × radius` (Gaussian) or `radius / 2` (Box) taps per pass instead of up to
+`(2 × samples + 1)²`.
+
+**Motion, Zoom and Radial (two stages).** Every tap is T(u) of a one-parameter
+transform group in pixels: a translation (Motion), a log-scale about the centre
+(Zoom, Radial Zoom) or a rotation (Radial Spin). Stage A averages a short box of
+length h with taps at most one pixel apart into an `rgba16float` cache; stage B
+sums coarse taps h apart over the whole range and samples that cache. Because
+T(a)·T(b) = T(a + b), the boxes tile the range exactly, so streaks stay continuous
+at any length with about `2 × sqrt(2 × streak length in px)` taps per pixel; the old
+fixed sample counts showed ghost copies and stair steps on long streaks. A partial
+last box (Radial Zoom ranges differ per pixel) is weighted by its covered share.
+Motion Blur's direction is now an exact on-screen angle and its Length a share of
+the frame width in every direction (before, vertical streaks were a share of the
+height and diagonal angles were skewed on 16:9); the Film Roll transition was
+adjusted to keep its streak. Motion mirrors samples at the frame edge; Zoom and
+Radial keep the sampler's edge clamp (a mirrored zoom or spin path folds onto other
+rays, where the cached boxes no longer tile). Radial Blur gained **Type: Spin**
+(Amount 1 = a 20° arc); missing values keep the old Zoom look. Amount 0 is the
+identity, so the old bypass thresholds are gone.
+
+**Alpha.** All five blurs average premultiplied colour and return straight alpha,
+so transparent surroundings no longer darken edges (the old straight-alpha average
+drew a dark rim around logos, titles and scaled clips).
+
+**Retired Samples.** Gaussian, Motion, Radial and Zoom Blur choose their taps
+themselves. Their `samples` parameters stay in saved projects but are hidden, have
+no effect and are marked `deprecated`; `addEffect`/`updateEffect` accept them and
+return a warning, and `listEffects` no longer lists hidden parameters.
+
+**Saved graphs.** An untouched saved copy of an old blur graph (any layout, folders
+or packed compositions) is replaced by the current recipe on load
+(`blurGraphUpgrade.ts`); edited graphs stay as the user left them. The previous
+recipes remain in `legacyBlurEffectGraphs.ts` and
+`legacyDirectionalBlurEffectGraphs.ts` for that recognition and for the shared
+compositions extracted from them (Bounded Sample Count, Scale UV).
 
 The organization/reuse pass also covers Glow, Edge Detect, Wave, Twirl, Bulge,
 Pixelate, Mirror, RGB Split, Blockify, Block Mosaic, the basic color effects and
@@ -864,36 +908,10 @@ the existing history resource, reset policy and clock remain unchanged. These
 blocks are insertable from Reusable Nodes and expandable into their primitives.
 Saved custom layouts/groups are not automatically replaced by presentation stages.
 
-Box Blur and Gaussian Blur expose their neighborhood sampling as editable graphs:
-kernel index, UV offset, image sample, weight, accumulation and normalization.
-The shared kernel reducer evaluates the connected sample and weight expressions
-for each grid position. Changing those connections changes the filter itself.
-A lazy image selection keeps the original radius-below-0.5 identity path without
-evaluating an unused, potentially singular Gaussian expression.
-
-Both preserve the existing two-dimensional sample order, clamp-to-edge sampling,
-RGBA averaging and one fullscreen pass. Gaussian Blur retains its existing
-Radius and Samples controls; this migration does not replace its kernel with a
-different separable approximation. Existing effect-stack texture boundaries and
-their quantization remain unchanged.
-
-Sharpen reuses the same kernel reduction for its weighted neighborhood, then
+Sharpen keeps a 2D kernel reduction for its weighted neighborhood, then
 exposes the unsharp-mask subtraction, gain, addition and RGB clamp as nodes.
 Unlike the blur effects, it retains the original center-pixel alpha.
 Kernel Index has a per-sample scope rather than a single preview value.
-
-Motion, Radial and Zoom Blur reuse a one-dimensional sequence reduction. The
-Sequence Index exposes the current sample index and normalized position inside
-that reduction, not a single frame-wide preview value. Sample positions, weights
-and averaging remain editable graph operations, and all four RGBA channels are
-averaged. Motion Blur uses explicit mirrored UV boundaries; Radial and Zoom Blur
-retain linear, clamp-to-edge sampling. Existing parameter IDs, defaults, ranges
-and quality controls are unchanged. Each default graph remains one GPU pass.
-
-The sequence reducer supports up to 256 samples; Motion's default graph retains
-its 128-sample ceiling. The existing small-amount identity branches remain lazy
-for Motion and Radial Blur. Zoom Blur still evaluates its sampling path at zero
-amount, matching the legacy shader rather than introducing a new bypass.
 
 Edge Detect uses eight shared neighbor samples in one pass. Each sampled image is
 converted to Rec.709 luminance before the two Sobel gradients are evaluated in
@@ -1270,12 +1288,9 @@ not alter project media or the exported result.
   default to animatable unless the effect explicitly opts out. This keeps the
   stopwatch/keyframe behavior consistent for registry-provided controls.
 
-The registered quality parameters are:
+The registered quality parameters are (the blurs choose their own taps; their old
+`samples` are retired, see Editable blur kernels):
 
-- Gaussian Blur: `samples`
-- Motion Blur: `samples`
-- Radial Blur: `samples`
-- Zoom Blur: `samples`
 - Glow: `rings`, `samplesPerRing` (Samples/Ring is a minimum; outer rings get
   more samples automatically, see the Glow graph section)
 - Voxel Relief: `maxSteps`
@@ -1340,9 +1355,9 @@ transition family. `Blur Dissolve`
 and `Zoom Blur` use the same assembly path to append temporary registered GPU
 effects to the incoming and outgoing participant layers while preserving each
 clip's existing effect stack. `Directional Blur` and `Whip Pan` use the same
-registered-effect path with `motion-blur`; the Motion Blur shader mirrors edge
-samples for out-of-range UVs so fast horizontal transition blurs do not expose
-transparent borders. `Projector Flicker` uses deterministic generated-solid
+registered-effect path with `motion-blur`; Motion Blur mirrors edge samples for
+out-of-range UVs so fast horizontal transition blurs do not expose transparent
+borders. `Projector Flicker` uses deterministic generated-solid
 exposure pulses, `Film Roll` combines vertical transform overscan with
 transition-scoped Motion Blur, and `Vignette Bloom` uses registered `glow` and
 `vignette` effects on both transition participants. `Light Sweep` uses a
@@ -1402,7 +1417,9 @@ stage light, fine daylight detail and saturated night lights. Run a Vite of the
 checkout first (`npx vite --port 5175 --strictPort`), then for example
 `node scripts/effect-lab.mjs --effect gaussian-blur --variants '[{"label":"r20","params":{"radius":20}}]' --out /tmp/blur`;
 `--list` prints every effect with its parameters, `--times` renders a frame
-sequence for temporal effects. Effects that need clip context (masks, face
+sequence for temporal effects, and `--inset 0.7` places the image at 70 % on a
+transparent frame (the contact sheet shows cells over a checkerboard) to check
+alpha handling such as dark rims. Effects that need clip context (masks, face
 landmarks, temporal source, tracking) render without it and are checked in the
 editor instead.
 
