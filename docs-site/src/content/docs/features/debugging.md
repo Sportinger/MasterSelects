@@ -182,6 +182,33 @@ For a visual UI failure, select the intended browser session explicitly and call
 
 Use `clickAppControl` to reproduce a visible button, link, disclosure, or other specific control without switching to a separate browser automation stack. Use `probeSameOriginRequest` to inspect a failing local `/api/` call from the authenticated tab; it returns selected headers and a bounded redacted body instead of exposing cookies or unrestricted URLs. All three tools are development-only and must be called with an explicit target session when multiple tabs are present.
 
+### Testing project folders without a person
+
+Native folder dialogs (Open existing, Reconnect media, granting folder access)
+cannot be driven by automation. `scripts/local-project-harness.mjs` runs these
+flows end to end in an isolated Google Chrome profile (default under `/tmp`) against
+a dev server (default `http://localhost:5174/editor`):
+
+- the project folder, and any `--mount name=/path` (optionally filtered with
+  `--mount-include name=<regex>`), is served read-only on `127.0.0.1` and copied
+  once into the harness profile's OPFS; later runs reuse the copy;
+- `showDirectoryPicker` returns real directory handles from that copy, so the
+  editor's File System Access path and UI run unchanged; the original folders are
+  never written;
+- steps: `open` (Choose-project dialog or File → Open Project...), `restore` (wait
+  for the automatic reopen), `pick:<dir>` / `pick:@<mount>` (answer the next folder
+  dialog), `click:<button regex>`, `waitText:<regex>`, `wait:<ms>`,
+  `eval:<expression>`; confirm dialogs are accepted.
+
+The JSON report has a timed progress trace (load phases, "saved items recovered",
+missing-media notices), the final visible state and the editor's warnings/errors
+with stacks. To read stores in `eval`, import the module URL the app actually
+loaded (Vite adds `?t=` after edits), e.g.
+`performance.getEntriesByType('resource').map(e => e.name).filter(u => u.includes('/src/stores/mediaStore/index.ts')).at(-1)`.
+Headless Chrome gets only the software WebGPU adapter, so GPU-heavy work such as
+simulation preparation is not representative there; folder, repository, load and
+relink behavior is.
+
 ---
 
 ## Monitoring Surfaces
