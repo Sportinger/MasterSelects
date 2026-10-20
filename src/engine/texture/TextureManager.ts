@@ -1,6 +1,7 @@
 // Texture creation and caching for images and video frames
 
 import { Logger } from '../../services/logger';
+import { supportsExternalTextures } from './externalTextureSupport';
 import { getCanvasVersion } from '../../services/canvasVersion';
 import {
   getCanvasSourceSize,
@@ -351,6 +352,8 @@ export class TextureManager {
     } else {
       return null;
     }
+    // Firefox: no zero-copy import; collectors fall back to copied textures.
+    if (!supportsExternalTextures(this.device)) return null;
 
     try {
       const texture = this.device.importExternalTexture({ source });
@@ -359,7 +362,13 @@ export class TextureManager {
     } catch (e) {
       // Log the actual error - this is critical for debugging Linux/Vulkan issues
       if (this.shouldLogExternalTextureImportFailure(source)) {
-        log.error('Failed to import external texture', e);
+        // Chromium reports a video (e.g. a live camera right after it starts)
+        // whose current frame has no GPU backing yet; the next tick retries.
+        if (e instanceof DOMException && /doesn't have back resource/i.test(e.message)) {
+          log.warn('Video frame not yet available for external texture import; retrying next frame', e.message);
+        } else {
+          log.error('Failed to import external texture', e);
+        }
       }
       return null;
     }

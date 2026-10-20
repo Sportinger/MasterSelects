@@ -12,6 +12,7 @@ import { HybridTemporalGpu } from './HybridTemporalGpu';
 import { hybridTemporalBatches, hybridTemporalMemory, hybridTemporalWindow } from './hybridTemporalWindow';
 import { recordTemporalPreparation, setTemporalStatus, temporalExportFrameStep, temporalExportFramesRemaining } from './temporalResourcePreparation';
 import { LinearTemporalBlock } from './LinearTemporalBlock';
+import { supportsExternalTextures } from '../../engine/texture/externalTextureSupport';
 import { linearTemporalAxis, linearTemporalBlockMemory } from './linearTemporalBlockPlan';
 import { slitScanSourceTransform } from './slit-scan/stabilization';
 import { temporalSourceTime } from './temporalClipSource';
@@ -127,7 +128,9 @@ export class HybridTemporalRuntime {
       void Promise.resolve().then(() => device.queue.onSubmittedWorkDone()).finally(() => retired.destroy());
     }
     device.queue.writeBuffer(entry.metadata, 0, window.metadata);
-    if (axis !== undefined && blockMemory.count && step) {
+    // The shared-source block samples borrowed frames as external textures;
+    // without them (Firefox) the atlas path below uploads copied frames.
+    if (axis !== undefined && blockMemory.count && step && supportsExternalTextures(device)) {
       entry.block ??= new LinearTemporalBlock(device);
       const { localTime: _localTime, ...sourceIdentity } = request.source;
       const blockIdentity = JSON.stringify([sourceIdentity, request.horizon, request.timeFactor, request.samples, request.nearest,

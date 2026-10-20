@@ -70,13 +70,16 @@ export class CompositorPipeline {
 
     this.compositeBindGroupLayout = resources.compositeBindGroupLayout;
     this.compositePipeline = resources.compositePipeline;
-    this.externalCompositeBindGroupLayout = resources.externalCompositeBindGroupLayout;
-    this.externalCompositePipeline = resources.externalCompositePipeline;
     this.copyBindGroupLayout = resources.copyBindGroupLayout;
     this.copyPipeline = resources.copyPipeline;
-    this.externalCopyBindGroupLayout = resources.externalCopyBindGroupLayout;
-    this.externalCopyPipeline = resources.externalCopyPipeline;
-    this.externalCopyPipelines = new Map(resources.externalCopyPipelines);
+    // Without external textures (Firefox) no video is imported zero-copy, so
+    // these stay null and every video layer arrives as a copied texture.
+    const external = resources.external;
+    this.externalCompositeBindGroupLayout = external?.externalCompositeBindGroupLayout ?? null;
+    this.externalCompositePipeline = external?.externalCompositePipeline ?? null;
+    this.externalCopyBindGroupLayout = external?.externalCopyBindGroupLayout ?? null;
+    this.externalCopyPipeline = external?.externalCopyPipeline ?? null;
+    this.externalCopyPipelines = new Map(external?.externalCopyPipelines ?? []);
   }
 
   getCompositePipeline(program?: ImageOperatorProgram): GPURenderPipeline | null {

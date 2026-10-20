@@ -93,6 +93,8 @@ function getExternalCompositeRunner(
   if (cached) return cached;
 
   const resources = createCompositorPipelineResources(gpuDevice);
+  const external = resources.external;
+  if (!external) throw new Error('WebGPU device cannot import external textures');
   const baseTexture = gpuDevice.createTexture({
     size: [outputWidth, outputHeight],
     format: 'rgba8unorm',
@@ -174,7 +176,7 @@ function getExternalCompositeRunner(
       const submitStartedAt = performance.now();
       const externalTexture = gpuDevice.importExternalTexture({ source: frame });
       const compositeBindGroup = gpuDevice.createBindGroup({
-        layout: resources.externalCompositeBindGroupLayout,
+        layout: external.externalCompositeBindGroupLayout,
         entries: [
           { binding: 0, resource: sampler },
           { binding: 1, resource: baseTexture.createView() },
@@ -192,7 +194,7 @@ function getExternalCompositeRunner(
           clearValue: { r: 0, g: 0, b: 0, a: 0 },
         }],
       });
-      compositePass.setPipeline(resources.externalCompositePipeline);
+      compositePass.setPipeline(external.externalCompositePipeline);
       compositePass.setBindGroup(0, compositeBindGroup);
       compositePass.draw(3);
       compositePass.end();
