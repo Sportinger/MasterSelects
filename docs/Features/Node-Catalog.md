@@ -118,6 +118,19 @@ weight requires nonzero sigma; normalization requires nonzero total weight.
 Kernel indices still need a surrounding reducer scope. These contracts are shared
 building blocks, not replacements for the existing kernel or sequence reducers.
 
+Saved graphs keep packed composition instances and wire their public ports by
+name. When a definition's ports change, `OperatorCompositionBody.legacyInputs`
+(`extractImageComposition({ legacyInputs })`) lists the earlier input ports and the
+inner endpoints they fed. Expansion routes such a port to exactly those endpoints
+and leaves them out of the current ports for that instance, so the saved wiring is
+reproduced instead of failing. Soft Bright Pass declares `sample-energy-value`
+(the alpha-weighted sample of the earlier alpha-aware Glow recipe, feeding
+`bright-sample.a`); Glow graphs saved in that period failed to load with
+"Unknown composition input: sample-energy-value" and now open and upgrade. A port
+that is neither current nor legacy still fails expansion; recipe recognition
+(`matchesEffectRecipe`) treats that as "not this recipe" instead of throwing, and
+a failed effect migration names the effect in the error.
+
 ### Text in any image graph
 
 **Text Atlas** renders its own typed characters (up to 256, in order) with a

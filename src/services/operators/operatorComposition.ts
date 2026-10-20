@@ -78,12 +78,18 @@ export function expandOperatorCompositions(source: EffectOperatorGraph): EffectO
       throw new Error(`Composition identity collision: ${instance.id}.`);
     }
     const position = graph.layout[instance.id] ?? { x: 0, y: 0 }, groupId = `compound-${instance.id}`;
+    // Saved instances may wire input ports an earlier definition version had. Such a
+    // port keeps feeding its own endpoints instead of failing the whole graph.
+    const legacyInputs = body.legacyInputs ?? {};
+    const claimed = new Set(graph.edges.filter(edge => edge.to === instance.id && !body.inputs[edge.input])
+      .flatMap(edge => (legacyInputs[edge.input] ?? []).map(key)));
+    const inputTargets = (port: string) => body.inputs[port]?.filter(target => !claimed.has(key(target))) ?? legacyInputs[port];
     if (graph.groups?.some(group => group.id === groupId)) throw new Error(`Composition group collision: ${groupId}.`);
     const parent = graph.groups?.find(group => group.nodeIds.includes(instance.id));
     graph.edges = graph.edges.flatMap(edge => {
       const from = edge.from === instance.id ? body.outputs[edge.output] : undefined;
       if (edge.from === instance.id && !from) throw new Error(`Unknown composition output: ${edge.output}.`);
-      const targets = edge.to === instance.id ? body.inputs[edge.input] : [{ nodeId: edge.to, portId: edge.input }];
+      const targets = edge.to === instance.id ? inputTargets(edge.input) : [{ nodeId: edge.to, portId: edge.input }];
       if (!targets) throw new Error(`Unknown composition input: ${edge.input}.`);
       return targets.map((target, index) => ({ ...edge, id: index ? `${edge.id}--${instance.id}-${index}` : edge.id,
         from: from ? ids[from.nodeId] : edge.from, output: from?.portId ?? edge.output,

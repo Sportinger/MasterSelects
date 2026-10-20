@@ -10,7 +10,11 @@ const literalKey = (node: BoundOperatorNode) => JSON.stringify([node.operator, n
 /** Matching allows only duplicated immutable leaves introduced by exact composition extraction.
  * Presentation (layout, folders, packed compositions) is ignored; node fields and wiring must match. */
 export function matchesEffectRecipe(source: EffectOperatorGraph, original: EffectOperatorGraph): boolean {
-  const actual = expandOperatorCompositions(source);
+  let actual: EffectOperatorGraph;
+  // A graph whose packed compositions no longer expand cannot equal the recipe.
+  // Recognition must answer "no", not abort a project load; the effect's own
+  // validation reports the actual problem.
+  try { actual = expandOperatorCompositions(source); } catch { return false; }
   const expectedNodes = original.nodes.filter(node => !literal(node)), actualNodes = actual.nodes.filter(node => !literal(node));
   if (expectedNodes.length !== actualNodes.length || expectedNodes.some(node => !actualNodes.some(value => value.id === node.id && sameCompositionNode(value, node)))) return false;
   const expectedLiterals = new Set(original.nodes.filter(literal).map(literalKey));

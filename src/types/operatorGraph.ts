@@ -35,6 +35,9 @@ export interface OperatorCompositionBody {
   graph: EffectOperatorGraph;
   inputs: Record<string, OperatorEndpoint[]>;
   outputs: Record<string, OperatorEndpoint>;
+  /** Input ports of earlier versions of this definition that saved instances may still wire.
+   * A used legacy port feeds exactly its endpoints; current ports then skip those endpoints. */
+  legacyInputs?: Record<string, OperatorEndpoint[]>;
 }
 export type OperatorBinding = string | [string, string, string] | { yaw: string; pitch: string };
 export interface BoundOperatorNode {

@@ -11,6 +11,8 @@ export function extractImageComposition(source: EffectOperatorGraph, spec: {
   captureLiterals?: boolean; additionalOutputs?: OperatorEndpoint[];
   keepLiteralInputs?: string[];
   inputLabels?: Record<string, string>; outputLabels?: Record<string, string>;
+  /** Ports earlier versions of this definition exposed; see OperatorCompositionBody.legacyInputs. */
+  legacyInputs?: Record<string, OperatorEndpoint[]>;
 }): OperatorDefinition {
   const nodes = new Map(source.nodes.map(node => [node.id, node]));
   const members = new Set(spec.members);
@@ -65,5 +67,6 @@ export function extractImageComposition(source: EffectOperatorGraph, spec: {
         edges: source.edges.filter(edge => members.has(edge.from) && members.has(edge.to)).map(edge => ({ ...edge })),
         layout: Object.fromEntries(bodyNodes.map(node => [node.id, { x: source.layout[node.id].x - minX, y: source.layout[node.id].y - minY }])) },
       inputs: exposedInputs, outputs: exposedOutputs,
+      ...(spec.legacyInputs ? { legacyInputs: structuredClone(spec.legacyInputs) } : {}),
     } };
 }

@@ -35,6 +35,9 @@ export const PROCESSING_COMPOSITIONS = [
     id: 'color.soft-bright-pass', label: 'Bright Pass',
     description: 'Rec.709 luminance, smooth lower/upper threshold and RGBA scaling. Threshold edges are explicit inputs.',
     members: ['sample-luma', 'sample-bright', 'bright-sample'], consumers: ['Image graphs', 'Glow'],
+    // Graphs saved while this pass was extracted from the alpha-aware Glow recipe fed the
+    // alpha-weighted sample into the multiply separately from the luminance input.
+    legacyInputs: { 'sample-energy-value': [{ nodeId: 'bright-sample', portId: 'a' }] },
   }),
   extractImageComposition(createDefaultEdgeDetectGraph(), {
     id: 'color.sobel-magnitude', label: 'Edge Strength (Taps)',
