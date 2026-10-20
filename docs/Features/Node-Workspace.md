@@ -301,13 +301,13 @@ The **Sampling** section provides **Texel Offset**, **Gaussian Weight**,
 **Normalize by Weight**, **Pair Tap Offsets** and **Merge Pair Weights**. These
 expand into existing vector, scalar and conversion operators. Exact matching
 formulas become shared instances; edited formulas and user group boundaries are
-preserved. Box and Gaussian Blur are separable two-pass graphs organized into
-Radius & Tap Count, Horizontal Pass (premultiplied), Vertical Pass and Straight
-Alpha Output; each pass uses one Pair Tap Offsets, two kernel weights and one
-Merge Pair Weights block, so another kernel (a tent, a custom curve) only replaces
-the two weight nodes. Motion, Radial and Zoom Blur are organized into Blur Range,
-Tap Counts & Box Length, Stage A (short box, cached), Stage B (coarse taps) and
-Straight Alpha Output. Details: [Effects → Editable blur kernels](./Effects.md#editable-blur-kernels).
+preserved. Box and Gaussian Blur are separable graphs organized into
+Premultiplied Source (cached), Radius & Tap Count, Horizontal Pass, Vertical Pass
+and Straight Alpha Output; each pass uses one Pair Tap Offsets, two kernel weights
+and one Merge Pair Weights block, so another kernel (a tent, a custom curve) only
+replaces the two weight nodes. Motion, Radial and Zoom Blur are organized into
+Premultiplied Source (cached), Blur Range, Tap Counts & Box Length, Stage A (short
+box, cached), Stage B (coarse taps) and Straight Alpha Output. Details: [Effects → Editable blur kernels](./Effects.md#editable-blur-kernels).
 **Natural Logarithm** and **Ceiling** are available as scalar math nodes.
 
 The same organization now covers Sharpen,
@@ -362,6 +362,10 @@ Collapsed local folders expose one input per incoming signal, even when several
 internal nodes consume it. Reconnecting or disconnecting that socket updates all
 of its original leaf endpoints; expanding still reveals the individual wires.
 Value outputs carry their parameter or constant names in the folder interface.
+Other folder ports are named after what they carry, not after the node type that
+computes it: an effect's presentation plan names its key outputs (Sigma, Tap
+Count, Box Length, Is Spin), and outputs with their own label (UV, Resolution)
+keep it; only unnamed outputs of several-output nodes read `Node: Port`.
 
 The Fisheye upgrade preserves all primitive IDs, parameter bindings, sampling
 scopes and arithmetic, generating the identical shader without additional passes.

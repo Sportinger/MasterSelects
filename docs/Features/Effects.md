@@ -845,51 +845,85 @@ contract lives in `src/effects/blur/blurSampling.ts`; the operator graphs
 **Radius unit.** Box and Gaussian Radius are pixels on a 1080p frame (the shorter
 frame side counts as 1080 px) and scale with the rendered size. A half-quality
 preview, the export and a 4K composition therefore show the same blur relative to
-the picture; 1080p landscape, portrait and square projects keep their previous
-pixel sizes. Motion, Radial and Zoom were already relative to the frame.
+the picture. Motion, Radial and Zoom were already relative to the frame.
 
-**Box and Gaussian (separable).** A premultiplied horizontal pass is cached as
-`rgba16float`, then a vertical pass reads it and restores straight alpha (two GPU
-passes). Each pass is a sequence of `2 * pairs + 1` taps: the centre texel plus
+**Premultiplied source.** Every blur first premultiplies the frame into an
+`rgba16float` cache (**Premultiplied Source (cached)**). All later reads filter
+between texels; filtering premultiplied texels is exact, while premultiplying a
+filtered straight-alpha read darkened colour wherever an alpha edge fell between
+two texels (a dark fringe on text, logos and cutouts).
+
+**Box and Gaussian (separable).** A horizontal pass over the premultiplied source
+is cached as `rgba16float`, then a vertical pass reads it and restores straight
+alpha (three GPU passes with the source cache). Each pass is a sequence of
+`2 * pairs + 1` taps: the centre texel plus
 pairs of texels merged into one linear-filtered tap at their weighted centre
 (shared blocks **Pair Tap Offsets** and **Merge Pair Weights**), which is exact for
 any kernel. Gaussian uses sigma = radius / 2 truncated at 3 sigma; at the old
 default (Radius 10, Samples 5) this matches the previous softness at 1080p, but
 without the old 11 × 11 tap grid that showed squares from radius ~10 upwards. The
-old grid grew with radius² / (3 × Samples); old projects with unusual Samples
-values change strength accordingly. Box gives full weight inside the radius plus a
+old grid grew with radius² / (3 × Samples), so saved projects change look: small
+radii are stronger (Radius 3 about 2.5×, Radius 5 1.5×), large ones about 20 %
+softer, projects that are not 1080p scale with their size (a 4K project blurs 2×
+as many pixels as before, 720p 0.67×), and other Samples values no longer change
+the strength. Box gives full weight inside the radius plus a
 fractional edge tap, so integer radii match the old box exactly and animated radii
 no longer jump. Past 127 pairs per side (Gaussian Radius 50 above a ~3600 px short
-side) the pairs spread out instead of truncating the kernel. Cost at 1080p: about
-`0.75 × radius` (Gaussian) or `radius / 2` (Box) taps per pass instead of up to
+side) the pairs spread out instead of truncating the kernel, and `addEffect`,
+`updateEffect` and the inspector say so for the composition size. Cost at 1080p:
+`0.75 × radius` (Gaussian) or `radius / 2` (Box) pairs per side, so about
+`1.5 × radius + 1` or `radius + 2` reads per pass, instead of up to
 `(2 × samples + 1)²`.
 
 **Motion, Zoom and Radial (two stages).** Every tap is T(u) of a one-parameter
 transform group in pixels: a translation (Motion), a log-scale about the centre
 (Zoom, Radial Zoom) or a rotation (Radial Spin). Stage A averages a short box of
-length h with taps at most one pixel apart into an `rgba16float` cache; stage B
+length h of the premultiplied source with taps at most one pixel apart into an
+`rgba16float` cache; stage B
 sums coarse taps h apart over the whole range and samples that cache. Because
 T(a)·T(b) = T(a + b), the boxes tile the range exactly, so streaks stay continuous
 at any length with about `2 × sqrt(2 × streak length in px)` taps per pixel; the old
 fixed sample counts showed ghost copies and stair steps on long streaks. A partial
 last box (Radial Zoom ranges differ per pixel) is weighted by its covered share.
-Motion Blur's direction is now an exact on-screen angle and its Length a share of
-the frame width in every direction (before, vertical streaks were a share of the
-height and diagonal angles were skewed on 16:9); the Film Roll transition was
-adjusted to keep its streak. Motion mirrors samples at the frame edge; Zoom and
+Motion Blur's direction is now an exact on-screen angle (diagonal angles were
+skewed on non-square frames); its reach to each side keeps the legacy length,
+Length × |(cos × width, sin × height)|: a share of the width for horizontal and of
+the height for vertical streaks, so saved projects and the Film Roll transition
+(Length 0.1, vertical) keep their streaks on every aspect ratio. Negative values
+reverse the range as the old shaders did: Motion draws the same streak, Zoom
+streaks inward, Radial Zoom outward, Spin turns the other way; scales never go
+below 0.05, and the tool and inspector report that limit and streaks beyond the
+64 × 256 read budget. Motion mirrors samples at the frame edge; Zoom and
 Radial keep the sampler's edge clamp (a mirrored zoom or spin path folds onto other
 rays, where the cached boxes no longer tile). Radial Blur gained **Type: Spin**
-(Amount 1 = a 20° arc); missing values keep the old Zoom look. Amount 0 is the
-identity, so the old bypass thresholds are gone.
+(Amount 1 = a 20° arc); missing values keep the old Zoom look. A blur at zero
+strength (the built-in recipe only) is skipped by the effects pipeline, so its
+input passes through exactly without running the passes.
 
 **Alpha.** All five blurs average premultiplied colour and return straight alpha,
 so transparent surroundings no longer darken edges (the old straight-alpha average
-drew a dark rim around logos, titles and scaled clips).
+drew a dark rim around logos, titles and scaled clips). Ground-truth tests
+(`tests/unit/blurGroundTruth.test.ts`) read discrete textures with bilinear
+filtering and float16 caches and compare hard alpha edges with dense premultiplied
+kernels; the GPU check (`image-graph-probe.html?suite=blur`) renders the same edges.
+
+**Pass caches.** The `rgba16float` caches between passes come from one pool in
+`ImageGraphPassRuntime`, keyed by size: a cache is leased for one encode (or one
+effect's batch) and returns to the pool, so all effects of a frame share a few
+textures per size; textures no encoder used for 120 encoders are destroyed.
+
+**Worker hosts.** The opt-in worker render modes follow the same units: worker
+software draws Gaussian and Box as a canvas blur with the contract's sigma, and
+Motion, Radial (Zoom and Spin) and Zoom along the contract's paths in one stage of
+up to 64 taps with premultiplied alpha; worker GPU runs the blur graphs.
 
 **Retired Samples.** Gaussian, Motion, Radial and Zoom Blur choose their taps
 themselves. Their `samples` parameters stay in saved projects but are hidden, have
 no effect and are marked `deprecated`; `addEffect`/`updateEffect` accept them and
-return a warning, and `listEffects` no longer lists hidden parameters.
+return a warning, and `listEffects` no longer lists hidden parameters. Visibility
+follows the instance's graph (`effectParamVisibility.ts`): an edited saved graph
+that still reads Samples shows it again without a warning, and Radial's Type
+(`graphOnly`) is hidden, and reported when set, on a graph that does not read it.
 
 **Saved graphs.** An untouched saved copy of an old blur graph (any layout, folders
 or packed compositions) is replaced by the current recipe on load
@@ -1433,15 +1467,25 @@ the picture is shown smaller. Parameters choose the level:
 `level=stages` (default, folders folded as when an effect is opened) or
 `level=all`; `open=a,b` opens folders by label slug, `parent/child` path or
 group id; `focus=folder` shows only one folder, with the flow layout it has
-inside the effect wrapped into rows (`rows=n` sets the count); `chain=1` keeps
-the clip source and output. Folder headers stay clickable for exploring.
+inside the effect wrapped into rows (`rows=n` sets the count, `break=a,b` starts
+rows at these node ids instead) and named stub cards for the values that come from
+outside the folder (Constants excepted); `plumbing=hide` leaves out the Constants
+and Coordinates & Resources folders and their cables, so an overview reads as one
+path; `chain=1` keeps the clip source and output. Folder ports are named after what
+they carry ("Sigma", "Tap Count"): an effect's presentation plan names its key
+outputs (`portLabels` in `effectPresentationPlans.ts`). Folder headers stay
+clickable for exploring. The page is part of dev builds only.
 
 `scripts/effect-graph-shot.mjs` captures shots of that page in hardware-GPU
 Chrome as WebP (at most 1600 px wide and 200 KB) into
 `docs/Features/assets/effects/graphs/`, for example
-`node scripts/effect-graph-shot.mjs gaussian-blur 'box-blur?focus=horizontal-pass-premultiplied@box-blur-horizontal-pass'`
+`node scripts/effect-graph-shot.mjs 'gaussian-blur?plumbing=hide' 'box-blur?focus=horizontal-pass&break=horizontal-sample@box-blur-horizontal-pass'`
 with a Vite of the checkout running (`npx vite --port 5176 --strictPort`). A shot
 is `<effect>[?query][@file name]`; `--list` prints the folders of each effect.
+`marks=id[:from],…` in a shot's query adds numbered callouts on those node cards
+and prints the figure markup (`layout=float` sizes them for a picture beside the
+text). The docs site links every picture to its full-size file and lets node
+graphs scroll sideways on narrow screens.
 
 ### Effect editor excerpts
 
