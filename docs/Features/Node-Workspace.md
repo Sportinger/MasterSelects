@@ -440,7 +440,9 @@ bindings; inputs absent in the new mode disconnect in the same undo step.
 Flock math cards offer all operations supported by the Flock registry.
 
 Numeric **Value** cards use a white accent and show the editable number to the
-left of the output connector. Their **Type** dropdown is available only in the
+left of the output connector. A Value card driven by an effect parameter is titled
+with that parameter (**Radius**, **Length**) instead of "Value"; its outputs in
+a folded folder read "Radius: Value". Their **Type** dropdown is available only in the
 right inspector. Image graphs offer Float and Integer; Integer truncates toward
 zero after parameter animation while retaining the shared numeric signal port.
 Changing type preserves compatible connections and parameter bindings.
@@ -578,7 +580,9 @@ their content changes or the zoom needs a sharper bitmap; overview levels keep
 zoom-in headroom and zooming out reuses a card bitmap for up to one octave, so a
 fast wheel zoom does not re-rasterize every card. While a wheel zoom animates,
 invisible DOM hit targets keep their membership and update once it settles; cables are stroked in shared batches, and
-far overviews draw them slightly thinner. Card hit targets return in small
+far overviews draw them slightly thinner. Below 75 % zoom card titles are drawn larger
+(up to three lines) over the whole card text band, also on folded folders, so
+an overview stays readable. Card hit targets return in small
 batches after a fold. In canvas mode, cable hover, click and context menu use a
 geometry index instead of per-cable DOM paths: the segment between two pointer
 samples is tested, so fast sweeps highlight every cable they cross, and pressing

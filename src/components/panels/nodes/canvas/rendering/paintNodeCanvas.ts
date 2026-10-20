@@ -194,7 +194,9 @@ function drawOverviewTitle(ctx: DrawContext, node: CanvasNode, theme: CanvasThem
     while (fitted >= 13 && !(wrapped = (ctx.font = font(fitted), wrapCanvasLabel(ctx, node.label, width, count)))) fitted = half(fitted * 0.92);
     if (wrapped && fitted > size) { size = fitted; lines = wrapped; }
   }
-  ctx.fillStyle = theme.card; ctx.fillRect(left - 2, OVERVIEW_TITLE_TOP - 2, node.width - left + 1, band + 2);
+  // The band spans the card: a folded group's title starts after its chevron slot, but the
+  // description underneath begins at the card edge and must not show through ("Loc…").
+  ctx.fillStyle = theme.card; ctx.fillRect(1, OVERVIEW_TITLE_TOP - 2, node.width - 2, band + 2);
   if (!lines) { text(ctx, node.label, left, OVERVIEW_TITLE_TOP + size * 0.9, width, theme.text, size, 700); return; }
   lines.forEach((line, index) => text(ctx, line, left, OVERVIEW_TITLE_TOP + size * (0.9 + index * OVERVIEW_LINE_HEIGHT), width, theme.text, size, 700));
 }

@@ -77,7 +77,7 @@ import './styles/medium-experience.css';
 import './styles/shared-controls.css';
 
 // Dev test pages - lazy loaded to avoid bloating main bundle
-// Access via ?test=parallel-decode or ?test=flex-eq
+// Access via ?test=parallel-decode, ?test=flex-eq, ?test=keyframe-curve or ?test=effect-graph&effect=<id>
 const ParallelDecodeTest = lazy(() =>
   import('./test/ParallelDecodeTest').then(m => ({ default: m.ParallelDecodeTest }))
 );
@@ -86,6 +86,9 @@ const FlexEqVisualQa = lazy(() =>
 );
 const KeyframeCurveVisualQa = lazy(() =>
   import('./test/KeyframeCurveVisualQa').then(m => ({ default: m.KeyframeCurveVisualQa }))
+);
+const EffectGraphDocShot = lazy(() =>
+  import('./test/effectGraphDoc/EffectGraphDocShot').then(m => ({ default: m.EffectGraphDocShot }))
 );
 
 interface AppProps {
@@ -505,6 +508,14 @@ function App({ initialExperience = 'editor' }: AppProps) {
     return (
       <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
         <KeyframeCurveVisualQa />
+      </Suspense>
+    );
+  }
+
+  if (testMode === 'effect-graph') {
+    return (
+      <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
+        <EffectGraphDocShot />
       </Suspense>
     );
   }

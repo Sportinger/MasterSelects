@@ -22,15 +22,17 @@ export function NodeValuePreview({ node, canvasRendered = false }: { node: NodeG
     try { editPreviewValue(control, value); setError(''); return true; }
     catch (error) { setError(String(error)); return false; }
   };
+  // A value card titled by its parameter ("Radius") would otherwise read "Radius Radius inline".
+  const inlineLabel = (entry: PreviewValueControl) => node.label === entry.label ? `${entry.label} inline` : `${node.label} ${entry.label} inline`;
   const control = (entry: PreviewValueControl) => <label key={entry.target.parameter} className="node-value-row">
     <span>{entry.label}</span>
-    {typeof entry.value === 'boolean' ? <input type="checkbox" aria-label={`${node.label} ${entry.label} inline`} checked={entry.value}
+    {typeof entry.value === 'boolean' ? <input type="checkbox" aria-label={inlineLabel(entry)} checked={entry.value}
       onChange={event => change(entry, event.target.checked)} onClick={event => event.currentTarget.blur()} />
-      : typeof entry.value === 'string' && entry.options?.length ? <InspectorSelect ariaLabel={`${node.label} ${entry.label} inline`}
+      : typeof entry.value === 'string' && entry.options?.length ? <InspectorSelect ariaLabel={inlineLabel(entry)}
         value={entry.value} options={[...entry.options]} onChange={value => change(entry, value)} onReset={() => change(entry, entry.defaultValue)} />
-      : typeof entry.value === 'string' ? <OperatorColorInput ariaLabel={`${node.label} ${entry.label} inline`} value={entry.value}
+      : typeof entry.value === 'string' ? <OperatorColorInput ariaLabel={inlineLabel(entry)} value={entry.value}
         onChange={value => change(entry, value)} />
-      : <PreviewNumber entry={entry} revision={frame.revision} nodeId={node.id} label={`${node.label} ${entry.label} inline`}
+      : <PreviewNumber entry={entry} revision={frame.revision} nodeId={node.id} label={inlineLabel(entry)}
           onChange={value => change(entry, value)} />}
   </label>;
   if (inlineNumericPorts(node)) {

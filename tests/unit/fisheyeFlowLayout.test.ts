@@ -33,7 +33,7 @@ describe('Fisheye dynamic hierarchy layout', () => {
     expect(lens.inputs.length).toBe(new Set(lensIncoming.map(edge => `${edge.fromNodeId}:${edge.fromPortId}`)).size);
     expect(lens.inputs.length).toBeLessThan(lensIncoming.length);
     const parameters = compact.nodes.find(node => node.label === 'Fisheye Parameters')!;
-    expect(parameters.outputs.some(port => port.label.includes('squeeze'))).toBe(true);
+    expect(parameters.outputs.some(port => /squeeze/i.test(port.label))).toBe(true);
     expect(compact.edges.length).toBeLessThan(90);
   });
   it('reuses immutable effect interiors across staged folds and produces the same projection', () => {

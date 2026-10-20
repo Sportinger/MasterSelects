@@ -8,6 +8,7 @@ import { addableEffectOperators, effectOperatorGraph, isImageGraphEffectType } f
 import { operatorAdaptiveVariants } from '../operators/operatorAdaptiveVariants';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { getEffectOperator } from '../operators/operatorRegistry';
+import { getEffect } from '../../effects';
 import { operatorEnabled } from '../operators/effectGraph';
 import { mathNodeSymbol } from './mathNodeSymbol';
 import { compositionGroupInterface } from '../operators/operatorComposition';
@@ -25,6 +26,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
     }], edges: [] };
   }
   const supported = addableEffectOperators(effect.type);
+  const parameters = getEffect(effect.type)?.params as Record<string, { label?: string }> | undefined;
   return {
     id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip', issue: graph.incomplete,
     nodes: graph.nodes.map(node => {
@@ -36,12 +38,15 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
           ? ({ x: 'R', y: 'G', z: 'B', w: 'A' } as Record<string, string>)[p.id] : undefined;
         return channel ? { ...projected, label: channel } : projected;
       };
-      return { id: node.id, operatorId: operator.id, label: operator.label, description: operator.description,
+      // A value node driven by an effect parameter is titled by that parameter ("Radius"), not "Value".
+      const parameter = operator.id.startsWith('values.') && typeof node.bindings.value === 'string' ? parameters?.[node.bindings.value] : undefined;
+      const valueTitle = operator.id.startsWith('values.') ? node.valueControl?.label ?? node.exposed?.label ?? parameter?.label : undefined;
+      return { id: node.id, operatorId: operator.id, label: valueTitle ?? operator.label, description: operator.description,
         connectionVariants: operatorAdaptiveVariants(operator, supported),
         kind: ['media.source', 'image.frame', 'audio.input', 'splat.source'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'render.pixel-particles', 'image.output', 'audio.output', 'scene.render'].includes(operator.id) ? 'output' : 'effect',
         runtime: operator.runtime, inputs: operator.inputs.map(p => projectPort(p, 'input')), outputs: operator.outputs.map(p => projectPort(p, 'output')),
         params: { targetClipId: clip.id, operatorOwnerType: effect.type, enabled: operatorEnabled(node, effect.params), bypassable: graph.domain === 'voxel' || graph.domain === 'scene' || !!operator.bypass,
-          ...(operator.id.startsWith('values.') ? { valueLabel: node.valueControl?.label ?? node.exposed?.label ?? (typeof node.bindings.value === 'string' ? node.bindings.value : node.id)
+          ...(operator.id.startsWith('values.') ? { valueLabel: valueTitle ?? (typeof node.bindings.value === 'string' ? node.bindings.value : node.id)
             .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/-/g, ' ') } : {}),
           mathSymbol: mathNodeSymbol(operator.id) ?? '',
           categoryLabel: operatorCardLabel(operator) },
