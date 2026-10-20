@@ -876,6 +876,13 @@
   opacity: 0.8;
 }
 
+/* Effect skipped because the GPU could not build its pipeline. */
+.effect-gpu-failure {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-2);
+  opacity: 1;
+}
+
 
 .effect-info {
   margin: 0;

@@ -1392,6 +1392,28 @@ effects during application.
 Effects with `uniformSize` 0 use no uniform buffer.
 Most effects use a 16-byte-aligned uniform block; a few multi-parameter effects use larger blocks.
 
+### When the GPU cannot build an effect
+
+Building a pipeline can fail on a device in three ways: an invalid shader or
+descriptor (validation), a driver compiler that gives up (internal, for example
+`CreateGraphicsPipelines failed with VK_ERROR_UNKNOWN` for Voxel Relief on an
+Android/Vulkan device) or memory exhaustion. Fullscreen effects
+(`EffectPipelineCache`), compute effects (`ComputeEffectRuntime`) and image graph
+passes (`ImageGraphPassRuntime`) push error scopes for all three
+(`src/engine/core/gpuPipelineErrorScopes.ts`). Previously only validation was
+scoped: a driver failure stayed in the cache as a valid-looking pipeline, and
+every frame that set it invalidated the whole frame's command buffer, so all
+layers stopped rendering, not just that effect.
+
+A failed pipeline is dropped and not rebuilt for the same shader; the effect is
+skipped (pass-through) while every other effect keeps rendering. The failure is
+logged with its kind and recorded in `src/effects/effectGpuFailures.ts`; the
+effect card shows "This device's graphics driver could not build this effect,
+so it is skipped." (full driver message as tooltip). A new GPU device clears the
+record. A pipeline whose failure is reported asynchronously can still be used in
+the frame it was created in. Other GPU subsystems (3D, splats, flocking,
+compositor, render workers) do not use these scopes yet.
+
 Effects can opt into temporal feedback through `usesFeedback`. Feedback effects
 sample their own previous output frame on binding 3 and the pipeline maintains
 separate committed-history and current-output textures per composition/layer/effect.

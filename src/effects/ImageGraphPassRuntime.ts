@@ -4,6 +4,11 @@ import type { ImageOperatorPlan } from '../services/operators/imageOperatorGraph
 import { imageOperatorRuntimeUniformSize, packImageOperatorRuntimeUniforms, type ImageOperatorResourceMetadata } from '../services/operators/imageOperatorRuntimeUniforms';
 import { imageGraphResourceSampleType, imageGraphResourceViewDimension } from './_shared/imageGraphShaderResources';
 import { motionAnalysisMaxEdge } from './time/motionAnalysisQuality';
+import { canScopePipelineErrors, popPipelineErrorScopes, pushPipelineErrorScopes } from '../engine/core/gpuPipelineErrorScopes';
+import { EffectGpuPipelineError } from './effectGpuFailures';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('ImageGraphPassRuntime');
 
 export type ImageGraphPassSource = { kind: 'texture'; view: GPUTextureView } | { kind: 'external'; texture: GPUExternalTexture };
 export interface ImageGraphPassBatch {
@@ -39,6 +44,7 @@ export interface EncodeImageGraphPassesOptions {
 export class ImageGraphPassRuntime {
   private readonly device: GPUDevice;
   private readonly pipelines = new Map<string, GPURenderPipeline>();
+  private readonly failedPipelines = new Map<string, string>();
   private readonly allocations = new Map<string, Allocation>();
   private readonly activeAllocationKeys = new Map<string, string>();
   private disposed = false;
@@ -138,6 +144,11 @@ export class ImageGraphPassRuntime {
   private pipeline(program: ImageOperatorPlan, source: ImageGraphPassSource['kind'], format: GPUTextureFormat) {
     const key = `${source}:${format}:${program.key}`; const found = this.pipelines.get(key);
     if (found) { this.pipelines.delete(key); this.pipelines.set(key, found); return found; }
+    // A pass the driver could not build must not be set again: it would invalidate the whole frame.
+    const failed = this.failedPipelines.get(key);
+    if (failed) throw new EffectGpuPipelineError(failed);
+    const scoped = canScopePipelineErrors(this.device);
+    if (scoped) pushPipelineErrorScopes(this.device);
     const module = this.device.createShaderModule({ code: `${commonShader}\n${imageGraphProgramShader(program, 'imageGraphPassFragment', source)}` });
     let layout: GPUPipelineLayout | 'auto' = 'auto';
     if (program.resourceSampling?.includes('exact-u32-pixel-load')) {
@@ -157,7 +168,14 @@ export class ImageGraphPassRuntime {
     const pipeline = this.device.createRenderPipeline({ layout, vertex: { module, entryPoint: 'vertexMain' },
       fragment: { module, entryPoint: 'imageGraphPassFragment', targets: [{ format }] }, primitive: { topology: 'triangle-list' } });
     if (this.pipelines.size >= 64) this.pipelines.delete(this.pipelines.keys().next().value!);
-    this.pipelines.set(key, pipeline); return pipeline;
+    this.pipelines.set(key, pipeline);
+    if (scoped) void popPipelineErrorScopes(this.device).then(failure => {
+      if (!failure) return;
+      if (this.pipelines.get(key) === pipeline) this.pipelines.delete(key);
+      this.failedPipelines.set(key, failure.message);
+      log.error(`Image graph pass pipeline could not be built (${failure.kind}); the effect is skipped`, failure);
+    }).catch(() => undefined);
+    return pipeline;
   }
 
   private allocation(instanceId: string, topology: string, width: number, height: number, resources: readonly { id: string; maxEdge?: number }[]): Allocation {
@@ -194,5 +212,5 @@ export class ImageGraphPassRuntime {
 
   private destroyAllocation(value: Allocation) { for (const texture of value.textures.values()) texture.destroy(); }
   dispose() { if (this.disposed) return; this.disposed = true; for (const value of this.allocations.values()) this.destroyAllocation(value);
-    this.activeAllocationKeys.clear(); this.allocations.clear(); this.pipelines.clear(); }
+    this.activeAllocationKeys.clear(); this.allocations.clear(); this.pipelines.clear(); this.failedPipelines.clear(); }
 }

@@ -38,6 +38,7 @@ import { resolveLinkedAudioClip } from '../../../services/nodeGraph/clipGraphPro
 import { LandmarkTrackingControls } from './LandmarkTrackingControls';
 import { EffectCatalogPicker } from './EffectCatalogPicker';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
+import { EffectGpuFailureNotice } from './EffectGpuFailureNotice';
 import './effectValueControls.css';
 
 type PrimitiveEffectParamValue = number | boolean | string;
@@ -630,6 +631,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                     });
                   }}>×</button>
                 </div>
+                <EffectGpuFailureNotice effectType={effect.type} />
                 {!isCollapsed && (
                   <div className="effect-params">
                     <EffectStyleRow clipId={clipId} effect={effect} />

@@ -1,6 +1,7 @@
 import commonShader from './_shared/commonShader';
 import type { FullscreenEffectDefinition } from './types';
 import { Logger } from '../services/logger';
+import { canScopePipelineErrors, popPipelineErrorScopes, pushPipelineErrorScopes } from '../engine/core/gpuPipelineErrorScopes';
 
 const log = Logger.create('EffectPipelineCache');
 
@@ -14,6 +15,7 @@ export class EffectPipelineCache {
   private readonly signatures = new Map<string, string>();
   private readonly pendingSignatures = new Map<string, string>();
   private readonly failedSignatures = new Map<string, string>();
+  private readonly failureMessages = new Map<string, string>();
   private readonly graphKeys = new Set<string>();
 
   constructor(device: GPUDevice, onPipelineReady?: () => void) {
@@ -41,16 +43,21 @@ export class EffectPipelineCache {
     this.signatures.delete(id);
     this.pendingSignatures.delete(id);
     this.failedSignatures.delete(id);
+    this.failureMessages.delete(id);
+  }
+
+  private fail(id: string, signature: string, message: string): void {
+    this.failedSignatures.set(id, signature);
+    this.failureMessages.set(id, message);
   }
 
   private create(id: string, effect: FullscreenEffectDefinition, compiledGraph: boolean): void {
     const signature = this.signature(effect);
-    const validate = !!this.onPipelineReady
-      && typeof this.device.pushErrorScope === 'function'
-      && typeof this.device.popErrorScope === 'function';
+    const validate = !!this.onPipelineReady && canScopePipelineErrors(this.device);
     let validationScopeOpen = false;
     try {
-      if (validate) { this.device.pushErrorScope('validation'); validationScopeOpen = true; }
+      // Validation alone misses driver compiler failures (internal errors) and OOM.
+      if (validate) { pushPipelineErrorScopes(this.device); validationScopeOpen = true; }
       const shaderModule = this.device.createShaderModule({ label: `effect-${id}`, code: `${commonShader}\n${effect.shader}` });
       const entries: GPUBindGroupLayoutEntry[] = [
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
@@ -71,32 +78,32 @@ export class EffectPipelineCache {
       });
       const commit = () => {
         this.shaderModules.set(id, shaderModule); this.bindGroupLayouts.set(id, layout); this.pipelines.set(id, pipeline);
-        this.signatures.set(id, signature); this.failedSignatures.delete(id);
+        this.signatures.set(id, signature); this.failedSignatures.delete(id); this.failureMessages.delete(id);
       };
       if (!validationScopeOpen) { commit(); return; }
       this.pendingSignatures.set(id, signature);
       // Compiled graph programs must be usable synchronously in this exact frame.
       if (compiledGraph) commit();
       validationScopeOpen = false;
-      void this.device.popErrorScope().then(error => {
+      void popPipelineErrorScopes(this.device).then(failure => {
         if (this.pendingSignatures.get(id) !== signature) return;
         this.pendingSignatures.delete(id);
-        if (error) {
+        if (failure) {
           if (compiledGraph) this.pipelines.delete(id);
-          this.failedSignatures.set(id, signature);
-          log.error(`Effect pipeline validation failed: ${id}`, { name: error.constructor?.name ?? 'GPUValidationError', message: error.message });
+          this.fail(id, signature, failure.message);
+          log.error(`Effect pipeline could not be built (${failure.kind}): ${id}; the effect is skipped`, { kind: failure.kind, message: failure.message });
           return;
         }
         commit(); this.onPipelineReady?.();
       }).catch(error => {
         if (compiledGraph) this.pipelines.delete(id);
         if (this.pendingSignatures.get(id) !== signature) return;
-        this.pendingSignatures.delete(id); this.failedSignatures.set(id, signature);
+        this.pendingSignatures.delete(id); this.fail(id, signature, error instanceof Error ? error.message : String(error));
         log.error(`Effect pipeline validation failed: ${id}`, error);
       });
     } catch (error) {
-      if (validationScopeOpen) void this.device.popErrorScope().catch(() => undefined);
-      this.failedSignatures.set(id, signature);
+      if (validationScopeOpen) void popPipelineErrorScopes(this.device).catch(() => undefined);
+      this.fail(id, signature, error instanceof Error ? error.message : String(error));
       log.error(`Failed to create pipeline for ${id}`, error);
     }
   }
@@ -117,6 +124,8 @@ export class EffectPipelineCache {
   getPipeline(id: string): GPURenderPipeline | undefined { return this.pipelines.get(id); }
   getBindGroupLayout(id: string): GPUBindGroupLayout | undefined { return this.bindGroupLayouts.get(id); }
   isPendingOrFailed(id: string): boolean { return this.pendingSignatures.has(id) || this.failedSignatures.has(id); }
+  /** Why the current signature of `id` could not be built, if it failed. */
+  getFailure(id: string): string | undefined { return this.failedSignatures.has(id) ? this.failureMessages.get(id) : undefined; }
   createBindGroup(id: string, entries: GPUBindGroupEntry[]): GPUBindGroup | null {
     const layout = this.bindGroupLayouts.get(id);
     return layout ? this.device.createBindGroup({ layout, entries }) : null;
@@ -124,7 +133,7 @@ export class EffectPipelineCache {
   clear(): void {
     this.graphKeys.clear();
     this.pipelines.clear(); this.bindGroupLayouts.clear(); this.shaderModules.clear();
-    this.signatures.clear(); this.pendingSignatures.clear(); this.failedSignatures.clear();
+    this.signatures.clear(); this.pendingSignatures.clear(); this.failedSignatures.clear(); this.failureMessages.clear();
   }
   get size(): number { return this.pipelines.size; }
 }

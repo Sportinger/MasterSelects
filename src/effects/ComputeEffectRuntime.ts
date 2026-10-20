@@ -4,11 +4,18 @@ import type { AnalogSignalPlan } from '../services/operators/analogSignalGraph';
 import type { ComputeImagePlan } from '../services/operators/computeImageGraph';
 import { ImageGraphComputeOutputRuntime } from './ImageGraphComputeOutputRuntime';
 import { JumpFloodRuntime } from './JumpFloodRuntime';
+import { canScopePipelineErrors, popPipelineErrorScopes, pushPipelineErrorScopes } from '../engine/core/gpuPipelineErrorScopes';
+import { reportEffectGpuFailure } from './effectGpuFailures';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('ComputeEffectRuntime');
 
 interface ComputePipelineState {
   pipeline: GPUComputePipeline;
   layout: GPUBindGroupLayout;
   signature: string;
+  /** Set when the driver could not build the pipeline; the effect is then skipped. */
+  failure?: string;
 }
 
 export class ComputeEffectRuntime {
@@ -46,6 +53,8 @@ export class ComputeEffectRuntime {
     if (definition.uniformSize > 0) {
       entries.push({ binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } });
     }
+    const scoped = canScopePipelineErrors(this.device);
+    if (scoped) pushPipelineErrorScopes(this.device);
     const layout = this.device.createBindGroupLayout({ label: `compute-effect-${definition.id}-layout`, entries });
     const module = this.device.createShaderModule({ label: `compute-effect-${definition.id}`, code: definition.shader });
     const pipeline = this.device.createComputePipeline({
@@ -53,8 +62,15 @@ export class ComputeEffectRuntime {
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [layout] }),
       compute: { module, entryPoint: definition.entryPoint },
     });
-    const state = { pipeline, layout, signature };
+    const state: ComputePipelineState = { pipeline, layout, signature };
     this.states.set(definition.id, state);
+    if (scoped) void popPipelineErrorScopes(this.device).then(failure => {
+      if (!failure || this.states.get(definition.id) !== state) return;
+      // An invalid pipeline would invalidate the whole frame's command buffer.
+      state.failure = failure.message;
+      log.error(`Compute effect pipeline could not be built (${failure.kind}): ${definition.id}; the effect is skipped`, failure);
+      reportEffectGpuFailure(definition.id, failure.message);
+    }).catch(() => undefined);
     return state;
   }
 
@@ -119,6 +135,7 @@ export class ComputeEffectRuntime {
         onImagePreviewInputs: options.onAnalogImageInputs });
     }
     const state = this.ensureSingle(options.definition);
+    if (state.failure) return false;
     const entries: GPUBindGroupEntry[] = [
       { binding: 1, resource: options.inputView },
       { binding: 5, resource: options.outputView },
