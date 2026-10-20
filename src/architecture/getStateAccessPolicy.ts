@@ -293,8 +293,7 @@ export const getStateAccessPolicyBaselines = {
   allowedAdapterPathCount: 40,
   // October integration adds 17 exact targets (43 reads) and 12 action-time
   // reads for export quality, driven transforms, text selection and composition sync.
-  // 2026-10-20 adds 9 classified targets (52 reads) for the Image workspace and media reconnect,
-  // and raises two ceilings by 3 reads (media panel selection commands, multicam angle runtime).
+  // 2026-10-20: +9 classified targets (52 reads, Image workspace, reconnect) and +3 reads on two ceilings.
   classCHardTargetFileCount: 441,
   classCHardTargetMaxHits: 1457,
 } as const;
