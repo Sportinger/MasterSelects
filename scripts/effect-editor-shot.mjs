@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeDocShotWebp } from './docShotWebp.mjs';
+import { calloutOverlay, docsFigure } from './docShotFigure.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
@@ -36,9 +37,6 @@ const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
 const out = path.resolve(option('--out', 'docs/Features/assets/effects/editor'));
 const imageDir = path.resolve('tests/browser/effect-lab/images');
 const viewport = { width: 1600, height: 900 };
-// Callouts match the existing docs pictures: a 1017-unit overlay per 720 px docs column.
-const DISPLAY_WIDTH = { full: 720, float: 418 };
-const UNITS_PER_PX = 1017 / 720, RADIUS = 18, REACH = 84;
 
 const launchArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan',
   '--ignore-gpu-blocklist', '--window-position=0,0'];
@@ -111,36 +109,12 @@ function measure({ preview, top, marks }) {
   }), text: card.innerText.replace(/\s+/g, ' ').slice(0, 300) };
 }
 
-function overlay(shot, crop, boxes) {
-  const width = crop.right - crop.left, height = crop.bottom - crop.top;
-  const scale = DISPLAY_WIDTH[shot.layout ?? 'full'] * UNITS_PER_PX / width;
-  const vw = Math.round(width * scale), vh = Math.round(height * scale);
-  const clamp = (value, max) => Math.min(max - RADIUS - 4, Math.max(RADIUS + 4, value));
-  const marker = `${shot.name}-arrow`;
-  const lines = [`<svg class="docs-shot-overlay" viewBox="0 0 ${vw} ${vh}" aria-hidden="true" focusable="false">`,
-    `<defs><marker id="${marker}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>`];
-  boxes.forEach((target, index) => {
-    const mark = shot.marks[index], from = (typeof mark === 'object' && mark.from) || 'left';
-    const x = value => (value - crop.left) * scale, y = value => (value - crop.top) * scale;
-    const middle = { x: x((target.left + target.right) / 2), y: y((target.top + target.bottom) / 2) };
-    const tip = { left: { x: x(target.left) - 6, y: middle.y }, right: { x: x(target.right) + 6, y: middle.y },
-      above: { x: middle.x, y: y(target.top) - 6 }, below: { x: middle.x, y: y(target.bottom) + 6 } }[from];
-    const step = { left: [-REACH, 0], right: [REACH, 0], above: [0, -REACH], below: [0, REACH] }[from];
-    const cx = Math.round(clamp(tip.x + step[0], vw)), cy = Math.round(clamp(tip.y + step[1], vh));
-    lines.push(`<path class="docs-shot-arrow" d="M${cx} ${cy} L${Math.round(tip.x)} ${Math.round(tip.y)}" marker-end="url(#${marker})" />`,
-      `<circle class="docs-shot-number" cx="${cx}" cy="${cy}" r="${RADIUS}" /><text x="${cx}" y="${cy}" class="docs-shot-number-text">${index + 1}</text>`);
-  });
-  lines.push('</svg>');
-  return lines.join('\n');
-}
-
-function figure(shot, file, svg) {
-  const featuresDir = path.resolve('docs/Features');
-  const src = file.startsWith(featuresDir) ? path.relative(featuresDir, file) : file;
-  const labels = shot.marks.map((mark, index) => `${index + 1} — ${typeof mark === 'object' && mark.label ? mark.label : (typeof mark === 'string' ? mark : mark.target)}.`);
-  const float = shot.layout === 'float' ? ' docs-shot--float-right' : '';
-  return `<figure class="docs-shot${float}">\n\n<div class="docs-shot-stage">\n\n![${shot.alt ?? shot.name}](${src})\n\n${svg}\n</div>\n\n`
-    + `<figcaption>${shot.caption ?? labels.join(' ')}</figcaption>\n</figure>`;
+function figure(shot, file, crop, boxes) {
+  const marks = (shot.marks ?? []).map(mark => typeof mark === 'string' ? { target: mark } : mark);
+  const labels = marks.map((mark, index) => `${index + 1} — ${mark.label ?? mark.target}.`);
+  return docsFigure({ file, alt: shot.alt ?? shot.name, caption: shot.caption ?? labels.join(' '),
+    svg: marks.length ? calloutOverlay({ name: shot.name, layout: shot.layout ?? 'full', crop, boxes, marks }) : '',
+    classes: shot.layout === 'float' ? 'docs-shot--float-right' : '' });
 }
 
 // One browser per shot: a fresh project in its own private file system, and one GPU device at a time.
@@ -169,7 +143,7 @@ for (const shot of shots) {
     const pageErrors = [...new Set(errors)];
     console.log(`\n${path.relative(process.cwd(), file)}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes`
       + `${pageErrors.length ? `, page errors: ${pageErrors.join(' | ')}` : ''}\n`);
-    console.log(figure(shot, file, overlay(shot, crop, marks)));
+    console.log(figure(shot, file, crop, marks));
   } finally {
     await browser.close();
   }

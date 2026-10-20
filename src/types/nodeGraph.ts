@@ -24,6 +24,8 @@ export type NodeGraphAudioSemanticKind =
 export interface NodeGraphPortMetadata {
   /** Recorded dependency, changed through its owning action rather than cable editing. */
   readOnly?: boolean;
+  /** The label names what the value is (an effect presentation plan's role, such as "Sigma"); folder ports keep it. */
+  carriedLabel?: boolean;
   animationProperty?: string;
   controlProperty?: string;
   sourceArtifact?: { kind: 'face-landmarks' | 'scene-depth'; effectId?: string };

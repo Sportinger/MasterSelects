@@ -87,9 +87,10 @@ const FlexEqVisualQa = lazy(() =>
 const KeyframeCurveVisualQa = lazy(() =>
   import('./test/KeyframeCurveVisualQa').then(m => ({ default: m.KeyframeCurveVisualQa }))
 );
-const EffectGraphDocShot = lazy(() =>
+// Docs tooling only: it replaces the timeline store's clips, so production builds leave it out.
+const EffectGraphDocShot = import.meta.env.DEV ? lazy(() =>
   import('./test/effectGraphDoc/EffectGraphDocShot').then(m => ({ default: m.EffectGraphDocShot }))
-);
+) : null;
 
 interface AppProps {
   initialExperience?: EditorEntryExperience;
@@ -512,7 +513,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
     );
   }
 
-  if (testMode === 'effect-graph') {
+  if (testMode === 'effect-graph' && EffectGraphDocShot) {
     return (
       <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
         <EffectGraphDocShot />

@@ -10,7 +10,7 @@ import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type { EffectType } from '../../types/effects';
 import type { NodeGraph } from '../../types/nodeGraph';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
-import { withCanvasPlacement, wrapFlowRows } from './effectGraphDocLayout';
+import { withBoundaryStubs, withCanvasPlacement, wrapFlowRows } from './effectGraphDocLayout';
 
 /**
  * `stages`: the effect is open and its folders (stages, compositions) are folded, as when an
@@ -27,9 +27,16 @@ export interface EffectGraphDocQuery {
   focus?: string;
   /** A focused folder keeps its flow layout from inside the effect, split into this many rows (default: a landscape fit). */
   rows: number | 'auto';
+  /** Node ids that start a new row in a focused folder (instead of `rows`). */
+  breaks: string[];
+  /** `hide`: leave out the Constants and Coordinates & Resources folders and their cables, so the stages read as one path. */
+  plumbing: 'show' | 'hide';
   /** Keep the clip chain (source, transform, output) around the effect. */
   chain: boolean;
 }
+
+/** Folders that only feed numbers and coordinates into every stage. */
+export const PLUMBING_FOLDERS = new Set(['Constants', 'Coordinates & Resources']);
 
 export interface EffectGraphDocGroup {
   id: string;
@@ -63,8 +70,10 @@ export function parseEffectGraphDocQuery(search: string): EffectGraphDocQuery {
   const focus = params.get('focus')?.trim().toLowerCase() || undefined;
   const rows = params.get('rows');
   if (rows && !(Number(rows) >= 1)) throw new Error(`rows must be a number from 1 (got "${rows}").`);
+  const plumbing = params.get('plumbing') ?? 'show';
+  if (plumbing !== 'show' && plumbing !== 'hide') throw new Error(`Unknown plumbing "${plumbing}": use show or hide.`);
   return { effectType: params.get('effect')?.trim() || 'gaussian-blur', level, open: listParam(params.get('open')), focus,
-    rows: rows ? Math.round(Number(rows)) : 'auto', chain: params.get('chain') === '1' };
+    rows: rows ? Math.round(Number(rows)) : 'auto', breaks: listParam(params.get('break')), plumbing, chain: params.get('chain') === '1' };
 }
 
 export const slugLabel = (label: string) => label.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -129,6 +138,18 @@ export function effectGraphDocFoldState(query: EffectGraphDocQuery, overrides: R
   return states;
 }
 
+/** Drops the plumbing folders, their cables and the folder inputs that only they fed. */
+function withoutPlumbing(graph: NodeGraph): NodeGraph {
+  const hidden = new Set(graph.nodes.filter(node => PLUMBING_FOLDERS.has(node.label) && node.binding?.kind === 'operator-group').map(node => node.id));
+  if (!hidden.size) return graph;
+  const edges = graph.edges.filter(edge => !hidden.has(edge.fromNodeId) && !hidden.has(edge.toNodeId));
+  const fed = new Set(edges.map(edge => `${edge.toNodeId}:${edge.toPortId}`));
+  const orphaned = new Set(graph.edges.filter(edge => hidden.has(edge.fromNodeId)).map(edge => `${edge.toNodeId}:${edge.toPortId}`));
+  return { ...graph, edges, nodes: graph.nodes.filter(node => !hidden.has(node.id)).map(node => ({ ...node,
+    inputs: node.inputs.filter(port => !orphaned.has(`${node.id}:${port.id}`) || fed.has(`${node.id}:${port.id}`)) })),
+  groups: graph.groups?.filter(group => !hidden.has(group.proxyId)).map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => !hidden.has(id)) })) };
+}
+
 /** Keeps the nodes, edges and folders inside one group (the effect, or a focused folder). */
 function cropToGroup(graph: NodeGraph, groupId: string): NodeGraph {
   const root = graph.groups?.find(group => group.id === groupId);
@@ -146,10 +167,15 @@ export function buildEffectGraphDoc(query: EffectGraphDocQuery, overrides: Recor
   const clip = effectGraphDocClip(query.effectType, states);
   const full = project(clip);
   const focus = query.focus ? folders.find(folder => matches(folder, query.focus!)) : undefined;
-  const graph = focus ? wrapFlowRows(cropToGroup(withCanvasPlacement(full), focus.id), query.rows)
+  const placed = focus ? withCanvasPlacement(full) : full;
+  // Constants are literal numbers (their cards show the value); other outside inputs get named stubs.
+  const skip = (source: NodeGraph['nodes'][number]) => source.label === 'Constants' || (query.plumbing === 'hide' && PLUMBING_FOLDERS.has(source.label));
+  const cropped = focus ? wrapFlowRows(withBoundaryStubs(cropToGroup(placed, focus.id), placed, skip), query.rows, query.breaks)
     : query.chain ? full : cropToGroup(full, EFFECT_GRAPH_DOC_GROUP);
+  const graph = query.plumbing === 'hide' && !focus ? withoutPlumbing(cropped) : cropped;
   // The canvas refits per graph id: one id per level keeps a refit when the level changes.
-  const id = `${full.id}:${query.effectType}:${query.level}:${query.open.join('+')}:${query.focus ?? ''}:${query.rows}:${query.chain ? 'chain' : 'effect'}`;
+  const id = `${full.id}:${query.effectType}:${query.level}:${query.open.join('+')}:${query.focus ?? ''}:${query.rows}:${query.breaks.join('+')}`
+    + `:${query.plumbing}:${query.chain ? 'chain' : 'effect'}`;
   const values = graph.nodes.filter(node => node.operatorId?.startsWith('values.'));
   const shown = { ...clip, nodeGraph: { ...clip.nodeGraph!, previews: { enabled: false,
     nodes: Object.fromEntries(values.map(node => [nodePreviewPreferenceKey(clip.id, node), { enabled: true }])) } } };

@@ -13,6 +13,7 @@ import { operatorEnabled } from '../operators/effectGraph';
 import { mathNodeSymbol } from './mathNodeSymbol';
 import { compositionGroupInterface } from '../operators/operatorComposition';
 import { operatorGroupBypassRoutes, operatorGroupRenderer } from '../operators/operatorGroupBypass';
+import { effectPresentationPlan } from '../operators/effectPresentationPlans';
 
 export const effectGraphId = (clipId: string, effectId: string) => `clip-graph:${clipId}:effect:${effectId}`;
 
@@ -27,6 +28,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
   }
   const supported = addableEffectOperators(effect.type);
   const parameters = getEffect(effect.type)?.params as Record<string, { label?: string }> | undefined;
+  const portLabels = effectPresentationPlan(effect.type)?.portLabels;
   return {
     id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip', issue: graph.incomplete,
     nodes: graph.nodes.map(node => {
@@ -44,7 +46,12 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
       return { id: node.id, operatorId: operator.id, label: valueTitle ?? operator.label, description: operator.description,
         connectionVariants: operatorAdaptiveVariants(operator, supported),
         kind: ['media.source', 'image.frame', 'audio.input', 'splat.source'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'render.pixel-particles', 'image.output', 'audio.output', 'scene.render'].includes(operator.id) ? 'output' : 'effect',
-        runtime: operator.runtime, inputs: operator.inputs.map(p => projectPort(p, 'input')), outputs: operator.outputs.map(p => projectPort(p, 'output')),
+        runtime: operator.runtime, inputs: operator.inputs.map(p => projectPort(p, 'input')), outputs: operator.outputs.map(p => {
+          // A presentation plan may name what an output carries ("Sigma"); folder ports show it.
+          const projected = projectPort(p, 'output');
+          const carried = portLabels?.[`${node.id}:${p.id}`] ?? (operator.outputs.length === 1 || p.id === 'value' ? portLabels?.[node.id] : undefined);
+          return carried ? { ...projected, label: carried, metadata: { ...projected.metadata, carriedLabel: true } } : projected;
+        }),
         params: { targetClipId: clip.id, operatorOwnerType: effect.type, enabled: operatorEnabled(node, effect.params), bypassable: graph.domain === 'voxel' || graph.domain === 'scene' || !!operator.bypass,
           ...(operator.id.startsWith('values.') ? { valueLabel: valueTitle ?? (typeof node.bindings.value === 'string' ? node.bindings.value : node.id)
             .replace(/([a-z])([A-Z])/g, '$1 $2').replace(/-/g, ' ') } : {}),

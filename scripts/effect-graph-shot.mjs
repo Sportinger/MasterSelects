@@ -9,10 +9,16 @@
 // A shot is `<effect>[?query][@name]`. The query takes the test page parameters:
 //   level=stages|all   folded stage folders (default, as when an effect is opened) or everything open
 //   open=a,b           open these folders too (label slug, `parent/child` path or group id)
-//   focus=folder       only the contents of this folder
+//   focus=folder       only the contents of this folder; values from outside become named stub
+//                      cards (Constants excepted)
 //   rows=n             split a focused folder's flow into n rows (default: landscape fit)
+//   break=a,b          start a new row at these node ids instead (keeps short cables)
+//   plumbing=hide      leave out the Constants and Coordinates & Resources folders and their
+//                      cables (overview pictures: the stages read as one path)
 //   chain=1            keep the clip chain (source, transform, output) around the effect
-// The file is `<out>/<name or effect>.webp`. `--list` prints every shot's folders instead.
+// and two picture options: marks=id[:from],...  numbered callouts on these node cards (from =
+// left|right|above|below), printed with the figure markup; layout=full|float sizes the callouts.
+// The file is `<out>/<name or effect>.webp`. `--list` prints every shot's folders and node ids instead.
 //
 // The page is laid out `--width` CSS pixels wide (smaller for tall graphs) and captured at
 // `--scale` device pixels per CSS pixel, so a full-width docs column shows the canvas at about
@@ -22,6 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeDocShotWebp } from './docShotWebp.mjs';
+import { calloutOverlay, docsFigure } from './docShotFigure.mjs';
 
 const args = process.argv.slice(2);
 const valueOptions = new Set(['--url', '--out', '--width', '--max-height', '--scale', '--max-bytes']);
@@ -41,7 +48,11 @@ const margin = 2 * 42;
 const parseShot = (spec) => {
   const [target, name] = spec.split('@');
   const [effect, query = ''] = target.split('?');
-  return { effect, query, name: name || effect };
+  const params = new URLSearchParams(query);
+  const marks = (params.get('marks') ?? '').split(',').filter(Boolean).map(item => { const [id, from] = item.split(':'); return { id, from: from || 'left' }; });
+  const layout = params.get('layout') ?? 'full';
+  params.delete('marks'); params.delete('layout');
+  return { effect, query: params.toString(), name: name || effect, marks, layout };
 };
 
 const launchArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan',
@@ -67,7 +78,8 @@ try {
     const shot = parseShot(spec);
     const state = await open(shot);
     if (args.includes('--list')) {
-      results.push({ shot: spec, title: state.title, nodes: state.nodes, bounds: state.bounds, folders: state.folders.map(folder => `${folder.path}${folder.collapsed ? '' : ' (open)'}`) });
+      const cards = await page.evaluate(() => [...document.querySelectorAll('.node-workspace-node')].map(card => `${card.dataset.nodeId} (${card.getAttribute('aria-label') ?? ''})`));
+      results.push({ shot: spec, title: state.title, nodes: state.nodes, bounds: state.bounds, folders: state.folders.map(folder => `${folder.path}${folder.collapsed ? '' : ' (open)'}`), cards });
       continue;
     }
     // Fit by width, unless the graph is tall: then the height decides and the page narrows.
@@ -93,14 +105,28 @@ try {
       const bottom = Math.min(viewport.height, Math.ceil(Math.max(...rects.map(rect => rect.bottom)) + pad));
       return { x: left, y: top, width: right - left, height: bottom - top };
     }, { pad: 18, viewport });
+    const boxes = await page.evaluate(ids => ids.map(id => {
+      // Effect node ids are scoped (`clip-graph:…/taper`): a mark names the local id.
+      const card = [...document.querySelectorAll('.node-workspace-node[data-node-id]')].find(element => element.dataset.nodeId === id || element.dataset.nodeId.endsWith(`/${id}`));
+      if (!card) return { missing: id };
+      const rect = card.getBoundingClientRect();
+      return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+    }), shot.marks.map(mark => mark.id));
+    const missing = boxes.filter(box => box.missing).map(box => box.missing);
+    if (missing.length) throw new Error(`${shot.name}: no node card ${missing.join(', ')} (use --list for the ids)`);
     const png = await page.screenshot({ type: 'png', ...(clip ? { clip } : {}) });
     const encoded = await encodeDocShotWebp(page, png, { maxBytes, maxPixelWidth })
       .catch(error => { throw new Error(`${shot.name}: ${error.message} Use focus/open or --max-bytes.`); });
     fs.mkdirSync(out, { recursive: true });
     const file = path.join(out, `${shot.name}.webp`);
     fs.writeFileSync(file, encoded.buffer);
+    const crop = clip ? { left: clip.x, top: clip.y, right: clip.x + clip.width, bottom: clip.y + clip.height }
+      : { left: 0, top: 0, right: viewport.width, bottom: viewport.height };
+    const figure = docsFigure({ file, alt: state.title, caption: shot.marks.map((mark, index) => `${index + 1} — ${mark.id}.`).join(' ') || state.title,
+      svg: shot.marks.length ? calloutOverlay({ name: shot.name, layout: shot.layout, crop, boxes, marks: shot.marks }) : '',
+      classes: 'docs-shot--graph' });
     results.push({ shot: spec, file: path.relative(process.cwd(), file), nodes: state.nodes, zoom: Math.round(zoom * 100) / 100,
-      pixels: `${encoded.width}x${encoded.height}`, bytes: encoded.size, quality: encoded.quality });
+      pixels: `${encoded.width}x${encoded.height}`, bytes: encoded.size, quality: encoded.quality, ...(shot.marks.length ? { figure } : {}) });
   }
   console.log(JSON.stringify({ results, errors: [...new Set(errors)] }, null, 1));
 } finally {
