@@ -1,0 +1,54 @@
+@layer overlays {
+.chunk-recovery-notice {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  z-index: calc(var(--z-overlay, 1000) + 10);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3, 12px);
+  width: max-content;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 12px 14px;
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-lg, 8px);
+  background: var(--bg-elevated, #2b2b2b);
+  box-shadow: var(--shadow-lg, 0 8px 24px rgba(0, 0, 0, 0.4));
+  color: var(--text-primary, #f2f2f2);
+  font-family: inherit;
+  transform: translateX(-50%);
+}
+
+.chunk-recovery-notice-message {
+  margin: 0;
+  font-size: var(--font-sm, 13px);
+  line-height: 1.4;
+}
+
+.chunk-recovery-notice-reload {
+  flex: 0 0 auto;
+  padding: 6px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 6px);
+  background: var(--accent, #2d8ceb);
+  color: #fff;
+  font: inherit;
+  font-size: var(--font-sm, 13px);
+  font-weight: var(--font-semibold, 600);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.chunk-recovery-notice-reload:hover {
+  background: var(--accent-hover, #4a9ff0);
+}
+
+.chunk-recovery-notice-reload:focus {
+  outline: none;
+}
+
+.chunk-recovery-notice-reload:focus-visible {
+  outline: 2px solid var(--accent-hover, #4a9ff0);
+  outline-offset: 2px;
+}
+}

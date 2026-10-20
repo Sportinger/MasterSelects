@@ -1,13 +1,33 @@
 import { reportChunkLoadRecovery } from '../services/diagnostics/diagnosticReporter';
 import { canReloadAfterChunkFailure } from './chunkReloadGuard';
+import { hideChunkRecoveryNotice, showChunkRecoveryNotice } from './chunkRecoveryNotice';
 
 const CHUNK_RELOAD_MARKER = 'masterselects:chunk-reload';
 const CHUNK_RELOAD_COOLDOWN_MS = 60_000;
 
 const CHUNK_ERROR_PATTERN =
-  /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|loading chunk [\w-]+ failed|chunkloaderror/i;
+  /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed|loading chunk [\w-]+ failed|chunkloaderror|unable to preload css/i;
 
 let reloadRequested = false;
+let waitingForConnection = false;
+
+function isOffline(): boolean {
+  return globalThis.navigator?.onLine === false;
+}
+
+// Reloading while offline fails again and burns the reload cooldown; mobile tabs
+// resumed from the background often fail lazy imports exactly then.
+function reloadWhenOnline(reason: string): void {
+  showChunkRecoveryNotice('offline');
+  if (waitingForConnection) return;
+  waitingForConnection = true;
+  reportChunkLoadRecovery('reload_waiting_online', reason);
+  window.addEventListener('online', () => {
+    waitingForConnection = false;
+    hideChunkRecoveryNotice();
+    reloadOnce(reason);
+  }, { once: true });
+}
 
 function getErrorMessage(value: unknown): string {
   if (value instanceof Error) {
@@ -40,8 +60,14 @@ function reloadOnce(reason: string): boolean {
     return false;
   }
 
+  if (isOffline()) {
+    reloadWhenOnline(reason);
+    return false;
+  }
+
   if (!canReloadAfterChunkFailure()) {
     reportChunkLoadRecovery('reload_deferred', reason);
+    showChunkRecoveryNotice('unsaved');
     return false;
   }
 
@@ -51,6 +77,7 @@ function reloadOnce(reason: string): boolean {
     const previousReload = Number(window.sessionStorage.getItem(CHUNK_RELOAD_MARKER));
     if (Number.isFinite(previousReload) && now - previousReload < CHUNK_RELOAD_COOLDOWN_MS) {
       reportChunkLoadRecovery('reload_suppressed', reason);
+      showChunkRecoveryNotice('retry');
       return false;
     }
 
@@ -64,6 +91,15 @@ function reloadOnce(reason: string): boolean {
   reportChunkLoadRecovery('reload', reason);
   window.location.reload();
   return true;
+}
+
+/**
+ * React consumes a rejected React.lazy import itself and reports it as an
+ * uncaught render error, which unmounts the root; no window hook sees it.
+ */
+export function recoverFromChunkRenderError(error: unknown): boolean {
+  const message = getErrorMessage(error);
+  return CHUNK_ERROR_PATTERN.test(message) && reloadOnce(message);
 }
 
 export function installChunkLoadRecovery(): void {

@@ -23,7 +23,10 @@ beforeEach(async () => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  document.getElementById('masterselects-chunk-recovery-notice')?.remove();
 });
+
+const notice = () => document.getElementById('masterselects-chunk-recovery-notice');
 
 // Vite's preload helper dispatches this cancelable event, then throws the
 // original error only when default was NOT prevented. Cancellation otherwise
@@ -73,6 +76,45 @@ describe('chunk load recovery', () => {
     });
     const error = new TypeError('Importing a module script failed.');
     await expect(failedViteImport(error)).rejects.toBe(error);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  // Production: React.lazy failures ("Failed to fetch dynamically imported module:
+  // …/App-DsNuWLcW.js") unmounted the root without any reload.
+  it('recovers lazy imports that React reports as uncaught render errors', async () => {
+    const { recoverFromChunkRenderError } = await import('../../src/runtime/chunkLoadRecovery');
+    expect(recoverFromChunkRenderError(new TypeError('Cannot read properties of undefined'))).toBe(false);
+    expect(reload).not.toHaveBeenCalled();
+    expect(recoverFromChunkRenderError(new TypeError('Failed to fetch dynamically imported module: /assets/App-DsNuWLcW.js'))).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('treats failed CSS preloads as chunk failures', async () => {
+    const { recoverFromChunkRenderError } = await import('../../src/runtime/chunkLoadRecovery');
+    expect(recoverFromChunkRenderError(new Error('Unable to preload CSS for /assets/ExportPanel-CxFn7j6S.css'))).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for the connection instead of reloading offline', async () => {
+    vi.stubGlobal('navigator', { onLine: false });
+    const error = new TypeError('Failed to fetch dynamically imported module: /assets/renderHostPort.js');
+    await expect(failedViteImport(error)).rejects.toBe(error);
+    expect(reload).not.toHaveBeenCalled();
+    expect(window.sessionStorage.getItem(marker)).toBeNull();
+    expect(notice()?.dataset.kind).toBe('offline');
+    vi.stubGlobal('navigator', { onLine: true });
+    window.dispatchEvent(new Event('online'));
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(notice()).toBeNull();
+  });
+
+  it('shows a reload notice when the cooldown suppresses the automatic reload', async () => {
+    window.sessionStorage.setItem(marker, String(Date.now()));
+    const error = new TypeError('Importing a module script failed.');
+    await expect(failedViteImport(error)).rejects.toBe(error);
+    expect(reload).not.toHaveBeenCalled();
+    expect(notice()?.dataset.kind).toBe('retry');
+    notice()!.querySelector('button')!.click();
     expect(reload).toHaveBeenCalledTimes(1);
   });
 });

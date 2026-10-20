@@ -13,7 +13,7 @@ import {
   ensureDirectEntryReturnsToLanding,
   resolveEntryExperience,
 } from './routing/entryExperience'
-import { installChunkLoadRecovery } from './runtime/chunkLoadRecovery'
+import { installChunkLoadRecovery, recoverFromChunkRenderError } from './runtime/chunkLoadRecovery'
 import { createReactRootErrorHandlers } from './services/diagnostics/diagnosticReporter'
 import { configureInspectorGraphWorker } from './services/operators/inspectorGraphClient'
 
@@ -51,5 +51,12 @@ if (
 
 // Note: StrictMode disabled for WebGPU compatibility in development
 // StrictMode causes double-mounting which breaks external texture references
-createRoot(document.getElementById('root')!, createReactRootErrorHandlers())
+const rootErrorHandlers = createReactRootErrorHandlers()
+createRoot(document.getElementById('root')!, {
+  ...rootErrorHandlers,
+  onUncaughtError: (error, errorInfo) => {
+    rootErrorHandlers.onUncaughtError(error, errorInfo)
+    recoverFromChunkRenderError(error)
+  },
+})
   .render(<RootApp initialExperience={initialExperience} />)

@@ -1,5 +1,6 @@
 import { beginOperationTrace, type OperationTrace } from '../productAnalytics/operationTrace';
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
+import { isRepositoryHydrating } from './repository/transaction/storeMutationBoundary';
 // Project Lifecycle — create, open, close, auto-sync
 
 import { Logger } from '../logger';
@@ -413,6 +414,10 @@ export function setupAutoSync(): void {
       return;
     }
     if (!projectFileService.isProjectOpen()) {
+      // Restoring the scratch workspace or switching projections at startup is
+      // not an edit; counting it vetoed chunk recovery and prompted on leave for
+      // every untouched editor.
+      if (isRepositoryHydrating()) return;
       // Keep unsaved store edits safe even before a project file exists.
       // Repeated setup and HMR must not forget this navigation veto.
       hasProjectlessEdits = true;

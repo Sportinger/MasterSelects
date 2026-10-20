@@ -406,14 +406,15 @@ export function reportRuntimeError(report: RuntimeErrorReport): void {
 }
 
 export function reportChunkLoadRecovery(
-  action: 'reload' | 'reload_suppressed' | 'reload_deferred',
+  action: 'reload' | 'reload_suppressed' | 'reload_deferred' | 'reload_waiting_online',
   reason: string,
 ): void {
   reporter.reportRuntimeError({
     extra: { action },
     message: `${action === 'reload' ? 'Reloading after chunk load failure'
       : action === 'reload_deferred' ? 'Chunk reload deferred to preserve unsaved project'
-        : 'Chunk load failure within reload cooldown'}: ${reason}`,
+        : action === 'reload_waiting_online' ? 'Chunk load failed offline; reload waits for the connection'
+          : 'Chunk load failure within reload cooldown'}: ${reason}`,
     stage: 'chunk_load',
   });
 }

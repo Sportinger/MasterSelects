@@ -205,6 +205,30 @@ describe('project lifecycle auto sync', () => {
     }
   });
 
+  // Startup restores the scratch workspace through repository hydration. Counting
+  // that as an edit vetoed chunk recovery and prompted on leave for every fresh editor.
+  it('does not treat repository hydration of a projectless workspace as an edit', async () => {
+    const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
+    const { canReloadAfterChunkFailure } = await import('../../src/runtime/chunkReloadGuard');
+    const { withRepositoryHydration } = await import('../../src/services/project/repository/transaction/storeMutationBoundary');
+    mocks.isProjectOpen.mockReturnValue(false);
+    mocks.hasUnsavedChanges.mockReturnValue(false);
+    setupAutoSync();
+    try {
+      withRepositoryHydration(() => (mocks.timelineSubscribe.mock.calls.at(-1)![1] as () => void)());
+      expect(canReloadAfterChunkFailure()).toBe(true);
+      const unload = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(unload);
+      expect(unload.defaultPrevented).toBe(false);
+      (mocks.timelineSubscribe.mock.calls.at(-1)![1] as () => void)();
+      expect(canReloadAfterChunkFailure()).toBe(false);
+    } finally {
+      mocks.isProjectOpen.mockReturnValue(true);
+      canReloadAfterChunkFailure();
+      teardownAutoSync();
+    }
+  });
+
   it('protects imported projectless media already present when auto-sync starts', async () => {
     const { setupAutoSync, teardownAutoSync } = await import('../../src/services/project/projectLifecycle');
     const { canReloadAfterChunkFailure } = await import('../../src/runtime/chunkReloadGuard');
