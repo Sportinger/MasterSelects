@@ -72,6 +72,12 @@ function serveFolders(mounts) {
     response.setHeader('Access-Control-Allow-Origin', '*');
     response.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
     const url = new URL(request.url, 'http://127.0.0.1');
+    // A public origin (production) reaching loopback needs the private-network preflight.
+    if (request.method === 'OPTIONS') {
+      response.setHeader('Access-Control-Allow-Private-Network', 'true');
+      response.setHeader('Access-Control-Allow-Methods', 'GET');
+      response.writeHead(204).end(); return;
+    }
     if (request.method !== 'GET') { response.writeHead(405).end(); return; }
     const mount = byName.get(url.searchParams.get('mount') ?? '');
     if (!mount) { response.writeHead(404).end(); return; }
@@ -93,6 +99,8 @@ function installPickers() {
     return directory;
   };
   window.__harness = { queue, picked: [], opfsDirectory };
+  // Harness sessions must not count as product usage (also against production).
+  Object.defineProperty(Navigator.prototype, 'doNotTrack', { configurable: true, get: () => '1' });
   window.showDirectoryPicker = async () => {
     const next = queue.shift();
     window.__harness.picked.push(next ?? '(cancelled)');
@@ -175,7 +183,8 @@ async function main() {
     context = await chromium.launchPersistentContext(options.profile, {
       channel: options.channel === 'chromium' ? undefined : options.channel,
       headless: !options.headed, viewport: { width: 1600, height: 1000 },
-      args: ['--enable-unsafe-webgpu'],
+      // Only this throwaway profile: let production pages read the loopback file server.
+      args: ['--enable-unsafe-webgpu', '--disable-features=LocalNetworkAccessChecks,BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights'],
     });
     await context.addInitScript(installPickers);
     const page = context.pages()[0] ?? await context.newPage();
