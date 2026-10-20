@@ -9,6 +9,7 @@ import {
   getRecentRuntimeDiagnosticEntries,
   getRuntimeGpuInfo,
 } from '../runtimeDiagnostics';
+import { getGpuStartupProbe, type GpuStartupProbe } from './gpuStartupProbe';
 
 const SESSION_STORAGE_KEY = 'ms.diagnostics.session';
 const DEVICE_STORAGE_KEY = 'ms.diagnostics.device';
@@ -19,6 +20,17 @@ const BOOT_AT_MS = Date.now();
 let memorySessionId: string | null = null;
 let memoryDeviceId: string | null = null;
 let storageEstimate: { quotaMb?: number; usageMb?: number } | null = null;
+let highEntropyUserAgent: HighEntropyUserAgent | null = null;
+
+/** Chromium freezes the user agent ("Windows NT 10.0", "Android 10; K"); these
+ * client hints carry the real OS version and device model. */
+interface HighEntropyUserAgent {
+  platformVersion?: string;
+  model?: string;
+  architecture?: string;
+  bitness?: string;
+  fullVersionList?: string[];
+}
 
 type NavigatorWithExtras = Navigator & {
   connection?: { downlink?: number; effectiveType?: string; rtt?: number; saveData?: boolean };
@@ -27,6 +39,13 @@ type NavigatorWithExtras = Navigator & {
     brands?: Array<{ brand: string; version: string }>;
     mobile?: boolean;
     platform?: string;
+    getHighEntropyValues?: (hints: string[]) => Promise<{
+      platformVersion?: string;
+      model?: string;
+      architecture?: string;
+      bitness?: string;
+      fullVersionList?: Array<{ brand: string; version: string }>;
+    }>;
   };
 };
 
@@ -62,10 +81,10 @@ export interface DiagnosticContext {
   timezone?: string;
   uptimeMs: number;
   userAgent?: string;
-  userAgentData?: { brands?: string[]; mobile?: boolean; platform?: string };
+  userAgentData?: { brands?: string[]; mobile?: boolean; platform?: string } & HighEntropyUserAgent;
   viewport?: { dpr: number; height: number; width: number };
   visibility?: string;
-  webgpu?: { adapter: Record<string, unknown> | null; supported: boolean };
+  webgpu?: { adapter: Record<string, unknown> | null; supported: boolean; startup?: GpuStartupProbe };
 }
 
 function randomId(prefix: string): string {
@@ -127,6 +146,21 @@ export function primeDiagnosticContext(): void {
   } catch {
     // Storage estimation is best-effort.
   }
+  try {
+    void (navigator as NavigatorWithExtras).userAgentData?.getHighEntropyValues?.(
+      ['platformVersion', 'model', 'architecture', 'bitness', 'fullVersionList'],
+    ).then((values) => {
+      highEntropyUserAgent = {
+        platformVersion: values.platformVersion || undefined,
+        model: values.model?.slice(0, 80) || undefined,
+        architecture: values.architecture || undefined,
+        bitness: values.bitness || undefined,
+        fullVersionList: values.fullVersionList?.slice(0, 6).map((brand) => `${brand.brand} ${brand.version}`),
+      };
+    }).catch(() => undefined);
+  } catch {
+    // Client hints are Chromium-only and best-effort.
+  }
 }
 
 export function collectDiagnosticBreadcrumbs(limit = BREADCRUMB_LIMIT): DiagnosticBreadcrumb[] {
@@ -163,6 +197,7 @@ export function collectDiagnosticContext(): DiagnosticContext {
       brands: nav.userAgentData.brands?.map((brand) => `${brand.brand} ${brand.version}`),
       mobile: nav.userAgentData.mobile,
       platform: nav.userAgentData.platform,
+      ...highEntropyUserAgent,
     };
   }
   context.language = nav.language;
@@ -208,9 +243,11 @@ export function collectDiagnosticContext(): DiagnosticContext {
     ? document.hasFocus()
     : undefined;
   context.performanceNow = perf ? Math.round(perf.now()) : undefined;
+  const startup = getGpuStartupProbe();
   context.webgpu = {
     adapter: getRuntimeGpuInfo(),
     supported: 'gpu' in nav,
+    ...(startup ? { startup } : {}),
   };
   return context;
 }

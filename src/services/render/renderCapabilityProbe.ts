@@ -1,4 +1,5 @@
 import { createBrowserWorkerRenderHostRuntimeBridge } from './workerRenderHostRuntimeBridge';
+import { readWebGlDebugAdapterInfo } from './webglAdapterHint';
 
 export type RenderPresentationStrategy =
   | 'worker-webgpu-present'
@@ -213,31 +214,6 @@ function gpuAdapterHasDetails(adapterInfo: RenderCapabilityProbeResult['gpuAdapt
     || adapterInfo?.device
     || adapterInfo?.description,
   );
-}
-
-function readWebGlDebugAdapterInfo(): RenderCapabilityProbeResult['gpuAdapter'] {
-  if (typeof document === 'undefined') return null;
-  try {
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
-    if (!context) return null;
-    const debugInfo = context.getExtension('WEBGL_debug_renderer_info') as {
-      readonly UNMASKED_VENDOR_WEBGL: number;
-      readonly UNMASKED_RENDERER_WEBGL: number;
-    } | null;
-    const vendor = debugInfo
-      ? String(context.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL) ?? '')
-      : String(context.getParameter(context.VENDOR) ?? '');
-    const renderer = debugInfo
-      ? String(context.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) ?? '')
-      : String(context.getParameter(context.RENDERER) ?? '');
-    const description = [vendor, renderer].filter(Boolean).join(' ');
-    return description
-      ? { vendor, description, source: 'webgl-debug-renderer' }
-      : null;
-  } catch {
-    return null;
-  }
 }
 
 function requestGpuAdapterWithTimeout(

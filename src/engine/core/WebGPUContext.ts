@@ -4,6 +4,7 @@ import { prefersSoftwareTimelineCanvas } from '../../utils/canvasPlatform';
 import { SoftwareOutputCanvas } from './SoftwareOutputCanvas';
 import { Logger } from '../../services/logger';
 import { attachWebGPUDeviceDiagnostics, markExpectedWebGPUDeviceDestruction } from '../../services/runtimeDiagnostics';
+import { recordGpuAdapter, recordGpuAdapterAttempt, recordGpuStartupFailure } from '../../services/diagnostics/gpuStartupProbe';
 import type { GPUInitializationFailure } from './gpuInitializationFailure';
 
 const log = Logger.create('WebGPUContext');
@@ -85,6 +86,7 @@ export class WebGPUContext {
     this.initializationFailure = null;
     if (!navigator.gpu) {
       this.initializationFailure = 'unsupported';
+      recordGpuStartupFailure('unsupported');
       log.error('WebGPU not supported');
       return false;
     }
@@ -148,10 +150,17 @@ export class WebGPUContext {
     options: GPURequestAdapterOptions | GPURequestAdapterOptionsWithFeatureLevel | undefined,
     label: string,
   ): Promise<GPUAdapter | null> {
+    const startedAt = performance.now();
     try {
       const request = options ? navigator.gpu.requestAdapter(options) : navigator.gpu.requestAdapter();
-      return await this.withTimeout(request, label);
+      const adapter = await this.withTimeout(request, label);
+      recordGpuAdapterAttempt(label, adapter ? 'ok' : 'null', performance.now() - startedAt);
+      return adapter;
     } catch (error) {
+      if (!(error instanceof GPUInitializationCancelledError)) {
+        recordGpuAdapterAttempt(label, error instanceof GPURequestTimeoutError ? 'timeout'
+          : `rejected:${error instanceof Error ? error.name : typeof error}`, performance.now() - startedAt);
+      }
       // A rejected configuration can recover on another backend/preference.
       // A pending or superseded request must never start another GPU request.
       if (error instanceof GPURequestTimeoutError || error instanceof GPUInitializationCancelledError) throw error;
@@ -231,10 +240,12 @@ export class WebGPUContext {
 
       if (!this.adapter) {
         this.initializationFailure = 'adapter_unavailable';
+        recordGpuStartupFailure('adapter_unavailable');
         log.error('Failed to get GPU adapter (all attempts)');
         return false;
       }
       log.info('Adapter obtained');
+      recordGpuAdapter(this.adapter);
       log.info('Adapter limits', {
         maxTextureDimension2D: this.adapter.limits.maxTextureDimension2D,
         maxStorageBufferBindingSize: this.adapter.limits.maxStorageBufferBindingSize,
@@ -290,6 +301,7 @@ export class WebGPUContext {
 
       if (!this.device) {
         this.initializationFailure = 'device_failed';
+        recordGpuStartupFailure('device_failed');
         log.error('Failed to create GPU device');
         return false;
       }
@@ -367,6 +379,7 @@ export class WebGPUContext {
       this.initializationFailure = error instanceof GPURequestTimeoutError
         ? (error.phase === 'adapter' ? 'adapter_timeout' : 'device_timeout')
         : 'initialization_failed';
+      recordGpuStartupFailure(this.initializationFailure);
       log.error('Failed to initialize WebGPU', error);
       return false;
     }
