@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { findReusableTopLayerTrack, getImageLayers } from '../../src/services/imageDocument/imageLayers';
-import type { TimelineTrack } from '../../src/types';
+import type { TimelineTrack } from '../../src/types/timeline';
 import { createMockClip } from '../helpers/mockData';
 
 function track(id: string, type: TimelineTrack['type'] = 'video', extra: Partial<TimelineTrack> = {}): TimelineTrack {

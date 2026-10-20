@@ -7,7 +7,7 @@ import {
 } from '../../src/components/preview/previewGuideMath';
 import { resolveLayerMoveSnapDelta } from '../../src/components/preview/editModeSnapping';
 import { getGuideSnapPoints } from '../../src/services/compositionGuides';
-import type { Layer } from '../../src/types';
+import type { Layer } from '../../src/types/layers';
 import type { LayerOverlayBounds } from '../../src/components/preview/editModeOverlayMath';
 
 // A 1920x1080 composition shown at half size, 100 px into the preview.

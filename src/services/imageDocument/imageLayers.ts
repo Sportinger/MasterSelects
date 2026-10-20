@@ -1,4 +1,4 @@
-import type { TimelineClip, TimelineTrack } from '../../types';
+import type { TimelineClip, TimelineTrack } from '../../types/timeline';
 
 /** Duration of an image document; layers span all of it, so time never shows. */
 export const IMAGE_DOCUMENT_DURATION = 5;

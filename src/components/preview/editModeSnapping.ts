@@ -1,4 +1,4 @@
-import type { Layer } from '../../types';
+import type { Layer } from '../../types/layers';
 import type { LayerOverlayBounds, OverlayPoint } from './editModeOverlayMath';
 
 export interface AxisSnapPoints {

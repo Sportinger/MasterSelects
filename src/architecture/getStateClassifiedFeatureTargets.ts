@@ -7,7 +7,8 @@ export const classifiedFeatureGetStateHardTargets = [
   { path: 'src/components/panels/documents/NotebookWritingEditor.tsx', maxCurrentHits: 25 },
   { path: 'src/components/panels/media/panel/MediaPanelDocuments.tsx', maxCurrentHits: 2 },
   { path: 'src/components/panels/media/panel/useMediaPanelDragDropMarquee.ts', maxCurrentHits: 1 },
-  { path: 'src/components/panels/media/panel/useMediaPanelSelectionCommands.ts', maxCurrentHits: 5 },
+  // 5 -> 7 on 2026-10-20: Image workspace entry and transcription provider choice.
+  { path: 'src/components/panels/media/panel/useMediaPanelSelectionCommands.ts', maxCurrentHits: 7 },
   { path: 'src/components/panels/media/urlDownload/MediaUrlDownloadDialog.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/nodes/canvas/rendering/NodeGraphCanvasSurface.tsx', maxCurrentHits: 1 },
   { path: 'src/components/panels/nodes/canvas/useNodeCanvasPlacement.ts', maxCurrentHits: 1 },
@@ -72,7 +73,8 @@ export const classifiedFeatureGetStateHardTargets = [
   { path: 'src/services/layerBuilder/videoSyncRecoveryCoordinator.ts', maxCurrentHits: 1 },
   { path: 'src/services/layerPlayback/mediaSync.ts', maxCurrentHits: 2 },
   { path: 'src/services/multicam/audioSyncJobs.ts', maxCurrentHits: 1 },
-  { path: 'src/services/multicam/multicamAngleRuntime.ts', maxCurrentHits: 1 },
+  // 1 -> 2 on 2026-10-20: rebuilding a camera slot when its media plays another file.
+  { path: 'src/services/multicam/multicamAngleRuntime.ts', maxCurrentHits: 2 },
   { path: 'src/services/nodeGraph/publishSceneGraphOutput.ts', maxCurrentHits: 1 },
   { path: 'src/services/nodePreview/sourcePreview.ts', maxCurrentHits: 1 },
   { path: 'src/services/objectTracking/objectMask.ts', maxCurrentHits: 4 },
@@ -84,4 +86,16 @@ export const classifiedFeatureGetStateHardTargets = [
   { path: 'src/services/roto/rotoClipMask.ts', maxCurrentHits: 4 },
   { path: 'src/services/text/textValueLink.ts', maxCurrentHits: 1 },
   { path: 'src/stores/timeline/multicamSlice.ts', maxCurrentHits: 4 },
+  // Classified 2026-10-20 at measured counts: Image workspace (layers, tools,
+  // canvas tools, guides, image documents), media reconnect overlay and the
+  // video-sync playback stop path. Reduction packets lower them.
+  { path: 'src/components/common/toolbar/MediaReconnectOverlay.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/panels/layers/LayersPanel.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/panels/layers/NewImageForm.tsx', maxCurrentHits: 1 },
+  { path: 'src/components/panels/tools/ToolsPanel.tsx', maxCurrentHits: 3 },
+  { path: 'src/components/panels/tools/useToolsPanelBindings.ts', maxCurrentHits: 6 },
+  { path: 'src/services/canvasTools.ts', maxCurrentHits: 8 },
+  { path: 'src/services/compositionGuides.ts', maxCurrentHits: 2 },
+  { path: 'src/services/imageDocument/imageDocumentService.ts', maxCurrentHits: 29 },
+  { path: 'src/services/layerBuilder/videoSyncPlaybackStopPause.ts', maxCurrentHits: 1 },
 ] as const;

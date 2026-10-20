@@ -1,4 +1,4 @@
-import type { TimelineClip } from '../../types';
+import type { TimelineClip } from '../../types/timeline';
 import { useTimelineStore } from '../../stores/timeline';
 import { isAndroidVideoFrameRuntime } from '../../engine/texture/videoFrameCopyPolicy';
 import { vfPipelineMonitor } from '../vfPipelineMonitor';

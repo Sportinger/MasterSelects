@@ -1,7 +1,8 @@
 import { useState, type DragEvent } from 'react';
 import { IconEye, IconEyeOff, IconMask, IconSparkles } from '@tabler/icons-react';
 import { getEffect } from '../../../effects';
-import type { ClipMask, Effect } from '../../../types';
+import type { ClipMask } from '../../../types/masks';
+import type { Effect } from '../../../types/effects';
 
 const EFFECT_DRAG_TYPE = 'application/x-masterselects-layer-effect';
 
