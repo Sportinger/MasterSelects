@@ -6,6 +6,7 @@
 //       [--variants '[{"label":"soft","params":{"radius":4}}, ...]' | --variants-file f.json]
 //       [--images dancer_stage,harbor_town,neon_rain_street] [--width 960]
 //       [--times 0,0.033,0.067] [--url http://localhost:5175]
+//       [--inset 0.7]   # image at 70 % on transparency; the sheet shows cells over a checkerboard
 //
 // Each variant renders on each image; "original" (effect bypassed) is always the first column.
 // Needs a running Vite of this checkout (`npx vite --port 5175 --strictPort`).
@@ -40,13 +41,14 @@ try {
     const images = option('--images', 'dancer_stage,harbor_town,neon_rain_street').split(',');
     const width = Number(option('--width', '960'));
     const times = option('--times') ? option('--times').split(',').map(Number) : undefined;
+    const inset = option('--inset') ? Number(option('--inset')) : undefined;
     const results = [];
     for (const image of images) {
       const row = [];
-      const original = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, bypass: true });
+      const original = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, bypass: true, inset });
       row.push({ label: 'original', ...original });
       for (const variant of variants) {
-        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times });
+        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times, inset });
         row.push({ label: variant.label, params: variant.params, ...result });
       }
       for (const cell of row) {
@@ -72,6 +74,11 @@ try {
         const y = 28 + r * (thumbHeight + label);
         context.fillStyle = '#ccc'; context.font = '13px system-ui';
         context.fillText(`${cell.label}${cell.gpuFailure ? ' (GPU FAILURE)' : ''}`, c * thumbWidth + 6, y + 15);
+        // Checkerboard behind each cell so transparent or dark-fringed edges are visible.
+        for (let ty = 0; ty < thumbHeight; ty += 12) for (let tx = 0; tx < thumbWidth; tx += 12) {
+          context.fillStyle = ((tx + ty) / 12) % 2 ? '#9a9a9a' : '#c8c8c8';
+          context.fillRect(c * thumbWidth + tx, y + label + ty, Math.min(12, thumbWidth - tx), Math.min(12, thumbHeight - ty));
+        }
         context.drawImage(bitmap, c * thumbWidth, y + label, thumbWidth, thumbHeight);
       }
       const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.85 });

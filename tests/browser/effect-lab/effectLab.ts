@@ -22,6 +22,8 @@ export interface EffectLabJob {
   frameRate?: number;
   /** Return the scaled source image without the effect (the "original" column). */
   bypass?: boolean;
+  /** Draw the image at this fraction of the frame, centred on transparency, to check alpha handling. */
+  inset?: number;
 }
 
 const USAGE = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
@@ -80,7 +82,12 @@ async function render(job: EffectLabJob) {
   const width = job.width ?? 960;
   const height = job.height ?? Math.round(width * bitmap.height / bitmap.width);
   const source = gpu.createTexture({ size: [width, height], format: 'rgba8unorm', usage: USAGE });
-  const scaled = await createImageBitmap(bitmap, { resizeWidth: width, resizeHeight: height, resizeQuality: 'high' });
+  let scaled: ImageBitmap | OffscreenCanvas = await createImageBitmap(bitmap, { resizeWidth: width, resizeHeight: height, resizeQuality: 'high' });
+  if (job.inset && job.inset > 0 && job.inset < 1) {
+    const canvas = new OffscreenCanvas(width, height), inner = [Math.round(width * job.inset), Math.round(height * job.inset)];
+    canvas.getContext('2d')!.drawImage(scaled, Math.round((width - inner[0]) / 2), Math.round((height - inner[1]) / 2), inner[0], inner[1]);
+    scaled = canvas;
+  }
   gpu.queue.copyExternalImageToTexture({ source: scaled }, { texture: source }, [width, height]);
   if (job.bypass) {
     const png = await toPng(gpu, source, width, height);
