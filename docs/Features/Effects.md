@@ -1392,6 +1392,20 @@ effects during application.
 Effects with `uniformSize` 0 use no uniform buffer.
 Most effects use a 16-byte-aligned uniform block; a few multi-parameter effects use larger blocks.
 
+### Effect Lab (review and doc stills)
+
+`scripts/effect-lab.mjs` renders one effect through the real `EffectsPipeline` on
+the hardware GPU (`tests/browser/effect-lab/`) and writes a PNG per image and
+parameter variant plus a labelled contact sheet with the original as first
+column. Test images (`tests/browser/effect-lab/images/`) cover skin tones in
+stage light, fine daylight detail and saturated night lights. Run a Vite of the
+checkout first (`npx vite --port 5175 --strictPort`), then for example
+`node scripts/effect-lab.mjs --effect gaussian-blur --variants '[{"label":"r20","params":{"radius":20}}]' --out /tmp/blur`;
+`--list` prints every effect with its parameters, `--times` renders a frame
+sequence for temporal effects. Effects that need clip context (masks, face
+landmarks, temporal source, tracking) render without it and are checked in the
+editor instead.
+
 ### When the GPU cannot build an effect
 
 Building a pipeline can fail on a device in three ways: an invalid shader or
