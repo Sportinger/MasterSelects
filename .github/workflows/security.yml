@@ -74,7 +74,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --manifest-path tools/native-helper/Cargo.toml --all-targets
       - run: cargo install cargo-audit --locked
-      - run: cargo audit --file tools/native-helper/Cargo.lock
+      # RUSTSEC-2026-0381 also names webpki-roots 0.26.11, the final 0.26 release: a shim that
+      # only re-exports webpki-roots 1.x (ureq 2 depends on it). The grep keeps that 1.x crate on
+      # a patched version (>= 1.0.10); drop the ignore once the helper moves to ureq 3.
+      - run: |
+          grep -A1 '^name = "webpki-roots"$' tools/native-helper/Cargo.lock | grep -E '^version = "1\.' | grep -qvE '"1\.0\.[0-9]"$'
+          cargo audit --file tools/native-helper/Cargo.lock --ignore RUSTSEC-2026-0381
 
   secret-scanning:
     runs-on: ubuntu-latest
