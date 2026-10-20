@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-10-20",
+    "type": "fix",
+    "title": "MasterSelects 3.2.5",
+    "description": "Projects whose saved Glow effects came from an earlier alpha-aware version open again instead of failing with \u201cUnknown composition input\u201d. When a project cannot be opened, the message now says why and which effect is affected, and the reason is logged.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-20",
     "type": "improve",
     "title": "MasterSelects 3.2.4",
     "description": "MasterSelects now measures how often the editor can start the GPU, broken down by platform, browser, system version and GPU family, so support for more devices can be planned. Only coarse categories are sent, and the usage-statistics setting, Do Not Track and Global Privacy Control are respected.",
