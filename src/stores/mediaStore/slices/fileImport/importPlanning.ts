@@ -1,5 +1,6 @@
 import type { MediaFile, SignalAssetItem } from '../../types';
 import type { ModelSequenceImportEntry } from '../../../../utils/modelSequence';
+import { toSignalArtifact } from '../../../../artifacts';
 import { artifactService } from '../../../../services/project/domains/ArtifactService';
 import { projectFileService } from '../../../../services/projectFileService';
 import {
@@ -117,7 +118,7 @@ async function persistSignalImportArtifacts(
         metadata: payload.artifact.metadata,
         createdAt: payload.artifact.createdAt,
       });
-      artifactsByOriginalId.set(payload.artifactId, stored.manifest);
+      artifactsByOriginalId.set(payload.artifactId, toSignalArtifact(stored.manifest));
     }
   } catch (error) {
     const target = 'original import storage';
