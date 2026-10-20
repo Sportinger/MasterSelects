@@ -420,6 +420,17 @@ Version bump + changelog (ONLY on explicit release request): `src/version.ts`
 (top-level `version` and `packages[""].version`). Carry-over counting: after
 `1.9` comes `2.0`; after `2.0.9` comes `2.1.0`.
 
+Production deploy (only on explicit request; decision 2026-10-20, user): the
+**full** GitHub `Security Checks` workflow (lint, security tests, the complete
+unit suite in six shards) must be green for the exact commit before it goes
+live. Run it on the task branch with `gh workflow run security.yml --ref
+<branch>` and wait for the result (`gh run watch`); targeted local tests are not
+enough, and the full suite must not run locally (it rotates the bridge token).
+Never deploy a commit with red CI. Then bump the version, build from a clean
+checkout (`sourceDirty: false`), run `npm run deploy:retain-assets`, deploy with
+`wrangler pages deploy dist --project-name masterselects --branch main`, and
+check `/build-info.json` on www.masterselects.com.
+
 Build warnings about mp4box, chunk sizes, and dynamic imports are
 pre-existing — not errors.
 
