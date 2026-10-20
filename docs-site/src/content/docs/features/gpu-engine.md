@@ -80,6 +80,32 @@ Clean `pagehide` completion and a three-second settled startup prevent normal
 reloads from being counted as crashes. Runtime owners and the engine singleton
 remain HMR-safe.
 
+### Pipelines The Driver Cannot Build
+
+A render or compute pipeline can fail in validation, in the driver compiler
+(`internal`, e.g. `CreateGraphicsPipelines failed with VK_ERROR_UNKNOWN` on
+Android Vulkan drivers) or for lack of memory. WebGPU still returns a pipeline
+object; setting it, or a bind group made from its `auto` layout, invalidates the
+whole command buffer, so every layer of the frame disappears.
+
+`guardGpuDevice(device, source)` (`src/engine/core/gpuPipelineGuard.ts`) is
+installed right after every `requestDevice` that renders: the editor
+(`WebGPUContext`), the render worker, thumbnails, look thumbnails and the photo
+guide preview. It scopes every synchronous pipeline creation for all three
+error kinds and remembers failed pipelines. Once one failed, render passes,
+compute passes and render bundles skip its `setPipeline`, draws, dispatches and
+bind groups derived from it, so only that feature is missing (one frame can
+still be lost before the verdict arrives). Healthy devices pay nothing: passes
+are only wrapped after a failure. Each failure is logged with feature, label,
+kind and driver message; the preview shows "Not supported by this graphics
+driver" with the affected features (`PreviewGpuFailureNotice`, full messages as
+tooltip). A new device clears the records of its source.
+
+Callers that must react themselves use `createCheckedPipeline(device, create)`,
+which returns the pipeline and its verdict without opening competing error
+scopes on a guarded device: effects skip and report themselves in the effect
+card, and the HAP export encoder falls back to its CPU encoder.
+
 ### Per-Draw GPU Buffers (Shared Uniform Ring)
 
 `queue.writeBuffer()` is staged before the command buffer it belongs to is

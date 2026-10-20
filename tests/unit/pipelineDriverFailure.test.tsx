@@ -6,6 +6,8 @@ import { clearEffectGpuFailures, getEffectGpuFailure, reportEffectGpuFailure } f
 import { EffectGpuFailureNotice } from '../../src/components/panels/properties/EffectGpuFailureNotice';
 import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
 import { EffectGpuPipelineError } from '../../src/effects/effectGpuFailures';
+import { PreviewGpuFailureNotice } from '../../src/components/preview/PreviewGpuFailureNotice';
+import { clearGpuPipelineFailures, guardGpuDevice } from '../../src/engine/core/gpuPipelineGuard';
 import type { ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import type { ComputeEffectDefinition, FullscreenEffectDefinition } from '../../src/effects/types';
 
@@ -121,6 +123,19 @@ describe('GPU driver failures while building effect pipelines', () => {
     act(() => reportEffectGpuFailure('voxel-relief', DRIVER_FAILURE));
     expect(screen.getByRole('status')).toHaveTextContent(/could not build this effect, so it is skipped/);
     act(() => clearEffectGpuFailures());
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('names a skipped non-effect feature in the preview', async () => {
+    const { device } = deviceWithDriverFailure(/flock/);
+    clearGpuPipelineFailures('editor');
+    render(<PreviewGpuFailureNotice />);
+    expect(screen.queryByRole('status')).toBeNull();
+    guardGpuDevice(device, 'editor');
+    device.createRenderPipeline({ label: 'flock-render' } as GPURenderPipelineDescriptor);
+    await act(flush);
+    expect(screen.getByRole('status')).toHaveTextContent(/Flocking simulation could not be built on this device and is skipped/);
+    act(() => clearGpuPipelineFailures('editor'));
     expect(screen.queryByRole('status')).toBeNull();
   });
 });

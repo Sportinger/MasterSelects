@@ -1,4 +1,5 @@
 import { Logger } from '../logger';
+import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
 import type { ThumbnailResources } from './contracts';
 
 const log = Logger.create('ThumbnailRenderer');
@@ -17,7 +18,7 @@ export async function createThumbnailResources(): Promise<ThumbnailResources | n
     return null;
   }
 
-  const device = await adapter.requestDevice();
+  const device = guardGpuDevice(await adapter.requestDevice(), 'thumbnails');
 
   const { CompositorPipeline } = await import('../../engine/pipeline/CompositorPipeline');
   const { EffectsPipeline } = await import('../../effects/EffectsPipeline');

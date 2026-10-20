@@ -276,7 +276,9 @@ fn fieldForces(sim: SimParams, index: u32, p: Particle, mask: u32) -> vec3f {
       acc += (t / tl) * weight - (q / radial) * op.f2 * weight;
     } else if (kind == 4u) {
       let x = p.pos * op.f1 + vec3f(op.f2, 0.0, 0.0);
-      acc += (vec3f(valueNoise3(x, 1u), valueNoise3(x, 2u), valueNoise3(x, 3u)) * 2.0 - vec3f(1.0)) * op.f0;
+      var noise = vec3f(0.0);
+      for (var channel = 0u; channel < 3u; channel++) { noise[channel] = valueNoise3(x, channel + 1u); }
+      acc += (noise * 2.0 - vec3f(1.0)) * op.f0;
     } else if (kind == 10u) {
       let t = op.f2;
       var weight = 1.0;
@@ -287,8 +289,12 @@ fn fieldForces(sim: SimParams, index: u32, p: Particle, mask: u32) -> vec3f {
         weight = 1.0 - u * u * (3.0 - 2.0 * u);
       }
       let q = p.pos * op.f1 + vec3f(t, t * 0.7, -t * 0.4) + op.v0;
-      var flow = curlNoise3(q);
-      if (op.f3 > 0.0) { flow += curlNoise3(q * 2.07 + vec3f(19.1, -7.3, 11.7)) * (op.f3 * 0.5); }
+      // One curlNoise3 call site for both octaves keeps the inlined shader small.
+      var flow = vec3f(0.0);
+      for (var octave = 0u; octave < select(1u, 2u, op.f3 > 0.0); octave++) {
+        let fine = octave == 1u;
+        flow += curlNoise3(select(q, q * 2.07 + vec3f(19.1, -7.3, 11.7), fine)) * select(1.0, op.f3 * 0.5, fine);
+      }
       acc += flow * op.f0 * weight;
     } else if (kind == 12u) {
       acc += op.v0;
@@ -377,25 +383,26 @@ fn simulate(@builtin(global_invocation_id) gid: vec3u, @builtin(num_workgroups) 
   let generation = p.gen;
   let respawn = e.respawn > 0.5;
 
+  // A single spawnParticle call site: drivers inline it at every call.
+  var spawn = false;
   if (age >= 0.0 && (!isActive || (p.life > 0.0 && age >= p.life))) {
     age = -1.0;
     p.age = -1.0;
-    if (isActive && respawn) {
-      stateOut[slot] = spawnParticle(p, index, e, generation, sim);
-      atomicAdd(&stats[2], 1u);
+    spawn = isActive && respawn;
+  }
+  if (!spawn && age < 0.0) {
+    var birth = 0.0;
+    if (e.birthMode > 0.5) { birth = (f32(localIndex) / e.count) * e.stagger; }
+    spawn = isActive && sim.simTime >= birth && (generation == 0.0 || respawn);
+    if (!spawn) {
+      p.age = -1.0;
+      stateOut[slot] = p;
       return;
     }
   }
-  if (age < 0.0) {
-    var birth = 0.0;
-    if (e.birthMode > 0.5) { birth = (f32(localIndex) / e.count) * e.stagger; }
-    if (isActive && sim.simTime >= birth && (generation == 0.0 || respawn)) {
-      stateOut[slot] = spawnParticle(p, index, e, generation, sim);
-      atomicAdd(&stats[2], 1u);
-    } else {
-      p.age = -1.0;
-      stateOut[slot] = p;
-    }
+  if (spawn) {
+    stateOut[slot] = spawnParticle(p, index, e, generation, sim);
+    atomicAdd(&stats[2], 1u);
     return;
   }
 

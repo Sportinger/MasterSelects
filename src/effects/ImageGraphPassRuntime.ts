@@ -4,7 +4,7 @@ import type { ImageOperatorPlan } from '../services/operators/imageOperatorGraph
 import { imageOperatorRuntimeUniformSize, packImageOperatorRuntimeUniforms, type ImageOperatorResourceMetadata } from '../services/operators/imageOperatorRuntimeUniforms';
 import { imageGraphResourceSampleType, imageGraphResourceViewDimension } from './_shared/imageGraphShaderResources';
 import { motionAnalysisMaxEdge } from './time/motionAnalysisQuality';
-import { canScopePipelineErrors, popPipelineErrorScopes, pushPipelineErrorScopes } from '../engine/core/gpuPipelineErrorScopes';
+import { createCheckedPipeline } from '../engine/core/gpuPipelineGuard';
 import { EffectGpuPipelineError } from './effectGpuFailures';
 import { Logger } from '../services/logger';
 
@@ -147,8 +147,6 @@ export class ImageGraphPassRuntime {
     // A pass the driver could not build must not be set again: it would invalidate the whole frame.
     const failed = this.failedPipelines.get(key);
     if (failed) throw new EffectGpuPipelineError(failed);
-    const scoped = canScopePipelineErrors(this.device);
-    if (scoped) pushPipelineErrorScopes(this.device);
     const module = this.device.createShaderModule({ code: `${commonShader}\n${imageGraphProgramShader(program, 'imageGraphPassFragment', source)}` });
     let layout: GPUPipelineLayout | 'auto' = 'auto';
     if (program.resourceSampling?.includes('exact-u32-pixel-load')) {
@@ -165,16 +163,17 @@ export class ImageGraphPassRuntime {
       const bindGroupLayout = this.device.createBindGroupLayout({ entries });
       layout = this.device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] });
     }
-    const pipeline = this.device.createRenderPipeline({ layout, vertex: { module, entryPoint: 'vertexMain' },
-      fragment: { module, entryPoint: 'imageGraphPassFragment', targets: [{ format }] }, primitive: { topology: 'triangle-list' } });
+    const { pipeline, settled } = createCheckedPipeline(this.device, () => this.device.createRenderPipeline({ label: `image-graph-pass-${program.key}`,
+      layout, vertex: { module, entryPoint: 'vertexMain' },
+      fragment: { module, entryPoint: 'imageGraphPassFragment', targets: [{ format }] }, primitive: { topology: 'triangle-list' } }));
     if (this.pipelines.size >= 64) this.pipelines.delete(this.pipelines.keys().next().value!);
     this.pipelines.set(key, pipeline);
-    if (scoped) void popPipelineErrorScopes(this.device).then(failure => {
+    void settled.then(failure => {
       if (!failure) return;
       if (this.pipelines.get(key) === pipeline) this.pipelines.delete(key);
       this.failedPipelines.set(key, failure.message);
       log.error(`Image graph pass pipeline could not be built (${failure.kind}); the effect is skipped`, failure);
-    }).catch(() => undefined);
+    });
     return pipeline;
   }
 

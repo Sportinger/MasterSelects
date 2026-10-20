@@ -129,7 +129,7 @@ fn voxelMaximumHeight() -> f32 {
 
 fn voxelHeightFromColor(color: vec4f) -> f32 {
   if (params.graphFlags.z > 0.0) {
-    return max(0.0, evaluateScalarField(luminance(color.rgb), params.graphField, u32(params.graphFlags.z), u32(params.graphFlags.w))) * color.a * params.graphBoxSize.z;
+    return max(0.0, voxelEvaluateField(luminance(color.rgb), u32(params.graphFlags.z), u32(params.graphFlags.w))) * color.a * params.graphBoxSize.z;
   }
   let brightness = pow(clamp(luminance(color.rgb), 0.0, 1.0), max(params.heightContrast, 0.001));
   return max(params.baseHeight, 0.0) * color.a + brightness * max(params.heightScale, 0.0) * color.a;
@@ -245,21 +245,25 @@ fn voxelFloorCell(fieldSize: vec2f, p: vec3f) -> VoxelCell {
   return cell;
 }
 
+// Geometry only: the traversal visits up to 576 cells per ray, so the color
+// is sampled once for the hit cell (voxelCellColor) instead of on every step.
 fn voxelCellFromIndex(index: vec2f, fieldSize: vec2f, cellSize: f32) -> VoxelCell {
   let center = (index + vec2f(0.5)) * cellSize;
   let uv = voxelSourceUv(center / fieldSize);
-  let source = voxelHeightTexture(clamp(uv, vec2f(0.0), vec2f(1.0)));
-  let brightness = pow(clamp(luminance(source.rgb), 0.0, 1.0), max(params.heightContrast, 0.001));
-  let height = voxelHeightFromColor(source);
+  let height = voxelHeightFromColor(voxelHeightTexture(clamp(uv, vec2f(0.0), vec2f(1.0))));
   let fill = clamp(1.0 - params.gap, 0.18, 1.0);
 
   var cell: VoxelCell;
   cell.center = center;
   cell.halfSize = vec3f(vec2f(cellSize * 0.5 * fill) * params.graphBoxSize.xy, max(height * 0.5, 0.0005));
   cell.height = max(height, 0.001);
-  cell.color = voxelColorTexture(clamp(uv, vec2f(0.0), vec2f(1.0)));
+  cell.color = vec4f(0.0);
   cell.material = 1.0;
   return cell;
+}
+
+fn voxelCellColor(center: vec2f, fieldSize: vec2f) -> vec4f {
+  return voxelColorTexture(clamp(voxelSourceUv(center / fieldSize), vec2f(0.0), vec2f(1.0)));
 }
 
 fn voxelCellIsInsideVideo(index: vec2f, fieldSize: vec2f, cellSize: f32) -> bool {
@@ -455,6 +459,7 @@ fn voxelTrace(ray: VoxelRay) -> VoxelHit {
           hit.travel = cellTravel;
           hit.sample.dist = 0.0;
           hit.sample.cell = cell;
+          hit.sample.cell.color = voxelCellColor(cell.center, fieldSize);
           break;
         }
       }
@@ -571,13 +576,17 @@ fn voxelReliefFragment(input: VertexOutput) -> @location(0) vec4f {
   if (params.graphFlags.x < 0.5 || params.graphTintOpacity.a <= 0.0) { return vec4f(0.0); }
   // A stable 2x2 sub-pixel pattern suppresses the high-frequency grid moire
   // and smooths thin column silhouettes without relying on temporal blur.
+  // One loop instead of four written-out calls: each call inlined the whole
+  // traversal, which quadrupled the shader that mobile Vulkan compilers rejected.
+  // The uniform-dependent bound (always 4) keeps compilers from unrolling it again.
   let pixelSize = vec2f(1.0 / max(params.width, 1.0), 1.0 / max(params.height, 1.0));
-  let relief = (
-    voxelRenderSample(input.uv + pixelSize * vec2f(-0.25, -0.25)) +
-    voxelRenderSample(input.uv + pixelSize * vec2f(0.25, -0.25)) +
-    voxelRenderSample(input.uv + pixelSize * vec2f(-0.25, 0.25)) +
-    voxelRenderSample(input.uv + pixelSize * vec2f(0.25, 0.25))
-  ) * 0.25;
+  let sampleCount = select(4u, 0u, params.width < 0.0);
+  var relief = vec4f(0.0);
+  for (var sampleIndex = 0u; sampleIndex < sampleCount; sampleIndex += 1u) {
+    let offset = vec2f(f32(sampleIndex & 1u), f32(sampleIndex >> 1u)) * 0.5 - vec2f(0.25);
+    relief += voxelRenderSample(input.uv + pixelSize * offset);
+  }
+  relief *= 0.25;
   let previous = textureSampleLevel(feedbackTex, texSampler, input.uv, 0.0);
   let smoothing = select(clamp(params.temporalBlend, 0.0, 0.94), 0.0, params.reset > 0.5);
   let rgb = mix(relief.rgb, previous.rgb, smoothing);

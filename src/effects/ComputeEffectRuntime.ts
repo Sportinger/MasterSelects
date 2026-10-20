@@ -4,7 +4,7 @@ import type { AnalogSignalPlan } from '../services/operators/analogSignalGraph';
 import type { ComputeImagePlan } from '../services/operators/computeImageGraph';
 import { ImageGraphComputeOutputRuntime } from './ImageGraphComputeOutputRuntime';
 import { JumpFloodRuntime } from './JumpFloodRuntime';
-import { canScopePipelineErrors, popPipelineErrorScopes, pushPipelineErrorScopes } from '../engine/core/gpuPipelineErrorScopes';
+import { createCheckedPipeline } from '../engine/core/gpuPipelineGuard';
 import { reportEffectGpuFailure } from './effectGpuFailures';
 import { Logger } from '../services/logger';
 
@@ -53,24 +53,22 @@ export class ComputeEffectRuntime {
     if (definition.uniformSize > 0) {
       entries.push({ binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } });
     }
-    const scoped = canScopePipelineErrors(this.device);
-    if (scoped) pushPipelineErrorScopes(this.device);
     const layout = this.device.createBindGroupLayout({ label: `compute-effect-${definition.id}-layout`, entries });
     const module = this.device.createShaderModule({ label: `compute-effect-${definition.id}`, code: definition.shader });
-    const pipeline = this.device.createComputePipeline({
+    const { pipeline, settled } = createCheckedPipeline(this.device, () => this.device.createComputePipeline({
       label: `compute-effect-${definition.id}-pipeline`,
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [layout] }),
       compute: { module, entryPoint: definition.entryPoint },
-    });
+    }));
     const state: ComputePipelineState = { pipeline, layout, signature };
     this.states.set(definition.id, state);
-    if (scoped) void popPipelineErrorScopes(this.device).then(failure => {
+    void settled.then(failure => {
       if (!failure || this.states.get(definition.id) !== state) return;
       // An invalid pipeline would invalidate the whole frame's command buffer.
       state.failure = failure.message;
       log.error(`Compute effect pipeline could not be built (${failure.kind}): ${definition.id}; the effect is skipped`, failure);
       reportEffectGpuFailure(definition.id, failure.message);
-    }).catch(() => undefined);
+    });
     return state;
   }
 

@@ -14,6 +14,10 @@
 //     [--step open | --step restore | --step pick:<relative dir> | --step pick:@<mount>[/<dir>] | --step click:<button name regex> | --step wait:<ms>
 //      | --step waitText:<regex> | --step eval:<js expression>]... [--exclude <relative prefix>]...
 //     [--profile <dir>] [--timeout <ms>] [--headed] [--channel chrome|chromium] [--report <file>] [--screenshot <file>]
+//     [--real-gpu] [--measure-pipelines]
+// --real-gpu opens a visible window on the hardware Vulkan driver (headless Chrome only has
+// SwiftShader). --measure-pipelines additionally compiles every pipeline the editor creates
+// asynchronously and reports the driver compile time per pipeline label (heaviest first).
 // Mounts are further read-only folders (e.g. where offline media lives) for relink
 // and folder-access flows. Default steps: open. The report (JSON) has the progress trace, the visible
 // outcome, timings and the editor's runtime warnings/errors.
@@ -24,7 +28,7 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 function parseArgs(argv) {
-  const options = { url: 'http://localhost:5174/editor', steps: [], exclude: [], mounts: [], includes: {}, timeout: 300_000, headed: false, channel: 'chrome',
+  const options = { url: 'http://localhost:5174/editor', steps: [], exclude: [], mounts: [], includes: {}, timeout: 300_000, headed: false, channel: 'chrome', realGpu: false, measurePipelines: false,
     profile: path.join(tmpdir(), 'ms-local-project-harness', 'profile') };
   for (let index = 0; index < argv.length; index += 1) {
     const name = argv[index], value = argv[index + 1];
@@ -40,6 +44,8 @@ function parseArgs(argv) {
     else if (name === '--report') options.report = path.resolve(take());
     else if (name === '--screenshot') options.screenshot = path.resolve(take());
     else if (name === '--headed') options.headed = true;
+    else if (name === '--real-gpu') { options.realGpu = true; options.headed = true; }
+    else if (name === '--measure-pipelines') options.measurePipelines = true;
     else if (name === '--channel') options.channel = take();
     else throw new Error(`Unknown argument: ${name}`);
   }
@@ -114,6 +120,54 @@ function installPickers() {
   window.showOpenFilePicker = async () => { throw new DOMException('The user aborted a request.', 'AbortError'); };
 }
 
+// Runs in the page: times the driver compile of every pipeline the editor creates by
+// compiling a twin asynchronously (measurement only; the editor keeps its own pipeline).
+function installPipelineMeter() {
+  const records = [];
+  window.__harnessPipelines = records;
+  // Drivers cache compiled pipelines, so each one is recompiled from a salted copy of its
+  // shaders, one after another: the time is the driver compile, not cache or queue time.
+  const sources = new WeakMap();
+  const createShaderModule = GPUDevice.prototype.createShaderModule;
+  GPUDevice.prototype.createShaderModule = function (descriptor) {
+    const module = createShaderModule.call(this, descriptor);
+    sources.set(module, descriptor.code);
+    return module;
+  };
+  let queue = Promise.resolve();
+  let salt = 0;
+  const salted = (device, stage) => {
+    if (!stage?.module || !sources.has(stage.module)) return stage;
+    salt += 1;
+    return { ...stage, module: createShaderModule.call(device, { code: `${sources.get(stage.module)}\nconst harness_salt_${salt}: u32 = ${salt}u;` }) };
+  };
+  const wrap = (proto, sync, async) => {
+    const original = proto[sync];
+    proto[sync] = function (descriptor) {
+      const pipeline = original.call(this, descriptor);
+      const label = descriptor.label || descriptor.fragment?.module?.label || descriptor.compute?.module?.label || descriptor.vertex?.module?.label || '(unlabeled)';
+      const saltedCopy = () => {
+        const copy = { ...descriptor, vertex: salted(this, descriptor.vertex), fragment: salted(this, descriptor.fragment), compute: salted(this, descriptor.compute) };
+        for (const key of ['vertex', 'fragment', 'compute']) if (!copy[key]) delete copy[key];
+        return copy;
+      };
+      // Best of two compiles, so compiler warm-up and load during project open do not count.
+      queue = queue.then(async () => {
+        let ms = Infinity, failure;
+        for (let round = 0; round < 2; round += 1) {
+          const started = performance.now();
+          try { await this[async](saltedCopy()); } catch (error) { failure = String(error).slice(0, 200); }
+          ms = Math.min(ms, Math.round(performance.now() - started));
+        }
+        records.push({ label, kind: sync, ms, ...(failure ? { error: failure } : {}) });
+      });
+      return pipeline;
+    };
+  };
+  wrap(GPUDevice.prototype, 'createRenderPipeline', 'createRenderPipelineAsync');
+  wrap(GPUDevice.prototype, 'createComputePipeline', 'createComputePipelineAsync');
+}
+
 // Runs in the page: copies the served folder into OPFS once per folder version.
 async function importFolder({ server, mount, target, signature }) {
   const directory = await window.__harness.opfsDirectory(target);
@@ -184,9 +238,11 @@ async function main() {
       channel: options.channel === 'chromium' ? undefined : options.channel,
       headless: !options.headed, viewport: { width: 1600, height: 1000 },
       // Only this throwaway profile: let production pages read the loopback file server.
-      args: ['--enable-unsafe-webgpu', '--disable-features=LocalNetworkAccessChecks,BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights'],
+      args: ['--enable-unsafe-webgpu', '--disable-features=LocalNetworkAccessChecks,BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights',
+        ...(options.realGpu ? ['--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan', '--ignore-gpu-blocklist'] : [])],
     });
     await context.addInitScript(installPickers);
+    if (options.measurePipelines) await context.addInitScript(installPipelineMeter);
     const page = context.pages()[0] ?? await context.newPage();
     page.on('pageerror', error => mark(`pageerror ${error.message}`));
     // Confirm dialogs (project switch, leave page) are answered like a person continuing.
@@ -250,6 +306,7 @@ async function main() {
     report.final = await page.evaluate(observe);
     report.picked = await page.evaluate(() => window.__harness.picked);
     report.diagnostics = await page.evaluate(diagnostics);
+    if (options.measurePipelines) report.pipelines = await page.evaluate(() => (window.__harnessPipelines ?? []).toSorted((a, b) => b.ms - a.ms));
     if (options.screenshot) await page.screenshot({ path: options.screenshot });
   } catch (error) {
     report.error = error instanceof Error ? error.message : String(error);

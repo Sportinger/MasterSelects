@@ -1,7 +1,8 @@
 import commonShader from './_shared/commonShader';
 import type { FullscreenEffectDefinition } from './types';
 import { Logger } from '../services/logger';
-import { canScopePipelineErrors, popPipelineErrorScopes, pushPipelineErrorScopes } from '../engine/core/gpuPipelineErrorScopes';
+import { canScopePipelineErrors } from '../engine/core/gpuPipelineErrorScopes';
+import { createCheckedPipeline } from '../engine/core/gpuPipelineGuard';
 
 const log = Logger.create('EffectPipelineCache');
 
@@ -54,10 +55,7 @@ export class EffectPipelineCache {
   private create(id: string, effect: FullscreenEffectDefinition, compiledGraph: boolean): void {
     const signature = this.signature(effect);
     const validate = !!this.onPipelineReady && canScopePipelineErrors(this.device);
-    let validationScopeOpen = false;
     try {
-      // Validation alone misses driver compiler failures (internal errors) and OOM.
-      if (validate) { pushPipelineErrorScopes(this.device); validationScopeOpen = true; }
       const shaderModule = this.device.createShaderModule({ label: `effect-${id}`, code: `${commonShader}\n${effect.shader}` });
       const entries: GPUBindGroupLayoutEntry[] = [
         { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
@@ -69,23 +67,24 @@ export class EffectPipelineCache {
       if (effect.byteTexture) entries.push({ binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'uint' } });
       if (effect.landmarkPoints) entries.push({ binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } });
       const layout = this.device.createBindGroupLayout({ label: `effect-${id}-layout`, entries });
-      const pipeline = this.device.createRenderPipeline({
+      const createPipeline = () => this.device.createRenderPipeline({
         label: `effect-${id}-pipeline`,
         layout: this.device.createPipelineLayout({ bindGroupLayouts: [layout] }),
         vertex: { module: shaderModule, entryPoint: 'vertexMain' },
         fragment: { module: shaderModule, entryPoint: effect.entryPoint, targets: [{ format: 'rgba8unorm' }] },
         primitive: { topology: 'triangle-list' },
       });
+      // The verdict covers validation, driver compiler (internal) and out-of-memory failures.
+      const { pipeline, settled } = validate ? createCheckedPipeline(this.device, createPipeline) : { pipeline: createPipeline(), settled: null };
       const commit = () => {
         this.shaderModules.set(id, shaderModule); this.bindGroupLayouts.set(id, layout); this.pipelines.set(id, pipeline);
         this.signatures.set(id, signature); this.failedSignatures.delete(id); this.failureMessages.delete(id);
       };
-      if (!validationScopeOpen) { commit(); return; }
+      if (!settled) { commit(); return; }
       this.pendingSignatures.set(id, signature);
       // Compiled graph programs must be usable synchronously in this exact frame.
       if (compiledGraph) commit();
-      validationScopeOpen = false;
-      void popPipelineErrorScopes(this.device).then(failure => {
+      void settled.then(failure => {
         if (this.pendingSignatures.get(id) !== signature) return;
         this.pendingSignatures.delete(id);
         if (failure) {
@@ -95,14 +94,8 @@ export class EffectPipelineCache {
           return;
         }
         commit(); this.onPipelineReady?.();
-      }).catch(error => {
-        if (compiledGraph) this.pipelines.delete(id);
-        if (this.pendingSignatures.get(id) !== signature) return;
-        this.pendingSignatures.delete(id); this.fail(id, signature, error instanceof Error ? error.message : String(error));
-        log.error(`Effect pipeline validation failed: ${id}`, error);
       });
     } catch (error) {
-      if (validationScopeOpen) void popPipelineErrorScopes(this.device).catch(() => undefined);
       this.fail(id, signature, error instanceof Error ? error.message : String(error));
       log.error(`Failed to create pipeline for ${id}`, error);
     }

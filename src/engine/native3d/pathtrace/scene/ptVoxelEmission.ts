@@ -1,4 +1,4 @@
-import scalarFieldSource from '../../../../shaders/scalarField.wgsl?raw';
+import { scalarFieldShader } from '../../../../shaders/scalarFieldShader';
 import voxelInstanceSource from '../../shaders/VoxelInstance.wgsl?raw';
 import emissionSource from './PtVoxelEmission.wgsl?raw';
 import type { SceneCamera, SceneVoxelLayer } from '../../../scene/types';
@@ -41,7 +41,7 @@ export function ptEmitVoxels(device: GPUDevice, encoder: GPUCommandEncoder, plan
   objects: GPUBuffer, base: number, temporaries: GPUBuffer[]): void {
   let pipeline = pipelines.get(device);
   if (!pipeline) {
-    const module = ptShaderModule(device, 'pt-voxel-emission', [scalarFieldSource, voxelInstanceSource, emissionSource].join('\n'));
+    const module = ptShaderModule(device, 'pt-voxel-emission', [voxelInstanceSource, scalarFieldShader('voxelEvaluateField', 'voxel.graphField'), emissionSource].join('\n'));
     pipeline = ptComputePipeline(device, 'pt-voxel-emission', module, 'emitVoxels');
     pipelines.set(device, pipeline);
   }

@@ -3,7 +3,7 @@
 // blocks, in the object pool, in the layer's local space (the instance carries the layer's world
 // matrix). Records follow PtShape: box p0 (min, relative material) p1 (max, unorm4x8 color);
 // sphere p0 (center, radius) p1.x relative material, p1.y color. Empty blocks get empty bounds.
-// Requires scalarField.wgsl and VoxelInstance.wgsl (bindings 0 and 1 of group 0).
+// Requires VoxelInstance.wgsl (bindings 0 and 1 of group 0) and its voxelEvaluateField (scalarFieldShader).
 
 struct VoxelEmitParams {
   base: u32,       // first vec4 of the layer's records in the object pool

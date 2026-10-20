@@ -6,6 +6,7 @@ import { Logger } from '../../services/logger';
 import { attachWebGPUDeviceDiagnostics, markExpectedWebGPUDeviceDestruction } from '../../services/runtimeDiagnostics';
 import { recordGpuAdapter, recordGpuAdapterAttempt, recordGpuStartupFailure } from '../../services/diagnostics/gpuStartupProbe';
 import type { GPUInitializationFailure } from './gpuInitializationFailure';
+import { guardGpuDevice } from './gpuPipelineGuard';
 
 const log = Logger.create('WebGPUContext');
 
@@ -307,6 +308,7 @@ export class WebGPUContext {
       }
       log.info('GPU device created successfully');
       attachWebGPUDeviceDiagnostics(this.device, 'WebGPUContext');
+      guardGpuDevice(this.device, 'editor');
 
       const initializedDevice = this.device;
       const generation = this.initializationGeneration;
