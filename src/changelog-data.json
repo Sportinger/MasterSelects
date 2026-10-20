@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-10-20",
+    "type": "improve",
+    "title": "MasterSelects 3.2.4",
+    "description": "MasterSelects now measures how often the editor can start the GPU, broken down by platform, browser, system version and GPU family, so support for more devices can be planned. Only coarse categories are sent, and the usage-statistics setting, Do Not Track and Global Privacy Control are respected.",
+    "section": "Release"
+  },
+  {
+    "date": "2026-10-20",
     "type": "fix",
     "title": "MasterSelects 3.2.3",
     "description": "Tabs that stay open across an update keep working: files of recent versions remain available, a part of the app that fails to load triggers a reload even when it breaks the whole screen, offline tabs wait for the connection, and when a reload is not possible a notice explains why and offers one. A fresh, untouched editor no longer counts as unsaved work. When WebGPU cannot start, error reports now name the GPU and the exact system version so support for more devices can be planned.",
