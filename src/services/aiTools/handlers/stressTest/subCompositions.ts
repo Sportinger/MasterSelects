@@ -27,7 +27,7 @@ export async function buildSubComposition(ctx: FixtureBuildContext): Promise<Com
     outPoint: Math.min(6.6, ctx.detail.duration ?? 6.6),
     name: 'sub detail base',
   });
-  addEffect(detailClip.id, 'gaussian-blur', { radius: 3, samples: 9 });
+  addEffect(detailClip.id, 'gaussian-blur', { radius: 3 });
   addEffect(detailClip.id, 'contrast', { amount: 1.28 });
 
   const blendClip = await addMediaSegment({

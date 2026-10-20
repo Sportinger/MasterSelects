@@ -39,6 +39,15 @@ export function premultiplyNodes(g: BlurGraphBuilder, prefix: string, sample: Gr
   return [g.add(prefix, 'vector.combine.rgba', { rgb, alpha: [split, 'alpha'] }), 'image'];
 }
 
+/**
+ * The frame premultiplied into an rgba16float cache (`source-cache`). Blur taps filter between
+ * texels; filtering premultiplied texels is exact, while premultiplying a filtered straight
+ * sample darkens colour wherever an alpha edge falls between the two texels.
+ */
+export function premultipliedSourceCache(g: BlurGraphBuilder): string {
+  return g.add('source-cache', 'image.materialize', { image: premultiplyNodes(g, 'source-premultiplied', ['frame', 'image']) });
+}
+
 /** Weighted sum → average image (weight sums are always positive in the blur recipes). */
 export function normalizeNodes(g: BlurGraphBuilder, prefix: string, reduce: string): GraphPort {
   const weight = g.add(`${prefix}-weight-vec4`, 'convert.scalar-to-vec4', { value: [reduce, 'weightSum'] });

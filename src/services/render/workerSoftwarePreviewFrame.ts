@@ -95,6 +95,9 @@ export interface WorkerLayerBitmapSource {
   readonly driftMs?: number;
 }
 
+/** Output frame size: blur units scale with it (effects/blur/blurSampling.ts). */
+type OutputSize = { readonly width: number; readonly height: number };
+
 type WorkerLayerBitmapSkip = {
   readonly reason: WorkerSoftwarePreviewSkipReason;
   readonly driftMs?: number;
@@ -522,12 +525,12 @@ function geometryFromLayer(layer: Layer): WorkerRenderSoftwareLayerGeometry {
   };
 }
 
-function solidLayerFromLayer(layer: Layer): WorkerRenderSoftwareLayer | null {
+function solidLayerFromLayer(layer: Layer, size?: OutputSize): WorkerRenderSoftwareLayer | null {
   const source = layer.source;
   if (!source || (source.type !== 'solid' && source.type !== 'color') || !source.color) return null;
   const compositeOperation = canvasCompositeOperationForBlendMode(layer.blendMode);
   if (!compositeOperation) return null;
-  const effectPlan = workerSoftwareEffectPlanForLayer(layer);
+  const effectPlan = workerSoftwareEffectPlanForLayer(layer, size);
   if (!effectPlan) return null;
   const transition = workerSoftwareTransitionFromLayer(layer);
   return {
@@ -547,7 +550,7 @@ function solidLayerFromLayer(layer: Layer): WorkerRenderSoftwareLayer | null {
   };
 }
 
-function adjustmentLayerFromLayer(layer: Layer): WorkerRenderSoftwareLayer | null {
+function adjustmentLayerFromLayer(layer: Layer, size?: OutputSize): WorkerRenderSoftwareLayer | null {
   if (layer.source?.type !== 'motion-adjustment') return null;
   const rotation = layerRotationZ(layer);
   if (
@@ -562,7 +565,7 @@ function adjustmentLayerFromLayer(layer: Layer): WorkerRenderSoftwareLayer | nul
   }
   const compositeOperation = canvasCompositeOperationForBlendMode(layer.blendMode);
   if (!compositeOperation) return null;
-  const effectPlan = workerSoftwareEffectPlanForLayer(layer);
+  const effectPlan = workerSoftwareEffectPlanForLayer(layer, size);
   if (!effectPlan) return null;
   return {
     id: layer.id,
@@ -588,13 +591,14 @@ async function bitmapLayerFromSource(
   layer: Layer,
   bitmapSource: WorkerLayerBitmapSource | WorkerLayerBitmapSkip,
   options: WorkerSoftwarePreviewFrameBuildOptions,
+  size?: OutputSize,
 ): Promise<
   | { readonly layer: WorkerRenderSoftwareLayer; readonly decoderKind?: WorkerLayerBitmapDecoderKind; readonly driftMs?: number }
   | WorkerLayerBitmapSkip
 > {
   const compositeOperation = canvasCompositeOperationForBlendMode(layer.blendMode);
   if (!compositeOperation) return { reason: 'unsupported-blend-mode' };
-  const effectPlan = workerSoftwareEffectPlanForLayer(layer);
+  const effectPlan = workerSoftwareEffectPlanForLayer(layer, size);
   if (!effectPlan) return { reason: 'unsupported-effects' };
   if ('reason' in bitmapSource) {
     const heldLayer = options.heldVideoLayers?.get(layer.id);
@@ -809,13 +813,13 @@ async function buildWorkerSoftwarePreviewFrameInternal(
       skippedByReason[unsupportedReason] += 1;
       continue;
     }
-    const solidLayer = solidLayerFromLayer(layer);
+    const solidLayer = solidLayerFromLayer(layer, size);
     if (solidLayer) {
       workerLayers.push(solidLayer);
       solidLayerCount += 1;
       continue;
     }
-    const adjustmentLayer = adjustmentLayerFromLayer(layer);
+    const adjustmentLayer = adjustmentLayerFromLayer(layer, size);
     if (adjustmentLayer) {
       workerLayers.push(adjustmentLayer);
       continue;
@@ -825,6 +829,7 @@ async function buildWorkerSoftwarePreviewFrameInternal(
       layer,
       isPromiseLike(bitmapSource) ? await bitmapSource : bitmapSource,
       options,
+      size,
     );
     if ('layer' in bitmapResult) {
       workerLayers.push(bitmapResult.layer);

@@ -302,13 +302,10 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
         params.rgbSplitAmount = finiteEffectNumber(effectParams.amount, 0.01);
         params.rgbSplitAngle = finiteEffectNumber(effectParams.angle, 0);
         break;
-      case 'gaussian-blur':
-      case 'box-blur':
+      // Gaussian, Box, Motion, Radial and Zoom Blur are image graphs: they never reach this
+      // legacy table (filtered above) and run their own graph in the worker compositor.
       case 'blur':
-        params.blurRadius = Math.max(0, finiteEffectNumber(
-          effectParams.radius,
-          finiteEffectNumber(effectParams.amount, effectType === 'box-blur' ? 5 : 10),
-        ));
+        params.blurRadius = Math.max(0, finiteEffectNumber(effectParams.radius, finiteEffectNumber(effectParams.amount, 10)));
         break;
       case 'exposure':
         params.exposure = finiteEffectNumber(effectParams.exposure, 0);

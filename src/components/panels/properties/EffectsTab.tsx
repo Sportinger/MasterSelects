@@ -39,6 +39,10 @@ import { LandmarkTrackingControls } from './LandmarkTrackingControls';
 import { EffectCatalogPicker } from './EffectCatalogPicker';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 import { EffectGpuFailureNotice } from './EffectGpuFailureNotice';
+import { EffectBudgetNotice } from './EffectBudgetNotice';
+import { ResolveEffectParamRow } from './ResolveEffectParamRow';
+import { RESOLVE_ROW_EFFECTS } from './resolveEffectRows';
+import { effectParamDefinitions } from '../../../services/operators/effectParamVisibility';
 import './effectValueControls.css';
 
 type PrimitiveEffectParamValue = number | boolean | string;
@@ -227,6 +231,7 @@ const EffectParams = memo(function EffectParams(props: EffectParamsViewProps) {
   return <EffectSectionBypass clipId={clipId} effectId={effect.id}>
     <ExposedGraphValueControls clipId={clipId} effect={effect} />
     <EffectParamsContent {...props} onChange={onChange} onParamCommit={onParamCommit} />
+    <EffectBudgetNotice effectType={effect.type} params={effect.params} />
   </EffectSectionBypass>;
 }, (previous, next) => previous.clipId === next.clipId
   && previous.effect.id === next.effect.id && previous.effect.type === next.effect.type
@@ -260,7 +265,15 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   if (effect.type === 'splat-exploration' && clipId) return <SplatExplorationControls clipId={clipId} effectId={effect.id} />;
   if (effect.type === 'voxel-relief' && clipId) return <VoxelReliefControls clipId={clipId} effectId={effect.id} />;
 
-  const parameterGroups = groupEffectParameters(effectDef.params);
+  // Hidden/retired parameters follow what this instance's graph actually reads.
+  const parameterGroups = groupEffectParameters(effectParamDefinitions(effect));
+  const resolveRows = RESOLVE_ROW_EFFECTS.has(effect.type);
+  const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false) => {
+    const value = effect.params[paramName] ?? paramDef.default;
+    const resolved = resolveRows ? <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef} value={value} effect={effect}
+      clipId={clipId} onChange={onChange} onDragStart={onDragStart} onDragEnd={onDragEnd} onParamCommit={onParamCommit} /> : null;
+    return resolved ?? renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, noMaxLimit, onDragStart, onDragEnd, onParamCommit);
+  };
   const ExtraControls = EXTRA_CONTROLS_REGISTRY[effectDef.id];
   const ungroupedParams = parameterGroups.find((group) => group.id === '__ungrouped__')?.params ?? [];
   const namedGroups = parameterGroups.filter((group) => !group.quality && group.label);
@@ -284,10 +297,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
     <>
       {ungroupedParams.length > 0 && (
         <div className="effect-param-section">
-          {ungroupedParams.map(([paramName, paramDef]) => {
-            const value = effect.params[paramName] ?? paramDef.default;
-            return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, false, onDragStart, onDragEnd, onParamCommit);
-          })}
+          {ungroupedParams.map(([paramName, paramDef]) => row(paramName, paramDef))}
         </div>
       )}
 
@@ -295,10 +305,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
         return (
           <ResolveInspectorSection key={group.id} title={group.label!} defaultOpen={group.id !== 'group:camera'}>
               <div className="effect-quality-params">
-                {group.params.map(([paramName, paramDef]) => {
-                  const value = effect.params[paramName] ?? paramDef.default;
-                  return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, false, onDragStart, onDragEnd, onParamCommit);
-                })}
+                {group.params.map(([paramName, paramDef]) => row(paramName, paramDef))}
               </div>
           </ResolveInspectorSection>
         );
@@ -322,11 +329,8 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
           </div>
           {qualityExpanded && (
             <div className="effect-quality-params">
-              {qualityParams.map(([paramName, paramDef]) => {
-                const value = effect.params[paramName] ?? paramDef.default;
-                // Quality params have no max limit when dragging
-                return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, true, onDragStart, onDragEnd, onParamCommit);
-              })}
+              {/* Quality params have no max limit when dragging */}
+              {qualityParams.map(([paramName, paramDef]) => row(paramName, paramDef, true))}
               <div className="effect-quality-warning">
                 High values may cause slowdowns
               </div>

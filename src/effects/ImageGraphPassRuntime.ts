@@ -14,7 +14,8 @@ export type ImageGraphPassSource = { kind: 'texture'; view: GPUTextureView } | {
 export interface ImageGraphPassBatch {
   readonly encoded: Map<string, { view: GPUTextureView; identity: string }>;
   readonly resources: Map<string, { view: GPUTextureView; identity: string }>;
-  readonly transientTextures: GPUTexture[];
+  /** Pooled pass textures this batch holds until `releaseBatch` or the next encoder. */
+  readonly leases: PooledPassTexture[];
   encoder?: GPUCommandEncoder;
   sourceResource?: GPUTextureView | GPUExternalTexture; sampler?: GPUSampler; width?: number; height?: number; timelineTimeSeconds?: number;
 }
@@ -27,12 +28,17 @@ export interface ImageGraphExternalResource {
   disTrajectory?: import('./time/DisTrajectory').DisTrajectory;
   temporalSamples?: import('./time/TemporalSampleMetadata').TemporalSampleMetadata;
 }
-interface Allocation { width: number; height: number; topology: string; textures: Map<string, GPUTexture>; views: Map<string, GPUTextureView> }
+/** A pass-boundary texture. Its content only lives from its producer pass to the end of one encode (or batch). */
+export interface PooledPassTexture { readonly texture: GPUTexture; readonly view: GPUTextureView; readonly key: string; lastUsed: number }
+/** Free pool textures unused for this many encoders are destroyed. */
+const STALE_ENCODERS = 120;
 
 export interface EncodeImageGraphPassesOptions {
   encoder: GPUCommandEncoder; sampler: GPUSampler; source: ImageGraphPassSource;
   width: number; height: number; timelineTimeSeconds: number; plan: ImageOperatorPlan;
-  outputView?: GPUTextureView; outputFormat?: GPUTextureFormat; instanceId: string;
+  outputView?: GPUTextureView; outputFormat?: GPUTextureFormat;
+  /** Caller's effect occurrence (diagnostics); pass textures are pooled, not owned per instance. */
+  instanceId: string;
   stopAtResourceId?: string;
   /** Ephemeral dedupe scope. Create once per capture/encode batch and then discard. */
   batch?: ImageGraphPassBatch;
@@ -40,13 +46,22 @@ export interface EncodeImageGraphPassesOptions {
   externalResources?: ReadonlyMap<string, ImageGraphExternalResource>;
 }
 
-/** Owns transient GPU allocations for compiled multi-pass image programs. */
+/**
+ * Owns the transient GPU textures of compiled multi-pass image programs. Pass-boundary caches
+ * are rebuilt on every encode, so they come from one pool keyed by size (all rgba16float):
+ * a texture is leased for one encode call, or for a batch until `releaseBatch`, and every
+ * lease returns to the pool when a new command encoder starts. Commands of one encoder run in
+ * recording order and whole command buffers in submission order, so a returned texture can be
+ * written by the next lease safely. Many effect instances share a few textures per size.
+ */
 export class ImageGraphPassRuntime {
   private readonly device: GPUDevice;
   private readonly pipelines = new Map<string, GPURenderPipeline>();
   private readonly failedPipelines = new Map<string, string>();
-  private readonly allocations = new Map<string, Allocation>();
-  private readonly activeAllocationKeys = new Map<string, string>();
+  private readonly free = new Map<string, PooledPassTexture[]>();
+  private readonly leased = new Set<PooledPassTexture>();
+  private encoder?: GPUCommandEncoder;
+  private generation = 0;
   private disposed = false;
 
   constructor(device: GPUDevice) {
@@ -54,7 +69,9 @@ export class ImageGraphPassRuntime {
     void device.lost.then(() => this.dispose());
   }
 
-  createBatch(): ImageGraphPassBatch { return { encoded: new Map(), resources: new Map(), transientTextures: [] }; }
+  createBatch(): ImageGraphPassBatch { return { encoded: new Map(), resources: new Map(), leases: [] }; }
+  /** The batch's resources are no longer read: its textures go back to the pool. */
+  releaseBatch(batch: ImageGraphPassBatch | undefined): void { if (batch) this.giveBack(batch.leases.splice(0)); }
   getBatchResourceView(batch: ImageGraphPassBatch, resourceId: string) { return batch.resources.get(resourceId)?.view; }
 
   encode(options: EncodeImageGraphPassesOptions): boolean {
@@ -84,8 +101,14 @@ export class ImageGraphPassRuntime {
       ? { ...resource, maxEdge: Math.min(resource.maxEdge, analysisEdge) } : resource);
     const descriptors = new Map(resources.map(item => [item.id, item]));
     const ids = new Set(descriptors.keys());
-    const topology = `${options.plan.key}:${resources.map(resource => resource.maxEdge ?? 0).join(',')}:${passes.map(pass => `${pass.id}>${pass.outputResource ?? 'final'}:${pass.inputResources.join(',')}`).join('|')}`;
-    const allocation = this.allocation(options.instanceId, topology, options.width, options.height, resources);
+    this.beginEncoder(options.encoder);
+    const leases: PooledPassTexture[] = [];
+    try { return this.encodePasses(options, passes, descriptors, ids, leases); }
+    finally { if (options.batch) options.batch.leases.push(...leases); else this.giveBack(leases); }
+  }
+
+  private encodePasses(options: EncodeImageGraphPassesOptions, passes: NonNullable<ImageOperatorPlan['passes']>,
+    descriptors: Map<string, NonNullable<ImageOperatorPlan['resources']>[number]>, ids: Set<string>, leases: PooledPassTexture[]): boolean {
     const produced = new Set<string>();
     const localViews = new Map<string, GPUTextureView>(), identities = new Map<string, string>();
     const metadata = new Map<string, ImageOperatorResourceMetadata>();
@@ -110,13 +133,8 @@ export class ImageGraphPassRuntime {
       const shared = producerIdentity ? options.batch?.encoded.get(producerIdentity) : undefined;
       if (pass.outputResource && shared) { localViews.set(pass.outputResource, shared.view); identities.set(pass.outputResource, shared.identity); produced.add(pass.outputResource);
         options.batch?.resources.set(pass.outputResource, shared); if (pass.outputResource === options.stopAtResourceId) break; continue; }
-      let output = pass.outputResource ? allocation.views.get(pass.outputResource) : options.outputView;
-      const priorResource = pass.outputResource ? options.batch?.resources.get(pass.outputResource) : undefined;
-      if (pass.outputResource && priorResource && priorResource.identity !== producerIdentity) {
-        const texture = this.device.createTexture({ size: { width, height }, format: 'rgba16float',
-          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
-        options.batch!.transientTextures.push(texture); output = texture.createView();
-      }
+      let output = options.outputView;
+      if (pass.outputResource) { const lease = this.lease(width, height); leases.push(lease); output = lease.view; }
       if (!output) throw new Error(`Image graph pass ${pass.id} has no output resource.`);
       if (pass.outputResource && descriptors.get(pass.outputResource)?.producerPassId !== pass.id)
         throw new Error(`Image graph resource ${pass.outputResource} has the wrong producer.`);
@@ -130,7 +148,7 @@ export class ImageGraphPassRuntime {
         this.device.queue.writeBuffer(buffer, 0, packed);
         entries.push({ binding: 2, resource: { buffer } });
       }
-      pass.inputResources.forEach((id, index) => entries.push({ binding: 3 + index, resource: localViews.get(id) ?? allocation.views.get(id)! }));
+      pass.inputResources.forEach((id, index) => entries.push({ binding: 3 + index, resource: localViews.get(id)! }));
       const bind = this.device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries });
       const render = options.encoder.beginRenderPass({ colorAttachments: [{ view: output, loadOp: 'clear', storeOp: 'store' }] });
       render.setPipeline(pipeline); render.setBindGroup(0, bind); render.draw(6); render.end();
@@ -177,39 +195,47 @@ export class ImageGraphPassRuntime {
     return pipeline;
   }
 
-  private allocation(instanceId: string, topology: string, width: number, height: number, resources: readonly { id: string; maxEdge?: number }[]): Allocation {
-    const allocationKey = `${instanceId}:${width}x${height}:${topology}`;
-    const found = this.allocations.get(allocationKey);
-    if (found) { this.allocations.delete(allocationKey); this.allocations.set(allocationKey, found); return found; }
-    const previousKey = this.activeAllocationKeys.get(instanceId);
-    // Drop ownership without destroy(): replacement may happen while the old
-    // views are referenced by commands recorded into an unsubmitted encoder.
-    // The encoder/batch keeps them alive until WebGPU can retire them safely.
-    if (previousKey && previousKey !== allocationKey) this.allocations.delete(previousKey);
-    const next: Allocation = { width, height, topology, textures: new Map(), views: new Map() };
-    for (const resource of resources) { const scale = resource.maxEdge ? Math.min(1, resource.maxEdge / Math.max(width, height)) : 1;
-      const texture = this.device.createTexture({ size: { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) }, format: 'rgba16float',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING }); next.textures.set(resource.id, texture); next.views.set(resource.id, texture.createView()); }
-    this.allocations.set(allocationKey, next); this.activeAllocationKeys.set(instanceId, allocationKey);
-    if (this.allocations.size > 32) {
-      // As above, eviction can occur before submission; explicit destruction
-      // requires a submission-retirement owner outside this synchronous runtime.
-      const retiredKey = this.allocations.keys().next().value!; this.allocations.delete(retiredKey);
-      for (const [owner, key] of this.activeAllocationKeys) if (key === retiredKey) this.activeAllocationKeys.delete(owner);
+  /** A new command encoder: every lease of the previous one returns to the pool; long unused textures are destroyed. */
+  private beginEncoder(encoder: GPUCommandEncoder): void {
+    if (encoder === this.encoder) return;
+    this.encoder = encoder; this.generation++;
+    this.giveBack([...this.leased]);
+    const stale: PooledPassTexture[] = [];
+    for (const [key, list] of this.free) {
+      const kept = list.filter(item => this.generation - item.lastUsed <= STALE_ENCODERS || (stale.push(item), false));
+      if (kept.length) this.free.set(key, kept); else this.free.delete(key);
     }
-    return next;
+    // Their last encoder is long finished; wait for the queue before destroying anyway.
+    if (stale.length) void this.device.queue.onSubmittedWorkDone().then(() => stale.forEach(item => item.texture.destroy()), () => undefined);
   }
 
-  release(instanceId: string): void {
-    const key = this.activeAllocationKeys.get(instanceId);
-    if (!key) return;
-    const allocation = this.allocations.get(key);
-    this.activeAllocationKeys.delete(instanceId); this.allocations.delete(key);
-    if (allocation) void Promise.resolve().then(() => this.device.queue.onSubmittedWorkDone())
-      .then(() => this.destroyAllocation(allocation), () => this.destroyAllocation(allocation));
+  private lease(width: number, height: number): PooledPassTexture {
+    const key = `${width}x${height}`;
+    const reused = this.free.get(key)?.pop();
+    const item = reused ?? (() => {
+      const texture = this.device.createTexture({ label: `image-graph-pass-${key}`, size: { width, height }, format: 'rgba16float',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
+      return { texture, view: texture.createView(), key, lastUsed: this.generation };
+    })();
+    this.leased.add(item);
+    return item;
   }
 
-  private destroyAllocation(value: Allocation) { for (const texture of value.textures.values()) texture.destroy(); }
-  dispose() { if (this.disposed) return; this.disposed = true; for (const value of this.allocations.values()) this.destroyAllocation(value);
-    this.activeAllocationKeys.clear(); this.allocations.clear(); this.pipelines.clear(); this.failedPipelines.clear(); }
+  private giveBack(items: readonly PooledPassTexture[]): void {
+    for (const item of items) {
+      if (!this.leased.delete(item)) continue;
+      item.lastUsed = this.generation;
+      const list = this.free.get(item.key) ?? [];
+      list.push(item); this.free.set(item.key, list);
+    }
+  }
+
+  /** Pooled textures currently held (leased) and idle (free), for diagnostics and tests. */
+  poolStats(): { leased: number; free: number } {
+    return { leased: this.leased.size, free: [...this.free.values()].reduce((total, list) => total + list.length, 0) };
+  }
+
+  dispose() { if (this.disposed) return; this.disposed = true;
+    for (const item of [...this.leased, ...[...this.free.values()].flat()]) item.texture.destroy();
+    this.leased.clear(); this.free.clear(); this.pipelines.clear(); this.failedPipelines.clear(); }
 }

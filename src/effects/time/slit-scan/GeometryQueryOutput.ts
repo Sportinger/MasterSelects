@@ -14,8 +14,6 @@ export class GeometryQueryOutput {
   trajectory?: import('../DisTrajectory').DisTrajectory;
   private texture?: GPUTexture;
   private device?: GPUDevice;
-  private runtime?: SlitScanGeometryCapture['passRuntime'];
-  private instanceId?: string;
   private compiled?: { key: string; values: string; resources: string; graph: SlitScanGeometryCapture['graph']; plan: ReturnType<typeof compileImageOperatorGraph> };
 
   capture(frame: SlitScanGeometryCapture, samplerId: string, motion = false): GPUTextureView | undefined {
@@ -53,19 +51,16 @@ export class GeometryQueryOutput {
     const renderPlan = plan.passes?.length ? plan : { ...plan, passes: [
       { id: 'slit-scan-query-output', program: plan, inputResources: plan.resourceInputs ?? [] },
     ] };
-    this.runtime = frame.passRuntime;
-    this.instanceId = JSON.stringify(['slit-scan-query', this.purpose, motion, frame.scopeId, frame.effect.id]);
+    // Pass caches are pooled by the shared runtime; nothing per query to release later.
     const encoded = frame.passRuntime.encode({ encoder: frame.encoder, sampler: frame.sampler,
       source: { kind: 'texture', view: frame.input }, width: frame.width, height: frame.height,
       timelineTimeSeconds: frame.timelineTime, plan: renderPlan, outputView: view, outputFormat: 'rgba32float',
-      instanceId: this.instanceId, externalResources: resources });
+      instanceId: JSON.stringify(['slit-scan-query', this.purpose, motion, frame.scopeId, frame.effect.id]), externalResources: resources });
     if (!encoded) throw new Error('Slit Scan numeric query did not render.');
     return view;
   }
 
   destroy(): void {
-    if (this.instanceId) this.runtime?.release(this.instanceId);
-    this.instanceId = undefined; this.runtime = undefined;
     const texture = this.texture, device = this.device;
     this.texture = undefined; this.device = undefined;
     if (texture && device) void Promise.resolve().then(() => device.queue.onSubmittedWorkDone())

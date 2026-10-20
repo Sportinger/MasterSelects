@@ -1,9 +1,11 @@
 // Separable Gaussian / Box Blur: WGSL reference of the editable operator graph
 // (services/operators/blurEffectGraphs.ts), following effects/blur/blurSampling.ts.
-// Rendering is owned by the graph. `separableBlurHorizontal` and `separableBlurVertical`
-// are its two passes (the GPU check compares them with the graph); `gaussianBlurFragment`
-// and `boxBlurFragment` are the registered single-pass entries for the generic effect
-// layout: they evaluate the horizontal pass at the two cache rows a vertical tap filters.
+// Rendering is owned by the graph. `separableBlurPremultiply`, `separableBlurHorizontal` and
+// `separableBlurVertical` are its three passes (the GPU check compares them with the graph);
+// `gaussianBlurFragment` and `boxBlurFragment` are the registered single-pass entries for the
+// generic effect layout (pipeline prewarm only): they evaluate the horizontal pass at the two
+// cache rows a vertical tap filters and premultiply after filtering, an approximation at
+// alpha edges that the graph avoids with its premultiplied source cache.
 
 struct SeparableBlurParams {
   radius: f32,  // pixels on a 1080p frame (shorter side 1080 px)
@@ -50,7 +52,7 @@ fn separableTap(kernel: SeparableKernel, k: i32) -> vec2f {
 fn premultiplied(color: vec4f) -> vec4f { return vec4f(color.rgb * color.a, color.a); }
 fn straight(color: vec4f) -> vec4f { return vec4f(color.rgb / max(color.a, 0.000001), color.a); }
 
-// One pass along `axis`; the horizontal pass premultiplies the straight source.
+// One pass along `axis` over premultiplied input; `premultiply` filters a straight source instead.
 fn separablePass(uv: vec2f, axis: vec2f, premultiply: bool) -> vec4f {
   let kernel = separableKernel();
   let resolution = vec2f(params.width, params.height);
@@ -67,8 +69,13 @@ fn separablePass(uv: vec2f, axis: vec2f, premultiply: bool) -> vec4f {
 }
 
 @fragment
+fn separableBlurPremultiply(input: VertexOutput) -> @location(0) vec4f {
+  return premultiplied(textureSampleLevel(inputTex, texSampler, input.uv, 0.0));
+}
+
+@fragment
 fn separableBlurHorizontal(input: VertexOutput) -> @location(0) vec4f {
-  return separablePass(input.uv, vec2f(1.0, 0.0), true);
+  return separablePass(input.uv, vec2f(1.0, 0.0), false);
 }
 
 @fragment

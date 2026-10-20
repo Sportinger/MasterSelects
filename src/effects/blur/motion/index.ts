@@ -1,4 +1,4 @@
-// Motion Blur: two-stage directional blur along an on-screen angle; length is a share of the frame width.
+// Motion Blur: two-stage directional blur along an on-screen angle; Length reaches a share of the frame size to each side.
 // Rendering is owned by the editable operator graph (services/operators/directionalBlurEffectGraphs.ts);
 // directionalBlur.wgsl is its WGSL reference. Contract: ../blurSampling.ts.
 

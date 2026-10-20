@@ -1,0 +1,99 @@
+// What blur parameters do on a given instance, said instead of done silently: retired and
+// graph-only parameters follow the instance's graph, zero strength skips the passes, and limits
+// at the frame size come back as notes.
+import { afterEach, describe, expect, it } from 'vitest';
+import { blurBudgetNotes } from '../../src/effects/blur/blurSampling';
+import { effectParamDefinitions, unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
+import { isNeutralBlurEffect } from '../../src/services/operators/blurIdentity';
+import { createDefaultGaussianBlurGraph } from '../../src/services/operators/blurEffectGraphs';
+import { createLegacyGaussianBlurGraph } from '../../src/services/operators/legacyBlurEffectGraphs';
+import { createLegacyRadialBlurGraph } from '../../src/services/operators/legacyDirectionalBlurEffectGraphs';
+import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
+import { useTimelineStore } from '../../src/stores/timeline';
+import { executeAITool } from '../../src/services/aiTools';
+import { createMockClip, createMockTrack } from '../helpers/mockData';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
+
+/** A saved legacy graph with one literal changed: user work, kept as saved. */
+function editedLegacy(create: () => EffectOperatorGraph): EffectOperatorGraph {
+  const graph = create();
+  const literal = graph.nodes.find(node => node.operator === 'values.number' && node.constants && !Object.keys(node.bindings).length && node.id === 'half')
+    ?? graph.nodes.find(node => node.operator === 'values.number' && node.constants && !Object.keys(node.bindings).length)!;
+  literal.constants = { value: Number(literal.constants!.value) + 0.25 };
+  return graph;
+}
+
+describe('blur parameters follow the instance graph', () => {
+  it('hides the retired Samples on the current recipe and says it does nothing', () => {
+    const effect = { type: 'gaussian-blur', params: { radius: 10, samples: 9 } };
+    expect(effectParamDefinitions(effect).samples.hidden).toBe(true);
+    expect(unusedParamWarnings(effect, ['radius', 'samples'])).toEqual([expect.stringMatching(/^samples: .*no effect/)]);
+  });
+
+  it('shows Samples again on an edited legacy graph that still reads it, without a warning', () => {
+    const effect = { type: 'gaussian-blur', params: { radius: 10, samples: 9 }, operatorGraph: editedLegacy(createLegacyGaussianBlurGraph) };
+    expect(effectParamDefinitions(effect).samples.hidden).toBe(false);
+    expect(unusedParamWarnings(effect, ['samples'])).toEqual([]);
+  });
+
+  it('hides Radial Type on an edited legacy graph that does not read it, and warns when it is set', () => {
+    const current = { type: 'radial-blur', params: { mode: 'spin' } };
+    expect(effectParamDefinitions(current).mode.hidden).toBeFalsy();
+    expect(unusedParamWarnings(current, ['mode'])).toEqual([]);
+    const legacy = { type: 'radial-blur', params: { mode: 'spin' }, operatorGraph: editedLegacy(createLegacyRadialBlurGraph) };
+    expect(effectParamDefinitions(legacy).mode.hidden).toBe(true);
+    expect(effectParamDefinitions(legacy).samples.hidden).toBe(false);
+    expect(unusedParamWarnings(legacy, ['mode'])).toEqual([expect.stringMatching(/^mode: .*does not read it/)]);
+  });
+});
+
+describe('zero-strength blurs skip their passes', () => {
+  it('treats a blur at zero as the identity only for the built-in recipe', () => {
+    expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0 } }, 1920, 1080)).toBe(true);
+    expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0.1 } }, 1920, 1080)).toBe(true);
+    expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 1 } }, 1920, 1080)).toBe(false);
+    expect(isNeutralBlurEffect({ type: 'box-blur', params: { radius: 0 } }, 3840, 2160)).toBe(true);
+    expect(isNeutralBlurEffect({ type: 'box-blur', params: { radius: 0.01 } }, 1920, 1080)).toBe(false);
+    for (const type of ['motion-blur', 'zoom-blur', 'radial-blur']) {
+      expect(isNeutralBlurEffect({ type, params: { amount: 0 } }, 1920, 1080), type).toBe(true);
+      expect(isNeutralBlurEffect({ type, params: { amount: 0.01 } }, 1920, 1080), type).toBe(false);
+    }
+    // A saved copy of the recipe (packed, moved) still counts; an edited graph may do more than blur.
+    const saved = recognizeOperatorCompositions(createDefaultGaussianBlurGraph());
+    saved.layout = Object.fromEntries(Object.keys(saved.layout).map(id => [id, { x: 3, y: 4 }]));
+    expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0 }, operatorGraph: saved }, 1920, 1080)).toBe(true);
+    const edited = createDefaultGaussianBlurGraph();
+    edited.nodes.find(node => node.id === 'coverage-floor')!.constants = { value: 0.5 };
+    expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0 }, operatorGraph: edited }, 1920, 1080)).toBe(false);
+    expect(isNeutralBlurEffect({ type: 'sharpen', params: { radius: 0 } }, 1920, 1080)).toBe(false);
+  });
+});
+
+describe('blur limits are reported, not applied silently', () => {
+  it('says when a separable kernel spreads its reads or a streak outgrows the tap budget', () => {
+    expect(blurBudgetNotes('gaussian-blur', { radius: 50 }, 1920, 1080)).toEqual([]);
+    expect(blurBudgetNotes('gaussian-blur', { radius: 50 }, 7680, 4320)).toEqual([expect.stringMatching(/Radius 50 reaches 300 px .*7680×4320.*spread/)]);
+    expect(blurBudgetNotes('box-blur', { radius: 300 }, 1920, 1080)).toHaveLength(1);
+    expect(blurBudgetNotes('motion-blur', { amount: 0.3 }, 7680, 4320)).toEqual([]);
+    expect(blurBudgetNotes('motion-blur', { amount: 3 }, 7680, 4320)).toEqual([expect.stringMatching(/stepped/)]);
+    expect(blurBudgetNotes('radial-blur', { amount: 20 }, 1920, 1080)).toEqual(expect.arrayContaining([expect.stringMatching(/centre/)]));
+    expect(blurBudgetNotes('zoom-blur', { amount: -3 }, 1920, 1080)).toEqual(expect.arrayContaining([expect.stringMatching(/centre/)]));
+    expect(blurBudgetNotes('brightness', { amount: 1 }, 1920, 1080)).toEqual([]);
+  });
+});
+
+describe('effect tools report what a blur parameter does on this instance', () => {
+  const initial = useTimelineStore.getState();
+  afterEach(() => useTimelineStore.setState(initial));
+
+  it('offers only visible parameters as valid and returns limit notes', async () => {
+    const clip = createMockClip({ id: 'c', trackId: 't', duration: 4, effects: [] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 't' })], clipKeyframes: new Map() });
+    const added = await executeAITool('addEffect', { clipId: 'c', effectType: 'gaussian-blur', params: { radius: 400 } }, 'internal');
+    expect((added.data as { warnings?: string[] }).warnings).toEqual([expect.stringMatching(/^Radius 400 reaches/)]);
+    const effectId = (added.data as { effectId: string }).effectId;
+    const wrong = await executeAITool('updateEffect', { clipId: 'c', effectId, params: { raduis: 3 } }, 'internal');
+    expect(wrong.success).toBe(false);
+    expect(wrong.error).toMatch(/Valid: radius$/);
+  });
+});

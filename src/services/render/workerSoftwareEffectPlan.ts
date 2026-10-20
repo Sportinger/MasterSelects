@@ -7,6 +7,7 @@ import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
+import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
@@ -140,19 +141,9 @@ interface MutableWorkerSoftwarePixelEffects {
     vignetteSoftness: number;
     samples: number;
   }[];
-  motionBlurAdjustments?: { amount: number; angle: number; samples: number }[];
-  radialBlurAdjustments?: {
-    amount: number;
-    centerX: number;
-    centerY: number;
-    samples: number;
-  }[];
-  zoomBlurAdjustments?: {
-    amount: number;
-    centerX: number;
-    centerY: number;
-    samples: number;
-  }[];
+  motionBlurAdjustments?: { amount: number; angle: number }[];
+  radialBlurAdjustments?: { amount: number; centerX: number; centerY: number; mode: 'zoom' | 'spin' }[];
+  zoomBlurAdjustments?: { amount: number; centerX: number; centerY: number }[];
   sourceResamplingEffectCount?: number;
   feedbackEffectCount?: number;
   colorGradePrimaryNodes?: RuntimePrimaryColorParams[];
@@ -192,10 +183,20 @@ function canAddFeedbackEffect(pixelEffects: MutableWorkerSoftwarePixelEffects): 
   return pixelEffects.feedbackEffectCount === 1;
 }
 
+/** Canvas blur(px) for Gaussian and Box Blur (see effects/blur/blurSampling.ts for the GPU kernels). */
+export function canvasBlurSigmaPx(type: 'gaussian-blur' | 'box-blur', radius: number,
+  outputSize: { readonly width: number; readonly height: number } = DEFAULT_OUTPUT_SIZE): number {
+  const radiusPx = Math.max(0, radius) * blurPixelScale(outputSize.width, outputSize.height);
+  return type === 'gaussian-blur' ? radiusPx * GAUSSIAN_SIGMA_PER_RADIUS : Math.sqrt(radiusPx * (radiusPx + 1) / 3);
+}
+
+const DEFAULT_OUTPUT_SIZE = { width: 1920, height: 1080 } as const;
+
 function effectFilterPart(
   effect: Effect,
   pixelEffects: MutableWorkerSoftwarePixelEffects,
   layerId: string,
+  outputSize?: { readonly width: number; readonly height: number },
 ): string | null {
   if (effect.enabled === false || effect.type.startsWith('audio-')) return '';
   const effectType = effect.type as string;
@@ -397,39 +398,39 @@ function effectFilterPart(
     }
     case 'motion-blur':
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
+      // Retired `samples` is ignored here as on the GPU; the tap count follows the streak length.
       (pixelEffects.motionBlurAdjustments ??= []).push({
-        amount: Math.max(0, finiteEffectNumber(effect.params.amount, 0.05)),
+        amount: finiteEffectNumber(effect.params.amount, 0.05),
         angle: finiteEffectNumber(effect.params.angle, 0),
-        samples: Math.max(4, Math.min(128, Math.round(finiteEffectNumber(effect.params.samples, 24)))),
       });
       return '';
     case 'radial-blur':
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
       (pixelEffects.radialBlurAdjustments ??= []).push({
-        amount: Math.max(0, finiteEffectNumber(effect.params.amount, 0.5)),
+        amount: finiteEffectNumber(effect.params.amount, 0.5),
         centerX: finiteEffectNumber(effect.params.centerX, 0.5),
         centerY: finiteEffectNumber(effect.params.centerY, 0.5),
-        samples: Math.max(4, Math.min(256, Math.round(finiteEffectNumber(effect.params.samples, 32)))),
+        mode: radialBlurMode(effect.params.mode),
       });
       return '';
     case 'zoom-blur':
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
       (pixelEffects.zoomBlurAdjustments ??= []).push({
-        amount: Math.max(0, finiteEffectNumber(effect.params.amount, 0.3)),
+        amount: finiteEffectNumber(effect.params.amount, 0.3),
         centerX: finiteEffectNumber(effect.params.centerX, 0.5),
         centerY: finiteEffectNumber(effect.params.centerY, 0.5),
-        samples: Math.max(4, Math.min(256, Math.round(finiteEffectNumber(effect.params.samples, 16)))),
       });
       return '';
-    case 'blur':
+    case 'blur': {
+      const radius = Math.max(0, finiteEffectNumber(effect.params.radius, finiteEffectNumber(effect.params.amount, 10)));
+      return radius > 0 ? `blur(${radius}px)` : '';
+    }
     case 'gaussian-blur':
     case 'box-blur': {
-      const fallbackRadius = effectType === 'box-blur' ? 5 : 10;
-      const radius = Math.max(0, finiteEffectNumber(
-        effect.params.radius,
-        finiteEffectNumber(effect.params.amount, fallbackRadius),
-      ));
-      return radius > 0 ? `blur(${radius}px)` : '';
+      // Canvas blur(px) is a Gaussian standard deviation in output pixels: the GPU contract's
+      // sigma (Gaussian) or the equal-variance width of the box, both in 1080p radius units.
+      const sigma = canvasBlurSigmaPx(effectType, finiteEffectNumber(effect.params.radius, effectType === 'box-blur' ? 5 : 10), outputSize);
+      return sigma > 0 ? `blur(${Math.round(sigma * 1000) / 1000}px)` : '';
     }
     case 'mirror':
       pixelEffects.mirrorHorizontal = pixelEffects.mirrorHorizontal || effect.params.horizontal !== false;
@@ -457,7 +458,8 @@ function effectFilterPart(
   }
 }
 
-export function workerSoftwareEffectPlanForLayer(layer: Layer): WorkerSoftwareEffectPlan | null {
+export function workerSoftwareEffectPlanForLayer(layer: Layer,
+  outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
   const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
@@ -486,7 +488,7 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer): WorkerSoftwareEf
     if (effect.enabled !== false && !effect.type.startsWith('audio-')) {
       activeVisualEffectCount += 1;
     }
-    const part = effectFilterPart(effect, pixelEffects, layer.id);
+    const part = effectFilterPart(effect, pixelEffects, layer.id, outputSize);
     if (part === null) return null;
     if (part) parts.push(part);
   }

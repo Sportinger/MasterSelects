@@ -246,22 +246,21 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly vignetteSoftness: number;
     readonly samples: number;
   }[];
+  /** Directional blurs follow effects/blur/blurSampling.ts (signed amounts, pixel-space Motion angle). */
   readonly motionBlurAdjustments?: readonly {
     readonly amount: number;
     readonly angle: number;
-    readonly samples: number;
   }[];
   readonly radialBlurAdjustments?: readonly {
     readonly amount: number;
     readonly centerX: number;
     readonly centerY: number;
-    readonly samples: number;
+    readonly mode: 'zoom' | 'spin';
   }[];
   readonly zoomBlurAdjustments?: readonly {
     readonly amount: number;
     readonly centerX: number;
     readonly centerY: number;
-    readonly samples: number;
   }[];
   readonly mirrorHorizontal?: boolean;
   readonly mirrorVertical?: boolean;

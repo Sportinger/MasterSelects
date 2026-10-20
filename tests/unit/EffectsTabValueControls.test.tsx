@@ -48,6 +48,17 @@ describe('EffectsTab numeric controls', () => {
     expect(screen.queryByText('Quality')).toBeNull();
   });
 
+  it('renders blur controls as Resolve inspector rows: slider, number and reset, and Type as an inspector select', () => {
+    const radial: Effect = { id: 'radial-rows', type: 'radial-blur', name: 'Radial Blur', enabled: true,
+      params: { mode: 'spin', amount: 0.5, centerX: 0.5, centerY: 0.5 } };
+    const { container } = render(<EffectsTab clipId="clip:effects-controls" effects={[radial]} />);
+    expect(screen.getByLabelText('Amount slider')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reset Center X')).toBeInTheDocument();
+    expect(screen.getByLabelText('Type')).toBeInTheDocument();
+    expect(container.querySelector('select')).toBeNull();
+    expect(container.querySelectorAll('.resolve-inspector-row, [class*="resolve"]').length).toBeGreaterThan(0);
+  });
+
   it('uses the shared Transform-style labeled draggable value without a separate slider', () => {
     const brightness: Effect = {
       id: 'effect:brightness:test',

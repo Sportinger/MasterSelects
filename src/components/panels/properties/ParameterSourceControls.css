@@ -1,5 +1,7 @@
 @layer features {
   .parameter-source-control, .parameter-source-inspector { container-type: inline-size; min-width: 0; width: 100%; }
+  /* In an effect card a source row sizes like its sibling parameter rows (the panel is their container). */
+  :is(.effect-param-section, .effect-quality-params) > .parameter-source-control { container-type: normal; }
   .parameter-source-status { display: flex; justify-content: flex-end; gap: 8px; padding: 0 4px 4px; }
   .parameter-source-status button { font: inherit; font-size: 10px; color: var(--text-secondary); background: none; border: 0; cursor: pointer; }
   .parameter-source-error { color: var(--text-error, #e88); font-size: 11px; overflow-wrap: anywhere; }

@@ -1,6 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 import { BLUR_REFERENCE_HEIGHT, GAUSSIAN_REACH_SIGMAS, GAUSSIAN_SIGMA_MIN_PX, GAUSSIAN_SIGMA_PER_RADIUS, SEPARABLE_MAX_PAIRS_PER_SIDE } from '../../effects/blur/blurSampling';
-import { BlurGraphBuilder, normalizeNodes, premultiplyNodes, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
+import { BlurGraphBuilder, normalizeNodes, premultipliedSourceCache, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
 
 export type EditableBlurEffectType = 'box-blur' | 'gaussian-blur' | 'sharpen';
 const node = (id: string, operator: string, bindings: BoundOperatorNode['bindings'] = {}, constants?: BoundOperatorNode['constants']): BoundOperatorNode =>
@@ -44,16 +44,16 @@ function separablePass(g: BlurGraphBuilder, axis: 'horizontal' | 'vertical', sou
   const offset = g.binary(id('offset'), 'math.divide-ieee.vec2', offsetTexels, 'resolution');
   const sampleUv = g.binary(id('sample-uv'), 'math.add.vec2', ['uv', 'uv'], offset);
   const sample = g.add(id('sample'), 'image.sample', { image: source, uv: sampleUv });
-  const term: GraphPort = axis === 'horizontal' ? premultiplyNodes(g, id('premultiplied'), [sample, 'image']) : [sample, 'image'];
-  const reduce = g.add(id('reduce'), 'image.sequence-reduce', { sample: term, weight, count: 'tap-count' });
+  const reduce = g.add(id('reduce'), 'image.sequence-reduce', { sample: [sample, 'image'], weight, count: 'tap-count' });
   return normalizeNodes(g, axis, reduce);
 }
 
 /**
  * Separable Box/Gaussian Blur (see `effects/blur/blurSampling.ts`): radius in pixels of a
- * 1080p frame (shorter side), a premultiplied horizontal pass cached as rgba16float, a vertical
- * pass, then straight alpha again. Two GPU passes of about radius / 2 (Box) or
- * 0.75 * radius (Gaussian) taps each at 1080p.
+ * 1080p frame (shorter side). The source is premultiplied into an rgba16float cache first, so
+ * the pair-merged linear taps filter premultiplied texels (exact at alpha edges); then a
+ * horizontal pass (cached), a vertical pass and straight alpha again. Each blur pass reads
+ * 2 * pairs + 1 taps: about 1.5 * radius + 1 (Gaussian) or radius + 2 (Box) at 1080p.
  */
 function createSeparableBlurGraph(kind: 'gaussian' | 'box'): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
@@ -91,7 +91,8 @@ function createSeparableBlurGraph(kind: 'gaussian' | 'box'): EffectOperatorGraph
   g.binary('stride', 'math.max.scalar', strideRaw, 'one');
   const pairsDouble = g.binary('pairs-double', 'math.multiply.scalar', 'pairs', 'two');
   g.binary('tap-count', 'math.add.scalar', pairsDouble, 'one');
-  const horizontal = separablePass(g, 'horizontal', ['frame', 'image'], weightAt);
+  const sourceCache = premultipliedSourceCache(g);
+  const horizontal = separablePass(g, 'horizontal', [sourceCache, 'image'], weightAt);
   const cache = g.add('horizontal-cache', 'image.materialize', { image: horizontal });
   const vertical = separablePass(g, 'vertical', [cache, 'image'], weightAt);
   unpremultiplyNodes(g, vertical);

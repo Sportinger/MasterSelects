@@ -62,7 +62,7 @@ async function checkGpu() {
       const blur = await checkBlurEffectsGpu(device), directional = await checkDirectionalBlurGpu(device), materialization = await checkImageMaterializationGpu(device);
       const validation = await device.popErrorScope();
       if (validation) throw new Error(validation.message);
-      return `PASS: ${blur} blur, ${directional} directional-blur and ${materialization} materialization comparisons; two-pass graphs match their WGSL references; no validation errors.`;
+      return `PASS: ${blur} blur, ${directional} directional-blur and ${materialization} materialization comparisons; the blur pass chains match their WGSL references and keep hard alpha edges clean; no validation errors.`;
     } finally { device.destroy(); }
   }
   if (suite === 'memory-leak') {

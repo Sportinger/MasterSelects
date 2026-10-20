@@ -6,7 +6,7 @@ import { sharpen } from '../../src/effects/stylize/sharpen';
 import { effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 import { createDefaultBoxBlurGraph } from '../../src/services/operators/blurEffectGraphs';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
-import { checkTwoPassBlurs, ROW_PITCH } from './blur-two-pass-gpu-check';
+import { alphaEdgeFixture, assertCleanAlphaEdge, checkTwoPassBlurs, ROW_PITCH } from './blur-two-pass-gpu-check';
 
 const rowPitch = 256;
 // Sharpen stays a single-pass graph checked against its registered shader.
@@ -28,7 +28,10 @@ const separableCases = [
   { name: 'gaussian-wide', type: 'gaussian-blur', params: { radius: 400 }, width: 64, height: 40 },
   // Past 127 pair taps per side the pairs spread out instead of truncating the kernel.
   { name: 'gaussian-stride', type: 'gaussian-blur', params: { radius: 10000 }, width: 64, height: 40 },
-] as const;
+  // A hard alpha edge inside a merged pair: the premultiplied source cache keeps the colour (no dark fringe).
+  { name: 'gaussian-alpha-edge', type: 'gaussian-blur', params: { radius: 108 }, width: 64, height: 40, fixture: alphaEdgeFixture(31) },
+  { name: 'box-alpha-edge', type: 'box-blur', params: { radius: 135 }, width: 64, height: 40, fixture: alphaEdgeFixture(32) },
+];
 
 function fixture(width: number, height: number): Uint8Array {
   const pixels = new Uint8Array(rowPitch * height);
@@ -114,7 +117,8 @@ export async function checkBlurEffectsGpu(device: GPUDevice): Promise<number> {
   let weightedAlphaCases = 0;
   const separable = await checkTwoPassBlurs(device, separableCases,
     { 'box-blur': boxBlur as FullscreenEffectDefinition, 'gaussian-blur': gaussianBlur as FullscreenEffectDefinition },
-    ['separableBlurHorizontal', 'separableBlurVertical'], async (item, input, actual, rerender) => {
+    ['separableBlurPremultiply', 'separableBlurHorizontal', 'separableBlurVertical'], async (item, input, actual, rerender) => {
+      if (item.name.endsWith('alpha-edge')) { assertCleanAlphaEdge(item.name, actual, item.width, item.height); return 1; }
       if (item.name.endsWith('radius-zero')) {
         // Radius 0 is the identity up to the premultiplied rgba16float round trip (fully transparent RGB is not kept).
         actual.forEach((value, index) => { if ((index % ROW_PITCH) < item.width * 4 && input[index - (index % 4) + 3] > 0

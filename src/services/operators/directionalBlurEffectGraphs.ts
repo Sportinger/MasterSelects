@@ -3,7 +3,7 @@ import {
   DIRECTIONAL_MAX_COARSE_TAPS, DIRECTIONAL_MAX_FINE_TAPS, RADIAL_MIN_SCALE, RADIAL_SCALE_PER_AMOUNT,
   SPIN_RADIANS_PER_AMOUNT, ZOOM_SCALE_PER_AMOUNT,
 } from '../../effects/blur/blurSampling';
-import { BlurGraphBuilder, normalizeNodes, premultiplyNodes, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
+import { BlurGraphBuilder, normalizeNodes, premultipliedSourceCache, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
 
 export type EditableDirectionalBlurEffectType = 'motion-blur' | 'radial-blur' | 'zoom-blur';
 
@@ -11,9 +11,11 @@ export type EditableDirectionalBlurEffectType = 'motion-blur' | 'radial-blur' | 
  * Two-stage Motion, Zoom and Radial Blur (contract: `effects/blur/blurSampling.ts`).
  * Each tap position is T(u) of a one-parameter transform group in pixel space:
  * translation (Motion), log-scale about the centre (Zoom, Radial Zoom) or rotation about
- * the centre (Radial Spin). Stage A averages a short box of length `step` with taps at most
- * one pixel apart into an rgba16float cache; stage B samples that cache at coarse taps one
- * box apart over the whole range. Alpha is premultiplied while averaging.
+ * the centre (Radial Spin). The source is premultiplied into an rgba16float cache first (exact
+ * filtering at alpha edges). Stage A averages a short box of length `step` with taps at most
+ * one pixel apart into a second cache; stage B samples that cache at coarse taps one box
+ * apart over the whole range. Negative amounts reverse the range (Motion: same streak, Zoom:
+ * inward, Radial Zoom: outward, Spin: the other way round); every count uses its magnitude.
  */
 function transform(g: BlurGraphBuilder, type: EditableDirectionalBlurEffectType, prefix: string, base: string, u: string): string {
   const id = (name: string) => `${prefix}-${name}`;
@@ -48,7 +50,6 @@ function speed(g: BlurGraphBuilder, type: EditableDirectionalBlurEffectType, pre
 function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
-  g.add('resolution-split', 'vector.split.vec2', { value: 'resolution' });
   g.number('zero', 0); g.number('one', 1); g.number('two', 2); g.number('half', .5);
   g.number('tiny', 1e-9); g.number('cover-epsilon', 1e-4); g.number('covered-floor', 1e-6);
   const amount = g.bound('amount', 'amount');
@@ -57,11 +58,16 @@ function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): Effec
   let rangeStart: GraphPort = 'zero', rangeLength: string, longest: string, longestPx: string;
   if (type === 'motion-blur') {
     g.add('direction', 'vector.unit-direction.scalar', { angle: g.bound('angle', 'angle') });
-    const halfLength = g.binary('half-length', 'math.multiply.scalar', amount, ['resolution-split', 'x']);
+    // On-screen direction in pixels; the reach keeps the legacy length Length * |(cos * W, sin * H)|,
+    // so horizontal streaks are a share of the width and vertical ones a share of the height.
+    const extent = g.unary('direction-extent', 'vector.length.vec2', g.binary('direction-frame', 'math.multiply.vec2', 'direction', 'resolution'));
+    const halfLength = g.binary('half-length', 'math.multiply.scalar', amount, extent);
     rangeStart = g.binary('range-start', 'math.subtract.scalar', 'zero', halfLength);
     rangeLength = g.binary('range-length', 'math.multiply.scalar', halfLength, 'two');
-    longest = rangeLength; longestPx = rangeLength;
+    longest = g.unary('longest', 'math.abs.scalar', rangeLength); longestPx = longest;
   } else {
+    g.add('resolution-split', 'vector.split.vec2', { value: 'resolution' });
+    g.number('min-scale', RADIAL_MIN_SCALE);
     const centerUv = g.add('center-uv', 'vector.combine.vec2', { x: g.bound('center-x', 'centerX'), y: g.bound('center-y', 'centerY') });
     g.binary('center', 'math.multiply.vec2', centerUv, 'resolution');
     const centerSplit = g.add('center-split', 'vector.split.vec2', { value: 'center' });
@@ -71,9 +77,10 @@ function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): Effec
     if (type === 'zoom-blur') {
       g.number('zoom-scale-per-amount', ZOOM_SCALE_PER_AMOUNT);
       const grow = g.binary('zoom-grow', 'math.multiply.scalar', amount, 'zoom-scale-per-amount');
-      const endScale = g.binary('zoom-end-scale', 'math.add.scalar', 'one', grow);
+      // Negative amounts zoom inward; the scale never reaches 0 (Amount below -1.9).
+      const endScale = g.binary('zoom-end-scale', 'math.max.scalar', g.binary('zoom-end-scale-raw', 'math.add.scalar', 'one', grow), 'min-scale');
       rangeLength = g.unary('range-length', 'math.log.scalar', endScale);
-      longest = rangeLength;
+      longest = g.unary('longest', 'math.abs.scalar', rangeLength);
     } else {
       g.add('mode', 'values.choice', {}, { bindings: { value: 'mode' } });
       g.add('is-spin', 'compare.greater.scalar', { a: 'mode', b: 'half' });
@@ -83,22 +90,22 @@ function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): Effec
       const arcHalf = g.binary('spin-arc-half', 'math.multiply.scalar', arc, 'half');
       const spinStart = g.binary('spin-start', 'math.subtract.scalar', 'zero', arcHalf);
       // Legacy zoom: inward to scale 1 - 0.2 * amount * (UV distance), never below 0.05.
-      g.number('radial-scale-per-amount', RADIAL_SCALE_PER_AMOUNT); g.number('radial-min-scale', RADIAL_MIN_SCALE);
+      g.number('radial-scale-per-amount', RADIAL_SCALE_PER_AMOUNT);
       const shrinkRate = g.binary('radial-shrink-rate', 'math.multiply.scalar', amount, 'radial-scale-per-amount');
       const uvDistance = g.unary('radial-uv-distance', 'vector.length.vec2', g.binary('radial-uv-offset', 'math.subtract.vec2', ['uv', 'uv'], centerUv));
       const scaleRaw = g.binary('radial-scale-raw', 'math.subtract.scalar', 'one', g.binary('radial-shrink', 'math.multiply.scalar', shrinkRate, uvDistance));
-      const zoomLength = g.unary('radial-log-scale', 'math.log.scalar', g.binary('radial-scale', 'math.max.scalar', scaleRaw, 'radial-min-scale'));
+      const zoomLength = g.unary('radial-log-scale', 'math.log.scalar', g.binary('radial-scale', 'math.max.scalar', scaleRaw, 'min-scale'));
       const centerUvSplit = g.add('center-uv-split', 'vector.split.vec2', { value: centerUv });
       const farU = g.binary('far-u', 'math.max.scalar', [centerUvSplit, 'x'], g.binary('right-u', 'math.subtract.scalar', 'one', [centerUvSplit, 'x']));
       const farV = g.binary('far-v', 'math.max.scalar', [centerUvSplit, 'y'], g.binary('bottom-v', 'math.subtract.scalar', 'one', [centerUvSplit, 'y']));
       const farUv = g.unary('farthest-uv', 'vector.length.vec2', g.add('far-corner-uv', 'vector.combine.vec2', { x: farU, y: farV }));
       const longestScale = g.binary('radial-longest-scale', 'math.max.scalar',
-        g.binary('radial-longest-scale-raw', 'math.subtract.scalar', 'one', g.binary('radial-longest-shrink', 'math.multiply.scalar', shrinkRate, farUv)), 'radial-min-scale');
-      const zoomLongest = g.binary('radial-longest', 'math.subtract.scalar', 'zero', g.unary('radial-longest-log', 'math.log.scalar', longestScale));
+        g.binary('radial-longest-scale-raw', 'math.subtract.scalar', 'one', g.binary('radial-longest-shrink', 'math.multiply.scalar', shrinkRate, farUv)), 'min-scale');
+      const zoomLongest = g.unary('radial-longest', 'math.log.scalar', longestScale);
       const pick = (id: string, zoom: GraphPort, spin: GraphPort) => g.add(id, 'select.scalar', { condition: ['is-spin', 'condition'], falseValue: zoom, trueValue: spin });
       rangeStart = pick('range-start', 'zero', spinStart);
       rangeLength = pick('range-length', zoomLength, arc);
-      longest = pick('longest', zoomLongest, arc);
+      longest = g.unary('longest', 'math.abs.scalar', pick('longest-signed', zoomLongest, arc));
     }
     longestPx = g.binary('longest-px', 'math.multiply.scalar', longest, farthest);
   }
@@ -118,9 +125,8 @@ function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): Effec
   const fineSequence = g.add('fine-sequence', 'image.sequence-index');
   const fineShare = g.binary('fine-share', 'math.divide-ieee.scalar', g.binary('fine-entry', 'math.add.scalar', [fineSequence, 'index'], 'half'), fineCount);
   const fineU = g.binary('fine-u', 'math.multiply.scalar', g.binary('fine-centered', 'math.subtract.scalar', fineShare, 'half'), step);
-  const fineSample = g.add('fine-sample', 'image.sample', { image: ['frame', 'image'], uv: transform(g, type, 'fine', finePixel, fineU) });
-  const fineTerm = premultiplyNodes(g, 'fine-premultiplied', [fineSample, 'image']);
-  const fineReduce = g.add('fine-reduce', 'image.sequence-reduce', { sample: fineTerm, weight: 'one', count: fineCount });
+  const fineSample = g.add('fine-sample', 'image.sample', { image: [premultipliedSourceCache(g), 'image'], uv: transform(g, type, 'fine', finePixel, fineU) });
+  const fineReduce = g.add('fine-reduce', 'image.sequence-reduce', { sample: [fineSample, 'image'], weight: 'one', count: fineCount });
   const cache = g.add('fine-cache', 'image.materialize', { image: normalizeNodes(g, 'fine', fineReduce) });
 
   // Stage B: coarse taps one box apart over this pixel's range; a partial last box is weighted by its share.

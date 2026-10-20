@@ -7,7 +7,7 @@ import { EffectPresetLibrary } from '../workspace/EffectPresetLibrary';
 import { getEffectOperator } from '../../../../services/operators/operatorRegistry';
 import { useUnifiedNodeActions } from '../useUnifiedNodeActions';
 import { useCallback, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { getCategoriesWithEffects, getEffect } from '../../../../effects';
+import { getCategoriesWithEffects, getEffect, getEffectDisplayName } from '../../../../effects';
 import type { NodeGraphLayout, NodeGraphViewTheme } from '../../../../services/nodeGraph';
 import type { NodeWorkspaceViewRequest } from '../../../../services/nodeGraph/nodeWorkspaceNavigation';
 import { useDockStore } from '../../../../stores/dockStore';
@@ -398,7 +398,7 @@ export function useClipWorkspaceController(clipId: string, panelId: string) {
               return buildCableInsertEntries({ effectId: 'new-group', effectName: 'a new group', operators: addableEffectOperators('invert'),
                 onAdd: operatorId => { try { addSingleNodeGroup(operatorId, point, { beforeEffectId: before }); } catch (error) { console.warn('Insert node into cable failed', error); } } });
             }
-            return buildCableInsertEntries({ effectId: effect.id, effectName: effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name,
+            return buildCableInsertEntries({ effectId: effect.id, effectName: getEffectDisplayName(effect),
               operators: addableEffectOperators(effect.type), onAdd: operatorId => {
                 const batch = startBatch('Insert node into cable');
                 try {
@@ -488,7 +488,7 @@ export function useClipWorkspaceController(clipId: string, panelId: string) {
                 finally { if (batch.opened) endBatch(); }
               };
               const imageCapable = !['audio', 'motion-adjustment'].includes(subject.clip.source?.type ?? '');
-              const displayName = (effect: { name: string; type: string }) => effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name;
+              const displayName = getEffectDisplayName;
               // Every graph kind: an existing effect of that kind receives the node, otherwise one is added on first use.
               const kinds = imageCapable ? GRAPH_OWNER_TYPES.map(type => {
                 // Image nodes each get their own free-standing group at the menu position.

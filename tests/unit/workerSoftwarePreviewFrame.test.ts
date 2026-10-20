@@ -1578,7 +1578,8 @@ describe('worker software preview frame builder', () => {
     );
 
     expect(frame.frame.layers).toHaveLength(1);
-    expect(frame.frame.layers[0]?.filter).toBe('blur(8px) blur(3px)');
+    // 640x360: radius units are 1080p pixels (1/3 here); Gaussian sigma = radius / 2, Box its equal-variance width.
+    expect(frame.frame.layers[0]?.filter).toBe('blur(1.333px) blur(0.816px)');
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
@@ -1939,7 +1940,8 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
-      motionBlurAdjustments: [{ amount: 0.08, angle: 0.4, samples: 12 }],
+      // The retired samples parameter is not forwarded; the worker follows the GPU contract.
+      motionBlurAdjustments: [{ amount: 0.08, angle: 0.4 }],
     });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
@@ -1973,12 +1975,12 @@ describe('worker software preview frame builder', () => {
     );
 
     expect(radialFrame.frame.layers[0]?.pixelEffects).toMatchObject({
-      radialBlurAdjustments: [{ amount: 0.75, centerX: 0.45, centerY: 0.55, samples: 20 }],
+      radialBlurAdjustments: [{ amount: 0.75, centerX: 0.45, centerY: 0.55, mode: 'zoom' }],
     });
     expect(radialFrame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(radialFrame.diagnostics)).toBe(false);
     expect(zoomFrame.frame.layers[0]?.pixelEffects).toMatchObject({
-      zoomBlurAdjustments: [{ amount: 0.4, centerX: 0.5, centerY: 0.45, samples: 18 }],
+      zoomBlurAdjustments: [{ amount: 0.4, centerX: 0.5, centerY: 0.45 }],
     });
     expect(zoomFrame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(zoomFrame.diagnostics)).toBe(false);
