@@ -35,8 +35,10 @@ const DIMENSIONS = {
 type Dimension = keyof typeof DIMENSIONS;
 const GROUP_LIMIT = 30;
 
+/** Dimension columns depend on the breakdown (see DIMENSIONS). */
 export interface GpuStartupGroup {
-  [key: string]: string | number | null;
+  platform?: string; deviceClass?: string; browser?: string; browserMajor?: number; inAppBrowser?: number;
+  osMajor?: number; gpuVendor?: string; failure?: string;
   sessions: number;
   failed: number;
   failureRate: number;
