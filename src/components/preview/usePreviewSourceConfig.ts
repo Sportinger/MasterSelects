@@ -19,6 +19,7 @@ interface UsePreviewSourceConfigOptions {
   panelId: string;
   source: PreviewPanelSource;
   showTransparencyGrid: boolean;
+  showRulers: boolean;
   tracks: TimelineTrack[];
 }
 
@@ -28,6 +29,8 @@ export interface PreviewSourceConfig {
   closeSourceMonitor: () => void;
   compositions: Composition[];
   displayedCompId: string | null;
+  /** The displayed composition is an image document (no time to transport). */
+  displayedCompIsStill: boolean;
   effectiveResolution: { width: number; height: number };
   isEditableSource: boolean;
   renderSource: PreviewPanelSource;
@@ -38,12 +41,14 @@ export interface PreviewSourceConfig {
   sourceMonitorPlaybackRequestId: number;
   stableRenderSource: PreviewPanelSource;
   toggleTransparency: () => void;
+  toggleRulers: () => void;
 }
 
 export function usePreviewSourceConfig({
   panelId,
   source,
   showTransparencyGrid,
+  showRulers,
   tracks,
 }: UsePreviewSourceConfigOptions): PreviewSourceConfig {
   const { compositions, activeCompositionId } = useMediaStore(useShallow(s => ({
@@ -144,9 +149,9 @@ export function usePreviewSourceConfig({
 
   const setPanelSource = useCallback(
     (nextSource: PreviewPanelSource) => {
-      updatePanelData(panelId, createPreviewPanelDataPatch(nextSource, { showTransparencyGrid }));
+      updatePanelData(panelId, createPreviewPanelDataPatch(nextSource, { showTransparencyGrid, showRulers }));
     },
-    [panelId, showTransparencyGrid, updatePanelData],
+    [panelId, showRulers, showTransparencyGrid, updatePanelData],
   );
 
   const toggleTransparency = useCallback(() => {
@@ -156,12 +161,17 @@ export function usePreviewSourceConfig({
     );
   }, [panelId, showTransparencyGrid, source, updatePanelData]);
 
+  const toggleRulers = useCallback(() => {
+    updatePanelData(panelId, createPreviewPanelDataPatch(source, { showTransparencyGrid, showRulers: !showRulers }));
+  }, [panelId, showRulers, showTransparencyGrid, source, updatePanelData]);
+
   return {
     activeCompositionId,
     activeCompositionVideoTracks,
     closeSourceMonitor,
     compositions,
     displayedCompId,
+    displayedCompIsStill: displayedComp?.still === true,
     effectiveResolution,
     isEditableSource,
     renderSource,
@@ -172,5 +182,6 @@ export function usePreviewSourceConfig({
     sourceMonitorPlaybackRequestId,
     stableRenderSource,
     toggleTransparency,
+    toggleRulers,
   };
 }

@@ -1,3 +1,4 @@
+import type { Layer } from '../../types';
 import type { LayerOverlayBounds, OverlayPoint } from './editModeOverlayMath';
 
 export interface AxisSnapPoints {
@@ -103,4 +104,36 @@ export function snapPointToTargets(
     x: point.x + (axes.x === false ? 0 : resolveAxisSnapDelta([point.x], targetPoints.x, threshold)),
     y: point.y + (axes.y === false ? 0 : resolveAxisSnapDelta([point.y], targetPoints.y, threshold)),
   };
+}
+
+/**
+ * Snap delta for a moved layer in canvas-size units. Ruler guides always
+ * snap; `snapToLayout` (Shift) adds the canvas edges, its center and the
+ * bounds of the other visible layers.
+ */
+export function resolveLayerMoveSnapDelta(params: {
+  layer: Layer;
+  candidatePosition: { x: number; y: number };
+  layers: readonly Layer[];
+  canvasSize: { width: number; height: number };
+  threshold: number;
+  calculateLayerBounds: (layer: Layer, canvasW: number, canvasH: number, forcePos?: { x: number; y: number }) => LayerOverlayBounds;
+  guideSnapPoints?: AxisSnapPoints;
+  snapToLayout: boolean;
+}): OverlayPoint {
+  const { layer, candidatePosition, layers, canvasSize, threshold, calculateLayerBounds, guideSnapPoints, snapToLayout } = params;
+  const targetSets: AxisSnapPoints[] = guideSnapPoints ? [guideSnapPoints] : [];
+  if (snapToLayout) {
+    targetSets.push(
+      getCanvasSnapPoints(canvasSize.width, canvasSize.height),
+      ...layers
+        .filter((candidate) => candidate?.id !== layer.id && candidate?.visible && candidate?.source)
+        .map((candidate) => getLayerBoundsSnapPoints(
+          calculateLayerBounds(candidate, canvasSize.width, canvasSize.height),
+        )),
+    );
+  }
+  if (targetSets.length === 0) return { x: 0, y: 0 };
+  const movedBounds = calculateLayerBounds(layer, canvasSize.width, canvasSize.height, candidatePosition);
+  return resolveSnapDelta(getLayerBoundsSnapPoints(movedBounds), mergeSnapPointSets(targetSets), threshold);
 }

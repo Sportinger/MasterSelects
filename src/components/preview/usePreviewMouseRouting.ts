@@ -102,6 +102,10 @@ interface UsePreviewMouseRoutingOptions {
   stopGaussianKeyboardMovement: () => void;
   viewPan: PreviewPoint;
   viewNavigationEnabled: boolean;
+  /** Hand tool: a plain left drag pans the view. */
+  handToolActive: boolean;
+  /** Click actions of the Zoom and Text tools; true when consumed. */
+  handleCanvasToolClick: (event: React.MouseEvent) => boolean;
 }
 
 interface PreviewMouseRoutingHandlers {
@@ -147,6 +151,8 @@ export function usePreviewMouseRouting({
   stopGaussianKeyboardMovement,
   viewPan,
   viewNavigationEnabled,
+  handToolActive,
+  handleCanvasToolClick,
 }: UsePreviewMouseRoutingOptions): PreviewMouseRoutingHandlers {
   const panFrameRef = useRef<number | null>(null);
   const pendingPanRef = useRef<PreviewPoint | null>(null);
@@ -335,12 +341,22 @@ export function usePreviewMouseRouting({
 
     if (!viewNavigationEnabled || !isCanvasInteractionTarget(event.target)) return;
 
-    if (event.button === 1 || (event.button === 0 && event.altKey)) {
+    // Canvas tools take the click before layer selection on the overlay.
+    if (handleCanvasToolClick(event)) {
       event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
+    if (event.button === 1 || (event.button === 0 && (event.altKey || handToolActive))) {
+      event.preventDefault();
+      if (handToolActive) event.stopPropagation();
       setIsPanning(true);
       panStartRef.current = { x: event.clientX, y: event.clientY, panX: viewPan.x, panY: viewPan.y };
     }
   }, [
+    handToolActive,
+    handleCanvasToolClick,
     activeEditCameraOrthoFrame,
     beginEffectOrbitDrag,
     canvasSize.height,

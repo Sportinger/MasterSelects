@@ -208,6 +208,24 @@ RAM preview is implemented by `RamPreviewEngine` and the timeline RAM preview sl
 
 ---
 
+## Rulers And Still-Image Zoom
+
+- Every dock preview has pixel rulers along its top and left edges. Toggle them with the ruler button in the viewer tools or `Shift+R`. The choice is stored per preview panel (`showRulers`); the Image workspace opens with rulers on.
+- Rulers count composition pixels from the canvas origin. They follow zoom and pan, tint the canvas span, and mark the pointer position. The pointer marker is measured against the rulers' own box, because their parent element is `display: contents`. They are SVG (`PreviewRulers.tsx`, ticks from `previewRulerTicks.ts`).
+- Rulers are hidden in the Source Monitor and in panel-sized 3D camera edit views, where screen space does not map to composition pixels.
+- When the displayed composition is an image document (`still`), the scrubber and playback row are replaced by a zoom bar: composition size, zoom out, **Fit**, **1:1** (actual pixels), zoom in, and the zoom level relative to the composition's pixels (`PreviewCanvasZoomBar.tsx`, `usePreviewCanvasZoom.ts`). With rulers on, **Fit** places the canvas in the area right of and below the rulers.
+
+### Guides
+
+Guides are cyan lines across the preview, like Photoshop guides. They belong to the composition (`Composition.guides`, composition pixels, `src/types/compositionGuides.ts`), so they are saved with the project, undoable and shared by every preview of that composition.
+
+- **Create:** drag down out of the top ruler for a horizontal guide, or right out of the left ruler for a vertical guide. A readout shows the position.
+- **Move:** drag a guide. Positions are whole composition pixels; holding Shift snaps to the canvas edges and center.
+- **Remove:** drag a guide back onto its ruler or out of the preview (the readout says **Remove guide**), or focus it and press Delete or Backspace. The × in the ruler corner clears all guides of the composition.
+- **Keyboard:** guides are focusable sliders. The arrow keys along the guide's axis nudge it by 1 px, with Shift by 10 px. Escape cancels a drag.
+- Guides show and hide together with the rulers (`Shift+R`). While visible, moving a layer in Edit mode always snaps its edges and center to them; Shift adds the canvas and layer targets.
+- A drag writes the composition once on release, so each guide drag is one undo step (`usePreviewGuideDrag.ts`, `src/services/compositionGuides.ts`). Invalid stored guides are dropped with a warning on load.
+
 ## Edit Mode
 
 Edit mode is a canvas overlay for layer transforms.
@@ -221,6 +239,7 @@ Edit mode is a canvas overlay for layer transforms.
 - Two-finger pinch cancels an active one-finger orbit and changes edit-view zoom or camera distance continuously from the live finger spacing, without fixed zoom steps. In both 2D and 3D Preview Edit modes its touch zoom delta is amplified to four times the normal preview pinch rate.
 - 2D transform, text, and mask editing preserve the composition resolution and aspect ratio; only camera/3D edit views use the full panel viewport for an independent perspective.
 - Moving or scaling a layer publishes a transient render transform once per animation frame, so the canvas and edit handles stay live without rewriting the durable clip, mask state, or RAM-preview caches. The final transform is committed as one history batch when the pointer is released.
+- A dock preview with `initialEditMode` starts in Edit mode. With `initialEditCameraView` it opens a 3D camera edit view (3D workspace); without one it opens 2D canvas edit mode (Image workspace, see [Image Mode](/features/image-mode/)).
 - Multiple preview panels can mix edit and non-edit views at the same time. Camera and object changes update every visible view immediately, while each panel keeps its own perspective.
 - 3D object handles remain visible across preview modes; selecting one activates the native 3D scene gizmo for that clip.
 - In camera Edit mode, the independent editor camera always orbits the scene origin `(0, 0, 0)`; timeline and viewport selection do not change its pivot.
@@ -228,7 +247,10 @@ Edit mode is a canvas overlay for layer transforms.
 - Camera Edit mode uses an independent editor camera with a 35 mm default, initially offset so the timeline camera is visible as an object. Navigating the editor view never changes the timeline camera; dragging the timeline camera's object gizmo updates its output live in every normal Preview.
 - The projected timeline-camera frame in camera Edit mode is a world-space object drawn from the camera's FOV/mm and Resolution X/Y. It becomes smaller with distance, wide lenses draw a larger front frame, tele lenses draw a smaller one, and the frame aspect follows the camera resolution.
 - Edit views can render a projected world grid that follows camera-view animation instead of snapping as a screen overlay. The grid plane matches the edit view: Front uses XY at `z=0`, Side uses YZ at `x=0`, and Top/free camera uses XZ at `y=0`.
-- Holding Shift while dragging a layer in Edit mode enables snapping for that drag. The layer can snap to composition edges/center and to the bounds of other visible layers; without Shift, layer movement stays free.
+- Holding Shift while dragging a layer in Edit mode enables snapping for that drag. The layer can snap to composition edges/center and to the bounds of other visible layers. Visible ruler guides snap without Shift; otherwise layer movement stays free.
+- The Tools panel's canvas tools change what a left click on the canvas does: Hand pans, Zoom zooms around the pointer (Alt zooms out), Text places a text layer. They take the click before layer selection, show their own cursor, and need Edit mode (`usePreviewCanvasToolPointer.ts`, see [UI Panels](/features/ui-panels/#tools-panel)).
+- Pan and zoom move the canvas without a CSS transition, and the edit overlay is drawn in a layout effect. The canvas, its handles, rulers and guides therefore move in the same frame instead of the canvas easing behind them.
+- Hit-testing and handles use the render layers that the Timeline panel syncs. In layouts without a Timeline panel (the Image workspace), `EditorPlaybackRuntimeHost` runs the same layer sync headlessly (`HeadlessLayerSync.tsx`, `timelineLayerSyncOwners.ts`).
 
 ### Scene Camera Navigation
 

@@ -580,7 +580,9 @@
 
 .preview-canvas-wrapper {
   transform-origin: center center;
-  transition: transform 0.1s ease-out;
+  /* No transform transition: overlays outside the wrapper (edit handles,
+     rulers, guides, text editor) follow pan and zoom instantly, so an eased
+     canvas would visibly trail behind them. */
 }
 
 /* Preview Bottom Controls (Quality Selector) */

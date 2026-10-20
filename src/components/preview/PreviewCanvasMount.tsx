@@ -46,6 +46,7 @@ import { rendersFlock } from '../../services/flock/flockEffect';
 import { PreviewScenePreparationOverlay } from './PreviewScenePreparationOverlay';
 import { PathTraceRegionOverlay } from './PathTraceRegionOverlay';
 import { PerspectiveGuidePreviewHost } from './PerspectiveGuidePreviewHost';
+import { PreviewRulers } from './PreviewRulers';
 
 interface PreviewCanvasMountProps {
   activeSharedSceneOverlayContent: boolean;
@@ -108,6 +109,7 @@ interface PreviewCanvasMountProps {
   setTextTyping: (typing: boolean) => void;
   showPlaybackWaiter: boolean;
   showBottomControls: boolean;
+  rulersVisible: boolean;
   sceneObjectOverlayEnabled: boolean;
   showSceneObjectOverlay: boolean;
   showTransparencyGrid: boolean;
@@ -207,6 +209,7 @@ export function PreviewCanvasMount({
   setTextTyping,
   showPlaybackWaiter,
   showBottomControls,
+  rulersVisible,
   sceneObjectOverlayEnabled,
   showSceneObjectOverlay,
   showTransparencyGrid,
@@ -431,6 +434,15 @@ export function PreviewCanvasMount({
           && <PreviewScenePreparationOverlay clips={clips} tracks={tracks} />}
         {!isExporting && !sourceMonitorActive && isEngineReady
           && <PathTraceRegionOverlay compositionId={displayedCompId} canvasInContainer={canvasInContainer} />}
+        {rulersVisible && isEngineReady && (
+          <PreviewRulers
+            canvasInContainer={canvasInContainer}
+            compositionHeight={effectiveResolution.height}
+            compositionId={displayedCompId ?? null}
+            compositionWidth={effectiveResolution.width}
+            containerSize={containerSize}
+          />
+        )}
 
         {layerTransformMode && isEngineReady && !rotoActive && (
           <canvas

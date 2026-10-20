@@ -49,6 +49,10 @@ import { usePreviewRenderTargetRegistration } from './usePreviewRenderTargetRegi
 import { usePreviewSceneNavigation } from './usePreviewSceneNavigation';
 import { usePreviewSourceConfig } from './usePreviewSourceConfig';
 import { usePreviewViewGeometry } from './usePreviewViewGeometry';
+import { PREVIEW_RULER_SIZE } from './PreviewRulers';
+import { usePreviewCanvasToolPointer } from './usePreviewCanvasToolPointer';
+import { usePreviewGuideSnapPoints } from './usePreviewGuideSnapPoints';
+import { usePreviewCanvasZoom } from './usePreviewCanvasZoom';
 import { usePreviewViewport } from './usePreviewViewport';
 import { usePreviewWheelHandler } from './usePreviewWheelHandler';
 import { usePreviewInitialEditCameraView } from './usePreviewInitialEditCameraView';
@@ -86,11 +90,12 @@ interface PreviewProps {
   panelId: string;
   source: PreviewPanelSource;
   showTransparencyGrid: boolean; // per-tab transparency toggle
+  showRulers?: boolean; // per-tab pixel rulers
   showTransport?: boolean;
   initialEdit?: Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>;
 }
 
-export function Preview({ panelId, source, showTransparencyGrid, showTransport = false, initialEdit }: PreviewProps) {
+export function Preview({ panelId, source, showTransparencyGrid, showRulers = false, showTransport = false, initialEdit }: PreviewProps) {
   const { isEngineReady } = useEngine();
   // NOTE: these are store actions (stable references) — safe to destructure once.
   const { addKeyframe, hasKeyframes, isRecording } = useTimelineStore.getState();
@@ -167,6 +172,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     closeSourceMonitor,
     compositions,
     displayedCompId,
+    displayedCompIsStill,
     effectiveResolution,
     isEditableSource,
     setPanelSource,
@@ -176,10 +182,12 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     sourceMonitorPlaybackRequestId,
     stableRenderSource,
     toggleTransparency,
+    toggleRulers,
   } = usePreviewSourceConfig({
     panelId,
     source,
     showTransparencyGrid,
+    showRulers,
     tracks,
   });
   const { previewQuality, setPreviewQuality } = useSettingsStore(useShallow(s => ({
@@ -235,7 +243,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
   const activeCameraClipAtPlayhead = useActiveCameraClipAtPlayhead(clips, tracks, playheadPosition);
   const editCameraModeActive = Boolean(
     isEditableSource && editMode && !maskPanelActive
-    && (initialEdit?.initialEditMode || activeCameraClipAtPlayhead),
+    && ((initialEdit?.initialEditMode && initialEdit.initialEditCameraView !== undefined) || activeCameraClipAtPlayhead),
   );
   const usesPanelSizedEditViewport = !maskPanelActive
     && (editCameraModeActive || previewCameraOverride !== null);
@@ -608,6 +616,16 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     viewZoom,
   });
 
+  const { canvasInContainer, viewTransform } = usePreviewViewGeometry({
+    canvasSize,
+    containerSize,
+    viewNavigationEnabled,
+    viewPan,
+    viewZoom,
+  });
+  const { activeCanvasTool, handleCanvasToolClick } = usePreviewCanvasToolPointer({
+    containerRef, containerSize, canvasInContainer, compositionSize: effectiveResolution, viewZoom, viewPan, setViewZoom, setViewPan,
+  });
   const {
     handleMouseDown,
     handleMouseMove,
@@ -649,6 +667,8 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     stopGaussianFpsLook,
     stopGaussianKeyboardMovement,
     viewPan,
+    handToolActive: activeCanvasTool === 'hand',
+    handleCanvasToolClick,
   });
 
   const { handleContextMenu, handleAuxClick, setPanelEditMode } = usePreviewPanelInputBindings({
@@ -662,15 +682,15 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     isPreviewShortcutTarget,
     sceneNavEnabled,
     setEditMode,
+    toggleRulers,
     viewNavigationEnabled,
   });
 
-  const { canvasInContainer, viewTransform } = usePreviewViewGeometry({
-    canvasSize,
-    containerSize,
-    viewNavigationEnabled,
-    viewPan,
-    viewZoom,
+  const rulersVisible = showRulers && !sourceMonitorActive && !usesPanelSizedEditViewport;
+  const canvasZoom = usePreviewCanvasZoom({
+    enabled: displayedCompIsStill && !sourceMonitorActive && !usesPanelSizedEditViewport,
+    fittedSize: canvasSize, containerSize, rulerInset: rulersVisible ? PREVIEW_RULER_SIZE : 0,
+    compositionWidth: effectiveResolution.width, viewZoom, setViewZoom, setViewPan,
   });
 
   // Edit mode helpers (bounding box calculation, hit testing, cursor mapping)
@@ -695,13 +715,14 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
       getLayerProjectionTransform,
     });
 
+  const guideSnapPoints = usePreviewGuideSnapPoints(rulersVisible ? displayedCompId : null, canvasSize, effectiveResolution);
   // Layer drag logic (move/scale, overlay drawing, document-level listeners)
   const { isDragging, dragMode, dragHandle, hoverHandle, handleOverlayMouseDown, handleOverlayMouseMove, handleOverlayMouseUp } =
     useLayerDrag({
       editMode: layerTransformMode, overlayRef, canvasSize, canvasInContainer, viewZoom,
       layers, clips, tracks, selectedLayerId, selectedClipId,
       selectClip, selectLayer, hasKeyframes, setPropertyValue, updateClipTransform, updateLayer,
-      calculateLayerBounds, findLayersAtPosition, findHandleAtPosition,
+      calculateLayerBounds, findLayersAtPosition, findHandleAtPosition, guideSnapPoints,
     });
 
   const motionPathLayer = useMemo(
@@ -797,7 +818,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
     sceneNavClipId, sceneNavEnabled, sceneObjectOverlaySelectedClipId, selectClip,
     selectedClip, selectedTextBounds, selectedTextLayer, setPropertyValue, setPreviewQuality,
     setQualityOpen, setTextTyping, showPlaybackWaiter,
-    showBottomControls: !showTransport, sceneObjectOverlayEnabled,
+    showBottomControls: !showTransport, rulersVisible, sceneObjectOverlayEnabled,
     showSceneObjectOverlay, showTransparencyGrid, sourceMonitorActive, sourceMonitorFile,
     sourceMonitorPlaybackRequestId, textClipEditMode, textPreviewEditorEnabled,
     textTypingActive, toggleTransparency, tracks, updateTextBoundsVertex,
@@ -831,7 +852,7 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
   return (
     <PreviewTransportPortalContext.Provider value={transportPortalContext}>
       <div
-      className={`preview-container${maskNavigationMode ? ' mask-navigation-mode' : ''}${showTransport ? ' has-transport' : ''}${showTransport && !playbackControlsVisible ? ' transport-collapsed' : ''}`}
+      className={`preview-container${maskNavigationMode ? ' mask-navigation-mode' : ''}${showTransport ? ' has-transport' : ''}${showTransport && !playbackControlsVisible ? ' transport-collapsed' : ''}${rulersVisible ? ' has-rulers' : ''}${viewNavigationEnabled ? ` canvas-tool-${activeCanvasTool}` : ''}${isPanning ? ' is-panning' : ''}`}
       ref={containerRef}
       data-preview-panel-id={panelId}
       data-preview-editable={isEditableSource ? 'true' : 'false'}
@@ -936,6 +957,10 @@ export function Preview({ panelId, source, showTransparencyGrid, showTransport =
           sourceMonitorActive={sourceMonitorActive}
           setPreviewQuality={setPreviewQuality}
           showTransparencyGrid={showTransparencyGrid}
+          showRulers={showRulers}
+          onToggleRulers={toggleRulers}
+          canvasZoom={canvasZoom}
+          compositionSize={effectiveResolution}
         />
       )}
       </div>

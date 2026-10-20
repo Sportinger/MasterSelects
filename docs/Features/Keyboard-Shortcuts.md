@@ -108,6 +108,17 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 ### Preview
 
 - `Tab` toggles preview edit mode on the focused editable preview, or on the first editable preview when no preview has focus.
+- `Shift+R` toggles the pixel rulers on the focused preview, or on the first editable preview when no preview has focus.
+
+### Tools
+
+Tool keys act on the surface clicked last, the Preview canvas or the Timeline (see [UI Panels](./UI-Panels.md#tools-panel)):
+
+- `V` selects Move on the canvas, or the Select tool in the Timeline.
+- `H` selects the Hand tool and `Z` the Zoom tool of the target surface (new default bindings).
+- `T` selects the canvas Text tool while a Tools panel is open and the canvas is the target; otherwise it stays the Timeline trim group.
+- `R`, `E` and `P` start a rectangle, ellipse or pen mask on the selected layer from the Tools panel, as they do in the Masks tab.
+- Canvas tool keys only work while a Tools panel is open, so layouts without one keep their earlier key behavior apart from `H` and `Z`.
 - `1`, `2`, `3`, and `4` highlight the matching slot in the multi-preview panel.
 
 ### Panels

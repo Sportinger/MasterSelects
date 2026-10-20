@@ -11,6 +11,7 @@ import {
   IconPlayerTrackNextFilled,
   IconPlayerTrackPrevFilled,
   IconRepeat,
+  IconRuler2,
   IconVolume2,
   IconVolumeOff,
 } from '@tabler/icons-react';
@@ -23,6 +24,8 @@ import { useDockStore } from '../../stores/dockStore';
 import { formatTimelineTimecode } from '../timeline/utils/timelineGrid';
 import { usePreviewDockPanelId } from './PreviewDockPanelContext';
 import { usePreviewTransportPortal } from './PreviewTransportPortalContext';
+import { PreviewCanvasZoomBar } from './PreviewCanvasZoomBar';
+import type { PreviewCanvasZoom } from './usePreviewCanvasZoom';
 import './PreviewTransport.css';
 
 const PREVIEW_FRAME_RATE = 30;
@@ -38,6 +41,11 @@ interface PreviewTransportProps {
   sourceMonitorActive?: boolean;
   setPreviewQuality: (quality: PreviewQuality) => void;
   showTransparencyGrid: boolean;
+  showRulers: boolean;
+  onToggleRulers: () => void;
+  /** Set for still images: the time transport becomes a canvas zoom bar. */
+  canvasZoom: PreviewCanvasZoom | null;
+  compositionSize: { width: number; height: number };
 }
 
 export function PreviewTransport({
@@ -49,6 +57,10 @@ export function PreviewTransport({
   sourceMonitorActive = false,
   setPreviewQuality,
   showTransparencyGrid,
+  showRulers,
+  onToggleRulers,
+  canvasZoom,
+  compositionSize,
 }: PreviewTransportProps) {
   const dockPanelId = usePreviewDockPanelId();
   const { setSourceControlsTarget } = usePreviewTransportPortal();
@@ -214,6 +226,18 @@ export function PreviewTransport({
           </button>
         )}
         {showViewerTools && (
+          <button
+            aria-label="Toggle rulers"
+            aria-pressed={showRulers}
+            className={showRulers ? 'active' : undefined}
+            onClick={onToggleRulers}
+            title="Rulers [Shift+R]"
+            type="button"
+          >
+            <IconRuler2 aria-hidden="true" />
+          </button>
+        )}
+        {showViewerTools && (
           <label className="preview-transport-quality" title="Preview quality">
             <span className="preview-transport-quality-text">
               {previewQuality === 1 ? 'Full' : previewQuality === 0.5 ? 'Half' : 'Quarter'}
@@ -271,6 +295,8 @@ export function PreviewTransport({
             ref={setSourceControlsTarget}
             className="preview-source-transport-slot"
           />
+        ) : canvasZoom ? (
+          <PreviewCanvasZoomBar compositionSize={compositionSize} focusable={playbackControlsVisible} zoom={canvasZoom} />
         ) : (
           <>
             <input

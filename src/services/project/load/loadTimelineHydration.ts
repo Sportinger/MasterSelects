@@ -33,6 +33,7 @@ import { recoverPersistedTranscriptStatus } from '../../transcription/persistedT
 import { migratePersistedEffectOperatorGraph } from '../../operators/effectGraphOwner';
 import { normalizeCompositionRenderSettings } from '../../../engine/native3d/pathtrace/contracts/ptTypes';
 import { quantizeTimeToFrame, quantizeRetimeClipTimings } from '../../timeline/retime/clipRetimeQuantization';
+import { normalizeCompositionGuides } from '../../compositionGuides';
 import {
   normalizePersistedFaceStatus,
   sanitizePersistedFaceAnalysis,
@@ -468,6 +469,8 @@ export function convertProjectCompositionToStore(
       annotations: pc.annotations ? structuredClone(pc.annotations) : undefined,
       multicam: pc.multicam ? structuredClone(pc.multicam) : undefined,
       renderSettings: pc.renderSettings ? normalizeCompositionRenderSettings(pc.renderSettings) : undefined,
+      still: pc.still === true ? true : undefined,
+      guides: normalizeCompositionGuides(pc.guides, pc.id),
       timelineData,
     };
   });

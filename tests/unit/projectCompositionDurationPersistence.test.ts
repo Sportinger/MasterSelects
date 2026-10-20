@@ -71,6 +71,33 @@ function projectComposition(
 }
 
 describe('project composition duration persistence', () => {
+  it('restores the image-document flag of still compositions', () => {
+    const [still, video] = convertProjectCompositionToStore([
+      { ...projectComposition(5, 5, true), still: true },
+      { ...projectComposition(10, 10, true), id: 'comp-2' },
+    ]);
+    expect(still.still).toBe(true);
+    expect(still.timelineData?.durationLocked).toBe(true);
+    expect(video.still).toBeUndefined();
+  });
+
+  it('restores valid ruler guides and drops broken ones', () => {
+    const [composition] = convertProjectCompositionToStore([{
+      ...projectComposition(5, 5, true),
+      guides: [
+        { id: 'g1', orientation: 'vertical', position: 960 },
+        { id: 'g2', orientation: 'horizontal', position: -12 },
+        { id: 'g1', orientation: 'horizontal', position: 5 },
+        { id: 'g3', orientation: 'diagonal', position: 5 },
+        { id: 'g4', orientation: 'vertical', position: Number.NaN },
+      ] as never,
+    }]);
+    expect(composition.guides).toEqual([
+      { id: 'g1', orientation: 'vertical', position: 960 },
+      { id: 'g2', orientation: 'horizontal', position: -12 },
+    ]);
+  });
+
   it('restores an explicitly locked video-length composition on its frame grid', () => {
     const [composition] = convertProjectCompositionToStore([
       projectComposition(4321.23356, 4321.23356, true),

@@ -38,6 +38,8 @@ export const BUILT_IN_PANEL_TYPES: PanelType[] = [
   'scope-waveform',
   'scope-histogram',
   'scope-vectorscope',
+  'layers',
+  'tools',
 ];
 export const VALID_PANEL_TYPES = new Set(BUILT_IN_PANEL_TYPES);
 const PANEL_CONFIG_LOOKUP = PANEL_CONFIGS as Partial<Record<PanelType, PanelConfig>>;
@@ -60,6 +62,7 @@ export const FACTORY_COLOR_LAYOUT_ID = 'factory-color';
 export const FACTORY_MEDIUM_EDIT_LAYOUT_ID = 'factory-medium-edit';
 export const FACTORY_START_LAYOUT_ID = 'factory-start';
 export const FACTORY_LIVE_LAYOUT_ID = 'factory-live';
+export const FACTORY_IMAGE_EDIT_LAYOUT_ID = 'factory-image-edit';
 export const START_LAYOUT_REVEAL_DURATION_MS = 400;
 export const START_LAYOUT_OUTRO_DURATION_MS = 400;
 export const START_CHAT_EXIT_DURATION_MS = 120;
@@ -78,6 +81,7 @@ export const FACTORY_DOCK_LAYOUT_IDS = new Set([
   FACTORY_MEDIUM_EDIT_LAYOUT_ID,
   FACTORY_START_LAYOUT_ID,
   FACTORY_LIVE_LAYOUT_ID,
+  FACTORY_IMAGE_EDIT_LAYOUT_ID,
 ]);
 export const FACTORY_DOCK_LAYOUT_NAMES = new Map<string, string>([
   [FACTORY_VIDEO_EDIT_LAYOUT_ID, 'Video'],
@@ -89,6 +93,7 @@ export const FACTORY_DOCK_LAYOUT_NAMES = new Map<string, string>([
   [FACTORY_MEDIUM_EDIT_LAYOUT_ID, 'Medium'],
   [FACTORY_START_LAYOUT_ID, 'Chat'],
   [FACTORY_LIVE_LAYOUT_ID, 'Live'],
+  [FACTORY_IMAGE_EDIT_LAYOUT_ID, 'Image'],
 ]);
 export const FACTORY_DOCK_LAYOUT_NAME_TO_ID = new Map<string, string>(
   [
@@ -98,6 +103,8 @@ export const FACTORY_DOCK_LAYOUT_NAME_TO_ID = new Map<string, string>(
     ['audio edit', FACTORY_AUDIO_EDIT_LAYOUT_ID] as const,
     ['3d edit', FACTORY_3D_EDIT_LAYOUT_ID] as const,
     ['color edit', FACTORY_COLOR_LAYOUT_ID] as const,
+    ['image edit', FACTORY_IMAGE_EDIT_LAYOUT_ID] as const,
+    ['photo', FACTORY_IMAGE_EDIT_LAYOUT_ID] as const,
     ['v mobile', FACTORY_VERTICAL_MOBILE_LAYOUT_ID] as const,
   ],
 );

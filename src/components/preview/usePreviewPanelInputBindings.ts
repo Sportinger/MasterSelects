@@ -15,6 +15,7 @@ interface UsePreviewPanelInputBindingsOptions {
   isPreviewShortcutTarget: () => boolean;
   sceneNavEnabled: boolean;
   setEditMode: Dispatch<SetStateAction<boolean>>;
+  toggleRulers: () => void;
   viewNavigationEnabled: boolean;
 }
 
@@ -41,6 +42,7 @@ export function usePreviewPanelInputBindings({
   isPreviewShortcutTarget,
   sceneNavEnabled,
   setEditMode,
+  toggleRulers,
   viewNavigationEnabled,
 }: UsePreviewPanelInputBindingsOptions) {
   usePreviewPinchZoom({
@@ -79,6 +81,8 @@ export function usePreviewPanelInputBindings({
     enabled: isEditableSource,
     shouldHandle: isPreviewShortcutTarget,
   });
+
+  useShortcut('preview.toggleRulers', toggleRulers, { shouldHandle: isPreviewShortcutTarget });
 
   const { handleContextMenu, handleAuxClick } = usePreviewContextMenu({
     editCameraOrthoViewActive,

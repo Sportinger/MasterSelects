@@ -9,7 +9,7 @@ import type { AnimatableProperty } from './animationProperties';
 
 // Panel types that can be docked
 // Note: Effects, Transcript, Analysis are now integrated into Properties panel
-export type PanelType = 'start' | 'preview' | 'multi-preview' | 'timeline' | 'curves' | 'clip-properties' | 'history' | 'annotations' | 'documents' | 'stats' | 'audio-mixer' | 'node-workspace' | 'color-nodes' | 'color-controls' | 'color-clips' | 'color-timeline' | 'color-scopes' | 'color-keyframes' | 'media' | '3d-scan' | 'discover' | 'ai-studio' | 'export' | 'midi-mapping' | 'capture' | 'go-live' | 'slot-grid' | 'stream-chat' | 'stream-analytics' | 'story' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope';
+export type PanelType = 'start' | 'preview' | 'multi-preview' | 'timeline' | 'curves' | 'clip-properties' | 'history' | 'annotations' | 'documents' | 'stats' | 'audio-mixer' | 'node-workspace' | 'color-nodes' | 'color-controls' | 'color-clips' | 'color-timeline' | 'color-scopes' | 'color-keyframes' | 'media' | '3d-scan' | 'discover' | 'ai-studio' | 'export' | 'midi-mapping' | 'capture' | 'go-live' | 'slot-grid' | 'stream-chat' | 'stream-analytics' | 'story' | 'ai-segment' | 'scene-description' | 'transitions' | 'scope-waveform' | 'scope-histogram' | 'scope-vectorscope' | 'layers' | 'tools';
 export type DockLayoutTransitionStaggerMode = 'puzzle' | 'sequence';
 export type DockLayoutStartTransitionDirection = 'to-start' | 'from-start';
 
@@ -46,7 +46,12 @@ export interface PreviewPanelData {
   source?: PreviewPanelSource;
   compositionId?: string | null; // legacy: null = active composition
   showTransparencyGrid?: boolean; // per-tab transparency grid toggle (default false)
+  showRulers?: boolean; // per-tab pixel rulers (default false)
   initialEditMode?: boolean;
+  /**
+   * Camera of an initial 3D edit view. With `initialEditMode` and no camera
+   * view, the preview starts in 2D canvas edit mode (Image workspace).
+   */
   initialEditCameraView?: 'camera' | 'front' | 'side' | 'top';
   /** @deprecated Dock previews now expose the unified, collapsible transport. */
   showTransport?: boolean;
@@ -443,6 +448,22 @@ export const PANEL_CONFIGS: Record<PanelType, PanelConfig> = {
     minHeight: 240,
     closable: false,
   },
+  layers: {
+    type: 'layers',
+    title: 'Layers',
+    icon: 'Layers',
+    minWidth: 220,
+    minHeight: 180,
+    closable: false,
+  },  tools: {
+    type: 'tools',
+    title: 'Tools',
+    icon: 'Tools',
+    minWidth: 40,
+    minHeight: 120,
+    fixedWidth: 40,
+  },
+
   transitions: {
     type: 'transitions',
     title: 'Transitions',

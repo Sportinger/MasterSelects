@@ -223,6 +223,8 @@ export interface ProjectComposition {
   annotations?: SourceAnnotation[];
   multicam?: import('../../../types/multicam').CompositionMulticam;
   renderSettings?: import('../../../types/renderSettings').CompositionRenderSettings;
+  still?: boolean;
+  guides?: import('../../../types/compositionGuides').CompositionGuide[];
 
   // Tracks and clips
   tracks: ProjectTrack[];

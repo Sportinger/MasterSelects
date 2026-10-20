@@ -4,6 +4,8 @@ import { claimShortcut } from '../../services/shortcutFocusPolicy';
 import { getShortcutRegistry } from '../../services/shortcutRegistry';
 import { useTimelineStore } from '../../stores/timeline';
 import { usePlaybackLoop } from '../timeline/hooks/usePlaybackLoop';
+import { useTimelineLayerSyncOwnerMounted } from '../timeline/hooks/timelineLayerSyncOwners';
+import { HeadlessLayerSync } from './HeadlessLayerSync';
 
 function useEditorPlaybackShortcut() {
   useEffect(() => {
@@ -30,11 +32,12 @@ function useEditorPlaybackShortcut() {
 /**
  * Owns composition playback independently of the currently mounted dock layout.
  * Timeline, Color, and other workspace transports and shortcuts all control the
- * same store.
+ * same store. Without a Timeline panel it also syncs the render layers.
  */
 export function EditorPlaybackRuntimeHost() {
   const isPlaying = useTimelineStore(state => state.isPlaying);
+  const timelineSyncsLayers = useTimelineLayerSyncOwnerMounted();
   useEditorPlaybackShortcut();
   usePlaybackLoop({ isPlaying });
-  return null;
+  return timelineSyncsLayers ? null : <HeadlessLayerSync />;
 }

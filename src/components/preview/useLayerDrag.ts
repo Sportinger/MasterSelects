@@ -1,5 +1,5 @@
 // Layer drag logic: move/scale layers in edit mode with document-level listeners + overlay drawing
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { useTimelineStore } from '../../stores/timeline';
 import type { AnimatableProperty, Layer, TimelineClip, TimelineTrack } from '../../types';
 import {
@@ -10,12 +10,7 @@ import {
   type LayerOverlayBounds,
   type OverlayPoint,
 } from './editModeOverlayMath';
-import {
-  getCanvasSnapPoints,
-  getLayerBoundsSnapPoints,
-  mergeSnapPointSets,
-  resolveSnapDelta,
-} from './editModeSnapping';
+import { resolveLayerMoveSnapDelta, type AxisSnapPoints } from './editModeSnapping';
 import {
   commitLayerTransformDrag,
   resolveClipScaleFromLayerScale,
@@ -50,6 +45,8 @@ interface UseLayerDragParams {
   calculateLayerBounds: (layer: Layer, canvasW: number, canvasH: number, forcePos?: { x: number; y: number }) => LayerOverlayBounds;
   findLayersAtPosition: (containerX: number, containerY: number) => Layer[];
   findHandleAtPosition: (containerX: number, containerY: number, layer: Layer) => string | null;
+  /** Visible ruler guides in canvas-size units; moves always snap to them. */
+  guideSnapPoints?: AxisSnapPoints;
 }
 
 function drawOverlayPath(ctx: CanvasRenderingContext2D, corners: LayerOverlayBounds['corners']): void {
@@ -84,39 +81,6 @@ interface MovePositionBasis {
 
 const LAYER_SNAP_THRESHOLD_SCREEN_PX = 10;
 
-function resolveLayerMoveSnapDelta(params: {
-  layer: Layer;
-  candidatePosition: { x: number; y: number };
-  layers: readonly Layer[];
-  canvasSize: { width: number; height: number };
-  threshold: number;
-  calculateLayerBounds: UseLayerDragParams['calculateLayerBounds'];
-}): OverlayPoint {
-  const {
-    layer,
-    candidatePosition,
-    layers,
-    canvasSize,
-    threshold,
-    calculateLayerBounds,
-  } = params;
-  const movedBounds = calculateLayerBounds(layer, canvasSize.width, canvasSize.height, candidatePosition);
-  const targetSets = [
-    getCanvasSnapPoints(canvasSize.width, canvasSize.height),
-    ...layers
-      .filter((candidate) => candidate?.id !== layer.id && candidate?.visible && candidate?.source)
-      .map((candidate) => getLayerBoundsSnapPoints(
-        calculateLayerBounds(candidate, canvasSize.width, canvasSize.height),
-      )),
-  ];
-
-  return resolveSnapDelta(
-    getLayerBoundsSnapPoints(movedBounds),
-    mergeSnapPointSets(targetSets),
-    threshold,
-  );
-}
-
 export function useLayerDrag({
   editMode,
   overlayRef,
@@ -137,6 +101,7 @@ export function useLayerDrag({
   calculateLayerBounds,
   findLayersAtPosition,
   findHandleAtPosition,
+  guideSnapPoints,
 }: UseLayerDragParams) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragLayerId, setDragLayerId] = useState<string | null>(null);
@@ -158,9 +123,12 @@ export function useLayerDrag({
   const dragUpdateFrame = useRef<number | null>(null);
   const layerHitCycleRef = useRef<LayerHitCycleState | null>(null);
 
+  const guideSnapPointsRef = useRef(guideSnapPoints);
+
   useEffect(() => {
     layersRef.current = layers;
-  }, [layers]);
+    guideSnapPointsRef.current = guideSnapPoints;
+  }, [guideSnapPoints, layers]);
 
   useEffect(() => {
     clipsRef.current = clips;
@@ -269,8 +237,9 @@ export function useLayerDrag({
     clearOwnedTransformPreview();
   }, [clearOwnedTransformPreview]);
 
-  // Draw overlay with bounding boxes (full-container overlay)
-  useEffect(() => {
+  // Draw overlay with bounding boxes (full-container overlay). A layout effect
+  // paints it in the same frame as a pan or zoom of the canvas.
+  useLayoutEffect(() => {
     if (!editMode || !overlayRef.current) return;
 
     const ctx = overlayRef.current.getContext('2d');
@@ -627,7 +596,8 @@ export function useLayerDrag({
         let newPosX = dragStart.current.layerPosX + positionDelta.x;
         let newPosY = dragStart.current.layerPosY + positionDelta.y;
 
-        if (e.shiftKey) {
+        const guides = guideSnapPointsRef.current;
+        if (e.shiftKey || (guides && (guides.x.length > 0 || guides.y.length > 0))) {
           const snapDelta = resolveLayerMoveSnapDelta({
             layer,
             candidatePosition: { x: newPosX, y: newPosY },
@@ -635,6 +605,8 @@ export function useLayerDrag({
             canvasSize,
             threshold: LAYER_SNAP_THRESHOLD_SCREEN_PX / Math.max(0.0001, viewZoom),
             calculateLayerBounds,
+            guideSnapPoints: guides,
+            snapToLayout: e.shiftKey,
           });
           if (snapDelta.x !== 0 || snapDelta.y !== 0) {
             const snappedPositionDelta = resolvePositionDeltaForCanvasDelta(

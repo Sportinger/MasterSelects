@@ -1,4 +1,5 @@
-import { DEFAULT_DRAG_STATE, DEFAULT_LAYOUT } from './layoutDefaults';
+import { DEFAULT_DRAG_STATE } from './dragStateDefaults';
+import { DEFAULT_LAYOUT } from './layoutDefaults';
 import { cloneDockLayout, getFactoryDockLayouts } from './layoutPersistence';
 import { FACTORY_VIDEO_EDIT_LAYOUT_ID } from './panelRegistry';
 import type { DockStoreState } from './storeTypes';

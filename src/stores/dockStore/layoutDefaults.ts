@@ -1,4 +1,4 @@
-import type { DockDragState, DockLayout, PreviewPanelData, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
+import type { DockLayout, PreviewPanelData, SavedDockLayout, SavedDockTimelineLayout } from '../../types/dock';
 import type { ThemeMode } from '../settings/settingsOptions';
 import {
   FACTORY_3D_EDIT_LAYOUT_ID,
@@ -11,6 +11,7 @@ import {
 } from './panelRegistry';
 import { MEDIUM_SAVED_DOCK_LAYOUT } from './mediumLayoutDefaults';
 import { LIVE_SAVED_DOCK_LAYOUT } from './liveLayoutDefaults';
+import { IMAGE_SAVED_DOCK_LAYOUT } from './imageLayoutDefaults';
 export const FACTORY_3D_EDIT_PREVIEW_DEFAULTS: Record<string, Pick<PreviewPanelData, 'initialEditMode' | 'initialEditCameraView'>> = {
   '3d-preview-front': { initialEditMode: true, initialEditCameraView: 'front' },
   '3d-preview-side': { initialEditMode: true, initialEditCameraView: 'side' },
@@ -61,10 +62,11 @@ export const DEFAULT_LAYOUT: DockLayout = {
                 id: 'right-group',
                 panels: [
                   { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
+                  { id: 'layers', type: 'layers', title: 'Layers' },
                   { id: 'export', type: 'export', title: 'Export' },
                   { id: 'color-controls', type: 'color-controls', title: 'Coloring' },
                 ],
-                activeIndex: 1,
+                activeIndex: 2,
               },
             ],
           },
@@ -129,6 +131,7 @@ export const RESOLVE_VIDEO_EDIT_LAYOUT: DockLayout = {
                 id: 'right-group',
                 panels: [
                   { id: 'clip-properties', type: 'clip-properties', title: 'Properties' },
+                  { id: 'layers', type: 'layers', title: 'Layers' },
                   { id: 'color-controls', type: 'color-controls', title: 'Coloring' },
                   { id: 'export', type: 'export', title: 'Export' },
                 ],
@@ -622,7 +625,7 @@ export const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
     layout: DEFAULT_LAYOUT,
     timeline: VIDEO_EDIT_TIMELINE_LAYOUT,
     createdAt: 0,
-    updatedAt: 5,
+    updatedAt: 6,
     favorite: true,
     factory: true,
   },
@@ -677,6 +680,7 @@ export const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
     favorite: true,
     factory: true,
   },
+  IMAGE_SAVED_DOCK_LAYOUT,
   LIVE_SAVED_DOCK_LAYOUT,
   {
     id: FACTORY_START_LAYOUT_ID,
@@ -688,13 +692,3 @@ export const FACTORY_SAVED_DOCK_LAYOUTS: SavedDockLayout[] = [
     factory: true,
   },
 ];
-export const DEFAULT_DRAG_STATE: DockDragState = {
-  isDragging: false,
-  draggedPanel: null,
-  sourceGroupId: null,
-  sourceFloatingId: null,
-  dropTarget: null,
-  dragOffset: { x: 0, y: 0 },
-  currentPos: { x: 0, y: 0 },
-  lastDropCommitted: false,
-};

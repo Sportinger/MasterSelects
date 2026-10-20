@@ -40,6 +40,7 @@ export type ShortcutActionId =
   | 'tool.navigationGroup'
   | 'tool.hand'
   | 'tool.zoom'
+  | 'tool.text'
   | 'tool.penKeyframe'
   | 'tool.midiDraw'
   | 'edit.splitAtPlayhead'
@@ -79,6 +80,7 @@ export type ShortcutActionId =
   | 'view.toggleCurveMode'
   // Preview
   | 'preview.editMode'
+  | 'preview.toggleRulers'
   | 'preview.slot1'
   | 'preview.slot2'
   | 'preview.slot3'
