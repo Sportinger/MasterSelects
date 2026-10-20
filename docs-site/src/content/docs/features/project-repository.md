@@ -312,6 +312,14 @@ change track visibility, or insert a camera then. Interactive tutorials wait for
 a writable repository before opening their history batch. Content guards remain
 in force for explicit edit attempts against read-only projects.
 
+A rejected edit (`RepositoryError` with code `ownership`: read-only tab,
+activation or handoff in progress, content projection being activated) is not
+applied. When it escapes a UI handler, the global error hooks
+(`src/services/runtimeDiagnostics.ts`, `src/services/editRejection.ts`) record
+it as a `WARN` diagnostic ("Edit not applied: …"), keep it out of crash reporting
+and show a short "Not applied" notice with the reason. Other repository error
+codes stay errors.
+
 Live journals larger than 256 KiB use the bounded aggregate representation already
 used by imported journals. Individual string/array/object blocks and mapping pages
 remain below the record limit; the logical value is reconstructed on read. Queue

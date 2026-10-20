@@ -27,6 +27,8 @@ The universal importer is connected to the Media Panel import flow. Signal impor
 
 `SignalArtifact` represents persisted content-addressed output. The artifact contract includes a hash, size, MIME type, encoding, storage location, producer, source references, and creation time.
 
+The artifact store returns an `ArtifactManifest`, which extends `SignalArtifact` with store bookkeeping (`blobId`, `manifestHash`, `retention`, `hashAlgorithm`). Project state keeps only the `SignalArtifact` fields: imports pass stored manifests through `toSignalArtifact()` (`src/artifacts/signalArtifact.ts`). The project repository's field ownership check rejects the extra fields, so before this every signal import into a stored project (STL, CSV, JSON, binary fallback) failed with `Unclassified nested DTO field: ProjectSignalState/assets/0/artifacts/0/blobId`.
+
 `SignalOperatorDescriptor` describes importer, analyzer, operator, renderer-adapter, and exporter providers without binding those providers to the main thread.
 
 ## Legacy Mappings

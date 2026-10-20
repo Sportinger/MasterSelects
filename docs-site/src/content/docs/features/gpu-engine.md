@@ -201,6 +201,8 @@ This is why preview can stay stable during seeks while a fresh frame is pending.
 
 - Firefox uses `getCopiedHtmlVideoPreviewFrame()` for HTML video preview stability.
 - That path copies the current video frame into a persistent GPU texture and falls back to the previous stable frame when needed.
+- Firefox 157 exposes WebGPU without `importExternalTexture`/`texture_external`. `supportsExternalTextures(device)` (`src/engine/texture/externalTextureSupport.ts`) detects this and logs one warning. The compositor then creates no external composite/copy pipelines (`resources.external` is `null`), `TextureManager.importVideoTexture()` returns `null` so collectors use copied textures, and `TemporalFrameUploader` copies decoded `VideoFrame`s into its transfer texture; Slit Scan skips the external-texture shared-source block and uses the atlas path. Without this, startup raised uncaptured shader, bind-group-layout and pipeline validation errors.
+- On Chromium, an import that fails because the video frame has no GPU backing yet ("doesn't have back resource", seen with a just-started live camera) is logged as a warning and retried next frame; other import failures stay errors.
 
 ---
 
