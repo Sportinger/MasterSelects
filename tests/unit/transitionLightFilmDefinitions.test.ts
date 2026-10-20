@@ -228,9 +228,8 @@ describe('light and film transition definitions', () => {
       effectType: 'motion-blur',
       effectName: 'Motion Blur',
       params: {
-        amount: { from: 0.1, to: 0 },
+        amount: { from: 0.05625, to: 0 },
         angle: 1.5708,
-        samples: 32,
       },
       startProgress: 0.28,
       endProgress: 1,

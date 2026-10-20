@@ -26,6 +26,9 @@ export interface EffectParam {
   // Internal state carried in params (e.g. a baked artifact reference). Kept in
   // project data and undo, but omitted from generic controls and property lists.
   hidden?: boolean;
+  // Retired parameter: kept (hidden) so saved projects and old tool calls still load, but
+  // the renderer no longer reads it. Tools return this reason when a caller sets it.
+  deprecated?: string;
 }
 
 /**

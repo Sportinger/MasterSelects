@@ -7,6 +7,7 @@ import { createSerializableTimelineState } from '../../src/stores/timeline/seria
 import { useTimelineStore } from '../../src/stores/timeline';
 import { captureSnapshot, getHistoryStateView, initHistoryStoreRefs, setHistoryCallbacks } from '../../src/stores/historyStore';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
+import { evaluateImagePasses } from '../helpers/imageGraphPasses';
 import type { Effect, Keyframe, TimelineClip } from '../../src/types';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { buildBaseLayerProps } from '../../src/engine/export/layerBuilder/baseLayers';
@@ -110,8 +111,11 @@ describe('image graph lifecycle parity', () => {
       expect(exportParams[item.parameter]).toBeCloseTo(item.expected);
       const context = { uv: [0.9, 0.5] as [number, number], resolution: [64, 37] as [number, number], timelineTimeSeconds: 1,
         sampleImage: () => pixel };
-      const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel, context);
-      const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel, context);
+      // Box and Gaussian Blur are two-pass (separable) plans; their cache is evaluated on the CPU at the sampled UV.
+      const run = (plan: ReturnType<typeof compileImageOperatorGraph>) => plan.passes?.length
+        ? evaluateImagePasses(plan, context.uv, context.resolution, () => pixel) : evaluateImageOperatorPlan(plan, pixel, context);
+      const previewPixel = run(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams));
+      const exportPixel = run(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams));
       expect(previewPixel).toEqual(exportPixel);
       if (item.type === 'box-blur' || item.type === 'gaussian-blur') expect(exportPixel[3]).toBeCloseTo(pixel[3], 12);
       else expect(exportPixel[3]).toBe(pixel[3]);

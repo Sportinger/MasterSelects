@@ -47,15 +47,16 @@ export const filmRoll: TransitionDefinition = {
       endProgress: 1,
       curve: 'ease-out',
     },
+    // Motion Blur length is a share of the frame width; 0.05625 keeps the former vertical
+    // streak (0.1 of the frame height) on 16:9.
     {
       kind: 'effect',
       target: 'outgoing',
       effectType: 'motion-blur',
       effectName: 'Motion Blur',
       params: {
-        amount: { from: 0, to: 0.1 },
+        amount: { from: 0, to: 0.05625 },
         angle: 1.5708,
-        samples: 32,
       },
       startProgress: 0,
       endProgress: 0.72,
@@ -67,9 +68,8 @@ export const filmRoll: TransitionDefinition = {
       effectType: 'motion-blur',
       effectName: 'Motion Blur',
       params: {
-        amount: { from: 0.1, to: 0 },
+        amount: { from: 0.05625, to: 0 },
         angle: 1.5708,
-        samples: 32,
       },
       startProgress: 0.28,
       endProgress: 1,

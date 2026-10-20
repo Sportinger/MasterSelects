@@ -1,7 +1,10 @@
-// Radial Blur Effect - High Quality
+// Radial Blur: two-stage Zoom (legacy inward falloff) or Spin (rotation) about a centre.
+// Rendering is owned by the editable operator graph (services/operators/directionalBlurEffectGraphs.ts);
+// directionalBlur.wgsl is its WGSL reference. Contract: ../blurSampling.ts.
 
-import shader from './shader.wgsl?raw';
+import shader from '../directionalBlur.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { finiteBlurParam, radialBlurMode } from '../blurSampling';
 
 export const radialBlur: EffectDefinition = {
   id: 'radial-blur',
@@ -10,9 +13,18 @@ export const radialBlur: EffectDefinition = {
 
   shader,
   entryPoint: 'radialBlurFragment',
-  uniformSize: 16,
+  uniformSize: 32,
 
   params: {
+    mode: {
+      type: 'select',
+      label: 'Type',
+      default: 'zoom',
+      options: [
+        { value: 'zoom', label: 'Zoom' },
+        { value: 'spin', label: 'Spin' },
+      ],
+    },
     amount: {
       type: 'number',
       label: 'Amount',
@@ -48,16 +60,13 @@ export const radialBlur: EffectDefinition = {
       max: 256,
       step: 1,
       animatable: false,
-      quality: true,
+      hidden: true,
+      deprecated: 'Radial Blur now chooses its taps from the streak length automatically; samples has no effect.',
     },
   },
 
-  packUniforms: (params) => {
-    return new Float32Array([
-      params.amount as number ?? 0.5,
-      params.centerX as number ?? 0.5,
-      params.centerY as number ?? 0.5,
-      params.samples as number ?? 32,
-    ]);
-  },
+  packUniforms: (params, width, height) => new Float32Array([
+    finiteBlurParam(params.amount, 0.5), 0, finiteBlurParam(params.centerX, 0.5), finiteBlurParam(params.centerY, 0.5), width, height, 2,
+    radialBlurMode(params.mode) === 'spin' ? 1 : 0,
+  ]),
 };

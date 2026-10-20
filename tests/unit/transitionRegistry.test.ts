@@ -239,7 +239,6 @@ describe('transition registry', () => {
       effectName: 'Gaussian Blur',
       params: {
         radius: { from: 0, to: 28 },
-        samples: 11,
       },
       startProgress: 0,
       endProgress: 0.88,
@@ -689,7 +688,6 @@ describe('transition registry', () => {
         amount: { from: 0, to: 0.46 },
         centerX: 0.5,
         centerY: 0.5,
-        samples: 32,
       },
       startProgress: 0,
       endProgress: 0.62,
@@ -703,7 +701,6 @@ describe('transition registry', () => {
       params: {
         amount: { from: 0, to: 0.11 },
         angle: 0,
-        samples: 32,
       },
       startProgress: 0,
       endProgress: 0.66,

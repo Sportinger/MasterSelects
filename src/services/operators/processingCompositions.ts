@@ -1,24 +1,47 @@
 import { extractImageComposition } from './extractImageComposition';
-import { createDefaultMotionBlurGraph, createDefaultRadialBlurGraph } from './directionalBlurEffectGraphs';
+import { createLegacyMotionBlurGraph, createLegacyRadialBlurGraph } from './legacyDirectionalBlurEffectGraphs';
+import { createDefaultGaussianBlurGraph } from './blurEffectGraphs';
 import { createDefaultContrastGraph, createDefaultSaturationGraph } from './colorEffectGraphs';
 import { createLegacyGlowGraph } from './glowEffectGraph';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultAsciiGraph, createDefaultAsciiGhostGraph } from './asciiEffectGraph';
 
 const ascii = createDefaultAsciiGraph();
+const gaussian = createDefaultGaussianBlurGraph();
 const glyphConsumers = ['Image graphs', 'ASCII / Glyph effects'];
 /** Versioned recipes, not additional shader implementations. Resource owners stay outside each recipe. */
 export const PROCESSING_COMPOSITIONS = [
-  extractImageComposition(createDefaultMotionBlurGraph(), {
+  // Extracted from the original single-pass Motion/Radial recipes so the shared definitions stay byte-stable.
+  extractImageComposition(createLegacyMotionBlurGraph(), {
     id: 'sampling.bounded-count', label: 'Bounded Sample Count',
     description: 'Bound a sample count using explicit lower/upper inputs, preserving the existing max, comparison and selection arithmetic. Truncation remains with the reducer.',
     members: ['samples-at-least-minimum', 'samples-over-maximum', 'count'], captureLiterals: false,
     consumers: ['Image graphs', 'Gaussian Blur', 'Motion Blur', 'Radial Blur', 'Zoom Blur'],
   }),
-  extractImageComposition(createDefaultRadialBlurGraph(), {
+  extractImageComposition(createLegacyRadialBlurGraph(), {
     id: 'coordinates.centered-scale.vec2', label: 'Scale UV',
     description: 'Scale a direction vector and add its center, using the existing scalar broadcast and vector math.',
     members: ['scale-vec2', 'scaled-direction', 'sample-uv'], consumers: ['Image graphs', 'Radial Blur', 'Zoom Blur'],
+  }),
+  // Linear-sampling pair taps of the separable Box/Gaussian Blur: one tap reads two texels at their weighted centre.
+  extractImageComposition(gaussian, {
+    id: 'sampling.pair-tap-offsets', label: 'Pair Tap Offsets',
+    description: 'For entry k of a 2 * pairs + 1 sequence: the near and far texel offsets (2|j|-1 and 2|j| times the stride, j = k - pairs), a gate that is 0 for the centre entry and the side (-1, 0 or 1). Weight both offsets with any kernel, then merge them with Merge Pair Weights.',
+    members: ['horizontal-signed', 'horizontal-magnitude', 'horizontal-far-texel', 'horizontal-far', 'horizontal-near-texel-raw', 'horizontal-near-texel',
+      'horizontal-near', 'horizontal-pair-gate', 'horizontal-magnitude-floor', 'horizontal-side'],
+    inputLabels: { 'horizontal-sequence-index': 'Sequence index', 'pairs-value': 'Pairs per side', 'stride-value': 'Texel stride' },
+    outputLabels: { 'horizontal-far-value': 'Far offset', 'horizontal-near-value': 'Near offset', 'horizontal-pair-gate-value': 'Pair gate', 'horizontal-side-value': 'Side' },
+    consumers: ['Image graphs', 'Gaussian Blur', 'Box Blur'],
+  }),
+  extractImageComposition(gaussian, {
+    id: 'sampling.pair-merge', label: 'Merge Pair Weights',
+    description: 'Merge two kernel weights into one linear-filtered tap: weight = near * gate + far, offset = side * weighted centre of the two offsets. Exact for any weights on texel-aligned offsets.',
+    members: ['horizontal-near-weight', 'horizontal-weight', 'horizontal-near-moment', 'horizontal-far-moment', 'horizontal-moment',
+      'horizontal-safe-weight', 'horizontal-centre', 'horizontal-offset-px'],
+    inputLabels: { 'horizontal-near-weight-raw-value': 'Near weight', 'horizontal-pair-gate-value': 'Pair gate', 'horizontal-far-weight-value': 'Far weight',
+      'horizontal-near-value': 'Near offset', 'horizontal-far-value': 'Far offset', 'horizontal-side-value': 'Side' },
+    outputLabels: { 'horizontal-weight-value': 'Weight', 'horizontal-offset-px-value': 'Offset (texels)' },
+    consumers: ['Image graphs', 'Gaussian Blur', 'Box Blur'],
   }),
   extractImageComposition(createDefaultSaturationGraph(), {
     id: 'color.luma-saturation.rgb', label: 'Saturation',

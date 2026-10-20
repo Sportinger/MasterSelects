@@ -38,6 +38,16 @@ describe('EffectsTab numeric controls', () => {
     expect(screen.getByTitle('Expand Brightness')).toHaveAttribute('aria-expanded', 'false');
   });
 
+  it('shows Radial Blur type and strength but no retired Samples or Quality section', () => {
+    const radial: Effect = { id: 'radial-ui', type: 'radial-blur', name: 'Radial Blur', enabled: true,
+      params: { mode: 'spin', amount: 0.5, centerX: 0.5, centerY: 0.5, samples: 32 } };
+    render(<EffectsTab clipId="clip:effects-controls" effects={[radial]} />);
+    expect(screen.getByText('Type')).toBeInTheDocument();
+    expect(screen.getByLabelText('Amount')).toBeVisible();
+    expect(screen.queryByLabelText('Samples')).toBeNull();
+    expect(screen.queryByText('Quality')).toBeNull();
+  });
+
   it('uses the shared Transform-style labeled draggable value without a separate slider', () => {
     const brightness: Effect = {
       id: 'effect:brightness:test',

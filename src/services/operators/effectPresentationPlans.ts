@@ -10,7 +10,6 @@ export const GLYPH_PRESENTATION_EFFECTS = new Set(['ascii', 'number-field', 'gri
   'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'contour-type']);
 const COLORS = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'temperature', 'vibrance', 'threshold', 'posterize', 'invert']);
 const REDUCE = 'reduce weight-vec4 average blurred';
-const BYPASS = 'half enabled bypass bypass-threshold selected';
 
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
@@ -24,17 +23,23 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
             : includes('min-vec2 max-vec2 clamped-uv curved-sample color', id) ? 'sampling'
               : /^(masked-color|scanned-color|flickered-color|mixed-color|combine)$/.test(id) ? 'finish' : 'curvature',
   };
-  if (type === 'box-blur' || type === 'sharpen') return {
-    labels: { sampling: 'Kernel Sampling', weight: 'Gaussian Weight', average: 'Weighted Average', finish: type === 'sharpen' ? 'Sharpen & Alpha' : 'Radius Bypass' },
+  if (type === 'gaussian-blur' || type === 'box-blur') return {
+    labels: { size: 'Radius & Tap Count', horizontal: 'Horizontal Pass (premultiplied)', vertical: 'Vertical Pass', finish: 'Straight Alpha Output' },
+    stage: ({ id }) => /^horizontal-/.test(id) ? 'horizontal' : /^vertical-/.test(id) ? 'vertical'
+      : /^(result|coverage-floor)/.test(id) ? 'finish' : 'size',
+  };
+  if (['motion-blur', 'radial-blur', 'zoom-blur'].includes(type)) return {
+    labels: { range: 'Blur Range', count: 'Tap Counts & Box Length', fine: 'Stage A: Short Box (cached)', coarse: 'Stage B: Coarse Taps', finish: 'Straight Alpha Output' },
+    stage: ({ id }) => /^fine-/.test(id) ? 'fine'
+      : /^(coarse-(?!needed$|count$|limit$|root$)|range-span|range-direction|boxes|covered|along|taper)/.test(id) ? 'coarse'
+        : /^(coarse-|longest-px|step)/.test(id) ? 'count'
+          : /^(result|coverage-floor)/.test(id) ? 'finish' : 'range',
+  };
+  if (type === 'sharpen') return {
+    labels: { sampling: 'Kernel Sampling', weight: 'Gaussian Weight', average: 'Weighted Average', finish: 'Sharpen & Alpha' },
     stage: ({ id }) => includes(REDUCE, id) ? 'average'
       : /^(sigma|two-sigma|distance-squared|negative-distance|exponent|weight$|radius-half)/.test(id) ? 'weight'
         : /^(frame|uv|resolution|index|one-vec2|texel-size|offset|radius-vec2|scaled-offset|sample)/.test(id) ? 'sampling' : 'finish',
-  };
-  if (['motion-blur', 'radial-blur', 'zoom-blur'].includes(type)) return {
-    labels: { count: 'Sample Count', sampling: 'Sample Coordinates', weight: 'Sample Weight', finish: 'Average & Bypass' },
-    stage: ({ id }) => /^(samples-|count$)/.test(id) ? 'count'
-      : includes(`${REDUCE} ${BYPASS}`, id) ? 'finish'
-        : /^(negative-t|weight|t-half)/.test(id) ? 'weight' : 'sampling',
   };
   if (type === 'glow') return {
     labels: { count: 'Ring & Sample Counts', spacing: 'Sample Spacing & Prefilter Size', taps: 'Horizontal Prefilter Taps',

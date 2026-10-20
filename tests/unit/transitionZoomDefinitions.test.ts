@@ -94,7 +94,6 @@ describe('zoom transition definitions', () => {
         amount: { from: 0.46, to: 0 },
         centerX: 0.5,
         centerY: 0.5,
-        samples: 32,
       },
       startProgress: 0.38,
       endProgress: 1,

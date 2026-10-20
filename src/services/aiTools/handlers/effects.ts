@@ -12,6 +12,12 @@ import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/s
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
+/** Retired parameters are still accepted (saved projects carry them) but say that they do nothing. */
+function deprecatedParamWarnings(effectType: string, params: Record<string, unknown> | undefined): string[] {
+  const definitions = getEffect(effectType)?.params ?? {};
+  return Object.keys(params ?? {}).flatMap(name => definitions[name]?.deprecated ? [`${name}: ${definitions[name].deprecated}`] : []);
+}
+
 export async function handleListEffects(): Promise<ToolResult> {
   const categories = getCategoriesWithEffects();
   const data = categories.map(({ category, effects }) => ({
@@ -19,7 +25,7 @@ export async function handleListEffects(): Promise<ToolResult> {
     effects: effects.map(e => ({
       id: e.id,
       name: e.name,
-      params: Object.entries(e.params).map(([key, param]) => ({
+      params: Object.entries(e.params).filter(([, param]) => !param.hidden).map(([key, param]) => ({
         name: key,
         type: param.type,
         default: param.default,
@@ -78,6 +84,7 @@ export async function handleAddEffect(
   }
 
   invalidateCache();
+  const warnings = deprecatedParamWarnings(effectType, customParams);
 
   return {
     success: true,
@@ -85,6 +92,7 @@ export async function handleAddEffect(
       clipId,
       effectId: newEffect?.id,
       effectType,
+      ...(warnings.length ? { warnings } : {}),
       params: newEffect ? { ...getDefaultParams(effectType), ...customParams } : getDefaultParams(effectType),
       ...describeMutationEntities(
         mutationSnapshot,
@@ -170,12 +178,14 @@ export async function handleUpdateEffect(
   // Visual feedback: select clip and open effects tab
   selectClipAndOpenTab(clipId, 'effects');
 
+  const warnings = deprecatedParamWarnings(effect.type, params);
   return {
     success: true,
     data: {
       clipId,
       effectId,
       updatedParams: Object.keys(params),
+      ...(warnings.length ? { warnings } : {}),
       ...describeMutationEntities(
         mutationSnapshot,
         getClipEffects(clipId),

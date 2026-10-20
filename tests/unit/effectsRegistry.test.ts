@@ -535,12 +535,11 @@ describe('Quality parameter properties', () => {
     }
   });
 
-  it('quality parameters should exist on multi-sample blur effects', () => {
-    const blurEffectsWithQuality = ['gaussian-blur', 'radial-blur', 'zoom-blur', 'motion-blur'];
-    for (const id of blurEffectsWithQuality) {
+  it('blur effects choose their own taps: the old samples are hidden, documented no-ops', () => {
+    for (const id of ['gaussian-blur', 'radial-blur', 'zoom-blur', 'motion-blur']) {
       const effect = getEffect(id)!;
-      const qualityParams = Object.values(effect.params).filter(p => p.quality === true);
-      expect(qualityParams.length).toBeGreaterThan(0);
+      expect(Object.values(effect.params).filter(p => p.quality === true)).toHaveLength(0);
+      expect(effect.params.samples).toMatchObject({ hidden: true, animatable: false, deprecated: expect.any(String) });
     }
   });
 
@@ -550,10 +549,10 @@ describe('Quality parameter properties', () => {
     expect(glow.params.samplesPerRing.quality).toBe(true);
   });
 
-  it('gaussian-blur samples should be a quality parameter', () => {
+  it('gaussian-blur keeps its retired samples value for saved projects', () => {
     const gb = getEffect('gaussian-blur')!;
-    expect(gb.params.samples.quality).toBe(true);
-    expect(gb.params.samples.animatable).toBe(false);
+    expect(gb.params.samples).toMatchObject({ default: 5, hidden: true, animatable: false });
+    expect(getDefaultParams('gaussian-blur')).toMatchObject({ radius: 10, samples: 5 });
   });
 
   it('effects without multi-sample logic should not have quality params', () => {

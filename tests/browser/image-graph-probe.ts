@@ -57,6 +57,14 @@ async function checkGpu() {
   const device = await adapter.requestDevice();
   device.pushErrorScope('validation');
   const suite = new URLSearchParams(location.search).get('suite');
+  if (suite === 'blur') {
+    try {
+      const blur = await checkBlurEffectsGpu(device), directional = await checkDirectionalBlurGpu(device), materialization = await checkImageMaterializationGpu(device);
+      const validation = await device.popErrorScope();
+      if (validation) throw new Error(validation.message);
+      return `PASS: ${blur} blur, ${directional} directional-blur and ${materialization} materialization comparisons; two-pass graphs match their WGSL references; no validation errors.`;
+    } finally { device.destroy(); }
+  }
   if (suite === 'memory-leak') {
     try {
       const comparisons = await checkMemoryLeakGraphGpu(device);

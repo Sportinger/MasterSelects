@@ -13,7 +13,7 @@ import { getEditableDraggableNumberSettings, operatorConstantNumberPersistenceKe
 import { createDefaultMirrorGraph } from '../../src/services/operators/samplingEffectGraphs';
 import { createDefaultBlockMosaicGraph } from '../../src/services/operators/blockEffectGraphs';
 import { OperatorColorInput } from '../../src/components/panels/nodes/workspace/OperatorColorInput';
-import { createDefaultGaussianBlurGraph } from '../../src/services/operators/blurEffectGraphs';
+import { createDefaultSharpenGraph } from '../../src/services/operators/blurEffectGraphs';
 
 const initial = useTimelineStore.getState();
 const owner = {};
@@ -37,8 +37,9 @@ function fixture() {
 
 describe('image operator node UI', () => {
   it('labels the kernel index as scoped instead of inventing a numeric or image preview', () => {
-    const effect: Effect = { id: 'blur-ui', name: 'Gaussian Blur', type: 'gaussian-blur', enabled: true,
-      params: {}, operatorGraph: createDefaultGaussianBlurGraph() };
+    // Sharpen keeps a 2D kernel reduction (Box and Gaussian Blur are separable sequence reductions now).
+    const effect: Effect = { id: 'blur-ui', name: 'Sharpen', type: 'sharpen', enabled: true,
+      params: {}, operatorGraph: createDefaultSharpenGraph() };
     const clip = createMockClip({ id: 'blur-clip', effects: [effect] });
     const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'index')!;
     const frame = imageOperatorValuePreview({ key: 'kernel-index', revision: '1', time: 0, clipId: clip.id, node,

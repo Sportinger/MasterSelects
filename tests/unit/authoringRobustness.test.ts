@@ -48,6 +48,21 @@ describe('effect parameter validation', () => {
     const ok = await executeAITool('updateEffect', { clipId: 'c', effectId, params: { amount: 0.3 } }, 'internal');
     expect(ok.success).toBe(true);
   });
+
+  it('accepts retired parameters for old callers but says that they do nothing', async () => {
+    const clip = createMockClip({ id: 'c', trackId: 't', duration: 4, effects: [] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 't' })], clipKeyframes: new Map() });
+    const added = await executeAITool('addEffect', { clipId: 'c', effectType: 'gaussian-blur', params: { radius: 12, samples: 20 } }, 'internal');
+    expect(added.success).toBe(true);
+    expect((added.data as { warnings?: string[] }).warnings).toEqual([expect.stringMatching(/^samples: .*no effect/)]);
+    const effectId = (added.data as { effectId: string }).effectId;
+    const updated = await executeAITool('updateEffect', { clipId: 'c', effectId, params: { radius: 4 } }, 'internal');
+    expect((updated.data as { warnings?: string[] }).warnings).toBeUndefined();
+    const listed = await executeAITool('listEffects', {}, 'internal');
+    const blur = (listed.data as { categories: { effects: { id: string; params: { name: string }[] }[] }[] }).categories
+      .flatMap(category => category.effects).find(effect => effect.id === 'gaussian-blur')!;
+    expect(blur.params.map(param => param.name)).toEqual(['radius']);
+  });
 });
 
 describe('action lanes follow split and trim', () => {
