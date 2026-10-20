@@ -18,7 +18,7 @@ import {
 } from '../../../types/animationProperties';
 import type { AudioEffectParamValue } from '../../../types/audio';
 import { isAudioEffect, type EffectType } from '../../../types/effects';
-import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
+import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects, getEffectDisplayName } from '../../../effects';
 import { groupEffectParameters } from '../../../effects/parameterGroups';
 import { VoxelReliefControls } from './VoxelReliefControls';
 import { EXTRA_CONTROLS_REGISTRY } from '../../../effects/extraControlsRegistry';
@@ -577,12 +577,12 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                     className="effect-collapse-toggle"
                     aria-expanded={!isCollapsed}
                     onClick={() => toggleEffectCollapsed(effect.id)}
-                    title={isCollapsed ? `Expand ${effect.name}` : `Collapse ${effect.name}`}
+                    title={`${isCollapsed ? 'Expand' : 'Collapse'} ${getEffectDisplayName(effect)}`}
                   >
                     <span className="effect-collapse-chevron" aria-hidden="true">
                       {isCollapsed ? '\u25B6' : '\u25BC'}
                     </span>
-                    <span className="effect-name">{effect.name}</span>
+                    <span className="effect-name">{getEffectDisplayName(effect)}</span>
                   </button>
                   <button
                     className={`effect-bypass-btn ${!isEnabled ? 'bypassed' : ''}`}

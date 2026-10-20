@@ -67,4 +67,12 @@ describe('EffectsTab numeric controls', () => {
     expect(value.closest('.labeled-value')).toHaveClass('effect-param-value');
     expect(container.querySelector('.param-slider')).not.toBeInTheDocument();
   });
+
+  it('titles a newly added effect with its registered name and keeps a renamed one', () => {
+    const added: Effect = { id: 'named-by-type', type: 'gaussian-blur', name: 'gaussian-blur', enabled: true, params: { radius: 12 } };
+    const renamed: Effect = { id: 'renamed', type: 'radial-blur', name: 'Stage swirl', enabled: true, params: { mode: 'spin', amount: 0.5 } };
+    const { container } = render(<EffectsTab clipId="clip:effects-controls" effects={[added, renamed]} />);
+    expect([...container.querySelectorAll('.effect-name')].map(name => name.textContent)).toEqual(['Gaussian Blur', 'Stage swirl']);
+    expect(screen.getByTitle('Collapse Gaussian Blur')).toBeInTheDocument();
+  });
 });

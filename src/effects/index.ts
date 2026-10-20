@@ -129,6 +129,14 @@ export function getEffect(id: string): EffectDefinition | undefined {
 }
 
 /**
+ * The name to show for an effect instance. New instances are named after their type id
+ * (`gaussian-blur`); those show the registered name (Gaussian Blur), renamed ones their own.
+ */
+export function getEffectDisplayName(effect: { name: string; type: string }): string {
+  return effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name;
+}
+
+/**
  * Get default parameters for an effect
  */
 export function getDefaultParams(id: string): Record<string, number | boolean | string> {

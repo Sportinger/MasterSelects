@@ -135,7 +135,7 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
     });
 
     const { container } = render(<EffectsTab clipId={clipId} effects={appliedEffects} />);
-    const brightnessToggle = screen.getByRole('button', { name: 'brightness' });
+    const brightnessToggle = screen.getByTitle('Collapse Brightness');
 
     expect(brightnessToggle).toHaveAttribute('aria-expanded', 'true');
     expect(container.querySelectorAll('.effect-params')).toHaveLength(2);
