@@ -14,7 +14,9 @@ function readStatus() {
   // The IndexedDB fallback may vanish with the private window: say so and offer the archive export.
   const temporary = session.location.kind === 'opfs' && isBrowserStorageFallbackActive();
   const local = temporary ? ' - Temporary storage' : session.location.kind === 'opfs' ? ' - Browser local' : '';
-  if (!session.opening.writable) return { phase: 'unsaved', label: 'Read-only' + local, detail: 'This tab can browse history. Grant folder access or close the other writing tab before editing.' };
+  if (!session.opening.writable) return { phase: 'unsaved', label: 'Read-only' + local, detail: session.opening.ownershipReason
+    ? 'This tab can browse history. ' + (session.opening.recovery.warnings.at(-1) ?? 'This project location cannot be written.')
+    : 'This tab can browse history. Use Take over editing to edit here.' };
   const error = session.client?.error ?? state.error;
   if (error || lifecycle.error) return { phase: 'failed', label: 'Save failed' + local, detail: error?.message ?? lifecycle.error ?? 'Click to retry saving.' };
   if (state.confirmedSequence < state.appliedSequence || state.queuedBytes > 0) return { phase: 'saving', label: 'Saving\u2026' + local, detail: 'Saving your project changes.' };

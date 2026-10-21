@@ -154,6 +154,18 @@ locks and location identity; the Native Helper additionally owns an operating
 system lock and validates the expected previous commit. A location without
 write ownership can be opened read-only.
 
+Writer handover between tabs (`lifecycle/writerHandover.ts`, bound to the
+editor in `lifecycle/editorWriterHandover.ts`) runs over the
+`ms.repository.writer-handover` BroadcastChannel: a read-only tab asks `who`
+writes, the writer answers with its tab id, start time and visibility; a
+`release` request makes the writer acknowledge (`releasing`), flush, reopen its
+own project read-only so the old worker drops `ms.repository.writer:<id>`, and
+confirm (`released`) or report the failure (`refused`). The requester then
+reopens through the normal lifecycle and acquires the lock. Without an
+acknowledgement within 2.5 s it inspects `navigator.locks.query()`: a still held
+lock is reported as an unresponsive writer, a free lock is taken directly.
+Every failed step stays visible in the toolbar and is logged as a warning.
+
 IndexedDB is a derived metadata index for revision, branch and named-version
 queries. Repository records remain authoritative.
 Completed commit indexes are retained on reload instead of clearing and
