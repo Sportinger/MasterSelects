@@ -1,14 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebGPUContext } from '../../src/engine/core/WebGPUContext';
 
+const log = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}));
+
 vi.mock('../../src/services/logger', () => ({
   Logger: {
-    create: vi.fn(() => ({
-      debug: vi.fn(),
-      info: vi.fn(),
-      warn: vi.fn(),
-      error: vi.fn(),
-    })),
+    create: vi.fn(() => log),
   },
 }));
 
@@ -424,5 +426,72 @@ describe('WebGPUContext', () => {
     expect(requestAdapter).toHaveBeenNthCalledWith(2, { featureLevel: 'compatibility' });
     expect(requestAdapter).not.toHaveBeenCalledWith({ powerPreference: 'high-performance' });
     expect(requestAdapter).not.toHaveBeenCalledWith({ powerPreference: 'low-power' });
+  });
+
+  function installLosableDevices() {
+    const losers: Array<(info: GPUDeviceLostInfo) => void> = [];
+    const requestAdapter = vi.fn(async () => {
+      const device = createDevice();
+      Object.defineProperty(device, 'lost', { value: new Promise(resolve => { losers.push(resolve); }) });
+      return createAdapter(device);
+    });
+    installGpu(requestAdapter);
+    return { requestAdapter, losers };
+  }
+
+  function setVisibility(state: DocumentVisibilityState): void {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+
+  it('treats a browser-destroyed device of a hidden page as background loss and recovers once visible', async () => {
+    vi.useFakeTimers();
+    const { requestAdapter, losers } = installLosableDevices();
+    const context = new WebGPUContext();
+    await context.initialize();
+    const restored = vi.fn();
+    context.onDeviceRestored(restored);
+    try {
+      setVisibility('hidden');
+      losers[0]({ reason: 'destroyed', message: 'Device was destroyed.' });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(log.error).not.toHaveBeenCalled();
+      expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('hidden'), expect.objectContaining({ kind: 'background' }));
+      expect(requestAdapter).toHaveBeenCalledTimes(1);
+      expect(context.recovering).toBe(true);
+      setVisibility('visible');
+      await vi.advanceTimersByTimeAsync(200);
+      expect(requestAdapter).toHaveBeenCalledTimes(2);
+      expect(restored).toHaveBeenCalledOnce();
+      expect(context.initialized).toBe(true);
+    } finally {
+      setVisibility('visible');
+    }
+  });
+
+  it('reports a real loss once, recovers, and stops after repeated driver resets', async () => {
+    vi.useFakeTimers();
+    const { requestAdapter, losers } = installLosableDevices();
+    const context = new WebGPUContext();
+    await context.initialize();
+    const failed = vi.fn();
+    context.onRecoveryFailed(failed);
+    const vkLoss = { reason: 'unknown', message: 'vkQueueSubmit failed with VK_ERROR_DEVICE_LOST' } as GPUDeviceLostInfo;
+
+    losers[0](vkLoss);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(context.initialized).toBe(true);
+    losers[1](vkLoss);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(context.initialized).toBe(true);
+    expect(log.error).toHaveBeenCalledTimes(1);
+    expect(log.warn).toHaveBeenCalledWith('Device lost again', expect.objectContaining({ occurrence: 2 }));
+
+    losers[2](vkLoss);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(failed).toHaveBeenCalledExactlyOnceWith('device_lost_repeatedly');
+    expect(requestAdapter).toHaveBeenCalledTimes(3);
+    expect(context.recovering).toBe(false);
+    expect(log.error).toHaveBeenCalledTimes(1);
   });
 });

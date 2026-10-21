@@ -61,6 +61,12 @@ Timeouts and unsupported runtimes terminate with a visible error rather than
 an indefinite loading state. Destroy/reinitialize invalidates older recovery
 work, and retained output canvases are rebound to the replacement device.
 
+Only the first real loss per session is reported as an error; repeats are
+warnings. A loss while the page is hidden, frozen, or unloading (Android Chrome
+reports it as "Device was destroyed.") is a warning and recovery waits until the
+page is visible again. Three real losses within a minute stop recovery and show
+a driver-reset message instead of looping lose/recover.
+
 Targeted coverage: `webgpuContext.test.ts`, `contextRecoveryWiring.test.ts`,
 and `outputCanvasRecovery.test.ts` under `tests/unit/`.
 

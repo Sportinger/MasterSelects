@@ -4,7 +4,8 @@ export type GPUInitializationFailure =
   | 'adapter_timeout'
   | 'device_timeout'
   | 'device_failed'
-  | 'initialization_failed';
+  | 'initialization_failed'
+  | 'device_lost_repeatedly';
 
 /** Product copy for a known failure, never inferred from navigator.gpu alone. */
 export function describeGPUInitializationFailure(failure: GPUInitializationFailure | null): string {
@@ -19,6 +20,8 @@ export function describeGPUInitializationFailure(failure: GPUInitializationFailu
       return 'The graphics driver did not respond in time while starting the GPU. Save your work if possible, then restart the browser and try again.';
     case 'device_failed':
       return 'A GPU was found, but the browser could not start it. Check your graphics driver and restart the browser.';
+    case 'device_lost_repeatedly':
+      return 'The graphics driver reset the GPU several times in a row, so the preview stopped retrying. Save your work, then reload the editor; if it happens again, update the graphics driver or remove the most recently added GPU-heavy effect.';
     default:
       return 'The preview renderer could not be initialized. Save your work if possible, then reload the editor.';
   }
