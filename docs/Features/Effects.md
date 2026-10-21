@@ -595,7 +595,7 @@ grades that have not stored their default values yet.
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
 - `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md) and, for Pixelate, Kaleidoscope, Mirror and RGB Split, [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
-- `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
+- `stylize` (13): Vignette, Grain, Sharpen, Posterize, Glow, Sheen, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate; for Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate see [Painterly, Relief and Particle Effects](./Effects-Stylize-Art.md)
 - `keying` (1): Chroma Key
 - `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
@@ -710,11 +710,22 @@ ASCII Ghost combines the current result with explicit previous-frame history usi
 component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
 
-Acuarela uses generic noise, vector math, image sampling and blend operators with
-an explicit `image.frame-history` source. The runtime supplies the committed previous
-frame; editing the graph never stores textures in the project. Disconnecting the
-history source removes its runtime dependency, and a direct source-to-output
-connection bypasses the watercolor processing.
+Acuarela is a three-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
+premultiplied source cache, an edge-aware 7 x 7 pigment wash read at a position that
+wobbles by Bleed pixels (`wash-cache`), and a pass that changes each colour like more or
+less pigment, `C' = C - (C - C^2)(d - 1)`, with the density `d` built from edge pooling,
+granulation on a paper height field and blooms. Its noise fields use the shared
+**Fractal Noise** node (`noise.fractal2d.vec2`, PCG-hashed gradient noise, 1-8 octaves),
+which stays free of the streaks Random (Hash) shows at large positions. Sizes are pixels
+of a 1080p frame; the recipe has no frame history and Mix 0 is skipped. Acuarela effects
+saved with the original watery-smoke recipe keep it: a stored graph renders as saved,
+and a graph-less effect with only the smoke parameters resolves to
+`createLegacyAcuarelaGraph()` (generic noise, vector math and blend operators with an
+explicit `image.frame-history` source, like Rom1). The smoke parameters are retired for
+the watercolour and shown only where a graph reads them; History Loop and Reset show only
+for graphs with frame history. The worker software renderer runs the smoke recipe on the
+CPU; the watercolour (minutes per frame there) is unsupported in software, so preview and
+export fall back to the main-thread GPU renderer.
 
 `ComputeEffectRuntime` adds storage-texture compute passes to the normal
 ping-pong effect stack. Pixel Sort uses bounded segments, Voronoi uses a
@@ -1410,16 +1421,23 @@ That keeps them zero-overhead relative to the full ping-pong effect chain.
 
 `Pixel Particle Disintegrate` is a `particle-render` clip effect. It samples
 the live source texture into deterministic instanced quads and resolves a
-straight-alpha texture back into the normal layer compositor. At progress `0`
-the source is already represented by particle cells at their origin positions;
-progress moves, curls, and fades those cells rather than crossfading from a
-normal full-frame video plane. Particle release is driven by a deterministic
+straight-alpha texture back into the normal layer compositor. Cells that have not
+been released are drawn by a flat pass as exact source pixels, so progress `0` is the
+untouched picture; a released cell becomes its particle, which starts as the exact
+cell, grows to Particle Size and takes its shape over the first quarter of its flight.
+Fade (0-1) thins and shrinks each particle over its own flight (effects saved before
+Fade read 0). Particles read the source premultiplied (manual bilinear), so cut-out
+edges keep their colour. Particle release is driven by a deterministic
 gust field: coherent noise pockets, a wind-front delay, and the clip seed decide
 which regions separate first, so the breakup starts in scattered islands and
 then grows without relying on accumulated simulation state. Each particle
 carries UVs from its original source cell, so moving particles keep their
 assigned image patch instead of sampling from their new screen position. Preview
 and export use explicit render/media time instead of wall-clock time.
+The grid has one particle per Cell Size cell; above the preview or export particle
+budget the cells grow until the grid fits (rows are never dropped), the renderer logs it
+once, and the effect card names the cell sizes preview and export draw at the
+composition size.
 
 This effect is terminal in the clip effect stack. Effects before it are pre-rendered
 into the particle source texture; effects after it are ignored with a renderer
@@ -1647,15 +1665,16 @@ Effects can opt into temporal feedback through `usesFeedback`. Feedback effects
 sample their own previous output frame on binding 3 and the pipeline maintains
 separate committed-history and current-output textures per composition/layer/effect.
 Repeated renders at the same timeline time re-evaluate against committed history;
-only advancing the frame promotes the latest current output. Acuarela and the frozen Rom1 snapshot
-use this path to build a watery smoke trail from animated fractal UV offsets.
+only advancing the frame promotes the latest current output. Rom1 and Acuarela effects
+saved with its original smoke recipe use this path to build a watery smoke trail from
+animated fractal UV offsets.
 Acuarela, Rom1 and glyph animation use the supplied composition timeline time
 (zero when omitted), not the wall clock. Explicit seeks, backwards jumps,
 owner revisions and export starts clear frame history. The saved, non-animatable
 `historyLoop` parameter chooses `reset` (the legacy/missing-value default) or
 `continuous` across explicit playback-loop boundaries. Render surfaces receive
 the same event revision so repeated renders consume a discontinuity only once.
-The worker software renderer mirrors standalone Acuarela/Rom1 feedback with a
+The worker software renderer mirrors standalone smoke-recipe Acuarela/Rom1 feedback with a
 composition/target/effect software feedback cache with the same two-history
 transition policy for preview and export readback;
 Voxel Relief uses the same binding to smooth a
