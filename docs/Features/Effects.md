@@ -827,6 +827,14 @@ Exposure and 0.1–10 for Levels, Temperature and Tint ±4) are clamped by the g
 `<param>-clamped` node; the inspector and the add/update effect tools say what
 renders instead (a gamma floor adds "very dark" or "almost black").
 
+Effect rows share one display rule (`effectParamDisplay` in
+`src/effects/paramDisplay.ts`), in the Resolve rows and in node-source rows alike:
+`displayUnit: 'degrees'` shows radians as whole degrees (Twirl, Kaleidoscope,
+Mirror, RGB Split), `displayScale` with `unit` shows a scaled unit (Hue Shift's turns
+as degrees) and `unit` alone a suffix (" EV") with as many decimals as the stored
+value needs; other rows show the decimals their step implies. Stored values,
+keyframes, tools and MIDI keep the parameter's own unit.
+
 Saved work keeps its look. Projects keep the graph they were saved with (the
 previous recipes stay in `legacyColorEffectGraphs.ts`). A color effect stored
 without any graph (projects from before 2026-09-21) is given the original graph when
