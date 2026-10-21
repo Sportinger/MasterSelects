@@ -134,3 +134,89 @@
   .sl-markdown-content .docs-shot--float-right ~ p,
   .sl-markdown-content .docs-shot--float-left ~ p { display: flow-root; }
 }
+
+/* Clips: <figure class="docs-shot docs-clip"> around a <video class="docs-clip-video"> (the sync
+   adds the class, poster handling and reduced-motion playback; scripts/doc-clip.mjs prints the
+   figure). They sit and float exactly like still shots. */
+.sl-markdown-content .docs-clip-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: .5rem;
+  background: #000;
+}
+.sl-markdown-content .docs-clip > p { margin: 0; }
+
+/* Edit diagrams: inline SVG with real <text>; everything inherits the theme through
+   currentColor, and meaning never rests on colour alone (clips carry their letters). */
+.sl-markdown-content .docs-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  color: var(--sl-color-white);
+  font-family: var(--sl-font);
+  overflow: visible;
+}
+.sl-markdown-content .docs-diagram text { fill: currentColor; font-size: 14px; }
+.sl-markdown-content .docs-diagram .docs-diagram-lane { fill: var(--sl-color-gray-6); stroke: var(--sl-color-hairline); }
+.sl-markdown-content .docs-diagram .docs-diagram-clip { fill: var(--sl-color-gray-5); stroke: currentColor; stroke-width: 1.5; }
+.sl-markdown-content .docs-diagram .docs-diagram-clip--alt { fill: var(--sl-color-accent-low); stroke: var(--sl-color-accent); }
+.sl-markdown-content .docs-diagram .docs-diagram-highlight { fill: none; stroke: #ffd54a; stroke-width: 3; }
+.sl-markdown-content .docs-diagram .docs-diagram-playhead { stroke: var(--sl-color-accent); stroke-width: 2; }
+.sl-markdown-content .docs-diagram .docs-diagram-muted { fill: var(--sl-color-gray-3); }
+@media (max-width: 50rem) {
+  .sl-markdown-content .docs-diagram--wide { overflow-x: auto; }
+  .sl-markdown-content .docs-diagram--wide svg { min-width: 36rem; }
+  .sl-markdown-content .docs-diagram--wide figcaption { position: sticky; left: 0; }
+}
+
+/* Effect galleries: <!-- docs-gallery: <group> --> expands to a card grid (thumbnail, name, one
+   line). Two columns on phones; every card keeps the old heading slug as its id. */
+.sl-markdown-content .docs-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: .75rem;
+  margin: 1.5rem 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+@media (max-width: 34rem) {
+  .sl-markdown-content .docs-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+}
+.sl-markdown-content .docs-gallery > li {
+  min-width: 0;
+  margin: 0;
+  scroll-margin-top: calc(var(--sl-nav-height, 3.5rem) + 1.5rem);
+}
+.sl-markdown-content .docs-gallery-card {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  height: 100%;
+  padding: .45rem .45rem .6rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: .5rem;
+  color: var(--sl-color-white);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-markdown-content a.docs-gallery-card:hover { border-color: var(--sl-color-accent); }
+.sl-markdown-content a.docs-gallery-card:focus { outline: none; }
+.sl-markdown-content a.docs-gallery-card:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
+.sl-markdown-content .docs-gallery > li:target .docs-gallery-card { border-color: #ffd54a; box-shadow: 0 0 0 1px #ffd54a; }
+.sl-markdown-content .docs-gallery-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin: 0 0 .3rem;
+  object-fit: cover;
+  border-radius: .3rem;
+  background: var(--sl-color-gray-5);
+}
+.sl-markdown-content .docs-gallery-name { font-size: .9375rem; font-weight: 600; line-height: 1.3; }
+.sl-markdown-content .docs-gallery-text { color: var(--sl-color-gray-2); font-size: .8125rem; line-height: 1.45; }
+.sl-markdown-content .docs-gallery-card--soon { color: var(--sl-color-gray-2); border-style: dashed; }
