@@ -6,6 +6,8 @@ Text clips are rasterized to a Canvas2D surface, uploaded as a GPU texture, and 
 
 Paused previews containing only static text, images or solids redraw when requested, then immediately return to idle. Playback, scrubbing, continuously animated effects and video decoder settling retain their render cadence; changing text still refreshes the preview immediately.
 
+A new text clip's first frame never shows another clip's raster. Moving the paused playhead onto a new clip renders it at once instead of waiting behind the GPU fence of the edit that created it, and when a raster's GPU upload is not ready yet the preview stays empty for that frame rather than re-presenting the previous clip's picture. Such a raster gets follow-up frames (about one second at display rate); if it still cannot be uploaded, the preview logs `Preview raster source is still not ready` with the clip IDs.
+
 ## Creation
 
 - Text clips are added through the timeline text action and require a video track.
