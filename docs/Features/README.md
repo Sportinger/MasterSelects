@@ -259,6 +259,7 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | Document | Description |
 |---|---|
 | [Effect system](./Effect-System.md) | Effect registry, picker groups, pipelines and runtimes, editable effect graphs, and per-effect implementation notes |
+| [Building an effect](./Effect-Building.md) | From a photo, video or description to a finished effect: reuse, robustness, presets, docs page and review rounds |
 | [GPU Engine](./GPU-Engine.md) | WebGPU engine, render loop, fallback paths, caches, and export boundary |
 | [Linux / Mesa GPU](./Linux-Mesa-GPU.md) | **Read before touching any canvas/GPU code** — Mesa silent-failure modes and the rules/gates that prevent "blank on Linux" regressions |
 | [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |

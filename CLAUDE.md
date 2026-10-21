@@ -23,6 +23,11 @@ removal still requires an explicit request.
 
 ## Nodes and effects: improve them whenever you touch them
 
+**Building a new effect** (usually from a photo, a video or a description of a look) or
+reworking one follows [Building an effect](docs/Features/Effect-Building.md): the reference,
+reuse, robustness, presets, the docs page by the style guide, and one to three review rounds
+by an art director and an engineer who did not build it. Read it before you start.
+
 Whenever dev work touches nodes, effects, operators, the stick-figure rig, or
 the tools agents use to drive them (also while building a project or an
 animation with them), leave them better than you found them:
