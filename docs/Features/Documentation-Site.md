@@ -36,6 +36,19 @@ Each page type has a fixed template: [Page templates](#page-templates).
 - **Alt text** says what the picture shows; the caption names every callout number.
 - **Look at every new picture and clip yourself** (a contact sheet for a batch) before you commit it. A broken or too dark render is not published: name it in `PICTURE_PENDING` (`scripts/effectDocsCatalog.mjs`) instead.
 
+**Controls: one short paragraph each, never a bare list of values.** A table of names and numbers tells a reader little. Give every control of an effect or feature its own small paragraph, in the order of the card, under a `###` heading for each section of the card:
+
+1. its name in bold, exactly as the card shows it;
+2. what it does to the picture and what it is good for, in everyday words;
+3. how its values feel: where it starts to show, a typical value, what the extreme does, and which neighbour it works with;
+4. its limits: the lowest and highest value it accepts, the unit and the default. They differ for every effect, so take them from the code (`node scripts/effect-docs.mjs --controls <id>` prints them), never from memory. A switch says "On or off, default off"; a choice list names each choice with what it does.
+
+```markdown
+**Radius** – how soft the picture gets. 2–5 takes the edge off, 10 is clearly out of focus,
+30 and more turns shapes into light. Animate it from 0 for a focus pull.
+0 to 50 pixels, default 10.
+```
+
 **Formatting.**
 
 - A picture is `<figure class="docs-shot">` with a `<figcaption>`; `docs-shot--float-right` or `--float-left` puts the top picture beside the text.
@@ -105,9 +118,9 @@ The `## Documentation Index` of `docs/Features/README.md` is the sidebar. The sy
 Simple at the top, deeper below. Every page ends in a fixed order, the deep parts always last.
 
 - **A. Guide** (`guides/<slug>.md`, ≤ 600 words, 3–6 annotated pictures). One sentence on what the reader will do, then "Try it interactively: **Info → Tutorials → …**" when an in-app tutorial exists. Numbered steps, each with its picture or clip. An "I want to… / Do this" table. It ends with "Go deeper:" links to the reference pages.
-- **B. Effect page** (`effects/<effect-id>.md`). What the effect does, one picture, its key controls in everyday words and a tip; then `## Controls` (generated), `## Node setup` and `## Technical details`. The full contract with an example: [Effect pages](#effect-pages).
+- **B. Effect page** (`effects/<effect-id>.md`). What the effect does, one picture, its key controls in everyday words and a tip; then `## Controls` (one paragraph per control), `## Node setup` and `## Technical details`. The full contract with an example: [Effect pages](#effect-pages).
 - **C. Effect group overview** (`Effects-<Group>.md`). The title is the picker label. One sentence and where to add an effect, then `<!-- docs-gallery: <group-id> -->`, then `## Which one?` (Look → Use), `## The shared idea` (one group graph) and `## Technical details`. The effects themselves are described on their effect pages, not here.
-- **D. Feature reference** (`<Page>.md`). One sentence and a link to its guide, an annotated picture, then `## Options` (every control in UI order: name → what it does → default), the formats or other lists the feature needs, `## Limits` in plain words and `## Technical details` (short, or a link to the developer page).
+- **D. Feature reference** (`<Page>.md`). One sentence and a link to its guide, an annotated picture, then `## Options` (one paragraph per control in UI order, with its limits and default, as in the [Style guide](#style-guide)), the formats or other lists the feature needs, `## Limits` in plain words and `## Technical details` (short, or a link to the developer page).
 - **E. Developer page** (Developers group). "For developers and agents. User docs: …", then `## Architecture` (with a diagram), `## Key files` (table), `## Contracts and invariants`, `## Tests` and `## Debugging`.
 
 Rules for every page:
@@ -127,14 +140,14 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 | Part | Made by |
 |---|---|
 | `effects/catalog.json`: names, groups, card text, page, still, clip and thumbnail paths | `node scripts/effect-docs.mjs` (never by hand) |
-| The controls table between `<!-- generated:controls start -->` and `<!-- generated:controls end -->` | the same script, refreshed on every run |
+| The controls table between `<!-- generated:controls start -->` and `<!-- generated:controls end -->` (basic pages, and hand-written pages not yet moved to paragraphs) | the same script, refreshed on every run |
 | Basic pages (marked `<!-- effect-docs: basic page sha=… -->` as the first line under the title) | the same script, rewritten on every run while the page still matches the marker's hash |
 | Rows of an effect's own card, the section order and folding of long cards, "Go deeper" links of basic pages, special thumbnails | `scripts/effectDocsExtras.mjs` (by hand, per effect id) |
 | Everything else on a page | by hand; the script never changes it |
 
 - After you add or rewrite an effect page, add a picture or change an effect's parameters, run `node scripts/effect-docs.mjs` and commit what it changes. `npx vitest run tests/unit/effectDocsCatalog.test.ts` fails when the catalog, a controls block or a basic page is out of date, when a page is not named after an effect id, when a visible effect has no page of its own, when a basic page was edited under its marker or a page's controls markers are broken, or when an effect lacks a still or a thumbnail (unless `PICTURE_PENDING` in `scripts/effectDocsCatalog.mjs` names why) or a thumbnail is over 30 KB.
 - **A basic page edited by hand.** The marker line carries a hash of the page as the script wrote it. When the page no longer matches it, the script leaves the page alone and reports `effects/<id>.md was edited by hand: delete its marker line to keep the edits (it becomes a hand-written page), or restore the file`; the drift test fails with the same text. The marker counts only as the first line under the `#` title.
-- To write a page by hand, start from its basic page and delete the marker line, or write the file before running the script. `node scripts/effect-docs.mjs --controls <id>` prints the controls block to paste.
+- To write a page by hand, start from its basic page and delete the marker line, or write the file before running the script. `node scripts/effect-docs.mjs --controls <id>` prints every control with its limits and default: the source for the control paragraphs.
 - `--basic` writes basic pages for every visible effect without a page (`--basic halftone,print` for chosen effect or group ids); it never touches an existing page. `--thumbs` makes the missing gallery thumbnails (`assets/effects/thumbs/<id>.webp`, 400 × 250 or smaller, ≤ 30 KB) from the effect half of each still; `--thumbs --force` remakes them all, `--thumbs --force text,riso` only those effect or group ids. An effect's `thumb` in `effectDocsExtras.mjs` picks another region of the still (`region`, fractions of it) or names the Effect Lab file that renders the thumbnail (`shot`, such as `scripts/effect-lab-shots/color-thumbs.json`: the dancer split down the middle for the subtle tonal effects). `--lab-manifest <file>` writes an Effect Lab `--pairs` manifest for basic pages without a still, `--reshoot <ids or groups>` adds basic pages that have one. Basic stills are a whole-frame split, except the Text & Glyph looks (an enlarged detail of the dancer, original and effect side by side, so the characters can be read) and the tracking overlays (both whole frames side by side, so the seam never cuts the target box).
 - **The generated controls table** lists the card's rows in card order with their range and default. Ranges and defaults show as many decimals as they need. Resource references stored as text (`…Id` parameters) are left out. `effectDocsExtras.mjs` adds what the registry cannot say: `rows` of an effect's own card (hidden parameters it renders, buttons, pickers), the card's `sections` order and `sectionLabels`, `omit`/`omitSections`, a `note` for cards without fixed rows, and `open`: only those sections stay in the table, every other one folds into its own `<details>` (Slit Scan). It also gives basic pages `deeper` links ("Go deeper:" under Technical details).
 - The card text is the first sentence of a hand-written page (a basic page uses the first clause of the in-app description), so write that sentence to stand alone, in under about 110 characters.
@@ -147,8 +160,8 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 2. One or two sentences: what it does and what for, in everyday words. The first one becomes the card text.
 3. `Group: [<picker label>](../Effects-<Group>.md) · [How to add an effect](../Effects.md#add-an-effect)`. Without an overview page, link the catalog section: `./index.md#print--halftone`.
 4. One picture with a caption. A static effect gets an original | effect still (`scripts/effect-lab.mjs --pairs`, `"layout": "split"`, saved as `../assets/effects/<id>.webp`); a moving or time-based effect (catalog `moving`) gets a short loop on moving footage (`scripts/doc-clip.mjs`, `../assets/effects/clips/<id>.mp4` with its `.webp` poster). Reuse the existing still or clip; make a new one only when the page would otherwise have none.
-5. `**Use it for:**` two or three uses, then two to four key controls as a list in everyday words (`- **Radius** – how soft: …`), then one `**Tip:**`.
-6. `## Controls`: the generated block. Write nothing inside the markers.
+5. `**Use it for:**` two or three uses, then two to four key controls, one line each in everyday words (`- **Radius** – how soft it gets.`; their full paragraphs follow under `## Controls`), then one `**Tip:**`.
+6. `## Controls`: one short paragraph per control, under a `###` for each card section, with its limits and default ([Style guide](#style-guide)). A basic page keeps the generated table until it is written by hand; when you write a page by hand, replace its table (the block with both markers) with paragraphs.
 7. `## Node setup`: a focused graph picture (`scripts/effect-graph-shot.mjs`) only when it teaches something, two or three sentences on its stages and one `**Remix:**` change a reader can follow. Style effects of one engine get two sentences and a link to the engine instead of a graph.
 8. `## Technical details`: compact facts (units, transparency, saved projects, limits) and links: [Effect system](./Effect-System.md) (its *Per-effect notes* hold the implementation notes of single effects), [Node Catalog](./Node-Catalog.md).
 
@@ -156,7 +169,7 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 - Links are relative to `docs/Features/effects/`: `../Effects-Blur.md`, `./box-blur.md`, `../Effect-System.md#editable-blur-kernels`, `../assets/effects/gaussian-blur.webp`.
 - When a group page's effect sections move into effect pages, the overview keeps a gallery: its cards carry the old heading slugs as ids, so `Effects-Blur.md#gaussian-blur` still lands on the Gaussian Blur card. Replace links to the old sections with links to the effect pages.
 
-**Example** (`docs/Features/effects/gaussian-blur.md`):
+**Example**, modelled on `docs/Features/effects/gaussian-blur.md`:
 
 ````markdown
 # Gaussian Blur
@@ -175,17 +188,14 @@ Group: [Blur & Sharpen](../Effects-Blur.md) · [How to add an effect](../Effects
 
 **Use it for:** soft backgrounds behind titles · a focus pull · calming a busy projection.
 
-- **Radius** – how soft. 2–5 takes the edge off, 10 is clearly out of focus, 30 and more turns shapes into light.
+- **Radius** – how soft it gets.
 
 **Tip:** animate Radius from 0 for a smooth focus pull. For a graphic, square look use [Box Blur](./box-blur.md).
 
 ## Controls
 
-<!-- generated:controls start -->
-| Control | Range | Default |
-|---|---|---|
-| Radius | 0 to 50 | 10 |
-<!-- generated:controls end -->
+**Radius** – how soft the picture gets. 2–5 takes the edge off, 10 is clearly out of focus,
+30 and more turns shapes into light. 0 to 50 pixels, default 10.
 
 ## Node setup
 
