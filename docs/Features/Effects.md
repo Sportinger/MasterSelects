@@ -867,11 +867,23 @@ inspector use the same display (`paramRangeNotes(..., { display: true })`: "Hori
 150% is above the rendered range (0% to 98%)"); tool results keep stored units.
 
 A rate parameter (per second) that may be keyframed declares `integratedAs`: while it
-has keyframes, `getInterpolatedEffects` writes the distance travelled since the clip
-start into that runtime-only param (`integrateKeyframedRate` in
-`src/utils/speedIntegration.ts`, shared with clip speed), and the packer uses it
-instead of rate × time, so a keyed ramp moves smoothly (Perspective Grid Speed, Color
-Wheel Spin; see [Generate Effects](./Effects-Generate.md#technical-details)).
+has keyframes, the shared keyframe step (`evaluateEffectKeyframes` in
+`stores/timeline/keyframes/effectKeyframeEvaluation.ts`, used by
+`getInterpolatedEffects` and `evaluateCompositionClipEffects`, so also by nested
+compositions, transition-mapped clips and export) writes the distance travelled into
+that runtime-only param: the rate at the clip start × the clip's start on the render
+clock, plus the area under the keyed curve (`integrateKeyframedRate` in
+`src/utils/speedIntegration.ts`, shared with clip speed). The packer uses it instead of
+rate × time, so a keyed ramp moves smoothly and the first key does not shift the
+pattern (Perspective Grid Speed, Color Wheel Spin; see
+[Generate Effects](./Effects-Generate.md#technical-details)). Stored travel values are
+dropped, `addEffect`/`updateEffect` do not store them, and a node source that drives
+such a rate drops the travel (logged), so the source runs at rate × time.
+
+A parameter added after instances were saved can declare `legacyDefault`: what a saved
+instance without it renders. Renderers, keyframe base values and the inspector
+(`getRenderedDefaultParams`, also in the Node Workspace editor) all use it, so a saved
+instance shows the value it draws and the other choice is one pick away.
 
 Saved work keeps its look. Projects keep the graph they were saved with (the
 previous recipes stay in `legacyColorEffectGraphs.ts`). A color effect stored

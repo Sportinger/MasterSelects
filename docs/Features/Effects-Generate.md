@@ -11,7 +11,7 @@ Memory Leak under **Analog & Glitch**.
 ### Color Wheel
 <figure class="docs-shot docs-shot--float-right">
 
-![Above, the dancer on stage; below, the same frame with a round hue wheel centred on her at half mix: pale in the middle, red at the right edge, yellow above it, green at the top, cyan at the left, blue at the bottom and magenta at the lower right, with dark stage around the wheel](assets/effects/color-wheel.webp)
+![Above, the dancer on stage; below, the same frame with a round hue wheel centred on her at half mix: pale in the middle, red at the right edge, yellow at the upper right, green at the upper left, cyan at the left, blue at the lower left and magenta at the lower right, with dark stage around the wheel](assets/effects/color-wheel.webp)
 
 <figcaption>Top: original. Bottom: the default Color Wheel (Disc, Radius 45 %) at Mix 0.5.</figcaption>
 </figure>
@@ -20,7 +20,7 @@ Paints a hue wheel: the colours go round the centre and reach full strength at t
 rim. Use it as a colour reference, a gel spot over the picture or a psychedelic background.
 - **Shape** – Disc (the default) draws a round wheel with a clean edge over the clip; Fill layer colours the whole layer (or only the inside of a shape layer).
 - **Radius**, **Center X** and **Center Y** – size and place of the disc, in % of the shorter side and of the layer.
-- **Direction** – hues run counter-clockwise like the usual HSV wheel (red right, green at the top), or clockwise.
+- **Direction** – hues run counter-clockwise like the usual HSV wheel (red at the right, yellow upper right, green upper left, blue lower left), or clockwise.
 - **Hue Rotation** – turns the colours round, in degrees. **Spin** keeps them turning (degrees per second) and can be keyframed for a smooth speed-up.
 - **Saturation**, **Brightness** and **Mix** – how strong and bright the colours are and how much of the clip shows through.
 
@@ -31,9 +31,9 @@ Tip: on a Blank clip, Disc gives a wheel on a transparent background.
 ### Perspective Grid
 <figure class="docs-shot docs-shot--float-left">
 
-![Above, the dancer's legs and the stage floor; below, the same crop with cyan grid lines on the floor that run towards a horizon behind her, get thinner and dimmer with distance and also cross the hem of her dress and her feet](assets/effects/perspective-grid.webp)
+![Above, the empty stage floor to the left of the dancer, dark wood under a dim back wall; below, the same crop with cyan grid lines on the floor that run towards a horizon in the haze and get thinner, closer together and dimmer with distance](assets/effects/perspective-grid.webp)
 
-<figcaption>Top: original. Bottom: Horizon 60 %, 16 Columns, Row Density 6, Line Width 10 px, Opacity 1.</figcaption>
+<figcaption>Top: original (the floor beside the dancer). Bottom: Horizon 60 %, 16 Columns, Row Density 6, Line Width 10 px, Opacity 1.</figcaption>
 </figure>
 
 A glowing floor grid that runs to a vanishing point and scrolls towards the viewer:
@@ -42,7 +42,8 @@ haze near the horizon instead of flickering.
 - **Horizon** – where the floor ends, measured from the top of the picture.
 - **Columns** and **Row Density** – how many lines; more rows make the floor look deeper.
 - **Line Width** – thickness of the nearest lines, in pixels of a 1080p frame. **Lines** Thin with depth makes them thinner further away, like lines painted on a floor; Even width keeps every line equally thick.
-- **Speed** – rows per second towards the viewer; negative values run away. Keyframe it to speed up or stop the floor smoothly.
+- **Speed** – rows per second towards the viewer; negative values run away. Keyframe it to speed up or stop the floor smoothly. **Scroll Offset** shifts the floor by whole or part rows.
+- **Horizon Fade** – how much the lines dim towards the horizon: higher values dim more of the floor, 0 keeps them bright up to the horizon.
 - **Blend** – Add makes glowing lines of light; Normal paints solid lines, which can also be dark.
 
 Tip: put Horizon on the real floor line of the shot, then lower Opacity until the
@@ -61,11 +62,11 @@ above the grid, a copy of the shot masked to the performer.
 </figure>
 
 A posable stick figure for choreography sketches, storyboards and animated
-characters. On a Blank clip only the figure shows. A new figure starts in an open
-stance, arms away from the body and one foot forward.
+characters. On a Blank clip only the figure shows. A new figure starts in a
+walking stance in profile: one arm forward, one back, a step.
 - **Pose** – joint angles in degrees: shoulders and hips swing forward from hanging down, elbows and knees bend. The **Pose library** applies or keys whole poses.
 - **Actions** – Walk, Run, Jump, Punch and more on the figure's own lane; they blend into each other.
-- **Scale**, **Line Thickness**, **Head** (filled or ring) and **Color** – the look. A ring head keeps its opening however thick the lines are.
+- **Scale**, **Line Thickness**, **Head** (filled or ring) and **Color** – the look. A ring head is drawn as thick as the lines and keeps an open centre.
 - **Ground** – Plant keeps the lowest point on the floor while the figure moves.
 
 Tip: **Walk**, **Run** and **Idle** under Motion animate every joint in one click.
@@ -93,14 +94,14 @@ Tip: more in [Flock Clips](./Flock-Clips.md).
 ### Weave
 <figure class="docs-shot docs-shot--float-right">
 
-![Above, the dancer's dress and legs; below, the same crop behind a finished white net of thick twisted yarn, woven over and under, with the right edge of the cloth in view](assets/effects/weave.webp)
+![Above, the dancer on stage; below, the same frame with a finished net of grey twisted yarn, woven over and under, hanging in front of her body from the shoulders to the knees, her face, raised arm and feet uncovered](assets/effects/weave.webp)
 
-<figcaption>Top: original. Bottom: the default Weave at 6 s, when the cloth is finished (editor preview, cropped).</figcaption>
+<figcaption>Top: original. Bottom: the default Weave at 6 s, when the cloth is finished (editor preview).</figcaption>
 </figure>
 
 Woven fabric, yarn, ropes and knots, drawn as fine lit fibres in 3D. The default
-is a woven net that weaves itself in over the first seconds of the clip and then
-hangs in front of it, bright white and nearly frame-filling.
+is a woven net of muted grey wool, about two thirds of the frame wide, that weaves
+itself in over the first seconds of the clip and then hangs in front of it.
 - The threads are a node graph: open the clip in the **Nodes** tab to change them.
 - Values exposed from that graph appear in the effect card, ready to keyframe.
 
@@ -130,14 +131,9 @@ Tip: lower Mix to lay the glitch over the clip.
 
 **Known limitations:** an unfrozen Memory Leak block changes from session to session.
 After adding Flocking or Weave the preview can show "Preparing 3D scene" for several
-seconds before the swarm or the threads appear. The default Weave net covers most of
-the picture.
+seconds before the swarm or the threads appear.
 
-**Older projects** keep their look: Perspective Grids saved before Lines existed keep
-an even line width (Line Width 0 stays a hairline), Color Wheels saved before Shape
-keep Fill layer with clockwise hues, and Stick Figures keep their saved pose. One
-deliberate change: saved grid lines are now exact at 1080p output and scale with
-other output sizes, so the preview matches the export.
+Saved projects keep their look, with small exceptions listed under Technical details.
 
 ## How the generate effects are built
 
@@ -190,14 +186,14 @@ effect is a folded card, and the › left of its title opens it.
 
 <div class="docs-shot-stage">
 
-![Memory Leak](assets/effects/graphs/memory-leak-read.webp)
+![UV and Memory Size feed Multiply, then Floor, into the Pixel input of Decode Byte Pixel; Memory Window, above Floor, feeds its Memory input](assets/effects/graphs/memory-leak-read.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 558" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 713" aria-hidden="true" focusable="false">
 <defs><marker id="memory-leak-read-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M386 420 L386 336" marker-end="url(#memory-leak-read-arrow)" />
-<circle class="docs-shot-number" cx="386" cy="420" r="18" /><text x="386" y="420" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M873 476 L873 392" marker-end="url(#memory-leak-read-arrow)" />
-<circle class="docs-shot-number" cx="873" cy="476" r="18" /><text x="873" y="476" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M386 635 L386 551" marker-end="url(#memory-leak-read-arrow)" />
+<circle class="docs-shot-number" cx="386" cy="635" r="18" /><text x="386" y="635" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M873 690 L873 606" marker-end="url(#memory-leak-read-arrow)" />
+<circle class="docs-shot-number" cx="873" cy="690" r="18" /><text x="873" y="690" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -245,64 +241,53 @@ graph compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 Shared helpers for finite reads and choice warnings live in
 `src/effects/generate/generatorParams.ts`.
 
-- **Robust values.** Every number is read as a finite value (NaN and infinities fall
-  back to the default). Values outside a parameter's rendered range
-  (`renderMin`/`renderMax`) are named in the inspector, in the units of its row, and in
-  `addEffect`/`updateEffect` tool results, in stored units. `paramWarnings` name
-  unknown choices (Shape, Direction, Lines, Blend, Head, Facing, Ground, Bit Depth, Per
-  Frame) and settings that draw nothing.
-- **Shader maths under test.** `tests/unit/generateShaderMath.test.ts` runs the scalar
-  WGSL helpers of Perspective Grid and Color Wheel on the CPU, translated from the
-  shader source, and checks them against independent references: line area per cell,
-  full coverage for lines a cell wide, disc area, premultiplied "over" and hue direction.
-- **Perspective Grid.** Horizon is a share of the height (0–0.98, shown in %). Line
-  Width is stored as the half width in pixels of a 1080-px-tall frame (shown as the
-  full width) and scales with the output height, so preview and export match. Lines
-  `floor` keeps that width on the floor (exact at the front edge, thinner with depth);
-  `screen` keeps the old even width: a core of 2 × Line Width plus a one-pixel soft rim.
-  Lines are filtered analytically: thinner than a pixel they keep their share of
-  brightness, a line one cell wide or wider covers its cell, and dense lines become a
-  haze that fades at least linearly towards the horizon, with a 1.5-px soft edge there.
-  Rendered limits: Columns 2000, Row Density 1000, Line Width 1000, Horizon Fade 100.
-  The composite is premultiplied, so lines over transparency keep their full colour.
-- **Keyframed rates.** Speed (Perspective Grid) and Spin (Color Wheel) declare
-  `integratedAs`: while they have keyframes, `getInterpolatedEffects` adds the distance
-  travelled since the clip start (`speedTravel`, `spinTravel`; trapezoidal integration
-  shared with clip speed in `src/utils/speedIntegration.ts`), and the packer uses it
-  instead of rate × time. Without keyframes the rate runs from the timeline time. The
-  scroll and hue offset are wrapped on the CPU in double precision, so long timelines
-  do not jitter.
-- **Color Wheel.** Hue Rotation and Spin are stored in turns (1 = 360°) and shown in °
-  and °/s. Radius is a share of the shorter side (0.45 for new wheels; full colour at the
-  rim with Saturation 1), Center X/Y a share of the layer. Disc has a 1-px anti-aliased
-  edge at any resolution and composites as straight-alpha "over". Direction `ccw` flips
-  screen y, so hues run counter-clockwise; `cw` is the old direction.
-- **Stick Figure.** Joints are solved on the CPU (pose, actions, ground) and drawn
-  as lines. Positions and lengths are kept within ±100 000 figure pixels
-  (`SKELETON_COORDINATE_LIMIT`, for every rig user), lengths after Scale too (named
-  when Scale pushes one past it); angles are free. The ring head's stroke is the limb
-  thickness, at most a quarter of the head radius on each side of its centre line
-  (`stickFigureRing`). Scale ≤ 0 and a figure entirely outside its layer are reported,
-  judged at the composition size from the saved pose (not from where an action walks
-  it); `createRig` returns the same warnings. New figures start from
-  `STICK_FIGURE_NEW_POSE`; the rig's rest pose is unchanged. Joints are keyframeable
-  and node-drivable, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes).
+- **Robust values.** Numbers are read as finite values (NaN and infinities use the
+  default). Values outside a parameter's rendered range (`renderMin`/`renderMax`) are
+  named in the inspector, in the units of its row, and in `addEffect`/`updateEffect`
+  results, in stored units; `paramWarnings` name unknown choices and settings that draw
+  nothing. The coverage and compositing maths of the grid, wheel and ring head run on
+  the CPU in unit tests, translated from the WGSL source.
+- **Perspective Grid.** Horizon is a share of the height (0–0.98). Line Width is stored
+  as the half width in pixels of a 1080-px-tall frame and scales with the output height,
+  so preview and export match. Lines `floor` keeps that width on the floor (thinner with
+  depth); `screen` keeps the old even width (2 × Line Width plus a one-pixel soft rim).
+  Lines are filtered analytically: sub-pixel lines keep their brightness share, dense
+  lines become a haze that fades towards the horizon over a 1.5-px soft edge. Rendered
+  limits: Columns 2000, Row Density 1000, Line Width 1000, Horizon Fade 100.
+- **Keyframed rates.** Speed and Spin declare `integratedAs`. The timeline and the
+  composition evaluator (nested compositions, transitions, export) share one keyframe
+  step that adds the distance a keyed rate has travelled: v(0) × clip start + the area
+  under the curve, so it equals rate × time while the rate is constant and adding the
+  first key does not move the pattern. Unkeyed, the rate runs from the timeline (or
+  composition) time. The travel values are runtime-only: stored ones are dropped and
+  tools do not store them. Scroll and hue are wrapped on the CPU in double precision.
+- **Color Wheel.** Hue Rotation and Spin are stored in turns (shown in ° and °/s).
+  Radius is a share of the shorter side, Center X/Y of the layer. Disc has a 1-px
+  anti-aliased edge and composites as straight-alpha "over"; `ccw` flips screen y.
+- **Stick Figure.** Joints are solved on the CPU and drawn as lines; positions and
+  lengths (also after Scale) stay within ±100 000 figure pixels for every rig user, and
+  a clamp is named. The ring head is stroked with the line thickness, up to the head
+  radius; thick lines grow it outward (at most 1.5 × Head Radius) so the opening keeps
+  half the head radius, and the neck ends flat at its outer edge. Scale ≤ 0 and a figure
+  outside its layer (judged at the composition size and saved pose) are reported, also
+  by `createRig`. See [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes).
 - **Memory Leak.** Block Width 8–1024, Float Gain at least 0.001; unknown Bit Depth or
-  Per Frame fall back to 8-bit and Hold and say so. Without a fed heap most of memory
-  is grey noise with a few structured regions (Offset picks them). Mix blends straight
-  colours, so Mix below 1 over transparency gets darker. Details in
-  [Memory Leak](./Memory-Leak.md).
-- **Flocking and Weave** render into the shared 3D scene; their own 2D pass is a
-  passthrough. After adding, the preview can show "Preparing 3D scene" for several
-  seconds; compiling the swarm's simulation shader alone takes about 0.3 s.
-- **Saved projects.** Choices and numbers an old instance lacks render at their
-  `legacyDefault`: Shape Fill layer, Direction clockwise, Radius 0.5, Lines Even width,
-  the Stick Figure rest pose. Blend Add and Head Filled are also the defaults. New
-  defaults apply only to new instances (Grid Opacity 0.8, Line Width 3 px and Lines
-  Thin with depth; Wheel Disc, Radius 45 % and Saturation 1; the open Stick Figure
-  stance). Saved grids now scale their line width with the output height (exact at
-  1080p).
+  Per Frame use 8-bit and Hold and say so. Without a fed heap most of memory is grey
+  noise with a few structured regions (Offset picks them). Mix blends straight colours,
+  so Mix below 1 over transparency gets darker. Details in [Memory Leak](./Memory-Leak.md).
+- **Flocking and Weave** render into the shared 3D scene; their 2D pass is a
+  passthrough. Compiling the swarm's simulation shader takes about 0.3 s of the
+  "Preparing 3D scene" time.
+- **Saved projects.** Choices and numbers an old instance lacks render, and show in
+  the inspector, at their `legacyDefault`: Shape Fill layer, Direction clockwise,
+  Radius 0.5, Lines Even width, the rig's rest pose. New defaults (Grid Opacity 0.8,
+  Line Width 3 px and Lines Thin with depth; Wheel Disc, Radius 45 % and Saturation 1;
+  the walking Stick Figure stance; the smaller grey Weave sheet) apply only to new
+  instances; a saved Weave keeps the graph stored with it. Deliberate changes for saved
+  grids: line widths are exact at 1080p and scale with the output, so in a 540p
+  preview they look about half as thick as before and match the export; and below
+  Horizon Fade 1 the dense lines near the horizon fade out instead of forming a solid band.
 - **Pictures on this page.** `scripts/effect-lab.mjs --pairs`,
-  `scripts/effect-graph-shot.mjs` and `scripts/effect-editor-shot.mjs`, each with a
-  `generate.json` manifest (`scripts/effect-*-shots/`). Flocking and Weave stills
-  are editor-preview screenshots, cropped and stacked like the lab pairs.
+  `scripts/effect-graph-shot.mjs` and `scripts/effect-editor-shot.mjs` with the
+  `generate.json` manifests in `scripts/effect-*-shots/`; Flocking and Weave use the
+  editor shot's `"view": "preview"` mode (the preview without and with the effect).

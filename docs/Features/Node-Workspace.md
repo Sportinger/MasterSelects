@@ -179,7 +179,9 @@ with Plant; drive it with Ballistic for a free jump. Facing mirrors the figure a
 its pelvis, so Pelvis X stays a screen position.
 
 **Head** draws the head filled (the original look) or as a ring with the limb
-thickness. The inspector shows angles in degrees and lengths and positions in pixels.
+thickness, up to the head radius; thicker lines grow the ring outward (at most 1.5 ×
+Head Radius) so its opening stays at least half the head radius, and the neck ends
+flat at the ring instead of reaching into it. The inspector shows angles in degrees and lengths and positions in pixels.
 Positions and lengths are kept within ±100 000 figure pixels (beyond that 32-bit GPU
 maths would break the drawing up); the inspector and tool results, `createRig`
 included, say when a value is clamped, when Scale at or below 0 leaves no figure, and
