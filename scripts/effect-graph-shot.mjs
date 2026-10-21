@@ -1,6 +1,7 @@
 // Effect graph shots: renders an effect's real default node graph on the Node Workspace canvas
 // (?test=effect-graph) in hardware-GPU Chrome and writes a WebP for the docs.
 //
+//   node scripts/effect-graph-shot.mjs --manifest scripts/effect-graph-shots/blur.json   # a docs page's shots
 //   node scripts/effect-graph-shot.mjs gaussian-blur box-blur
 //   node scripts/effect-graph-shot.mjs 'gaussian-blur?focus=horizontal-pass-premultiplied@gaussian-blur-horizontal-pass'
 //       [--url http://localhost:5176] [--out docs/Features/assets/effects/graphs]
@@ -13,12 +14,12 @@
 //                      cards (Constants excepted)
 //   rows=n             split a focused folder's flow into n rows (default: landscape fit)
 //   break=a,b          start a new row at these node ids instead (keeps short cables)
-//   hide=a,b           leave these node ids (and the stubs only they used) out of a focused
-//                      folder, to show one strand of a large folder
+//   only=a,b           with focus: just these nodes (local ids, see --list), laid out compactly;
+//                      their other inputs become named stubs (a recipe, not the whole folder)
 //   plumbing=hide      leave out the Constants and Coordinates & Resources folders and their
 //                      cables (overview pictures: the stages read as one path)
 //   chain=1            keep the clip chain (source, transform, output) around the effect
-// and two picture options: marks=id[:from],...  numbered callouts on these node cards (from =
+// (a composition's `@` id may be given without its `@`) and two picture options: marks=id[:from],...  numbered callouts on these node cards (from =
 // left|right|above|below), printed with the figure markup; layout=full|float sizes the callouts.
 // The file is `<out>/<name or effect>.webp`. `--list` prints every shot's folders and node ids instead.
 //
@@ -33,9 +34,12 @@ import { encodeDocShotWebp } from './docShotWebp.mjs';
 import { calloutOverlay, docsFigure } from './docShotFigure.mjs';
 
 const args = process.argv.slice(2);
-const valueOptions = new Set(['--url', '--out', '--width', '--max-height', '--scale', '--max-bytes']);
+const valueOptions = new Set(['--url', '--out', '--width', '--max-height', '--scale', '--max-bytes', '--manifest']);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
-const shots = args.filter((arg, index) => !arg.startsWith('--') && !valueOptions.has(args[index - 1]));
+// A manifest keeps a page's shots reproducible: `{ "shots": ["<effect>?<query>@<name>", ...] }`.
+const manifest = option('--manifest');
+const shots = [...manifest ? JSON.parse(fs.readFileSync(manifest, 'utf8')).shots : [],
+  ...args.filter((arg, index) => !arg.startsWith('--') && !valueOptions.has(args[index - 1]))];
 if (!shots.length) throw new Error('Name at least one shot, e.g. gaussian-blur or "gaussian-blur?focus=vertical-pass@gaussian-vertical".');
 const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
 const out = path.resolve(option('--out', 'docs/Features/assets/effects/graphs'));
@@ -80,14 +84,18 @@ try {
     const shot = parseShot(spec);
     const state = await open(shot);
     if (args.includes('--list')) {
-      const cards = await page.evaluate(() => [...document.querySelectorAll('.node-workspace-node')].map(card => `${card.dataset.nodeId} (${card.getAttribute('aria-label') ?? ''})`));
-      results.push({ shot: spec, title: state.title, nodes: state.nodes, bounds: state.bounds, folders: state.folders.map(folder => `${folder.path}${folder.collapsed ? '' : ' (open)'}`), cards });
+      results.push({ shot: spec, title: state.title, nodes: state.nodes, bounds: state.bounds,
+        folders: state.folders.map(folder => `${folder.path}${folder.collapsed ? '' : ' (open)'}`), cards: state.cards });
       continue;
     }
     // Fit by width, unless the graph is tall: then the height decides and the page narrows.
+    // Cables that bend out past the cards get room on both sides of one axis: the canvas' Fit
+    // centres the graph and keeps the zoom set by the other, tight axis.
     const { width, height } = state.bounds;
-    const zoom = Math.min((cssWidth - margin) / width, (maxCssHeight - margin) / height);
-    const viewport = { width: Math.min(cssWidth, Math.ceil(width * zoom + margin)), height: Math.ceil(height * zoom + margin) };
+    const bend = state.overhang ?? { left: 0, top: 0, right: 0, bottom: 0 };
+    const extraX = 2 * Math.max(bend.left, bend.right), extraY = extraX ? 0 : 2 * Math.max(bend.top, bend.bottom);
+    const zoom = Math.min((cssWidth - margin) / (width + extraX), (maxCssHeight - margin) / (height + extraY));
+    const viewport = { width: Math.ceil((width + extraX) * zoom + margin), height: Math.ceil((height + extraY) * zoom + margin) };
     await page.setViewportSize(viewport);
     // The worker canvas reports readiness on the canvas element; cards, cables and the flow
     // layout settle in the following frames. Then the canvas' own Fit frames the settled graph.
@@ -96,20 +104,25 @@ try {
     await page.waitForTimeout(2000);
     await page.evaluate(() => [...document.querySelectorAll('.node-workspace-toolbar button')].find(button => button.textContent === 'Fit')?.click());
     await page.waitForTimeout(1200);
-    // Crop the fit margin down to a slim border of canvas grid around the frame and cards.
-    const clip = await page.evaluate(({ pad, viewport }) => {
+    // Crop the fit margin down to a slim border of canvas grid around the frame, the cards and
+    // the cables that bend out past them (a wrapped row's last cable turns back outside).
+    const clip = await page.evaluate(({ pad, viewport, bounds, overhang }) => {
       const rects = [...document.querySelectorAll('.node-workspace-canvas-inner .node-workspace-group, .node-workspace-canvas-inner .node-workspace-node')]
         .map(element => element.getBoundingClientRect()).filter(rect => rect.width && rect.height);
       if (!rects.length) return undefined;
-      const left = Math.max(0, Math.floor(Math.min(...rects.map(rect => rect.left)) - pad));
-      const top = Math.max(0, Math.floor(Math.min(...rects.map(rect => rect.top)) - pad));
-      const right = Math.min(viewport.width, Math.ceil(Math.max(...rects.map(rect => rect.right)) + pad));
-      const bottom = Math.min(viewport.height, Math.ceil(Math.max(...rects.map(rect => rect.bottom)) + pad));
+      const box = { left: Math.min(...rects.map(rect => rect.left)), top: Math.min(...rects.map(rect => rect.top)),
+        right: Math.max(...rects.map(rect => rect.right)), bottom: Math.max(...rects.map(rect => rect.bottom)) };
+      const scale = (box.right - box.left) / Math.max(1, bounds.width), bend = overhang ?? { left: 0, top: 0, right: 0, bottom: 0 };
+      const left = Math.max(0, Math.floor(box.left - bend.left * scale - pad));
+      const top = Math.max(0, Math.floor(box.top - bend.top * scale - pad));
+      const right = Math.min(viewport.width, Math.ceil(box.right + bend.right * scale + pad));
+      const bottom = Math.min(viewport.height, Math.ceil(box.bottom + bend.bottom * scale + pad));
       return { x: left, y: top, width: right - left, height: bottom - top };
-    }, { pad: 18, viewport });
+    }, { pad: 18, viewport, bounds: state.bounds, overhang: state.overhang });
     const boxes = await page.evaluate(ids => ids.map(id => {
       // Effect node ids are scoped (`clip-graph:…/taper`): a mark names the local id.
-      const card = [...document.querySelectorAll('.node-workspace-node[data-node-id]')].find(element => element.dataset.nodeId === id || element.dataset.nodeId.endsWith(`/${id}`));
+      const card = [...document.querySelectorAll('.node-workspace-node[data-node-id]')]
+        .find(element => [id, `@${id}`].some(local => element.dataset.nodeId === local || element.dataset.nodeId.endsWith(`/${local}`)));
       if (!card) return { missing: id };
       const rect = card.getBoundingClientRect();
       return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };

@@ -70,13 +70,18 @@
 /* Every picture links to its full-size file (sync-features.mjs wraps it). */
 .sl-markdown-content .docs-shot-zoom { display: block; cursor: zoom-in; }
 .sl-markdown-content .docs-shot-zoom:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; border-radius: .5rem; }
-/* Node graphs keep a legible size on narrow screens and scroll sideways inside their figure. */
+/* Node graphs keep a legible size on narrow screens and scroll sideways inside their figure.
+   The callout stage (not only the picture) gets the width, so its overlay stays on the picture;
+   the caption stays in view and says that the picture scrolls. */
 @media (max-width: 50rem) {
   .sl-markdown-content .docs-shot--graph { overflow-x: auto; }
-  .sl-markdown-content .docs-shot--graph img { min-width: 44rem; }
-  /* The callout overlay covers its stage: the stage keeps the picture's width, so the
-     callouts scale and scroll together with the picture. */
+  .sl-markdown-content .docs-shot--graph img,
   .sl-markdown-content .docs-shot--graph .docs-shot-stage { min-width: 44rem; }
+  .sl-markdown-content .docs-shot--graph figcaption { position: sticky; left: 0; }
+  .sl-markdown-content .docs-shot--graph figcaption::before {
+    content: 'Scroll sideways, or tap the picture to enlarge it. ';
+    color: var(--sl-color-gray-1);
+  }
 }
 
 /* Vector callouts identify real controls without changing screenshot content. */
@@ -119,7 +124,10 @@
   .sl-markdown-content h2,
   .sl-markdown-content h3,
   .sl-markdown-content .docs-float-end { clear: both; }
-  /* Lists beside a floating shot keep their bullets clear of the picture. */
+  /* Lists and paragraphs beside a floating shot stay in one column: bullets keep clear of the
+     picture, and a tip does not jump to full width under it mid-sentence. */
   .sl-markdown-content .docs-shot--float-right ~ ul,
-  .sl-markdown-content .docs-shot--float-left ~ ul { display: flow-root; }
+  .sl-markdown-content .docs-shot--float-left ~ ul,
+  .sl-markdown-content .docs-shot--float-right ~ p,
+  .sl-markdown-content .docs-shot--float-left ~ p { display: flow-root; }
 }

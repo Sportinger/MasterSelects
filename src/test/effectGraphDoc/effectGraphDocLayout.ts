@@ -3,13 +3,18 @@
 // named stub cards for the values that come from outside them.
 import { reconcileCanvasPlacement } from '../../components/panels/nodes/canvas/nodeCanvasPlacement';
 import { getNodeHeight, getNodeWidth } from '../../components/panels/nodes/canvas/canvasGeometry';
+import { PREVIEW_BLOCK_GAP } from '../../components/panels/nodes/canvas/spacePreviewNodes';
 import type { NodeGraph, NodeGraphEdge, NodeGraphLayout, NodeGraphNode, NodeGraphPort } from '../../types/nodeGraph';
 
 /** Cards closer than this share a flow column. */
 const COLUMN_TOLERANCE = 60;
-const ROW_GAP = 150;
+const ROW_GAP = 90;
+/** Gaps of the compact layout used for a hand-picked node selection (`only=`). */
+const COMPACT_COLUMN_GAP = 70;
+const COMPACT_ROW_GAP = PREVIEW_BLOCK_GAP;
 const STUB_GAP = 56;
-const STUB_STACK_GAP = 24;
+/** Stacked cards keep the canvas' own clearance, or its placement pass pushes them further apart. */
+const STUB_STACK_GAP = PREVIEW_BLOCK_GAP;
 /** Docs columns are wide: aim for a landscape picture. */
 const TARGET_ASPECT = 1.6;
 const MAX_ROWS = 4;
@@ -97,6 +102,52 @@ export function withBoundaryStubs(cropped: NodeGraph, full: NodeGraph, skip: (so
   groups: cropped.groups?.map(group => group === focus ? { ...group, nodeIds: [...group.nodeIds, ...stubIds] } : group) };
 }
 
+/**
+ * Lays a hand-picked selection of a folder's nodes out afresh: one column per step along the
+ * cables (longest path from the selection's own inputs), each card level with its first input
+ * where possible, so a short recipe reads left to right without the gaps of the full folder.
+ */
+export function compactFlowLayout(graph: NodeGraph): NodeGraph {
+  const ids = new Set(graph.nodes.map(node => node.id));
+  const sources = new Map<string, string[]>();
+  for (const edge of graph.edges) if (ids.has(edge.fromNodeId) && ids.has(edge.toNodeId) && edge.fromNodeId !== edge.toNodeId) {
+    sources.set(edge.toNodeId, [...sources.get(edge.toNodeId) ?? [], edge.fromNodeId]);
+  }
+  const depth = new Map<string, number>();
+  const depthOf = (id: string, path: Set<string>): number => {
+    const known = depth.get(id);
+    if (known !== undefined) return known;
+    if (path.has(id)) return 0;
+    path.add(id);
+    const value = Math.max(-1, ...(sources.get(id) ?? []).map(source => depthOf(source, path))) + 1;
+    path.delete(id); depth.set(id, value);
+    return value;
+  };
+  const byId = new Map(graph.nodes.map(node => [node.id, node]));
+  for (const node of graph.nodes) depthOf(node.id, new Set());
+  // A card fed only from outside the pick sits right before its first consumer, not at the start.
+  const consumers = new Map<string, string[]>();
+  for (const [target, list] of sources) for (const source of list) consumers.set(source, [...consumers.get(source) ?? [], target]);
+  for (const node of graph.nodes.toSorted((a, b) => depth.get(b.id)! - depth.get(a.id)!)) {
+    const next = consumers.get(node.id)?.map(id => depth.get(id)!);
+    if (!sources.has(node.id) && next?.length) depth.set(node.id, Math.max(depth.get(node.id)!, Math.min(...next) - 1));
+  }
+  const columns: NodeGraphNode[][] = [];
+  for (const node of graph.nodes.toSorted((a, b) => a.layout.y - b.layout.y || a.layout.x - b.layout.x)) (columns[depth.get(node.id)!] ??= []).push(node);
+  const pitch = Math.max(...graph.nodes.map(getNodeWidth)) + COMPACT_COLUMN_GAP;
+  const placed = new Map<string, NodeGraphLayout>();
+  columns.forEach((column, index) => {
+    let nextTop = 0;
+    for (const node of column ?? []) {
+      const first = sources.get(node.id)?.map(id => placed.get(id)).find(Boolean);
+      const y = Math.max(nextTop, first?.y ?? 0);
+      placed.set(node.id, { x: index * pitch, y });
+      nextTop = y + getNodeHeight(byId.get(node.id)!) + COMPACT_ROW_GAP;
+    }
+  });
+  return { ...graph, nodes: graph.nodes.map(node => ({ ...node, layout: placed.get(node.id) ?? node.layout })) };
+}
+
 export function wrappedRowCount(width: number, height: number, columns: number): number {
   let best = 1, bestScore = Infinity;
   for (let rows = 1; rows <= Math.min(MAX_ROWS, columns); rows++) {
@@ -130,12 +181,24 @@ export function wrapFlowRows(graph: NodeGraph, rows: number | 'auto', breaks: re
     ? [...breakColumns].filter(start => start > 0 && start <= index).length : Math.floor(index / perRow));
   const isStubColumn = (column: NodeGraphNode[]) => column.every(node => node.id.startsWith(DOC_STUB_PREFIX));
   for (let index = columns.length - 2; index >= 0; index--) if (isStubColumn(columns[index])) rowOf[index] = rowOf[index + 1];
-  const rowLeft = new Map<number, number>();
-  columns.forEach((column, index) => rowLeft.set(rowOf[index], Math.min(rowLeft.get(rowOf[index]) ?? Infinity, ...column.map(node => node.layout.x))));
+  const rowLeft = new Map<number, number>(), rowTop = new Map<number, number>(), rowBottom = new Map<number, number>();
+  columns.forEach((column, index) => {
+    const row = rowOf[index];
+    rowLeft.set(row, Math.min(rowLeft.get(row) ?? Infinity, ...column.map(node => node.layout.x)));
+    rowTop.set(row, Math.min(rowTop.get(row) ?? Infinity, ...column.map(node => node.layout.y)));
+    rowBottom.set(row, Math.max(rowBottom.get(row) ?? -Infinity, ...column.map(node => node.layout.y + getNodeHeight(node))));
+  });
+  // Each row is as tall as its own cards, so short rows leave no empty band.
+  const rowOffset = new Map<number, number>();
+  let nextTop = top;
+  for (const row of [...rowTop.keys()].toSorted((a, b) => a - b)) {
+    rowOffset.set(row, nextTop - rowTop.get(row)!);
+    nextTop += rowBottom.get(row)! - rowTop.get(row)! + ROW_GAP;
+  }
   const moved = new Map<string, NodeGraphLayout>();
   columns.forEach((column, index) => {
     const row = rowOf[index];
-    for (const node of column) moved.set(node.id, { x: node.layout.x - rowLeft.get(row)! + left, y: node.layout.y + row * (height + ROW_GAP) });
+    for (const node of column) moved.set(node.id, { x: node.layout.x - rowLeft.get(row)! + left, y: node.layout.y + rowOffset.get(row)! });
   });
   return { ...graph, nodes: graph.nodes.map(node => moved.has(node.id) ? { ...node, layout: moved.get(node.id)! } : node) };
 }
