@@ -287,7 +287,12 @@ const renderHostPortProxy = new Proxy({} as RenderHostPortWithReferenceResolutio
   get(_target, propertyKey: keyof RenderHostPortWithReferenceResolution) {
     if (propertyKey === 'render' || propertyKey === 'renderToPreviewCanvas' || propertyKey === 'cacheActiveCompOutput') {
       return (...args: unknown[]) => {
-        if (readEditorContentPublication().blocked) return;
+        if (readEditorContentPublication().blocked) {
+          // The stores may be mid-switch, so these layers are not drawn. The render
+          // loop keeps the request and draws fresh state once publication reopens.
+          if (propertyKey !== 'cacheActiveCompOutput') instance.requestRender();
+          return;
+        }
         const method = instance[propertyKey] as (...args: unknown[]) => unknown;
         return method.apply(instance, args);
       };

@@ -26,6 +26,7 @@ export class RenderLoop {
   private lastActivityTime = 0;
   private isIdle = false;
   private renderRequested = false;
+  private deferredRequestReason: string | null = null;
   private lastRenderedPlayhead = -1;
 
   // When true, idle detection is completely suppressed (engine always renders).
@@ -168,10 +169,15 @@ export class RenderLoop {
         return;
       }
 
+      // A request is consumed only by a frame that reaches the render callback.
+      // Frames skipped for recovery, export or a blocked editor publication keep
+      // it pending, so the first frame after the gate reopens shows the change.
+      const pendingRequest = this.renderRequested;
       this.renderRequested = false;
 
       // Skip during device recovery
       if (this.callbacks.isRecovering()) {
+        this.keepDeferredRequest(pendingRequest, 'recovering');
         this.animationId = requestAnimationFrame(loop);
         return;
       }
@@ -248,7 +254,15 @@ export class RenderLoop {
       // Call render callback (unless exporting). Clear the fresh-frame signal
       // before entering the callback so a provider that publishes while this
       // frame is being assembled schedules one more presentation tick.
-      if (!this.callbacks.isExporting() && !readEditorContentPublication().blocked) {
+      const exporting = this.callbacks.isExporting();
+      const publicationBlocked = !exporting && readEditorContentPublication().blocked;
+      if (exporting || publicationBlocked) {
+        this.keepDeferredRequest(pendingRequest, exporting ? 'exporting' : 'publication-blocked');
+      } else {
+        if (this.deferredRequestReason) {
+          log.debug('Deferred render request delivered', { reason: this.deferredRequestReason });
+          this.deferredRequestReason = null;
+        }
         try {
           const frameReason = { newFrameReady: this.newFrameReady };
           this.newFrameReady = false;
@@ -340,6 +354,8 @@ export class RenderLoop {
     // During recovery or export, don't interfere
     if (this.callbacks.isRecovering()) return;
     if (this.callbacks.isExporting()) return;
+    // A project switch holds publication; its pending request is not a stall.
+    if (readEditorContentPublication().blocked) return;
 
     // Hidden tab: RAF is paused by the browser, so a growing render gap is
     // not a stall. Warning here would also re-arm renderRequested on every
@@ -391,6 +407,15 @@ export class RenderLoop {
         this.start();
       }
     }
+  }
+
+  private keepDeferredRequest(pendingRequest: boolean, reason: string): void {
+    if (!pendingRequest) return;
+    if (this.deferredRequestReason !== reason) {
+      log.debug('Render request deferred until the frame gate reopens', { reason });
+      this.deferredRequestReason = reason;
+    }
+    this.renderRequested = true;
   }
 
   requestRender(): void {
