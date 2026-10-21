@@ -5,10 +5,16 @@ import { canonicalEncode, hashBytes } from '../segments/canonical';
 interface ViewSlot {
   format: 'masterselects-view'; schemaVersion: 1; repositoryId: string;
   workspaceId: string; viewKey: string; sequence: number; value: JsonValue; checksum: string;
+  /** Wall-clock write time in ms, stored in the record because some backends (Native Helper) report no file times. */
+  updatedAt?: number;
 }
 interface ViewState { sequence: number; confirmed: number; slot: 'a' | 'b'; value: JsonValue; pending: boolean; }
 const VIEWS_PREFIX = '.masterselects/views/';
 async function* chunk(bytes: Uint8Array): AsyncIterable<Uint8Array> { yield bytes; }
+/** Newest first by write time; equal or unknown times fall back to the workspace id so every reader picks the same one. */
+function newerHolder(a: { workspaceId: string; updatedAt: number }, b: { workspaceId: string; updatedAt: number }): boolean {
+  return a.updatedAt !== b.updatedAt ? a.updatedAt > b.updatedAt : a.workspaceId < b.workspaceId;
+}
 
 /** Frequent views use two replaceable slots; they never extend the commit chain. */
 export class WorkspaceViewStore {
@@ -20,6 +26,7 @@ export class WorkspaceViewStore {
   private listed: Promise<{ own: Set<string>; others: Map<string, string[]> }> | null = null;
   /** Keys read from another workspace, by source workspace, until this workspace writes them itself. */
   private inherited = new Map<string, string>();
+  private lastStamp = 0;
   private readonly backend: RepositoryBackend;
   private readonly owner: RepositoryOwner;
   readonly repositoryId: string;
@@ -60,7 +67,7 @@ export class WorkspaceViewStore {
     const { own, others } = await this.listing();
     return [...new Set([...this.states.keys(), ...own, ...others.keys()])];
   }
-  private async slots(key: string, workspaceId: string): Promise<Array<{ record: ViewSlot; slot: 'a' | 'b'; modifiedTime: number }>> {
+  private async slots(key: string, workspaceId: string): Promise<Array<{ record: ViewSlot; slot: 'a' | 'b'; updatedAt: number }>> {
     const candidates = await Promise.all((['a', 'b'] as const).map(async slot => {
       try {
         const path = this.path(key, slot, workspaceId);
@@ -72,7 +79,9 @@ export class WorkspaceViewStore {
           || record.workspaceId !== workspaceId || record.viewKey !== key || !Number.isSafeInteger(record.sequence) || record.sequence < 0) return null;
         const { checksum, ...body } = record;
         if (await hashBytes(canonicalEncode(body)) !== checksum) return null;
-        return { record, slot, modifiedTime: stat.modifiedTime ?? 0 };
+        // Records written before updatedAt existed fall back to the file time (0 where the backend has none).
+        const updatedAt = Number.isSafeInteger(record.updatedAt) && record.updatedAt! > 0 ? record.updatedAt! : stat.modifiedTime ?? 0;
+        return { record, slot, updatedAt };
       } catch (error) {
         if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'SecurityError')) throw error;
         return null;
@@ -103,11 +112,12 @@ export class WorkspaceViewStore {
     const part = key.startsWith('project/part/');
     const shapeSource = this.inherited.get('project');
     const holders = !part ? others.get(key) ?? [] : shapeSource && others.get(key)?.includes(shapeSource) ? [shapeSource] : [];
-    let newest: { workspaceId: string; modifiedTime: number; value: JsonValue } | null = null;
+    let newest: { workspaceId: string; updatedAt: number; value: JsonValue } | null = null;
     for (const workspaceId of holders) {
       try {
         const [latest] = await this.slots(key, workspaceId);
-        if (latest && (!newest || latest.modifiedTime > newest.modifiedTime)) newest = { workspaceId, modifiedTime: latest.modifiedTime, value: latest.record.value };
+        const candidate = latest && { workspaceId, updatedAt: latest.updatedAt, value: latest.record.value };
+        if (candidate && (!newest || newerHolder(candidate, newest))) newest = candidate;
       } catch (error) {
         if (!(error instanceof RepositoryError)) throw error;
       }
@@ -151,7 +161,7 @@ export class WorkspaceViewStore {
           await this.owner.assertOwned();
           const slot = current.slot === 'a' ? 'b' : 'a';
           const body = { format: 'masterselects-view' as const, schemaVersion: 1 as const, repositoryId: this.repositoryId,
-            workspaceId: this.workspaceId, viewKey: write.key, sequence: write.sequence, value: write.value };
+            workspaceId: this.workspaceId, viewKey: write.key, sequence: write.sequence, value: write.value, updatedAt: this.stamp() };
           const record: ViewSlot = { ...body, checksum: await hashBytes(canonicalEncode(body)) };
           const encoded = canonicalEncode(record);
           await this.backend.replaceViewSlot(this.path(write.key, slot), chunk(encoded));
@@ -169,6 +179,8 @@ export class WorkspaceViewStore {
       }
     });
   }
+  /** Non-decreasing per store, so a backwards clock step never makes a later write look older than this workspace's earlier one. */
+  private stamp(): number { this.lastStamp = Math.max(Date.now(), this.lastStamp + 1); return this.lastStamp; }
   async flush(watermarks = this.watermarks()): Promise<void> {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     this.queueWrites(); await this.chain;

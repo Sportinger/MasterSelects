@@ -103,6 +103,20 @@ describe('.msproj archive import into browser storage', () => {
     expect([...root.entries.keys()]).toEqual([]);
   });
 
+  it('cancels the copy through its signal and leaves no project folder behind', async () => {
+    const before = new AbortController(); before.abort();
+    await expect(storeProjectArchiveInBrowser(new File(['bytes'], 'Early.msproj'), before.signal)).rejects.toMatchObject({ code: 'cancelled' });
+    const during = new AbortController();
+    const write = FakeFile.prototype.createWritable;
+    vi.spyOn(FakeFile.prototype, 'createWritable').mockImplementation(async function (this: FakeFile) {
+      const writable = await write.call(this);
+      return { ...writable, write: async (blob: Blob) => { await writable.write(blob); during.abort(); } };
+    });
+    await expect(storeProjectArchiveInBrowser(new File(['bytes'], 'Late.msproj'), during.signal)).rejects.toMatchObject({ code: 'cancelled' });
+    expect([...root.entries.keys()]).toEqual([]);
+    vi.restoreAllMocks();
+  });
+
   it('derives a storage-safe folder name and discards an import that did not open', async () => {
     expect(archiveProjectName('Show: Act 1?.MSPROJ')).toBe('Show Act 1');
     expect(archiveProjectName('.msproj')).toBe('Imported Project');

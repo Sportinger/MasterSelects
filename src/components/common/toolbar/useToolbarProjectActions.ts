@@ -157,6 +157,7 @@ export function useToolbarProjectActions({
   const openFromBrowserStorage = useCallback(async (
     action: 'open' | 'import',
     open: () => Promise<boolean>,
+    signal?: AbortSignal,
   ): Promise<string | null> => {
     setIsLoading(true);
     setProjectLoadProgress({
@@ -181,6 +182,11 @@ export function useToolbarProjectActions({
       return null;
     } catch (error) {
       setProjectLoadProgress(null);
+      if (signal?.aborted) {
+        // The person cancelled; the import already removed its partial copy and staging.
+        log.info(`Browser project ${action} cancelled`);
+        return action === 'import' ? 'The project archive import was cancelled.' : 'Opening the project was cancelled.';
+      }
       const storageFailure = describeBrowserStorageFailure(error);
       const fallback = action === 'import' ? 'The project archive could not be imported.' : 'The project could not be opened.';
       if (storageFailure) {
@@ -200,8 +206,8 @@ export function useToolbarProjectActions({
     openFromBrowserStorage('open', () => openStoredProject(name))
   ), [openFromBrowserStorage]);
 
-  const handleImportProjectArchive = useCallback((file: File) => (
-    openFromBrowserStorage('import', () => openProjectArchive(file))
+  const handleImportProjectArchive = useCallback((file: File, signal?: AbortSignal) => (
+    openFromBrowserStorage('import', () => openProjectArchive(file, signal), signal)
   ), [openFromBrowserStorage]);
 
   const handleOpenRecent = useCallback(async (projectId: string) => {

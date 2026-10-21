@@ -30,6 +30,10 @@ export function archiveProjectName(fileName: string): string {
   return name || 'Imported Project';
 }
 
+function throwIfCancelled(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new RepositoryError('cancelled', 'Project archive import cancelled');
+}
+
 async function entryExists(root: FileSystemDirectoryHandle, name: string): Promise<boolean> {
   try {
     await root.getDirectoryHandle(name);
@@ -64,14 +68,16 @@ async function removeFolder(root: FileSystemDirectoryHandle, name: string): Prom
  * The IndexedDB fallback writable is not a WritableStream; it takes the file
  * as one Blob and stores it in its own large chunks.
  */
-async function copyFileInto(file: File, writable: FileSystemWritableFileStream): Promise<void> {
+async function copyFileInto(file: File, writable: FileSystemWritableFileStream, signal?: AbortSignal): Promise<void> {
   if (typeof WritableStream !== 'undefined' && writable instanceof WritableStream && typeof file.stream === 'function') {
-    // pipeTo closes the destination on success and aborts it on failure.
-    await file.stream().pipeTo(writable);
+    // pipeTo closes the destination on success and aborts it on failure or cancellation.
+    await file.stream().pipeTo(writable, signal ? { signal } : undefined);
     return;
   }
   try {
+    throwIfCancelled(signal);
     await writable.write(file);
+    throwIfCancelled(signal);
     await writable.close();
   } catch (error) {
     await writable.abort().catch(() => {});
@@ -83,7 +89,8 @@ async function copyFileInto(file: File, writable: FileSystemWritableFileStream):
  * Copies the archive into a new browser-storage project folder and returns
  * the folder name to open. A partial copy is removed and reported, never kept.
  */
-export async function storeProjectArchiveInBrowser(file: File): Promise<string> {
+export async function storeProjectArchiveInBrowser(file: File, signal?: AbortSignal): Promise<string> {
+  throwIfCancelled(signal);
   if (!isProjectArchiveFileName(file.name)) {
     throw new RepositoryError('unsupported', 'Choose a MasterSelects project archive (.msproj file).');
   }
@@ -100,7 +107,7 @@ export async function storeProjectArchiveInBrowser(file: File): Promise<string> 
     }
     const writable = await handle.createWritable({ keepExistingData: false });
     copyStarted = performance.now();
-    await copyFileInto(file, writable);
+    await copyFileInto(file, writable, signal);
     copyMs = performance.now() - copyStarted;
     const copied = await handle.getFile();
     if (copied.size !== file.size) {
@@ -108,6 +115,8 @@ export async function storeProjectArchiveInBrowser(file: File): Promise<string> 
     }
   } catch (error) {
     await removeFolder(root, name);
+    // pipeTo rejects with the signal's AbortError; callers see one cancellation error type.
+    if (signal?.aborted) throw new RepositoryError('cancelled', 'Project archive import cancelled');
     throw error;
   }
   // Timings separate storage setup from the byte copy when an import feels slow.

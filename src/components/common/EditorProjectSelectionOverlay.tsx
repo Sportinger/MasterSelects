@@ -85,6 +85,8 @@ export function EditorProjectSelectionOverlay({
   ));
   const completionTimerRef = useRef<number | null>(null);
   const archiveInputRef = useRef<HTMLInputElement>(null);
+  const archiveImportAbort = useRef<AbortController | null>(null);
+  const [cancellingArchive, setCancellingArchive] = useState(false);
 
   useEffect(() => {
     const refresh = () => setRecentProjects(projectFileService.getRecentProjects());
@@ -100,6 +102,8 @@ export function EditorProjectSelectionOverlay({
     if (completionTimerRef.current !== null) {
       window.clearTimeout(completionTimerRef.current);
     }
+    // Leaving the selection cancels a running archive import; it removes its partial copy.
+    archiveImportAbort.current?.abort();
   }, []);
 
   const completeSelection = useCallback(() => {
@@ -193,13 +197,19 @@ export function EditorProjectSelectionOverlay({
     if (busyAction || !confirmProjectSwitch()) return;
     setBusyAction('archive');
     setError(null);
+    const controller = new AbortController();
+    archiveImportAbort.current = controller;
     try {
-      if (await openProjectArchive(file)) {
+      if (await openProjectArchive(file, controller.signal)) {
         completeSelection();
         return;
       }
       setError('The project archive could not be opened.');
     } catch (error) {
+      if (controller.signal.aborted) {
+        log.info('Project archive import cancelled');
+        return;
+      }
       if (isExpectedArchiveImportRejection(error)) {
         log.warn('Project archive import rejected', error);
         setError(`The project archive could not be imported. ${(error as Error).message}`);
@@ -207,6 +217,8 @@ export function EditorProjectSelectionOverlay({
       }
       setError(reportProjectActionError('archive import', error, 'The project archive could not be imported.'));
     } finally {
+      if (archiveImportAbort.current === controller) archiveImportAbort.current = null;
+      setCancellingArchive(false);
       setBusyAction(null);
     }
   };
@@ -299,6 +311,7 @@ export function EditorProjectSelectionOverlay({
                 className="editor-project-cancel"
                 disabled={busyAction !== null}
                 type="button"
+                onPointerUp={(event) => event.currentTarget.blur()}
                 onClick={() => {
                   setIsNamingProject(false);
                   setProjectName('');
@@ -363,14 +376,20 @@ export function EditorProjectSelectionOverlay({
               />
               <button
                 className="editor-project-cancel"
-                disabled={busyAction !== null}
+                disabled={(busyAction !== null && busyAction !== 'archive') || cancellingArchive}
                 type="button"
+                onPointerUp={(event) => event.currentTarget.blur()}
                 onClick={() => {
+                  if (busyAction === 'archive') {
+                    setCancellingArchive(true);
+                    archiveImportAbort.current?.abort();
+                    return;
+                  }
                   setStoredProjects(null);
                   setError(null);
                 }}
               >
-                Back
+                {busyAction === 'archive' ? (cancellingArchive ? 'Cancelling import…' : 'Cancel import') : 'Back'}
               </button>
             </div>
           ) : (

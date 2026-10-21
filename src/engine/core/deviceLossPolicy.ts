@@ -10,7 +10,8 @@
 //   VK_ERROR_DEVICE_LOST). The first one per session is reported as an error;
 //   repeats are warnings so one bad driver does not flood error reporting.
 //   Several real losses in a short window stop recovery instead of looping
-//   lose -> recover -> lose forever.
+//   lose -> recover -> lose forever; that final loss is its own incident and
+//   files one error, since the GPU stays unavailable afterwards.
 //
 // One incident files at most one error. The first real loss's error is held
 // until recovery has an outcome: a recovered loss reports "Device lost", a
@@ -23,7 +24,7 @@ export const REPEATED_LOSS_WINDOW_MS = 60_000;
 export type DeviceLossDecision =
   | { kind: 'background'; report: 'warn'; recover: 'when-visible' }
   | { kind: 'unexpected'; report: 'error' | 'warn'; recover: 'now'; occurrence: number }
-  | { kind: 'repeated'; report: 'warn'; recover: 'stop'; occurrence: number };
+  | { kind: 'repeated'; report: 'error'; recover: 'stop'; occurrence: number };
 
 let pageHidden = false;
 let lifecycleInstalled = false;
@@ -78,7 +79,7 @@ export class DeviceLossPolicy {
     this.recentLosses = this.recentLosses.filter(at => now - at < REPEATED_LOSS_WINDOW_MS);
     this.recentLosses.push(now);
     const occurrence = this.recentLosses.length;
-    if (occurrence >= REPEATED_LOSS_LIMIT) return { kind: 'repeated', report: 'warn', recover: 'stop', occurrence };
+    if (occurrence >= REPEATED_LOSS_LIMIT) return { kind: 'repeated', report: 'error', recover: 'stop', occurrence };
 
     const report = this.reportedUnexpectedLoss ? 'warn' : 'error';
     this.reportedUnexpectedLoss = true;

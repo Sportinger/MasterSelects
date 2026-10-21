@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import type { RepositoryBackend, RepositoryOwner } from '../../src/services/project/repository/contracts';
 import { RepositoryError } from '../../src/services/project/repository/contracts';
 import { WorkspaceViewStore } from '../../src/services/project/repository/workspace/WorkspaceViewStore';
@@ -6,14 +6,15 @@ import { readProjectWorkspace, splitProjectWorkspace } from '../../src/services/
 import type { RepositorySession } from '../../src/services/project/repository/RepositorySession';
 
 const owner: RepositoryOwner = { writerEpoch: 'writer', assertOwned() {}, async release() {} };
-function memory() {
+function memory(options: { fileTimes?: boolean } = {}) {
+  const fileTimes = options.fileTimes ?? true;
   const files = new Map<string, Uint8Array>(), times = new Map<string, number>(); let stats = 0, clock = 0;
   const collect = async (chunks: AsyncIterable<Uint8Array>) => { const parts: Uint8Array[] = []; for await (const part of chunks) parts.push(part); return Uint8Array.from(parts.flatMap(part => [...part])); };
   const backend = { locationId: 'views', capabilities: { rangeReads: true, immutableWrites: true, replaceViewSlots: true, ownership: true, durability: 'stream-close' },
     async acquireOwner() { return owner; },
     async list(prefix: string, cursor?: string, limit = 128) { const names = [...files.keys()].filter(path => path.startsWith(prefix) && (!cursor || path > cursor)).toSorted(); const paths = names.slice(0, limit); return { paths, nextCursor: names.length > limit ? paths.at(-1)! : null }; },
     async read(path: string, offset = 0, length?: number) { const bytes = files.get(path); if (!bytes) throw new RepositoryError('io', 'Missing'); return bytes.slice(offset, length === undefined ? undefined : offset + length); },
-    async stat(path: string) { stats++; return files.has(path) ? { length: files.get(path)!.length, modifiedTime: times.get(path) } : null; },
+    async stat(path: string) { stats++; return files.has(path) ? { length: files.get(path)!.length, modifiedTime: fileTimes ? times.get(path) : undefined } : null; },
     async writeNew(path: string, chunks: AsyncIterable<Uint8Array>) { files.set(path, await collect(chunks)); times.set(path, ++clock); },
     async replaceViewSlot(path: string, chunks: AsyncIterable<Uint8Array>) { files.set(path, await collect(chunks)); times.set(path, ++clock); },
     async removeUnpublished(path: string) { files.delete(path); },
@@ -110,6 +111,38 @@ describe('workspace view inheritance', () => {
     expect(await current.read('layout')).toBe('newer');
     expect(await current.read('playhead')).toBe(9);
     expect(await current.read('missing')).toBeNull();
+  });
+
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('picks the newest workspace from the stored write time when the backend reports no file times (Native Helper)', async () => {
+    const { backend } = memory({ fileTimes: false });
+    const now = vi.spyOn(Date, 'now');
+    now.mockReturnValue(1_000);
+    await write(backend, 'z-older', { layout: 'older' });
+    now.mockReturnValue(2_000);
+    await write(backend, 'a-newer', { layout: 'newer' });
+    now.mockReturnValue(3_000);
+    await write(backend, 'b-mid-but-older-than-a', {});
+    expect(await new WorkspaceViewStore(backend, owner, 'repo', 'fresh').read('layout')).toBe('newer');
+
+    // The choice follows the write time, not the workspace id order.
+    now.mockReturnValue(4_000);
+    await write(backend, 'z-older', { layout: 'rewritten' });
+    expect(await new WorkspaceViewStore(backend, owner, 'repo', 'fresh').read('layout')).toBe('rewritten');
+  });
+
+  it('breaks equal or unknown write times by workspace id, independent of listing order', async () => {
+    const { backend } = memory({ fileTimes: false });
+    vi.spyOn(Date, 'now').mockReturnValue(5_000);
+    await write(backend, 'workspace-b', { layout: 'b' });
+    await write(backend, 'workspace-a', { layout: 'a' });
+    const reversed = backend.list;
+    backend.list = async (prefix, cursor, limit) => {
+      const page = await reversed(prefix, cursor, limit);
+      return { ...page, paths: page.paths.toReversed() };
+    };
+    expect(await new WorkspaceViewStore(backend, owner, 'repo', 'fresh').read('layout')).toBe('a');
   });
 
   it('takes project workspace parts only from the workspace that supplied the shape', async () => {

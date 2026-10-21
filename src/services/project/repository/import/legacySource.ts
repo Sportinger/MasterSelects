@@ -42,6 +42,8 @@ export interface LegacyReadOptions {
 export class RepositoryArchiveSourceError extends RepositoryError {
   constructor() { super('unsupported', 'Repository archives require repository restore, not legacy migration'); }
 }
+/** Paths only a repository archive holds; old project packages never contain them. */
+const REPOSITORY_ARCHIVE_ENTRY = /^(project\.msrepo\.json|archive-manifest\.json|\.masterselects\/(segments|artifacts|commits|views)\/.+)$/;
 type EntryStore = Pick<RepositoryBackend, 'stat' | 'read' | 'list'>;
 /**
  * Package entries are staged in memory: they are small (project JSON, sidecars, manifests), end up as
@@ -191,6 +193,9 @@ export async function openLegacySource(source: ReadOnlyProjectSource, input: Leg
     const packageHash = new StreamHash(); let packageLength = 0; const packagePath = safePath(input.path);
     async function* teed() { for await (const chunk of readFileChunks(source, packagePath, signal)) { packageHash.update(chunk); packageLength += chunk.length; yield chunk; } }
     await extractZip(teed(), async entry => {
+      // A repository archive restores through its own path: stop at its first repository entry instead of
+      // buffering the whole (possibly multi-GB) archive in memory before noticing its manifest.
+      if (REPOSITORY_ARCHIVE_ENTRY.test(entry.path)) throw new RepositoryArchiveSourceError();
       const parts: Uint8Array[] = []; let length = 0;
       for await (const chunk of entry.chunks) { parts.push(chunk.slice()); length += chunk.length; }
       const bytes = new Uint8Array(length); let offset = 0;

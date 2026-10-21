@@ -132,6 +132,7 @@
 }
 
 .editor-project-box:focus-visible,
+.editor-project-cancel:focus-visible,
 .editor-project-name-form button:focus-visible,
 .editor-project-name-form input:focus-visible {
   outline: 2px solid #999;
@@ -270,6 +271,16 @@
   font-size: 0.67rem;
   margin-top: 0.65rem;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.editor-project-cancel:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.editor-project-cancel:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .editor-project-error {

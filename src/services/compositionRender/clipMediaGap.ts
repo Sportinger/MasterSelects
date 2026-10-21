@@ -80,18 +80,19 @@ const log = Logger.create('CompositionRenderer');
 export function createArrivedClipMediaWatch(
   compositionSources: ReadonlyMap<string, CompositionSources>,
   invalidate: (compositionId: string) => void,
-): { arm(): void } {
-  let armed = false;
+): { arm(): void; dispose(): void } {
+  let unsubscribe: (() => void) | null = null;
   return {
     arm() {
-      if (armed) return;
-      armed = true;
-      useMediaStore.subscribe(state => state.files, files => {
+      if (unsubscribe) return;
+      unsubscribe = useMediaStore.subscribe(state => state.files, files => {
         for (const compositionId of findCompositionsWithArrivedMedia(compositionSources, files)) {
           log.info(`Media for composition ${compositionId} finished loading; rebuilding its sources`);
           invalidate(compositionId);
         }
       });
     },
+    /** Stops watching, e.g. when HMR replaces the renderer module, so no stale renderer keeps rebuilding. */
+    dispose() { unsubscribe?.(); unsubscribe = null; },
   };
 }

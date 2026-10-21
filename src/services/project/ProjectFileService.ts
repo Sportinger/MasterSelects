@@ -3,10 +3,10 @@ import { captureRepositoryDomainPublication } from './repository/artifacts/Repos
 import { getActiveRepositorySession, getActiveRepositoryDirectory } from './repository/lifecycle/editorRepositoryLifecycle';
 import { Logger } from '../logger';
 import { FileStorageService, fileStorageService } from './core/FileStorageService';
-import { NativeFileStorageService, nativeFileStorageService } from './core/NativeFileStorageService';
-import { NativeProjectCoreService } from './core/NativeProjectCoreService';
+import type { NativeFileStorageService } from './core/NativeFileStorageService';
+import type { NativeProjectCoreService } from './core/NativeProjectCoreService';
 import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
-import { canHostNativeHelper } from './core/browserStorageFailure';
+import { ProjectBackendSelection, type ProjectBackend } from './fileService/projectBackendSelection';
 import { ProjectCoreService } from './core/ProjectCoreService';
 import { AnalysisService } from './domains/AnalysisService';
 import { TranscriptService, type StoredTranscript } from './domains/TranscriptService';
@@ -58,7 +58,7 @@ export type {
   DeleteMediaFileArtifactsResult,
 } from './fileService/artifactCleanup';
 const log = Logger.create('ProjectFileService');
-export type ProjectBackend = 'fsa' | 'native';
+export type { ProjectBackend } from './fileService/projectBackendSelection';
 class ProjectFileService {
   private readonly coreService: ProjectCoreService;
   private readonly fileStorage: FileStorageService;
@@ -67,9 +67,7 @@ class ProjectFileService {
   private readonly cacheService: CacheService;
   private readonly proxyStorageService: ProxyStorageService;
   private readonly rawMediaService: RawMediaService;
-  private nativeCoreService: NativeProjectCoreService | null = null;
-  private nativeFileStorage: NativeFileStorageService | null = null;
-  private _activeBackend: ProjectBackend = 'fsa';
+  private readonly backends = new ProjectBackendSelection();
   constructor() {
     this.fileStorage = fileStorageService;
     this.coreService = new ProjectCoreService(this.fileStorage);
@@ -81,29 +79,29 @@ class ProjectFileService {
   }
   private get fileRoutingContext(): FileStorageRoutingContext {
     return {
-      activeBackend: this._activeBackend,
+      activeBackend: this.backends.backend,
       coreService: this.coreService,
       fileStorage: this.fileStorage,
-      nativeCoreService: this.nativeCoreService,
-      nativeFileStorage: this.nativeFileStorage,
+      nativeCoreService: this.backends.nativeCoreService,
+      nativeFileStorage: this.backends.nativeFileStorage,
     };
   }
   private get rawMediaRoutingContext(): rawMediaRouting.RawMediaRoutingContext {
     return {
-      activeBackend: this._activeBackend,
+      activeBackend: this.backends.backend,
       coreService: this.coreService,
-      nativeCoreService: this.nativeCoreService,
+      nativeCoreService: this.backends.nativeCoreService,
       rawMediaService: this.rawMediaService,
       getProjectData: () => this.core.getProjectData(),
       markDirty: () => this.core.markDirty(),
-      ensureNativeBackendReady: () => this.ensureNativeBackendReady(),
+      ensureNativeBackendReady: () => this.backends.selectReadyNative(),
     };
   }
   private get artifactStorageContext(): artifactStorageDelegates.ArtifactStorageContext {
     return {
-      activeBackend: this._activeBackend,
+      activeBackend: this.backends.backend,
       getProjectHandle: () => this.coreService.getProjectHandle(),
-      getNativeProjectPath: () => this.nativeCoreService?.getProjectPath() ?? null,
+      getNativeProjectPath: () => this.backends.nativeCoreService?.getProjectPath() ?? null,
       cacheService: this.cacheService,
       proxyStorageService: this.proxyStorageService,
       analysisService: this.analysisService,
@@ -116,7 +114,7 @@ class ProjectFileService {
   }
   private get artifactCleanupContext(): MediaArtifactCleanupContext {
     return {
-      activeBackend: this._activeBackend,
+      activeBackend: this.backends.backend,
       getProjectHandle: () => this.coreService.getProjectHandle(),
       deleteEntry: (subFolder, entryName, options) => this.deleteEntry(subFolder as keyof typeof PROJECT_FOLDERS, entryName, options),
       deleteRawFile: (relativePath) => this.deleteRawFile(relativePath),
@@ -129,40 +127,9 @@ class ProjectFileService {
       deleteProxy: (mediaId) => this.deleteProxy(mediaId),
     };
   }
-  private ensureNativeBackend(): NativeProjectCoreService {
-    if (!this.nativeCoreService) {
-      this.nativeCoreService = new NativeProjectCoreService();
-      this.nativeFileStorage = nativeFileStorageService;
-    }
-    this._activeBackend = 'native';
-    return this.nativeCoreService;
-  }
-  private async ensureNativeBackendReady(): Promise<NativeProjectCoreService | null> {
-    if (!canHostNativeHelper()) return null; // iOS/Android: browser storage only, logged once
-    const previousBackend = this._activeBackend;
-    const nativeCore = this.ensureNativeBackend();
-    const abandonNativeBackend = (): null => {
-      this._activeBackend = previousBackend;
-      return null;
-    };
-    if (!NativeHelperClient.isConnected()) {
-      const connected = await NativeHelperClient.connect();
-      if (!connected) {
-        log.warn('Native Helper backend requested but helper is not connected');
-        return abandonNativeBackend();
-      }
-    }
-    const hasFsCommands = await NativeHelperClient.hasFsCommands();
-    if (!hasFsCommands) {
-      log.error('Native Helper does not support project file-system commands');
-      return abandonNativeBackend();
-    }
-    return nativeCore;
-  }
-
   /** Get the currently active backend */
   get activeBackend(): ProjectBackend {
-    const session = getActiveRepositorySession(); return session ? session.location.kind === 'native' ? 'native' : 'fsa' : this._activeBackend;
+    const session = getActiveRepositorySession(); return session ? session.location.kind === 'native' ? 'native' : 'fsa' : this.backends.backend;
   }
 
   /**
@@ -171,7 +138,7 @@ class ProjectFileService {
    * into the project's Raw folder even when the global copy setting is off.
    */
   requiresProjectLocalMediaCopies(): boolean {
-    return this._activeBackend === 'fsa'
+    return this.backends.backend === 'fsa'
       && (
         !this.isFsaAvailable
         || isAndroidAutoRestoreProjectHandle(this.coreService.getProjectHandle())
@@ -188,37 +155,37 @@ class ProjectFileService {
 
   /** Switch to native helper backend (for Firefox) */
   activateNativeBackend(): void {
-    this.ensureNativeBackend();
+    this.backends.selectNative();
     log.info('Switched to Native Helper backend');
   }
 
   /** Switch back to FSA backend (for Chrome) */
   activateFsaBackend(): void {
-    this._activeBackend = 'fsa';
+    this.backends.selectFsa();
     log.info('Switched to FSA backend');
   }
 
   /** Get native core service (for native-specific operations like listProjects) */
   getNativeCoreService(): NativeProjectCoreService | null {
-    return this.nativeCoreService;
+    return this.backends.nativeCoreService;
   }
 
   /** Get native file storage (for native-specific operations like getFileUrl) */
   getNativeFileStorage(): NativeFileStorageService | null {
-    return this.nativeFileStorage;
+    return this.backends.nativeFileStorage;
   }
 
   /** Helper to get the active core service */
   private get core(): ProjectCoreService | NativeProjectCoreService {
-    if (this._activeBackend === 'native' && this.nativeCoreService) {
-      return this.nativeCoreService;
+    if (this.backends.backend === 'native' && this.backends.nativeCoreService) {
+      return this.backends.nativeCoreService;
     }
     return this.coreService;
   }
 
   isSupported(): boolean {
-    if (this._activeBackend === 'native' || !this.isFsaAvailable) {
-      return (this.nativeCoreService?.isSupported() ?? false) || this.coreService.isSupported();
+    if (this.backends.backend === 'native' || !this.isFsaAvailable) {
+      return (this.backends.nativeCoreService?.isSupported() ?? false) || this.coreService.isSupported();
     }
     return this.coreService.isSupported();
   }
@@ -229,8 +196,8 @@ class ProjectFileService {
 
   getProjectPath(): string | null {
     const session = getActiveRepositorySession(); if (session) return session.location.kind === 'native' ? session.location.path : null;
-    if (this._activeBackend === 'native' && this.nativeCoreService) {
-      return this.nativeCoreService.getProjectPath();
+    if (this.backends.backend === 'native' && this.backends.nativeCoreService) {
+      return this.backends.nativeCoreService.getProjectPath();
     }
     return null;
   }
@@ -241,8 +208,8 @@ class ProjectFileService {
 
   getProjectPackageSession(): ProjectPackageSession | null {
     if (getActiveRepositorySession()) return null;
-    if (this._activeBackend === 'native') {
-      const path = this.nativeCoreService?.getProjectPath();
+    if (this.backends.backend === 'native') {
+      const path = this.backends.nativeCoreService?.getProjectPath();
       return path ? getNativeProjectPackageSession(path) : null;
     }
     const handle = this.coreService.getProjectHandle();
@@ -274,8 +241,8 @@ class ProjectFileService {
   }
 
   async createProject(name: string, preserveCurrent = false): Promise<boolean> {
-    if (this._activeBackend === 'native' || !this.isFsaAvailable) {
-      const nativeCore = await this.ensureNativeBackendReady();
+    if (this.backends.backend === 'native' || !this.isFsaAvailable) {
+      const nativeCore = await this.backends.selectReadyNative();
       if (nativeCore) {
         const projectRoot = await NativeHelperClient.getProjectRoot();
         const parentPath = await pickNativeFolder(
@@ -297,8 +264,8 @@ class ProjectFileService {
   createProjectInBrowserStorage(path: string, name: string): Promise<boolean> { return this.coreService.createProjectInBrowserStorage(path, name); }
 
   async openProject(): Promise<boolean> {
-    if (this._activeBackend === 'fsa' && this.isFsaAvailable) return this.coreService.openProject();
-    const nativeCore = await this.ensureNativeBackendReady();
+    if (this.backends.backend === 'fsa' && this.isFsaAvailable) return this.coreService.openProject();
+    const nativeCore = await this.backends.selectReadyNative();
     if (!nativeCore) throw new ProjectBackendUnavailableError();
     const projectPath = await pickNativeFolder('Select an existing project folder', await NativeHelperClient.getProjectRoot());
     return projectPath ? nativeCore.loadProject(projectPath) : false;
@@ -306,8 +273,8 @@ class ProjectFileService {
 
   /** Without a folder picker or Native Helper, Open Project lists browser-stored projects instead. */
   async resolveOpenProjectRoute(): Promise<OpenProjectRoute> {
-    return selectOpenProjectRoute({ folderPicker: this._activeBackend === 'fsa' && this.isFsaAvailable,
-      nativeHelper: async () => Boolean(await this.ensureNativeBackendReady()), browserStorage: isOpfsAvailable() });
+    return selectOpenProjectRoute({ folderPicker: this.backends.backend === 'fsa' && this.isFsaAvailable,
+      nativeHelper: async () => Boolean(await this.backends.selectReadyNative()), browserStorage: isOpfsAvailable() });
   }
 
   getRecentProjects(): RecentProjectEntry[] {
@@ -326,14 +293,14 @@ class ProjectFileService {
     return openRecentProjectFromRecent({
       isFsaAvailable: this.isFsaAvailable,
       coreService: this.coreService,
-      ensureNativeBackendReady: () => this.ensureNativeBackendReady(),
+      ensureNativeBackendReady: () => this.backends.selectReadyNative(),
       activateFsaBackend: () => this.activateFsaBackend(),
     }, id);
   }
 
   async loadProject(handleOrPath: FileSystemDirectoryHandle | string): Promise<boolean> {
     if (typeof handleOrPath === 'string') {
-      const nativeCore = await this.ensureNativeBackendReady();
+      const nativeCore = await this.backends.selectReadyNative();
       return nativeCore
         ? nativeCore.loadProject(normalizeNativePath(handleOrPath))
         : false;
@@ -358,8 +325,8 @@ class ProjectFileService {
   }
 
   async restoreLastProject(): Promise<boolean> {
-    if (this._activeBackend === 'native' || !this.isFsaAvailable) {
-      const nativeCore = await this.ensureNativeBackendReady();
+    if (this.backends.backend === 'native' || !this.isFsaAvailable) {
+      const nativeCore = await this.backends.selectReadyNative();
       if (nativeCore) return nativeCore.restoreLastProject();
     }
 
@@ -371,8 +338,8 @@ class ProjectFileService {
     return this.coreService.listStoredProjects();
   }
 
-  async openStoredProject(name: string): Promise<boolean> {
-    return this.coreService.openStoredProject(name);
+  async openStoredProject(name: string, options?: { signal?: AbortSignal }): Promise<boolean> {
+    return this.coreService.openStoredProject(name, options);
   }
 
   updateProjectData(updates: Partial<ProjectFile>): void {
