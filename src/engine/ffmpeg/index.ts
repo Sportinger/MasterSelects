@@ -9,6 +9,8 @@ export {
   RawFrameBuffer,
   isAllocationFailure,
 } from './bridge/rawFrameBuffer';
+export type { FFmpegExportMemoryStage } from './bridge/rawFrameBuffer';
+export { FFmpegExportCancelledError, FFmpegFrameStream } from './bridge/ffmpegFrameStream';
 
 // Codec definitions and presets
 export {
