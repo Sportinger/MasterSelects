@@ -1380,11 +1380,27 @@
   cursor: pointer;
 }
 
+/* The label text and the whole control cell toggle the checkbox. */
+.transition-checkbox-row .resolve-inspector-row-label,
+.transition-param-toggle {
+  cursor: pointer;
+}
+
+.transition-param-toggle {
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+  width: 100%;
+  min-height: 24px;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .transition-param-checkbox {
   width: 14px;
   height: 14px;
   margin: 0;
   accent-color: var(--accent);
+  cursor: pointer;
 }
 
 /* Pointer clicks blur the checkbox; the keyboard keeps a product-styled ring. */
@@ -1404,6 +1420,18 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   background: var(--bg-primary);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Closing the picker after a pointer click leaves no ring; the keyboard keeps a product-styled one. */
+.transition-param-color:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.transition-param-color:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .transition-static-value,

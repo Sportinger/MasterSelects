@@ -1,5 +1,10 @@
 import type { TimelineClip } from '../types';
-import { reconnectAudioRoute } from './audio/routing/connectAudioRoute';
+import {
+  disconnectAudioRoute,
+  disconnectMasterAudioRoute,
+  reconnectAudioRoute,
+  reconnectMasterAudioRoute,
+} from './audio/routing/connectAudioRoute';
 import { syncMediaCutFades } from './audio/routing/mediaCutFades';
 /**
  * AudioRoutingManager - Routes audio through Web Audio API for live EQ and volume
@@ -19,7 +24,6 @@ import type { AudioRouteEffectSettings, LiveAudioRouteProcessor } from './audio/
 import { buildAudioRoutingDebugSnapshot } from './audio/routing/debugSnapshots';
 import { readRouteMeterSnapshot, readRouteSpectrumDb, type ReadRouteMeterSnapshotOptions } from './audio/routing/meteringSnapshots';
 import { runtimeSpectrumTaps } from './audio/runtimeSpectrumTaps';
-import { reconnectCustomProcessorInternal } from './audio/routing/processorGraphReconnect';
 import { createProcessorNode } from './audio/routing/processorNodeFactory';
 import { updateProcessorNode } from './audio/routing/processorNodeUpdate';
 import {
@@ -30,7 +34,7 @@ import {
   processorSignature,
 } from './audio/routing/routeEffectState';
 import { createAudioRouteGraph, createMasterRouteGraph } from './audio/routing/routeGraphFactory';
-import { publishMasterTerminal, setMasterTapActivator } from './audio/routing/masterTap';
+import { setMasterTapActivator } from './audio/routing/masterTap';
 import { applyAudioContextOutputDevice, applyMediaElementOutputDevice } from './audio/routing/outputDeviceRouting';
 import type {
   AudioRoute,
@@ -67,6 +71,11 @@ const audioRoutingDebugCounters: AudioRoutingDebugCounters = {
 };
 
 const reverbImpulseCache = new Map<string, AudioBuffer>();
+// Module state (like the cache above), so a manager kept across HMR has it too.
+/** Routes being built (the context may still be resuming): one creation per element, cancelled by a removal. */
+const pendingRoutes = new Map<HTMLMediaElement, Promise<AudioRoute | null>>();
+/** Source nodes of disposed routes: an element can feed only one, so a reused element gets it back. */
+const disposedSources = new WeakMap<HTMLMediaElement, AudioNode>();
 
 class AudioRoutingManager {
   private audioContext: AudioContext | null = null;
@@ -146,31 +155,43 @@ class AudioRoutingManager {
   /**
    * Get or create audio route for an element
    */
-  private async getOrCreateRoute(element: HTMLMediaElement): Promise<AudioRoute | null> {
-    // Check if route already exists
-    let route = this.routes.get(element);
+  private getOrCreateRoute(element: HTMLMediaElement): Promise<AudioRoute | null> {
+    const route = this.routes.get(element);
     if (route) {
       if (!route.isConnected) {
         this.reconnectRouteChain(route);
       }
-      return route;
+      return Promise.resolve(route);
     }
+    const pending = pendingRoutes.get(element);
+    if (pending) return pending;
 
     const previousFailure = this.routeCreateFailures.get(element);
-    const now = performance.now();
-    if (previousFailure && now < previousFailure.retryAt) {
-      return null;
+    if (previousFailure && performance.now() < previousFailure.retryAt) {
+      return Promise.resolve(null);
     }
+    const creation: Promise<AudioRoute | null> = this.createRoute(element, () => pendingRoutes.get(element) === creation);
+    pendingRoutes.set(element, creation);
+    return creation;
+  }
 
+  private async createRoute(element: HTMLMediaElement, isWanted: () => boolean): Promise<AudioRoute | null> {
+    const now = performance.now();
     try {
       const ctx = await this.getContext();
+      // Removed while the context resumed: building it now would leave a connected graph nobody owns.
+      if (!isWanted()) {
+        log.debug('Cancelled an audio route removed while it was being created');
+        return null;
+      }
       this.getOrCreateMasterRoute(ctx);
 
       // Create source node (can only be done ONCE per element)
-      const sourceNode = ctx.createMediaElementSource(element);
+      const disposedSource = disposedSources.get(element);
+      const sourceNode = disposedSource?.context === ctx ? disposedSource : ctx.createMediaElementSource(element);
 
       // Connect chain: source -> track gain/FX/EQ/pan -> track meter -> master bus
-      route = createAudioRouteGraph(ctx, sourceNode);
+      const route = createAudioRouteGraph(ctx, sourceNode);
       this.reconnectRouteChain(route);
 
       this.routes.set(element, route);
@@ -194,6 +215,8 @@ class AudioRoutingManager {
           : now,
       });
       return null;
+    } finally {
+      if (isWanted()) pendingRoutes.delete(element);
     }
   }
 
@@ -455,29 +478,19 @@ class AudioRoutingManager {
    * Call when element is no longer needed
    */
   removeRoute(element: HTMLMediaElement): void {
+    // A route still being built is cancelled (see createRoute).
+    pendingRoutes.delete(element);
     const route = this.routes.get(element);
     if (route) {
-      try {
-        route.sourceNode.disconnect();
-        route.cutGainNode.disconnect();
-        route.gainNode.disconnect();
-        route.panNode.disconnect();
-        route.analyserNode.disconnect();
-        route.stereoSplitterNode.disconnect();
-        route.leftAnalyserNode.disconnect();
-        route.rightAnalyserNode.disconnect();
-        route.eqFilters.forEach(f => f.disconnect());
-        route.processorNodes.forEach(processor => processor.nodes.forEach(node => node.disconnect()));
-      } catch {
-        // Ignore disconnect errors
-      }
-      route.isConnected = false;
+      disconnectAudioRoute(route);
       log.debug('Removed audio route');
     }
   }
 
   disposeRoute(element: HTMLMediaElement): void {
     this.removeRoute(element);
+    const route = this.routes.get(element);
+    if (route) disposedSources.set(element, route.sourceNode);
     this.routes.delete(element);
   }
 
@@ -488,6 +501,7 @@ class AudioRoutingManager {
     for (const element of Array.from(this.routes.keys())) {
       this.disposeRoute(element);
     }
+    pendingRoutes.clear();
     for (const key of [...this.nodeRoutes.keys()]) {
       this.removeNodeRoute(key);
     }
@@ -572,20 +586,7 @@ class AudioRoutingManager {
   }
 
   private disconnectMasterRoute(): void {
-    const route = this.masterRoute;
-    if (!route) return;
-    try {
-      route.inputNode.disconnect();
-      route.gainNode.disconnect();
-      route.analyserNode.disconnect();
-      route.stereoSplitterNode.disconnect();
-      route.leftAnalyserNode.disconnect();
-      route.rightAnalyserNode.disconnect();
-      route.eqFilters.forEach(filter => filter.disconnect());
-      route.processorNodes.forEach(processor => processor.nodes.forEach(node => node.disconnect()));
-    } catch {
-      // Ignore disconnect errors during teardown.
-    }
+    if (this.masterRoute) disconnectMasterAudioRoute(this.masterRoute);
   }
 
   private updateRouteProcessors(
@@ -647,45 +648,7 @@ class AudioRoutingManager {
   }
 
   private reconnectMasterRouteChain(route: MasterAudioRoute): void {
-    try {
-      route.inputNode.disconnect();
-      route.gainNode.disconnect();
-      route.eqFilters.forEach(filter => filter.disconnect());
-      route.analyserNode.disconnect();
-      route.stereoSplitterNode.disconnect();
-      route.leftAnalyserNode.disconnect();
-      route.rightAnalyserNode.disconnect();
-      route.processorNodes.forEach(processor => processor.nodes.forEach(node => node.disconnect()));
-    } catch {
-      // Disconnecting a partially connected graph can throw; rebuild below.
-    }
-
-    let tail: AudioNode = route.inputNode;
-
-    for (const processor of route.processorNodes) {
-      if (processor.inputNode && processor.outputNode) {
-        reconnectCustomProcessorInternal(processor);
-        tail.connect(processor.inputNode);
-        tail = processor.outputNode;
-      } else {
-        for (const node of processor.nodes) {
-          tail.connect(node);
-          tail = node;
-        }
-      }
-    }
-
-    tail.connect(route.eqFilters[0]);
-    for (let index = 0; index < route.eqFilters.length - 1; index += 1) {
-      route.eqFilters[index].connect(route.eqFilters[index + 1]);
-    }
-    route.eqFilters[route.eqFilters.length - 1].connect(route.gainNode);
-    route.gainNode.connect(route.stereoSplitterNode);
-    route.stereoSplitterNode.connect(route.leftAnalyserNode, 0);
-    route.stereoSplitterNode.connect(route.rightAnalyserNode, 1);
-    route.gainNode.connect(route.analyserNode);
-    route.analyserNode.connect(this.audioContext!.destination);
-    publishMasterTerminal(this.audioContext!, route.analyserNode);
+    reconnectMasterAudioRoute(route, this.audioContext!);
   }
 }
 

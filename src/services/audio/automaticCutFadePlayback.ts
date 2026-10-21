@@ -8,26 +8,28 @@ const ENVELOPE_POINTS = 64;
 
 export function automaticCutFadeSignature(clip: TimelineClip): string {
   return JSON.stringify([clip.id, clip.inPoint, clip.outPoint,
-    (clip.audioState?.editStack ?? []).filter(isAutomaticCutFade), clip.transitionAudioEnvelope ?? null]);
+    (clip.audioState?.editStack ?? []).filter(isAutomaticCutFade), clip.transitionAudioEnvelopes ?? null]);
 }
 
-/** True when the clip's sound has edge gains (automatic cut de-clicks or a crossfade ramp) to schedule. */
+/** True when the clip's sound has edge gains (automatic cut de-clicks or crossfade ramps) to schedule. */
 export function hasScheduledEdgeGains(clip: TimelineClip): boolean {
-  return Boolean(clip.transitionAudioEnvelope) || clip.audioState?.editStack?.some(isAutomaticCutFade) === true;
+  return (clip.transitionAudioEnvelopes?.length ?? 0) > 0 || clip.audioState?.editStack?.some(isAutomaticCutFade) === true;
 }
 
-/** The edge gain (automatic cut de-clicks × crossfade ramp) at a source time of the clip. */
+/** The edge gain (automatic cut de-clicks × crossfade ramps, as export multiplies them) at a source time of the clip. */
 export function getScheduledEdgeGainAt(clip: TimelineClip, sourceTime: number): number {
-  const envelope = clip.transitionAudioEnvelope;
+  const ramps = (clip.transitionAudioEnvelopes ?? []).reduce((value, envelope) => (
+    value * getTransitionAudioEnvelopeGain(envelope, sourceTime)
+  ), 1);
   return (clip.audioState?.editStack ?? []).filter(isAutomaticCutFade).reduce((value, operation) => (
     value * getAudioEditOperationPreviewVolumeMultiplier(operation, sourceTime)
-  ), envelope ? getTransitionAudioEnvelopeGain(envelope, sourceTime) : 1);
+  ), ramps);
 }
 
 /**
  * Schedule against the audio clock; a display frame may miss an entire short
- * fade. Covers the automatic cut de-clicks and a preview crossfade ramp
- * (TransitionAudioEnvelope), both before the route's effects.
+ * fade. Covers the automatic cut de-clicks and the preview crossfade ramps
+ * (TransitionAudioEnvelope), all before the route's effects.
  */
 export function scheduleAutomaticCutFades(
   gain: AudioParam,
@@ -39,12 +41,12 @@ export function scheduleAutomaticCutFades(
 ): void {
   gain.cancelScheduledValues(contextStart);
   const operations = (clip.audioState?.editStack ?? []).filter(isAutomaticCutFade);
-  const envelope = clip.transitionAudioEnvelope;
+  const envelopes = clip.transitionAudioEnvelopes ?? [];
   const attack = fadePlaybackStart && operations.length > 0 ? Math.min(0.003 * rate, (clip.outPoint - sourceStart) / 2) : 0;
   const valueAt = (time: number) => (attack > 0 ? Math.min(1, Math.max(0, (time - sourceStart) / attack)) : 1) *
     getScheduledEdgeGainAt(clip, time);
   gain.setValueAtTime(valueAt(sourceStart), contextStart);
-  if ((operations.length === 0 && !envelope) || rate <= 0 || !Number.isFinite(rate)) return;
+  if ((operations.length === 0 && envelopes.length === 0) || rate <= 0 || !Number.isFinite(rate)) return;
 
   // Only subdivide the fade ranges, never the full source duration. Include
   // overlapping operations in the product so repeated edits keep their envelope.
@@ -60,7 +62,7 @@ export function scheduleAutomaticCutFades(
     const range = operation.timeRange!;
     addRange(Math.min(range.start, range.end), Math.max(range.start, range.end), 32);
   }
-  if (envelope) addRange(envelope.sourceStart, envelope.sourceEnd, ENVELOPE_POINTS);
+  for (const envelope of envelopes) addRange(envelope.sourceStart, envelope.sourceEnd, ENVELOPE_POINTS);
   for (const time of [...points].toSorted((a, b) => a - b)) {
     if (time <= sourceStart) continue;
     gain.linearRampToValueAtTime(valueAt(time), contextStart + (time - sourceStart) / rate);

@@ -105,6 +105,7 @@ export class AudioTrackSyncManager {
     getAudioProxyElementForClip: (clip) => this.getAudioProxyElementForClip(clip),
     getClipSourceMediaFileId: (clip) => this.getClipSourceMediaFileId(clip),
     isAudioSourceClip: (clip) => this.isAudioSourceClip(clip),
+    getLastPlayedElement: (trackId, clipId) => this.audioHandoffs.getLastPlayedElement(trackId, clipId),
     pauseAudioTrackProxy: (clipId) => this.runtimeElements.pauseAudioTrackProxy(clipId),
     stopStemBufferMixer: (clipId) => this.stemBufferMixers.stop(clipId),
     pauseStemAudioElements: (clipId) => this.stemPreviewElements.pauseStemAudioElements(clipId),
@@ -247,7 +248,7 @@ export class AudioTrackSyncManager {
     this.syncNestedCompMixdown(ctx, state);
 
     // Pause inactive audio
-    this.pauseInactiveAudio(ctx, activeTransitionAudioClipIds, crossfades.tailClipIds);
+    this.pauseInactiveAudio(ctx, activeTransitionAudioClipIds, crossfades);
 
     // Update audio track state for next frame's handoff detection only during playback.
     if (ctx.isPlaying && !ctx.isDraggingPlayhead) {
@@ -555,7 +556,7 @@ export class AudioTrackSyncManager {
   /**
    * Pause audio not at playhead
    */
-  private pauseInactiveAudio(ctx: FrameContext, activeTransitionAudioClipIds = new Set<string>(), tailClipIds = new Set<string>()): void {
+  private pauseInactiveAudio(ctx: FrameContext, activeTransitionAudioClipIds = new Set<string>(), crossfades?: Pick<AudioCrossfadeFrame, 'tailClipIds' | 'preparedClipIds'>): void {
     const activeClipIds = new Set([
       ...ctx.clipsAtTime.map(clip => clip.id),
       ...activeTransitionAudioClipIds,
@@ -570,11 +571,11 @@ export class AudioTrackSyncManager {
         clipAudioElement.pause();
       }
 
-      // A proxy the next clip plays on (a handoff) keeps its route, and so does one whose effect
-      // tail still rings after a crossfade (paused only): removing the route would cut the sound.
+      // A proxy the next clip plays on (a handoff) keeps its route; one whose effect tail still rings after a crossfade
+      // or that an upcoming crossfade positioned is only paused: removing it would cut the sound or waste the preparation.
       const audioTrackProxy = this.runtimeElements.getAudioTrackProxy(clip.id);
       if (audioTrackProxy && !isAtPlayhead && !this.audioHandoffs.hasHandoffElement(audioTrackProxy)) {
-        if (tailClipIds.has(clip.id)) pauseAudioElement(audioTrackProxy);
+        if (crossfades?.tailClipIds.has(clip.id) || crossfades?.preparedClipIds.has(clip.id)) pauseAudioElement(audioTrackProxy);
         else this.runtimeElements.removeAudioTrackProxy(clip.id);
       }
 

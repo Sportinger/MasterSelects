@@ -1378,7 +1378,20 @@ Preview schedules them on each route's pre-effect gain on the audio clock
 (`audioCrossfadePreviewVoices`): the incoming sound starts 0.25 s early at gain
 0, crossfaded clips stay on their own audio element (no buffer mixer, no cut
 handoff), and the halves of one recording (same file and source offset) play
-once with both gains added, as the export's sample sum does. Retimed, reversed
+once with both gains added, as the export's sample sum does. That one-voice
+choice is made once per crossfade from both routes at the edit (ids ignored),
+so keyframed volume or EQ cannot switch voices mid-fade. The outgoing sound
+stays on the element it already plays on (its own, a cut handoff's or a split
+recording's), and an upcoming incoming element or audio proxy is positioned,
+paused and routed ahead; dropped proxy clones dispose their route, and a route
+removed while it is still being built is cancelled. A track plays one window at
+a time: around a short clip the later crossfade's pre-roll waits until the
+earlier window ends, and crossfades that overlap on one clip start the later
+one where the earlier ends (logged; export renders both). A clip with fades on
+both edges keeps both, multiplied as in export, and crossfaded edges never
+apply their automatic cut de-click. The faded-out sound's effect tail (clip and
+track effects) keeps its route connected. Clips playing audible separated stems
+cut at the edit in preview (logged); export renders their crossfade. Retimed, reversed
 or composition clips cannot play their extra footage in step, so they meet at
 the edit everywhere (Properties: "Cut (retimed clip)"). Audio curve: Auto
 (default; also for crossfades saved without one) is Equal gain for the halves of

@@ -5,7 +5,7 @@ import {
   type TransitionParamDefinition,
   type TransitionParamValue,
 } from '../../../transitions';
-import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
+import { useId, useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
 import type { TimelineClip } from '../../../types/timeline';
 import type { TimelineTransition } from '../../../types/timelineCore';
@@ -60,10 +60,10 @@ const AUDIO_SKIP_NOTES = {
 
 const CURVE_LABELS = { 'equal-power': 'Equal power', 'equal-gain': 'Equal gain' } as const;
 
-/** Mouse, pen and touch clicks leave no focus ring on a checkbox; the keyboard keeps its own. */
-function blurAfterPointer(event: ReactPointerEvent<HTMLInputElement>): void {
-  const target = event.currentTarget;
-  requestAnimationFrame(() => target.blur());
+/** Mouse, pen and touch clicks anywhere on a checkbox row leave no focus on it; the keyboard keeps its own ring. */
+function blurAfterPointer(event: ReactPointerEvent<HTMLElement>): void {
+  const target = event.currentTarget.querySelector('input');
+  requestAnimationFrame(() => { if (target && document.activeElement === target) target.blur(); });
 }
 
 function getSelectOptions(paramId: string, param: TransitionParamDefinition, audio: AudioCrossfadeResolution | null) {
@@ -92,6 +92,7 @@ export function TransitionControlsSections({
   onUpdateDuration,
   onUpdateParam,
 }: TransitionControlsSectionsProps) {
+  const idPrefix = useId();
   const clips = useTimelineStore(state => state.clips);
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
   const frameRate = useMediaStore(state =>
@@ -158,17 +159,20 @@ export function TransitionControlsSections({
           const value = getTransitionParamValue(transition, definition, paramId);
           if (param.type === 'boolean') {
             const skipReason = paramId === 'includeAudio' && value === true ? audio?.skipReason : undefined;
+            const inputId = `${idPrefix}-${paramId}`;
             return (
-              <div key={paramId}>
-                <ResolveInspectorRow label={param.label}>
-                  <input
-                    type="checkbox"
-                    className="transition-param-checkbox"
-                    aria-label={param.label}
-                    checked={value === true}
-                    onPointerUp={blurAfterPointer}
-                    onChange={(event) => onUpdateParam(paramId, event.currentTarget.checked)}
-                  />
+              <div key={paramId} onPointerUp={blurAfterPointer}>
+                {/* The label text and the whole control cell toggle the checkbox. */}
+                <ResolveInspectorRow className="transition-checkbox-row" label={param.label} labelFor={inputId}>
+                  <label className="transition-param-toggle">
+                    <input
+                      id={inputId}
+                      type="checkbox"
+                      className="transition-param-checkbox"
+                      checked={value === true}
+                      onChange={(event) => onUpdateParam(paramId, event.currentTarget.checked)}
+                    />
+                  </label>
                 </ResolveInspectorRow>
                 {skipReason ? <div className="transition-param-note">{AUDIO_SKIP_NOTES[skipReason]}</div> : null}
               </div>
@@ -205,7 +209,7 @@ export function TransitionControlsSections({
           return (
             <ResolveInspectorRow key={paramId} label={param.label}>
               <input
-                className={param.type === 'color' ? 'transition-param-color' : 'resolve-inspector-field'}
+                className={param.type === 'color' ? 'transition-param-color' : 'resolve-inspector-text-input'}
                 aria-label={param.label}
                 type={param.type === 'color' ? 'color' : 'text'}
                 value={String(value ?? param.defaultValue)}

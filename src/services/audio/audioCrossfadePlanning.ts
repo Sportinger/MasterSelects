@@ -212,20 +212,22 @@ export function resolveAudioCrossfadeFromClip(
 }
 
 /**
- * True when a Crossfade at either edge of this clip may blend its sound: cheap,
- * for callers that keep such clips on one playback path (no planning).
+ * True when a Crossfade at either edge of this clip may blend its sound: one
+ * between two sound clips, or a video Crossfade with "Include audio" on. Cheap,
+ * for callers that keep such clips on one playback path (no planning); purely
+ * visual crossfades of the linked video do not count.
  */
 export function hasAudioCrossfadeEdge(
   clip: TimelineClip,
   clips: readonly TimelineClip[],
   isAudioSourceClip: (clip: TimelineClip) => boolean = isAudioCrossfadeSourceClip,
 ): boolean {
-  const isCrossfade = (candidate: TimelineClip) =>
-    candidate.transitionOut?.type === 'crossfade' || candidate.transitionIn?.type === 'crossfade';
   if (!isAudioSourceClip(clip)) return false;
-  if (isCrossfade(clip)) return true;
+  if (clip.transitionOut?.type === 'crossfade' || clip.transitionIn?.type === 'crossfade') return true;
   const linked = clip.linkedClipId ? getClipLookup(clips).get(clip.linkedClipId) : undefined;
-  return !!linked && isCrossfade(linked);
+  const definition = getRuntimeTransition('crossfade');
+  return [linked?.transitionOut, linked?.transitionIn].some((transition) =>
+    transition?.type === 'crossfade' && transitionIncludesAudio(transition, definition));
 }
 
 export function planAudioCrossfadeFromClip(

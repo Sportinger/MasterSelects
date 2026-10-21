@@ -5,6 +5,19 @@ const routing = vi.hoisted(() => ({
   applyEffects: vi.fn(async () => true),
   syncCutFades: vi.fn(),
 }));
+// Lets a test replace the live route of a clip; every other test uses the real settings.
+const routeOverride = vi.hoisted(() => ({
+  current: null as null | ((input: { clip: { id: string } }) => unknown),
+}));
+vi.mock('../../src/services/audio/audioGraphRouteSettings', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/services/audio/audioGraphRouteSettings')>();
+  return {
+    ...actual,
+    createLiveAudioRouteSettings: (input: Parameters<typeof actual.createLiveAudioRouteSettings>[0]) =>
+      (routeOverride.current?.(input) as ReturnType<typeof actual.createLiveAudioRouteSettings> | undefined)
+        ?? actual.createLiveAudioRouteSettings(input),
+  };
+});
 vi.mock('../../src/services/audioRoutingManager', () => ({
   audioRoutingManager: {
     hasRoute: (element: unknown) => routing.routed.has(element),
@@ -13,14 +26,15 @@ vi.mock('../../src/services/audioRoutingManager', () => ({
   },
 }));
 
-import { planAudioCrossfadeFromClip, type AudioCrossfadePair } from '../../src/services/audio/audioCrossfadePlanning';
+import { hasAudioCrossfadeEdge, planAudioCrossfadeFromClip, type AudioCrossfadePair } from '../../src/services/audio/audioCrossfadePlanning';
 import {
   AUDIO_CROSSFADE_PREROLL_SECONDS,
-  planAudioCrossfadeEdgeClips,
+  addAudioCrossfadeEdgeClips,
   planAudioCrossfadePreviewWindow,
 } from '../../src/services/audio/audioCrossfadePreviewVoices';
 import { getTransitionAudioEnvelopeGain } from '../../src/services/audio/audioCrossfadeGains';
 import { getScheduledEdgeGainAt, scheduleAutomaticCutFades } from '../../src/services/audio/automaticCutFadePlayback';
+import { createAutomaticCutDeClickOperation } from '../../src/services/audio/automaticCutDeClick';
 import { syncMediaCutFades } from '../../src/services/audio/routing/mediaCutFades';
 import { AudioTrackCrossfadeTransitionSync } from '../../src/services/layerBuilder/audioTrackCrossfadeTransitions';
 import { AudioTrackHandoffManager } from '../../src/services/layerBuilder/audioTrackHandoffs';
@@ -62,17 +76,24 @@ function plan(clips: TimelineClip[]): AudioCrossfadePair {
   return planAudioCrossfadeFromClip(clips[0], clips, { getMediaDuration: () => MEDIA_DURATION })!;
 }
 
-function frameContext(clips: TimelineClip[], playheadPosition: number, isPlaying = true): FrameContext {
+interface FrameOptions {
+  now?: number;
+  /** Media durations by media file id (default MEDIA_DURATION). */
+  durations?: Record<string, number>;
+  getInterpolatedEffects?: (clipId: string, localTime: number) => unknown[];
+}
+
+function frameContext(clips: TimelineClip[], playheadPosition: number, isPlaying = true, options: FrameOptions = {}): FrameContext {
   return {
     clips,
     playheadPosition,
     audioTracks: [track],
     isPlaying,
     isDraggingPlayhead: false,
-    now: 1000,
-    mediaFileById: new Map(clips.map((clip) => [clip.mediaFileId, { duration: MEDIA_DURATION }])),
+    now: options.now ?? 1000,
+    mediaFileById: new Map(clips.map((clip) => [clip.mediaFileId, { duration: options.durations?.[clip.mediaFileId!] ?? MEDIA_DURATION }])),
     unmutedAudioTrackIds: new Set(['a1']),
-    getInterpolatedEffects: () => [],
+    getInterpolatedEffects: options.getInterpolatedEffects ?? (() => []),
     getClipKeyframes: () => [],
     clipsAtTime: clips.filter((clip) => playheadPosition >= clip.startTime && playheadPosition < clip.startTime + clip.duration),
     clipsByTrackId: new Map(clips
@@ -85,8 +106,13 @@ function mediaElement(name: string, extra: Partial<HTMLAudioElement> = {}): HTML
   return { name, src: `blob:${name}`, readyState: 4, paused: true, currentTime: 0, pause: vi.fn(), ...extra } as unknown as HTMLAudioElement;
 }
 
-function createSync(elements: Record<string, HTMLAudioElement>, synced: AudioSyncTarget[] = []) {
+function createSync(
+  elements: Record<string, HTMLAudioElement>,
+  synced: AudioSyncTarget[] = [],
+  extraDeps: Partial<ConstructorParameters<typeof AudioTrackCrossfadeTransitionSync>[0]> = {},
+) {
   return new AudioTrackCrossfadeTransitionSync({
+    ...extraDeps,
     getClipAudioElement: (clip) => elements[clip.id] ?? null,
     getAudioProxyElementForClip: () => null,
     getClipSourceMediaFileId: (clip) => clip.mediaFileId,
@@ -95,10 +121,19 @@ function createSync(elements: Record<string, HTMLAudioElement>, synced: AudioSyn
     stopStemBufferMixer: vi.fn(),
     pauseStemAudioElements: vi.fn(),
     syncPreviewAudioElement: (target) => { synced.push(target); },
+    ...extraDeps,
   });
 }
 
+function syncWindow(sync: AudioTrackCrossfadeTransitionSync, ctx: FrameContext) {
+  const frame = sync.planFrame(ctx);
+  const window = frame.windows.get('a1');
+  if (window) sync.sync({ ctx, state: { masterSet: false } as AudioSyncState, track, window, activeTransitionAudioClipIds: new Set(), regionGainPreview: null });
+  return frame;
+}
+
 beforeEach(() => {
+  routeOverride.current = null;
   routing.routed.clear();
   routing.applyEffects.mockClear();
   routing.syncCutFades.mockClear();
@@ -112,12 +147,12 @@ describe('preview audio crossfade voices', () => {
     const [outgoing, incoming] = window.voices.map((voice) => voice.voiceClip);
     expect(outgoing).toMatchObject({ id: 'a', startTime: window.start, inPoint: 2 + window.start });
     expect(outgoing.outPoint).toBeCloseTo(6.5);
-    expect(outgoing.transitionAudioEnvelope).toMatchObject({ role: 'outgoing', curve: 'equal-power', sourceStart: 5.5, sourceEnd: 6.5 });
+    expect(outgoing.transitionAudioEnvelopes?.[0]).toMatchObject({ role: 'outgoing', curve: 'equal-power', sourceStart: 5.5, sourceEnd: 6.5 });
     // b's source 1.25 s is its head handle 0.75 s before its in point.
     expect(incoming).toMatchObject({ id: 'b', startTime: window.start, inPoint: 2 - (4 - window.start) });
-    expect(incoming.transitionAudioEnvelope).toMatchObject({ role: 'incoming', sourceStart: 1.5, sourceEnd: 2.5 });
+    expect(incoming.transitionAudioEnvelopes?.[0]).toMatchObject({ role: 'incoming', sourceStart: 1.5, sourceEnd: 2.5 });
     expect(getScheduledEdgeGainAt(incoming, incoming.inPoint)).toBe(0);
-    expect(getTransitionAudioEnvelopeGain(incoming.transitionAudioEnvelope!, 2)).toBeCloseTo(Math.SQRT1_2);
+    expect(getTransitionAudioEnvelopeGain(incoming.transitionAudioEnvelopes![0], 2)).toBeCloseTo(Math.SQRT1_2);
     // b keeps its own element after the fade.
     expect(window.continuesOn.elementClip.id).toBe('b');
   });
@@ -142,7 +177,7 @@ describe('preview audio crossfade voices', () => {
     expect(window.voices).toHaveLength(1);
     const [{ clip, voiceClip }] = window.voices;
     expect(clip.id).toBe('a');
-    expect(voiceClip.transitionAudioEnvelope?.role).toBe('sum');
+    expect(voiceClip.transitionAudioEnvelopes?.[0]?.role).toBe('sum');
     for (const time of [5.5, 5.8, 6, 6.4]) expect(getScheduledEdgeGainAt(voiceClip, time)).toBeCloseTo(1, 9);
     expect(window.continuesOn).toMatchObject({ clip: { id: 'b' }, elementClip: { id: 'a' } });
     const power = planAudioCrossfadePreviewWindow(plan(splitRecording({ audioCurve: 'equal-power' })), { singleVoice: true })!;
@@ -156,10 +191,12 @@ describe('preview audio crossfade voices', () => {
     const pair = plan(clips);
     expect(pair.fade.kind).toBe('declick');
     expect(planAudioCrossfadePreviewWindow(pair, { singleVoice: false })).toBeNull();
-    const [outgoing, incoming] = planAudioCrossfadeEdgeClips(pair);
-    expect(outgoing.transitionAudioEnvelope).toMatchObject({ role: 'outgoing', sourceEnd: MEDIA_DURATION });
-    expect(MEDIA_DURATION - outgoing.transitionAudioEnvelope!.sourceStart).toBeCloseTo(0.005);
-    expect(incoming.transitionAudioEnvelope).toMatchObject({ role: 'incoming', sourceStart: 0 });
+    const edgeClips = new Map<string, TimelineClip>();
+    addAudioCrossfadeEdgeClips(edgeClips, pair);
+    const [outgoing, incoming] = [edgeClips.get('a')!, edgeClips.get('b')!];
+    expect(outgoing.transitionAudioEnvelopes?.[0]).toMatchObject({ role: 'outgoing', sourceEnd: MEDIA_DURATION });
+    expect(MEDIA_DURATION - outgoing.transitionAudioEnvelopes![0].sourceStart).toBeCloseTo(0.005);
+    expect(incoming.transitionAudioEnvelopes?.[0]).toMatchObject({ role: 'incoming', sourceStart: 0 });
   });
 });
 
@@ -282,5 +319,184 @@ describe('scheduled crossfade gain', () => {
     const element = { currentTime: incoming.inPoint, playbackRate: 1, paused: true, seeking: false } as HTMLMediaElement;
     syncMediaCutFades(gain, { currentTime: 20 } as AudioContext, element, incoming);
     expect(gain.setValueAtTime).toHaveBeenLastCalledWith(0, 20);
+  });
+});
+
+/** a (0–4 s) | b (4–4.8 s) | c (4.8 s–), different sounds, two 0.8 s crossfades: fades 3.6–4.4 s and 4.4–5.2 s. */
+function shortMiddleClip(): TimelineClip[] {
+  const fade = (id: string, linkedClipId: string) => ({ id, type: 'crossfade' as const, duration: 0.8, linkedClipId, params: {} });
+  return [
+    audioClip('a', 0, 2, 'pa', { transitionOut: fade('x-ab', 'b') }),
+    audioClip('b', 4, 5, 'pb', { duration: 0.8, outPoint: 5.8, transitionIn: fade('x-ab', 'a'), transitionOut: fade('x-bc', 'c') }),
+    audioClip('c', 4.8, 2, 'pc', { transitionIn: fade('x-bc', 'b') }),
+  ];
+}
+
+describe('crossfades on both edges of one clip', () => {
+  it('plays one window per track: the later pre-roll waits until the earlier window has ended', () => {
+    const clips = shortMiddleClip();
+    const elements = { a: mediaElement('a', { paused: false }), b: mediaElement('b', { paused: false }), c: mediaElement('c') };
+    const synced: AudioSyncTarget[] = [];
+    const sync = createSync(elements, synced);
+    // 4.3 s is inside a → b and where b → c's pre-roll alone would start (4.15 s).
+    const frame = syncWindow(sync, frameContext(clips, 4.3));
+    const first = frame.windows.get('a1')!;
+    expect(first.pair.incomingClip.id).toBe('b');
+    expect(first.end).toBeCloseTo(4.4);
+    // a keeps fading out (no hard cut), c waits silent and positioned for 4.4 s.
+    expect(synced.map((target) => target.clip.id)).toEqual(['a', 'b']);
+    expect(frame.preparedClipIds.has('c')).toBe(true);
+    expect(elements.c.currentTime).toBeCloseTo(2 - (4.8 - 4.4));
+
+    const second = sync.planFrame(frameContext(clips, 4.41)).windows.get('a1')!;
+    expect(second.pair.incomingClip.id).toBe('c');
+    expect(second.start).toBeCloseTo(4.4);
+    for (const voice of second.voices) expect(voice.voiceClip.startTime).toBeCloseTo(4.4);
+  });
+
+  it('keeps the de-click of both edges on a short clip without extra sound', () => {
+    const clips = [
+      audioClip('a', 0, 16, 'pa', { transitionOut: crossfade('b') }),
+      audioClip('b', 4, 0, 'pb', { duration: 0.5, outPoint: 0.5, transitionIn: crossfade('a'), transitionOut: crossfade('c') }),
+      audioClip('c', 4.5, 0, 'pc', { transitionIn: crossfade('b') }),
+    ];
+    const frame = createSync({}).planFrame(frameContext(clips, 4.25, true, { durations: { pb: 0.5 } }));
+    expect(frame.windows.size).toBe(0);
+    const b = frame.edgeClips.get('b')!;
+    expect(b.transitionAudioEnvelopes).toHaveLength(2);
+    expect(getScheduledEdgeGainAt(b, 0)).toBeCloseTo(0, 9);
+    expect(getScheduledEdgeGainAt(b, 0.25)).toBe(1);
+    expect(getScheduledEdgeGainAt(b, 0.5)).toBeCloseTo(0, 9);
+  });
+
+  it('plays the incoming clip without its cut de-click after the window, as export does', () => {
+    const clips = differentSounds();
+    const deClick = createAutomaticCutDeClickOperation(clips[1], 'in', 0.012, { createdAt: 0, id: 'de-click-b' })!;
+    clips[1] = { ...clips[1], audioState: { editStack: [deClick] } } as TimelineClip;
+    expect(getScheduledEdgeGainAt(clips[1], 2.003)).toBeLessThan(1);
+    const frame = createSync({}).planFrame(frameContext(clips, 4.6));
+    expect(frame.windows.size).toBe(0);
+    expect(getScheduledEdgeGainAt(frame.edgeClips.get('b')!, 2.003)).toBe(1);
+  });
+});
+
+describe('voice levels and elements', () => {
+  it('moves the ramp to the level while a voice route is missing, and back once it exists', () => {
+    const elements = { a: mediaElement('a', { paused: false }), b: mediaElement('b', { paused: false }) };
+    const synced: AudioSyncTarget[] = [];
+    const sync = createSync(elements, synced);
+    const volumesAt = (now: number) => {
+      synced.length = 0;
+      syncWindow(sync, frameContext(differentSounds(), 3.6, true, { now }));
+      return synced.map((target) => target.volume ?? 1);
+    };
+    expect(volumesAt(1000)).toEqual([1, 1]);
+    // Still unrouted 300 ms after the request: the route failed, the level fades instead.
+    const [outgoing, incoming] = volumesAt(1300);
+    expect(outgoing).toBeGreaterThan(0.9);
+    expect(outgoing).toBeLessThan(1);
+    expect(incoming).toBeGreaterThan(0);
+    expect(incoming).toBeLessThan(0.3);
+    expect(outgoing ** 2 + incoming ** 2).toBeCloseTo(1, 6);
+    routing.routed.add(elements.a);
+    routing.routed.add(elements.b);
+    expect(volumesAt(1400)).toEqual([1, 1]);
+  });
+
+  it('keeps the outgoing sound on the element it already plays on for the whole window', () => {
+    const handoff = mediaElement('handoff of a', { paused: false });
+    const elements = { a: mediaElement('a'), b: mediaElement('b') };
+    let lastPlayed: HTMLAudioElement | null = handoff;
+    const synced: AudioSyncTarget[] = [];
+    const sync = createSync(elements, synced, { getLastPlayedElement: (_trackId, clipId) => (clipId === 'a' ? lastPlayed : null) });
+    const frame = syncWindow(sync, frameContext(differentSounds(), 3.6));
+    expect(synced[0]).toMatchObject({ clip: { id: 'a' }, element: handoff });
+    // Nothing else pauses or removes it meanwhile.
+    expect(frame.handoffOverrides.get('a1')?.retainedElements).toEqual([handoff, elements.b]);
+    // The handoff state now names the window's clip; the voice stays put.
+    lastPlayed = null;
+    synced.length = 0;
+    syncWindow(sync, frameContext(differentSounds(), 3.8));
+    expect(synced[0].element).toBe(handoff);
+  });
+});
+
+describe('one voice or two for a split recording', () => {
+  const voicesAt = (sync: AudioTrackCrossfadeTransitionSync, clips: TimelineClip[], time: number, options?: FrameOptions) =>
+    sync.planFrame(frameContext(clips, time, true, options)).windows.get('a1')!.voices.length;
+
+  it('decides once from the edit, so keyframed volume cannot flip the voices mid-fade', () => {
+    // a fades 1 → 0.6 over its length, b continues 0.6 → 0.2: equal only at the edit.
+    const volume = (clipId: string, localTime: number) => clipId === 'a'
+      ? 1 - 0.1 * Math.min(4, localTime)
+      : 0.6 - 0.1 * Math.max(0, localTime);
+    const options: FrameOptions = {
+      getInterpolatedEffects: (clipId, localTime) => [
+        { id: `volume-${clipId}`, type: 'audio-volume', enabled: true, params: { volume: volume(clipId, localTime) } },
+      ],
+    };
+    const clips = splitRecording();
+    const sync = createSync({ a: mediaElement('a', { paused: false }), b: mediaElement('b') });
+    for (const time of [3.55, 3.9, 4.2, 4.45]) {
+      expect(voicesAt(sync, clips, time, options)).toBe(1);
+      expect(sync.blocksHandoff(frameContext(clips, time, true, options), 'a', clips[1])).toBe(false);
+    }
+  });
+
+  it('ignores ids nested in the route settings, but not a real difference', () => {
+    const route = (bandId: string, gainDb: number) => ({
+      volume: 1, eqGains: [], pan: 0, muted: false,
+      processors: [{ id: `eq-${bandId}`, type: 'dynamic-eq-band', band: { id: `band-${bandId}`, gainDb } }],
+    });
+    routeOverride.current = ({ clip }) => route(clip.id, 3);
+    expect(voicesAt(createSync({ a: mediaElement('a', { paused: false }) }), splitRecording(), 4.2)).toBe(1);
+    routeOverride.current = ({ clip }) => route('same', clip.id === 'a' ? 3 : 6);
+    expect(voicesAt(createSync({ a: mediaElement('a', { paused: false }) }), splitRecording(), 4.2)).toBe(2);
+  });
+});
+
+describe('cut fade scheduling on a running element', () => {
+  function recordGain() {
+    const values: number[] = [];
+    const gain = {
+      cancelScheduledValues: vi.fn(),
+      setValueAtTime: vi.fn((value: number) => values.push(value)),
+      linearRampToValueAtTime: vi.fn(),
+    } as unknown as AudioParam;
+    return { gain, values };
+  }
+
+  it('starts a cold element with its short attack, but keeps the level when a running one moves on to the next clip', () => {
+    // A plain split without a crossfade: b continues a's element (a cut handoff).
+    const [a, b] = splitRecording().map((clip) => ({
+      ...clip,
+      transitionIn: undefined,
+      transitionOut: undefined,
+      audioState: { editStack: [createAutomaticCutDeClickOperation(clip, 'out', 0.012, { createdAt: 0, id: `de-click-${clip.id}` })!] },
+    } as TimelineClip));
+    const { gain, values } = recordGain();
+    const element = { currentTime: 3, playbackRate: 1, paused: false, seeking: false } as HTMLMediaElement;
+    // The first scheduled value is where the gain starts.
+    syncMediaCutFades(gain, { currentTime: 10 } as AudioContext, element, a);
+    expect(values[0]).toBe(0);
+    const handoffStart = values.length;
+    element.currentTime = 5;
+    syncMediaCutFades(gain, { currentTime: 12 } as AudioContext, element, b);
+    expect(values[handoffStart]).toBe(1);
+  });
+});
+
+describe('clips kept off the source buffer mixer', () => {
+  it('counts only crossfades that blend sound', () => {
+    const sound = audioClip('sound', 0, 0, 'pa', { linkedClipId: 'video' });
+    const video = (params: Record<string, unknown>) => ({
+      ...audioClip('video', 0, 0, 'pa', { linkedClipId: 'sound', transitionOut: crossfade('next', params) }),
+      trackId: 'v1', source: { type: 'video', mediaFileId: 'pa' },
+    } as unknown as TimelineClip);
+    // A purely visual Crossfade of the linked video leaves the sound free to use the mixer.
+    expect(hasAudioCrossfadeEdge(sound, [sound, video({})])).toBe(false);
+    expect(hasAudioCrossfadeEdge(sound, [sound, video({ includeAudio: true })])).toBe(true);
+    // Between two sound clips the Crossfade always blends sound.
+    expect(hasAudioCrossfadeEdge(differentSounds()[0], differentSounds())).toBe(true);
   });
 });

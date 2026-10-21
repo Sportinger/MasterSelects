@@ -20,9 +20,9 @@ export interface AudioTrackHandoffState {
 type GetClipAudioElement = (clip: TimelineClip) => HTMLAudioElement | null;
 type GetClipSourceMediaFileId = (clip: TimelineClip) => string | undefined;
 
-/** Crossfaded clips are no cut: per track the clip and element that play on after the fade, and a veto. */
+/** Crossfaded clips are no cut: per track the clip and element that play on after the fade (plus the window's other elements), and a veto. */
 export interface AudioHandoffCrossfades {
-  overrides: ReadonlyMap<string, { clip: TimelineClip; audioElement: HTMLAudioElement }>;
+  overrides: ReadonlyMap<string, { clip: TimelineClip; audioElement: HTMLAudioElement; retainedElements?: readonly HTMLAudioElement[] }>;
   blocksHandoff?: (previousClipId: string, clip: TimelineClip) => boolean;
 }
 
@@ -49,6 +49,12 @@ export class AudioTrackHandoffManager {
     return this.handoffs.get(clipId) ?? null;
   }
 
+  /** The element a track played this clip on in the last playing frame (its own or a handoff), or null. */
+  getLastPlayedElement(trackId: string, clipId: string): HTMLAudioElement | null {
+    const last = this.lastTrackState.get(trackId);
+    return last?.clipId === clipId ? last.audioElement : null;
+  }
+
   compute(
     ctx: FrameContext,
     getClipAudioElement: GetClipAudioElement,
@@ -61,7 +67,7 @@ export class AudioTrackHandoffManager {
 
     for (const track of ctx.audioTracks) {
       const crossfade = crossfades?.overrides.get(track.id);
-      if (crossfade) { this.handoffElements.add(crossfade.audioElement); continue; }
+      if (crossfade) { [crossfade.audioElement, ...(crossfade.retainedElements ?? [])].forEach((audio) => this.handoffElements.add(audio)); continue; }
       const clip = getClipForTrack(ctx, track.id);
       if (!clip?.source || !clipUsesSourceAudioLayer(clip)) continue;
 
@@ -105,11 +111,7 @@ export class AudioTrackHandoffManager {
 
       const elemDrift = Math.abs(prev.audioElement.currentTime - clip.inPoint);
       if (elemDrift > 0.5) {
-        log.debug('Audio handoff SKIP: element too far', {
-          elementTime: prev.audioElement.currentTime.toFixed(3),
-          inPoint: clip.inPoint.toFixed(3),
-          drift: elemDrift.toFixed(3),
-        });
+        log.debug('Audio handoff SKIP: element too far', { elementTime: prev.audioElement.currentTime.toFixed(3), inPoint: clip.inPoint.toFixed(3), drift: elemDrift.toFixed(3) });
         continue;
       }
 

@@ -48,12 +48,12 @@ function createVoiceClip(
     duration: end - start,
     inPoint: sourceAt(clip, start),
     outPoint: sourceAt(clip, end),
-    transitionAudioEnvelope: {
+    transitionAudioEnvelopes: [{
       role,
       curve: fade.curve,
       sourceStart: sourceAt(clip, fade.outgoingStart),
       sourceEnd: sourceAt(clip, fade.outgoingEnd),
-    },
+    }],
   };
 }
 
@@ -65,11 +65,14 @@ function createVoiceClip(
  * halves of a split clip with the same route) plays once on the outgoing
  * element with both gains added, which is exactly the export's sample sum;
  * two unaligned elements of the same sound would comb-filter instead.
- * Returns null for a de-click (see planAudioCrossfadeEdgeClips).
+ * `notBefore` is where the previous window on the track ends: one track plays
+ * one window at a time, so the pre-roll (and, for crossfades that overlap on a
+ * short clip, the whole window) starts no earlier.
+ * Returns null for a de-click (see addAudioCrossfadeEdgeClips).
  */
 export function planAudioCrossfadePreviewWindow(
   pair: AudioCrossfadePair,
-  options: { singleVoice: boolean; preroll?: number },
+  options: { singleVoice: boolean; preroll?: number; notBefore?: number },
 ): AudioCrossfadePreviewWindow | null {
   const { fade, outgoingClip, incomingClip } = pair;
   if (fade.kind !== 'crossfade' || !pair.usesHandles) return null;
@@ -77,18 +80,21 @@ export function planAudioCrossfadePreviewWindow(
   const incoming = withoutCrossfadedCutDeClick(incomingClip, 'incoming');
   const fadeStart = fade.outgoingStart;
   const fadeEnd = fade.outgoingEnd;
+  const notBefore = Math.min(fadeEnd, options.notBefore ?? -Infinity);
   if (options.singleVoice) {
+    const start = Math.max(fadeStart, notBefore);
     return {
       pair,
-      start: fadeStart,
+      start,
       end: fadeEnd,
-      voices: [{ clip: outgoingClip, voiceClip: createVoiceClip(outgoing, 'sum', fadeStart, fadeEnd, fade) }],
+      voices: [{ clip: outgoingClip, voiceClip: createVoiceClip(outgoing, 'sum', start, fadeEnd, fade) }],
       continuesOn: { clip: incomingClip, elementClip: outgoingClip },
     };
   }
   const mediaStart = incoming.startTime - incoming.inPoint;
-  const start = Math.min(fadeStart, Math.max(fadeStart - (options.preroll ?? AUDIO_CROSSFADE_PREROLL_SECONDS), mediaStart));
-  const outgoingStart = Math.min(fadeStart, Math.max(start, outgoing.startTime));
+  const preroll = options.preroll ?? AUDIO_CROSSFADE_PREROLL_SECONDS;
+  const start = Math.max(notBefore, Math.min(fadeStart, Math.max(fadeStart - preroll, mediaStart)));
+  const outgoingStart = Math.max(start, Math.min(fadeStart, outgoing.startTime));
   return {
     pair,
     start,
@@ -102,25 +108,36 @@ export function planAudioCrossfadePreviewWindow(
 }
 
 /**
- * Clips that meet at the edit with a de-click (no extra sound to overlap, or a
- * retimed clip): normal playback carries the short fades, in source seconds,
- * scheduled ahead on the audio clock. Retimed clips map the timeline fade
- * through their average speed; reversed or remapped clips keep a plain cut.
+ * Clips that meet at a crossfaded edit as normal playback plays them, merged
+ * into `edgeClips` (by clip id) so a clip with crossfades on both edges keeps
+ * both. Every crossfaded edge loses its automatic cut de-click, as in export:
+ * outside a crossfade's window the clips play without it. A de-click pair (no
+ * extra sound to overlap, or a retimed clip) adds its short fades, in source
+ * seconds, scheduled ahead on the audio clock and multiplied with the other
+ * edge's ones; retimed clips map the timeline fade through their average
+ * speed, reversed or remapped clips keep a plain cut with their own de-click.
  */
-export function planAudioCrossfadeEdgeClips(pair: AudioCrossfadePair): TimelineClip[] {
+export function addAudioCrossfadeEdgeClips(edgeClips: Map<string, TimelineClip>, pair: AudioCrossfadePair): void {
   const { fade } = pair;
-  if (fade.kind !== 'declick') return [];
-  const edge = (clip: TimelineClip, role: 'outgoing' | 'incoming'): TimelineClip | null => {
-    if (clip.reversed || clip.timeRemap || clip.duration <= 0) return null;
-    const rate = (clip.outPoint - clip.inPoint) / clip.duration;
-    if (!(rate > 0)) return null;
-    const base = withoutCrossfadedCutDeClick(clip, role);
-    const length = (role === 'outgoing' ? fade.outgoingEnd - fade.outgoingStart : fade.incomingEnd - fade.incomingStart) * rate;
-    const envelope: TransitionAudioEnvelope = role === 'outgoing'
-      ? { role, curve: fade.curve, sourceStart: clip.outPoint - length, sourceEnd: clip.outPoint }
-      : { role, curve: fade.curve, sourceStart: clip.inPoint, sourceEnd: clip.inPoint + length };
-    return { ...base, transitionAudioEnvelope: envelope };
+  const add = (clip: TimelineClip, role: 'outgoing' | 'incoming') => {
+    const envelope = fade.kind === 'declick' ? getDeClickEnvelope(clip, role, fade) : null;
+    // A reversed or remapped clip keeps its own cut de-click.
+    if (fade.kind === 'declick' && !envelope) return;
+    const base = withoutCrossfadedCutDeClick(edgeClips.get(clip.id) ?? clip, role);
+    edgeClips.set(clip.id, envelope
+      ? { ...base, transitionAudioEnvelopes: [...(base.transitionAudioEnvelopes ?? []), envelope] }
+      : base);
   };
-  return [edge(pair.outgoingClip, 'outgoing'), edge(pair.incomingClip, 'incoming')]
-    .filter((clip): clip is TimelineClip => clip !== null);
+  add(pair.outgoingClip, 'outgoing');
+  add(pair.incomingClip, 'incoming');
+}
+
+function getDeClickEnvelope(clip: TimelineClip, role: 'outgoing' | 'incoming', fade: AudioCrossfadeFade): TransitionAudioEnvelope | null {
+  if (clip.reversed || clip.timeRemap || clip.duration <= 0) return null;
+  const rate = (clip.outPoint - clip.inPoint) / clip.duration;
+  if (!(rate > 0)) return null;
+  const length = (role === 'outgoing' ? fade.outgoingEnd - fade.outgoingStart : fade.incomingEnd - fade.incomingStart) * rate;
+  return role === 'outgoing'
+    ? { role, curve: fade.curve, sourceStart: clip.outPoint - length, sourceEnd: clip.outPoint }
+    : { role, curve: fade.curve, sourceStart: clip.inPoint, sourceEnd: clip.inPoint + length };
 }
