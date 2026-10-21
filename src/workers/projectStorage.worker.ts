@@ -92,7 +92,7 @@ async function open(request: Extract<StorageRequest, { type: 'open' }>, signal: 
   openProgress({ phase: 'opening' });
   if (request.browserStorage) adoptBrowserStorageKind(request.browserStorage);
   backend = request.location.kind === 'fsa' ? await createFsaRepositoryBackend(request.location.handle)
-    : request.location.kind === 'opfs' ? await createOpfsRepositoryBackend(request.location.path)
+    : request.location.kind === 'opfs' ? await createOpfsRepositoryBackend(request.location.path, request.location.store)
     : await createNativeRepositoryBackend(request.location.path, { repositoryCommand: nativeCommand, readRepositoryBlob: nativeBlob });
   try {
 

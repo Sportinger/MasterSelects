@@ -75,7 +75,7 @@ export class ProjectCoreService {
   }
   private async adoptSession(fallback: FileSystemDirectoryHandle): Promise<void> {
     const session = getActiveRepositorySession(); if (!session) throw new Error('Repository activation did not finish');
-    const handle = session.location.kind === 'opfs' ? await directoryForOpfs(session.location.path)
+    const handle = session.location.kind === 'opfs' ? await directoryForOpfs(session.location.path, session.location.store)
       : session.location.kind === 'fsa' ? session.location.handle : fallback;
     this.projectHandle = handle; this.pendingHandle = null;
     if (session.location.kind === 'opfs') await addRecentOpfsProject(session.location.path, this.getProjectData());

@@ -20,6 +20,9 @@ import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
 import { ToolbarSaveStatus } from './toolbar/ToolbarSaveStatus';
 import { ToolbarWriteAccess } from './toolbar/ToolbarWriteAccess';
+import { ToolbarSavePermanently } from './toolbar/ToolbarSavePermanently';
+import { SavePermanentlyDialog } from './toolbar/SavePermanentlyDialog';
+import { usePermanentSaveStatus } from './toolbar/usePermanentSaveStatus';
 import { DevChatDialog } from './DevChatDialog';
 import { LeaveNoteDialog } from './LeaveNoteDialog';
 import { LegalDialog } from './LegalDialog';
@@ -35,6 +38,7 @@ import {
 } from '../../services/projectFileService';
 import { useMediaStore } from '../../stores/mediaStore';
 import {
+  createNewProject,
   loadProjectToStores,
   setProjectLoadProgress,
   setupAutoSync,
@@ -121,6 +125,8 @@ export function Toolbar({
 
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [showBrowserProjectDialog, setShowBrowserProjectDialog] = useState(false);
+  const [showSavePermanently, setShowSavePermanently] = useState(false);
+  const permanentSave = usePermanentSaveStatus();
   const openBrowserProjectDialog = useCallback(() => setShowBrowserProjectDialog(true), []);
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [projectName, setProjectName] = useState('Untitled Project');
@@ -426,7 +432,8 @@ export function Toolbar({
       <div className="toolbar-spacer" />
 
       <div className="toolbar-section toolbar-right">
-        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} onExportArchive={() => setShowArchiveDialog(true)} />
+        <ToolbarSavePermanently status={permanentSave} onOpen={() => setShowSavePermanently(true)} />
+        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} onExportArchive={() => setShowSavePermanently(true)} />
         <ToolbarWriteAccess />
         {(capturePhase === 'recording' || capturePhase === 'paused' || capturePhase === 'stopping') && (
           <button
@@ -452,6 +459,19 @@ export function Toolbar({
 
       {isSettingsOpen && <SettingsDialog onClose={closeSettings} />}
       {showArchiveDialog && <RepositoryArchiveDialog onClose={() => setShowArchiveDialog(false)} />}
+      {showSavePermanently && (
+        <SavePermanentlyDialog
+          status={permanentSave}
+          projectName={projectFileService.getProjectData()?.name ?? projectName}
+          onClose={() => setShowSavePermanently(false)}
+          createProject={createNewProject}
+          onProjectChanged={() => {
+            const data = projectFileService.getProjectData();
+            if (data) { setProjectName(data.name); setIsProjectOpen(true); setNeedsPermission(false); }
+            setRecentProjects(projectFileService.getRecentProjects());
+          }}
+        />
+      )}
       {showBrowserProjectDialog && (
         <BrowserProjectOpenDialog
           onClose={() => setShowBrowserProjectDialog(false)}

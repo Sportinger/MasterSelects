@@ -88,7 +88,7 @@ const lifecycle = createLifecycle({
     const old = lifecycle.getSession(); setRepositoryDomainPublication(publicationFor(session));
     try { const merged = await readEditorRepositoryWorkspace(session, workspace ?? {});
       await activateRepositoryProjection(session, merged); projectWorkspace = merged;
-      activeDirectory = session.location.kind === 'fsa' ? session.location.handle : session.location.kind === 'opfs' ? await directoryForOpfs(session.location.path) : null;
+      activeDirectory = session.location.kind === 'fsa' ? session.location.handle : session.location.kind === 'opfs' ? await directoryForOpfs(session.location.path, session.location.store) : null;
       if (session.location.kind === 'opfs' && !session.location.path.startsWith('repository-scratch/')) sessionStorage.setItem('ms.repository.last-opfs-path', session.location.path);
       else sessionStorage.removeItem('ms.repository.last-opfs-path');
     }
