@@ -1,0 +1,163 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "dancer_stage_motion.mp4",
+  "clips": [
+    {
+      "name": "glitch",
+      "effect": "glitch",
+      "params": {
+        "amount": 0.75,
+        "density": 0.45
+      },
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "pair",
+      "crop": [
+        380,
+        100,
+        840,
+        860
+      ],
+      "width": 960,
+      "float": "left",
+      "alt": "The dancer turning, original left and with Glitch right: in short bursts rows of the picture tear sideways with red, green and blue fringes and square blocks jump, with clean frames in between",
+      "caption": "Left: original. Right: Intensity 0.75, Density 0.45 – bursts with clean frames between.",
+      "loop": 0.35
+    },
+    {
+      "name": "crt-screen",
+      "effect": "crt-screen",
+      "params": {
+        "flicker": 0.8
+      },
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "detail",
+      "detail": [
+        620,
+        470
+      ],
+      "zoom": 3,
+      "width": 1206,
+      "float": "right",
+      "alt": "CRT Screen on the dancing figure. Left: the whole frame, bulging, with rounded corners and a faint darker band rolling down. Right: part of the dancer enlarged three times, drawn in horizontal lines with fine red, green and blue stripes",
+      "caption": "CRT Screen, Flicker 0.8. Left: the whole frame. Right: enlarged 3× pixel for pixel.",
+      "loop": 0.35
+    },
+    {
+      "name": "film-prism",
+      "effect": "film-prism",
+      "params": {
+        "amount": 1,
+        "mode": "prism",
+        "grain": 0.4
+      },
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "detail",
+      "detail": [
+        620,
+        470
+      ],
+      "zoom": 3,
+      "width": 1206,
+      "float": "right",
+      "alt": "Film Prism on the dancing figure. Left: the whole frame with coloured edges. Right: part of the dancer enlarged three times: the white dress gains a red edge on one side and a blue-green edge on the other, and fine grain moves over the picture",
+      "caption": "Fringe 1, Prism shape, Grain 0.4. Left: the whole frame. Right: enlarged 3× pixel for pixel; the grain moves.",
+      "loop": 0.35
+    },
+    {
+      "name": "analog-signal-lab",
+      "effect": "analog-signal-lab",
+      "params": {
+        "rfAmount": 0,
+        "vhsAmount": 1,
+        "tapeSpeed": "lp",
+        "tracking": 0.3,
+        "dropout": 0.15,
+        "tapeWear": 0.25,
+        "chromaBleed": 0.6,
+        "headSwitching": 0.7,
+        "crtAmount": 0.2
+      },
+      "range": [
+        0.5,
+        5.5
+      ],
+      "layout": "pair",
+      "crop": [
+        380,
+        140,
+        840,
+        940
+      ],
+      "width": 960,
+      "float": "left",
+      "alt": "The dancer, original left and through Analog Signal Lab's Worn VHS Look right: softer, warm cream colours kept, noise streaks crawling through the dark background and along the bottom edge where the video heads switch",
+      "caption": "Left: original. Right: the Worn VHS Look.",
+      "loop": 0.35
+    },
+    {
+      "name": "add-glitch",
+      "kind": "operation",
+      "playhead": 1,
+      "viewport": {
+        "width": 1000,
+        "height": 660
+      },
+      "scale": 1.5,
+      "dock": {
+        "top-split": 0.1,
+        "center-right-split": 0.56,
+        "root-split": 0.9
+      },
+      "panels": [
+        "preview-group",
+        "right-group"
+      ],
+      "start": "preview:0.62,0.78",
+      "width": 1280,
+      "steps": [
+        {
+          "pause": 500
+        },
+        {
+          "click": "+ Add Effect"
+        },
+        {
+          "pause": 400
+        },
+        {
+          "type": "glitch",
+          "delay": 130
+        },
+        {
+          "pause": 800
+        },
+        {
+          "click": "Glitch"
+        },
+        {
+          "pause": 700
+        },
+        {
+          "drag": "Density",
+          "to": 1,
+          "ms": 1600
+        },
+        {
+          "pause": 1500
+        }
+      ],
+      "alt": "Screen recording: the pointer clicks + Add Effect in Properties, Effects, types glitch and clicks the Glitch tile; the Glitch card appears, the pointer drags its Density slider to 1 and the preview of the dancer breaks up",
+      "caption": "Adding Glitch: + Add Effect, type glitch, click the tile, drag Density.",
+      "poster": 8.6
+    }
+  ]
+}

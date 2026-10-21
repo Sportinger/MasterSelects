@@ -8,6 +8,7 @@ import starlight from '@astrojs/starlight';
 // are untracked: `npm run dev` and `npm run build` run the sync first.
 const sidebarFile = new URL('./src/generated/sidebar.json', import.meta.url);
 const redirectsFile = new URL('./src/generated/redirects.json', import.meta.url);
+const docsClipsScript = new URL('./src/scripts/docsClips.js', import.meta.url);
 function readGenerated(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -25,34 +26,6 @@ const sidebar = listsWelcome
   ? featureGroups
   : [{ label: 'Getting Started', items: [{ label: 'Welcome', slug: 'getting-started/welcome' }, { label: 'Overview', slug: 'getting-started/overview' }] }, ...featureGroups];
 
-// Docs clips (<video data-docs-autoplay>) loop while visible; with reduced motion they keep
-// their poster and controls and never start by themselves.
-const clipScript = `(() => {
-  const motion = matchMedia('(prefers-reduced-motion: reduce)');
-  const start = () => {
-    const clips = document.querySelectorAll('video[data-docs-autoplay]');
-    if (!clips.length) return;
-    const watch = 'IntersectionObserver' in window ? new IntersectionObserver((entries) => {
-      for (const { target, isIntersecting } of entries) {
-        if (motion.matches || !isIntersecting) target.pause();
-        else target.play().catch(() => { target.controls = true; });
-      }
-    }, { threshold: 0.25 }) : undefined;
-    const apply = () => {
-      for (const clip of clips) {
-        clip.controls = motion.matches;
-        if (motion.matches) clip.pause();
-        else if (!watch) clip.play().catch(() => { clip.controls = true; });
-      }
-    };
-    apply();
-    for (const clip of clips) watch?.observe(clip);
-    motion.addEventListener('change', apply);
-  };
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
-  else start();
-})();`;
-
 export default defineConfig({
   site: 'https://www.masterselects.com',
   base: '/docs',
@@ -66,16 +39,19 @@ export default defineConfig({
         'Browser-based media editor and agent-friendly foundation for video, audio, motion, 3D, and creative tools.',
       logo: { src: './src/assets/ms-mark.png' },
       customCss: ['./src/styles/custom.css'],
-      head: [{ tag: 'script', content: clipScript }],
+      // Docs clips start when scrolled into view and respect reduced motion (inline: a few lines).
+      head: [{ tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsClipsScript, 'utf8') }],
       sidebar,
     }),
-    // A running `astro dev` restarts when a sync changes the generated sidebar or redirects.
+    // A running `astro dev` restarts when a sync changes the generated sidebar or redirects,
+    // or when the clip script changes.
     {
       name: 'masterselects-feature-sidebar',
       hooks: {
         'astro:config:setup': ({ addWatchFile }) => {
           addWatchFile(sidebarFile);
           addWatchFile(redirectsFile);
+          addWatchFile(docsClipsScript);
         },
       },
     },

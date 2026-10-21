@@ -213,9 +213,15 @@ describe('docs site page conversion', () => {
     ['Effects.md', '# Effects\n\n## Split compare\n'],
     ['Product-Analytics.md', '# Analytics\n'],
   ]);
+  // A WebP header (VP8X) that says 640 × 360.
+  const poster = new Uint8Array(32);
+  poster.set([...'RIFF'].map((c) => c.charCodeAt(0)), 0);
+  poster.set([...'WEBPVP8X'].map((c) => c.charCodeAt(0)), 8);
+  poster.set([639 & 0xff, 639 >> 8, 0, 359 & 0xff, 359 >> 8, 0], 24);
   const assets = new Map<string, Uint8Array>([
     ['assets/clips/drag.mp4', new Uint8Array(10)],
     ['assets/clips/drag.webm', new Uint8Array(10)],
+    ['assets/clips/still.webp', poster],
   ]);
   function convert(file: string, markdown: string) {
     const warnings: string[] = [];
@@ -256,10 +262,15 @@ describe('docs site page conversion', () => {
   });
 
   it('turns a clip into a muted video with its webm source and reports the missing poster', () => {
-    const { text, warnings } = convert('guides/x.md', '# X\n\n![Dragging a clip](../assets/clips/drag.mp4)\n\n<video src="../assets/clips/drag.mp4" poster="../assets/clips/drag.webm" autoplay muted aria-label="Drag"></video>\n');
+    const { text, warnings } = convert('guides/x.md', '# X\n\n![Dragging a clip](../assets/clips/drag.mp4)\n');
     expect(text).toContain('<video class="docs-clip-video" muted loop playsinline controls preload="none" data-docs-autoplay aria-label="Dragging a clip"><source src="/docs/assets/clips/drag.webm" type="video/webm"><source src="/docs/assets/clips/drag.mp4" type="video/mp4"></video>');
-    expect(text).toContain('<video class="docs-clip-video" src="/docs/assets/clips/drag.mp4" poster="/docs/assets/clips/drag.webm" data-docs-autoplay muted aria-label="Drag" playsinline controls>');
     expect(warnings).toEqual([expect.stringContaining('has no poster')]);
+  });
+
+  it('gives a clip figure from doc-clip.mjs site URLs, its poster size and script-driven playback', () => {
+    const { text, warnings } = convert('Effects-Analog.md', '# Analog\n\n<figure class="docs-shot docs-clip">\n<video src="assets/clips/drag.mp4" poster="assets/clips/still.webp" autoplay muted loop playsinline preload="none" aria-label="Drag"></video>\n</figure>\n');
+    expect(text).toContain('<video class="docs-clip-video" src="/docs/assets/clips/drag.mp4" poster="/docs/assets/clips/still.webp" data-docs-autoplay muted loop playsinline preload="none" aria-label="Drag" controls width="640" height="360">');
+    expect(warnings).toEqual([]);
   });
 
   it('expands a gallery whose cards keep the old heading slugs as ids', () => {

@@ -7,7 +7,9 @@ MasterSelects has a modular GPU effect system built around registered effect mod
 ## Apply an effect to a clip
 
 Select a video clip in the timeline, open **Properties → Effects**, then expand
-**+ Add Effect**. Type a name such as `blur` to narrow the catalog. The thumbnails
+**+ Add Effect**. Type a name such as `blur` to narrow the catalog; effects whose
+name matches come first (`glitch` lists Glitch before the effects that only
+mention glitches in their description). The thumbnails
 preview each look using the selected clip, so you can compare treatments before
 applying one. Click **Gaussian Blur** to add it to the clip's effect stack.
 
@@ -2034,6 +2036,61 @@ with the card's text, so a renamed parameter does not silently drop a callout.
 default width so the picture shows the inspector as most users see it; a taller window
 fits a long card. A card taller than the panel is cropped at the panel's bottom edge,
 not in the timeline below.
+
+### Docs clips (motion and editor operations)
+
+Which medium (owner decision 2026-10-21): an effect whose look is static keeps an
+original | effect still (Effect Lab pairs above). An effect that moves or depends on
+time (Glitch bursts, CRT flicker and hum, film grain, VHS faults) gets a short loop
+on moving footage instead, in the still's place, with the same figure and float. An
+editor operation (adding an effect, dragging a control) gets a clip with a visible
+pointer. Less is more: at most one clip per effect, and an operation clip only where
+a page says how to do something.
+
+`scripts/doc-clip.mjs <shot file>` makes both kinds in the real editor of the
+checkout, each in a throwaway project of hardware-GPU Chrome, from one JSON shot
+list per docs page (`scripts/doc-clips/analog.json`):
+
+- An **effect clip** puts the source video on the timeline, adds the effect with the
+  given parameters and exports the `range` through `debugExport` (the export panel's
+  `FrameExporter`, at the source size and frame rate), for `pair` and `split` also once
+  without the effect. ffmpeg builds the layout – `single`, `pair` (original | effect),
+  `split` (one picture, original left of a thin line) or `detail` (the frame | a 3×
+  pixel-for-pixel detail at `detail` [x, y]) – and a seamless loop: the last `loop`
+  seconds (default 0.5) fade into the first, so the clip ends on the frame it starts with.
+- An **operation clip** sets dock split ratios (`dock`), opens Properties → Effects and
+  records the page with Chrome's screencast while `steps` drive the real mouse:
+  `click` or `move` to visible text ("+ Add Effect", "Glitch"), `type`, `drag` the
+  slider of a row label to a value, `pause`. Moves are eased with a slight arc (about
+  0.5–1.2 s); a drawn pointer follows them (Playwright shows no cursor), with a yellow
+  ripple on clicks. The clip shows the named dock groups (`panels`), cropped together.
+
+Each clip becomes `<name>.mp4` (H.264, yuv420p, BT.709, faststart, no audio; the
+CRF rises until it fits `maxBytes`, 1.5 MB for effect clips and 2 MB for
+operations) and a WebP poster (`poster` seconds into the clip), and the script
+prints the figure:
+
+```html
+<figure class="docs-shot docs-clip docs-shot--float-left">
+<video src="assets/effects/clips/glitch.mp4" poster="assets/effects/clips/glitch.webp" width="962" height="490" autoplay muted loop playsinline preload="none" aria-label="…"></video>
+<figcaption>…</figcaption>
+</figure>
+```
+
+Run `npx vite --port 5192 --strictPort` in the checkout, then
+`node scripts/doc-clip.mjs scripts/doc-clips/analog.json --media <folder>`; `--only
+<name>` remakes one clip, `--keep <folder>` keeps the exports and screencast frames,
+and `--reencode` then encodes the clips again from them without a browser (for
+layout, crop, loop, poster or size changes). The analog page's source video
+(`dancer_stage_motion.mp4`, 6 s, 1080p) is not in the repository: `--media` or
+`DOC_CLIP_MEDIA` names its folder. Keep the real mouse away from the recording
+window: the drawn pointer ignores foreign pointer events and the script warns about
+them, but the editor's hover effects still react. The script also prints the
+screencast frame gaps and how long the page took each pointer move; while the editor
+is busy, a short compositor transition keeps the pointer gliding. The docs site
+(`docs-site/scripts/sync-features.mjs`) gives a clip its site URLs and its poster's
+size, and `docs-site/src/scripts/docsClips.js` plays it only while it is in view;
+under `prefers-reduced-motion` the poster stays, with controls.
 
 ### When the GPU cannot build an effect
 

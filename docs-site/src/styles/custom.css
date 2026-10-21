@@ -135,9 +135,11 @@
   .sl-markdown-content .docs-shot--float-left ~ p { display: flow-root; }
 }
 
-/* Clips: <figure class="docs-shot docs-clip"> around a <video class="docs-clip-video"> (the sync
-   adds the class, poster handling and reduced-motion playback; scripts/doc-clip.mjs prints the
-   figure). They sit and float exactly like still shots. */
+/* Clips: <figure class="docs-shot docs-clip"> around a muted loop, in the same frame as the
+   pictures (scripts/doc-clip.mjs prints the figure). The sync gives every <video> the class
+   docs-clip-video, site URLs and its poster's size (the box is reserved before it loads);
+   src/scripts/docsClips.js plays it only while it is in view and never under reduced motion. */
+.sl-markdown-content .docs-clip video,
 .sl-markdown-content .docs-clip-video {
   display: block;
   width: 100%;
@@ -145,8 +147,11 @@
   margin: 0;
   border: 1px solid var(--sl-color-hairline);
   border-radius: .5rem;
-  background: #000;
+  background: #111;
+  object-fit: contain;
 }
+.sl-markdown-content .docs-clip-video:focus { outline: none; }
+.sl-markdown-content .docs-clip-video:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
 .sl-markdown-content .docs-clip > p { margin: 0; }
 
 /* Edit diagrams: inline SVG with real <text>; everything inherits the theme through

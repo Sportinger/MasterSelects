@@ -292,8 +292,15 @@ export function convertPage({ body, title }, ctx) {
       if (authored) {
         list = /\bclass="/u.test(list) ? list.replace(/\bclass="/u, 'class="docs-clip-video ') : ` class="docs-clip-video"${list}`;
       }
-      if (/\sautoplay\b(?!=)/u.test(list)) list = list.replace(/\sautoplay\b(?!=)/u, ' data-docs-autoplay');
+      list = list.replace(/\sautoplay(?:="[^"]*")?(?=\s|$)/u, ' data-docs-autoplay');
       for (const flag of ['muted', 'playsinline', 'controls']) if (!new RegExp(`\\s${flag}\\b`, 'u').test(list)) list += ` ${flag}`;
+      // Without width/height the clip takes its poster's size, so the page does not shift when it loads.
+      const posterUrl = list.match(/\sposter="\/docs\/(assets\/[^"]+)"/u)?.[1];
+      if (authored && posterUrl && !(/\swidth="/u.test(list) && /\sheight="/u.test(list))) {
+        const size = imageSize(ctx.asset(posterUrl));
+        if (size) list = `${list.replace(/\s(?:width|height)="[^"]*"/gu, '')} width="${size.width}" height="${size.height}"`;
+        else ctx.warn(`${ctx.file}: a <video> has no width/height and no readable poster; the page shifts when it loads.`);
+      }
       if (authored && !/\sposter="/u.test(list)) ctx.warn(`${ctx.file}: a <video> has no poster; viewers who prefer reduced motion see an empty frame.`);
       if (authored && !/\s(?:aria-label|title)="/u.test(list)) ctx.warn(`${ctx.file}: a <video> has no aria-label.`);
       return `<video${list.replace(/\s+$/u, '')}>`;
