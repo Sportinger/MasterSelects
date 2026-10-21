@@ -29,14 +29,15 @@ const DIRECTIONAL_PORTS = { ...BLUR_PORTS, 'amount-positive': 'Amount ≥ 0', di
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
   if (type === 'crt-screen') return {
-    labels: { curvature: 'Screen Curvature', sampling: 'Clamped Image Sampling', scan: 'Scanlines',
-      mask: 'RGB Phosphor Mask', flicker: 'Timeline Flicker', finish: 'Color Mix & Sampled Alpha' },
-    stage: ({ id }) => includes('uv-split resolution-split', id) ? 'sources'
-      : /^(scan-|scan$)/.test(id) ? 'scan'
-        : /^(time-speed$|flicker(?:-|$))/.test(id) ? 'flicker'
-          : /^(safe-scale$|pixel-x$|mask(?:-|$)|is-|above-half$|below-one-half$)/.test(id) ? 'mask'
-            : includes('min-vec2 max-vec2 clamped-uv curved-sample color', id) ? 'sampling'
-              : /^(masked-color|scanned-color|flickered-color|mixed-color|combine)$/.test(id) ? 'finish' : 'curvature',
+    labels: { premultiply: 'Premultiplied Source (cached)', screen: 'Tube Shape & Rim', scan: 'Scanline Beams',
+      mask: 'Phosphor Mask', flicker: 'Hum Bar & Flutter', finish: 'Light Out & Alpha' },
+    portLabels: { 'screen-uv': 'Tube Position', 'screen-tube': 'Tube Coverage', 'screen-vignette': 'Rim Shade', 'scan-linear': 'Beam Light',
+      'scan-depth': 'Line Depth', 'mask-factor:rgb': 'Mask', 'flicker-gain': 'Flicker Gain' },
+    stage: ({ id }) => /-clamped$/.test(id) ? 'controls' : /^source-/.test(id) ? 'premultiply'
+      : /^(screen-|one-vec2$|half-vec2$)/.test(id) ? 'screen'
+        : /^(scan-|flat-|line[01]-|zero-rgb$|gamma-rgb$)/.test(id) ? 'scan'
+          : /^mask-/.test(id) ? 'mask' : /^flicker-/.test(id) ? 'flicker'
+            : id === 'resolution-split' ? 'sources' : 'finish',
   };
   if (type === 'gaussian-blur' || type === 'box-blur') return {
     labels: { premultiply: 'Premultiplied Source (cached)', size: 'Radius & Tap Count', horizontal: 'Horizontal Pass', vertical: 'Vertical Pass', finish: 'Straight Alpha Output' },

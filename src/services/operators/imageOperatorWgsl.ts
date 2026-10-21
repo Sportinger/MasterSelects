@@ -1,5 +1,6 @@
 import { IMAGE_OPERATOR_PARAMETER_VEC4_COUNT } from './imageOperatorParameters';
 import hash2d from '../../effects/_shared/hash2d.wgsl?raw';
+import hashPcg2d from '../../effects/_shared/hashPcg2d.wgsl?raw';
 import gaussian from '../../effects/_shared/gaussian.wgsl?raw';
 import coordinateRotation from '../../effects/_shared/coordinateRotation.wgsl?raw';
 import radialProjection from '../../effects/_shared/radialProjection.wgsl?raw';
@@ -7,6 +8,7 @@ export const imageF32 = (value: number) => Number.isInteger(value) ? `${value}.0
 export const imageParameterExpression = (slot: number) => `imageParameters.values[${Math.floor(slot / 4)}].${'xyzw'[slot % 4]}`;
 export const IMAGE_PARAMETER_WGSL = `struct ImageOperatorParameters { values: array<vec4f, ${IMAGE_OPERATOR_PARAMETER_VEC4_COUNT}>, };`;
 export const IMAGE_HASH2D_WGSL = hash2d.replace('fn hash(', 'fn imageGraphHash2d(');
+export const IMAGE_HASH_PCG2D_WGSL = hashPcg2d;
 export const IMAGE_GAUSSIAN_WGSL = gaussian.replace('fn gaussian(', 'fn imageGraphGaussian(');
 export const IMAGE_COORDINATE_ROTATION_WGSL = coordinateRotation;
 export const IMAGE_VECTOR_WGSL = `fn imageGraphNormalize2(value: vec2f) -> vec2f {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultFilmPrismGraph } from '../../src/services/operators/filmPrismEffectGraph';
+import { createLegacyFilmPrismGraph } from '../../src/services/operators/legacyFilmPrismGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { effectOperatorGraph, effectOperatorParams, isImageGraphEffectType, isLocalImageEffectType } from '../../src/services/operators/effectGraphOwner';
 import { getDefaultParams } from '../../src/effects';
@@ -31,19 +31,18 @@ const computationalNodes = (graph: ReturnType<typeof effectOperatorGraph>) => gr
   .toSorted((a, b) => a.id.localeCompare(b.id));
 
 describe('Film Prism image graph', () => {
-  it('uses the contextual owner with authoritative catalog defaults', () => {
+  it('uses the contextual owner with authoritative catalog defaults and keeps saved original graphs', () => {
     const effect: Effect = { id: 'film-prism', name: 'Film Prism', type: 'film-prism', enabled: true, params: {} };
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('film-prism'));
-    const owned = effectOperatorGraph(effect), recipe = createDefaultFilmPrismGraph();
-    expect(owned.compositionRules).toBe(2);
+    // A saved original graph stays as saved (no upgrade to the 2026-10 recipe).
+    const recipe = createLegacyFilmPrismGraph(), owned = effectOperatorGraph({ ...effect, operatorGraph: recipe });
     expect(computationalNodes(owned)).toEqual(computationalNodes(recipe));
-    expect(effectOperatorGraph({ ...effect, operatorGraph: recipe })).toEqual(owned);
   });
 
   it('expands common noise2d into four shared hashes and keeps four samples', () => {
-    const graph = createDefaultFilmPrismGraph();
+    const graph = createLegacyFilmPrismGraph();
     expect(graph.nodes.filter(node => node.operator === 'noise.hash2d.vec2')).toHaveLength(4);
     expect(graph.nodes.filter(node => node.operator === 'image.sample').map(node => node.id))
       .toEqual(['red-sample', 'green-sample', 'blue-sample', 'alpha-sample']);
@@ -53,7 +52,7 @@ describe('Film Prism image graph', () => {
   });
 
   it('matches radial order, nested value noise, clamp, grain and center alpha', () => {
-    const params = { amount: .75, speed: .4 }, plan = compileImageOperatorGraph(createDefaultFilmPrismGraph(), params);
+    const params = { amount: .75, speed: .4 }, plan = compileImageOperatorGraph(createLegacyFilmPrismGraph(), params);
     expect(plan.capabilities).toEqual(expect.arrayContaining(['uv', 'resolution', 'time', 'sample']));
     for (const context of [{ uv: [.002, .13] as [number, number], resolution: [64, 37] as [number, number], timelineTimeSeconds: 0 },
       { uv: [.52, .71] as [number, number], resolution: [31, 19] as [number, number], timelineTimeSeconds: 1.25 },
@@ -65,7 +64,7 @@ describe('Film Prism image graph', () => {
 
   it('retains amount-zero radial and deterministic grain behavior', () => {
     const context = { uv: [.3, .4] as [number, number], resolution: [23, 11] as [number, number], timelineTimeSeconds: .75, sampleImage: sample };
-    const plan = compileImageOperatorGraph(createDefaultFilmPrismGraph(), { amount: 0, speed: 1 });
+    const plan = compileImageOperatorGraph(createLegacyFilmPrismGraph(), { amount: 0, speed: 1 });
     expect(evaluateImageOperatorPlan(plan, [0, 0, 0, 0], context)).toEqual(reference(context.uv, context.resolution, context.timelineTimeSeconds, 0, 1));
     expect(evaluateImageOperatorPlan(plan, [0, 0, 0, 0], context)).toEqual(evaluateImageOperatorPlan(plan, [0, 0, 0, 0], context));
   });

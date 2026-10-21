@@ -4,7 +4,7 @@ import type { ImagePlanInstruction } from './imageOperatorPlanTypes';
 export interface ImageScopeValue { node: BoundOperatorNode; output: string }
 
 const PURE_PREFIXES = ['values.', 'math.', 'vector.', 'convert.', 'coordinates.', 'optics.', 'compare.', 'logic.', 'color.'];
-const PURE_INTRINSICS = new Set(['image.normalized-uv', 'image.resolution', 'image.timeline-time', 'pattern.bayer4.vec2', 'noise.hash2d.vec2']);
+const PURE_INTRINSICS = new Set(['image.normalized-uv', 'image.resolution', 'image.timeline-time', 'pattern.bayer4.vec2', 'noise.hash2d.vec2', 'noise.hash2d-pcg.vec2']);
 const CONTEXT_LEAVES = new Set(['image.kernel-index', 'image.sequence-index']);
 
 const isPure = (operator: string) => PURE_INTRINSICS.has(operator) || PURE_PREFIXES.some(prefix => operator.startsWith(prefix));

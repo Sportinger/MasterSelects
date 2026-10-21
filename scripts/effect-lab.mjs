@@ -7,6 +7,7 @@
 //       [--images dancer_stage,harbor_town,neon_rain_street] [--width 960]
 //       [--times 0,0.033,0.067] [--url http://localhost:5175]
 //       [--inset 0.7]   # image at 70 % on transparency; the sheet shows cells over a checkerboard
+//   A variant may carry its own "times" (e.g. one variant per frame of an animation) instead of --times.
 //   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>]
 //
 // Each variant renders on each image; "original" (effect bypassed) is always the first column.
@@ -91,7 +92,7 @@ try {
       const original = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, bypass: true, inset });
       row.push({ label: 'original', ...original });
       for (const variant of variants) {
-        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times, inset });
+        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times: variant.times ?? times, inset });
         row.push({ label: variant.label, params: variant.params, ...result });
       }
       for (const cell of row) {

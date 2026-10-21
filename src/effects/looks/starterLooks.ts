@@ -31,7 +31,7 @@ export const STARTER_LOOKS: LookDefinition[] = [
     fx('grain', { amount: 0.13 }),
   ]),
   look('crt-memory', 'CRT Memory', 'analog', ['crt', 'retro', 'scanline'], [
-    fx('crt-screen', { amount: 0.72, scale: 3, speed: 0.25 }),
+    fx('crt-screen', { amount: 1, curvature: 0.3, lineCount: 240, scanlines: 0.7, maskStrength: 0.4, flicker: 0.25, speed: 0.6 }),
     fx('rgb-split', { amount: 0.012 }),
   ]),
   look('paper-press', 'Paper Press', 'print', ['paper', 'press', 'soft'], [
@@ -55,14 +55,14 @@ export const STARTER_LOOKS: LookDefinition[] = [
   ]),
   look('data-glitch', 'Data Glitch', 'digital', ['glitch', 'grid', 'motion'], [
     fx('glitch-grid', { amount: 0.55, scale: 20, speed: 1.25 }),
-    fx('glitch', { amount: 0.32, scale: 28, speed: 0.8 }),
+    fx('glitch', { amount: 0.45, density: 0.3, bands: 20, split: 0.5, speed: 0.8 }),
   ]),
   look('mosaic-motion', 'Mosaic Motion', 'motion', ['mosaic', 'kinetic', 'block'], [
     fx('scatter-mosaic', { amount: 0.62, scale: 16, speed: 0.65 }),
     fx('posterize', { levels: 7 }),
   ]),
   look('prism-film', 'Prism Film', 'analog', ['film', 'prism', 'grain'], [
-    fx('film-prism', { amount: 0.68, speed: 0.3 }),
+    fx('film-prism', { amount: 0.6, grain: 0.25, speed: 1 }),
     fx('grain', { amount: 0.12 }),
   ]),
   look('wave-blueprint', 'Wave Blueprint', 'editorial', ['line', 'blueprint', 'graphic'], [

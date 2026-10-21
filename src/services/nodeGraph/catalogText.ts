@@ -299,6 +299,7 @@ const CATALOG_TEXT: Readonly<Record<string, { d?: string; t?: readonly string[] 
   "math.subtract.scalar-audio": { d: "Subtracts B from A for every audio sample; a number input applies the same value to all samples.", t: ["minus", "difference", "invert", "audio math"] },
   "media.source": { d: "Provides the clip's video frames as the image input for face tracking and depth analysis.", t: ["video input", "footage", "frames", "source"] },
   "noise.hash2d.vec2": { t: ["random", "hash", "noise", "pseudo random", "white noise"] },
+  "noise.hash2d-pcg.vec2": { t: ["random", "hash", "noise", "pseudo random", "white noise", "integer hash", "pcg", "grain"] },
   "render.cables": { d: "Draws the simulated cables as shaded, rounded tubes with attachment rings, optionally in native 3D or with 2D face shadows.", t: ["cable render", "tubes", "ropes", "shading", "wires"] },
   "render.strands": { d: "Draws the connected curves as thin strands in the shared 3D scene; Width sets their thickness, Color their look unless a Fiber Material comes before it, Subdivision the path tracer's pieces per curve segment.", t: ["strand render", "hair", "threads", "fibers", "lines", "subdivision"] },
   "render.pixel-particles": { d: "Draws pixel particles as the clip image with square, soft or shard shapes; muting it shows the input unchanged.", t: ["particle render", "disintegrate", "dust", "vanish", "points"] },

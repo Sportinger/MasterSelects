@@ -33,8 +33,12 @@ function noise2d(g: Builder, p: Ref, zero: Ref, one: Ref, two: Ref, three: Ref):
   return mix('noise-result', mix('noise-row-zero', h00, h10, ux), mix('noise-row-one', h01, h11, ux), uy);
 }
 
-/** Granular equivalent of filmPrismFragment; parameter schema stays catalog-owned. */
-export function createDefaultFilmPrismGraph(): EffectOperatorGraph {
+/**
+ * The Film Prism graph as it shipped before the 2026-10 analog review (three-sample fringe, pixel
+ * grain that slides with time and ignores Amount). Frozen: saved effects that still carry it keep
+ * their look and graph-less old effects are given it on load (analogLegacyGraphs.ts). Never change it.
+ */
+export function createLegacyFilmPrismGraph(): EffectOperatorGraph {
   const g = new Builder();
   const frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const resolution = g.node('resolution', 'image.resolution', 'value'), time = g.node('time', 'image.timeline-time', 'value');

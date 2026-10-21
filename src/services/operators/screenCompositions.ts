@@ -1,8 +1,8 @@
 import type { OperatorDefinition } from '../../types/operatorGraph';
-import { createDefaultCrtScreenGraph } from './crtScreenEffectGraph';
+import { createLegacyCrtScreenGraph } from './legacyCrtScreenGraph';
 import { extractImageComposition } from './extractImageComposition';
 
-const crt = createDefaultCrtScreenGraph();
+const crt = createLegacyCrtScreenGraph();
 /** V1 contracts retain the source arithmetic/order. Time and textures are always external signals. */
 export const SCREEN_COMPOSITIONS: readonly OperatorDefinition[] = [
   extractImageComposition(crt, {

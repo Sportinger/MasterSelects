@@ -3,7 +3,7 @@ import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDef
 import { crtScreen } from '../../src/effects/analog';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
-import { createDefaultCrtScreenGraph } from '../../src/services/operators/crtScreenEffectGraph';
+import { createLegacyCrtScreenGraph } from '../../src/services/operators/legacyCrtScreenGraph';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const width = 64;
@@ -117,7 +117,7 @@ async function render(
 }
 
 function directGraph(): EffectOperatorGraph {
-  const graph = structuredClone(createDefaultCrtScreenGraph());
+  const graph = structuredClone(createLegacyCrtScreenGraph());
   graph.edges = graph.edges.filter(edge => !graph.nodes.some(node => node.operator === 'image.output' && node.id === edge.to));
   const frame = graph.nodes.find(node => node.operator === 'image.frame');
   const output = graph.nodes.find(node => node.operator === 'image.output');
@@ -138,7 +138,7 @@ export async function checkCrtScreenGraphGpu(device: GPUDevice): Promise<number>
   try {
     for (const item of cases) {
       const params = resolvedParams(item.params);
-      const plan = compileImageOperatorGraph(createDefaultCrtScreenGraph(), params);
+      const plan = compileImageOperatorGraph(createLegacyCrtScreenGraph(), params);
       const expected = await render(device, sampler, source.createView(), target, readback,
         crtScreen.shader, crtScreen.entryPoint, packLegacy(params, item.time));
       const actual = await render(device, sampler, source.createView(), target, readback,

@@ -47,11 +47,12 @@ import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
 import { isUpgradableBlurEffectType, upgradeBlurGraph } from './blurGraphUpgrade';
 import { organizeEffectFamilyGraph } from './effectFamilyPresentation';
 import { normalizeFisheyeParameters } from '../../effects/distort/fisheye/normalization';
-import { createDefaultCrtScreenGraph } from './crtScreenEffectGraph';
+import { createDefaultCrtScreenGraph } from './crtScreenRecipe';
+import { pinOriginalAnalogGraph } from './analogLegacyGraphs';
 import { createDefaultRibbonScanGraph } from './ribbonScanEffectGraph';
 import { createDefaultWaveLinesGraph } from './waveLinesEffectGraph';
-import { createDefaultGlitchGraph } from './glitchEffectGraph';
-import { createDefaultFilmPrismGraph } from './filmPrismEffectGraph';
+import { createDefaultGlitchGraph } from './glitchRecipe';
+import { createDefaultFilmPrismGraph } from './filmPrismRecipe';
 import { createDefaultCrystalGraph } from './crystalEffectGraph';
 import { createDefaultGlassDispersionGraph } from './glassDispersionEffectGraph';
 import { createDefaultHalftoneGraph, type EditableHalftoneEffectType } from './halftoneEffectGraphs';
@@ -272,6 +273,8 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
     return effect;
   }
+  // Graph-less analog effects from before their 2026-10 rebuild keep their original look.
+  effect = pinOriginalAnalogGraph(effect);
   // A valid Weave document with unfinished wiring is an editable draft, not
   // an unloadable project. Keep every node/cable; reject structural corruption.
   if (effect.type === WEAVE_EFFECT_TYPE) {
