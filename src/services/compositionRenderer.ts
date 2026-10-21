@@ -33,7 +33,11 @@ import {
 } from './compositionRender/sourceSetup';
 import { disposeCompositionSources } from './compositionRender/sourceLifecycle';
 import { createArrivedClipMediaWatch, reportClipMediaGap } from './compositionRender/clipMediaGap';
-import { adoptActiveTimelineClipSource, createSerializedCanvasSource } from './compositionRender/clipSourceAdoption';
+import {
+  adoptActiveTimelineClipSource,
+  createSerializedCanvasSource,
+  preparesCompositionClipSource,
+} from './compositionRender/clipSourceAdoption';
 import {
   loadImageSource,
   loadVectorAnimationSource,
@@ -74,6 +78,8 @@ class CompositionRendererService {
 
   // Throttle "not ready" warnings per composition (avoid spam at 60fps)
   private notReadyWarned: Map<string, number> = new Map();
+  /** Clip-set signature per composition whose "no sources loaded" warning was already logged. */
+  private noSourcesWarned: Map<string, string> = new Map();
 
   // Track in-flight preparation promises to deduplicate concurrent calls
   private preparingPromises: Map<string, Promise<boolean>> = new Map();
@@ -162,6 +168,7 @@ class CompositionRendererService {
     const loadPromises: Promise<void>[] = [];
     const current = (currentSources: CompositionSources) => this.isSourcesCurrent(currentSources);
     let waitingForMedia = 0;
+    const expectedSourceClips: { id: string; sourceType?: string; mediaFileId?: string }[] = [];
 
     for (const clip of clips) {
       // Handle both TimelineClip (active) and SerializableClip (stored)
@@ -170,9 +177,12 @@ class CompositionRendererService {
 
       // Get source type - TimelineClip has source.type, SerializableClip has sourceType
       const sourceType = timelineClip.source?.type || serializableClip.sourceType;
+      // Audio, 3D, MIDI and similar clips never get a source here (other runtimes own them).
+      if (sourceType && !preparesCompositionClipSource(sourceType)) continue;
 
       // Get media file ID
       const mediaFileId = timelineClip.source?.mediaFileId || serializableClip.mediaFileId;
+      if (sourceType && !clip.isComposition) expectedSourceClips.push({ id: clip.id, sourceType, mediaFileId });
       const mediaFile = mediaFileId
         ? mediaFiles.find(f => f.id === mediaFileId)
         : undefined;
@@ -255,13 +265,7 @@ class CompositionRendererService {
     this.notReadyWarned.delete(compositionId);
     log.info(`Composition ready: ${composition.name}, ${sources.clipSources.size} sources loaded`);
 
-    if (sources.clipSources.size === 0 && clips.length > waitingForMedia) {
-      log.warn(`prepareComposition: No sources loaded for ${clips.length} clips! Check mediaFileId values.`);
-      for (const clip of clips) {
-        const sc = clip as SerializableClip;
-        log.warn(`  Clip ${clip.id}: sourceType=${sc.sourceType}, mediaFileId=${sc.mediaFileId || 'MISSING'}`);
-      }
-    }
+    this.warnIfNoSourcesLoaded(compositionId, sources, expectedSourceClips, waitingForMedia);
 
     // Notify any waiting callbacks
     const callbacks = this.readyCallbacks.get(compositionId) || [];
@@ -269,6 +273,33 @@ class CompositionRendererService {
     this.readyCallbacks.delete(compositionId);
 
     return true;
+  }
+
+  /**
+   * Warns once per composition and clip set when visual clips that should have a source got none
+   * (clips still waiting for their media are excluded; they rebuild the composition on arrival).
+   */
+  private warnIfNoSourcesLoaded(
+    compositionId: string,
+    sources: CompositionSources,
+    expectedSourceClips: readonly { id: string; sourceType?: string; mediaFileId?: string }[],
+    waitingForMedia: number,
+  ): void {
+    if (sources.clipSources.size > 0 || expectedSourceClips.length <= waitingForMedia) {
+      this.noSourcesWarned.delete(compositionId);
+      return;
+    }
+    const signature = expectedSourceClips.map(clip => `${clip.id}:${clip.mediaFileId ?? ''}`).toSorted().join('|');
+    if (this.noSourcesWarned.get(compositionId) === signature) return;
+    this.noSourcesWarned.set(compositionId, signature);
+    log.warn(`prepareComposition: no sources loaded for ${expectedSourceClips.length} visual clips; check their media`, {
+      compositionId,
+      clips: expectedSourceClips.slice(0, 10).map(clip => ({
+        clipId: clip.id,
+        sourceType: clip.sourceType,
+        mediaFileId: clip.mediaFileId ?? 'MISSING',
+      })),
+    });
   }
 
   /**
@@ -483,6 +514,7 @@ class CompositionRendererService {
    * Dispose of a composition's sources
    */
   disposeComposition(compositionId: string): void {
+    this.noSourcesWarned.delete(compositionId);
     disposeCompositionCache(this.compositionSources, compositionId);
   }
 
