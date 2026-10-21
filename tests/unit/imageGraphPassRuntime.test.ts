@@ -92,6 +92,10 @@ describe('ImageGraphPassRuntime', () => {
     expect(createTexture).toHaveBeenCalledTimes(2);
     expect(runtime.poolStats()).toEqual({ leased: 2, free: 0 });
     runtime.releaseBatch(first);
+    // A released batch forgets its views (the pool may hand them to the next effect) and refuses reuse.
+    expect(first.encoded.size + first.resources.size).toBe(0);
+    expect(runtime.getBatchResourceView(first, 'blur')).toBeUndefined();
+    expect(() => runtime.encode({ ...common, encoder: frame, instanceId: 'a-again', batch: first })).toThrow(/released/);
     runtime.encode({ ...common, encoder: frame, instanceId: 'c' });
     expect(createTexture).toHaveBeenCalledTimes(2);
     // A new encoder returns every lease of the previous one.

@@ -21,6 +21,8 @@ describe('canvas scene visibility', () => {
     expect(visible.groups.map(item => item.label)).toEqual(['visible']);
     expect(visible.cables).toEqual([scene.cables[0]]);
     expect(visible.plugs).toEqual([scene.plugs[0]]);
+    expect(visible.uniformTitles).toBeUndefined();
+    expect(new CanvasSceneVisibility({ ...scene, uniformTitles: true }).visible({ zoom: 1, panX: 0, panY: 0, width: 640, height: 360, ratio: 1 }).uniformTitles).toBe(true);
   });
 
   it('accounts for zoom, pan, and long items without dropping intersections', () => {

@@ -68,8 +68,10 @@ export class CanvasSceneVisibility {
   private readonly groups: RectIndex<CanvasScene['groups'][number]>;
   private readonly plugs: RectIndex<CanvasPlug>;
   private readonly branches?: RectIndex<NonNullable<CanvasScene['branches']>[number]>;
+  private readonly uniformTitles?: boolean;
 
   constructor(scene: CanvasScene) {
+    this.uniformTitles = scene.uniformTitles;
     this.nodes = new RectIndex(scene.nodes, node => node);
     // Index narrow route legs rather than the huge empty hull between endpoints.
     this.cables = new RectIndex(scene.cables.flatMap(cable => {
@@ -96,6 +98,6 @@ export class CanvasSceneVisibility {
     const rect = { x: (-view.panX - margin) / zoom, y: (-view.panY - margin) / zoom,
       width: (view.width + margin * 2) / zoom, height: (view.height + margin * 2) / zoom };
     return { nodes: this.nodes.query(rect), cables: [...new Set(this.cables.query(rect).map(entry => entry.cable))], groups: this.groups.query(rect), plugs: this.plugs.query(rect),
-      ...(this.branches ? { branches: this.branches.query(rect) } : {}) };
+      ...(this.branches ? { branches: this.branches.query(rect) } : {}), ...(this.uniformTitles ? { uniformTitles: true } : {}) };
   }
 }

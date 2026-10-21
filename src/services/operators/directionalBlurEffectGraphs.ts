@@ -14,8 +14,8 @@ export type EditableDirectionalBlurEffectType = 'motion-blur' | 'radial-blur' | 
  * the centre (Radial Spin). The source is premultiplied into an rgba16float cache first (exact
  * filtering at alpha edges). Stage A averages a short box of length `step` with taps at most
  * one pixel apart into a second cache; stage B samples that cache at coarse taps one box
- * apart over the whole range. Negative amounts reverse the range (Motion: same streak, Zoom:
- * inward, Radial Zoom: outward, Spin: the other way round); every count uses its magnitude.
+ * apart over the whole range. Below 0, Motion and Radial Blur clamp the amount to 0 and pass the
+ * picture through (legacy); a negative Zoom Blur amount streaks inward. Counts use magnitudes.
  */
 function transform(g: BlurGraphBuilder, type: EditableDirectionalBlurEffectType, prefix: string, base: string, u: string): string {
   const id = (name: string) => `${prefix}-${name}`;
@@ -52,7 +52,9 @@ function createTwoStageBlurGraph(type: EditableDirectionalBlurEffectType): Effec
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
   g.number('zero', 0); g.number('one', 1); g.number('two', 2); g.number('half', .5);
   g.number('tiny', 1e-9); g.number('cover-epsilon', 1e-4); g.number('covered-floor', 1e-6);
-  const amount = g.bound('amount', 'amount');
+  const boundAmount = g.bound('amount', 'amount');
+  // Motion and Radial Blur leave the picture unchanged below 0, as their legacy shaders did.
+  const amount = type === 'zoom-blur' ? boundAmount : g.binary('amount-positive', 'math.max.scalar', boundAmount, 'zero');
 
   // Range of the group parameter: start, signed length; longest range and its length in pixels.
   let rangeStart: GraphPort = 'zero', rangeLength: string, longest: string, longestPx: string;

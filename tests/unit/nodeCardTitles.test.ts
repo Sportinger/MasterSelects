@@ -38,4 +38,31 @@ describe('node card titles', () => {
     expect(bands[0][0]).toBeLessThanOrEqual(1);
     expect(bands[0][0] + bands[0][2]).toBeGreaterThanOrEqual(node.width - 1);
   });
+
+  it('gives every zoomed-out title one size in a uniform-title scene, so short names do not outshout long ones', () => {
+    const fonts: Array<{ text: string; size: number }> = [];
+    const state: Record<string | symbol, unknown> = { canvas: { width: 800, height: 600 } };
+    const context = new Proxy(state, {
+      get: (target, key) => key in target ? target[key] : key === 'measureText'
+        ? (value: string) => ({ width: String(value).length * 0.6 * Number(/(\d+(?:\.\d+)?)px/.exec(String(target.font))?.[1] ?? 10) })
+        : key === 'fillText' ? (value: string) => { fonts.push({ text: value, size: Number(/(\d+(?:\.\d+)?)px/.exec(String(target.font))?.[1]) }); }
+          : () => undefined,
+      set: (target, key, value) => { target[key] = value; return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    const card = (id: string, label: string, x: number): CanvasNode => ({ id, label, description: '', kind: 'math', runtime: 'builtin', x, y: 0,
+      width: 180, height: 140, color: '#c9773c', selected: false, bypassed: false, bypassable: false, badges: [], ports: [] });
+    const theme: CanvasTheme = { background: '#111', card: '#1b1b1b', text: '#eee', muted: '#888', border: '#333', accent: '#4af' };
+    const titleSizes = (uniformTitles: boolean) => {
+      fonts.length = 0;
+      const scene: CanvasScene = { nodes: [card('a', 'Pairs', 0), card('b', 'Normalize by Weight', 240)], cables: [], groups: [], plugs: [], uniformTitles };
+      paintBase(context, scene, { zoom: 0.3, panX: 0, panY: 0, width: 800, height: 600, ratio: 1 }, theme);
+      const size = (title: string) => Math.max(...fonts.filter(entry => title.includes(entry.text) && entry.size > 13).map(entry => entry.size));
+      return [size('Pairs'), size('Normalize by Weight')];
+    };
+    const [shortFit, longFit] = titleSizes(false);
+    expect(shortFit).toBeGreaterThan(longFit);
+    const [shortUniform, longUniform] = titleSizes(true);
+    expect(shortUniform).toBe(longUniform);
+    expect(longUniform).toBe(longFit);
+  });
 });

@@ -40,7 +40,7 @@ Tip: for a natural defocus use Gaussian Blur; Box Blur is the graphic look.
 
 <figure class="docs-shot">
 
-![The window lights of the night street three times: the original, Gaussian Blur at Radius 25 with round soft glows, and Box Blur at Radius 25 with flat squares](assets/effects/box-vs-gaussian-lights.webp)
+![The window lights of the night street twice: Gaussian Blur at Radius 25 makes round, soft glows, Box Blur at Radius 25 flat squares](assets/effects/box-vs-gaussian-lights.webp)
 
 <figcaption>The same lights, close up: Gaussian Blur makes round glows, Box Blur flat squares.</figcaption>
 </figure>
@@ -56,7 +56,7 @@ Tip: for a natural defocus use Gaussian Blur; Box Blur is the graphic look.
 Smears the picture in one direction, as if the camera or the subject moved fast
 during the exposure.
 - **Length** – how far the streak reaches to each side, as a share of the picture width (of the height for vertical streaks). 0.03 is a quick move, 0.1 a fast pan.
-- **Angle** – the direction on screen, in radians: 0 is horizontal, 1.57 (90°) vertical, 0.79 (45°) diagonal.
+- **Angle** – the direction: 0 is horizontal, 1.57 vertical, 0.79 diagonal.
 
 Tip: keep Length small on faces; long streaks work best on lights and fabric.
 
@@ -96,143 +96,113 @@ strong, even burst.
 
 ## How the blur effects are built
 
-Every blur is a small node graph. The inspector shows its controls, the Node
-Workspace shows the nodes behind them, and you can change those nodes.
+Every blur is a small node graph. To see it, select the clip and open the
+**Nodes** tab; the arrow on a folder card opens that stage. Changes apply to this
+one effect. [Node Workspace](./Node-Workspace.md) shows how to add and connect nodes.
 
 <figure class="docs-shot">
 
 <div class="docs-shot-stage">
 
-![The blurred harbour in the preview next to Properties, Effects, with Gaussian Blur at Radius 10](assets/effects/editor/gaussian-blur-inspector.webp)
+![Properties, Effects with Gaussian Blur at Radius 10, beside a strip of the blurred preview](assets/effects/editor/gaussian-blur-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 438" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 497" aria-hidden="true" focusable="false">
 <defs><marker id="gaussian-blur-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M830 175 L830 91" marker-end="url(#gaussian-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="830" cy="175" r="18" /><text x="830" y="175" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M503 361 L587 361" marker-end="url(#gaussian-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="503" cy="361" r="18" /><text x="503" y="361" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M917 186 L917 270" marker-end="url(#gaussian-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="917" cy="186" r="18" /><text x="917" y="186" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M766 152 L766 68" marker-end="url(#gaussian-blur-inspector-arrow)" />
+<circle class="docs-shot-number" cx="766" cy="152" r="18" /><text x="766" y="152" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M357 394 L441 394" marker-end="url(#gaussian-blur-inspector-arrow)" />
+<circle class="docs-shot-number" cx="357" cy="394" r="18" /><text x="357" y="394" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M882 190 L882 274" marker-end="url(#gaussian-blur-inspector-arrow)" />
+<circle class="docs-shot-number" cx="882" cy="190" r="18" /><text x="882" y="190" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
-<figcaption>1 — Properties → Effects lists the effects of the selected clip. 2 — Radius, Gaussian Blur's one control (Fixed · Source: it can also be driven by a node). 3 — Bypass, to compare with the original.</figcaption>
+<figcaption>1 — Properties → Effects. 2 — Radius, the white Radius card in the graph. 3 — Bypass, to compare with the original.</figcaption>
 </figure>
 
-Each control is a node in the graph: **Radius** (2) is the white **Radius**
-card in the Gaussian Blur graph below. To see the graph, select the clip and
-open the **Nodes** tab (in the tab row Media · AI Studio · Nodes). The effect
-appears as folders, one per stage; the arrow on a folder card opens it. Changes
-apply to this one effect on this clip.
+### The shared idea
 
-### Gaussian Blur: three short passes
+All five blurs follow one recipe: weigh each colour by its transparency, read
+neighbouring pixels, weigh each read, add them up and divide by the total weight,
+then restore normal transparency. [Gaussian and Box Blur](#gaussian-blur-two-passes)
+do this along the rows, then along the columns.
+[Motion, Radial and Zoom Blur](#motion-radial-and-zoom-blur-two-stages) do it
+along a path, in short pieces first.
+
+### Gaussian Blur: two passes
 
 <figure class="docs-shot docs-shot--graph">
 
-![The Gaussian Blur graph from Input Frame through Premultiplied Source, Radius and Tap Count, Horizontal Pass, Vertical Pass and Straight Alpha Output to Output; the Constants and Coordinates folders are hidden](assets/effects/graphs/gaussian-blur.webp)
+![The Gaussian Blur graph: Input Frame and Radius on the left, then Premultiplied Source and Radius & Tap Count, Horizontal Pass, Vertical Pass, Straight Alpha Output and Output](assets/effects/graphs/gaussian-blur.webp)
 
-<figcaption>Gaussian Blur as it opens in the Node Workspace, with the Constants and Coordinates & Resources folders left out of the picture. Ports are named after what they carry.</figcaption>
+<figcaption>Gaussian Blur in the Node Workspace (Constants and Coordinates folders left out).</figcaption>
 </figure>
 
-A blur replaces every pixel with a weighted average of its neighbours. Gaussian
-Blur does that in short steps, from left to right:
-
-- **Premultiplied Source** weighs each colour by its transparency once and
-  keeps the result, so transparent pixels can never darken an edge.
-- **Radius & Tap Count** turns the Radius into the width of the bell curve
-  (**Sigma**) and decides how many reads each pass needs.
-- **Horizontal Pass** blurs along the rows, **Vertical Pass** blurs that along
-  the columns. Two short passes give the same picture as one big square of reads,
-  at a fraction of the cost.
-- **Straight Alpha Output** restores normal transparency.
+**Radius & Tap Count** turns Radius into the width of the bell curve (**Sigma**)
+and the number of reads. **Horizontal Pass** blurs the rows, **Vertical Pass**
+the columns of that result.
 
 ### Inside a pass
 
 <figure class="docs-shot docs-shot--graph">
 
-![The Horizontal Pass folder of Gaussian Blur opened. Top row: the stubs Tap Index, Pairs and Stride, Pair Tap Offsets, the stub Sigma, two Gaussian Falloff nodes, Merge Pair Weights, Combine Vector, the stub Resolution, Divide, the stub UV and Add. Bottom row: the stub Premultiplied Source, Sample Image, the stub Tap Count, Sequence Reduce, Normalize by Weight and Cache Image](assets/effects/graphs/gaussian-blur-horizontal-pass.webp)
+![The Horizontal Pass of Gaussian Blur as a recipe. Left column: the inputs Tap Index, Pairs and Stride feeding Pair Tap Offsets; top: Sigma and two Gaussian Falloff nodes feeding Merge Pair Weights; bottom: Premultiplied Source and Read Position feeding Sample Image; right: Tap Count, Sequence Reduce, Normalize by Weight and Cache Image](assets/effects/graphs/gaussian-blur-horizontal-pass.webp)
 
-<figcaption>Gaussian Blur's Horizontal Pass. Green cards are values from outside the folder. Top row: where to read and how much each read counts. The long cable carries the read position to Sample Image at the start of the bottom row, which reads, adds up, averages and caches.</figcaption>
+<figcaption>The Horizontal Pass, reduced to its recipe. Green cards come from elsewhere in the graph.</figcaption>
 </figure>
 
-1. **Pair Tap Offsets** lists where to read: the pixel itself and pairs of
-   neighbours, one step further out each time.
-2. Two **Gaussian Falloff** nodes decide how much each neighbour counts. They
-   are the kernel: swap them and the blur changes character.
-3. **Merge Pair Weights** folds each pair into one read (a speed trick, see
-   Technical details). **Combine Vector**, **Divide** and **Add** turn the offset
-   into a position in the picture.
-4. **Sample Image** reads the premultiplied picture there, **Sequence Reduce**
-   adds all reads up, **Normalize by Weight** divides by the total weight and
-   **Cache Image** keeps the result for the vertical pass.
+1. **Pair Tap Offsets** lists where to read: the pixel and pairs of neighbours.
+2. Two **Gaussian Falloff** nodes weigh each neighbour. They are the kernel.
+3. **Merge Pair Weights** folds each pair into one read (a speed trick).
+4. **Sample Image** reads, **Sequence Reduce** adds up, **Normalize by Weight**
+   averages and **Cache Image** keeps the result for the vertical pass.
 
-Remix: for a blur that stretches sideways, open **Vertical Pass** and give its
-two **Gaussian Falloff** nodes a smaller **Sigma**: put a **Multiply** with a
-value below 1 between the Sigma input and both falloffs. Values above 1 would
-cut the bell curve off.
+Remix: for a blur that stretches sideways, open **Vertical Pass** and put a
+**Multiply** with a value below 1 between the Sigma input and both **Gaussian
+Falloff** nodes.
 
 ### Box Blur: a different weight
 
-<figure class="docs-shot docs-shot--graph">
+<figure class="docs-shot docs-shot--float-right">
 
-![The Horizontal Pass of Box Blur: the stub Reach with two Subtract and two Clamp nodes take the place of the two Gaussian Falloff nodes; the rest is the same as in Gaussian Blur](assets/effects/graphs/box-blur-horizontal-pass.webp)
+![Inside Box Blur's Horizontal Pass: the inputs Reach and Far offset on the left feed Subtract, which feeds Clamp](assets/effects/graphs/box-blur-weight.webp)
 
-<figcaption>Box Blur's Horizontal Pass. Subtract and Clamp replace the Gaussian Falloff nodes; everything else is the same.</figcaption>
+<figcaption>The weight of one read in Box Blur: Subtract and Clamp, where Gaussian Blur has a Gaussian Falloff.</figcaption>
 </figure>
 
 Box Blur is the Gaussian graph with one change in both passes: every neighbour
-inside the radius counts fully. **Subtract** measures how far a read lies
-inside the **Reach** and **Clamp** limits that to 0–1, so the outermost pixel
-counts partly and an animated Radius grows smoothly.
+inside the radius counts fully. **Subtract** measures how far a read lies inside
+the **Reach**, and **Clamp** limits that to 0–1.
 
-Remix: this is the place to invent your own kernel. Any math nodes that turn
-the offset into a weight of 0 or more work here; change both passes the same
-way. The reads end just past the radius, so let the weight fall to 0 there.
+Remix: invent your own kernel here. Any math that turns the offset into a weight
+of 0 or more works; change both passes the same way.
+
+<div class="docs-float-end"></div>
 
 ### Motion, Radial and Zoom Blur: two stages
 
 <figure class="docs-shot docs-shot--graph">
 
-![The Motion Blur graph: Parameters and Input Frame on the left, then Premultiplied Source, Blur Range, Tap Counts and Box Length, Stage A, Stage B, Straight Alpha Output and Output; the Constants and Coordinates folders are hidden](assets/effects/graphs/motion-blur.webp)
+![The Motion Blur graph: Parameters and Input Frame on the left, then Blur Range and Premultiplied Source, Tap Counts & Box Length, Stage A, Stage B, Straight Alpha Output and Output](assets/effects/graphs/motion-blur.webp)
 
-<figcaption>Motion Blur with the Constants and Coordinates & Resources folders left out. Radial and Zoom Blur have the same stages.</figcaption>
+<figcaption>Motion Blur; Radial and Zoom Blur have the same stages.</figcaption>
 </figure>
 
-These blurs smear every pixel along a path: a straight line (Motion), a ray
-from the centre (Zoom, Radial Zoom) or a circle around it (Radial Spin). A
-long streak would need hundreds of reads per pixel, so they work in two stages:
-
-- **Blur Range** works out each pixel's path, from Angle and Length or from the
-  centre and Amount.
-- **Tap Counts & Box Length** cuts the longest path into equal short pieces.
-- **Stage A: Short Box (cached)** averages every pixel over one short piece and
-  caches the result.
-- **Stage B: Coarse Taps** reads that cache once per piece along the whole
-  path and averages the reads. A taper weight shapes the streak: Motion fades
-  both ends softly, Radial Zoom fades along the streak, Spin and Zoom Blur stay even.
+These blurs smear every pixel along a path: a line (Motion), a ray from the
+centre (Zoom) or a circle (Spin). **Blur Range** works out the path. **Stage A**
+averages one short piece of it and caches that; **Stage B** reads the cache once
+per piece along the whole path, so a long streak needs dozens of reads, not hundreds.
 
 <figure class="docs-shot docs-shot--graph">
 
-<div class="docs-shot-stage">
+![Motion Blur's taper inside Stage B, in one row: Position t, Multiply, Subtract, Multiply, Multiply, Exponential, then the input Box Weight and the Multiply that gives each read its weight](assets/effects/graphs/motion-blur-taper.webp)
 
-![The Stage B folder of Motion Blur opened: the coarse tap position on the left and middle, Sample Image, Sequence Reduce and Normalize by Weight on the right; the taper nodes end in Exponential, which feeds a Multiply that weighs each read](assets/effects/graphs/motion-blur-stage-b.webp)
-
-<svg class="docs-shot-overlay" viewBox="0 0 1017 727" aria-hidden="true" focusable="false">
-<defs><marker id="motion-blur-stage-b-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M595 705 L595 675" marker-end="url(#motion-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="595" cy="705" r="18" /><text x="595" y="705" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M888 659 L804 659" marker-end="url(#motion-blur-stage-b-arrow)" />
-<circle class="docs-shot-number" cx="888" cy="659" r="18" /><text x="888" y="659" class="docs-shot-number-text">2</text>
-</svg>
-</div>
-
-<figcaption>Motion Blur's Stage B. 1 — Exponential, the soft taper. 2 — the Multiply that weighs each read with it.</figcaption>
+<figcaption>Motion Blur's taper in Stage B: Exponential fades both ends of the streak; the last Multiply weighs each read with it.</figcaption>
 </figure>
 
-Remix: in Motion Blur's **Stage B** the taper is the **Exponential** node (1).
-Connect a **Value** of 1 to the input of the **Multiply** (2) that Exponential
-feeds, and the streak becomes even. Copy the same taper nodes into Zoom Blur's
-Stage B to let its burst fade out.
+Remix: for an even streak, open **Stage B**, unplug **Exponential** from input A
+of the last **Multiply** and plug a **Value** of 1 into A. Leave input B alone:
+it carries the Box Weight.
 
 ### Radial Blur: Zoom or Spin
 
@@ -240,57 +210,33 @@ Stage B to let its burst fade out.
 
 <div class="docs-shot-stage">
 
-![Radial Blur in Properties, Effects: Type set to Spin, Amount 0.5, Center X and Center Y 0.5](assets/effects/editor/radial-blur-inspector.webp)
+![Inside Radial Blur's Blur Range: Type feeds Greater Than; its Is Spin output and the inputs Zoom Range and Spin Arc feed a Switch that outputs Range Length](assets/effects/graphs/radial-blur-type.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 590 343" aria-hidden="true" focusable="false">
-<defs><marker id="radial-blur-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M22 139 L49 139" marker-end="url(#radial-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="139" r="18" /><text x="22" y="139" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M22 186 L49 186" marker-end="url(#radial-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="186" r="18" /><text x="22" y="186" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M22 233 L49 233" marker-end="url(#radial-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="233" r="18" /><text x="22" y="233" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M22 281 L49 281" marker-end="url(#radial-blur-inspector-arrow)" />
-<circle class="docs-shot-number" cx="22" cy="281" r="18" /><text x="22" y="281" class="docs-shot-number-text">4</text>
+<svg class="docs-shot-overlay" viewBox="0 0 590 356" aria-hidden="true" focusable="false">
+<defs><marker id="radial-blur-type-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M222 239 L222 155" marker-end="url(#radial-blur-type-arrow)" />
+<circle class="docs-shot-number" cx="222" cy="239" r="18" /><text x="222" y="239" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M506 258 L506 174" marker-end="url(#radial-blur-type-arrow)" />
+<circle class="docs-shot-number" cx="506" cy="258" r="18" /><text x="506" y="258" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
-<figcaption>Radial Blur in the inspector. 1 — Type. 2 — Amount. 3 — Center X. 4 — Center Y.</figcaption>
+<figcaption>1 — Greater Than turns Type into Is Spin. 2 — a Switch picks the Zoom or the Spin range.</figcaption>
 </figure>
 
-Radial Blur's controls enter the graph through its **Parameters** folder.
-**Type** (1) picks the path, **Amount** (2) how far it reaches, **Center X**
-(3) and **Center Y** (4) where it is anchored. Inside **Blur Range** a
-**Greater Than** test on Type drives **Switch** nodes that choose between a ray
-from the centre (Zoom) and a circle around it (Spin).
+Inside **Blur Range**, **Greater Than** (1) turns Type into Is Spin, and
+**Switch** nodes (2) pick the path: a ray for Zoom, a circle for Spin.
 
 <div class="docs-float-end"></div>
 
-<figure class="docs-shot docs-shot--graph">
+### Zoom Blur: an even burst
 
-<div class="docs-shot-stage">
+Zoom Blur has the same stages without a Type. At the same Amount it stretches
+much further than Radial Blur's Zoom type, and every read counts the same.
 
-![The Blur Range folder of Radial Blur opened: the stubs Center X, Center Y, Amount and Type on the left, Greater Than next to Type, the centre and farthest-corner math below, and Switch nodes on the right that pick the Zoom or Spin range](assets/effects/graphs/radial-blur-range.webp)
-
-<svg class="docs-shot-overlay" viewBox="0 0 1017 660" aria-hidden="true" focusable="false">
-<defs><marker id="radial-blur-range-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M358 170 L358 86" marker-end="url(#radial-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="358" cy="170" r="18" /><text x="358" y="170" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M695 249 L695 165" marker-end="url(#radial-blur-range-arrow)" />
-<circle class="docs-shot-number" cx="695" cy="249" r="18" /><text x="695" y="249" class="docs-shot-number-text">2</text>
-</svg>
-</div>
-
-<figcaption>Radial Blur's Blur Range. 1 — Greater Than turns Type into Is Spin. 2 — one of the Switch nodes that pick the Zoom or the Spin range.</figcaption>
-</figure>
-
-### Zoom Blur
-
-Zoom Blur has the same stages without a Type. Its **Blur Range** builds a ray
-from the centre on a logarithmic scale (**Natural Logarithm** of 1 + 0.5 ×
-Amount), so the short boxes of Stage A tile the streak exactly, and every read
-in Stage B counts the same. That even weight, reaching outward, is why it is
-stronger than Radial Blur's Zoom type for the same Amount.
+Remix: to let the burst fade outward, open **Stage B**, **Multiply** Position t
+by a Value of 0.5, **Subtract** that from a Value of 1 and plug the result into
+input A of the **Multiply** that weighs each read.
 
 ## Technical details
 
@@ -300,28 +246,32 @@ more in [Effects: editable blur kernels](./Effects.md#editable-blur-kernels),
 [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 
 - **Units.** Radius is in pixels of a 1080p frame (its shorter side) and scales
-  with the rendered size, so preview, export and 4K match. Motion Length reaches
-  Length × |(cos × width, sin × height)| to each side (the legacy length); the
-  direction is the on-screen angle in pixels. Radial and Zoom are relative to the frame.
+  with the rendered size, so preview, export and 4K match; 3D layer-space effects
+  count their layer's own resolution. Motion Length reaches
+  Length × |(cos × width, sin × height)| to each side (the legacy length); Angle is
+  the on-screen direction in radians (0–6.28). Radial and Zoom are relative to the frame.
 - **Premultiplied source.** The frame is premultiplied into an `rgba16float`
   cache first; every filtered read after that is exact at alpha edges.
 - **Separable kernels.** Gaussian and Box run a horizontal pass into an
   `rgba16float` cache, then a vertical pass: about 1.5 × Radius + 1 (Gaussian) or
-  Radius + 2 (Box) reads per pass at 1080p, i.e. 0.75 × Radius or Radius / 2
-  pairs per side. Gaussian uses sigma = Radius / 2, cut at 3 sigma.
+  Radius + 2 (Box) reads per pass at 1080p. Gaussian uses sigma = Radius / 2, cut
+  at 3 sigma.
 - **Pair-merged taps.** One linear-filtered read covers two neighbouring texels
   at their weighted centre, exact for any weights. Up to 127 pairs per side;
   beyond that the pairs spread out, and the tool result and inspector say so.
-- **Two stages.** Every directional tap is T(u) of a translation, a log-scale or
-  a rotation. Stage A averages a box of length h with reads at most one pixel
-  apart (up to 256), Stage B reads it h apart (up to 64), about
-  2 × √(2 × streak length in px) reads per pixel; longer streaks are reported.
-  Negative amounts reverse the path as before. Motion mirrors at the frame edge;
-  Radial and Zoom clamp.
+- **Two stages.** Each tap moves the read along a line (Motion), along a ray on a
+  logarithmic scale (Zoom, Radial Zoom) or along an arc (Spin), so the short boxes
+  of Stage A tile the path exactly. Stage A reads at most one pixel apart (up to
+  256 reads), Stage B one box apart (up to 64): about 2 × √(2 × streak length in
+  px) reads per pixel; longer streaks are reported. Motion mirrors at the frame
+  edge; Radial and Zoom clamp.
+- **Zoom against Radial Zoom.** Zoom Blur samples the scales 1 to
+  1 + 0.5 × Amount with even weights; Radial Zoom samples 1 − 0.2 × Amount ×
+  distance to 1 (distance in UV units: 0.5 is half the picture) with the weight
+  1 − t / 2. At Amount 0.3, half a picture from the centre, Zoom Blur's streak is
+  about five times longer.
+- **Below 0.** Motion and Radial Blur leave the picture unchanged, as before, and
+  the inspector and tool results say so; Zoom Blur streaks inward.
 - **Zero strength.** A blur at 0 is skipped, so the picture passes through exactly.
-- **Saved projects.** Untouched old blur graphs load as the current recipe;
-  edited graphs stay as saved (and show Samples again if they still read it).
-  Looks change: small Gaussian radii are stronger (Radius 3 about 2.5×), large
-  ones about 20 % softer, projects that are not 1080p scale with their size, and
-  Samples no longer changes anything. Motion lengths stay; diagonal angles are
-  now exact on screen.
+- **Saved projects.** Untouched old blur graphs upgrade automatically; edited
+  graphs stay as saved.

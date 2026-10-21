@@ -2,7 +2,8 @@
 // textures read like the GPU reads them (bilinear, clamp-to-edge, rgba16float caches), compared
 // with dense premultiplied kernels and with the legacy lengths saved projects rely on.
 import { describe, expect, it } from 'vitest';
-import { motionBlurHalfLengthPx, separableBlurTaps, type DirectionalBlurType } from '../../src/effects/blur/blurSampling';
+import { blurBudgetNotes, motionBlurHalfLengthPx, separableBlurTaps, type DirectionalBlurType } from '../../src/effects/blur/blurSampling';
+import { isNeutralBlurEffect } from '../../src/services/operators/blurIdentity';
 import { filmRoll } from '../../src/transitions/filmRoll';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
@@ -65,14 +66,21 @@ describe('directional blur signs and limits', () => {
   };
   const finite = (pixels: Pixel[]) => pixels.every(value => value.every(Number.isFinite));
 
-  it('renders negative amounts like the legacy shaders: Motion and Spin mirror, Zoom and Radial reverse', () => {
-    const same = (a: Pixel[], b: Pixel[]) => a.forEach((value, index) => value.forEach((channel, c) => expect(channel).toBeCloseTo(b[index][c], 5)));
-    same(sampleAt('motion-blur', { amount: -0.05, angle: 0.4 }), sampleAt('motion-blur', { amount: 0.05, angle: 0.4 }));
-    same(sampleAt('radial-blur', { mode: 'spin', amount: -0.5 }), sampleAt('radial-blur', { mode: 'spin', amount: 0.5 }));
-    for (const [type, params] of [['zoom-blur', { amount: -0.3 }], ['radial-blur', { amount: -0.5 }], ['zoom-blur', { amount: -5 }]] as const) {
-      const inward = sampleAt(type, params), identity = sampleAt(type, { ...params, amount: 0 });
-      expect(finite(inward), `${type} ${JSON.stringify(params)}`).toBe(true);
+  it('passes the picture through below 0 for Motion and Radial Blur like the legacy shaders; Zoom Blur streaks inward', () => {
+    // The legacy Motion and Radial shaders returned their input below Length 0.001 / Amount 0.01.
+    const source = [[10, 7], [48, 27], [90, 50]].map(([x, y]) => texture(x, y));
+    const same = (a: Pixel[], b: Pixel[]) => a.forEach((value, index) => value.forEach((channel, c) => expect(channel).toBeCloseTo(b[index][c], 2)));
+    for (const [type, params] of [['motion-blur', { amount: -0.05, angle: 0.4 }], ['radial-blur', { amount: -0.5 }],
+      ['radial-blur', { mode: 'spin', amount: -0.5 }]] as const) {
+      same(sampleAt(type, params), source);
+      expect(isNeutralBlurEffect({ type, params }, ...resolution), `${type} ${JSON.stringify(params)} is skipped`).toBe(true);
+      expect(blurBudgetNotes(type, params, ...resolution).join(' ')).toMatch(/below 0.*unchanged/);
+    }
+    for (const params of [{ amount: -0.3 }, { amount: -5 }]) {
+      const inward = sampleAt('zoom-blur', params), identity = sampleAt('zoom-blur', { amount: 0 });
+      expect(finite(inward), JSON.stringify(params)).toBe(true);
       expect(inward).not.toEqual(identity);
+      expect(isNeutralBlurEffect({ type: 'zoom-blur', params }, ...resolution)).toBe(false);
     }
   });
 

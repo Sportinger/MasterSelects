@@ -10,7 +10,9 @@
 //   effect   effect id (`gaussian-blur`), params: { radius: 12 } on top of the defaults
 //   image    Effect Lab image (tests/browser/effect-lab/images), default harbor_town.jpg
 //   preview  CSS px of the preview kept left of the inspector (0: inspector only), default 380
-//   top      "panel" (from the Properties tabs, default) or "card" (only the effect's card)
+//   top      "panel" (from the dock tabs, default), "tabs" (from the Properties sub-tabs, below
+//            the dock tab row) or "card" (only the effect's card)
+//   hide     button texts left out of the picture (e.g. an unrelated quick-add button)
 //   layout   "full" (docs column) or "float" (beside text): sizes the callouts, default "full"
 //   marks    numbered callouts, in order. A mark is a target or { target, from, label }:
 //              a parameter row label ("Radius", "Center X"), "tab:<sub-tab>" ("tab:Effects"),
@@ -69,6 +71,10 @@ async function setUp(page, shot) {
     await page.locator('button').filter({ hasText: /^Effects/ }).first().click();
   });
   await page.locator('.effect-header').first().waitFor({ timeout: 10000 });
+  // Controls named in `hide` are not part of what the picture explains.
+  if (shot.hide?.length) await page.evaluate(texts => {
+    for (const element of document.querySelectorAll('button')) if (texts.includes(element.textContent.trim())) element.style.display = 'none';
+  }, shot.hide);
   // No hover state or pointer in the picture; the preview settles on the effect.
   await page.mouse.move(viewport.width / 2, viewport.height - 4);
   await page.waitForTimeout(2500);
@@ -84,7 +90,6 @@ function measure({ preview, top, marks }) {
   const panelBox = box(panel), cardBox = box(card);
   const canvas = [...document.querySelectorAll('canvas')].map(element => ({ element, rect: element.getBoundingClientRect() }))
     .filter(({ rect }) => rect.right <= panelBox.left + 2).sort((a, b) => b.rect.width * b.rect.height - a.rect.width * a.rect.height)[0];
-  const crop = { left: Math.max(0, panelBox.left - preview), top: top === 'card' ? cardBox.top - 8 : panelBox.top, right: panelBox.right, bottom: Math.min(window.innerHeight, cardBox.bottom + 12) };
   const find = target => {
     if (target.startsWith('preview:')) {
       const [x, y] = target.slice(8).split(',').map(Number), rect = canvas.rect;
@@ -102,6 +107,10 @@ function measure({ preview, top, marks }) {
     return [...card.querySelectorAll('*')].find(element => element.children.length === 0 && !header.contains(element)
       && element.textContent.trim() === target);
   };
+  // `tabs`: from the row of Properties sub-tabs (Transform, Color, Effects, …), below the dock tabs.
+  const tabRow = top === 'tabs' ? find('tab:Effects')?.parentElement : undefined;
+  const cropTop = top === 'card' ? cardBox.top - 8 : tabRow ? tabRow.getBoundingClientRect().top : panelBox.top;
+  const crop = { left: Math.max(0, panelBox.left - preview), top: Math.max(0, cropTop), right: panelBox.right, bottom: Math.min(window.innerHeight, cardBox.bottom + 12) };
   return { crop, marks: marks.map(mark => {
     const target = typeof mark === 'string' ? mark : mark.target;
     const found = find(target);

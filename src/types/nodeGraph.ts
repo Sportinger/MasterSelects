@@ -235,6 +235,8 @@ export interface NodeGraph {
     composition?: { operatorId: string; description: string; position: NodeGraphLayout; inputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }>; outputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }> } }>;
   /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
   expandedNodes?: NodeGraphNode[];
+  /** Zoomed-out card titles: `uniform` gives every card one size (docs pictures), instead of each filling its card. */
+  overviewTitles?: 'fit' | 'uniform';
 }
 
 export interface NodeGraphView {

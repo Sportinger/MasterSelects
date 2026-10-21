@@ -28,7 +28,7 @@ interface ResolveEffectParamRowProps {
 /** Few enough decimals that a value with its unit (" EV", "°") fits the field. */
 const decimalsFor = (step: number) => step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
 
-/** One parameter row; returns null for types without a Resolve row yet (callers fall back). */
+/** One parameter row for the types `hasResolveEffectParamRow` accepts (callers check it first). */
 export function ResolveEffectParamRow({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit }: ResolveEffectParamRowProps) {
   const property = `effect.${effect.id}.${paramName}`;
   // A parameter that can take a node source gets the source-aware row.

@@ -16,6 +16,8 @@ export interface ImageGraphPassBatch {
   readonly resources: Map<string, { view: GPUTextureView; identity: string }>;
   /** Pooled pass textures this batch holds until `releaseBatch` or the next encoder. */
   readonly leases: PooledPassTexture[];
+  /** Set by `releaseBatch`: its views may already hold another effect's pass output. */
+  released?: boolean;
   encoder?: GPUCommandEncoder;
   sourceResource?: GPUTextureView | GPUExternalTexture; sampler?: GPUSampler; width?: number; height?: number; timelineTimeSeconds?: number;
 }
@@ -70,12 +72,17 @@ export class ImageGraphPassRuntime {
   }
 
   createBatch(): ImageGraphPassBatch { return { encoded: new Map(), resources: new Map(), leases: [] }; }
-  /** The batch's resources are no longer read: its textures go back to the pool. */
-  releaseBatch(batch: ImageGraphPassBatch | undefined): void { if (batch) this.giveBack(batch.leases.splice(0)); }
+  /** The batch's resources are no longer read: its textures go back to the pool and the batch
+   * forgets their views, so nothing can read a texture the next lease overwrites. */
+  releaseBatch(batch: ImageGraphPassBatch | undefined): void {
+    if (!batch) return;
+    this.giveBack(batch.leases.splice(0)); batch.encoded.clear(); batch.resources.clear(); batch.released = true;
+  }
   getBatchResourceView(batch: ImageGraphPassBatch, resourceId: string) { return batch.resources.get(resourceId)?.view; }
 
   encode(options: EncodeImageGraphPassesOptions): boolean {
     if (this.disposed) throw new Error('ImageGraphPassRuntime is disposed.');
+    if (options.batch?.released) throw new Error('Image graph pass batch was released; create a new batch.');
     const passes = options.plan.passes?.length ? options.plan.passes
       : options.plan.resourceInputs?.length
         ? [{ id: 'image-pass:final', program: options.plan, inputResources: options.plan.resourceInputs, outputResource: undefined }]

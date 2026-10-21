@@ -348,8 +348,9 @@ describe('motion adjustment contract freeze', () => {
         surfaces: allSurfaces,
         parameters: {
           radius: numberPolicy(10, 0, 50, false),
-          // Still accepted for saved projects; the separable kernel ignores it.
-          samples: { ...numberPolicy(5, 1, 64, true), ignored: expect.stringContaining('no effect') },
+          // Still accepted for saved projects; the separable kernel ignores it (the effect's
+          // `deprecated` note tells tool callers).
+          samples: numberPolicy(5, 1, 64, true),
         },
       },
     });

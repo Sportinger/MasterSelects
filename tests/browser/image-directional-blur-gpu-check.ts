@@ -21,7 +21,7 @@ const cases = [
   { name: 'zoom-default', type: 'zoom-blur', params: {}, width: 64, height: 37 },
   { name: 'zoom-off-center', type: 'zoom-blur', params: { amount: 0.65, centerX: 0.3, centerY: 0.7 }, width: 64, height: 37 },
   { name: 'zoom-max', type: 'zoom-blur', params: { amount: 1, centerX: 1, centerY: 0 }, width: 48, height: 27 },
-  // Negative amounts reverse the range (legacy): finite pixels, never NaN.
+  // Below 0 Motion and Radial Blur pass the picture through (legacy); Zoom Blur streaks inward.
   { name: 'motion-negative', type: 'motion-blur', params: { amount: -0.05, angle: 0.4 }, width: 64, height: 37 },
   { name: 'zoom-negative', type: 'zoom-blur', params: { amount: -0.3 }, width: 64, height: 37 },
   { name: 'radial-negative', type: 'radial-blur', params: { amount: -0.5 }, width: 64, height: 37 },
@@ -35,10 +35,10 @@ export async function checkDirectionalBlurGpu(device: GPUDevice): Promise<number
     async (item, input, actual, rerender) => {
       const inside = (index: number) => (index % ROW_PITCH) < item.width * 4;
       if (item.name.endsWith('alpha-edge')) { assertCleanAlphaEdge(item.name, actual, item.width, item.height); return 1; }
-      if (item.name.endsWith('-negative') && !actual.some((value, index) => inside(index) && value !== input[index])) {
+      if (item.name === 'zoom-negative' && !actual.some((value, index) => inside(index) && value !== input[index])) {
         throw new Error(`${item.name} did not blur`);
       }
-      if (item.name.endsWith('-zero')) {
+      if (item.name.endsWith('-zero') || (item.name.endsWith('-negative') && item.type !== 'zoom-blur')) {
         // Amount 0 is the identity up to the premultiplied rgba16float round trip (fully transparent RGB is not kept).
         actual.forEach((value, index) => { if (inside(index) && input[index - (index % 4) + 3] > 0 && Math.abs(value - input[index]) > 1) {
           throw new Error(`${item.name} changed pixels at byte ${index}`);

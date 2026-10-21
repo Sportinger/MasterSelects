@@ -3,7 +3,8 @@ import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
 
 const size = (value: unknown, fallback: number) => typeof value === 'number' && value > 0 ? value : fallback;
 
-/** Says where a blur stops being exact at the active composition size (no silent clamps). */
+/** Says where a blur stops being exact at the size of the composition being edited, which owns the
+ * clip and sets the export size (no silent clamps). The renderer logs other rendered sizes. */
 export function EffectBudgetNotice({ effectType, params }: { effectType: string; params: Record<string, unknown> }) {
   const width = size(useMediaStore(state => state.getActiveComposition?.()?.width), 1920);
   const height = size(useMediaStore(state => state.getActiveComposition?.()?.height), 1080);
