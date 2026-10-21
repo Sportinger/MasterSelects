@@ -32,15 +32,20 @@ import { migrateAnalogSignalGraph } from './analogSignalMigration';
 import { createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
 import { getEffect } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
-import { createDefaultContextualEffectGraph, type EditableContextualEffectType } from './contextualEffectGraphs';
+import type { EditableContextualEffectType } from './contextualEffectGraphs';
+import { createDefaultGrainGraph } from './grainEffectGraph';
+import { createDefaultSharpenGraph } from './sharpenEffectGraph';
+import { createDefaultVignetteGraph } from './vignetteEffectGraph';
+import { createDefaultScanlinesGraph } from './scanlinesEffectGraph';
 import { createDefaultSamplingEffectGraph, type EditableSamplingEffectType } from './samplingEffectGraphs';
 import { createDefaultBlockEffectGraph, type EditableBlockEffectType } from './blockEffectGraphs';
 import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
 import { createDefaultBlurEffectGraph, type EditableBlurEffectType } from './blurEffectGraphs';
 import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectType } from './directionalBlurEffectGraphs';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
-import { createDefaultGlowGraph } from './glowEffectGraph';
+import { createDefaultGlowGraph } from './glowBloomEffectGraph';
 import { upgradeGlowGraph } from './glowGraphUpgrade';
+import { createEarlierStylizeGraph, stylizePresentation, upgradePointwiseStylizeGraph } from './stylizeRecipes';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
 import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
@@ -174,8 +179,9 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         || effectType === 'vector-tiling' || effectType === 'embroidery' || effectType === 'outline' || effectType === 'bricks'
         ? () => createDefaultGeometryFragmentGraph(effectType)
       : effectType === 'threshold' || effectType === 'posterize' ? () => createDefaultPointwiseEffectGraph(effectType)
-        : effectType === 'vignette' || effectType === 'scanlines' || effectType === 'grain'
-          ? () => createDefaultContextualEffectGraph(effectType)
+        : effectType === 'grain' ? createDefaultGrainGraph
+        : effectType === 'vignette' ? createDefaultVignetteGraph
+        : effectType === 'scanlines' ? createDefaultScanlinesGraph
         : effectType === 'ascii' ? createDefaultAsciiGraph
         : effectType === 'number-field' ? createDefaultNumberFieldGraph
         : effectType === 'grid-glyph' ? createDefaultGridGlyphGraph
@@ -220,7 +226,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
           ? () => createDefaultSamplingEffectGraph(effectType)
         : effectType === 'blockify' || effectType === 'block-mosaic'
           ? () => createDefaultBlockEffectGraph(effectType)
-        : effectType === 'box-blur' || effectType === 'gaussian-blur' || effectType === 'sharpen'
+        : effectType === 'sharpen' ? createDefaultSharpenGraph
+        : effectType === 'box-blur' || effectType === 'gaussian-blur'
           ? () => createDefaultBlurEffectGraph(effectType)
         : effectType === 'motion-blur' || effectType === 'radial-blur' || effectType === 'zoom-blur'
           ? () => createDefaultDirectionalBlurGraph(effectType)
@@ -237,8 +244,12 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     if (known && known.signature === signature && (options.inspectionOnly || known.params === effect.params)) return known.graph;
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
-      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved) : saved;
-    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
+      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
+        : upgradePointwiseStylizeGraph(effectType, saved);
+    // Stylize effects saved with their earlier recipe (before 2026-10-21) keep it and its folder plan.
+    const earlier = stylizePresentation(effectType, presented);
+    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), earlier?.key ?? effectType,
+      earlier?.createDefault ?? fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
@@ -254,6 +265,17 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
   if (effect.type === WEAVE_EFFECT_TYPE) return expandOperatorCompositions(weaveOperatorGraph(params));
   if (effect.type === 'face-cables') return cableOperatorGraph(params);
   throw new Error('This effect has no operator graph.');
+}
+
+/**
+ * Project-file entry point. An effect saved before effect graphs existed (no graph at all) rendered
+ * an earlier recipe: a rebuilt stylize effect (2026-10-21) gets that recipe instead of the current
+ * one, so the project keeps its look. A graphless effect in the running editor is a new one.
+ */
+export function migrateLoadedEffectOperatorGraph(effect: Effect): Effect {
+  const graphless = !effect.operatorGraph && effect.params[EFFECT_GRAPH_PARAM] === undefined;
+  const earlier = graphless ? createEarlierStylizeGraph(effect.type) : undefined;
+  return migratePersistedEffectOperatorGraph(earlier ? { ...effect, operatorGraph: earlier } : effect);
 }
 
 /** Converts the former JSON parameter into the canonical effect-owned field.

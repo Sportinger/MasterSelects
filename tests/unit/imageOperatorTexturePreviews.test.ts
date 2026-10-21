@@ -3,7 +3,7 @@ import { captureImageOperatorPreviews } from '../../src/services/nodePreview/ima
 import { imageOperatorPreviewStage } from '../../src/services/nodePreview/imageOperatorPreviewStages';
 import { nodePreviewTextureTap } from '../../src/services/nodePreview/NodePreviewTextureTap';
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
-import { createDefaultScanlinesGraph, createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierScanlinesGraph as createDefaultScanlinesGraph, createEarlierVignetteGraph as createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import type { Effect } from '../../src/types/effects';
 import { createDefaultPixelateGraph } from '../../src/services/operators/samplingEffectGraphs';
 import * as graphOwner from '../../src/services/operators/effectGraphOwner';

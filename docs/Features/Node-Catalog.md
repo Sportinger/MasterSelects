@@ -237,6 +237,21 @@ primitive patterns can adopt the same definitions across image effects.
 The numeric Value family exposes Float and Integer variants in the inspector;
 Integer truncates toward zero and keeps the number-port contract.
 
+Two small image nodes carry the rebuilt stylize recipes and are free to reuse:
+
+- **Random (Cell)** (`noise.cell-hash.vec2`) gives a uniform value from 0 to 1 for
+  each whole-number cell of its input (the input is rounded down), from an integer
+  PCG hash: identical on every GPU and in the software renderer, and without the
+  stripes a sine hash (Random (Hash)) shows at large coordinates. Film Grain blends
+  four of them into smooth value noise; Vignette uses two per pixel as its
+  anti-banding dither.
+- **Cache Image** (`image.materialize`) has a **Resolution** setting (Full, 1/2 …
+  1/1024): the cached pass renders at that fraction of the frame (at least one
+  pixel) and later passes read it with normalized UV, so it acts as a smooth, cheaper
+  copy. It is a fixed setting: it decides texture sizes before rendering, so it
+  cannot be animated or bound to a parameter (the compiler says so). Glow builds its
+  bloom pyramid from ten such levels.
+
 ## Categories, names and visibility
 
 `src/services/operators/operatorTaxonomy.ts` is the one presentation taxonomy for

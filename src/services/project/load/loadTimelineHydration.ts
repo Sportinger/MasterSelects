@@ -30,7 +30,7 @@ import type {
 } from '../../../types';
 import { calcRangeCoverage } from './loadMediaCacheHydration';
 import { recoverPersistedTranscriptStatus } from '../../transcription/persistedTranscriptStatus';
-import { migratePersistedEffectOperatorGraph } from '../../operators/effectGraphOwner';
+import { migrateLoadedEffectOperatorGraph } from '../../operators/effectGraphOwner';
 import { normalizeCompositionRenderSettings } from '../../../engine/native3d/pathtrace/contracts/ptTypes';
 import { quantizeTimeToFrame, quantizeRetimeClipTimings } from '../../timeline/retime/clipRetimeQuantization';
 import { normalizeCompositionGuides } from '../../compositionGuides';
@@ -308,7 +308,7 @@ export function convertProjectCompositionToStore(
         terrainAttachment: cloneTerrainAttachment(c.terrainAttachment),
         terrainScreenAnchor: cloneTerrainScreenAnchor(c.terrainScreenAnchor),
         terrainAnchorConnector: cloneTerrainAnchorConnector(c.terrainAnchorConnector),
-        effects: c.effects.map((effect): Effect => migratePersistedEffectOperatorGraph({
+        effects: c.effects.map((effect): Effect => migrateLoadedEffectOperatorGraph({
           id: effect.id,
           name: effect.name,
           type: effect.type as Effect['type'],

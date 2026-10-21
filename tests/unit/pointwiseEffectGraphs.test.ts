@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { POSTERIZE_PARAMS, THRESHOLD_PARAMS } from '../../src/effects/stylize/pointwiseParams';
-import { createDefaultPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { createEarlierPointwiseEffectGraph as createDefaultPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
 import { setOperatorParameter } from '../../src/services/operators/effectGraphEditing';
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';

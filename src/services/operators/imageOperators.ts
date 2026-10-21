@@ -2,6 +2,7 @@ import type { OperatorDefinition, OperatorPort } from '../../types/operatorGraph
 import { MOTION_IMAGE_OPERATORS } from './motionImageOperators';
 import { GLYPH_FONT_OPTIONS } from '../../effects/_shared/glyphFonts';
 import { TEXT_ATLAS_DEFAULT_CHARACTERS, TEXT_ATLAS_MAX_CHARACTERS } from './imageOperatorGlyphResources';
+import { CACHE_IMAGE_SCALE_OPTIONS } from './imageResourceScale';
 
 const port = (id: string, type: OperatorPort['type'], label: string, required = false): OperatorPort =>
   ({ id, type, label, required, ...(type === 'image' && required
@@ -240,8 +241,9 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
     inputs: [], outputs: [port('image', 'image', 'Image')], parameters: [], addable: false,
     consumers: ['image'], implementation: 'shared' }), state: 'frame-history', fusion: 'pass-boundary' },
   { ...imageOperator({ id: 'image.materialize', family: 'image.materialize', variant: 'rgba16float', label: 'Cache Image',
-    description: 'Stores an image expression in an internal rgba16float resource before downstream evaluation.',
-    inputs: [port('image', 'image', 'Image', true)], outputs: [port('image', 'image', 'Image')], parameters: [], addable: true }), fusion: 'pass-boundary' },
+    description: 'Stores an image expression in an internal rgba16float resource before downstream evaluation. Resolution renders the cache at a fraction of the frame (a smooth, cheaper copy, sampled with normalized UV); it is a fixed setting and cannot be animated.',
+    inputs: [port('image', 'image', 'Image', true)], outputs: [port('image', 'image', 'Image')],
+    parameters: [{ id: 'scale', label: 'Resolution', type: 'select', default: '1', options: CACHE_IMAGE_SCALE_OPTIONS, animatable: false }], addable: true }), fusion: 'pass-boundary' },
   imageOperator({ id: 'image.resource-input', label: 'Materialized Resource', description: 'Compiler-owned materialized image input.',
     inputs: [], outputs: [port('image', 'image', 'Image')], parameters: [], addable: false }),
   ...(['image', 'scalar'] as const).map(variant => ({ ...imageOperator({ id: variant === 'image' ? 'image.temporal-smooth' : 'image.temporal-smooth.scalar',
@@ -312,6 +314,9 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
   imageOperator({ id: 'vector.reduce-min.vec2', family: 'vector.reduce-min', variant: 'vec2', label: 'Smallest Component', description: 'Returns the smaller vec2 component.',
     inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
   imageOperator({ id: 'noise.hash2d.vec2', family: 'noise.hash2d', variant: 'vec2', label: 'Random (Hash)', description: 'Deterministic shared two-dimensional sine hash.',
+    inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
+  imageOperator({ id: 'noise.cell-hash.vec2', family: 'noise.cell-hash', variant: 'vec2', label: 'Random (Cell)',
+    description: 'Uniform random value from 0 to 1 for each whole-number cell of the input (the input is rounded down), from an integer PCG hash: identical on every GPU and in software, and free of the stripes a sine hash shows at large coordinates. Neighbouring cells are unrelated; offset the input to get another pattern.',
     inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
   imageOperator({ id: 'vector.dot.vec2', family: 'vector.dot', variant: 'vec2', label: 'Dot Product', description: 'Dot product of two vec2 values.',
     inputs: [port('a', 'vec2', 'A', true), port('b', 'vec2', 'B', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),

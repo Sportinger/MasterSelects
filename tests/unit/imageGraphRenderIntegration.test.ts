@@ -15,8 +15,8 @@ import { threshold } from '../../src/effects/stylize/threshold';
 import { posterize } from '../../src/effects/stylize/posterize';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { createOperatorCompositePipeline } from '../../src/engine/pipeline/compositor/operatorPipeline';
-import { createDefaultPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
-import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierPointwiseEffectGraph as createDefaultPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { createEarlierScanlinesGraph, createEarlierVignetteGraph as createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import { vignette } from '../../src/effects/stylize/vignette';
 import { scanlines } from '../../src/effects/stylize/scanlines';
 import { pixelate } from '../../src/effects/distort/pixelate';
@@ -89,14 +89,15 @@ describe('image graph render integration', () => {
   });
 
   it('keeps contextual graphs in a fullscreen pass and supplies fragment UV', () => {
-    const instance = { id: 'vignette-test', type: 'vignette', name: 'Vignette', enabled: true, params: {} };
+    // The earlier recipe (saved projects) reads only UV; the current one also reads the resolution.
+    const instance = { id: 'vignette-test', type: 'vignette', name: 'Vignette', enabled: true, params: {}, operatorGraph: createDefaultVignetteGraph() };
     expect(splitLayerEffects([instance]).complexEffects).toEqual([instance]);
     const definition = imageGraphDefinition(instance, vignette as FullscreenEffectDefinition);
     expect(definition.shader).toContain('evaluateImageGraph(textureSample(inputTex, texSampler, input.uv), input.uv, imageParameters)');
   });
 
   it('packs composition time after the shared parameter block without specializing the shader key', () => {
-    const instance = { id: 'scanlines-time', type: 'scanlines', name: 'Scanlines', enabled: true, params: {} };
+    const instance = { id: 'scanlines-time', type: 'scanlines', name: 'Scanlines', enabled: true, params: {}, operatorGraph: createEarlierScanlinesGraph() };
     const atTwo = imageGraphDefinition(instance, scanlines as FullscreenEffectDefinition, 2);
     const atThree = imageGraphDefinition(instance, scanlines as FullscreenEffectDefinition, 3);
     expect(atTwo.id).toBe(atThree.id);

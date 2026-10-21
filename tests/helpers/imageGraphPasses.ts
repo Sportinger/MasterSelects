@@ -10,6 +10,8 @@ export interface PassEvaluationOptions {
    * Without it a cached resource is evaluated exactly at the sampled UV (an idealised cache).
    */
   filterResources?: boolean;
+  /** Timeline seconds for plans that read time (for example Sharpen's halo window blend). */
+  timelineTimeSeconds?: number;
   /** Store cached texels as float16, like the rgba16float caches. */
   float16?: boolean;
 }
@@ -57,7 +59,8 @@ export function createImagePassEvaluator(plan: ImageOperatorPlan, resolution: [n
     ? bilinear(resolution[0], resolution[1], (x, y) => texel(id, x, y), sampled)
     : evaluate(producer(id), sampled);
   function evaluate(program: ImageOperatorPlan, at: [number, number]): Pixel {
-    return evaluateImageOperatorPlan(program, sampleImage(at), { uv: at, resolution, sampleImage, sampleResource });
+    return evaluateImageOperatorPlan(program, sampleImage(at), { uv: at, resolution, sampleImage, sampleResource,
+      timelineTimeSeconds: options.timelineTimeSeconds ?? 0 });
   }
   return uv => evaluate(plan, uv);
 }

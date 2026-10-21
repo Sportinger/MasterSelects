@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { VIGNETTE_PARAMS } from '../../src/effects/stylize/vignette/parameters';
-import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierVignetteGraph as createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import {
   effectOperatorGraph,
   effectOperatorParams,
@@ -25,7 +25,7 @@ describe('contextual image effect graph ownership', () => {
     expect(getEffect('vignette')?.params).toBe(VIGNETTE_PARAMS);
     expect(VIGNETTE_PARAMS).toMatchObject({
       amount: { default: 0.5, min: 0, max: 1 }, size: { default: 0.5, min: 0, max: 1.5 },
-      softness: { default: 0.5, min: 0, max: 1 }, roundness: { default: 1, min: 0.5, max: 2 },
+      softness: { default: 0.5, min: 0, max: 1 }, roundness: { default: 1, min: 0, max: 1 },
     });
     expect(isImageGraphEffectType('vignette')).toBe(true);
     expect(isLocalImageEffectType('vignette')).toBe(false);
@@ -47,7 +47,8 @@ describe('contextual image effect graph ownership', () => {
   });
 
   it('keeps UV vec2 component labels distinct from RGBA color channels', () => {
-    const vignetteEffect = effect();
+    // The earlier recipe (saved projects) builds the aspect from Roundness.
+    const vignetteEffect = { ...effect(), operatorGraph: createDefaultVignetteGraph() };
     const projected = buildEffectOperatorGraph(createMockClip({ effects: [vignetteEffect] }), vignetteEffect);
     const aspect = projected.nodes.find(node => node.id === 'aspect');
     expect(aspect?.inputs.map(port => port.label)).toEqual(['X', 'Y']);

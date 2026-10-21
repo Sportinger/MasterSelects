@@ -1,11 +1,14 @@
-// Glow Effect - bright pass, separable prefilter and per-axis ring sampling.
-// Rendering is owned by the editable operator graph (services/operators/glowEffectGraph.ts);
-// shader.wgsl holds its three-pass WGSL reference plus `glowFragment`, a single-pass
-// variant without the prefilter that compiles under the generic effect layout.
-// All of them follow glowSampling.ts.
+// Glow Effect - a lens bloom: soft-knee bright pass, a half-size pyramid and a tent upsample.
+// Rendering is owned by the editable operator graph (services/operators/glowBloomEffectGraph.ts);
+// its contract is glowBloom.ts. Glows saved before the bloom keep their ring graph
+// (services/operators/glowEffectGraph.ts, contract glowSampling.ts); shader.wgsl is the WGSL
+// reference of that ring recipe and is only used to prewarm the generic effect layout.
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { glowParamNotes } from './glowBloom';
+
+const RING_ONLY = 'Only Glows saved with the earlier ring version read it; the bloom chooses its own sampling, so it has no effect here.';
 
 export const glow: EffectDefinition = {
   id: 'glow',
@@ -15,23 +18,32 @@ export const glow: EffectDefinition = {
   shader,
   entryPoint: 'glowFragment',
   uniformSize: 32, // 8 floats
-  // Reports clamped quality (rings, samples, prefilter reach) in the inspector.
-  extraControls: () => import('./GlowQualityNote'),
+  // The earlier ring version of saved Glows: its quality limits and an update offer.
+  extraControls: () => import('../StylizeRecipeNote'),
 
   params: {
     amount: {
       type: 'number',
       label: 'Amount',
-      default: 5,
+      default: 1,
       min: 0,
       max: 5,
-      step: 0.1,
+      step: 0.05,
       animatable: true,
     },
     threshold: {
       type: 'number',
       label: 'Threshold',
-      default: 0.7935,
+      default: 0.6,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+    },
+    softness: {
+      type: 'number',
+      label: 'Softness',
+      default: 0.5,
       min: 0,
       max: 1,
       step: 0.01,
@@ -40,21 +52,13 @@ export const glow: EffectDefinition = {
     radius: {
       type: 'number',
       label: 'Radius',
-      default: 1,
-      min: 1,
-      max: 100,
+      default: 40,
+      min: 0,
+      max: 300,
       step: 1,
       animatable: true,
     },
-    softness: {
-      type: 'number',
-      label: 'Softness',
-      default: 0.496,
-      min: 0.1,
-      max: 1,
-      step: 0.05,
-      animatable: true,
-    },
+    color: { type: 'color', label: 'Color', default: '#ffffff', graphOnly: true },
     rings: {
       type: 'number',
       label: 'Rings',
@@ -63,7 +67,8 @@ export const glow: EffectDefinition = {
       max: 32,
       step: 1,
       animatable: false,
-      quality: true,
+      hidden: true,
+      deprecated: RING_ONLY,
     },
     samplesPerRing: {
       type: 'number',
@@ -73,16 +78,19 @@ export const glow: EffectDefinition = {
       max: 64,
       step: 1,
       animatable: false,
-      quality: true,
+      hidden: true,
+      deprecated: RING_ONLY,
     },
   },
 
+  paramWarnings: (params, width, height) => glowParamNotes(params, width, height),
+
   packUniforms: (params, width, height) => {
     return new Float32Array([
-      params.amount as number ?? 5,
-      params.threshold as number ?? 0.7935,
-      params.radius as number ?? 1,
-      params.softness as number ?? 0.496,
+      params.amount as number ?? 1,
+      params.threshold as number ?? 0.6,
+      params.radius as number ?? 40,
+      params.softness as number ?? 0.5,
       width,
       height,
       params.rings as number ?? 6.85,

@@ -4,7 +4,7 @@ import { createLegacyAlphaGlowGraph } from '../../src/services/operators/legacyA
 import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { upgradeGlowGraph } from '../../src/services/operators/glowGraphUpgrade';
-import { createDefaultGlowGraph } from '../../src/services/operators/glowEffectGraph';
+import { createRingGlowGraph as createDefaultGlowGraph } from '../../src/services/operators/glowEffectGraph';
 
 const BRIGHT_PASS = ['sample-luma', 'sample-bright', 'bright-sample'];
 

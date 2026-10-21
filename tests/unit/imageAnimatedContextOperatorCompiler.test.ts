@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { grain } from '../../src/effects/stylize/grain';
 import { scanlines } from '../../src/effects/stylize/scanlines';
-import { createDefaultGrainGraph, createDefaultScanlinesGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierGrainGraph as createDefaultGrainGraph, createEarlierScanlinesGraph as createDefaultScanlinesGraph } from '../../src/services/operators/contextualEffectGraphs';
 import { effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
@@ -48,7 +48,7 @@ describe('timeline-context image operator graphs', () => {
   it('keeps the legacy parameter metadata and creates graphless canonical owners', () => {
     expect(scanlines.params).toMatchObject({ density: { default: 5, min: 1, max: 20 }, opacity: { default: 0.3, min: 0, max: 1 }, speed: { default: 0, min: 0, max: 5 } });
     expect(grain.params).toMatchObject({ amount: { default: 0.1, min: 0, max: 0.5 }, size: { default: 1, min: 0.5, max: 5 },
-      speed: { default: 1, min: 0, max: 5 }, seed: { default: 0, min: 0, max: 65535 } });
+      speed: { default: 1, min: 0, max: 1 }, seed: { default: 0, min: 0, max: 65535 }, chroma: { default: 0, min: 0, max: 1, graphOnly: true } });
     expect(effectOperatorGraph({ type: 'scanlines', params: scanParams }).nodes.some(node => node.operator === 'image.timeline-time')).toBe(true);
     expect(effectOperatorGraph({ type: 'grain', params: grainParams }).nodes.some(node => node.operator === 'color.luminance-rec709.rgb')).toBe(true);
     const migrated = migratePersistedEffectOperatorGraph({ id: 'legacy-grain', name: 'Film Grain', type: 'grain', enabled: true,

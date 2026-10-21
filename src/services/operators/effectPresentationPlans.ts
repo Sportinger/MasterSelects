@@ -53,13 +53,50 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^(coarse-|longest-px|step)/.test(id) ? 'count'
           : /^(result|coverage-floor)/.test(id) ? 'finish' : 'range',
   };
-  if (type === 'sharpen') return {
+  if (type === 'sharpen-earlier') return {
     labels: { sampling: 'Kernel Sampling', weight: 'Gaussian Weight', average: 'Weighted Average', finish: 'Sharpen & Alpha' },
     stage: ({ id }) => includes(REDUCE, id) ? 'average'
       : /^(sigma|two-sigma|distance-squared|negative-distance|exponent|weight$|radius-half)/.test(id) ? 'weight'
         : /^(frame|uv|resolution|index|one-vec2|texel-size|offset|radius-vec2|scaled-offset|sample)/.test(id) ? 'sampling' : 'finish',
   };
+  if (type === 'sharpen') return {
+    labels: { size: 'Radius & Tap Count', premultiply: 'Premultiplied Source (cached)', horizontal: 'Horizontal Blur Pass', vertical: 'Vertical Blur Pass',
+      detail: 'Unsharp Mask (brightness)', halo: 'Halo Limit', finish: 'Apply to Color & Alpha' },
+    portLabels: { ...SEPARABLE_PORTS, 'sharpened-luma': 'Sharpened Brightness', 'limited-luma': 'Limited Brightness', 'darkest-value': 'Darkest Nearby',
+      'brightest-value': 'Brightest Nearby', detail: 'Detail' },
+    stage: ({ id }) => /^(source-premultiplied|source-cache)/.test(id) ? 'premultiply' : /^horizontal-/.test(id) ? 'horizontal' : /^vertical-/.test(id) ? 'vertical'
+      : /^(source-split|source-luma|blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
+        : /^(darkest-|brightest-|window-|halo-|limited-luma)/.test(id) ? 'halo'
+          : /^(luma-change|luma-delta|result-|combine)/.test(id) ? 'finish' : 'size',
+  };
+  if (type === 'vignette') return {
+    labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
+    portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither' },
+    stage: ({ id }) => /^(minimum-feather|feather|falloff|outer-edge|gain|darkening)/.test(id) ? 'falloff' : /^(pixel$|dither)/.test(id) ? 'dither'
+      : /^(source-split|shaded|dithered|clamped|combine)$/.test(id) ? 'finish' : 'shape',
+  };
+  if (type === 'grain') return {
+    labels: { cells: 'Grain Cells (Size)', pattern: 'Pattern per Frame (Speed, Seed)', noise: 'Smooth Noise', mix: 'Octaves & Color Grain',
+      response: 'Film Response (midtones)', finish: 'Add Grain & Alpha' },
+    portLabels: { 'grain-uv': 'Grain Position', 'pattern-seed': 'Pattern Offset', 'grain-rgb': 'Grain', response: 'Response', strength: 'Strength' },
+    stage: ({ id }) => /^(size-safe|pixel-scale|short-side|cell-px|pixel$|grain-uv)/.test(id) ? 'cells' : /^(pattern-|seed-offset)/.test(id) ? 'pattern'
+      : /^(corner-|grain-(coarse|fine|red-noise|green-noise|blue-noise))/.test(id) ? 'noise' : /^grain-(?!scaled)/.test(id) ? 'mix'
+        : /^(response|source-luma|strength)/.test(id) ? 'response' : 'finish',
+  };
+  if (type === 'scanlines') return {
+    labels: { lines: 'Line Pattern (Density, Scroll)', fade: 'Fade Dense Lines', finish: 'Darken & Alpha' },
+    portLabels: { wave: 'Line Wave', 'line-visibility': 'Line Visibility', pattern: 'Pattern', gain: 'Brightness Gain' },
+    stage: ({ id }) => /^(resolution-split|line-|frame-turns|frequency-safe|frequency-magnitude|pattern|half-wave)/.test(id) ? 'fade'
+      : /^(opacity-limited|gain|darkening|gap|source-split|shaded|combine)$/.test(id) ? 'finish' : 'lines',
+  };
   if (type === 'glow') return {
+    labels: { bright: 'Bright Pass (soft knee)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid: Halve the Light',
+      up: 'Pyramid: Add Levels Back Up', finish: 'Glow Resolve & Alpha' },
+    stage: ({ id }) => /^(bright-|source-)/.test(id) ? 'bright'
+      : /^(tap-|texel$|one-vec2$|up-offset$|up-uv$|down-offset$|down-uv$|level-|top-level-)/.test(id) ? 'kernel'
+        : /^down-/.test(id) ? 'down' : /^up-/.test(id) ? 'up' : 'finish',
+  };
+  if (type === 'glow-earlier') return {
     labels: { count: 'Ring & Sample Counts', spacing: 'Sample Spacing & Prefilter Size', taps: 'Horizontal Prefilter Taps',
       bright: 'Bright Pass', horizontal: 'Horizontal Prefilter', vertical: 'Vertical Prefilter', sampling: 'Ring Sampling',
       weight: 'Ring Weight', finish: 'Glow Resolve & Alpha' },
@@ -72,10 +109,17 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
                 : /^(ring-progress|gaussian-sigma|ring-weight|sample-weight)/.test(id) ? 'weight'
                   : /^(index-components|ring$|ring-stagger|angle|direction|ring-radius|ring-offset|ring-sample)/.test(id) ? 'sampling' : 'finish',
   };
-  if (type === 'edge-detect') return {
+  if (type === 'edge-detect-earlier') return {
     labels: { sampling: 'Neighbor Luminance', gradient: 'Sobel Gradient', finish: 'Edge Output' },
     stage: ({ id }) => /^(negative-tl|two-[lrtb]$|g[xy]|gradient|magnitude)/.test(id) ? 'gradient'
       : includes('strength scaled clamped inverse invert selected rgba image', id) ? 'finish' : 'sampling',
+  };
+  if (type === 'edge-detect') return {
+    labels: { scale: 'Line Width (sigma & window)', window: 'Window Taps (premultiplied brightness)', gradient: 'Gradient & Edge Strength', finish: 'Line Color & Alpha' },
+    portLabels: { sigma: 'Sigma (px)', reach: 'Reach (px)', 'window-size': 'Window Size', 'tap-moment': 'Moments', edge: 'Edge', 'line-color': 'Line Color' },
+    stage: ({ id }) => /^(pixel-scale|short-side|width-safe|sigma|two-sigma|reach|window-size)/.test(id) ? 'scale'
+      : /^(tap-|window-reduce|window-index)/.test(id) ? 'window'
+        : /^(window-|gradient|edge-contrast|edge-raw|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',
   };
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
     labels: { coordinates: type === 'wave' ? 'Wave Coordinates' : type === 'twirl' ? 'Twirl Coordinates' : 'Bulge Coordinates', sampling: 'Image Sampling' },

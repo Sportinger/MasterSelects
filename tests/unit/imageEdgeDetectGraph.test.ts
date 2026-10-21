@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
+import { createEarlierEdgeDetectGraph as createDefaultEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
 const luma = (rgb: readonly number[]) => rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;

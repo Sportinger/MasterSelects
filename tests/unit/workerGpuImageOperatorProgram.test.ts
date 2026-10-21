@@ -6,7 +6,7 @@ import type { Layer } from '../../src/types/layers';
 import { shouldUseLayerVideoFramePresenter } from '../../src/services/render/workerRenderHostRuntimeHandlers';
 import { uploadWorkerVideoFrameTexture, workerGpuOperatorProgramCacheKey, workerGpuOperatorProgramPresentationKey, workerVideoFrameNeedsStraightAlphaUpload } from '../../src/services/render/workerGpuOperatorPipeline';
 import { hasCompositorRenderLayer } from '../../src/services/render/workerGpuVideoFrameCompositor';
-import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierVignetteGraph as createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 
 function layerWithEditedInvert(): Layer {
   const graph = createDefaultInvertImageGraph();

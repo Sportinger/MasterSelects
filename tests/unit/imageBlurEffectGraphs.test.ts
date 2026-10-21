@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { getEffect } from '../../src/effects';
 import { separableBlurTaps } from '../../src/effects/blur/blurSampling';
-import { createDefaultBoxBlurGraph, createDefaultGaussianBlurGraph, createDefaultSharpenGraph } from '../../src/services/operators/blurEffectGraphs';
+import { createDefaultBoxBlurGraph, createDefaultGaussianBlurGraph, createDefaultSharpenGraph as createEarlierSharpenGraph } from '../../src/services/operators/blurEffectGraphs';
+import { createDefaultSharpenGraph } from '../../src/services/operators/sharpenEffectGraph';
 import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../../src/services/operators/effectGraphOwner';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
 import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
@@ -39,7 +40,7 @@ describe('blur effect operator graph ownership', () => {
   ] as const)('owns a valid %s graph with only stable effect bindings', (type, factory, bindings) => {
     const graph = factory();
     expect(validateEffectGraph(graph)).toEqual([]);
-    expect(graph.nodes.length).toBeLessThanOrEqual(100);
+    expect(graph.nodes.length).toBeLessThanOrEqual(type === 'sharpen' ? 200 : 100);
     expect(graph.nodes.flatMap(node => Object.values(node.bindings)).toSorted()).toEqual([...bindings].toSorted());
     expect(isImageGraphEffectType(type)).toBe(true);
     // Composition recognition may reorder nodes and duplicate captured literals; the computation is the recipe.
@@ -86,8 +87,8 @@ describe('blur effect operator graph ownership', () => {
     }
   });
 
-  it('builds Sharpen as a fixed extent weighted blur and preserves center alpha', () => {
-    const graph = createDefaultSharpenGraph();
+  it('keeps the earlier Sharpen (saved projects) as a fixed extent weighted blur that preserves center alpha', () => {
+    const graph = createEarlierSharpenGraph();
     expect(graph.nodes.find(node => node.id === 'extent')?.constants?.value).toBe(3);
     expect(connection(graph, 'offset', 'scaled-offset', 'a')).toBe(true);
     expect(connection(graph, 'center-split', 'difference', 'a')).toBe(true);

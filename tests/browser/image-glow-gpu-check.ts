@@ -3,7 +3,7 @@ import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
 import { glow } from '../../src/effects/stylize/glow';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
-import { createDefaultGlowGraph } from '../../src/services/operators/glowEffectGraph';
+import { createRingGlowGraph as createDefaultGlowGraph } from '../../src/services/operators/glowEffectGraph';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 
 const rowPitch = 256;

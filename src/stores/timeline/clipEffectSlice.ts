@@ -25,6 +25,7 @@ import {
 import { cleanupEffectParamTimelineState } from './helpers/propertyTimelineCleanup';
 import { reconcileRemovedParameterTargets } from '../../services/parameterSources/parameterSourceLifecycle';
 import { createInitialSlitScanGraph } from '../../services/operators/slitScanGraphUpgrade';
+import { createStylizeRecipeGraph } from '../../services/operators/stylizeRecipes';
 import { reconcileSlitScanDuration } from './helpers/slitScanDuration';
 import { FLOCKING_EFFECT_TYPE, flockingEffectOf } from '../../services/flock/flockEffect';
 import { createFlockPresetDefinition } from '../../services/flock/presets/flockPresets';
@@ -141,6 +142,8 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
     // One swarm per clip: adding Flocking again returns the existing effect.
     const existingFlocking = effectType === FLOCKING_EFFECT_TYPE ? flockingEffectOf(clips.find(c => c.id === clipId)) : undefined;
     if (existingFlocking) return existingFlocking.id;
+    // Effects whose look is a versioned recipe carry it from the start (a graphless stylize effect in a project file is legacy).
+    const recipeGraph = effectType === 'slit-scan' ? createInitialSlitScanGraph() : createStylizeRecipeGraph(effectType);
     const effect: Effect = {
       id: generateEffectId(),
       name: effectType === FLOCKING_EFFECT_TYPE ? 'Flocking' : effectType === 'lens-correction' ? 'Lens Correction' : effectType === 'guided-perspective' ? 'Guided Perspective' : effectType === 'stick-figure' ? 'Stick Figure' : effectType,
@@ -153,7 +156,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
         geometryLastMode: 'motion-surface',
         geometryPromoted3D: false,
       } : {}) },
-      ...(effectType === 'slit-scan' ? { operatorGraph: createInitialSlitScanGraph() } : {}),
+      ...(recipeGraph ? { operatorGraph: recipeGraph } : {}),
     };
     const keyframes = clipKeyframes.get(clipId) ?? [];
     set({

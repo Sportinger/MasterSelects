@@ -1,4 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { MIN_POSTERIZE_LEVELS, SOFTNESS_FLOOR } from '../../effects/stylize/pointwiseModel';
+import { BlurGraphBuilder, type GraphPort } from './blurGraphBuilder';
 
 export type EditablePointwiseEffectType = 'threshold' | 'posterize';
 const node = (id: string, operator: string, bindings: BoundOperatorNode['bindings'] = {}, constants?: BoundOperatorNode['constants']): BoundOperatorNode =>
@@ -14,7 +16,8 @@ function graph(nodes: BoundOperatorNode[], edges: OperatorEdge[]): EffectOperato
     layout: Object.fromEntries(ordered.map((item, index) => [item.id, { x: index * 260, y: ['split', 'combine'].includes(item.id) ? 0 : 180 }])) };
 }
 
-export function createDefaultThresholdGraph(): EffectOperatorGraph {
+/** The earlier Threshold (before 2026-10-21): hard strict Rec.709 comparison. */
+export function createEarlierThresholdGraph(): EffectOperatorGraph {
   return graph([node('luma', 'color.luminance-rec709.rgb'), node('level', 'values.number', { value: 'level' }),
     node('compare', 'compare.greater.scalar'), literal('black', 0), literal('white', 1), node('select', 'select.scalar'),
     node('result-rgb', 'convert.scalar-to-rgb')], [
@@ -24,7 +27,8 @@ export function createDefaultThresholdGraph(): EffectOperatorGraph {
   ]);
 }
 
-export function createDefaultPosterizeGraph(): EffectOperatorGraph {
+/** The earlier Posterize (before 2026-10-21): floor(rgb * L) / (L - 1), no final clamp. */
+export function createEarlierPosterizeGraph(): EffectOperatorGraph {
   return graph([node('levels', 'values.number', { value: 'levels' }), literal('minimum-levels', 2), node('effective-levels', 'math.max.scalar'),
     node('levels-rgb', 'convert.scalar-to-rgb'), node('multiply', 'math.multiply.rgb'), node('floor', 'math.floor.rgb'), literal('one', 1),
     node('denominator', 'math.subtract.scalar'), node('denominator-rgb', 'convert.scalar-to-rgb'), node('divide', 'math.divide-ieee.rgb')], [
@@ -34,6 +38,77 @@ export function createDefaultPosterizeGraph(): EffectOperatorGraph {
     edge('denominator', 'value', 'denominator-rgb', 'value'), edge('floor', 'value', 'divide', 'a'), edge('denominator-rgb', 'rgb', 'divide', 'b'),
     edge('divide', 'value', 'combine', 'rgb'),
   ]);
+}
+
+export function createEarlierPointwiseEffectGraph(type: EditablePointwiseEffectType): EffectOperatorGraph {
+  return type === 'threshold' ? createEarlierThresholdGraph() : createEarlierPosterizeGraph();
+}
+
+/** Smooth step of `t` (already clamped to 0-1): t * t * (3 - 2 t). */
+function smoothRamp(g: BlurGraphBuilder, id: string, t: GraphPort, rgb: boolean): string {
+  const [multiply, subtract] = rgb ? ['math.multiply.rgb', 'math.subtract.rgb'] : ['math.multiply.scalar', 'math.subtract.scalar'];
+  const [three, two]: GraphPort[] = rgb ? [['three-rgb', 'rgb'], ['two-rgb', 'rgb']] : ['three', 'two'];
+  return g.binary(id, multiply, g.binary(`${id}-square`, multiply, t, t),
+    g.binary(`${id}-falloff`, subtract, three, g.binary(`${id}-double`, multiply, two, t)));
+}
+
+/**
+ * Threshold v2 (contract in `effects/stylize/pointwiseModel.ts`): Rec.709 brightness against
+ * Level; Softness widens the hard step into a smooth ramp of that brightness width. Softness 0
+ * is exactly the earlier strict comparison. Alpha is kept.
+ */
+export function createDefaultThresholdGraph(): EffectOperatorGraph {
+  const g = new BlurGraphBuilder();
+  g.add('frame', 'image.frame'); g.number('zero', 0); g.number('one', 1); g.number('half', .5); g.number('two', 2); g.number('three', 3);
+  const level = g.bound('level', 'level'), softness = g.bound('softness', 'softness');
+  const source = g.add('split', 'vector.split.rgba', { image: ['frame', 'image'] });
+  const luma = g.add('luma', 'color.luminance-rec709.rgb', { rgb: [source, 'rgb'] });
+  const hard = g.add('hard', 'select.scalar', { falseValue: 'zero', trueValue: 'one', condition: [g.binary('compare', 'compare.greater.scalar', luma, level), 'condition'] });
+  // Smooth ramp across Level ± Softness / 2.
+  const width = g.binary('ramp-width', 'math.max.scalar', softness, g.number('ramp-floor', SOFTNESS_FLOOR));
+  const position = g.binary('ramp-position', 'math.add.scalar', g.binary('ramp-offset', 'math.divide-ieee.scalar',
+    g.binary('ramp-distance', 'math.subtract.scalar', luma, level), width), 'half');
+  const ramp = smoothRamp(g, 'ramp', g.add('ramp-clamped', 'math.clamp.scalar', { value: position, min: 'zero', max: 'one' }), false);
+  const soft = g.add('soft', 'select.scalar', { falseValue: 'zero', trueValue: 'one', condition: [g.binary('soft-active', 'compare.greater.scalar', softness, 'zero'), 'condition'] });
+  const value = g.add('value', 'math.mix.scalar', { a: hard, b: ramp, t: soft });
+  const output = g.add('combine', 'vector.combine.rgba', { rgb: [g.add('result-rgb', 'convert.scalar-to-rgb', { value }), 'rgb'], alpha: [source, 'alpha'] });
+  g.add('output', 'image.output', { image: [output, 'image'] });
+  return g.graph();
+}
+
+/**
+ * Posterize v2 (contract in `effects/stylize/pointwiseModel.ts`): every channel snaps to Levels
+ * even steps (floor(rgb * L) / (L - 1), limited to 0-1); Softness rounds each step into a smooth
+ * ramp of that share of a step, which keeps gradients from tearing into hard contours. Softness 0
+ * is exactly the earlier staircase. Alpha is kept.
+ */
+export function createDefaultPosterizeGraph(): EffectOperatorGraph {
+  const g = new BlurGraphBuilder();
+  g.add('frame', 'image.frame'); g.number('zero', 0); g.number('one', 1);
+  g.number('half', .5); g.number('two', 2); g.number('three', 3);
+  const half: GraphPort = [g.unary('half-rgb', 'convert.scalar-to-rgb', 'half'), 'rgb'];
+  g.unary('two-rgb', 'convert.scalar-to-rgb', 'two'); g.unary('three-rgb', 'convert.scalar-to-rgb', 'three');
+  const levels = g.binary('effective-levels', 'math.max.scalar', g.bound('levels', 'levels'), g.number('minimum-levels', MIN_POSTERIZE_LEVELS));
+  const softness = g.bound('softness', 'softness');
+  const source = g.add('split', 'vector.split.rgba', { image: ['frame', 'image'] });
+  const scaled = g.add('scaled', 'math.multiply.rgb-scalar', { a: [source, 'rgb'], b: levels });
+  const hard = g.unary('hard', 'math.floor.rgb', scaled);
+  // Smooth steps: the step boundary at each whole number of `scaled` becomes a ramp Softness wide.
+  const shifted = g.binary('shifted', 'math.subtract.rgb', scaled, half);
+  const base = g.unary('base', 'math.floor.rgb', shifted);
+  const within = g.binary('within', 'math.subtract.rgb', shifted, base);
+  const width = g.binary('ramp-width', 'math.max.scalar', softness, g.number('ramp-floor', SOFTNESS_FLOOR));
+  const position = g.binary('ramp-position', 'math.add.rgb', g.add('ramp-offset', 'math.divide-ieee.rgb-scalar', {
+    a: g.binary('ramp-distance', 'math.subtract.rgb', within, half), b: width }), half);
+  const ramp = smoothRamp(g, 'ramp', g.add('ramp-clamped', 'math.clamp.rgb-scalar', { value: position, min: 'zero', max: 'one' }), true);
+  const smooth = g.binary('smooth', 'math.add.rgb', base, ramp);
+  const soft = g.add('soft', 'select.scalar', { falseValue: 'zero', trueValue: 'one', condition: [g.binary('soft-active', 'compare.greater.scalar', softness, 'zero'), 'condition'] });
+  const steps = g.add('steps', 'math.mix.rgb', { a: hard, b: smooth, t: soft });
+  const divided = g.add('divide', 'math.divide-ieee.rgb-scalar', { a: steps, b: g.binary('denominator', 'math.subtract.scalar', levels, 'one') });
+  const clamped = g.add('clamped', 'math.clamp.rgb-scalar', { value: divided, min: 'zero', max: 'one' });
+  const output = g.add('combine', 'vector.combine.rgba', { rgb: clamped, alpha: [source, 'alpha'] });
+  g.add('output', 'image.output', { image: [output, 'image'] });
+  return g.graph();
 }
 
 export function createDefaultPointwiseEffectGraph(type: EditablePointwiseEffectType): EffectOperatorGraph {

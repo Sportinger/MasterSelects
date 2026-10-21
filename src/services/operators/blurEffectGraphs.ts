@@ -15,7 +15,7 @@ const graph = (nodes: BoundOperatorNode[], edges: OperatorEdge[]): EffectOperato
  * texels 2|j|-1 and 2|j| (times the stride) merged into one linear-filtered tap at their
  * weighted centre. `weightAt` builds the kernel weight of a texel offset node.
  */
-function separablePass(g: BlurGraphBuilder, axis: 'horizontal' | 'vertical', source: GraphPort,
+export function separablePass(g: BlurGraphBuilder, axis: 'horizontal' | 'vertical', source: GraphPort,
   weightAt: (id: string, offset: string) => string) {
   const id = (name: string) => `${axis}-${name}`;
   const sequence = g.add(id('sequence'), 'image.sequence-index');

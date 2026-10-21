@@ -298,6 +298,7 @@ const CATALOG_TEXT: Readonly<Record<string, { d?: string; t?: readonly string[] 
   "math.subtract.audio-scalar": { d: "Subtracts B from A for every audio sample; a number input applies the same value to all samples.", t: ["minus", "difference", "dc offset", "audio math"] },
   "math.subtract.scalar-audio": { d: "Subtracts B from A for every audio sample; a number input applies the same value to all samples.", t: ["minus", "difference", "invert", "audio math"] },
   "media.source": { d: "Provides the clip's video frames as the image input for face tracking and depth analysis.", t: ["video input", "footage", "frames", "source"] },
+  "noise.cell-hash.vec2": { t: ["random", "cell hash", "pcg", "integer hash", "lattice noise", "grain"] },
   "noise.hash2d.vec2": { t: ["random", "hash", "noise", "pseudo random", "white noise"] },
   "render.cables": { d: "Draws the simulated cables as shaded, rounded tubes with attachment rings, optionally in native 3D or with 2D face shadows.", t: ["cable render", "tubes", "ropes", "shading", "wires"] },
   "render.strands": { d: "Draws the connected curves as thin strands in the shared 3D scene; Width sets their thickness, Color their look unless a Fiber Material comes before it, Subdivision the path tracer's pieces per curve segment.", t: ["strand render", "hair", "threads", "fibers", "lines", "subdivision"] },

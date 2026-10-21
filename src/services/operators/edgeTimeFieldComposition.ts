@@ -1,9 +1,9 @@
-import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
+import { createEarlierEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { extractImageComposition } from './extractImageComposition';
 
-/** The existing eight-tap edge recipe, exposing its unclamped scalar magnitude. */
+/** The eight-tap Sobel edge recipe (the earlier Edge Detect), exposing its unclamped scalar magnitude. */
 export function edgeTimeFieldComposition() {
-  const graph = createDefaultEdgeDetectGraph();
+  const graph = createEarlierEdgeDetectGraph();
   const downstream = new Set(['frame', 'uv', 'resolution', 'strength', 'invert', 'scaled', 'clamped',
     'inverse', 'selected', 'rgba', 'image', 'output']);
   const definition = extractImageComposition(graph, {

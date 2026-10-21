@@ -1,6 +1,6 @@
 import { createLegacyAlphaGlowGraph } from '../../src/services/operators/legacyAlphaGlowGraph';
 import { describe, expect, it } from 'vitest';
-import { createDefaultGlowGraph, createLegacyGlowGraph } from '../../src/services/operators/glowEffectGraph';
+import { createRingGlowGraph as createDefaultGlowGraph, createLegacyGlowGraph } from '../../src/services/operators/glowEffectGraph';
 import { upgradeGlowGraph } from '../../src/services/operators/glowGraphUpgrade';
 import {
   effectOperatorGraph, effectOperatorParams, isImageGraphEffectType, isLocalImageEffectType, migratePersistedEffectOperatorGraph,
@@ -182,14 +182,14 @@ describe('glow image graph', () => {
 });
 
 describe('glow graph ownership and migration', () => {
-  it('uses catalog defaults through the contextual owner without becoming inline-local', () => {
-    const effect = { type: 'glow', params: {} };
+  it('keeps a saved ring Glow and its folders through the contextual owner without becoming inline-local', () => {
+    // A graphless Glow is a new one (the bloom, glowBloom.test.ts); saved ring Glows keep their graph.
+    const effect = { type: 'glow', params: DEFAULTS, operatorGraph: createDefaultGlowGraph() };
     expect(isImageGraphEffectType('glow')).toBe(true);
     expect(isLocalImageEffectType('glow')).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(DEFAULTS);
     const owned = effectOperatorGraph(effect);
     expect(computational(owned)).toEqual(computational(createDefaultGlowGraph()));
-    expect(effectOperatorGraph({ ...effect, operatorGraph: createDefaultGlowGraph() })).toEqual(owned);
     expect(owned.groups?.map(group => group.label)).toEqual(expect.arrayContaining(['Bright Pass', 'Vertical Prefilter', 'Ring Sampling']));
   });
 

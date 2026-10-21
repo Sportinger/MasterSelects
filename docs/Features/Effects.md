@@ -103,10 +103,11 @@ and source. Other effects and structural settings are not implicitly enabled.
 
 ## Glow on transparent and 3D layers
 
-Glow samples premultiplied light energy and expands alpha into its halo. Hidden RGB
-in fully transparent pixels contributes no light, and pixel-radius sampling stays
-circular on portrait frames. Canonical saved Glow recipes, including composition
-folders, upgrade automatically; custom rewired graphs retain their own behavior.
+Glow builds its bloom from premultiplied light and expands alpha into its halo, so a
+title on a transparent layer glows outside its letters too. Hidden RGB in fully
+transparent pixels contributes no light, and the halo is round on any aspect. Glows
+saved with the earlier ring version keep it (see Glow below); custom rewired graphs
+retain their own behavior.
 Raster Weave strands process their own projected effect stack before joining the
 shared 3D scene, so Glow works with other strands or particles without affecting
 those layers. See [Weave](./Weave.md) for rendering limitations.
@@ -798,15 +799,27 @@ Resolve-style workspace's YIQ hue rotation. Levels retains its original
 unguarded normalization: equal input black/white points remain a singular
 case with backend-dependent output, rather than silently gaining an epsilon.
 
-Threshold and Posterize also expose executable pointwise groups. Threshold
-uses Rec.709 luminance and a strict greater-than comparison (equality is black).
-Posterize retains the original `floor(rgb * levels) / (levels - 1)` formula,
-with levels bounded below by two and no internal output clamp. Both preserve
-source alpha and the original parameter ranges, defaults, and keyframe IDs.
+Threshold and Posterize also expose executable pointwise groups (contract in
+`src/effects/stylize/pointwiseModel.ts`). Threshold uses Rec.709 luminance and a
+strict greater-than comparison (equality is black). Posterize uses
+`floor(rgb * levels) / (levels - 1)` with levels bounded below by two, limited to
+0–1 (the earlier graph let white overflow to `L / (L - 1)` until the render target
+clamped it). Since 2026-10-21 both have a **Softness** (default 0): Threshold ramps
+smoothly from Level − Softness/2 to Level + Softness/2 (a brightness width, 0–0.5);
+Posterize rounds each step edge into a smooth ramp of that share of a step (0–1).
+Softness 0 renders exactly the earlier math, so untouched saved graphs simply read as
+the current recipe. Both preserve source alpha and the original ranges, defaults and
+keyframe IDs; Levels below 2 and negative Softness are reported, not silently clamped.
 
-Vignette exposes normalized pixel coordinates, center/aspect adjustment,
-distance, smoothstep falloff, and gain as an editable graph. It retains its
-existing fullscreen pass and alpha behavior. UV-dependent node previews show
+Vignette (contract `src/effects/stylize/vignette/vignetteModel.ts`) measures the
+distance from the centre in pixels, normalized so every corner is at 1 on any
+resolution and aspect. **Roundness** blends from the frame's shape (0, an ellipse
+touching all four edges at the same distance) to a true circle (1, the default).
+The darkening starts at Size and is complete at Size + Softness (smoothstep, never
+narrower than 1.5 px), `gain = 1 − Amount × falloff`; a dither of at most half an
+8-bit step, only where the gain changes the picture, keeps dark gradients free of
+banding. One fullscreen pass; alpha is kept. Vignettes saved before 2026-10-21 keep
+their earlier graph, where Roundness (0.5–2) stretched a UV ellipse vertically. UV-dependent node previews show
 the spatial field instead of inventing a single numeric value. Adding a UV
 dependency to another image graph also routes it through the contextual
 fullscreen path; ordinary pixel-only graphs keep their inline optimization.
@@ -814,10 +827,23 @@ Animated graph parameters update GPU uniform values while reusing the compiled
 pipeline; changing graph wiring or a structural node constant recompiles it.
 
 Scanlines and Film Grain also expose executable UV/time/math graphs. They use
-composition timeline time for reproducible preview, seeking and export, replacing
-their former wall-clock animation even for legacy graph-less effects. Grain adds
-an explicit Seed control with default `0`; existing controls keep their original
-ranges and defaults. Both preserve source alpha and use one fullscreen pass.
+composition timeline time for reproducible preview, seeking and export. Both
+preserve source alpha and use one fullscreen pass.
+
+- **Scanlines** (`scanlinesModel.ts`): `0.5 + 0.5 sin((v + time × Speed × 0.1) ×
+  Density × 100)` over the frame height, so Density 5 gives about 80 lines on any
+  resolution. Lines closer than 4 px fade into their even average (fully below
+  2 px) instead of flickering as moiré; Opacity is limited to 0–1. Both limits are
+  reported in the inspector and tool results.
+- **Film Grain** (`grainModel.ts`, since 2026-10-21): smooth two-octave value noise
+  built from **Random (Cell)** hashes on a grid of Size pixels of a 1080p frame, so
+  the grain looks the same at every render size. A new pattern appears at
+  `round(time × 60 × Speed)` (Speed 1 changes it on every frame up to 60 fps, 0
+  freezes it); Seed picks another pattern. The noise is zero-mean (no pumping),
+  strongest in the midtones (30 % of it in black and white, like film) and has a
+  standard deviation of about `0.35 × Amount` there. **Color** (0–1) mixes each
+  channel from shared grain towards its own. Grains saved earlier keep their
+  seeded sine-dot noise (Speed there scrolled the pattern, 0–5).
 
 Pixelate, Mirror and RGB Split expose editable coordinate and sampling graphs.
 Sampling follows the connected upstream image expression, so rewiring math before
@@ -958,73 +984,72 @@ recipes remain in `legacyBlurEffectGraphs.ts` and
 `legacyDirectionalBlurEffectGraphs.ts` for that recognition and for the shared
 compositions extracted from them (Bounded Sample Count, Scale UV).
 
-The organization/reuse pass also covers Glow, Edge Detect, Wave, Twirl, Bulge,
-Pixelate, Mirror, RGB Split, Blockify, Block Mosaic, the basic color effects and
-all ASCII/Glyph variants. Glow exposes Soft Bright Pass, Edge Detect exposes
-Sobel Magnitude, and Saturation/Vibrance share Luma Saturation. Glyph Cell Grid,
+The organization/reuse pass also covers Glow, Edge Detect, Sharpen, Vignette, Film
+Grain, Scanlines, Wave, Twirl, Bulge, Pixelate, Mirror, RGB Split, Blockify, Block
+Mosaic, the basic color effects and all ASCII/Glyph variants. The earlier Glow
+exposes Soft Bright Pass, the earlier Edge Detect exposes Sobel Magnitude, and
+Saturation/Vibrance share Luma Saturation. Stylize graphs saved with their earlier
+recipe keep that recipe's folders. Glyph Cell Grid,
 Tone to Glyph Index and Glyph Atlas Alpha share compatible glyph computations.
 ASCII Ghost's Decay & Max RGBA accepts its current and previous frames explicitly;
 the existing history resource, reset policy and clock remain unchanged. These
 blocks are insertable from Reusable Nodes and expandable into their primitives.
 Saved custom layouts/groups are not automatically replaced by presentation stages.
 
-Sharpen keeps a 2D kernel reduction for its weighted neighborhood, then
-exposes the unsharp-mask subtraction, gain, addition and RGB clamp as nodes.
-Unlike the blur effects, it retains the original center-pixel alpha.
-Kernel Index has a per-sample scope rather than a single preview value.
+**Sharpen** (contract `src/effects/stylize/sharpen/sharpenModel.ts`, since
+2026-10-21) premultiplies the frame into a cache, blurs it with the separable
+Gaussian Blur passes (σ = Radius pixels of a 1080p frame, at least 0.25 px) and adds
+`Amount × (luma − blurred luma)` to R, G and B alike, so edges get crisp without
+colour fringes. A halo limit keeps the sharpened brightness within the darkest and
+brightest brightness of a 3×3 window (taps one σ apart, at least a pixel) plus 15 %
+of that window's range, which removes the bright and dark outlines of a classic
+unsharp mask. Negative Amount softens; alpha is kept. Three passes. Sharpens saved
+earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
-Edge Detect uses eight shared neighbor samples in one pass. Each sampled image is
-converted to Rec.709 luminance before the two Sobel gradients are evaluated in
-their original arithmetic order. Strength is applied to the gradient magnitude,
-then clamped before optional inversion. As in the legacy effect, output alpha is
-always one, independent of source alpha. Strength remains animatable with default
-1 and range 0–5; Invert defaults to false. Sampling, coefficients and the final
-clamp are editable graph connections rather than an opaque Sobel operation.
+**Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,
+since 2026-10-21) is a derivative-of-Gaussian gradient of premultiplied brightness
+in one window reduction: σ = **Width** pixels of a 1080p frame (at least 0.7 px),
+window ±2σ up to ±8 px. Dividing by the window's own second moment makes it exact for
+brightness ramps at any Width and resolution, so a step of contrast c reads about
+`c × 4 × Strength` (the brightness of the earlier Sobel), clamped to 0–1. Lines are
+white on black (Invert: black on white); **Color** tints them with the picture's own
+colour at full brightness. Output alpha is `max(source alpha, edge)`: transparent
+surroundings stay transparent and a layer's outline shows. Cost grows with Width:
+(2⌈2σ⌉ + 1)² taps, 25 at the default on 1080p, at most 289. Edge Detects saved earlier
+keep the eight-tap Sobel at render resolution (alpha always one); its Sobel Magnitude
+stays available as a reusable block.
 
-Glow composes a bright pass, a separable prefilter, a ring blur and an additive
-resolve from the same image and math operators, in three graph passes (two
-`Cache Image` stages). The shared contract lives in
-`src/effects/stylize/glow/glowSampling.ts`; the operator graph, the three-pass
-WGSL reference (`shader.wgsl`) and the worker software path follow it:
+**Glow** (contract `src/effects/stylize/glow/glowBloom.ts`, since 2026-10-21) is a
+lens bloom in 21 graph passes, most of them tiny:
 
-1. **Bright pass + horizontal prefilter.** Each tap emits
-   `rgb × alpha × smoothstep(threshold ± 0.1, Rec.709 luma)`, so transparent
-   pixels never glow. A horizontal Gaussian with σ = half the sample spacing
-   averages that light; its taps sit on texel boundaries two pixels apart, so the
-   linear sampler covers every texel once and thin strokes are never skipped.
-2. **Vertical prefilter** with the same taps over the cached horizontal result.
-3. **Rings.** Ring *k* sits at `k × Radius × 10` pixels, converted per axis, so
-   the glow is round on non-square layers (a 1080×1920 layer used to stretch it
-   1.78× vertically; landscape layers squashed it). Rings and Samples/Ring keep
-   their truncation and limits (1–32, 4–64). Each ring keeps its legacy total
-   weight `Samples/Ring × gaussian(k / rings, Softness + 0.3)` but spreads it
-   over enough samples (`floor(2π × rings) + 1`, at most 64) that the outer arc
-   spacing never exceeds the ring spacing. Samples/Ring therefore acts as the
-   minimum count and still sets the ring-versus-center balance.
-4. **Resolve.** The weighted center light (weight 2) is added, the light is
-   normalized, Amount × 2 is applied and added to the premultiplied source.
-   Output alpha is `max(source alpha, brightest premultiplied channel)` and RGB is
-   un-premultiplied by it. The compositor blends layers with straight alpha
-   (`mix(base, layer, alpha)`), so the result equals the original layer plus the
-   glow light: opaque pixels keep `clamp(color + glow)` exactly as before, and a
-   halo now also appears around glyphs on transparent layers (previously it was
-   clipped to the source alpha and only showed inside opaque areas).
+1. **Bright pass** (full size, cached): the share of each pixel's light above a soft
+   knee around Threshold, taken from the brightest channel so saturated lights glow
+   too; knee = Softness × Threshold. Light is premultiplied by alpha.
+2. **Pyramid down**: ten Cache Images at 1/2 … 1/1024 of the frame, each a
+   `[1 3 3 1]` reduction of the one above.
+3. **Pyramid up**: from the smallest level back up with a 3×3 tent; each level joins
+   with a weight that grows smoothly as Radius (pixels of a 1080p frame) reaches its
+   size, so Radius widens the glow continuously. The finest level always glows.
+4. **Resolve**: the tent-upsampled glow, divided by the square root of the summed
+   level weights (wide glows grow without flooding the frame), × Amount × **Color**,
+   is added to the premultiplied source. Output alpha is `max(source alpha,
+   brightest result channel)` and RGB is un-premultiplied by it, so the halo also
+   appears around glyphs on transparent layers.
 
-The prefilter is what removes the mottled, blotchy texture that sparse rings
-produced next to thin bright strokes at larger radii (for example a 6 px cyan
-outline around dark text fill at Radius 2.4). Quality degrades gracefully: when
-2π × rings exceeds 64 samples per ring, the prefilter widens to the larger arc
-spacing instead of leaving gaps; the prefilter itself holds at most 32 taps per
-side (±63 px), so radii above roughly 4 with the default ring count can keep
-faint ring structure. Both limits, and clamped Rings or Samples/Ring values, are
-reported below the Glow parameters in the inspector instead of being applied
-silently. Default settings cost about 16 + 16 prefilter taps plus 6 × 38 ring
-taps per pixel and two full-resolution `rgba16float` textures per Glow instance.
+Cost does not depend on Radius: about 2.7 full-frame passes of work and about 1.7
+frames of `rgba16float` cache memory per Glow (the full-size bright pass plus two
+pyramids of a third of a frame each). Radius stops
+widening the glow once the largest level is reached (about 1536 at 1080p); the
+inspector and tool results say so, as they do for negative values.
 
-Saved projects keep their parameters. Both the original and alpha-aware single-pass recipes upgrade to the prefiltered graph; custom wiring and edited constants remain unchanged. Their untouched saved Glow graph (any
-packed, folded or laid-out form of the original single-pass recipe) is upgraded
-to the new recipe on load; graphs whose nodes, wiring, exposed values or folder
-bypasses were edited are kept exactly as authored and keep the legacy sampling.
+Glows saved before 2026-10-21 keep the **earlier ring version** (contract
+`glowSampling.ts`, graph `createRingGlowGraph`): a bright pass, a separable
+prefilter and ring sampling at `k × Radius × 10` pixels with Rings and
+Samples/Ring (both retired for new Glows, still read by the ring graph, and its
+quality limits are still reported in the inspector). Untouched saved single-pass
+originals upgrade to that ring graph as before; edited graphs stay as authored. The
+inspector offers **Use the new Glow** (which resets Amount, Threshold, Softness and
+Radius to the bloom's defaults) for an untouched ring Glow.
 
 Wave, Twirl, Bulge and Kaleidoscope use editable UV/math graphs followed by a
 single image sample. Wave preserves its sequential cross-axis displacement;
@@ -1153,8 +1178,8 @@ recipe, including alpha. Final CRT mixing still preserves alpha from the curved
 sample; no GPU pass, clock, parameter binding or shader formula is added.
 
 The separate Scanlines effect retains its scrolling/density phase and operand
-order. Grain retains its seeded sine-dot noise instead of being substituted with
-Glitch's Hash 2D or CRT's sine gain. Shared primitive operators already cover
+order. Film Grain uses its own Random (Cell) value noise rather than Glitch's
+Hash 2D or CRT's sine gain. Shared primitive operators already cover
 those differences; similarity alone is not treated as an identical recipe.
 
 Glitch and Film Prism likewise store editable generic graphs. Glitch composes
@@ -1348,11 +1373,10 @@ not alter project media or the exported result.
   default to animatable unless the effect explicitly opts out. This keeps the
   stopwatch/keyframe behavior consistent for registry-provided controls.
 
-The registered quality parameters are (the blurs choose their own taps; their old
-`samples` are retired, see Editable blur kernels):
+The registered quality parameters are (the blurs and the Glow bloom choose their own
+taps; the blurs' old `samples` and Glow's `rings`/`samplesPerRing` are retired and only
+read by graphs saved with them, see Editable blur kernels and Glow):
 
-- Glow: `rings`, `samplesPerRing` (Samples/Ring is a minimum; outer rings get
-  more samples automatically, see the Glow graph section)
 - Voxel Relief: `maxSteps`
 - Pixel Particle Disintegrate: `maxPreviewParticles`, `maxExportParticles`,
   `maxInstances`
@@ -1622,7 +1646,7 @@ raymarch/feedback effect.
 Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled.
 With `Limit to Video` enabled, the raymarcher discards voxel cells outside the source rectangle and uses a finite source-sized floor, so orbit views show only the actual video footprint instead of repeating its edge pixels around the subject. Existing project instances retain their stored parameters.
 
-Glow also starts from the iPad-tuned preset: amount 5, threshold 0.7935, radius 1, softness 0.496, 6.85 rings, and 17.95 samples per ring. Existing Glow instances likewise retain their stored parameters.
+New Glows start from the bloom defaults: Amount 1, Threshold 0.6, Softness 0.5, Radius 40 and white Color. Saved ring Glows keep their stored parameters (the earlier iPad-tuned preset was Amount 5, Threshold 0.7935, Radius 1, Softness 0.496, 6.85 rings and 17.95 samples per ring).
 
 ### Editable Voxel Relief nodes
 

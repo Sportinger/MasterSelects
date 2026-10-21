@@ -3,7 +3,7 @@ import { edgeDetect } from '../../src/effects/stylize/edge-detect';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
-import { createDefaultEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
+import { createEarlierEdgeDetectGraph as createDefaultEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
 
 const rowPitch = 256, width = 47, height = 29;
 const cases = [
