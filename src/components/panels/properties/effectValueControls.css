@@ -63,3 +63,9 @@
     }
   }
 }
+
+/* A value at the playhead lies outside the rendered range and is clamped. */
+.effect-param-range-notice {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-2);
+}

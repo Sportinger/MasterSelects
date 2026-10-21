@@ -786,17 +786,43 @@ the legacy shader. Direct source wiring prunes history resources and processing.
 
 ### Editable color effect graphs
 
-Brightness, Contrast, Saturation, Invert, Exposure, Levels, Hue Shift,
-Temperature, and Vibrance expose editable node groups.
-Their math is compiled into the existing image processing path: a single
-eligible effect stays inline, while effect stacks retain their ordered passes
-and intermediate clamps. Bound Amount nodes retain the effect's original
-range, default, and keyframe property; alpha bypasses the RGB calculations.
-The other exposed parameters likewise retain their original IDs and ranges.
-Hue Shift uses HSV conversion and wrapped hue in turns; it is not the
-Resolve-style workspace's YIQ hue rotation. Levels retains its original
-unguarded normalization: equal input black/white points remain a singular
-case with backend-dependent output, rather than silently gaining an epsilon.
+Brightness, Contrast, Saturation, Vibrance, Exposure, Levels, Hue Shift,
+Temperature and Invert are editable node graphs; the user page is
+[Color Effects](./Effects-Color.md). A single color effect on a clip runs inside
+the composite pass; in a stack each one runs as its own pass, in stack order. Alpha
+bypasses the RGB math. New instances (since the 2026-10 rebuild,
+`colorEffectGraphs.ts`, tuning in `COLOR_RECIPE`) compute:
+
+- **Brightness**: per channel `y = x·m / (x·m + 1 − x)` with `m = 2^(2.5 · Amount)`;
+  black and white stay fixed, so there is no grey veil.
+- **Contrast**: S-curve `y = x^c / (x^c + (1 − x)^c)`, slope `c` = Amount at
+  mid-grey 0.5; highlights and shadows roll off instead of clipping.
+- **Saturation**: mix of Rec.709 luma and RGB by Amount, stopped where the first
+  channel reaches 0 or 1, so hue and luma stay (gamut-safe).
+- **Vibrance**: the same gamut-safe mix, with Amount weighted by `1 − S` (HSV
+  saturation) and up to 70 % less on skin hues (a Gaussian around 0.07 turns, about 25°).
+- **Exposure**: `2^EV` in linear light (exact sRGB transfer both ways), then the
+  display-referred Offset and Gamma of the original effect.
+- **Temperature / Tint**: channel gains in linear light, 0.6 stops red against blue
+  per Temperature unit and 0.5 stops of green per Tint unit, scaled so grey keeps its
+  Rec.709 luminance; black stays black.
+- **Hue Shift**: rotation in OkLCh by Shift turns (the inspector shows degrees);
+  lightness and chroma stay, colours that leave sRGB are clamped.
+- **Levels**: unchanged remap, but equal input points act as a hard threshold and
+  swapped points as a negative (range `max(|white − black|, 1e-4)` with its sign).
+- **Invert**: `1 − rgb`, unchanged.
+
+Inputs are limited to 0–1 (the effect chain carries 8-bit display-referred colour).
+Values outside a parameter's render range (`renderMin`/`renderMax`: Brightness ±4,
+Contrast and Saturation 0–10, Vibrance −1 to 4, Exposure ±20 EV, Gamma 0.1–10,
+Temperature and Tint ±4) are clamped by the graph's `<param>-clamped` node; the
+inspector and the add/update effect tools say what renders instead. Saved projects
+keep the graph they were saved with (the previous recipes stay in
+`legacyColorEffectGraphs.ts`), so their look does not change. The worker software
+and export path evaluates the same graphs instead of its former shortcuts.
+Adjustment layers on the worker GPU path still use the motion-adjustment 4×5
+colour matrix for Brightness, Contrast and Saturation (linear offset, linear
+contrast, Rec.709 matrix saturation), which does not match these curves.
 
 Threshold and Posterize also expose executable pointwise groups. Threshold
 uses Rec.709 luminance and a strict greater-than comparison (equality is black).
@@ -935,7 +961,7 @@ compositions extracted from them (Bounded Sample Count, Scale UV).
 The organization/reuse pass also covers Glow, Edge Detect, Wave, Twirl, Bulge,
 Pixelate, Mirror, RGB Split, Blockify, Block Mosaic, the basic color effects and
 all ASCII/Glyph variants. Glow exposes Soft Bright Pass, Edge Detect exposes
-Sobel Magnitude, and Saturation/Vibrance share Luma Saturation. Glyph Cell Grid,
+Sobel Magnitude, and Saturation/Vibrance share Saturation (Gamut-Safe). Glyph Cell Grid,
 Tone to Glyph Index and Glyph Atlas Alpha share compatible glyph computations.
 ASCII Ghost's Decay & Max RGBA accepts its current and previous frames explicitly;
 the existing history resource, reset policy and clock remain unchanged. These
@@ -1336,14 +1362,11 @@ The `performanceMonitor` service can also reset quality parameters to defaults w
 
 ## Inline Effects
 
-These effects are applied directly in the composite shader instead of running as separate effect passes:
-
-- Brightness
-- Contrast
-- Saturation
-- Invert
-
-That keeps them zero-overhead relative to the full ping-pong effect chain.
+When a clip has exactly one enabled effect and it is a pointwise image graph
+(Brightness, Contrast, Saturation, Vibrance, Exposure, Levels, Hue Shift,
+Temperature, Invert, Threshold or Posterize), its compiled program runs inside the
+composite shader instead of a separate effect pass. Stacks of several effects run
+as ordered passes so their order is kept.
 
 ## Particle Render Effects
 

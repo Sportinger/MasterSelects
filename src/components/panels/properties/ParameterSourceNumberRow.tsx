@@ -30,20 +30,22 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false }:
   } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); kind = 'Error'; }
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (failure) { setMessage(failure instanceof Error ? failure.message : String(failure)); } };
   const nodes = clip.nodeGraph?.parameterSources?.graph.nodes ?? [];
+  const scale = target.displayScale ?? 1; // Display units only; stored values stay in the target's unit.
   const selection = driven ? `node:${binding!.source!.nodeId}|${binding!.source!.portId}` : binding?.localMode === 'constant' ? 'fixed' : 'auto';
   const navigate = (id: string) => { requestNodeAnimation(clipId, id, false); useDockStore.getState().activatePanelType('node-workspace'); };
   return <div className="parameter-source-control" onPointerUp={event => {
     const button = event.target instanceof Element ? event.target.closest('button') : null;
     if (button) requestAnimationFrame(() => { if (document.activeElement === button) button.blur(); });
   }}>
-    <ResolveInspectorNumberRow label={target.label} ariaLabel={target.label} value={value} defaultValue={target.defaultValue}
-      min={target.min} max={target.max} hardMin={target.hardMin} hardMax={target.hardMax} step={target.step}
+    <ResolveInspectorNumberRow label={target.label} ariaLabel={target.label} value={value * scale} defaultValue={target.defaultValue * scale}
+      min={target.min * scale} max={target.max * scale} hardMin={(target.hardMin ?? -Infinity) * scale} hardMax={(target.hardMax ?? Infinity) * scale}
+      step={target.step * scale} suffix={target.suffix}
       disabled={readOnly || driven || !!error} persistenceKey={`parameter.${property}`}
-      onReset={next => safely(() => { if (!readOnly && !driven) setParameterBaseValue(clipId, property, next); })}
+      onReset={next => safely(() => { if (!readOnly && !driven) setParameterBaseValue(clipId, property, next / scale); })}
       onChange={next => safely(() => {
         if (readOnly || driven) return;
         const state = useTimelineStore.getState();
-        state.setPropertyValue(clipId, property as AnimatableProperty, next);
+        state.setPropertyValue(clipId, property as AnimatableProperty, next / scale);
       })}
       keyframeToggle={!readOnly && !driven && !error && binding?.localMode !== 'constant'
         ? <KeyframeToggle clipId={clipId} property={property as AnimatableProperty} value={value} /> : undefined} />

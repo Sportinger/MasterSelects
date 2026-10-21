@@ -17,10 +17,13 @@ afterEach(() => useTimelineStore.setState(initial));
 const effect = (type: EditableColorEffectType): Effect => ({ id: `${type}-fx`, name: type, type, enabled: true, params: getDefaultParams(type) });
 
 describe('editable color effect graphs', () => {
+  // Brightness: odds curve with gain 2^(2.5 * amount); Contrast: S-curve x^a / (x^a + (1 - x)^a); Saturation 0: Rec.709 luma.
+  const odds = (x: number) => x * 2 ** 0.5 / (x * 2 ** 0.5 + 1 - x), curve = (x: number) => x * x / (x * x + (1 - x) ** 2);
+  const luma = 0.2126 * 0.2 + 0.7152 * 0.4 + 0.0722 * 0.8;
   it.each([
-    ['brightness', 0.2, [0.4, 0.6, 1, 0.35]],
-    ['contrast', 2, [0, 0.3, 1, 0.35]],
-    ['saturation', 0, [0.3858, 0.3858, 0.3858, 0.35]],
+    ['brightness', 0.2, [odds(0.2), odds(0.4), odds(0.8), 0.35]],
+    ['contrast', 2, [curve(0.2), curve(0.4), curve(0.8), 0.35]],
+    ['saturation', 0, [luma, luma, luma, 0.35]],
   ] as const)('expresses %s as reusable RGB math while preserving alpha', (type, amount, expected) => {
     const graph = createDefaultColorEffectGraph(type);
     const amountNode = graph.nodes.find(node => node.id === 'amount');

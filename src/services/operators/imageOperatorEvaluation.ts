@@ -2,6 +2,7 @@ import { blendSequencePixel } from './sequenceBlend';
 import type { ImageOperatorEvaluationContext, ImageOperatorPlan } from './imageOperatorGraph';
 import { pointwiseOperation } from './fields/pointwiseOperations';
 import { imageFract, imageHsvToRgb, imageRgbToHsv } from './imageColorSemantics';
+import { oklchToRgb, rgbToOklch } from './imageColorSpaceSemantics';
 import { projectImageRadius, rotateImageCoordinate, unprojectImageRadius } from './imageOpticsSemantics';
 import { imageDegreesToRadians } from './imageAngleSemantics';
 import { normalizeImageVector2 } from './imageVectorSemantics';
@@ -272,6 +273,8 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     else if (item.operation === 'hash2d-vec2') values.push(imageHash2d(args[0] as number[]));
     else if (item.operation === 'rgb-to-hsv') values.push(imageRgbToHsv(args[0] as [number, number, number]));
     else if (item.operation === 'hsv-to-rgb') values.push(imageHsvToRgb(args[0] as [number, number, number]));
+    else if (item.operation === 'rgb-to-oklch') values.push(rgbToOklch(args[0] as number[]));
+    else if (item.operation === 'oklch-to-rgb') values.push(oklchToRgb(args[0] as number[]));
     else values.push([...(args[0] as number[]), args[1] as number]);
    }
    return values;

@@ -84,6 +84,7 @@ const RULES: Readonly<Record<string, LoweringRule>> = {
   'vector.reduce-min.rgb': unary('reduce-min-rgb', 'scalar', 'rgb'), 'vector.reduce-max.rgb': unary('reduce-max-rgb', 'scalar', 'rgb'),
   'color.luminance-rec601.rgb': unary('luminance-rec601', 'scalar', 'rgb'),
   'color.luminance-rec709.rgb': unary('luminance-rec709', 'scalar', 'rgb'), 'color.luminance-rec709.image': unary('luminance-rec709', 'scalar', 'image'),
+  'color.srgb-to-linear.rgb': unary('srgb-to-linear-rgb', 'rgb', 'rgb', 'rgb'), 'color.linear-to-srgb.rgb': unary('linear-to-srgb-rgb', 'rgb', 'rgb', 'rgb'),
   'convert.rgb-to-vec3': unary('rgb-to-vec3', 'vec3', 'rgb'), 'convert.vec3-to-rgb': unary('vec3-to-rgb', 'rgb'),
   'vector.combine.rgba': { operation: 'combine', type: 'image', inputs: ['rgb', 'alpha'] },
   'field.shape-distance': { operation: 'shape-distance', type: 'scalar', inputs: ['position', 'center', 'size'],

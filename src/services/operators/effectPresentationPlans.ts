@@ -11,7 +11,15 @@ const includes = (list: string, id: string) => list.split(' ').includes(id);
 export const GLYPH_PRESENTATION_EFFECTS = new Set(['ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic',
   'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither',
   'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'contour-type']);
-const COLORS = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'temperature', 'vibrance', 'threshold', 'posterize', 'invert']);
+const COLORS = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'hue-shift', 'temperature', 'vibrance', 'threshold', 'posterize', 'invert']);
+/** Stages of the rebuilt color recipes (node id prefixes, see colorEffectGraphs.ts); older graphs use processing/finish. */
+const COLOR_STAGES: readonly [RegExp, string, string][] = [
+  [/-clamped$/, 'controls', 'Parameters'], [/^(clamp|combine|image)(-|$)/, 'finish', 'Clamp & Alpha'],
+  [/^input(-|$)/, 'input', 'Input 0–1'], [/^curve(-|$)/, 'curve', 'Tone Curve'], [/^light-/, 'light', 'Linear Light'],
+  [/^gain-/, 'gain', 'White Balance Gains'], [/^tone-/, 'tone', 'Offset & Gamma'], [/^weight(-|$)/, 'weight', 'Muted-Colour Weight'],
+  [/^measure-/, 'measure', 'Hue & Saturation'], [/^skin-/, 'skin', 'Skin Protection'], [/^gamut-/, 'gamut', 'Gamut-Safe Saturation'], [/^(range|remap)(-|$)/, 'remap', 'Input Black & White'],
+  [/^gamma-/, 'gamma', 'Gamma'], [/^output-range$/, 'output', 'Output Range'], [/^hue-/, 'hue', 'Hue Rotation'],
+];
 const REDUCE = 'reduce weight-vec4 average blurred';
 const BLUR_PORTS = { 'source-cache': 'Premultiplied Source', 'radius-px': 'Radius (px)', 'pixel-scale': 'Pixel Scale' };
 const SEPARABLE_PORTS = { ...BLUR_PORTS, sigma: 'Sigma', reach: 'Reach', pairs: 'Pairs', stride: 'Stride', 'tap-count': 'Tap Count',
@@ -83,8 +91,8 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : /split|^combine$|^image$|^color-|^ink|^mosaic$|^mixed$|^scaled-color$|^poster|^eight-rgb$|^seven-rgb$|^cell-fract$|^border|^plus4$|^center4$|^minus4$/.test(id) ? 'finish' : 'coordinates',
   };
   if (COLORS.has(type)) return {
-    labels: { processing: 'Color Processing', finish: 'Clamp & Alpha' },
-    stage: ({ id }) => includes('clamp combine image', id) ? 'finish' : 'processing',
+    labels: { processing: 'Color Processing', ...Object.fromEntries(COLOR_STAGES.map(([, stage, label]) => [stage, label])) },
+    stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
     labels: { grid: 'Cell Grid', source: 'Cell Sampling & Tone', index: 'Glyph Selection', atlas: 'Atlas Sampling', appearance: 'Ink & Appearance', feedback: 'Feedback Resolve' },

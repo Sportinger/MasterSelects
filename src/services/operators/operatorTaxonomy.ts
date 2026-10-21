@@ -38,7 +38,7 @@ const EXACT: Record<string, NodeCategoryId> = {
   'geometry.motion-time': 'time',
   'image.timeline-time': 'values', 'math.constant': 'values', 'signal.sine-gain.scalar': 'values',
   'convert.degrees-to-radians.scalar': 'math',
-  'convert.rgb-to-hsv': 'color', 'convert.hsv-to-rgb': 'color', 'image.mask-overlay': 'color', 'image.luminance': 'color',
+  'convert.rgb-to-hsv': 'color', 'convert.hsv-to-rgb': 'color', 'convert.rgb-to-oklch': 'color', 'convert.oklch-to-rgb': 'color', 'image.mask-overlay': 'color', 'image.luminance': 'color',
   'image.rgb-split': 'vector', 'image.rgb-combine': 'vector',
   'color.sobel-magnitude': 'sampling', 'field.sobel': 'sampling', 'image.sample': 'sampling', 'image.load-pixel-clamped': 'sampling',
   'image.materialize': 'sampling', 'image.resource-input': 'sampling', 'image.segment-sort-luma': 'sampling', 'image.quadtree-partition': 'sampling',

@@ -20,7 +20,7 @@
     grid-column: 3;
   }
 
-  .resolve-inspector-section {
+  .resolve-inspector-section, .resolve-inspector-params /* effect cards have no section */ {
     --resolve-inspector-row-height: 26px;
     --resolve-inspector-label-width: 100px;
     --resolve-inspector-control-width: 190px;

@@ -5,6 +5,7 @@ import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntime
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { COLOR_RECIPE_EFFECT_TYPES } from '../operators/colorEffectGraphs';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
@@ -233,36 +234,6 @@ function effectFilterPart(
         historyLoop: resolveFeedbackHistoryLoop(effect.params),
       });
       return '';
-    case 'brightness':
-      pixelEffects.brightness += finiteEffectNumber(effect.params.amount, 0);
-      return '';
-    case 'exposure':
-      (pixelEffects.exposureAdjustments ??= []).push({
-        exposure: finiteEffectNumber(effect.params.exposure, 0),
-        offset: finiteEffectNumber(effect.params.offset, 0),
-        gamma: Math.max(0.001, finiteEffectNumber(effect.params.gamma, 1)),
-      });
-      return '';
-    case 'temperature':
-      (pixelEffects.temperatureAdjustments ??= []).push({
-        temperature: finiteEffectNumber(effect.params.temperature, 0),
-        tint: finiteEffectNumber(effect.params.tint, 0),
-      });
-      return '';
-    case 'vibrance':
-      (pixelEffects.vibranceAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 0),
-      });
-      return '';
-    case 'levels':
-      (pixelEffects.levelsAdjustments ??= []).push({
-        inputBlack: finiteEffectNumber(effect.params.inputBlack, 0),
-        inputWhite: finiteEffectNumber(effect.params.inputWhite, 1),
-        gamma: Math.max(0.001, finiteEffectNumber(effect.params.gamma, 1)),
-        outputBlack: finiteEffectNumber(effect.params.outputBlack, 0),
-        outputWhite: finiteEffectNumber(effect.params.outputWhite, 1),
-      });
-      return '';
     case 'threshold':
       (pixelEffects.thresholdAdjustments ??= []).push({
         level: finiteEffectNumber(effect.params.level, 0.5),
@@ -445,12 +416,6 @@ function effectFilterPart(
         angle: finiteEffectNumber(effect.params.angle, 0),
       };
       return '';
-    case 'contrast':
-      return `contrast(${Math.max(0, finiteEffectNumber(effect.params.amount, 1))})`;
-    case 'saturation':
-      return `saturate(${Math.max(0, finiteEffectNumber(effect.params.amount, 1))})`;
-    case 'hue-shift':
-      return `hue-rotate(${finiteEffectNumber(effect.params.shift, 0) * 360}deg)`;
     case 'invert':
       return 'invert(1)';
     default:
@@ -462,8 +427,9 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
+  // Saved graphs, and the color recipes (graph-only, see colorEffectGraphs.ts), evaluate their graphs exactly.
   const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
-    && (effect.operatorGraph || effect.params.operatorGraph !== undefined));
+    && (effect.operatorGraph || effect.params.operatorGraph !== undefined || COLOR_RECIPE_EFFECT_TYPES.has(effect.type)));
   if (hasPersistedImageGraph) {
     if (!activeEffects.every(effect => isImageGraphEffectType(effect.type))) return null;
     try {

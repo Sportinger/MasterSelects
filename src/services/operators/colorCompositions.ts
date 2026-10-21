@@ -1,4 +1,7 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorDefinition, OperatorEndpoint, OperatorPort } from '../../types/operatorGraph';
+import { extractImageComposition } from './extractImageComposition';
+import { createDefaultBrightnessGraph, createDefaultContrastGraph, createDefaultExposureGraph, createDefaultHueShiftGraph,
+  createDefaultSaturationGraph, createDefaultTemperatureGraph } from './colorEffectGraphs';
 
 const node = (id: string, operator: string): BoundOperatorNode => ({ id, operator, operatorVersion: 1, bindings: {} });
 const endpoint = (nodeId: string, portId: string): OperatorEndpoint => ({ nodeId, portId });
@@ -32,8 +35,59 @@ const hueShiftGraph: EffectOperatorGraph = {
   },
 };
 
-/** Reusable HSV hue rotation assembled entirely from the existing image operators. */
-export const COLOR_COMPOSITIONS: readonly OperatorDefinition[] = [{
+const ids = (graph: EffectOperatorGraph, prefix: RegExp) => graph.nodes.filter(node => prefix.test(node.id)
+  && !(node.operator === 'values.number' && node.constants)).map(node => node.id);
+const rgbIn = { 'split-rgb': 'RGB' };
+const consumers = (...effects: string[]) => ['Image graphs', ...effects];
+
+/**
+ * The tone, light and colour stages of the rebuilt color effects (2026-10) as shared nodes:
+ * each effect graph is its bound parameters plus one of these, and every block is insertable
+ * from Reusable Nodes and expandable into its primitives.
+ */
+const brightness = createDefaultBrightnessGraph(), contrast = createDefaultContrastGraph(), exposure = createDefaultExposureGraph();
+const temperature = createDefaultTemperatureGraph(), saturation = createDefaultSaturationGraph(), hue = createDefaultHueShiftGraph();
+const RECIPE_COMPOSITIONS: readonly OperatorDefinition[] = [
+  extractImageComposition(brightness, {
+    id: 'color.brightness-curve.rgb', label: 'Brightness Curve',
+    description: 'Lift (+) or lower (−) mid-tones while black and white stay put: y = x·m / (x·m + 1 − x) with m = 2^(2.5 × Brightness), on 0–1 RGB.',
+    members: [...ids(brightness, /^curve/), 'input'], consumers: consumers('Brightness'),
+    inputLabels: { ...rgbIn, 'amount-clamped-value': 'Brightness' }, outputLabels: { 'curve-value': 'RGB' },
+  }),
+  extractImageComposition(contrast, {
+    id: 'color.contrast-curve.rgb', label: 'Contrast Curve',
+    description: 'S-curve around mid-grey with slope Contrast there: y = x^c / (x^c + (1 − x)^c). Black and white stay put and highlights roll off instead of clipping; below 1 it flattens.',
+    members: [...ids(contrast, /^curve/), 'input'], consumers: consumers('Contrast'),
+    inputLabels: { ...rgbIn, 'amount-clamped-value': 'Contrast' }, outputLabels: { 'curve-value': 'RGB' },
+  }),
+  extractImageComposition(exposure, {
+    id: 'color.exposure-stops.rgb', label: 'Exposure (Stops)',
+    description: 'Multiplies linear light by 2^Stops between sRGB to Linear and Linear to sRGB, like opening the lens: +1 doubles the light. Not clamped.',
+    members: ids(exposure, /^light-/), consumers: consumers('Exposure'),
+    inputLabels: { ...rgbIn, 'exposure-clamped-value': 'Stops' }, outputLabels: { 'light-encoded-rgb': 'RGB' },
+  }),
+  extractImageComposition(temperature, {
+    id: 'color.white-balance.rgb', label: 'White Balance',
+    description: 'Temperature (+ warm, − cool) and Tint (+ magenta, − green) as channel gains in linear light, scaled so grey keeps its brightness and black stays black. 1 = 0.6 stops red against blue. Not clamped.',
+    members: [...ids(temperature, /^(gain|light)-/)], consumers: consumers('Temperature'),
+    inputLabels: { ...rgbIn, 'temperature-clamped-value': 'Temperature', 'tint-clamped-value': 'Tint' }, outputLabels: { 'light-encoded-rgb': 'RGB' },
+  }),
+  extractImageComposition(saturation, {
+    id: 'color.gamut-saturation.rgb', label: 'Saturation (Gamut-Safe)',
+    description: 'Mixes Rec.709 luma and RGB by Amount (0 grey, 1 unchanged), but stops where the first channel reaches 0 or 1, so strong settings keep hue and brightness instead of clipping. Expects 0–1 RGB and Amount ≥ 0.',
+    members: ids(saturation, /^gamut-/), consumers: consumers('Saturation', 'Vibrance'),
+    inputLabels: { 'input-value': 'RGB', 'amount-clamped-value': 'Amount' }, outputLabels: { 'gamut-mix-value': 'RGB' },
+  }),
+  extractImageComposition(hue, {
+    id: 'color.oklch-hue-rotate.rgb', label: 'Hue Rotate (OkLCh)',
+    description: 'Rotates hue in perceptual OkLCh by Shift turns (0.5 = 180°), keeping lightness and chroma, so a rotation does not pump brightness. Not clamped.',
+    members: ids(hue, /^hue-/), consumers: consumers('Hue Shift'),
+    inputLabels: { ...rgbIn, 'shift-value': 'Shift (turns)' }, outputLabels: { 'hue-rgb-rgb': 'RGB' },
+  }),
+];
+
+/** Reusable HSV hue rotation assembled entirely from the existing image operators, then the recipe stages above. */
+export const COLOR_COMPOSITIONS: readonly OperatorDefinition[] = [...RECIPE_COMPOSITIONS, {
   id: 'color.hue-shift.rgb',
   version: 1,
   label: 'Hue Shift',

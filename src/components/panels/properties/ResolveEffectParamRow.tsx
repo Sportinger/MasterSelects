@@ -25,6 +25,9 @@ interface ResolveEffectParamRowProps {
     inputMethod: 'click' | 'drag' | 'keyboard' | 'reset' | 'select' | 'type') => void;
 }
 
+/** Few enough decimals that a value with its unit (" EV", "°") fits the field. */
+const decimalsFor = (step: number) => step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+
 /** One parameter row; returns null for types without a Resolve row yet (callers fall back). */
 export function ResolveEffectParamRow({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit }: ResolveEffectParamRowProps) {
   const property = `effect.${effect.id}.${paramName}`;
@@ -41,11 +44,15 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
   if (definition.type !== 'number') return null;
   if (sourceTarget && clipId) return <ParameterSourceNumberRow clipId={clipId} property={property} />;
   const min = definition.min ?? 0, max = definition.max ?? 1, number = typeof value === 'number' ? value : Number(definition.default);
-  return <ResolveInspectorNumberRow label={definition.label} value={number} defaultValue={Number(definition.default)}
-    min={min} max={max} step={definition.step ?? 0.01} sensitivity={Math.max(0.5, (max - min) / 100)}
+  // Shown in display units (e.g. degrees for turns); typing may go beyond the slider up to the rendered range.
+  const scale = definition.displayScale ?? 1, shown = (stored: number) => stored * scale;
+  return <ResolveInspectorNumberRow label={definition.label} value={shown(number)} defaultValue={shown(Number(definition.default))}
+    min={shown(min)} max={shown(max)} step={shown(definition.step ?? 0.01)} sensitivity={Math.max(0.5, shown(max - min) / 100)}
+    numberMin={shown(definition.renderMin ?? min)} numberMax={shown(definition.renderMax ?? max)} suffix={definition.unit}
+    decimals={definition.unit ? decimalsFor(shown(definition.step ?? 0.01)) : undefined}
     persistenceKey={`effect.${clipId ?? 'global'}.${effect.id}.${paramName}`}
     midiTarget={clipId ? { clipId, property: createEffectProperty(effect.id, paramName), label: definition.label, currentValue: number, min, max } : null}
-    onChange={set} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={method => onParamCommit?.(paramName, 'number', method)}
+    onChange={next => set(next / scale)} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={method => onParamCommit?.(paramName, 'number', method)}
     keyframeToggle={definition.animatable && clipId
       ? <EffectKeyframeToggle clipId={clipId} effectId={effect.id} paramName={paramName} value={number} /> : undefined} />;
 }

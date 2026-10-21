@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createDefaultBrightnessGraph, createDefaultContrastGraph } from '../../src/services/operators/colorEffectGraphs';
+import { createLegacyBrightnessGraph, createLegacyContrastGraph } from '../../src/services/operators/legacyColorEffectGraphs';
 import { compileImageOperatorGraph, createDefaultInvertImageGraph, type ImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 const rasterizeGlyphAtlas = vi.hoisted(() => vi.fn());
 vi.mock('../../src/effects/_shared/glyphAtlasRaster', () => ({ rasterizeGlyphAtlas }));
@@ -93,8 +93,9 @@ describe('worker software image graphs', () => {
 
   it('applies stacked programs in order with rgba8 quantization between programs', () => {
     const data = new Uint8ClampedArray([51, 51, 51, 127]);
-    const brightness = compileImageOperatorGraph(createDefaultBrightnessGraph(), { amount: .2 });
-    const contrast = compileImageOperatorGraph(createDefaultContrastGraph(), { amount: 2 });
+    // The original offset/linear recipes keep the hand-checked numbers: (0.2 + 0.2 → 102) then (102/255 - 0.5) * 2 + 0.5.
+    const brightness = compileImageOperatorGraph(createLegacyBrightnessGraph(), { amount: .2 });
+    const contrast = compileImageOperatorGraph(createLegacyContrastGraph(), { amount: 2 });
     applyWorkerSoftwareImageGraphs(data, 1, 1, [brightness, contrast], 0);
     expect([...data]).toEqual([77, 77, 77, 127]);
   });

@@ -33,6 +33,14 @@ export interface EffectParam {
   // Read only through the effect's operator graph: hidden (and reported by tools) when an
   // edited graph no longer binds it.
   graphOnly?: boolean;
+  // Rendered range for numbers that may arrive outside min/max (keyframe overshoot, tools,
+  // node drivers). The effect graph clamps to it; the inspector and tool results say so.
+  renderMin?: number;
+  renderMax?: number;
+  // Display only: inspectors show value × displayScale with this unit (Hue Shift stores turns and
+  // shows degrees). Stored values, keyframes and tool calls keep the parameter's own unit.
+  displayScale?: number;
+  unit?: string;
 }
 
 /**

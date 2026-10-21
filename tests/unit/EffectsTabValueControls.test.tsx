@@ -4,6 +4,7 @@ import { useTimelineStore } from '../../src/stores/timeline';
 
 import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
 import type { Effect } from '../../src/types/effects';
+import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -59,7 +60,7 @@ describe('EffectsTab numeric controls', () => {
     expect(container.querySelectorAll('.resolve-inspector-row, [class*="resolve"]').length).toBeGreaterThan(0);
   });
 
-  it('uses the shared Transform-style labeled draggable value without a separate slider', () => {
+  it('renders color controls as Resolve rows: Transform-style draggable value, thin slider and reset', () => {
     const brightness: Effect = {
       id: 'effect:brightness:test',
       name: 'Brightness',
@@ -75,8 +76,21 @@ describe('EffectsTab numeric controls', () => {
     const value = screen.getByLabelText('Amount');
     expect(value).toHaveClass('draggable-number');
     expect(value).toHaveAttribute('role', 'slider');
-    expect(value.closest('.labeled-value')).toHaveClass('effect-param-value');
+    expect(value.closest('.labeled-value')).toHaveClass('resolve-inspector-field');
+    expect(screen.getByLabelText('Amount slider')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reset Amount')).toBeInTheDocument();
+    // The row grid comes from the params container (an effect card has no section header).
+    expect(value.closest('.resolve-inspector-params')).not.toBeNull();
     expect(container.querySelector('.param-slider')).not.toBeInTheDocument();
+  });
+
+  it('shows units in the value field: Hue Shift in degrees (stored as turns), Exposure in EV', () => {
+    const numeric = vi.spyOn(useTimelineStore.getState(), 'setPropertyValue').mockImplementation(() => {});
+    const exposure: Effect = { id: 'units-exposure', type: 'exposure', name: 'Exposure', enabled: true, params: { exposure: 1.5, offset: 0, gamma: 1 } };
+    render(<EffectsTab clipId="clip:effects-controls" effects={[exposure]} />);
+    expect(screen.getByLabelText('Exposure')).toHaveTextContent('1.5 EV');
+    fireEvent.contextMenu(screen.getByLabelText('Exposure'));
+    expect(numeric).toHaveBeenCalledWith('clip:effects-controls', 'effect.units-exposure.exposure', 0);
   });
 
   it('titles a newly added effect with its registered name and keeps a renamed one', () => {
@@ -85,5 +99,30 @@ describe('EffectsTab numeric controls', () => {
     const { container } = render(<EffectsTab clipId="clip:effects-controls" effects={[added, renamed]} />);
     expect([...container.querySelectorAll('.effect-name')].map(name => name.textContent)).toEqual(['Gaussian Blur', 'Stage swirl']);
     expect(screen.getByTitle('Collapse Gaussian Blur')).toBeInTheDocument();
+  });
+  it('shows Hue Shift in degrees and stores turns', () => {
+    const initial = useTimelineStore.getState();
+    const hue: Effect = { id: 'units-hue', type: 'hue-shift', name: 'Hue Shift', enabled: true, params: { shift: 0.25 } };
+    useTimelineStore.setState({ clips: [createMockClip({ id: 'clip:hue', trackId: 't', duration: 4, effects: [hue] })],
+      tracks: [createMockTrack({ id: 't' })], clipKeyframes: new Map() });
+    try {
+      const numeric = vi.spyOn(useTimelineStore.getState(), 'setPropertyValue').mockImplementation(() => {});
+      render(<EffectsTab clipId="clip:hue" effects={[hue]} />);
+      expect(screen.getByLabelText('Shift')).toHaveTextContent('90°');
+      expect(screen.getByLabelText('Shift slider')).toHaveAttribute('aria-valuemax', '360');
+      // One keyboard step is one degree: 91° is stored as 91/360 of a turn.
+      fireEvent.keyDown(screen.getByLabelText('Shift slider'), { key: 'ArrowRight' });
+      expect(numeric).toHaveBeenCalledTimes(1);
+      expect(numeric.mock.calls[0][1]).toBe('effect.units-hue.shift');
+      expect(numeric.mock.calls[0][2]).toBeCloseTo(91 / 360, 10);
+    } finally { useTimelineStore.setState(initial); }
+  });
+
+  it('says when a value at the playhead is clamped for rendering', () => {
+    const effect: Effect = { id: 'overshoot', type: 'saturation', name: 'Saturation', enabled: true, params: { amount: -0.4 } };
+    const view = render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Amount -0.4 is below the rendered range (0 to 10) and renders as 0.');
+    view.rerender(<EffectsTab clipId="clip:effects-controls" effects={[{ ...effect, params: { amount: 2 } }]} />);
+    expect(screen.queryByText(/rendered range/)).toBeNull();
   });
 });
