@@ -3,7 +3,6 @@ import { createStoreSpeedSource } from '../timeline/retime/clipRetime';
 import { resolveAudioPreviewRetime } from '../timeline/retime/clipAudioRetime';
 import { readEditorContentPublication } from '../project/repository/transaction/editorPublication';
 // AudioTrackSyncManager - Handles audio element synchronization with playhead
-// Extracted from LayerBuilderService for separation of concerns
 
 import type { TimelineClip, TimelineTrack } from '../../types';
 import type { FrameContext, AudioSyncState, AudioSyncTarget } from './types';
@@ -35,6 +34,7 @@ import { AudioTrackCompositionPlaybackMixdownManager } from './audioTrackComposi
 import { AudioTrackCrossfadeTransitionSync } from './audioTrackCrossfadeTransitions';
 import { AudioTrackHandoffManager } from './audioTrackHandoffs';
 import { AudioTrackRuntimeElementManager } from './audioTrackRuntimeElements';
+import type { AudioTrackProxyLookup } from './audioTrackProxyLoads';
 import { AudioTrackStemBufferMixerManager } from './audioTrackStemBufferMixers';
 import { AudioTrackStemLayerBufferCache } from './audioTrackStemLayerBuffers';
 import { AudioTrackStemPreviewElementManager } from './audioTrackStemPreviewElements';
@@ -86,8 +86,7 @@ export class AudioTrackSyncManager {
     stemLayerBuffers: this.stemLayerBuffers,
   });
   private prebuffering = new AudioTrackPrebufferManager({
-    getAudioProxyElementForClip: (clip) => this.getAudioProxyElementForClip(clip),
-    getClipAudioElement: (clip) => this.getClipAudioElement(clip),
+    getPlayableSourceAudioElement: (clip) => this.getPlayableSourceAudioElement(clip),
     stemBufferMixers: this.stemBufferMixers,
     stemPreviewElements: this.stemPreviewElements,
   });
@@ -102,7 +101,7 @@ export class AudioTrackSyncManager {
   });
   private crossfadeTransitions = new AudioTrackCrossfadeTransitionSync({
     getClipAudioElement: (clip) => this.getClipAudioElement(clip),
-    getAudioProxyElementForClip: (clip) => this.getAudioProxyElementForClip(clip),
+    resolveAudioProxyForClip: (clip) => this.resolveAudioProxyForClip(clip),
     getClipSourceMediaFileId: (clip) => this.getClipSourceMediaFileId(clip),
     isAudioSourceClip: (clip) => this.isAudioSourceClip(clip),
     pauseAudioTrackProxy: (clipId) => this.runtimeElements.pauseAudioTrackProxy(clipId),
@@ -150,9 +149,7 @@ export class AudioTrackSyncManager {
     timelineState.clearStaleRuntimeAudioMeters(0, performance.now());
   }
 
-  /**
-   * Sync audio elements to current playhead
-   */
+  /** Sync audio elements to current playhead */
   syncAudioElements(): void {
     if (readEditorContentPublication().blocked) { this.stopAllAudioPlayback(); return; }
     let ctx = createFrameContext();
@@ -220,7 +217,7 @@ export class AudioTrackSyncManager {
     if (ctx.isPlaying && !ctx.isDraggingPlayhead) {
       this.audioHandoffs.compute(
         ctx,
-        (clip) => this.getAudioProxyElementForClip(clip) ?? this.getClipAudioElement(clip),
+        (clip) => this.getPlayableSourceAudioElement(clip),
         (clip) => this.getClipSourceMediaFileId(clip)
       );
     }
@@ -246,7 +243,7 @@ export class AudioTrackSyncManager {
     if (ctx.isPlaying && !ctx.isDraggingPlayhead) {
       this.audioHandoffs.updateLastTrackState(
         ctx,
-        (clip) => this.getAudioProxyElementForClip(clip) ?? this.getClipAudioElement(clip),
+        (clip) => this.getPlayableSourceAudioElement(clip),
         (clip) => this.getClipSourceMediaFileId(clip)
       );
     }
@@ -269,9 +266,7 @@ export class AudioTrackSyncManager {
     this.audioSyncHandler.syncAudioElement(target, ctx, state);
   }
 
-  /**
-   * Sync audio track clips
-   */
+  /** Sync audio track clips */
   private syncAudioTrackClips(
     ctx: FrameContext,
     state: AudioSyncState,
@@ -366,8 +361,11 @@ export class AudioTrackSyncManager {
       const compositionAudioElement = needsSourceElement
         ? this.compositionPlaybackMixdowns.ensureCompositionAudioPlaybackElement(clip, 'source', ctx.clips)
         : null;
-      const sourceAudioProxy = needsSourceElement ? this.getAudioProxyElementForClip(clip) : null;
-      const sourceAudioElement = sourceAudioProxy ?? compositionAudioElement ?? this.getClipAudioElement(clip);
+      const proxyLookup = needsSourceElement ? this.resolveAudioProxyForClip(clip) : null;
+      const sourceAudioProxy = proxyLookup?.element ?? null;
+      // A ready proxy that is still loading keeps the clip silent; its original source may be undecodable.
+      const sourceAudioElement = sourceAudioProxy ?? compositionAudioElement ??
+        (proxyLookup?.pending ? null : this.getClipAudioElement(clip));
       const sourceMediaFileId = needsSourceElement ? this.getClipSourceMediaFileId(clip) : undefined;
       const canUseSourceBufferMixer = Boolean(
         sourceMediaFileId && !retime.mutedReason &&
@@ -411,6 +409,7 @@ export class AudioTrackSyncManager {
 
       if (needsSourceElement) {
         if (!sourceAudioElement) {
+          if (proxyLookup?.pending) pauseAudioElement(this.getClipAudioElement(clip));
           if (canUseSourceBufferMixer && sourceMediaFileId) {
             void proxyFrameCache.warmScrubAudioBuffer(sourceMediaFileId);
           }
@@ -507,17 +506,13 @@ export class AudioTrackSyncManager {
     }
   }
 
-  /**
-   * Sync video clip audio (proxies and varispeed scrubbing)
-   */
+  /** Sync video clip audio (proxies and varispeed scrubbing) */
   private syncVideoClipAudio(ctx: FrameContext, state: AudioSyncState): void {
     const activeVideoClipIds = this.videoClipAudioSync.sync(ctx, state);
     this.runtimeElements.removeVideoAudioProxiesNotIn(activeVideoClipIds);
   }
 
-  /**
-   * Sync nested composition mixdown audio
-   */
+  /** Sync nested composition mixdown audio */
   private syncNestedCompMixdown(ctx: FrameContext, state: AudioSyncState): void {
     for (const clip of ctx.clipsAtTime) {
       if (!shouldUseInlineCompositionMixdown(ctx.clips, clip)) {
@@ -554,9 +549,7 @@ export class AudioTrackSyncManager {
     }
   }
 
-  /**
-   * Pause audio not at playhead
-   */
+  /** Pause audio not at playhead */
   private pauseInactiveAudio(ctx: FrameContext, activeTransitionAudioClipIds = new Set<string>()): void {
     const activeClipIds = new Set([
       ...ctx.clipsAtTime.map(clip => clip.id),
@@ -641,9 +634,14 @@ export class AudioTrackSyncManager {
     return linkedClip && this.getClipVideoElement(linkedClip) && !linkedClip.isComposition ? linkedClip : undefined;
   }
 
-  private getAudioProxyElementForClip(clip: TimelineClip): HTMLAudioElement | null {
-    const mediaFileId = this.getClipSourceMediaFileId(clip);
-    return this.runtimeElements.getAudioTrackProxyForClip(mediaFileId, clip.id);
+  private resolveAudioProxyForClip(clip: TimelineClip): AudioTrackProxyLookup {
+    return this.runtimeElements.resolveAudioTrackProxyForClip(this.getClipSourceMediaFileId(clip), clip.id);
+  }
+
+  /** Proxy element when available; never the original while a ready proxy is still loading. */
+  private getPlayableSourceAudioElement(clip: TimelineClip): HTMLAudioElement | null {
+    const proxy = this.resolveAudioProxyForClip(clip);
+    return proxy.element ?? (proxy.pending ? null : this.getClipAudioElement(clip));
   }
 
   private pauseAndDisposeRoute(element: HTMLMediaElement | null | undefined): void {
