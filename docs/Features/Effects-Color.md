@@ -6,8 +6,9 @@ colour mood. Add one in **Properties → Effects → + Add Effect**.
 Black stays black and white stays white unless you ask for it, and colours keep
 their shade when you push them. The export renders the same graphs as the preview
 (adjustment layers in the optional worker GPU modes excepted, see Known gaps).
-Effects in projects and custom Looks saved before October 2026 keep their earlier
-look; add the effect again to get the new one.
+Effects in projects and custom Looks saved before this update keep their earlier
+look; to get the new one, add the effect again (for a Look: rebuild it from freshly
+added effects and save it again).
 
 ## The nine color effects
 
@@ -28,9 +29,9 @@ Tip: Brightness never burns out the brightest whites; for a camera-like change o
 ### Contrast
 <figure class="docs-shot docs-shot--float-left">
 
-![The dancer on a dark stage, split in the middle: left half original, right half with Contrast 1.4, where the background is darker and the lit dress glows brighter](assets/effects/contrast.webp)
+![The whole dancer twice, the same crop: left original, right Contrast 1.4, where the dark background and floor are deeper and the lit dress and skin stand out brighter and a little warmer](assets/effects/contrast.webp)
 
-<figcaption>Left: original. Right: Amount 1.4.</figcaption>
+<figcaption>The same part of the frame. Left: original. Right: Amount 1.4.</figcaption>
 </figure>
 
 Adds punch: shadows get deeper and highlights brighter, on a soft S-shaped curve,
@@ -41,9 +42,9 @@ make colours stronger.
 ### Exposure
 <figure class="docs-shot docs-shot--float-right">
 
-![The dancer on stage, split in the middle: left half original, right half with Exposure +1 EV, where the dress, the haze and the stage are brighter, like twice as much light](assets/effects/exposure.webp)
+![The whole dancer twice, the same crop: left original, right Exposure +1 EV, where skin, dress, the hazy background and the floor are all brighter and the brightest part of the dress is close to white](assets/effects/exposure.webp)
 
-<figcaption>Left: original. Right: Exposure +1 EV.</figcaption>
+<figcaption>The same part of the frame. Left: original. Right: Exposure +1 EV.</figcaption>
 </figure>
 
 Works like the camera's exposure: it changes the amount of light. +1 doubles it,
@@ -55,9 +56,9 @@ Works like the camera's exposure: it changes the amount of light. +1 doubles it,
 ### Levels
 <figure class="docs-shot docs-shot--float-left">
 
-![The dancer on stage, split in the middle: left half original, right half with Output Black 0.12 and Output White 0.92, where the black stage floor and background have turned a soft dark grey](assets/effects/levels.webp)
+![The whole dancer twice, the same crop: left original, right with Output Black 0.12 and Output White 0.92, where the black background and floor have turned a soft dark grey and the dress is slightly duller](assets/effects/levels.webp)
 
-<figcaption>Left: original. Right: Output Black 0.12, Output White 0.92.</figcaption>
+<figcaption>The same part of the frame. Left: original. Right: Output Black 0.12, Output White 0.92.</figcaption>
 </figure>
 
 The classic Levels from photo editing: you choose which tone becomes black, which
@@ -84,9 +85,9 @@ into a flat block.
 ### Vibrance
 <figure class="docs-shot docs-shot--float-left">
 
-![The harbour town, split in the middle: left half original, right half with Vibrance 1, where the blue sky and the sea are deeper while the colourful houses change little](assets/effects/vibrance.webp)
+![The dancer's face, arms and dress, the same crop three times: left original; middle Saturation 1.6, where skin and dress turn orange; right Vibrance 1, where the skin stays natural and the dress is only a little warmer](assets/effects/vibrance.webp)
 
-<figcaption>Left: original. Right: Amount 1.</figcaption>
+<figcaption>The same part of the frame. Left: original. Middle: Saturation 1.6. Right: Vibrance 1.</figcaption>
 </figure>
 
 A gentler saturation: it strengthens pale colours a lot and strong colours only a
@@ -146,22 +147,22 @@ Tip: add Hue Shift at 180° after Invert to get roughly the original colours bac
 Every color effect is a small node graph. The inspector shows its controls, the
 Node Workspace shows the nodes behind them, and you can change those nodes.
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-shot--float-right">
 
 <div class="docs-shot-stage">
 
-![The dancer one stop brighter in the preview next to Properties, Effects, with Exposure at 1.0 EV, Offset 0 and Gamma 1](assets/effects/editor/exposure-inspector.webp)
+![Properties, Effects with the Exposure card: Exposure at 1.0 EV, Offset 0 and Gamma 1, with keyframe and reset buttons beside each row](assets/effects/editor/exposure-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 486" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 527" aria-hidden="true" focusable="false">
 <defs><marker id="exposure-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M830 175 L830 91" marker-end="url(#exposure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="830" cy="175" r="18" /><text x="830" y="175" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M503 361 L587 361" marker-end="url(#exposure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="503" cy="361" r="18" /><text x="503" y="361" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M503 436 L587 436" marker-end="url(#exposure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="503" cy="436" r="18" /><text x="503" y="436" class="docs-shot-number-text">3</text>
-<path class="docs-shot-arrow" d="M917 186 L917 270" marker-end="url(#exposure-inspector-arrow)" />
-<circle class="docs-shot-number" cx="917" cy="186" r="18" /><text x="917" y="186" class="docs-shot-number-text">4</text>
+<path class="docs-shot-arrow" d="M355 148 L355 64" marker-end="url(#exposure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="355" cy="148" r="18" /><text x="355" y="148" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M22 370 L49 370" marker-end="url(#exposure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="370" r="18" /><text x="22" y="370" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M22 465 L49 465" marker-end="url(#exposure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="22" cy="465" r="18" /><text x="22" y="465" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M464 173 L464 257" marker-end="url(#exposure-inspector-arrow)" />
+<circle class="docs-shot-number" cx="464" cy="173" r="18" /><text x="464" y="173" class="docs-shot-number-text">4</text>
 </svg>
 </div>
 
@@ -177,6 +178,8 @@ one effect on this clip.
 In the number field you can type past the end of a slider, up to what the effect
 can show (Exposure up to ±20 EV). If a keyframe, a node or the AI agent goes
 further, the effect uses the limit and the inspector says so.
+
+<div class="docs-float-end"></div>
 
 ### One block between colour in and colour out
 
@@ -206,16 +209,16 @@ Mask), so you can drop, say, a Brightness Curve into any other image effect grap
 
 <div class="docs-shot-stage">
 
-![The Brightness Curve folder opened: on the left the Value cards 1 and 2.5, the Amount input, the RGB input and the Value cards 0 and 1, then Scalar to RGB, Multiply and Clamp, Power of Two and Subtract, Multiply, Add and Divide](assets/effects/graphs/brightness-curve.webp)
+![The Brightness Curve folder opened: on the left the Value cards 1 and 2.5 and the Amount and RGB inputs, then Scalar to RGB, Multiply and Clamp, Power of Two and Subtract, Multiply, Add and Divide](assets/effects/graphs/brightness-curve.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 929" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 690" aria-hidden="true" focusable="false">
 <defs><marker id="brightness-curve-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M97 297 L97 381" marker-end="url(#brightness-curve-arrow)" />
-<circle class="docs-shot-number" cx="97" cy="297" r="18" /><text x="97" y="297" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M101 316 L101 400" marker-end="url(#brightness-curve-arrow)" />
+<circle class="docs-shot-number" cx="101" cy="316" r="18" /><text x="101" y="316" class="docs-shot-number-text">1</text>
 </svg>
 </div>
 
-<figcaption>Brightness Curve. 1 — the Value 2.5: Amount × 2.5 goes through Power of Two to become the gain; Multiply, Add and Divide bend each colour channel with it.</figcaption>
+<figcaption>Brightness Curve (Clamp's limits 0 and 1 are left out). 1 — the Value 2.5: Amount × 2.5 goes through Power of Two to become the gain; Multiply, Add and Divide bend each colour channel with it.</figcaption>
 </figure>
 
 The curve brightens the dark-to-middle tones of each channel by the gain from
@@ -356,12 +359,17 @@ blocks in the [Node Catalog](./Node-Catalog.md) and the graph contract in the
 - **Saved projects.** Effects keep the graph they were saved with, so projects from
   before the 2026-10 rebuild look as before (`legacyColorEffectGraphs.ts`). A color
   effect saved before effect graphs existed (no graph at all) loads with the
-  original graph; new effects get the recipe graph when they are added. Custom
-  Looks saved before the rebuild apply their color effects with the original
-  graphs; new Looks store each color effect's graph (Look schema 2).
+  original graph; new effects get the recipe graph when they are added, also on
+  adjustment layers, where an agent's `configure` keeps the graph of every effect
+  it keeps. Custom Looks saved before the 2026-10 rebuild apply their color effects
+  with the original graphs; new Looks store each color effect's graph (Look schema 2).
+  A stored Look graph is validated when the Look is applied; one that no longer
+  validates renders the current recipe and the Looks panel says so. To move an old
+  Look to the new math, rebuild it from freshly added effects and save it again.
 - **Known gaps.** Adjustment layers in the optional worker GPU render modes still
   use the older 4×5 colour matrix for Brightness, Contrast and Saturation; the
-  adjustment inspector and the `WorkerGpuAdjustment` log name each effect that
-  looks different there (`adjustment-color-recipe-unsupported`). Exposure clips each channel
+  `WorkerGpuAdjustment` log, and the adjustment inspector while such a mode is
+  selected, name each effect that looks different there
+  (`adjustment-color-recipe-unsupported`). Exposure clips each channel
   hard, so strong +EV can shift hues in the highlights. Contrast pivots at fixed
   mid-grey, Levels has no per-channel mode, Temperature has no Kelvin scale.

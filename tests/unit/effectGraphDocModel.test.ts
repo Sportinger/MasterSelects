@@ -123,6 +123,16 @@ describe('effect graph doc shots: graph selection', () => {
     expect(() => doc('?effect=motion-blur&focus=stage-b-coarse-taps&only=nothing-here')).toThrow(/No node nothing-here/);
   });
 
+  it('leaves the unpicked number cards of the folder out of a picked recipe instead of stubbing them', () => {
+    const { graph } = doc('?effect=brightness&focus=brightness-curve&only=curve-stops-per-amount,curve-stops,curve-gain,input,curve-lifted,curve-one,curve-one-rgb,curve-rest,curve-total,curve');
+    const local = graph.nodes.map(node => node.id.split('/').at(-1));
+    // Clamp's limits 0 and 1 are plain Value cards of the folder: neither cards nor stubs remain.
+    expect(local).not.toEqual(expect.arrayContaining(['input-low']));
+    expect(graph.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label).toSorted()).toEqual(['Amount', 'RGB']);
+    const clamp = graph.nodes.find(node => node.id.endsWith('/input'))!;
+    expect(graph.edges.filter(edge => edge.toNodeId === clamp.id)).toHaveLength(1);
+  });
+
   it('gives each wrapped row its own height, so a short row leaves no empty band', () => {
     const { graph } = doc('?effect=gaussian-blur&focus=horizontal-pass&break=horizontal-sample');
     const second = graph.nodes.find(node => node.id.endsWith('/horizontal-sample'))!.layout.y;

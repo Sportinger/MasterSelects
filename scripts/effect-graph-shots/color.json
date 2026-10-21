@@ -1,7 +1,7 @@
 {
   "shots": [
     "brightness?plumbing=hide",
-    "brightness?focus=brightness-curve&marks=curve-stops-per-amount:above@brightness-curve",
+    "brightness?focus=brightness-curve&only=curve-stops-per-amount,curve-stops,curve-gain,input,curve-lifted,curve-one,curve-one-rgb,curve-rest,curve-total,curve&marks=curve-stops-per-amount:above@brightness-curve",
     "exposure?focus=exposure-stops&marks=light-gain:above@exposure-stops",
     "hue-shift?focus=hue-rotate-oklch&marks=hue-lch-split:above,hue-lch-combine:above@hue-shift-rotate",
     "vibrance?focus=muted-colour-weight&only=weight-muted,weight,weight-boost,weight-amount,weight-saturation&rows=1&layout=full&marks=weight:below@vibrance"
