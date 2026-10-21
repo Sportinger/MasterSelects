@@ -504,6 +504,23 @@ describe('WebGPUContext', () => {
     expect(log.error).toHaveBeenCalledWith('Device lost', vkLoss.message);
   });
 
+  it('carries a later incident loss into its recovery-failed error after the first loss was filed', async () => {
+    vi.useFakeTimers();
+    const { requestAdapter, losers } = installLosableDevices();
+    const context = new WebGPUContext();
+    await context.initialize();
+    losers[0]({ reason: 'unknown', message: 'first driver reset' } as GPUDeviceLostInfo);
+    await vi.advanceTimersByTimeAsync(200);
+    expect(context.initialized).toBe(true);
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('Device lost', 'first driver reset');
+    log.error.mockClear();
+    requestAdapter.mockResolvedValue(null);
+    losers[1]({ reason: 'unknown', message: 'GPU process crashed' } as GPUDeviceLostInfo);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('GPU recovery failed',
+      { attempts: 3, failure: 'adapter_unavailable', lostDevice: 'GPU process crashed' });
+  });
+
   it('keeps hidden, unloading, and frozen pages out of the repeated-loss count until they return', () => {
     const policy = new DeviceLossPolicy(() => 0);
     const resumed = vi.fn();
