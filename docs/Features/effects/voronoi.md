@@ -4,7 +4,7 @@
 
 Shatters the image into slowly drifting Voronoi cells, each filled with one sampled color and subtly outlined; Scale sets cell size.
 
-Group: [Pixel & Mosaic](../Effects-Mirror-Pixel.md) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 

@@ -4,7 +4,7 @@
 
 Pixelates the image into blocks and posterizes each to a few color levels; Block Size sets the pixel size.
 
-Group: [Pixel & Mosaic](../Effects-Mirror-Pixel.md) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 

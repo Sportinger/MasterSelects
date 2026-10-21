@@ -1,4 +1,4 @@
-// Inspector rows of the mirror, split and pixel effects (docs/Features/Effects-Mirror-Pixel.md):
+// Inspector rows of the mirror, split and pixel effects (docs/Features/effects/, Lens & Distort and Pixel & Mosaic):
 // values read with the decimals of their step, Angle dims in RGB Split's Lens mode with a visible
 // reason, colour rows show their hex value and reset, and value notes name parameters by their label.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';

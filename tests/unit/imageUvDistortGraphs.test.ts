@@ -13,7 +13,7 @@ const RESOLUTION: UV = [1920, 1080];
 const fract = (value: number) => value - Math.floor(value);
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 
-/** Independent CPU reference of the documented formulas (docs/Features/Effects-Distort.md). */
+/** Independent CPU reference of the documented formulas (docs/Features/effects/bulge.md, twirl.md and wave.md). */
 function shapeScale(shape: unknown, [width, height]: UV): UV {
   const short = Math.min(width, height);
   return shape === 'frame' ? [1, 1] : [width / short, height / short];
