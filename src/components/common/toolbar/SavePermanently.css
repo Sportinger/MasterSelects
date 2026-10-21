@@ -23,7 +23,17 @@
 }
 
 @layer overlays {
-  .save-permanently-dialog { max-height: calc(100dvh - 48px); overflow-y: auto; }
+  /* Fits the visible viewport (iPad landscape is 734px tall): the body scrolls, the footer with Done stays. */
+  .repository-archive-dialog.save-permanently-dialog {
+    max-height: calc(100vh - 48px);
+    max-height: calc(100dvh - 48px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    overflow: hidden;
+  }
+  .save-permanently-body {
+    display: flex; flex: 1 1 auto; flex-direction: column; gap: 12px; min-height: 0;
+    margin: -4px; padding: 4px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  }
+  .save-permanently-footer { flex: 0 0 auto; }
   .save-permanently-dialog button { -webkit-tap-highlight-color: transparent; }
   .save-permanently-dialog .save-permanently-accent { background: linear-gradient(90deg, transparent, var(--warning), var(--warning-light), transparent); }
   .repository-archive-dialog .save-permanently-warning { color: var(--text-primary); }

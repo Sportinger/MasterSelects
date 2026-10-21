@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { Logger } from '../../../services/logger';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import { moveActiveProjectToPersistentBrowserStorage, moveTemporaryProject, type OpenBrowserStorageCopy } from '../../../services/project/permanentSave/browserStorageMigration';
@@ -66,6 +67,11 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
     return () => { mounted.current = false; if (focus?.isConnected) focus.focus(); };
   }, []);
 
+  // The body scrolls on short screens: bring a new result or error into view.
+  useEffect(() => {
+    if (message || error) dialog.current?.querySelector<HTMLElement>('[role=status], [role=alert]')?.scrollIntoView?.({ block: 'nearest' });
+  }, [message, error]);
+
   async function run(key: string, action: () => Promise<string | null>) {
     setBusy(key); setError(null); setMessage(null);
     try {
@@ -124,7 +130,8 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
     return `Moved ${moved.length} project${moved.length === 1 ? '' : 's'} into this browser’s permanent storage. Open them via Open Project.`;
   }
 
-  return <div className="project-name-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+  // Portaled: the toolbar is a stacking context below the workspace bar, which would cover the footer.
+  return createPortal(<div className="project-name-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <div className="project-name-dialog repository-archive-dialog save-permanently-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}
       onKeyDown={event => {
         if (event.key === 'Escape' && !busy) { event.preventDefault(); onClose(); }
@@ -137,49 +144,51 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
       }}>
       <div className="project-name-dialog-accent save-permanently-accent" />
       <h2 id={titleId}>{status.activeTemporary ? 'Save this project permanently' : notSafe ? 'Keep this project safe' : 'Move temporary projects'}</h2>
-      {status.activeTemporary
-        ? <p className="save-permanently-warning"><strong>Temporary.</strong> {status.scratch ? 'This unsaved work' : `"${projectName}"`} is only in a temporary browser database. Private Browsing and in-app browsers delete it when the window closes.</p>
-        : notSafe ? <p className="save-permanently-warning"><strong>Not safe yet.</strong> "{projectName}" is stored in Safari’s website data, which Safari deletes after seven days of browsing without a visit.</p>
-          : !message && <p>Projects from an earlier session are still in temporary browser storage.</p>}
-      {status.activeTemporary && <label className="save-permanently-name">Project name
-        <input value={name} disabled={busy !== null} onChange={event => setName(event.target.value)} />
-      </label>}
-      {environment.checking && (status.activeTemporary || notSafe) && <p>Checking where this device can save…</p>}
-      {destinations.length > 0 && <ul className="save-permanently-options" aria-label="Destinations">
-        {destinations.map((destination, index) => <li key={destination}>
-          {destination === 'home-screen' ? <SavePermanentlyHomeScreenStep busy={busy} onDownload={() => { void run('take-along', takeAlong); }} /> : <button type="button" className="save-permanently-option" data-recommended={index === 0 ? 'true' : 'false'} disabled={busy !== null}
-            onPointerUp={blurAfterPointer} onClick={() => { void run(destination, actions[destination]); }}>
-            <span className="save-permanently-option-title">{busy === destination ? 'Saving…' : COPY[destination].title}{index === 0 && <em>Recommended</em>}</span>
-            <span className="save-permanently-option-description">{describeDestination(destination)}</span>
-          </button>}
-        </li>)}
-      </ul>}
-      {canMoveOthers && <div className="save-permanently-others">
-        <p>{status.activeTemporary ? 'Also in temporary storage' : 'In temporary storage'}: {status.temporaryProjects.join(', ')}</p>
-        <button type="button" disabled={busy !== null} onPointerUp={blurAfterPointer} onClick={() => { void run('others', moveOthers); }}>
-          {busy === 'others' ? 'Moving…' : `Move ${status.temporaryProjects.length} to this browser’s permanent storage`}
-        </button>
-      </div>}
-      {!canMoveOthers && status.temporaryProjects.length > 0 && <p className="save-permanently-others">
-        Also in temporary storage: {status.temporaryProjects.join(', ')}.
-        {environment.persistentBrowserStorage && ' They can move into this browser’s permanent storage after this project was kept in this browser.'}
-      </p>}
-      {!environment.checking && <p className="save-permanently-persistence">
-        {environment.persistence === true ? 'This browser keeps MasterSelects storage permanently.'
-          : environment.persistence === 'unsupported' ? 'This browser does not report whether it keeps its storage.'
-            : 'This browser may clear MasterSelects storage when space runs low.'}
-        {environment.persistence === false && <button type="button" disabled={busy !== null} onPointerUp={blurAfterPointer}
-          onClick={() => { void run('persist', async () => (await environment.requestPersistence())
-            ? 'The browser will keep MasterSelects storage.'
-            : `The browser declined to keep its storage permanently. ${safariTab ? 'Add MasterSelects to the Home Screen' : 'Save to a folder'} or download an archive to be safe.`); }}>
-          Ask to keep it</button>}
-      </p>}
-      {environment.homeScreen === 'home-screen-app' && <p className="save-permanently-hint">Opened from the Home Screen: Safari does not apply its seven-day cleanup to this app’s storage, so projects kept in this browser stay. A downloaded .msproj archive is still a good backup.</p>}
-      {message && <p role="status" className="save-permanently-message">{message}</p>}
-      {error && <p role="alert">{error}</p>}
-      <div className="repository-archive-actions">
+      <div className="save-permanently-body">
+        {status.activeTemporary
+          ? <p className="save-permanently-warning"><strong>Temporary.</strong> {status.scratch ? 'This unsaved work' : `"${projectName}"`} is only in a temporary browser database. Private Browsing and in-app browsers delete it when the window closes.</p>
+          : notSafe ? <p className="save-permanently-warning"><strong>Not safe yet.</strong> "{projectName}" is stored in Safari’s website data, which Safari deletes after seven days of browsing without a visit.</p>
+            : !message && <p>Projects from an earlier session are still in temporary browser storage.</p>}
+        {status.activeTemporary && <label className="save-permanently-name">Project name
+          <input value={name} disabled={busy !== null} onChange={event => setName(event.target.value)} />
+        </label>}
+        {environment.checking && (status.activeTemporary || notSafe) && <p>Checking where this device can save…</p>}
+        {destinations.length > 0 && <ul className="save-permanently-options" aria-label="Destinations">
+          {destinations.map((destination, index) => <li key={destination}>
+            {destination === 'home-screen' ? <SavePermanentlyHomeScreenStep busy={busy} onDownload={() => { void run('take-along', takeAlong); }} /> : <button type="button" className="save-permanently-option" data-recommended={index === 0 ? 'true' : 'false'} disabled={busy !== null}
+              onPointerUp={blurAfterPointer} onClick={() => { void run(destination, actions[destination]); }}>
+              <span className="save-permanently-option-title">{busy === destination ? 'Saving…' : COPY[destination].title}{index === 0 && <em>Recommended</em>}</span>
+              <span className="save-permanently-option-description">{describeDestination(destination)}</span>
+            </button>}
+          </li>)}
+        </ul>}
+        {canMoveOthers && <div className="save-permanently-others">
+          <p>{status.activeTemporary ? 'Also in temporary storage' : 'In temporary storage'}: {status.temporaryProjects.join(', ')}</p>
+          <button type="button" disabled={busy !== null} onPointerUp={blurAfterPointer} onClick={() => { void run('others', moveOthers); }}>
+            {busy === 'others' ? 'Moving…' : `Move ${status.temporaryProjects.length} to this browser’s permanent storage`}
+          </button>
+        </div>}
+        {!canMoveOthers && status.temporaryProjects.length > 0 && <p className="save-permanently-others">
+          Also in temporary storage: {status.temporaryProjects.join(', ')}.
+          {environment.persistentBrowserStorage && ' They can move into this browser’s permanent storage after this project was kept in this browser.'}
+        </p>}
+        {!environment.checking && <p className="save-permanently-persistence">
+          {environment.persistence === true ? 'This browser keeps MasterSelects storage permanently.'
+            : environment.persistence === 'unsupported' ? 'This browser does not report whether it keeps its storage.'
+              : 'This browser may clear MasterSelects storage when space runs low.'}
+          {environment.persistence === false && <button type="button" disabled={busy !== null} onPointerUp={blurAfterPointer}
+            onClick={() => { void run('persist', async () => (await environment.requestPersistence())
+              ? 'The browser will keep MasterSelects storage.'
+              : `The browser declined to keep its storage permanently. ${safariTab ? 'Add MasterSelects to the Home Screen' : 'Save to a folder'} or download an archive to be safe.`); }}>
+            Ask to keep it</button>}
+        </p>}
+        {environment.homeScreen === 'home-screen-app' && <p className="save-permanently-hint">Opened from the Home Screen: Safari does not apply its seven-day cleanup to this app’s storage, so projects kept in this browser stay. A downloaded .msproj archive is still a good backup.</p>}
+        {message && <p role="status" className="save-permanently-message">{message}</p>}
+        {error && <p role="alert">{error}</p>}
+      </div>
+      <div className="repository-archive-actions save-permanently-footer">
         <button type="button" disabled={busy !== null} onPointerUp={blurAfterPointer} onClick={onClose}>{message ? 'Done' : 'Close'}</button>
       </div>
     </div>
-  </div>;
+  </div>, document.body);
 }

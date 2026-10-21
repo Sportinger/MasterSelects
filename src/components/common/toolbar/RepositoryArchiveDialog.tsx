@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { MetadataPage, RevisionMetadata, JsonValue } from '../../../services/project/repository/contracts';
 import { getActiveRepositorySession, flushEditorRepository } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import { pickArchiveOutput, exportCurrentProjectArchive } from '../../../services/project/repository/lifecycle/exportProjectArchive';
@@ -72,7 +73,8 @@ export function RepositoryArchiveDialog({ onClose, projectName }: { onClose(): v
       if (mounted.current) { setError(cause instanceof Error ? cause.message : String(cause)); setBusy(false); }
     } finally { if (controller.current === abort) controller.current = null; }
   }
-  return <div className="project-name-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+  // Portaled out of the toolbar stacking context so the workspace bar cannot cover it.
+  return createPortal(<div className="project-name-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <div className="project-name-dialog repository-archive-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}
       onKeyDown={event => {
         if (event.key === 'Escape') { event.preventDefault(); if (busy) controller.current?.abort(); else onClose(); }
@@ -104,5 +106,5 @@ export function RepositoryArchiveDialog({ onClose, projectName }: { onClose(): v
       <div className="repository-archive-actions"><button onPointerUp={event => event.currentTarget.blur()} onClick={() => busy ? controller.current?.abort() : onClose()}>{busy ? 'Cancel export' : 'Cancel'}</button>
         <button disabled={busy || !session} onPointerUp={event => event.currentTarget.blur()} onClick={() => { void startExport(); }}>{busy ? 'Exporting…' : 'Export .msproj'}</button></div>
     </div>
-  </div>;
+  </div>, document.body);
 }
