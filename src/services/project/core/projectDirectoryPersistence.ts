@@ -6,6 +6,7 @@ import {
   storeLastOpfsProjectName,
 } from '../tabProjectPersistence';
 import { ensurePersistentStorage, resolveProjectRootMode } from './projectRootAccess';
+import { getBrowserStorageRoot } from './browserStorageRoot';
 
 const log = Logger.create('ProjectDirectoryPersistence');
 
@@ -20,7 +21,7 @@ export async function rememberProjectParent(handle: FileSystemDirectoryHandle): 
 
 export async function readProjectParent(): Promise<FileSystemHandle | null> {
   return resolveProjectRootMode() === 'opfs'
-    ? navigator.storage.getDirectory()
+    ? getBrowserStorageRoot()
     : projectDB.getStoredHandle('projectsFolder');
 }
 

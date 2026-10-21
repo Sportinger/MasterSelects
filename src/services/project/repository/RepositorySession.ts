@@ -7,6 +7,7 @@ import { StorageWorkerClient } from './persistence/StorageWorkerClient';
 import { WorkerCoordinatorStorage } from './transaction/WorkerCoordinatorStorage';
 import { ProjectTransactionCoordinator, type CoordinatorActivation } from './transaction/ProjectTransactionCoordinator';
 import type { NativeRepositoryClient } from './backends/nativeBackend';
+import { getBrowserStorageKind } from '../core/browserStorageRoot';
 
 export interface RepositorySessionOptions {
   descriptor: RepositoryDescriptor; location: RepositoryLocation; workspaceId: string;
@@ -36,7 +37,7 @@ export class RepositorySession {
     try {
 
       const opening = await client.request<StorageOpenResult>({ type: 'open', location: options.location,
-        descriptor: options.descriptor, workspaceId: options.workspaceId }, options.signal);
+        descriptor: options.descriptor, workspaceId: options.workspaceId, browserStorage: getBrowserStorageKind() ?? undefined }, options.signal);
 
       const storage = new WorkerCoordinatorStorage(client, opening);
       const coordinator = new ProjectTransactionCoordinator(options.descriptor.repositoryId, options.workspaceId, storage, options.activation);

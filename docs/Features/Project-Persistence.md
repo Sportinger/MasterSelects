@@ -106,9 +106,18 @@ merely because the browser remembers their names.
 WebKit (every iOS/iPadOS browser) can refuse OPFS with an opaque `UnknownError`
 while its storage process resumes, in Private Browsing, in in-app browsers or on
 a nearly full device. Opening the project root and the scratch recovery retries
-once; if storage stays unavailable, project dialogs and the save status explain
-the cause instead of the raw browser text. iOS, iPadOS and Android never try the
-desktop Native Helper.
+once; if OPFS stays unavailable, browser projects switch to an IndexedDB
+fallback (`ms-browser-project-storage`) that serves the same directory/file
+handle surface, so project creation, saving, scratch recovery and `.msproj`
+export keep working. The choice is made on the first storage access and kept
+for the tab (`sessionStorage`), and the storage worker adopts the editor's
+choice, so one project never spans both stores. While the fallback is active
+the save status reads "Temporary storage", explains that Private Browsing and
+in-app browsers may delete the project when the window closes, and opens the
+`.msproj` archive export on click. Fallback projects in a later tab where OPFS
+works are not listed there; export them first. Only when IndexedDB refuses as
+well do project dialogs and the save status explain the cause instead of the
+raw browser text. iOS, iPadOS and Android never try the desktop Native Helper.
 
 The Native Helper checks granted paths and negotiates repository write support.
 A connected helper with ordinary file commands does not by itself prove that

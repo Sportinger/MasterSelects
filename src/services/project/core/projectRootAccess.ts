@@ -8,7 +8,8 @@
 
 import { Logger } from '../../logger';
 import { RepositoryError } from '../repository/contracts';
-import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isBrowserStorageUnavailableError, retryTransientStorage } from './browserStorageFailure';
+import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isBrowserStorageUnavailableError } from './browserStorageFailure';
+import { isBrowserStorageFallbackActive, getBrowserStorageRoot } from './browserStorageRoot';
 
 const log = Logger.create('ProjectRootAccess');
 
@@ -52,7 +53,8 @@ export function resolveProjectRootMode(): ProjectRootMode {
 export function getProjectWriteSupportError(): string | null {
   const mode = resolveProjectRootMode();
   if (mode === 'none') return 'This browser does not provide project file storage.';
-  if (mode === 'opfs' && (
+  // The IndexedDB fallback writes through its own streams.
+  if (mode === 'opfs' && !isBrowserStorageFallbackActive() && (
     typeof FileSystemFileHandle === 'undefined'
     || typeof FileSystemFileHandle.prototype.createWritable !== 'function'
   )) {
@@ -101,15 +103,15 @@ export async function acquireProjectRoot(mode: ProjectRootMode, options: { throw
   if (mode === 'opfs') {
     await ensurePersistentStorage();
     try {
-      // WebKit can abort OPFS while its storage process is resuming. Retry
-      // acquisition once; no project directory or file has been mutated.
-      return await retryTransientStorage(() => navigator.storage.getDirectory(), 'Opening the origin private file system');
+      // OPFS (retried once while WebKit's storage process resumes), or the
+      // IndexedDB fallback when the browser refuses OPFS outright.
+      return await getBrowserStorageRoot();
     } catch (error) {
       if (isBrowserStorageUnavailableError(error)) {
         // Environment, not code: Private Browsing, in-app browsers or low space.
         // Callers show the explanation; this is not an application error.
-        log.warn('Origin private file system is unavailable in this browser', error);
-        if (options.throwOnFailure) throw new RepositoryError('unsupported', BROWSER_STORAGE_UNAVAILABLE_MESSAGE, { cause: error });
+        log.warn('Browser project storage is unavailable in this browser', error);
+        if (options.throwOnFailure) throw error instanceof RepositoryError ? error : new RepositoryError('unsupported', BROWSER_STORAGE_UNAVAILABLE_MESSAGE, { cause: error });
         return null;
       }
       log.error('Failed to open the origin private file system', error);

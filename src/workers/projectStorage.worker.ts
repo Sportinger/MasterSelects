@@ -7,6 +7,7 @@ import { RepositoryJournalReader, createJournalIndexCache } from '../services/pr
 import { RepositoryError, type RepositoryBackend, type RepositoryDescriptor, type RepositoryOwner } from '../services/project/repository/contracts';
 import { createFsaRepositoryBackend } from '../services/project/repository/backends/fsaBackend';
 import { createOpfsRepositoryBackend } from '../services/project/repository/backends/opfsBackend';
+import { adoptBrowserStorageKind } from '../services/project/core/browserStorageRoot';
 import { createNativeRepositoryBackend } from '../services/project/repository/backends/nativeBackend';
 import { RepositoryPersistence } from '../services/project/repository/persistence/RepositoryPersistence';
 import { recoverRepository } from '../services/project/repository/persistence/recovery';
@@ -89,6 +90,7 @@ async function open(request: Extract<StorageRequest, { type: 'open' }>, signal: 
     throw new RepositoryError('unsupported', 'Unsupported repository descriptor');
 
   openProgress({ phase: 'opening' });
+  if (request.browserStorage) adoptBrowserStorageKind(request.browserStorage);
   backend = request.location.kind === 'fsa' ? await createFsaRepositoryBackend(request.location.handle)
     : request.location.kind === 'opfs' ? await createOpfsRepositoryBackend(request.location.path)
     : await createNativeRepositoryBackend(request.location.path, { repositoryCommand: nativeCommand, readRepositoryBlob: nativeBlob });

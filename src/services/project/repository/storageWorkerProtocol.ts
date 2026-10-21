@@ -1,6 +1,7 @@
 import type { BlobReference, CommitManifest, JsonValue, MetadataPage, RecordReference, RepositoryDescriptor, RepositoryErrorCode, RepositoryProjection, RepositoryRecord, RevisionMetadata } from './contracts';
 import type { PublicationResult, RecoveryResult } from './persistence/RepositoryPersistence';
 import type { RepositoryCommand, OkResponse } from '../../nativeHelper/protocol';
+import type { BrowserStorageKind } from '../core/browserStorageRoot';
 
 export type RepositoryLocation =
   | { kind: 'fsa'; handle: FileSystemDirectoryHandle }
@@ -16,7 +17,8 @@ export interface DraftPublication {
   heads: Record<string, RecordReference | string>; checkpoints?: (RecordReference | string)[];
 }
 export type StorageRequest =
-  | { type: 'open'; location: RepositoryLocation; descriptor: RepositoryDescriptor; workspaceId: string }
+  /** `browserStorage` carries the editor's OPFS-or-fallback choice so the worker opens the same store. */
+  | { type: 'open'; location: RepositoryLocation; descriptor: RepositoryDescriptor; workspaceId: string; browserStorage?: BrowserStorageKind }
   | { type: 'publish'; batch: DraftPublication }
   | { type: 'projection'; reference: RecordReference; generation: number }
   | { type: 'projection-references'; reference: RecordReference }
