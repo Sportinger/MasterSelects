@@ -516,7 +516,7 @@ export const motionDesignToolDefinitions: ToolDefinition[] = [
                   properties: {
                     amount: { type: 'number' },
                     radius: { type: 'number' },
-                    samples: { type: 'integer', description: 'Retired Gaussian Blur setting: accepted for saved projects, has no effect.' },
+                    samples: { type: 'integer' },
                   },
                   required: [],
                 },
