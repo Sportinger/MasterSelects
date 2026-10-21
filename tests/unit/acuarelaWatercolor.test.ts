@@ -42,6 +42,13 @@ describe('Acuarela watercolour recipe', () => {
     }
   });
 
+  it('shows the recipe in pipeline-ordered folders without dropping any to a cycle', () => {
+    const organized = effectOperatorGraph(effect(watercolour()), { inspectionOnly: true });
+    expect((organized.groups ?? []).map(group => group.label)).toEqual(expect.arrayContaining(['Premultiplied Source (cached)',
+      'Frame & Paper Coordinates', 'Wet Patches & Bleed', 'Pigment Wash (edge-aware, cached)', 'Edge Pooling', 'Paper & Granulation',
+      'Blooms', 'Pigment Density', 'Paper Light, Lift & Mix']));
+  });
+
   it('keeps a flat opaque colour exactly when only the wash acts (any wash, bleed and flow)', () => {
     const data = new Uint8ClampedArray(24 * 16 * 4);
     for (let index = 0; index < data.length; index += 4) data.set([51, 153, 204, 255], index);

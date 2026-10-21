@@ -14,7 +14,7 @@ export function acuarelaPresentationPlan(type: string): EffectPresentationPlan |
       'paper-height': 'Paper Height', 'paper-light': 'Paper Relief', 'paper-granulation': 'Granulation', 'bloom-density': 'Blooms',
       density: 'Pigment Density', 'density-painted': 'Painted Colour', 'finish-rgb': 'Lit & Lifted', 'result:image': 'Watercolour' },
     stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : /^(space-|coverage-floor$|reference-height$)/.test(id) ? 'space'
-      : /^wet(-|$)/.test(id) ? 'bleed' : /^wash-/.test(id) ? 'wash' : /^pool-/.test(id) ? 'edges' : /^paper-/.test(id) ? 'paper'
+      : /^wet(-|$)/.test(id) ? 'bleed' : /^wash-/.test(id) ? 'wash' : /^pool(-|$)/.test(id) ? 'edges' : /^paper-/.test(id) ? 'paper'
         : /^bloom-/.test(id) ? 'blooms' : /^density(-|$)/.test(id) ? 'pigment' : 'finish',
   };
 }
