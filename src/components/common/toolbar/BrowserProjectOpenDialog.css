@@ -1,0 +1,7 @@
+@layer overlays {
+  .browser-project-list { display:flex; flex-direction:column; gap:6px; max-height:min(320px, 45vh); margin:0; padding:0; overflow-y:auto; list-style:none; }
+  .browser-project-list button { width:100%; overflow:hidden; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
+  .browser-project-list button:hover:not(:disabled),
+  .repository-archive-dialog .browser-project-import:hover:not(:disabled) { background:var(--bg-hover); }
+  .repository-archive-dialog .browser-project-import { align-self:flex-start; }
+}

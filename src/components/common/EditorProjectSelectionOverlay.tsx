@@ -7,6 +7,7 @@ import {
 } from 'react';
 import {
   IconArrowRight,
+  IconFileImport,
   IconFolderOpen,
   IconPlus,
 } from '@tabler/icons-react';
@@ -19,10 +20,12 @@ import {
   createBlankProject,
   loadProjectToStores,
   openExistingProject,
+  openProjectArchive,
   openStoredProject,
 } from '../../services/projectSync';
 import { getProjectWriteSupportError, resolveProjectRootMode } from '../../services/project/core/projectRootAccess';
 import { describeBrowserStorageFailure } from '../../services/project/core/browserStorageFailure';
+import { isExpectedArchiveImportRejection } from '../../services/project/projectBackendAvailability';
 import { validateProjectName } from './projectNameValidation';
 import { Logger } from '../../services/logger';
 import './EditorProjectSelectionOverlay.css';
@@ -74,6 +77,7 @@ export function EditorProjectSelectionOverlay({
   const [storageMode] = useState(resolveProjectRootMode);
   const [storedProjects, setStoredProjects] = useState<string[] | null>(null);
   const completionTimerRef = useRef<number | null>(null);
+  const archiveInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const refresh = () => setRecentProjects(projectFileService.getRecentProjects());
@@ -172,6 +176,29 @@ export function EditorProjectSelectionOverlay({
       setError(`"${name}" could not be opened.`);
     } catch (error) {
       setError(reportProjectActionError('open', error, 'The project could not be opened.'));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  // An exported .msproj is copied into browser storage and opened from there.
+  const handleImportArchive = async (file: File) => {
+    if (busyAction || !confirmProjectSwitch()) return;
+    setBusyAction('archive');
+    setError(null);
+    try {
+      if (await openProjectArchive(file)) {
+        completeSelection();
+        return;
+      }
+      setError('The project archive could not be opened.');
+    } catch (error) {
+      if (isExpectedArchiveImportRejection(error)) {
+        log.warn('Project archive import rejected', error);
+        setError(`The project archive could not be imported. ${(error as Error).message}`);
+        return;
+      }
+      setError(reportProjectActionError('archive import', error, 'The project archive could not be imported.'));
     } finally {
       setBusyAction(null);
     }
@@ -279,6 +306,35 @@ export function EditorProjectSelectionOverlay({
               {storedProjects.length === 0 && (
                 <div className="editor-project-empty">No stored projects</div>
               )}
+              <button
+                className="editor-project-box is-existing"
+                disabled={busyAction !== null}
+                type="button"
+                onPointerUp={(event) => event.currentTarget.blur()}
+                onClick={() => archiveInputRef.current?.click()}
+              >
+                <span className="editor-project-box-icon">
+                  <IconFileImport aria-hidden="true" />
+                </span>
+                <span className="editor-project-box-copy">
+                  <strong>{busyAction === 'archive' ? 'Importing…' : 'Import .msproj'}</strong>
+                  <small>Exported project archive</small>
+                </span>
+                <IconArrowRight aria-hidden="true" />
+              </button>
+              <input
+                accept=".msproj"
+                aria-hidden="true"
+                hidden
+                ref={archiveInputRef}
+                tabIndex={-1}
+                type="file"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  event.currentTarget.value = '';
+                  if (file) void handleImportArchive(file);
+                }}
+              />
               <button
                 className="editor-project-cancel"
                 disabled={busyAction !== null}

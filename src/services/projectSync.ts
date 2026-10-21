@@ -8,6 +8,7 @@ export {
   createNewProject,
   openExistingProject,
   openStoredProject,
+  openProjectArchive,
   closeCurrentProject,
   setupAutoSync,
 } from './project/projectLifecycle';
