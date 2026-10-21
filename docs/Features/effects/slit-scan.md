@@ -27,74 +27,26 @@ The card opens on **Time** and **Wave**; Sampling, Motion compensation, Preview 
 <!-- generated:controls start -->
 | Control | Range | Default |
 |---|---|---|
-| **3D geometry** | | |
-| Representation | 2D image, Reference time surface, Free motion band, Motion-deformed surface, Space-time slice (observed depth) | 2D image |
-| Reference projection | Perspective, Orthographic | Perspective |
-| Depth time source | Continuous requested time, Sampled source frames | Continuous requested time |
-| Mesh quality | 128 columns, 256 columns, 512 columns, 1024 columns, 2048 columns | 256 columns |
-| Time depth / sec | −5 to 5 | 0.25 |
-| Motion deformation | 0 to 2 | 1 |
-| Untracked regions | Keep time surface, Leave gaps | Keep time surface |
-| Flow depth | −2 to 2 | 0 |
-| Geometry smoothing | 0 to 4 | 0 |
-| **Space-time slice** | | |
-| Space axis | X, Y, Depth Z | X |
-| Tilt (°) | 0 to 90 | 0 |
-| Length / second | 0.01 to 5 | 0.25 |
-| Slice position | −10 to 10 | 0 |
-| Slice thickness | 0.001 to 2 | 0.06 |
-| Relative depth | 0 to 2 | 0.5 |
-| Point size | 0.001 to 0.1 | 0.025 |
-| **RGB time** | | |
-| Channel times | Linked, Separate RGB (no smoothing) | Linked |
-| Red offset (s) | −60 to 60 | 0 |
-| Green offset (s) | −60 to 60 | 0 |
-| Blue offset (s) | −60 to 60 | 0 |
-| Time map channel | Base / alpha, Red, Green, Blue | Base / alpha |
-| **Time map** | | |
-| Field source | External image / video, Effect input, Noise, Clip mask, Source motion and 2 more | External image / video |
-| Map alignment | Timeline (free), Depth source | Timeline (free) |
-| Map mix | 0 to 1 | 0 |
-| Map start (timeline s) | −3600 to 3600 | 0 |
-| Map channel | Luminance, Alpha, Red, Green, Blue and 3 more | Luminance |
-| Invert map | Off, On | Off |
-| **Shape target** | | |
-| Anchor X | 0 to 1 | 0.5 |
-| Anchor Y | 0 to 1 | 0.5 |
-| Target stretch (×) | 0.1 to 8 | 1 |
-| Time coherence | 0 to 1 | 0.25 |
-| **Motion field** | | |
-| Motion value | Magnitude, Directed velocity | Magnitude |
-| Direction (degrees) | −180 to 180 | 0 |
-| Minimum (UV/s) | −10 to 10 | 0 |
-| Maximum (UV/s) | −10 to 10 | 0.25 |
-| Confidence threshold | 0 to 1 | 0.1 |
-| **Resources** | | |
-| Time field mask | text | empty |
-| Motion compensation | Off, DIS optical flow | Off |
-| Time change (ms / 1%) | 0 to 2000 | 100 |
-| Show smoothing areas | on or off | off |
-| Protection mask | text | empty |
-| Stabilization tracking | text | empty |
-| Enable stabilization | on or off | on |
-| Time map source | text | empty |
-| Bypass slowdown | on or off | off |
-| **Field shaping** | | |
-| Input minimum | 0 to 1 | 0 |
-| Input maximum | 0 to 1 | 1 |
-| Gamma | 0.01 to 10 | 1 |
-| Hue mapping | Periodic wave, Direct ramp (seam) | Periodic wave |
-| Hue phase | 0 to 1 | 0 |
-| **Field noise** | | |
-| Noise scale | 0.1 to 100 | 4 |
-| Noise seed | 0 to 1000 | 0 |
-| Drift X (UV/s) | −1 to 1 | 0.02 |
-| Drift Y (UV/s) | −1 to 1 | 0.01 |
-| Noise type | Smooth, Hard cells | Smooth |
-| **Field combination** | | |
-| Noise strength | 0 to 1 | 0 |
-| Combine noise | Mix, Add (centered), Multiply, Minimum, Maximum | Mix |
-| **Sampling** | | |
+| **Time** | | |
+| Look | Sweep, Falling time, Center out, Wave folds, Radial bloom, Time rings, Time steps | Sweep |
+| Preview | Result, Time map, Protection mask | Result |
+| Delay (s) | 0 to 60 | 1 |
+| Time factor (×) | 1 to 100 | 1 |
+| Profile | Linear scan, Out from center, Wave / folds, Radial scan, Time rings | Linear scan |
+| Scan direction | Left → right, Top → bottom, Bottom → top, Right → left | Left → right |
+| Angle (°) | −180 to 180 | 0 |
+| Mix | 0 to 1 | 1 |
+| Time bands (0 = off) | 0 to 64 | 0 |
+| **Wave** | | |
+| Waves | 0.1 to 10 | 2 |
+| Phase | 0 to 1 | 0 |
+| Speed (cycles/s) | −2 to 2 | 0.15 |
+
+<details>
+<summary>Sampling</summary>
+
+| Control | Range | Default |
+|---|---|---|
 | Frame storage | GPU cache, Hybrid · bounded GPU memory, GPU history · resident video volume | GPU history · resident video volume |
 | History memory | 640 MiB, 1 GiB, 2 GiB, 4 GiB | 4 GiB |
 | Temporal sampling | Blend adjacent frames, Nearest frame (no blending) | Blend adjacent frames |
@@ -104,35 +56,191 @@ The card opens on **Time** and **Wave**; Sampling, Motion compensation, Preview 
 | Seam smoothing (px) | 0 to 8 | 0 |
 | Seam edge protection | 0 to 1 | 0.65 |
 | Stretch threshold (×) | 1.01 to 16 | 2 |
-| Resolution | Full size (follows preview Proxy mode), Small preview · 160 px | Full size (follows preview Proxy mode) |
-| **Preview quality** | | |
-| Preview quality | Full resolution, Adaptive · playback / scrub / edits | Adaptive · playback / scrub / edits |
-| **Motion compensation** | | |
+
+</details>
+
+<details>
+<summary>Motion compensation</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Motion compensation (section switch) | off or DIS optical flow | off |
 | Flow strength | 0 to 2 | 1 |
-| **Stabilization** | | |
+
+</details>
+
+<details>
+<summary>Preview quality</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Quality | Small preview · 160 px, Full size | Full size |
+| Preview quality | Full resolution, Adaptive · playback / scrub / edits | Adaptive · playback / scrub / edits |
+
+</details>
+
+<details>
+<summary>3D geometry</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Representation | 2D image, Reference time surface, Free motion band, Motion-deformed surface, Space-time slice (observed depth) | 2D image |
+| Reference projection | Perspective, Orthographic | Perspective |
+| Depth time source | Continuous requested time, Sampled source frames | Continuous requested time |
+| Mesh quality | 128 columns, 256 columns, 512 columns, 1024 columns, 2048 columns | 256 columns |
+| Time depth / sec | −5 to 5 | 0.25 |
+| Motion deformation | 0 to 2 | 1 |
+| Untracked regions | Keep time surface, Leave gaps | Keep time surface |
+| Flow depth | −2 to 2 | 0 |
+| Geometry smoothing | 0 to 4 | 0 |
+
+</details>
+
+<details>
+<summary>Space-time slice</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Space axis | X, Y, Depth Z | X |
+| Tilt (°) | 0 to 90 | 0 |
+| Length / second | 0.01 to 5 | 0.25 |
+| Slice position | −10 to 10 | 0 |
+| Slice thickness | 0.001 to 2 | 0.06 |
+| Relative depth | 0 to 2 | 0.5 |
+| Point size | 0.001 to 0.1 | 0.025 |
+
+</details>
+
+<details>
+<summary>Object stabilization</summary>
+
+| Control | Range | Default |
+|---|---|---|
 | Reference (source s) | 0 to 86400 | 0 |
 | Strength | 0 to 1 | 1 |
 | Rotation | Lock rotation, Keep rotation | Lock rotation |
 | Scale | Lock size, Keep size changes | Lock size |
-| **Time** | | |
-| Preview | Result, Time map, Protection mask | Result |
-| Delay (s) | 0 to 60 | 1 |
-| Time factor (×) | 1 to 100 | 1 |
-| Profile | Linear scan, Out from center, Wave / folds, Radial scan, Time rings | Linear scan |
-| Angle (°) | −180 to 180 | 0 |
-| Mix | 0 to 1 | 1 |
-| Time bands (0 = off) | 0 to 64 | 0 |
-| **Subject protection** | | |
+
+</details>
+
+<details>
+<summary>Time field source</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Field source | External image / video, Effect input, Noise, Clip mask, Source motion and 2 more | External image / video |
+| Map alignment | Timeline (free), Depth source | Timeline (free) |
+| Map mix | 0 to 1 | 0 |
+| Map start (timeline s) | −3600 to 3600 | 0 |
+| Map channel | Luminance, Alpha, Red, Green, Blue and 3 more | Luminance |
+| Invert map | Off, On | Off |
+
+</details>
+
+<details>
+<summary>Shape target</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Anchor X | 0 to 1 | 0.5 |
+| Anchor Y | 0 to 1 | 0.5 |
+| Target stretch (×) | 0.1 to 8 | 1 |
+| Time coherence | 0 to 1 | 0.25 |
+
+</details>
+
+<details>
+<summary>Motion field</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Motion value | Magnitude, Directed velocity | Magnitude |
+| Direction (degrees) | −180 to 180 | 0 |
+| Minimum (UV/s) | −10 to 10 | 0 |
+| Maximum (UV/s) | −10 to 10 | 0.25 |
+| Confidence threshold | 0 to 1 | 0.1 |
+
+</details>
+
+<details>
+<summary>Field shaping</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Input minimum | 0 to 1 | 0 |
+| Input maximum | 0 to 1 | 1 |
+| Gamma | 0.01 to 10 | 1 |
+| Hue mapping | Periodic wave, Direct ramp (seam) | Periodic wave |
+| Hue phase | 0 to 1 | 0 |
+
+</details>
+
+<details>
+<summary>Field noise</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Noise scale | 0.1 to 100 | 4 |
+| Noise seed | 0 to 1000 | 0 |
+| Drift X (UV/s) | −1 to 1 | 0.02 |
+| Drift Y (UV/s) | −1 to 1 | 0.01 |
+| Noise type | Smooth, Hard cells | Smooth |
+
+</details>
+
+<details>
+<summary>Field combination</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Noise strength | 0 to 1 | 0 |
+| Combine noise | Mix, Add (centered), Multiply, Minimum, Maximum | Mix |
+
+</details>
+
+<details>
+<summary>RGB time</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Channel times | Linked, Separate RGB (no smoothing) | Linked |
+| Red offset (s) | −60 to 60 | 0 |
+| Green offset (s) | −60 to 60 | 0 |
+| Blue offset (s) | −60 to 60 | 0 |
+| Time map channel | Base / alpha, Red, Green, Blue | Base / alpha |
+
+</details>
+
+<details>
+<summary>Protection mask</summary>
+
+| Control | Range | Default |
+|---|---|---|
+| Clip mask | None or a mask of the clip | None |
+| Mask feather | 0 to 200 px | 30 px |
+
+</details>
+
+<details>
+<summary>Subject protection</summary>
+
+| Control | Range | Default |
+|---|---|---|
 | Protection strength | 0 to 1 | 1 |
-| **Protected center** | | |
+
+</details>
+
+<details>
+<summary>Protected center</summary>
+
+| Control | Range | Default |
+|---|---|---|
 | Center X | 0 to 1 | 0.5 |
 | Center Y | 0 to 1 | 0.5 |
 | Radius | 0 to 1 | 0 |
-| Feather | 0 to 1 | 0.15 |
-| **Wave** | | |
-| Waves | 0.1 to 10 | 2 |
-| Phase | 0 to 1 | 0 |
-| Speed (cycles/s) | −2 to 2 | 0.15 |
+| Feather | 0.001 to 1 | 0.15 |
+
+</details>
 <!-- generated:controls end -->
 
 ## Node setup

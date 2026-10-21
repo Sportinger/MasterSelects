@@ -1,16 +1,20 @@
 // Effect documentation from the effect registry: writes docs/Features/effects/catalog.json,
 // refreshes the generated controls tables in effect pages and keeps basic pages current.
-// Hand-written effect pages are never rewritten: only their <!-- generated:controls --> blocks.
+// Hand-written effect pages are never rewritten: only their <!-- generated:controls --> blocks. A basic
+// page edited under its marker is reported and left alone (delete the marker to keep the edit).
 //
 //   node scripts/effect-docs.mjs                       # catalog.json, generated blocks, basic pages
 //   node scripts/effect-docs.mjs --check               # change nothing; exit 1 when something is stale
-//   node scripts/effect-docs.mjs --basic               # also write basic pages for effects that have no
-//                                                      # page and that no effect group page describes
+//   node scripts/effect-docs.mjs --basic               # also write basic pages for effects that have no page
 //   node scripts/effect-docs.mjs --basic halftone,print   # ...for these effect or picker group ids
 //   node scripts/effect-docs.mjs --lab-manifest <file> # Effect Lab --pairs manifest for basic pages
 //                                                      # without a still (render it, then rerun this)
-//   node scripts/effect-docs.mjs --thumbs [--force]    # gallery thumbnails from the effect stills
-//   node scripts/effect-docs.mjs --uncovered           # list effects documented nowhere
+//       [--reshoot <effect or group ids>]              # ...also for these basic pages that have one
+//   node scripts/effect-docs.mjs --thumbs [--force [ids]] # gallery thumbnails from the effect stills (an effect's
+//                                                      # `thumb` in effectDocsExtras.mjs picks the region or
+//                                                      # names the Effect Lab shot file that makes it); --force
+//                                                      # remakes them all, or only these effect or group ids
+//   node scripts/effect-docs.mjs --uncovered           # list visible effects without a page
 //   node scripts/effect-docs.mjs --controls <id>       # print an effect's controls block (to paste into a new page)
 //
 // The registry is TypeScript: it is loaded through Vite (no dev server, no config file, no browser).
@@ -19,6 +23,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CONTROLS_END, CONTROLS_START, LAB_STILL_SKIP, THUMB_TARGET_BYTES, controlsTable, effectAssets, isBasicPage, labPair, pageFile, planEffectDocs, snapshotRegistry } from './effectDocsCatalog.mjs';
+import { EFFECT_DOC_EXTRAS } from './effectDocsExtras.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const featuresDir = path.join(root, 'docs', 'Features');
@@ -75,16 +80,23 @@ if (controlsFor !== undefined) {
 // Gallery thumbnails first (the catalog lists them): the effect half of the still, 400 x 250 WebP (smaller if needed).
 if (args.includes('--thumbs') && !check) {
   const { default: sharp } = await import('sharp');
-  const force = args.includes('--force');
+  const forceOption = option('--force');
+  const forceIds = forceOption ? forceOption.split(',').map((item) => item.trim()).filter(Boolean) : undefined;
+  const forced = (effect) => forceOption !== undefined && (!forceIds || forceIds.includes(effect.id) || forceIds.includes(effect.group));
   for (const effect of snapshot.effects) {
     const assets = effectAssets(effect.id);
     const source = [assets.still, assets.poster].find(exists);
-    if (!source || (exists(assets.thumb) && !force)) continue;
+    if (!source || (exists(assets.thumb) && !forced(effect))) continue;
+    const thumb = EFFECT_DOC_EXTRAS[effect.id]?.thumb;
+    if (thumb?.shot) { notes.push(`${assets.thumb}: made by node scripts/effect-lab.mjs --pairs ${thumb.shot} --only ${effect.id}; left alone.`); continue; }
     const { width, height } = await sharp(feature(source)).metadata();
-    // Stills show "original | effect" side by side, or stacked when taller than wide: keep the effect half.
-    const region = height > width * 0.9
-      ? { left: 0, top: Math.ceil(height / 2), width, height: Math.floor(height / 2) }
-      : { left: Math.ceil(width / 2), top: 0, width: Math.floor(width / 2), height };
+    // Stills show "original | effect" side by side, or stacked when taller than wide: keep the effect half
+    // (or the region the extras name, as fractions of the still: [left, top, width, height]).
+    const region = thumb?.region
+      ? { left: Math.round(thumb.region[0] * width), top: Math.round(thumb.region[1] * height), width: Math.round(thumb.region[2] * width), height: Math.round(thumb.region[3] * height) }
+      : height > width * 0.9
+        ? { left: 0, top: Math.ceil(height / 2), width, height: Math.floor(height / 2) }
+        : { left: Math.ceil(width / 2), top: 0, width: Math.floor(width / 2), height };
     // Lower the quality first, then the size, until the thumbnail fits (fine line patterns compress badly).
     let buffer;
     search: for (const [width, height] of [[400, 250], [352, 220], [320, 200]]) {
@@ -99,7 +111,7 @@ if (args.includes('--thumbs') && !check) {
   }
 }
 
-// New basic pages: the listed effect or group ids, or every effect documented nowhere.
+// New basic pages: the listed effect or group ids, or every visible effect without a page.
 const basicOption = option('--basic');
 let basic = [];
 if (basicOption !== undefined) {
@@ -115,6 +127,8 @@ if (basicOption !== undefined) {
 
 const plan = planEffectDocs(snapshot, { read, exists, pages: listPages() }, { basic });
 for (const id of plan.unknownPages) notes.push(`effects/${id}.md: "${id}" is not an effect id of the registry; the page is left alone.`);
+for (const problem of plan.problems) notes.push(problem.text);
+if (plan.problems.length) process.exitCode = 1;
 const changes = [...plan.texts].filter(([file, text]) => read(file) !== text).map(([file]) => file);
 if (!check) {
   for (const file of changes) {
@@ -126,8 +140,10 @@ if (!check) {
 // Effect Lab manifest for basic pages without a still (moving effects get one frame until they have a loop).
 const manifestFile = option('--lab-manifest');
 if (manifestFile) {
+  const reshoot = (option('--reshoot') ?? '').split(',').map((item) => item.trim()).filter(Boolean);
   const pairs = snapshot.effects
-    .filter((effect) => isBasicPage(plan.texts.get(pageFile(effect.id)) ?? '') && !exists(effectAssets(effect.id).still))
+    .filter((effect) => isBasicPage(plan.texts.get(pageFile(effect.id)) ?? '')
+      && (!exists(effectAssets(effect.id).still) || reshoot.includes(effect.id) || reshoot.includes(effect.group)))
     .filter((effect) => !LAB_STILL_SKIP[effect.id] || void notes.push(`${effect.id}: no Effect Lab still, it ${LAB_STILL_SKIP[effect.id]}.`))
     .map(labPair);
   fs.writeFileSync(path.resolve(manifestFile), `${JSON.stringify({ pairs }, null, 2)}\n`);
@@ -136,8 +152,8 @@ if (manifestFile) {
 
 if (args.includes('--uncovered')) {
   console.log(plan.uncovered.length
-    ? `Documented nowhere (${plan.uncovered.length}): ${plan.uncovered.map((effect) => effect.id).join(', ')}`
-    : 'Every visible effect has a page or is described on an effect group page.');
+    ? `Without a page (${plan.uncovered.length}): ${plan.uncovered.map((effect) => effect.id).join(', ')}`
+    : 'Every visible effect has a page.');
 }
 for (const note of notes) console.warn(note);
 const entries = plan.catalog.effects;

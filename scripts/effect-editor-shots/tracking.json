@@ -1,0 +1,25 @@
+{
+  "shots": [
+    {
+      "name": "face-cables-inspector",
+      "effect": "face-cables",
+      "image": "dancer_stage.jpg",
+      "preview": 0,
+      "top": "card",
+      "layout": "float",
+      "alt": "The top of the Face Cables effect card in Properties → Effects: Open clip nodes, the Connections section with Cable 1, the Cable chooser, From Right mouth corner, To Right iris / pupil center, Lock start and Lock end, Add cable and Branch to right ear",
+      "marks": [
+        {
+          "target": "From",
+          "label": "From and To, the two face points the cable hangs between",
+          "reach": 60
+        },
+        {
+          "target": "Attachment",
+          "label": "Attachment: a locked end stays on its point, an unlocked end falls freely",
+          "reach": 60
+        }
+      ]
+    }
+  ]
+}

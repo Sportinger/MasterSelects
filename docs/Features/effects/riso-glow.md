@@ -1,10 +1,10 @@
 # Riso Glow
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=f4d1dae9abb5, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Two-ink risograph print look with a pulsing glow added to the inks; Shadow and Glow Ink set the colors, Speed the pulse rate.
 
-Group: [Print & Halftone](./index.md#print--halftone) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
@@ -22,7 +22,6 @@ Group: [Print & Halftone](./index.md#print--halftone) · [How to add an effect](
 |---|---|---|
 | **Pattern** | | |
 | Scale | 2 to 80 | 14 |
-| Angle | −180 to 180 | 0 |
 | **Style** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |
@@ -32,7 +31,7 @@ Group: [Print & Halftone](./index.md#print--halftone) · [How to add an effect](
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Drift Lines](./drift-lines.md), [Glitch Grid](./glitch-grid.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
 
 ## Technical details
 

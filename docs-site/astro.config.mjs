@@ -8,6 +8,7 @@ import starlight from '@astrojs/starlight';
 // are untracked: `npm run dev` and `npm run build` run the sync first.
 const sidebarFile = new URL('./src/generated/sidebar.json', import.meta.url);
 const redirectsFile = new URL('./src/generated/redirects.json', import.meta.url);
+const anchorRedirectsFile = new URL('./src/generated/anchor-redirects.json', import.meta.url);
 const docsClipsScript = new URL('./src/scripts/docsClips.js', import.meta.url);
 function readGenerated(file, fallback) {
   try {
@@ -19,6 +20,13 @@ function readGenerated(file, fallback) {
 }
 const featureGroups = readGenerated(sidebarFile, []);
 const redirects = readGenerated(redirectsFile, {});
+// Sections that moved off a page that stays (docs/Features/redirects.json "anchors"): an old #anchor
+// is sent on before the page renders. The page no longer has those ids, so nothing else uses them.
+const anchorRedirects = readGenerated(anchorRedirectsFile, {});
+const anchorRedirectScript = `(() => { const pages = ${JSON.stringify(anchorRedirects)};
+  const page = pages[location.pathname] || pages[location.pathname + '/'];
+  const to = page && location.hash && page[decodeURIComponent(location.hash.slice(1))];
+  if (to) location.replace(to); })();`;
 
 // The site's own start pages lead the sidebar when the index does not list them.
 const listsWelcome = JSON.stringify(featureGroups).includes('"getting-started/welcome"');
@@ -34,13 +42,17 @@ export default defineConfig({
   redirects,
   integrations: [
     starlight({
-      title: 'MasterSelects Documentation',
+      // Short enough for the phone header next to the logo, search and menu buttons.
+      title: 'MasterSelects Docs',
       description:
         'Browser-based media editor and agent-friendly foundation for video, audio, motion, 3D, and creative tools.',
       logo: { src: './src/assets/ms-mark.png' },
       customCss: ['./src/styles/custom.css'],
       // Docs clips start when scrolled into view and respect reduced motion (inline: a few lines).
-      head: [{ tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsClipsScript, 'utf8') }],
+      head: [
+        { tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsClipsScript, 'utf8') },
+        ...(Object.keys(anchorRedirects).length ? [{ tag: 'script', content: anchorRedirectScript }] : []),
+      ],
       sidebar,
     }),
     // A running `astro dev` restarts when a sync changes the generated sidebar or redirects,
@@ -51,6 +63,7 @@ export default defineConfig({
         'astro:config:setup': ({ addWatchFile }) => {
           addWatchFile(sidebarFile);
           addWatchFile(redirectsFile);
+          addWatchFile(anchorRedirectsFile);
           addWatchFile(docsClipsScript);
         },
       },

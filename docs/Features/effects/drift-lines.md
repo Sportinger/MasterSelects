@@ -1,10 +1,10 @@
 # Drift Lines
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=8be0e47c8767, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Shifts horizontal bands sideways in a wavy animated drift and shades them into lines; Scale sets band height, Amount the drift.
 
-Group: [Lines & Engraving](./index.md#lines--engraving) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
@@ -22,17 +22,13 @@ Group: [Lines & Engraving](./index.md#lines--engraving) · [How to add an effect
 |---|---|---|
 | **Pattern** | | |
 | Scale | 2 to 80 | 14 |
-| Angle | −180 to 180 | 0 |
 | **Style** | | |
 | Amount | 0 to 1 | 0.75 |
-| **Color** | | |
-| Ink | a colour | `#111827` |
-| Paper | a colour | `#f8fafc` |
 | **Motion** | | |
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Glitch Grid](./glitch-grid.md), [Riso Glow](./riso-glow.md), [Scatter Mosaic](./scatter-mosaic.md), [Crystal Glass](./crystal.md), [Glass Dispersion](./glass-dispersion.md), [Wave Lines](./wave-lines.md), [Toy Bricks](./bricks.md), [Embroidery](./embroidery.md), [Outline](./outline.md).
 
 ## Technical details
 

@@ -1,16 +1,16 @@
 # Inscribe
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=8bbdbda1f52c, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Draws characters only along brightness edges over a darkened image, like text etched into the outlines; Cell Size sets character size.
 
-Group: [Text & Glyph](./index.md#text--glyph) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
-![Inscribe on the harbour town: the original on the left, Inscribe at its default settings on the right](../assets/effects/inscribe.webp)
+![Inscribe on an enlarged detail of the dancer on a dark stage: the original on the left, Inscribe at its default settings on the right](../assets/effects/inscribe.webp)
 
-<figcaption>Left: the original. Right: Inscribe at its default settings.</figcaption>
+<figcaption>Left: the original. Right: Inscribe at its default settings. An enlarged detail, so the characters can be read.</figcaption>
 </figure>
 
 *A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
@@ -36,7 +36,7 @@ Group: [Text & Glyph](./index.md#text--glyph) · [How to add an effect](../Effec
 | Light | a colour | `#e8fff5` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [ASCII](./ascii.md), [Brand Generator](./brand-generator.md), [Grid Glyph](./grid-glyph.md), [Number Field](./number-field.md), [Pixel Code](./pixel-code.md), [Stitch Poster](./stitch-poster.md), [Word Mosaic](./word-mosaic.md), [Contour Type](./contour-type.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [ASCII](./ascii.md), [Brand Generator](./brand-generator.md), [Grid Glyph](./grid-glyph.md), [Number Field](./number-field.md), [Pixel Code](./pixel-code.md), [Stitch Poster](./stitch-poster.md), [Word Mosaic](./word-mosaic.md), [Contour Type](./contour-type.md).
 
 ## Technical details
 

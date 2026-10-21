@@ -66,6 +66,6 @@ place of **Zero**: the background turns dark grey.
   so transparent surroundings stay transparent and a layer's outline shows in its full line colour.
 - **Saved projects.** An Edge Detect saved before 2026-10-21 keeps its earlier one-pixel look (Width
   and Color have no effect on it); its card offers **Use the new Edge Detect**.
-- Shared notes: [Light & Stylize](../Effects-Stylize.md#technical-details). Formulas:
+- Shared notes: [Light & Stylize](../Effect-System.md#light--stylize-notes). Formulas:
   [Effect system](../Effect-System.md#editable-blur-kernels); blocks:
   [Node Catalog](../Node-Catalog.md).

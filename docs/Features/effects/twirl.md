@@ -28,7 +28,7 @@ light.
 <!-- generated:controls start -->
 | Control | Range | Default |
 |---|---|---|
-| Twist | −720 to 720° | 115° |
+| Twist | −720 to 720° | 114.59° |
 | Radius | 0.05 to 1 | 0.5 |
 | Center X | 0 to 1 | 0.5 |
 | Center Y | 0 to 1 | 0.5 |
@@ -81,9 +81,9 @@ swirl stays strong further out.
 - **Limits.** Each pixel is read once, so a very strong Twist (above about 10 radians) shimmers on
   fine detail.
 - **Saved projects.** An untouched graph, an effect saved before effects owned a graph and an effect
-  preset of the earlier recipe load as the current recipe with Stretch to Frame and Clamp, so they
-  look as before.
+  preset of the earlier recipe load as the current recipe with Stretch to Frame and Clamp, which keeps
+  their look.
 
-Units, frame edges and transparency: [Lens & Distort](../Effects-Distort.md#technical-details).
+Units, frame edges and transparency: [Lens & Distort](../Effect-System.md#lens--distort-notes).
 Recipes: [Effect system: editable UV distortions](../Effect-System.md#editable-uv-distortions).
 Nodes: [Node Catalog](../Node-Catalog.md).

@@ -71,6 +71,6 @@ than half of the groups become large tiles; 1 turns them off.
 - **Saved projects** made with the earlier Block Mosaic open with the 1080p-based sizes, the centred
   grid and averaged colours, and keep a 1-pixel grout in its darker colour.
 
-Grid, sizes and transparency: [Pixel & Mosaic](../Effects-Pixel.md#technical-details).
+Grid, sizes and transparency: [Pixel & Mosaic](../Effect-System.md#pixel--mosaic-notes).
 Recipes: [Effect system: editable mirror, split and pixel graphs](../Effect-System.md#editable-mirror-split-and-pixel-graphs).
 Nodes: [Node Catalog](../Node-Catalog.md).

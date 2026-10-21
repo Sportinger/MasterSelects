@@ -1,10 +1,10 @@
 # Hand Particles
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=97bb344557c6, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Adds drifting glowing particles around tracked hands in the Overlay color; Particle Source picks fingertips, all landmarks or hand centers.
 
-Group: [Tracking & Overlays](./index.md#tracking--overlays) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Tracking & Overlays](../Effects-Tracking.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 *A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
 
@@ -25,3 +25,5 @@ Group: [Tracking & Overlays](./index.md#tracking--overlays) · [How to add an ef
 ## Technical details
 
 It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+
+Go deeper: [Effect system: landmark tracking effects](../Effect-System.md#landmark-tracking-effects)

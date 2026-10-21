@@ -1,10 +1,10 @@
 # Dither Studio
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=aab13da873e9, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Reduces the image to two ink colors using a selectable dither pattern (Bayer 2, Bayer 4 or Checker); Kernel picks the pattern, Scale its size.
 
-Group: [Print & Halftone](./index.md#print--halftone) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
@@ -22,7 +22,6 @@ Group: [Print & Halftone](./index.md#print--halftone) · [How to add an effect](
 |---|---|---|
 | **Pattern** | | |
 | Scale | 2 to 80 | 14 |
-| Angle | −180 to 180 | 0 |
 | Kernel | bayer 2, bayer 4, checker | bayer 4 |
 | **Style** | | |
 | Amount | 0 to 1 | 0.75 |

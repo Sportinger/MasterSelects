@@ -1,14 +1,14 @@
 # HUD Tracker
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=d9555e784117, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Overlays a sci-fi HUD with a corner-bracket target box around the tracked subject, landmark dots and a sweeping scan line in the Overlay color.
 
-Group: [Tracking & Overlays](./index.md#tracking--overlays) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Tracking & Overlays](../Effects-Tracking.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
-![HUD Tracker on the dancer on a dark stage: the original on the left, HUD Tracker at its default settings on the right](../assets/effects/hud-tracker.webp)
+![HUD Tracker on the dancer on a dark stage: the whole frame twice, the original on the left, HUD Tracker at its default settings on the right](../assets/effects/hud-tracker.webp)
 
 <figcaption>Left: the original. Right: HUD Tracker at its default settings, one frame of its movement.</figcaption>
 </figure>
@@ -27,8 +27,10 @@ Group: [Tracking & Overlays](./index.md#tracking--overlays) · [How to add an ef
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [CCTV](./cctv.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md), [Tracked Scene](./tracked-scene.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [CCTV](./cctv.md), [Rain Reveal](./rain-reveal.md), [Stardust](./stardust.md), [Tracked Scene](./tracked-scene.md).
 
 ## Technical details
 
 HUD Tracker is one look of the tracking overlay engine; its looks share one node setup. It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+
+Go deeper: [Effect system: landmark tracking effects](../Effect-System.md#landmark-tracking-effects)

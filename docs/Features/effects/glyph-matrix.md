@@ -1,16 +1,16 @@
 # Glyph Matrix
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=c4d9140ba03e, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Character art whose glyphs sweep diagonally through the character ramp over time, like a scrolling data wave; Speed sets the sweep rate.
 
-Group: [Text & Glyph](./index.md#text--glyph) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
-![Glyph Matrix on the harbour town: the original on the left, Glyph Matrix at its default settings on the right](../assets/effects/glyph-matrix.webp)
+![Glyph Matrix on an enlarged detail of the dancer on a dark stage: the original on the left, Glyph Matrix at its default settings on the right](../assets/effects/glyph-matrix.webp)
 
-<figcaption>Left: the original. Right: Glyph Matrix at its default settings, one frame of its movement.</figcaption>
+<figcaption>Left: the original. Right: Glyph Matrix at its default settings, one frame of its movement. An enlarged detail, so the characters can be read.</figcaption>
 </figure>
 
 *A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
@@ -38,7 +38,7 @@ Group: [Text & Glyph](./index.md#text--glyph) · [How to add an effect](../Effec
 | Speed | 0 to 5 | 1 |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [Tag Pills](./capsule-cloud.md), [Data Hatching](./data-hatch.md), [Dither Text](./dither-text.md), [Matrix Rain](./matrix.md), [Dither Glow](./pixel-dither.md), [Retro Matrix](./retro-matrix.md), [Symbol Matrix](./symbol-matrix.md), [Creative UI Collage](./ui-collage.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Tag Pills](./capsule-cloud.md), [Data Hatching](./data-hatch.md), [Dither Text](./dither-text.md), [Matrix Rain](./matrix.md), [Dither Glow](./pixel-dither.md), [Retro Matrix](./retro-matrix.md), [Symbol Matrix](./symbol-matrix.md), [Creative UI Collage](./ui-collage.md).
 
 ## Technical details
 

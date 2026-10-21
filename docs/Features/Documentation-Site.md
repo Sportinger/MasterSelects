@@ -34,6 +34,7 @@ The `## Documentation Index` of `docs/Features/README.md` is the sidebar. The sy
 | `<!-- docs-sidebar: collapsed -->` | Under `###`: the group starts collapsed. Starlight still opens the group of the current page. |
 | `<!-- docs-sidebar: expanded -->` | Under `####`: the subgroup starts open. |
 | `<!-- docs-sidebar: effect-groups keying+time -->` | One collapsed subgroup per picker group of the app, labelled and ordered like the picker (`EFFECT_GROUPS` in `src/effects/effectCatalogGroups.ts`). Ids joined by `+` share one subgroup ("Keying & Time"). The rows below the directive give their group id as the second cell (for example `` `blur` ``) and lead that subgroup; the existing `effects/<id>.md` pages follow in picker order, labelled with their catalog name. Subgroups without pages are left out. |
+| `<!-- docs-sidebar: also -->` | The rows below may repeat a page another group already lists, as a second way in (Using effects leads the Effects group and stays under Guides). Anywhere else a repeated row is reported and skipped. |
 | `<!-- docs-sidebar: unpublished -->` | The section's pages stay in the repo but are not rendered, not searchable and not in the sidebar. Links to them become plain text. |
 
 - Rows inside other HTML comments are planned pages: the sync counts them and does not list them. Move a row out of its comment when its page exists; the sync never lists a missing page.
@@ -68,14 +69,18 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 |---|---|
 | `effects/catalog.json`: names, groups, card text, page, still, clip and thumbnail paths | `node scripts/effect-docs.mjs` (never by hand) |
 | The controls table between `<!-- generated:controls start -->` and `<!-- generated:controls end -->` | the same script, refreshed on every run |
-| Basic pages (marked `<!-- effect-docs: basic page … -->` under the title) | the same script, rewritten on every run |
+| Basic pages (marked `<!-- effect-docs: basic page sha=… -->` as the first line under the title) | the same script, rewritten on every run while the page still matches the marker's hash |
+| Rows of an effect's own card, the section order and folding of long cards, "Go deeper" links of basic pages, special thumbnails | `scripts/effectDocsExtras.mjs` (by hand, per effect id) |
 | Everything else on a page | by hand; the script never changes it |
 
-- After you add or rewrite an effect page, add a picture or change an effect's parameters, run `node scripts/effect-docs.mjs` and commit what it changes. `npx vitest run tests/unit/effectDocsCatalog.test.ts` fails when the catalog, a controls block or a basic page is out of date, when a page is not named after an effect id, when a visible effect has neither a page nor a description on an effect group page, or when a thumbnail is missing or over 30 KB.
+- After you add or rewrite an effect page, add a picture or change an effect's parameters, run `node scripts/effect-docs.mjs` and commit what it changes. `npx vitest run tests/unit/effectDocsCatalog.test.ts` fails when the catalog, a controls block or a basic page is out of date, when a page is not named after an effect id, when a visible effect has no page of its own, when a basic page was edited under its marker or a page's controls markers are broken, or when an effect lacks a still or a thumbnail (unless `PICTURE_PENDING` in `scripts/effectDocsCatalog.mjs` names why) or a thumbnail is over 30 KB.
+- **A basic page edited by hand.** The marker line carries a hash of the page as the script wrote it. When the page no longer matches it, the script leaves the page alone and reports `effects/<id>.md was edited by hand: delete its marker line to keep the edits (it becomes a hand-written page), or restore the file`; the drift test fails with the same text. The marker counts only as the first line under the `#` title.
 - To write a page by hand, start from its basic page and delete the marker line, or write the file before running the script. `node scripts/effect-docs.mjs --controls <id>` prints the controls block to paste.
-- `--basic` writes basic pages for every effect documented nowhere (`--basic halftone,print` for chosen effect or group ids); it never touches an existing page. `--thumbs` makes the missing gallery thumbnails (`assets/effects/thumbs/<id>.webp`, 400 × 250 or smaller, ≤ 30 KB) from the effect half of each still; `--thumbs --force` remakes them. `--lab-manifest <file>` writes an Effect Lab `--pairs` manifest for basic pages without a still.
+- `--basic` writes basic pages for every visible effect without a page (`--basic halftone,print` for chosen effect or group ids); it never touches an existing page. `--thumbs` makes the missing gallery thumbnails (`assets/effects/thumbs/<id>.webp`, 400 × 250 or smaller, ≤ 30 KB) from the effect half of each still; `--thumbs --force` remakes them all, `--thumbs --force text,riso` only those effect or group ids. An effect's `thumb` in `effectDocsExtras.mjs` picks another region of the still (`region`, fractions of it) or names the Effect Lab file that renders the thumbnail (`shot`, such as `scripts/effect-lab-shots/color-thumbs.json`: the dancer split down the middle for the subtle tonal effects). `--lab-manifest <file>` writes an Effect Lab `--pairs` manifest for basic pages without a still, `--reshoot <ids or groups>` adds basic pages that have one. Basic stills are a whole-frame split, except the Text & Glyph looks (an enlarged detail of the dancer, original and effect side by side, so the characters can be read) and the tracking overlays (both whole frames side by side, so the seam never cuts the target box).
+- **The generated controls table** lists the card's rows in card order with their range and default. Ranges and defaults show as many decimals as they need. Resource references stored as text (`…Id` parameters) are left out. `effectDocsExtras.mjs` adds what the registry cannot say: `rows` of an effect's own card (hidden parameters it renders, buttons, pickers), the card's `sections` order and `sectionLabels`, `omit`/`omitSections`, a `note` for cards without fixed rows, and `open`: only those sections stay in the table, every other one folds into its own `<details>` (Slit Scan). It also gives basic pages `deeper` links ("Go deeper:" under Technical details).
 - The card text is the first sentence of a hand-written page (a basic page uses the first clause of the in-app description), so write that sentence to stand alone, in under about 110 characters.
 - `catalog.json` has one line per effect. On a merge conflict, take either side and run the script again.
+- **Controls that act.** A control the docs list must change the picture: `tests/unit/effectControlsRead.test.ts` fails when a shown parameter is not read by the effect (see [Effect system: contracts](./Effect-System.md#contracts-and-invariants)). Retire such a parameter in the effect instead of documenting it.
 
 **The page, top to bottom.** No YAML front matter: the title is the `#` heading, the sync writes the front matter.
 
@@ -161,7 +166,7 @@ The Markdown shortcut `![Glitch on a dancer](../assets/effects/clips/glitch.mp4)
 
 **Diagrams** are inline SVG in `<figure class="docs-shot docs-diagram">` with real `<text>`; colours come from the theme through `currentColor` and the classes `docs-diagram-lane`, `-clip`, `-clip--alt`, `-highlight`, `-playhead` and `-muted`. Meaning never rests on colour alone (clips carry their letters). `docs-diagram--wide` scrolls sideways on phones.
 
-**Galleries.** `<!-- docs-gallery: blur -->` on its own line expands to a card grid of the group's effects in picker order (`keying+time` joins groups; `all` gives one `##` section per picker group, for `effects/index.md`). A card shows the thumbnail, the name and one line, and links to `effects/<id>.md` once that page exists. Each card keeps the old heading slug as its `id` (for example `#gaussian-blur`), so old in-page links still land on it. The cards read `docs/Features/effects/catalog.json`, which `scripts/effect-docs.mjs` writes (one line per group and per effect):
+**Galleries.** `<!-- docs-gallery: blur -->` on its own line expands to a card grid of the group's effects in picker order (`keying+time` joins groups; `all` gives one `##` section per sidebar subgroup, joined like the sidebar, each with an "Overview and which one to choose →" link to its group overview, for `effects/index.md`). A card shows the thumbnail, the name and one line, and links to `effects/<id>.md` once that page exists. Each card keeps the old heading slug as its `id` (for example `#gaussian-blur`), so old in-page links still land on it. The cards read `docs/Features/effects/catalog.json`, which `scripts/effect-docs.mjs` writes (one line per group and per effect):
 
 ```json
 { "groups": [{ "id": "blur", "label": "Blur & Sharpen", "effects": ["box-blur", "gaussian-blur"] }],
@@ -178,6 +183,8 @@ Paths are relative to `docs/Features`. Further fields: `basic` (a generated basi
 ## Shot and clip tooling
 
 The scripts that make the pictures and clips. Each prints the figure HTML to paste; [Effect pages](#effect-pages) says which picture an effect page needs.
+
+Each effect group keeps its shot lists under the group's name: `scripts/effect-lab-shots/<group>.json` (stills), `scripts/effect-graph-shots/<group>.json` (graphs), `scripts/effect-editor-shots/<group>.json` (inspector excerpts, `tracking.json` for Face Cables) and `scripts/doc-clips/<group>.json` (loops). `scripts/effect-lab-shots/color-thumbs.json` renders the Brightness still and the split thumbnails of the subtle tonal effects. The basic-page stills come from `node scripts/effect-docs.mjs --lab-manifest <file>`.
 
 ### Effect Lab (review and doc stills)
 
@@ -363,6 +370,8 @@ under `prefers-reduced-motion` the poster stays, with controls.
 ## Redirects
 
 `docs/Features/redirects.json` lists published URLs that moved, old → new, as full `/docs/…` URLs (a target may carry an anchor). The sync writes the active ones to `docs-site/src/generated/redirects.json`, which becomes Astro's `redirects` (old path relative to the `/docs` base, target as written). A redirect waits while its old page is still published, so it can be added before the move; a target that is not a published page, or an anchor the target does not have, is reported. Unpublished internal pages get no redirect.
+
+**Sections that leave a page that stays.** A server redirect cannot see the `#anchor`, so moved sections of a published page are listed under `"anchors"`: `{ "/docs/features/effects/": { "slit-scan": "/docs/effects/slit-scan/" } }`. The sync writes them to `docs-site/src/generated/anchor-redirects.json`; a small script in the page head sends a visit with that anchor on before the page renders. The sync reports an anchor the page still has, a page that is not published and a target that does not exist. Two rules keep old deep links working: when a group page's sections move into effect pages, its gallery cards keep the old heading slugs as ids; when sections leave any other published page (such as the old `Effects.md`), add their old anchors here.
 
 ## Generated output
 

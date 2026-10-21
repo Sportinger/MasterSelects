@@ -51,8 +51,15 @@ and source. Other effects and structural settings are not implicitly enabled.
   the look of instances saved before a parameter existed.
 - A value the renderer clamps or ignores is reported (`paramRangeNotes`, `paramWarnings`), never
   silently changed.
-- Every visible effect has a docs page or a description on its group page; `tests/unit/effectDocsCatalog.test.ts`
-  fails otherwise (see [Effect pages](./Documentation-Site.md#effect-pages)).
+- Every control a card shows changes the picture. The looks built with `createCatalogEffect` and
+  `createTrackingEffect` share base parameters (Scale, Angle, Ink, Paper, Overlay, Speed); a look whose
+  recipe never reads one retires it with `retired` (`ignoredBaseParams(name, keys)` for the catalog
+  looks): the card hides it, tools answer that the value is ignored, saved values still load and a
+  style switch keeps them. `tests/unit/effectControlsRead.test.ts` fails when a shown control is not
+  bound by the effect's default graph, or, for shader effects of the shared catalog and tracking
+  uniforms, not read by its entry point (helper functions included).
+- Every visible effect has its own docs page; `tests/unit/effectDocsCatalog.test.ts` fails otherwise
+  (see [Effect pages](./Documentation-Site.md#effect-pages)).
 
 ## Registry and catalog
 
@@ -535,7 +542,7 @@ clock, plus the area under the keyed curve (`integrateKeyframedRate` in
 `src/utils/speedIntegration.ts`, shared with clip speed). The packer uses it instead of
 rate × time, so a keyed ramp moves smoothly and the first key does not shift the
 pattern (Perspective Grid Speed, Color Wheel Spin; see
-[Generate Effects](./Effects-Generate.md#technical-details)). Stored travel values are
+[Generate Effects](./Effect-System.md#generate-notes)). Stored travel values are
 dropped, `addEffect`/`updateEffect` do not store them, and a node source that drives
 such a rate drops the travel (logged), so the source runs at rate × time.
 
@@ -1862,6 +1869,22 @@ Mosaic and Drift Lines expose timeline-driven hash/wave displacement and
 sampled-alpha paths; displaced samples determine alpha rather than the original
 undisplaced pixel.
 
+### Riso and Riso Glow inks
+
+Each ink filters the paper towards its own colour where it prints: the print colour is
+`paper × mix(1, inkA, a) × mix(1, inkB, b)`, with `a` and `b` the coverage of the dark and the warm
+ink (1 − luminance, read 0.35 × Registration pixels to the left and to the right). The default inks (#2046b3 blue,
+#ef476f pink) therefore print blue, pink and, where both overlap, a deep violet. The recipe
+(`risoEffectGraphs.ts`) and its WGSL reference (`src/effects/halftone/shader.wgsl`) share this
+formula; `tests/unit/imageRisoGraphs.test.ts` checks that each default ink prints in its own colour.
+Riso Glow adds `glow × (a·inkA + b·inkB) × 0.3` on top, pulsing with Speed.
+
+### CCTV noise speed
+
+CCTV's picture noise changes 24 × Speed times per second (Speed 0 holds it), like the sweep of HUD
+Tracker; the other tracking overlays without a time-based part (Subject Highlight's colour, Tracked
+Scene's and Motion Trails' speed) retire those controls.
+
 ### Ribbon Scan
 
 Ribbon Scan (`ribbonScanRecipe.ts`) scrolls Ribbons bands (`scale`, at least 3)
@@ -2442,6 +2465,192 @@ ID. **Resume task** retries polling/download without submitting a new generation
 Pending jobs are checkpointed in the original repository and results cannot be
 applied after a source, correction or project switch. **Discard pending task**
 allows a fresh request; it does not cancel/refund an already started provider job.
+
+## Effect group notes
+
+What applies to a whole effect group, for developers; each group overview links here. Each effect page adds its own notes.
+
+### Color & Tone notes
+
+Recipes: `src/services/operators/colorEffectGraphs.ts` (tuning in `COLOR_RECIPE`; Posterize and
+Threshold in `pointwiseEffectGraphs.ts`). Formulas:
+[Effect system: editable color effect graphs](./Effect-System.md#editable-color-effect-graphs);
+blocks: [Node Catalog](./Node-Catalog.md); graph contract:
+[Operator Graph Compiler](./Operator-Graph-Compiler.md).
+
+- **Range.** The effect chain carries 8-bit, display-referred colour; the recipes limit their input
+  to 0–1, so there is no HDR headroom between effects.
+- **Beyond the slider.** In the number field you can type past the end of a slider, up to what the
+  effect can show (each page names its range). If a keyframe, a node or the AI agent goes further,
+  the effect uses the limit, and the inspector, `addEffect`/`updateEffect` warnings and
+  `listEffects` (`renderRange`) report it.
+- **Performance.** All recipes are per-pixel math without extra texture reads. A single colour
+  effect runs inside the composite pass; in a stack each one is its own pass. The worker software
+  render modes evaluate the same graphs on the CPU, once per distinct colour of the frame (about
+  0.2–0.4 s for a 1080p photo); a layer that mixes them with the retired `blur` effect is skipped and
+  reported (`unsupported-effects`).
+- **Saved projects.** Brightness, Contrast, Exposure, Levels, Saturation, Vibrance, Temperature and
+  Hue Shift keep the graph they were saved with, so projects from before the 2026-10 rebuild look as
+  before (`legacyColorEffectGraphs.ts`); add the effect again for the current look. A colour effect
+  saved before effect graphs existed loads with the original graph; new effects get the recipe graph
+  when they are added, also on adjustment layers, where an agent's `configure` keeps the graph of
+  every effect it keeps.
+- **Looks.** Custom Looks saved before the 2026-10 rebuild apply their colour effects with the
+  original graphs; new Looks store each colour effect's graph (Look schema 2). A stored Look graph is
+  validated when the Look is applied; one that no longer validates renders the current recipe, with a
+  notice. To move an old Look to the new math, rebuild it from freshly added effects and save it
+  again.
+- **Known gaps.** Adjustment layers in the optional worker GPU render modes still use the older 4×5
+  colour matrix for Brightness, Contrast and Saturation; the `WorkerGpuAdjustment` log, and the
+  adjustment inspector while such a mode is selected, name each effect that looks different there
+  (`adjustment-color-recipe-unsupported`).
+
+### Blur & Sharpen notes
+
+The contract lives in `src/effects/blur/blurSampling.ts`; formulas and history in
+[Effect system: editable blur kernels](./Effect-System.md#editable-blur-kernels), nodes in
+[Node Catalog](./Node-Catalog.md), compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
+
+- **Units.** Radius is in pixels of a 1080p frame (its shorter side) and scales with the rendered
+  size, so preview, export and 4K match; 3D layer-space effects count their layer's own resolution.
+  Motion, Radial and Zoom are relative to the frame.
+- **Premultiplied source.** The frame is premultiplied into an `rgba16float` cache first; every
+  filtered read after that is exact at alpha edges. The GPU preview and the export show the same
+  blur.
+- **Read budgets.** Gaussian and Box read up to 127 merged pairs per side and pass; Motion, Radial
+  and Zoom up to 256 (Stage A) and 64 (Stage B) reads per pixel. Beyond that the reads spread out,
+  and the inspector and the tool result say so.
+- **Zero strength.** An unedited blur at 0 is skipped, so the picture passes through exactly; an
+  edited graph always runs.
+- **Saved projects.** Untouched old blur graphs upgrade automatically; edited graphs stay as saved.
+  Saved projects render with the current kernels. Radius follows the frame size, so a 4K project
+  blurs twice as many pixels as a 1080p one.
+- **Software preview.** The worker software preview approximates: Gaussian and Box as a canvas
+  blur, Motion, Radial and Zoom with up to 64 evenly spaced reads (longer streaks step; the
+  `SoftwareBlur` log says so).
+
+### Light & Stylize notes
+
+Formulas and history: [Effect system: editable color effect graphs](./Effect-System.md#editable-color-effect-graphs)
+(Vignette, and Film Grain, Scanlines, Posterize, Threshold),
+[Effect system: editable blur kernels](./Effect-System.md#editable-blur-kernels) (Glow, Edge Detect,
+Sharpen) and [Effect system: glyph, cell and compute effects](./Effect-System.md#glyph-cell-and-compute-effects)
+(Acuarela); nodes in [Node Catalog](./Node-Catalog.md#composed-coordinate-nodes), compilation in
+[Operator Graph Compiler](./Operator-Graph-Compiler.md).
+
+- **Units.** Glow Radius, Edge Detect Width and Acuarela's Wash and Bleed are in pixels of a 1080p
+  frame (its shorter side) and scale with the rendered size, so preview, export and 4K match.
+- **Out-of-range values.** Tool results and the inspector list every value that is clamped or
+  ignored (`paramWarnings`), instead of failing silently. The notes describe the current recipes; an
+  effect that still runs an earlier one gets a single note naming that version instead, and an
+  edited graph gets them as one hedged note (its own nodes decide). A note function that fails is
+  logged and reported.
+- **Saved projects.** Glow, Vignette, Edge Detect (and Film Grain, Scanlines and Sharpen) saved
+  before 2026-10-21 keep their earlier graph and folders (`stylizeRecipes.ts`); the card offers
+  **Use the new …**, which for Glow and Vignette also resets the values and removes their keyframes,
+  in one undo step. Custom Looks record `recipe: 'earlier'` for such effects (Looks saved before are
+  migrated), so applying them recreates the earlier graph.
+- **Transitions** build their effects without a graph at render time, so they use the current
+  recipes: Vignette Bloom is retuned (Glow Radius 60–240; Vignette Roundness 0 with Size and
+  Softness ÷ √2 for the same falloff; Glow Amount 0.1–1.4 for the bloom's ramp to white).
+- **Software preview.** The worker software renderer (the Linux fallback) evaluates effects that
+  carry a graph on the CPU, which is slow at large sizes (the Glow pyramid most of all). Graphless
+  ones, as transitions create them, use dedicated pixel paths (`workerSoftwareBloom.ts` for Glow).
+  Rom1 runs on the CPU; the watercolour Acuarela falls back to the main-thread GPU renderer.
+
+### Generate notes
+
+Notes for developers. Registry, uniforms and the byte-texture binding are in
+[Effect system](./Effect-System.md#registry-and-ui), nodes in [Node Catalog](./Node-Catalog.md), graph
+compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md). Shared helpers for finite
+reads and choice warnings live in `src/effects/generate/generatorParams.ts`.
+
+- **Robust values.** Numbers are read as finite values (NaN and infinities use the default). Values
+  outside a parameter's rendered range (`renderMin`/`renderMax`) are named in the inspector, in the
+  units of its row, and in `addEffect`/`updateEffect` results, in stored units; `paramWarnings` name
+  unknown choices and settings that draw nothing. The coverage and compositing maths of the grid,
+  wheel and ring head run on the CPU in unit tests, translated from the WGSL source.
+- **Keyframed rates.** Perspective Grid Speed and Color Wheel Spin declare `integratedAs`. The
+  timeline and the composition evaluator (nested compositions, transitions, export) share one
+  keyframe step (`evaluateEffectKeyframes`) that adds the distance a keyed rate has travelled: the
+  area under the curve from the start of the render clock (−clip start in clip time) to now, with the
+  first key's value held before it. It equals rate × time while the rate is constant, adding the
+  first key does not move the pattern, and a head trim (keys stay on the timeline, at negative clip
+  times) keeps the phase of a keyed ramp. Unkeyed, the rate runs from the timeline (or composition)
+  time. The step evaluates the clip's own keyframe array, so the property index and a table of
+  cumulative segment integrals are built once per edit: a frame binary-searches its segment and
+  integrates only that part (O(log K), about 1 µs for 1000 keys). Two keys at one time are a jump.
+  Effects without keys keep their identity. The travel values are runtime-only: project,
+  composition, preset and undo-history loads drop stored ones, tools and Looks do not store them, and
+  an instance that still carries one renders without it (one log line). A node source or the
+  Constant mode on a rate runs it at rate × time and logs which of the two overrides the keys. Scroll
+  and hue are wrapped on the CPU in double precision.
+- **Saved projects.** Choices and numbers an old instance lacks render, and show in the inspector, at
+  their `legacyDefault` (each effect page names them). A Look saved from such an instance stores these
+  values, and custom Looks saved earlier without them apply and preview with them too; built-in Looks
+  use the current defaults. New defaults apply only to new instances.
+
+### Lens & Distort notes
+
+Notes for developers; each effect page adds its own formula and limits.
+
+- **Units.** Shape Circle measures offsets and Radius in units of the shorter frame side (0.5 = half
+  of it), so circles stay round and match at every resolution; Stretch to Frame measures each axis
+  in its own 0–1 range. Angles are stored in radians and shown in degrees; keyframe lanes, MIDI and
+  tools use radians.
+- **Sampling.** The frame is premultiplied into an `rgba16float` cache, read with one bilinear sample
+  at the read position (Kaleidoscope: two, crossfaded) and unpremultiplied, so transparent edges keep
+  their colour without a dark rim. Transparent frame edges fade over one source pixel by lowering
+  alpha only. One sample per pixel means very strong settings shimmer on fine detail.
+- **Neutral settings** (Bulge & Pinch Amount 1, Twist 0, both Wave heights 0, RGB Split Amount 0,
+  Mirror with both axes off) skip the built-in recipe, so the picture passes through exactly.
+- **Software preview and export.** Without WebGPU (software preview, worker-first export readback)
+  the untouched recipes run as a hand-written pass with the same mapping, frame edges and
+  premultiplied read, within 1/255 of the graph; edited graphs run through the graph interpreter.
+- **Warnings.** Clamped or degenerate values (Radius ≤ 0, negative Amount, unknown Shape or Frame
+  Edges choices, out-of-range Fisheye values, Lens Correction folding at the active composition size,
+  Guided Perspective limits) appear below the effect in the inspector, judged on the values at the
+  playhead, and in the `addEffect` / `updateEffect` tool results.
+- **Code.** The recipes live in `src/services/operators/uvDistortRecipes.ts` and
+  `mirrorRecipes.ts`. More: [Effect system: editable UV distortions](./Effect-System.md#editable-uv-distortions),
+  [editable mirror, split and pixel graphs](./Effect-System.md#editable-mirror-split-and-pixel-graphs),
+  [Node Catalog](./Node-Catalog.md) and [Operator Graph Compiler](./Operator-Graph-Compiler.md).
+
+### Pixel & Mosaic notes
+
+Notes for developers on Pixelate, Blockify and Block Mosaic; each effect page adds its own limits.
+
+- **Cell grid.** Pixel Size, Block Size, Tile Size and Grout Width are pixels of a 1080p frame,
+  rounded to whole rendered pixels, so preview, export and 4K show the same blocks relative to the
+  picture. The grid is anchored at the frame centre: cells grow and shrink about the middle when the
+  size is animated, and cells at the frame edges are cut by the frame.
+- **Average.** A cached row average and a column average are exact up to 128 rendered pixels per
+  cell; larger cells average 64 evenly spread pairs of pixels per row and column.
+- **Transparency.** The average reads a premultiplied `rgba16float` copy of the frame and is
+  unpremultiplied, so transparent pixels never darken a cell.
+- **Software preview and export.** Without WebGPU, Pixelate runs as a hand-written pass that averages
+  every cell exactly, within 1/255 of the graph; Blockify, Block Mosaic and edited graphs run
+  through the graph interpreter, which is slower.
+- **Code.** The recipes live in `src/services/operators/cellGridRecipes.ts`. More:
+  [Effect system: editable mirror, split and pixel graphs](./Effect-System.md#editable-mirror-split-and-pixel-graphs),
+  [Node Catalog](./Node-Catalog.md) and [Operator Graph Compiler](./Operator-Graph-Compiler.md).
+
+### Analog & Glitch notes
+
+- **Time.** The effects follow timeline time: the preview, scrubbing and the export match, and Speed 0 freezes them.
+- **Hash keys.** Every key the recipes hash is an exact integer below 2^24 (the seed and the cycle fold into 509 keys by integer modulo, each kind of roll adds its own integer salt, grain frames move the keys by 16384 rows), so neighbouring cells share bit-identical keys and the GPU and the worker software path hash the same bits (`tests/unit/analogHashKeys.test.ts`). The older sine hash stays unchanged for other effects.
+- **Values.** Values outside a control's range are clamped and reported in the inspector and in agent tool results.
+- **Stage folders** are presentation only (`effectPresentationPlans.ts`) and appear on the untouched recipe; a graph with your own folders keeps them. A folded plain folder offers only the outputs that are used; a composition keeps every output it declares.
+- **Saved projects.** Effects and custom Looks saved before the 2026-10 rebuild of CRT Screen, Glitch, Film Prism, Holo and Ribbon Scan keep their original graphs (`legacyCrtScreenGraph.ts`, `legacyGlitchGraph.ts`, `legacyFilmPrismGraph.ts`, `legacyHoloGraph.ts`, `legacyRibbonScanGraph.ts`, pinned by `analogLegacyGraphs.ts`), in Look thumbnails too, without the new recipes' own controls; add the effect again for the new version.
+- **Experimental.** Crystal Glass, Glass Dispersion and Pixel Sort carry an `experimental` note on their definition: the effect list adds "(Experimental)", and the inspector and the `listEffects`/`addEffect` tool results give the reason.
+- **Source.** The recipes live in `src/services/operators/crtScreenRecipe.ts`, `glitchRecipe.ts`, `filmPrismRecipe.ts`, `holoRecipe.ts` and `ribbonScanRecipe.ts` (shared helpers in `analogRecipeBuilder.ts`); compilation: [Operator Graph Compiler](./Operator-Graph-Compiler.md), random nodes: [Node Catalog](./Node-Catalog.md#random-nodes).
+
+### Keying & Time notes
+
+- **Source.** Time Stack and Slit Scan need a video clip, not a still image or a nested composition. The past comes from the original video's own timestamps (trims, speed changes and reverse clips included), not from earlier playback, through one shared source-frame service.
+- **Loading.** The first load of the frame window takes a moment; the preview shows the plain clip or the last complete picture meanwhile, and the export waits for the exact frames.
+- **Memory.** Each of them keeps its frames in a GPU budget of its own (Time Stack: Frame cache; Slit Scan: History memory).
+- **More.** Keyer internals: [Effect system: editable keying and feedback graphs](./Effect-System.md#editable-keying-and-feedback-graphs); Slit Scan notes: [Effect system: Slit Scan](./Effect-System.md#slit-scan); compilation: [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 
 ## Notes
 

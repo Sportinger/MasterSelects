@@ -9,9 +9,10 @@ import {
 import { effectParamDisplay } from '../../src/effects/paramDisplay';
 import { catalogText } from '../../src/services/nodeGraph/catalogText';
 import {
-  CATALOG_FILE, CONTROLS_END, CONTROLS_START, THUMB_MAX_BYTES, basicPage, cardText, controlsTable, firstSentence, pageLead,
-  planEffectDocs, refreshGeneratedBlocks, snapshotRegistry,
+  CATALOG_FILE, CONTROLS_END, CONTROLS_START, PICTURE_PENDING, THUMB_MAX_BYTES, basicPage, cardText, controlsTable, firstSentence,
+  generatedBlockProblem, isBasicPage, pageLead, planEffectDocs, refreshGeneratedBlocks, snapshotRegistry,
 } from '../../scripts/effectDocsCatalog.mjs';
+import { BUDGETS } from '../../docs-site/scripts/lib/media.mjs';
 
 const featuresDir = path.resolve(__dirname, '../../docs/Features');
 const read = (file: string) => (fs.existsSync(path.join(featuresDir, file)) ? fs.readFileSync(path.join(featuresDir, file), 'utf8') : undefined);
@@ -34,26 +35,32 @@ describe('effect docs match the registry', () => {
 
   it('every effect page is named after an effect id and its generated parts are current', () => {
     expect(plan.unknownPages, 'effects/<id>.md must use a registry id').toEqual([]);
+    expect(plan.problems.map((problem: { text: string }) => problem.text)).toEqual([]);
     const stale = [...plan.texts].filter(([file, text]) => file !== CATALOG_FILE && read(file) !== text).map(([file]) => file);
     expect(stale, rerun).toEqual([]);
   });
 
-  it('every visible effect has a page or is described on an effect group page', () => {
-    expect(plan.uncovered.map((effect) => effect.id)).toEqual([]);
+  it('every visible effect has its own page', () => {
+    expect(plan.uncovered.map((effect) => effect.id), 'write effects/<id>.md, or run node scripts/effect-docs.mjs --basic').toEqual([]);
   });
 
-  it('pictures the catalog names exist and thumbnails fit their budget', () => {
-    for (const entry of plan.catalog.effects) {
-      for (const asset of [entry.still, entry.thumb, entry.clip].filter(Boolean)) expect(exists(asset), asset).toBe(true);
-      if (entry.thumb) expect(fs.statSync(path.join(featuresDir, entry.thumb)).size, entry.thumb).toBeLessThanOrEqual(THUMB_MAX_BYTES);
+  it('every effect has a still and a gallery thumbnail within budget, unless its picture is pending', () => {
+    expect(THUMB_MAX_BYTES).toBe(BUDGETS.thumbBytes);
+    const missing = plan.catalog.effects.filter((entry) => !entry.hidden && !PICTURE_PENDING[entry.id] && (!entry.still || !entry.thumb));
+    expect(missing.map((entry) => entry.id), 'render a still (effect-lab --pairs), then node scripts/effect-docs.mjs --thumbs').toEqual([]);
+    for (const entry of plan.catalog.effects.filter((item) => item.thumb)) {
+      expect(fs.statSync(path.join(featuresDir, entry.thumb)).size, entry.thumb).toBeLessThanOrEqual(THUMB_MAX_BYTES);
     }
+    const stalePending = Object.keys(PICTURE_PENDING).filter((id) => plan.catalog.effects.find((entry) => entry.id === id)?.thumb);
+    expect(stalePending, 'these effects have pictures now: remove them from PICTURE_PENDING').toEqual([]);
   });
 });
 
 describe('effect docs helpers', () => {
   const effect = {
     id: 'demo', name: 'Demo', group: 'blur', description: 'Softens the picture; Radius sets how much.', engine: undefined, styles: [],
-    experimental: undefined, kind: 'fullscreen', ownControls: false, nodeValues: false, moving: false, live: false, hidden: false,
+    experimental: undefined, kind: 'fullscreen', ownControls: false, nodeValues: false, moving: false, live: false, feedback: false, hidden: false,
+    hiddenParams: [],
     params: [
       { key: 'radius', label: 'Radius', type: 'number', section: '', min: 0, max: 100, default: 10, display: { scale: 1, suffix: 'px', decimals: 0 } },
       { key: 'turn', label: 'Turn', type: 'number', section: '', min: 0, max: 1, default: 0.25, display: { scale: 360, suffix: '°', decimals: 0 } },
@@ -69,6 +76,38 @@ describe('effect docs helpers', () => {
     expect(table).toContain('| Angle (Only in Offset mode) | −1 to 1 | 0 |');
     expect(table.indexOf('**Quality**')).toBeGreaterThan(table.indexOf('| Radius'));
     expect(table).toContain('| Mode | Fast, Fine | Fine |');
+  });
+
+  it('shows range ends and defaults with the decimals they need', () => {
+    const table = controlsTable({ ...effect, params: [
+      { key: 'feather', label: 'Feather', type: 'number', section: '', min: 0.001, max: 1, default: 0.15, display: { scale: 1, step: 0.01, decimals: 2 } },
+      { key: 'angle', label: 'Angle', type: 'number', section: '', min: 0, max: 6.28318, default: 2, display: { scale: 180 / Math.PI, step: 1, suffix: '°', decimals: 0 } },
+    ] });
+    expect(table).toContain('| Feather | 0.001 to 1 | 0.15 |');
+    expect(table).toContain('| Angle | 0 to 360° | 114.59° |');
+  });
+
+  it('keeps "$&" in a table literal and reports broken markers', () => {
+    const odd = { ...effect, params: [{ ...effect.params[0], label: "Cost $& $' $$" }] };
+    const refreshed = refreshGeneratedBlocks(`# Demo\n\n${CONTROLS_START}\nold\n${CONTROLS_END}\n`, odd);
+    expect(refreshed).toContain("| Cost $& $' $$ |");
+    expect(generatedBlockProblem(`# Demo\n\n${CONTROLS_START}\nno end\n`)).toMatch(/1 .* and 0 /u);
+    expect(generatedBlockProblem(`${CONTROLS_START}\na\n${CONTROLS_END}\n${CONTROLS_START}\nb\n${CONTROLS_END}`)).toMatch(/2 generated/u);
+    expect(generatedBlockProblem(`${CONTROLS_START}\na\n${CONTROLS_END}`)).toBeUndefined();
+  });
+
+  it('never overwrites a basic page that was edited under its marker', () => {
+    const snap = { groups: [{ id: 'blur', label: 'Blur & Sharpen', effects: ['demo'] }], effects: [effect] };
+    const page = basicPage(effect, { groupLabel: 'Blur & Sharpen', overview: undefined, still: undefined, names: new Map() });
+    const files = (text: string) => ({ read: (file: string) => (file === 'effects/demo.md' ? text : undefined), exists: () => false, pages: ['demo'] });
+    expect(planEffectDocs(snap, files(page)).problems).toEqual([]);
+    const edited = `${page}\n**Tip:** a hand-written tip.\n`;
+    const result = planEffectDocs(snap, files(edited));
+    expect(result.texts.has('effects/demo.md')).toBe(false);
+    expect(result.problems[0].text).toMatch(/effects\/demo\.md was edited by hand: delete its marker line/u);
+    // The marker counts only as the first line under the title.
+    expect(isBasicPage(page)).toBe(true);
+    expect(isBasicPage(`# Demo\n\nA hand-written lead.\n\n<!-- effect-docs: basic page sha=0, quoted -->\n`)).toBe(false);
   });
 
   it('refreshes only the generated block of a hand-written page', () => {
@@ -94,7 +133,7 @@ describe('effect docs helpers', () => {
 
   it('writes a marked basic page that links its group and the add-an-effect section', () => {
     const page = basicPage(effect, { groupLabel: 'Blur & Sharpen', overview: 'Effects-Blur.md', still: undefined, names: new Map() });
-    expect(page.startsWith('# Demo\n\n<!-- effect-docs: basic page')).toBe(true);
+    expect(page.startsWith('# Demo\n\n<!-- effect-docs: basic page sha=')).toBe(true);
     expect(page).toContain('[Blur & Sharpen](../Effects-Blur.md)');
     expect(page).toContain('(../Effects.md#add-an-effect)');
     expect(page).toContain('## Controls');

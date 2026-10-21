@@ -4,6 +4,8 @@ Effects change how a clip looks: soften it, colour it, break it up, draw over it
 to a clip, adjust them while the preview follows, and animate them like any other setting.
 Every effect has its own page in the [Effect catalog](./effects/index.md).
 
+Try it interactively: **Info → Tutorials → Effects & Color**.
+
 ## Add an effect
 
 Select a clip in the timeline and open **Properties → Effects**. Click **+ Add Effect**, type part
@@ -11,13 +13,13 @@ of a name (for example `blur`) or pick a group, then click a tile. The tiles pre
 your own clip, so you can compare before you choose. Effects whose name matches your search come
 first.
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-shot--detail">
 
 <div class="docs-shot-stage">
 
-![Big Buck Bunny in the preview beside the Effects catalog filtered to blur, with six live effect thumbnails.](assets/workflows/effects-catalog-detail.webp)
+![The Effects tab beside a strip of the preview: + Add Effect is open, the search field says blur and six live effect tiles show Box Blur, Gaussian Blur, Motion Blur, Radial Blur, Zoom Blur and Sharpen.](assets/workflows/effects-catalog-detail.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="600 0 417 500" aria-hidden="true" focusable="false">
 <defs><marker id="effects-catalog-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M840 65 L903 18" marker-end="url(#effects-catalog-detail-arrow)" />
 <circle class="docs-shot-number" cx="840" cy="65" r="18" /><text x="840" y="65" class="docs-shot-number-text">1</text>
@@ -29,6 +31,7 @@ first.
 </div>
 
 <figcaption>1 — Open Effects. 2 — Search for blur under + Add Effect. 3 — Click Gaussian Blur to apply it. The main preview still shows the untreated clip here.</figcaption>
+</figure>
 
 On an **Adjustment Layer** the list offers only the effects that work there (Brightness, Contrast,
 Saturation, Invert and Gaussian Blur). Effects marked *Experimental* in the list work, but have
@@ -39,13 +42,13 @@ known flaws; their card says which.
 The new effect appears as a card below the list. Drag a number left or right, or double-click it
 to type a value. The reset arrow (or a right-click on the number) brings back the default.
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-shot--detail">
 
 <div class="docs-shot-stage">
 
-![Gaussian Blur enabled with Radius 10; the Big Buck Bunny frame is visibly softened.](assets/workflows/effects-blur-after-detail.webp)
+![The Gaussian Blur card in the Effects tab with Radius 10, beside a strip of the softened preview.](assets/workflows/effects-blur-after-detail.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="600 0 417 390" aria-hidden="true" focusable="false">
 <defs><marker id="effects-blur-after-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M650 278 L760 278" marker-end="url(#effects-blur-after-detail-arrow)" />
 <circle class="docs-shot-number" cx="650" cy="278" r="18" /><text x="650" y="278" class="docs-shot-number-text">1</text>
@@ -66,13 +69,13 @@ Click the checkmark in the effect's header (**Bypass effect**) to switch the eff
 losing its settings: the card dims and the preview shows the clip without it. Click again to
 switch it back on. The red **×** removes the effect.
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-shot--detail">
 
 <div class="docs-shot-stage">
 
-![The same Big Buck Bunny frame with Gaussian Blur bypassed, a dimmed effect header and the original sharp preview.](assets/workflows/effects-blur-before-detail.webp)
+![The Gaussian Blur card bypassed, with a dimmed header, beside a strip of the sharp original preview.](assets/workflows/effects-blur-before-detail.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 601" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="600 0 417 390" aria-hidden="true" focusable="false">
 <defs><marker id="effects-blur-before-detail-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M850 162 L940 211" marker-end="url(#effects-blur-before-detail-arrow)" />
 <circle class="docs-shot-number" cx="850" cy="162" r="18" /><text x="850" y="162" class="docs-shot-number-text">1</text>

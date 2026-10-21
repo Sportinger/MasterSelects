@@ -86,6 +86,6 @@ ends in a clear edge.
   preset of the earlier recipe load as the current recipe with Stretch to Frame and Clamp, and get the
   smooth curve.
 
-Units, frame edges and transparency: [Lens & Distort](../Effects-Distort.md#technical-details).
+Units, frame edges and transparency: [Lens & Distort](../Effect-System.md#lens--distort-notes).
 Recipes: [Effect system: editable UV distortions](../Effect-System.md#editable-uv-distortions).
 Nodes: [Node Catalog](../Node-Catalog.md).

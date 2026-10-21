@@ -63,9 +63,9 @@ rings.
   meant something else); its card offers **Use the new Vignette (resets its shape)**, which resets
   Size, Softness and Roundness and removes their keyframes, in one undo step.
 - **Transitions.** The Vignette Bloom transition uses the current Vignette (Roundness 0, with Size
-  and Softness ÷ √2: the same falloff as before).
+  and Softness ÷ √2, which gives the transition its familiar falloff).
 - **Software preview.** Without a graph (as transitions create it) the worker software renderer uses
   the current pixel distance without the dither.
-- Shared notes: [Light & Stylize](../Effects-Stylize.md#technical-details). Formulas:
+- Shared notes: [Light & Stylize](../Effect-System.md#light--stylize-notes). Formulas:
   [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

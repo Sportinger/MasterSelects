@@ -44,6 +44,6 @@ into input T of **Mix**, past the last **Minimum**.
   (hue and brightness stay).
 - **Range.** The slider covers 0 to 3; typed values render up to 10, and the inspector reports
   anything beyond that.
-- Shared colour notes: [Color & Tone](../Effects-Color.md#technical-details). Formulas:
+- Shared colour notes: [Color & Tone](../Effect-System.md#color--tone-notes). Formulas:
   [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

@@ -1,16 +1,16 @@
 # ASCII Ghost
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=8caff5a04a17, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 ASCII art whose characters cycle over time and leave fading ghost trails; Cell Size sets character size, Speed the cycling rate.
 
-Group: [Text & Glyph](./index.md#text--glyph) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Text & Glyph](../Effects-Glyph.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
-![ASCII Ghost on the harbour town: the original on the left, ASCII Ghost at its default settings on the right](../assets/effects/ascii-ghost.webp)
+![ASCII Ghost on an enlarged detail of the dancer on a dark stage: the original on the left, ASCII Ghost at its default settings on the right](../assets/effects/ascii-ghost.webp)
 
-<figcaption>Left: the original. Right: ASCII Ghost at its default settings, one frame of its movement.</figcaption>
+<figcaption>Left: the original. Right: ASCII Ghost at its default settings, one frame of its movement. An enlarged detail, so the characters can be read.</figcaption>
 </figure>
 
 *A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
@@ -43,4 +43,4 @@ Group: [Text & Glyph](./index.md#text--glyph) · [How to add an effect](../Effec
 
 ## Technical details
 
-It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+It builds on its own earlier frames, so its trails grow during playback; **History Loop** sets whether they start again when playback jumps back to the loop start. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).

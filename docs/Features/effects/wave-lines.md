@@ -2,7 +2,7 @@
 
 Redraws the picture as wavy lines on a plain background, a graphic line-art look. The waves bend with the brightness of the picture and drift over time.
 
-Group: [Lines & Engraving](./index.md#lines--engraving) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 

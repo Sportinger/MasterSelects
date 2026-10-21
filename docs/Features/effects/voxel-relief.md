@@ -3,7 +3,7 @@
 Builds the picture out of small blocks in 3D: bright parts rise, dark parts stay low. You can look at
 the relief from any angle.
 
-Group: [3D & Particles](./index.md#3d--particles) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
@@ -31,7 +31,7 @@ scroll to move closer. Keyframe Tilt and Yaw for a camera move.
 | **General** | | |
 | History Loop | Reset, Continuous | Reset |
 | **Relief** | | |
-| Columns | 12 to 180 | 107 |
+| Columns | 12 to 180 | 107.4 |
 | Height | 0 to 1.2 | 1.2 |
 | Base | 0 to 0.2 | 0.015 |
 | Gap | 0 to 0.36 | 0.06 |

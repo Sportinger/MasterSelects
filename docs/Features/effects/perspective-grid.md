@@ -7,9 +7,9 @@ Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.m
 
 <figure class="docs-shot">
 
-![Above, the empty stage floor to the left of the dancer, dark wood under a dim back wall; below, the same crop with cyan grid lines on the floor that run towards a horizon in the haze and get thinner, closer together and dimmer with distance](../assets/effects/perspective-grid.webp)
+![The empty stage floor to the left of the dancer, dark wood under a dim back wall, with cyan grid lines on the floor that run towards a horizon in the haze and get thinner, closer together and dimmer with distance](../assets/effects/perspective-grid.webp)
 
-<figcaption>Top: original (the floor beside the dancer). Bottom: Horizon 60 %, 16 Columns, Row Density 6, Line Width 10 px, Opacity 1.</figcaption>
+<figcaption>The floor beside the dancer with Horizon 60 %, 16 Columns, Row Density 6, Line Width 10 px, Opacity 1.</figcaption>
 </figure>
 
 **Use it for:** a retro synthwave floor · a virtual stage floor under a performer · a moving
@@ -90,7 +90,7 @@ can change is in its card, with units, a ◇ to set keyframes and ↺ to reset.
 - **Limits.** Columns render up to 2000, Row Density up to 1000, Line Width up to 1000 and Horizon
   Fade up to 100; values beyond are named in the inspector.
 - **Speed** is a rate: a keyframed Speed speeds up and slows down smoothly
-  ([keyframed rates](../Effects-Generate.md#technical-details)).
+  ([keyframed rates](../Effect-System.md#generate-notes)).
 - **Saved projects.** Grids saved before the Lines choice render with Even width. New defaults
   (Opacity 0.8, Line Width 3 px, Thin with depth) apply only to new instances. Line widths are exact
   at 1080p and scale with the output, so in a 540p preview they look about half as thick as in older

@@ -67,6 +67,6 @@ equally strong everywhere, like digital sensor noise; 0 keeps black and white co
   more and is reported.
 - **Saved projects.** A Film Grain saved before 2026-10-21 keeps its earlier noise (Color has no
   effect on it); its card offers **Use the new Film Grain**.
-- Shared notes on stylize recipes: [Light & Stylize](../Effects-Stylize.md#technical-details).
+- Shared notes on stylize recipes: [Light & Stylize](../Effect-System.md#light--stylize-notes).
   Formulas: [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

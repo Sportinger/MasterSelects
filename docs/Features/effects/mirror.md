@@ -77,6 +77,6 @@ back and forth in strips a quarter of the picture height wide.
   radians.
 - **Saved projects** keep their look; diagonal mirror lines point exactly along the on-screen angle.
 
-Frame edges and transparency: [Lens & Distort](../Effects-Distort.md#technical-details).
+Frame edges and transparency: [Lens & Distort](../Effect-System.md#lens--distort-notes).
 Recipes: [Effect system: editable mirror, split and pixel graphs](../Effect-System.md#editable-mirror-split-and-pixel-graphs).
 Mirror Repeat: [Node Catalog](../Node-Catalog.md#composed-coordinate-nodes).

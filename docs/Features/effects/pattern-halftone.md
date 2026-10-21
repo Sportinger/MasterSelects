@@ -1,10 +1,10 @@
 # Pattern Halftone
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=ad9d3d1b564b, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Halftone screen of circle, diamond or line marks sized by image darkness, in Ink on Paper; Shape picks the mark, Scale the cell size.
 
-Group: [Print & Halftone](./index.md#print--halftone) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Print & Halftone](../Effects-Print.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 

@@ -7,9 +7,9 @@ Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.m
 
 <figure class="docs-shot">
 
-![Above, the dancer; below, the same frame with a white stick figure with a ring head on the right, echoing her pose: one arm raised, the other out to the side, one leg stretched back](../assets/effects/stick-figure.webp)
+![The dancer with a white stick figure with a ring head on the right, echoing her pose: one arm raised, the other out to the side, one leg stretched back](../assets/effects/stick-figure.webp)
 
-<figcaption>Top: original. Bottom: a posed figure, Facing Left, Head Ring, Scale 1.6.</figcaption>
+<figcaption>A posed figure, Facing Left, Head Ring, Scale 1.6.</figcaption>
 </figure>
 
 **Use it for:** blocking a choreography before rehearsal · a storyboard figure over a shot · a small

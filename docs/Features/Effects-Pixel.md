@@ -41,21 +41,6 @@ on the effect's card, then on each folder ([The node setup](./Effects.md#the-nod
 
 ## Technical details
 
-Notes for developers on Pixelate, Blockify and Block Mosaic; each effect page adds its own limits.
+Block and tile sizes are measured on a 1080p frame, so the preview, the export and 4K show the same blocks. The grid is centred, so animated sizes grow from the middle. Transparent pixels never darken a block.
 
-- **Cell grid.** Pixel Size, Block Size, Tile Size and Grout Width are pixels of a 1080p frame,
-  rounded to whole rendered pixels, so preview, export and 4K show the same blocks relative to the
-  picture. The grid is anchored at the frame centre: cells grow and shrink about the middle when the
-  size is animated, and cells at the frame edges are cut by the frame.
-- **Average.** A cached row average and a column average are exact up to 128 rendered pixels per
-  cell; larger cells average 64 evenly spread pairs of pixels per row and column.
-- **Transparency.** The average reads a premultiplied `rgba16float` copy of the frame and is
-  unpremultiplied, so transparent pixels never darken a cell.
-- **Software preview and export.** Without WebGPU, Pixelate runs as a hand-written pass that averages
-  every cell exactly, within 1/255 of the graph; Blockify, Block Mosaic and edited graphs run
-  through the graph interpreter, which is slower.
-- **Code.** The recipes live in `src/services/operators/cellGridRecipes.ts`. More:
-  [Effect system: editable mirror, split and pixel graphs](./Effect-System.md#editable-mirror-split-and-pixel-graphs),
-  [Node Catalog](./Node-Catalog.md) and [Operator Graph Compiler](./Operator-Graph-Compiler.md).
-- **Pictures.** The `mirror-pixel.json` manifests in `scripts/effect-lab-shots/`,
-  `scripts/effect-editor-shots/` and `scripts/effect-graph-shots/` regenerate the stills and graphs.
+Developer notes: [Effect system: Pixel & Mosaic notes](./Effect-System.md#pixel--mosaic-notes).

@@ -100,8 +100,11 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 
 ### Effects
 
+<!-- docs-sidebar: also -->
+
 | Document | Description |
 |---|---|
+| [Using effects](./Effects.md) | Add, adjust, compare, reorder and animate effects (also under Guides) |
 | [Effect catalog](./effects/index.md) | Every effect of the app, by picker group, with a picture and a link to its page |
 | [Nodes basics](./Node-Workspace.md) | The Nodes canvas of a clip: nodes, cables, operators, effect order and execution boundaries |
 
@@ -121,15 +124,12 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | [Overview](./Effects-Analog.md) | `analog` | Which analog or glitch effect to choose, the shared idea of the analog recipes, and group-wide technical notes |
 | [Overview](./Effects-Keying-Time.md) | `keying` | Which keying or time effect to choose, how the time effects read the past, and group-wide technical notes |
 | [Overview](./Effects-Generate.md) | `generate` | Which generator to use (also Flocking, Weave and Memory Leak), the three ways they build a picture, and technical notes |
-
-<!-- planned:
-| [Overview](./Effects-Print.md) | `print` | Print & Halftone |
-| [Overview](./Effects-Lines.md) | `lines` | Lines & Engraving |
-| [Overview](./Effects-Textile.md) | `textile` | Textile & Craft |
-| [Overview](./Effects-Glyph.md) | `text` | Text & Glyph |
-| [Overview](./Effects-Tracking.md) | `tracking` | Tracking & Overlays |
-| [Overview](./Effects-3D-Particles.md) | `scene` | 3D & Particles |
--->
+| [Overview](./Effects-Print.md) | `print` | Which print look to choose and how they turn tones into ink marks |
+| [Overview](./Effects-Lines.md) | `lines` | Which line look to choose and the three ways they draw lines |
+| [Overview](./Effects-Textile.md) | `textile` | Which fabric look to choose and how the pattern lets the picture through |
+| [Overview](./Effects-Glyph.md) | `text` | Which of the 18 character looks to choose and the controls they share |
+| [Overview](./Effects-Tracking.md) | `tracking` | Which overlay to choose and how to track the person they follow |
+| [Overview](./Effects-3D-Particles.md) | `scene` | Which 3D or particle effect to choose and how they build objects from the clip |
 
 ### Transitions
 <!-- docs-sidebar: collapsed -->

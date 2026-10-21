@@ -43,3 +43,40 @@ export function buildRedirects(entries, routes, anchorsOf = () => undefined) {
   if (waiting) notes.push({ level: 'info', text: `Redirects: ${waiting} wait until their old page is gone.` });
   return { redirects, active, waiting, notes };
 }
+
+/**
+ * Sections that left a page which stays published: { "<page URL>": { "<old anchor>": "<new URL>" } }.
+ * A visit with that #anchor is sent on by a small script in the page head (astro.config.mjs).
+ * Reported: a page that is not published, an anchor the page still has (the redirect would hide
+ * it), and a target that is no published page or lacks its anchor.
+ * Returns { anchors (for src/generated/anchor-redirects.json), count, notes }.
+ */
+export function buildAnchorRedirects(entries, routes, anchorsOf = () => undefined) {
+  const anchors = {};
+  const notes = [];
+  let count = 0;
+  for (const [page, map] of Object.entries(entries ?? {})) {
+    const route = routeOf(page);
+    if (!page.startsWith(`${SITE_BASE}/`) || !routes.has(route)) {
+      notes.push({ level: 'warn', text: `Anchor redirects: ${page} is no published page; its ${Object.keys(map ?? {}).length} anchors are skipped.` });
+      continue;
+    }
+    for (const [anchor, to] of Object.entries(map ?? {})) {
+      if (anchorsOf(route)?.has(anchor)) {
+        notes.push({ level: 'warn', text: `Anchor redirects: ${page}#${anchor} still exists on the page; not redirected.` });
+        continue;
+      }
+      if (typeof to !== 'string' || !to.startsWith(`${SITE_BASE}/`) || !routes.has(routeOf(to))) {
+        notes.push({ level: 'warn', text: `Anchor redirects: ${page}#${anchor} points to ${to}, which is no published page; skipped.` });
+        continue;
+      }
+      const targetAnchor = to.split('#')[1];
+      if (targetAnchor && anchorsOf(routeOf(to)) && !anchorsOf(routeOf(to)).has(decodeURIComponent(targetAnchor))) {
+        notes.push({ level: 'warn', text: `Anchor redirects: ${page}#${anchor} points to #${targetAnchor}, which ${to.split('#')[0]} does not have.` });
+      }
+      (anchors[`${SITE_BASE}/${route}/`] ??= {})[anchor] = to;
+      count += 1;
+    }
+  }
+  return { anchors, count, notes };
+}

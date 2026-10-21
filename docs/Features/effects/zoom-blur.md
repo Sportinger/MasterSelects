@@ -50,6 +50,6 @@ that input A. This is exactly Radial Blur's Zoom fade (1 − t/2).
   longer streaks are reported. At the frame edge the picture is clamped.
 - **Below 0.** A negative Amount streaks inward.
 - Shared blur notes (transparency, saved projects, software preview):
-  [Blur & Sharpen](../Effects-Blur.md#technical-details). Formulas:
+  [Blur & Sharpen](../Effect-System.md#blur--sharpen-notes). Formulas:
   [Effect system](../Effect-System.md#editable-blur-kernels); blocks:
   [Node Catalog](../Node-Catalog.md).

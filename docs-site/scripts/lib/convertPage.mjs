@@ -6,9 +6,11 @@
 // pages → /docs/<route>/, shared assets → /docs/assets/…, pictures → full-size links,
 // clips → reduced-motion-aware <video>. Code blocks and inline code are left untouched.
 
+import path from 'node:path';
 import { Slugger, slug } from './slug.mjs';
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, imageSize, mp4Info } from './media.mjs';
 import { SITE_BASE, isExternal, pageSlug, resolveFrom, routeUrl } from './routes.mjs';
+import { mergeEffectGroups } from './featureIndex.mjs';
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})/u;
 const INLINE_CODE = /(``[^\n]*?``|`[^`\n]*`)/u;
@@ -124,7 +126,9 @@ const assetUrl = (file) => `${SITE_BASE}/${file}`;
 
 /**
  * Cards for <!-- docs-gallery: <group-id>[+<group-id>…] | all -->.
- * ctx: { catalog (loadEffectCatalog), hasPage(file), asset(file), warn(text), takenIds: Set }.
+ * ctx: { catalog (loadEffectCatalog), hasPage(file), asset(file), warn(text), takenIds: Set,
+ *   file (the page), effectIndex ({ merges, overviews } from the README index, optional) }.
+ * `all` gives one section per sidebar subgroup (joined groups share one) with a link to its overview.
  * A card links to effects/<id>.md when that page exists, shows the catalog thumbnail when
  * the file exists, and keeps the effect's old heading slug as its id (unless the page uses it).
  */
@@ -163,7 +167,13 @@ export function galleryHtml(spec, ctx) {
     return `<ul class="docs-gallery not-content" aria-label="${escapeHtml(label)}">\n${cards.join('\n')}\n</ul>`;
   };
   if (spec !== 'all') return list(groups.flatMap((group) => group.effects), groups.map((group) => group.label).join(' & '));
-  return groups.filter((group) => group.effects.length).map((group) => `## ${group.label}\n\n${list(group.effects, group.label)}`).join('\n\n');
+  const merged = mergeEffectGroups(groups, ctx.effectIndex?.merges ?? []);
+  return merged.filter((group) => group.effects.length).map((group) => {
+    const overview = group.ids.map((id) => ctx.effectIndex?.overviews.get(id)).find(Boolean);
+    const link = overview && ctx.file && ctx.hasPage(overview)
+      ? `\n\n[Overview and which one to choose →](${path.posix.relative(path.posix.dirname(ctx.file), overview)})` : '';
+    return `## ${group.label}${link}\n\n${list(group.effects, group.label)}`;
+  }).join('\n\n');
 }
 
 /**

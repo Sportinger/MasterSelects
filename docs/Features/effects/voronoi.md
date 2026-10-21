@@ -1,6 +1,6 @@
 # Voronoi
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=584483b2c177, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Shatters the image into slowly drifting Voronoi cells, each filled with one sampled color and subtly outlined; Scale sets cell size.
 

@@ -145,5 +145,5 @@ back in to restore them.
   clamped to 0–1); that look is now [Rom1](./rom1.md).
 - **Software preview.** The worker software preview falls back to the main-thread GPU renderer for
   the watercolour; the smoke look runs on the CPU.
-- Shared notes: [Light & Stylize](../Effects-Stylize.md#technical-details). Blocks:
+- Shared notes: [Light & Stylize](../Effect-System.md#light--stylize-notes). Blocks:
   [Node Catalog](../Node-Catalog.md).

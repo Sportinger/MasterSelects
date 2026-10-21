@@ -1,6 +1,6 @@
 # Pixel Poster
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=af85d39f9caa, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Pixelates the image into blocks and posterizes each to a few color levels; Block Size sets the pixel size.
 
@@ -22,15 +22,11 @@ Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effect
 |---|---|---|
 | **Pattern** | | |
 | Block Size | 2 to 64 | 10 |
-| Angle | −180 to 180 | 0 |
 | **Style** | | |
 | Amount | 0 to 1 | 0.75 |
-| **Color** | | |
-| Ink | a colour | `#111827` |
-| Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Kilim Carpet](./kilim.md), [Vector Engraving](./vector-tiling.md).
 
 ## Technical details
 

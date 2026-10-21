@@ -88,9 +88,9 @@ the **Premultiplied Source**, **Vertical Pass** the columns of that result.
 - **Pair-merged taps.** One filtered read covers two neighbouring pixels at their weighted centre,
   exact for any weights. Up to 127 pairs per side; beyond that the pairs spread out, and the
   inspector and the tool result say so.
-- **Older projects** render with this kernel: Gaussian is stronger at small radii and about 20 %
-  softer at large ones than before.
+- **Saved projects** render with this kernel; at a given Radius, small radii blur a little more and
+  large radii about 20 % less than the kernel of older versions.
 - Shared blur notes (transparency, saved projects, software preview):
-  [Blur & Sharpen](../Effects-Blur.md#technical-details). Kernel and caching:
+  [Blur & Sharpen](../Effect-System.md#blur--sharpen-notes). Kernel and caching:
   [Effect system](../Effect-System.md#editable-blur-kernels); blocks:
   [Node Catalog](../Node-Catalog.md).

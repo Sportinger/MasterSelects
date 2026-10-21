@@ -5,8 +5,8 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { convertPage, galleryHtml, preparePage, stripBackLinks } from '../../docs-site/scripts/lib/convertPage.mjs';
 import { loadEffectCatalog, parseEffectGroups } from '../../docs-site/scripts/lib/effectCatalog.mjs';
-import { buildSidebar, readIndexSections } from '../../docs-site/scripts/lib/featureIndex.mjs';
-import { buildRedirects } from '../../docs-site/scripts/lib/redirects.mjs';
+import { buildSidebar, effectGroupIndex, readIndexSections } from '../../docs-site/scripts/lib/featureIndex.mjs';
+import { buildAnchorRedirects, buildRedirects } from '../../docs-site/scripts/lib/redirects.mjs';
 import { pageSlug } from '../../docs-site/scripts/lib/routes.mjs';
 
 const pickerGroups = [
@@ -290,6 +290,57 @@ describe('docs site page conversion', () => {
     expect(html).toContain('<span class="docs-gallery-text">Square blocks.</span>');
     expect(html).toContain('<li><span class="docs-gallery-card docs-gallery-card--soon">');
   });
+
+  it('gives the full catalog one section per sidebar subgroup with a link to its overview', () => {
+    const catalog = loadEffectCatalog({ catalog: { groups: pickerGroups, effects: [] } });
+    const effectIndex = effectGroupIndex(readIndexSections(`## Documentation Index
+
+### Effects
+
+<!-- docs-sidebar: effect-groups keying+time -->
+
+| Document | Effect group | Description |
+|---|---|---|
+| [Overview](./Effects-Blur.md) | \`blur\` | Blurs |
+| [Overview](./Effects-Keying-Time.md) | \`keying\` | Keys and time |
+`).sections);
+    const html = galleryHtml('all', {
+      catalog, effectIndex, file: 'effects/index.md',
+      hasPage: (page: string) => page.startsWith('Effects-'), asset: () => undefined, warn: () => {}, takenIds: new Set(),
+    });
+    expect(html).toContain('## Blur & Sharpen\n\n[Overview and which one to choose →](../Effects-Blur.md)');
+    expect(html).toContain('## Keying & Time\n\n[Overview and which one to choose →](../Effects-Keying-Time.md)');
+    expect(html).not.toContain('## Time\n');
+    expect(html).toMatch(/## Color & Tone\n\n<ul/u);
+  });
+});
+
+describe('docs site sidebar: a second way in', () => {
+  it('lets rows under "also" repeat a page another group lists, without a warning', () => {
+    const { sidebar, notes } = buildSidebar({
+      sections: readIndexSections(`## Documentation Index
+
+### Guides
+
+| Document | Description |
+|---|---|
+| [Using effects](./Effects.md) | Effects |
+
+### Effects
+
+<!-- docs-sidebar: also -->
+
+| Document | Description |
+|---|---|
+| [Using effects](./Effects.md) | Effects |
+| [Nodes basics](./Node-Workspace.md) | Nodes |
+| [Nodes basics](./Node-Workspace.md) | Twice |
+`).sections,
+      pages: ['README.md', 'Effects.md', 'Node-Workspace.md'], sitePages: new Set(), effectGroups: [], effectNames: new Map(),
+    });
+    expect(sidebar[1].items.map((item: { slug: string }) => item.slug)).toEqual(['features/effects', 'features/node-workspace', 'features/node-workspace']);
+    expect(notes.filter((note: { text: string }) => note.text.includes('again'))).toEqual([]);
+  });
 });
 
 describe('docs site redirects', () => {
@@ -303,5 +354,30 @@ describe('docs site redirects', () => {
     expect(result.redirects).toEqual({ '/features/time-stack': '/docs/effects/time-stack/' });
     expect(result.waiting).toBe(1);
     expect(result.notes.map((note: { text: string }) => note.text).join('\n')).toContain('memory-leak/, which is no published page');
+  });
+});
+
+describe('docs site anchor redirects', () => {
+  it('sends old anchors of a page that stays to their new place, and reports the ones that cannot work', () => {
+    const routes = new Set(['features/effects', 'effects/slit-scan', 'features/effect-system']);
+    const anchors = new Map([['features/effects', new Set(['add-an-effect'])], ['features/effect-system', new Set(['split-compare'])]]);
+    const result = buildAnchorRedirects({
+      '/docs/features/effects/': {
+        'slit-scan': '/docs/effects/slit-scan/',
+        'split-compare': '/docs/features/effect-system/#split-compare',
+        'add-an-effect': '/docs/effects/slit-scan/',
+        'gone': '/docs/features/missing/',
+        'bad-anchor': '/docs/features/effect-system/#nope',
+      },
+      '/docs/features/missing/': { x: '/docs/effects/slit-scan/' },
+    }, routes, (slug: string) => anchors.get(slug));
+    expect(result.anchors).toEqual({ '/docs/features/effects/': {
+      'slit-scan': '/docs/effects/slit-scan/', 'split-compare': '/docs/features/effect-system/#split-compare', 'bad-anchor': '/docs/features/effect-system/#nope',
+    } });
+    const texts = result.notes.map((note: { text: string }) => note.text).join('\n');
+    expect(texts).toContain('#add-an-effect still exists');
+    expect(texts).toContain('/docs/features/missing/, which is no published page');
+    expect(texts).toContain('#nope');
+    expect(texts).toContain('/docs/features/missing/ is no published page');
   });
 });

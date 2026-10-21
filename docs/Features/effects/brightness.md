@@ -7,9 +7,9 @@ Group: [Color & Tone](../Effects-Color.md) · [How to add an effect](../Effects.
 
 <figure class="docs-shot">
 
-![The rainy night street with neon signs, split in the middle: left half original, right half with Brightness 0.5, where walls and the wet street are lighter and the darkest areas are still black](../assets/effects/brightness.webp)
+![The rainy night street with neon signs, split in the middle: left half original, right half with Brightness 0.8, where walls, shop fronts and the wet street are clearly lighter and the darkest areas are still black](../assets/effects/brightness.webp)
 
-<figcaption>Left: original. Right: Amount 0.5.</figcaption>
+<figcaption>Left: original. Right: Amount 0.8.</figcaption>
 </figure>
 
 **Use it for:** footage that is a little too dark or too bright · lifting a dim projection without
@@ -60,6 +60,6 @@ control; set it to 4 for a harder push.
 - **Range.** The slider covers −1 to 1; typed values, keyframes and nodes render up to ±4. Beyond
   that the curve uses the limit, and the inspector and the tool result say so.
 - What all colour effects share (8-bit range, saved projects, adjustment layers):
-  [Color & Tone](../Effects-Color.md#technical-details). Formulas:
+  [Color & Tone](../Effect-System.md#color--tone-notes). Formulas:
   [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

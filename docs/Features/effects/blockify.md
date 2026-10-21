@@ -43,6 +43,9 @@ Blockify is [Pixelate's recipe](./pixelate.md#node-setup) with two more folders:
 the cell average and **Mix with Original** for Amount. Posterize adds the block's dither threshold to
 each colour channel and rounds it to the Levels steps.
 
+**Remix:** delete the **Posterize** folder and connect the cell average straight to **Mix with
+Original**: Blockify becomes Pixelate with an Amount control, for a mosaic that fades in.
+
 ## Technical details
 
 - **Posterize.** Each channel is rounded to Levels steps (2–64) after adding the block's 4 × 4 Bayer
@@ -53,6 +56,6 @@ each colour channel and rounds it to the Levels steps.
 - **Saved projects** made with the earlier Blockify open with the 1080p-based size, the centred grid
   and averaged colours, and keep 8 levels without dither.
 
-Grid, sizes and transparency: [Pixel & Mosaic](../Effects-Pixel.md#technical-details).
+Grid, sizes and transparency: [Pixel & Mosaic](../Effect-System.md#pixel--mosaic-notes).
 Recipes: [Effect system: editable mirror, split and pixel graphs](../Effect-System.md#editable-mirror-split-and-pixel-graphs).
 Nodes: [Node Catalog](../Node-Catalog.md).

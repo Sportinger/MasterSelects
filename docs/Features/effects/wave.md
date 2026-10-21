@@ -7,9 +7,9 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot">
 
-![The night street twice: on top the original; below, the shop fronts, neon signs and the walker rippling in vertical and horizontal waves](../assets/effects/wave.webp)
+![The night street twice: on the left the original; on the right, the shop fronts, neon signs and the walker rippling in vertical and horizontal waves](../assets/effects/wave.webp)
 
-<figcaption>Top: original. Bottom: the default settings.</figcaption>
+<figcaption>Left: original. Right: the default settings.</figcaption>
 </figure>
 
 **Use it for:** heat shimmer · an underwater or dream look · a wobbly transition.
@@ -92,6 +92,6 @@ ripples are calm at the top and strongest at the bottom, like a water surface.
   preset of the earlier recipe load as the current recipe with Clamp and Speed 0, so they look as
   before.
 
-Frame edges and transparency: [Lens & Distort](../Effects-Distort.md#technical-details).
+Frame edges and transparency: [Lens & Distort](../Effect-System.md#lens--distort-notes).
 Recipes: [Effect system: editable UV distortions](../Effect-System.md#editable-uv-distortions).
 Nodes: [Node Catalog](../Node-Catalog.md).

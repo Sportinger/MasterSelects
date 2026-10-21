@@ -1,7 +1,7 @@
 # Rom1
 
 Watery smoke: bright parts of the picture smear along slowly drifting currents. Their trails build
-up over time and fade. This was the original look of Acuarela.
+up over time and fade.
 
 Group: [Light & Stylize](../Effects-Stylize.md) · [How to add an effect](../Effects.md#add-an-effect)
 
@@ -57,8 +57,8 @@ original.
   Loop and Reset control the restart: [Effect system](../Effect-System.md#editable-keying-and-feedback-graphs).
 - **Gain.** The lift equals Gain up to 0.25, then eases towards 0.5, so the frame never turns white.
   Gain above 1 is reported.
-- **Saved projects.** The Gain curve applies to saved effects too: up to 0.25 they look as before,
-  higher Gain washes out where it used to turn white.
+- **Saved projects.** The Gain curve applies to saved effects too: up to 0.25 nothing changes, higher
+  Gain washes out instead of turning white.
 - **Software preview.** The worker software preview runs Rom1 on the CPU.
-- Shared notes: [Light & Stylize](../Effects-Stylize.md#technical-details). Blocks:
+- Shared notes: [Light & Stylize](../Effect-System.md#light--stylize-notes). Blocks:
   [Node Catalog](../Node-Catalog.md).

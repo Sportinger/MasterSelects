@@ -7,9 +7,9 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 
 <figure class="docs-shot">
 
-![The night street twice: on top with strong simulated wide-angle distortion, the house fronts at the left and right bowing outward; below, corrected and slightly enlarged, the house edges straight and upright](../assets/effects/lens-correction.webp)
+![The night street twice: on the left with strong simulated wide-angle distortion, the house fronts at the left and right bowing outward; on the right, corrected and slightly enlarged, the house edges straight and upright](../assets/effects/lens-correction.webp)
 
-<figcaption>Top: simulated barrel distortion. Bottom: Remove Distortion −28, Scale 120.</figcaption>
+<figcaption>Left: simulated barrel distortion. Right: Remove Distortion −28, Scale 120.</figcaption>
 </figure>
 
 **Use it for:** straight walls and horizons in wide-angle photos · removing colour fringes along

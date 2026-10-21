@@ -41,6 +41,18 @@ const BASE_PARAMS: Record<string, EffectParam> = {
   colorB: { type: 'color', label: 'Paper', default: '#f8fafc', group: 'Color' },
 };
 
+type BaseParam = 'scale' | 'angle' | 'colorA' | 'colorB';
+const BASE_PARAM_NAMES: Record<BaseParam, string> = { scale: 'scale', angle: 'angle', colorA: 'ink color', colorB: 'paper color' };
+
+/**
+ * `retired` entries for shared base parameters a look's recipe never reads: the card hides them,
+ * tools say the value is ignored, and saved values still load (a style switch keeps them).
+ * tests/unit/effectControlsRead.test.ts fails when a shown control is not read.
+ */
+export function ignoredBaseParams(name: string, keys: readonly BaseParam[]): Record<string, string> {
+  return Object.fromEntries(keys.map(key => [key, `${name} has no ${BASE_PARAM_NAMES[key]}; the value is ignored.`]));
+}
+
 function numberParam(params: Record<string, Primitive>, key: string, fallback: number): number {
   const value = params[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;

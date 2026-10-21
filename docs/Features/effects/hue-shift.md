@@ -62,6 +62,6 @@ are cut off at the end, so stay below about 1.5.
   clamped per channel (no gamut mapping).
 - **Units.** Shift is stored in turns: 0.25 is 90°. Keyframes and agent tools use turns; only the
   inspector shows degrees.
-- Shared colour notes: [Color & Tone](../Effects-Color.md#technical-details). Formulas:
+- Shared colour notes: [Color & Tone](../Effect-System.md#color--tone-notes). Formulas:
   [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

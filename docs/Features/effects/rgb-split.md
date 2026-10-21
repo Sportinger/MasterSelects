@@ -63,6 +63,6 @@ into **G** of **Combine Vector**. Green then moves with blue.
   radians.
 - **Saved projects** keep their look; diagonal splits point exactly along the on-screen angle.
 
-Frame edges and transparency: [Lens & Distort](../Effects-Distort.md#technical-details).
+Frame edges and transparency: [Lens & Distort](../Effect-System.md#lens--distort-notes).
 Recipes: [Effect system: editable mirror, split and pixel graphs](../Effect-System.md#editable-mirror-split-and-pixel-graphs).
 Nodes: [Node Catalog](../Node-Catalog.md).

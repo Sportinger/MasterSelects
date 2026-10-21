@@ -5,8 +5,8 @@ Film shot through a cheap lens or a glass prism: edges gain soft rainbow fringes
 Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/film-prism.mp4" poster="../assets/effects/clips/film-prism.webp" width="1206" height="338" autoplay muted loop playsinline preload="none" aria-label="Film Prism on the dancing figure. Left: the whole frame with coloured edges. Right: part of the dancer enlarged three times: the white dress gains a red edge on one side and a blue-green edge on the other, and fine grain moves over the picture"></video>
-<figcaption>Fringe 1, Prism shape, Grain 0.4. Left: the whole frame. Right: enlarged 3× pixel for pixel; the grain moves.</figcaption>
+<video src="../assets/effects/clips/film-prism.mp4" poster="../assets/effects/clips/film-prism.webp" width="1206" height="338" autoplay muted loop playsinline preload="none" aria-label="Film Prism on the dancing figure. Left: the whole frame with coloured edges. Right: the middle of the stage, where she dances, enlarged twice: the white dress gains a red edge on one side and a blue-green edge on the other, and fine grain moves over the picture"></video>
+<figcaption>Fringe 1, Prism shape, Grain 0.4. Left: the whole frame. Right: the middle of the stage enlarged 2× pixel for pixel; the grain moves.</figcaption>
 </figure>
 
 **Use it for:** a vintage film look · dreamlike memories and flashbacks · softening clean digital footage without blurring it.

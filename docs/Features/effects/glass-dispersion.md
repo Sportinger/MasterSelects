@@ -17,6 +17,8 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 - **Dispersion** – how far red and blue slide apart in each cell.
 - **Pulse Speed** – how fast the split pulses; 0 holds it still.
 
+**Tip:** keep Dispersion low and animate it for a short shimmer, on a transition or a lighting change; held high it reads as noise.
+
 **Experimental:** cells are sized in pixels of the output, so the look changes with the resolution, and each cell splits the colours its own way, so strong Dispersion reads as blocks of RGB noise.
 
 ## Controls

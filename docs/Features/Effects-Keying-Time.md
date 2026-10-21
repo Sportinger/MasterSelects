@@ -19,8 +19,6 @@ Time Stack and Slit Scan read the past. Both are built around one node, **Sample
 
 ## Technical details
 
-- **Source.** Time Stack and Slit Scan need a video clip, not a still image or a nested composition. The past comes from the original video's own timestamps (trims, speed changes and reverse clips included), not from earlier playback, through one shared source-frame service.
-- **Loading.** The first load of the frame window takes a moment; the preview shows the plain clip or the last complete picture meanwhile, and the export waits for the exact frames.
-- **Memory.** Each of them keeps its frames in a GPU budget of its own (Time Stack: Frame cache; Slit Scan: History memory).
-- **More.** Keyer internals: [Effect system: editable keying and feedback graphs](./Effect-System.md#editable-keying-and-feedback-graphs); Slit Scan notes: [Effect system: Slit Scan](./Effect-System.md#slit-scan); compilation: [Operator Graph Compiler](./Operator-Graph-Compiler.md).
-- **Pictures.** The stills come from `scripts/effect-lab.mjs`; the graph and inspector pictures from `scripts/effect-graph-shot.mjs` and `scripts/effect-editor-shot.mjs`, each with a `keying-time.json` manifest (`scripts/effect-*-shots/`).
+Time Stack and Slit Scan need a video clip, not a still or a nested composition, and read the past from the video itself. The first load of their frames takes a moment; the export waits for the exact frames. Each keeps its frames in a GPU memory budget of its own.
+
+Developer notes: [Effect system: Keying & Time notes](./Effect-System.md#keying--time-notes).

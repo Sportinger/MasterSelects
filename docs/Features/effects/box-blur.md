@@ -55,6 +55,6 @@ works; change all four weights (near and far, both passes) the same way.
   reads per pass at 1080p, with the same pair-merged reads as Gaussian Blur (up to 127 pairs per
   side, reported beyond).
 - Shared blur notes (transparency, saved projects, software preview):
-  [Blur & Sharpen](../Effects-Blur.md#technical-details). Kernels:
+  [Blur & Sharpen](../Effect-System.md#blur--sharpen-notes). Kernels:
   [Effect system](../Effect-System.md#editable-blur-kernels); blocks:
   [Node Catalog](../Node-Catalog.md).

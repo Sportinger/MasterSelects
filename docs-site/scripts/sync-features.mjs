@@ -25,9 +25,9 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { convertPage, preparePage, titleOf } from './lib/convertPage.mjs';
 import { loadEffectCatalog } from './lib/effectCatalog.mjs';
-import { buildSidebar, countSidebarPages, readIndexSections } from './lib/featureIndex.mjs';
+import { buildSidebar, countSidebarPages, effectGroupIndex, readIndexSections } from './lib/featureIndex.mjs';
 import { assetBudgetIssues } from './lib/media.mjs';
-import { buildRedirects } from './lib/redirects.mjs';
+import { buildAnchorRedirects, buildRedirects } from './lib/redirects.mjs';
 import { PAGE_FOLDERS, contentFile, pageSlug } from './lib/routes.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -168,6 +168,7 @@ const { sidebar, unpublished, notes: sidebarNotes } = buildSidebar({
   sections: index.sections, pages: sourceFiles, sitePages, effectGroups: catalog.groups, effectNames,
 });
 sidebarNotes.forEach(report);
+const effectIndex = effectGroupIndex(index.sections);
 
 // Pass 1: every published page alone (back-links, galleries, anchors).
 const published = sourceFiles.filter((file) => !unpublished.has(file));
@@ -180,7 +181,9 @@ const checkedAssets = new Map();
 const prepared = new Map(published.map((file) => [file, preparePage(sources.get(file), {
   overview: file === 'README.md',
   title: file === 'README.md' ? 'Overview' : undefined,
+  file,
   catalog,
+  effectIndex,
   hasPage: (page) => published.includes(page),
   pageTitle: (page) => titles.get(page),
   asset: readAsset,
@@ -245,21 +248,25 @@ if (hasAssets) {
 
 // Redirects for published URLs that moved; astro.config.mjs reads src/generated/redirects.json.
 let redirectEntries = {};
+let anchorEntries = {};
 const redirectText = readFeatureFile('redirects.json', 'utf8');
 if (redirectText) {
-  try { redirectEntries = JSON.parse(redirectText).redirects ?? {}; } catch (error) { report({ level: 'warn', text: `Redirects: docs/Features/redirects.json is not valid JSON (${error.message}); no redirects.` }); }
+  try { ({ redirects: redirectEntries = {}, anchors: anchorEntries = {} } = JSON.parse(redirectText)); } catch (error) { report({ level: 'warn', text: `Redirects: docs/Features/redirects.json is not valid JSON (${error.message}); no redirects.` }); }
 }
 const routes = new Set([...published.map((file) => pageSlug(file)), ...sitePages]);
 const anchorsBySlug = new Map(published.map((file) => [pageSlug(file), prepared.get(file).anchors]));
 const redirects = buildRedirects(redirectEntries, routes, (slug) => anchorsBySlug.get(slug));
 redirects.notes.forEach(report);
+const anchorRedirects = buildAnchorRedirects(anchorEntries, routes, (slug) => anchorsBySlug.get(slug));
+anchorRedirects.notes.forEach(report);
 
 // Rewrite generated JSON only on change: a running `astro dev` restarts when these files change.
 writeIfChanged(path.join(generatedDir, 'sidebar.json'), `${JSON.stringify(sidebar, null, 2)}\n`);
 writeIfChanged(path.join(generatedDir, 'redirects.json'), `${JSON.stringify(redirects.redirects, null, 2)}\n`);
+writeIfChanged(path.join(generatedDir, 'anchor-redirects.json'), `${JSON.stringify(anchorRedirects.anchors, null, 2)}\n`);
 
 for (const text of warnings) console.warn(text);
 for (const text of infos) console.log(text);
 const sourceLabel = sourceRef ? `Git ref ${sourceRef}` : 'working tree';
 console.log(`Sidebar: ${sidebar.length} groups, ${countSidebarPages(sidebar)} entries; ${unpublished.size} pages unpublished. Effect groups from ${catalog.source}.`);
-console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects; assets ${hasAssets ? 'copied' : 'not found'}; ${warnings.length} warnings.`);
+console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects, ${anchorRedirects.count} anchor redirects; assets ${hasAssets ? 'copied' : 'not found'}; ${warnings.length} warnings.`);

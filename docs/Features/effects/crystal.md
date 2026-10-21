@@ -17,6 +17,8 @@ Group: [Lens & Distort](../Effects-Distort.md) · [How to add an effect](../Effe
 - **Refraction** – how far each facet bends the picture.
 - **Shimmer Speed** – how fast the facets shimmer; 0 holds them still.
 
+**Tip:** keep Refraction low (up to about 0.3) and use more Facets for clean glass; strong bending doubles edges into ghosts.
+
 **Experimental:** facets are squares of the frame, so they stretch with its shape and have hard seams, and strong Refraction doubles edges into ghost copies.
 
 ## Controls

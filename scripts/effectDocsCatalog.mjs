@@ -9,16 +9,22 @@
 //                                         nobody has written a page for yet
 // Page template and rules: docs/Features/Documentation-Site.md ("Effect pages").
 
+import { createHash } from 'node:crypto';
 import { mergeEffectGroups, readIndexSections, rowTarget } from '../docs-site/scripts/lib/featureIndex.mjs';
+import { BUDGETS } from '../docs-site/scripts/lib/media.mjs';
 import { slug } from '../docs-site/scripts/lib/slug.mjs';
+import { EFFECT_DOC_EXTRAS } from './effectDocsExtras.mjs';
 
 export const CATALOG_FILE = 'effects/catalog.json';
 export const CONTROLS_START = '<!-- generated:controls start -->';
 export const CONTROLS_END = '<!-- generated:controls end -->';
-/** First line after the title of a generated basic page; a page without it is hand-written. */
+/**
+ * First line after the title of a generated basic page; a page without it is hand-written. It carries
+ * a hash of the page as written, so a hand edit under a kept marker is reported instead of overwritten.
+ */
 export const BASIC_MARKER = '<!-- effect-docs: basic page';
-const BASIC_MARKER_LINE = `${BASIC_MARKER}, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->`;
-export const THUMB_MAX_BYTES = 30000;
+const basicMarkerLine = (sha) => `${BASIC_MARKER} sha=${sha}, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->`;
+export const THUMB_MAX_BYTES = BUDGETS.thumbBytes;
 /** Thumbnails are encoded below this, so they stay inside the budget the docs sync checks. */
 export const THUMB_TARGET_BYTES = 24000;
 
@@ -53,9 +59,7 @@ export function snapshotRegistry(api) {
     const effect = byId.get(id);
     const engine = api.engineOf(id);
     const styles = engine ? api.engineMembers(engine).filter((member) => member !== id && byId.has(member) && keys(byId.get(member)) === keys(effect)) : [];
-    const params = Object.entries(effect.params ?? {})
-      .filter(([, param]) => !param.hidden && !param.deprecated)
-      .map(([key, param]) => ({
+    const describe = ([key, param]) => ({
         key,
         label: param.label,
         type: param.type,
@@ -66,7 +70,12 @@ export function snapshotRegistry(api) {
         options: param.options?.map((option) => ({ value: option.value, label: option.label })),
         display: param.type === 'number' ? api.display(param, typeof param.default === 'number' ? param.default : undefined) : undefined,
         onlyWhen: param.activeWhen?.note,
-      }));
+      });
+    const current = Object.entries(effect.params ?? {}).filter(([, param]) => !param.deprecated);
+    const params = current.filter(([, param]) => !param.hidden).map(describe);
+    // Hidden parameters an effect's own card renders (named in effectDocsExtras.mjs rows); long text defaults dropped.
+    const cardKeys = new Set((EFFECT_DOC_EXTRAS[id]?.rows ?? []).map((row) => (typeof row === 'string' ? row : row.key)).filter(Boolean));
+    const hiddenParams = current.filter(([key, param]) => param.hidden && cardKeys.has(key)).map(describe);
     // Moving: the picture depends on time or on earlier frames, so a still cannot show it (it gets a loop).
     const moving = Boolean(effect.requiresContinuousRender || effect.usesFeedback || effect.usesInputHistory || effect.sourceTimeOwner
       || Object.values(effect.params ?? {}).some((param) => param.integratedAs));
@@ -84,8 +93,10 @@ export function snapshotRegistry(api) {
       nodeValues: Object.values(effect.params ?? {}).some((param) => param.hidden && !param.deprecated && param.type === 'number'),
       moving,
       live: Boolean(effect.requiresContinuousRender),
+      feedback: Boolean(effect.usesFeedback),
       hidden: api.hidden.has(id),
       params,
+      hiddenParams,
     };
   });
   return { groups: groups.map((group) => ({ ...group, effects: group.effects.filter((id) => !api.hidden.has(id)) })), effects };
@@ -152,12 +163,43 @@ export function pageLead(markdown) {
   return paragraph.length ? plainText(paragraph.join(' ')) : undefined;
 }
 
-export const isBasicPage = (markdown) => markdown.includes(BASIC_MARKER);
+/** sha-256 prefix of a text, as the basic-page marker stores it. */
+export const contentHash = (text) => createHash('sha256').update(text.replace(/\r\n/gu, '\n')).digest('hex').slice(0, 12);
+
+/** The basic-page marker of a page: only valid as the first line after the `#` title. */
+export function basicMarker(markdown) {
+  const lines = markdown.replace(/\r\n/gu, '\n').split('\n');
+  const title = lines.findIndex((line) => /^#\s/u.test(line));
+  if (title < 0) return undefined;
+  const next = lines.findIndex((line, index) => index > title && line.trim() !== '');
+  const line = next < 0 ? '' : lines[next].trim();
+  if (!line.startsWith(BASIC_MARKER)) return undefined;
+  return { line: lines[next], sha: line.match(/\bsha=([0-9a-f]+)/u)?.[1] };
+}
+
+export const isBasicPage = (markdown) => basicMarker(markdown) !== undefined;
+
+/** Whether a basic page was changed by hand since the script wrote it (its text no longer matches the marker's hash). */
+export function basicPageEdited(markdown) {
+  const marker = basicMarker(markdown);
+  if (!marker?.sha) return false;
+  const text = markdown.replace(/\r\n/gu, '\n');
+  return contentHash(text.replace(`${marker.line}\n\n`, '')) !== marker.sha;
+}
 
 // ---------------------------------------------------------------------------------------------
 // Controls table
 
-const trimNumber = (value, decimals) => String(Number(value.toFixed(Math.min(4, Math.max(0, decimals)))));
+/**
+ * A shown number with the card's decimals, or more where the value needs them (a range end such as 0.001
+ * never reads 0); a difference below half a percent of the card's step does not count (359.9998° is 360°).
+ */
+function trimNumber(value, display) {
+  const tolerance = Math.max(1e-9, (display?.step ?? 0.01) * 0.005);
+  let decimals = Math.min(4, Math.max(0, display?.decimals ?? 2));
+  while (decimals < 4 && Math.abs(Number(value.toFixed(decimals)) - value) > tolerance) decimals += 1;
+  return String(Number(value.toFixed(decimals)));
+}
 
 function unitSuffix(display) {
   const suffix = display?.suffix ?? '';
@@ -166,7 +208,7 @@ function unitSuffix(display) {
 
 function numberText(value, display) {
   if (typeof value !== 'number') return String(value);
-  return `${trimNumber(value * (display?.scale ?? 1), display?.decimals ?? 2).replace('-', '−')}${unitSuffix(display)}`;
+  return `${trimNumber(value * (display?.scale ?? 1), display).replace('-', '−')}${unitSuffix(display)}`;
 }
 
 const tableCell = (text) => String(text).replace(/\|/gu, '\\|').replace(/\s+/gu, ' ').trim();
@@ -184,9 +226,7 @@ export function controlRange(param) {
       if (min === undefined && max === undefined) return 'any number';
       if (min === undefined) return `up to ${numberText(max, display)}`;
       if (max === undefined) return `${numberText(min, display)} or more`;
-      const decimals = display?.decimals ?? 2;
-      const scale = display?.scale ?? 1;
-      return `${trimNumber(min * scale, decimals).replace('-', '−')} to ${numberText(max, display)}`;
+      return `${trimNumber(min * (display?.scale ?? 1), display).replace('-', '−')} to ${numberText(max, display)}`;
     }
     case 'boolean': return 'on or off';
     case 'select': return choiceList(param.options ?? []);
@@ -211,40 +251,89 @@ export function controlDefault(param) {
   }
 }
 
+/** A resource reference (a media, mask or tracking id) stored as text: the card shows a picker or nothing, not a field. */
+const isResourceId = (param) => param.type === 'text' && /Id$/u.test(param.key);
+
+/** The rows of an effect's card per section, in card order, with the rows of effectDocsExtras.mjs. */
+function cardSections(effect, extras) {
+  const omitted = new Set(extras.omit ?? []);
+  const omittedSections = new Set(extras.omitSections ?? []);
+  const known = new Map([...effect.params, ...(effect.hiddenParams ?? [])].map((param) => [param.key, param]));
+  const row = (param, overrides = {}) => ({
+    key: param?.key,
+    label: overrides.label ?? (param.onlyWhen ? `${param.label} (${param.onlyWhen.replace(/\.$/u, '')})` : param.label),
+    range: overrides.range ?? controlRange(param),
+    default: overrides.default ?? controlDefault(param),
+  });
+  const sections = new Map();
+  const add = (section, entry, before) => {
+    if (!sections.has(section)) sections.set(section, []);
+    const list = sections.get(section);
+    const at = before ? list.findIndex((item) => item.key === before) : -1;
+    list.splice(at < 0 ? list.length : at, 0, entry);
+  };
+  const extraRows = (extras.rows ?? []).map((entry) => (typeof entry === 'string' ? { key: entry } : entry));
+  const listed = new Set(extraRows.map((entry) => entry.key).filter(Boolean));
+  for (const param of effect.params) {
+    if (omitted.has(param.key) || omittedSections.has(param.section) || isResourceId(param) || listed.has(param.key)) continue;
+    add(param.section, row(param));
+  }
+  for (const entry of extraRows) {
+    const param = entry.key ? known.get(entry.key) : undefined;
+    if (entry.key && !param) throw new Error(`effectDocsExtras.mjs: ${effect.id} names "${entry.key}", which is no current parameter.`);
+    const section = entry.section ?? param?.section ?? '';
+    add(section, param ? row(param, entry) : { label: entry.label, range: entry.range ?? '', default: entry.default ?? '' }, entry.before);
+  }
+  const order = extras.sections ?? [];
+  const rank = (section) => (section === 'Quality' ? 1e6 : order.includes(section) ? order.indexOf(section) : order.length);
+  return [...sections].toSorted(([a], [b]) => rank(a) - rank(b));
+}
+
 /**
  * The generated controls block (without its markers): one table, Control · Range · Default, in the
  * order of the effect card. When the card has sections, each starts with a row naming it (Quality last).
+ * A card with an `open` list in effectDocsExtras.mjs keeps those sections in the table and folds the
+ * others into one <details> each, so a long card stays short on a phone.
  */
 export function controlsTable(effect) {
-  if (!effect.params.length) {
+  const extras = EFFECT_DOC_EXTRAS[effect.id] ?? {};
+  const sections = cardSections(effect, extras);
+  if (!sections.length) {
+    if (extras.note) return extras.note;
     if (effect.ownControls) return 'This effect has no standard controls; its card shows controls of its own.';
     return effect.nodeValues
       ? 'Its controls are values of its node setup: the effect card shows the ones the setup exposes.'
       : 'This effect has no controls.';
   }
-  const sections = new Map();
-  for (const param of effect.params) {
-    if (!sections.has(param.section)) sections.set(param.section, []);
-    sections.get(param.section).push(param);
-  }
-  const ordered = [...sections].toSorted(([a], [b]) => (a === 'Quality') - (b === 'Quality'));
-  const named = ordered.length > 1 || ordered[0][0] !== '';
-  const rows = ordered.flatMap(([section, params]) => [
-    ...(named ? [`| **${tableCell(section || 'General')}** | | |`] : []),
-    ...params.map((param) => {
-      const label = param.onlyWhen ? `${param.label} (${param.onlyWhen.replace(/\.$/u, '')})` : param.label;
-      return `| ${tableCell(label)} | ${tableCell(controlRange(param))} | ${tableCell(controlDefault(param))} |`;
-    }),
-  ]);
-  const table = `| Control | Range | Default |\n|---|---|---|\n${rows.join('\n')}`;
-  return effect.ownControls ? `${table}\n\nThe effect card also has controls of its own that this table does not list.` : table;
+  const label = (section) => tableCell(extras.sectionLabels?.[section] ?? (section || 'General'));
+  const lines = (rows) => rows.map((entry) => `| ${tableCell(entry.label)} | ${tableCell(entry.range)} | ${tableCell(entry.default)} |`);
+  const head = '| Control | Range | Default |\n|---|---|---|';
+  const open = extras.open ? sections.filter(([section]) => extras.open.includes(section)) : sections;
+  const folded = extras.open ? sections.filter(([section]) => !extras.open.includes(section)) : [];
+  const named = sections.length > 1 || sections[0][0] !== '';
+  const table = `${head}\n${open.flatMap(([section, rows]) => [...(named ? [`| **${label(section)}** | | |`] : []), ...lines(rows)]).join('\n')}`;
+  const details = folded.map(([section, rows]) => `<details>\n<summary>${label(section)}</summary>\n\n${head}\n${lines(rows).join('\n')}\n\n</details>`);
+  const ownNote = effect.ownControls && !extras.rows ? ['The effect card also has controls of its own that this table does not list.'] : [];
+  return [table, ...details, ...ownNote].join('\n\n');
 }
 
-/** `markdown` with every generated controls block refreshed, or unchanged when it has none. */
+/** Why a page's generated controls blocks cannot be refreshed (a start without its end, or more than one block), or undefined. */
+export function generatedBlockProblem(markdown) {
+  const starts = markdown.split(CONTROLS_START).length - 1;
+  const ends = markdown.split(CONTROLS_END).length - 1;
+  if (starts !== ends) return `has ${starts} "${CONTROLS_START}" and ${ends} "${CONTROLS_END}" markers`;
+  if (starts > 1) return `has ${starts} generated controls blocks; keep one`;
+  if (starts === 1 && markdown.indexOf(CONTROLS_END) < markdown.indexOf(CONTROLS_START)) return 'has its controls end marker before the start marker';
+  return undefined;
+}
+
+/** `markdown` with its generated controls block refreshed, or unchanged when it has none. */
 export function refreshGeneratedBlocks(markdown, effect) {
   const start = CONTROLS_START.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
   const end = CONTROLS_END.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-  return markdown.replace(new RegExp(`${start}[\\s\\S]*?${end}`, 'gu'), `${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`);
+  const block = `${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`;
+  // A replacer function: "$&" or "$'" in a label must stay literal text.
+  return markdown.replace(new RegExp(`${start}[\\s\\S]*?${end}`, 'gu'), () => block);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -273,14 +362,6 @@ export function groupOverviews(readme, groupIds) {
     }
   }
   return result;
-}
-
-const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-
-/** Whether a group page describes an effect: its name as a heading word group or in bold. */
-export function describesEffect(markdown, name) {
-  const word = `(?<![\\p{L}\\p{N}])${escapeRegExp(name)}(?![\\p{L}\\p{N}])`;
-  return new RegExp(`^#{1,4}\\s.*${word}`, 'imu').test(markdown) || new RegExp(`\\*\\*${escapeRegExp(name)}\\*\\*`, 'u').test(markdown.replace(/\s+/gu, ' '));
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -330,7 +411,19 @@ export function catalogJson(catalog) {
 // Basic pages
 
 /** Effect Lab test image (tests/browser/effect-lab/images) for an effect's basic still, and how alt texts name it. */
-const LAB_IMAGE_BY_GROUP = { print: 'harbor_town', textile: 'harbor_town', text: 'harbor_town', scene: 'harbor_town', pixel: 'neon_rain_street', analog: 'neon_rain_street' };
+const LAB_IMAGE_BY_GROUP = { print: 'harbor_town', textile: 'harbor_town', text: 'dancer_stage', scene: 'harbor_town', pixel: 'neon_rain_street', analog: 'neon_rain_street' };
+/**
+ * Stills that are not a whole-frame split. Glyph looks: an enlarged detail of the dancer's lit dress, side by
+ * side, so the characters can be read at page width. Tracking overlays: both whole frames side by side, so the
+ * seam never cuts the target box in half.
+ */
+const LAB_SHOT_BY_GROUP = {
+  text: { layout: 'pair', crop: [740, 140, 460, 360], zoom: 1.3, gap: 6, detail: true },
+};
+const LAB_SHOT_BY_ENGINE = {
+  'tracking-overlay': { layout: 'pair', outWidth: 1200, gap: 6 },
+};
+const labShot = (effect) => LAB_SHOT_BY_GROUP[effect.group] ?? LAB_SHOT_BY_ENGINE[effect.engine] ?? { layout: 'split', outWidth: 1200 };
 /** Effects a still test image cannot show; they wait for a clip on suitable footage. */
 export const LAB_STILL_SKIP = {
   'face-cables': 'needs a face-tracking bake of moving footage',
@@ -340,23 +433,36 @@ export const LAB_STILL_SKIP = {
   subject: 'needs tracked landmarks in moving footage',
   'tracked-scene': 'needs tracked landmarks in moving footage',
 };
+/** Effects without a still or thumbnail yet, and why; every other effect with a page needs both. */
+export const PICTURE_PENDING = { ...LAB_STILL_SKIP, 'ai-edge-fill': 'needs a generated fill of a corrected photo (cloud credits)' };
 const LAB_IMAGE_TEXT = {
   dancer_stage: 'the dancer on a dark stage',
   harbor_town: 'the harbour town',
   neon_rain_street: 'the night street with neon signs',
 };
 export const labImage = (effect) => LAB_IMAGE_BY_GROUP[effect.group] ?? 'dancer_stage';
-export const stillAlt = (effect) => `${effect.name} on ${LAB_IMAGE_TEXT[labImage(effect)]}: the original on the left, ${effect.name} at its default settings on the right`;
+export function stillAlt(effect) {
+  const shot = labShot(effect);
+  const where = shot.detail ? `an enlarged detail of ${LAB_IMAGE_TEXT[labImage(effect)]}` : LAB_IMAGE_TEXT[labImage(effect)];
+  const frames = shot.layout === 'pair' && !shot.detail ? ': the whole frame twice, ' : ': ';
+  return `${effect.name} on ${where}${frames}the original on the left, ${effect.name} at its default settings on the right`;
+}
+/** The caption of a basic page's still. */
+export function stillCaption(effect) {
+  const detail = labShot(effect).detail ? ' An enlarged detail, so the characters can be read.' : '';
+  return `Left: the original. Right: ${effect.name} at its default settings${effect.moving ? ', one frame of its movement' : ''}.${detail}`;
+}
 
-/** An Effect Lab --pairs entry for an effect's basic still: a split of the original and the effect at its defaults. */
+/** An Effect Lab --pairs entry for an effect's basic still: the original and the effect at its defaults. */
 export function labPair(effect) {
+  const { detail, ...shot } = labShot(effect);
+  void detail;
   return {
     name: effect.id,
     out: `docs/Features/${effectAssets(effect.id).still}`,
     image: labImage(effect),
     width: 1920,
-    layout: 'split',
-    outWidth: 1200,
+    ...shot,
     maxBytes: 120000,
     left: { effect: 'original' },
     // Moving effects render one frame after a second of playback (a loop shows them better later).
@@ -371,38 +477,41 @@ const ENGINE_LABELS = {
 };
 
 /**
- * A basic page for an effect without a hand-written page. ctx: { groupLabel, overview (file
- * relative to docs/Features or undefined), still (its Effect Lab still, asset path, or undefined), names (id → name),
- * hasPage(id) (whether effects/<id>.md exists, for links to the other styles) }.
+ * A basic page for an effect without a hand-written page. ctx: { groupLabel (the sidebar label, joined
+ * groups as "Keying & Time"), overview (file relative to docs/Features or undefined), still (its Effect Lab
+ * still, asset path, or undefined), names (id → name), hasPage(id) (whether effects/<id>.md exists, for
+ * links to the other styles) }. The marker under the title carries the hash of the rest of the page.
  */
 export function basicPage(effect, ctx) {
   const groupLink = ctx.overview ? `../${ctx.overview}` : `./index.md#${slug(ctx.groupLabel)}`;
   const lead = effect.description ? effect.description.trim().replace(/([^.!?])$/u, '$1.') : `${effect.name} is an effect of the ${ctx.groupLabel} group.`;
   const parts = [
-    `# ${effect.name}`,
-    BASIC_MARKER_LINE,
     lead,
     `Group: [${ctx.groupLabel}](${groupLink}) · [How to add an effect](../Effects.md#add-an-effect)`,
   ];
   if (ctx.still) {
-    parts.push(`<figure class="docs-shot">\n\n![${stillAlt(effect)}](../${ctx.still})\n\n<figcaption>Left: the original. Right: ${effect.name} at its default settings${effect.moving ? ', one frame of its movement' : ''}.</figcaption>\n</figure>`);
+    parts.push(`<figure class="docs-shot">\n\n![${stillAlt(effect)}](../${ctx.still})\n\n<figcaption>${stillCaption(effect)}</figcaption>\n</figure>`);
   }
   if (effect.experimental) parts.push(`**Experimental:** ${effect.experimental.trim()}`);
   parts.push('*A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*');
   parts.push(`## Controls\n\n${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`);
   if (effect.styles.length) {
     const names = effect.styles.map((id) => (ctx.hasPage?.(id) ? `[${ctx.names.get(id) ?? id}](./${id}.md)` : ctx.names.get(id) ?? id));
-    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: ${names.join(', ')}.`);
+    parts.push(`**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: ${names.join(', ')}.`);
   }
   const details = [];
   if (effect.engine) details.push(`${effect.name} is one look of ${ENGINE_LABELS[effect.engine] ?? `the ${effect.engine} engine`}; its looks share one node setup.`);
   if (effect.kind === 'compute') details.push('It runs as a GPU compute effect.');
   if (effect.kind === 'particle-render') details.push('It draws GPU particles and comes last in the effect stack: effects after it are ignored.');
-  if (effect.live) details.push('It keeps moving while the playhead stands still.');
+  if (effect.feedback) details.push('It builds on its own earlier frames, so its trails grow during playback; **History Loop** sets whether they start again when playback jumps back to the loop start.');
+  else if (effect.live) details.push('It keeps moving while the playhead stands still.');
   else if (effect.moving) details.push('It changes over time: its picture depends on the playback time or on earlier frames.');
   details.push('How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).');
   parts.push(`## Technical details\n\n${details.join(' ')}`);
-  return `${parts.join('\n\n')}\n`;
+  const deeper = EFFECT_DOC_EXTRAS[effect.id]?.deeper ?? [];
+  if (deeper.length) parts.push(`Go deeper: ${deeper.map(([text, link]) => `[${text}](${link})`).join(' · ')}`);
+  const body = `${parts.join('\n\n')}\n`;
+  return `# ${effect.name}\n\n${basicMarkerLine(contentHash(`# ${effect.name}\n\n${body}`))}\n\n${body}`;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -411,21 +520,22 @@ export function basicPage(effect, ctx) {
 /**
  * What the effect docs should look like. files: { read(file) → text | undefined, exists(file),
  * pages: ids of the existing effects/<id>.md pages }. `basic`: ids to write new basic pages for.
- * Returns { texts: Map<file, text> (every file the script owns, with its current text),
- * catalog, uncovered: effects documented nowhere, unknownPages: page ids the registry lacks }.
+ * Returns { texts: Map<file, text> (every file the script owns, with its current text), catalog,
+ * uncovered: visible effects without a page, unknownPages: page ids the registry lacks,
+ * problems: [{ file, text }] pages left alone (a basic page edited under its marker, broken markers) }.
  */
 export function planEffectDocs(snapshot, files, { basic = [] } = {}) {
   const byId = new Map(snapshot.effects.map((effect) => [effect.id, effect]));
   const names = new Map(snapshot.effects.map((effect) => [effect.id, effect.name]));
   const labels = new Map(snapshot.groups.map((group) => [group.id, group.label]));
   const overviews = groupOverviews(files.read('README.md') ?? '', snapshot.groups.map((group) => group.id));
-  const groupPages = [...new Set([...overviews.values()].flatMap((entry) => entry.pages))];
   const texts = new Map();
+  const problems = [];
   const pageText = (id) => texts.get(pageFile(id)) ?? files.read(pageFile(id));
   // Pages after this run: the existing ones plus the new basic pages (so links between them settle in one run).
   const pageIds = new Set([...files.pages, ...basic.filter((id) => byId.has(id) && !byId.get(id).hidden)]);
   const context = (effect) => ({
-    groupLabel: labels.get(effect.group) ?? effect.group,
+    groupLabel: (overviews.get(effect.group)?.joined ?? [effect.group]).map((id) => labels.get(id) ?? id).join(' & '),
     overview: overviews.get(effect.group)?.overview,
     still: files.exists(effectAssets(effect.id).still) ? effectAssets(effect.id).still : undefined,
     names,
@@ -435,7 +545,18 @@ export function planEffectDocs(snapshot, files, { basic = [] } = {}) {
     const effect = byId.get(id);
     const text = files.read(pageFile(id));
     if (!effect || text === undefined) continue;
-    texts.set(pageFile(id), isBasicPage(text) ? basicPage(effect, context(effect)) : refreshGeneratedBlocks(text, effect));
+    const file = pageFile(id);
+    if (isBasicPage(text)) {
+      if (basicPageEdited(text)) {
+        problems.push({ file, text: `${file} was edited by hand: delete its marker line to keep the edits (it becomes a hand-written page), or restore the file.` });
+      } else {
+        texts.set(file, basicPage(effect, context(effect)));
+      }
+      continue;
+    }
+    const problem = generatedBlockProblem(text);
+    if (problem) problems.push({ file, text: `${file} ${problem}; its controls table is not refreshed.` });
+    else texts.set(file, refreshGeneratedBlocks(text, effect));
   }
   for (const id of basic) {
     const effect = byId.get(id);
@@ -443,7 +564,6 @@ export function planEffectDocs(snapshot, files, { basic = [] } = {}) {
   }
   const catalog = buildCatalog(snapshot, { page: pageText, exists: files.exists });
   texts.set(CATALOG_FILE, catalogJson(catalog));
-  const describedOn = (effect) => groupPages.filter((file) => describesEffect(files.read(file) ?? '', effect.name));
-  const uncovered = snapshot.effects.filter((effect) => !effect.hidden && pageText(effect.id) === undefined && !describedOn(effect).length);
-  return { texts, catalog, uncovered, unknownPages: files.pages.filter((id) => !byId.has(id)) };
+  const uncovered = snapshot.effects.filter((effect) => !effect.hidden && pageText(effect.id) === undefined);
+  return { texts, catalog, uncovered, problems, unknownPages: files.pages.filter((id) => !byId.has(id)) };
 }

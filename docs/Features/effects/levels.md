@@ -52,6 +52,6 @@ negative, with the same black and white points.
   inspector says so.
 - **Special cases.** Equal input points give a hard threshold per channel; swapped input points
   give a negative. There is no per-channel mode.
-- Shared colour notes: [Color & Tone](../Effects-Color.md#technical-details). Formulas:
+- Shared colour notes: [Color & Tone](../Effect-System.md#color--tone-notes). Formulas:
   [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

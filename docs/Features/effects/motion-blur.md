@@ -27,7 +27,7 @@ fabric.
 | Control | Range | Default |
 |---|---|---|
 | Length | 0 to 0.3 | 0.05 |
-| Angle | 0 to 6.28 | 0 |
+| Angle | 0 to 360° | 0° |
 <!-- generated:controls end -->
 
 ## Node setup
@@ -69,6 +69,6 @@ streak.
 - **Below 0.** A negative Length leaves the picture unchanged, and the inspector and the tool
   result say so.
 - Shared blur notes (transparency, saved projects, software preview):
-  [Blur & Sharpen](../Effects-Blur.md#technical-details). Formulas:
+  [Blur & Sharpen](../Effect-System.md#blur--sharpen-notes). Formulas:
   [Effect system](../Effect-System.md#editable-blur-kernels); blocks:
   [Node Catalog](../Node-Catalog.md).

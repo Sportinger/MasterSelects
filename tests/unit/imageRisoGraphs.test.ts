@@ -23,10 +23,28 @@ describe('Riso image graphs', () => {
     const color = sample(uv), a = 1 - luma(sample([uv[0] - offset, uv[1]])), b = 1 - luma(sample([uv[0] + offset, uv[1]]));
     const colorA = colorToRgba(params.colorA, params.colorA), colorB = colorToRgba(params.colorB, params.colorB), paper = [.96, .93, .85];
     const glow = type === 'riso-glow' ? .55 + .45 * Math.sin(time * params.speed * 2) : 0;
-    const expected = [0, 1, 2].map(index => { const subtractive = paper[index] * (1 - a * colorA[index]) * (1 - b * colorB[index]);
+    const expected = [0, 1, 2].map(index => { const subtractive = paper[index] * mix(1, colorA[index], a) * mix(1, colorB[index], b);
       return mix(color[index], subtractive + glow * (a * colorA[index] + b * colorB[index]) * .3, params.amount); }).concat(color[3]);
     const plan = compileImageOperatorGraph(createDefaultRisoGraph(type), params, { parameterSchema: definition.params });
     const actual = evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv, resolution, timelineTimeSeconds: time, sampleImage: sample });
     expected.forEach((value, index) => expect(actual[index]).toBeCloseTo(value, 10));
+  });
+
+  it('prints each default ink in its own colour, not its complement', () => {
+    // The dark ink reads the picture a little to the left, the warm ink a little to the right (Registration).
+    // Across a dark|light edge only the dark ink prints; across a light|dark edge only the warm ink.
+    const params = { scale: 8, amount: 1, colorA: riso.params.colorA.default as string, colorB: riso.params.colorB.default as string };
+    const plan = compileImageOperatorGraph(createDefaultRisoGraph('riso'), params, { parameterSchema: riso.params });
+    const at = (u: number, darkLeft: boolean) => evaluateImageOperatorPlan(plan, [0, 0, 0, 0], {
+      uv: [u, .5], resolution: [64, 36], timelineTimeSeconds: 0,
+      sampleImage: ([x]: [number, number]): [number, number, number, number] => ((x < .5) === darkLeft ? [0, 0, 0, 1] : [1, 1, 1, 1]),
+    });
+    const dark = at(.52, true), warm = at(.48, false), paper = at(.1, false);
+    expect(paper.slice(0, 3).map(value => Number(value.toFixed(2)))).toEqual([.96, .93, .85]);
+    // #2046b3 is blue: blue is its strongest channel. #ef476f is pink: red is.
+    expect(dark[2]).toBeGreaterThan(dark[0]);
+    expect(dark[2]).toBeGreaterThan(dark[1]);
+    expect(warm[0]).toBeGreaterThan(warm[1]);
+    expect(warm[0]).toBeGreaterThan(warm[2]);
   });
 });

@@ -1,10 +1,10 @@
 # Kilim Carpet
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=93f2bf3086b2, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Overlays a woven diamond-and-stripe carpet pattern in two colors, shaded by image brightness; Scale sets the motif size.
 
-Group: [Textile & Craft](./index.md#textile--craft) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
@@ -22,7 +22,6 @@ Group: [Textile & Craft](./index.md#textile--craft) · [How to add an effect](..
 |---|---|---|
 | **Pattern** | | |
 | Scale | 2 to 80 | 14 |
-| Angle | −180 to 180 | 0 |
 | **Style** | | |
 | Amount | 0 to 1 | 0.75 |
 | **Color** | | |
@@ -30,7 +29,7 @@ Group: [Textile & Craft](./index.md#textile--craft) · [How to add an effect](..
 | Paper | a colour | `#f8fafc` |
 <!-- generated:controls end -->
 
-**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Vector Engraving](./vector-tiling.md).
+**Styles:** the **Style** menu in the effect card switches to another look of the same engine and keeps the values and keyframes: [Cross Stitch](./cross-stitch.md), [Dithering](./dither.md), [Halftone](./halftone.md), [Paper Print](./paper-print.md), [Pixel Poster](./pixel-poster.md), [Riso](./riso.md), [Contour Map](./contour-map.md), [Crosshatch](./crosshatch.md), [Vector Engraving](./vector-tiling.md).
 
 ## Technical details
 

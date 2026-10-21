@@ -62,14 +62,14 @@
       ],
       "layout": "detail",
       "detail": [
-        620,
-        470
+        600,
+        430
       ],
-      "zoom": 3,
+      "zoom": 2,
       "width": 1206,
       "float": "right",
-      "alt": "Film Prism on the dancing figure. Left: the whole frame with coloured edges. Right: part of the dancer enlarged three times: the white dress gains a red edge on one side and a blue-green edge on the other, and fine grain moves over the picture",
-      "caption": "Fringe 1, Prism shape, Grain 0.4. Left: the whole frame. Right: enlarged 3× pixel for pixel; the grain moves.",
+      "alt": "Film Prism on the dancing figure. Left: the whole frame with coloured edges. Right: the middle of the stage, where she dances, enlarged twice: the white dress gains a red edge on one side and a blue-green edge on the other, and fine grain moves over the picture",
+      "caption": "Fringe 1, Prism shape, Grain 0.4. Left: the whole frame. Right: the middle of the stage enlarged 2× pixel for pixel; the grain moves.",
       "loop": 0.35
     },
     {

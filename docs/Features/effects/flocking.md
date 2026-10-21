@@ -3,13 +3,13 @@
 A swarm in 3D (birds, fish, krill, sparks) that moves by itself around the clip, with real depth. The
 clip stays visible underneath.
 
-Group: [3D & Particles](./index.md#3d--particles) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
-![Above, the dancer; below, the same crop with a violet swarm of fine particles, thin curved filaments and small wire cubes drifting around her](../assets/effects/flocking.webp)
+![Left, the dancer; right, the same crop with a violet swarm of fine particles, thin curved filaments and small wire cubes drifting around her](../assets/effects/flocking.webp)
 
-<figcaption>Top: original. Bottom: preset Violet Filaments, 4 s in (editor preview, cropped to the swarm).</figcaption>
+<figcaption>Left: original. Right: preset Violet Filaments, 4 s in (editor preview, cropped to the swarm).</figcaption>
 </figure>
 
 **Use it for:** birds, fish or insects around a performer · sparks and dust in a stage space · data
@@ -26,7 +26,7 @@ sculptures and abstract swarms.
 ## Controls
 
 <!-- generated:controls start -->
-This effect has no standard controls; its card shows controls of its own.
+The card shows a **Preset** menu and the values that preset exposes, grouped as Population, Behavior, Guidance, Appearance and Lines; they change with the preset. **Open Nodes** shows the whole swarm graph.
 <!-- generated:controls end -->
 
 ## Node setup

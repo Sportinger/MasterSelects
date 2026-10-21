@@ -3,7 +3,7 @@
 The picture breaks into small particles that blow away, as the clip's exit. At Progress 0 it is
 untouched; at 1 it is gone.
 
-Group: [3D & Particles](./index.md#3d--particles) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 

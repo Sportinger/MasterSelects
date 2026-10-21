@@ -1,6 +1,6 @@
 # Quadtree Zoom
 
-<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=18ccec1340e2, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Splits the image into adaptive square blocks, small where detail is high and large in flat areas; Minimum Cell and Detail Threshold control the split.
 

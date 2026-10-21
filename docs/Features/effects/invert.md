@@ -37,4 +37,4 @@ and what was bright before turns black.
 
 Invert works on the screen colours, one channel at a time (`1 − x`), and leaves the transparency as
 it is. On an adjustment layer it inverts everything below it. Shared colour notes:
-[Color & Tone](../Effects-Color.md#technical-details); blocks: [Node Catalog](../Node-Catalog.md).
+[Color & Tone](../Effect-System.md#color--tone-notes); blocks: [Node Catalog](../Node-Catalog.md).

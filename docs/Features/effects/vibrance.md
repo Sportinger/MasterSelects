@@ -62,6 +62,6 @@ skin-coloured hues. The result, **Mix Amount**, is the Amount input of **Saturat
   orange light get the full Amount.
 - **Range.** The slider covers −1 to 1; typed values render −1 to 4, and the inspector reports
   anything beyond that.
-- Shared colour notes: [Color & Tone](../Effects-Color.md#technical-details). Formulas:
+- Shared colour notes: [Color & Tone](../Effect-System.md#color--tone-notes). Formulas:
   [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

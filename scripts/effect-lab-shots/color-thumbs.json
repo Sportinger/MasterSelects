@@ -1,0 +1,15 @@
+{
+  "about": "Brightness still and the gallery thumbnails of the subtle tonal effects: one picture of the dancer split down the middle (original | effect), so the cards show the change at 130 px. node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/color-thumbs.json",
+  "pairs": [
+    { "name": "brightness", "out": "docs/Features/assets/effects/brightness.webp", "image": "neon_rain_street", "width": 1920, "layout": "split", "outWidth": 1600, "maxBytes": 190000,
+      "left": { "effect": "original" }, "right": { "effect": "brightness", "params": { "amount": 0.8 } } },
+    { "name": "brightness-thumb", "out": "docs/Features/assets/effects/thumbs/brightness.webp", "image": "dancer_stage", "width": 1920, "layout": "split", "crop": [560, 160, 800, 500], "outWidth": 400, "maxBytes": 24000,
+      "left": { "effect": "original" }, "right": { "effect": "brightness", "params": { "amount": 0.8 } } },
+    { "name": "contrast-thumb", "out": "docs/Features/assets/effects/thumbs/contrast.webp", "image": "dancer_stage", "width": 1920, "layout": "split", "crop": [560, 160, 800, 500], "outWidth": 400, "maxBytes": 24000,
+      "left": { "effect": "original" }, "right": { "effect": "contrast", "params": { "amount": 1.8 } } },
+    { "name": "exposure-thumb", "out": "docs/Features/assets/effects/thumbs/exposure.webp", "image": "dancer_stage", "width": 1920, "layout": "split", "crop": [560, 160, 800, 500], "outWidth": 400, "maxBytes": 24000,
+      "left": { "effect": "original" }, "right": { "effect": "exposure", "params": { "exposure": 1.3 } } },
+    { "name": "levels-thumb", "out": "docs/Features/assets/effects/thumbs/levels.webp", "image": "dancer_stage", "width": 1920, "layout": "split", "crop": [560, 160, 800, 500], "outWidth": 400, "maxBytes": 24000,
+      "left": { "effect": "original" }, "right": { "effect": "levels", "params": { "outputBlack": 0.2, "outputWhite": 0.88 } } }
+  ]
+}

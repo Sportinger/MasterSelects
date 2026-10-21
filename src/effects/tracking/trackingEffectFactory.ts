@@ -10,6 +10,8 @@ interface TrackingEffectOptions {
   animated?: boolean;
   feedback?: boolean;
   params?: Record<string, EffectParam>;
+  /** Shared parameters this look's shader never reads, with the reason tools return; hidden in the card, saved values still load. */
+  retired?: Record<string, string>;
 }
 
 function numeric(value: unknown, fallback: number): number {
@@ -27,6 +29,18 @@ function color(value: unknown): [number, number, number, number] {
 }
 
 export function createTrackingEffect(options: TrackingEffectOptions): EffectDefinition {
+  const params: Record<string, EffectParam> = {
+    amount: { type: 'number', label: 'Amount', default: 0.8, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
+    color: { type: 'color', label: 'Overlay', default: '#36f59a', group: 'Style' },
+    ...(options.animated ? {
+      speed: { type: 'number' as const, label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion' },
+    } : {}),
+    ...(options.feedback ? FEEDBACK_PARAMETERS : {}),
+    ...options.params,
+  };
+  for (const [key, reason] of Object.entries(options.retired ?? {})) {
+    if (params[key]) params[key] = { ...params[key], deprecated: reason };
+  }
   return {
     id: options.id,
     name: options.name,
@@ -37,15 +51,7 @@ export function createTrackingEffect(options: TrackingEffectOptions): EffectDefi
     landmarkPoints: true,
     usesFeedback: options.feedback,
     requiresContinuousRender: options.animated || options.feedback,
-    params: {
-      amount: { type: 'number', label: 'Amount', default: 0.8, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
-      color: { type: 'color', label: 'Overlay', default: '#36f59a', group: 'Style' },
-      ...(options.animated ? {
-        speed: { type: 'number' as const, label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion' },
-      } : {}),
-      ...(options.feedback ? FEEDBACK_PARAMETERS : {}),
-      ...options.params,
-    },
+    params,
     packUniforms: (params, width, height, timelineTimeSeconds = 0) => new Float32Array([
       width,
       height,

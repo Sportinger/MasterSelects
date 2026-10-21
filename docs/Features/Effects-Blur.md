@@ -42,27 +42,6 @@ How to open a graph: [The node setup](./Effects.md#the-node-setup).
 
 ## Technical details
 
-The contract lives in `src/effects/blur/blurSampling.ts`; formulas and history in
-[Effect system: editable blur kernels](./Effect-System.md#editable-blur-kernels), nodes in
-[Node Catalog](./Node-Catalog.md), compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
+Radius is measured on a 1080p frame and scales with the picture, so the preview, the export and 4K show the same softness. Transparent edges blur without a dark rim. A blur at 0 leaves the picture exactly as it was.
 
-- **Units.** Radius is in pixels of a 1080p frame (its shorter side) and scales with the rendered
-  size, so preview, export and 4K match; 3D layer-space effects count their layer's own resolution.
-  Motion, Radial and Zoom are relative to the frame.
-- **Premultiplied source.** The frame is premultiplied into an `rgba16float` cache first; every
-  filtered read after that is exact at alpha edges. The GPU preview and the export show the same
-  blur.
-- **Read budgets.** Gaussian and Box read up to 127 merged pairs per side and pass; Motion, Radial
-  and Zoom up to 256 (Stage A) and 64 (Stage B) reads per pixel. Beyond that the reads spread out,
-  and the inspector and the tool result say so.
-- **Zero strength.** An unedited blur at 0 is skipped, so the picture passes through exactly; an
-  edited graph always runs.
-- **Saved projects.** Untouched old blur graphs upgrade automatically; edited graphs stay as saved.
-  Older projects render with the current kernels, and a 4K project blurs twice as many pixels as
-  before (Radius follows the frame size).
-- **Software preview.** The worker software preview approximates: Gaussian and Box as a canvas
-  blur, Motion, Radial and Zoom with up to 64 evenly spaced reads (longer streaks step; the
-  `SoftwareBlur` log says so).
-- **Pictures.** `scripts/effect-graph-shot.mjs`, `scripts/effect-editor-shot.mjs` and
-  `scripts/effect-lab.mjs --pairs`, each with a `blur.json` manifest (`scripts/effect-*-shots/`;
-  Sharpen in `stylize.json`).
+Developer notes: [Effect system: Blur & Sharpen notes](./Effect-System.md#blur--sharpen-notes).

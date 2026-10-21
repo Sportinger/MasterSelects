@@ -71,6 +71,6 @@ and edges get only a thin halo.
 - **Below 0.** An Amount below 0 (typed or via tools) softens the picture and is reported.
 - **Saved projects.** A Sharpen saved before 2026-10-21 keeps its earlier graph; its card offers
   **Use the new Sharpen**.
-- Shared notes: [Blur & Sharpen](../Effects-Blur.md#technical-details). Formulas:
+- Shared notes: [Blur & Sharpen](../Effect-System.md#blur--sharpen-notes). Formulas:
   [Effect system](../Effect-System.md#editable-blur-kernels); blocks:
   [Node Catalog](../Node-Catalog.md).

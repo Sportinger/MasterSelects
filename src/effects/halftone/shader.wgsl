@@ -88,7 +88,8 @@ fn risoColor(uv: vec2f, glow: f32) -> vec3f {
   let a = 1.0 - luminance(source(uv - offset).rgb);
   let b = 1.0 - luminance(source(uv + offset).rgb);
   let paper = vec3f(0.96, 0.93, 0.85);
-  let subtractive = paper * (1.0 - a * params.colorA.rgb) * (1.0 - b * params.colorB.rgb);
+  // Each ink filters the paper towards its own colour where it prints.
+  let subtractive = paper * mix(vec3f(1.0), params.colorA.rgb, a) * mix(vec3f(1.0), params.colorB.rgb, b);
   return subtractive + glow * (a * params.colorA.rgb + b * params.colorB.rgb) * 0.3;
 }
 

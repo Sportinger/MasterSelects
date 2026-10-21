@@ -105,6 +105,6 @@ picks, look at the output of **Bright Pass** instead.
   and Samples/Ring are read only by those earlier graphs.
 - **Software preview.** The worker software renderer builds the bloom pyramid on the CPU, slowly at
   large sizes.
-- Shared notes: [Light & Stylize](../Effects-Stylize.md#technical-details). Formulas:
+- Shared notes: [Light & Stylize](../Effect-System.md#light--stylize-notes). Formulas:
   [Effect system](../Effect-System.md#editable-blur-kernels); blocks:
   [Node Catalog](../Node-Catalog.md).

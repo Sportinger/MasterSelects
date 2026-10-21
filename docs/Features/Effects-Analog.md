@@ -39,11 +39,6 @@ Sizes count against the frame (lines per picture height, pixels at 1080 lines), 
 
 ## Technical details
 
-- **Time.** The effects follow timeline time: the preview, scrubbing and the export match, and Speed 0 freezes them.
-- **Hash keys.** Every key the recipes hash is an exact integer below 2^24 (the seed and the cycle fold into 509 keys by integer modulo, each kind of roll adds its own integer salt, grain frames move the keys by 16384 rows), so neighbouring cells share bit-identical keys and the GPU and the worker software path hash the same bits (`tests/unit/analogHashKeys.test.ts`). The older sine hash stays unchanged for other effects.
-- **Values.** Values outside a control's range are clamped and reported in the inspector and in agent tool results.
-- **Stage folders** are presentation only (`effectPresentationPlans.ts`) and appear on the untouched recipe; a graph with your own folders keeps them. A folded plain folder offers only the outputs that are used; a composition keeps every output it declares.
-- **Saved projects.** Effects and custom Looks saved before the 2026-10 rebuild of CRT Screen, Glitch, Film Prism, Holo and Ribbon Scan keep their original graphs (`legacyCrtScreenGraph.ts`, `legacyGlitchGraph.ts`, `legacyFilmPrismGraph.ts`, `legacyHoloGraph.ts`, `legacyRibbonScanGraph.ts`, pinned by `analogLegacyGraphs.ts`), in Look thumbnails too, without the new recipes' own controls; add the effect again for the new version.
-- **Experimental.** Crystal Glass, Glass Dispersion and Pixel Sort carry an `experimental` note on their definition: the effect list adds "(Experimental)", and the inspector and the `listEffects`/`addEffect` tool results give the reason.
-- **Source.** The recipes live in `src/services/operators/crtScreenRecipe.ts`, `glitchRecipe.ts`, `filmPrismRecipe.ts`, `holoRecipe.ts` and `ribbonScanRecipe.ts` (shared helpers in `analogRecipeBuilder.ts`); compilation: [Operator Graph Compiler](./Operator-Graph-Compiler.md), random nodes: [Node Catalog](./Node-Catalog.md#random-nodes).
-- **Pictures and clips.** `scripts/doc-clip.mjs` (the effect loops and the operation clip, `scripts/doc-clips/analog.json`; see [Documentation Website: Docs clips](./Documentation-Site.md#docs-clips-motion-and-editor-operations)), `scripts/effect-lab.mjs`, `scripts/effect-graph-shot.mjs` and `scripts/effect-editor-shot.mjs`, each with an `analog.json` manifest (`scripts/effect-*-shots/`).
+The effects follow timeline time: the preview, scrubbing and the export match, and Speed 0 freezes them. Values outside a control's range are clamped and named in the card. Crystal Glass, Glass Dispersion and Pixel Sort are marked *Experimental*; their card says why.
+
+Developer notes: [Effect system: Analog & Glitch notes](./Effect-System.md#analog--glitch-notes).

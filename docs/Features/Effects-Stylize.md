@@ -39,32 +39,6 @@ Pooling**; each effect page shows them under *Node setup*. How to open a graph:
 
 ## Technical details
 
-Formulas and history: [Effect system: editable color effect graphs](./Effect-System.md#editable-color-effect-graphs)
-(Vignette, and Film Grain, Scanlines, Posterize, Threshold),
-[Effect system: editable blur kernels](./Effect-System.md#editable-blur-kernels) (Glow, Edge Detect,
-Sharpen) and [Effect system: glyph, cell and compute effects](./Effect-System.md#glyph-cell-and-compute-effects)
-(Acuarela); nodes in [Node Catalog](./Node-Catalog.md#composed-coordinate-nodes), compilation in
-[Operator Graph Compiler](./Operator-Graph-Compiler.md).
+Glow Radius, Edge Detect Width and Acuarela's Wash and Bleed are measured on a 1080p frame and scale with the picture, so the preview, the export and 4K match. Glow, Vignette and Edge Detect saved before 21 October 2026 keep their earlier look; their card offers **Use the new …** to switch.
 
-- **Units.** Glow Radius, Edge Detect Width and Acuarela's Wash and Bleed are in pixels of a 1080p
-  frame (its shorter side) and scale with the rendered size, so preview, export and 4K match.
-- **Out-of-range values.** Tool results and the inspector list every value that is clamped or
-  ignored (`paramWarnings`), instead of failing silently. The notes describe the current recipes; an
-  effect that still runs an earlier one gets a single note naming that version instead, and an
-  edited graph gets them as one hedged note (its own nodes decide). A note function that fails is
-  logged and reported.
-- **Saved projects.** Glow, Vignette, Edge Detect (and Film Grain, Scanlines and Sharpen) saved
-  before 2026-10-21 keep their earlier graph and folders (`stylizeRecipes.ts`); the card offers
-  **Use the new …**, which for Glow and Vignette also resets the values and removes their keyframes,
-  in one undo step. Custom Looks record `recipe: 'earlier'` for such effects (Looks saved before are
-  migrated), so applying them recreates the earlier graph.
-- **Transitions** build their effects without a graph at render time, so they use the current
-  recipes: Vignette Bloom is retuned (Glow Radius 60–240; Vignette Roundness 0 with Size and
-  Softness ÷ √2, the same falloff as before; Glow Amount 0.1–1.4 for the bloom's ramp to white).
-- **Software preview.** The worker software renderer (the Linux fallback) evaluates effects that
-  carry a graph on the CPU, which is slow at large sizes (the Glow pyramid most of all). Graphless
-  ones, as transitions create them, use dedicated pixel paths (`workerSoftwareBloom.ts` for Glow).
-  Rom1 runs on the CPU; the watercolour Acuarela falls back to the main-thread GPU renderer.
-- **Pictures.** `scripts/effect-lab.mjs --pairs`, `scripts/effect-graph-shot.mjs` and
-  `scripts/effect-editor-shot.mjs`, with the manifests `stylize.json` and `stylize-art.json` in
-  `scripts/effect-*-shots/`.
+Developer notes: [Effect system: Light & Stylize notes](./Effect-System.md#light--stylize-notes).

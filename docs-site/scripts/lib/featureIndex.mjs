@@ -63,6 +63,10 @@ export function readIndexSections(markdown) {
         target.collapsed = word === 'collapsed';
       } else if (word === 'unpublished') {
         section.unpublished = true;
+      } else if (word === 'also') {
+        // The rows below may repeat a page that an earlier section lists (a second way in, e.g. Using effects).
+        block = { kind: 'rows', rows: [], also: true };
+        section.blocks.push(block);
       } else if (word === 'effect-groups') {
         block = { kind: 'effects', merges: args.map((arg) => arg.split('+').filter(Boolean)), rows: [] };
         section.blocks.push(block);
@@ -96,6 +100,23 @@ export function readIndexSections(markdown) {
     target.rows.push({ label: row[1].trim(), target: row[2], cells });
   }
   return { sections, notes };
+}
+
+/**
+ * The effect-groups block of the index: { merges ([["keying", "time"]]), overviews: Map<groupId, file> }
+ * (the overview page of each picker group; joined groups share theirs).
+ */
+export function effectGroupIndex(sections) {
+  const block = sections.flatMap((section) => section.blocks).find((entry) => entry.kind === 'effects');
+  const overviews = new Map();
+  if (!block) return { merges: [], overviews };
+  for (const row of block.rows) {
+    const id = row.cells[0]?.replace(/`/gu, '').trim();
+    const file = rowTarget(row.target)?.file;
+    if (!id || !file || overviews.has(id)) continue;
+    for (const member of block.merges.find((ids) => ids.includes(id)) ?? [id]) if (!overviews.has(member)) overviews.set(member, file);
+  }
+  return { merges: block.merges, overviews };
 }
 
 /** What an index row links to: a docs/Features page (`file`) or a hand-written site page (`site`). */
@@ -155,7 +176,7 @@ export function buildSidebar({ sections, pages, sitePages = new Set(), effectGro
 
   // Entries: { label?, file } or { label, site }. `placed` remembers where each page went.
   const placed = new Map();
-  const accept = (row, where) => {
+  const accept = (row, where, also = false) => {
     const target = rowTarget(row.target);
     if (!target) {
       notes.push({ level: 'warn', text: `Sidebar: "${where}" links ${row.target}, which is neither a docs/Features page nor a docs-site page; skipped.` });
@@ -177,6 +198,7 @@ export function buildSidebar({ sections, pages, sitePages = new Set(), effectGro
       return undefined;
     }
     if (placed.has(target.file)) {
+      if (also) return { label: row.label, file: target.file };
       notes.push({ level: 'warn', text: `Sidebar: ${target.file} is listed under "${placed.get(target.file)}" and again under "${where}"; kept the first row.` });
       return undefined;
     }
@@ -190,7 +212,7 @@ export function buildSidebar({ sections, pages, sitePages = new Set(), effectGro
     collapsed: section.collapsed,
     planned: section.planned,
     blocks: section.blocks.map((block) => {
-      if (block.kind === 'rows') return { kind: 'rows', entries: block.rows.map((row) => accept(row, section.label)).filter(Boolean) };
+      if (block.kind === 'rows') return { kind: 'rows', entries: block.rows.map((row) => accept(row, section.label, block.also)).filter(Boolean) };
       if (block.kind === 'group') {
         const where = `${section.label} › ${block.label}`;
         return { kind: 'group', label: block.label, collapsed: block.collapsed, entries: block.rows.map((row) => accept(row, where)).filter(Boolean) };

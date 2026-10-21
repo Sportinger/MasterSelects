@@ -225,3 +225,7 @@
 .sl-markdown-content .docs-gallery-name { font-size: .9375rem; font-weight: 600; line-height: 1.3; }
 .sl-markdown-content .docs-gallery-text { color: var(--sl-color-gray-2); font-size: .8125rem; line-height: 1.45; }
 .sl-markdown-content .docs-gallery-card--soon { color: var(--sl-color-gray-2); border-style: dashed; }
+
+/* Phone header: a long site title ends in an ellipsis instead of being cut mid-word. */
+.site-title { min-width: 0; }
+.site-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

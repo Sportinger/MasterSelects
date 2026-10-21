@@ -76,30 +76,6 @@ RGB Split all work this way, and each is a small node graph you can open: select
 
 ## Technical details
 
-Notes for developers; each effect page adds its own formula and limits.
+With **Shape: Circle**, circles stay round and the effect looks the same at every resolution. Angles show in degrees. Very strong settings can shimmer on fine detail; values the effect clamps are named below its card.
 
-- **Units.** Shape Circle measures offsets and Radius in units of the shorter frame side (0.5 = half
-  of it), so circles stay round and match at every resolution; Stretch to Frame measures each axis
-  in its own 0–1 range. Angles are stored in radians and shown in degrees; keyframe lanes, MIDI and
-  tools use radians.
-- **Sampling.** The frame is premultiplied into an `rgba16float` cache, read with one bilinear sample
-  at the read position (Kaleidoscope: two, crossfaded) and unpremultiplied, so transparent edges keep
-  their colour without a dark rim. Transparent frame edges fade over one source pixel by lowering
-  alpha only. One sample per pixel means very strong settings shimmer on fine detail.
-- **Neutral settings** (Bulge & Pinch Amount 1, Twist 0, both Wave heights 0, RGB Split Amount 0,
-  Mirror with both axes off) skip the built-in recipe, so the picture passes through exactly.
-- **Software preview and export.** Without WebGPU (software preview, worker-first export readback)
-  the untouched recipes run as a hand-written pass with the same mapping, frame edges and
-  premultiplied read, within 1/255 of the graph; edited graphs run through the graph interpreter.
-- **Warnings.** Clamped or degenerate values (Radius ≤ 0, negative Amount, unknown Shape or Frame
-  Edges choices, out-of-range Fisheye values, Lens Correction folding at the active composition size,
-  Guided Perspective limits) appear below the effect in the inspector, judged on the values at the
-  playhead, and in the `addEffect` / `updateEffect` tool results.
-- **Code.** The recipes live in `src/services/operators/uvDistortRecipes.ts` and
-  `mirrorRecipes.ts`. More: [Effect system: editable UV distortions](./Effect-System.md#editable-uv-distortions),
-  [editable mirror, split and pixel graphs](./Effect-System.md#editable-mirror-split-and-pixel-graphs),
-  [Node Catalog](./Node-Catalog.md) and [Operator Graph Compiler](./Operator-Graph-Compiler.md).
-- **Pictures.** The `distort.json` and `mirror-pixel.json` manifests in `scripts/effect-graph-shots/`
-  and `scripts/effect-editor-shots/` regenerate the graphs and the editor excerpts;
-  `scripts/effect-lab-shots/mirror-pixel.json` regenerates the Kaleidoscope, Mirror and RGB Split
-  stills.
+Developer notes: [Effect system: Lens & Distort notes](./Effect-System.md#lens--distort-notes).

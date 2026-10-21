@@ -63,6 +63,6 @@ bottom, and Scroll Speed moves them sideways.
   uses the current recipe.
 - **Software preview.** The worker software preview fades too dense lines like the graph, but shows
   the Scanline Glitch transition's lines without that fade.
-- Shared notes on stylize recipes: [Light & Stylize](../Effects-Stylize.md#technical-details).
+- Shared notes on stylize recipes: [Light & Stylize](../Effect-System.md#light--stylize-notes).
   Formulas: [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

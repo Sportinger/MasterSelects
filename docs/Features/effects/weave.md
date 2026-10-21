@@ -4,13 +4,13 @@ Woven fabric, yarn, ropes and knots, drawn as fine lit fibres in 3D above the cl
 of grey wool, about two thirds of the frame wide, weaves itself in over the first seconds and then
 hangs in front of the clip.
 
-Group: [3D & Particles](./index.md#3d--particles) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [3D & Particles](../Effects-3D-Particles.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 
-![Above, the dancer on stage; below, the same frame with a finished net of grey twisted yarn, woven over and under, hanging in front of her body from the shoulders to the knees, her face, raised arm and feet uncovered](../assets/effects/weave.webp)
+![Left, the dancer on stage; right, the same frame with a finished net of grey twisted yarn, woven over and under, hanging in front of her body from the shoulders to the knees, her face, raised arm and feet uncovered](../assets/effects/weave.webp)
 
-<figcaption>Top: original. Bottom: the default Weave at 6 s, when the cloth is finished (editor preview).</figcaption>
+<figcaption>Left: original. Right: the default Weave at 6 s, when the cloth is finished (editor preview).</figcaption>
 </figure>
 
 **Use it for:** a net or a veil that weaves itself in front of a performer · ropes and knots ·

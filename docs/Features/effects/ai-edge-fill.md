@@ -24,7 +24,13 @@ asks you to generate again.
 ## Controls
 
 <!-- generated:controls start -->
-This effect has no standard controls; its card shows controls of its own.
+| Control | Range | Default |
+|---|---|---|
+| Generation Size | 1K, 2K, 4K | 2K |
+| Prompt | text | a description of the scene to continue (editable) |
+| Generate fill | button | – |
+| Fill Opacity | 0 to 100 | 100 |
+| Seam Blend | 0 to 64 | 12 |
 <!-- generated:controls end -->
 
 ## Node setup

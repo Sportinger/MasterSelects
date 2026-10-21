@@ -90,6 +90,6 @@ the **Exposure** card and **Power of Two** (1).
 - **Range.** The slider covers ±3 EV; in the number field you can type up to ±20 EV. Gamma renders
   0.2 to 10; at its floor the picture is very dark (x^5), and the inspector says so.
 - **Highlights.** Each channel clips on its own, so a strong +EV can shift hues in the highlights.
-- Shared colour notes: [Color & Tone](../Effects-Color.md#technical-details). Formulas:
+- Shared colour notes: [Color & Tone](../Effect-System.md#color--tone-notes). Formulas:
   [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

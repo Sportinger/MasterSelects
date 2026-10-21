@@ -57,6 +57,6 @@ the picture breaks into vertical streaks, like a view through ribbed glass.
 - **Saved projects** made with the earlier Pixelate open with the 1080p-based size, the centred grid
   and averaged colours, so their squares can look different.
 
-Grid, sizes and transparency: [Pixel & Mosaic](../Effects-Pixel.md#technical-details).
+Grid, sizes and transparency: [Pixel & Mosaic](../Effect-System.md#pixel--mosaic-notes).
 Recipes: [Effect system: editable mirror, split and pixel graphs](../Effect-System.md#editable-mirror-split-and-pixel-graphs).
 Nodes: [Node Catalog](../Node-Catalog.md).

@@ -47,6 +47,6 @@ becomes half as strong, for fine corrections.
   apart); Tint lowers green by 0.5 stops and raises red and blue by 0.25. The gains are then
   normalised to keep the Rec.709 brightness, in linear light.
 - **Range.** The sliders cover −1 to 1; typed values render up to ±4. There is no Kelvin scale.
-- Shared colour notes: [Color & Tone](../Effects-Color.md#technical-details). Formulas:
+- Shared colour notes: [Color & Tone](../Effect-System.md#color--tone-notes). Formulas:
   [Effect system](../Effect-System.md#editable-color-effect-graphs); blocks:
   [Node Catalog](../Node-Catalog.md).

@@ -56,5 +56,5 @@ The formula of its light is under Technical details.
   current look.
 - **Warnings.** Intensity below 0, Width at or below 0 and Softness or Highlights outside 0–1 are
   clamped and reported in the effect card and the tool result.
-- Shared notes: [Light & Stylize](../Effects-Stylize.md#technical-details). How effects are stored
+- Shared notes: [Light & Stylize](../Effect-System.md#light--stylize-notes). How effects are stored
   and rendered: [Effect system](../Effect-System.md).

@@ -17,6 +17,8 @@ Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effect
 - **Amount** – how much of the sorted colour replaces the original.
 - **Segment Size** – how long each sorted run is (4 to 16 pixels).
 
+**Tip:** raise Threshold until only the highlights streak; on smooth areas such as a sky keep Amount low, where the run seams show.
+
 **Experimental:** the effect sorts fixed runs of at most 16 pixels instead of whole bright intervals, so smooth areas such as a sky show a fine pattern of vertical stripes at the run seams instead of long sorted streaks.
 
 ## Controls

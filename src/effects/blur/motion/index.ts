@@ -33,6 +33,8 @@ export const motionBlur: EffectDefinition = {
       max: 6.28318,
       step: 0.01,
       animatable: true,
+      // Stored in radians (tools, keyframes); the card shows degrees.
+      displayUnit: 'degrees',
     },
     samples: {
       type: 'number',

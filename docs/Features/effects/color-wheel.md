@@ -6,9 +6,9 @@ Group: [Generate](../Effects-Generate.md) · [How to add an effect](../Effects.m
 
 <figure class="docs-shot">
 
-![Above, the dancer on stage; below, the same frame with a round hue wheel centred on her at half mix: pale in the middle, red at the right edge, yellow at the upper right, green at the upper left, cyan at the left, blue at the lower left and magenta at the lower right, with dark stage around the wheel](../assets/effects/color-wheel.webp)
+![The dancer on stage with a round hue wheel centred on her at half mix: pale in the middle, red at the right edge, yellow at the upper right, green at the upper left, cyan at the left, blue at the lower left and magenta at the lower right, with dark stage around the wheel](../assets/effects/color-wheel.webp)
 
-<figcaption>Top: original. Bottom: the default Color Wheel (Disc, Radius 45 %) at Mix 0.5.</figcaption>
+<figcaption>The default Color Wheel (Disc, Radius 45 %) at Mix 0.5.</figcaption>
 </figure>
 
 **Use it for:** a colour reference for a projector or a camera · a coloured gel spot over the
@@ -55,7 +55,7 @@ change is in its card.
   the shorter side, Center X/Y of the layer.
 - **Disc** has a one-pixel anti-aliased edge and is laid over the clip as straight-alpha "over".
 - **Spin** is a rate: a keyframed Spin speeds up and slows down smoothly
-  ([keyframed rates](../Effects-Generate.md#technical-details)).
+  ([keyframed rates](../Effect-System.md#generate-notes)).
 - **Saved projects.** Instances saved before Shape, Direction and Radius existed render with Fill
   layer, clockwise and Radius 0.5; the inspector shows these values. The new defaults (Disc, Radius
   45 %, Saturation 1) apply only to new instances.
