@@ -25,7 +25,8 @@ function radialReference(type: 'bulge' | 'twirl', uv: UV, params: Record<string,
   let moved: UV;
   if (type === 'bulge') {
     const weight = Math.max(1 - r * r, 0) ** 2;
-    const beta = amount > 1 ? (amount - 1) * 1.232 : Math.min(1 - amount, 1) * -0.95;
+    // Above 1 the centre magnification equals Amount: the read offset shrinks by 1 / Amount at r = 0.
+    const beta = amount > 1 ? Math.log(amount) : Math.min(1 - amount, 1) * -0.95;
     const factor = Math.exp(-beta * weight);
     moved = [p[0] * factor, p[1] * factor];
   } else {
@@ -115,6 +116,14 @@ describe('Wave, Twirl and Bulge & Pinch graphs', () => {
       if (amount < -1 || amount > 3) continue;
       const nearRim: UV = [.5 + .499 * 1080 / 1920, .5];
       expect(Math.abs((run('bulge', { amount, radius: .5 }, nearRim).sampled[0][0] - .5) * 1920 / 1080 - .499)).toBeLessThan(1e-4);
+    }
+  });
+
+  it('magnifies the centre of a bulge exactly Amount times', () => {
+    for (const amount of [1.25, 2, 2.5, 3, 8]) {
+      const offset = 1e-5, uv: UV = [.5 + offset, .5];
+      const sampled = run('bulge', { amount, radius: .5 }, uv).sampled[0][0] - .5;
+      expect(offset / sampled).toBeCloseTo(amount, 6);
     }
   });
 

@@ -17,8 +17,9 @@ import { applyWorkerSoftwareSourceResamplingEffects } from '../../src/services/r
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 type Pixel = [number, number, number, number];
+const CHROMA_FIX_NODES = ['red', 'green', 'blue'].flatMap(channel => ['safe-alpha', 'straight', 'at-average'].map(step => `${channel}-channel-${step}`));
 const ALPHA_FIX_NODES = ['source-premultiplied-split', 'source-premultiplied-alpha', 'source-premultiplied-rgb', 'source-premultiplied',
-  'result-split', 'result-alpha', 'coverage-floor', 'result-safe-alpha', 'result-rgb', 'result'];
+  'result-split', 'result-alpha', 'coverage-floor', 'result-safe-alpha', 'result-rgb', 'result', ...CHROMA_FIX_NODES];
 
 /** The Fisheye recipe as it shipped before the review: the frame read straight, the average written straight. */
 function straightAlphaFisheye(): EffectOperatorGraph {
@@ -27,7 +28,10 @@ function straightAlphaFisheye(): EffectOperatorGraph {
   graph.edges = graph.edges.filter(edge => !removed.has(edge.from) && !removed.has(edge.to));
   graph.edges.push({ id: 'legacy-edge-color', from: 'frame', output: 'image', to: 'edge-color', input: 'image' },
     { id: 'legacy-original', from: 'frame', output: 'image', to: 'original-sample', input: 'image' },
-    { id: 'legacy-output', from: 'fisheye-image', output: 'image', to: 'output', input: 'image' });
+    { id: 'legacy-output', from: 'fisheye-image', output: 'image', to: 'output', input: 'image' },
+    { id: 'legacy-red', from: 'red-channel-split', output: 'x', to: 'chroma-rgba', input: 'x' },
+    { id: 'legacy-green', from: 'green-channel-split', output: 'y', to: 'chroma-rgba', input: 'y' },
+    { id: 'legacy-blue', from: 'blue-channel-split', output: 'z', to: 'chroma-rgba', input: 'z' });
   graph.groups = graph.groups!.map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => !removed.has(id)) }));
   for (const id of removed) delete graph.layout[id];
   return graph;
@@ -61,6 +65,39 @@ describe('Fisheye keeps colour at transparent edges', () => {
     const [r, , , a] = fisheyePixel(createDefaultFisheyeGraph(), { ...params, samples: 8 }, inFeather, orange);
     expect(a).toBeGreaterThan(0); expect(a).toBeLessThan(1);
     expect(r).toBeCloseTo(.8, 6);
+  });
+
+  it('keeps chromatic aberration fringes across a cut-out within the source colour', () => {
+    // Opaque mid-grey with a transparent hole of radius 0.1 at the centre: near the magnified hole
+    // edge the red, green and blue reads land on different sides of it.
+    const grey: Pixel = [.5, .5, .5, 1];
+    const sampleImage = ([u, v]: [number, number]): Pixel => Math.hypot(u - .5, v - .5) < .1 ? [0, 0, 0, 0] : grey;
+    const effect = { type: 'fisheye', params: { ...fisheyeDefaults, chromaticAberration: .05, outside: 'original', edgeMode: 'clamp', samples: 1 } as Record<string, number | boolean | string> };
+    const plan = compileImageOperatorGraph(createDefaultFisheyeGraph(), effectOperatorParams(effect), effectOperatorCompileContext(effect));
+    let fringe = 0;
+    for (let step = 0; step <= 1500; step++) {
+      const uv: [number, number] = [.5 + step / 1500 * .45, .5];
+      const [r, g, b, a] = evaluateImageOperatorPlan(plan, sampleImage(uv), { uv, resolution: [1920, 1080], sampleImage });
+      for (const channel of [r, g, b]) expect(channel).toBeLessThanOrEqual(.5 + 1e-6);
+      if (a > .05 && a < .95) fringe++;
+    }
+    // The walk crosses the partly covered fringe, where the old recipe reached up to 3x the colour.
+    expect(fringe).toBeGreaterThan(0);
+    const width = 192, height = 108, data = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const inside = Math.hypot((x + .5) / width - .5, (y + .5) / height - .5) < .1;
+      data.set(inside ? [0, 0, 0, 0] : [128, 128, 128, 255], (y * width + x) * 4);
+    }
+    const adjustment = { projection: 'equidistant', strength: 1, fieldOfView: 140, curveBias: 0, radius: 1, zoom: 1, centerX: .5, centerY: .5,
+      squeeze: 1, rotation: 0, preserveAspect: true, outside: 'original', feather: .03, edgeMode: 'clamp', edgeFeather: .005,
+      chromaticAberration: .05, vignette: 0, vignetteSoftness: .25, samples: 1 } as const;
+    let cpuFringe = 0;
+    for (let x = 0; x < width; x++) {
+      const pixel = applyWorkerSoftwareSourceResamplingEffects(data, width, height, x, height / 2, { fisheyeAdjustments: [adjustment] } as never)!;
+      for (const channel of pixel.slice(0, 3)) expect(channel).toBeLessThanOrEqual(128 / 255 + 1e-6);
+      if (pixel[3] > .05 && pixel[3] < .95) cpuFringe++;
+    }
+    expect(cpuFringe).toBeGreaterThan(0);
   });
 
   it('does the same on the worker CPU path', () => {

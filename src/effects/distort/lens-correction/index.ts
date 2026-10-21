@@ -73,7 +73,7 @@ export const lensCorrection: EffectDefinition = {
   id: 'lens-correction', name: 'Lens Correction', category: 'distort',
   shader, entryPoint: 'lensCorrectionFragment', uniformSize: 96,
   params: LENS_CORRECTION_PARAMS,
-  paramWarnings: params => lensCorrectionWarnings(params),
+  paramWarnings: (params, width, height) => lensCorrectionWarnings(params, width, height),
   packUniforms: (params, width, height) => {
     const { p, vignetteEnabled, profile, aspect, scale, fold } = lensGeometry(params, width, height);
     return new Float32Array([

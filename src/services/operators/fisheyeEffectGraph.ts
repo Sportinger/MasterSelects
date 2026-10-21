@@ -230,12 +230,19 @@ export function createDefaultFisheyeGraph(): EffectOperatorGraph {
   const alphaRG = g.binary('alpha-red-green', 'math.add.scalar', { node: redSplit.node, port: 'w' }, { node: greenSplit.node, port: 'w' }, 40, 'chroma');
   const alphaSum = g.binary('alpha-sum', 'math.add.scalar', alphaRG, { node: blueSplit.node, port: 'w' }, 41, 'chroma');
   const averageAlpha = g.binary('alpha-average', 'math.divide-ieee.scalar', alphaSum, three, 42, 'chroma');
-  const separated = g.node('chroma-rgba', 'vector.combine.vec4', 42, 'chroma');
-  g.connect({ node: redSplit.node, port: 'x' }, separated, 'x'); g.connect({ node: greenSplit.node, port: 'y' }, separated, 'y');
-  g.connect({ node: blueSplit.node, port: 'z' }, separated, 'z'); g.connect(averageAlpha, separated, 'w');
-  const separatedImage = g.unary('chroma-image', 'convert.vec4-to-image', separated, 43, 'chroma');
+  // Each channel's sample is premultiplied by its own alpha: take its straight colour, then
+  // premultiply it by the shared averaged alpha, so a fringe across a cut-out never exceeds 1.
+  const channelAtAverage = (id: string, split: Ref, port: string) => {
+    const safeAlpha = g.binary(`${id}-safe-alpha`, 'math.max.scalar', { node: split.node, port: 'w' }, tiny, 40, 'chroma');
+    const straight = g.binary(`${id}-straight`, 'math.divide-ieee.scalar', { node: split.node, port }, safeAlpha, 41, 'chroma');
+    return g.binary(`${id}-at-average`, 'math.multiply.scalar', straight, averageAlpha, 43, 'chroma');
+  };
+  const separated = g.node('chroma-rgba', 'vector.combine.vec4', 44, 'chroma');
+  g.connect(channelAtAverage('red-channel', redSplit, 'x'), separated, 'x'); g.connect(channelAtAverage('green-channel', greenSplit, 'y'), separated, 'y');
+  g.connect(channelAtAverage('blue-channel', blueSplit, 'z'), separated, 'z'); g.connect(averageAlpha, separated, 'w');
+  const separatedImage = g.unary('chroma-image', 'convert.vec4-to-image', separated, 45, 'chroma');
   const chromaEnabled = g.binary('chroma-enabled', 'compare.greater.scalar', aberration, tiny, 42, 'chroma'); chromaEnabled.port = 'condition';
-  let lensColor = g.selectImage('chroma-select', chromaEnabled, greenSample, separatedImage, 44, 'chroma');
+  let lensColor = g.selectImage('chroma-select', chromaEnabled, greenSample, separatedImage, 46, 'chroma');
 
   // Vignette preserves alpha, then lens coverage mixes with selected outside color.
   const vignetteStartRaw = g.binary('vignette-start-raw', 'math.subtract.scalar', one, vignetteSoftness, 36, 'resolve');

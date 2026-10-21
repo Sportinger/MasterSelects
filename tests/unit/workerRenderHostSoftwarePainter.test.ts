@@ -5,6 +5,8 @@ import { drawWorkerSoftwareLayer } from '../../src/services/render/workerRenderH
 import { createWorkerSoftwareFeedbackStore } from '../../src/services/render/workerSoftwareFeedbackEffects';
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from '../../src/services/render/workerSoftwareGlow';
 import { directionalBlurPlan, mirrorRepeat, transformDirectionalPixel, type DirectionalBlurType } from '../../src/effects/blur/blurSampling';
+import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
+import type { Layer } from '../../src/types';
 
 function baseContext() {
   return {
@@ -87,6 +89,20 @@ function drawLayerWithPixels(
   );
   expect(targetContext.drawImage).toHaveBeenCalled();
   return outputPixels;
+}
+
+/** Pixel effects of a fresh built-in Wave, Twirl or Bulge, as the software plan builds them. */
+function uvDistortPixelEffects(type: 'wave' | 'twirl' | 'bulge', params: Record<string, number | string>) {
+  const plan = workerSoftwareEffectPlanForLayer({ id: 'distort-layer', effects: [{ id: `${type}-fx`, type, name: type, enabled: true, params }] } as unknown as Layer);
+  expect(plan?.pixelEffects.uvDistortAdjustments).toHaveLength(1);
+  expect(plan?.pixelEffects.imageOperatorPlans).toBeUndefined();
+  return plan!.pixelEffects;
+}
+
+/** Linear filtering of one opaque row at u (texel centres at (i + 0.5) / n, clamp to edge). */
+function rowBilinear(row: number[], u: number): number {
+  const x = Math.min(row.length - 1, Math.max(0, u * row.length - 0.5)), left = Math.floor(x), right = Math.min(row.length - 1, left + 1);
+  return row[left] + (row[right] - row[left]) * (x - left);
 }
 
 describe('worker software painter', () => {
@@ -583,23 +599,14 @@ describe('worker software painter', () => {
       50, 0, 0, 255,
       90, 0, 0, 255,
     ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        waveAdjustments: [{
-          amplitudeX: 0,
-          amplitudeY: 0.5,
-          frequencyX: 1,
-          frequencyY: 0.25,
-        }],
-      },
-    );
-
+    // amplitudeY 0.5 at frequencyY 0.25 on the single row (v = 0.5) shifts every read by
+    // 0.5 * sin(tau * 0.25 * 0.5) = 0.354 of the width; Clamp holds the right border.
+    const outputPixels = drawLayerWithPixels(inputPixels, 3, 1, uvDistortPixelEffects('wave', {
+      amplitudeX: 0, amplitudeY: 0.5, frequencyX: 1, frequencyY: 0.25, speed: 0, phase: 0, edges: 'clamp',
+    }));
+    const shift = 0.5 * Math.sin(Math.PI * 2 * 0.25 * 0.5);
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      50, 0, 0, 255,
+      Math.round(rowBilinear([10, 50, 90], 1 / 6 + shift)), 0, 0, 255,
       90, 0, 0, 255,
       90, 0, 0, 255,
     ]);
@@ -817,25 +824,15 @@ describe('worker software painter', () => {
       50, 0, 0, 255,
       90, 0, 0, 255,
     ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        twirlAdjustments: [{
-          amount: Math.PI,
-          radius: 1,
-          centerX: 0.5,
-          centerY: 0.5,
-        }],
-      },
-    );
-
+    const outputPixels = drawLayerWithPixels(inputPixels, 3, 1, uvDistortPixelEffects('twirl', {
+      amount: Math.PI, radius: 1, centerX: 0.5, centerY: 0.5, shape: 'frame', edges: 'clamp',
+    }));
+    // The outer pixels sit at r = 1/3 and turn by pi * (2/3)^2 about the centre.
+    const angle = Math.PI * (2 / 3) ** 2, reach = Math.cos(angle) / 3;
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
+      Math.round(rowBilinear([10, 50, 90], 0.5 - reach)), 0, 0, 255,
       50, 0, 0, 255,
-      50, 0, 0, 255,
-      50, 0, 0, 255,
+      Math.round(rowBilinear([10, 50, 90], 0.5 + reach)), 0, 0, 255,
     ]);
   });
 
@@ -845,25 +842,15 @@ describe('worker software painter', () => {
       50, 0, 0, 255,
       90, 0, 0, 255,
     ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        bulgeAdjustments: [{
-          amount: 2,
-          radius: 1,
-          centerX: 0.5,
-          centerY: 0.5,
-        }],
-      },
-    );
-
+    const outputPixels = drawLayerWithPixels(inputPixels, 3, 1, uvDistortPixelEffects('bulge', {
+      amount: 2, radius: 1, centerX: 0.5, centerY: 0.5, shape: 'frame', edges: 'clamp',
+    }));
+    // r = 1/3: the read offset shrinks by exp(-ln 2 * (1 - 1/9)^2).
+    const reach = Math.exp(-Math.log(2) * (8 / 9) ** 2) / 3;
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
+      Math.round(rowBilinear([10, 50, 90], 0.5 - reach)), 0, 0, 255,
       50, 0, 0, 255,
-      50, 0, 0, 255,
-      50, 0, 0, 255,
+      Math.round(rowBilinear([10, 50, 90], 0.5 + reach)), 0, 0, 255,
     ]);
   });
 });

@@ -124,7 +124,10 @@ fn renderFisheyeSample(outputUv: vec2f) -> vec4f {
     let red = sampleWithEdges(lensSpaceToUv(direction * sampleRadius * (1.0 + chromaShift)));
     let green = sampleWithEdges(lensSpaceToUv(direction * sampleRadius));
     let blue = sampleWithEdges(lensSpaceToUv(direction * sampleRadius * (1.0 - chromaShift)));
-    lensColor = vec4f(red.r, green.g, blue.b, (red.a + green.a + blue.a) / 3.0);
+    // Samples are premultiplied by their own alpha: straight colour per channel, then the shared alpha.
+    let alpha = (red.a + green.a + blue.a) / 3.0;
+    let straight = vec3f(red.r / max(red.a, 0.000001), green.g / max(green.a, 0.000001), blue.b / max(blue.a, 0.000001));
+    lensColor = vec4f(straight * alpha, alpha);
   }
 
   let vignetteStart = max(0.0, 1.0 - params.vignetteSoftness);

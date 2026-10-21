@@ -3,7 +3,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
-import { EDGES_PARAM, SHAPE_PARAM, UV_DISTORT_COMMON_WGSL, distortNumber, edgeIndex, radiusWarnings, shapeIndex } from '../uvDistortParams';
+import { EDGES_PARAM, SHAPE_PARAM, UV_DISTORT_COMMON_WGSL, choiceWarnings, distortNumber, edgeIndex, radiusWarnings, shapeIndex } from '../uvDistortParams';
 
 export const bulge: EffectDefinition = {
   id: 'bulge',
@@ -18,7 +18,7 @@ export const bulge: EffectDefinition = {
     amount: {
       type: 'number',
       label: 'Amount',
-      default: 1.6,
+      default: 2,
       min: 0,
       max: 3,
       step: 0.01,
@@ -55,10 +55,10 @@ export const bulge: EffectDefinition = {
     edges: EDGES_PARAM,
   },
 
-  paramWarnings: params => [...radiusWarnings(params), ...(typeof params.amount === 'number' && params.amount < 0
+  paramWarnings: params => [...radiusWarnings(params), ...choiceWarnings(params), ...(typeof params.amount === 'number' && params.amount < 0
     ? [`amount: ${params.amount} acts like 0, the strongest pinch.`] : [])],
   packUniforms: (params, width, height) => new Float32Array([
-    distortNumber(params.amount, 1.6),
+    distortNumber(params.amount, 2),
     distortNumber(params.radius, 0.5),
     distortNumber(params.centerX, 0.5),
     distortNumber(params.centerY, 0.5),

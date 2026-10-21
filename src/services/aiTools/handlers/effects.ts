@@ -25,15 +25,15 @@ function effectParamWarnings(effect: Effect | undefined, names: readonly string[
   const composition = useMediaStore.getState().getActiveComposition();
   return [...unusedParamWarnings(effect, names),
     ...blurBudgetNotes(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080),
-    ...(names.length ? definitionParamWarnings(effect.type, effect.params) : [])];
+    ...(names.length ? definitionParamWarnings(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080) : [])];
 }
 
 /** Values the effect itself clamps or cannot show (its `paramWarnings`), judged on the resulting parameters. */
-function definitionParamWarnings(effectType: string, params: Record<string, unknown>): string[] {
+function definitionParamWarnings(effectType: string, params: Record<string, unknown>, width: number, height: number): string[] {
   const definition = getEffect(effectType);
   if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
   try {
-    return definition.paramWarnings(params as Record<string, number | boolean | string>);
+    return definition.paramWarnings(params as Record<string, number | boolean | string>, width, height);
   } catch { return []; }
 }
 

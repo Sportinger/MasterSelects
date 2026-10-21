@@ -1,6 +1,7 @@
 import type { WorkerRenderSoftwareFrame, WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import { projectImageRadius, rotateImageCoordinate, unprojectImageRadius } from '../operators/imageOpticsSemantics';
 import { directionalBlurPlan, transformDirectionalPixel, type DirectionalBlurPlan, type DirectionalBlurType } from '../../effects/blur/blurSampling';
+import { applyWorkerSoftwareUvDistort } from './workerSoftwareUvDistortEffects';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -273,7 +274,10 @@ function renderFisheyeSample(
     const red = sampleChannel(1 + chromaShift);
     const green = sampleChannel(1);
     const blue = sampleChannel(1 - chromaShift);
-    lensColor = [red[0], green[1], blue[2], (red[3] + green[3] + blue[3]) / 3];
+    // Each sample is premultiplied by its own alpha: straight colour per channel, then the shared alpha.
+    const alpha = (red[3] + green[3] + blue[3]) / 3;
+    lensColor = [red[0] / Math.max(red[3], 1e-6) * alpha, green[1] / Math.max(green[3], 1e-6) * alpha,
+      blue[2] / Math.max(blue[3], 1e-6) * alpha, alpha];
   }
 
   const vignetteMask = smoothstep(Math.max(0, 1 - adjustment.vignetteSoftness), 1, radius);
@@ -334,7 +338,8 @@ function applyFisheyeAdjustment(
 export function hasWorkerSoftwareSourceResamplingEffects(
   pixelEffects: WorkerRenderSoftwarePixelEffects | undefined,
 ): boolean {
-  return (pixelEffects?.kaleidoscopeAdjustments?.length ?? 0) > 0
+  return (pixelEffects?.uvDistortAdjustments?.length ?? 0) > 0
+    || (pixelEffects?.kaleidoscopeAdjustments?.length ?? 0) > 0
     || (pixelEffects?.fisheyeAdjustments?.length ?? 0) > 0
     || (pixelEffects?.motionBlurAdjustments?.length ?? 0) > 0
     || (pixelEffects?.radialBlurAdjustments?.length ?? 0) > 0
@@ -348,10 +353,14 @@ export function applyWorkerSoftwareSourceResamplingEffects(
   x: number,
   y: number,
   pixelEffects: WorkerRenderSoftwarePixelEffects,
+  timelineTime = 0,
 ): readonly [number, number, number, number] | null {
   const uvX = (x + 0.5) / width;
   const uvY = (y + 0.5) / height;
   let output: readonly [number, number, number, number] | null = null;
+  for (const adjustment of pixelEffects.uvDistortAdjustments ?? []) {
+    output = applyWorkerSoftwareUvDistort(sourceData, width, height, uvX, uvY, adjustment, timelineTime);
+  }
   for (const adjustment of pixelEffects.kaleidoscopeAdjustments ?? []) {
     output = applyKaleidoscopeAdjustment(sourceData, width, height, uvX, uvY, adjustment);
   }

@@ -1875,7 +1875,7 @@ describe('worker software preview frame builder', () => {
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
   });
 
-  it('renders Wave through its own graph in worker software pixel effects', async () => {
+  it('carries a built-in Wave into the hand-written worker software pass', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({
         effects: [{
@@ -1891,9 +1891,10 @@ describe('worker software preview frame builder', () => {
 
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
-    // No hand-written software copy: the graph is the single definition of Wave.
-    expect(frame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toHaveLength(1);
-    expect(frame.frame.layers[0]?.pixelEffects).not.toHaveProperty('waveAdjustments');
+    // The untouched recipe runs as the hand-written pass (missing controls take their defaults).
+    expect(frame.frame.layers[0]?.pixelEffects.uvDistortAdjustments).toEqual([{ kind: 'wave', edges: 0,
+      amplitudeX: 0.01, amplitudeY: 0.02, frequencyX: 4, frequencyY: 6, speed: 0.5, phaseDegrees: 0 }]);
+    expect(frame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toBeUndefined();
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
@@ -2055,7 +2056,7 @@ describe('worker software preview frame builder', () => {
     expect(hasWorkerSoftwareBlockingSkips(rom1Frame.diagnostics)).toBe(false);
   });
 
-  it('renders Twirl and Bulge through their graphs in worker software pixel effects', async () => {
+  it('carries built-in Twirl and Bulge into the hand-written worker software pass', async () => {
     const twirlFrame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({
         effects: [{
@@ -2081,12 +2082,12 @@ describe('worker software preview frame builder', () => {
       { width: 640, height: 360 },
     );
 
-    expect(twirlFrame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toHaveLength(1);
-    expect(twirlFrame.frame.layers[0]?.pixelEffects).not.toHaveProperty('twirlAdjustments');
+    expect(twirlFrame.frame.layers[0]?.pixelEffects.uvDistortAdjustments).toEqual([{ kind: 'twirl', edges: 0, stretchToFrame: false,
+      amount: 1.2, radius: 0.75, centerX: 0.5, centerY: 0.45 }]);
     expect(twirlFrame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(twirlFrame.diagnostics)).toBe(false);
-    expect(bulgeFrame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toHaveLength(1);
-    expect(bulgeFrame.frame.layers[0]?.pixelEffects).not.toHaveProperty('bulgeAdjustments');
+    expect(bulgeFrame.frame.layers[0]?.pixelEffects.uvDistortAdjustments).toEqual([{ kind: 'bulge', edges: 0, stretchToFrame: false,
+      amount: 1.4, radius: 0.6, centerX: 0.55, centerY: 0.5 }]);
     expect(bulgeFrame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(bulgeFrame.diagnostics)).toBe(false);
   });
@@ -2131,7 +2132,9 @@ describe('worker software preview frame builder', () => {
     );
 
     expect(frame.frame.layers).toHaveLength(1);
+    // One hand-written pass holds one resampling effect: a stack runs as ordered graph plans.
     expect(frame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toHaveLength(2);
+    expect(frame.frame.layers[0]?.pixelEffects.uvDistortAdjustments).toBeUndefined();
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
   });
 

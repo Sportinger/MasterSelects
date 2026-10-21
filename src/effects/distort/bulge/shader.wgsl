@@ -23,7 +23,8 @@ fn bulgeFragment(input: VertexOutput) -> @location(0) vec4f {
   let p = (input.uv - center) * scale;
   let r = length(p) / max(params.radius, 0.0001);
   let inside = max(1.0 - r * r, 0.0);
-  let beta = max(params.amount - 1.0, 0.0) * 1.232 - clamp(1.0 - params.amount, 0.0, 1.0) * 0.95;
+  // Above 1 the centre is magnified Amount times; a pinch stays above beta = -1 (never folds).
+  let beta = log(max(params.amount, 1.0)) - clamp(1.0 - params.amount, 0.0, 1.0) * 0.95;
   let moved = p * exp(-beta * inside * inside);
   return distortSampleEdges(inputTex, texSampler, center + moved / scale, params.edges, resolution);
 }

@@ -3,6 +3,8 @@ import { handleAddEffect, handleUpdateEffect } from '../../src/services/aiTools/
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { fisheyeParameterWarnings } from '../../src/effects/distort/fisheye/normalization';
+import { getEffect } from '../../src/effects';
+import type { EffectDefinition } from '../../src/effects/types';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const initialTimelineState = useTimelineStore.getState();
@@ -42,5 +44,29 @@ describe('distort effects report values they clamp or cannot show', () => {
       'samples: 5 is not 1, 4 or 8; using 4.',
     ]);
     expect(fisheyeParameterWarnings({ strength: -.5, samples: 8 })).toEqual([]);
+  });
+  it('names unknown Shape and Frame Edges choices instead of falling back silently', async () => {
+    const warnings = (type: string, params: Record<string, string | number>) => (getEffect(type) as EffectDefinition).paramWarnings!(params);
+    expect(warnings('twirl', { radius: .5, shape: 'oval', edges: 'wrap' })).toEqual([
+      'shape: "oval" is not an option; using circle.', 'edges: "wrap" is not an option; using mirror.']);
+    expect(warnings('bulge', { amount: 2, radius: .5, edges: 'repeat' })).toEqual(['edges: "repeat" is not an option; using mirror.']);
+    expect(warnings('wave', { edges: 'tile' })).toEqual(['edges: "tile" is not an option; using mirror.']);
+    expect(warnings('wave', { edges: 'transparent' })).toEqual([]);
+    const wave = data(await handleAddEffect({ clipId: 'video-clip', effectType: 'wave', params: { edges: 'tile' } }, useTimelineStore.getState()));
+    expect(wave.warnings).toContain('edges: "tile" is not an option; using mirror.');
+  });
+
+  it('judges a Lens Correction fold at the active composition size', async () => {
+    // An optical centre near the left edge reaches much farther on a wide frame than on a tall one.
+    const lens = getEffect('lens-correction') as EffectDefinition;
+    const params = (distortion: number) => ({ ...Object.fromEntries(Object.entries(lens.params).map(([id, schema]) => [id, schema.default])), centerX: .15, distortion }) as Record<string, number | string | boolean>;
+    const folds = (distortion: number, width: number, height: number) => lens.paramWarnings!(params(distortion), width, height).some(text => text.includes('fold'));
+    const distortion = [-5, -10, -15, -20, -25, -30, -35, -40, -50, -60, -70, -80].find(value => folds(value, 1920, 1080) !== folds(value, 1080, 1920));
+    expect(distortion).toBeDefined();
+    const tall = { id: 'tall', name: 'Tall', width: 1080, height: 1920 } as never;
+    vi.mocked(useMediaStore.getState).mockReturnValue({ ...initialMediaState, activeCompositionId: 'tall', compositions: [tall],
+      getActiveComposition: () => tall } as ReturnType<typeof useMediaStore.getState>);
+    const added = data(await handleAddEffect({ clipId: 'video-clip', effectType: 'lens-correction', params: { centerX: .15, distortion: distortion! } }, useTimelineStore.getState()));
+    expect((added.warnings ?? []).some(text => text.includes('fold'))).toBe(folds(distortion!, 1080, 1920));
   });
 });

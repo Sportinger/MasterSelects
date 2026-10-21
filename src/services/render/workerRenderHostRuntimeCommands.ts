@@ -1,3 +1,4 @@
+import type { WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
 import type {
   RenderCommand,
   RenderCommandTarget,
@@ -203,6 +204,8 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly size: number;
     readonly speed: number;
   }[];
+  /** Untouched built-in Wave, Twirl and Bulge & Pinch (edited graphs run as imageOperatorPlans). */
+  readonly uvDistortAdjustments?: readonly WorkerSoftwareUvDistortAdjustment[];
   readonly kaleidoscopeAdjustments?: readonly {
     readonly segments: number;
     readonly rotation: number;

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { Effect } from '../../src/types/effects';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
-import { effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { getDefaultEffectParams } from '../../src/stores/timeline/utils';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
 import { packOperatorCompositions } from '../../src/services/operators/operatorComposition';
@@ -47,10 +48,21 @@ describe('saved Wave, Twirl and Bulge upgrade', () => {
     expect(matchesEffectRecipe(effectOperatorGraph(migrated), edited)).toBe(true);
   });
 
-  it.each(cases)('leaves a new %s without a saved graph on the current defaults', (type, _legacy, current, params) => {
+  it.each(cases)('leaves a new %s without a saved graph (every default filled in) on its own values', (type, _legacy, current, params) => {
+    const fresh = { ...getDefaultEffectParams(type), ...params };
+    const migrated = migratePersistedEffectOperatorGraph(effect(type, fresh));
+    expect(matchesEffectRecipe(migrated.operatorGraph!, current())).toBe(true);
+    expect(migrated.params).toEqual(fresh);
+  });
+
+  it.each(cases)('keeps the original look of a %s saved before effects owned a graph', (type, _legacy, current, params, legacyParams) => {
+    // Projects from before the graph migration stored only the original four parameters.
     const migrated = migratePersistedEffectOperatorGraph(effect(type, { ...params }));
     expect(matchesEffectRecipe(migrated.operatorGraph!, current())).toBe(true);
-    expect(migrated.params).toEqual(params);
+    expect(migrated.params).toEqual({ ...params, ...legacyParams });
+    const compiled = effectOperatorParams(migrated);
+    for (const [id, value] of Object.entries(legacyParams)) expect(compiled[id]).toBe(value);
+    expect(migratePersistedEffectOperatorGraph(migrated).params).toEqual(migrated.params);
   });
 
   it('materializes transition swirls and drops with the frame-shaped, clamped look of the compositor transition', () => {

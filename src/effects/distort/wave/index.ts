@@ -3,7 +3,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
-import { EDGES_PARAM, UV_DISTORT_COMMON_WGSL, distortNumber, edgeIndex } from '../uvDistortParams';
+import { EDGES_PARAM, UV_DISTORT_COMMON_WGSL, choiceWarnings, distortNumber, edgeIndex } from '../uvDistortParams';
 
 export const wave: EffectDefinition = {
   id: 'wave',
@@ -76,6 +76,7 @@ export const wave: EffectDefinition = {
     },
   },
 
+  paramWarnings: params => choiceWarnings(params, ['edges']),
   packUniforms: (params, width, height, time = 0) => new Float32Array([
     distortNumber(params.amplitudeX, 0.015),
     distortNumber(params.amplitudeY, 0.015),

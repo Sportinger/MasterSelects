@@ -11,9 +11,9 @@ import { BlurGraphBuilder, premultipliedSourceCache, unpremultiplyNodes, type Gr
  * - Bulge & Pinch: the offset p becomes p * exp(-beta * (1 - r^2)^2) with r = |p| / radius.
  *   The weight is smooth at the rim (no visible ring) and finite at the centre (no smear).
  *   Amount keeps its meaning: 1 leaves the picture alone, above 1 bulges, below 1 pinches.
- *   beta = BULGE_BETA_PER_AMOUNT * max(amount - 1, 0) - PINCH_BETA_LIMIT * clamp(1 - amount, 0, 1):
- *   bulging is unbounded, pinching stays above beta = -1, which keeps the mapping monotonic,
- *   so a pinch never folds the picture back on itself, whatever value arrives.
+ *   beta = ln(max(amount, 1)) - PINCH_BETA_LIMIT * clamp(1 - amount, 0, 1): above 1 the centre is
+ *   magnified exactly Amount times (2 = twice as large), pinching stays above beta = -1, which
+ *   keeps the mapping monotonic, so a pinch never folds the picture back on itself.
  * - Twirl: rotation of amount * (1 - r)^2 radians about the centre (unchanged curve).
  * - Wave: y += sin(tau * frequencyX * x + phase) * amplitudeX, then
  *   x += sin(tau * frequencyY * y' + phase) * amplitudeY, phase = phase degrees + tau * speed * time.
@@ -23,7 +23,6 @@ import { BlurGraphBuilder, premultipliedSourceCache, unpremultiplyNodes, type Gr
  * - Alpha: the single bilinear sample reads the frame premultiplied (an rgba16float cache) and
  *   the result is unpremultiplied, so cut-outs and transparent edges keep their colour.
  */
-export const BULGE_BETA_PER_AMOUNT = 1.232;
 export const PINCH_BETA_LIMIT = 0.95;
 export const RADIUS_EPSILON = 1e-4;
 export type DistortEdgeMode = 'mirror' | 'clamp' | 'transparent';
@@ -102,11 +101,11 @@ export function createDefaultBulgeGraph(): EffectOperatorGraph {
   g.binary('bulge-inside-clamped', 'math.max.scalar', 'bulge-inside', 'zero');
   g.binary('bulge-weight', 'math.multiply.scalar', 'bulge-inside-clamped', 'bulge-inside-clamped');
   g.bound('bulge-amount', 'amount');
-  g.number('bulge-beta-per-amount', BULGE_BETA_PER_AMOUNT); g.number('pinch-beta-limit', -PINCH_BETA_LIMIT);
+  g.number('pinch-beta-limit', -PINCH_BETA_LIMIT);
   // Branch-free on purpose: animating Amount across 1 only refills a uniform, it never swaps the shader.
-  g.binary('bulge-excess-raw', 'math.subtract.scalar', 'bulge-amount', 'one');
-  g.binary('bulge-excess', 'math.max.scalar', 'bulge-excess-raw', 'zero');
-  g.binary('bulge-beta', 'math.multiply.scalar', 'bulge-excess', 'bulge-beta-per-amount');
+  // ln(max(Amount, 1)): the centre magnification equals Amount, and never a log of 0 or less.
+  g.binary('bulge-magnification', 'math.max.scalar', 'bulge-amount', 'one');
+  g.unary('bulge-beta', 'math.log.scalar', 'bulge-magnification');
   g.binary('pinch-depth-raw', 'math.subtract.scalar', 'one', 'bulge-amount');
   g.add('pinch-depth', 'math.clamp.scalar', { value: 'pinch-depth-raw', min: 'zero', max: 'one' });
   g.binary('pinch-beta', 'math.multiply.scalar', 'pinch-depth', 'pinch-beta-limit');

@@ -34,7 +34,8 @@ export function GuidedPerspectiveControls({ params, onChange, clipId, effectInst
           panelId: getFirstEditablePreviewPanelId() });
       }}
       onPointerUp={event => event.currentTarget.blur()}>Edit guides</button></ResolveInspectorRow>
-    <p className="effect-info">{guides.length ? `${guides.length} guides applied.` : 'Draw at least two vertical or horizontal guides, up to eight per direction.'}
+    <p className="effect-info">{clip && clip.source?.type !== 'image' ? 'Guides can be drawn on still photos (image clips) only. '
+      : ''}{guides.length ? `${guides.length} guides applied.` : 'Draw at least two vertical or horizontal guides, up to eight per direction.'}
       {' '}Apply Lens Correction before this effect. Draw in Preview; wheel or pinch to zoom, right-click a guide to remove it.</p>
     {(['strength', 'scale'] as const).map(key => <ResolveInspectorNumberRow key={key}
       label={key === 'strength' ? 'Strength' : 'Scale'} value={typeof params[key] === 'number' ? params[key] as number : 100}

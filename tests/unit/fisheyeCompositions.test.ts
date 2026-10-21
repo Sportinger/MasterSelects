@@ -20,7 +20,7 @@ describe('Fisheye shared nested compositions', () => {
     const original = createDefaultFisheyeGraph(), graph = composed(), expanded = expandOperatorCompositions(graph);
     expect(graph.nodes.filter(node => node.operator === 'coordinates.restore-lens.vec2')).toHaveLength(3);
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'coordinates.divide-x.vec2')).toHaveLength(6);
-    expect(expanded.nodes).toHaveLength(260);
+    expect(expanded.nodes).toHaveLength(269);
     // 19 presentation areas, 3 lens transforms, 6 nested divides and 1 shared sample normalization.
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'sampling.normalize-rgba')).toHaveLength(1);
     expect(expanded.groups).toHaveLength(29);

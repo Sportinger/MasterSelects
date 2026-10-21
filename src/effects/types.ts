@@ -83,8 +83,9 @@ export interface FullscreenEffectDefinition {
    * Optional: notes for values the renderer clamps, ignores or cannot show (e.g. an
    * out-of-range number or a setting with no visible result). Tool results return them as
    * warnings; effect inspectors may show them. Never silent about a degraded value.
+   * width/height: the active composition size (callers pass it; 1920x1080 when unknown).
    */
-  paramWarnings?: (params: Record<string, number | boolean | string>) => string[];
+  paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
 
   // Optional: Multi-pass for complex effects (blur, glow, etc.)
   passes?: number;

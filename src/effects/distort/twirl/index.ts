@@ -3,7 +3,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
-import { EDGES_PARAM, SHAPE_PARAM, UV_DISTORT_COMMON_WGSL, distortNumber, edgeIndex, radiusWarnings, shapeIndex } from '../uvDistortParams';
+import { EDGES_PARAM, SHAPE_PARAM, UV_DISTORT_COMMON_WGSL, choiceWarnings, distortNumber, edgeIndex, radiusWarnings, shapeIndex } from '../uvDistortParams';
 
 export const twirl: EffectDefinition = {
   id: 'twirl',
@@ -58,7 +58,7 @@ export const twirl: EffectDefinition = {
     edges: EDGES_PARAM,
   },
 
-  paramWarnings: radiusWarnings,
+  paramWarnings: params => [...radiusWarnings(params), ...choiceWarnings(params)],
   packUniforms: (params, width, height) => new Float32Array([
     distortNumber(params.amount, 2),
     distortNumber(params.radius, 0.5),

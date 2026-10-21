@@ -21,3 +21,14 @@ export function radiusWarnings(params: Record<string, number | boolean | string>
   return typeof radius === 'number' && !(radius > 0)
     ? [`radius: ${radius} leaves no area to distort, so the picture is unchanged. Use a radius above 0 (0.5 = half the shorter frame side).`] : [];
 }
+
+const CHOICES = { shape: SHAPE_PARAM, edges: EDGES_PARAM } as const;
+
+/** Shape and Frame Edges fall back to their default for an unknown value (as the graph does): say so. */
+export function choiceWarnings(params: Record<string, number | boolean | string>, ids: readonly (keyof typeof CHOICES)[] = ['shape', 'edges']): string[] {
+  return ids.flatMap(id => {
+    const value = params[id], schema = CHOICES[id];
+    return value === undefined || schema.options?.some(option => option.value === value) ? []
+      : [`${id}: "${String(value)}" is not an option; using ${String(schema.default)}.`];
+  });
+}

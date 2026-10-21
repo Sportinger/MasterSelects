@@ -8,8 +8,7 @@ import { isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
-
-const GRAPH_ONLY_SOFTWARE_EFFECTS = new Set(['wave', 'twirl', 'bulge']);
+import { workerSoftwareUvDistortAdjustment, type WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
@@ -103,6 +102,7 @@ interface MutableWorkerSoftwarePixelEffects {
   }[];
   scanlineAdjustments?: { density: number; opacity: number; speed: number }[];
   grainAdjustments?: { amount: number; size: number; speed: number }[];
+  uvDistortAdjustments?: WorkerSoftwareUvDistortAdjustment[];
   kaleidoscopeAdjustments?: { segments: number; rotation: number }[];
   fisheyeAdjustments?: {
     projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';
@@ -312,6 +312,17 @@ function effectFilterPart(
         speed: finiteEffectNumber(effect.params.speed, 1),
       });
       return '';
+    case 'wave':
+    case 'twirl':
+    case 'bulge': {
+      // Only the untouched built-in recipe reaches this switch (see workerSoftwareEffectPlanForLayer).
+      const adjustment = workerSoftwareUvDistortAdjustment(effect);
+      if (adjustment === undefined) return null;
+      if (adjustment === null) return '';
+      if (!canAddSourceResamplingEffect(pixelEffects)) return null;
+      (pixelEffects.uvDistortAdjustments ??= []).push(adjustment);
+      return '';
+    }
     case 'kaleidoscope':
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
       (pixelEffects.kaleidoscopeAdjustments ??= []).push({
@@ -419,10 +430,11 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
-  // Wave, Twirl and Bulge have no hand-written software path: their graph is the only definition.
+  // Built-in Wave, Twirl and Bulge keep a hand-written pass even with a stored copy of their
+  // recipe (interpreting their graph per pixel is far slower); edited graphs run as graphs.
   const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
-    && (effect.operatorGraph || effect.params.operatorGraph !== undefined || GRAPH_ONLY_SOFTWARE_EFFECTS.has(effect.type)));
-  if (hasPersistedImageGraph) {
+    && (effect.operatorGraph || effect.params.operatorGraph !== undefined) && workerSoftwareUvDistortAdjustment(effect) === undefined);
+  const graphPlans = (): WorkerSoftwareEffectPlan | null => {
     if (!activeEffects.every(effect => isImageGraphEffectType(effect.type))) return null;
     try {
       const plans: ImageOperatorPlan[] = [];
@@ -435,11 +447,16 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
         owners.push({ feedbackKey: JSON.stringify([layer.id, effect.id]), reset: effect.params.reset === true,
           historyLoop: resolveFeedbackHistoryLoop(effect.params) });
       }
-      pixelEffects.imageOperatorPlans = plans;
-      pixelEffects.imageOperatorPlanOwners = owners;
-      return { filter: 'none', pixelEffects };
+      const graphEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
+      graphEffects.imageOperatorPlans = plans;
+      graphEffects.imageOperatorPlanOwners = owners;
+      return { filter: 'none', pixelEffects: graphEffects };
     } catch { return null; }
-  }
+  };
+  if (hasPersistedImageGraph) return graphPlans();
+  // The hand-written pass holds one resampling effect; stacked built-in distorts (Wave then
+  // Twirl, …) run as ordered graph plans instead of skipping the layer.
+  const stackedFallback = () => activeEffects.some(effect => workerSoftwareUvDistortAdjustment(effect)) ? graphPlans() : null;
   const parts: string[] = [];
   let activeVisualEffectCount = 0;
   for (const effect of layer.effects) {
@@ -447,7 +464,7 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
       activeVisualEffectCount += 1;
     }
     const part = effectFilterPart(effect, pixelEffects, layer.id, outputSize);
-    if (part === null) return null;
+    if (part === null) return stackedFallback();
     if (part) parts.push(part);
   }
   const feedbackEffectCount = (pixelEffects.acuarelaAdjustments?.length ?? 0)
