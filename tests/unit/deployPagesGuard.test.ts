@@ -151,6 +151,40 @@ describe('deploy:pages guard', () => {
   });
 });
 
+describe('deploy:pages tool errors', () => {
+  function failingGh(error: Error) {
+    const run = fakeRun();
+    return (command: string, args: string[]): string => {
+      if (command === 'gh') { calls.push([command, ...args]); throw error; }
+      return run(command, args);
+    };
+  }
+
+  it('explains a missing GitHub CLI instead of a raw spawn error', async () => {
+    const missing = Object.assign(new Error('gh was not found; install it or add it to PATH'), { code: 'ENOENT' });
+    const error = await runDeploy(['--skip-build'], failingGh(missing)).catch((caught: unknown) => caught);
+    expect((error as DeployGuardError).step).toBe('CI check');
+    expect((error as Error).message).toMatch(/GitHub CLI gh was not found; install it and run `gh auth login` \(it is required to prove a green Security Checks run/);
+    expect(deployCalls()).toEqual([]);
+  });
+
+  it('explains an unauthenticated GitHub CLI', async () => {
+    const unauthenticated = Object.assign(new Error('Command failed: gh run list'), {
+      status: 4, stderr: 'To get started with GitHub CLI, please run:  gh auth login\n',
+    });
+    const error = await runDeploy(['--skip-build'], failingGh(unauthenticated)).catch((caught: unknown) => caught);
+    expect((error as Error).message).toMatch(/GitHub CLI gh is not authenticated; run `gh auth login`/);
+    expect(deployCalls()).toEqual([]);
+  });
+
+  it('refuses a custom --dist when it would build into dist', async () => {
+    const error = await runDeploy(['--dist', 'out']).catch((caught: unknown) => caught);
+    expect((error as DeployGuardError).step).toBe('Argument check');
+    expect((error as Error).message).toMatch(/--dist out needs --skip-build/);
+    expect(calls).toEqual([]);
+  });
+});
+
 describe('deploy:pages entrypoint', () => {
   it('runs when started directly with node (file URL comparison, not a file:// string concat)', () => {
     const script = path.resolve(__dirname, '../../scripts/deploy-pages.mjs');

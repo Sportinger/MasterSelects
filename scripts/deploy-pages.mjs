@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // The one production deploy path for Cloudflare Pages (`npm run deploy:pages`).
 //
 // Tabs opened before a deploy keep running the old build and lazily load its hashed chunk and
@@ -15,12 +14,17 @@
 //          [--project masterselects] [--branch main] [--dist dist]
 // --dry-run runs every check (including the build and the retention into dist) and prints the
 // deploy command instead of running it. --skip-build reuses an existing dist (still checked).
-import { execFileSync } from 'node:child_process';
+// A --dist other than dist needs --skip-build: `npm run build:deploy` always writes dist (build
+// elsewhere with `vite build --outDir <dir>` first).
+//
+// No shebang on purpose: npm runs this with node, and a CRLF after a shebang (Windows checkout
+// without the .gitattributes eol rule) breaks the vitest import of this module.
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { extractAssetReferences, listProductionOrigins, retainFromOrigin } from './retain-deployed-assets.mjs';
 import { checkBuildInfo, checkGreenCi, checkOwnBuild, checkPreviousDeploymentRetained } from './deploy-pages-checks.mjs';
+import { runCommand } from './run-command.mjs';
 
 export function parseDeployArgs(argv) {
   const options = { dryRun: false, skipBuild: false, keep: 8, project: 'masterselects', branch: 'main', dist: 'dist' };
@@ -46,12 +50,6 @@ export class DeployGuardError extends Error {
     this.step = step;
     this.problems = problems;
   }
-}
-
-function defaultRun(command, args, { cwd, inherit = false } = {}) {
-  // npm and npx are .cmd shims on Windows, which execFile only starts through a shell.
-  return execFileSync(command, args, { cwd, encoding: 'utf8', shell: process.platform === 'win32',
-    stdio: inherit ? 'inherit' : ['ignore', 'pipe', 'pipe'] }) ?? '';
 }
 
 function readJson(file) {
@@ -87,18 +85,45 @@ function describeRange(run, cwd, sha) {
   return { files, manifestDiff };
 }
 
+const GH_REQUIRED = 'it is required to prove a green Security Checks run for this commit';
+
+/** Successful Security Checks runs, with a clear message when gh is missing or not logged in. */
+function listGreenSecurityRuns(run, cwd) {
+  let output;
+  try {
+    output = run('gh', ['run', 'list', '--workflow', 'security.yml', '--status', 'success',
+      '--limit', '200', '--json', 'headSha'], { cwd });
+  } catch (error) {
+    if (error?.code === 'ENOENT') {
+      throw new DeployGuardError('CI check', [`GitHub CLI gh was not found; install it and run \`gh auth login\` (${GH_REQUIRED})`]);
+    }
+    const detail = String(error?.stderr || error?.message || error).trim().split('\n').find(Boolean) ?? 'unknown error';
+    const unauthenticated = /auth login|not logged in|authenticat|GH_TOKEN|HTTP 401/i.test(detail);
+    throw new DeployGuardError('CI check', [unauthenticated
+      ? `GitHub CLI gh is not authenticated; run \`gh auth login\` (${GH_REQUIRED}): ${detail}`
+      : `gh run list failed (${GH_REQUIRED}): ${detail}`]);
+  }
+  try {
+    const runs = JSON.parse(output || '[]');
+    if (Array.isArray(runs)) return runs;
+  } catch { /* reported below */ }
+  throw new DeployGuardError('CI check', [`gh run list returned no JSON list: ${String(output).slice(0, 200)}`]);
+}
+
 /**
  * Runs the guarded deploy. `run(command, args, { cwd, inherit })` executes a program and returns
  * its stdout (throwing on a non-zero exit); tests replace it and the global fetch.
  */
-export async function deployPages({ argv = [], cwd = process.cwd(), run = defaultRun, log = console.log } = {}) {
+export async function deployPages({ argv = [], cwd = process.cwd(), run = runCommand, log = console.log } = {}) {
   const options = parseDeployArgs(argv);
   const dist = path.resolve(cwd, options.dist);
+  if (!options.skipBuild && dist !== path.resolve(cwd, 'dist')) {
+    throw new DeployGuardError('Argument check', [`--dist ${options.dist} needs --skip-build: npm run build:deploy writes dist; build into ${options.dist} with \`vite build --outDir ${options.dist}\` first`]);
+  }
   const assetsDir = path.join(dist, 'assets');
 
   const head = run('git', ['rev-parse', 'HEAD'], { cwd }).trim();
-  const ciRuns = JSON.parse(run('gh', ['run', 'list', '--workflow', 'security.yml', '--status', 'success',
-    '--limit', '200', '--json', 'headSha'], { cwd }) || '[]');
+  const ciRuns = listGreenSecurityRuns(run, cwd);
   const ci = checkGreenCi({ head, successfulRuns: ciRuns, describeRange: sha => describeRange(run, cwd, sha) });
   requireNone('CI check', ci.problems);
   log(`[deploy-pages] Security Checks green for ${ci.coveredBy}${ci.coveredBy === head ? '' : ` (HEAD ${head} only bumps the version)`}`);
