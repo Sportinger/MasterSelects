@@ -3,10 +3,8 @@ import { createStoreSpeedSource } from '../timeline/retime/clipRetime';
 import { resolveAudioPreviewRetime } from '../timeline/retime/clipAudioRetime';
 import { readEditorContentPublication } from '../project/repository/transaction/editorPublication';
 // AudioTrackSyncManager - Handles audio element synchronization with playhead
-// Extracted from LayerBuilderService for separation of concerns
-
 import type { TimelineClip, TimelineTrack } from '../../types';
-import type { FrameContext, AudioSyncState, AudioSyncTarget } from './types';
+import type { FrameContext, AudioSyncState } from './types';
 import { LAYER_BUILDER_CONSTANTS } from './types';
 import { createFrameContext, getClipTimeInfo, getMediaFileForClip, getClipForTrack, isVideoTrackVisible } from './FrameContext';
 import {
@@ -32,7 +30,8 @@ import {
 } from '../timeline/lazyMediaElements';
 import { resolveAudioSyncMedia } from './audioSyncMediaResolver';
 import { AudioTrackCompositionPlaybackMixdownManager } from './audioTrackCompositionPlaybackMixdowns';
-import { AudioTrackCrossfadeTransitionSync } from './audioTrackCrossfadeTransitions';
+import { AudioTrackCrossfadeTransitionSync, type AudioCrossfadeFrame } from './audioTrackCrossfadeTransitions';
+import { hasAudioCrossfadeEdge } from '../audio/audioCrossfadePlanning';
 import { AudioTrackHandoffManager } from './audioTrackHandoffs';
 import { AudioTrackRuntimeElementManager } from './audioTrackRuntimeElements';
 import { AudioTrackStemBufferMixerManager } from './audioTrackStemBufferMixers';
@@ -90,6 +89,7 @@ export class AudioTrackSyncManager {
     getClipAudioElement: (clip) => this.getClipAudioElement(clip),
     stemBufferMixers: this.stemBufferMixers,
     stemPreviewElements: this.stemPreviewElements,
+    isPreparedElsewhere: (clipId) => this.crossfadeTransitions.isPrepared(clipId),
   });
   private idleStemRuntimeReleased = true;
 
@@ -105,10 +105,11 @@ export class AudioTrackSyncManager {
     getAudioProxyElementForClip: (clip) => this.getAudioProxyElementForClip(clip),
     getClipSourceMediaFileId: (clip) => this.getClipSourceMediaFileId(clip),
     isAudioSourceClip: (clip) => this.isAudioSourceClip(clip),
+    getLastPlayedElement: (trackId, clipId) => this.audioHandoffs.getLastPlayedElement(trackId, clipId),
     pauseAudioTrackProxy: (clipId) => this.runtimeElements.pauseAudioTrackProxy(clipId),
     stopStemBufferMixer: (clipId) => this.stemBufferMixers.stop(clipId),
     pauseStemAudioElements: (clipId) => this.stemPreviewElements.pauseStemAudioElements(clipId),
-    syncPreviewAudioElement: (target, ctx, state) => this.syncPreviewAudioElement(target, ctx, state),
+    syncPreviewAudioElement: (target, ctx, state) => this.audioSyncHandler.syncAudioElement(target, ctx, state),
   });
 
   constructor() {
@@ -215,13 +216,20 @@ export class AudioTrackSyncManager {
       }
     }
 
+    // Audio crossfades near the playhead; their clips are not cut handoffs.
+    const crossfades = this.crossfadeTransitions.planFrame(ctx);
+    const handoffCrossfades = {
+      overrides: crossfades.handoffOverrides,
+      blocksHandoff: (previousClipId: string, clip: TimelineClip) => this.crossfadeTransitions.blocksHandoff(ctx, previousClipId, clip),
+    };
     // Compute audio handoffs for seamless cut transitions only while playing.
     // Paused/stopped sync must not retain stale proxy elements across resumes.
     if (ctx.isPlaying && !ctx.isDraggingPlayhead) {
       this.audioHandoffs.compute(
         ctx,
         (clip) => this.getAudioProxyElementForClip(clip) ?? this.getClipAudioElement(clip),
-        (clip) => this.getClipSourceMediaFileId(clip)
+        (clip) => this.getClipSourceMediaFileId(clip),
+        handoffCrossfades,
       );
     }
 
@@ -231,7 +239,7 @@ export class AudioTrackSyncManager {
     const activeTransitionAudioClipIds = new Set<string>();
 
     // Sync audio track clips
-    this.syncAudioTrackClips(ctx, state, activeTransitionAudioClipIds);
+    this.syncAudioTrackClips(ctx, state, activeTransitionAudioClipIds, crossfades);
 
     // Sync video clip audio (proxies and elements)
     this.syncVideoClipAudio(ctx, state);
@@ -240,14 +248,15 @@ export class AudioTrackSyncManager {
     this.syncNestedCompMixdown(ctx, state);
 
     // Pause inactive audio
-    this.pauseInactiveAudio(ctx, activeTransitionAudioClipIds);
+    this.pauseInactiveAudio(ctx, activeTransitionAudioClipIds, crossfades);
 
     // Update audio track state for next frame's handoff detection only during playback.
     if (ctx.isPlaying && !ctx.isDraggingPlayhead) {
       this.audioHandoffs.updateLastTrackState(
         ctx,
         (clip) => this.getAudioProxyElementForClip(clip) ?? this.getClipAudioElement(clip),
-        (clip) => this.getClipSourceMediaFileId(clip)
+        (clip) => this.getClipSourceMediaFileId(clip),
+        handoffCrossfades,
       );
     }
 
@@ -261,38 +270,26 @@ export class AudioTrackSyncManager {
     timelineState.clearStaleRuntimeAudioMeters(650, ctx.now);
   }
 
-  private syncPreviewAudioElement(
-    target: AudioSyncTarget,
-    ctx: FrameContext,
-    state: AudioSyncState,
-  ): void {
-    this.audioSyncHandler.syncAudioElement(target, ctx, state);
-  }
-
   /**
    * Sync audio track clips
    */
   private syncAudioTrackClips(
     ctx: FrameContext,
     state: AudioSyncState,
-    activeTransitionAudioClipIds: Set<string>,
+    activeTransitionAudioClipIds = new Set<string>(),
+    crossfades: AudioCrossfadeFrame = this.crossfadeTransitions.planFrame(ctx),
   ): void {
     const regionGainPreview = useTimelineStore.getState().audioRegionGainPreview;
     for (const track of ctx.audioTracks) {
-      const activeCrossfade = this.crossfadeTransitions.getActiveForTrack(ctx, track);
-      if (activeCrossfade) {
-        this.crossfadeTransitions.sync({
-          ctx,
-          state,
-          track,
-          activeTransition: activeCrossfade,
-          activeTransitionAudioClipIds,
-          regionGainPreview,
-        });
+      const crossfadeWindow = crossfades.windows.get(track.id);
+      if (crossfadeWindow) {
+        this.crossfadeTransitions.sync({ ctx, state, track, window: crossfadeWindow, activeTransitionAudioClipIds, regionGainPreview });
         continue;
       }
 
-      const clip = getClipForTrack(ctx, track.id);
+      const trackClip = getClipForTrack(ctx, track.id);
+      // Clips meeting at a crossfaded edit play with the crossfade's de-click.
+      const clip = trackClip ? crossfades.edgeClips.get(trackClip.id) ?? trackClip : undefined;
       if (!clip?.source) continue;
 
       const timeInfo = getClipTimeInfo(ctx, clip);
@@ -369,9 +366,11 @@ export class AudioTrackSyncManager {
       const sourceAudioProxy = needsSourceElement ? this.getAudioProxyElementForClip(clip) : null;
       const sourceAudioElement = sourceAudioProxy ?? compositionAudioElement ?? this.getClipAudioElement(clip);
       const sourceMediaFileId = needsSourceElement ? this.getClipSourceMediaFileId(clip) : undefined;
+      // Crossfaded clips stay on their element: a switch from the buffer mixer
+      // at the crossfade's edge would cut the sound while the element starts.
       const canUseSourceBufferMixer = Boolean(
         sourceMediaFileId && !retime.mutedReason &&
-        needsSourceElement &&
+        needsSourceElement && !hasAudioCrossfadeEdge(clip, ctx.clips, (candidate) => this.isAudioSourceClip(candidate)) &&
         ctx.isPlaying &&
         !ctx.isDraggingPlayhead &&
         this.stemBufferMixers.canUseRouteSettings(routeSettings, timeInfo.absSpeed, timeInfo.speed),
@@ -451,7 +450,7 @@ export class AudioTrackSyncManager {
       // Use handoff element if available (seamless cut transition)
       const handoffAudio = this.audioHandoffs.getHandoffAudioElement(clip.id);
       if (shouldUseSourceAudio && sourceAudioElement) {
-        this.syncPreviewAudioElement({
+        this.audioSyncHandler.syncAudioElement({
           element: handoffAudio ?? sourceAudioElement,
           clip,
           clipTime: timeInfo.clipTime,
@@ -487,7 +486,7 @@ export class AudioTrackSyncManager {
           const meterTrackId = !stemMeterAssigned ? track.id : undefined;
           if (meterTrackId) stemMeterAssigned = true;
 
-          this.syncPreviewAudioElement({
+          this.audioSyncHandler.syncAudioElement({
             element: stemAudio,
             clip,
             clipTime: timeInfo.clipTime,
@@ -536,7 +535,7 @@ export class AudioTrackSyncManager {
       const isMuted = track ? !isVideoTrackVisible(ctx, track.id) : false;
       const routeSettings = getClipAudioRouteSettings(ctx, clip, track, timeInfo.clipLocalTime, timeInfo.clipTime);
 
-      this.syncPreviewAudioElement({
+      this.audioSyncHandler.syncAudioElement({
         element: mixdownAudio,
         clip,
         clipTime: timeInfo.clipTime,
@@ -557,7 +556,7 @@ export class AudioTrackSyncManager {
   /**
    * Pause audio not at playhead
    */
-  private pauseInactiveAudio(ctx: FrameContext, activeTransitionAudioClipIds = new Set<string>()): void {
+  private pauseInactiveAudio(ctx: FrameContext, activeTransitionAudioClipIds = new Set<string>(), crossfades?: Pick<AudioCrossfadeFrame, 'tailElements' | 'preparedClipIds'>): void {
     const activeClipIds = new Set([
       ...ctx.clipsAtTime.map(clip => clip.id),
       ...activeTransitionAudioClipIds,
@@ -572,11 +571,12 @@ export class AudioTrackSyncManager {
         clipAudioElement.pause();
       }
 
+      // A proxy the next clip plays on (a handoff) keeps its route; one whose effect tail still rings after a crossfade
+      // or that an upcoming crossfade positioned is only paused: removing it would cut the sound or waste the preparation.
       const audioTrackProxy = this.runtimeElements.getAudioTrackProxy(clip.id);
-      if (audioTrackProxy && !isAtPlayhead) {
-        this.runtimeElements.removeAudioTrackProxy(clip.id, {
-          shouldPause: element => element.paused || !this.audioHandoffs.hasHandoffElement(element),
-        });
+      if (audioTrackProxy && !isAtPlayhead && !this.audioHandoffs.hasHandoffElement(audioTrackProxy)) {
+        if (crossfades?.tailElements.has(audioTrackProxy) || crossfades?.preparedClipIds.has(clip.id)) pauseAudioElement(audioTrackProxy);
+        else this.runtimeElements.removeAudioTrackProxy(clip.id);
       }
 
       if (clip.mixdownAudio && !isAtPlayhead && !clip.mixdownAudio.paused) {

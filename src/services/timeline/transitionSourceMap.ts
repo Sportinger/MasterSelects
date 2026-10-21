@@ -294,6 +294,17 @@ function resolveV2SegmentTime(
     : null;
 }
 
+/**
+ * The opacity a transition's generated opacity keyframes are relative to: the
+ * clip's own opacity, so a clip at 50 % stays at 50 % through the transition.
+ * A clip at static opacity 0 is made visible only by its own opacity
+ * keyframes; scaling by 0 would erase the fade, so its generated keyframes are
+ * relative to 1 instead (see evaluateTransitionMappedAnimation).
+ */
+export function getTransitionOpacityReference(baseOpacity: number | undefined): number {
+  return typeof baseOpacity === 'number' && Number.isFinite(baseOpacity) && baseOpacity > 1e-6 ? baseOpacity : 1;
+}
+
 /** Returns null for an absent or invalid map rather than fabricating source time. */
 export function resolveTransitionSourceMapTime(
   sourceMap: unknown,

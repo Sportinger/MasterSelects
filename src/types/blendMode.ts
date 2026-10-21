@@ -42,7 +42,10 @@ export type BlendMode =
   | 'stencil-luma'
   | 'silhouette-alpha'
   | 'silhouette-luma'
-  | 'alpha-add';
+  | 'alpha-add'
+  // Internal: Porter-Duff plus (premultiplied colour and alpha are added).
+  // Used by dissolve transitions; not offered in the blend-mode menus.
+  | 'plus';
 
 export const BLEND_MODES = [
   'normal', 'dissolve', 'dancing-dissolve',

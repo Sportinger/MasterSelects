@@ -1,4 +1,5 @@
-﻿import type {
+﻿import { resolveWorkerPresenterBlendIndex } from './workerGpuPresenterBlendModes';
+import type {
   WorkerGpuPresentBaseOptions,
   WorkerGpuPresentDiagnostics,
   WorkerGpuPresentResult,
@@ -110,32 +111,7 @@ const BITMAP_LAYER_COMPOSITE_SHADER = VIDEO_FRAME_LAYER_COMPOSITE_SHADER
     'textureSample(frameTexture, frameSampler, input.uv)',
   );
 
-const BLEND_MODE_TO_GPU_INDEX: Record<string, number> = {
-  normal: 0,
-  dissolve: 0,
-  'dancing-dissolve': 0,
-  multiply: 1,
-  screen: 2,
-  overlay: 3,
-  darken: 4,
-  'darker-color': 4,
-  lighten: 5,
-  'lighter-color': 5,
-  add: 6,
-  'linear-dodge': 6,
-  subtract: 7,
-  'linear-burn': 7,
-  difference: 8,
-  'classic-difference': 8,
-  exclusion: 9,
-  'color-dodge': 10,
-  'classic-color-dodge': 10,
-  'color-burn': 11,
-  'classic-color-burn': 11,
-  'hard-light': 12,
-  'soft-light': 13,
-  divide: 14,
-};
+
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -268,7 +244,7 @@ function createLayerUniformBuffer(
   const f32 = (offset: number, value: number) => view.setFloat32(offset, value, true);
   const u32 = (offset: number, value: number) => view.setUint32(offset, value, true);
   f32(0, Math.max(0, Math.min(1, finiteNumber(layer.opacity, 1))));
-  u32(4, BLEND_MODE_TO_GPU_INDEX[layer.blendMode] ?? 0);
+  u32(4, resolveWorkerPresenterBlendIndex(layer.blendMode));
   f32(8, finiteNumber(layer.inlineBrightness, 0));
   f32(12, finiteNumber(layer.inlineContrast, 1));
   f32(16, finiteNumber(layer.inlineSaturation, 1));

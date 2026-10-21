@@ -37,6 +37,7 @@ import type { Text3DProperties, TextClipProperties } from './text';
 import type {
   ClipTransform,
   TimelineTransition,
+  TransitionAudioEnvelope,
   TransitionRecipeBlendWindow,
   TransitionSourceMap,
 } from './timelineCore';
@@ -238,6 +239,7 @@ export interface TimelineClip {
   transitionSourceTimeOverride?: number; // Runtime-only source time for virtual transition participant clips
   transitionSourceHold?: boolean; // Runtime-only: freeze a virtual transition participant on the override frame
   transitionSourceMap?: TransitionSourceMap;
+  transitionAudioEnvelopes?: TransitionAudioEnvelope[]; // Runtime-only: preview crossfade gains of this sound, multiplied
   transitionRecipeBlendWindows?: TransitionRecipeBlendWindow[];
   // 3D layer support (AE-style per-layer toggle)
   is3D?: boolean;

@@ -1524,6 +1524,52 @@ They stay deterministic without bundled overlay video. `Additive Dissolve` and
 `Non-Additive Dissolve`
 use temporary transition blend windows on the incoming participant, so they
 stay in the same layer assembly path instead of adding one-off shaders.
+`Crossfade` is a true dissolve, outgoing·(1−t) + incoming·t: the incoming clip
+is added with the internal `plus` blend mode (premultiplied), so transparent
+clips (titles, keyed or scaled clips) dissolve too. Clip blend modes carry
+through every transition (`transitionCompositionBlend`): the transition
+composition is drawn in parts, each composited in its own mode over the lower
+tracks. Clips sharing a mode form one part, solids and overlays (Dip, Light
+Leak, …) are separate parts, and clips with different modes are two parts
+(exact at both edges; mid-dissolve shows a little of the lower tracks). Clips
+added inside the composition below the transition's own clips are a separate
+Normal part, so `plus` does not add them; if the transition's clips cannot be
+found among the layers, their mode stays inside the composition and a warning is
+logged; an incoming clip moved below the outgoing one inside the composition
+takes the Normal mode and the upper clip gets `plus`. Audio (Include audio, or
+two audio clips) uses one plan for preview, Properties and export
+(`audioCrossfadePlanning`, `audioCrossfadeGains`): the fade runs only where both
+clips have sound, with 5 ms de-clicks when they overlap less than 10 ms, and the
+gains apply before the clip and track effects, so effect tails ring out alike.
+Preview schedules them on each route's pre-effect gain on the audio clock
+(`audioCrossfadePreviewVoices`): the incoming sound starts 0.25 s early at gain
+0, crossfaded clips stay on their own audio element (no buffer mixer, no cut
+handoff), and the halves of one recording (same file and source offset) play
+once with both gains added, as the export's sample sum does. That one-voice
+choice is made once per crossfade from both routes at the edit (ids ignored),
+so keyframed volume or EQ cannot switch voices mid-fade. The outgoing sound
+stays on the element it already plays on (its own, a cut handoff's or a split
+recording's), and an upcoming incoming element or audio proxy is positioned,
+paused and routed ahead; dropped proxy clones dispose their route, and a route
+removed while it is still being built is cancelled. A track plays one window at
+a time: around a short clip the later crossfade's pre-roll waits until the
+earlier window ends, and crossfades that overlap on one clip start the later
+one where the earlier ends (logged; export renders both). A clip with fades on
+both edges keeps both, multiplied as in export, and crossfaded edges never
+apply their automatic cut de-click. The faded-out sound's effect tail (clip and
+track effects) keeps the route of the element it played on connected, also when
+that is another clip's proxy from a cut handoff. Clips playing audible separated stems
+cut at the edit in preview (logged); export renders their crossfade. Retimed, reversed
+or composition clips cannot play their extra footage in step, so they meet at
+the edit everywhere (Properties: "Cut (retimed clip)"). Audio curve: Auto
+(default; also for crossfades saved without one) is Equal gain for the halves of
+one recording and Equal power otherwise. Audio crossfades inside a nested
+composition are not rendered; its mixdown cuts at the edit in preview and
+export, and the export log says so. Default length 1 s, snapped to project
+frames in Properties; the Transitions panel's length field is Auto unless a
+length is typed. Checked in the editor on a real GPU against (1−t)·A + t·B and
+a recording of the preview output.
+User guide with pictures: [Dissolve Transitions](./Transitions-Dissolve.md).
 
 The current user-facing suite is grouped by family in the Transitions panel and
 the transition-scoped Properties tab. It includes dissolve/dip, directional

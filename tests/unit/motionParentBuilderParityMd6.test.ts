@@ -6,13 +6,13 @@ import {
   initializeLayerBuilder,
 } from '../../src/engine/export/ExportLayerBuilder';
 import { buildBaseLayerProps, buildNestedBaseLayer } from '../../src/engine/export/layerBuilder/baseLayers';
-import { buildTransitionCompositionLayerForExport } from '../../src/engine/export/layerBuilder/nestedLayers';
+import { buildTransitionCompositionLayersForExport } from '../../src/engine/export/layerBuilder/nestedLayers';
 import type { FrameContext as ExportFrameContext } from '../../src/engine/export/types';
 import { LayerBuilderService } from '../../src/services/layerBuilder/LayerBuilderService';
 import { buildNestedLayerBase } from '../../src/services/layerBuilder/layerBuilderNestedLayers';
-import { buildLayerBuilderNestedTransitionLayer } from '../../src/services/layerBuilder/layerBuilderNestedTransitionLayer';
+import { buildLayerBuilderNestedTransitionLayers } from '../../src/services/layerBuilder/layerBuilderNestedTransitionLayer';
 import { LayerBuilderProxyFrames } from '../../src/services/layerBuilder/layerBuilderProxyFrames';
-import { buildLayerBuilderTransitionCompositionLayer } from '../../src/services/layerBuilder/layerBuilderTransitionComposition';
+import { buildLayerBuilderTransitionCompositionLayers } from '../../src/services/layerBuilder/layerBuilderTransitionComposition';
 import { evaluateParentedClipTransform } from '../../src/services/layerBuilder/parentTransformEvaluation';
 import { compositionRenderer } from '../../src/services/compositionRenderer';
 import { useMediaStore } from '../../src/stores/mediaStore';
@@ -455,13 +455,13 @@ describe('MD6 parent transform builder parity', () => {
 
     const service = new LayerBuilderService();
     const previewContext = service.captureFrameContext(9.5);
-    const previewTransition = buildLayerBuilderTransitionCompositionLayer(
+    const [previewTransition] = buildLayerBuilderTransitionCompositionLayers(
       activeTransition,
       0,
       previewContext,
       new LayerBuilderProxyFrames(),
     );
-    const exportTransition = buildTransitionCompositionLayerForExport({
+    const [exportTransition] = buildTransitionCompositionLayersForExport({
       activeTransition,
       layerIndex: 0,
       parentCompositionId: 'export',
@@ -642,15 +642,15 @@ describe('MD6 parent transform builder parity', () => {
       compositionById: new Map([[transitionComposition.id, transitionComposition]]),
     } as typeof ctx;
 
-    const transitionLayer = buildLayerBuilderNestedTransitionLayer({
+    const [transitionLayer] = buildLayerBuilderNestedTransitionLayers({
       parentClip: wrapper,
       nestedTrack,
       layerIndex: 0,
       clipTime: nestedTransitionTime,
       ctx: nestedTransitionContext,
-    });
+    }) ?? [];
 
-    expect(transitionLayer).not.toBeNull();
+    expect(transitionLayer).toBeDefined();
     expect(compositionRenderer.evaluateAtTime).toHaveBeenCalled();
     expect(transitionLayer?.source?.nestedComposition?.layers[0]?.position.x)
       .toBe(nestedTransitionTime / 4 * 100 + 5);

@@ -221,7 +221,9 @@ describe('transition registry', () => {
 
   it('defines first-pass render models through primitive recipes', () => {
     expect(getTransition('crossfade')?.recipe).toEqual([
+      expect.objectContaining({ kind: 'opacity', target: 'outgoing', from: 1, to: 0 }),
       expect.objectContaining({ kind: 'opacity', target: 'incoming', from: 0, to: 1 }),
+      { kind: 'blend', target: 'incoming', mode: 'plus' },
     ]);
     expect(getTransition('dip-to-color')?.recipe).toContainEqual({ kind: 'solid', color: '#000000', colorParam: 'color' });
     expect(getTransition('dip-to-black')?.recipe).toContainEqual({ kind: 'solid', color: '#000000' });

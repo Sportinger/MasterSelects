@@ -15,7 +15,7 @@ import {
   hydrateTransitionCompositionTimeline,
   type TransitionCompositionSourceResolver,
 } from '../../../services/layerBuilder/layerBuilderTransitionComposition';
-import { createTransitionNestedCompositionLayer } from '../../../services/layerBuilder/transitionNestedCompositionLayer';
+import { createTransitionNestedCompositionLayers } from '../../../services/layerBuilder/transitionNestedCompositionLayer';
 import type { ExportClipStateLike } from './contracts';
 import { buildNestedBaseLayer, getClipKeyframes } from './baseLayers';
 import { buildFlockLayerSource } from '../../../services/layerBuilder/layerBuilderFlockLayers';
@@ -113,7 +113,8 @@ function tagLinkedExportSourceClipIds(
   }
 }
 
-export function buildTransitionCompositionLayerForExport(params: {
+/** The transition's export layers, top first (one per blend part). */
+export function buildTransitionCompositionLayersForExport(params: {
   activeTransition: ActiveTransitionPlan;
   layerIndex: number;
   parentCompositionId: string;
@@ -130,7 +131,7 @@ export function buildTransitionCompositionLayerForExport(params: {
   depth?: number;
   parentTransformClips?: readonly TimelineClip[];
   parentTransformTimelineTime?: number;
-}): Layer | null {
+}): Layer[] {
   const {
     activeTransition,
     layerIndex,
@@ -151,7 +152,7 @@ export function buildTransitionCompositionLayerForExport(params: {
   } = params;
   const transition = activeTransition.outgoingClip.transitionOut;
   const compositionId = transition?.compositionId;
-  if (!transition || compositionId === parentCompositionId) return null;
+  if (!transition || compositionId === parentCompositionId) return [];
 
   const mediaFileById = new Map(mediaFiles.map(file => [file.id, file]));
   const composition = compositionId
@@ -171,7 +172,7 @@ export function buildTransitionCompositionLayerForExport(params: {
           return sourceClip ? getClipKeyframes(sourceClip) : undefined;
         },
       });
-  if (!composition?.timelineData || composition.transitionComp?.kind !== 'transition-comp') return null;
+  if (!composition?.timelineData || composition.transitionComp?.kind !== 'transition-comp') return [];
 
   const compositionTime = getTransitionCompositionTime(activeTransition, composition, parentTime);
   const nestedTimeline = hydrateTransitionCompositionTimeline({
@@ -217,7 +218,7 @@ export function buildTransitionCompositionLayerForExport(params: {
     },
   );
 
-  return createTransitionNestedCompositionLayer({
+  return createTransitionNestedCompositionLayers({
     transition,
     composition,
     compositionTime,
@@ -270,7 +271,7 @@ export function buildNestedLayersForExport(
         mediaFiles.find((file) => file.id === mediaFileId)?.duration,
     });
     if (activeTransition) {
-      const transitionLayer = buildTransitionCompositionLayerForExport({
+      const transitionLayers = buildTransitionCompositionLayersForExport({
         activeTransition,
         layerIndex: i,
         parentCompositionId: clip.compositionId || clip.id,
@@ -285,9 +286,7 @@ export function buildNestedLayersForExport(
         parentTransformClips: parentTransformContext?.clips ?? clip.nestedClips,
         parentTransformTimelineTime: parentTransformContext?.timelineTime ?? nestedTime,
       });
-      if (transitionLayer) {
-        layers.push(transitionLayer);
-      }
+      layers.push(...transitionLayers);
       continue;
     }
 

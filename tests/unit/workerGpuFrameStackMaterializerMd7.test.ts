@@ -306,6 +306,23 @@ describe('Worker GPU FrameStack materializer MD7', () => {
     expect(materializer.snapshot().state).toBe('finalized');
   });
 
+  it('keeps the premultiplied flag and blend mode of a transition composition layer', () => {
+    const image = new FakeImageBitmap();
+    const gpu = fakeGpu();
+    const transitionBinding = bitmapBinding('transition', image);
+    const materializer = createWorkerGpuFrameStackMaterializer({
+      device: gpu.device,
+      stack: stack([{
+        ...transitionBinding,
+        renderLayer: { ...transitionBinding.renderLayer, blendMode: 'screen', premultipliedAlpha: true },
+      }]),
+    });
+
+    const result = materializer.resolve('transition', gpu.encoder);
+
+    expect(result.data.layer).toMatchObject({ blendMode: 'screen', premultipliedAlpha: true });
+  });
+
   it('makes bitmap upload failure terminal and cleans the registered texture immediately', async () => {
     const image = new FakeImageBitmap();
     const gpu = fakeGpu({ copyThrows: true });

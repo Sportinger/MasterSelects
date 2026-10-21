@@ -26,6 +26,19 @@ export interface TransitionCompositionLink {
 }
 
 /**
+ * Runtime-only gain ramp of a clip's sound inside an audio crossfade, in source
+ * seconds of that clip. Preview schedules it on the route's pre-effect gain, so
+ * an effect tail decays from the faded sound as in export.
+ */
+export interface TransitionAudioEnvelope {
+  /** 'outgoing' 1 → 0, 'incoming' 0 → 1, 'sum' both sides of one continuous recording played once. */
+  role: 'outgoing' | 'incoming' | 'sum';
+  sourceStart: number;
+  sourceEnd: number;
+  curve: 'equal-power' | 'equal-gain';
+}
+
+/**
  * Versioned, plain-data map from transition-composition seconds to source-media
  * seconds. Segments are ordered, contiguous half-open ranges; the final end is
  * included when resolving a clamped time.

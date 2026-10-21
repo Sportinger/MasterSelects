@@ -55,6 +55,7 @@ const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeO
   add: 'lighter',
   'linear-dodge': 'lighter',
   'alpha-add': 'lighter',
+  plus: 'lighter',
 };
 
 export interface WorkerSoftwareEffectPlan {

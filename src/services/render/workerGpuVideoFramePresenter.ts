@@ -1,3 +1,4 @@
+import { resolveWorkerPresenterBlendIndex, WORKER_PRESENTER_PLUS_BLEND_WGSL } from './workerGpuPresenterBlendModes';
 import type {
   WorkerGpuPresentBaseOptions,
   WorkerGpuPresentDiagnostics,
@@ -181,7 +182,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   adjustedRgb = mix(vec3f(luminosity(adjustedRgb)), adjustedRgb, layer.inlineSaturation);
   frameColor = vec4f(clamp(adjustedRgb, vec3f(0.0), vec3f(1.0)), frameColor.a);
   let opacity = clamp(layer.opacity, 0.0, 1.0);
-  let alpha = clamp(frameColor.a * opacity, 0.0, 1.0);
+  let alpha = clamp(frameColor.a * opacity, 0.0, 1.0);${WORKER_PRESENTER_PLUS_BLEND_WGSL}
   let blended = clampColor(blendRgb(baseColor.rgb, frameColor.rgb, layer.blendMode));
   let outAlpha = alpha + baseColor.a * (1.0 - alpha);
   return vec4f(mix(baseColor.rgb, blended, alpha), outAlpha);
@@ -223,32 +224,7 @@ const presenterResourcesBySurface = new WeakMap<WorkerGpuTargetSurface, WorkerGp
 const layerPresenterResourcesBySurface = new WeakMap<WorkerGpuTargetSurface, WorkerGpuVideoFrameLayerPresenterResources>();
 
 
-const BLEND_MODE_TO_GPU_INDEX: Record<string, number> = {
-  normal: 0,
-  dissolve: 0,
-  'dancing-dissolve': 0,
-  multiply: 1,
-  screen: 2,
-  overlay: 3,
-  darken: 4,
-  'darker-color': 4,
-  lighten: 5,
-  'lighter-color': 5,
-  add: 6,
-  'linear-dodge': 6,
-  subtract: 7,
-  'linear-burn': 7,
-  difference: 8,
-  'classic-difference': 8,
-  exclusion: 9,
-  'color-dodge': 10,
-  'classic-color-dodge': 10,
-  'color-burn': 11,
-  'classic-color-burn': 11,
-  'hard-light': 12,
-  'soft-light': 13,
-  divide: 14,
-};
+
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -355,7 +331,7 @@ function finiteNumber(value: number | undefined, fallback: number): number {
 }
 
 function blendModeIndex(value: string): number {
-  return BLEND_MODE_TO_GPU_INDEX[value] ?? 0;
+  return resolveWorkerPresenterBlendIndex(value);
 }
 
 function createLayerUniformBuffer(

@@ -27,7 +27,7 @@ import {
 } from '../timeline/transitionCompositionSourceClips';
 import { buildLayerBuilderNestedLayers } from './layerBuilderNestedLayerBuilder';
 import type { LayerBuilderProxyFrames } from './layerBuilderProxyFrames';
-import { createTransitionNestedCompositionLayer } from './transitionNestedCompositionLayer';
+import { createTransitionNestedCompositionLayers } from './transitionNestedCompositionLayer';
 import type { FrameContext } from './types';
 
 const generatedCanvasCache = new Map<string, HTMLCanvasElement>();
@@ -482,16 +482,17 @@ export function resolveTransitionCompositionRuntime(
   return { composition, compositionTime, nestedTimeline, syntheticClip };
 }
 
-export function buildLayerBuilderTransitionCompositionLayer(
+/** The transition's layers, top first (one per blend part, see createTransitionNestedCompositionLayers). */
+export function buildLayerBuilderTransitionCompositionLayers(
   activeTransition: ActiveTransitionPlan,
   layerIndex: number,
   ctx: FrameContext,
   proxyFrames: LayerBuilderProxyFrames,
-): Layer | null {
+): Layer[] {
   const transition = activeTransition.outgoingClip.transitionOut;
-  if (!transition) return null;
+  if (!transition) return [];
   const runtime = resolveTransitionCompositionRuntime(activeTransition, ctx);
-  if (!runtime) return null;
+  if (!runtime) return [];
   const { composition, compositionTime, nestedTimeline, syntheticClip } = runtime;
   const nestedLayers = buildLayerBuilderNestedLayers({
     clip: syntheticClip,
@@ -502,7 +503,7 @@ export function buildLayerBuilderTransitionCompositionLayer(
     parentTransformTimelineTime: ctx.playheadPosition,
   });
 
-  return createTransitionNestedCompositionLayer({
+  return createTransitionNestedCompositionLayers({
     transition,
     composition,
     compositionTime,

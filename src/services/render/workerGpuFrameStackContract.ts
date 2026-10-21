@@ -242,6 +242,7 @@ const RENDER_LAYER_KEYS = [
   'maskInvert',
   'maskClipId',
   'transitionRender',
+  'premultipliedAlpha',
 ] as const;
 
 type UnknownRecord = Record<string, unknown>;
@@ -466,6 +467,8 @@ function assertRenderLayer(
   if (typeof blendMode !== 'string' || blendMode.length === 0) {
     fail(code, `${path}.blendMode`);
   }
+  const premultipliedAlpha = optionalDataValue(record, 'premultipliedAlpha', path);
+  if (premultipliedAlpha !== undefined && typeof premultipliedAlpha !== 'boolean') fail(code, `${path}.premultipliedAlpha`);
   assertFiniteVector(dataValue(record, 'position', path, code), ['x', 'y', 'z'], `${path}.position`, code);
   const scale = requirePlainRecord(dataValue(record, 'scale', path, code), `${path}.scale`, code);
   if (
@@ -481,15 +484,7 @@ function assertRenderLayer(
     assertFiniteVector(rotation, ['x', 'y', 'z'], `${path}.rotation`, code);
   }
   const videoRotation = optionalDataValue(record, 'videoRotation', path);
-  if (
-    videoRotation !== undefined
-    && videoRotation !== 0
-    && videoRotation !== 90
-    && videoRotation !== 180
-    && videoRotation !== 270
-  ) {
-    fail(code, `${path}.videoRotation`);
-  }
+  if (videoRotation !== undefined && ![0, 90, 180, 270].includes(videoRotation as number)) fail(code, `${path}.videoRotation`);
   const effects = dataValue(record, 'effects', path, code);
   if (!Array.isArray(effects) || effects.length > MOTION_ADJUSTMENT_MAX_EFFECTS_PER_LAYER) {
     fail(code, `${path}.effects`);

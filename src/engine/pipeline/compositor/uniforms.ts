@@ -8,6 +8,8 @@ export const COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT = 36;
 export const COMPOSITOR_UNIFORM_FLOAT_COUNT = COMPOSITOR_LAYER_UNIFORM_FLOAT_COUNT + IMAGE_OPERATOR_PARAMETER_CAPACITY;
 export const COMPOSITOR_UNIFORM_SIZE = COMPOSITOR_UNIFORM_FLOAT_COUNT * 4;
 export const COMPOSITOR_U32_INDICES: readonly number[] = [1, 10, 11, 16, 21, 22, 29]; // blendMode, mask flags, inlineInvert, transitionType, source rotation
+/** Set on the blendMode word (low byte = blend mode) when the layer texture is premultiplied. */
+export const COMPOSITOR_PREMULTIPLIED_SOURCE_FLAG = 0x100;
 
 export interface InlineEffectParams {
   operatorProgram?: ImageOperatorProgram;
@@ -97,7 +99,9 @@ export function writeLayerUniformData(
 
   // Update uniforms
   uniformData[0] = layer.opacity;
-  uniformDataU32[1] = BLEND_MODE_MAP[layer.blendMode]; // blendMode is u32 in shader
+  // blendMode is u32 in shader: low byte = mode, bit 8 = premultiplied source texture
+  uniformDataU32[1] = (BLEND_MODE_MAP[layer.blendMode] ?? 0)
+    | (layer.premultipliedAlpha ? COMPOSITOR_PREMULTIPLIED_SOURCE_FLAG : 0);
   uniformData[2] = layer.position.x;
   uniformData[3] = layer.position.y;
   uniformData[4] = layer.scale.x * sourcePixelScale;

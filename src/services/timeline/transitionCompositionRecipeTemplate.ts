@@ -15,6 +15,8 @@ import {
   getSerializableClip,
 } from './transitionCompositionSourceClips';
 import { buildBakedDatamoshTimelineData } from './datamoshTransitionComposition';
+import { getTransitionTemplateParamsKey } from './transitionTemplateParamsKey';
+import { getTransitionOpacityReference } from './transitionSourceMap';
 
 const TRANSITION_TEMPLATE_VERSION = 4;
 
@@ -39,22 +41,17 @@ export function resolveTransitionColor(
   return getTransitionParamString(transition, colorParam, color);
 }
 
-export function getTransitionTemplateParamsKey(
-  transition: TimelineTransition,
-  _outgoingClip: TimelineClip,
-  _incomingClip: TimelineClip,
-): string {
-  return JSON.stringify({
-    params: Object.entries(transition.params ?? {}).toSorted(([a], [b]) => a.localeCompare(b)),
-  });
-}
+export { getTransitionTemplateParamsKey };
 
 export function buildOpacityKeyframesFromRecipe(
   recipe: readonly TransitionPrimitive[],
   target: TransitionLayerTarget,
   clipId: string,
   duration: number,
+  /** Clip opacity the recipe scales; the mapped animation composes relative to it. */
+  baseOpacity = 1,
 ): Keyframe[] {
+  const reference = getTransitionOpacityReference(baseOpacity);
   const keyframes = recipe
     .filter((primitive): primitive is Extract<TransitionPrimitive, { kind: 'opacity' }> =>
       primitive.kind === 'opacity' && primitive.target === target
@@ -65,11 +62,11 @@ export function buildOpacityKeyframesFromRecipe(
       const easing = primitive.curve ?? 'linear';
       return [
         {
-          ...makeKeyframe(clipId, 'opacity', start, primitive.from, easing),
+          ...makeKeyframe(clipId, 'opacity', start, primitive.from * reference, easing),
           id: `${clipId}:kf:opacity:${index}:start`,
         },
         {
-          ...makeKeyframe(clipId, 'opacity', Math.max(start, end), primitive.to, easing),
+          ...makeKeyframe(clipId, 'opacity', Math.max(start, end), primitive.to * reference, easing),
           id: `${clipId}:kf:opacity:${index}:end`,
         },
       ];
@@ -202,7 +199,6 @@ export function buildTransitionRecipeBlendWindows(
   recipe: readonly TransitionPrimitive[],
   target: 'outgoing' | 'incoming',
   duration: number,
-  baseBlendMode: SerializableClip['transform']['blendMode'],
 ): SerializableClip['transitionRecipeBlendWindows'] {
   const blends = recipe
     .filter((primitive): primitive is Extract<TransitionPrimitive, { kind: 'blend' }> =>
@@ -223,13 +219,11 @@ export function buildTransitionRecipeBlendWindows(
   for (let index = 0; index < points.length - 1; index += 1) {
     const compStart = points[index];
     const compEnd = points[index + 1];
-    let blendMode = baseBlendMode;
-    for (const blend of blends) {
-      if (compStart >= blend.startTime && compStart < blend.endTime) {
-        blendMode = blend.mode as SerializableClip['transform']['blendMode'];
-      }
-    }
-    if (blendMode === baseBlendMode) continue;
+    // A window is kept even when the recipe mode equals the clip's own mode, so
+    // the renderer can tell the recipe's Add/Multiply from the clip's mode.
+    const active = blends.filter((blend) => compStart >= blend.startTime && compStart < blend.endTime);
+    if (active.length === 0) continue;
+    const blendMode = active[active.length - 1].mode as SerializableClip['transform']['blendMode'];
 
     const previous = windows[windows.length - 1];
     if (previous?.compEnd === compStart && previous.blendMode === blendMode) {
@@ -493,16 +487,11 @@ export function buildTransitionTimelineData(input: {
   const recipe = definition?.recipe ?? [];
   const isScene3D = definition?.renderMode === 'scene-3d-panel';
   const materializeRecipeClip = (clip: SerializableClip, target: 'outgoing' | 'incoming'): SerializableClip => {
-    const opacityKeyframes = buildOpacityKeyframesFromRecipe(recipe, target, clip.id, duration);
+    const opacityKeyframes = buildOpacityKeyframesFromRecipe(recipe, target, clip.id, duration, clip.transform.opacity);
     const transformKeyframes = buildTransformKeyframesFromRecipe(recipe, target, clip, duration);
     const effects = buildEffectMaterializationFromRecipe(recipe, target, clip.id, duration);
     const masks = buildMaskMaterializationFromRecipe(recipe, target, clip.id, duration, getTransitionSeed(transition));
-    const transitionRecipeBlendWindows = buildTransitionRecipeBlendWindows(
-      recipe,
-      target,
-      duration,
-      clip.transform.blendMode,
-    );
+    const transitionRecipeBlendWindows = buildTransitionRecipeBlendWindows(recipe, target, duration);
     const clipWithGeneratedProperties: SerializableClip = {
       ...clip,
       transform: {

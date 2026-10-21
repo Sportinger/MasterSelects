@@ -9,6 +9,7 @@ import { timelineRuntimeCoordinator } from '../../src/services/timeline/timeline
 import { reportExportPreviewFrame } from '../../src/services/timeline/exportRuntimeReporting';
 import { clearCompositionAudioMixdownCache } from '../../src/services/timeline/compositionAudioMixdownCache';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { Logger } from '../../src/services/logger';
 import type { TimelineClip, TimelineTrack } from '../../src/types';
 
 const compositionAudioMixerMocks = vi.hoisted(() => ({
@@ -508,6 +509,50 @@ describe('AudioExportPipeline audio preflight', () => {
         trackPan: -0.25,
       }),
     ]);
+  });
+
+  it('renders audio crossfades like preview: handles, equal-power gains before effects and a log for retimed clips', async () => {
+    const audioClip = (id: string, startTime: number, extra: Partial<TimelineClip> = {}) => createClip({
+      id, trackId: audioTrack.id, startTime, duration: 4, inPoint: 2, outPoint: 6, mediaFileId: `${id}-media`,
+      source: { type: 'audio', audioElement: {} as HTMLAudioElement, naturalDuration: 20 }, ...extra,
+    });
+    const outgoing = audioClip('fade-out', 0, { transitionOut: { id: 'fade', type: 'crossfade', duration: 2, linkedClipId: 'fade-in' } });
+    const incoming = audioClip('fade-in', 4, { transitionIn: { id: 'fade', type: 'crossfade', duration: 2, linkedClipId: 'fade-out' } });
+    const retimed = audioClip('slow', 10, { speed: 0.5, transitionOut: { id: 'slow-fade', type: 'crossfade', duration: 2, linkedClipId: 'after-slow' } });
+    const afterSlow = audioClip('after-slow', 14);
+    useTimelineStore.setState({
+      clips: [outgoing, incoming, retimed, afterSlow],
+      tracks: [audioTrack],
+      clipKeyframes: new Map(),
+      masterAudioState: undefined,
+    });
+    const buffer = createMockAudioBuffer();
+    const pipeline = new AudioExportPipeline() as AudioExportPipelineTestAccess;
+    pipeline.extractor = { clearCache: vi.fn() };
+    let extractedClips: TimelineClip[] = [];
+    pipeline.extractAllAudio = vi.fn(async (clips: TimelineClip[]) => {
+      extractedClips = clips;
+      return new Map(clips.map((clip) => [clip.id, buffer]));
+    });
+    let renderedEnvelopes = new Map<string, unknown>();
+    pipeline.renderAllClipAudio = vi.fn(async (clips: TimelineClip[], ...rest: unknown[]) => {
+      renderedEnvelopes = rest[4] as Map<string, unknown>;
+      return new Map(clips.map((clip) => [clip.id, buffer]));
+    });
+    pipeline.mixer = { updateSettings: vi.fn(), mixTracks: vi.fn(async () => buffer) };
+    pipeline.renderMasterBusAudio = vi.fn(async () => buffer);
+    Logger.clear();
+
+    await pipeline.exportRawAudio(1, 20);
+
+    const byId = new Map(extractedClips.map((clip) => [clip.id, clip]));
+    expect(byId.get('fade-out')).toMatchObject({ startTime: 0, duration: 5, outPoint: 7 });
+    expect(byId.get('fade-in')).toMatchObject({ startTime: 3, duration: 5, inPoint: 1 });
+    expect(byId.get('slow')).toMatchObject({ duration: 4, outPoint: 6 });
+    // The gains reach the clip renderer (before effects) in timeline seconds.
+    expect(renderedEnvelopes.get('fade-out')).toEqual([{ role: 'outgoing', start: 3, end: 5, curve: 'equal-power' }]);
+    expect(renderedEnvelopes.get('fade-in')).toEqual([{ role: 'incoming', start: 3, end: 5, curve: 'equal-power' }]);
+    expect(Logger.search('retimed or reversed clip')).toHaveLength(1);
   });
 
   it('applies the master target LUFS during export rendering', async () => {

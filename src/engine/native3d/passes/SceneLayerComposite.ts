@@ -32,7 +32,7 @@ struct Params { mode: u32, opacity: f32, time: f32, pad: f32 }
     return b * mix(1., select(mask, 1. - mask, params.mode >= 34u), params.opacity);
   }
   if (alpha <= 0.) { return b; }
-  if (params.mode == 36u) { return vec4f(b.rgb + f.rgb * params.opacity, min(1., b.a + alpha)); }
+  if (params.mode == 36u || params.mode == 37u) { return vec4f(b.rgb + f.rgb * params.opacity, min(1., b.a + alpha)); }
   var mixed = source;
   var coverage = alpha;
   switch (params.mode) {

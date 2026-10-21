@@ -5,6 +5,7 @@ import type { TransitionPlan } from '../../stores/timeline/editOperations/transi
 import { buildIncomingRevealMask } from './transitionCompositionMasks';
 import { makeKeyframe, mergeGeneratedKeyframes, sliceGeneratedKeyframesForSegment } from './transitionCompositionKeyframes';
 import { buildLinkedMappedClip, getSerializableClip } from './transitionCompositionSourceClips';
+import { getTransitionOpacityReference } from './transitionSourceMap';
 import { getTransitionTemplateParamsKey, mergeTransitionMarkers } from './transitionCompositionRecipeTemplate';
 
 const TRANSITION_TEMPLATE_VERSION = 3;
@@ -50,11 +51,14 @@ export function buildMaterializedLightLeakTimelineData(input: {
     softness: 0.42,
     angle: 0.18,
   };
+  // Opacity keyframes scale the clip's own opacity, so a clip at 50 % stays at
+  // 50 % at the transition edges (the mapped animation composes relative to it).
   const materializeOutgoingClip = (clip: SerializableClip): SerializableClip => {
+    const opacity = getTransitionOpacityReference(clip.transform.opacity);
     const outgoingKeyframes: Keyframe[] = [
-      makeKeyframe(clip.id, 'opacity', 0, 1),
-      makeKeyframe(clip.id, 'opacity', bodyStart, 1),
-      makeKeyframe(clip.id, 'opacity', bodyEnd, 0.08, 'ease-in-out'),
+      makeKeyframe(clip.id, 'opacity', 0, opacity),
+      makeKeyframe(clip.id, 'opacity', bodyStart, opacity),
+      makeKeyframe(clip.id, 'opacity', bodyEnd, 0.08 * opacity, 'ease-in-out'),
     ];
     return {
       ...clip,
@@ -71,10 +75,11 @@ export function buildMaterializedLightLeakTimelineData(input: {
       ...clip,
       masks: [...(clip.masks ?? []), revealMask],
     };
+    const opacity = getTransitionOpacityReference(clip.transform.opacity);
     const incomingGeneratedKeyframes: Keyframe[] = [
       makeKeyframe(clip.id, 'opacity', 0, 0),
-      makeKeyframe(clip.id, 'opacity', duration * 0.12, 0.18, 'ease-in'),
-      makeKeyframe(clip.id, 'opacity', bodyEnd, 1, 'ease-out'),
+      makeKeyframe(clip.id, 'opacity', duration * 0.12, 0.18 * opacity, 'ease-in'),
+      makeKeyframe(clip.id, 'opacity', bodyEnd, opacity, 'ease-out'),
       makeKeyframe(clip.id, `mask.${revealMaskId}.position.x` as Keyframe['property'], bodyStart, -0.62),
       makeKeyframe(clip.id, `mask.${revealMaskId}.position.x` as Keyframe['property'], bodyEnd, 0.78, 'ease-in-out'),
     ];

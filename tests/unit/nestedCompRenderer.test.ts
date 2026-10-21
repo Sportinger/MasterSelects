@@ -786,6 +786,16 @@ describe('NestedCompRenderer shared-scene integration', () => {
       expect(reusedView).toBe(activeView);
       expect(device.createTexture).toHaveBeenCalledOnce();
       expect(mockCompositeNestedLayers).not.toHaveBeenCalled();
+      // A transition's blend part draws only some of the composition's layers:
+      // the active composition's full output must not stand in for it.
+      const texturesBeforePart = device.createTexture.mock.calls.length;
+      renderer.preRender(
+        'active-child',
+        [],
+        16, 16, { beginRenderPass: () => ({ end: vi.fn() }) } as unknown as GPUCommandEncoder, {} as GPUSampler, 2.5,
+        undefined, undefined, 0, false, 'preview', undefined, 'blend-part-wrapper', 1, 24, false,
+      );
+      expect(device.createTexture.mock.calls.length).toBeGreaterThan(texturesBeforePart);
       const texturesBeforeFpsChange = device.createTexture.mock.calls.length;
       renderer.preRender(
         'active-child',

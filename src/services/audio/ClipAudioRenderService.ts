@@ -26,6 +26,7 @@ import { renderEditStackOperations } from './clipRender/editStackRendering';
 import { defaultSpectralImageLayerMaskProvider } from './clipRender/spectralImageMaskProvider';
 import { applySpectralImageLayer, isSpectralLayerEnabled } from './clipRender/spectralImageLayerRendering';
 import { emitProgress } from './clipRender/renderProgress';
+import { applyAudioCrossfadeEnvelopes, type AudioCrossfadeGainEnvelope } from './audioCrossfadeGains';
 
 export type ClipAudioRenderPhase =
   | 'stem-mix'
@@ -59,6 +60,11 @@ export interface ClipAudioRenderRequest {
   sourceBufferStart?: number;
   signal?: AbortSignal;
   keyframes?: readonly Keyframe[];
+  /**
+   * Audio crossfade gains (timeline seconds), applied to the clip's sound
+   * before its effects, so effect tails decay from the faded sound.
+   */
+  crossfadeEnvelopes?: readonly AudioCrossfadeGainEnvelope[];
   effectMode?: 'output' | 'analysis-shape';
   effectTailSeconds?: number;
   onProgress?: (progress: ClipAudioRenderProgress) => void;
@@ -163,6 +169,7 @@ export class ClipAudioRenderService {
     processedBuffer = await this.processSpeed(clip, processedBuffer, keyframes, onProgress, signal,
       request.sourceBufferStart ?? (clip.timeRemap?.kind === 'warp' && !sourceIsClipRange ? 0 : clip.inPoint));
     signal?.throwIfAborted();
+    processedBuffer = applyAudioCrossfadeEnvelopes(processedBuffer, request.crossfadeEnvelopes, clip.startTime);
 
     if (clip.audioState?.muted === true && effectMode !== 'analysis-shape') {
       emitProgress(onProgress, {
