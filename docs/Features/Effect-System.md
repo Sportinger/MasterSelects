@@ -1279,7 +1279,7 @@ field shaping, protection, quantization and temporal interpolation can alter the
 final result. Object stabilization must be disabled because this first version
 uses source coordinates. Shape settings and the tracking asset persist normally.
 
-The separate [Space-time slice](Slit-Scan-3D.md#space-time-slice-observed-depth)
+The separate [Space-time slice](./effects/slit-scan.md#space-time-slice)
 representation uses baked per-time depth and color rather than a time relief.
 
 DIS motion analysis drains both GPU allocation error scopes and preserves the

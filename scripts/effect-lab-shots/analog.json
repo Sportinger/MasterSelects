@@ -1,0 +1,75 @@
+{
+  "pairs": [
+    {
+      "name": "holo",
+      "out": "docs/Features/assets/effects/holo.webp",
+      "image": "harbor_town",
+      "width": 1920,
+      "layout": "split",
+      "outWidth": 1200,
+      "maxBytes": 190000,
+      "left": { "effect": "original" },
+      "right": { "effect": "holo", "params": { "amount": 1 }, "times": [0, 0.5, 1] }
+    },
+    {
+      "name": "ribbon-scan",
+      "out": "docs/Features/assets/effects/ribbon-scan.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [600, 60, 820, 980],
+      "gap": 8,
+      "outWidth": 1200,
+      "maxBytes": 140000,
+      "left": { "effect": "original" },
+      "right": { "effect": "ribbon-scan", "params": {}, "times": [0, 0.5, 1] }
+    },
+    {
+      "name": "wave-lines",
+      "out": "docs/Features/assets/effects/wave-lines.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [600, 60, 820, 980],
+      "gap": 8,
+      "outWidth": 1200,
+      "maxBytes": 140000,
+      "left": { "effect": "original" },
+      "right": { "effect": "wave-lines", "params": {}, "times": [0, 0.5, 1] }
+    },
+    {
+      "name": "crystal",
+      "out": "docs/Features/assets/effects/crystal.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "crop": [600, 60, 820, 980],
+      "gap": 8,
+      "outWidth": 1200,
+      "maxBytes": 140000,
+      "left": { "effect": "original" },
+      "right": { "effect": "crystal", "params": {}, "times": [0, 0.5, 1] }
+    },
+    {
+      "name": "glass-dispersion",
+      "out": "docs/Features/assets/effects/glass-dispersion.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "split",
+      "outWidth": 1200,
+      "maxBytes": 140000,
+      "left": { "effect": "original" },
+      "right": { "effect": "glass-dispersion", "params": {}, "times": [0, 0.5, 1] }
+    },
+    {
+      "name": "pixel-sort",
+      "out": "docs/Features/assets/effects/pixel-sort.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [560, 40, 640, 520],
+      "zoom": 1.2,
+      "gap": 8,
+      "outWidth": 1200,
+      "maxBytes": 140000,
+      "left": { "effect": "original" },
+      "right": { "effect": "pixel-sort", "params": { "amount": 1, "threshold": 0.3 } }
+    }
+  ]
+}

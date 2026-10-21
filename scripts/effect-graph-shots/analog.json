@@ -2,6 +2,10 @@
   "shots": [
     "crt-screen?focus=scanline-beams&only=scan-w0-sigma-luma,scan-w0-sigma,scan-w0-sigma-squared,scan-w0-spread,scan-w0-d2,scan-w0-ratio,scan-w0-exponent,scan-w0-profile,scan-w0-area,scan-w0-weight@crt-screen-beam",
     "glitch?focus=burst-clock&only=state-burst-density,state-burst-chance,state-burst-roll-key-x,state-burst-roll-key-y,state-burst-roll-key,state-burst-roll,state-burst-hit,state-burst,state-level-burst,state-level@glitch-burst",
-    "film-prism?focus=grain-strength&only=grain-luma,grain-midtone-inverse,grain-midtone-l,grain-midtone-curve,grain-midtones,grain-strength,grain-amplitude@film-prism-grain"
+    "film-prism?focus=grain-strength&only=grain-luma,grain-midtone-inverse,grain-midtone-l,grain-midtone-curve,grain-midtones,grain-strength,grain-amplitude@film-prism-grain",
+    "holo?only=band-x-count,band-x,band-y-count,band-y,band-position&name.uv-split:x=Frame X&name.uv-split:y=Frame Y@holo-bands",
+    "ribbon-scan?only=ribbon-amount-squared,ribbon-reach-scale,ribbon-reach,ribbon-wave-reach,ribbon-shift&name.ribbon-wave=Ribbon Wave&name.ribbon=Ribbon Envelope@ribbon-scan-shift",
+    "pixel-sort?cables=avoid&omit=output@pixel-sort",
+    "analog-signal-lab?cables=avoid&omit=output@analog-signal-lab"
   ]
 }
