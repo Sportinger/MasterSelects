@@ -7,7 +7,7 @@ struct SheenParams {
   softness: f32,
   intensity: f32,
   aspect: f32,
-  _pad0: f32,
+  pixelSize: f32,
   _pad1: f32,
   color: vec4f,
 };
@@ -27,10 +27,16 @@ fn sheenFragment(input: VertexOutput) -> @location(0) vec4f {
   let extent = 0.5 * (abs(direction.x) * params.aspect + abs(direction.y));
   let along = dot(centered, direction) / max(extent, 1e-4);
   // position 0..1 sweeps the band from fully outside one side to fully outside the other.
-  let center = mix(-1.0 - params.width, 1.0 + params.width, params.position);
   let halfWidth = max(params.width, 1e-4);
-  let hard = halfWidth * (1.0 - clamp(params.softness, 0.0, 1.0));
-  let band = 1.0 - smoothstep(hard, halfWidth, abs(along - center));
-  let light = params.color.rgb * band * params.intensity * params.color.a * color.a;
-  return vec4f(color.rgb + light, color.a);
+  let center = mix(-1.0 - halfWidth, 1.0 + halfWidth, params.position);
+  // Softness 0 is a hard-edged band (one pixel of anti-aliasing), 1 fades over the whole width.
+  let pixel = params.pixelSize / max(extent, 1e-4);
+  let soft = max(halfWidth * clamp(params.softness, 0.0, 1.0), pixel);
+  let band = 1.0 - smoothstep(halfWidth - soft, halfWidth, abs(along - center));
+  let light = params.color.rgb * band * max(params.intensity, 0.0) * params.color.a;
+  // Soft additive highlight: c + light for a faint sheen, approaching white without a flat
+  // clipped plateau, so the layer's own detail stays visible inside a strong band.
+  let headroom = max(vec3f(1.0) - color.rgb, vec3f(1e-4));
+  let lit = vec3f(1.0) - headroom * exp(-light / headroom);
+  return vec4f(select(color.rgb, lit, color.rgb < vec3f(1.0)), color.a);
 }

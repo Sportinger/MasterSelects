@@ -60,6 +60,7 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
       step: 1,
       animatable: true,
       group: 'camera',
+      suffix: '°',
     },
     yaw: {
       type: 'number',
@@ -70,6 +71,7 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
       step: 1,
       animatable: true,
       group: 'camera',
+      suffix: '°',
     },
     perspective: {
       type: 'number',
@@ -120,6 +122,7 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
       step: 1,
       animatable: true,
       group: 'camera',
+      suffix: '°',
     },
     heightContrast: {
       type: 'number',
@@ -180,6 +183,7 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
       step: 1,
       animatable: true,
       group: 'light',
+      suffix: '°',
     },
     lightElevation: {
       type: 'number',
@@ -190,6 +194,7 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
       step: 1,
       animatable: true,
       group: 'light',
+      suffix: '°',
     },
     lightFollow: {
       type: 'boolean',

@@ -23,6 +23,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
     cellSize: {
       type: 'number',
       label: 'Cell Size',
+      suffix: 'px',
       default: 8,
       min: 2,
       max: 64,

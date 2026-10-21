@@ -1,8 +1,10 @@
-// Rom1 - frozen snapshot of the current Acuarela-style watery feedback effect.
+// Rom1 - watery smoke: a frozen snapshot of the original Acuarela feedback look (Acuarela is a watercolour now).
+// It renders through its node graph (rom1EffectGraph.ts); this shader is that graph's reference.
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
 import { FEEDBACK_PARAMETERS } from '../../_shared/feedbackParameters';
+import { rom1ParamWarnings } from './warnings';
 
 export const rom1: EffectDefinition = {
   id: 'rom1',
@@ -14,6 +16,8 @@ export const rom1: EffectDefinition = {
   uniformSize: 48,
   usesFeedback: true,
   requiresContinuousRender: true,
+
+  paramWarnings: rom1ParamWarnings,
 
   params: {
     ...FEEDBACK_PARAMETERS,
