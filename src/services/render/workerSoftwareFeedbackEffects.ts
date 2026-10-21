@@ -1,3 +1,4 @@
+import { ROM1_GAIN_REACH } from '../operators/smokeGainUpgrade';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import { transitionFrameHistory, type FrameHistoryDiscontinuity, type FrameHistoryLoopPolicy, type FrameHistoryState } from '../../effects/frameHistoryTransition';
 
@@ -289,7 +290,7 @@ function applyAcuarelaEffect(input: {
   const smearA = sampleRgba(input.sourceData, input.width, input.height, input.uvX + offsetX * 0.45, input.uvY + offsetY * 0.45);
   const smearB = sampleRgba(input.sourceData, input.width, input.height, input.uvX - offsetX * 0.65, input.uvY - offsetY * 0.65);
   const smearC = sampleRgba(input.sourceData, input.width, input.height, input.uvX - offsetY * 0.5, input.uvY + offsetX * 0.5);
-  const gain = Math.max(params.gain, 0) * 0.35;
+  const gain = Math.min(Math.max(params.gain, 0), 1) * 0.35;
   const lifted = [
     clamp01(input.current[0] + gain * input.current[3]),
     clamp01(input.current[1] + gain * input.current[3]),
@@ -351,7 +352,8 @@ function applyRom1Effect(input: {
   const edgeMask = feedbackEdgeMask(warpedUvX, warpedUvY);
   const feedback = sampleRgba(input.previous, input.width, input.height, warpedUvX, warpedUvY);
   const wetSource = sampleRgba(input.sourceData, input.width, input.height, warpedUvX, warpedUvY);
-  const gain = Math.max(params.gain, 0);
+  // Rom1's Gain shoulder (smokeGainUpgrade.ts): eases toward 0.35 instead of lifting to white.
+  const gain = (1 - Math.exp(-Math.max(params.gain, 0) / ROM1_GAIN_REACH)) * ROM1_GAIN_REACH;
   const lifted = [
     clamp01(mix(input.current[0], wetSource[0], 0.18) + gain * input.current[3]),
     clamp01(mix(input.current[1], wetSource[1], 0.18) + gain * input.current[3]),

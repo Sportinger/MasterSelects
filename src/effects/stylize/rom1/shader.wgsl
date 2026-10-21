@@ -72,7 +72,8 @@ fn rom1Fragment(input: VertexOutput) -> @location(0) vec4f {
   let feedback = textureSample(feedbackTex, texSampler, feedbackSampleUv) * rom1EdgeMask(warpedUv);
   let wetSource = textureSample(inputTex, texSampler, feedbackSampleUv);
 
-  let gain = max(params.gain, 0.0);
+  // Soft shoulder: small Gain unchanged, large Gain eases toward 0.35 instead of lifting to white.
+  let gain = (1.0 - exp(0.0 - max(params.gain, 0.0) / 0.35)) * 0.35;
   let liftedSource = vec4f(
     clamp(mix(source.rgb, wetSource.rgb, 0.18) + vec3f(gain) * source.a, vec3f(0.0), vec3f(1.0)),
     source.a

@@ -14,12 +14,16 @@ import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/work
 import { applyWorkerSoftwareImageGraphs } from '../../src/services/render/workerSoftwareImageGraphs';
 import type { Effect } from '../../src/types/effects';
 import type { Layer } from '../../src/types/layers';
+import { applyLookToClip } from '../../src/effects/looks/applyLook';
+import { useTimelineStore } from '../../src/stores/timeline';
+import { buildEffectOperatorGraph } from '../../src/services/nodeGraph/effectGraphProjection';
+import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 type Rgba = [number, number, number, number];
 const watercolour = (overrides: Record<string, number> = {}) => ({ ...getDefaultParams('acuarela'), ...overrides }) as Record<string, number | string | boolean>;
 const SMOKE = { opacity: 1, gain: 0.01, speed: 4, detail: 4, strength: 0.32, density: 4, gainX: 0.3, gainY: 0.3, reset: false, historyLoop: 'reset' };
-/** Only the pigment wash: no pooling, granulation, blooms, paper light or lift. */
-const PLAIN = { edges: 0, granulation: 0, blooms: 0, paper: 0, lift: 0 };
+/** Only the pigment wash: no pooling, tones, shadow pigment, granulation, blooms, paper light or lift. */
+const PLAIN = { edges: 0, simplify: 0, shadows: 0, granulation: 0, blooms: 0, paper: 0, lift: 0 };
 const plan = (params: Record<string, unknown>) => compileImageOperatorGraph(createDefaultAcuarelaGraph(), params, {});
 const layer = (effect: Effect): Layer => ({ id: 'layer', name: 'Layer', visible: true, opacity: 1, blendMode: 'normal', source: { type: 'solid' },
   position: { x: 0, y: 0 }, scale: { x: 1, y: 1 }, rotation: 0, effects: [effect] } as Layer);
@@ -29,15 +33,16 @@ const effect = (params: Record<string, unknown>): Effect => ({ id: 'water', type
 const step = ([u]: [number, number]): Rgba => u < 0.5 ? [0.2, 0.2, 0.2, 1] : [0.8, 0.8, 0.8, 1];
 
 describe('Acuarela watercolour recipe', () => {
-  it('runs as three passes without frame history, within the graph limits', () => {
+  it('runs as four passes without frame history, within the graph limits', () => {
     const graph = createDefaultAcuarelaGraph();
     const compiled = plan(watercolour());
-    expect(compiled.passes?.map(pass => pass.outputResource ?? 'output')).toEqual(['image-resource:source-cache:image', 'image-resource:wash-cache:image', 'output']);
+    expect(compiled.passes?.map(pass => pass.outputResource ?? 'output')).toEqual(['image-resource:source-cache:image', 'image-resource:wash-first-cache:image',
+      'image-resource:wash-cache:image', 'output']);
     expect(compiled.frameHistoryResource).toBeUndefined();
     expect(graph.nodes.some(node => node.operator === 'image.frame-history')).toBe(false);
     expect(graph.nodes.length).toBeLessThanOrEqual(IMAGE_EFFECT_GRAPH_LIMITS.nodes);
     expect(graph.edges.length).toBeLessThanOrEqual(IMAGE_EFFECT_GRAPH_LIMITS.edges);
-    for (const id of ['wash', 'bleed', 'edges', 'blooms', 'granulation', 'paper', 'grainSize', 'lift', 'flow', 'opacity']) {
+    for (const id of ['wash', 'bleed', 'edges', 'simplify', 'blooms', 'shadows', 'granulation', 'paper', 'grainSize', 'lift', 'flow', 'opacity']) {
       expect(graph.nodes.some(node => node.bindings.value === id), id).toBe(true);
     }
   });
@@ -45,8 +50,8 @@ describe('Acuarela watercolour recipe', () => {
   it('shows the recipe in pipeline-ordered folders without dropping any to a cycle', () => {
     const organized = effectOperatorGraph(effect(watercolour()), { inspectionOnly: true });
     expect((organized.groups ?? []).map(group => group.label)).toEqual(expect.arrayContaining(['Premultiplied Source (cached)',
-      'Frame & Paper Coordinates', 'Wet Patches & Bleed', 'Pigment Wash (edge-aware, cached)', 'Edge Pooling', 'Paper & Granulation',
-      'Blooms', 'Pigment Density', 'Paper Light, Lift & Mix']));
+      'Frame & Paper Coordinates', 'Wet Patches & Bleed', 'Pigment Wash (edge-aware, cached)', 'Second Wash & Wet Bleeding (cached)', 'Edge Pooling',
+      'Simplify (tones)', 'Shadow Pigment', 'Paper & Granulation', 'Blooms', 'Pigment Density', 'Paper Light, Lift & Mix']));
   });
 
   it('keeps a flat opaque colour exactly when only the wash acts (any wash, bleed and flow)', () => {
@@ -69,7 +74,7 @@ describe('Acuarela watercolour recipe', () => {
   });
 
   it('pools pigment on the dark side of a wash border with the documented density model', () => {
-    const final = plan(watercolour({ ...PLAIN, edges: 1, bleed: 0 })).passes![2].program;
+    const final = plan(watercolour({ ...PLAIN, edges: 1, bleed: 0 })).passes![3].program;
     const pixel = (x: number): Rgba => evaluateImageOperatorPlan(final, [0, 0, 0, 0], { uv: [(x + 0.5) / 1920, 0.5], resolution: [1920, 1080],
       timelineTimeSeconds: 0, sampleImage: step, sampleResource: (_id, uv) => step(uv) }) as Rgba;
     // One pixel left of the border: the four reads 2 px away see one light value, mean luminance 0.35.
@@ -98,7 +103,14 @@ describe('Acuarela watercolour recipe', () => {
       'grainSize: 0.1 is below 0.25; it renders as 0.25 (the finest grain).', 'opacity: -0.5 is outside 0-1; it is clamped to 0.',
       'lift: 1.5 is outside 0-1; it is clamped to 1.']);
     expect(acuarelaParamWarnings(watercolour({ wash: 20 }))[0]).toMatch(/^wash: above 12 px/);
+    expect(acuarelaParamWarnings(watercolour({ edges: -1, granulation: 3, simplify: 2 }))).toEqual([
+      'simplify: 2 is outside 0-1; it is clamped to 1.', 'edges: -1 is below 0 and lightens the pooled side of every edge.',
+      'granulation: 3 is above the 0-2 range; the effect is exaggerated.']);
+    // Edges 2, Granulation 2 and Blooms 2 can reach 1 + 3 + 1.68 + 1.1 = 6.78, above the density cap of 4.
+    expect(acuarelaParamWarnings(watercolour({ edges: 2, granulation: 2, blooms: 2 })).at(-1)).toMatch(/^density: .* 6\.78; it is clamped to 4/);
+    // Saved smoke-recipe effects get the smoke notes (their Gain is clamped to 0-1).
     expect(acuarelaParamWarnings({ ...SMOKE, strength: 9 })).toEqual([]);
+    expect(acuarelaParamWarnings({ ...SMOKE, gain: 3 })).toEqual(['gain: 3 is outside 0-1; it is clamped to 1.']);
   });
 });
 
@@ -138,6 +150,26 @@ describe('Acuarela saved with the watery-smoke recipe', () => {
     expect(JSON.parse(String(lookParams[EFFECT_GRAPH_PARAM]))).toEqual(createLegacyAcuarelaGraph());
     expect(withLegacyAcuarelaGraph('acuarela', watercolour())).not.toHaveProperty(EFFECT_GRAPH_PARAM);
     expect(withLegacyAcuarelaGraph('glow', SMOKE)).toBe(SMOKE);
+  });
+
+  it('moves a smoke Look graph into the effect graph when the Look is applied', () => {
+    const clip = createMockClip({ id: 'smoke-look-clip' });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
+    applyLookToClip({ id: 'old-smoke', name: 'Old', category: 'editorial', tags: [], builtIn: false, thumbnail: { kind: 'generated' },
+      stack: [{ effectId: 'acuarela', enabled: true, params: { ...SMOKE } }] }, clip.id);
+    const applied = useTimelineStore.getState().clips[0].effects[0];
+    expect(applied.params).not.toHaveProperty(EFFECT_GRAPH_PARAM);
+    expect(applied.operatorGraph?.nodes.some(node => node.operator === 'image.frame-history')).toBe(true);
+    expect(applied.params).toMatchObject({ strength: 0.32, gain: 0.01 });
+  });
+
+  it('names the watercolour ports only on the watercolour recipe, not on saved smoke graphs', () => {
+    const clip = createMockClip({ id: 'labels-clip' });
+    const label = (owner: Effect, id: string) => buildEffectOperatorGraph(clip, owner).nodes.find(node => node.id === id)?.outputs[0]?.label;
+    expect(label(effect(watercolour()), 'density')).toBe('Pigment Density');
+    const smoke = migratePersistedEffectOperatorGraph(effect(SMOKE));
+    expect(smoke.operatorGraph!.nodes.some(node => node.id === 'density')).toBe(true);
+    expect(label(smoke, 'density')).not.toBe('Pigment Density');
   });
 
   it('runs the smoke recipe on the worker CPU and leaves the watercolour to the GPU fallback', () => {

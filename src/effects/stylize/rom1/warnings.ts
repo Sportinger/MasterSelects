@@ -5,7 +5,8 @@ export function rom1ParamWarnings(params: Params): string[] {
   const notes: string[] = [];
   const value = (id: string) => typeof params[id] === 'number' && Number.isFinite(params[id]) ? params[id] as number : undefined;
   const gain = value('gain'), opacity = value('opacity');
-  if (gain !== undefined && gain > 1) notes.push(`gain: ${gain} lifts every pixel past white; the trails fill the frame with white.`);
+  // Gain is added to every pixel through a soft shoulder that eases toward 0.35 (smokeGainUpgrade.ts).
+  if (gain !== undefined && gain > 1) notes.push(`gain: ${gain} is above 1; the lift eases toward 0.35, so the frame washes out but never turns white.`);
   if (gain !== undefined && gain < 0) notes.push(`gain: ${gain} is below 0; it renders as 0.`);
   if (opacity !== undefined && (opacity < 0 || opacity > 1)) notes.push(`opacity: ${opacity} is outside 0-1; it is clamped to ${opacity < 0 ? 0 : 1}.`);
   for (const id of ['speed', 'detail', 'density']) {

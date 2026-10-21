@@ -28,7 +28,9 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
   }
   const supported = addableEffectOperators(effect.type);
   const parameters = getEffect(effect.type)?.params as Record<string, { label?: string }> | undefined;
-  const portLabels = effectPresentationPlan(effect.type)?.portLabels;
+  const plan = effectPresentationPlan(effect.type);
+  // A saved smoke-recipe Acuarela shares the effect id but not the watercolour's node meanings.
+  const portLabels = plan?.portLabelsApply && !plan.portLabelsApply(graph) ? undefined : plan?.portLabels;
   return {
     id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip', issue: graph.incomplete,
     nodes: graph.nodes.map(node => {

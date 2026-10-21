@@ -1,6 +1,8 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { withLegacyLookParams } from './legacyLookParams';
+import { EFFECT_GRAPH_PARAM } from '../../services/operators/effectGraph';
+import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
 import type { LookDefinition, LookStackEntry } from './types';
 
 export function applyLookToClip(look: LookDefinition, clipId: string): void {
@@ -12,6 +14,12 @@ export function applyLookToClip(look: LookDefinition, clipId: string): void {
       // A custom Look saved before an effect gained controls lacks them: give them the values that keep its look.
       const params = look.builtIn ? entry.params : withLegacyLookParams(entry.effectId, entry.params);
       if (Object.keys(params).length > 0) updateClipEffect(clipId, effectId, params);
+      // A graph carried in the params (the smoke Acuarela of an old Look) moves to the effect's
+      // canonical operatorGraph, as on project load, so renders do not re-parse it every frame.
+      if (typeof params[EFFECT_GRAPH_PARAM] === 'string') {
+        const state = useTimelineStore.getState(), clip = state.clips.find(item => item.id === clipId);
+        if (clip) state.updateClip(clipId, { effects: clip.effects.map(effect => effect.id === effectId ? migratePersistedEffectOperatorGraph(effect) : effect) });
+      }
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }
   } finally {

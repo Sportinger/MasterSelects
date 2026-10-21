@@ -1,4 +1,4 @@
-import type { BoundOperatorNode } from '../../types/operatorGraph';
+import type { BoundOperatorNode, EffectOperatorGraph } from '../../types/operatorGraph';
 import { mirrorPixelPresentationPlan } from './mirrorPixelPresentation';
 import { acuarelaPresentationPlan } from './acuarelaPresentation';
 
@@ -8,6 +8,8 @@ export interface EffectPresentationPlan {
   /** What a node's output carries, by node id (its value output) or `id:port`: the output port is
    * named so, and folder ports it feeds read "Sigma" instead of "Maximum: Value". */
   portLabels?: Record<string, string>;
+  /** Port labels apply only to graphs this accepts (an effect id can carry more than one recipe). */
+  portLabelsApply?: (graph: Pick<EffectOperatorGraph, 'nodes'>) => boolean;
 }
 const includes = (list: string, id: string) => list.split(' ').includes(id);
 export const GLYPH_PRESENTATION_EFFECTS = new Set(['ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic',
