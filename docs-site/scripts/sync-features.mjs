@@ -138,9 +138,9 @@ function convert(markdown, { title }) {
 // settings vanish: keep the cache only while an astro dev server of this very
 // site runs. A stale record whose PID now belongs to another process does not
 // count, and builds (--build) always start from a clean cache.
-function devServerRunning() {
-  let pid;
-  try { ({ pid } = JSON.parse(fs.readFileSync(path.join(astroCacheDir, 'dev.json'), 'utf8'))); } catch { return false; }
+async function devServerRunning() {
+  let pid, url;
+  try { ({ pid, url } = JSON.parse(fs.readFileSync(path.join(astroCacheDir, 'dev.json'), 'utf8'))); } catch { return false; }
   if (!Number.isInteger(pid) || pid <= 0) return false;
   const siteDir = path.resolve(here, '..');
   if (fs.existsSync('/proc')) {
@@ -150,9 +150,12 @@ function devServerRunning() {
       return commandLine.some((part) => /astro(\.mjs)?$/.test(part)) && commandLine.includes('dev') && cwd === fs.realpathSync(siteDir);
     } catch { return false; }
   }
-  try { process.kill(pid, 0); return true; } catch (error) { return error?.code === 'EPERM'; }
+  // Without /proc (Windows, macOS) a recorded PID may belong to another process by now: only a
+  // dev server that answers on its recorded address counts as running.
+  if (typeof url !== 'string') return false;
+  try { await fetch(url, { signal: AbortSignal.timeout(1500) }); return true; } catch { return false; }
 }
-if (forBuild || !devServerRunning()) fs.rmSync(astroCacheDir, { recursive: true, force: true });
+if (forBuild || !(await devServerRunning())) fs.rmSync(astroCacheDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
 // Pages are updated in place: a running `astro dev` watches these files, and

@@ -93,6 +93,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
   const nodesStart = import.meta.env.DEV ? performance.now() : 0;
   let nodeCount = 0;
   const titleBoost = overviewTitleBoost(view.zoom);
+  const titleCap = scene.uniformTitles && titleBoost > 1 ? uniformOverviewTitleSize(ctx, scene.nodes, titleBoost) : Infinity;
   for (const node of scene.nodes) {
     if (!inView(node, view)) continue;
     if (import.meta.env.DEV) nodeCount++;
@@ -115,7 +116,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
     if (sprite) {
       ctx.drawImage(sprite, -CARD_SPRITE_PAD, -CARD_SPRITE_PAD, node.width + CARD_SPRITE_PAD * 2, node.height + CARD_SPRITE_PAD * 2);
     } else drawNodeCard(ctx, node, theme);
-    if (titleBoost > 1 && !node.laneRow) drawOverviewTitle(ctx, node, theme, titleBoost);
+    if (titleBoost > 1 && !node.laneRow) drawOverviewTitle(ctx, node, theme, titleBoost, titleCap);
     ctx.restore();
   }
   if (import.meta.env.DEV) recordPaintPhase('paint-nodes', performance.now() - nodesStart, nodeCount);
@@ -170,10 +171,26 @@ const OVERVIEW_TITLE_TOP = 30, OVERVIEW_LINE_HEIGHT = 1.12;
 /** Widest word per label at 1px bold, so overview repaints skip re-measuring. */
 const widestWordRatio = new Map<string, number>();
 
+/** One title size for a scene: the size at which at least half the cards' titles fit. Short
+ * titles no longer outgrow the rest; the few long ones that need less keep their own fit. */
+function uniformOverviewTitleSize(ctx: DrawContext, nodes: readonly CanvasNode[], boost: number): number {
+  const fits = nodes.filter(node => !node.laneRow).map(node => fitOverviewTitle(ctx, node, boost).size).toSorted((a, b) => a - b);
+  return fits.length ? fits[Math.floor((fits.length - 1) / 2)] : 13 * boost;
+}
+
 /** Replaces the sprite's text band with a bold title that wraps (up to three
  * lines) into the free space above the curve, symbol, and ports. */
-function drawOverviewTitle(ctx: DrawContext, node: CanvasNode, theme: CanvasTheme, boost: number) {
-  const left = node.expandable ? 30 : 10, width = node.width - left - 10, target = 13 * boost;
+function drawOverviewTitle(ctx: DrawContext, node: CanvasNode, theme: CanvasTheme, boost: number, cap = Infinity) {
+  const { left, width, band, size, lines } = fitOverviewTitle(ctx, node, boost, cap);
+  // The band spans the card: a folded group's title starts after its chevron slot, but the
+  // description underneath begins at the card edge and must not show through ("Loc…").
+  ctx.fillStyle = theme.card; ctx.fillRect(1, OVERVIEW_TITLE_TOP - 2, node.width - 2, band + 2);
+  if (!lines) { text(ctx, node.label, left, OVERVIEW_TITLE_TOP + size * 0.9, width, theme.text, size, 700); return; }
+  lines.forEach((line, index) => text(ctx, line, left, OVERVIEW_TITLE_TOP + size * (0.9 + index * OVERVIEW_LINE_HEIGHT), width, theme.text, size, 700));
+}
+
+function fitOverviewTitle(ctx: DrawContext, node: CanvasNode, boost: number, cap = Infinity) {
+  const left = node.expandable ? 30 : 10, width = node.width - left - 10, target = Math.min(13 * boost, cap);
   const bottom = Math.min(node.height - 6, node.summarySegments?.y ?? Infinity, node.curve?.y ?? Infinity, node.mathSymbol ? node.mathSymbol.y - 26 : Infinity,
     ...node.ports.map(port => port.y - 8));
   const band = Math.max(20, bottom - OVERVIEW_TITLE_TOP);
@@ -194,11 +211,7 @@ function drawOverviewTitle(ctx: DrawContext, node: CanvasNode, theme: CanvasThem
     while (fitted >= 13 && !(wrapped = (ctx.font = font(fitted), wrapCanvasLabel(ctx, node.label, width, count)))) fitted = half(fitted * 0.92);
     if (wrapped && fitted > size) { size = fitted; lines = wrapped; }
   }
-  // The band spans the card: a folded group's title starts after its chevron slot, but the
-  // description underneath begins at the card edge and must not show through ("Loc…").
-  ctx.fillStyle = theme.card; ctx.fillRect(1, OVERVIEW_TITLE_TOP - 2, node.width - 2, band + 2);
-  if (!lines) { text(ctx, node.label, left, OVERVIEW_TITLE_TOP + size * 0.9, width, theme.text, size, 700); return; }
-  lines.forEach((line, index) => text(ctx, line, left, OVERVIEW_TITLE_TOP + size * (0.9 + index * OVERVIEW_LINE_HEIGHT), width, theme.text, size, 700));
+  return { left, width, band, size, lines };
 }
 
 /** A complete card at the context's current origin; shared by direct paint and sprites. */

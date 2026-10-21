@@ -889,16 +889,21 @@ Motion Blur's direction is now an exact on-screen angle (diagonal angles were
 skewed on non-square frames); its reach to each side keeps the legacy length,
 Length × |(cos × width, sin × height)|: a share of the width for horizontal and of
 the height for vertical streaks, so saved projects and the Film Roll transition
-(Length 0.1, vertical) keep their streaks on every aspect ratio. Negative values
-reverse the range as the old shaders did: Motion draws the same streak, Zoom
-streaks inward, Radial Zoom outward, Spin turns the other way; scales never go
-below 0.05, and the tool and inspector report that limit and streaks beyond the
-64 × 256 read budget. Motion mirrors samples at the frame edge; Zoom and
+(Length 0.1, vertical) keep their streaks on every aspect ratio. Below 0, Motion
+and Radial Blur leave the picture unchanged, as the old shaders did (they returned
+their input below Length 0.001 / Amount 0.01): the graph clamps the amount at 0
+(**Maximum**, port "Amount ≥ 0"), the pipeline skips the effect, and tool results
+and the inspector say so. Keyframe overshoot or a tool call can produce such values.
+Zoom Blur streaks inward below 0, as it did on the GPU. Scales never go below 0.05,
+and the tool and inspector report that limit and streaks beyond the 64 × 256 read
+budget. Motion mirrors samples at the frame edge; Zoom and
 Radial keep the sampler's edge clamp (a mirrored zoom or spin path folds onto other
 rays, where the cached boxes no longer tile). Radial Blur gained **Type: Spin**
 (Amount 1 = a 20° arc); missing values keep the old Zoom look. A blur at zero
 strength (the built-in recipe only) is skipped by the effects pipeline, so its
-input passes through exactly without running the passes.
+input passes through exactly without running the passes. Its effect preview in the
+Node Workspace shows that input; while a preview of one of its inner nodes is open,
+the effect renders normally so those previews have pictures.
 
 **Alpha.** All five blurs average premultiplied colour and return straight alpha,
 so transparent surroundings no longer darken edges (the old straight-alpha average
@@ -911,16 +916,31 @@ kernels; the GPU check (`image-graph-probe.html?suite=blur`) renders the same ed
 `ImageGraphPassRuntime`, keyed by size: a cache is leased for one encode (or one
 effect's batch) and returns to the pool, so all effects of a frame share a few
 textures per size; textures no encoder used for 120 encoders are destroyed.
+Releasing a batch also forgets its views and refuses further use, so nothing can
+read a cache the next effect has overwritten.
+
+**Limits at the rendered size.** Tool results and the inspector state the limits at
+the size of the edited composition (the export size). The frame actually rendered
+can be smaller or larger (reduced-quality preview, nested compositions, 3D
+layer-space effects at their layer's own resolution, where Radius is relative to that
+resolution); the pipeline logs once per effect and size (`BlurBudget`) when the
+kernel is spread or capped there.
 
 **Worker hosts.** The opt-in worker render modes follow the same units: worker
 software draws Gaussian and Box as a canvas blur with the contract's sigma, and
 Motion, Radial (Zoom and Spin) and Zoom along the contract's paths in one stage of
-up to 64 taps with premultiplied alpha; worker GPU runs the blur graphs.
+up to 64 taps with premultiplied alpha; worker GPU runs the blur graphs. Gaussian
+Blur on a motion-adjustment layer in the worker GPU host
+(`workerGpuAdjustmentBlur.ts`) renders the tap list of `separableBlurTaps` itself:
+a premultiplied `rgba16float` source and horizontal pass, straight alpha after the
+vertical pass, Radius relative to 1080p, Samples not read.
 
 **Retired Samples.** Gaussian, Motion, Radial and Zoom Blur choose their taps
 themselves. Their `samples` parameters stay in saved projects but are hidden, have
 no effect and are marked `deprecated`; `addEffect`/`updateEffect` accept them and
-return a warning, and `listEffects` no longer lists hidden parameters. Visibility
+return a warning, and `listEffects` no longer lists hidden parameters. New instances
+do not carry them (`getDefaultParams` leaves deprecated parameters out); graphs that
+still read one fall back to its catalog default. Visibility
 follows the instance's graph (`effectParamVisibility.ts`): an edited saved graph
 that still reads Samples shows it again without a warning, and Radial's Type
 (`graphOnly`) is hidden, and reported when set, on a graph that does not read it.
@@ -1462,14 +1482,20 @@ editor instead.
 `?test=effect-graph&effect=<id>` shows an effect's default operator graph on the
 real Node Workspace canvas, read-only and without editor chrome: the clip graph
 of a freshly added effect, cropped to the effect and fitted to the window. Card
-titles use the canvas' enlarged overview lettering, so they stay readable when
-the picture is shown smaller. Parameters choose the level:
+titles use the canvas' enlarged overview lettering with one size per picture
+(`overviewTitles: 'uniform'`: the size at which half the titles fit; longer ones
+may come out smaller, short ones no larger), so short stub names do not outshout
+the recipe. Parameters choose the level:
 `level=stages` (default, folders folded as when an effect is opened) or
 `level=all`; `open=a,b` opens folders by label slug, `parent/child` path or
 group id; `focus=folder` shows only one folder, with the flow layout it has
 inside the effect wrapped into rows (`rows=n` sets the count, `break=a,b` starts
 rows at these node ids instead) and named stub cards for the values that come from
-outside the folder (Constants excepted); `plumbing=hide` leaves out the Constants
+outside the folder (Constants excepted); `only=a,b` (with `focus`) keeps just
+these node ids, laid out compactly left to right, and turns their other inputs into
+stubs, so a picture shows a recipe instead of the whole folder (`--list` prints the
+ids; a composition's `@` may be left out); each wrapped row is as tall as its own
+cards; `plumbing=hide` leaves out the Constants
 and Coordinates & Resources folders and their cables, so an overview reads as one
 path; `chain=1` keeps the clip source and output. Folder ports are named after what
 they carry ("Sigma", "Tap Count"): an effect's presentation plan names its key
@@ -1479,9 +1505,13 @@ clickable for exploring. The page is part of dev builds only.
 `scripts/effect-graph-shot.mjs` captures shots of that page in hardware-GPU
 Chrome as WebP (at most 1600 px wide and 200 KB) into
 `docs/Features/assets/effects/graphs/`, for example
-`node scripts/effect-graph-shot.mjs 'gaussian-blur?plumbing=hide' 'box-blur?focus=horizontal-pass&break=horizontal-sample@box-blur-horizontal-pass'`
+`node scripts/effect-graph-shot.mjs --manifest scripts/effect-graph-shots/blur.json`
+(one manifest per docs page keeps its pictures reproducible) or
+`node scripts/effect-graph-shot.mjs 'gaussian-blur?plumbing=hide'`,
 with a Vite of the checkout running (`npx vite --port 5176 --strictPort`). A shot
-is `<effect>[?query][@file name]`; `--list` prints the folders of each effect.
+is `<effect>[?query][@file name]`; `--list` prints the folders and node ids of each
+effect. Cables that bend out past the cards (the last cable of a wrapped row) stay
+inside the crop.
 `marks=id[:from],…` in a shot's query adds numbered callouts on those node cards
 and prints the figure markup (`layout=float` sizes them for a picture beside the
 text). The docs site links every picture to its full-size file and lets node
@@ -1497,7 +1527,9 @@ density, at most 200 KB) into `docs/Features/assets/effects/editor/`. It prints
 the docs `<figure>` with numbered callouts on the named controls (parameter
 labels, `tab:Effects`, `bypass`, `remove`, `add` or `preview:x,y`) in the
 `docs-shot-overlay` style; `layout: "float"` sizes them for a picture beside the
-text. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
+text. `top: "tabs"` crops below the dock tab row (from the Properties sub-tabs),
+`preview` sets the width of the preview strip, and `hide` leaves named buttons that
+the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
 `--only <name>` recaptures one shot. A control the script cannot find stops it
 with the card's text, so a renamed parameter does not silently drop a callout.
 

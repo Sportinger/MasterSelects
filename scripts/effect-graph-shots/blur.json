@@ -1,0 +1,10 @@
+{
+  "shots": [
+    "gaussian-blur?plumbing=hide",
+    "gaussian-blur?focus=horizontal-pass&only=compound-shared-zero,horizontal-far-weight,horizontal-near-weight-raw,compound-shared-weight-floor,horizontal-sample,horizontal-reduce,compound-shared-horizontal-weight-vec4,horizontal-cache&rows=1@gaussian-blur-horizontal-pass",
+    "box-blur?focus=horizontal-pass&only=horizontal-far-weight-coverage,horizontal-far-weight&rows=1&layout=float@box-blur-weight",
+    "motion-blur?plumbing=hide",
+    "motion-blur?focus=stage-b-coarse-taps&only=taper-double,taper-centered,taper-squared,taper-exponent,taper,coarse-weight&rows=1@motion-blur-taper",
+    "radial-blur?focus=blur-range&only=is-spin,range-length&rows=1&layout=float&marks=is-spin:below,range-length:below@radial-blur-type"
+  ]
+}

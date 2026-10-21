@@ -3,30 +3,31 @@
     {
       "name": "gaussian-blur-inspector",
       "effect": "gaussian-blur",
-      "params": { "radius": 10 },
+      "params": {
+        "radius": 10
+      },
       "image": "harbor_town.jpg",
-      "preview": 380,
-      "alt": "The blurred harbour in the preview next to Properties, Effects, with Gaussian Blur at Radius 10",
+      "preview": 200,
+      "alt": "Properties, Effects with Gaussian Blur at Radius 10, beside a strip of the blurred preview",
       "marks": [
-        { "target": "tab:Effects", "from": "below", "label": "Properties → Effects lists the selected clip's effects" },
-        { "target": "Radius", "label": "Radius, Gaussian Blur's one control" },
-        { "target": "bypass", "from": "above", "label": "Bypass, to compare with the original" }
-      ]
-    },
-    {
-      "name": "radial-blur-inspector",
-      "effect": "radial-blur",
-      "params": { "mode": "spin", "amount": 0.5 },
-      "image": "neon_rain_street.jpg",
-      "preview": 0,
-      "top": "card",
-      "layout": "float",
-      "alt": "Radial Blur in Properties, Effects: Type set to Spin, Amount 0.5, Center X and Center Y 0.5",
-      "marks": [
-        { "target": "Type", "label": "Type: Zoom or Spin" },
-        { "target": "Amount", "label": "Amount" },
-        { "target": "Center X", "label": "Center X" },
-        { "target": "Center Y", "label": "Center Y" }
+        {
+          "target": "tab:Effects",
+          "from": "below",
+          "label": "Properties → Effects lists the effects of the selected clip"
+        },
+        {
+          "target": "Radius",
+          "label": "Radius, Gaussian Blur's one control"
+        },
+        {
+          "target": "bypass",
+          "from": "above",
+          "label": "Bypass, to compare with the original"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
       ]
     }
   ]
