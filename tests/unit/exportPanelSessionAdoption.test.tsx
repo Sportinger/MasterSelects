@@ -106,6 +106,16 @@ const mockFactory = vi.hoisted(() => {
     isLoaded: vi.fn(() => true),
     cancel: vi.fn(),
     encode: vi.fn(async () => new Blob(['video'], { type: 'video/mp4' })),
+    // The runner streams frames into FFmpeg segment by segment instead of collecting them for encode().
+    openFrameStream: vi.fn(async () => {
+      const stream = {
+        frameCount: 0,
+        writeFrame: vi.fn((pixels: ArrayLike<number>) => { stream.frameCount++; return new Uint8Array(pixels.length); }),
+        finish: vi.fn(async () => new Blob(['video'], { type: 'video/mp4' })),
+        abort: vi.fn(),
+      };
+      return stream;
+    }),
   };
   const startExport = vi.fn();
   const setExportProgress = vi.fn();
