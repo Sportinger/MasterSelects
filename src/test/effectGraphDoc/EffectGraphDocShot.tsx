@@ -77,6 +77,10 @@ export function EffectGraphDocShot() {
   // Workspace. The canvas waits for it: its first placement would otherwise reserve preview space
   // under every card and keep those gaps.
   const storedClip = useTimelineStore(state => state.clips.find(clip => clip.id === EFFECT_GRAPH_DOC_CLIP_ID));
+  // The title probe paints the scene as the canvas does, from the same store state.
+  const clips = useTimelineStore(state => state.clips);
+  const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
+  const getSourceTimeForClip = useTimelineStore(state => state.getSourceTimeForClip);
   useLayoutEffect(() => {
     if (doc) useTimelineStore.setState({ clips: [doc.clip], tracks: [effectGraphDocTrack()], clipKeyframes: new Map() });
   }, [doc]);
@@ -100,7 +104,6 @@ export function EffectGraphDocShot() {
       const context = new OffscreenCanvas(8, 8).getContext('2d');
       if (!card || !node || !context) return undefined;
       const zoom = card.getBoundingClientRect().width / getNodeWidth(node);
-      const { clips, clipKeyframes, getSourceTimeForClip } = useTimelineStore.getState();
       const scene = buildCanvasScene({ graph: doc.graph, nodes: placed, plugs: [], selection: new Set(), selectedNodeId: null, selectedEdgeId: null,
         hoveredEdgeId: null, hoveredPort: null, draft: null, clips, keyframes: clipKeyframes, sourceTime: getSourceTimeForClip });
       return { zoom, titleSize: paintedTitleSize(context, scene, zoom) };
@@ -109,7 +112,7 @@ export function EffectGraphDocShot() {
       crossings, displaced, overhang: cableOverhang(doc.graph, placed, bounds),
       bounds: { width: Math.round(bounds.right - bounds.left), height: Math.round(bounds.bottom - bounds.top) }, folders: doc.groups,
       cards: doc.graph.nodes.map(node => `${node.id.split('/').at(-1)} (${node.label})`) };
-  }, [doc, result.error]);
+  }, [doc, result.error, clips, clipKeyframes, getSourceTimeForClip]);
 
   const toggleGroup = useCallback((id: string) => {
     const collapsed = doc?.graph.groups?.find(group => group.id === id)?.collapsed;

@@ -2,7 +2,8 @@
 // (the graph interpreter is far slower). It must match the graph pixel for pixel, including
 // premultiplied filtering at cut-outs, every Frame Edges mode, both shapes and travelling waves.
 import { describe, expect, it } from 'vitest';
-import type { Effect, Layer } from '../../src/types';
+import type { Effect } from '../../src/types/effects';
+import type { Layer } from '../../src/types/layers';
 import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
 import { prepareImageEffect } from '../../src/services/operators/imageEffectRuntimePlan';
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';

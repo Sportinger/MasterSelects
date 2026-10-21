@@ -194,8 +194,7 @@ export interface SplatEffectorClipActions {
 }
 
 export interface ClipEffectActions {
-  /** `operatorGraph` replaces the effect's initial graph (a Look entry's stored, validated graph). */
-  addClipEffect: (clipId: string, effectType: string, options?: { operatorGraph?: Effect['operatorGraph'] }) => string;
+  addClipEffect: (clipId: string, effectType: string, options?: { /** Replaces the initial graph (a Look entry's stored, validated graph). */ operatorGraph?: Effect['operatorGraph'] }) => string;
   removeClipEffect: (clipId: string, effectId: string) => void;
   updateClipEffect: (clipId: string, effectId: string, params: Partial<Effect['params']>) => void;
   setClipEffectEnabled: (clipId: string, effectId: string, enabled: boolean) => void;

@@ -6,7 +6,7 @@ import { getEffect } from '../../src/effects';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
-import type { Effect } from '../../src/types';
+import type { Effect } from '../../src/types/effects';
 
 vi.mock('../../src/components/panels/properties/LabeledValue', () => ({
   LabeledValue: ({ value, suffix, ariaLabel, onChange }: { value: number; suffix?: string; ariaLabel: string; onChange: (value: number) => void }) =>

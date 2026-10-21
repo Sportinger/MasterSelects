@@ -7,7 +7,7 @@ import { createDefaultBulgeGraph, createDefaultTwirlGraph, createDefaultWaveGrap
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { rendersBuiltInUvDistortRecipe } from '../../src/services/operators/uvDistortIdentity';
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
-import type { Layer } from '../../src/types';
+import type { Layer } from '../../src/types/layers';
 import { EFFECT_PRESET_STORAGE_KEY, instantiateEffectPreset, listEffectPresets, removeEffectPreset, saveEffectPreset } from '../../src/services/nodeGraph/effectPresetLibrary';
 import { applyEffectPreset } from '../../src/services/nodeGraph/applyEffectPreset';
 import { useTimelineStore } from '../../src/stores/timeline';

@@ -1,5 +1,5 @@
 import { COLOR_RECIPE_EFFECT_TYPES, createDefaultColorEffectGraph, type EditableColorEffectType } from '../../operators/colorEffectGraphs';
-import type { Effect } from '../../../types';
+import type { Effect } from '../../../types/effects';
 
 /**
  * The Adjustment 1.0 mutation contract carries effect parameters only, while each timeline effect

@@ -6,7 +6,7 @@ import { createWorkerSoftwareFeedbackStore } from '../../src/services/render/wor
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from '../../src/services/render/workerSoftwareGlow';
 import { directionalBlurPlan, mirrorRepeat, transformDirectionalPixel, type DirectionalBlurType } from '../../src/effects/blur/blurSampling';
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
-import type { Layer } from '../../src/types';
+import type { Layer } from '../../src/types/layers';
 
 function baseContext() {
   return {

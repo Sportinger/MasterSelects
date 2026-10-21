@@ -13,7 +13,7 @@ import { createDefaultColorEffectGraph } from '../../src/services/operators/colo
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { effectOperatorGraph, effectOperatorParams, migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
-import type { Effect } from '../../src/types';
+import type { Effect } from '../../src/types/effects';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();

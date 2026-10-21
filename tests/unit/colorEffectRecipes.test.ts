@@ -6,7 +6,7 @@ import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/
 import { paramRangeNotes } from '../../src/effects/paramRangeNotes';
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
 import { applyWorkerSoftwareImageGraphs } from '../../src/services/render/workerSoftwareImageGraphs';
-import type { Layer } from '../../src/types';
+import type { Layer } from '../../src/types/layers';
 
 /**
  * Independent CPU references for the rebuilt color effects (2026-10). The formulas below are

@@ -1,5 +1,5 @@
 import { colorEffectGraphState, type ColorEffectGraphState } from '../../../operators/colorEffectGraphState';
-import type { Effect } from '../../../../types';
+import type { Effect } from '../../../../types/effects';
 
 /** What getClipDetails reports instead of a full effect graph (several KB of nodes, cables and layout). */
 export interface EffectGraphSummary {
