@@ -1917,7 +1917,9 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
-      kaleidoscopeAdjustments: [{ segments: 8, rotation: 0.25 }],
+      // Built-in recipe: every control resolved (Circle shape, Mirror edges by default).
+      mirrorPixelAdjustments: [{ type: 'kaleidoscope', segments: 8, rotation: 0.25, sourceAngle: 0, zoom: 1, centerX: 0.5, centerY: 0.5,
+        stretch: false, edges: 'mirror' }],
     });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
@@ -2097,11 +2099,11 @@ describe('worker software preview frame builder', () => {
       [solidLayer({
         effects: [
           {
-            id: 'kaleidoscope-a',
-            type: 'kaleidoscope',
-            name: 'Kaleidoscope',
+            id: 'zoom-blur-a',
+            type: 'zoom-blur',
+            name: 'Zoom Blur',
             enabled: true,
-            params: { segments: 6, rotation: 0 },
+            params: { amount: 0.3, centerX: 0.5, centerY: 0.5 },
           },
           {
             id: 'motion-blur-a',
@@ -2301,8 +2303,7 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
       brightness: 0,
-      mirrorHorizontal: true,
-      mirrorVertical: true,
+      mirrorPixelAdjustments: [{ type: 'mirror', horizontal: true, vertical: true, keepEnd: false, angle: 0, centerX: 0.5, centerY: 0.5, edges: 'mirror' }],
     });
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
@@ -2323,8 +2324,7 @@ describe('worker software preview frame builder', () => {
     );
 
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
-      mirrorHorizontal: true,
-      mirrorVertical: false,
+      mirrorPixelAdjustments: [{ type: 'mirror', horizontal: true, vertical: false }],
     });
   });
 
@@ -2346,7 +2346,7 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
       brightness: 0,
-      pixelateSize: 12,
+      mirrorPixelAdjustments: [{ type: 'pixelate', size: 12 }],
     });
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
@@ -2370,7 +2370,7 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
       brightness: 0,
-      rgbSplit: { amount: 0.04, angle: Math.PI / 2 },
+      mirrorPixelAdjustments: [{ type: 'rgb-split', amount: 0.04, angle: Math.PI / 2, lens: false, edges: 'mirror' }],
     });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);

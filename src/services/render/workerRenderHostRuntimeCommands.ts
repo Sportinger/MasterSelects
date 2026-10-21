@@ -1,4 +1,5 @@
 import type { WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
+import type { WorkerSoftwareMirrorPixelAdjustment } from './workerSoftwareMirrorPixelEffects';
 import type {
   RenderCommand,
   RenderCommandTarget,
@@ -206,10 +207,6 @@ export interface WorkerRenderSoftwarePixelEffects {
   }[];
   /** Untouched built-in Wave, Twirl and Bulge & Pinch (edited graphs run as imageOperatorPlans). */
   readonly uvDistortAdjustments?: readonly WorkerSoftwareUvDistortAdjustment[];
-  readonly kaleidoscopeAdjustments?: readonly {
-    readonly segments: number;
-    readonly rotation: number;
-  }[];
   readonly fisheyeAdjustments?: readonly {
     readonly projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';
     readonly strength: number;
@@ -247,13 +244,8 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly centerX: number;
     readonly centerY: number;
   }[];
-  readonly mirrorHorizontal?: boolean;
-  readonly mirrorVertical?: boolean;
-  readonly pixelateSize?: number;
-  readonly rgbSplit?: {
-    readonly amount: number;
-    readonly angle: number;
-  };
+  /** Untouched built-in Kaleidoscope, Mirror, RGB Split and Pixelate, in stack order (edited graphs run as imageOperatorPlans). */
+  readonly mirrorPixelAdjustments?: readonly WorkerSoftwareMirrorPixelAdjustment[];
   readonly colorGradePrimaryNodes?: readonly RuntimePrimaryColorParams[];
 }
 

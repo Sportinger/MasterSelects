@@ -1057,7 +1057,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
-      .toMatchObject({ kaleidoscopeAdjustments: [{ segments: 8, rotation: 0.25 }] });
+      .toMatchObject({ mirrorPixelAdjustments: [{ type: 'kaleidoscope', segments: 8, rotation: 0.25 }] });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
@@ -1185,8 +1185,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects).toMatchObject({
-      mirrorHorizontal: true,
-      mirrorVertical: true,
+      mirrorPixelAdjustments: [{ type: 'mirror', horizontal: true, vertical: true }],
     });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
@@ -1214,7 +1213,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects).toMatchObject({
-      pixelateSize: 10,
+      mirrorPixelAdjustments: [{ type: 'pixelate', size: 10 }],
     });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
@@ -1242,7 +1241,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects).toMatchObject({
-      rgbSplit: { amount: 0.04, angle: Math.PI / 2 },
+      mirrorPixelAdjustments: [{ type: 'rgb-split', amount: 0.04, angle: Math.PI / 2 }],
     });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();

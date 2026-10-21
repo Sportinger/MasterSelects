@@ -5,7 +5,8 @@ import { nodePreviewTextureTap } from '../../src/services/nodePreview/NodePrevie
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
 import { createDefaultScanlinesGraph, createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import type { Effect } from '../../src/types/effects';
-import { createDefaultPixelateGraph } from '../../src/services/operators/samplingEffectGraphs';
+// The pre-review single-pass Pixelate graph: a compact vehicle for the sampling preview stage.
+import { createLegacyPixelateGraph as createDefaultPixelateGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import * as graphOwner from '../../src/services/operators/effectGraphOwner';
 import * as glyphAtlas from '../../src/effects/_shared/glyphAtlas';
 import { createDefaultMemoryLeakGraph } from '../../src/services/operators/memoryLeakEffectGraph';

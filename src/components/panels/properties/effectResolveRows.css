@@ -12,6 +12,38 @@
     --resolve-inspector-control-action-gap: 14px;
   }
 
+  /* Switches and colour wells sit at the start of the control column, sized like the row's fields. */
+  .resolve-effect-checkbox {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+
+  .resolve-effect-color {
+    display: inline-flex;
+    align-items: center;
+    height: var(--resolve-inspector-row-height);
+  }
+
+  .resolve-effect-color input[type="color"] {
+    box-sizing: border-box;
+    width: 44px;
+    height: 20px;
+    padding: 1px;
+    border: 1px solid var(--border-strong);
+    border-radius: 3px;
+    background: var(--input-bg);
+    cursor: pointer;
+  }
+
+  .resolve-effect-checkbox:focus-visible,
+  .resolve-effect-color input[type="color"]:focus-visible {
+    outline: 1px solid var(--accent) !important;
+    outline-offset: 1px !important;
+  }
+
   /* Among Resolve rows, a parameter-source row sizes like its siblings (the panel is their container). */
   .effect-params--resolve-rows > .parameter-source-control { container-type: normal; }
 }

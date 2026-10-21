@@ -4,11 +4,16 @@ import type { Effect } from '../../types/effects';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
-import { isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { rendersBuiltInMirrorPixelRecipe } from '../operators/mirrorPixelGraphUpgrade';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
 import { workerSoftwareUvDistortAdjustment, type WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
+import { workerSoftwareMirrorPixelAdjustment, type WorkerSoftwareMirrorPixelAdjustment } from './workerSoftwareMirrorPixelEffects';
+
+/** Built-in recipes with a hand-written worker CPU pass (edited graphs run through the graph interpreter). */
+const HAND_WRITTEN_MIRROR_PIXEL = new Set(['kaleidoscope', 'mirror', 'pixelate', 'rgb-split']);
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
@@ -67,10 +72,8 @@ interface MutableWorkerSoftwarePixelEffects {
     reset: boolean;
     historyLoop?: 'reset' | 'continuous';
   }[];
-  mirrorHorizontal?: boolean;
-  mirrorVertical?: boolean;
-  pixelateSize?: number;
-  rgbSplit?: { amount: number; angle: number };
+  /** Built-in Kaleidoscope, Mirror, RGB Split and Pixelate, in stack order. */
+  mirrorPixelAdjustments?: WorkerSoftwareMirrorPixelAdjustment[];
   exposureAdjustments?: { exposure: number; offset: number; gamma: number }[];
   temperatureAdjustments?: { temperature: number; tint: number }[];
   vibranceAdjustments?: { amount: number }[];
@@ -103,7 +106,6 @@ interface MutableWorkerSoftwarePixelEffects {
   scanlineAdjustments?: { density: number; opacity: number; speed: number }[];
   grainAdjustments?: { amount: number; size: number; speed: number }[];
   uvDistortAdjustments?: WorkerSoftwareUvDistortAdjustment[];
-  kaleidoscopeAdjustments?: { segments: number; rotation: number }[];
   fisheyeAdjustments?: {
     projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';
     strength: number;
@@ -148,9 +150,6 @@ function createEmptyPixelEffects(
 ): MutableWorkerSoftwarePixelEffects {
   return {
     brightness: 0,
-    mirrorHorizontal: false,
-    mirrorVertical: false,
-    pixelateSize: 0,
     ...(colorGradePrimaryNodes && colorGradePrimaryNodes.length > 0
       ? { colorGradePrimaryNodes: colorGradePrimaryNodes.map((node) => ({ ...node })) }
       : {}),
@@ -324,12 +323,14 @@ function effectFilterPart(
       return '';
     }
     case 'kaleidoscope':
-      if (!canAddSourceResamplingEffect(pixelEffects)) return null;
-      (pixelEffects.kaleidoscopeAdjustments ??= []).push({
-        segments: Math.max(2, finiteEffectNumber(effect.params.segments, 6)),
-        rotation: finiteEffectNumber(effect.params.rotation, 0),
-      });
+    case 'mirror':
+    case 'pixelate':
+    case 'rgb-split': {
+      // Only the untouched built-in recipe reaches this switch (see workerSoftwareEffectPlanForLayer).
+      const adjustment = workerSoftwareMirrorPixelAdjustment(effectType, effectOperatorParams(effect));
+      if (adjustment) (pixelEffects.mirrorPixelAdjustments ??= []).push(adjustment);
       return '';
+    }
     case 'fisheye': {
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
       const projection = effect.params.projection;
@@ -400,19 +401,6 @@ function effectFilterPart(
       const sigma = canvasBlurSigmaPx(effectType, finiteEffectNumber(effect.params.radius, effectType === 'box-blur' ? 5 : 10), outputSize);
       return sigma > 0 ? `blur(${Math.round(sigma * 1000) / 1000}px)` : '';
     }
-    case 'mirror':
-      pixelEffects.mirrorHorizontal = pixelEffects.mirrorHorizontal || effect.params.horizontal !== false;
-      pixelEffects.mirrorVertical = pixelEffects.mirrorVertical || effect.params.vertical === true;
-      return '';
-    case 'pixelate':
-      pixelEffects.pixelateSize = Math.max(1, finiteEffectNumber(effect.params.size, 8));
-      return '';
-    case 'rgb-split':
-      pixelEffects.rgbSplit = {
-        amount: Math.max(0, finiteEffectNumber(effect.params.amount, 0.01)),
-        angle: finiteEffectNumber(effect.params.angle, 0),
-      };
-      return '';
     case 'contrast':
       return `contrast(${Math.max(0, finiteEffectNumber(effect.params.amount, 1))})`;
     case 'saturation':
@@ -433,7 +421,8 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   // Built-in Wave, Twirl and Bulge keep a hand-written pass even with a stored copy of their
   // recipe (interpreting their graph per pixel is far slower); edited graphs run as graphs.
   const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
-    && (effect.operatorGraph || effect.params.operatorGraph !== undefined) && workerSoftwareUvDistortAdjustment(effect) === undefined);
+    && (effect.operatorGraph || effect.params.operatorGraph !== undefined) && workerSoftwareUvDistortAdjustment(effect) === undefined
+    && !(HAND_WRITTEN_MIRROR_PIXEL.has(effect.type) && rendersBuiltInMirrorPixelRecipe(effect)));
   const graphPlans = (): WorkerSoftwareEffectPlan | null => {
     if (!activeEffects.every(effect => isImageGraphEffectType(effect.type))) return null;
     try {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Effect } from '../../src/types/effects';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
-import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
+import { createLegacyKaleidoscopeGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { createLegacyBulgeGraph, createLegacyTwirlGraph, createLegacyWaveGraph } from '../../src/services/operators/legacyUvDistortEffectGraphs';
 import { createDefaultBulgeGraph, createDefaultTwirlGraph, createDefaultWaveGraph } from '../../src/services/operators/uvDistortRecipes';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
@@ -17,8 +17,14 @@ const memory = () => {
   const data = new Map<string, string>();
   return { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => { data.set(key, value); } };
 };
+/** A user-edited Kaleidoscope graph (the pre-review recipe with a changed circle constant), kept as saved. */
+const editedKaleidoscope = () => {
+  const graph = createLegacyKaleidoscopeGraph();
+  graph.nodes.find(node => node.id === 'tau')!.constants = { value: 7 };
+  return graph;
+};
 const source = (): Effect => ({ id: 'original', name: 'Custom kaleidoscope', type: 'kaleidoscope', enabled: true,
-  params: { segments: 11, rotation: 0.3 }, operatorGraph: createDefaultUvDistortGraph('kaleidoscope') });
+  params: { segments: 11, rotation: 0.3 }, operatorGraph: editedKaleidoscope() });
 afterEach(() => useTimelineStore.setState({ clips: [], tracks: [], isExporting: false }));
 
 describe('effect preset library', () => {

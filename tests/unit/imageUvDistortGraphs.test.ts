@@ -212,33 +212,3 @@ describe('Wave, Twirl and Bulge & Pinch graphs', () => {
     }
   });
 });
-
-// Kaleidoscope shares the dispatcher but keeps its original recipe (a later review group).
-describe('Kaleidoscope UV graph', () => {
-  const reference = (uv: UV, params: Record<string, number>): UV => {
-    const delta: UV = [uv[0] - .5, uv[1] - .5], distance = Math.hypot(...delta);
-    const angle = Math.atan2(delta[1], delta[0]) + params.rotation, segmentAngle = (Math.PI * 2) / params.segments;
-    let folded = fract(angle / segmentAngle) * segmentAngle;
-    if (folded > segmentAngle * .5) folded = segmentAngle - folded;
-    return [Math.cos(folded) * distance + .5, Math.sin(folded) * distance + .5];
-  };
-  it.each([[{ segments: 5.5, rotation: 1.2 }, [.17, .73]], [{ segments: 5.5, rotation: -2.4 }, [.18, .24]]] as const)(
-    'preserves fractional segments and WGSL-style negative fract folding (%j)', (params, uv) => {
-      const sampled: UV[] = [];
-      evaluateImageOperatorPlan(compileImageOperatorGraph(createDefaultUvDistortGraph('kaleidoscope'), { ...params }), source([...uv] as UV),
-        { uv: [...uv] as UV, sampleImage: at => { sampled.push(at); return source(at); } });
-      const expected = reference([...uv] as UV, params);
-      expect(sampled).toHaveLength(1);
-      expect(sampled[0][0]).toBeCloseTo(expected[0], 13); expect(sampled[0][1]).toBeCloseTo(expected[1], 13);
-    });
-  it('is owner-backed, one pass, bounded and rewires to source UV', () => {
-    const effect = { type: 'kaleidoscope', params: {} }, graph = effectOperatorGraph(effect), params = effectOperatorParams(effect);
-    expect(params).toMatchObject({ segments: 6, rotation: 0 }); expect(graph.nodes.length).toBeLessThanOrEqual(64);
-    const plan = compileImageOperatorGraph(graph, params); expect(plan.passes).toBeUndefined();
-    const rewired = structuredClone(graph), uvEdge = rewired.edges.find(item => item.to === 'sample' && item.input === 'uv')!;
-    uvEdge.from = 'uv'; uvEdge.output = 'uv';
-    const uv: UV = [.31, .67], sampled: UV[] = [];
-    evaluateImageOperatorPlan(compileImageOperatorGraph(rewired, params), source(uv), { uv, sampleImage: at => { sampled.push(at); return source(at); } });
-    expect(sampled[0]).toEqual(uv);
-  });
-});

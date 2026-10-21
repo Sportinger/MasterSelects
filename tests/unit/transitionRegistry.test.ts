@@ -302,6 +302,7 @@ describe('transition registry', () => {
       params: {
         amount: { from: 0, to: 0.048 },
         angle: 0,
+        edges: 'mirror',
       },
       startProgress: 0,
       endProgress: 0.62,
@@ -341,6 +342,8 @@ describe('transition registry', () => {
       params: {
         segments: { from: 5, to: 14 },
         rotation: { from: 0, to: Math.PI * 2 },
+        shape: 'circle',
+        edges: 'mirror',
       },
       startProgress: 0,
       endProgress: 0.72,

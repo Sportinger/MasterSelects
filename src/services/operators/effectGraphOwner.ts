@@ -48,6 +48,7 @@ import { upgradeFisheyeGraph } from './fisheyeGraphUpgrade';
 import { isUpgradableBlurEffectType, upgradeBlurGraph } from './blurGraphUpgrade';
 import { organizeEffectFamilyGraph } from './effectFamilyPresentation';
 import { upgradePersistedUvDistortEffect } from './uvDistortGraphUpgrade';
+import { upgradePersistedMirrorPixelEffect } from './mirrorPixelGraphUpgrade';
 import { normalizeFisheyeParameters } from '../../effects/distort/fisheye/normalization';
 import { createDefaultCrtScreenGraph } from './crtScreenEffectGraph';
 import { createDefaultRibbonScanGraph } from './ribbonScanEffectGraph';
@@ -274,7 +275,7 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
     return effect;
   }
-  effect = upgradePersistedUvDistortEffect(effect);
+  effect = upgradePersistedMirrorPixelEffect(upgradePersistedUvDistortEffect(effect));
   // A valid Weave document with unfinished wiring is an editable draft, not
   // an unloadable project. Keep every node/cable; reject structural corruption.
   if (effect.type === WEAVE_EFFECT_TYPE) {

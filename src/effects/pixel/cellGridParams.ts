@@ -1,0 +1,21 @@
+import { CELL_REFERENCE_HEIGHT } from '../../services/operators/cellGridRecipes';
+
+/** Rendered pixels per 1080p pixel: the shorter frame side over 1080. */
+export const cellPixelScale = (width = 1920, height = 1080) => Math.min(width, height) / CELL_REFERENCE_HEIGHT;
+
+/**
+ * A cell size the recipe raises to its minimum (`minimum` rendered pixels): say so. Pixelate at 1
+ * rendered pixel shows the picture unchanged.
+ */
+export function cellSizeWarnings(id: string, value: unknown, minimum: number, width?: number, height?: number): string[] {
+  if (typeof value !== 'number') return [];
+  const rendered = Math.floor(value * cellPixelScale(width, height) + 0.5);
+  if (rendered >= minimum) return [];
+  return [`${id}: ${value} is below ${minimum} rendered pixel${minimum === 1 ? '' : 's'} at ${width ?? 1920}×${height ?? 1080}; `
+    + `cells are ${minimum} pixel${minimum === 1 ? ' wide, so the picture is unchanged' : 's wide'}.`];
+}
+
+/** Amount mixes with the original between 0 and 1; values outside are clamped. */
+export function amountWarnings(value: unknown): string[] {
+  return typeof value === 'number' && (value < 0 || value > 1) ? [`amount: ${value} is outside 0–1; the effect uses ${value < 0 ? 0 : 1}.`] : [];
+}

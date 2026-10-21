@@ -112,11 +112,11 @@ describe('image operator node UI', () => {
     const effect: Effect = { id: 'mosaic-ui', name: 'Block Mosaic', type: 'block-mosaic', enabled: true,
       params: { colorA: '#11223380' }, operatorGraph: createDefaultBlockMosaicGraph() };
     const clip = createMockClip({ id: 'mosaic-clip', effects: [effect] });
-    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'color-a')!;
-    node.preview = { enabled: true, requested: true, key: 'mosaic-color-a' };
-    const frame = imageOperatorValuePreview({ key: 'mosaic-color-a', revision: '1', time: 0, clipId: clip.id, node,
+    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'grout-color')!;
+    node.preview = { enabled: true, requested: true, key: 'mosaic-grout-color' };
+    const frame = imageOperatorValuePreview({ key: 'mosaic-grout-color', revision: '1', time: 0, clipId: clip.id, node,
       width: 164, height: 100, interval: 16, priority: 1 }, clip, effect)!;
-    expect(frame.controls?.[0]).toMatchObject({ label: 'Ink', value: '#11223380', defaultValue: '#111827' });
+    expect(frame.controls?.[0]).toMatchObject({ label: 'Grout Color', value: '#11223380', defaultValue: '#111827' });
   });
 
   it('edits bound Mirror booleans without numeric coercion and preserves owner defaults', () => {
@@ -136,7 +136,7 @@ describe('image operator node UI', () => {
     previewTextStore.retain(owner, new Set(['mirror-horizontal']));
     act(() => previewTextStore.publish(horizontal.frame));
     render(<NodeValuePreview node={horizontal.node} />);
-    const checkbox = screen.getByRole('checkbox', { name: /Horizontal inline/ });
+    const checkbox = screen.getByRole('checkbox', { name: /Left \/ Right inline/ });
     expect(checkbox).toBeChecked();
     fireEvent.click(checkbox);
     const saved = useTimelineStore.getState().clips[0].effects[0];

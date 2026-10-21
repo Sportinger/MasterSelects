@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultMirrorGraph, createDefaultPixelateGraph, createDefaultRgbSplitGraph } from '../../src/services/operators/samplingEffectGraphs';
+// The pre-review single-pass recipes stay the compact vehicles for the scoped sampling compiler;
+// the current recipes are covered in mirrorPixelRecipes.test.ts.
+import {
+  createLegacyMirrorGraph as createDefaultMirrorGraph, createLegacyPixelateGraph as createDefaultPixelateGraph, createLegacyRgbSplitGraph as createDefaultRgbSplitGraph,
+} from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
 const sample = ([u, v]: [number, number]): [number, number, number, number] => [u, v, u + v, .4];

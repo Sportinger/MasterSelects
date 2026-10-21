@@ -1,3 +1,4 @@
+import { createLegacyPixelateGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { describe, expect, it, vi } from 'vitest';
 import { splitLayerEffects } from '../../src/engine/render/layerEffectStack';
 import { createDefaultInvertImageGraph, compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
@@ -107,7 +108,8 @@ describe('image graph render integration', () => {
   });
 
   it('adapts sampling graphs with the existing texture source and packed input resolution', () => {
-    const instance = { id: 'pixelate-sample', type: 'pixelate', name: 'Pixelate', enabled: true, params: {} };
+    // The pre-review single-pass Pixelate graph (edited saved graphs keep it): one fullscreen sampling pass.
+    const instance = { id: 'pixelate-sample', type: 'pixelate', name: 'Pixelate', enabled: true, params: {}, operatorGraph: createLegacyPixelateGraph() };
     const definition = imageGraphDefinition(instance, pixelate as FullscreenEffectDefinition);
     const packed = definition.packUniforms({}, 1280, 720)!;
     expect(definition.uniformSize).toBe(272);

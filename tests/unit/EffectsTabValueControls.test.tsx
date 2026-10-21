@@ -53,17 +53,31 @@ describe('EffectsTab numeric controls', () => {
 
   it('keeps the generic control for parameter types without a Resolve row in a Resolve-row effect', () => {
     const params = getEffect('gaussian-blur')!.params as Record<string, EffectParam>;
-    params.previewToggle = { type: 'boolean', label: 'Preview Toggle', default: false };
+    params.previewNote = { type: 'text', label: 'Preview Note', default: '' };
     try {
-      const effect: Effect = { id: 'gaussian-boolean', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewToggle: true } };
+      const effect: Effect = { id: 'gaussian-text', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewNote: 'a' } };
       render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
-      expect(screen.getByText('Preview Toggle')).toBeInTheDocument();
+      expect(screen.getByText('Preview Note')).toBeInTheDocument();
       expect(screen.getByLabelText('Radius slider')).toBeInTheDocument();
-      expect(hasResolveEffectParamRow({ type: 'boolean' })).toBe(false);
+      expect(hasResolveEffectParamRow({ type: 'text' })).toBe(false);
       expect(hasResolveEffectParamRow({ type: 'select' })).toBe(true);
     } finally {
-      delete params.previewToggle;
+      delete params.previewNote;
     }
+  });
+
+  it('renders switches and colours as Resolve rows: Mirror axes as checkboxes, the Block Mosaic grout as a colour well', () => {
+    expect(hasResolveEffectParamRow({ type: 'boolean' })).toBe(true);
+    expect(hasResolveEffectParamRow({ type: 'color' })).toBe(true);
+    const mirror: Effect = { id: 'mirror-rows', type: 'mirror', name: 'Mirror', enabled: true, params: { horizontal: true, vertical: false } };
+    const mosaic: Effect = { id: 'mosaic-rows', type: 'block-mosaic', name: 'Block Mosaic', enabled: true, params: { colorA: '#11223380' } };
+    const { container } = render(<EffectsTab clipId="clip:effects-controls" effects={[mirror, mosaic]} />);
+    expect(screen.getByRole('checkbox', { name: 'Left / Right' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Top / Bottom' })).not.toBeChecked();
+    expect(screen.getByLabelText('Grout Color')).toHaveValue('#112233');
+    // Mirror's Angle is stored in radians and edited in degrees, like Kaleidoscope Rotation.
+    expect(screen.getByLabelText('Angle slider')).toBeInTheDocument();
+    expect(container.querySelectorAll('.resolve-effect-checkbox')).toHaveLength(2);
   });
 
   it('renders blur controls as Resolve inspector rows: slider, number and reset, and Type as an inspector select', () => {

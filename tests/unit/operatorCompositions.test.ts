@@ -4,13 +4,13 @@ import type { EffectOperatorGraph, OperatorDefinition } from '../../src/types/op
 import { COORDINATE_COMPOSITIONS } from '../../src/services/operators/coordinateCompositions';
 import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
-import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
+import { createLegacyKaleidoscopeGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { compileImageOperatorGraph, compileImageOperatorPreview, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { readEffectGraph, validateEffectGraph } from '../../src/services/operators/effectGraph';
 import { getAllEffects } from '../../src/effects';
 import { effectOperatorGraph, isImageGraphEffectType } from '../../src/services/operators/effectGraphOwner';
 
-const flat = () => { const graph = structuredClone(expandOperatorCompositions(createDefaultUvDistortGraph('kaleidoscope'))); delete graph.groups; delete graph.compositionRules; return graph; };
+const flat = () => { const graph = structuredClone(expandOperatorCompositions(createLegacyKaleidoscopeGraph())); delete graph.groups; delete graph.compositionRules; return graph; };
 const compounds = (graph: EffectOperatorGraph) => graph.nodes.filter(node => COORDINATE_COMPOSITIONS.some(def => def.id === node.operator));
 
 describe('reusable coordinate compositions', () => {
@@ -20,7 +20,7 @@ describe('reusable coordinate compositions', () => {
     for (const effect of effects) expect(() => effectOperatorGraph({ type: effect.id, params: {} }), effect.id).not.toThrow();
   });
   it('stores three shared instances, expands stable leaf IDs and round-trips without copying parameter owners', () => {
-    const graph = createDefaultUvDistortGraph('kaleidoscope');
+    const graph = createLegacyKaleidoscopeGraph();
     expect(graph.nodes).toHaveLength(14); expect(compounds(graph)).toHaveLength(3);
     expect(validateEffectGraph(graph)).toEqual([]);
     const restored = readEffectGraph(JSON.stringify(graph), () => { throw new Error('No fallback'); });
@@ -34,7 +34,7 @@ describe('reusable coordinate compositions', () => {
 
   it('keeps the old UV formula across sector seams, the center, negative angles and segment counts', () => {
     for (const segments of [1, 2, 6, 17]) for (const rotation of [-9, -.01, 0, Math.PI, 12]) {
-      const plan = compileImageOperatorGraph(createDefaultUvDistortGraph('kaleidoscope'), { segments, rotation });
+      const plan = compileImageOperatorGraph(createLegacyKaleidoscopeGraph(), { segments, rotation });
       for (const uv of [[0, 0], [.5, .5], [.5, .9], [.9, .5], [.17, .73], [1, 1]] as [number, number][]) {
         const x = uv[0] - .5, y = uv[1] - .5, period = Math.PI * 2 / segments;
         const phase = (Math.atan2(y, x) + rotation) / period;
@@ -64,7 +64,7 @@ describe('reusable coordinate compositions', () => {
   });
 
   it('detaches an edited interior and retains unrelated shared instances', () => {
-    const expanded = structuredClone(expandOperatorCompositions(createDefaultUvDistortGraph('kaleidoscope')));
+    const expanded = structuredClone(expandOperatorCompositions(createLegacyKaleidoscopeGraph()));
     expanded.nodes.find(node => node.id === 'segment-fract')!.operator = 'math.sin.scalar';
     const packed = packOperatorCompositions(expanded);
     expect(compounds(packed)).toHaveLength(2);
@@ -74,7 +74,7 @@ describe('reusable coordinate compositions', () => {
   });
 
   it('keeps one period input across all four consumers and supports instance previews', () => {
-    const graph = createDefaultUvDistortGraph('kaleidoscope');
+    const graph = createLegacyKaleidoscopeGraph();
     const instance = graph.nodes.find(node => node.operator === 'math.mirror-repeat.scalar')!;
     expect(graph.edges.filter(edge => edge.to === instance.id && edge.input === 'period')).toHaveLength(1);
     const expanded = expandOperatorCompositions(graph);

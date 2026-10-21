@@ -1,4 +1,5 @@
 import type { BoundOperatorNode } from '../../types/operatorGraph';
+import { mirrorPixelPresentationPlan } from './mirrorPixelPresentation';
 
 export interface EffectPresentationPlan {
   labels: Record<string, string>;
@@ -91,11 +92,8 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^space-(moved-delta|sample-uv)$/.test(id) ? 'coordinates' : /^space-/.test(id) ? 'space'
           : /^phase(-|$)/.test(id) ? 'phase' : 'coordinates',
   };
-  if (['pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic'].includes(type)) return {
-    labels: { coordinates: 'Grid & Coordinates', sampling: 'Image Sampling', finish: 'Color & Alpha' },
-    stage: ({ id, operator }) => operator === 'image.sample' ? 'sampling'
-      : /split|^combine$|^image$|^color-|^ink|^mosaic$|^mixed$|^scaled-color$|^poster|^eight-rgb$|^seven-rgb$|^cell-fract$|^border|^plus4$|^center4$|^minus4$/.test(id) ? 'finish' : 'coordinates',
-  };
+  const mirrorPixel = mirrorPixelPresentationPlan(type);
+  if (mirrorPixel) return mirrorPixel;
   if (COLORS.has(type)) return {
     labels: { processing: 'Color Processing', finish: 'Clamp & Alpha' },
     stage: ({ id }) => includes('clamp combine image', id) ? 'finish' : 'processing',

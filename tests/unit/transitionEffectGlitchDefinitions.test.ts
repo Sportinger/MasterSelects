@@ -24,6 +24,7 @@ describe('effect-driven glitch transition definitions', () => {
       params: {
         amount: { from: 0, to: 0.048 },
         angle: 0,
+        edges: 'mirror',
       },
       startProgress: 0,
       endProgress: 0.62,
@@ -37,6 +38,7 @@ describe('effect-driven glitch transition definitions', () => {
       params: {
         amount: { from: 0.048, to: 0 },
         angle: 3.14159,
+        edges: 'mirror',
       },
       startProgress: 0.34,
       endProgress: 1,

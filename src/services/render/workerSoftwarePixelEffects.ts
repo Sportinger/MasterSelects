@@ -14,6 +14,7 @@ import {
   type WorkerSoftwareFeedbackFrameMetadata,
 } from './workerSoftwareFeedbackEffects';
 import { applyWorkerSoftwareImageGraphs } from './workerSoftwareImageGraphs';
+import { applyWorkerSoftwareMirrorPixelEffects } from './workerSoftwareMirrorPixelEffects';
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from './workerSoftwareGlow';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
@@ -456,10 +457,7 @@ export function hasWorkerSoftwarePixelEffects(layer: WorkerRenderSoftwareFrame['
     || scanlineAdjustmentCount > 0
     || grainAdjustmentCount > 0
     || hasWorkerSoftwareSourceResamplingEffects(layer.pixelEffects)
-    || layer.pixelEffects?.mirrorHorizontal === true
-    || layer.pixelEffects?.mirrorVertical === true
-    || finiteNumber(layer.pixelEffects?.pixelateSize, 0) > 1
-    || finiteNumber(layer.pixelEffects?.rgbSplit?.amount, 0) > 0
+    || (layer.pixelEffects?.mirrorPixelAdjustments?.length ?? 0) > 0
     || colorGradeNodeCount > 0;
 }
 
@@ -474,11 +472,6 @@ export function applyWorkerSoftwarePixelEffects(
   feedbackFrameMetadata?: WorkerSoftwareFeedbackFrameMetadata,
 ): void {
   const brightness = finiteNumber(layer.pixelEffects?.brightness, 0);
-  const mirrorHorizontal = layer.pixelEffects?.mirrorHorizontal === true;
-  const mirrorVertical = layer.pixelEffects?.mirrorVertical === true;
-  const pixelateSize = Math.floor(finiteNumber(layer.pixelEffects?.pixelateSize, 0));
-  const rgbSplit = layer.pixelEffects?.rgbSplit;
-  const rgbSplitAmount = Math.max(0, finiteNumber(rgbSplit?.amount, 0));
   const exposureAdjustments = layer.pixelEffects?.exposureAdjustments ?? [];
   const temperatureAdjustments = layer.pixelEffects?.temperatureAdjustments ?? [];
   const vibranceAdjustments = layer.pixelEffects?.vibranceAdjustments ?? [];
@@ -493,8 +486,6 @@ export function applyWorkerSoftwarePixelEffects(
   const scanlineAdjustments = layer.pixelEffects?.scanlineAdjustments ?? [];
   const grainAdjustments = layer.pixelEffects?.grainAdjustments ?? [];
   const colorGradePrimaryNodes = layer.pixelEffects?.colorGradePrimaryNodes ?? [];
-  const hasPixelate = pixelateSize > 1;
-  const hasRgbSplit = rgbSplitAmount > 0;
   if (!hasWorkerSoftwarePixelEffects(layer)) return;
 
   const imageData = context.getImageData(0, 0, width, height);
@@ -503,6 +494,8 @@ export function applyWorkerSoftwarePixelEffects(
     owners: layer.pixelEffects?.imageOperatorPlanOwners, store: feedbackStore, scopeId: feedbackScopeId,
     frame: feedbackFrameMetadata ?? { timelineTimeSeconds: timelineTime },
   });
+  // Kaleidoscope, Mirror, RGB Split and Pixelate resample the whole frame first, in stack order.
+  applyWorkerSoftwareMirrorPixelEffects(data, width, height, layer.pixelEffects?.mirrorPixelAdjustments ?? []);
   const feedbackFrame = createWorkerSoftwareFeedbackFrame({
     pixelEffects: layer.pixelEffects,
     store: feedbackStore,
@@ -511,11 +504,7 @@ export function applyWorkerSoftwarePixelEffects(
     height,
     frame: feedbackFrameMetadata ?? { timelineTimeSeconds: timelineTime },
   });
-  const sourceData = mirrorHorizontal
-    || mirrorVertical
-    || hasPixelate
-    || hasRgbSplit
-    || hasWorkerSoftwareFeedbackEffects(layer.pixelEffects)
+  const sourceData = hasWorkerSoftwareFeedbackEffects(layer.pixelEffects)
     || edgeDetectAdjustments.length > 0
     || sharpenAdjustments.length > 0
     || glowAdjustments.length > 0
@@ -525,25 +514,13 @@ export function applyWorkerSoftwarePixelEffects(
     : data;
   // Glow is a separable neighborhood prefilter; build it once per frame, then sample rings per pixel.
   const glowFields = glowAdjustments.map(adjustment => prepareWorkerSoftwareGlow(sourceData, width, height, adjustment));
-  const splitDx = hasRgbSplit ? Math.round(Math.cos(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * width) : 0;
-  const splitDy = hasRgbSplit ? Math.round(Math.sin(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * height) : 0;
   for (let y = 0; y < height; y += 1) {
-    const sampleY = mirrorVertical && y >= height / 2 ? height - 1 - y : y;
-    const pixelY = hasPixelate ? Math.floor(sampleY / pixelateSize) * pixelateSize : sampleY;
     for (let x = 0; x < width; x += 1) {
-      const sampleX = mirrorHorizontal && x >= width / 2 ? width - 1 - x : x;
-      const pixelX = hasPixelate ? Math.floor(sampleX / pixelateSize) * pixelateSize : sampleX;
       const targetIndex = (y * width + x) * 4;
-      const sourceIndex = (pixelY * width + pixelX) * 4;
-      const rIndex = hasRgbSplit
-        ? (clampIndex(pixelY + splitDy, height) * width + clampIndex(pixelX + splitDx, width)) * 4
-        : sourceIndex;
-      const bIndex = hasRgbSplit
-        ? (clampIndex(pixelY - splitDy, height) * width + clampIndex(pixelX - splitDx, width)) * 4
-        : sourceIndex;
-      let r = sourceData[rIndex] / 255 + brightness;
+      const sourceIndex = targetIndex;
+      let r = sourceData[sourceIndex] / 255 + brightness;
       let g = sourceData[sourceIndex + 1] / 255 + brightness;
-      let b = sourceData[bIndex + 2] / 255 + brightness;
+      let b = sourceData[sourceIndex + 2] / 255 + brightness;
       let alpha = sourceData[sourceIndex + 3] / 255;
       const sourceResampled = applyWorkerSoftwareSourceResamplingEffects(
         sourceData,
@@ -594,7 +571,7 @@ export function applyWorkerSoftwarePixelEffects(
         [r, g, b, alpha] = applyChromaKeyAdjustment([r, g, b, alpha], adjustment);
       }
       for (const adjustment of edgeDetectAdjustments) {
-        [r, g, b, alpha] = applyEdgeDetectAdjustment(sourceData, width, height, pixelX, pixelY, adjustment);
+        [r, g, b, alpha] = applyEdgeDetectAdjustment(sourceData, width, height, x, y, adjustment);
       }
       for (const adjustment of sharpenAdjustments) {
         const uvX = (x + 0.5) / width;

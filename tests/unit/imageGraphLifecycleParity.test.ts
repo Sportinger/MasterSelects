@@ -113,11 +113,12 @@ describe('image graph lifecycle parity', () => {
         sampleImage: () => pixel };
       // Box and Gaussian Blur are two-pass (separable) plans; their cache is evaluated on the CPU at the sampled UV.
       const run = (plan: ReturnType<typeof compileImageOperatorGraph>) => plan.passes?.length
-        ? evaluateImagePasses(plan, context.uv, context.resolution, () => pixel) : evaluateImageOperatorPlan(plan, pixel, context);
+        ? evaluateImagePasses(plan, context.uv, context.resolution, () => pixel, { timelineTimeSeconds: 1 }) : evaluateImageOperatorPlan(plan, pixel, context);
       const previewPixel = run(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams));
       const exportPixel = run(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams));
       expect(previewPixel).toEqual(exportPixel);
-      if (item.type === 'box-blur' || item.type === 'gaussian-blur') expect(exportPixel[3]).toBeCloseTo(pixel[3], 12);
+      // Multi-pass plans (separable blurs, cell averages) average the alpha of their taps.
+      if (['box-blur', 'gaussian-blur', 'blockify', 'block-mosaic'].includes(item.type)) expect(exportPixel[3]).toBeCloseTo(pixel[3], 12);
       else expect(exportPixel[3]).toBe(pixel[3]);
       const endpoints = [0, 2].map(time => {
         const sampled = evaluateCompositionClipEffects([effect], keys, time)[0];
@@ -221,10 +222,9 @@ describe('image graph lifecycle parity', () => {
     const effect: Effect = { id: 'block-mosaic-time', type: 'block-mosaic', name: 'Block Mosaic', enabled: true,
       params: { scale: 8, amount: 1, speed: 2, colorA: '#33669980', colorB: '#f0c04040' } };
     const plan = compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
-    const evaluate = (timelineTimeSeconds: number) => evaluateImageOperatorPlan(plan, pixel, {
-      uv: [0.37, 0.61], resolution: [64, 37], timelineTimeSeconds,
-      sampleImage: ([u, v]) => [u, v, (u + v) / 2, u > 0.5 ? 0.25 : 0.75],
-    });
+    // The tile layout reshuffles with time: compare a row of pixels, any of which may sit in a merged tile.
+    const evaluate = (timelineTimeSeconds: number) => Array.from({ length: 16 }, (_, index) => evaluateImagePasses(plan, [(index + 0.5) / 16, 0.61], [64, 37],
+      ([u, v]) => [u, v, (u + v) / 2, u > 0.5 ? 0.25 : 0.75], { timelineTimeSeconds }));
     const atOne = evaluate(1), repeated = evaluate(1), sought = evaluate(2.25);
     expect(repeated).toEqual(atOne);
     expect(sought).not.toEqual(atOne);

@@ -3,7 +3,7 @@ import { convertCompositions } from '../../src/services/project/projectCompositi
 import { convertProjectCompositionToStore } from '../../src/services/project/load/loadTimelineHydration';
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
 import type { Composition } from '../../src/stores/mediaStore';
-import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
+import { createLegacyKaleidoscopeGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 
 function compositionWithGraph(version = 1): Composition {
@@ -32,7 +32,9 @@ describe('image operator project persistence', () => {
   it('saves reusable instances and restores their stable editable interiors', () => {
     const composition = compositionWithGraph(), effect = composition.timelineData!.clips[0].effects[0];
     effect.type = 'kaleidoscope'; effect.params = { segments: 6, rotation: .2 };
-    effect.operatorGraph = createDefaultUvDistortGraph('kaleidoscope');
+    // A user-edited pre-review recipe (changed circle constant): saved graphs stay as authored.
+    effect.operatorGraph = createLegacyKaleidoscopeGraph();
+    effect.operatorGraph.nodes.find(node => node.id === 'tau')!.constants = { value: 7 };
     const [restored] = convertProjectCompositionToStore(JSON.parse(JSON.stringify(convertCompositions([composition]))));
     const loaded = restored.timelineData!.clips[0].effects[0];
     expect(loaded.operatorGraph?.nodes).toHaveLength(14);

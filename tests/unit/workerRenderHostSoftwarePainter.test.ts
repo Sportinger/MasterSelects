@@ -217,7 +217,8 @@ describe('worker software painter', () => {
       filter: 'none',
       pixelEffects: {
         brightness: 0,
-        rgbSplit: { amount: 1 / 3, angle: 0 },
+        // A third of the width: red reads one pixel to the right, blue one to the left (Clamp edges).
+        mirrorPixelAdjustments: [{ type: 'rgb-split', amount: 1 / 3, angle: 0, lens: false, edges: 'clamp' }],
       },
       geometry: {
         position: { x: 0, y: 0 },
@@ -612,7 +613,7 @@ describe('worker software painter', () => {
     ]);
   });
 
-  it('applies kaleidoscope distortion as a worker source-resampling pass', () => {
+  it('applies kaleidoscope distortion as a worker whole-frame resampling pass', () => {
     const inputPixels = new Uint8ClampedArray([
       10, 0, 0, 255,
       50, 0, 0, 255,
@@ -624,7 +625,9 @@ describe('worker software painter', () => {
       1,
       {
         brightness: 0,
-        kaleidoscopeAdjustments: [{ segments: 4, rotation: 0 }],
+        // Stretch to Frame and Clamp: the original UV-space fold (both outer pixels read the right edge).
+        mirrorPixelAdjustments: [{ type: 'kaleidoscope', segments: 4, rotation: 0, sourceAngle: 0, zoom: 1, centerX: 0.5, centerY: 0.5,
+          stretch: true, edges: 'clamp' }],
       },
     );
 

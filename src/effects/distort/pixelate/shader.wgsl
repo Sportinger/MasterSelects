@@ -1,7 +1,7 @@
-// Pixelate Effect Shader
+// Pixelate: WGSL reference of the editable graph (services/operators/cellGridRecipes.ts).
 
 struct PixelateParams {
-  pixelSize: f32,
+  size: f32,   // cell size in pixels of a 1080p frame (shorter side)
   width: f32,
   height: f32,
   _p: f32,
@@ -13,11 +13,8 @@ struct PixelateParams {
 
 @fragment
 fn pixelateFragment(input: VertexOutput) -> @location(0) vec4f {
-  let pixelX = params.pixelSize / params.width;
-  let pixelY = params.pixelSize / params.height;
-  let uv = vec2f(
-    floor(input.uv.x / pixelX) * pixelX + pixelX * 0.5,
-    floor(input.uv.y / pixelY) * pixelY + pixelY * 0.5
-  );
-  return textureSample(inputTex, texSampler, uv);
+  let resolution = vec2f(params.width, params.height);
+  let cell = cellRenderedPixels(params.size, resolution, 1.0);
+  let average = cellAveragePremultiplied(inputTex, cellBounds(input.uv * resolution, cell, resolution), resolution);
+  return vec4f(average.rgb / max(average.a, 0.000001), average.a);
 }

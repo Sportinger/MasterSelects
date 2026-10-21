@@ -6,10 +6,6 @@ import {
 import { Logger } from '../logger';
 import { applyWorkerSoftwareUvDistort } from './workerSoftwareUvDistortEffects';
 
-function finiteNumber(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
-
 function clampIndex(value: number, maxExclusive: number): number {
   return Math.max(0, Math.min(maxExclusive - 1, value));
 }
@@ -45,34 +41,6 @@ function sampleRgba(
 function mirrorEdgeUv(value: number): number {
   const wrapped = value - Math.floor(value * 0.5) * 2;
   return wrapped > 1 ? 2 - wrapped : wrapped;
-}
-
-function applyKaleidoscopeAdjustment(
-  sourceData: Uint8ClampedArray,
-  width: number,
-  height: number,
-  uvX: number,
-  uvY: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['kaleidoscopeAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  const deltaX = uvX - 0.5;
-  const deltaY = uvY - 0.5;
-  const angle = Math.atan2(deltaY, deltaX) + finiteNumber(adjustment.rotation, 0);
-  const radius = Math.hypot(deltaX, deltaY);
-  const segmentAngle = (Math.PI * 2) / Math.max(2, finiteNumber(adjustment.segments, 6));
-  let foldedAngle = (angle / segmentAngle - Math.floor(angle / segmentAngle)) * segmentAngle;
-  if (foldedAngle > segmentAngle * 0.5) {
-    foldedAngle = segmentAngle - foldedAngle;
-  }
-  return sampleRgba(
-    sourceData,
-    width,
-    height,
-    clamp01(Math.cos(foldedAngle) * radius + 0.5),
-    clamp01(Math.sin(foldedAngle) * radius + 0.5),
-  );
 }
 
 type DirectionalAdjustment = { readonly amount: number; readonly angle?: number; readonly centerX?: number;
@@ -359,7 +327,6 @@ export function hasWorkerSoftwareSourceResamplingEffects(
   pixelEffects: WorkerRenderSoftwarePixelEffects | undefined,
 ): boolean {
   return (pixelEffects?.uvDistortAdjustments?.length ?? 0) > 0
-    || (pixelEffects?.kaleidoscopeAdjustments?.length ?? 0) > 0
     || (pixelEffects?.fisheyeAdjustments?.length ?? 0) > 0
     || (pixelEffects?.motionBlurAdjustments?.length ?? 0) > 0
     || (pixelEffects?.radialBlurAdjustments?.length ?? 0) > 0
@@ -380,9 +347,6 @@ export function applyWorkerSoftwareSourceResamplingEffects(
   let output: readonly [number, number, number, number] | null = null;
   for (const adjustment of pixelEffects.uvDistortAdjustments ?? []) {
     output = applyWorkerSoftwareUvDistort(sourceData, width, height, uvX, uvY, adjustment, timelineTime);
-  }
-  for (const adjustment of pixelEffects.kaleidoscopeAdjustments ?? []) {
-    output = applyKaleidoscopeAdjustment(sourceData, width, height, uvX, uvY, adjustment);
   }
   for (const adjustment of pixelEffects.fisheyeAdjustments ?? []) {
     output = applyFisheyeAdjustment(sourceData, width, height, uvX, uvY, adjustment);

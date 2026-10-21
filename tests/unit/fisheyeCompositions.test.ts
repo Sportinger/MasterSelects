@@ -7,7 +7,7 @@ import { compileImageOperatorGraph } from '../../src/services/operators/imageOpe
 import { effectOperatorGraph, effectOperatorParams, effectOperatorCompileContext } from '../../src/services/operators/effectGraphOwner';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
-import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
+import { createLegacyKaleidoscopeGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 
 const semantic = (graph: EffectOperatorGraph) => ({
   nodes: graph.nodes.toSorted((a, b) => a.id.localeCompare(b.id)),
@@ -61,7 +61,7 @@ describe('Fisheye shared nested compositions', () => {
   it('upgrades revision-one graphs without rerunning old rules and refuses cross-folder matches or private fan-out', () => {
     const legacy = createDefaultFisheyeGraph(); legacy.compositionRules = 1;
     expect(recognizeOperatorCompositions(legacy).nodes.filter(node => node.operator === 'coordinates.restore-lens.vec2')).toHaveLength(3);
-    const ungrouped = expandOperatorCompositions(createDefaultUvDistortGraph('kaleidoscope'));
+    const ungrouped = expandOperatorCompositions(createLegacyKaleidoscopeGraph());
     delete ungrouped.groups; ungrouped.compositionRules = 1;
     expect(recognizeOperatorCompositions(ungrouped).nodes).toEqual(ungrouped.nodes);
     const split = createDefaultFisheyeGraph();
