@@ -5,6 +5,7 @@ import { Logger } from '../logger';
 import type { AudioArtifactStore } from './AudioArtifactStore';
 import { AudioDecodeService, BROWSER_AUDIO_DECODE_DECODER_ID } from './AudioDecodeService';
 import { decodeSourceAudioWithFallbacks, SOURCE_AUDIO_FALLBACK_DECODE_ATTEMPTS } from './decode/sourceAudioFallbackDecode';
+import { runSharedBrowserAudioDecode } from './decode/sharedBrowserAudioDecode';
 import { readLongPcmWavInfo, readLongWavFingerprintBytes } from './longPcmWav';
 import { buildPeakDecimatedAudioBuffer } from './longWavPeaksClient';
 
@@ -392,11 +393,12 @@ async function decodeTimelineWaveformAnalysisForFile(file: File, options: Genera
     const arrayBuffer = await file.arrayBuffer();
     assertCurrentAnalysis(options);
 
-    // Browser decodeAudioData first, then the container/WebCodecs and FFmpeg paths.
+    // Browser decodeAudioData first (shared with a concurrent audio proxy of the
+    // same file), then the container/WebCodecs and FFmpeg paths.
     const { buffer: audioBuffer } = await decodeSourceAudioWithFallbacks(file, [
       {
         id: BROWSER_AUDIO_DECODE_DECODER_ID,
-        decode: () => decodeService.decodeAudioBuffer(
+        decode: () => runSharedBrowserAudioDecode(file, () => decodeService.decodeAudioBuffer(
           {
             kind: 'array-buffer',
             arrayBuffer,
@@ -415,7 +417,7 @@ async function decodeTimelineWaveformAnalysisForFile(file: File, options: Genera
               sourceLastModified: file.lastModified,
             },
           },
-        ),
+        ), options.signal),
       },
       ...SOURCE_AUDIO_FALLBACK_DECODE_ATTEMPTS,
     ], options.signal);
