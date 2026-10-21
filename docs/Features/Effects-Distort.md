@@ -25,9 +25,10 @@ the area blends smoothly into the untouched picture.
 - **Radius** – size of the area, as a share of the picture height (the width in a portrait picture): 0.5 makes a circle as tall as the picture.
 - **Center X / Center Y** – where the area sits (0.5 / 0.5 is the middle of the picture).
 
-Tip: animate Amount from 1 to let the bump grow out of the picture. When a pinch
-reaches the edge of the picture, **Frame Edges: Clamp** or **Transparent** avoids
-a mirrored seam along the border.
+Tip: animate Amount from 1 to let the bump grow out of the picture. A pinch
+larger than the picture reads beyond its edge: keep Radius at 0.5 or less in the
+middle (the pinch then stays inside the frame), or use **Frame Edges:
+Transparent** over a background layer.
 
 <div class="docs-float-end"></div>
 
@@ -59,9 +60,10 @@ Tip: keyframe Twist from 0 up and back to 0 for a swirl transition.
 
 Ripples the picture with smooth waves, from a gentle ripple to a funhouse wobble.
 The waves travel by themselves.
-- **Horizontal Height / Vertical Height** – how far the picture moves, as a share of the picture (0.015 is 1.5 %).
+- **Horizontal Height / Vertical Height** – how far the picture moves, as a share of the picture (0.015 is 1.5 %). Horizontal Height moves the picture up and down in waves that run across it; Vertical Height moves it sideways.
 - **Horizontal Waves / Vertical Waves** – how many waves fit across and down the picture.
 - **Speed** – how fast the waves travel, in waves per second. 0 stands still, negative values run the other way.
+- **Phase** – shifts the waves along, in degrees (useful with Speed 0).
 
 Tip: small heights (0.005) with a slow Speed read as heat shimmer.
 
@@ -91,7 +93,7 @@ Tip: Lens Radius 0.9 with **Outside Lens: Transparent** makes a round porthole.
 
 ![The night street twice: on top with strong simulated wide-angle distortion, the house fronts at the left and right bowing outward; below, corrected and slightly enlarged, the house edges straight and upright](assets/effects/lens-correction.webp)
 
-<figcaption>Top: the street with simulated wide-angle (barrel) distortion. Bottom: Remove Distortion −28, Scale 120.</figcaption>
+<figcaption>Top: simulated barrel distortion. Bottom: Remove Distortion −28, Scale 120.</figcaption>
 </figure>
 
 Repairs what a camera lens does to a photo or clip: bowed lines, coloured
@@ -101,10 +103,10 @@ fringes at contrast edges and dark corners.
 - **Red/Cyan Fringe and Blue/Yellow Fringe** – remove coloured edges.
 - **Vignette Amount** – lifts dark corners (negative darkens them).
 
+<div class="docs-float-end"></div>
+
 Tip: very strong correction leaves empty corners. Raise Scale to crop them, or
 fill them on still photos with AI Edge Fill.
-
-<div class="docs-float-end"></div>
 
 ### Guided Perspective
 <figure class="docs-shot docs-shot--float-left">
@@ -133,27 +135,28 @@ again. It uses the cloud AI service and its credits; see [AI Edge Fill](./Effect
 
 <div class="docs-float-end"></div>
 
-**Known limitations.** Very strong Twist, Wave with many tiny waves or a strong
-pinch can shimmer on fine detail, and a very strong bulge looks soft, because
-each pixel is read once.
+### Known limitations
+
+Very strong Twist, Wave with many tiny waves or a strong pinch can shimmer on
+fine detail, and a very strong bulge looks soft, because each pixel is read once.
 
 ## How the distort effects are built
 
 Bulge & Pinch, Twirl and Wave share their controls and their idea. Twirl shows
 both best.
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-shot--detail">
 
 <div class="docs-shot-stage">
 
-![A slice of the swirled preview next to the Twirl effect card: Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror](assets/effects/editor/twirl-inspector.webp)
+![The Twirl effect card in Properties → Effects: Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror](assets/effects/editor/twirl-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 418" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 590 418" aria-hidden="true" focusable="false">
 <defs><marker id="twirl-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M415 132 L499 132" marker-end="url(#twirl-inspector-arrow)" />
-<circle class="docs-shot-number" cx="415" cy="132" r="18" /><text x="415" y="132" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M415 359 L499 359" marker-end="url(#twirl-inspector-arrow)" />
-<circle class="docs-shot-number" cx="415" cy="359" r="18" /><text x="415" y="359" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M101 132 L161 132" marker-end="url(#twirl-inspector-arrow)" />
+<circle class="docs-shot-number" cx="101" cy="132" r="18" /><text x="101" y="132" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M23 359 L83 359" marker-end="url(#twirl-inspector-arrow)" />
+<circle class="docs-shot-number" cx="23" cy="359" r="18" /><text x="23" y="359" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -175,7 +178,7 @@ both best.
 
 ![The Twirl graph from left to right: Parameters and Input Frame, then Centre, Shape & Radius, Twirl Angle, Premultiplied Source (cached), Frame Edges & Sampling, Straight Alpha Output and Output; the Constants and Coordinates folders are hidden](assets/effects/graphs/twirl.webp)
 
-<figcaption>Twirl as it opens in the Node Workspace, with the Constants and Coordinates & Resources folders left out of the picture.</figcaption>
+<figcaption>Twirl as it opens in the Node Workspace, with the Constants and Coordinates & Resources folders left out of the picture and cables routed around the cards.</figcaption>
 </figure>
 
 A distortion does not move pixels. Every pixel of the result asks: which spot
@@ -199,18 +202,18 @@ Bulge & Pinch and Twirl differ only in the middle folder.
 
 <div class="docs-shot-stage">
 
-![The Twirl Angle folder opened. Top row: the stub Distance / Radius, Minimum, Subtract, Multiply, the stub Twist and a second Multiply that outputs Turn Angle. Bottom row: the stub Offset, Rotate UV, the stub Shape Scale, Divide, the stub Centre and Add, which outputs Read Position](assets/effects/graphs/twirl-angle.webp)
+![The Twirl Angle folder opened, its cables running around the cards. Top row: Distance / Radius, Minimum, Subtract, Multiply, Twist and a second Multiply that outputs Turn Angle. Bottom row: Offset, Rotate UV, Shape Scale, Divide, Centre and Add, which outputs Read Position. Turn Angle runs back from the end of the top row into the Angle input of Rotate UV](assets/effects/graphs/twirl-angle.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 461" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 449" aria-hidden="true" focusable="false">
 <defs><marker id="twirl-angle-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M596 283 L596 199" marker-end="url(#twirl-angle-arrow)" />
-<circle class="docs-shot-number" cx="596" cy="283" r="18" /><text x="596" y="283" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M922 283 L922 199" marker-end="url(#twirl-angle-arrow)" />
-<circle class="docs-shot-number" cx="922" cy="283" r="18" /><text x="922" y="283" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M587 22 L587 79" marker-end="url(#twirl-angle-arrow)" />
+<circle class="docs-shot-number" cx="587" cy="22" r="18" /><text x="587" y="22" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M907 22 L907 79" marker-end="url(#twirl-angle-arrow)" />
+<circle class="docs-shot-number" cx="907" cy="22" r="18" /><text x="907" y="22" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
-<figcaption>Twirl's Twirl Angle folder. Green cards are values from outside the folder. 1 — the Multiply that squares the falloff. 2 — the Multiply that makes Turn Angle.</figcaption>
+<figcaption>Twirl's Twirl Angle folder, with cables routed around the cards (the <strong>Avoid</strong> button in the Node Workspace toolbar). Green cards are values from outside the folder. 1 — the Multiply that squares the falloff. 2 — the Multiply that makes Turn Angle.</figcaption>
 </figure>
 
 **Minimum**, **Subtract** and the first **Multiply** (1) turn the distance into
@@ -230,34 +233,36 @@ straight line instead of a curve, and the swirl stays strong further out.
 
 <div class="docs-shot-stage">
 
-![The up-and-down strand of the Wave Displacement folder in two rows. First row: UV, Split Vector with X and Y outputs, Horizontal Waves and two Multiply nodes. Second row: Phase, Add, Sine, Horizontal Height, Multiply and Add](assets/effects/graphs/wave-displacement.webp)
+![The up-and-down strand of the Wave Displacement folder in two rows, its cables running around the cards. Top row: X and Horizontal Waves, two Multiply nodes, Phase, Add and Sine. Bottom row: Horizontal Height, Multiply, Y and Add. The Sine output runs back from the end of the top row into the bottom-row Multiply](assets/effects/graphs/wave-displacement.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 461" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 577" aria-hidden="true" focusable="false">
 <defs><marker id="wave-displacement-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M244 257 L244 173" marker-end="url(#wave-displacement-arrow)" />
-<circle class="docs-shot-number" cx="244" cy="257" r="18" /><text x="244" y="257" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M420 439 L420 409" marker-end="url(#wave-displacement-arrow)" />
-<circle class="docs-shot-number" cx="420" cy="439" r="18" /><text x="420" y="439" class="docs-shot-number-text">2</text>
-<path class="docs-shot-arrow" d="M746 439 L746 429" marker-end="url(#wave-displacement-arrow)" />
-<circle class="docs-shot-number" cx="746" cy="439" r="18" /><text x="746" y="439" class="docs-shot-number-text">3</text>
+<path class="docs-shot-arrow" d="M418 527 L418 443" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="418" cy="527" r="18" /><text x="418" y="527" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M902 247 L902 163" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="902" cy="247" r="18" /><text x="902" y="247" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M253 554 L253 490" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="253" cy="554" r="18" /><text x="253" y="554" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
-<figcaption>The up-and-down strand of Wave's Wave Displacement folder; the sideways strand is left out. Green cards are inputs: the picture position (UV) and values from outside the folder. 1 — Split Vector, with its Y output. 2 — Sine. 3 — the Multiply that scales the wave by Horizontal Height.</figcaption>
+<figcaption>The up-and-down strand of Wave's Wave Displacement folder, with cables routed around the cards; the sideways strand and the Split Vector node are left out. Green cards are inputs: X and Y, the picture position from Split Vector, and values from outside the folder. 1 — Y. 2 — Sine. 3 — the Multiply that scales the wave by Horizontal Height.</figcaption>
 </figure>
 
-This strand moves the picture up and down. **Split Vector** (1) splits the
-position into X and Y. X times **Horizontal Waves** (and 2π) plus **Phase** goes
-into a **Sine** (2); the **Multiply** (3) scales that wave by **Horizontal
-Height**, and the last **Add** shifts Y by it. A second strand in the same
-folder, left out here, does the same along Y with the vertical controls and
-shifts X; **Combine Vector** joins both into the **Read Position**. Phase grows
-with Speed over time, so the waves travel.
+This strand moves the picture up and down. **Split Vector**, at the start of the
+folder, splits each pixel's position into **X** and **Y** (1). X times
+**Horizontal Waves** (and 2π, the free dot on the second Multiply) plus
+**Phase** goes into a **Sine** (2); the **Multiply** (3) scales that wave by
+**Horizontal Height**, and the last **Add** shifts Y by it. A second strand in
+the same folder, left out here, does the same along Y with the vertical controls
+and shifts X; **Combine Vector** joins both into the **Read Position**. Phase
+grows with Speed over time, so the waves travel.
 
-Remix, a water reflection: add a **Multiply** node between the **Sine** (2) and
-the Multiply (3), and connect the **Y** output of **Split Vector** (1) to its
-second input. Y runs from 0 at the top of the picture to 1 at the bottom, so
-the ripples are calm at the top and strongest at the bottom.
+Remix, ripples that grow towards the bottom: add a **Multiply** node between the
+**Sine** (2) and the Multiply (3), and connect the **Y** output of **Split
+Vector** (the Y card (1) in the picture) to its second input. Y runs from 0 at
+the top of the picture to 1 at the bottom, so the ripples are calm at the top
+and strongest at the bottom, like a water surface.
 
 ### The other distort effects
 
@@ -327,9 +332,10 @@ Notes for developers. The recipes live in
   appear below the effect in the inspector, judged on the values at the
   playhead, and in the `addEffect` / `updateEffect` tool results.
 - **Saved projects.** They open with their settings. Untouched Wave, Twirl and
-  Bulge graphs, and effects saved before effects owned a graph, load as the
-  current recipes with Stretch to Frame, Clamp and (Wave) Speed 0, so Wave and
-  Twirl look as before; Bulge & Pinch gets the smooth curve. Untouched
+  Bulge graphs, effects saved before effects owned a graph and effect presets
+  saved with the earlier recipe load (or apply) as the current recipes with
+  Stretch to Frame, Clamp and (Wave) Speed 0, so Wave and Twirl look as before;
+  Bulge & Pinch gets the smooth curve. Untouched
   Fisheye graphs of the earlier recipe are recognized by a frozen fingerprint
   and load as the current one; edited graphs stay as saved. Guided Perspective
   below Strength 100 renders the straight-line blend.
