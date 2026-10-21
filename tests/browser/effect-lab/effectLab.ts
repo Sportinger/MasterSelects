@@ -102,6 +102,11 @@ async function render(job: EffectLabJob) {
   const effect = { id: `lab-${job.effectId}`, type: job.effectId, name: definition.name, enabled: true, params };
   const times = job.times?.length ? job.times : [0];
   const scopeId = `effect-lab:${scope += 1}`;
+  // Byte-texture effects (Memory Leak) pass the image through until their source has loaded
+  // (the FFmpeg heap): wait for it, so the first rendered cell already shows the effect.
+  const byteTexture = (definition as { byteTexture?: (p: typeof params, c: object) => unknown }).byteTexture;
+  for (let wait = 0; byteTexture && wait < 150 && !byteTexture(params, { effectInstanceId: effect.id, width, height,
+    timelineTimeSeconds: times[0], frameRate: job.frameRate ?? 30, scopeId }); wait += 1) await pause(100);
   const started = performance.now();
   let finalTexture: GPUTexture = source;
   for (let attempt = 0; attempt < 40; attempt += 1) {

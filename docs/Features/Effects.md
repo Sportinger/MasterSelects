@@ -96,9 +96,10 @@ and source. Other effects and structural settings are not implicitly enabled.
 - The populated clip-effect categories are `color`, `blur`, `distort`,
   `stylize`, `generate`, `keying`, `halftone`, `analog`, `pixel`, `glyph`,
   `geometry`, `tracking`, and `time`.
-- `generate` holds the [Memory Leak](./Memory-Leak.md) generator, which
-  reinterprets leftover bytes of the FFmpeg wasm heap as pixels through the
-  byte-texture binding described below.
+- `generate` holds the generators described in [Generate Effects](./Effects-Generate.md):
+  Color Wheel, Perspective Grid, Stick Figure, Flocking, Weave and the
+  [Memory Leak](./Memory-Leak.md) generator, which reinterprets leftover bytes of
+  the FFmpeg wasm heap as pixels through the byte-texture binding described below.
 - `time` contains Time Stack and Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
 ## Glow on transparent and 3D layers
@@ -615,7 +616,7 @@ grades that have not stored their default values yet.
 - `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md) and, for Pixelate, Kaleidoscope, Mirror and RGB Split, [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
 - `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
 - `keying` (1): Chroma Key
-- `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
+- `generate` (6, see [Generate Effects](./Effects-Generate.md)): **Color Wheel** (an HSV wheel filling the layer or drawn as an anti-aliased disc), **Perspective Grid** (a scrolling vanishing-point floor grid with filtered lines whose width is set in 1080p pixels at the front edge), **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes)), **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)), **Weave** (curve-node yarn and fabric in 3D; see [Weave](./Weave.md)) and Memory Leak
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
 - `analog` (10): glitch, crystal/glass, ribbon, CRT, prism, wave, hologram, compute Pixel Sort, and Analog Signal Lab
 - `pixel` (2): Blockify and Block Mosaic; see [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)

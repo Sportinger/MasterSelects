@@ -1,0 +1,96 @@
+{
+  "pairs": [
+    {
+      "name": "color-wheel",
+      "out": "docs/Features/assets/effects/color-wheel.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "pair",
+      "outWidth": 1600,
+      "gap": 6,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "color-wheel",
+        "params": {
+          "shape": "disc",
+          "mix": 0.5
+        }
+      }
+    },
+    {
+      "name": "perspective-grid",
+      "out": "docs/Features/assets/effects/perspective-grid.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "split",
+      "outWidth": 1600,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "perspective-grid",
+        "params": {
+          "horizon": 0.7,
+          "lineWidth": 3,
+          "opacity": 1,
+          "rows": 4,
+          "columns": 16
+        }
+      }
+    },
+    {
+      "name": "stick-figure",
+      "out": "docs/Features/assets/effects/stick-figure.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "pair",
+      "outWidth": 1600,
+      "gap": 6,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "stick-figure",
+        "params": {
+          "facing": "left",
+          "rootX": 600,
+          "groundY": 430,
+          "scale": 1.6,
+          "spine": 12,
+          "head": -15,
+          "shoulderL": 140,
+          "elbowL": 10,
+          "shoulderR": -80,
+          "elbowR": -15,
+          "hipL": -6,
+          "kneeL": 8,
+          "hipR": -60,
+          "kneeR": 12,
+          "headStyle": "ring"
+        }
+      }
+    },
+    {
+      "name": "memory-leak",
+      "out": "docs/Features/assets/effects/memory-leak.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "pair",
+      "outWidth": 1600,
+      "gap": 6,
+      "left": {
+        "effect": "original"
+      },
+      "right": {
+        "effect": "memory-leak",
+        "params": {
+          "size": 128,
+          "motion": "static",
+          "offset": 1
+        }
+      }
+    }
+  ]
+}
