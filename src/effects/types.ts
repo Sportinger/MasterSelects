@@ -63,6 +63,22 @@ export interface EffectParam {
 }
 
 /**
+ * A named starting point of an effect, picked in its card ("Preset"). Applying it sets every visible
+ * control to the preset's value, or to its default when the preset leaves it out (text controls stay
+ * unless named), in one undo step. Controls with keyframes or a node driving them keep their animation
+ * and are named in the card instead (src/services/effects/effectPresets.ts). The docs page lists each
+ * preset under "## Presets" (tests/unit/effectDocsCatalog.test.ts checks the names).
+ */
+export interface EffectPreset {
+  /** Stable id (kebab-case); never shown. */
+  id: string;
+  /** Name in the card and the docs, a short noun phrase ("Venetian Blinds"). */
+  name: string;
+  /** Values that differ from the defaults, in stored units. */
+  params: Readonly<Record<string, number | boolean | string>>;
+}
+
+/**
  * Props for custom effect control components
  */
 export interface EffectControlProps {
@@ -140,6 +156,13 @@ export interface FullscreenEffectDefinition {
   // Optional: Effect changes over wall-clock time and should keep paused preview rendering.
   requiresContinuousRender?: boolean;
 
+  /** The picture changes with timeline time (Speed × time) but holds still while paused, so it needs
+   * no continuous rendering; the docs show it as a loop. */
+  timelineAnimated?: boolean;
+
+  /** Named starting points picked in the effect card (EffectPreset). */
+  presets?: readonly EffectPreset[];
+
   // Optional: Custom UI component for special controls
   customControls?: ComponentType<EffectControlProps>;
 
@@ -178,6 +201,7 @@ export interface ParticleRenderEffectDefinition {
   category: EffectCategory;
   params: Record<string, EffectParam>;
   requiresContinuousRender?: boolean;
+  presets?: readonly EffectPreset[];
   customControls?: ComponentType<EffectControlProps>;
   // Notes on values the renderer clamps or changes at this output size (see FullscreenEffectDefinition).
   paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
@@ -200,6 +224,7 @@ export interface ComputeEffectDefinition {
   /** Why the effect is still experimental (see FullscreenEffectDefinition.experimental). */
   experimental?: string;
   requiresContinuousRender?: boolean;
+  presets?: readonly EffectPreset[];
   customControls?: ComponentType<EffectControlProps>;
 }
 

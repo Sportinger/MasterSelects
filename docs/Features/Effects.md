@@ -124,7 +124,11 @@ opens that node in the Nodes tab. More: [Parameter sources](./Node-Workspace.md#
 has a **Style** menu at the top: it switches to another look and keeps your settings and
 keyframes.
 
-**Effect presets.** To reuse an effect you have set up, open the **Nodes** tab, click **Effect
+**Presets.** Effects that come with presets have a **Preset** row under **Style**. A preset is a
+named starting point: it sets all controls of the card at once, and one undo takes it back. A control
+with keyframes keeps them, and the card says so. Each effect page shows its presets.
+
+**Your own effects.** To reuse an effect you have set up, open the **Nodes** tab, click **Effect
 presets**, give it a name and click **Save effect copy**. Under **Saved effects**, **Add copy** adds
 it to the selected clip, in any project in this browser.
 

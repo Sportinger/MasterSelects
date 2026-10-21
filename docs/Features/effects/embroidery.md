@@ -1,6 +1,6 @@
 # Embroidery
 
-<!-- effect-docs: basic page sha=9acc4a70bcc0, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=325f15a0d21a, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Covers the image in wavy animated thread rows tinted with the Ink color for a knitted fabric look; Scale sets the stitch size.
 
@@ -10,7 +10,7 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 
 ![Embroidery on the harbour town: the original on the left, Embroidery at its default settings on the right](../assets/effects/embroidery.webp)
 
-<figcaption>Left: the original. Right: Embroidery at its default settings.</figcaption>
+<figcaption>Left: the original. Right: Embroidery at its default settings, one frame of its movement.</figcaption>
 </figure>
 
 *A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
@@ -34,4 +34,4 @@ Group: [Textile & Craft](../Effects-Textile.md) · [How to add an effect](../Eff
 
 ## Technical details
 
-Embroidery is one look of the pattern engine; its looks share one node setup. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+Embroidery is one look of the pattern engine; its looks share one node setup. It changes over time: its picture depends on the playback time or on earlier frames. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).

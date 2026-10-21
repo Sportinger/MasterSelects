@@ -34,5 +34,5 @@ Lines move over time.
 
 ## Technical details
 
-Line spacing is measured in pixels. Contour runs as a GPU compute effect (marching squares);
+Line spacing is measured in pixels (Drift Lines: pixels of a 1080p frame). Contour runs as a GPU compute effect (marching squares);
 the others are node setups of the pattern engine. More: [Effect system](./Effect-System.md).

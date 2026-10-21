@@ -34,7 +34,10 @@ const fixtures: Fixture[] = [
   { type: 'cross-stitch', definition: crossStitch as FullscreenEffectDefinition, factory: createDefaultCrossStitchGraph, cases: base(4, 40) },
   { type: 'glitch-grid', definition: glitchGrid as FullscreenEffectDefinition, factory: () => createDefaultMotionHalftoneGraph('glitch-grid'), cases: animated(2, 80) },
   { type: 'scatter-mosaic', definition: scatterMosaic as FullscreenEffectDefinition, factory: () => createDefaultMotionHalftoneGraph('scatter-mosaic'), cases: animated(2, 80) },
-  { type: 'drift-lines', definition: driftLines as FullscreenEffectDefinition, factory: () => createDefaultMotionHalftoneGraph('drift-lines'), cases: animated(2, 80) },
+  { type: 'drift-lines', definition: driftLines as FullscreenEffectDefinition, factory: () => createDefaultMotionHalftoneGraph('drift-lines'), cases: [
+    ...animated(2, 80), { name: 'angle-upright', params: { angle: 90, amount: .83 }, time: .5 },
+    { name: 'angle-tilted', params: { angle: -30, scale: 6, amount: 1 }, time: 1.5 },
+  ] },
 ];
 function resolved(definition: FullscreenEffectDefinition, overrides: Record<string, Primitive>): Record<string, Primitive> {
   return { ...Object.fromEntries(Object.entries(definition.params).map(([id, spec]) => [id, spec.default])), ...overrides };

@@ -1,5 +1,6 @@
 import shader from './shader.wgsl?raw';
-import { createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
+import { catalogBaseParam, createCatalogEffect, ignoredBaseParams } from '../_shared/catalogEffect';
+import { DRIFT_LINES_PRESETS, driftLinesWarnings } from './driftLines';
 
 const select = (label: string, values: string[], defaultValue = values[0]) => ({
   type: 'select' as const,
@@ -65,7 +66,17 @@ export const scatterMosaic = createCatalogEffect({
   id: 'scatter-mosaic', name: 'Scatter Mosaic', category: 'halftone', shader, entryPoint: 'scatterMosaicFragment', animated: true,
   retired: ignoredBaseParams('Scatter Mosaic', ['angle', 'colorA', 'colorB']),
 });
+// Timeline clock: the graph moves with the playhead and holds still while paused (no continuous render).
 export const driftLines = createCatalogEffect({
-  id: 'drift-lines', name: 'Drift Lines', category: 'halftone', shader, entryPoint: 'driftLinesFragment', animated: true,
-  retired: ignoredBaseParams('Drift Lines', ['angle', 'colorA', 'colorB']),
+  id: 'drift-lines', name: 'Drift Lines', category: 'halftone', shader, entryPoint: 'driftLinesFragment', animated: true, clock: 'timeline',
+  // Same parameter ids as the other looks of the engine (the Style menu keeps values); labels of its own.
+  params: {
+    scale: catalogBaseParam('scale', { label: 'Band Size', unit: ' px', renderMin: 2 }),
+    amount: catalogBaseParam('amount', { label: 'Drift', group: 'Motion' }),
+    // An edited graph saved before Angle acted does not read it: the card hides it then (graphOnly).
+    angle: catalogBaseParam('angle', { unit: '°', graphOnly: true }),
+  },
+  retired: ignoredBaseParams('Drift Lines', ['colorA', 'colorB']),
+  paramWarnings: driftLinesWarnings,
+  presets: DRIFT_LINES_PRESETS,
 });

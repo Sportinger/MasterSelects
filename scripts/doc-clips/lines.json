@@ -1,0 +1,19 @@
+{
+  "out": "docs/Features/assets/effects/clips",
+  "source": "dancer_stage_motion.mp4",
+  "clips": [
+    {
+      "name": "drift-lines",
+      "effect": "drift-lines",
+      "params": {},
+      "range": [0.5, 5.5],
+      "layout": "pair",
+      "crop": [420, 60, 1000, 960],
+      "width": 960,
+      "float": "left",
+      "alt": "The dancer turning on a dark stage, original left and with Drift Lines right: the picture is cut into thin horizontal bands that slide left and right in a slow wave, so her dress and arms break into a rippling staircase, with faint dark lines between the bands",
+      "caption": "Left: original. Right: Drift Lines at its default settings.",
+      "loop": 0.35
+    }
+  ]
+}

@@ -183,6 +183,7 @@ function describe() {
       type: param.type, label: param.label, default: param.default, min: param.min, max: param.max,
       options: param.options?.map(option => option.value), hidden: param.hidden || undefined,
     }])),
+    presets: effect.presets?.map(preset => ({ id: preset.id, name: preset.name, params: preset.params })),
   }));
 }
 

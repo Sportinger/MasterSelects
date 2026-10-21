@@ -41,6 +41,7 @@ and source. Other effects and structural settings are not implicitly enabled.
 | `src/services/nodeGraph/catalogText.ts` | One-sentence descriptions and search words |
 | `src/effects/EffectsPipeline.ts` | Fullscreen passes, caches, feedback and history |
 | `src/components/panels/properties/EffectsTab.tsx` | The effect cards in Properties → Effects |
+| `src/services/effects/effectPresets.ts` | Effect presets: apply in one undo step, match, card notice |
 | `scripts/effect-docs.mjs` | Effect catalog and effect pages for the docs |
 
 ## Contracts and invariants
@@ -60,6 +61,20 @@ and source. Other effects and structural settings are not implicitly enabled.
   uniforms, not read by its entry point (helper functions included).
 - Every visible effect has its own docs page; `tests/unit/effectDocsCatalog.test.ts` fails otherwise
   (see [Effect pages](./Documentation-Site.md#effect-pages)).
+- **Presets.** An effect declares its named starting points in its definition: `presets: [{ id, name,
+  params }]` (`EffectPreset` in `src/effects/types.ts`; `createCatalogEffect` passes `presets` through).
+  `params` holds only the values that differ from the defaults, in stored units, and only shown controls.
+  Every effect card with presets shows a **Preset** row under **Style** (`EffectPresetRow`). Applying one
+  (`applyEffectPreset` in `src/services/effects/effectPresets.ts`) sets each shown control to the
+  preset's value or its default (text controls stay unless named) through the card's own path, in
+  one undo step. A control with keyframes or a driving node keeps its animation, and the row names it
+  ("Heat Haze: Drift kept its keyframes."). The row shows the preset the values match. AI tools do not
+  list presets yet. Three to five presets per effect; the docs check names them
+  ([Effect pages](./Documentation-Site.md#effect-pages)).
+- **Animated looks keep time with the playhead.** A look rendered by its node graph reads `image.timeline-time`,
+  so it holds still while paused; `createCatalogEffect({ animated: true, clock: 'timeline' })` marks it
+  `timelineAnimated` instead of `requiresContinuousRender` (no wall-clock re-rendering while paused, the
+  docs still show it as a loop). Looks still flagged as continuous re-render an unchanged frame while paused.
 
 ## Registry and catalog
 
@@ -1868,6 +1883,22 @@ choice and pattern masks as editable graph operations. Glitch Grid, Scatter
 Mosaic and Drift Lines expose timeline-driven hash/wave displacement and
 sampled-alpha paths; displaced samples determine alpha rather than the original
 undisplaced pixel.
+
+### Drift Lines
+
+`createDriftLinesGraph` (`src/services/operators/motionHalftoneEffectGraphs.ts`) and its shader twin
+`driftLinesFragment` turn the pixel around the frame centre by **Angle** (degrees, counter-clockwise on
+screen) and count bands across it from the top edge, so Angle 0 is the original horizontal recipe. The
+band height is **Band Size** (`scale`) × shorter side / 1080 (`DRIFT_LINES_REFERENCE_HEIGHT`), at least one
+pixel; preview qualities, thumbnails and 4K exports show the same bands. Each band shifts along its own
+direction by sin(band × 0.71 + timeline time × Speed × 2) × **Drift** × 6 % of the frame width, and
+every second band is shaded to 0.64–0.82 of its brightness. Band Size below 2 is clamped by the
+`scale-clamped` node (`renderMin`, reported by `paramRangeNotes`); bands under one output pixel are
+reported by `driftLinesWarnings`. The parameter ids stay the engine's (`scale`, `amount`, `angle`,
+`speed`), so the Style menu keeps values; only the labels differ. Angle is `graphOnly`: a node setup
+edited before it acted does not read it and the card hides it. The stage folders come from its
+presentation plan (Bands, Drift Wave, Shifted Sample, Line Shading & Alpha). Its four presets live in
+`src/effects/halftone/driftLines.ts`. Tests: `tests/unit/imageMotionHalftoneGraphs.test.ts`, `tests/unit/effectPresets.test.ts`.
 
 ### Riso and Riso Glow inks
 

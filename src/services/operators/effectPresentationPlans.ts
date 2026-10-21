@@ -207,6 +207,15 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
             : /^(source-split|source-luma|blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
               : /^(limited-change|luma-change|result-|combine)/.test(id) ? 'finish' : 'size',
   };
+  // Drift Lines (createDriftLinesGraph): band index across the turned bands, the wave that shifts each band, the line shading.
+  if (type === 'drift-lines') return {
+    labels: { bands: 'Bands (Band Size, Angle)', drift: 'Drift Wave (Drift, Speed)', sampling: 'Shifted Sample', lines: 'Line Shading & Alpha' },
+    portLabels: { 'row-height': 'Band Height (px)', across: 'Across the Bands (px)', row: 'Band Index', shift: 'Shift (px)', radians: 'Angle (rad)',
+      'sample-uv': 'Shifted Position', line: 'Line Shade' },
+    stage: ({ id }) => /^(sample|clamped-uv|min-uv|max-uv)$/.test(id) ? 'sampling'
+      : /^(line|sample-split|darkened|combine)(-|$)/.test(id) ? 'lines'
+        : /^(time-|row-phase$|shift|resolution-split$|along$|offset|back-radians$|sample-uv$)/.test(id) ? 'drift' : 'bands',
+  };
   if (type === 'vignette') return {
     labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
     portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither' },

@@ -1,6 +1,6 @@
 # Outline
 
-<!-- effect-docs: basic page sha=a88633e1a251, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+<!-- effect-docs: basic page sha=bbe8240c23b3, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
 
 Turns the image into an edge drawing: brightness edges in Ink on Paper with a subtle pulse; Amount blends with the original.
 
@@ -10,7 +10,7 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 
 ![Outline on the dancer on a dark stage: the original on the left, Outline at its default settings on the right](../assets/effects/outline.webp)
 
-<figcaption>Left: the original. Right: Outline at its default settings.</figcaption>
+<figcaption>Left: the original. Right: Outline at its default settings, one frame of its movement.</figcaption>
 </figure>
 
 *A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
@@ -33,4 +33,4 @@ Group: [Lines & Engraving](../Effects-Lines.md) · [How to add an effect](../Eff
 
 ## Technical details
 
-Outline is one look of the pattern engine; its looks share one node setup. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
+Outline is one look of the pattern engine; its looks share one node setup. It changes over time: its picture depends on the playback time or on earlier frames. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).
