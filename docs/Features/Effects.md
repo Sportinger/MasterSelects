@@ -1552,6 +1552,13 @@ and prints the figure markup (`layout=float` sizes them for a picture beside the
 text). The docs site links every picture to its full-size file and lets node
 graphs scroll sideways on narrow screens.
 
+For an effect without folders (Time Stack), `only=` without `focus` picks the
+recipe from the whole effect. In a recipe, `omit=` also takes stubs (`uv:uv`, as
+the stub list names them) and leaves them out before the layout, so they leave no
+gap. `name.<id>=Label` gives the stub fed by node `<id>` a name for the picture
+("Time map" instead of the generic "Switch"); real cards keep their editor names,
+and a name that matches no stub fails with the list of stubs.
+
 ### Effect editor excerpts
 
 `scripts/effect-editor-shot.mjs <shot file>` shows where an effect's controls
@@ -1570,6 +1577,10 @@ text. `top: "tabs"` crops below the dock tab row (from the Properties sub-tabs),
 the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
 `--only <name>` recaptures one shot. A control the script cannot find stops it
 with the card's text, so a renamed parameter does not silently drop a callout.
+`viewport: { width, height }` sets the editor window (default 1600 × 900): a wider
+window gives the Properties panel room, so an effect with inspector sections
+(Chroma Key) shows its rows with sliders instead of the narrow layout. A card taller
+than the panel is cropped at the panel's bottom edge, not in the timeline below.
 
 ### When the GPU cannot build an effect
 

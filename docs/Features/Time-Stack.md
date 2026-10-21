@@ -22,8 +22,8 @@ gain the Decay nodes with Decay 1, and graphs edited before Decay existed stay a
 (the inspector notes that Decay has no effect there).
 The effect does not extend the clip's duration or repeat its audio.
 
-The editable graph uses a Sequence Index, delay multiplication, Sample Input
-History, a Decay power (`decay^index`, clamped) and Sequence Blend. Fifteen nodes
+The editable graph uses a Sequence Index, delay multiplication, Sample Past
+Frame, a Decay power (`decay^index`, clamped) and Sequence Blend. Fifteen nodes
 represent the entire stack; the GPU
 loops over the samples instead of expanding twenty separate decoder branches.
 Sequence Blend is reusable with other image sequences. Its numeric modes are
@@ -63,4 +63,4 @@ No universal real-time rate is guaranteed when the window cannot stay resident.
 The Time Stack owner supplies the discrete `i × offset` source window. Editing
 the graph's delay arithmetic does not expand that window automatically. Use the
 Time offset control for supported time changes. General image owners still need
-an explicit temporal resource owner to execute Sample Input History.
+an explicit temporal resource owner to execute Sample Past Frame.

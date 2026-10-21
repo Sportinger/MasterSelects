@@ -1,0 +1,7 @@
+{
+  "shots": [
+    "chroma-key?focus=spill-suppression&only=spill-other-mean,spill-is-gentle,spill-limit,spill-over-limit,spill-positive,spill-excess,spill-removed,spill-despilled&name.spill-other-sum=Red %2B blue&name.spill-other=Stronger of red, blue&name.spill-primary=Green&name.spill-strength=Strength&name.screen-channel=Green only&name.unmix-color=Colour@chroma-key-spill",
+    "time-stack?only=index,offset,delay,history,stack,opacity&name.decay-clamped=Decay&omit=uv:uv,frame:image,count:value,mode:value@time-stack",
+    "slit-scan?focus=time-sampling-and-mix&only=masked-delay,sample-delay,history&name.smooth-or-banded=Time map&name.subject-protected=Protection mask&name.safe-delay=Delay (s)&omit=uv:uv,frame:image,motion-comp-image:image@slit-scan-time-sampling"
+  ]
+}
