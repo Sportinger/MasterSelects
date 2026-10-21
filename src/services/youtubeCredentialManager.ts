@@ -30,6 +30,22 @@ const RETIRED_AI_CREDENTIAL_IDS = [
   'klingSecretKey',
 ] as const;
 
+/**
+ * IndexedDB failures caused by the browser profile rather than this code:
+ * Firefox "UnknownError" on a damaged profile, private windows, blocked or
+ * full storage. The optional credential then stays unavailable for this load.
+ */
+const STORAGE_UNAVAILABLE_ERRORS = new Set(['AbortError', 'UnknownError', 'InvalidStateError', 'SecurityError', 'QuotaExceededError', 'TimeoutError']);
+const RETRIED_OPEN_ERRORS = new Set(['AbortError', 'UnknownError']);
+
+function errorName(error: unknown): string | null {
+  return typeof error === 'object' && error !== null && 'name' in error ? String(error.name) : null;
+}
+
+export function isCredentialStorageUnavailable(error: unknown): boolean {
+  return STORAGE_UNAVAILABLE_ERRORS.has(errorName(error) ?? '');
+}
+
 interface EncryptedCredential {
   data: number[];
   iv: number[];
@@ -81,10 +97,10 @@ async function openDB(): Promise<IDBDatabase> {
   try {
     return await open();
   } catch (error) {
-    // A transient WebKit open abort must not disable credentials for this load.
-    // Retry only before obtaining a connection; never replay credential writes.
-    if (typeof error !== 'object' || error === null
-      || !('name' in error) || error.name !== 'AbortError') throw error;
+    // A transient WebKit open abort or Firefox UnknownError must not disable
+    // credentials for this load. Retry once, only before obtaining a
+    // connection; never replay credential writes.
+    if (!RETRIED_OPEN_ERRORS.has(errorName(error) ?? '')) throw error;
     return open();
   }
 }
@@ -169,6 +185,17 @@ class YouTubeCredentialManager {
       return await decrypt(stored, await this.getEncryptionKey());
     } catch (error) {
       log.error('Failed to decrypt YouTube integration credential', error);
+      return null;
+    }
+  }
+
+  /** Startup read: unavailable browser storage degrades to "no credential" with a warning. */
+  async getOrNullIfStorageUnavailable(): Promise<string | null> {
+    try {
+      return await this.get();
+    } catch (error) {
+      if (!isCredentialStorageUnavailable(error)) throw error;
+      log.warn('Browser storage is unavailable; continuing without the saved YouTube API key', error);
       return null;
     }
   }

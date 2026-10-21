@@ -13,7 +13,7 @@ import { CacheService } from './domains/CacheService';
 import { ProxyStorageService, type ProxyFrameScanProgressCallback, type ProxyFrameWriter } from './domains/ProxyStorageService';
 import { RawMediaService } from './domains/RawMediaService';
 import { PROJECT_FOLDERS } from './core/constants';
-import { RepositoryError } from './repository/contracts';
+import { ProjectBackendUnavailableError } from './projectBackendAvailability';
 import {
   getFsaProjectPackageSession,
   getNativeProjectPackageSession,
@@ -299,7 +299,7 @@ class ProjectFileService {
       return this.coreService.openProject();
     }
     const nativeCore = await this.ensureNativeBackendReady();
-    if (!nativeCore) throw new RepositoryError('unsupported', 'Project folder selection requires an available file backend');
+    if (!nativeCore) throw new ProjectBackendUnavailableError();
     const projectRoot = await NativeHelperClient.getProjectRoot();
     const projectPath = await pickNativeFolder(
       'Select an existing project folder',
