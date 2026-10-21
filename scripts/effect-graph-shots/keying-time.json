@@ -1,6 +1,6 @@
 {
   "shots": [
-    "chroma-key?focus=spill-suppression&only=spill-is-gentle,spill-other-mean,spill-limit&marks=spill-is-gentle:above,spill-limit:above@chroma-key-spill",
+    "chroma-key?focus=spill-suppression&only=spill-is-gentle,spill-limit&marks=spill-is-gentle:above,spill-limit:above@chroma-key-spill",
     "time-stack?only=index,opacity,stack&omit=count:value,mode:value&marks=index:above,stack:above@time-stack",
     "slit-scan?focus=time-sampling-and-mix&only=masked-delay,sample-delay&marks=masked-delay:above@slit-scan-time-sampling"
   ]

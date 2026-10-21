@@ -10,7 +10,7 @@ Time Stack and Slit Scan under **Time**).
 ### Chroma Key
 <figure class="docs-shot docs-shot--float-right">
 
-![Left: a dancer leaping in front of an unevenly lit green screen, with curly hair and a chiffon scarf. Right: the same shot keyed with Chroma Key at its default settings over a dark blue background; the flyaway hair and the see-through scarf keep their detail and show no green edge](assets/effects/chroma-key.webp)
+![Left: a dancer leaping in front of an unevenly lit green screen, with curly hair and a chiffon scarf. Right: the same shot keyed with Chroma Key at its default settings over a dark blue background; the flyaway hair keeps its detail and no green edge remains, while the chiffon scarf turns mostly solid grey with violet patches at its lower end](assets/effects/chroma-key.webp)
 
 <figcaption>Left: green-screen shot. Right: Chroma Key, default settings, over dark blue.</figcaption>
 </figure>
@@ -25,7 +25,7 @@ Time Stack and Slit Scan under **Time**).
 Makes a green or blue screen transparent, so the performer can stand in front of
 any background. It finds the screen colour in the picture by itself, and hair,
 fine fabric and edges take on the new background instead of a green rim.
-- **Screen** – Green, Blue, or a colour you pick from the screen.
+- **Screen** – Green, Blue, or a colour you pick from the screen. The inspector says so when the clip shows no such screen.
 - **Clip Black / Clip White** – raise Clip Black until the background is gone, lower Clip White until the performer is solid. **View → Matte** shows this in black and white.
 - **Shrink / Grow** and **Softness** (Edge) – pull the edge in or out and soften it, in pixels of a 1080p picture.
 - **Suppression** and **Method** (Spill) – remove the green glow; Method **Gentle** keeps yellow costumes yellow.
@@ -37,25 +37,29 @@ performer.
 <div class="docs-float-end"></div>
 
 ### Time Stack
+
+Shows delayed copies of a moving video clip at once, like a long-exposure photo
+of a dance. The trail builds up over the clip's first seconds.
+
 <figure class="docs-shot docs-shot--float-left">
 
-![Left: a dancer turning on a dark stage. Right: Time Stack at its default settings (Lighten, Decay 0.8): fainter and fainter copies of her arms, hair and dress trail off to the right](assets/effects/time-stack.webp)
+![Left: a dancer turning on a dark stage. Right: Time Stack at its default settings (Lighten, Decay 0.8): fainter and fainter copies of her arms, hair and dress fan out around her as she turns](assets/effects/time-stack.webp)
 
 <figcaption>Left: original. Right: default settings (Lighten, Decay 0.8).</figcaption>
 </figure>
 
-Shows several delayed copies of a moving clip at once, like a long-exposure photo
-of a dance. Works on video clips.
-- **Instances** – how many copies (up to 32).
-- **Time offset** – time between copies; 20 copies 0.1 s apart span 1.9 s.
-- **Decay** – 0.8 (default) fades older copies like an echo, 1 keeps them equal.
-- **Blend mode** – Lighten (default) for a lit dancer on a dark stage, Darken for a dark one on light. Normal covers the current frame.
-
-Tip: the trail builds up at the start of the clip, as each copy's moment is reached.
+- **Instances** – number of copies (up to 32).
+- **Time offset** – time between copies.
+- **Decay** – 0.8 fades older copies; 1 keeps them equal.
+- **Blend mode** – Lighten for lit dancers on dark stages, Darken for the reverse.
 
 <div class="docs-float-end"></div>
 
 ### Slit Scan
+
+Shows each part of a video clip's frame from a different moment, so movement
+smears and folds through the picture: the classic slit-scan look.
+
 <figure class="docs-shot docs-shot--float-right">
 
 ![Left: the dancer turning on a dark stage, seen from behind. Right: Slit Scan with the Time steps look at the same moment: the picture is cut into vertical bands, each from a slightly earlier moment towards the right, so her face, arms and dress are assembled from strips that do not line up and a hand floats detached at the left](assets/effects/slit-scan.webp)
@@ -63,28 +67,22 @@ Tip: the trail builds up at the start of the clip, as each copy's moment is reac
 <figcaption>Left: original. Right: the Time steps look; each band further right is further back in time (up to 2 s).</figcaption>
 </figure>
 
-Shows each part of the frame from a different moment, so movement smears and
-folds through the picture: the classic slit-scan look. Works on video clips.
 - **Look** – a starting point: Sweep, Falling time, Center out, Wave folds, Radial bloom, Time rings or Time steps.
-- **Delay** – how far back in time the picture reaches, in seconds (1 by default).
-- **Profile** and **Scan direction** – the shape of the time gradient: which part of the frame shows now and which the past.
-
-Tip: fast limbs break into a row of soft ghosts; **Sampling → Motion compensation**
-turns them into one continuous smear. Give a new Slit Scan a moment to load its frames;
-until the whole time window is ready, the preview shows the plain clip.
-
-**Known limitations:** Chroma Key measures one screen colour for the whole frame, so
-on a very unevenly lit screen see-through areas such as chiffon can come out a little
-too light or too dark; Time Stack and Slit Scan need a video clip, not a still image or
-a nested composition.
-
-**Saved projects:** a Chroma Key from an older project switches to the new keyer; its
-Spill Suppression stays, an old Tolerance or Edge Softness no longer acts, and the
-inspector names them (a Chroma Key whose nodes you edited keeps the old key and its
-controls). Time Stack keeps its look. A Slit Scan set to Radial scan or Time rings
-now shows that profile; with Protected center off it used to show Wave.
+- **Delay** – how far back in time the picture reaches (1 s).
+- **Profile** and **Scan direction** – the shape of the time gradient.
 
 <div class="docs-float-end"></div>
+
+Tip: fast limbs break into a row of soft ghosts; switch on the **Motion compensation**
+section (its header switch) to turn them into one continuous smear. A new Slit Scan
+needs a moment to load its frames.
+
+**Known limitations:** Chroma Key measures one screen colour for the whole frame, so
+see-through fabric such as chiffon can come out greyish or blotchy; Time Stack and
+Slit Scan need a video clip, not a still image or a nested composition.
+
+**Older projects:** Chroma Key switches to the new keyer and the inspector lists
+retired values; Time Stack keeps its look.
 
 ## How the keying and time effects are built
 
@@ -137,28 +135,31 @@ chiffon), and **Spill Suppression** removes the green glow.
 
 <div class="docs-shot-stage">
 
-![The limit of Chroma Key's Spill Suppression as a recipe: Half and Spill Method feed Step, whose Is Gentle output feeds input T of Mix; Other Sum times Half gives Other Mean, which feeds input A of Mix; Stronger Other feeds input B; Mix outputs the Limit](assets/effects/graphs/chroma-key-spill.webp)
+![The limit of Chroma Key's Spill Suppression as a recipe: Half (0.5) feeds the Edge and Spill Method the Value of Step, whose Is Gentle output feeds input T of Mix; Other Mean feeds input A of Mix and Stronger Other input B; Mix outputs the Limit](assets/effects/graphs/chroma-key-spill.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 1112" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 1013" aria-hidden="true" focusable="false">
 <defs><marker id="chroma-key-spill-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M508 22 L508 84" marker-end="url(#chroma-key-spill-arrow)" />
 <circle class="docs-shot-number" cx="508" cy="22" r="18" /><text x="508" y="22" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M836 22 L836 84" marker-end="url(#chroma-key-spill-arrow)" />
 <circle class="docs-shot-number" cx="836" cy="22" r="18" /><text x="836" y="22" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M866 430 L772 430" marker-end="url(#chroma-key-spill-arrow)" />
+<circle class="docs-shot-number" cx="866" cy="430" r="18" /><text x="866" y="430" class="docs-shot-number-text">3</text>
 </svg>
 </div>
 
-<figcaption>Spill Suppression: the limit for the screen channel. 1 — Step. 2 — Mix.</figcaption>
+<figcaption>Spill Suppression: the limit for the screen channel. 1 — Step. 2 — Mix. 3 — input T of Mix.</figcaption>
 </figure>
 
 The screen channel (green on a green screen) may be no stronger than the other two
 channels allow. **Step** (1) turns Spill Method into 0 (Neutral) or 1 (Gentle), and
-**Mix** (2) picks the **Limit**: A, the mean of the other two channels (**Other
-Mean**), or B, the stronger of them (**Stronger Other**). After this recipe a
-**Subtract** and a **Maximum** keep what lies above the limit, a **Multiply** scales it
-by Strength (Spill Suppression), and a last **Subtract** takes it out of the colour.
+**Mix** (2) uses it at input T (3) to pick the **Limit**: A, the mean of the other two
+channels (**Other Mean**), or B, the stronger of them (**Stronger Other**). After this
+recipe a **Subtract** and a **Maximum** keep what lies above the limit, a **Multiply**
+scales it by Strength (Spill Suppression), and a last **Subtract** takes it out of the
+colour.
 
-Remix: for a limit halfway between Neutral and Gentle, unplug **Step** from input T
+Remix: for a limit halfway between Neutral and Gentle, unplug **Step** from input T (3)
 of **Mix** and plug a **Value** of 0.5 into T.
 
 ### Time Stack and Slit Scan: reading the past
@@ -245,16 +246,16 @@ compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
   and 0.85). Shrink / Grow (−20 to 20) and Edge Softness (0 to 20) are pixels of a
   1080p frame (its shorter side) and scale with the render size; each adds two
   separable Gaussian passes (up to 32 taps per side) only while it is not 0.
-- **Chroma Key limits.** One screen colour per frame; local Screen Grid colours are
-  used only for screen subtraction. Out-of-range values are used at their limit,
-  values that are not a number (NaN, null, text) at their default, and a Clip Black at
-  or above Clip White makes a hard cut; the inspector names each case and tool results
-  report unusable numbers. A frame without screen colour keys nothing; only
-  **View → Matte** shows that (all white). The worker CPU keyer (software preview and
-  export readback) uses the same grid and subtraction with scalar per-pixel work
-  (a 1080p frame in well under 0.3 s). It has no edge kernel and keys only a layer
-  whose sole effect is Chroma Key, so it declines Shrink / Grow, Edge Softness or
-  other effects on the layer instead of rendering them differently.
+- **Chroma Key values.** Out-of-range values are used at their limit, values that are
+  not a number (NaN, null, text) at their default, and Clip Black at or above Clip
+  White makes a hard cut; the inspector names each case and tool results report
+  unusable numbers. A clip without screen colour keys nothing: the inspector and
+  `addEffect`/`updateEffect` say so, checked on the clip's thumbnails (`screenProbe.ts`).
+- **Chroma Key on the worker CPU.** Software preview and export readback key with
+  scalar per-pixel code (the key of a 1080p frame in under 0.1 s, the whole worker
+  pixel pass in about 0.3–0.4 s), also for the untouched graph every loaded project
+  stores; the graph interpreter needed about a minute per frame. It keys only a layer whose sole effect is one
+  Chroma Key without Shrink / Grow or Edge Softness, and declines anything else.
 - **Time Stack.** Up to 32 instances, Time offset 0–10 s; instance i reads
   t − i × offset with opacity decay^i (Decay 0.8 by default, clamped to 0.0001–1,
   reported). Sequence Blend draws the current frame first, so in Normal the older
@@ -268,15 +269,14 @@ compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
   Wave values and show Custom once one differs or is animated. The first load of the
   frame window takes a few seconds; until it is ready the preview shows the plain clip.
 - **Saved projects.** Untouched Rec.601 Chroma Key graphs upgrade to the new keyer:
-  stored Spill Suppression stays, Clip Black/White and the edge use their defaults, the
-  old Tolerance/Edge Softness (values and keyframes) no longer act and the inspector
-  lists them; the old Custom choice keyed pure green and now keys the picked colour
-  (#4C9A55 unless one is stored), which the inspector says too. Edited graphs keep the
-  old key with its Tolerance and Edge Softness rows. Time Stacks saved before Decay load
-  with Decay 1 (identical output) and keep their blend mode. Slit Scan graphs with the
+  stored Spill Suppression stays, Clip Black/White and the edge use their defaults, and
+  the inspector lists the old Tolerance/Edge Softness values and keyframes that no
+  longer act; the old Custom choice keyed pure green and now keys the picked colour
+  (#4C9A55 unless one is stored). Edited graphs keep the old key with its Tolerance and
+  Edge Softness rows (keyframable). A Time Stack stored without Decay (project or
+  preset) renders with Decay 1 (identical output) everywhere. Slit Scan graphs with the
   radial profiles in the Protected Center folder are regrouped, so Radial scan and Time
-  rings render (they showed Wave while that folder was muted). Older Slit Scans without
-  a stored interpolation already blended.
+  rings render (they showed Wave while that folder was muted).
 - **Pictures on this page.** `scripts/effect-graph-shot.mjs` and
   `scripts/effect-editor-shot.mjs`, each with a `keying-time.json` manifest
   (`scripts/effect-*-shots/`); the stills come from `scripts/effect-lab.mjs`.
