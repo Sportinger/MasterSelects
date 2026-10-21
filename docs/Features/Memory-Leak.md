@@ -52,6 +52,12 @@ The frame index for the motion modes is derived from the effect's timeline
 time and the active composition frame rate, so scrubbing, playback, and export
 produce the same block for the same frame.
 
+Keyframes and tools can set values beyond these ranges; the inspector and tool
+results name what renders instead (`memoryLeakWarnings` in `memoryWindow.ts`):
+Block Width outside 8–1024, a negative Offset or Advance (read as 0), Float Gain
+below 0.001 (read as 0.001, so float pixels come out almost black), Mix outside
+0–1, and an unknown Bit Depth (8-bit) or Per Frame value (the block holds still).
+
 ## Extra controls
 
 Below the parameter groups the effect renders a status line

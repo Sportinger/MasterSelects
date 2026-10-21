@@ -10,7 +10,8 @@ export const RESOLVE_ROW_EFFECTS: ReadonlySet<string> = new Set(['gaussian-blur'
   'brightness', 'contrast', 'saturation', 'vibrance', 'exposure', 'levels', 'hue-shift', 'temperature',
   ...STYLIZE_RESOLVE_ROW_EFFECTS,
   'crt-screen', 'glitch', 'film-prism', 'holo', 'ribbon-scan', 'crystal', 'glass-dispersion', 'wave-lines', 'pixel-sort',
-  'acuarela', 'rom1', 'sheen', 'pixel-particle-disintegrate']);
+  'acuarela', 'rom1', 'sheen', 'pixel-particle-disintegrate',
+  'color-wheel', 'perspective-grid', 'stick-figure']);
 
 /** Parameter types that have a Resolve row (ResolveEffectParamRow); others keep the generic control. */
 export function hasResolveEffectParamRow(definition: { type: string }): boolean {

@@ -98,9 +98,10 @@ and source. Other effects and structural settings are not implicitly enabled.
 - The populated clip-effect categories are `color`, `blur`, `distort`,
   `stylize`, `generate`, `keying`, `halftone`, `analog`, `pixel`, `glyph`,
   `geometry`, `tracking`, and `time`.
-- `generate` holds the [Memory Leak](./Memory-Leak.md) generator, which
-  reinterprets leftover bytes of the FFmpeg wasm heap as pixels through the
-  byte-texture binding described below.
+- `generate` holds the generators described in [Generate Effects](./Effects-Generate.md):
+  Color Wheel, Perspective Grid, Stick Figure, Flocking, Weave and the
+  [Memory Leak](./Memory-Leak.md) generator, which reinterprets leftover bytes of
+  the FFmpeg wasm heap as pixels through the byte-texture binding described below.
 - `time` contains Time Stack and Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
 ## Glow on transparent and 3D layers
@@ -618,7 +619,7 @@ grades that have not stored their default values yet.
 - `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md) and, for Pixelate, Kaleidoscope, Mirror and RGB Split, [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
 - `stylize` (13): Vignette, Grain, Sharpen, Posterize, Glow, Sheen, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate; for Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate see [Painterly, Relief and Particle Effects](./Effects-Stylize-Art.md)
 - `keying` (1): Chroma Key
-- `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
+- `generate` (6, see [Generate Effects](./Effects-Generate.md)): **Color Wheel** (an HSV wheel filling the layer or drawn as an anti-aliased disc), **Perspective Grid** (a scrolling vanishing-point floor grid with filtered lines whose width is set in 1080p pixels at the front edge), **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes)), **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)), **Weave** (curve-node yarn and fabric in 3D; see [Weave](./Weave.md)) and Memory Leak
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
 - `analog` (10): CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and compute Pixel Sort (user guide: [Analog Effects](./Effects-Analog.md))
 - `pixel` (2): Blockify and Block Mosaic; see [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
@@ -902,7 +903,28 @@ Effect rows share one display rule (`effectParamDisplay` in
 Mirror, RGB Split), `displayScale` with `unit` shows a scaled unit (Hue Shift's turns
 as degrees) and `unit` alone a suffix (" EV") with as many decimals as the stored
 value needs; other rows show the decimals their step implies. Stored values,
-keyframes, tools and MIDI keep the parameter's own unit.
+keyframes, tools and MIDI keep the parameter's own unit. Render-range notes in the
+inspector use the same display (`paramRangeNotes(..., { display: true })`: "Horizon
+150% is above the rendered range (0% to 98%)"); tool results keep stored units.
+
+A rate parameter (per second) that may be keyframed declares `integratedAs`: while it
+has keyframes, the shared keyframe step (`evaluateEffectKeyframes` in
+`stores/timeline/keyframes/effectKeyframeEvaluation.ts`, used by
+`getInterpolatedEffects` and `evaluateCompositionClipEffects`, so also by nested
+compositions, transition-mapped clips and export) writes the distance travelled into
+that runtime-only param: the rate at the clip start × the clip's start on the render
+clock, plus the area under the keyed curve (`integrateKeyframedRate` in
+`src/utils/speedIntegration.ts`, shared with clip speed). The packer uses it instead of
+rate × time, so a keyed ramp moves smoothly and the first key does not shift the
+pattern (Perspective Grid Speed, Color Wheel Spin; see
+[Generate Effects](./Effects-Generate.md#technical-details)). Stored travel values are
+dropped, `addEffect`/`updateEffect` do not store them, and a node source that drives
+such a rate drops the travel (logged), so the source runs at rate × time.
+
+A parameter added after instances were saved can declare `legacyDefault`: what a saved
+instance without it renders. Renderers, keyframe base values and the inspector
+(`getRenderedDefaultParams`, also in the Node Workspace editor) all use it, so a saved
+instance shows the value it draws and the other choice is one pick away.
 
 Saved work keeps its look. Projects keep the graph they were saved with (the
 previous recipes stay in `legacyColorEffectGraphs.ts`). A color effect stored

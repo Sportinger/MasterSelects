@@ -19,7 +19,7 @@ import {
 } from '../../../types/animationProperties';
 import type { AudioEffectParamValue } from '../../../types/audio';
 import { isAudioEffect, type EffectType } from '../../../types/effects';
-import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects, getEffectDisplayName } from '../../../effects';
+import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects, getEffectDisplayName, getRenderedDefaultParams } from '../../../effects';
 import { groupEffectParameters } from '../../../effects/parameterGroups';
 import { VoxelReliefControls } from './VoxelReliefControls';
 import { EXTRA_CONTROLS_REGISTRY } from '../../../effects/extraControlsRegistry';
@@ -273,7 +273,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   const resolveRows = RESOLVE_ROW_EFFECTS.has(effect.type);
   const rowsClass = (base: string) => resolveRows ? `${base} effect-params--resolve-rows` : base;
   const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false) => {
-    const value = effect.params[paramName] ?? paramDef.default;
+    const value = effect.params[paramName] ?? paramDef.legacyDefault ?? paramDef.default;
     // Decide before creating the element: a rendered-null Resolve row would hide the parameter.
     if (resolveRows && hasResolveEffectParamRow(paramDef)) return <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef}
       value={value} effect={effect} clipId={clipId} onChange={onChange} onDragStart={onDragStart} onDragEnd={onDragEnd} onParamCommit={onParamCommit} />;
@@ -529,9 +529,10 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
           {videoEffects.map((effect, idx) => {
             const interpolated = interpolatedEffects.find(e => e.id === effect.id) || effect;
             const effectDef = EFFECT_REGISTRY.get(effect.type);
+            // Missing parameters show what renders: a saved instance's legacy value, else the default.
             const primitiveParams = toPrimitiveEffectParams(
               interpolated.params,
-              effectDef ? getDefaultParams(effect.type) : {},
+              effectDef ? getRenderedDefaultParams(effect.type) : {},
             );
             const isEnabled = effect.enabled !== false; // default to true if undefined
             const isOrbitActive = effectOrbitTarget?.clipId === clipId && effectOrbitTarget.effectId === effect.id;

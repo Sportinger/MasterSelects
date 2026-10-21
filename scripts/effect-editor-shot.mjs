@@ -35,6 +35,14 @@
 //              number, reach its arrow length (overlay units, default 84; the crop grows to keep it);
 //              label goes into the printed caption.
 //   alt, caption  printed into the figure
+// A shot with `"view": "preview"` captures the editor preview instead (for effects the Effect Lab
+// cannot render, such as 3D scene effects): the picture of the clip without the effect on top and
+// with it below (like the lab's "stack" layout), written to `file`:
+//   file     output path from the repository root (default `<out>/<name>.webp`)
+//   time     playhead in seconds (default 1); crop [x0, y0, x1, y1] as 0–1 of the preview
+//   then     tool calls after addEffect, `"$clip"` standing for the clip id
+//            (e.g. [{ "tool": "applyFlockPreset", "args": { "clipId": "$clip", "presetId": "violet-filaments" } }])
+//   settle   ms to wait once "Preparing 3D scene" has gone (default 3000); outWidth (default 960)
 // Needs a Vite of this checkout (`npx vite --port 5176 --strictPort`); each shot's project lives in
 // a throwaway browser context.
 import fs from 'node:fs';
@@ -54,11 +62,13 @@ const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
 const out = path.resolve(option('--out', 'docs/Features/assets/effects/editor'));
 const imageDir = path.resolve('tests/browser/effect-lab/images');
 const defaultViewport = { width: 1600, height: 900 };
+/** The current shot's browser window (set per shot below; the helpers read it). */
+let viewport = defaultViewport;
 
 const launchArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan',
   '--ignore-gpu-blocklist', '--window-position=0,0'];
 
-async function openNodes(page, shot, viewport) {
+async function openNodes(page, shot) {
   await page.getByRole('tab', { name: 'Nodes', exact: true }).first().click();
   await page.getByRole('combobox', { name: 'Node graph source' }).click();
   await page.getByRole('option').filter({ hasText: shot.image ?? 'harbor_town.jpg' }).first().click();
@@ -71,12 +81,15 @@ async function openNodes(page, shot, viewport) {
   await page.waitForTimeout(2500);
 }
 
-async function setUp(page, shot, viewport) {
-  const tool = async (name, input) => {
-    const result = await page.evaluate(([toolName, toolInput]) => window.aiTools.execute(toolName, toolInput), [name, input]);
-    if (!result?.success) throw new Error(`${name}: ${result?.error ?? 'failed'}`);
-    return result.data;
-  };
+const editorTool = page => async (name, input) => {
+  const result = await page.evaluate(([toolName, toolInput]) => window.aiTools.execute(toolName, toolInput), [name, input]);
+  if (!result?.success) throw new Error(`${name}: ${result?.error ?? 'failed'}`);
+  return result.data;
+};
+
+/** A fresh project with the shot's image as a five-second clip; returns the clip id. */
+async function createImageClip(page, shot) {
+  const tool = editorTool(page);
   await page.goto(`${url}/editor`);
   await page.getByRole('button', { name: /New project/ }).click({ timeout: 60000 });
   await page.locator('form input').first().fill('Effect editor shot');
@@ -89,8 +102,13 @@ async function setUp(page, shot, viewport) {
     if (!imported) await page.waitForTimeout(250);
   }
   if (!imported) throw new Error(`${shot.name}: the image was not imported`);
-  const added = await tool('addClipSegment', { mediaFileId: imported.id, trackId: null, startTime: 0, inPoint: 0, outPoint: 5 });
-  const clipId = added.clips[0].id;
+  const added = await tool('addClipSegment', { mediaFileId: imported.id, trackId: null, startTime: 0, inPoint: 0, outPoint: shot.duration ?? 5 });
+  return added.clips[0].id;
+}
+
+async function setUp(page, shot) {
+  const tool = editorTool(page);
+  const clipId = await createImageClip(page, shot);
   await tool('addEffect', { clipId, effectType: shot.effect, params: shot.params ?? {} });
   await tool('selectClips', { clipIds: [clipId] });
   await tool('setPlayhead', { time: 1 });
@@ -106,6 +124,66 @@ async function setUp(page, shot, viewport) {
   // No hover state or pointer in the picture; the preview settles on the effect.
   await page.mouse.move(viewport.width / 2, viewport.height - 4);
   await page.waitForTimeout(2500);
+}
+
+/** The preview at the playhead once no 3D scene is being prepared (PNG of the preview canvas). */
+async function previewPng(page, shot) {
+  const tool = editorTool(page), time = shot.time ?? 1;
+  await page.mouse.move(viewport.width / 2, viewport.height - 4);
+  await page.waitForTimeout(1500);
+  for (let wait = 0; wait < 120 && await page.getByText('Preparing 3D scene').count(); wait += 1) await page.waitForTimeout(500);
+  // A paused preview shows the frame from before the scene was ready: render the playhead again.
+  await tool('setPlayhead', { time: time + 0.5 });
+  await page.waitForTimeout(500);
+  await tool('setPlayhead', { time });
+  await page.waitForTimeout(shot.settle ?? 3000);
+  // Only the picture: the preview's overlay bars stay out of it.
+  await page.evaluate(() => {
+    const canvas = document.querySelector('canvas.preview-canvas'), area = canvas.getBoundingClientRect();
+    for (const element of document.body.querySelectorAll('*')) {
+      if (element === canvas || element.contains(canvas) || canvas.contains(element)) continue;
+      const rect = element.getBoundingClientRect();
+      if (rect.width && rect.right > area.left && rect.left < area.right && rect.bottom > area.top && rect.top < area.bottom) element.style.visibility = 'hidden';
+    }
+  });
+  if (process.env.SHOT_DEBUG) await page.screenshot({ path: `${process.env.SHOT_DEBUG}-${Date.now()}.png` });
+  // A preview that has not drawn yet is one flat colour (a tiny PNG): render the playhead again.
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const png = await page.locator('canvas.preview-canvas').first().screenshot({ type: 'png' });
+    if (png.length > 20000 || attempt === 4) return png;
+    await tool('setPlayhead', { time: time + 0.5 });
+    await tool('setPlayhead', { time });
+    await page.waitForTimeout(3000);
+  }
+}
+
+/** Without the effect on top, with it below: the same crop of both, scaled to `outWidth`. */
+async function capturePreviewPair(page, shot) {
+  const tool = editorTool(page);
+  const clipId = await createImageClip(page, shot);
+  await tool('setPlayhead', { time: shot.time ?? 1 });
+  const original = await previewPng(page, shot);
+  await tool('addEffect', { clipId, effectType: shot.effect, params: shot.params ?? {} });
+  for (const step of shot.then ?? []) {
+    await tool(step.tool, JSON.parse(JSON.stringify(step.args ?? {}).replaceAll('"$clip"', JSON.stringify(clipId))));
+  }
+  // No selection: a selected clip draws its transform gizmo into the preview.
+  await tool('selectClips', { clipIds: [] });
+  await tool('setPlayhead', { time: shot.time ?? 1 });
+  const effect = await previewPng(page, shot);
+  const png = await page.evaluate(async ({ pictures, crop, outWidth, gap }) => {
+    const bitmaps = await Promise.all(pictures.map(data => createImageBitmap(new Blob([Uint8Array.from(atob(data), c => c.charCodeAt(0))], { type: 'image/png' }))));
+    const [x0, y0, x1, y1] = crop, w = bitmaps[0].width, h = bitmaps[0].height;
+    const sx = x0 * w, sy = y0 * h, sw = (x1 - x0) * w, sh = (y1 - y0) * h;
+    const cw = outWidth, ch = Math.round(sh * outWidth / sw);
+    const canvas = new OffscreenCanvas(cw, ch * 2 + gap), context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff'; context.fillRect(0, 0, canvas.width, canvas.height);
+    bitmaps.forEach((bitmap, index) => context.drawImage(bitmap, sx, sy, sw, sh, 0, index * (ch + gap), cw, ch));
+    const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer());
+    let binary = ''; for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }, { pictures: [original, effect].map(buffer => buffer.toString('base64')), crop: shot.crop ?? [0, 0, 1, 1], outWidth: shot.outWidth ?? 960, gap: 6 });
+  return Buffer.from(png, 'base64');
 }
 
 /** Crop (CSS px) and the target box of every mark, measured in the page. */
@@ -216,7 +294,7 @@ function figure(shot, file, crop, boxes) {
 // One browser per shot: a fresh project in its own private file system, and one GPU device at a time.
 for (const shot of shots) {
   // A shot's viewport (or width/height) overrides the default browser window.
-  const viewport = { ...defaultViewport, ...(shot.width ? { width: shot.width } : {}), ...(shot.height ? { height: shot.height } : {}), ...(shot.viewport ?? {}) };
+  viewport = { ...defaultViewport, ...(shot.width ? { width: shot.width } : {}), ...(shot.height ? { height: shot.height } : {}), ...(shot.viewport ?? {}) };
   const browser = await chromium.launch({ channel: 'chrome', headless: false, args: [...launchArgs, `--window-size=${viewport.width},${viewport.height + 120}`] });
   try {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
@@ -229,8 +307,18 @@ for (const shot of shots) {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await setUp(page, shot, viewport);
-    if (shot.view === 'nodes') await openNodes(page, shot, viewport);
+    if (shot.view === 'preview') {
+      const encoded = await encodeDocShotWebp(page, await capturePreviewPair(page, shot), { maxBytes: 200000, maxPixelWidth: 1600 });
+      const file = path.resolve(shot.file ?? path.join(out, `${shot.name}.webp`));
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, encoded.buffer);
+      const pageErrors = [...new Set(errors)];
+      console.log(`\n${path.relative(process.cwd(), file)}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes`
+        + `${pageErrors.length ? `, page errors: ${pageErrors.join(' | ')}` : ''}\n`);
+      continue;
+    }
+    await setUp(page, shot);
+    if (shot.view === 'nodes') await openNodes(page, shot);
     const { crop, marks, text } = await page.evaluate(measure, { preview: shot.preview ?? 380, top: shot.top ?? 'panel', marks: shot.marks ?? [], view: shot.view ?? 'inspector', gutter: shot.gutter ?? 0 });
     const missing = marks.filter(mark => mark.missing).map(mark => mark.missing);
     if (missing.length) {

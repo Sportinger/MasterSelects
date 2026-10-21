@@ -1,5 +1,5 @@
 import { useTimelineStore } from '../../../stores/timeline';
-import { getAllEffects, getDefaultParams, getEffect, hasEffect, getCategoriesWithEffects, resolveEffectTypeId } from '../../../effects';
+import { getAllEffects, getDefaultParams, getEffect, hasEffect, getCategoriesWithEffects, resolveEffectTypeId, effectRateTravelParams, withoutRuntimeTravelParams } from '../../../effects';
 import { paramRangeNotes } from '../../../effects/paramRangeNotes';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
@@ -18,6 +18,7 @@ import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
 import { effectExperimentalNote } from '../../../effects/types';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { Effect } from '../../../types/effects';
+import type { EffectParam } from '../../../effects/types';
 import { finiteEffectNumber, isUnusableEffectNumber } from '../../../effects/_shared/effectNumberParam';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
@@ -29,13 +30,13 @@ type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
  * silently. The effect's own notes describe its current recipe; an instance that runs an earlier
  * saved stylize recipe gets one note naming that version instead.
  */
-function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
+export function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
   if (!effect) return [];
   const composition = useMediaStore.getState().getActiveComposition();
   const definitions = getEffect(effect.type)?.params ?? {};
   // Number parameters that are not a finite number render at their default (effectOperatorParams).
   const unusable = names.flatMap(name => definitions[name]?.type === 'number' && isUnusableEffectNumber(effect.params[name])
-    ? [`${name}: ${typeof effect.params[name] === 'string' ? JSON.stringify(effect.params[name]) : String(effect.params[name])} is not a finite number, so the default ${definitions[name].default} is used.`] : []);
+    ? [`${name}: ${typeof effect.params[name] === 'string' ? JSON.stringify(effect.params[name]) : String(effect.params[name])} is not a finite number, so the default ${renderedFallback(definitions[name], effect.params[name])} is used.`] : []);
   const set = Object.fromEntries(names.map(name => [name, effect.params[name]]));
   const width = composition?.width ?? 1920, height = composition?.height ?? 1080;
   // The effect's own notes are judged on the recipe this instance runs (effectDefinitionNotes).
@@ -45,6 +46,9 @@ function effectParamWarnings(effect: Effect | undefined, names: readonly string[
     ...blurBudgetNotes(effect.type, effect.params, width, height),
     ...(earlier ? [earlier] : names.length ? effectDefinitionNotes(effect, width, height) : [])];
 }
+
+/** Renderers drop null like an unset parameter, which renders at its legacy value (effects/types.ts). */
+const renderedFallback = (definition: EffectParam, value: unknown) => value === null ? definition.legacyDefault ?? definition.default : definition.default;
 
 /** An automatic Chroma Key on a clip without that screen colour keys nothing: say so (checked on the clip's
  * thumbnails, at most a second). Not for a picked colour or an edited old Rec.601 key graph. */
@@ -70,6 +74,14 @@ function normalizeNumberParams(effectType: string, params: Record<string, unknow
   const definitions = getEffect(effectType)?.params ?? {};
   return Object.fromEntries(Object.entries(params).map(([name, value]) => [name,
     definitions[name]?.type === 'number' && typeof value === 'string' && !isUnusableEffectNumber(value) ? finiteEffectNumber(value, 0) : value]));
+}
+
+/** Travel parameters (speedTravel, spinTravel) are computed while rendering from a keyframed rate
+ * (EffectParam.integratedAs). A stored value would freeze the pattern, so tools never store one. */
+function withoutRuntimeParams(effectType: string, params: Record<string, unknown>): { params: Record<string, unknown>; warnings: string[] } {
+  const runtime = effectRateTravelParams(effectType).filter(([, travel]) => travel in params);
+  return { params: withoutRuntimeTravelParams(effectType, params), warnings: runtime.map(([rate, name]) =>
+    `${name}: computed while rendering from the keyframed ${rate}, so it was not stored; set or keyframe ${rate} instead.`) };
 }
 
 export async function handleListEffects(): Promise<ToolResult> {
@@ -106,8 +118,9 @@ export async function handleAddEffect(
 ): Promise<ToolResult> {
   const clipId = args.clipId as string;
   const effectType = resolveEffectTypeId(String(args.effectType ?? ''));
-  const customParams = args.params && typeof args.params === 'object'
-    ? normalizeNumberParams(effectType, args.params as Record<string, unknown>) : undefined;
+  const runtimeChecked = args.params && typeof args.params === 'object'
+    ? withoutRuntimeParams(effectType, normalizeNumberParams(effectType, args.params as Record<string, unknown>)) : undefined;
+  const customParams = runtimeChecked?.params;
 
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
@@ -144,7 +157,7 @@ export async function handleAddEffect(
   invalidateCache();
   const added = useTimelineStore.getState().clips.find(c => c.id === clipId)?.effects.find(e => e.id === newEffect?.id);
   const experimental = effectExperimentalNote(getEffect(effectType));
-  const warnings = [...(experimental ? [`${getEffect(effectType)!.name} is experimental: ${experimental}`] : []),
+  const warnings = [...(experimental ? [`${getEffect(effectType)!.name} is experimental: ${experimental}`] : []), ...runtimeChecked?.warnings ?? [],
     ...effectParamWarnings(added, Object.keys(customParams ?? {})), ...await chromaKeyScreenWarnings(clipId, added)];
 
   return {
@@ -211,7 +224,7 @@ export async function handleUpdateEffect(
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) return { success: false, error: `Effect not found: ${effectId}` };
   if (!args.params || typeof args.params !== 'object') return { success: false, error: 'params must be an object.' };
-  const params = normalizeNumberParams(effect.type, args.params as Record<string, unknown>);
+  const { params, warnings: runtimeWarnings } = withoutRuntimeParams(effect.type, normalizeNumberParams(effect.type, args.params as Record<string, unknown>));
 
   // A misspelled parameter used to be stored silently and do nothing; reject it with the valid names.
   // Retired parameters stay accepted (saved projects carry them) but are not offered while they do nothing.
@@ -243,7 +256,7 @@ export async function handleUpdateEffect(
   selectClipAndOpenTab(clipId, 'effects');
 
   const updated = getClipEffects(clipId).find(item => item.id === effectId);
-  const warnings = [...effectParamWarnings(updated, Object.keys(params)),
+  const warnings = [...runtimeWarnings, ...effectParamWarnings(updated, Object.keys(params)),
     ...'keyColor' in params ? await chromaKeyScreenWarnings(clipId, updated) : []];
   return {
     success: true,

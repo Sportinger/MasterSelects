@@ -124,9 +124,9 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | [Overview](./Effects-Keying-Time.md) | `keying` | Chroma Key, Time Stack and Slit Scan with before/after pictures, inspector, graph recipes and technical notes |
 | [Time Stack](./Time-Stack.md) | `time` | Delayed video instances blended in an editable node group: instance count, time offset, blend modes, and the GPU frame cache |
 | [Slit Scan 3D](./Slit-Scan-3D.md) | `time` | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
+| [Overview](./Effects-Generate.md) | `generate` | Color Wheel, Perspective Grid and Stick Figure, plus the Flocking, Weave and Memory Leak generators, with before/after pictures, their controls, how they are built and technical notes |
 
 <!-- planned:
-| [Overview](./Effects-Generate.md) | `generate` | Color Wheel, Perspective Grid and Stick Figure |
 | [Overview](./Effects-Print.md) | `print` | Print & Halftone |
 | [Overview](./Effects-Lines.md) | `lines` | Lines & Engraving |
 | [Overview](./Effects-Textile.md) | `textile` | Textile & Craft |

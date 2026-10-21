@@ -19,6 +19,8 @@ const CABLE_CLEARANCE = 8;
 /** Candidate vertical moves for a card looking for a free slot, cheapest first (moving up costs three times more). */
 const SLOT_OFFSETS = Array.from({ length: 240 }, (_, index) => (index >> 1) * 8 * (index % 2 ? -1 : 1) || 0)
   .toSorted((a, b) => (a < 0 ? -3 * a : a) - (b < 0 ? -3 * b : b));
+/** The same slots, above first: for a card whose port lies above the port a column neighbour feeds. */
+const SLOT_OFFSETS_ABOVE = SLOT_OFFSETS.toSorted((a, b) => (a > 0 ? 3 * a : -a) - (b > 0 ? 3 * b : -b));
 /** Stacked cards keep the canvas' own clearance, or its placement pass pushes them further apart. */
 const STUB_STACK_GAP = PREVIEW_BLOCK_GAP;
 /** Room between a cable that passes a stub column and the stub's top edge. */
@@ -254,9 +256,15 @@ export function compactRecipeLayout(graph: NodeGraph): NodeGraph {
     const target = (consumers.get(node.id) ?? []).filter(edge => placed.has(edge.toNodeId))
       .map(edge => ({ edge, y: placed.get(edge.toNodeId)!.layout.y + portY(placed.get(edge.toNodeId)!, edge.toPortId, 'input') }))
       .toSorted((a, b) => depth.get(a.edge.toNodeId)! - depth.get(b.edge.toNodeId)! || a.y - b.y)[0];
-    return { node, desired: target ? target.y - portY(node, target.edge.fromPortId, 'output') : 0 };
+    // A card in the same column already feeds a lower port of that consumer: going below it would
+    // cross the two cables right at the consumer, so this card tries the slots above first.
+    const consumer = target && placed.get(target.edge.toNodeId);
+    const aboveNeighbour = !!consumer && internal.some(edge => edge.toNodeId === consumer.id && edge.fromNodeId !== node.id
+      && placed.has(edge.fromNodeId) && depth.get(edge.fromNodeId) === depth.get(node.id)
+      && consumer.layout.y + portY(consumer, edge.toPortId, 'input') > target.y);
+    return { node, desired: target ? target.y - portY(node, target.edge.fromPortId, 'output') : 0, aboveNeighbour };
   }).toSorted((a, b) => depth.get(a.node.id)! - depth.get(b.node.id)! || a.desired - b.desired);
-  for (const { node, desired } of free) {
+  for (const { node, desired, aboveNeighbour } of free) {
     const fits = (y: number) => {
       const card = { ...node, layout: { x: depth.get(node.id)! * pitch, y } }, box = boxOf(card);
       if (crowded(card)) return false;
@@ -268,7 +276,7 @@ export function compactRecipeLayout(graph: NodeGraph): NodeGraph {
         && edgeCablePoints(placed.get(edge.fromNodeId)!, placed.get(edge.toNodeId)!, edge).some(point => inside(box, point, -CABLE_CLEARANCE)));
     };
     // Below is cheaper than above: stacked inputs keep the order of the ports they feed.
-    const y = SLOT_OFFSETS.map(offset => desired + offset).find(fits) ?? desired;
+    const y = (aboveNeighbour ? SLOT_OFFSETS_ABOVE : SLOT_OFFSETS).map(offset => desired + offset).find(fits) ?? desired;
     at(node, y);
   }
   const firstPass = new Map([...placed.values()].map(card => [card.id, card.layout.y]));

@@ -178,6 +178,15 @@ rig node to its obvious targets (figure joints, or this clip's position and rota
 with Plant; drive it with Ballistic for a free jump. Facing mirrors the figure around
 its pelvis, so Pelvis X stays a screen position.
 
+**Head** draws the head filled (the original look) or as a ring with the limb
+thickness, up to the head radius; thicker lines grow the ring outward (at most 1.5 ×
+Head Radius) so its opening stays at least half the head radius, and the neck ends
+flat at the ring instead of reaching into it. The inspector shows angles in degrees and lengths and positions in pixels.
+Positions and lengths are kept within ±100 000 figure pixels (beyond that 32-bit GPU
+maths would break the drawing up); the inspector and tool results, `createRig`
+included, say when a value is clamped, when Scale at or below 0 leaves no figure, and
+when the whole figure lies outside its layer.
+
 **Actions.** The Stick Figure's **Actions** lane holds action clips: Idle, Walk, Run,
 Jump, Punch, Kick, Duck, Hit React, Throw, Grab, Land and Fall. Each has authored key
 poses with anticipation, contact and follow-through, forward travel (added to Pelvis X

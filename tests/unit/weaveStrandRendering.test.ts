@@ -23,11 +23,11 @@ describe('Weave strand rendering', () => {
     const second = weave({ id: 'other', params: { operatorGraph: JSON.stringify(graph) } });
     const counts = () => buildStrandsLayerSources({ id: 'clip', effects: [first, second, weave()] }, 0, [])
       .map(layer => layer.source.strands.program.strandCount);
-    expect(counts()).toEqual([4, 7, 40]);
+    expect(counts()).toEqual([4, 7, 26]);
     first.params.operatorGraph = second.params.operatorGraph;
-    expect(counts()).toEqual([7, 7, 40]);
+    expect(counts()).toEqual([7, 7, 26]);
     first.params.operatorGraph = '{invalid';
-    expect(counts()).toEqual([7, 40]);
+    expect(counts()).toEqual([7, 26]);
   });
 
   it('validates transported geometry programs', () => {
@@ -45,7 +45,7 @@ describe('Weave strand rendering', () => {
   it('builds strand sources only for enabled, rendering Weave effects', () => {
     const clip = { id: 'clip', effects: [weave()] };
     const [built] = buildStrandsLayerSources(clip, 0, []);
-    expect(built.source.strands).toMatchObject({ clipId: 'clip', effectId: 'fx-weave', program: { strandCount: 40,
+    expect(built.source.strands).toMatchObject({ clipId: 'clip', effectId: 'fx-weave', program: { strandCount: 26,
       render: { profile: { plies: 3, fibers: 5 } } } });
     expect(buildStrandsLayerSources({ id: 'clip', effects: [weave({ enabled: false })] }, 0, [])).toEqual([]);
     const graph = createDefaultWeaveGraph();

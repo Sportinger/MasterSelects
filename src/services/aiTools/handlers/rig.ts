@@ -5,6 +5,7 @@ import { addStickFigureAction, createStickFigureRig, resolveStickFigure, updateS
 import { validateChoreography } from '../../rig/choreographyValidation';
 import { STICK_FIGURE_EFFECT, stickFigureRef } from '../../rig/stickFigureJointRuntime';
 import { useTimelineStore } from '../../../stores/timeline';
+import { effectParamWarnings } from './effects';
 
 const fail = (error: unknown): ToolResult => ({ success: false, error: error instanceof Error ? error.message : String(error) });
 const optionalNumber = (value: unknown, name: string): number | undefined => {
@@ -36,7 +37,11 @@ export async function handleCreateRig(args: Record<string, unknown>): Promise<To
       facing, color: typeof args.color === 'string' ? args.color : undefined, x: optionalNumber(args.x, 'x'),
       ...(args.params === undefined ? {} : { params: paramsObject(args.params) }),
     });
-    return { success: true, data: created };
+    // Values the figure clamps, or settings that leave nothing visible, are named like addEffect does.
+    const effect = useTimelineStore.getState().clips.find(clip => clip.id === created.clipId)?.effects.find(item => item.id === created.effectId);
+    const named = [...Object.keys(args.params && typeof args.params === 'object' ? args.params : {}), ...(args.x === undefined ? [] : ['rootX'])];
+    const warnings = effectParamWarnings(effect, named.length ? named : ['scale']);
+    return { success: true, data: { ...created, ...(warnings.length ? { warnings } : {}) } };
   } catch (error) { return fail(error); }
 }
 

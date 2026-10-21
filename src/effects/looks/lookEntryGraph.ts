@@ -2,14 +2,14 @@ import { COLOR_RECIPE_EFFECT_TYPES, type EditableColorEffectType } from '../../s
 import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
 import { createLegacyColorEffectGraph } from '../../services/operators/legacyColorEffectGraphs';
 import { createEarlierStylizeGraph } from '../../services/operators/stylizeRecipes';
-import { lookEntryOriginalGraph, lookEntryRecipeOnlyParams } from './lookStackEffects';
+import { lookEntryOriginalGraph, lookEntryRecipeOnlyParams, lookThumbnailEffects } from './lookStackEffects';
 import { withLegacyLookParams } from './legacyLookParams';
 import { EFFECT_GRAPH_PARAM } from '../../services/operators/effectGraph';
 import { watercolourOnlyParams } from '../../services/operators/acuarelaIdentity';
 import { Logger } from '../../services/logger';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import type { EffectType } from '../../types/effects';
-import { getDefaultParams } from '../index';
+import type { Effect, EffectType } from '../../types/effects';
+import { getDefaultParams, withLegacyDefaultParams, withoutRuntimeTravelParams } from '../index';
 import type { LookDefinition, LookStackEntry } from './types';
 
 const log = Logger.create('LookEntryGraph');
@@ -38,10 +38,14 @@ export interface CheckedLookEntryGraph {
 }
 
 /**
- * The values an applied Look entry sets: its saved values, for a custom Look plus the values that
- * keep the look of effects that gained controls or a new recipe since (legacyLookParams.ts). A
- * graph carried in the values (the smoke Acuarela of an old Look) is not one of them: it becomes
- * the effect's operatorGraph (checkedLookEntryOperatorGraph), as on project load.
+ * The values an applied Look entry sets (applyLookToClip, thumbnails, graph checks). New effects
+ * store every parameter, so a custom Look entry that lacks one was made from an instance saved
+ * before the parameter existed: it gets the value that instance rendered with (`legacyDefault`, and
+ * the values that keep the look of effects that gained controls or a new recipe since,
+ * legacyLookParams.ts) instead of the new default. Built-in Looks list only what they change and use
+ * the current defaults. Runtime-only travel is never applied. A graph carried in the values (the
+ * smoke Acuarela of an old Look) is not one of them: it becomes the effect's operatorGraph
+ * (checkedLookEntryOperatorGraph), as on project load.
  */
 export function lookEntryParams(look: Pick<LookDefinition, 'builtIn'>, entry: LookStackEntry): LookStackEntry['params'] {
   const params = withCarriedGraph(look, entry);
@@ -49,8 +53,15 @@ export function lookEntryParams(look: Pick<LookDefinition, 'builtIn'>, entry: Lo
   return Object.fromEntries(Object.entries(params).filter(([id]) => id !== EFFECT_GRAPH_PARAM));
 }
 
-const withCarriedGraph = (look: Pick<LookDefinition, 'builtIn'>, entry: LookStackEntry) =>
-  look.builtIn ? entry.params : withLegacyLookParams(entry.effectId, entry.params);
+const withCarriedGraph = (look: Pick<LookDefinition, 'builtIn'>, entry: LookStackEntry): LookStackEntry['params'] =>
+  withoutRuntimeTravelParams(entry.effectId, look.builtIn ? entry.params
+    : withLegacyDefaultParams(entry.effectId, withLegacyLookParams(entry.effectId, entry.params)));
+
+/** The effect instances a Look thumbnail renders: what applyLookToClip would put on a clip. */
+export function lookPreviewEffects(look: Pick<LookDefinition, 'id' | 'name' | 'builtIn' | 'schemaVersion' | 'stack'>): Effect[] {
+  return lookThumbnailEffects(look as LookDefinition, entry => checkedLookEntryOperatorGraph(look, entry).graph,
+    entry => lookEntryParams(look, entry), (entry, graph) => lookEntryOmittedParams(look, entry, graph)) as Effect[];
+}
 
 /**
  * Default parameters an applied entry leaves out because its graph never reads them: an analog

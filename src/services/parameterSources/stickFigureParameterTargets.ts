@@ -15,9 +15,11 @@ export function stickFigureParameterTargets(effect: Pick<Effect, 'id' | 'name' |
     if (definition.type !== 'number') return [];
     const stored = effect.params[name];
     const fallback = definition.default as number;
+    // A figure saved without a joint renders the rig's rest pose there (legacyDefault).
+    const rendered = ('legacyDefault' in definition ? definition.legacyDefault : undefined) ?? fallback;
     return [{
       path: `effect.${effect.id}.${name}`, label: definition.label, group: effect.name,
-      value: typeof stored === 'number' && Number.isFinite(stored) ? stored : fallback, defaultValue: fallback,
+      value: typeof stored === 'number' && Number.isFinite(stored) ? stored : rendered as number, defaultValue: fallback,
       min: definition.min ?? -1000, max: definition.max ?? 1000, step: definition.step ?? 1,
       unit: isSkeletonAngleKey(name) ? 'degrees' : name === 'opacity' || name === 'scale' || name === 'turn' ? 'number' : 'pixels',
     }];

@@ -199,8 +199,11 @@ last curves rather than inventing a remaining parent.
 
 ## Default graph
 
-A new Weave effect starts with a plain weave of fuzzy three-ply yarns on a sail
-held at its corners:
+A new Weave effect starts with a plain weave of fuzzy three-ply yarns (16 warps and
+10 wefts over 1.6 × 0.96 scene units, about two thirds of the frame wide, in a muted
+grey custom wool) on a sail held at its corners, simulated as 40 × 24 square cloth
+cells. Weaves saved before 2026-10-21 keep the graph stored with them (the 2.4 × 1.6
+sheet with 24 × 16 threads in white wool and a 40 × 27 cloth):
 
 | Group | What it does | Exposed values |
 |---|---|---|
@@ -512,7 +515,7 @@ composition renders every fiber as a ray traced round cone with a hair BSDF (see
 **Antialiasing** (Strand Render) applies to preview, export, nested compositions
 and both render hosts:
 
-| Mode | How | Cost (default weave, 1080p, AMD RDNA3) |
+| Mode | How | Cost (earlier 24 × 16 default weave, 1080p, AMD RDNA3) |
 |---|---|---|
 | **Hashed** (default) | Fibers thinner than a pixel keep one pixel of geometry with deterministic hashed coverage; distant yarns draw a hashed share of their fibers (stochastic simplification). | ~4 ms GPU |
 | **4x Coverage** | Every fiber, four-sample alpha-to-coverage in a strand-only target that starts from the scene depth; resolved once into the scene. About 32 bytes per viewport pixel; extremely thin fibers can still lose coverage. | ~6 ms GPU |
@@ -536,7 +539,7 @@ simulation on the CPU; the GPU pulls the threads in (Thread Along with one progr
 for all points), evaluates the Yarn Profile radius fields (compiled to WGSL, their
 values passed as data, so an animated Reveal or Irregularity keeps the pipeline) and
 binds the cached rest curves to the cloth, including the rotation-minimizing yarn
-frames. On the reference machine a frame of the default weave costs about 6 ms of CPU
+frames. On the reference machine a frame of the default weave (measured with the earlier 24 × 16 sheet) costs about 6 ms of CPU
 for the strands, while threads are pulled in and afterwards (before: about 140 ms
 while pulling in); a paused frame reuses everything. GPU times are in the table above.
 
