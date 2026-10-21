@@ -23,8 +23,18 @@ function noise2d(g:B,id:string,p:Ref,z:Ref,o:Ref,two:Ref,three:Ref){
   return mix('result',mix('row0',h00,h10,{node:fs.node,port:'x'}),mix('row1',h01,h11,{node:fs.node,port:'x'}),{node:fs.node,port:'y'});
 }
 
-/** Exact four-octave expansion of the legacy feedback watercolor shader. */
-export function createDefaultAcuarelaGraph():EffectOperatorGraph {
+/** Effects saved before the watercolour recipe carry the smoke parameters and none of the new ones. */
+export function hasLegacyAcuarelaParams(params: Record<string, unknown>): boolean {
+  return params.wash === undefined && params.bleed === undefined
+    && ['strength', 'density', 'detail', 'gainX', 'gainY', 'gain', 'speed'].some(id => params[id] !== undefined);
+}
+
+/**
+ * The original watery-smoke recipe, an exact four-octave expansion of the legacy feedback shader.
+ * Kept for Acuarela effects saved with it: their stored graph renders unchanged, and graph-less
+ * saved effects (smoke parameters only, see `hasLegacyAcuarelaParams`) resolve to it.
+ */
+export function createLegacyAcuarelaGraph():EffectOperatorGraph {
   const g=new B(),frame=g.node('frame','image.frame','image'),feedback=g.node('feedback','image.frame-history','image'),uv=g.node('uv','image.normalized-uv','uv');
   const bind=(id:string)=>g.node(id,id==='reset'?'values.boolean':'values.number','value',{value:id});
   const opacity=bind('opacity'),gain=bind('gain'),speed=bind('speed'),detail=bind('detail'),strength=bind('strength'),density=bind('density'),gainX=bind('gainX'),gainY=bind('gainY');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
+import { createLegacyAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { IMAGE_EFFECT_GRAPH_LIMITS } from '../../src/services/operators/effectGraphLimits';
 
@@ -16,7 +16,7 @@ const fbm = (x: number, y: number, time: number): [number, number] => { let sx =
 
 describe('Acuarela image graph', () => {
   it('binds the legacy shader parameters and the explicit frame-history source within budget', () => {
-    const graph = createDefaultAcuarelaGraph();
+    const graph = createLegacyAcuarelaGraph();
     for (const id of ['opacity', 'gain', 'speed', 'detail', 'strength', 'density', 'gainX', 'gainY']) {
       expect(graph.nodes.find(node => node.id === id)?.bindings).toEqual({ value: id });
     }
@@ -41,7 +41,7 @@ describe('Acuarela image graph', () => {
 
   it('matches the zero-strength legacy feedback blend and sampled alpha', () => {
     const params = { opacity: 1, gain: 0, speed: 4, detail: 4, strength: 0, density: 4, gainX: .3, gainY: .3 };
-    const plan = compileImageOperatorGraph(createDefaultAcuarelaGraph(), params, { allowFrameHistory: true });
+    const plan = compileImageOperatorGraph(createLegacyAcuarelaGraph(), params, { allowFrameHistory: true });
     expect(plan.frameHistoryResource).toBe('effect-history');
     const uv: [number, number] = [.5, .5], current = source(uv), prior = feedback(), decay = .98, memoryMix = .04;
     const expectedRgb = current.slice(0, 3).map((value, index) => value * (1 - memoryMix) + prior[index] * decay * memoryMix);
@@ -53,7 +53,7 @@ describe('Acuarela image graph', () => {
 
   it('returns the original source exactly when opacity is zero', () => {
     const params = { opacity: 0, gain: .7, speed: 9, detail: 7, strength: 1, density: 80, gainX: 1, gainY: 1 };
-    const plan = compileImageOperatorGraph(createDefaultAcuarelaGraph(), params, { allowFrameHistory: true });
+    const plan = compileImageOperatorGraph(createLegacyAcuarelaGraph(), params, { allowFrameHistory: true });
     const uv: [number, number] = [.42, .61];
     expect(evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv, resolution: [8, 8], timelineTimeSeconds: 1.2,
       sampleImage: source, sampleResource: () => feedback() })).toEqual(source(uv));
@@ -69,7 +69,7 @@ describe('Acuarela image graph', () => {
     const warpMix = params.strength * .92, warpedRgb = wash.map((value, i) => current[i] * (1 - warpMix) + value * warpMix), feedbackMix = params.strength * .1 + params.opacity * .04;
     const waterRgb = warpedRgb.map((value, i) => Math.min(value * (1 - feedbackMix) + prior[i] * .98 * feedbackMix, Math.max(current[i], wash[i]) + .1));
     const waterAlpha = Math.max(current[3], prior[3] * .98), expected = waterRgb.map((value, i) => current[i] * .2 + value * .8).concat(current[3] * .2 + waterAlpha * .8);
-    const plan = compileImageOperatorGraph(createDefaultAcuarelaGraph(), params, { allowFrameHistory: true });
+    const plan = compileImageOperatorGraph(createLegacyAcuarelaGraph(), params, { allowFrameHistory: true });
     const actual = evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv, resolution: [8, 8], timelineTimeSeconds: time, sampleImage: source, sampleResource: () => feedback() });
     expected.forEach((value, index) => expect(actual[index]).toBeCloseTo(value, 8));
   });

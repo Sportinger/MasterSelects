@@ -9,6 +9,7 @@ import { EffectsPipeline } from '../../../src/effects/EffectsPipeline';
 import { getAllEffects, getDefaultParams, getEffect } from '../../../src/effects';
 import { guardGpuDevice, getGpuPipelineFailures } from '../../../src/engine/core/gpuPipelineGuard';
 import { getEffectGpuFailure } from '../../../src/effects/effectGpuFailures';
+import { getPixelParticleDisintegrateRenderer } from '../../../src/engine/particles/PixelParticleDisintegrateRenderer';
 
 export interface EffectLabJob {
   effectId: string;
@@ -24,6 +25,8 @@ export interface EffectLabJob {
   bypass?: boolean;
   /** Draw the image at this fraction of the frame, centred on transparency, to check alpha handling. */
   inset?: number;
+  /** Particle-render effects: which particle budget applies (the editor uses 'preview', export 'export'). */
+  quality?: 'preview' | 'export';
 }
 
 const USAGE = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
@@ -104,10 +107,19 @@ async function render(job: EffectLabJob) {
   const scopeId = `effect-lab:${scope += 1}`;
   const started = performance.now();
   let finalTexture: GPUTexture = source;
+  const particleRender = (definition as { pipelineKind?: string }).pipelineKind === 'particle-render';
   for (let attempt = 0; attempt < 40; attempt += 1) {
     const changesBefore = pipelineChanges;
     for (const time of times) {
       const encoder = gpu.createCommandEncoder();
+      if (particleRender) {
+        // Same call as the Compositor: accumulate into ping, resolve into pong; motion time = clip media time.
+        getPixelParticleDisintegrateRenderer(gpu).render({ commandEncoder: encoder, sampler, sourceView, accumulationView: pingView,
+          outputView: pongView, outputWidth: width, outputHeight: height, effect: effect as never, motionTime: time, quality: job.quality ?? 'preview' });
+        gpu.queue.submit([encoder.finish()]);
+        finalTexture = pong;
+        continue;
+      }
       const result = pipeline!.applyEffects(encoder, [effect] as never, sampler, sourceView, pingView, pingView,
         pongView, width, height, ping, pong, undefined, time, undefined, { frameRate: job.frameRate ?? 30, scopeId } as never);
       gpu.queue.submit([encoder.finish()]);
@@ -126,6 +138,33 @@ async function render(job: EffectLabJob) {
   };
 }
 
+/**
+ * First-frame cost of a fresh effect on this page: the first submit waits for the driver to build
+ * the effect's pipelines, later frames do not. Run it as the page's first job for the effect.
+ */
+async function probeCompile(job: EffectLabJob) {
+  const gpu = await device();
+  const definition = getEffect(job.effectId);
+  if (!definition) throw new Error(`Unknown effect: ${job.effectId}`);
+  const width = job.width ?? 1920, height = job.height ?? 1080;
+  const textures = [0, 1, 2].map(() => gpu.createTexture({ size: [width, height], format: 'rgba8unorm', usage: USAGE }));
+  const [, ping, pong] = textures, [sourceView, pingView, pongView] = textures.map(texture => texture.createView());
+  const sampler = gpu.createSampler({ magFilter: 'linear', minFilter: 'linear' });
+  const effect = { id: `probe-${job.effectId}`, type: job.effectId, name: definition.name, enabled: true,
+    params: { ...getDefaultParams(job.effectId), ...job.params } };
+  const frame = async (time: number) => {
+    const started = performance.now(), encoder = gpu.createCommandEncoder();
+    pipeline!.applyEffects(encoder, [effect] as never, sampler, sourceView, pingView, pingView, pongView, width, height, ping, pong,
+      undefined, time, undefined, { frameRate: 30, scopeId: `probe:${scope += 1}` } as never);
+    gpu.queue.submit([encoder.finish()]);
+    await gpu.queue.onSubmittedWorkDone();
+    return Math.round(performance.now() - started);
+  };
+  const firstFrameMs = await frame(0), frames = [await frame(1 / 30), await frame(2 / 30), await frame(3 / 30)];
+  for (const texture of textures) texture.destroy();
+  return { firstFrameMs, steadyFrameMs: Math.min(...frames), gpuFailure: getEffectGpuFailure(job.effectId) ?? null };
+}
+
 function describe() {
   return getAllEffects().map(effect => ({
     id: effect.id, name: effect.name, category: effect.category,
@@ -137,5 +176,5 @@ function describe() {
   }));
 }
 
-Object.assign(window, { __effectLab: { render, describe } });
+Object.assign(window, { __effectLab: { render, describe, probeCompile } });
 status.textContent = 'ready';

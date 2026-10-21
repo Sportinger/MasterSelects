@@ -67,7 +67,8 @@ import { createDefaultToneGeometryGraph } from './toneGeometryEffectGraph';
 import { createDefaultCrossStitchGraph } from './crossStitchEffectGraph';
 import { createDefaultMotionHalftoneGraph, type EditableMotionHalftoneEffectType } from './motionHalftoneEffectGraphs';
 import { createDefaultAsciiGhostGraph, createDefaultAsciiGraph, createDefaultBrandGeneratorGraph, createDefaultCapsuleCloudGraph, createDefaultDataHatchGraph, createDefaultDitherTextGraph, createDefaultGlyphMatrixGraph, createDefaultGridGlyphGraph, createDefaultInscribeGraph, createDefaultMatrixGraph, createDefaultNumberFieldGraph, createDefaultPixelCodeGraph, createDefaultPixelDitherGraph, createDefaultRetroMatrixGraph, createDefaultStitchPosterGraph, createDefaultSymbolMatrixGraph, createDefaultUiCollageGraph, createDefaultWordMosaicGraph } from './asciiEffectGraph';
-import { createDefaultAcuarelaGraph } from './acuarelaEffectGraph';
+import { createLegacyAcuarelaGraph, hasLegacyAcuarelaParams } from './acuarelaEffectGraph';
+import { createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
 import { createDefaultVoronoiGraph } from './voronoiEffectGraph';
 import { createDefaultPixelSortGraph } from './pixelSortEffectGraph';
 import { createDefaultQuadtreeGraph } from './quadtreeEffectGraph';
@@ -201,7 +202,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'chroma-key' ? createDefaultChromaKeyGraph
         : effectType === 'rom1' ? createDefaultRom1Graph
         : effectType === 'memory-leak' ? createDefaultMemoryLeakGraph
-        : effectType === 'acuarela' ? createDefaultAcuarelaGraph
+        : effectType === 'acuarela' ? (hasLegacyAcuarelaParams(effect.params) ? createLegacyAcuarelaGraph : createDefaultAcuarelaGraph)
         : effectType === 'crt-screen' ? createDefaultCrtScreenGraph
         : effectType === 'ribbon-scan' ? createDefaultRibbonScanGraph
         : effectType === 'wave-lines' ? createDefaultWaveLinesGraph

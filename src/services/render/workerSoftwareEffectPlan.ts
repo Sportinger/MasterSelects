@@ -5,6 +5,7 @@ import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntime
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { hasLegacyAcuarelaParams } from '../operators/acuarelaEffectGraph';
 import { rendersBuiltInMirrorPixelRecipe } from '../operators/mirrorPixelGraphUpgrade';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
@@ -232,6 +233,9 @@ function effectFilterPart(
   if (pointwise) return addPointwiseEffect(pixelEffects, pointwise);
   switch (effectType) {
     case 'acuarela':
+      // The hand-written CPU mirror covers only the original smoke recipe; the watercolour recipe
+      // runs as a graph plan (workerSoftwareEffectPlanForLayer).
+      if (!hasLegacyAcuarelaParams(effect.params)) return null;
       if (!canAddFeedbackEffect(pixelEffects)) return null;
       (pixelEffects.acuarelaAdjustments ??= []).push({
         feedbackKey: `${layerId}:${effect.id}`,
@@ -409,7 +413,9 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
       return { filter: 'none', pixelEffects: graphEffects };
     } catch { return null; }
   };
-  if (hasPersistedImageGraph || handWrittenMirrorPixelOutOfOrder(activeEffects)) return graphPlans();
+  // Watercolour Acuarela has no hand-written CPU pass (only the legacy smoke recipe does): its graph runs as a plan.
+  const watercolorAcuarela = activeEffects.some(effect => effect.type === 'acuarela' && !hasLegacyAcuarelaParams(effect.params));
+  if (hasPersistedImageGraph || watercolorAcuarela || handWrittenMirrorPixelOutOfOrder(activeEffects)) return graphPlans();
   // The hand-written pass holds one resampling effect; stacked built-in distorts (Wave then
   // Twirl, Kaleidoscope then Fisheye then Motion Blur, …) run as ordered graph plans instead of skipping the layer.
   const stackedFallback = () => activeEffects.some(effect => workerSoftwareUvDistortAdjustment(effect) || HAND_WRITTEN_MIRROR_PIXEL.has(effect.type))

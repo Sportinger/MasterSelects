@@ -7,6 +7,7 @@ import { INPUT_HISTORY_SAMPLE_WGSL } from './inputHistorySampling';
 import { OPTICAL_FLOW_WGSL, HISTORY_OPTICAL_FLOW_WGSL } from './opticalFlowWgsl';
 import { MOTION_IMAGE_WGSL } from './motionImageWgsl';
 import { IMAGE_BAYER_4_WGSL } from './imagePatternSemantics';
+import { IMAGE_FRACTAL_NOISE_WGSL } from './imageNoiseSemantics';
 import { emitImageSegmentSortWgsl, IMAGE_SEGMENT_SORT_WGSL } from './imageOperatorSegmentSortWgsl';
 import { emitImageQuadtreeWgsl } from './imageOperatorQuadtreeWgsl';
 import { imageSampleScopeNeedsSource, imageScopeReadsPrimaryInput } from './imageOperatorScopes';
@@ -85,6 +86,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation === 'project-radius' ? `imageGraphProjectRadius(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'unproject-radius' ? `imageGraphUnprojectRadius(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'hash2d-vec2' ? `imageGraphHash2d(${args[0]})`
+      : item.operation === 'fractal-noise2d' ? `imageGraphFractalNoise(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'rgb-to-hsv' ? `imageGraphRgbToHsv(${args[0]})` : item.operation === 'hsv-to-rgb' ? `imageGraphHsvToRgb(${args[0]})`
       : `vec4f(${args[0]}, ${args[1]})`;
     const type = item.type === 'image' || item.type === 'vec4' ? 'vec4f' : item.type === 'rgb' || item.type === 'vec3' ? 'vec3f' : item.type === 'vec2' ? 'vec2f' : item.type === 'boolean' ? 'bool' : 'f32';
@@ -141,6 +143,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       ...(instructions.some(item => item.operation === 'rotate-vec2') ? [IMAGE_COORDINATE_ROTATION_WGSL] : []),
       ...(instructions.some(item => item.operation === 'normalize-vec2') ? [IMAGE_VECTOR_WGSL] : []),
       ...(instructions.some(item => item.operation === 'bayer4-vec2') ? [IMAGE_BAYER_4_WGSL] : []),
+      ...(instructions.some(item => item.operation === 'fractal-noise2d') ? [IMAGE_FRACTAL_NOISE_WGSL] : []),
       ...(segmentSortScopes.length ? [IMAGE_SEGMENT_SORT_WGSL] : []),
       ...(instructions.some(item => item.operation === 'marching-squares-topology') ? [IMAGE_MARCHING_SQUARES_TOPOLOGY_WGSL] : []),
       ...(instructions.some(item => item.operation === 'project-radius' || item.operation === 'unproject-radius') ? [IMAGE_RADIAL_PROJECTION_WGSL] : []),

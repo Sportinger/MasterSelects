@@ -7,6 +7,7 @@ import { imageDegreesToRadians } from './imageAngleSemantics';
 import { normalizeImageVector2 } from './imageVectorSemantics';
 import { evaluateImageDerivativeQuad, type ImageDerivativeMode } from './imageOperatorDerivatives';
 import { evaluateImageBayer4 } from './imagePatternSemantics';
+import { evaluateFractalNoise2d } from './imageNoiseSemantics';
 import { sortImageSegment } from './imageSegmentSortSemantics';
 import { partitionImageQuadtree } from './imageQuadtreePartitionSemantics';
 import { imageSampleScopeNeedsSource, imageScopeReadsPrimaryInput } from './imageOperatorScopes';
@@ -270,6 +271,7 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     else if (item.operation === 'project-radius') values.push(projectImageRadius(args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'unproject-radius') values.push(unprojectImageRadius(args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'hash2d-vec2') values.push(imageHash2d(args[0] as number[]));
+    else if (item.operation === 'fractal-noise2d') values.push(evaluateFractalNoise2d(args[0] as number[], args[1] as number, args[2] as number));
     else if (item.operation === 'rgb-to-hsv') values.push(imageRgbToHsv(args[0] as [number, number, number]));
     else if (item.operation === 'hsv-to-rgb') values.push(imageHsvToRgb(args[0] as [number, number, number]));
     else values.push([...(args[0] as number[]), args[1] as number]);

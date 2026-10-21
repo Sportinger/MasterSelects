@@ -1,6 +1,7 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { withLegacyMirrorPixelControls } from '../../services/operators/mirrorPixelGraphUpgrade';
+import { withLegacyAcuarelaGraph } from '../../services/operators/acuarelaIdentity';
 import type { LookDefinition, LookStackEntry } from './types';
 
 export function applyLookToClip(look: LookDefinition, clipId: string): void {
@@ -10,7 +11,7 @@ export function applyLookToClip(look: LookDefinition, clipId: string): void {
     for (const entry of look.stack) {
       const effectId = addClipEffect(clipId, entry.effectId);
       // A custom Look saved before an effect gained controls lacks them: give them the values that keep its look.
-      const params = look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params);
+      const params = look.builtIn ? entry.params : withLegacyAcuarelaGraph(entry.effectId, withLegacyMirrorPixelControls(entry.effectId, entry.params));
       if (Object.keys(params).length > 0) updateClipEffect(clipId, effectId, params);
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }

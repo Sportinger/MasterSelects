@@ -385,6 +385,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         inputs: [visitSource(current, 'value'), visitSource(current, 'sigma')] }); break;
       case 'noise.hash2d.vec2': register = emit({ nodeId: current.id, operation: 'hash2d-vec2', type: 'scalar',
         inputs: [visitSource(current, 'value')] }); break;
+      case 'noise.fractal2d.vec2': register = emit({ nodeId: current.id, operation: 'fractal-noise2d', type: 'scalar',
+        inputs: [visitSource(current, 'value'), visitSource(current, 'octaves'), visitSource(current, 'roughness')] }); break;
       case 'convert.rgb-to-hsv': register = emit({ nodeId: current.id, operation: 'rgb-to-hsv', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;
       case 'convert.hsv-to-rgb': register = emit({ nodeId: current.id, operation: 'hsv-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
       default: throw new Error(`Unsupported local image operator: ${current.operator}`);

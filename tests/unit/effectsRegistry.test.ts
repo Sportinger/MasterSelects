@@ -233,9 +233,10 @@ describe('Expected effects per category', () => {
     expect(getEffectsByCategory('keying').length).toBe(1);
   });
 
-  it('marks Acuarela as feedback-driven and continuous', () => {
+  it('keeps Acuarela feedback-capable for its saved smoke recipe but static while paused', () => {
     expect(getEffect('acuarela')?.usesFeedback).toBe(true);
-    expect(getEffect('acuarela')?.requiresContinuousRender).toBe(true);
+    // The watercolour recipe depends on the timeline time only; the smoke recipe's history only advances with it.
+    expect(getEffect('acuarela')?.requiresContinuousRender).toBeUndefined();
   });
 
   it('marks Rom1 as feedback-driven and continuous', () => {
@@ -696,13 +697,14 @@ describe('Registry helper functions', () => {
 
   it('effectStackNeedsContinuousRender returns true for enabled continuous render effects', () => {
     expect(effectStackNeedsContinuousRender([
-      { type: 'acuarela', enabled: true },
+      { type: 'rom1', enabled: true },
     ])).toBe(true);
   });
 
   it('effectStackNeedsContinuousRender ignores disabled and non-continuous effects', () => {
     expect(effectStackNeedsContinuousRender([
-      { type: 'acuarela', enabled: false },
+      { type: 'rom1', enabled: false },
+      { type: 'acuarela', enabled: true },
       { type: 'gaussian-blur', enabled: true },
     ])).toBe(false);
   });

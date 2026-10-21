@@ -1,5 +1,6 @@
 import { getEffect } from '../../effects';
 import type { EffectParam } from '../../effects/types';
+import { FEEDBACK_HISTORY_LOOP_KEY } from '../../effects/_shared/feedbackParameters';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { effectOperatorGraph, isImageGraphEffectType } from './effectGraphOwner';
 
@@ -8,6 +9,7 @@ export interface EffectParamOwner { type: string; params: Record<string, unknown
 
 const boundByGraph = new WeakMap<EffectOperatorGraph, ReadonlySet<string>>();
 const conditional = (definition: EffectParam) => !!definition.deprecated || !!definition.graphOnly;
+const FEEDBACK_CONTROLS = [FEEDBACK_HISTORY_LOOP_KEY, 'reset'];
 
 /** Parameters the instance's effective image graph reads; undefined when no graph decides it. */
 export function graphBoundParameters(effect: EffectParamOwner): ReadonlySet<string> | undefined {
@@ -18,7 +20,9 @@ export function graphBoundParameters(effect: EffectParamOwner): ReadonlySet<stri
   if (!bound) {
     bound = new Set(graph.nodes.flatMap(node => [...Object.values(node.bindings).flatMap(binding =>
       typeof binding === 'string' ? [binding] : Array.isArray(binding) ? [binding[0]] : [binding.yaw, binding.pitch]),
-    ...node.enabled ? [node.enabled] : []]));
+    ...node.enabled ? [node.enabled] : [],
+    // The feedback controls act through the frame history the runtime keeps for this node.
+    ...node.operator === 'image.frame-history' ? FEEDBACK_CONTROLS : []]));
     boundByGraph.set(graph, bound);
   }
   return bound;

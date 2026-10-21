@@ -7,6 +7,9 @@
 //       [--images dancer_stage,harbor_town,neon_rain_street] [--width 960]
 //       [--times 0,0.033,0.067] [--url http://localhost:5175]
 //       [--inset 0.7]   # image at 70 % on transparency; the sheet shows cells over a checkerboard
+//       [--quality export]  # particle-render effects: export particle budget instead of preview
+//   node scripts/effect-lab.mjs --compile-probe --effect voxel-relief [--width 1920]
+//       # first frame (waits for the driver to build the pipelines) vs steady frame, in a fresh page
 //   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>]
 //
 // Each variant renders on each image; "original" (effect bypassed) is always the first column.
@@ -76,7 +79,11 @@ try {
   await page.goto(`${url}/tests/browser/effect-lab/index.html`);
   await page.waitForFunction(() => document.querySelector('#status')?.textContent === 'ready', null, { timeout: 120000 });
 
-  if (args.includes('--list')) {
+  if (args.includes('--compile-probe')) {
+    const job = { effectId: option('--effect'), image: 'dancer_stage.jpg', width: Number(option('--width', '1920')),
+      params: option('--params') ? JSON.parse(option('--params')) : {} };
+    console.log(JSON.stringify({ effectId: job.effectId, ...(await page.evaluate(probe => window.__effectLab.probeCompile(probe), job)), errors }));
+  } else if (args.includes('--list')) {
     console.log(JSON.stringify(await page.evaluate(() => window.__effectLab.describe()), null, 1));
   } else if (option('--pairs')) {
     const entries = JSON.parse(fs.readFileSync(option('--pairs'), 'utf8')).pairs.filter(entry => !option('--only') || entry.name === option('--only'));
@@ -99,13 +106,14 @@ try {
     const width = Number(option('--width', '960'));
     const times = option('--times') ? option('--times').split(',').map(Number) : undefined;
     const inset = option('--inset') ? Number(option('--inset')) : undefined;
+    const quality = option('--quality');
     const results = [];
     for (const image of images) {
       const row = [];
       const original = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, bypass: true, inset });
       row.push({ label: 'original', ...original });
       for (const variant of variants) {
-        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times, inset });
+        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times, inset, quality });
         row.push({ label: variant.label, params: variant.params, ...result });
       }
       for (const cell of row) {

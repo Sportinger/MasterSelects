@@ -1,5 +1,6 @@
 import type { BoundOperatorNode } from '../../types/operatorGraph';
 import { mirrorPixelPresentationPlan } from './mirrorPixelPresentation';
+import { acuarelaPresentationPlan } from './acuarelaPresentation';
 
 export interface EffectPresentationPlan {
   labels: Record<string, string>;
@@ -92,7 +93,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^space-(moved-delta|sample-uv)$/.test(id) ? 'coordinates' : /^space-/.test(id) ? 'space'
           : /^phase(-|$)/.test(id) ? 'phase' : 'coordinates',
   };
-  const mirrorPixel = mirrorPixelPresentationPlan(type);
+  const mirrorPixel = mirrorPixelPresentationPlan(type) ?? acuarelaPresentationPlan(type);
   if (mirrorPixel) return mirrorPixel;
   if (COLORS.has(type)) return {
     labels: { processing: 'Color Processing', finish: 'Clamp & Alpha' },
