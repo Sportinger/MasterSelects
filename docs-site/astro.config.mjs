@@ -12,6 +12,7 @@ const anchorRedirectsFile = new URL('./src/generated/anchor-redirects.json', imp
 const docsClipsScript = new URL('./src/scripts/docsClips.js', import.meta.url);
 const docsCompareScript = new URL('./src/scripts/docsCompare.js', import.meta.url);
 const docsCalloutsScript = new URL('./src/scripts/docsCallouts.js', import.meta.url);
+const docsLightboxScript = new URL('./src/scripts/docsLightbox.js', import.meta.url);
 function readGenerated(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -51,11 +52,12 @@ export default defineConfig({
       logo: { src: './src/assets/ms-mark.png' },
       customCss: ['./src/styles/custom.css'],
       // Docs clips start when scrolled into view and respect reduced motion; compare figures get
-      // their draggable divider; callouts light up from their word in the text (inline: a few lines each).
+      // their draggable divider; callouts light up from their word in the text; a click on a picture opens the zoomable lightbox.
       head: [
         { tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsClipsScript, 'utf8') },
         { tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsCompareScript, 'utf8') },
         { tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsCalloutsScript, 'utf8') },
+        { tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsLightboxScript, 'utf8') },
         ...(Object.keys(anchorRedirects).length ? [{ tag: 'script', content: anchorRedirectScript }] : []),
       ],
       sidebar,
@@ -72,6 +74,7 @@ export default defineConfig({
           addWatchFile(docsClipsScript);
           addWatchFile(docsCompareScript);
           addWatchFile(docsCalloutsScript);
+          addWatchFile(docsLightboxScript);
         },
       },
     },

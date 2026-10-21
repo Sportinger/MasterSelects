@@ -30,11 +30,18 @@ function callouts(svg) {
   return found.filter((item) => item.circle && item.number);
 }
 
-/** "1 — Preset: pick a starting point. 2 — Band Size." → Map { '1' → 'preset', '2' → 'band size' } */
+/** "1 — Preset: pick a starting point. 2 — Band Size." → Map { '1' → { label: 'Preset', note: 'pick a starting point' }, … } */
 function captionLabels(caption) {
   const labels = new Map();
+  const text = caption?.textContent ?? '';
   const pattern = /(\d+)\s*[—–]\s*([^:.;—–]+?)(?=\s*(?:[:.;]|\d+\s*[—–]|$))/gu;
-  for (const match of (caption?.textContent ?? '').matchAll(pattern)) labels.set(match[1], normal(match[2]));
+  const matches = [...text.matchAll(pattern)];
+  matches.forEach((match, index) => {
+    const end = matches[index + 1]?.index ?? text.length;
+    const rest = text.slice(match.index + match[0].length, end).trim();
+    const note = rest.startsWith(':') ? rest.slice(1).trim().replace(/\.$/u, '') : '';
+    labels.set(match[1], { label: match[2].trim(), note });
+  });
   return labels;
 }
 
@@ -117,11 +124,10 @@ function elbowPath(points) {
 /** Word box → callout circle: out of the word, round two corners, into the circle's edge. */
 function route(word, circle) {
   const w = word.getBoundingClientRect();
-  const ctm = circle.getScreenCTM();
-  if (!ctm) return undefined;
-  const centre = new DOMPoint(Number(circle.getAttribute('cx')), Number(circle.getAttribute('cy'))).matrixTransform(ctm);
-  const r = Number(circle.getAttribute('r')) * Math.hypot(ctm.a, ctm.b) + 3;
-  const t = { x: centre.x, y: centre.y };
+  const box = circle.getBoundingClientRect();
+  if (!box.width) return undefined;
+  const r = box.width / 2 + 3;
+  const t = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
   const verticalGap = t.y > w.bottom ? t.y - w.bottom : t.y < w.top ? w.top - t.y : 0;
   const horizontalGap = t.x > w.right ? t.x - w.right : t.x < w.left ? w.left - t.x : 0;
   if (verticalGap >= horizontalGap) {
@@ -193,7 +199,11 @@ for (const svg of content?.querySelectorAll('.docs-shot-stage > svg.docs-shot-ov
   const section = sectionOf(figure, content);
   const refs = captionRefs(caption, new Set(items.map((item) => item.number)));
   for (const item of items) {
-    const label = labels.get(item.number);
+    const { label: text = '', note = '' } = labels.get(item.number) ?? {};
+    const label = text && normal(text);
+    item.group.dataset.callout = item.number;
+    item.group.dataset.label = text;
+    item.group.dataset.note = note;
     let words = label ? boldWords(section, label) : [];
     if (label && !words.length) words = boldWords([content], label).slice(0, 1);
     item.words = [...refs.filter((ref) => ref.dataset.callout === item.number), ...words];
@@ -210,3 +220,6 @@ for (const svg of content?.querySelectorAll('.docs-shot-stage > svg.docs-shot-ov
   }
   stage.classList.add('docs-callouts-live');
 }
+
+// The lightbox (docsLightbox.js) draws the same lines from its notes.
+window.docsCallouts = { route, elbowPath };
