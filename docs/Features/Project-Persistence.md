@@ -130,7 +130,7 @@ choice, so one project never spans both stores. While the fallback is active
 the save status reads "Temporary storage", explains that Private Browsing and
 in-app browsers may delete the project when the window closes, and a warning
 styled **Temporary · Save permanently** button sits next to it (only "Save" on
-phone widths). Both open the *Save this project permanently* dialog, which
+phone widths). Both open the *This project is only temporary* dialog, which
 offers only the destinations this device supports, best first:
 
 - **Save to a folder** (folder picker or Native Helper): the existing Save As
@@ -180,27 +180,42 @@ apart: iOS/iPadOS WebKit (including iPadOS's desktop-mode Mac user agent, via
 `display-mode: standalone`/`fullscreen`), in a browser tab, or `none`
 elsewhere. Desktop and Android behave as described above.
 
-- **In a Safari tab** the dialog's first, recommended entry is **Add
-  MasterSelects to the Home Screen**: Share button, **Add to Home Screen**
-  (under **More** if it is not listed) with **Open as Web App** on, then open
-  MasterSelects from the new icon. Because the Home Screen app does not see
-  Safari's storage, the entry downloads the project as `.msproj` in one click
-  (**Download .msproj to take along**) and says to use **Open Project > Import
-  .msproj archive** in the Home Screen app. Keep in this browser, Download
-  .msproj archive and Ask to keep it follow below it; Keep in this browser says
-  that a tab can still lose the project and no longer reports it as saved
-  permanently.
+- **In a Safari tab** the dialog leads with numbered Home Screen steps, each
+  one bold line with a short hint: 1 **Download this project** (the step's
+  button downloads the `.msproj`, because the Home Screen app has its own,
+  empty storage; the step turns into a check mark afterwards), 2 **Tap Share**,
+  3 **Tap Add to Home Screen** (under More if it is not listed, Open as Web App
+  on), 4 **Open the new icon**, 5 **Open Project → Import**. Keep in this
+  browser (which says that Safari can still delete it), Download a backup and
+  Ask to keep it sit under the collapsed **More options**.
 - The same tab also marks **browser-local** projects (not only temporary
   ones, including the browser recovery) with a **Not safe yet · Keep safe**
   button in the place and style of the Temporary button. It opens the dialog as
-  *Keep this project safe* (Home Screen step, then the archive as a backup
-  outside Safari) and stays until the page runs from the Home Screen or
+  *This project can get lost* (Home Screen steps; the archive as a backup
+  outside Safari under More options) and stays until the page runs from the Home Screen or
   `navigator.storage.persisted()` returns true; it is not dismissible. While
   persistence is still being checked it stays hidden, so it does not flicker.
 - **In the Home Screen app** there is no Home Screen step and no hint for
   browser-local projects: browser storage is the permanent place. A temporary
   project still gets Keep in this browser first and the `.msproj` download as
-  backup, and the dialog notes that the seven-day cleanup does not apply.
+  backup, and More options notes that the seven-day cleanup does not apply.
+
+The dialog is deliberately plain (decision 2026-10-21, user: the first
+iPad version was far too much text). It shows one large headline that names
+the problem (*This project is only temporary*, *This project can get lost*,
+*Some projects are still temporary*, and *Your project is safe* once nothing
+is at risk any more), one "why" sentence, and one obvious action: the Home
+Screen steps in a Safari tab, otherwise one big button for the best destination
+(**Save to a folder**, **Keep in this browser** or **Download project file**).
+All other destinations, Ask to keep it, leftover temporary projects and the
+storage notes are one short line each under the collapsed, keyboard-operable
+**More options** disclosure. Results are one bold sentence (green with a check
+mark on success, amber where the project is still at risk). The body scrolls
+and the Close/Done footer stays visible; the dialog is portaled to the page so
+the phone/iPad workspace bar cannot cover it, Escape and the Tab trap still
+work after a pointer activation blurred the control, and the first focus goes
+to the recommended action rather than the name field (no iPad keyboard pops up).
+Copy lives in `src/components/common/toolbar/savePermanentlyCopy.ts`.
 
 The Native Helper checks granted paths and negotiates repository write support.
 A connected helper with ordinary file commands does not by itself prove that
