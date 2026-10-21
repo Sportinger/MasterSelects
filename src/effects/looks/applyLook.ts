@@ -1,5 +1,8 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
+import { editEffectGraph } from '../../services/operators/effectGraphEditing';
+import { createEarlierStylizeGraph, hasEarlierStylizeRecipe, isEarlierStylizeGraph } from '../../services/operators/stylizeRecipes';
+import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import type { LookDefinition, LookStackEntry } from './types';
 
 export function applyLookToClip(look: LookDefinition, clipId: string): void {
@@ -8,6 +11,12 @@ export function applyLookToClip(look: LookDefinition, clipId: string): void {
   try {
     for (const entry of look.stack) {
       const effectId = addClipEffect(clipId, entry.effectId);
+      // A stylize effect saved with its earlier recipe gets that recipe back, so its values keep their look.
+      const earlier = entry.recipe === 'earlier' ? createEarlierStylizeGraph(entry.effectId) : undefined;
+      if (earlier) editEffectGraph(clipId, effectId, `Apply look: ${look.name}`, target => {
+        for (const key of Object.keys(target)) delete (target as unknown as Record<string, unknown>)[key];
+        Object.assign(target, earlier);
+      });
       if (Object.keys(entry.params).length > 0) updateClipEffect(clipId, effectId, entry.params);
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }
@@ -16,11 +25,12 @@ export function applyLookToClip(look: LookDefinition, clipId: string): void {
   }
 }
 export function stackFromClipEffects(
-  effects: Array<{ type: string; enabled?: boolean; params?: Record<string, unknown> }>,
+  effects: Array<{ type: string; enabled?: boolean; params?: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }>,
 ): LookStackEntry[] {
   return effects.map((effect) => ({
     effectId: effect.type,
     enabled: effect.enabled !== false,
+    ...(hasEarlierStylizeRecipe(effect.type) && isEarlierStylizeGraph(effect.type, effect.operatorGraph) ? { recipe: 'earlier' as const } : {}),
     params: Object.fromEntries(Object.entries(effect.params ?? {}).filter(([, value]) => (
       typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
     ))) as Record<string, number | boolean | string>,

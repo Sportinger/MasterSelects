@@ -4,7 +4,7 @@ import { createLegacyAlphaGlowGraph } from '../../src/services/operators/legacyA
 import { expandOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
 import { upgradeGlowGraph } from '../../src/services/operators/glowGraphUpgrade';
-import { createRingGlowGraph as createDefaultGlowGraph } from '../../src/services/operators/glowEffectGraph';
+import { createRingGlowGraph } from '../../src/services/operators/glowEffectGraph';
 
 const BRIGHT_PASS = ['sample-luma', 'sample-bright', 'bright-sample'];
 
@@ -45,7 +45,7 @@ describe('legacy composition input ports', () => {
   });
 
   it('upgrades the untouched saved alpha-era Glow to the current recipe', () => {
-    expect(upgradeGlowGraph(savedAlphaEraGraph())).toEqual(createDefaultGlowGraph());
+    expect(upgradeGlowGraph(savedAlphaEraGraph())).toEqual(createRingGlowGraph());
   });
 
   it('answers "not this recipe" instead of throwing for graphs that cannot expand', () => {

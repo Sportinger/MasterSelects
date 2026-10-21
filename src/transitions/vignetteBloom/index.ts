@@ -35,10 +35,9 @@ export const vignetteBloom: TransitionDefinition = {
       params: {
         amount: { from: 0.2, to: 2.2 },
         threshold: { from: 0.78, to: 0.42 },
-        radius: { from: 18, to: 44 },
+        // Bloom Radius in 1080p pixels (the ring Glow this was tuned for spread about 5x as far per unit).
+        radius: { from: 60, to: 240 },
         softness: 0.65,
-        rings: 3,
-        samplesPerRing: 10,
       },
       startProgress: 0,
       endProgress: 0.7,
@@ -52,10 +51,8 @@ export const vignetteBloom: TransitionDefinition = {
       params: {
         amount: { from: 2.2, to: 0.2 },
         threshold: { from: 0.42, to: 0.78 },
-        radius: { from: 44, to: 18 },
+        radius: { from: 240, to: 60 },
         softness: 0.65,
-        rings: 3,
-        samplesPerRing: 10,
       },
       startProgress: 0.3,
       endProgress: 1,
@@ -67,10 +64,11 @@ export const vignetteBloom: TransitionDefinition = {
       effectType: 'vignette',
       effectName: 'Vignette',
       params: {
+        // Roundness 0 follows the frame; Size and Softness are the earlier UV values / sqrt(2), the same falloff as before.
         amount: { from: 0.12, to: 0.72 },
-        size: { from: 0.82, to: 0.58 },
-        softness: 0.78,
-        roundness: 1,
+        size: { from: 0.58, to: 0.41 },
+        softness: 0.55,
+        roundness: 0,
       },
       startProgress: 0,
       endProgress: 0.72,
@@ -83,9 +81,9 @@ export const vignetteBloom: TransitionDefinition = {
       effectName: 'Vignette',
       params: {
         amount: { from: 0.72, to: 0.12 },
-        size: { from: 0.58, to: 0.82 },
-        softness: 0.78,
-        roundness: 1,
+        size: { from: 0.41, to: 0.58 },
+        softness: 0.55,
+        roundness: 0,
       },
       startProgress: 0.28,
       endProgress: 1,

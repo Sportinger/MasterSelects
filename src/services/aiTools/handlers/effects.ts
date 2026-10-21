@@ -9,7 +9,8 @@ import {
 import type { JsonObject } from '../../motionDesign/adjustment/contracts';
 import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../../motionDesign/adjustment/supportedEffectContractAdapter';
 import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/supportedEffects';
-import { effectParamDefinitions, unusedParamWarnings } from '../../operators/effectParamVisibility';
+import { effectDefinitionNotes, effectParamDefinitions, unusedParamWarnings } from '../../operators/effectParamVisibility';
+import { earlierStylizeRecipeNote } from '../../operators/stylizeRecipes';
 import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { Effect } from '../../../types/effects';
@@ -18,23 +19,18 @@ type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
 /**
  * Accepted parameters that do nothing on this instance (retired, or not read by its edited graph)
- * and blur limits at the active composition size: tools say so instead of failing silently.
+ * and blur limits at the active composition size: tools say so instead of failing silently. The
+ * effect's own limit notes describe its current recipe; an instance that runs an earlier saved
+ * stylize recipe gets one note naming that version instead.
  */
 function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
   if (!effect) return [];
   const composition = useMediaStore.getState().getActiveComposition();
+  const width = composition?.width ?? 1920, height = composition?.height ?? 1080;
+  const earlier = names.length ? earlierStylizeRecipeNote(effect.type, effect.operatorGraph) : undefined;
   return [...unusedParamWarnings(effect, names),
-    ...blurBudgetNotes(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080),
-    ...(names.length ? definitionParamWarnings(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080) : [])];
-}
-
-/** Values the effect itself clamps or cannot show (its `paramWarnings`), judged on the resulting parameters. */
-function definitionParamWarnings(effectType: string, params: Record<string, unknown>, width: number, height: number): string[] {
-  const definition = getEffect(effectType);
-  if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
-  try {
-    return definition.paramWarnings(params as Record<string, number | boolean | string>, width, height);
-  } catch { return []; }
+    ...blurBudgetNotes(effect.type, effect.params, width, height),
+    ...(earlier ? [earlier] : names.length ? effectDefinitionNotes(effect, width, height) : [])];
 }
 
 export async function handleListEffects(): Promise<ToolResult> {

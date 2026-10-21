@@ -9,6 +9,7 @@ import { EffectsPipeline } from '../../../src/effects/EffectsPipeline';
 import { getAllEffects, getDefaultParams, getEffect } from '../../../src/effects';
 import { guardGpuDevice, getGpuPipelineFailures } from '../../../src/engine/core/gpuPipelineGuard';
 import { getEffectGpuFailure } from '../../../src/effects/effectGpuFailures';
+import { createEarlierStylizeGraph } from '../../../src/services/operators/stylizeRecipes';
 
 export interface EffectLabJob {
   effectId: string;
@@ -24,6 +25,8 @@ export interface EffectLabJob {
   bypass?: boolean;
   /** Draw the image at this fraction of the frame, centred on transparency, to check alpha handling. */
   inset?: number;
+  /** 'earlier': render a rebuilt stylize effect with the recipe saved projects keep (stylizeRecipes.ts). */
+  recipe?: 'earlier';
 }
 
 const USAGE = GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
@@ -99,7 +102,9 @@ async function render(job: EffectLabJob) {
   const sampler = gpu.createSampler({ magFilter: 'linear', minFilter: 'linear' });
   const sourceView = source.createView(), pingView = ping.createView(), pongView = pong.createView();
   const params = { ...getDefaultParams(job.effectId), ...job.params };
-  const effect = { id: `lab-${job.effectId}`, type: job.effectId, name: definition.name, enabled: true, params };
+  const operatorGraph = job.recipe === 'earlier' ? createEarlierStylizeGraph(job.effectId) : undefined;
+  if (job.recipe === 'earlier' && !operatorGraph) throw new Error(`${job.effectId} has no earlier recipe.`);
+  const effect = { id: `lab-${job.effectId}`, type: job.effectId, name: definition.name, enabled: true, params, ...(operatorGraph ? { operatorGraph } : {}) };
   const times = job.times?.length ? job.times : [0];
   const scopeId = `effect-lab:${scope += 1}`;
   const started = performance.now();

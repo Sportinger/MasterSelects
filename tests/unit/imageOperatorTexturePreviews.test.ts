@@ -3,7 +3,7 @@ import { captureImageOperatorPreviews } from '../../src/services/nodePreview/ima
 import { imageOperatorPreviewStage } from '../../src/services/nodePreview/imageOperatorPreviewStages';
 import { nodePreviewTextureTap } from '../../src/services/nodePreview/NodePreviewTextureTap';
 import { createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
-import { createEarlierScanlinesGraph as createDefaultScanlinesGraph, createEarlierVignetteGraph as createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierScanlinesGraph, createEarlierVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import type { Effect } from '../../src/types/effects';
 import { createDefaultPixelateGraph } from '../../src/services/operators/samplingEffectGraphs';
 import * as graphOwner from '../../src/services/operators/effectGraphOwner';
@@ -125,7 +125,7 @@ describe('image operator texture previews', () => {
       createShaderModule: vi.fn(({ code }: { code: string }) => { shader = code; return {}; }),
       createRenderPipeline: vi.fn(() => pipeline), createBindGroup: vi.fn(() => ({})) } as unknown as GPUDevice;
     const vignetteEffect = { id: 'vignette-preview', type: 'vignette', name: 'Vignette', enabled: true, params: {},
-      operatorGraph: createDefaultVignetteGraph() } as Effect;
+      operatorGraph: createEarlierVignetteGraph() } as Effect;
     expect(captureImageOperatorPreviews({ effect: vignetteEffect, device, encoder: {} as GPUCommandEncoder, sampler: {} as GPUSampler,
       source: { kind: 'texture', view: {} as GPUTextureView }, width: 640, height: 360 })).toBe(1);
     expect(shader).toContain('evaluateImageGraph(textureSample(imagePreviewSource, imagePreviewSampler, input.uv), input.uv, imageParameters)');
@@ -145,7 +145,7 @@ describe('image operator texture previews', () => {
       createBuffer: vi.fn(() => ({})), createShaderModule: vi.fn(() => ({})), createRenderPipeline: vi.fn(() => pipeline),
       createBindGroup: vi.fn(() => ({})) } as unknown as GPUDevice;
     const scanlinesEffect = { id: 'scanlines-preview', type: 'scanlines', name: 'Scanlines', enabled: true, params: {},
-      operatorGraph: createDefaultScanlinesGraph() } as Effect;
+      operatorGraph: createEarlierScanlinesGraph() } as Effect;
     expect(captureImageOperatorPreviews({ effect: scanlinesEffect, device, encoder: {} as GPUCommandEncoder, sampler: {} as GPUSampler,
       source: { kind: 'texture', view: {} as GPUTextureView }, width: 640, height: 360, timelineTimeSeconds: 4.25 })).toBe(1);
     expect(writes[0]).toHaveLength(68);

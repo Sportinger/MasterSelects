@@ -28,8 +28,9 @@ const DIRECTIONAL_PORTS = { ...BLUR_PORTS, 'amount-positive': 'Amount ≥ 0', di
 
 const GLOW_PORTS: Record<string, string> = { 'source-split:rgb': 'Source Color', 'source-alpha': 'Source Alpha', 'bright-cache': 'Bright Light',
   'tap-weight': 'Tap Weight', 'up-uv': 'Up Read Position', 'down-uv': 'Down Read Position', 'level-weight': 'Level Weight',
-  'top-level-weight': 'Top Level Weight', 'glow-light': 'Glow Light', 'glow-amount': 'Glow Amount', 'glow-tinted': 'Tinted Glow', 'color-rgb': 'Glow Color', 'glow-scaled': 'Glow',
-  'resolve-premultiplied': 'Premultiplied Source', 'resolve-result': 'Picture + Glow',
+  'top-level-weight': 'Top Level Weight', 'glow-core-weight': 'Level 0 Weight', 'glow-light': 'Glow Light', 'glow-amount': 'Glow Amount', 'glow-tinted': 'Tinted Glow', 'color-rgb': 'Glow Color', 'glow-scaled': 'Glow',
+  'resolve-premultiplied': 'Premultiplied Source', 'glow-negative': '−Glow', 'euler-rgb': 'e', 'one-rgb': 'One', 'resolve-falloff': 'exp(−Glow)',
+  'resolve-room': 'Room (1 − Picture)', 'resolve-remaining': 'Room × exp(−Glow)', 'resolve-result': 'Picture screened with Glow',
   ...Object.fromEntries(Array.from({ length: 10 }, (_, index) => [[`down-${index + 1}-cache`, `Level ${index + 1} (1/${2 ** (index + 1)} size)`],
     [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`]]).flat()) };
 // Threshold and Posterize: the hard step and the soft ramp that Softness blends in.
@@ -71,12 +72,15 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   if (type === 'sharpen') return {
     labels: { size: 'Radius & Tap Count', premultiply: 'Premultiplied Source (cached)', horizontal: 'Horizontal Blur Pass', vertical: 'Vertical Blur Pass',
       detail: 'Unsharp Mask (brightness)', halo: 'Halo Limit', finish: 'Apply to Color & Alpha' },
-    portLabels: { ...SEPARABLE_PORTS, 'sharpened-luma': 'Sharpened Brightness', 'limited-luma': 'Limited Brightness', 'darkest-value': 'Darkest Nearby',
-      'brightest-value': 'Brightest Nearby', detail: 'Detail' },
+    portLabels: { ...SEPARABLE_PORTS, 'sharpened-luma': 'Sharpened Brightness', 'darkest-value': 'Darkest Nearby', 'brightest-value': 'Brightest Nearby',
+      detail: 'Detail', 'detail-change': 'Wanted Change', 'detail-up': 'Wanted Up', 'detail-down': 'Wanted Down', 'halo-ceiling': 'Ceiling', 'halo-floor': 'Floor',
+      'halo-room-up-raw': 'Ceiling − Brightness', 'halo-room-up': 'Room Up', 'halo-room-down': 'Room Down', 'halo-limited-up-negative': '−Wanted Up',
+      'halo-limited-up-exponent': '−Wanted Up / Room', 'halo-limited-up-falloff': 'exp(−Wanted Up / Room)', 'halo-limited-up-share': 'Share of Room',
+      'halo-limited-up': 'Limited Up', 'halo-limited-down': 'Limited Down', 'limited-change': 'Limited Change' },
     stage: ({ id }) => /^(source-premultiplied|source-cache)/.test(id) ? 'premultiply' : /^horizontal-/.test(id) ? 'horizontal' : /^vertical-/.test(id) ? 'vertical'
-      : /^(source-split|source-luma|blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
-        : /^(darkest-|brightest-|window-|halo-|limited-luma)/.test(id) ? 'halo'
-          : /^(luma-change|luma-delta|result-|combine)/.test(id) ? 'finish' : 'size',
+      : /^(darkest-|brightest-|window-|halo-|limited-|detail-(change|up|down|negative)|exponent-|room-floor|overshoot)/.test(id) ? 'halo'
+        : /^(source-split|source-luma|blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
+          : /^(luma-change|result-|combine)/.test(id) ? 'finish' : 'size',
   };
   if (type === 'vignette') return {
     labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
@@ -85,11 +89,11 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : /^(source-split|shaded|dithered|clamped|combine)$/.test(id) ? 'finish' : 'shape',
   };
   if (type === 'grain') return {
-    labels: { cells: 'Grain Cells (Size)', pattern: 'Pattern per Frame (Speed, Seed)', noise: 'Smooth Noise', mix: 'Octaves & Color Grain',
+    labels: { cells: 'Grain Cells (Size)', pattern: 'Pattern per Frame (Speed, Seed)', noise: 'Smooth Noise', mix: 'Layers & Color Grain',
       response: 'Film Response (midtones)', finish: 'Add Grain & Alpha' },
-    portLabels: { 'grain-uv': 'Grain Position', 'pattern-seed': 'Pattern Offset', 'grain-rgb': 'Grain', response: 'Response', strength: 'Strength' },
-    stage: ({ id }) => /^(size-safe|pixel-scale|short-side|cell-px|pixel$|grain-uv)/.test(id) ? 'cells' : /^(pattern-|seed-offset)/.test(id) ? 'pattern'
-      : /^(corner-|grain-(coarse|fine|red-noise|green-noise|blue-noise))/.test(id) ? 'noise' : /^grain-(?!scaled)/.test(id) ? 'mix'
+    portLabels: { 'grain-uv': 'Grain Position', 'pattern-offset': 'Pattern Offset', 'grain-mono': 'Monochrome Grain', 'grain-rgb': 'Grain', response: 'Response', strength: 'Strength' },
+    stage: ({ id }) => /^(size-safe|pixel-scale|short-side|cell-px|pixel$|grain-uv)/.test(id) ? 'cells' : /^(pattern-|seed-)/.test(id) ? 'pattern'
+      : /^(corner-|grain-(layer-\d|red-noise|green-noise|blue-noise))/.test(id) ? 'noise' : /^grain-(?!scaled)/.test(id) ? 'mix'
         : /^(response|source-luma|strength)/.test(id) ? 'response' : 'finish',
   };
   if (type === 'scanlines') return {
@@ -103,7 +107,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       up: 'Pyramid: Add Levels Back Up', finish: 'Glow Resolve & Alpha' },
     portLabels: GLOW_PORTS,
     stage: ({ id }) => /^(bright-|source-)/.test(id) ? 'bright'
-      : /^(tap-|texel$|one-vec2$|up-offset$|up-uv$|down-offset$|down-uv$|level-|top-level-)/.test(id) ? 'kernel'
+      : /^(tap-|texel$|one-vec2$|up-offset$|up-uv$|down-offset$|down-uv$|level-|top-level-|finest-)/.test(id) ? 'kernel'
         : /^down-/.test(id) ? 'down' : /^up-/.test(id) ? 'up' : 'finish',
   };
   if (type === 'glow-earlier') return {
@@ -129,7 +133,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     portLabels: { sigma: 'Sigma (px)', reach: 'Reach (px)', 'window-size': 'Window Size', 'tap-moment': 'Moments', edge: 'Edge', 'line-color': 'Line Color' },
     stage: ({ id }) => /^(pixel-scale|short-side|width-safe|sigma|two-sigma|reach|window-size)/.test(id) ? 'scale'
       : /^(tap-|window-reduce|window-index)/.test(id) ? 'window'
-        : /^(window-|gradient|edge-contrast|edge-raw|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',
+        : /^(window-|gradient-(sums|length|normalized)|edge-contrast|edge-raw|edge-falloff|edge-negative|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',
   };
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
     labels: { coordinates: type === 'wave' ? 'Wave Coordinates' : type === 'twirl' ? 'Twirl Coordinates' : 'Bulge Coordinates', sampling: 'Image Sampling' },

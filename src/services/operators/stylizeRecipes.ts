@@ -43,9 +43,12 @@ export function createStylizeRecipeGraph(type: string): EffectOperatorGraph | un
   return isRecipeType(type) ? CURRENT[type]() : undefined;
 }
 
+/** True for the stylize effects whose earlier recipe renders differently from the current one. */
+export const hasEarlierStylizeRecipe = (type: string) => isRecipeType(type) && type !== 'threshold' && type !== 'posterize';
+
 /** The recipe a graphless stylize effect in a project file rendered (undefined when it is the current one). */
 export function createEarlierStylizeGraph(type: string): EffectOperatorGraph | undefined {
-  return isRecipeType(type) && type !== 'threshold' && type !== 'posterize' ? EARLIER[type]() : undefined;
+  return hasEarlierStylizeRecipe(type) ? EARLIER[type as StylizeRecipeEffectType]() : undefined;
 }
 
 const recognizer = (create: () => EffectOperatorGraph) => {
@@ -87,18 +90,32 @@ export interface StylizeRecipeUpdate {
   /** One plain sentence for the inspector. */
   message: string;
   label: string;
-  /** Values the current recipe reads differently; set together with the new graph. */
+  /** Values the current recipe reads differently; set together with the new graph (their keyframes are removed). */
   resetParams?: Record<string, number>;
+  /** Tool-result note: how the earlier recipe reads the values (the current recipe's limit notes do not apply to it). */
+  toolNote: string;
 }
 
+const RUNS_EARLIER = 'runs the earlier version saved with its project (before 2026-10-21)';
 /** What the inspector says about an untouched earlier recipe, and the values an update resets. */
 export const STYLIZE_RECIPE_UPDATES: Partial<Record<StylizeRecipeEffectType, StylizeRecipeUpdate>> = {
   glow: { message: 'This Glow was saved with the earlier ring version and keeps that look; Color has no effect on it.',
-    label: 'Use the new Glow (resets its values)', resetParams: { amount: 1, threshold: 0.6, softness: 0.5, radius: 40 } },
-  grain: { message: 'This Film Grain was saved with the earlier noise and keeps that look; Color has no effect on it.', label: 'Use the new Film Grain' },
-  sharpen: { message: 'This Sharpen was saved with the earlier version, which can draw bright and dark halos.', label: 'Use the new Sharpen' },
+    label: 'Use the new Glow (resets its values)', resetParams: { amount: 1.5, threshold: 0.8, softness: 0.5, radius: 40 },
+    toolNote: `This Glow ${RUNS_EARLIER}: rings of samples, Radius in steps of about 10 px per ring, Rings and Samples/Ring apply, Color has no effect.` },
+  grain: { message: 'This Film Grain was saved with the earlier noise and keeps that look; Color has no effect on it.', label: 'Use the new Film Grain',
+    toolNote: `This Film Grain ${RUNS_EARLIER}: per-pixel noise, Size and Speed act as they did then (Speed up to 5), Color has no effect.` },
+  sharpen: { message: 'This Sharpen was saved with the earlier version, which can draw bright and dark halos.', label: 'Use the new Sharpen',
+    toolNote: `This Sharpen ${RUNS_EARLIER}: a fixed 7x7 unsharp mask without halo limit; strong values draw bright and dark outlines.` },
   vignette: { message: 'This Vignette was saved with the earlier version; Roundness worked differently there.',
-    label: 'Use the new Vignette (resets its shape)', resetParams: { size: 0.5, softness: 0.5, roundness: 1 } },
-  scanlines: { message: 'This Scanlines was saved with the earlier version, which can flicker when lines get very dense.', label: 'Use the new Scanlines' },
-  'edge-detect': { message: 'This Edge Detect was saved with the earlier version; Width and Color have no effect on it.', label: 'Use the new Edge Detect' },
+    label: 'Use the new Vignette (resets its shape)', resetParams: { size: 0.5, softness: 0.5, roundness: 1 },
+    toolNote: `This Vignette ${RUNS_EARLIER}: an ellipse that follows the frame; Roundness stretches it vertically (0.5-2 was the range) and is not limited to 0-1.` },
+  scanlines: { message: 'This Scanlines was saved with the earlier version, which can flicker when lines get very dense.', label: 'Use the new Scanlines',
+    toolNote: `This Scanlines ${RUNS_EARLIER}: Opacity is used as set (above 1 darkens further) and dense lines are not faded, so they can flicker.` },
+  'edge-detect': { message: 'This Edge Detect was saved with the earlier version; Width and Color have no effect on it.', label: 'Use the new Edge Detect',
+    toolNote: `This Edge Detect ${RUNS_EARLIER}: a one-pixel Sobel at render resolution with opaque output; Width and Color have no effect.` },
 };
+
+/** Tool note for an instance that runs an untouched earlier stylize recipe; undefined otherwise. */
+export function earlierStylizeRecipeNote(type: string, graph: EffectOperatorGraph | undefined): string | undefined {
+  return isEarlierStylizeGraph(type, graph) ? STYLIZE_RECIPE_UPDATES[type as StylizeRecipeEffectType]?.toolNote : undefined;
+}

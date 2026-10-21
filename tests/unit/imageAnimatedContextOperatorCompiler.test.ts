@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { grain } from '../../src/effects/stylize/grain';
 import { scanlines } from '../../src/effects/stylize/scanlines';
-import { createEarlierGrainGraph as createDefaultGrainGraph, createEarlierScanlinesGraph as createDefaultScanlinesGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierGrainGraph, createEarlierScanlinesGraph } from '../../src/services/operators/contextualEffectGraphs';
 import { effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
@@ -10,7 +10,7 @@ const grainParams = { amount: 0.1, size: 1, speed: 1, seed: 0 };
 
 describe('timeline-context image operator graphs', () => {
   it('matches the exact scanlines formula and preserves straight alpha', () => {
-    const plan = compileImageOperatorGraph(createDefaultScanlinesGraph(), scanParams);
+    const plan = compileImageOperatorGraph(createEarlierScanlinesGraph(), scanParams);
     expect(plan.capabilities).toEqual(['uv', 'time']);
     expect(plan.wgsl).toContain('inputColor: vec4f, inputUv: vec2f, timelineTimeSeconds: f32, imageParameters: ImageOperatorParameters');
     expect(() => evaluateImageOperatorPlan(plan, [0.2, 0.4, 0.6, 0.25], { uv: [0.25, 0.75] })).toThrow(/timeline time/);
@@ -23,7 +23,7 @@ describe('timeline-context image operator graphs', () => {
   });
 
   it('matches Rec709 luminance-aware grain and gives seed a dynamic stable slot', () => {
-    const graph = createDefaultGrainGraph();
+    const graph = createEarlierGrainGraph();
     const first = compileImageOperatorGraph(graph, grainParams);
     const second = compileImageOperatorGraph(graph, { ...grainParams, seed: 7 });
     expect(first.key).toBe(second.key);
@@ -55,7 +55,7 @@ describe('timeline-context image operator graphs', () => {
       params: { amount: 0.1, size: 1, speed: 1 } });
     expect(migrated.params.seed).toBe(0);
     expect(migrated.operatorGraph?.nodes.some(node => node.operator === 'image.timeline-time')).toBe(true);
-    const invalid = createDefaultGrainGraph();
+    const invalid = createEarlierGrainGraph();
     invalid.edges = invalid.edges.filter(edge => edge.to !== 'output');
     expect(() => effectOperatorGraph({ type: 'grain', params: grainParams, operatorGraph: invalid })).toThrow();
   });

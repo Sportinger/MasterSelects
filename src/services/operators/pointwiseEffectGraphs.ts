@@ -79,8 +79,10 @@ export function createDefaultThresholdGraph(): EffectOperatorGraph {
 /**
  * Posterize v2 (contract in `effects/stylize/pointwiseModel.ts`): every channel snaps to Levels
  * even steps (floor(rgb * L) / (L - 1), limited to 0-1); Softness rounds each step into a smooth
- * ramp of that share of a step, which keeps gradients from tearing into hard contours. Softness 0
- * is exactly the earlier staircase. Alpha is kept.
+ * ramp of that share of a step, which keeps gradients from tearing into hard contours. Brightness
+ * Only posterizes the brightest channel and scales the colour with it, so hue and saturation stay
+ * (no false colours where channels cross a step apart). Softness 0 without Brightness Only is
+ * exactly the earlier staircase. Alpha is kept.
  */
 export function createDefaultPosterizeGraph(): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
@@ -91,7 +93,12 @@ export function createDefaultPosterizeGraph(): EffectOperatorGraph {
   const levels = g.binary('effective-levels', 'math.max.scalar', g.bound('levels', 'levels'), g.number('minimum-levels', MIN_POSTERIZE_LEVELS));
   const softness = g.bound('softness', 'softness');
   const source = g.add('split', 'vector.split.rgba', { image: ['frame', 'image'] });
-  const scaled = g.add('scaled', 'math.multiply.rgb-scalar', { a: [source, 'rgb'], b: levels });
+  // Brightness Only: the staircase runs on the brightest channel instead of each channel.
+  const brightnessOnly = g.add('brightness-only-share', 'select.scalar', { falseValue: 'zero', trueValue: 'one',
+    condition: g.bound('brightness-only', 'brightnessOnly', 'values.boolean') });
+  const brightness = g.add('brightness', 'vector.reduce-max.rgb', { rgb: [source, 'rgb'] });
+  const input = g.add('posterize-input', 'math.mix.rgb', { a: [source, 'rgb'], b: [g.unary('brightness-rgb', 'convert.scalar-to-rgb', brightness), 'rgb'], t: brightnessOnly });
+  const scaled = g.add('scaled', 'math.multiply.rgb-scalar', { a: input, b: levels });
   const hard = g.unary('hard', 'math.floor.rgb', scaled);
   // Smooth steps: the step boundary at each whole number of `scaled` becomes a ramp Softness wide.
   const shifted = g.binary('shifted', 'math.subtract.rgb', scaled, half);
@@ -106,7 +113,13 @@ export function createDefaultPosterizeGraph(): EffectOperatorGraph {
   const steps = g.add('steps', 'math.mix.rgb', { a: hard, b: smooth, t: soft });
   const divided = g.add('divide', 'math.divide-ieee.rgb-scalar', { a: steps, b: g.binary('denominator', 'math.subtract.scalar', levels, 'one') });
   const clamped = g.add('clamped', 'math.clamp.rgb-scalar', { value: divided, min: 'zero', max: 'one' });
-  const output = g.add('combine', 'vector.combine.rgba', { rgb: clamped, alpha: [source, 'alpha'] });
+  // Brightness Only: scale the colour so its brightest channel lands on the posterized brightness.
+  const brightnessGain = g.binary('brightness-gain', 'math.divide-ieee.scalar', g.add('posterized-brightness', 'vector.reduce-max.rgb', { rgb: clamped }),
+    g.binary('brightness-safe', 'math.max.scalar', brightness, g.number('brightness-floor', 1e-6)));
+  const keptColour = g.add('kept-colour', 'math.clamp.rgb-scalar', { value: g.add('kept-colour-raw', 'math.multiply.rgb-scalar', { a: [source, 'rgb'], b: brightnessGain }),
+    min: 'zero', max: 'one' });
+  const result = g.add('result-rgb', 'math.mix.rgb', { a: clamped, b: keptColour, t: brightnessOnly });
+  const output = g.add('combine', 'vector.combine.rgba', { rgb: result, alpha: [source, 'alpha'] });
   g.add('output', 'image.output', { image: [output, 'image'] });
   return g.graph();
 }

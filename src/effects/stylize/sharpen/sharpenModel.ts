@@ -6,9 +6,12 @@
  *   Gaussian of the premultiplied picture (sigma = Radius pixels of a 1080p frame), so
  *   transparent surroundings never darken an edge. Adding the same brightness change to R, G
  *   and B sharpens without colour fringes.
- * - Halo limit: the sharpened brightness stays within the darkest and brightest pixel of a 3x3
- *   window (taps one sigma apart, at least one pixel) plus SHARPEN_OVERSHOOT of that window's
- *   range. Edges get crisp; the bright and dark outlines of a classic unsharp mask stay small.
+ * - Halo limit: SHARPEN_WINDOW_TAPS x SHARPEN_WINDOW_TAPS taps spread evenly over ±max(sigma, 1)
+ *   pixels give a smooth darkest and brightest brightness of the neighbourhood (exponentially
+ *   weighted means, SHARPEN_WINDOW_SHARPNESS per unit of brightness; transparent taps weigh
+ *   nothing). The change may approach that range plus SHARPEN_OVERSHOOT of it, softly:
+ *   room * (1 - exp(-change / room)). Edges get crisp; halos stay small and strong settings keep
+ *   their gradation instead of flattening into plateaus.
  * - Amount scales the detail; negative values soften. Alpha is kept.
  */
 import { GAUSSIAN_REACH_SIGMAS, SEPARABLE_MAX_PAIRS_PER_SIDE } from '../../blur/blurSampling';
@@ -16,6 +19,11 @@ import { GAUSSIAN_REACH_SIGMAS, SEPARABLE_MAX_PAIRS_PER_SIDE } from '../../blur/
 export const SHARPEN_REFERENCE_HEIGHT = 1080;
 export const SHARPEN_MIN_SIGMA_PX = 0.25;
 export const SHARPEN_OVERSHOOT = 0.15;
+export const SHARPEN_WINDOW_TAPS = 5;
+/** Exponent per unit of brightness of the smooth window minimum and maximum. */
+export const SHARPEN_WINDOW_SHARPNESS = 64;
+/** Window exponents are limited to ± this, so the sums stay finite for bright HDR values. */
+export const SHARPEN_EXPONENT_LIMIT = 80;
 
 const finite = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 

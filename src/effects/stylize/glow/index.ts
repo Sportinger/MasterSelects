@@ -25,7 +25,7 @@ export const glow: EffectDefinition = {
     amount: {
       type: 'number',
       label: 'Amount',
-      default: 1,
+      default: 1.5,
       min: 0,
       max: 5,
       step: 0.05,
@@ -34,7 +34,7 @@ export const glow: EffectDefinition = {
     threshold: {
       type: 'number',
       label: 'Threshold',
-      default: 0.6,
+      default: 0.8,
       min: 0,
       max: 1,
       step: 0.01,

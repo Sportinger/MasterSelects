@@ -62,7 +62,7 @@ export function createEarlierEdgeDetectGraph(): EffectOperatorGraph {
  * Edge Detect v2 (contract in `effects/stylize/edge-detect/edgeDetectModel.ts`): a
  * derivative-of-Gaussian gradient of premultiplied brightness from one window reduction,
  * normalized by the window's own second moment (exact for ramps at every Width and resolution),
- * and line/background colours. One fullscreen pass.
+ * a soft roll-off, and line/background colours composited premultiplied. One fullscreen pass.
  */
 export function createDefaultEdgeDetectGraph(): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
@@ -97,25 +97,45 @@ export function createDefaultEdgeDetectGraph(): EffectOperatorGraph {
 
   // Edge contrast: |sum w L d| / sqrt(sum w dx^2 * sum w) * sqrt(2 pi): a step of contrast c reads about c.
   const sums = g.add('window-sums', 'vector.split.vec4', { value: [reduce, 'sum'] });
-  const gradient = g.unary('gradient-length', 'vector.length.vec2', g.add('gradient-sums', 'vector.combine.vec2', { x: [sums, 'x'], y: [sums, 'y'] }));
+  const gradientSums = g.add('gradient-sums', 'vector.combine.vec2', { x: [sums, 'x'], y: [sums, 'y'] });
+  const gradient = g.unary('gradient-length', 'vector.length.vec2', gradientSums);
   const spread = g.unary('window-spread', 'math.sqrt.scalar', g.binary('window-moments', 'math.max.scalar',
     g.binary('window-moment-product', 'math.multiply.scalar', [sums, 'z'], [sums, 'w']), g.number('moment-floor', 1e-12)));
   g.number('step-scale', Math.sqrt(2 * Math.PI) * EDGE_GAIN);
   const contrast = g.binary('edge-contrast', 'math.multiply.scalar', g.binary('gradient-normalized', 'math.divide-ieee.scalar', gradient, spread), 'step-scale');
-  const edge = g.add('edge', 'math.clamp.scalar', { value: g.binary('edge-raw', 'math.multiply.scalar', contrast,
-    g.binary('strength-safe', 'math.max.scalar', strength, 'zero')), min: 'zero', max: 'one' });
+  // Soft roll-off instead of a hard clip: 1 - exp(-contrast * Strength); dense detail keeps its structure.
+  const response = g.binary('edge-raw', 'math.multiply.scalar', contrast, g.binary('strength-safe', 'math.max.scalar', strength, 'zero'));
+  const edge = g.binary('edge', 'math.subtract.scalar', 'one', g.unary('edge-falloff', 'math.exp.scalar', g.binary('edge-negative', 'math.subtract.scalar', 'zero', response)));
 
   // Colours: lines white (Invert: black) or the picture's own colour at full brightness; background the opposite.
+  // The picture's colour is the alpha-weighted mean of this pixel and two taps towards the brighter
+  // side of the edge (one and two sigma away), so an outline outside a layer takes the layer's colour.
   const source = g.add('source-split', 'vector.split.rgba', { image: ['frame', 'image'] });
-  const vivid = g.add('vivid', 'math.divide-ieee.rgb-scalar', { a: [source, 'rgb'], b: g.binary('vivid-peak', 'math.max.scalar',
-    g.add('source-peak', 'vector.reduce-max.rgb', { rgb: [source, 'rgb'] }), g.number('vivid-floor', EDGE_VIVID_FLOOR)) });
+  const sourceAlpha = g.add('source-alpha', 'convert.alpha-to-scalar', { alpha: [source, 'alpha'] });
+  const towardsBright = g.add('colour-direction', 'math.multiply.vec2-scalar', { a: g.unary('gradient-direction', 'vector.normalize.vec2', gradientSums), b: sigma });
+  const colourTap = (id: string, steps: string) => g.add(`${id}-split`, 'vector.split.rgba', { image: [g.add(`${id}-sample`, 'image.sample', { image: ['frame', 'image'],
+    uv: g.binary(`${id}-uv`, 'math.add.vec2', ['uv', 'uv'], g.binary(`${id}-offset-uv`, 'math.divide-ieee.vec2', g.add(`${id}-offset`, 'math.multiply.vec2-scalar', { a: towardsBright, b: steps }), 'resolution')) }), 'image'] });
+  const near = colourTap('colour-near', 'one'), far = colourTap('colour-far', 'two');
+  const tapPremultiplied = (id: string, split: string) => g.add(`${id}-premultiplied`, 'math.multiply.rgb-scalar', { a: [split, 'rgb'],
+    b: g.add(`${id}-alpha`, 'convert.alpha-to-scalar', { alpha: [split, 'alpha'] }) });
+  const colourSum = g.binary('colour-sum', 'math.add.rgb', g.binary('colour-sum-near', 'math.add.rgb', tapPremultiplied('colour-centre', source), tapPremultiplied('colour-near', near)),
+    tapPremultiplied('colour-far', far));
+  const colourAlpha = g.binary('colour-alpha', 'math.add.scalar', g.binary('colour-alpha-near', 'math.add.scalar', sourceAlpha, 'colour-near-alpha'), 'colour-far-alpha');
+  const pictureColour = g.add('colour-mean', 'math.divide-ieee.rgb-scalar', { a: colourSum, b: g.binary('colour-alpha-safe', 'math.max.scalar', colourAlpha, g.number('alpha-floor', 1e-6)) });
+  const vivid = g.add('vivid', 'math.divide-ieee.rgb-scalar', { a: pictureColour, b: g.binary('vivid-peak', 'math.max.scalar',
+    g.add('source-peak', 'vector.reduce-max.rgb', { rgb: pictureColour }), g.number('vivid-floor', EDGE_VIVID_FLOOR)) });
   const plainLine = g.add('plain-line', 'select.scalar', { falseValue: 'one', trueValue: 'zero', condition: invert });
   const background = g.add('background', 'select.scalar', { falseValue: 'zero', trueValue: 'one', condition: invert });
   const lineColor = g.add('line-color', 'math.mix.rgb', { a: [g.add('plain-line-rgb', 'convert.scalar-to-rgb', { value: plainLine }), 'rgb'], b: vivid,
     t: g.add('colorize-limited', 'math.clamp.scalar', { value: colorize, min: 'zero', max: 'one' }) });
-  const rgb = g.add('edge-rgb', 'math.mix.rgb', { a: [g.add('background-rgb', 'convert.scalar-to-rgb', { value: background }), 'rgb'], b: lineColor, t: edge });
-  // Outlines also show outside a layer: alpha is the larger of the source alpha and the edge.
-  const alpha = g.binary('edge-alpha', 'math.max.scalar', g.add('source-alpha', 'convert.alpha-to-scalar', { alpha: [source, 'alpha'] }), edge);
+  // Lines over the background, composited premultiplied: the background covers what the layer
+  // covers, the line covers `edge`; outlines also show outside a layer in their full colour.
+  const backgroundCover = g.binary('background-cover', 'math.multiply.scalar', sourceAlpha, g.binary('edge-gap', 'math.subtract.scalar', 'one', edge));
+  const premultiplied = g.binary('edge-premultiplied', 'math.add.rgb', g.add('line-premultiplied', 'math.multiply.rgb-scalar', { a: lineColor, b: edge }),
+    g.add('background-premultiplied', 'math.multiply.rgb-scalar', { a: [g.add('background-rgb', 'convert.scalar-to-rgb', { value: background }), 'rgb'], b: backgroundCover }));
+  const alpha = g.binary('edge-alpha', 'math.add.scalar', edge, backgroundCover);
+  const rgb = g.add('edge-rgb', 'math.clamp.rgb-scalar', { value: g.add('edge-straight', 'math.divide-ieee.rgb-scalar', { a: premultiplied,
+    b: g.binary('edge-alpha-safe', 'math.max.scalar', alpha, 'alpha-floor') }), min: 'zero', max: 'one' });
   const output = g.add('combine', 'vector.combine.rgba', { rgb, alpha: [g.add('edge-alpha-port', 'convert.scalar-to-alpha', { value: alpha }), 'alpha'] });
   g.add('output', 'image.output', { image: [output, 'image'] });
   return g.graph();

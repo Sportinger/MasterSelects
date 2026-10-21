@@ -4,6 +4,7 @@
 //   node scripts/effect-lab.mjs --list                       # effect ids, kinds, params (JSON)
 //   node scripts/effect-lab.mjs --effect gaussian-blur --out <dir>
 //       [--variants '[{"label":"soft","params":{"radius":4}}, ...]' | --variants-file f.json]
+//       (a variant with "recipe": "earlier" renders a rebuilt stylize effect as saved projects keep it)
 //       [--images dancer_stage,harbor_town,neon_rain_street] [--width 960]
 //       [--times 0,0.033,0.067] [--url http://localhost:5175]
 //       [--inset 0.7]   # image at 70 % on transparency; the sheet shows cells over a checkerboard
@@ -91,7 +92,7 @@ try {
       const original = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, bypass: true, inset });
       row.push({ label: 'original', ...original });
       for (const variant of variants) {
-        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times, inset });
+        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times, inset, recipe: variant.recipe });
         row.push({ label: variant.label, params: variant.params, ...result });
       }
       for (const cell of row) {

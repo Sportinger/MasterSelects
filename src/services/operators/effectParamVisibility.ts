@@ -2,6 +2,7 @@ import { getEffect } from '../../effects';
 import type { EffectParam } from '../../effects/types';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { effectOperatorGraph, isImageGraphEffectType } from './effectGraphOwner';
+import { isEarlierStylizeGraph } from './stylizeRecipes';
 
 /** The parts of an effect instance that decide which of its parameters still act. */
 export interface EffectParamOwner { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }
@@ -48,4 +49,17 @@ export function unusedParamWarnings(effect: EffectParamOwner, names: readonly st
     if (definition.deprecated) return [`${name}: ${definition.deprecated}`];
     return bound ? [`${name}: this effect's edited graph does not read it, so it has no effect.`] : [];
   });
+}
+
+/**
+ * The effect's own notes on values it clamps, ignores or cannot show (`paramWarnings`), judged on
+ * the recipe this instance runs: the notes describe the current recipe, so an instance that still
+ * runs an untouched earlier stylize recipe gets none (its inspector card and tool results name the
+ * earlier version instead, see `earlierStylizeRecipeNote`).
+ */
+export function effectDefinitionNotes(effect: EffectParamOwner, width: number, height: number): string[] {
+  const definition = getEffect(effect.type);
+  if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
+  if (isEarlierStylizeGraph(effect.type, effect.operatorGraph)) return [];
+  try { return definition.paramWarnings(effect.params as Record<string, number | boolean | string>, width, height); } catch { return []; }
 }

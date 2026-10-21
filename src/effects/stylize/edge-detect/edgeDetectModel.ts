@@ -7,11 +7,16 @@
  *   the outline of a title on a transparent layer is an edge too. The window reaches two sigma,
  *   at most EDGE_MAX_REACH_PX pixels; sigma is never below EDGE_MIN_SIGMA_PX pixels.
  * - The gradient is divided by the window's own second moment, so it is exact for a brightness
- *   ramp at any Width and resolution; a hard step of contrast c then reads about
- *   c * EDGE_GAIN * Strength (EDGE_GAIN matches the brightness of the earlier Sobel edges),
- *   clamped to 0-1.
+ *   ramp at any Width and resolution; a hard step of contrast c then gives a response of about
+ *   x = c * EDGE_GAIN * Strength (EDGE_GAIN matches the brightness of the earlier Sobel edges).
+ *   The line strength is 1 - exp(-x): linear for faint edges, rolling off softly instead of
+ *   clipping, so dense detail keeps its structure.
  * - Lines are white on black (Invert: black on white); Color tints them with the picture's own
- *   colour at full brightness. Alpha = max(source alpha, edge), so outlines also show outside a layer.
+ *   colour at full brightness: the alpha-weighted mean of this pixel and two taps one and two
+ *   sigma towards the brighter side of the edge, so an outline outside a layer takes its colour.
+ * - Lines are composited over the background premultiplied: alpha = edge + source alpha *
+ *   (1 - edge), colour = (line * edge + background * source alpha * (1 - edge)) / alpha. An
+ *   outline outside a transparent layer keeps its full line colour.
  */
 export const EDGE_REFERENCE_HEIGHT = 1080;
 export const EDGE_GAIN = 4;

@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { EffectControlProps } from '../types';
 import { useTimelineStore } from '../../stores/timeline';
+import { endBatch, startBatch } from '../../stores/historyStore';
+import type { AnimatableProperty } from '../../types';
 import { editEffectGraph } from '../../services/operators/effectGraphEditing';
 import { createStylizeRecipeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_UPDATES } from '../../services/operators/stylizeRecipes';
 import { glowQualityNote, resolveGlowSampling } from './glow/glowSampling';
@@ -9,8 +11,9 @@ import { glowQualityNote, resolveGlowSampling } from './glow/glowSampling';
  * Inspector note for a stylize effect saved with its earlier recipe (see stylizeRecipes.ts): it
  * keeps that look until the user asks for the current recipe with the button. A Glow saved with
  * the ring version also reports its quality limits (never silent). Values the current recipes
- * limit are reported by the effect's `paramWarnings` (EffectBudgetNotice). Renders nothing for a
- * current recipe.
+ * limit are reported by the effect's `paramWarnings` (EffectBudgetNotice). The update resets the
+ * values the current recipe reads differently and removes their keyframes in the same undo step.
+ * Renders nothing for a current recipe.
  */
 export default function StylizeRecipeNote({ clipId, effectInstanceId, effectId, params }: EffectControlProps) {
   const graph = useTimelineStore(store => store.clips.find(clip => clip.id === clipId)?.effects
@@ -23,14 +26,23 @@ export default function StylizeRecipeNote({ clipId, effectInstanceId, effectId, 
   const apply = () => {
     const next = createStylizeRecipeGraph(effectId);
     if (!update || !next || !clipId || !effectInstanceId) return;
+    // One undo step: the new graph, its reset values, and no keyframes left on those values
+    // (they were set in the earlier recipe's units, for example Glow Radius in ring steps).
+    const batch = startBatch(update.label);
     try {
       editEffectGraph(clipId, effectInstanceId, update.label, (target, values) => {
         for (const key of Object.keys(target)) delete (target as unknown as Record<string, unknown>)[key];
         Object.assign(target, next);
         Object.assign(values, update.resetParams ?? {});
       });
+      const { clipKeyframes, disablePropertyKeyframes } = useTimelineStore.getState();
+      const keyframed = new Set((clipKeyframes.get(clipId) ?? []).map(keyframe => keyframe.property));
+      for (const [name, value] of Object.entries(update.resetParams ?? {})) {
+        const property = `effect.${effectInstanceId}.${name}` as AnimatableProperty;
+        if (keyframed.has(property)) disablePropertyKeyframes(clipId, property, value);
+      }
       setError(null);
-    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); }
+    } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); } finally { if (batch.opened) endBatch(); }
   };
   return (
     <div className="effect-recipe-note">

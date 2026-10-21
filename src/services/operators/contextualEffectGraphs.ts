@@ -10,7 +10,7 @@ const row = (ids: readonly string[], y: number) => Object.fromEntries(ids.map((i
 
 /**
  * Earlier recipes of Vignette, Scanlines and Film Grain (before 2026-10-21). Saved projects keep
- * them; `stylizeRecipeUpgrades.ts` recognizes them so the inspector can offer the current recipe.
+ * them; `stylizeRecipes.ts` recognizes them so the inspector can offer the current recipe.
  */
 
 /** Exact legacy vignette math. UV is fragment context, deliberately not texture-transform UV. */

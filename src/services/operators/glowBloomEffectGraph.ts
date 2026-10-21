@@ -1,5 +1,5 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { GLOW_KNEE_FLOOR, GLOW_LEVEL_REACH, GLOW_LEVELS, GLOW_PEAK_FLOOR, GLOW_REFERENCE_HEIGHT } from '../../effects/stylize/glow/glowBloom';
+import { GLOW_FINEST_REACH, GLOW_KNEE_FLOOR, GLOW_LEVEL_REACH, GLOW_LEVELS, GLOW_PEAK_FLOOR, GLOW_REFERENCE_HEIGHT } from '../../effects/stylize/glow/glowBloom';
 import { BlurGraphBuilder, normalizeNodes, type GraphPort } from './blurGraphBuilder';
 
 /** Light carried by a pyramid level: rgb is the light, alpha the summed weights of the levels in it. */
@@ -17,9 +17,10 @@ function filterTaps(g: BlurGraphBuilder, prefix: string, source: GraphPort, uv: 
 /**
  * Glow v3, a lens bloom (contract in `effects/stylize/glow/glowBloom.ts`): a full-size bright
  * pass, a pyramid of GLOW_LEVELS half-size Cache Images ([1 3 3 1] downsample), and the way back
- * up with a 3x3 tent that adds every level by its Radius weight. One shared tap kernel serves
- * every pass; each pass reads it in its own resolution. About 2.7 full-frame passes of work and
- * about 1.7 frames of rgba16float cache memory (bright pass plus two pyramids), at any Radius.
+ * up with a 3x3 tent that adds every level by its Radius weight; the bright pass itself is level
+ * 0. The glow is screened onto the picture (1 - (1 - picture) * exp(-glow)), so it never clips.
+ * One shared tap kernel serves every pass; each pass reads it in its own resolution. About 2.7
+ * full-frame passes of work and about 1.7 frames of rgba16float cache memory, at any Radius.
  */
 export function createDefaultGlowGraph(): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
@@ -75,7 +76,14 @@ export function createDefaultGlowGraph(): EffectOperatorGraph {
   const levelShort = g.unary('level-short-side', 'vector.reduce-min.vec2', 'resolution');
   const reachRatio = g.binary('level-reach-ratio', 'math.divide-ieee.scalar', g.binary('level-reach-px', 'math.multiply.scalar', radiusSafe, levelShort), 'reference-height');
   const position = g.binary('level-position', 'math.divide-ieee.scalar', g.unary('level-log', 'math.log.scalar', reachRatio), 'ln2');
-  g.add('level-weight', 'math.smoothstep.scalar', { edge0: 'zero', edge1: 'one', value: g.binary('level-position-shifted', 'math.add.scalar', position, 'one') });
+  const radiusWeight = g.add('level-radius-weight', 'math.smoothstep.scalar', { edge0: 'zero', edge1: 'one', value: g.binary('level-position-shifted', 'math.add.scalar', position, 'one') });
+  // Levels finer than the finest 1080p level fade out, so 4K renders the same levels as 1080p.
+  // fineness = log2(level reach / (GLOW_FINEST_REACH / 2)): 0 at half the finest reach, 1 at it.
+  g.number('finest-reach', 2 * GLOW_LEVEL_REACH * GLOW_REFERENCE_HEIGHT / GLOW_FINEST_REACH);
+  const fineness = g.binary('level-fineness', 'math.divide-ieee.scalar', g.unary('level-fineness-log', 'math.log.scalar',
+    g.binary('level-fineness-ratio', 'math.divide-ieee.scalar', 'finest-reach', g.binary('level-short-safe', 'math.max.scalar', levelShort, 'one'))), 'ln2');
+  const fineFade = g.add('level-fine-fade', 'math.smoothstep.scalar', { edge0: 'zero', edge1: 'one', value: fineness });
+  g.binary('level-weight', 'math.multiply.scalar', radiusWeight, fineFade);
   // The smallest level is summed into the next-larger pass, one level up in size.
   g.add('top-level-weight', 'math.smoothstep.scalar', { edge0: 'zero', edge1: 'one', value: position });
 
@@ -96,7 +104,7 @@ export function createDefaultGlowGraph(): EffectOperatorGraph {
       tentWeight = 'top-level-weight';
     }
     const own = g.add(`up-${level}-level`, 'image.sample', { image: [`down-${level}-cache`, 'image'], uv: ['uv', 'uv'] });
-    const weight = level === 1 ? 'one' : 'level-weight';
+    const weight = 'level-weight';
     const ownLight = g.add(`up-${level}-level-light`, 'math.multiply.rgb-scalar', { a: splitRgb(g, `up-${level}-level-split`, [own, 'image']), b: weight });
     const sum = g.binary(`up-${level}-light`, 'math.add.rgb', tentRgb, ownLight);
     const weightSum = g.binary(`up-${level}-weights`, 'math.add.scalar', tentWeight, weight);
@@ -104,17 +112,36 @@ export function createDefaultGlowGraph(): EffectOperatorGraph {
     g.add(`up-${level}-cache`, 'image.materialize', { image: [packed, 'image'] }, { bindings: {}, constants: { scale: String(1 / 2 ** level) } });
   }
 
-  // Resolve at full size: tent-upsampled glow * Amount * Color, added to the premultiplied source.
+  // Resolve at full size. Level 0 is the bright pass itself. It stands for every 1080p level whose
+  // reach this render size cannot resolve, log2(min(Radius, its reach) / finest reach) + 1 of them,
+  // and fills up to a total weight of 1 when the Radius is finer than the pyramid: a reduced
+  // preview keeps the 1080p glow, and a tiny Radius stays tight.
   const glowSplit = g.add('glow-split', 'vector.split.rgba', { image: filterTaps(g, 'glow', ['up-1-cache', 'image'], 'up-uv') });
+  const pyramidWeight = g.add('glow-pyramid-weight', 'convert.alpha-to-scalar', { alpha: [glowSplit, 'alpha'] });
+  g.number('finest-level-reach', GLOW_FINEST_REACH);
+  const coreReach = g.binary('glow-core-reach', 'math.min.scalar', radiusSafe, g.binary('glow-core-level-reach', 'math.divide-ieee.scalar', 'reference-height', levelShort));
+  const folded = g.binary('glow-core-folded', 'math.add.scalar', g.binary('glow-core-octaves', 'math.divide-ieee.scalar',
+    g.unary('glow-core-log', 'math.log.scalar', g.binary('glow-core-ratio', 'math.divide-ieee.scalar', coreReach, 'finest-level-reach')), 'ln2'), 'one');
+  const coreWeight = g.binary('glow-core-weight', 'math.max.scalar', g.binary('glow-core-needed', 'math.max.scalar', folded,
+    g.binary('glow-core-missing', 'math.subtract.scalar', 'one', pyramidWeight)), 'zero');
+  const core = g.add('glow-core', 'image.sample', { image: ['bright-cache', 'image'], uv: ['uv', 'uv'] });
+  const coreLight = g.add('glow-core-light', 'math.multiply.rgb-scalar', { a: splitRgb(g, 'glow-core-split', [core, 'image']), b: coreWeight });
+  const lightSum = g.binary('glow-light-sum', 'math.add.rgb', [glowSplit, 'rgb'], coreLight);
   // Wider glows add levels; dividing by the square root of their weight sum lets them grow without flooding the frame.
-  const weightSum = g.add('glow-weight-sum', 'convert.alpha-to-scalar', { alpha: [glowSplit, 'alpha'] });
+  const weightSum = g.binary('glow-weight-sum', 'math.add.scalar', pyramidWeight, coreWeight);
   const spread = g.unary('glow-spread', 'math.sqrt.scalar', g.binary('glow-weight-safe', 'math.max.scalar', weightSum, 'one'));
-  const glowLight = g.add('glow-light', 'math.divide-ieee.rgb-scalar', { a: [glowSplit, 'rgb'], b: spread });
+  const glowLight = g.add('glow-light', 'math.divide-ieee.rgb-scalar', { a: lightSum, b: spread });
   const intensity = g.binary('glow-amount', 'math.max.scalar', amount, 'zero');
   const tinted = g.binary('glow-tinted', 'math.multiply.rgb', glowLight, [g.add('color-rgb', 'convert.vec4-to-rgb', { value: color }), 'rgb']);
   const glow = g.add('glow-scaled', 'math.multiply.rgb-scalar', { a: tinted, b: intensity });
+  // Screen with a soft roll-off: 1 - (1 - picture) * exp(-glow). Small glows add light like Add,
+  // bright areas have less room left, nothing passes white: hue holds and the frame cannot clip.
   const premultiplied = g.add('resolve-premultiplied', 'math.multiply.rgb-scalar', { a: [source, 'rgb'], b: alpha });
-  const result = g.binary('resolve-result', 'math.add.rgb', premultiplied, glow);
+  const oneRgb: GraphPort = [g.unary('one-rgb', 'convert.scalar-to-rgb', 'one'), 'rgb'];
+  const room = g.binary('resolve-room', 'math.subtract.rgb', oneRgb, premultiplied);
+  const falloff = g.binary('resolve-falloff', 'math.power.rgb', [g.unary('euler-rgb', 'convert.scalar-to-rgb', g.number('euler', Math.E)), 'rgb'],
+    g.binary('glow-negative', 'math.subtract.rgb', [g.unary('zero-rgb', 'convert.scalar-to-rgb', 'zero'), 'rgb'], glow));
+  const result = g.binary('resolve-result', 'math.subtract.rgb', oneRgb, g.binary('resolve-remaining', 'math.multiply.rgb', room, falloff));
   const resultPeak = g.add('resolve-peak', 'vector.reduce-max.rgb', { rgb: result });
   const coverage = g.add('resolve-coverage', 'math.clamp.scalar', { value: g.binary('resolve-coverage-raw', 'math.max.scalar', alpha, resultPeak), min: 'zero', max: 'one' });
   const safeCoverage = g.binary('resolve-coverage-safe', 'math.max.scalar', coverage, 'coverage-floor');

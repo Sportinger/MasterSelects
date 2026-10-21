@@ -13,6 +13,11 @@ import { useTimelineStore } from '../../src/stores/timeline';
 import type { Effect } from '../../src/types/effects';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { evaluateImagePasses } from '../helpers/imageGraphPasses';
+import { imageCellHash } from '../../src/services/operators/imageOperatorEvaluation';
+import { thresholdValue, posterizeValue } from '../../src/effects/stylize/pointwiseModel';
+import { grainResponse, GRAIN_PATTERN_SPAN, GRAIN_SEED_ROW } from '../../src/effects/stylize/grain/grainModel';
+import { glowContribution, glowLevelWeights } from '../../src/effects/stylize/glow/glowBloom';
+import { vignetteDistance } from '../../src/effects/stylize/vignette/vignetteModel';
 
 type Pixel = [number, number, number, number];
 const TYPES = [...STYLIZE_RECIPE_EFFECT_TYPES];
@@ -131,6 +136,16 @@ describe('stylize recipes: any value stays finite', () => {
   });
 });
 
+describe('stylize recipes: notes for values that change nothing', () => {
+  it('says when Glow cannot glow and when Grain Speed has no further effect', () => {
+    const glowNotes = (getEffect('glow') as FullscreenEffectDefinition).paramWarnings!;
+    expect(glowNotes({ ...getDefaultParams('glow'), threshold: 1.5, softness: 0.2 } as Record<string, number>, 1920, 1080).join(' ')).toMatch(/nothing glows/);
+    expect(glowNotes({ ...getDefaultParams('glow'), threshold: 1, softness: 0.5 } as Record<string, number>, 1920, 1080)).toEqual([]);
+    const grainNotes = (getEffect('grain') as FullscreenEffectDefinition).paramWarnings!;
+    expect(grainNotes({ ...getDefaultParams('grain'), speed: 5 } as Record<string, number>, 1920, 1080).join(' ')).toMatch(/changes nothing above 1/);
+  });
+});
+
 describe('Vignette', () => {
   const grey: Pixel = [0.6, 0.6, 0.6, 1];
   const gain = (params: Record<string, unknown>, uv: [number, number], resolution: [number, number]) =>
@@ -148,6 +163,14 @@ describe('Vignette', () => {
       expect(Math.abs(right - below)).toBeLessThan(0.01);
       const edgeX = gain({ roundness: 0, size: 0.4 }, [0.999, 0.5], resolution), edgeY = gain({ roundness: 0, size: 0.4 }, [0.5, 0.999], resolution);
       expect(Math.abs(edgeX - edgeY)).toBeLessThan(0.01);
+    }
+  });
+
+  it('follows the model: gain = 1 - Amount * smoothstep(Size, Size + Softness, distance) (dither at most half an 8-bit step)', () => {
+    const smooth = (e0: number, e1: number, x: number) => { const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0))); return t * t * (3 - 2 * t); };
+    for (const [x, y] of [[100, 80], [1500, 300], [960, 1000], [30, 1050]]) {
+      const reference = 1 - 0.7 * smooth(0.3, 0.8, vignetteDistance(x + 0.5, y + 0.5, 1920, 1080, 0.5));
+      expect(Math.abs(gain({ amount: 0.7, size: 0.3, softness: 0.5, roundness: 0.5 }, [(x + 0.5) / 1920, (y + 0.5) / 1080], [1920, 1080]) - reference)).toBeLessThan(1 / 255);
     }
   });
 
@@ -188,6 +211,51 @@ describe('Film Grain', () => {
     expect(sample({ speed: 0 }, [1920, 1080], 3, 50)).toEqual(sample({ speed: 0 }, [1920, 1080], 7.2, 50));
   });
 
+  it('has no grid direction: its edges run along the axes as often as along the diagonals', () => {
+    // Gradient orientation energy over half-pixel samples; a single axis-aligned value-noise layer
+    // puts about 1.8 times as much of it on the axes as on the diagonals (square grain).
+    const compiled = plan('grain', { size: 4, amount: 0.5 }), n = 72, bins = new Float64Array(6);
+    for (const time of [0.25, 0.5, 0.75]) {
+      const field = Array.from({ length: n }, (_, y) => Array.from({ length: n }, (_, x) =>
+        evaluateImageOperatorPlan(compiled, mid, { uv: [(100 + x / 2) / 1920, (100 + y / 2) / 1080], resolution: [1920, 1080], timelineTimeSeconds: time })[1]));
+      for (let y = 1; y < n - 1; y++) for (let x = 1; x < n - 1; x++) {
+        const gx = field[y][x + 1] - field[y][x - 1], gy = field[y + 1][x] - field[y - 1][x];
+        bins[Math.round(((Math.atan2(gy, gx) * 180 / Math.PI + 360) % 90) / 15) % 6] += gx * gx + gy * gy;
+      }
+    }
+    const average = bins.reduce((sum, value) => sum + value, 0) / bins.length;
+    for (const value of bins) {
+      expect(value / average).toBeGreaterThan(0.85);
+      expect(value / average).toBeLessThan(1.18);
+    }
+  });
+
+  it('shows a new pattern on every frame of a long timeline (the pattern index stays exact in f32)', () => {
+    // Reference of the pattern offset: f32 index, then Random (Cell) of whole numbers, as the shader computes it.
+    const offset = (time: number) => {
+      const index = Math.floor(Math.fround(Math.fround(time) * 60) + 0.5);
+      return [imageCellHash([index, 0]) * GRAIN_PATTERN_SPAN, imageCellHash([index, GRAIN_SEED_ROW]) * GRAIN_PATTERN_SPAN];
+    };
+    const offsets = Array.from({ length: 300 }, (_, frame) => offset(7200 + frame / 30));
+    const distinct = new Set(offsets.map(([x, y]) => `${Math.round(x)}:${Math.round(y)}`));
+    expect(distinct.size).toBe(300);
+    // And the plan agrees: two frames two hours in are unrelated grain.
+    const a = sample({}, [1920, 1080], 7200, 400), b = sample({}, [1920, 1080], 7200 + 1 / 30, 400);
+    expect(Math.abs(mean(a.map((value, index) => value * b[index])) / (deviation(a) * deviation(b)))).toBeLessThan(0.15);
+  });
+
+  it('follows the film response: full grain in the midtones, 30 % of it in black and white', () => {
+    const spread = (level: number) => {
+      const compiled = plan('grain', { amount: 0.2 }), values: number[] = [];
+      for (let index = 0; index < 2000; index++) {
+        const uv: [number, number] = [((index * 0.618034) % 1), ((index * 0.7548777) % 1)];
+        values.push(evaluateImageOperatorPlan(compiled, [level, level, level, 1], { uv, resolution: [1920, 1080], timelineTimeSeconds: 0.5 })[1] - level);
+      }
+      return deviation(values);
+    };
+    expect(spread(0.25) / spread(0.5)).toBeCloseTo(grainResponse(0.25) / grainResponse(0.5), 1);
+  });
+
   it('keeps its grain size at every resolution: the same picture position gets the same grain', () => {
     const small = sample({ size: 2 }, [960, 540], 0.25, 200), large = sample({ size: 2 }, [3840, 2160], 0.25, 200);
     small.forEach((value, index) => expect(large[index]).toBeCloseTo(value, 4));
@@ -208,12 +276,17 @@ describe('Edge Detect', () => {
     return best;
   };
 
-  it('reads a step of contrast c as about c * 4 * Strength at every Width and resolution', () => {
+  // The line strength is 1 - exp(-x) of the response x = c * 4 * Strength (soft roll-off, no clip).
+  const response = (edge: number) => -Math.log(1 - edge);
+
+  it('reads a step of contrast c as a response of about c * 4 * Strength at every Width and resolution, rolled off softly', () => {
     for (const width of [1, 2, 4]) {
-      expect(peak(width, 1080)).toBeGreaterThan(0.42);
-      expect(peak(width, 1080)).toBeLessThan(0.56);
+      expect(response(peak(width, 1080))).toBeGreaterThan(0.42);
+      expect(response(peak(width, 1080))).toBeLessThan(0.56);
     }
-    expect(Math.abs(peak(2, 540) - peak(2, 1080))).toBeLessThan(0.06);
+    expect(Math.abs(response(peak(2, 540)) - response(peak(2, 1080)))).toBeLessThan(0.06);
+    // Strong edges approach white without clipping flat: twice the contrast is still brighter.
+    expect(peak(1, 1080, 0.75)).toBeGreaterThan(peak(1, 1080, 0.5) + 0.05);
   });
 
   it('finds no edges in a flat picture and keeps transparent surroundings transparent', () => {
@@ -221,6 +294,34 @@ describe('Edge Detect', () => {
     expect(evaluateImageOperatorPlan(plan('edge-detect'), flat(), { uv: [0.5, 0.5], resolution: [320, 180], sampleImage: flat })[0]).toBeLessThan(1e-4);
     const empty = (): Pixel => [0, 0, 0, 0];
     expect(evaluateImageOperatorPlan(plan('edge-detect'), empty(), { uv: [0.5, 0.5], resolution: [320, 180], sampleImage: empty })[3]).toBe(0);
+  });
+});
+
+describe('Edge Detect on a transparent layer', () => {
+  const width = 64, height = 36;
+  const square = (x: number, y: number): Pixel => (x >= 24 && x < 40 && y >= 10 && y < 26 ? [0.9, 0.3, 0.1, 1] : [0, 0, 0, 0]);
+  /** Straight colours and alphas of the row through the middle, left of and across the left edge. */
+  const row = (params: Record<string, unknown>) => {
+    const out = render('edge-detect', { width: 2, ...params }, width, height, square);
+    return Array.from({ length: 8 }, (_, step) => at(out, width, 18 + step, 18));
+  };
+
+  it('draws the outline outside the layer in the full line colour (no darkened or grey fringe)', () => {
+    for (const [params, line] of [[{}, [1, 1, 1]], [{ invert: true }, [0, 0, 0]]] as const) {
+      const pixels = row(params), outside = pixels.slice(0, 6).filter(pixel => pixel[3] > 0.05);
+      expect(outside.length).toBeGreaterThan(0);
+      for (const pixel of outside) for (let channel = 0; channel < 3; channel++) expect(Math.abs(pixel[channel] - line[channel])).toBeLessThan(2 / 255);
+    }
+  });
+
+  it('colours that outline with the layer colour at full brightness (Color 1)', () => {
+    const outside = row({ colorize: 1 }).slice(0, 6).filter(pixel => pixel[3] > 0.05);
+    expect(outside.length).toBeGreaterThan(0);
+    for (const pixel of outside) {
+      expect(pixel[0]).toBeGreaterThan(0.97);
+      expect(Math.abs(pixel[1] - 0.3 / 0.9)).toBeLessThan(0.03);
+      expect(Math.abs(pixel[2] - 0.1 / 0.9)).toBeLessThan(0.03);
+    }
   });
 });
 
@@ -240,6 +341,15 @@ describe('Sharpen', () => {
     expect(row[25] - row[22]).toBeGreaterThan(high - low - 1 / 255);
   });
 
+  it('keeps gradation at strong, wide settings: a ramp stays a ramp (no plateaus) and nothing reads the timeline time', () => {
+    const ramp = (x: number): Pixel => { const v = 0.15 + 0.6 * x / 47 + (x % 6 < 3 ? 0.04 : -0.04); return [v, v, v, 1]; };
+    const out = render('sharpen', { amount: 5, radius: 5 }, width, height, x => ramp(x));
+    const values = Array.from({ length: width }, (_, x) => luma(at(out, width, x, 13)));
+    const levels = new Set(values.slice(4, 44).map(value => Math.round(value * 255)));
+    expect(levels.size).toBeGreaterThan(20);
+    expect(plan('sharpen', { amount: 5, radius: 5 }).passes!.some(pass => pass.program.capabilities.includes('time'))).toBe(false);
+  });
+
   it('keeps a flat colour layer on transparency free of dark or bright fringes', () => {
     const out = render('sharpen', { amount: 3, radius: 1.5 }, width, height, (x, y) => (x > 12 && x < 36 && y > 6 && y < 20 ? [0.9, 0.5, 0.2, 1] : [0, 0, 0, 0]));
     for (let y = 7; y < 20; y++) for (let x = 13; x < 36; x++) {
@@ -252,6 +362,12 @@ describe('Sharpen', () => {
 describe('Glow', () => {
   const width = 128, height = 72;
   const dot = (alphaOutside = 1, half = 2) => (x: number, y: number): Pixel => (Math.abs(x - 63.5) < half && Math.abs(y - 35.5) < half ? [1, 1, 1, 1] : [0, 0, 0, alphaOutside]);
+
+  it('passes the share of light above the soft-knee threshold (model reference)', () => {
+    expect(glowContribution(0.5, 0.8, 0.5)).toBeCloseTo((0.5 - 0.4) ** 2 / (4 * 0.4) / 0.5, 9);
+    expect(glowContribution(1, 0.8, 0.5)).toBeCloseTo((1 - 0.4) ** 2 / 1.6, 9);
+    expect(glowContribution(0.3, 0.8, 0.5)).toBe(0);
+  });
 
   it('leaves pictures below the threshold untouched', () => {
     const out = render('glow', { threshold: 0.8, softness: 0.2 }, width, height, (x, y) => [0.3, 0.4 * x / width, 0.5 * y / height, 1]);
@@ -270,9 +386,38 @@ describe('Glow', () => {
       expect(Math.abs(at(out, width, 63, 42)[0] - at(out, width, 63, 29)[0])).toBeLessThan(3 / 255);
       return ray.findIndex(value => value < 4 / 255);
     };
-    const tight = reach(10), wide = reach(150);
+    const tight = reach(40), wide = reach(300);
     expect(wide === -1 || wide > tight).toBe(true);
     expect(tight).toBeGreaterThan(1);
+  });
+
+  it('screens the glow on: a mid-bright saturated sky stays its colour, and strong glows never clip', () => {
+    const hue = ([r, g, b]: readonly number[]) => { const max = Math.max(r, g, b), d = max - Math.min(r, g, b); return 60 * (max === b ? 4 + (r - g) / d : max === g ? 2 + (b - r) / d : (g - b) / d); };
+    // A whole frame of sky is the worst case: every neighbour adds its light.
+    const sky: Pixel = [0.3, 0.53, 0.78, 1], calm = at(render('glow', {}, 32, 18, () => sky), 32, 16, 9);
+    for (let channel = 0; channel < 3; channel++) expect(calm[channel] - sky[channel]).toBeLessThan(0.1);
+    expect(Math.abs(hue(calm) - hue(sky))).toBeLessThan(4);
+    const neon: Pixel = [0.81, 0.09, 0.73, 1];
+    const strong = at(render('glow', { amount: 2, threshold: 0.2 }, 32, 18, () => neon), 32, 16, 9);
+    expect(strong[0]).toBeLessThan(1);
+    // Screen: 1 - (1 - picture) * exp(-glow) keeps the darkest channel well below white.
+    expect(strong[1]).toBeLessThan(0.6);
+    expect(strong[0] - strong[1]).toBeGreaterThan(0.35);
+  });
+
+  it('looks the same at a reduced preview size: a tight glow stays tight, a wide one keeps its reach', () => {
+    /** Glow over a disc of 0.06 h at 0.12 h from its centre, at frame height h. */
+    const halo = (radius: number, h: number) => {
+      const w = h * 16 / 9, disc = (x: number, y: number): Pixel => (Math.hypot(x + 0.5 - w / 2, y + 0.5 - h / 2) < 0.06 * h ? [1, 1, 1, 1] : [0, 0, 0, 1]);
+      return at(render('glow', { radius, amount: 2 }, w, h, disc), w, Math.round(w / 2 + 0.12 * h), h / 2)[0];
+    };
+    expect(halo(4, 54)).toBeLessThan(2 / 255);
+    expect(halo(4, 108)).toBeLessThan(2 / 255);
+    expect(Math.abs(halo(300, 54) - halo(300, 108))).toBeLessThan(0.03);
+    // The level weights follow 1080p: at half size level 0 stands for 1080p level 1.
+    expect(glowLevelWeights(40, 540)[0]).toBeCloseTo(1, 6);
+    expect(glowLevelWeights(40, 1080)[0]).toBe(0);
+    expect(glowLevelWeights(40, 2160).slice(0, 2)).toEqual([0, 0]);
   });
 
   it('tints the halo with Color and carries it onto transparent surroundings', () => {
@@ -298,6 +443,25 @@ describe('Threshold and Posterize Softness', () => {
       expect(soft[index]).toBeGreaterThanOrEqual(soft[index - 1]);
       expect(soft[index] - soft[index - 1]).toBeLessThan(0.04);
     }
+  });
+
+  it('matches the model references of Threshold and Posterize', () => {
+    const threshold = ramp('threshold', { level: 0.4, softness: 0.1 }), posterize = ramp('posterize', { levels: 5, softness: 0.3 });
+    threshold.forEach((value, index) => expect(value).toBeCloseTo(thresholdValue(index / 400, 0.4, 0.1), 6));
+    posterize.forEach((value, index) => expect(value).toBeCloseTo(posterizeValue(index / 400, 5, 0.3), 6));
+  });
+
+  it('Posterize Brightness Only steps the brightest channel and keeps hue and saturation (no false colours)', () => {
+    const compiled = plan('posterize', { levels: 5, brightnessOnly: true });
+    for (const pixel of [[0.78, 0.76, 0.82, 1], [0.8, 0.3, 0.1, 0.5], [0.05, 0.2, 0.6, 1]] as Pixel[]) {
+      const out = evaluateImageOperatorPlan(compiled, pixel), peak = Math.max(...pixel.slice(0, 3));
+      const expected = Math.floor(peak * 5) / 4;
+      for (let channel = 0; channel < 3; channel++) expect(out[channel]).toBeCloseTo(pixel[channel] * expected / peak, 6);
+      expect(out[3]).toBe(pixel[3]);
+    }
+    // Off, it is the per-channel staircase: the light cloud splits into lavender.
+    const perChannel = evaluateImageOperatorPlan(plan('posterize', { levels: 5 }), [0.78, 0.76, 0.82, 1]);
+    expect(perChannel[2] - perChannel[0]).toBeGreaterThan(0.2);
   });
 
   it('rounds every Posterize step into a continuous ramp and keeps the levels in between', () => {

@@ -578,10 +578,8 @@ describe('transition registry', () => {
       params: {
         amount: { from: 0.2, to: 2.2 },
         threshold: { from: 0.78, to: 0.42 },
-        radius: { from: 18, to: 44 },
+        radius: { from: 60, to: 240 },
         softness: 0.65,
-        rings: 3,
-        samplesPerRing: 10,
       },
       startProgress: 0,
       endProgress: 0.7,
