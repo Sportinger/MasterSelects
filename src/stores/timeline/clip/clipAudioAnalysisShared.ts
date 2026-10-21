@@ -87,6 +87,21 @@ export async function resolveClipSourceFile(clip: TimelineClip): Promise<File | 
   }
 }
 
+const UNDECODABLE_AUDIO_CODES = new Set(['decode-failed', 'no-decoder-available', 'invalid-decode-result']);
+
+/**
+ * The source file is readable but no decode path (browser decodeAudioData, then the
+ * container range reader) produced audio, e.g. an unsupported codec or a video without
+ * a decodable audio track. The clip still works; it only has no waveform.
+ */
+export function isUndecodableAudioSourceError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const maybe = error as { name?: unknown; code?: unknown };
+  return maybe.name === 'AudioDecodeServiceError'
+    && typeof maybe.code === 'string'
+    && UNDECODABLE_AUDIO_CODES.has(maybe.code);
+}
+
 export function isUnreadableClipSourceError(error: unknown): boolean {
   return Boolean(error)
     && typeof error === 'object'
