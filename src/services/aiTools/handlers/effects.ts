@@ -9,19 +9,29 @@ import {
 import type { JsonObject } from '../../motionDesign/adjustment/contracts';
 import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../../motionDesign/adjustment/supportedEffectContractAdapter';
 import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/supportedEffects';
+import { effectParamDefinitions, unusedParamWarnings } from '../../operators/effectParamVisibility';
+import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
+import { useMediaStore } from '../../../stores/mediaStore';
+import type { Effect } from '../../../types/effects';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
-/** Retired parameters are still accepted (saved projects carry them) but say that they do nothing. */
-function deprecatedParamWarnings(effectType: string, params: Record<string, unknown> | undefined): string[] {
-  const definitions = getEffect(effectType)?.params ?? {};
-  return Object.keys(params ?? {}).flatMap(name => definitions[name]?.deprecated ? [`${name}: ${definitions[name].deprecated}`] : []);
+/**
+ * Accepted parameters that do nothing on this instance (retired, or not read by its edited graph)
+ * and blur limits at the active composition size: tools say so instead of failing silently.
+ */
+function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
+  if (!effect) return [];
+  const composition = useMediaStore.getState().getActiveComposition();
+  return [...unusedParamWarnings(effect, names),
+    ...blurBudgetNotes(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080),
+    ...(names.length ? definitionParamWarnings(effect.type, effect.params) : [])];
 }
 
-/** Values the effect clamps or cannot show, judged on the effect's resulting parameters. */
-function effectParamWarnings(effectType: string, params: Record<string, unknown> | undefined): string[] {
+/** Values the effect itself clamps or cannot show (its `paramWarnings`), judged on the resulting parameters. */
+function definitionParamWarnings(effectType: string, params: Record<string, unknown>): string[] {
   const definition = getEffect(effectType);
-  if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings || !params) return [];
+  if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
   try {
     return definition.paramWarnings(params as Record<string, number | boolean | string>);
   } catch { return []; }
@@ -93,8 +103,8 @@ export async function handleAddEffect(
   }
 
   invalidateCache();
-  const warnings = [...deprecatedParamWarnings(effectType, customParams),
-    ...(customParams ? effectParamWarnings(effectType, { ...getDefaultParams(effectType), ...customParams }) : [])];
+  const added = useTimelineStore.getState().clips.find(c => c.id === clipId)?.effects.find(e => e.id === newEffect?.id);
+  const warnings = effectParamWarnings(added, Object.keys(customParams ?? {}));
 
   return {
     success: true,
@@ -163,10 +173,12 @@ export async function handleUpdateEffect(
   if (!params || typeof params !== 'object') return { success: false, error: 'params must be an object.' };
 
   // A misspelled parameter used to be stored silently and do nothing; reject it with the valid names.
+  // Hidden parameters stay accepted (saved projects carry them) but are not offered.
   const known = new Set([...Object.keys(getEffect(effect.type)?.params ?? {}), ...Object.keys(effect.params)]);
   const unknown = Object.keys(params).filter(name => !known.has(name));
   if (unknown.length) {
-    return { success: false, error: `Unknown parameter${unknown.length > 1 ? 's' : ''} for ${effect.type}: ${unknown.join(', ')}. Valid: ${[...known].sort().join(', ')}` };
+    const valid = Object.entries(effectParamDefinitions(effect)).filter(([, definition]) => !definition.hidden).map(([name]) => name);
+    return { success: false, error: `Unknown parameter${unknown.length > 1 ? 's' : ''} for ${effect.type}: ${unknown.join(', ')}. Valid: ${valid.toSorted().join(', ')}` };
   }
 
   if (clip.source?.type === 'motion-adjustment') {
@@ -188,7 +200,8 @@ export async function handleUpdateEffect(
   // Visual feedback: select clip and open effects tab
   selectClipAndOpenTab(clipId, 'effects');
 
-  const warnings = [...deprecatedParamWarnings(effect.type, params), ...effectParamWarnings(effect.type, { ...effect.params, ...params })];
+  const updated = getClipEffects(clipId).find(item => item.id === effectId);
+  const warnings = effectParamWarnings(updated, Object.keys(params));
   return {
     success: true,
     data: {

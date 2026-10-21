@@ -3,6 +3,9 @@ import type { BoundOperatorNode } from '../../types/operatorGraph';
 export interface EffectPresentationPlan {
   labels: Record<string, string>;
   stage: (node: BoundOperatorNode) => string;
+  /** What a node's output carries, by node id (its value output) or `id:port`: the output port is
+   * named so, and folder ports it feeds read "Sigma" instead of "Maximum: Value". */
+  portLabels?: Record<string, string>;
 }
 const includes = (list: string, id: string) => list.split(' ').includes(id);
 export const GLYPH_PRESENTATION_EFFECTS = new Set(['ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic',
@@ -10,6 +13,14 @@ export const GLYPH_PRESENTATION_EFFECTS = new Set(['ascii', 'number-field', 'gri
   'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'contour-type']);
 const COLORS = new Set(['brightness', 'contrast', 'saturation', 'exposure', 'levels', 'temperature', 'vibrance', 'threshold', 'posterize', 'invert']);
 const REDUCE = 'reduce weight-vec4 average blurred';
+const BLUR_PORTS = { 'source-cache': 'Premultiplied Source', 'radius-px': 'Radius (px)', 'pixel-scale': 'Pixel Scale' };
+const SEPARABLE_PORTS = { ...BLUR_PORTS, sigma: 'Sigma', reach: 'Reach', pairs: 'Pairs', stride: 'Stride', 'tap-count': 'Tap Count',
+  'horizontal-cache': 'Horizontal Pass', 'vertical-image': 'Vertical Pass', 'result:image': 'Blurred Image',
+  'horizontal-sequence:index': 'Tap Index', 'vertical-sequence:index': 'Tap Index' };
+const DIRECTIONAL_PORTS = { ...BLUR_PORTS, direction: 'Direction', 'half-length': 'Half Length', 'range-start': 'Range Start',
+  'range-length': 'Range Length', longest: 'Longest Range', 'longest-px': 'Longest (px)', center: 'Centre (px)', 'center-uv': 'Centre',
+  'is-spin': 'Is Spin', farthest: 'Farthest (px)', 'coarse-count': 'Coarse Taps', step: 'Box Length', 'fine-cache': 'Short Boxes',
+  'coarse-image': 'Coarse Average', 'result:image': 'Blurred Image', 'fine-sequence:index': 'Fine Tap', 'coarse-sequence:index': 'Coarse Tap' };
 
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
@@ -24,13 +35,16 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
               : /^(masked-color|scanned-color|flickered-color|mixed-color|combine)$/.test(id) ? 'finish' : 'curvature',
   };
   if (type === 'gaussian-blur' || type === 'box-blur') return {
-    labels: { size: 'Radius & Tap Count', horizontal: 'Horizontal Pass (premultiplied)', vertical: 'Vertical Pass', finish: 'Straight Alpha Output' },
-    stage: ({ id }) => /^horizontal-/.test(id) ? 'horizontal' : /^vertical-/.test(id) ? 'vertical'
+    labels: { premultiply: 'Premultiplied Source (cached)', size: 'Radius & Tap Count', horizontal: 'Horizontal Pass', vertical: 'Vertical Pass', finish: 'Straight Alpha Output' },
+    portLabels: SEPARABLE_PORTS,
+    stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : /^horizontal-/.test(id) ? 'horizontal' : /^vertical-/.test(id) ? 'vertical'
       : /^(result|coverage-floor)/.test(id) ? 'finish' : 'size',
   };
   if (['motion-blur', 'radial-blur', 'zoom-blur'].includes(type)) return {
-    labels: { range: 'Blur Range', count: 'Tap Counts & Box Length', fine: 'Stage A: Short Box (cached)', coarse: 'Stage B: Coarse Taps', finish: 'Straight Alpha Output' },
-    stage: ({ id }) => /^fine-/.test(id) ? 'fine'
+    labels: { premultiply: 'Premultiplied Source (cached)', range: 'Blur Range', count: 'Tap Counts & Box Length', fine: 'Stage A: Short Box (cached)',
+      coarse: 'Stage B: Coarse Taps', finish: 'Straight Alpha Output' },
+    portLabels: DIRECTIONAL_PORTS,
+    stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : /^fine-/.test(id) ? 'fine'
       : /^(coarse-(?!needed$|count$|limit$|root$)|range-span|range-direction|boxes|covered|along|taper)/.test(id) ? 'coarse'
         : /^(coarse-|longest-px|step)/.test(id) ? 'count'
           : /^(result|coverage-floor)/.test(id) ? 'finish' : 'range',

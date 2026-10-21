@@ -32,6 +32,8 @@ export interface MotionAdjustmentNumberParameterPolicy {
   readonly minimum: number;
   readonly maximum: number;
   readonly integer: boolean;
+  /** Accepted (saved projects carry it) but no longer read by the renderer; the reason. */
+  readonly ignored?: string;
 }
 
 export interface MotionAdjustmentEffectCompatibilityEntry {
@@ -97,7 +99,8 @@ export const ADJUSTMENT_EFFECT_COMPATIBILITY_MATRIX = Object.freeze({
     surfaces: REQUIRED_ALL_SURFACES,
     parameters: Object.freeze({
       radius: numberPolicy(10, 0, 50, false),
-      samples: numberPolicy(5, 1, 64, true),
+      samples: Object.freeze({ ...numberPolicy(5, 1, 64, true),
+        ignored: 'Gaussian Blur chooses its taps from the radius; samples is accepted for saved projects and has no effect.' }),
     }),
   }),
 }) satisfies Readonly<

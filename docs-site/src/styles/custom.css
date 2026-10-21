@@ -67,6 +67,14 @@
 @media (min-width: 60rem) {
   .sl-markdown-content .docs-shot--detail { max-width: 27rem; }
 }
+/* Every picture links to its full-size file (sync-features.mjs wraps it). */
+.sl-markdown-content .docs-shot-zoom { display: block; cursor: zoom-in; }
+.sl-markdown-content .docs-shot-zoom:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; border-radius: .5rem; }
+/* Node graphs keep a legible size on narrow screens and scroll sideways inside their figure. */
+@media (max-width: 50rem) {
+  .sl-markdown-content .docs-shot--graph { overflow-x: auto; }
+  .sl-markdown-content .docs-shot--graph img { min-width: 44rem; }
+}
 
 /* Vector callouts identify real controls without changing screenshot content. */
 .sl-markdown-content .docs-shot-stage { position: relative; }

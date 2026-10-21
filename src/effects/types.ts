@@ -27,8 +27,12 @@ export interface EffectParam {
   // project data and undo, but omitted from generic controls and property lists.
   hidden?: boolean;
   // Retired parameter: kept (hidden) so saved projects and old tool calls still load, but
-  // the renderer no longer reads it. Tools return this reason when a caller sets it.
+  // the renderer no longer reads it. Tools return this reason when a caller sets it. An
+  // edited saved graph that still binds it shows it again (effectParamVisibility.ts).
   deprecated?: string;
+  // Read only through the effect's operator graph: hidden (and reported by tools) when an
+  // edited graph no longer binds it.
+  graphOnly?: boolean;
 }
 
 /**

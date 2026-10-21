@@ -6,7 +6,11 @@
 // rewrites feature-to-feature links to site routes, points links that
 // leave docs/Features at GitHub, and copies the shared assets folder.
 //
-// Usage: node scripts/sync-features.mjs   (from docs-site/)
+// Usage: node scripts/sync-features.mjs [--build] [--source-ref <ref>]   (from docs-site/)
+//   --build   always clear the Astro content cache (production builds)
+//
+// The site lives under the `/docs` base, so every generated route starts with /docs.
+// Pictures become links to the full-size file, with width/height and lazy loading.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,6 +25,8 @@ const overviewOut = path.join(here, '..', 'src', 'content', 'docs', 'getting-sta
 const assetsOut = path.join(here, '..', 'public', 'assets');
 const astroCacheDir = path.join(here, '..', '.astro');
 const featurePath = 'docs/Features';
+const forBuild = process.argv.includes('--build');
+const siteBase = '/docs';
 const sourceRefFlag = process.argv.indexOf('--source-ref');
 const sourceRef = sourceRefFlag >= 0 ? process.argv[sourceRefFlag + 1] : undefined;
 
@@ -55,6 +61,36 @@ function readSourceFile(relativePath, encoding = 'utf8') {
   return gitOutput(['show', `${sourceRef}:${path.posix.join(featurePath, relativePath)}`], { encoding });
 }
 
+/** Pixel size of a PNG, JPEG or WebP file, or undefined. */
+function imageSize(bytes) {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const view = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const ascii = (offset, length) => String.fromCharCode(...u8.subarray(offset, offset + length));
+  if (u8.length > 24 && ascii(1, 3) === 'PNG') return { width: view.getUint32(16), height: view.getUint32(20) };
+  if (u8.length > 30 && ascii(0, 4) === 'RIFF' && ascii(8, 4) === 'WEBP') {
+    const chunk = ascii(12, 4);
+    if (chunk === 'VP8X') return { width: 1 + (u8[24] | u8[25] << 8 | u8[26] << 16), height: 1 + (u8[27] | u8[28] << 8 | u8[29] << 16) };
+    if (chunk === 'VP8 ') return { width: view.getUint16(26, true) & 0x3fff, height: view.getUint16(28, true) & 0x3fff };
+    if (chunk === 'VP8L') { const bits = view.getUint32(21, true); return { width: 1 + (bits & 0x3fff), height: 1 + ((bits >> 14) & 0x3fff) }; }
+  }
+  if (u8[0] === 0xff && u8[1] === 0xd8) {
+    for (let offset = 2; offset + 9 < u8.length;) {
+      if (u8[offset] !== 0xff) return undefined;
+      const marker = u8[offset + 1], length = view.getUint16(offset + 2);
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { height: view.getUint16(offset + 5), width: view.getUint16(offset + 7) };
+      offset += 2 + length;
+    }
+  }
+  return undefined;
+}
+
+const escapeAttribute = (value) => value.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+function readAsset(relativePath) {
+  try { return sourceRef ? gitOutput(['show', `${sourceRef}:${path.posix.join(featurePath, relativePath)}`]) : fs.readFileSync(path.join(featuresDir, relativePath)); }
+  catch { return undefined; }
+}
+
 function convert(markdown, { title }) {
   let body = markdown;
   // Drop the repo-internal "[Back to Project](../../README.md)" back-link line.
@@ -64,6 +100,7 @@ function convert(markdown, { title }) {
   const pageTitle = title ?? h1?.[1] ?? 'Untitled';
   if (h1) body = body.replace(h1[0], '').replace(/^\s*\n/, '');
 
+  let images = 0;
   body = body.replace(/(!?)\[([^\]]+)\]\(([^)\s]+)\)/g, (full, imagePrefix, label, target) => {
     if (/^(https?:|mailto:|#)/.test(target)) return full;
     const [rawPath, anchor = ''] = target.split('#');
@@ -72,14 +109,20 @@ function convert(markdown, { title }) {
     // Feature-to-feature links become site routes.
     const fileName = path.posix.basename(clean);
     if (slugByFile.has(fileName) && !clean.includes('/')) {
-      return `${imagePrefix}[${label}](/features/${slugByFile.get(fileName)}/${suffix})`;
+      return `${imagePrefix}[${label}](${siteBase}/features/${slugByFile.get(fileName)}/${suffix})`;
     }
     if (fileName === 'README.md' && (clean === 'README.md' || clean === './README.md')) {
-      return `${imagePrefix}[${label}](/getting-started/overview/${suffix})`;
+      return `${imagePrefix}[${label}](${siteBase}/getting-started/overview/${suffix})`;
     }
-    // Shared images move into the site's public/ folder.
+    // Shared images move into the site's public/ folder. A picture opens its full-size file
+    // (graphs and fine detail stay readable on small screens) and loads lazily below the top.
     if (clean.startsWith('assets/')) {
-      return `${imagePrefix}[${label}](/docs/${clean}${suffix})`;
+      const url = `${siteBase}/${clean}${suffix}`;
+      if (!imagePrefix) return `[${label}](${url})`;
+      const size = imageSize(readAsset(clean) ?? new Uint8Array());
+      const dimensions = size ? ` width="${size.width}" height="${size.height}"` : '';
+      const loading = images++ ? ' loading="lazy"' : '';
+      return `<a class="docs-shot-zoom" href="${url}" title="Open the full-size picture"><img src="${url}" alt="${escapeAttribute(label)}"${dimensions}${loading} decoding="async"></a>`;
     }
     // Repository-internal destinations are not public documentation routes.
     // Keep their readable labels without linking to the frozen public repo.
@@ -92,17 +135,24 @@ function convert(markdown, { title }) {
 
 // A running `astro dev` (recorded in .astro/dev.json) imports generated modules
 // from this cache and restarts with an empty content collection when its
-// settings vanish: clear the cache only when no dev server of this site runs.
+// settings vanish: keep the cache only while an astro dev server of this very
+// site runs. A stale record whose PID now belongs to another process does not
+// count, and builds (--build) always start from a clean cache.
 function devServerRunning() {
-  try {
-    const { pid } = JSON.parse(fs.readFileSync(path.join(astroCacheDir, 'dev.json'), 'utf8'));
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return error?.code === 'EPERM';
+  let pid;
+  try { ({ pid } = JSON.parse(fs.readFileSync(path.join(astroCacheDir, 'dev.json'), 'utf8'))); } catch { return false; }
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  const siteDir = path.resolve(here, '..');
+  if (fs.existsSync('/proc')) {
+    try {
+      const commandLine = fs.readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0');
+      const cwd = fs.realpathSync(`/proc/${pid}/cwd`);
+      return commandLine.some((part) => /astro(\.mjs)?$/.test(part)) && commandLine.includes('dev') && cwd === fs.realpathSync(siteDir);
+    } catch { return false; }
   }
+  try { process.kill(pid, 0); return true; } catch (error) { return error?.code === 'EPERM'; }
 }
-if (!devServerRunning()) fs.rmSync(astroCacheDir, { recursive: true, force: true });
+if (forBuild || !devServerRunning()) fs.rmSync(astroCacheDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
 // Pages are updated in place: a running `astro dev` watches these files, and

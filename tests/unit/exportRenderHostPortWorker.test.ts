@@ -1103,7 +1103,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
-      .toMatchObject({ motionBlurAdjustments: [{ amount: 0.08, angle: 0.4, samples: 12 }] });
+      .toMatchObject({ motionBlurAdjustments: [{ amount: 0.08, angle: 0.4 }] });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
@@ -1126,7 +1126,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
-      .toMatchObject({ radialBlurAdjustments: [{ amount: 0.75, centerX: 0.45, centerY: 0.55, samples: 20 }] });
+      .toMatchObject({ radialBlurAdjustments: [{ amount: 0.75, centerX: 0.45, centerY: 0.55, mode: 'zoom' }] });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
@@ -1142,7 +1142,7 @@ describe('worker-first export render host port', () => {
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
-      .toMatchObject({ zoomBlurAdjustments: [{ amount: 0.4, centerX: 0.5, centerY: 0.45, samples: 18 }] });
+      .toMatchObject({ zoomBlurAdjustments: [{ amount: 0.4, centerX: 0.5, centerY: 0.45 }] });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();
@@ -1253,7 +1253,8 @@ describe('worker-first export render host port', () => {
     exportRenderHostPort.setResolution(1920, 1080);
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
-    expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].filter).toBe('blur(8px)');
+    // Radius 8 in 1080p pixels on a 64x36 export: sigma 8 / 2 * 36 / 1080 output pixels.
+    expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].filter).toBe('blur(0.133px)');
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();

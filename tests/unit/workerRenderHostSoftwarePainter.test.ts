@@ -4,6 +4,7 @@ import type { WorkerRenderSoftwareFrame } from '../../src/services/render/worker
 import { drawWorkerSoftwareLayer } from '../../src/services/render/workerRenderHostSoftwarePainter';
 import { createWorkerSoftwareFeedbackStore } from '../../src/services/render/workerSoftwareFeedbackEffects';
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from '../../src/services/render/workerSoftwareGlow';
+import { directionalBlurPlan, mirrorRepeat, transformDirectionalPixel, type DirectionalBlurType } from '../../src/effects/blur/blurSampling';
 
 function baseContext() {
   return {
@@ -767,125 +768,47 @@ describe('worker software painter', () => {
     expect(second ? Array.from(second) : null).toEqual([98, 49, 0, 250]);
   });
 
-  it('applies motion blur as a weighted worker source-resampling pass', () => {
-    const inputPixels = new Uint8ClampedArray([
-      10, 0, 0, 255,
-      50, 0, 0, 255,
-      90, 0, 0, 255,
-    ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        motionBlurAdjustments: [{ amount: 0.5, angle: 0, samples: 4 }],
-      },
-    );
-
-    const sampleAt = (uvX: number): number => {
-      const wrapped = uvX - Math.floor(uvX * 0.5) * 2;
-      const mirrored = wrapped > 1 ? 2 - wrapped : wrapped;
-      const index = Math.max(0, Math.min(2, Math.round(mirrored * 2)));
-      return [10, 50, 90][index] ?? 0;
-    };
-    const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      let total = 0;
-      let weightTotal = 0;
-      for (let sampleIndex = 0; sampleIndex < 4; sampleIndex += 1) {
-        const t = (sampleIndex / 3 - 0.5) * 2;
-        const weight = Math.exp(-t * t * 2);
-        total += sampleAt(uvX + t * 0.5) * weight;
-        weightTotal += weight;
+  // Directional blurs follow the shared contract (effects/blur/blurSampling.ts) in one stage of
+  // evenly spaced, taper-weighted taps along each pixel's range, averaged with premultiplied alpha.
+  const contractRow = (type: DirectionalBlurType, params: Record<string, unknown>, row: Array<[number, number]>) => {
+    const width = row.length, plan = directionalBlurPlan(type, params, width, 1);
+    const nearest = (u: number) => row[Math.max(0, Math.min(width - 1, Math.round(u * (width - 1))))];
+    return row.flatMap((_pixel, x) => {
+      const pixel: [number, number] = [x + 0.5, 0.5], { start, length } = plan.range(pixel);
+      const count = Math.max(2, Math.min(64, Math.ceil(Math.abs(length) * plan.speed(pixel)) + 1));
+      let red = 0, alpha = 0, total = 0;
+      for (let index = 0; index < count; index++) {
+        const t = (index + 0.5) / count, weight = plan.taper(t), [px] = transformDirectionalPixel(plan, pixel, start + length * t);
+        const u = type === 'motion-blur' ? mirrorRepeat(px / width) : Math.max(0, Math.min(1, px / width));
+        const [value, opacity] = nearest(u);
+        red += value * opacity * weight; alpha += opacity * weight; total += weight;
       }
-      return Math.round(total / weightTotal);
-    };
+      return [Math.round(red / Math.max(alpha, 1e-6)), 0, 0, Math.round(alpha / total)];
+    });
+  };
+  const row: Array<[number, number]> = [[10, 255], [50, 255], [90, 255]];
+  const rowPixels = new Uint8ClampedArray(row.flatMap(([red, alpha]) => [red, 0, 0, alpha]));
 
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      expectedAtX(0), 0, 0, 255,
-      expectedAtX(1), 0, 0, 255,
-      expectedAtX(2), 0, 0, 255,
-    ]);
+  it('applies motion blur along the contract streak as a worker source-resampling pass', () => {
+    const outputPixels = drawLayerWithPixels(rowPixels, 3, 1, { brightness: 0, motionBlurAdjustments: [{ amount: 0.5, angle: 0 }] });
+    expect(outputPixels ? Array.from(outputPixels) : null).toEqual(contractRow('motion-blur', { amount: 0.5, angle: 0 }, row));
   });
 
-  it('applies radial blur as a weighted worker source-resampling pass', () => {
-    const inputPixels = new Uint8ClampedArray([
-      10, 0, 0, 255,
-      50, 0, 0, 255,
-      90, 0, 0, 255,
-    ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        radialBlurAdjustments: [{ amount: 2, centerX: 0, centerY: 0.5, samples: 4 }],
-      },
-    );
-
-    const sampleAt = (uvX: number): number => {
-      const index = Math.max(0, Math.min(2, Math.round(Math.max(0, Math.min(1, uvX)) * 2)));
-      return [10, 50, 90][index] ?? 0;
-    };
-    const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      const distance = Math.abs(uvX);
-      let total = 0;
-      let weightTotal = 0;
-      for (let sampleIndex = 0; sampleIndex < 4; sampleIndex += 1) {
-        const t = sampleIndex / 3;
-        const scale = 1 - 2 * 0.2 * t * distance;
-        const weight = 1 - t * 0.5;
-        total += sampleAt(uvX * scale) * weight;
-        weightTotal += weight;
-      }
-      return Math.round(total / weightTotal);
-    };
-
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      expectedAtX(0), 0, 0, 255,
-      expectedAtX(1), 0, 0, 255,
-      expectedAtX(2), 0, 0, 255,
-    ]);
+  it('applies radial zoom and spin blur as worker source-resampling passes', () => {
+    const zoom = drawLayerWithPixels(rowPixels, 3, 1, { brightness: 0, radialBlurAdjustments: [{ amount: 2, centerX: 0, centerY: 0.5, mode: 'zoom' }] });
+    expect(zoom ? Array.from(zoom) : null).toEqual(contractRow('radial-blur', { amount: 2, centerX: 0, centerY: 0.5 }, row));
+    const spin = drawLayerWithPixels(rowPixels, 3, 1, { brightness: 0, radialBlurAdjustments: [{ amount: 2, centerX: 0.5, centerY: 0.5, mode: 'spin' }] });
+    // The centre pixel sits on the rotation centre and keeps its colour.
+    expect(spin ? Array.from(spin).slice(4, 8) : null).toEqual([50, 0, 0, 255]);
   });
 
-  it('applies zoom blur as a worker source-resampling pass', () => {
-    const inputPixels = new Uint8ClampedArray([
-      10, 0, 0, 255,
-      50, 0, 0, 255,
-      90, 0, 0, 255,
-    ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        zoomBlurAdjustments: [{ amount: 1, centerX: 0, centerY: 0.5, samples: 4 }],
-      },
-    );
-
-    const sampleAt = (uvX: number): number => {
-      const index = Math.max(0, Math.min(2, Math.round(Math.max(0, Math.min(1, uvX)) * 2)));
-      return [10, 50, 90][index] ?? 0;
-    };
-    const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      let total = 0;
-      for (let sampleIndex = 0; sampleIndex < 4; sampleIndex += 1) {
-        const t = sampleIndex / 3;
-        total += sampleAt(uvX * (1 + 0.5 * t));
-      }
-      return Math.round(total / 4);
-    };
-
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      expectedAtX(0), 0, 0, 255,
-      expectedAtX(1), 0, 0, 255,
-      expectedAtX(2), 0, 0, 255,
-    ]);
+  it('applies zoom blur as a worker source-resampling pass and keeps colour at alpha edges', () => {
+    const outputPixels = drawLayerWithPixels(rowPixels, 3, 1, { brightness: 0, zoomBlurAdjustments: [{ amount: 1, centerX: 0, centerY: 0.5 }] });
+    expect(outputPixels ? Array.from(outputPixels) : null).toEqual(contractRow('zoom-blur', { amount: 1, centerX: 0, centerY: 0.5 }, row));
+    const edge = new Uint8ClampedArray([200, 0, 0, 255, 200, 0, 0, 255, 0, 0, 0, 0]);
+    const blurred = drawLayerWithPixels(edge, 3, 1, { brightness: 0, motionBlurAdjustments: [{ amount: 0.5, angle: 0 }] });
+    expect(blurred?.[8]).toBe(200);
+    expect(blurred?.[11]).toBeGreaterThan(0);
   });
 
   it('applies twirl distortion as a worker source-resampling pass', () => {

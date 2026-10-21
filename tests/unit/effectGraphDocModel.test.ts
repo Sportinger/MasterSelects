@@ -10,9 +10,11 @@ const labels = (search: string) => doc(search).graph.nodes.map(node => node.labe
 
 describe('effect graph doc shots: graph selection', () => {
   it('reads the query with stages as the default level and rejects unknown levels and row counts', () => {
-    expect(parseEffectGraphDocQuery('?test=effect-graph&effect=box-blur')).toEqual({ effectType: 'box-blur', level: 'stages', open: [], focus: undefined, rows: 'auto', chain: false });
-    expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&chain=1'))
-      .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, chain: true });
+    expect(parseEffectGraphDocQuery('?test=effect-graph&effect=box-blur')).toEqual({ effectType: 'box-blur', level: 'stages', open: [], focus: undefined,
+      rows: 'auto', breaks: [], plumbing: 'show', chain: false });
+    expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&break=sample,reduce&plumbing=hide&chain=1'))
+      .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, breaks: ['sample', 'reduce'], plumbing: 'hide', chain: true });
+    expect(() => parseEffectGraphDocQuery('?plumbing=dim')).toThrow(/plumbing/);
     expect(() => parseEffectGraphDocQuery('?level=deep')).toThrow(/Unknown level/);
     expect(() => parseEffectGraphDocQuery('?rows=0')).toThrow(/rows/);
     expect(slugLabel('Coordinates & Resources')).toBe('coordinates-and-resources');
@@ -23,42 +25,85 @@ describe('effect graph doc shots: graph selection', () => {
     expect(title).toBe('Gaussian Blur');
     expect(graph.nodes.every(node => graph.groups!.find(group => group.id === EFFECT_GRAPH_DOC_GROUP)!.nodeIds.includes(node.id))).toBe(true);
     expect(graph.nodes.some(node => node.binding?.kind === 'clip-source')).toBe(false);
-    expect(graph.nodes.map(node => node.label)).toEqual(expect.arrayContaining(['Input Frame', 'Radius & Tap Count', 'Horizontal Pass (premultiplied)',
+    expect(graph.nodes.map(node => node.label)).toEqual(expect.arrayContaining(['Input Frame', 'Radius & Tap Count', 'Horizontal Pass',
       'Vertical Pass', 'Straight Alpha Output', 'Output', 'Radius']));
     expect(graph.nodes.map(node => node.label)).not.toContain('Value');
     expect(groups.every(group => group.collapsed)).toBe(true);
     // Nested compositions are listed too, so they can be opened by path.
-    expect(groups.map(group => group.path)).toEqual(expect.arrayContaining(['horizontal-pass-premultiplied/pair-tap-offsets', 'vertical-pass/merge-pair-weights']));
+    expect(groups.map(group => group.path)).toEqual(expect.arrayContaining(['horizontal-pass/pair-tap-offsets', 'vertical-pass/merge-pair-weights']));
     expect(graph.edges.every(edge => graph.nodes.some(node => node.id === edge.fromNodeId) && graph.nodes.some(node => node.id === edge.toNodeId))).toBe(true);
     // Docs pictures show structure: no empty preview panes.
     expect(doc('?effect=gaussian-blur').clip.nodeGraph?.previews?.enabled).toBe(false);
   });
 
   it('opens a nested folder together with the folders around it, and everything at level all', () => {
-    const states = effectGraphDocFoldState(parseEffectGraphDocQuery('?effect=gaussian-blur&open=horizontal-pass-premultiplied/pair-tap-offsets'));
+    const states = effectGraphDocFoldState(parseEffectGraphDocQuery('?effect=gaussian-blur&open=horizontal-pass/pair-tap-offsets'));
     const open = Object.entries(states).filter(([, state]) => !state.collapsed).map(([id]) => id);
     expect(open).toEqual(expect.arrayContaining([EFFECT_GRAPH_DOC_GROUP, `${EFFECT_GRAPH_DOC_GROUP}/organized-gaussian-blur-horizontal`]));
     expect(open.some(id => id.includes('vertical'))).toBe(false);
-    expect(labels('?effect=gaussian-blur&open=horizontal-pass-premultiplied/pair-tap-offsets')).toContain('Gaussian Falloff');
+    expect(labels('?effect=gaussian-blur&open=horizontal-pass/pair-tap-offsets')).toContain('Gaussian Falloff');
     expect(doc('?effect=motion-blur&level=all').groups.every(group => !group.collapsed)).toBe(true);
     expect(labels('?effect=motion-blur&level=all').length).toBeGreaterThan(60);
   });
 
   it('crops to a focused folder, keeps its flow from inside the effect and wraps it into rows', () => {
-    const focused = doc('?effect=box-blur&focus=horizontal-pass-premultiplied');
-    expect(focused.title).toBe('Box Blur – Horizontal Pass (premultiplied)');
+    const focused = doc('?effect=box-blur&focus=horizontal-pass');
+    expect(focused.title).toBe('Box Blur – Horizontal Pass');
     const names = focused.graph.nodes.map(node => node.label);
     expect(names).toEqual(expect.arrayContaining(['Pair Tap Offsets', 'Merge Pair Weights', 'Sample Image', 'Sequence Reduce', 'Normalize by Weight', 'Clamp']));
     expect(names).not.toContain('Gaussian Falloff');
     expect(names).not.toContain('Vertical Pass');
     const rowsOf = (search: string) => new Set(doc(search).graph.nodes.map(node => Math.round(node.layout.y / 400))).size;
-    expect(rowsOf('?effect=box-blur&focus=horizontal-pass-premultiplied&rows=1')).toBeLessThan(rowsOf('?effect=box-blur&focus=horizontal-pass-premultiplied&rows=3'));
+    expect(rowsOf('?effect=box-blur&focus=horizontal-pass&rows=1')).toBeLessThan(rowsOf('?effect=box-blur&focus=horizontal-pass&rows=3'));
     // Within a row, the left-to-right order of the flow is kept.
-    const single = doc('?effect=box-blur&focus=horizontal-pass-premultiplied&rows=1').graph.nodes;
+    const single = doc('?effect=box-blur&focus=horizontal-pass&rows=1').graph.nodes;
     const x = (nodes: typeof single, label: string) => nodes.find(node => node.label === label)!.layout.x;
     expect(x(single, 'Pair Tap Offsets')).toBeLessThan(x(single, 'Merge Pair Weights'));
     expect(x(single, 'Sample Image')).toBeLessThan(x(single, 'Sequence Reduce'));
     expect(Math.max(...single.map(node => node.layout.y + getNodeHeight(node))) - Math.min(...single.map(node => node.layout.y))).toBeLessThan(1200);
+  });
+
+  it('names folder ports by what they carry, not by the node type that computes it', () => {
+    const { graph } = doc('?effect=gaussian-blur');
+    const size = graph.nodes.find(node => node.label === 'Radius & Tap Count')!, pass = graph.nodes.find(node => node.label === 'Vertical Pass')!;
+    expect(size.outputs.map(port => port.label)).toEqual(expect.arrayContaining(['Sigma', 'Pairs', 'Stride', 'Tap Count']));
+    expect(pass.inputs.map(port => port.label)).toEqual(expect.arrayContaining(['Sigma', 'Stride', 'Horizontal Pass']));
+    expect([...size.outputs, ...pass.inputs].some(port => /^(Maximum|Minimum|Add): Value$/.test(port.label))).toBe(false);
+    const motion = doc('?effect=radial-blur').graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
+    expect(motion).toEqual(expect.arrayContaining(['Is Spin', 'Box Length', 'Range Length', 'Short Boxes']));
+    expect(motion.some(label => /^Switch: Value$/.test(label))).toBe(false);
+  });
+
+  it('hides the plumbing folders on request, so the stages read as one path', () => {
+    const shown = doc('?effect=motion-blur'), hidden = doc('?effect=motion-blur&plumbing=hide');
+    expect(shown.graph.nodes.map(node => node.label)).toEqual(expect.arrayContaining(['Constants', 'Coordinates & Resources']));
+    const names = hidden.graph.nodes.map(node => node.label);
+    expect(names).not.toContain('Constants'); expect(names).not.toContain('Coordinates & Resources');
+    expect(names).toEqual(expect.arrayContaining(['Blur Range', 'Stage A: Short Box (cached)', 'Stage B: Coarse Taps', 'Output']));
+    expect(hidden.graph.edges.length).toBeLessThan(shown.graph.edges.length / 2);
+    expect(hidden.graph.edges.every(edge => hidden.graph.nodes.some(node => node.id === edge.fromNodeId))).toBe(true);
+    // Folder inputs that only constants fed are left out with them.
+    const stageB = (graph: typeof shown.graph) => graph.nodes.find(node => node.label === 'Stage B: Coarse Taps')!.inputs.length;
+    expect(stageB(hidden.graph)).toBeLessThan(stageB(shown.graph));
+  });
+
+  it('gives a focused folder named stubs for values from outside and keeps each stub beside its consumer', () => {
+    const { graph } = doc('?effect=gaussian-blur&focus=horizontal-pass&rows=1');
+    const stubs = graph.nodes.filter(node => node.id.startsWith('doc-stub:'));
+    expect(stubs.map(node => node.label)).toEqual(expect.arrayContaining(['Sigma', 'Pairs', 'Premultiplied Source']));
+    // Constants are literal numbers shown on their own cards: no stubs for them.
+    expect(stubs.some(node => /^(zero|one|two|half)$/.test(node.label))).toBe(false);
+    for (const stub of stubs) {
+      const targets = graph.edges.filter(edge => edge.fromNodeId === stub.id).map(edge => graph.nodes.find(node => node.id === edge.toNodeId)!);
+      expect(targets.length).toBeGreaterThan(0);
+      expect(Math.min(...targets.map(node => node.layout.x))).toBeGreaterThan(stub.layout.x);
+    }
+    // A row break before Sample Image keeps its source stub on the same row.
+    const broken = doc('?effect=gaussian-blur&focus=horizontal-pass&break=horizontal-sample').graph;
+    const at = (id: string) => broken.nodes.find(node => node.id.endsWith(`/${id}`))!.layout;
+    const source = broken.nodes.find(node => node.label === 'Premultiplied Source')!;
+    expect(Math.abs(source.layout.y - at('horizontal-sample').y)).toBeLessThan(200);
+    expect(at('horizontal-sample').y).toBeGreaterThan(at('horizontal-offset').y);
   });
 
   it('names the available folders when a token matches none, and rejects effects without a graph', () => {

@@ -19,6 +19,7 @@ export const radialBlur: EffectDefinition = {
     mode: {
       type: 'select',
       label: 'Type',
+      graphOnly: true,
       default: 'zoom',
       options: [
         { value: 'zoom', label: 'Zoom' },

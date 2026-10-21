@@ -78,6 +78,7 @@ export const NodeGraphPortMetadataFields = {
   "required": { class: 'content', owner: 'timeline' },
   "repeated": { class: 'content', owner: 'timeline' },
   "generateAction": { class: 'content', owner: 'timeline' },
+  "carriedLabel": { class: 'derived', owner: 'timeline' },
 } as const satisfies FieldOwnershipMap<NodeGraphPortMetadata>;
 
 export const NodeGroupSizeFields = {

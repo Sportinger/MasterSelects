@@ -1,6 +1,6 @@
 import { useState, type DragEvent } from 'react';
 import { IconEye, IconEyeOff, IconMask, IconSparkles } from '@tabler/icons-react';
-import { getEffect } from '../../../effects';
+import { getEffectDisplayName } from '../../../effects';
 import type { ClipMask } from '../../../types/masks';
 import type { Effect } from '../../../types/effects';
 
@@ -96,7 +96,7 @@ export function LayerEffectRows({ effects, onOpen, onToggleEnabled, onReorder }:
             {effect.enabled ? <IconEye aria-hidden="true" size={14} /> : <IconEyeOff aria-hidden="true" size={14} />}
           </button>
           <IconSparkles aria-hidden="true" className="layers-child-kind" size={14} />
-          <span className="layers-child-name" title={effect.name}>{getEffect(effect.type)?.name ?? effect.name}</span>
+          <span className="layers-child-name" title={effect.name}>{getEffectDisplayName(effect)}</span>
         </div>
       ))}
     </div>

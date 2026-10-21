@@ -1,10 +1,12 @@
 // Motion / Zoom / Radial Blur: WGSL reference of the editable two-stage operator graph
 // (services/operators/directionalBlurEffectGraphs.ts), following effects/blur/blurSampling.ts.
-// Rendering is owned by the graph. `directionalBlurFine` (stage A, into an rgba16float cache)
-// and `directionalBlurCoarse` (stage B, reading that cache on binding 1) are its two passes;
-// the GPU check compares them with the graph. `motionBlurFragment`, `zoomBlurFragment` and
-// `radialBlurFragment` are the registered single-pass entries for the generic effect layout:
-// they evaluate stage A at every coarse tap directly instead of filtering a cache.
+// Rendering is owned by the graph. `directionalBlurPremultiply` (premultiplied source cache),
+// `directionalBlurFine` (stage A, reading that cache) and `directionalBlurCoarse` (stage B,
+// reading the stage A cache) are its three passes, each reading its input on binding 1; the
+// GPU check compares them with the graph. `motionBlurFragment`, `zoomBlurFragment` and
+// `radialBlurFragment` are the registered single-pass entries for the generic effect layout
+// (pipeline prewarm only): they evaluate stage A at every coarse tap directly and premultiply
+// after filtering the straight source, an approximation at alpha edges.
 
 struct DirectionalBlurParams {
   amount: f32,
@@ -28,25 +30,26 @@ fn isRadial() -> bool { return params.kind > 1.5; }
 fn isSpin() -> bool { return isRadial() && params.mode > 0.5; }
 
 // Group range for the pixel at `uv`: start, signed length; longest range; longest in pixels.
+// Negative amounts reverse the range; counts and the box length use its magnitude (z, w).
 fn directionalRange(uv: vec2f) -> vec4f {
   if (isMotion()) {
-    let halfLength = params.amount * params.width;
-    return vec4f(-halfLength, halfLength * 2.0, halfLength * 2.0, halfLength * 2.0);
+    let halfLength = params.amount * length(vec2f(cos(params.angle), sin(params.angle)) * resolution());
+    return vec4f(-halfLength, halfLength * 2.0, abs(halfLength * 2.0), abs(halfLength * 2.0));
   }
   let center = blurCenter();
   let farthest = length(vec2f(max(center.x, params.width - center.x), max(center.y, params.height - center.y)));
   if (!isRadial()) {
-    let span = log(1.0 + params.amount * 0.5);
-    return vec4f(0.0, span, span, span * farthest);
+    let span = log(max(1.0 + params.amount * 0.5, 0.05));
+    return vec4f(0.0, span, abs(span), abs(span) * farthest);
   }
   let arc = params.amount * 0.3490658503988659;
   let shrinkRate = params.amount * 0.2;
   let centerUv = vec2f(params.centerX, params.centerY);
   let zoomLength = log(max(1.0 - shrinkRate * length(uv - centerUv), 0.05));
   let farUv = length(vec2f(max(centerUv.x, 1.0 - centerUv.x), max(centerUv.y, 1.0 - centerUv.y)));
-  let zoomLongest = -log(max(1.0 - shrinkRate * farUv, 0.05));
+  let zoomLongest = log(max(1.0 - shrinkRate * farUv, 0.05));
   let spin = isSpin();
-  let longest = select(zoomLongest, arc, spin);
+  let longest = abs(select(zoomLongest, arc, spin));
   return vec4f(select(0.0, -arc * 0.5, spin), select(zoomLength, arc, spin), longest, longest * farthest);
 }
 
@@ -72,8 +75,9 @@ fn directionalTransform(base: vec2f, u: f32) -> vec2f {
   return (center + offset) / resolution();
 }
 
-// Stage A at `uv`: premultiplied average over the box u in [-step/2, step/2].
-fn directionalFine(uv: vec2f, step: f32) -> vec4f {
+// Stage A at `uv`: average over the box u in [-step/2, step/2] of the premultiplied input
+// (`premultiply`: of the straight input, premultiplied after filtering).
+fn directionalFine(uv: vec2f, step: f32, premultiply: bool) -> vec4f {
   let pixel = uv * resolution();
   let speed = select(length(pixel - blurCenter()), 1.0, isMotion());
   let count = i32(clamp(ceil(step * speed), 1.0, 256.0));
@@ -81,7 +85,7 @@ fn directionalFine(uv: vec2f, step: f32) -> vec4f {
   for (var i = 0; i < count; i++) {
     let u = ((f32(i) + 0.5) / f32(count) - 0.5) * step;
     let color = textureSampleLevel(inputTex, texSampler, directionalTransform(pixel, u), 0.0);
-    sum += vec4f(color.rgb * color.a, color.a);
+    sum += select(color, vec4f(color.rgb * color.a, color.a), premultiply);
   }
   return sum / vec4f(f32(count));
 }
@@ -108,8 +112,14 @@ fn directionalCoarseTap(uv: vec2f, range: vec4f, step: f32, k: i32) -> CoarseTap
 fn straightColor(color: vec4f) -> vec4f { return vec4f(color.rgb / max(color.a, 0.000001), color.a); }
 
 @fragment
+fn directionalBlurPremultiply(input: VertexOutput) -> @location(0) vec4f {
+  let color = textureSampleLevel(inputTex, texSampler, input.uv, 0.0);
+  return vec4f(color.rgb * color.a, color.a);
+}
+
+@fragment
 fn directionalBlurFine(input: VertexOutput) -> @location(0) vec4f {
-  return directionalFine(input.uv, directionalStep(directionalRange(input.uv)));
+  return directionalFine(input.uv, directionalStep(directionalRange(input.uv)), false);
 }
 
 @fragment
@@ -133,7 +143,7 @@ fn directionalBlurSinglePass(uv: vec2f) -> vec4f {
   var weightSum = 0.0;
   for (var k = 0; k < directionalCoarseCount(range, step); k++) {
     let tap = directionalCoarseTap(uv, range, step, k);
-    sum += directionalFine(clamp(tap.uv, vec2f(0.0), vec2f(1.0)), step) * tap.weight;
+    sum += directionalFine(clamp(tap.uv, vec2f(0.0), vec2f(1.0)), step, true) * tap.weight;
     weightSum += tap.weight;
   }
   return straightColor(sum / vec4f(weightSum));

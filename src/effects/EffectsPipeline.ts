@@ -37,6 +37,7 @@ import { effectOperatorParams } from '../services/operators/effectGraphOwner';
 import { prepareImageEffect } from '../services/operators/imageEffectRuntimePlan';
 import { compileComputeImageGraph } from '../services/operators/computeImageGraph';
 import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
+import { isNeutralBlurEffect } from '../services/operators/blurIdentity';
 import { TemporalSmoothHistory } from './TemporalSmoothHistory';
 import {
   transitionFrameHistory,
@@ -303,9 +304,7 @@ export class EffectsPipeline {
     return currentOutput === pingView ? pongView : pingView;
   }
 
-  /**
-   * Apply effects to a texture using ping-pong rendering
-   */
+  /** Apply effects to a texture using ping-pong rendering. */
   applyEffects(
     commandEncoder: GPUCommandEncoder,
     effects: EffectInstance[],
@@ -331,7 +330,7 @@ export class EffectsPipeline {
       frameRate: typeof requestedFrameRate === 'number' && Number.isFinite(requestedFrameRate) && requestedFrameRate > 0 ? requestedFrameRate : 30,
       scopeId: renderClock?.scopeId || 'legacy',
     };
-    const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-'));
+    const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-') && !isNeutralBlurEffect(e, outputWidth, outputHeight));
     this.temporalResources.retainTimeStacks(frameHistory?.scopeId ?? clock.scopeId, new Set(enabledEffects.filter(effect => effect.type === 'time-stack').map(effect => effect.id)));
     if (enabledEffects.length === 0) {
       return { finalView: inputView, swapped: false };
@@ -449,7 +448,8 @@ export class EffectsPipeline {
             height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm',
             instanceId: JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id]), batch: imagePassBatch,
             externalResources: imageExternalResources });
-          if (imagePassBatch) this.temporalSmoothing.commit(commandEncoder, imagePlan, effect.id, frameHistory?.scopeId, this.imageGraphPassRuntime, imagePassBatch);
+          if (imagePassBatch) { this.temporalSmoothing.commit(commandEncoder, imagePlan, effect.id, frameHistory?.scopeId, this.imageGraphPassRuntime, imagePassBatch);
+            this.imageGraphPassRuntime.releaseBatch(imagePassBatch); } // Its pass caches serve the next effect.
           effectInput = effectOutput;
           if (effect.type === 'slit-scan' && preparedImage && imageExternalResources) {
             effectInput = this.slitScanOutput.process({ effect, graph: preparedImage.graph, device: this.device, encoder: commandEncoder,

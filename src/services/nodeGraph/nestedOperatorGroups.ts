@@ -1,5 +1,20 @@
 import type { NodeGraph, NodeGraphNode, NodeGraphPort, ClipNodeGraph } from '../../types/nodeGraph';
 
+/**
+ * The label of a folder port fed by `node`'s output: what the value is (a value node's name, or
+ * the output's own label such as "Sigma" or "UV"), else "<node>: <port>" (several outputs, or
+ * an output only called "Value").
+ */
+function carriedLabel(node: NodeGraphNode, port: NodeGraphPort): string {
+  if (port.metadata?.carriedLabel) return port.label;
+  if (node.outputs.length === 1 || port.id === 'value') {
+    const name = node.params?.valueLabel;
+    if (typeof name === 'string' && name) return name;
+    if (port.label && port.label !== 'Value') return port.label;
+  }
+  return `${node.params?.valueLabel ?? node.label}: ${port.label}`;
+}
+
 /** Nested groups expose the actual typed endpoints; folding never changes executable edges. */
 export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expandAllGroups = false): NodeGraph {
   const groups = graph.groups?.map(g => ({ ...g, nodeIds: [...g.nodeIds] })) ?? [];
@@ -55,7 +70,7 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expa
       const declared = (port.direction === 'input' ? g.composition?.inputs : g.composition?.outputs)?.find(p =>
         p.endpoints.some(item => item.nodeId === endpoint.nodeId && item.portId === endpoint.portId));
       if (declared) {
-        if (!list.some(p => p.id === declared.id)) list.push({ ...port, id: declared.id, label: declared.label,
+        if (!list.some(p => p.id === declared.id)) list.push({ ...port, id: declared.id, label: port.metadata?.carriedLabel ? port.label : declared.label,
           metadata: { ...port.metadata, groupEndpoint: declared.endpoints[0], groupEndpoints: declared.endpoints } });
         return declared.id;
       }
@@ -67,7 +82,7 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expa
           metadata: { ...port.metadata, groupEndpoint: bundle.endpoints[0], groupEndpoints: bundle.endpoints } });
         return bundle.id;
       }
-      if (!list.some(p => p.id === id)) list.push({ ...port, id, label: `${node.params?.valueLabel ?? node.label}: ${port.label}`,
+      if (!list.some(p => p.id === id)) list.push({ ...port, id, label: port.direction === 'output' ? carriedLabel(node, port) : `${node.params?.valueLabel ?? node.label}: ${port.label}`,
         metadata: { ...port.metadata, groupEndpoint: port.metadata?.groupEndpoint ?? { nodeId: node.id, portId: port.id } } });
       return id;
     };

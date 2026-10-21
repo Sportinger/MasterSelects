@@ -52,7 +52,7 @@ function reference(type: DirectionalBlurType, params: Record<string, unknown>, u
 }
 
 describe('directional blur image graphs', () => {
-  it.each(TYPES)('%s is a valid two-pass graph with stable owner bindings and runtime parameters', type => {
+  it.each(TYPES)('%s is a valid three-pass graph (premultiplied source, stage A, stage B) with stable owner bindings and runtime parameters', type => {
     const graph = createDefaultDirectionalBlurGraph(type), bindings = graph.nodes.flatMap(node => Object.values(node.bindings));
     expect(validateEffectGraph(graph)).toEqual([]); expect(graph.nodes.length).toBeLessThanOrEqual(140);
     expect(bindings.toSorted()).toEqual([...expectedBindings[type]].toSorted());
@@ -61,7 +61,7 @@ describe('directional blur image graphs', () => {
     const defaults = effectOperatorParams({ type, params: {} });
     expect(defaults).toMatchObject(Object.fromEntries(expectedBindings[type].map(id => [id, getEffect(type)!.params[id].default])));
     const plan = compile(type, {});
-    expect(plan.passes).toHaveLength(2);
+    expect(plan.passes).toHaveLength(3);
     expect(compile(type, { amount: 0.123 }).key).toBe(plan.key);
   });
 
@@ -91,11 +91,11 @@ describe('directional blur image graphs', () => {
     expect(taps.length + directionalFineTaps(plan, [100, 100])).toBeLessThan(160);
   });
 
-  it('measures motion on screen: the direction is an exact angle in pixels, the length a share of the width', () => {
+  it('measures motion on screen: the direction is an exact angle in pixels, the reach the legacy Length * |(cos W, sin H)|', () => {
     const plan = directionalBlurPlan('motion-blur', { amount: 0.1, angle: Math.PI / 4 }, 1920, 1080);
     const end = transformDirectionalPixel(plan, [0, 0], plan.range([0, 0]).start + plan.range([0, 0]).length);
     expect(end[1] / end[0]).toBeCloseTo(1, 9);
-    expect(Math.hypot(...end)).toBeCloseTo(0.1 * 1920, 6);
+    expect(Math.hypot(...end)).toBeCloseTo(0.1 * Math.hypot(1920 * Math.SQRT1_2, 1080 * Math.SQRT1_2), 6);
   });
 
   it('ignores the retired samples parameter: same shader and same pixels', () => {

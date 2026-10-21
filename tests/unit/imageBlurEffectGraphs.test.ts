@@ -50,14 +50,16 @@ describe('blur effect operator graph ownership', () => {
     expect(effectOperatorParams({ type, params: {} })).toMatchObject(Object.fromEntries(bindings.map(id => [id, getEffect(type)!.params[id].default])));
   });
 
-  it.each(['box-blur', 'gaussian-blur'] as const)('%s is a premultiplied horizontal pass cached before a vertical pass', type => {
+  it.each(['box-blur', 'gaussian-blur'] as const)('%s premultiplies the source into a cache before the horizontal and vertical passes', type => {
     const graph = type === 'box-blur' ? createDefaultBoxBlurGraph() : createDefaultGaussianBlurGraph();
+    expect(connection(graph, 'source-premultiplied', 'source-cache', 'image')).toBe(true);
+    expect(connection(graph, 'source-cache', 'horizontal-sample', 'image')).toBe(true);
+    expect(connection(graph, 'horizontal-sample', 'horizontal-reduce', 'sample')).toBe(true);
     expect(connection(graph, 'horizontal-image', 'horizontal-cache', 'image')).toBe(true);
     expect(connection(graph, 'horizontal-cache', 'vertical-sample', 'image')).toBe(true);
-    expect(connection(graph, 'horizontal-premultiplied', 'horizontal-reduce', 'sample')).toBe(true);
     expect(connection(graph, 'short-side', 'pixel-scale', 'a')).toBe(true);
     const plan = compileImageOperatorGraph(graph, effectOperatorParams({ type, params: {} }), effectOperatorCompileContext({ type }));
-    expect(plan.passes).toHaveLength(2);
+    expect(plan.passes).toHaveLength(3);
     // Radius stays a runtime value: animating it never recompiles the shader.
     expect(compileImageOperatorGraph(graph, effectOperatorParams({ type, params: { radius: 31.7 } })).key).toBe(plan.key);
   });

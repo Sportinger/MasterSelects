@@ -1,5 +1,6 @@
 import type { WorkerRenderSoftwareFrame, WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import { projectImageRadius, rotateImageCoordinate, unprojectImageRadius } from '../operators/imageOpticsSemantics';
+import { directionalBlurPlan, transformDirectionalPixel, type DirectionalBlurPlan, type DirectionalBlurType } from '../../effects/blur/blurSampling';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -70,149 +71,49 @@ function applyKaleidoscopeAdjustment(
   );
 }
 
-function applyMotionBlurAdjustment(
+type DirectionalAdjustment = { readonly amount: number; readonly angle?: number; readonly centerX?: number;
+  readonly centerY?: number; readonly mode?: 'zoom' | 'spin' };
+const SOFTWARE_DIRECTIONAL_MAX_TAPS = 64;
+const directionalPlans = new WeakMap<DirectionalAdjustment, { width: number; height: number; plan: DirectionalBlurPlan }>();
+
+/**
+ * Motion, Radial and Zoom Blur on the CPU: the shared sampling contract (blurSampling.ts) with
+ * one stage of evenly spaced taps along each pixel's own range, up to 64 taps (the GPU graph
+ * uses two stages and stays continuous beyond 64 px of streak). Alpha is premultiplied.
+ */
+function applyDirectionalBlurAdjustment(
+  type: DirectionalBlurType,
   sourceData: Uint8ClampedArray,
   width: number,
   height: number,
   uvX: number,
   uvY: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['motionBlurAdjustments']
-  >[number],
+  adjustment: DirectionalAdjustment,
 ): readonly [number, number, number, number] {
-  const amount = Math.max(0, finiteNumber(adjustment.amount, 0.05));
-  if (amount < 0.001) return sampleRgba(sourceData, width, height, uvX, uvY);
-
-  const samples = Math.max(4, Math.min(128, Math.round(finiteNumber(adjustment.samples, 24))));
-  const angle = finiteNumber(adjustment.angle, 0);
-  const directionX = Math.cos(angle);
-  const directionY = Math.sin(angle);
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let alpha = 0;
+  let cached = directionalPlans.get(adjustment);
+  if (!cached || cached.width !== width || cached.height !== height) {
+    cached = { width, height, plan: directionalBlurPlan(type, adjustment, width, height) };
+    directionalPlans.set(adjustment, cached);
+  }
+  const plan = cached.plan, pixel: [number, number] = [uvX * width, uvY * height];
+  const { start, length } = plan.range(pixel);
+  const reachPx = Math.abs(length) * plan.speed(pixel);
+  if (!(reachPx > 1e-3)) return sampleRgba(sourceData, width, height, uvX, uvY);
+  const count = Math.max(2, Math.min(SOFTWARE_DIRECTIONAL_MAX_TAPS, Math.ceil(reachPx) + 1));
+  const sum = [0, 0, 0, 0];
   let weightTotal = 0;
-
-  for (let sampleIndex = 0; sampleIndex < samples; sampleIndex += 1) {
-    const t = (sampleIndex / (samples - 1) - 0.5) * 2;
-    const weight = Math.exp(-t * t * 2);
-    const sample = sampleRgba(
-      sourceData,
-      width,
-      height,
-      mirrorEdgeUv(uvX + directionX * t * amount),
-      mirrorEdgeUv(uvY + directionY * t * amount),
-    );
-    r += sample[0] * weight;
-    g += sample[1] * weight;
-    b += sample[2] * weight;
-    alpha += sample[3] * weight;
+  for (let index = 0; index < count; index += 1) {
+    const t = (index + 0.5) / count, weight = plan.taper(t);
+    const [x, y] = transformDirectionalPixel(plan, pixel, start + length * t);
+    const sample = type === 'motion-blur'
+      ? sampleRgba(sourceData, width, height, mirrorEdgeUv(x / width), mirrorEdgeUv(y / height))
+      : sampleRgba(sourceData, width, height, clamp01(x / width), clamp01(y / height));
+    sum[0] += sample[0] * sample[3] * weight; sum[1] += sample[1] * sample[3] * weight;
+    sum[2] += sample[2] * sample[3] * weight; sum[3] += sample[3] * weight;
     weightTotal += weight;
   }
-
-  return [
-    r / weightTotal,
-    g / weightTotal,
-    b / weightTotal,
-    alpha / weightTotal,
-  ];
-}
-
-function applyRadialBlurAdjustment(
-  sourceData: Uint8ClampedArray,
-  width: number,
-  height: number,
-  uvX: number,
-  uvY: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['radialBlurAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  const amount = Math.max(0, finiteNumber(adjustment.amount, 0.5));
-  if (amount < 0.01) return sampleRgba(sourceData, width, height, uvX, uvY);
-
-  const centerX = finiteNumber(adjustment.centerX, 0.5);
-  const centerY = finiteNumber(adjustment.centerY, 0.5);
-  const deltaX = uvX - centerX;
-  const deltaY = uvY - centerY;
-  const distance = Math.hypot(deltaX, deltaY);
-  const samples = Math.max(4, Math.min(256, Math.round(finiteNumber(adjustment.samples, 32))));
-  const scaledAmount = amount * 0.2;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let alpha = 0;
-  let weightTotal = 0;
-
-  for (let sampleIndex = 0; sampleIndex < samples; sampleIndex += 1) {
-    const t = sampleIndex / (samples - 1);
-    const scale = 1 - scaledAmount * t * distance;
-    const weight = 1 - t * 0.5;
-    const sample = sampleRgba(
-      sourceData,
-      width,
-      height,
-      clamp01(centerX + deltaX * scale),
-      clamp01(centerY + deltaY * scale),
-    );
-    r += sample[0] * weight;
-    g += sample[1] * weight;
-    b += sample[2] * weight;
-    alpha += sample[3] * weight;
-    weightTotal += weight;
-  }
-
-  return [
-    r / weightTotal,
-    g / weightTotal,
-    b / weightTotal,
-    alpha / weightTotal,
-  ];
-}
-
-function applyZoomBlurAdjustment(
-  sourceData: Uint8ClampedArray,
-  width: number,
-  height: number,
-  uvX: number,
-  uvY: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['zoomBlurAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  const centerX = finiteNumber(adjustment.centerX, 0.5);
-  const centerY = finiteNumber(adjustment.centerY, 0.5);
-  const deltaX = uvX - centerX;
-  const deltaY = uvY - centerY;
-  const samples = Math.max(4, Math.min(256, Math.round(finiteNumber(adjustment.samples, 16))));
-  const amount = Math.max(0, finiteNumber(adjustment.amount, 0.3)) * 0.5;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let alpha = 0;
-
-  for (let sampleIndex = 0; sampleIndex < samples; sampleIndex += 1) {
-    const t = sampleIndex / (samples - 1);
-    const scale = 1 + amount * t;
-    const sample = sampleRgba(
-      sourceData,
-      width,
-      height,
-      clamp01(centerX + deltaX * scale),
-      clamp01(centerY + deltaY * scale),
-    );
-    r += sample[0];
-    g += sample[1];
-    b += sample[2];
-    alpha += sample[3];
-  }
-
-  return [
-    r / samples,
-    g / samples,
-    b / samples,
-    alpha / samples,
-  ];
+  const alpha = sum[3] / weightTotal, coverage = Math.max(alpha, 1e-6);
+  return [sum[0] / weightTotal / coverage, sum[1] / weightTotal / coverage, sum[2] / weightTotal / coverage, alpha];
 }
 
 type FisheyeAdjustment = NonNullable<
@@ -451,13 +352,13 @@ export function applyWorkerSoftwareSourceResamplingEffects(
     output = applyFisheyeAdjustment(sourceData, width, height, uvX, uvY, adjustment);
   }
   for (const adjustment of pixelEffects.motionBlurAdjustments ?? []) {
-    output = applyMotionBlurAdjustment(sourceData, width, height, uvX, uvY, adjustment);
+    output = applyDirectionalBlurAdjustment('motion-blur', sourceData, width, height, uvX, uvY, adjustment);
   }
   for (const adjustment of pixelEffects.radialBlurAdjustments ?? []) {
-    output = applyRadialBlurAdjustment(sourceData, width, height, uvX, uvY, adjustment);
+    output = applyDirectionalBlurAdjustment('radial-blur', sourceData, width, height, uvX, uvY, adjustment);
   }
   for (const adjustment of pixelEffects.zoomBlurAdjustments ?? []) {
-    output = applyZoomBlurAdjustment(sourceData, width, height, uvX, uvY, adjustment);
+    output = applyDirectionalBlurAdjustment('zoom-blur', sourceData, width, height, uvX, uvY, adjustment);
   }
   return output;
 }
