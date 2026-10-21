@@ -28,7 +28,10 @@ For an app-like window without Safari's address and toolbar chrome, open the
 LAN editor in Safari, choose **Share → More → Add to Home Screen**, enable
 **Open as Web App**, and launch MasterSelects from the new Home Screen icon.
 The icon keeps the current LAN address, so recreate it if the development
-machine's IP changes. In a normal Safari tab, **Page Menu → More → Hide
+machine's IP changes. The Home Screen app has its own storage, exempt from
+Safari's seven-day eviction, so projects from the Safari tab do not appear in it:
+the editor's **Keep safe** dialog downloads them as `.msproj` for **Open Project
+> Import .msproj archive** there (see `Project-Persistence.md`). In a normal Safari tab, **Page Menu → More → Hide
 Toolbar** is temporary and the toolbar can reappear. See Apple's
 [iPad web-app instructions](https://support.apple.com/de-de/guide/ipad/ipad8f1f7a29/ipados).
 

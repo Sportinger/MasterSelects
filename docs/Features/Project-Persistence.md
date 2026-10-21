@@ -156,10 +156,8 @@ source-identity proofs no longer abort these moves.
 A temporary copy is removed only after its permanent copy is open, writable and
 contains the last confirmed revision; on any failure it stays and the dialog
 says so. The scratch browser recovery is never deleted. The dialog also shows
-whether the browser keeps its storage (`navigator.storage.persisted()`), can
-ask for it (`persist()`), and on iPhone/iPad notes that Safari grants persistence
-by its own heuristics, most likely for the Home Screen app, whose storage is
-separate. When a tab itself uses OPFS while projects remain in the fallback
+whether the browser keeps its storage (`navigator.storage.persisted()`) and can
+ask for it (`persist()`, **Ask to keep it**). When a tab itself uses OPFS while projects remain in the fallback
 database (a tab still on the fallback only lists them, because Open Project
 would not find them there), the button reads "Move N temporary projects" and moves them with a
 byte-verified copy (SHA-256 per file) under their repository writer lock; a
@@ -168,6 +166,41 @@ well do project dialogs and the save status explain the cause instead of the
 raw browser text. iOS, iPadOS and Android never try the desktop Native Helper.
 To test the fallback on a device whose OPFS works, start the dev server with
 `VITE_MS_FORCE_BROWSER_STORAGE=indexeddb`; production builds ignore it.
+
+### iPhone and iPad: Home Screen first
+
+WebKit offers no folder picker, so on iPhone and iPad a real project folder is
+impossible and browser storage is the only place a project lives. A Safari tab
+(any iOS/iPadOS browser tab) is subject to Safari's eviction of script-writable
+storage after seven days of browsing without a visit; a web app opened from the
+Home Screen is exempt and has its own, separate storage.
+`resolveAppleHomeScreenMode()` (`src/utils/mobileAppleWebKit.ts`) tells the cases
+apart: iOS/iPadOS WebKit (including iPadOS's desktop-mode Mac user agent, via
+`maxTouchPoints`) running as a Home Screen app (`navigator.standalone` or
+`display-mode: standalone`/`fullscreen`), in a browser tab, or `none`
+elsewhere. Desktop and Android behave as described above.
+
+- **In a Safari tab** the dialog's first, recommended entry is **Add
+  MasterSelects to the Home Screen**: Share button, **Add to Home Screen**
+  (under **More** if it is not listed) with **Open as Web App** on, then open
+  MasterSelects from the new icon. Because the Home Screen app does not see
+  Safari's storage, the entry downloads the project as `.msproj` in one click
+  (**Download .msproj to take along**) and says to use **Open Project > Import
+  .msproj archive** in the Home Screen app. Keep in this browser, Download
+  .msproj archive and Ask to keep it follow below it; Keep in this browser says
+  that a tab can still lose the project and no longer reports it as saved
+  permanently.
+- The same tab also marks **browser-local** projects (not only temporary
+  ones, including the browser recovery) with a **Not safe yet · Keep safe**
+  button in the place and style of the Temporary button. It opens the dialog as
+  *Keep this project safe* (Home Screen step, then the archive as a backup
+  outside Safari) and stays until the page runs from the Home Screen or
+  `navigator.storage.persisted()` returns true; it is not dismissible. While
+  persistence is still being checked it stays hidden, so it does not flicker.
+- **In the Home Screen app** there is no Home Screen step and no hint for
+  browser-local projects: browser storage is the permanent place. A temporary
+  project still gets Keep in this browser first and the `.msproj` download as
+  backup, and the dialog notes that the seven-day cleanup does not apply.
 
 The Native Helper checks granted paths and negotiates repository write support.
 A connected helper with ordinary file commands does not by itself prove that
@@ -225,7 +258,8 @@ does not cache the app. The icons in `public/icons/` (`any` and `maskable`,
 192/512 px, plus a 180 px `apple-touch-icon`) are rendered from the 2048 px
 "MS" logo by `node scripts/generate-pwa-icons.mjs` (needs ffmpeg). On iPad, a
 home-screen web app has its own storage, separate from Safari's, so projects
-stored in Safari's browser storage do not appear there.
+stored in Safari's browser storage do not appear there; take them along as
+`.msproj` (see *iPhone and iPad: Home Screen first*).
 
 ## Continuous saving
 
