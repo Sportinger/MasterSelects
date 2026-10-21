@@ -18,7 +18,7 @@ function translate(error: unknown): never {
   throw new RepositoryError(name === 'QuotaExceededError' ? 'quota' : name === 'NotAllowedError' || name === 'SecurityError' ? 'permission' : 'io', error instanceof Error ? error.message : String(error), { cause: error });
 }
 
-export function directoryBackend(root: FileSystemDirectoryHandle, locationId: string, hasWritePermission = true): RepositoryBackend {
+export function directoryBackend(root: FileSystemDirectoryHandle, locationId: string, hasWritePermission = true, writableStreams = supportsRepositoryWritableStreams()): RepositoryBackend {
   let owner: RepositoryOwner | null = null;
   let queue = Promise.resolve();
   // Commit files are immutable once written: each is read and hashed once, not on every publication.
@@ -34,7 +34,7 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
     const listing = listings.get(id);
     if (listing) { listingBytes -= listing.bytes; listings.delete(id); }
   };
-  const writable = hasWritePermission && supportsRepositoryWritableStreams()
+  const writable = hasWritePermission && writableStreams
     && Boolean(navigator.locks) && !locationId.startsWith('fsa-readonly:');
   async function parent(path: string, create = false) {
     const parts = repositoryPath(path); const name = parts.pop()!; let directory = root;

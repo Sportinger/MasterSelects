@@ -421,7 +421,7 @@ export function Toolbar({
       <div className="toolbar-spacer" />
 
       <div className="toolbar-section toolbar-right">
-        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} />
+        <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} onExportArchive={() => setShowArchiveDialog(true)} />
         {(capturePhase === 'recording' || capturePhase === 'paused' || capturePhase === 'stopping') && (
           <button
             className={`toolbar-capture-rec${capturePhase === 'recording' ? ' recording' : ''}`}

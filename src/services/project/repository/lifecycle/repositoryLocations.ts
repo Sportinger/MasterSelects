@@ -3,6 +3,7 @@ import { RepositoryError } from '../contracts';
 import type { RepositoryLocation, RepositoryOpenProgress } from '../storageWorkerProtocol';
 import { createFsaRepositoryBackend } from '../backends/fsaBackend';
 import { createOpfsRepositoryBackend } from '../backends/opfsBackend';
+import { getBrowserStorageRoot } from '../../core/browserStorageRoot';
 import { createNativeRepositoryBackend } from '../backends/nativeBackend';
 import { NativeHelperClient } from '../../../nativeHelper/NativeHelperClient';
 import { readJson, writeJson } from '../archive/streamIO';
@@ -25,7 +26,7 @@ export async function isLegacyProjectLocation(location: RepositoryLocation): Pro
   return isLegacyProjectBackend(await backendForLocation(location));
 }
 export async function directoryForOpfs(path: string): Promise<FileSystemDirectoryHandle> {
-  let root = await navigator.storage.getDirectory();
+  let root = await getBrowserStorageRoot();
   for (const part of path.split('/')) {
     if (!part || part === '.' || part === '..') throw new RepositoryError('corrupt', 'Invalid OPFS project path');
     root = await root.getDirectoryHandle(part, { create: true });

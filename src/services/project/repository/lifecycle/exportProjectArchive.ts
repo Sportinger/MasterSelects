@@ -7,6 +7,7 @@ import { RepositoryError } from '../contracts';
 import { backendForLocation } from './repositoryLocations';
 import { getActiveRepositorySession, flushEditorRepository } from './editorRepositoryLifecycle';
 import { recoverRepository } from '../persistence/recovery';
+import { getBrowserStorageRoot } from '../../core/browserStorageRoot';
 
 const log = Logger.create('ProjectArchiveExport');
 
@@ -40,7 +41,7 @@ export async function pickArchiveOutput(name: string): Promise<ArchiveOutput | n
     log.info('Archive destination opened');
     return verifiedArchiveOutput(handle, writable);
   }
-  const root = await navigator.storage.getDirectory(); const folder = await root.getDirectoryHandle('archive-downloads', { create: true });
+  const root = await getBrowserStorageRoot(); const folder = await root.getDirectoryHandle('archive-downloads', { create: true });
   const entryName = crypto.randomUUID() + '.msproj'; const handle = await folder.getFileHandle(entryName, { create: true });
   const writable = await handle.createWritable();
   log.info('Archive download destination opened');
