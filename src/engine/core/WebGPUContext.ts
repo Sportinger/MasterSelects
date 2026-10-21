@@ -3,9 +3,10 @@
 import { prefersSoftwareTimelineCanvas } from '../../utils/canvasPlatform';
 import { SoftwareOutputCanvas } from './SoftwareOutputCanvas';
 import { Logger } from '../../services/logger';
-import { attachWebGPUDeviceDiagnostics, markExpectedWebGPUDeviceDestruction } from '../../services/runtimeDiagnostics';
+import { attachWebGPUDeviceDiagnostics, markExpectedWebGPUDeviceDestruction, markWebGPUDeviceLossOwnerReported } from '../../services/runtimeDiagnostics';
 import { recordGpuAdapter, recordGpuAdapterAttempt, recordGpuStartupFailure } from '../../services/diagnostics/gpuStartupProbe';
 import type { GPUInitializationFailure } from './gpuInitializationFailure';
+import { DeviceLossPolicy, whenPageVisible } from './deviceLossPolicy';
 
 const log = Logger.create('WebGPUContext');
 
@@ -65,6 +66,7 @@ export class WebGPUContext {
   // integrated/display GPU once and keep that choice for future initializations.
   private hasTriedLowPowerFallback = false;
   private powerPreferenceFallbackCallbacks: Set<(preference: GPUPowerPreference) => void> = new Set();
+  private readonly lossPolicy = new DeviceLossPolicy();
 
   async initialize(powerPreference?: GPUPowerPreference): Promise<boolean> {
     // Store the preference if provided
@@ -312,38 +314,11 @@ export class WebGPUContext {
       const generation = this.initializationGeneration;
       this.device.lost.then((info) => {
         if (this.device !== initializedDevice || generation !== this.initializationGeneration) return;
-        const recoveryGeneration = ++this.initializationGeneration;
-        log.error('Device lost', info.message);
-        this.isInitialized = false;
-
-        // Notify listeners about device loss BEFORE attempting recovery
-        for (const callback of this.deviceLostCallbacks) {
-          try {
-            callback(info.message);
-          } catch (e) {
-            log.error('Error in device lost callback', e);
-          }
-        }
-
-        // Loss listeners need the old device to release their caches. Once they
-        // finish, never expose or reuse that lost device during a retry.
-        this.device = null;
-        this.adapter = null;
-        this.initPromise = null;
-        if (info.reason !== 'destroyed') {
-          if (this.currentPowerPreference === 'high-performance' &&
-              !this.hasTriedLowPowerFallback && this.shouldUseLowPowerFallback()) {
-            this.hasTriedLowPowerFallback = true;
-            this.currentPowerPreference = 'low-power';
-            this.notifyPowerPreferenceFallback('low-power');
-          }
-          this.isRecovering = true;
-          this.recoveryAttempts = 0;
-          void this.recoverDevice(recoveryGeneration);
-        } else {
-          this.finishRecoveryFailure();
-        }
+        this.handleDeviceLost(info);
       });
+      // The loss handler above reports real losses once; keep the generic
+      // runtime diagnostic from filing a second error for the same event.
+      markWebGPUDeviceLossOwnerReported(this.device);
 
       // Log detailed GPU adapter info to help debug iGPU vs dGPU selection
       const adapterInfo =
@@ -383,6 +358,48 @@ export class WebGPUContext {
       log.error('Failed to initialize WebGPU', error);
       return false;
     }
+  }
+
+  /** The editor's current device was lost without the editor destroying it. */
+  private handleDeviceLost(info: GPUDeviceLostInfo): void {
+    const recoveryGeneration = ++this.initializationGeneration;
+    const decision = this.lossPolicy.classify();
+    const details = { reason: info.reason, message: info.message, kind: decision.kind };
+    if (decision.report === 'error') log.error('Device lost', info.message);
+    else if (decision.kind === 'background') log.warn('Device lost while the page was hidden or unloading; restoring when visible', details);
+    else if (decision.kind === 'repeated') log.warn('Device lost repeatedly; stopping recovery', { ...details, occurrence: decision.occurrence });
+    else log.warn('Device lost again', { ...details, occurrence: decision.occurrence });
+    this.isInitialized = false;
+
+    // Notify listeners about device loss BEFORE attempting recovery
+    for (const callback of this.deviceLostCallbacks) {
+      try { callback(info.message); } catch (e) { log.error('Error in device lost callback', e); }
+    }
+
+    // Loss listeners need the old device to release their caches. Once they
+    // finish, never expose or reuse that lost device during a retry.
+    this.device = null;
+    this.adapter = null;
+    this.initPromise = null;
+    if (decision.recover === 'stop') {
+      this.initializationFailure = 'device_lost_repeatedly';
+      this.finishRecoveryFailure();
+      return;
+    }
+    if (info.reason !== 'destroyed' && this.currentPowerPreference === 'high-performance' &&
+        !this.hasTriedLowPowerFallback && this.shouldUseLowPowerFallback()) {
+      this.hasTriedLowPowerFallback = true;
+      this.currentPowerPreference = 'low-power';
+      this.notifyPowerPreferenceFallback('low-power');
+    }
+    // destroy()/reinitialize swap the device out first, so a 'destroyed' loss
+    // here came from the browser and is recovered like any other loss.
+    this.isRecovering = true;
+    this.recoveryAttempts = 0;
+    if (decision.recover === 'now') void this.recoverDevice(recoveryGeneration);
+    else whenPageVisible(() => {
+      if (recoveryGeneration === this.initializationGeneration) void this.recoverDevice(recoveryGeneration);
+    });
   }
 
   getInitializationFailure(): GPUInitializationFailure | null {

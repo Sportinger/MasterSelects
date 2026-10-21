@@ -39,6 +39,7 @@ interface RuntimeDiagnosticsState {
   originalConsole: Partial<Record<CapturedConsoleMethod, (...args: unknown[]) => void>>;
   attachedDevices: WeakSet<GPUDevice>;
   expectedDeviceDestructions?: WeakSet<GPUDevice>;
+  ownerReportedDeviceLosses?: WeakSet<GPUDevice>;
   gpuInfo: Record<string, unknown> | null;
   sink?: (entry: RuntimeDiagnosticEntry) => void;
 }
@@ -372,6 +373,16 @@ export function markExpectedWebGPUDeviceDestruction(device: GPUDevice | null): v
   (state.expectedDeviceDestructions ??= new WeakSet()).add(device);
 }
 
+/**
+ * The device owner logs and reports losses of this device itself (once per
+ * session, with recovery context), so the generic loss record stays a warning.
+ */
+export function markWebGPUDeviceLossOwnerReported(device: GPUDevice | null): void {
+  if (!device) return;
+  const state = getState();
+  (state.ownerReportedDeviceLosses ??= new WeakSet()).add(device);
+}
+
 export function attachWebGPUDeviceDiagnostics(device: GPUDevice | null, label = 'main'): void {
   if (!device) return;
 
@@ -398,9 +409,10 @@ export function attachWebGPUDeviceDiagnostics(device: GPUDevice | null, label = 
 
     void device.lost.then((info) => {
       const expected = info.reason === 'destroyed' && state.expectedDeviceDestructions?.has(device) === true;
+      const ownerReported = state.ownerReportedDeviceLosses?.has(device) === true;
       recordDiagnostic({
         source: 'webgpu-device-lost',
-        level: expected ? 'INFO' : 'ERROR',
+        level: expected ? 'INFO' : ownerReported ? 'WARN' : 'ERROR',
         message: info.message || 'WebGPU device lost',
         details: {
           label,
