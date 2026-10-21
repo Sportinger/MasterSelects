@@ -43,7 +43,7 @@ export async function mediaFilesNeedingAccess(): Promise<MediaFileAccessState[]>
   }));
   return states.filter((state): state is MediaFileAccessState => state !== null);
 }
-/** Known media folders whose browser access lapsed (e.g. after a reload); one click restores them. */
+/** Known media folders whose browser access lapsed (e.g. after a browser restart); one click restores them. */
 export async function mediaFoldersNeedingAccess(): Promise<ProjectMediaSourceRootState[]> {
   return (await getProjectMediaSourceRootStates()).filter(root => root.handle && root.permission !== 'granted');
 }

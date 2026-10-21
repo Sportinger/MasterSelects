@@ -16,10 +16,13 @@ import {
 import { installChunkLoadRecovery, recoverFromChunkRenderError } from './runtime/chunkLoadRecovery'
 import { createReactRootErrorHandlers } from './services/diagnostics/diagnosticReporter'
 import { configureInspectorGraphWorker } from './services/operators/inspectorGraphClient'
+import { installAppInstallPromptCapture } from './services/pwa/appInstallPrompt'
 
 configureInspectorGraphWorker(() => new Worker(new URL('./workers/inspectorGraphWorker.ts', import.meta.url), { type: 'module' }));
 
 installChunkLoadRecovery();
+// The browser's install offer fires soon after load; keep it for the install hint in folder-access dialogs.
+installAppInstallPromptCapture();
 
 document.addEventListener('pointerdown', () => {
   document.documentElement.classList.add('pointer-focus');
