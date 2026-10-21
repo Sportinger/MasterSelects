@@ -1,24 +1,10 @@
 import { useMediaStore } from '../../stores/mediaStore';
 import type { MediaFile } from '../../stores/mediaStore/types';
 import { Logger } from '../logger';
-import { isLinkedMediaDeferred } from '../project/linkedMediaDemand';
-import { isRepositoryHydrating } from '../project/repository/transaction/storeMutationBoundary';
+import { classifyClipMediaGap, type ClipMediaGap } from './clipMediaGapClassification';
 import type { CompositionSources } from './sourceTypes';
 
-/**
- * Why a clip got no source while a composition was prepared:
- * - `missing`: no media entry with that id exists (a real project defect);
- * - `loading`: the entry exists but its runtime File is not restored yet (project open/reopen,
- *   or a linked source that opens on demand); the composition re-prepares once it arrives;
- * - `unavailable`: the entry exists without a File outside any load (offline or needs relink).
- */
-export type ClipMediaGap = 'missing' | 'loading' | 'unavailable';
-
-export function classifyClipMediaGap(mediaFileId: string | undefined, mediaFile: MediaFile | undefined, projectLoading: boolean): ClipMediaGap {
-  if (!mediaFileId || !mediaFile) return 'missing';
-  if (projectLoading || isRepositoryHydrating() || isLinkedMediaDeferred(mediaFileId)) return 'loading';
-  return 'unavailable';
-}
+export { classifyClipMediaGap, type ClipMediaGap } from './clipMediaGapClassification';
 
 /**
  * Logs a clip without a loadable source at the right level and remembers media that may still

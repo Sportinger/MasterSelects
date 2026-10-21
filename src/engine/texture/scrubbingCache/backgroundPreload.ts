@@ -1,3 +1,4 @@
+import { isRevokedPrimaryMediaObjectUrl } from '../../../services/project/mediaObjectUrlManager';
 import { Logger } from '../../../services/logger';
 import {
   canRetainBackgroundPreloadVideo,
@@ -63,6 +64,8 @@ export class BackgroundPreloadController {
     if (typeof document === 'undefined' || !video.src || !Number.isFinite(targetTime) || targetTime < 0) {
       return;
     }
+    // The element's media URL was revoked by a reopen; its replacement element preloads instead.
+    if (isRevokedPrimaryMediaObjectUrl(video.src)) return;
 
     if (options.isPlaying) {
       this.paused = true;

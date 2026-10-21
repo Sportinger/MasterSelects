@@ -110,6 +110,8 @@ Slot playback, background layers, and main preview therefore share runtime sourc
 
 The media-runtime domain also owns object-URL, media-element, and scrub-audio lease managers. These leases track acquisition and release outside persisted timeline state.
 
+Primary media object URLs (`project/mediaObjectUrlManager.ts`) are one per media id. A newer open of the same media (reopen after "Take over editing", reload, linked media opened on demand) retires the previous URL instead of revoking it under its consumers: lazy timeline media elements are released and rebuilt from the current source, scrub preload sessions and their cached frames for that URL are dropped, consumers that still hold the old URL resolve it to the current one, and the browser releases the old URL after a 5-second grace period. Concurrent opens of one linked media (playhead demand and the composition source check) share one open, so only one primary URL is created. Before this, the losing open revoked the URL the store kept, and every media element load failed with `ERR_FILE_NOT_FOUND` (25–50 errors per 30 s in a read-only tab).
+
 `liveInputRuntime.ts` manages display capture, camera, and composition-feedback streams, exposes their video elements to render consumers, and releases streams when inputs are removed or disconnected.
 
 ---

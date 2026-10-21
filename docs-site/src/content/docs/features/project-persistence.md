@@ -20,7 +20,11 @@ Invalid names and storage failures remain visible in the dialog.
 
 Browser folder pickers open a selected directory. Where those pickers are
 unavailable, the chooser lists projects stored on the device. Recent entries
-reuse their remembered location and may need folder permission again.
+reuse their remembered location and may need folder permission again. The
+chooser and **File > Open Recent** name each entry's location (**Folder**,
+**Native**, **Browser local** or **Temporary**, the IndexedDB fallback; browser
+entries remember their store), and a temporary copy is always listed after a
+permanent project of the same name.
 
 An existing repository is opened from its `project.msrepo.json` descriptor.
 Legacy `project.json` folders and `.msproj` packages are converted in place on
@@ -139,7 +143,14 @@ offers only the destinations this device supports, best first:
 
 - **Save to a folder** (folder picker or Native Helper): the existing Save As
   copy of the repository with history, journals and workspace views; the
-  editor switches to the folder.
+  editor switches to the folder. Verification reads the new folder's own
+  session (same project lineage, writable, history holds the last confirmed
+  revision; one re-read on a failed read). When only saving the latest edits
+  into the folder failed after the switch, it saves once more; edits that still
+  wait are named in the result while the verified temporary copy is removed.
+  A copy that opened but does not verify is reported as such ("now opens from
+  the chosen folder … temporary copy was kept"), never as "nothing changed".
+  The removed temporary copy also leaves the recent projects.
 - **Keep in this browser** (when OPFS opens and accepts a write in this tab
   now): the repository is copied into OPFS as a new repository and opened
   there and adopted by the project core, so thumbnails, waveforms and caches
@@ -156,6 +167,14 @@ writer registration from its verified source. Copies at any other location still
 open read-only (Copy/Restore). Renaming (also inside Save As and Keep in this
 browser) rewrites only the project root, so media carrying repository-internal
 source-identity proofs no longer abort these moves.
+
+Duplicates (Save As, Save permanently, imports) contain only `project.msrepo.json`
+and `.masterselects/` at the project root; `archive-manifest.json` is written only
+into `.msproj` export staging. Repository directory lookups never hand a reader's
+pending "does this folder exist" lookup to a concurrent writer: on slow disks a
+view-slot or artifact-manifest write into a folder created at that moment
+failed with "A requested file or directory could not be found", which made a
+successful Save to a folder report failure.
 
 A temporary copy is removed only after its permanent copy is open, writable and
 contains the last confirmed revision; on any failure it stays and the dialog

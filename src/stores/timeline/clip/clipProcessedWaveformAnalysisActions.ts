@@ -20,7 +20,7 @@ import {
   clearAudioAnalysisJobUpdate,
   createAudioAnalysisJobUpdate,
   isAudioAnalysisCancellation,
-  resolveClipSourceFile,
+  resolveClipSource,
   updateAudioAnalysisJobProgress,
 } from './clipAudioAnalysisShared';
 
@@ -139,7 +139,13 @@ export async function generateProcessedWaveformForClipAction(
           mediaFileId = mediaFileId ?? clip.compositionId;
         }
       } else {
-        const sourceFile = await resolveClipSourceFile(clip);
+        const resolution = await resolveClipSource(clip);
+        const sourceFile = resolution.file;
+        if (!sourceFile) {
+          // Silent skips hide why a processed waveform never appears; a reopen in progress is expected.
+          if (resolution.gap === 'loading') log.debug('Processed waveform waits for the clip media to finish loading', { clipId });
+          else log.warn('Processed waveform skipped: the clip source is not loaded', { clipId, gap: resolution.gap });
+        }
         if (sourceFile) {
           mediaFileId = mediaFileId ?? `file:${sourceFile.name}:${sourceFile.size}:${sourceFile.lastModified}`;
           updateClips(clips => updateClipById(clips, clipId, { file: sourceFile }));
