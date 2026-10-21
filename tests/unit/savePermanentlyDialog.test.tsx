@@ -33,7 +33,10 @@ const status = (overrides: StatusOverrides = {}) => ({
   temporaryProjects: [] as string[], activeBrowserLocal: overrides.activeTemporary === false, homeScreen: 'none' as const, persistence: null,
   refresh: vi.fn(), ...overrides,
 });
-const optionTitles = () => Array.from(document.querySelectorAll('.save-permanently-option-title')).map(node => node.firstChild?.textContent);
+// Visible action titles in document order: the primary action, then (when expanded) More options.
+const optionTitles = () => Array.from(document.querySelectorAll('.save-permanently-option-title')).map(node => node.textContent);
+const stepLabels = () => Array.from(document.querySelectorAll('.save-permanently-step-text strong')).map(node => node.textContent?.trim());
+const openMore = () => fireEvent.click(screen.getByRole('button', { name: /More options/ }));
 
 describe('save permanently destinations', () => {
   it('offers only the destinations the device supports, best first', () => {
@@ -89,66 +92,99 @@ describe('SavePermanentlyDialog', () => {
       createBrowserStorageCopy={vi.fn()} onProjectChanged={vi.fn()} {...props} />,
   );
 
-  it('recommends the Home Screen first on iPad Private Browsing, then the archive', () => {
+  it('shows the Home Screen steps first on iPad Private Browsing, the rest under More options', () => {
     state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab' };
     renderDialog();
-    expect(screen.getByRole('heading').textContent).toBe('Save this project permanently');
-    expect(optionTitles()).toEqual(['Add MasterSelects to the Home Screen', 'Download .msproj archive']);
-    expect(document.querySelector('.save-permanently-home-screen')?.getAttribute('data-recommended')).toBe('true');
-    expect(screen.getByText(/lands in the Files app/)).toBeTruthy();
+    expect(screen.getByRole('heading').textContent).toBe('This project is only temporary');
+    expect(screen.getByText('Safari can delete it when this tab closes.')).toBeTruthy();
+    expect(stepLabels()).toEqual(['Download this project', 'Tap Share', 'Tap Add to Home Screen', 'Open the new  icon', 'Open Project → Import']);
     expect(screen.getByText(/Open as Web App/)).toBeTruthy();
+    // Collapsed by default: no secondary option is rendered.
+    expect(optionTitles()).toEqual([]);
+    const toggle = screen.getByRole('button', { name: /More options/ });
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    openMore();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(optionTitles()).toEqual(['Download a backup', 'Ask to keep it']);
+    expect(screen.getByText(/Files → Downloads/)).toBeTruthy();
   });
 
-  it('orders Home Screen, Keep in this browser, Download and Ask to keep it in an iPad Safari tab', async () => {
+  it('downloads the project as step 1 in an iPad Safari tab and marks the step done', async () => {
     state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab', persistentBrowserStorage: true };
     state.download.mockResolvedValue('Stage Show.msproj');
     renderDialog();
-    expect(optionTitles()).toEqual(['Add MasterSelects to the Home Screen', 'Keep in this browser', 'Download .msproj archive']);
-    expect(screen.getByText('Ask to keep it')).toBeTruthy();
-    const takeAlong = screen.getByText('Download .msproj to take along');
-    // The Home Screen step comes before every other control except the name.
-    expect(takeAlong.compareDocumentPosition(screen.getByText('Keep in this browser')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(takeAlong);
-    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Downloaded Stage Show\.msproj.*Home Screen app use Open Project > Import \.msproj archive/));
+    const download = screen.getByRole('button', { name: 'Download project' });
+    // The download is the recommended action and comes before More options.
+    expect(download.compareDocumentPosition(screen.getByRole('button', { name: /More options/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(download));
+    openMore();
+    expect(optionTitles()).toEqual(['Keep in this browser', 'Download a backup', 'Ask to keep it']);
+    fireEvent.click(download);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('✓ Downloaded "Stage Show.msproj" to Files → Downloads. Now do step 2.'));
+    expect(screen.getByRole('status').getAttribute('data-tone')).toBe('success');
+    expect(document.querySelector('.save-permanently-step')?.getAttribute('data-done')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Download again' })).toBeTruthy();
     expect(state.download).toHaveBeenCalledWith('Stage Show');
   });
 
-  it('does not call a Safari-tab browser copy permanent', async () => {
+  it('does not call a Safari-tab browser copy safe', async () => {
     state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab', persistentBrowserStorage: true };
     state.moveActive.mockResolvedValue({ from: 'Stage Show', to: 'Stage Show', removedTemporary: true, persisted: false });
     renderDialog();
+    openMore();
+    expect(screen.getByText('Safari can still delete it after 7 days.')).toBeTruthy();
     fireEvent.click(screen.getByText('Keep in this browser'));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Kept in this browser.*seven days.*Home Screen/));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Kept in this browser\. Safari can still delete it/));
+    expect(screen.getByRole('status').getAttribute('data-tone')).toBe('warning');
   });
 
   it('keeps a browser-local project safe from an iPad Safari tab', () => {
     state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab', persistentBrowserStorage: true };
     renderDialog({ activeTemporary: false });
-    expect(screen.getByRole('heading').textContent).toBe('Keep this project safe');
-    expect(screen.getByText(/Not safe yet\./)).toBeTruthy();
-    expect(optionTitles()).toEqual(['Add MasterSelects to the Home Screen', 'Download .msproj archive']);
-    expect(screen.getByText(/backup outside Safari/)).toBeTruthy();
+    expect(screen.getByRole('heading').textContent).toBe('This project can get lost');
+    expect(screen.getByText('Safari deletes website data after 7 days without a visit.')).toBeTruthy();
+    expect(screen.getByText('Fix: use the Home Screen app. It keeps your data.')).toBeTruthy();
+    // No name field: the iPad keyboard must not pop up, and nothing gets renamed here.
+    expect(screen.queryByRole('textbox')).toBeNull();
+    openMore();
+    expect(optionTitles()).toEqual(['Download a backup', 'Ask to keep it']);
   });
 
   it('treats browser storage as permanent in the Home Screen app, archive as backup', () => {
     state.environment = { ...state.environment, appleMobile: true, homeScreen: 'home-screen-app', persistentBrowserStorage: true };
     renderDialog();
-    expect(optionTitles()).toEqual(['Keep in this browser', 'Download .msproj archive']);
-    expect(screen.queryByText('Download .msproj to take along')).toBeNull();
-    expect(screen.getByText(/Opened from the Home Screen/)).toBeTruthy();
+    expect(optionTitles()).toEqual(['Keep in this browser']);
+    expect(screen.queryByText('Download project')).toBeNull();
+    openMore();
+    expect(optionTitles()).toEqual(['Keep in this browser', 'Download a backup', 'Ask to keep it']);
+    expect(screen.getByText(/Home Screen app: Safari keeps this app’s data/)).toBeTruthy();
   });
 
-  it('lists folder, browser and archive on desktop Chrome and saves to a folder', async () => {
+  it('makes Save to a folder the one big action on desktop Chrome and saves there', async () => {
     state.environment = { ...state.environment, folderPicker: true, persistentBrowserStorage: true };
     state.saveToFolder.mockResolvedValue({ status: 'saved', removedTemporary: true });
     const onProjectChanged = vi.fn();
     renderDialog({}, { onProjectChanged });
-    expect(optionTitles()).toEqual(['Save to a folder…', 'Keep in this browser', 'Download .msproj archive']);
+    expect(screen.getByRole('heading').textContent).toBe('This project is only temporary');
+    expect(optionTitles()).toEqual(['Save to a folder']);
+    expect(document.querySelector('.save-permanently-primary')?.textContent).toMatch(/^Save to a folder/);
     expect(screen.queryByText(/Home Screen/)).toBeNull();
-    fireEvent.click(screen.getByText('Save to a folder…'));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved permanently.*temporary copy was removed/));
+    openMore();
+    expect(optionTitles()).toEqual(['Save to a folder', 'Keep in this browser', 'Download a backup', 'Ask to keep it']);
+    fireEvent.click(document.querySelector('.save-permanently-primary')!);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('✓ Saved. "Stage Show" is safe in the chosen folder.'));
+    expect(screen.getByRole('button', { name: 'Done' })).toBeTruthy();
     expect(state.saveToFolder).toHaveBeenCalledWith('Stage Show', expect.any(Function));
     expect(onProjectChanged).toHaveBeenCalledOnce();
+  });
+
+  it('says nothing changed when no folder was chosen', async () => {
+    state.environment = { ...state.environment, folderPicker: true };
+    state.saveToFolder.mockResolvedValue({ status: 'cancelled' });
+    renderDialog();
+    fireEvent.click(document.querySelector('.save-permanently-primary')!);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('No folder chosen. Nothing changed.'));
+    expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
   });
 
   it('explains a failed move and says that nothing was removed', async () => {
@@ -162,20 +198,25 @@ describe('SavePermanentlyDialog', () => {
   it('downloads the archive under the project name', async () => {
     state.download.mockResolvedValue('Stage Show.msproj');
     renderDialog();
-    fireEvent.click(screen.getByText('Download .msproj archive'));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Downloaded Stage Show\.msproj.*Import \.msproj archive/));
+    expect(optionTitles()).toEqual(['Download project file']);
+    fireEvent.click(screen.getByText('Download project file'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Downloaded "Stage Show\.msproj"\. Open it via Open Project → Import/));
     expect(state.download).toHaveBeenCalledWith('Stage Show');
   });
 
   it('moves projects left in temporary storage when this tab can store permanently', async () => {
     state.environment.persistentBrowserStorage = true;
     state.moveOne.mockImplementation(async (name: string) => ({ from: name, to: name, removedTemporary: true }));
-    renderDialog({ activeTemporary: false, temporaryProjects: ['A', 'B'] });
-    expect(screen.getByRole('heading').textContent).toBe('Move temporary projects');
-    expect(optionTitles()).toEqual([]);
-    fireEvent.click(screen.getByText('Move 2 to this browser’s permanent storage'));
+    const { rerender } = renderDialog({ activeTemporary: false, temporaryProjects: ['A', 'B'] });
+    expect(screen.getByRole('heading').textContent).toBe('Some projects are still temporary');
+    expect(optionTitles()).toEqual(['Move 2 projects to permanent storage']);
+    fireEvent.click(screen.getByText('Move 2 projects to permanent storage'));
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Moved 2 projects/));
     expect(state.moveOne.mock.calls).toEqual([['A'], ['B']]);
+    // Once the status refreshed, nothing is at risk any more.
+    rerender(<SavePermanentlyDialog status={status({ activeTemporary: false, temporaryProjects: [] })} projectName="Stage Show" onClose={vi.fn()}
+      createProject={vi.fn()} createBrowserStorageCopy={vi.fn()} onProjectChanged={vi.fn()} />);
+    expect(screen.getByRole('heading').textContent).toBe('Your project is safe');
   });
 
   it('moves the open project through the project core copy', async () => {
@@ -184,15 +225,43 @@ describe('SavePermanentlyDialog', () => {
     const createBrowserStorageCopy = vi.fn();
     renderDialog({}, { createBrowserStorageCopy });
     fireEvent.click(screen.getByText('Keep in this browser'));
-    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved permanently in this browser/));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('✓ Saved. Your project is safe in this browser.'));
     expect(state.moveActive).toHaveBeenCalledWith(createBrowserStorageCopy);
   });
 
   it('lists leftovers without offering their move while this tab still uses the temporary store', () => {
     state.environment.persistentBrowserStorage = true;
     renderDialog({ temporaryProjects: ['A', 'B'] });
-    expect(screen.queryByText(/^Move 2 to/)).toBeNull();
-    expect(screen.getByText(/Also in temporary storage: A, B\..*after this project was kept in this browser/)).toBeTruthy();
+    openMore();
+    expect(screen.queryByText(/^Move 2/)).toBeNull();
+    expect(screen.getByText(/Also temporary: A, B\..*once this project is in the browser/)).toBeTruthy();
+  });
+
+  it('keeps the disclosure keyboard accessible and focus inside the dialog', () => {
+    state.environment = { ...state.environment, folderPicker: true };
+    renderDialog();
+    const toggle = screen.getByRole('button', { name: /More options/ });
+    expect(toggle.tagName).toBe('BUTTON');
+    toggle.focus();
+    fireEvent.click(toggle);
+    const group = screen.getByRole('group', { name: 'More options' });
+    expect(toggle.getAttribute('aria-controls')).toBe(group.id);
+    const close = screen.getByRole('button', { name: 'Close' });
+    close.focus();
+    fireEvent.keyDown(close, { key: 'Tab' });
+    expect(document.activeElement).toBe(screen.getByRole('textbox'));
+    // A pointer activation blurs the control; Tab from <body> still lands inside the dialog.
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(close);
+  });
+
+  it('closes on Escape even when a pointer activation left focus on the page', () => {
+    const onClose = vi.fn();
+    renderDialog({}, { onClose });
+    (document.activeElement as HTMLElement | null)?.blur();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledOnce();
   });
 });
 
