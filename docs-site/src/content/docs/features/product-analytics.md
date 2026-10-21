@@ -191,9 +191,10 @@ Apply the migration before deploying Pages Functions that write or query the tab
 
 ```bash
 npm run cf:migrate:remote
-npm run build
-npx wrangler pages deploy dist --project-name=masterselects --branch=main
+npm run deploy:pages
 ```
+
+`deploy:pages` builds, retains old deployments' assets, verifies them and only then runs `wrangler pages deploy`; see [Debugging](/features/debugging/#keeping-old-chunks-available-across-deploys).
 
 ## Fassandra Stats
 

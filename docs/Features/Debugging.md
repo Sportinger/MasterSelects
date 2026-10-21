@@ -474,7 +474,13 @@ with `sourceDirty: false` and the `package.json` version; the new build's own en
 chunks and `projectStorage.worker-*.js`; and, after retention, the live deployment's
 entry chunks and its storage worker in `dist/assets`. `--dry-run` runs every check and
 the retention into `dist` and prints the deploy command instead of running it;
-`--skip-build` checks an existing `dist`.
+`--skip-build` checks an existing `dist`. The checkout must be clean before the build.
+`build:deploy` runs `docs:build`, whose sync rewrites the tracked docs-site pages
+(`docs-site/src/content/docs/features/`, `getting-started/overview.md`,
+`docs-site/public/assets/`) from `docs/Features` at HEAD; such changes do not stop the
+deploy, but the script names them so the sync can be committed afterwards. Any other
+file the build changes stops it. The script also runs when started on Windows, where
+its path is a drive path rather than a `file://` string.
 
 The pre-module bootstrap (`public/app-bootstrap.js`) only records the running version
 and logs `[Version] Update detected`. It no longer reloads or clears Cache Storage:

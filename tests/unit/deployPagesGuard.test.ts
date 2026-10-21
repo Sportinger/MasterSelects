@@ -1,9 +1,10 @@
 // @vitest-environment node
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DeployGuardError, deployPages } from '../../scripts/deploy-pages.mjs';
+import { DeployGuardError, deployPages, isDocsSyncOutput } from '../../scripts/deploy-pages.mjs';
 import { checkGreenCi, checkOwnBuild, onlyVersionLinesChanged } from '../../scripts/deploy-pages-checks.mjs';
 
 const HEAD = 'a'.repeat(40);
@@ -25,18 +26,22 @@ function writeBuild(overrides: Record<string, unknown> = {}): void {
   writeFileSync(path.join(root, 'dist', 'assets', 'projectStorage.worker-new1.js'), 'self.onmessage=()=>{}');
 }
 
-function fakeRun(options: { greenRuns?: string[]; dirty?: boolean } = {}) {
+function fakeRun(options: { greenRuns?: string[]; dirty?: boolean; statusAfterBuild?: string } = {}) {
+  let built = false;
   return (command: string, args: string[]): string => {
     calls.push([command, ...args]);
     const line = [command, ...args].join(' ');
     if (line === 'git rev-parse HEAD') return `${HEAD}\n`;
     if (line.startsWith('gh run list')) return JSON.stringify((options.greenRuns ?? [HEAD]).map(headSha => ({ headSha })));
-    if (line.startsWith('git status')) return options.dirty ? ' M src/App.tsx\n' : '';
+    if (line.startsWith('git status')) {
+      if (built && options.statusAfterBuild !== undefined) return options.statusAfterBuild;
+      return options.dirty ? ' M src/App.tsx\n' : '';
+    }
     if (line.startsWith('npx wrangler pages deployment list')) {
       return `Fetching deployments...\n${JSON.stringify([{ Deployment: `${PREVIOUS}/`, Source: 'bbbbbbb' }])}`;
     }
     if (line.startsWith('npx wrangler pages deploy ')) return '';
-    if (line.startsWith('npm run build:deploy')) return '';
+    if (line.startsWith('npm run build:deploy')) { built = true; return ''; }
     throw new Error(`unexpected command: ${line}`);
   };
 }
@@ -114,11 +119,44 @@ describe('deploy:pages guard', () => {
     expect(deployCalls()).toEqual([]);
   });
 
+  it('deploys when the build only re-syncs the docs-site pages of a checkout that was clean before it', async () => {
+    const logs: string[] = [];
+    const run = fakeRun({ statusAfterBuild: ' M docs-site/src/content/docs/features/debugging.md\n?? docs-site/public/assets/workflows/\n' });
+    const result = await deployPages({ argv: [], cwd: root, run, log: line => logs.push(line) });
+    expect(result.deployed).toBe(true);
+    expect(logs.some(line => /commit the docs-site sync/.test(line) && line.includes('debugging.md'))).toBe(true);
+  });
+
+  it('refuses to deploy when the build changes files outside the docs-site sync output', async () => {
+    const run = fakeRun({ statusAfterBuild: ' M docs-site/src/content/docs/features/debugging.md\n M docs-site/package-lock.json\n' });
+    const error = await runDeploy([], run).catch((caught: unknown) => caught);
+    expect((error as DeployGuardError).step).toBe('Build check');
+    expect((error as Error).message).toMatch(/outside the docs-site sync output: docs-site\/package-lock\.json$/m);
+    expect(deployCalls()).toEqual([]);
+  });
+
+  it('refuses a dirty checkout before building', async () => {
+    const error = await runDeploy([], fakeRun({ dirty: true })).catch((caught: unknown) => caught);
+    expect((error as DeployGuardError).step).toBe('Checkout check');
+    expect((error as Error).message).toMatch(/src\/App\.tsx/);
+    expect(calls.some(call => call[1] === 'run' && call[2] === 'build:deploy')).toBe(false);
+    expect(deployCalls()).toEqual([]);
+  });
+
   it('refuses to deploy without a green Security Checks run', async () => {
     const error = await runDeploy(['--skip-build'], fakeRun({ greenRuns: [] })).catch((caught: unknown) => caught);
     expect((error as DeployGuardError).step).toBe('CI check');
     expect(calls.some(call => call[1] === 'run' && call[2] === 'build:deploy')).toBe(false);
     expect(deployCalls()).toEqual([]);
+  });
+});
+
+describe('deploy:pages entrypoint', () => {
+  it('runs when started directly with node (file URL comparison, not a file:// string concat)', () => {
+    const script = path.resolve(__dirname, '../../scripts/deploy-pages.mjs');
+    const result = spawnSync(process.execPath, [script, '--no-such-flag'], { encoding: 'utf8' });
+    expect(result.status).toBe(1);
+    expect(result.stderr).toMatch(/NOT DEPLOYED\. Unknown argument: --no-such-flag/);
   });
 });
 
@@ -146,6 +184,14 @@ describe('deploy:pages checks', () => {
     expect(onlyVersionLinesChanged(`${bump}\n+    "deploy": "rm -rf /",`)).toBe(false);
     const notAncestor = checkGreenCi({ head: HEAD, successfulRuns: [{ headSha: 'b'.repeat(40) }], describeRange: () => null });
     expect(notAncestor.problems[0]).toMatch(/no green Security Checks run/);
+  });
+
+  it('treats only the docs-site sync output as derived build output', () => {
+    expect(isDocsSyncOutput('docs-site/src/content/docs/features/product-analytics.md')).toBe(true);
+    expect(isDocsSyncOutput('docs-site/src/content/docs/getting-started/overview.md')).toBe(true);
+    expect(isDocsSyncOutput('docs-site/public/assets/workflows/export-settings.webp')).toBe(true);
+    expect(isDocsSyncOutput('docs-site/package-lock.json')).toBe(false);
+    expect(isDocsSyncOutput('docs/Features/Debugging.md')).toBe(false);
   });
 
   it('requires the new build to carry its own entry chunks and storage worker', () => {

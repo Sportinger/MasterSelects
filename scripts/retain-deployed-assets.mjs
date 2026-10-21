@@ -16,8 +16,9 @@
 // this retention and refuses to deploy unless the previous deployment's entry chunks and
 // project storage worker ended up in dist/assets.
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const ASSET_NAME = String.raw`[A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:js|mjs|css|wasm|webp|jpe?g|png|svg|ttf|woff2?|gz|json)`;
 // Vite references chunks as "./name.js" (dynamic import), "assets/name.js"
@@ -138,6 +139,13 @@ async function main() {
   if (failures && options.strict) process.exitCode = 1;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare file URLs (not `file://${argv[1]}`) so the entry check also matches Windows drive paths,
+// paths that need URL encoding, and symlinked script paths.
+function isEntrypoint() {
+  if (!process.argv[1]) return false;
+  try { return import.meta.url === pathToFileURL(realpathSync(path.resolve(process.argv[1]))).href; } catch { return false; }
+}
+
+if (isEntrypoint()) {
   main().catch((error) => { console.error(`[retain-assets] ${error instanceof Error ? error.message : error}`); process.exitCode = 1; });
 }
