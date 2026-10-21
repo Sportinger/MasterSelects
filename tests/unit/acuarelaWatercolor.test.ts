@@ -73,19 +73,62 @@ describe('Acuarela watercolour recipe', () => {
     expect(pixel(961)[0]).toBeCloseTo(0.8, 6);
   });
 
-  it('pools pigment on the dark side of a wash border with the documented density model', () => {
+  it('pools pigment on the dark side of a wash border as a soft gradient with the documented density model', () => {
     const final = plan(watercolour({ ...PLAIN, edges: 1, bleed: 0 })).passes![3].program;
     const pixel = (x: number): Rgba => evaluateImageOperatorPlan(final, [0, 0, 0, 0], { uv: [(x + 0.5) / 1920, 0.5], resolution: [1920, 1080],
       timelineTimeSeconds: 0, sampleImage: step, sampleResource: (_id, uv) => step(uv) }) as Rgba;
-    // One pixel left of the border: the four reads 2 px away see one light value, mean luminance 0.35.
-    // pool = clamp((0.35 - 0.2) * 6, -1, 1) = 0.9, d = 1 + 1.5 * 0.9 = 2.35, C' = C - (C - C^2)(d - 1) < 0 -> 0.
-    expect(pixel(959)[0]).toBeCloseTo(0, 6);
-    // One pixel right of it: mean 0.65, pool = -0.9, d = 1 - 0.25 * 0.9 = 0.775, C' = 0.8 + 0.16 * 0.225 = 0.836.
-    expect(pixel(960)[0]).toBeCloseTo(0.836, 5);
-    // Far from the border nothing changes; white paper and black stay put at any density.
+    // Independent reference: Gaussian mean (5 x 5 reads 1.5 px apart, sigma 2 px) of the step's luminance,
+    // contrast to the centre, smoothstep(0.005, 0.08), dark side x 1.5 (light side x 0.25), excess eased by
+    // 1 - exp(-e) (or exp(e) - 1 below 0), C' = C - (C - C^2) e.
+    const smooth = (low: number, high: number, value: number) => { const t = Math.min(Math.max((value - low) / (high - low), 0), 1); return t * t * (3 - 2 * t); };
+    const expected = (x: number) => {
+      let sum = 0, weights = 0;
+      for (let i = -2; i <= 2; i += 1) for (let j = -2; j <= 2; j += 1) {
+        const weight = Math.exp(-(i * i + j * j) * 2.25 / 8); weights += weight;
+        sum += weight * step([(x + 0.5 + i * 1.5) / 1920, 0.5])[0];
+      }
+      const centre = step([(x + 0.5) / 1920, 0.5])[0], contrast = sum / weights - centre;
+      const e = 1.5 * smooth(0.005, 0.08, contrast) - 0.25 * smooth(0.005, 0.08, -contrast);
+      const eased = e >= 0 ? 1 - Math.exp(-e) : Math.exp(e) - 1;
+      return centre - (centre - centre * centre) * eased;
+    };
+    // (x 958 and 961 have a read exactly on the border, where float rounding picks the side.)
+    for (const x of [954, 956, 957, 959, 960, 962, 963]) expect(pixel(x)[0], `x ${x}`).toBeCloseTo(expected(x), 5);
+    // A gradient a few pixels wide, darkest at the border and never below C^2 (the eased density stays under 2).
+    expect(pixel(959)[0]).toBeLessThan(pixel(957)[0]);
+    expect(pixel(957)[0]).toBeLessThan(pixel(956)[0]);
+    expect(pixel(956)[0]).toBeCloseTo(0.2, 6);
+    expect(pixel(959)[0]).toBeGreaterThan(0.2 * 0.2);
+    expect(pixel(960)[0]).toBeGreaterThan(0.8);
+    // Far from the border nothing changes.
     expect(pixel(400)[0]).toBeCloseTo(0.2, 6);
     expect(pixel(1500)[0]).toBeCloseTo(0.8, 6);
     expect(pixel(959)[3]).toBe(1);
+  });
+
+  it('paints a thin dark line as a deeper tint of its own colour, never below the Lift floor or black', () => {
+    // A 3 px line (x 958-960) on light paper at 1920 x 1080; the final pass reads the frame as its wash.
+    const paperColour: Rgba = [0.85, 0.82, 0.78, 1];
+    const hue = ([r, g, b]: readonly number[]) => {
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+      const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return (h * 60 + 360) % 360;
+    };
+    for (const line of [[0.45, 0.3, 0.2, 1], [0.2, 0.35, 0.6, 1]] as Rgba[]) {
+      const frame = ([u]: [number, number]): Rgba => { const x = u * 1920; return x >= 958 && x < 961 ? line : paperColour; };
+      const centre = (params: Record<string, number>) => evaluateImageOperatorPlan(plan(watercolour(params)).passes![3].program, [0, 0, 0, 0], {
+        uv: [959.5 / 1920, 0.5], resolution: [1920, 1080], timelineTimeSeconds: 0, sampleImage: frame, sampleResource: (_id, uv) => frame(uv) }) as Rgba;
+      // Defaults: every channel stays at or above the Lift floor (Lift 0.1 lets 8 % white paper through).
+      const painted = centre({});
+      for (const channel of painted.slice(0, 3)) expect(channel).toBeGreaterThanOrEqual(0.08 - 1e-6);
+      // Pigment only (no Shadow Pigment, no Lift): darker than the line but not below C^2, the same hue.
+      const pigment = centre({ shadows: 0, lift: 0, simplify: 0, paper: 0 });
+      for (let channel = 0; channel < 3; channel += 1) {
+        expect(pigment[channel]).toBeLessThanOrEqual(line[channel] + 1e-6);
+        expect(pigment[channel]).toBeGreaterThanOrEqual(line[channel] * line[channel] - 1e-6);
+      }
+      expect(Math.abs(hue(pigment) - hue(line))).toBeLessThan(8);
+    }
   });
 
   it('never produces NaN or out-of-range colour for extreme values', () => {
@@ -106,8 +149,11 @@ describe('Acuarela watercolour recipe', () => {
     expect(acuarelaParamWarnings(watercolour({ edges: -1, granulation: 3, simplify: 2 }))).toEqual([
       'simplify: 2 is outside 0-1; it is clamped to 1.', 'edges: -1 is below 0 and lightens the pooled side of every edge.',
       'granulation: 3 is above the 0-2 range; the effect is exaggerated.']);
-    // Edges 2, Granulation 2 and Blooms 2 can reach 1 + 3 + 1.68 + 1.1 = 6.78, above the density cap of 4.
-    expect(acuarelaParamWarnings(watercolour({ edges: 2, granulation: 2, blooms: 2 })).at(-1)).toMatch(/^density: .* 6\.78; it is clamped to 4/);
+    // The pigment density eases inside 0..2 instead of clamping, so even the largest values need no note.
+    expect(acuarelaParamWarnings(watercolour({ edges: 2, granulation: 2, blooms: 2 }))).toEqual([]);
+    // Above 16 px the wobble of the read position stays at its 12 px cap.
+    expect(acuarelaParamWarnings(watercolour({ bleed: 16 }))).toEqual([]);
+    expect(acuarelaParamWarnings(watercolour({ bleed: 25 }))).toEqual(['bleed: above 16 px the wobble stays at 12 px; higher values only widen the wet bleeding.']);
     // Saved smoke-recipe effects get the smoke notes (their Gain is clamped to 0-1).
     expect(acuarelaParamWarnings({ ...SMOKE, strength: 9 })).toEqual([]);
     expect(acuarelaParamWarnings({ ...SMOKE, gain: 3 })).toEqual(['gain: 3 is outside 0-1; it is clamped to 1.']);
@@ -156,11 +202,15 @@ describe('Acuarela saved with the watery-smoke recipe', () => {
     const clip = createMockClip({ id: 'smoke-look-clip' });
     useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
     applyLookToClip({ id: 'old-smoke', name: 'Old', category: 'editorial', tags: [], builtIn: false, thumbnail: { kind: 'generated' },
-      stack: [{ effectId: 'acuarela', enabled: true, params: { ...SMOKE } }] }, clip.id);
+      stack: [{ effectId: 'acuarela', enabled: true, params: { ...SMOKE, gain: 3 } }] }, clip.id);
     const applied = useTimelineStore.getState().clips[0].effects[0];
     expect(applied.params).not.toHaveProperty(EFFECT_GRAPH_PARAM);
     expect(applied.operatorGraph?.nodes.some(node => node.operator === 'image.frame-history')).toBe(true);
-    expect(applied.params).toMatchObject({ strength: 0.32, gain: 0.01 });
+    expect(applied.params).toMatchObject({ strength: 0.32, gain: 3 });
+    // The watercolour defaults addClipEffect filled in are gone, so the smoke notes (and the worker CPU pass) apply.
+    expect(applied.params).not.toHaveProperty('wash');
+    expect(acuarelaParamWarnings(applied.params as Record<string, number | string | boolean>)).toEqual(['gain: 3 is outside 0-1; it is clamped to 1.']);
+    expect(workerSoftwareEffectPlanForLayer(layer(applied))?.pixelEffects.imageOperatorPlans).toHaveLength(1);
   });
 
   it('names the watercolour ports only on the watercolour recipe, not on saved smoke graphs', () => {

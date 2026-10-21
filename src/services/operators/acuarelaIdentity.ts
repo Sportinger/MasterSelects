@@ -36,6 +36,19 @@ export function withLegacyAcuarelaGraph<T extends Record<string, unknown>>(type:
   return { ...params, [EFFECT_GRAPH_PARAM]: JSON.stringify(createLegacyAcuarelaGraph()) };
 }
 
+/** Parameters only the watercolour recipe reads. */
+const WATERCOLOUR_PARAM_IDS = new Set(['wash', 'bleed', 'edges', 'simplify', 'blooms', 'shadows', 'granulation', 'paper', 'grainSize', 'lift', 'flow']);
+
+/**
+ * An instance that renders the smoke recipe (a Look applied with it gets the watercolour defaults
+ * first) drops the watercolour values, so its parameters alone still name the smoke recipe for
+ * the clamp notes and the worker CPU pass (`hasLegacyAcuarelaParams`).
+ */
+export function withoutWatercolourParams<T extends { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }>(effect: T): T {
+  if (!rendersAcuarelaSmokeRecipe(effect) || !Object.keys(effect.params).some(id => WATERCOLOUR_PARAM_IDS.has(id))) return effect;
+  return { ...effect, params: Object.fromEntries(Object.entries(effect.params).filter(([id]) => !WATERCOLOUR_PARAM_IDS.has(id))) };
+}
+
 /** True when the instance renders with the smoke recipe's frame history (saved smoke effects, or a graph built on it). */
 export function rendersAcuarelaSmokeRecipe(effect: { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }): boolean {
   if (effect.type !== 'acuarela') return false;

@@ -5,13 +5,13 @@
  */
 import { hasLegacyAcuarelaParams } from '../../../services/operators/acuarelaEffectGraph';
 import { rom1ParamWarnings } from '../rom1/warnings';
-import { ACUARELA_DENSITY_MAX } from '../../../services/operators/acuarelaWatercolorGraph';
+import { ACUARELA_WOBBLE_MAX_PX } from '../../../services/operators/acuarelaWatercolorGraph';
 
 type Params = Record<string, number | boolean | string>;
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-/** Pigment density terms at their largest: 1 + 1.5 Edges + 0.84 Granulation + 0.55 Blooms (see acuarelaWatercolorGraph.ts). */
-const DENSITY_LIMIT = ACUARELA_DENSITY_MAX;
+/** Bleed above which the wobble of the read position stays at its cap (reach = min(0.75 Bleed, cap) in wet patches). */
+const WOBBLE_FULL_BLEED = ACUARELA_WOBBLE_MAX_PX / 0.75;
 
 export function acuarelaParamWarnings(params: Params): string[] {
   // The smoke recipe clamps Gain to 0-1 (a lift of at most 0.35); its other notes are Rom1's.
@@ -38,8 +38,8 @@ export function acuarelaParamWarnings(params: Params): string[] {
   }
   const wash = params.wash;
   if (finite(wash) && wash > 12) notes.push(`wash: above 12 px the 7 x 7 wash taps spread apart and fine detail turns grainy.`);
-  const term = (id: string, weight: number) => finite(params[id]) ? Math.max(0, params[id] as number) * weight : 0;
-  const peak = 1 + term('edges', 1.5) + term('granulation', 0.84) + term('blooms', 0.55);
-  if (peak > DENSITY_LIMIT) notes.push(`density: Edges, Granulation and Blooms together can reach a pigment density of ${peak.toFixed(2)}; it is clamped to ${DENSITY_LIMIT}, so the darkest strokes flatten.`);
+  const bleed = params.bleed;
+  if (finite(bleed) && bleed > WOBBLE_FULL_BLEED) notes.push(`bleed: above ${WOBBLE_FULL_BLEED} px the wobble stays at ${ACUARELA_WOBBLE_MAX_PX} px; higher values only widen the wet bleeding.`);
+  // Pigment density needs no note: its excess eases smoothly inside 0..2 (acuarelaWatercolorGraph.ts pigment()), nothing is clamped.
   return notes;
 }

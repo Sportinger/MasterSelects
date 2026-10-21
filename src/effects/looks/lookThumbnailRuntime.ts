@@ -5,6 +5,7 @@ import { Logger } from '../../services/logger';
 import { withLegacyLookParams } from './legacyLookParams';
 import { EFFECT_GRAPH_PARAM } from '../../services/operators/effectGraph';
 import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { withoutWatercolourParams } from '../../services/operators/acuarelaIdentity';
 import type { Effect } from '../../types/effects';
 import type { LookDefinition } from './types';
 import { fitThumbnailToWidthRect } from './lookThumbnailGeometry';
@@ -198,7 +199,7 @@ class LookThumbnailRuntime {
       // As applyLookToClip: a custom Look saved before an effect gained controls gets the values that keep its look.
       params: { ...getDefaultParams(entry.effectId), ...(look.builtIn ? entry.params : withLegacyLookParams(entry.effectId, entry.params)) },
     // A graph carried in the params moves to the canonical operatorGraph, as in applyLookToClip.
-    })).map(effect => typeof effect.params[EFFECT_GRAPH_PARAM] === 'string' ? migratePersistedEffectOperatorGraph(effect as Effect) : effect);
+    })).map(effect => typeof effect.params[EFFECT_GRAPH_PARAM] === 'string' ? withoutWatercolourParams(migratePersistedEffectOperatorGraph(effect as Effect)) : effect);
     const encoder = device.createCommandEncoder();
     const result = this.pipeline.applyEffects(
       encoder,

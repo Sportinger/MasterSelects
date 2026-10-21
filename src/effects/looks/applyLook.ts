@@ -3,6 +3,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import { withLegacyLookParams } from './legacyLookParams';
 import { EFFECT_GRAPH_PARAM } from '../../services/operators/effectGraph';
 import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { withoutWatercolourParams } from '../../services/operators/acuarelaIdentity';
 import type { LookDefinition, LookStackEntry } from './types';
 
 export function applyLookToClip(look: LookDefinition, clipId: string): void {
@@ -15,10 +16,11 @@ export function applyLookToClip(look: LookDefinition, clipId: string): void {
       const params = look.builtIn ? entry.params : withLegacyLookParams(entry.effectId, entry.params);
       if (Object.keys(params).length > 0) updateClipEffect(clipId, effectId, params);
       // A graph carried in the params (the smoke Acuarela of an old Look) moves to the effect's
-      // canonical operatorGraph, as on project load, so renders do not re-parse it every frame.
+      // canonical operatorGraph, as on project load, so renders do not re-parse it every frame; the
+      // watercolour defaults filled in by addClipEffect go, so the params still name the smoke recipe.
       if (typeof params[EFFECT_GRAPH_PARAM] === 'string') {
         const state = useTimelineStore.getState(), clip = state.clips.find(item => item.id === clipId);
-        if (clip) state.updateClip(clipId, { effects: clip.effects.map(effect => effect.id === effectId ? migratePersistedEffectOperatorGraph(effect) : effect) });
+        if (clip) state.updateClip(clipId, { effects: clip.effects.map(effect => effect.id === effectId ? withoutWatercolourParams(migratePersistedEffectOperatorGraph(effect)) : effect) });
       }
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }

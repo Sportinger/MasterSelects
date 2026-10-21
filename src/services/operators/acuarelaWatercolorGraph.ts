@@ -2,26 +2,26 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { BlurGraphBuilder, premultipliedSourceCache, type GraphPort } from './blurGraphBuilder';
 
 /**
- * Acuarela watercolour recipe (see docs/Features/Effects-Stylize-Art.md). Three passes:
+ * Acuarela watercolour recipe (see docs/Features/Effects-Stylize-Art.md and Effects.md). Four passes:
  *
  * 1. `source-cache`: the frame premultiplied into an rgba16float cache, so every filtered read
  *    below mixes premultiplied texels (clean colour at transparent edges).
- * 2. `wash-cache`: the pigment wash. An edge-aware (bilateral) 7 x 7 kernel around the read
- *    position flattens colour inside shapes and keeps their borders. The read position wobbles by
- *    up to Bleed pixels (two Fractal Noise fields), and inside "wet" patches (a third, slow noise
- *    field) the kernel widens 2.5x and lets colour cross edges (wet-in-wet bleeding).
- *    Kernel: taps at 0.6 sigma spacing, sigma = Wash px; weight = exp(-0.18 |k|^2 - |dc|^2 / (2 s_r^2)),
- *    dc = premultiplied RGB difference to the centre tap, s_r = mix(0.10, 0.6, wet).
- * 3. Pigment density d per pixel (Bousseau et al. 2006, "Interactive watercolor rendering"):
+ * 2. `wash-first-cache` and `wash-cache`: the pigment wash, two edge-aware (bilateral) 7 x 7 passes
+ *    with jittered taps (see wash()). The first reads at a position that wobbles by up to Bleed
+ *    pixels (capped at ACUARELA_WOBBLE_MAX_PX); in "wet" patches (a slow noise field) both widen and
+ *    let colour cross edges (wet-in-wet bleeding).
+ * 3. The final pass: Simplify tones, then pigment density d per pixel (Bousseau et al. 2006, "Interactive watercolor rendering"):
  *    C' = C - (C - C^2)(d - 1). d > 1 darkens a colour like more pigment, d < 1 lightens it, white
- *    paper (C = 1) and black stay put. d sums
- *    - Edges: pigment pooling on the darker side of every wash border (the wash compared with the
- *      mean of four reads 2 px away), weaker in wet patches,
+ *    paper (C = 1) and black stay put; d - 1 eases into -1..1 (see pigment()), so d stays inside
+ *    0..2 where the formula is valid. d sums
+ *    - Edges: pigment pooling on the darker side of every wash border (the wash compared with a
+ *      Gaussian mean of its neighbourhood, a 2-4 px gradient), weaker in wet patches,
  *    - Granulation: pigment settling in the paper valleys (paper height, 3 octaves of Fractal Noise
  *      at Grain Size) plus a slow uneven-density field, stronger where there is more pigment,
  *    - Blooms: a few backruns in flat areas, a lighter inside with a dark ragged rim.
- *    Then the paper relief (forward differences of the paper height) shades the result, Lift lets
- *    the white paper through, and Mix blends with the original.
+ *    Shadow Pigment then lifts black to a dark indigo, the paper relief (forward differences of the
+ *    paper height) shades the result, Lift lets the white paper through, and Mix blends with the
+ *    original.
  *
  * Every size is in pixels of a 1080p frame (shorter side), so previews and exports match. Flow
  * (cycles per second) moves the wet patches and the wobble with the timeline; the paper stays put.
@@ -31,15 +31,15 @@ export const ACUARELA_REFERENCE_HEIGHT = 1080;
 export const ACUARELA_KERNEL_EXTENT = 3;
 /** Kernel tap spacing in sigmas; the spatial weight per unit index is spacing^2 / 2. */
 export const ACUARELA_TAP_SPACING = 0.6;
-export const ACUARELA_EDGE_REACH_PX = 2;
+/** Spacing of the 5 x 5 pooling reads and sigma of their Gaussian weight (1080p px). */
+export const ACUARELA_POOL_SPACING_PX = 1.5;
+export const ACUARELA_POOL_SIGMA_PX = 2;
 /** Largest wobble of the read position (1080p px); keeps the wobble slope below 0.3 px per px. */
 export const ACUARELA_WOBBLE_MAX_PX = 12;
 /** Tones of the Simplify quantization. */
 export const ACUARELA_TONE_LEVELS = 6;
 /** Darkest pigment (indigo) that Shadow Pigment lifts black to. */
 export const ACUARELA_SHADOW_PIGMENT: readonly [number, number, number] = [0.08, 0.09, 0.14];
-/** Largest pigment density (d); the default Edges, Granulation and Blooms stay below it. */
-export const ACUARELA_DENSITY_MAX = 4;
 /** Share of white paper at Lift 1. */
 export const ACUARELA_LIFT_REACH = 0.8;
 
@@ -217,45 +217,45 @@ function straight(g: BlurGraphBuilder, id: string, sample: GraphPort): string {
   return g.add(id, 'math.divide-ieee.rgb-scalar', { a: [`${id}-split`, 'rgb'], b: `${id}-safe-alpha` });
 }
 
-/** Pigment pooling: wash luminance against the mean of four reads at the edge reach. */
+/**
+ * Pigment pooling: the wash luminance against a Gaussian mean of its neighbourhood (5 x 5 reads
+ * ACUARELA_POOL_SPACING_PX apart, sigma ACUARELA_POOL_SIGMA_PX, both 1080p px). Next to a border the
+ * mean leans toward the other side, so the contrast fades smoothly over a few pixels; a smoothstep
+ * (not a gain and a hard clamp) turns it into a 2-4 px gradient of pooled pigment instead of a
+ * 1 px threshold line. Positive on the darker side of a border, negative on the lighter side.
+ */
 function edgePooling(g: BlurGraphBuilder, washCache: string): void {
   g.add('pool-wash', 'image.sample', { image: [washCache, 'image'], uv: ['uv', 'uv'] });
   straight(g, 'pool-wash-rgb', ['pool-wash', 'image']);
   g.add('pool-wash-luma', 'color.luminance-rec709.rgb', { rgb: 'pool-wash-rgb' });
-  g.number('pool-reach-1080', ACUARELA_EDGE_REACH_PX);
-  g.binary('pool-reach-px', 'math.multiply.scalar', 'pool-reach-1080', 'space-scale');
-  g.add('pool-reach', 'math.multiply.vec2-scalar', { a: 'space-texel', b: 'pool-reach-px' });
-  g.add('pool-reach-split', 'vector.split.vec2', { value: 'pool-reach' });
-  g.add('pool-step-x', 'vector.combine.vec2', { x: ['pool-reach-split', 'x'], y: 'zero' });
-  g.add('pool-step-y', 'vector.combine.vec2', { x: 'zero', y: ['pool-reach-split', 'y'] });
-  const reads = [['right', 'math.add.vec2', 'pool-step-x'], ['left', 'math.subtract.vec2', 'pool-step-x'],
-    ['down', 'math.add.vec2', 'pool-step-y'], ['up', 'math.subtract.vec2', 'pool-step-y']] as const;
-  for (const [name, operator, step] of reads) {
-    g.binary(`pool-${name}-uv`, operator, ['uv', 'uv'], step);
-    g.add(`pool-${name}`, 'image.sample', { image: [washCache, 'image'], uv: `pool-${name}-uv` });
-    g.add(`pool-${name}-split`, 'vector.split.rgba', { image: [`pool-${name}`, 'image'] });
-    g.add(`pool-${name}-alpha`, 'convert.alpha-to-scalar', { alpha: [`pool-${name}-split`, 'alpha'] });
-  }
-  // Premultiplied sums: the straight mean colour is sum(rgb) / sum(alpha).
-  g.binary('pool-rgb-a', 'math.add.rgb', ['pool-right-split', 'rgb'], ['pool-left-split', 'rgb']);
-  g.binary('pool-rgb-b', 'math.add.rgb', ['pool-down-split', 'rgb'], ['pool-up-split', 'rgb']);
-  g.binary('pool-rgb-sum', 'math.add.rgb', 'pool-rgb-a', 'pool-rgb-b');
-  g.binary('pool-alpha-a', 'math.add.scalar', 'pool-right-alpha', 'pool-left-alpha');
-  g.binary('pool-alpha-b', 'math.add.scalar', 'pool-down-alpha', 'pool-up-alpha');
-  g.binary('pool-alpha-sum', 'math.add.scalar', 'pool-alpha-a', 'pool-alpha-b');
-  g.binary('pool-alpha-safe', 'math.max.scalar', 'pool-alpha-sum', 'coverage-floor');
-  g.add('pool-mean-rgb', 'math.divide-ieee.rgb-scalar', { a: 'pool-rgb-sum', b: 'pool-alpha-safe' });
+  g.number('pool-spacing-1080', ACUARELA_POOL_SPACING_PX);
+  g.binary('pool-spacing-px', 'math.multiply.scalar', 'pool-spacing-1080', 'space-scale');
+  g.add('pool-index', 'image.kernel-index');
+  g.add('pool-index-px', 'math.multiply.vec2-scalar', { a: 'pool-index', b: 'pool-spacing-px' });
+  g.binary('pool-index-offset', 'math.multiply.vec2', 'pool-index-px', 'space-texel');
+  g.binary('pool-tap-uv', 'math.add.vec2', ['uv', 'uv'], 'pool-index-offset');
+  g.add('pool-tap', 'image.sample', { image: [washCache, 'image'], uv: 'pool-tap-uv' });
+  g.add('pool-index-squared', 'vector.dot.vec2', { a: 'pool-index', b: 'pool-index' });
+  g.number('pool-falloff', -(ACUARELA_POOL_SPACING_PX ** 2) / (2 * ACUARELA_POOL_SIGMA_PX ** 2));
+  g.binary('pool-exponent', 'math.multiply.scalar', 'pool-index-squared', 'pool-falloff');
+  g.unary('pool-weight', 'math.exp.scalar', 'pool-exponent');
+  g.number('pool-extent', 2);
+  g.add('pool-reduce', 'image.kernel-grid-reduce', { sample: ['pool-tap', 'image'], weight: 'pool-weight', extent: 'pool-extent' });
+  // Premultiplied weighted mean, then straight colour (rgb / alpha).
+  g.add('pool-weight-vec4', 'convert.scalar-to-vec4', { value: ['pool-reduce', 'weightSum'] });
+  g.add('pool-average', 'math.divide-ieee.vec4', { a: ['pool-reduce', 'sum'], b: 'pool-weight-vec4' });
+  g.add('pool-mean', 'convert.vec4-to-image', { value: 'pool-average' });
+  straight(g, 'pool-mean-rgb', ['pool-mean', 'image']);
   g.add('pool-mean-luma', 'color.luminance-rec709.rgb', { rgb: 'pool-mean-rgb' });
   g.binary('pool-contrast', 'math.subtract.scalar', 'pool-mean-luma', 'pool-wash-luma');
-  g.number('pool-gain', 6); g.number('minus-one', -1);
-  g.binary('pool-contrast-gained', 'math.multiply.scalar', 'pool-contrast', 'pool-gain');
-  g.add('pool', 'math.clamp.scalar', { value: 'pool-contrast-gained', min: 'minus-one', max: 'one' });
-  g.add('pool-dark-side', 'math.max.scalar', { a: 'pool', b: 'zero' });
-  g.binary('pool-light-side-negative', 'math.min.scalar', 'pool', 'zero');
+  g.binary('pool-contrast-negative', 'math.subtract.scalar', 'zero', 'pool-contrast');
+  g.number('pool-low', .005); g.number('pool-high', .08);
+  g.add('pool-dark-side', 'math.smoothstep.scalar', { edge0: 'pool-low', edge1: 'pool-high', value: 'pool-contrast' });
+  g.add('pool-light-side', 'math.smoothstep.scalar', { edge0: 'pool-low', edge1: 'pool-high', value: 'pool-contrast-negative' });
   g.number('pool-dark-weight', 1.5); g.number('pool-light-weight', .25);
   g.binary('pool-darkening', 'math.multiply.scalar', 'pool-dark-side', 'pool-dark-weight');
-  g.binary('pool-lightening', 'math.multiply.scalar', 'pool-light-side-negative', 'pool-light-weight');
-  g.binary('pool-shape', 'math.add.scalar', 'pool-darkening', 'pool-lightening');
+  g.binary('pool-lightening', 'math.multiply.scalar', 'pool-light-side', 'pool-light-weight');
+  g.binary('pool-shape', 'math.subtract.scalar', 'pool-darkening', 'pool-lightening');
   g.number('pool-wet-softening', .6);
   g.binary('pool-wet-share', 'math.multiply.scalar', 'wet', 'pool-wet-softening');
   g.binary('pool-dryness', 'math.subtract.scalar', 'one', 'pool-wet-share');
@@ -280,15 +280,21 @@ function paper(g: BlurGraphBuilder): void {
   g.binary('paper-slope-x', 'math.subtract.scalar', 'paper-height-x', 'paper-height');
   g.binary('paper-slope-y', 'math.subtract.scalar', 'paper-height-y', 'paper-height');
   g.binary('paper-slope', 'math.subtract.scalar', 'paper-slope-x', 'paper-slope-y');
-  g.number('paper-relief-gain', 8);
+  g.number('paper-relief-gain', 4);
   g.binary('paper-relief-raw', 'math.multiply.scalar', 'paper-slope', 'paper-relief-gain');
   g.binary('paper-light-raw', 'math.add.scalar', 'half', 'paper-relief-raw');
   g.add('paper-light', 'math.clamp.scalar', { value: 'paper-light-raw', min: 'zero', max: 'one' });
-  // Light washes show the paper, dense dark paint hides it: weight = 0.2 + 0.8 smoothstep(0.04, 0.5, wash luminance).
-  g.number('paper-light-low', .04);
-  g.add('paper-light-share', 'math.smoothstep.scalar', { edge0: 'paper-light-low', edge1: 'half', value: 'pool-wash-luma' });
+  // Mid-light washes show the paper most; dense dark paint hides it and near-white (skin, a white
+  // dress, sky) eases off: visibility = 0.2 + 0.8 smoothstep(0.04, 0.4, L) (1 - 0.7 smoothstep(0.55, 0.9, L)).
+  g.number('paper-light-low', .04); g.number('paper-light-high', .4);
+  g.add('paper-light-share', 'math.smoothstep.scalar', { edge0: 'paper-light-low', edge1: 'paper-light-high', value: 'pool-wash-luma' });
+  g.number('paper-white-low', .55); g.number('paper-white-high', .9); g.number('paper-white-ease', .7);
+  g.add('paper-white-share', 'math.smoothstep.scalar', { edge0: 'paper-white-low', edge1: 'paper-white-high', value: 'pool-wash-luma' });
+  g.binary('paper-white-eased', 'math.multiply.scalar', 'paper-white-share', 'paper-white-ease');
+  g.binary('paper-white-keep', 'math.subtract.scalar', 'one', 'paper-white-eased');
+  g.binary('paper-bell', 'math.multiply.scalar', 'paper-light-share', 'paper-white-keep');
   g.number('paper-dark-floor', .2); g.number('paper-light-gain', .8);
-  g.binary('paper-light-gained', 'math.multiply.scalar', 'paper-light-share', 'paper-light-gain');
+  g.binary('paper-light-gained', 'math.multiply.scalar', 'paper-bell', 'paper-light-gain');
   g.binary('paper-visibility', 'math.add.scalar', 'paper-dark-floor', 'paper-light-gained');
   // Granulation: ((0.55 - height) * 1.3 * (0.3 + pigment) + 0.4 * (uneven - 0.5)) * visibility, times Granulation.
   g.binary('paper-pigment-raw', 'math.subtract.scalar', 'one', 'pool-wash-luma');
@@ -323,7 +329,7 @@ function blooms(g: BlurGraphBuilder): void {
   g.number('bloom-rim-sharpness', -10000);
   g.binary('bloom-rim-exponent', 'math.multiply.scalar', 'bloom-rim-distance-squared', 'bloom-rim-sharpness');
   g.unary('bloom-rim', 'math.exp.scalar', 'bloom-rim-exponent');
-  g.number('bloom-rim-weight', .55); g.number('bloom-inside-weight', .25);
+  g.number('bloom-rim-weight', 1.1); g.number('bloom-inside-weight', .5);
   g.binary('bloom-rim-share', 'math.multiply.scalar', 'bloom-rim', 'bloom-rim-weight');
   g.binary('bloom-inside-share', 'math.multiply.scalar', 'bloom-inside', 'bloom-inside-weight');
   g.binary('bloom-shape', 'math.subtract.scalar', 'bloom-rim-share', 'bloom-inside-share');
@@ -363,9 +369,40 @@ function simplify(g: BlurGraphBuilder): void {
   g.add('tone-rgb', 'math.mix.rgb', { a: 'pool-wash-rgb', b: 'tone-quantized', t: 'tone-amount' });
 }
 
-/** Shadow Pigment: black lifts toward a dark indigo pigment, C = P + (1 - P) C, mixed in by Shadow Pigment. */
+/**
+ * Pigment density d = 1 + pooling + granulation + blooms, applied with Bousseau et al.'s
+ * C' = C - (C - C^2)(d - 1). That form stays inside 0..1 only for 0 <= d <= 2 (above 2 it goes
+ * negative for every C < (d - 2) / (d - 1), which drew black ink lines), so the excess e = d - 1
+ * eases instead of clamping: more pigment 1 - exp(-e), less pigment exp(e) - 1. d stays inside
+ * 0..2 for any Edges, Granulation and Blooms, the darkest pooling is C^2 (a deeper tint of the same
+ * pigment), and white paper (C = 1) and black stay put.
+ */
+function pigment(g: BlurGraphBuilder): void {
+  g.binary('density-pool-granulation', 'math.add.scalar', 'pool-density', 'paper-granulation');
+  g.binary('density-terms', 'math.add.scalar', 'density-pool-granulation', 'bloom-density');
+  g.binary('density-more', 'math.max.scalar', 'density-terms', 'zero');
+  g.binary('density-more-exponent', 'math.subtract.scalar', 'zero', 'density-more');
+  g.unary('density-more-decay', 'math.exp.scalar', 'density-more-exponent');
+  g.binary('density-more-eased', 'math.subtract.scalar', 'one', 'density-more-decay');
+  g.binary('density-less', 'math.min.scalar', 'density-terms', 'zero');
+  g.unary('density-less-decay', 'math.exp.scalar', 'density-less');
+  g.binary('density-less-eased', 'math.subtract.scalar', 'density-less-decay', 'one');
+  g.binary('density-excess', 'math.add.scalar', 'density-more-eased', 'density-less-eased');
+  g.binary('density', 'math.add.scalar', 'one', 'density-excess');
+  g.add('density-colour', 'math.clamp.rgb-scalar', { value: 'tone-rgb', min: 'zero', max: 'one' });
+  g.binary('density-colour-squared', 'math.multiply.rgb', 'density-colour', 'density-colour');
+  g.binary('density-transmission', 'math.subtract.rgb', 'density-colour', 'density-colour-squared');
+  g.add('density-change', 'math.multiply.rgb-scalar', { a: 'density-transmission', b: 'density-excess' });
+  g.binary('density-painted', 'math.subtract.rgb', 'density-colour', 'density-change');
+}
+
+/**
+ * Shadow Pigment, after the density: black lifts toward a dark indigo pigment, C = P + (1 - P) C,
+ * mixed in by Shadow Pigment, so pooled edges keep the indigo floor too. The clamp keeps every
+ * channel inside 0..1 before the paper light and Lift.
+ */
 function shadowPigment(g: BlurGraphBuilder): void {
-  g.add('shade-clamped', 'math.clamp.rgb-scalar', { value: 'tone-rgb', min: 'zero', max: 'one' });
+  g.add('shade-clamped', 'math.clamp.rgb-scalar', { value: 'density-painted', min: 'zero', max: 'one' });
   const [r, gr, b] = ACUARELA_SHADOW_PIGMENT;
   g.number('shade-pigment-r', r); g.number('shade-pigment-g', gr); g.number('shade-pigment-b', b);
   g.add('shade-pigment-vec3', 'vector.combine.vec3', { x: 'shade-pigment-r', y: 'shade-pigment-g', z: 'shade-pigment-b' });
@@ -377,21 +414,6 @@ function shadowPigment(g: BlurGraphBuilder): void {
   g.bound('shadows', 'shadows');
   g.add('shade-amount', 'math.clamp.scalar', { value: 'shadows', min: 'zero', max: 'one' });
   g.add('shade-rgb', 'math.mix.rgb', { a: 'shade-clamped', b: 'shade-lifted', t: 'shade-amount' });
-}
-
-/** d = clamp(1 + pooling + granulation + blooms, 0, 4); C' = C - (C - C^2)(d - 1). */
-function pigment(g: BlurGraphBuilder): void {
-  g.binary('density-pool-granulation', 'math.add.scalar', 'pool-density', 'paper-granulation');
-  g.binary('density-terms', 'math.add.scalar', 'density-pool-granulation', 'bloom-density');
-  g.binary('density-raw', 'math.add.scalar', 'one', 'density-terms');
-  g.number('density-max', ACUARELA_DENSITY_MAX);
-  g.add('density', 'math.clamp.scalar', { value: 'density-raw', min: 'zero', max: 'density-max' });
-  g.add('density-colour', 'math.clamp.rgb-scalar', { value: 'shade-rgb', min: 'zero', max: 'one' });
-  g.binary('density-colour-squared', 'math.multiply.rgb', 'density-colour', 'density-colour');
-  g.binary('density-transmission', 'math.subtract.rgb', 'density-colour', 'density-colour-squared');
-  g.binary('density-excess', 'math.subtract.scalar', 'density', 'one');
-  g.add('density-change', 'math.multiply.rgb-scalar', { a: 'density-transmission', b: 'density-excess' });
-  g.binary('density-painted', 'math.subtract.rgb', 'density-colour', 'density-change');
 }
 
 /**
@@ -407,8 +429,10 @@ function finish(g: BlurGraphBuilder): void {
   g.binary('finish-relief-share', 'math.multiply.scalar', 'finish-light-centered', 'finish-relief-weight');
   g.binary('finish-relief-visible', 'math.multiply.scalar', 'finish-relief-share', 'paper-visibility');
   g.binary('finish-relief-amount', 'math.multiply.scalar', 'finish-relief-visible', 'paper');
-  g.binary('finish-relief', 'math.add.scalar', 'one', 'finish-relief-amount');
-  g.add('finish-lit', 'math.multiply.rgb-scalar', { a: 'density-painted', b: 'finish-relief' });
+  g.binary('finish-relief-raw', 'math.add.scalar', 'one', 'finish-relief-amount');
+  // A huge or inverted Paper could push the relief below 0 and turn colours negative.
+  g.binary('finish-relief', 'math.max.scalar', 'finish-relief-raw', 'zero');
+  g.add('finish-lit', 'math.multiply.rgb-scalar', { a: 'shade-rgb', b: 'finish-relief' });
   g.bound('lift', 'lift');
   g.add('finish-lift-clamped', 'math.clamp.scalar', { value: 'lift', min: 'zero', max: 'one' });
   g.number('finish-lift-reach', ACUARELA_LIFT_REACH);
@@ -442,8 +466,8 @@ export function createDefaultAcuarelaGraph(): EffectOperatorGraph {
   paper(g);
   blooms(g);
   simplify(g);
-  shadowPigment(g);
   pigment(g);
+  shadowPigment(g);
   finish(g);
   return g.graph(10);
 }
