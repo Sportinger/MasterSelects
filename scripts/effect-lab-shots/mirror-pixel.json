@@ -47,11 +47,12 @@
       "out": "docs/Features/assets/effects/blockify.webp",
       "image": "neon_rain_street",
       "width": 1920,
-      "layout": "split",
-      "crop": [180, 0, 960, 540],
-      "outWidth": 1600,
+      "layout": "stack",
+      "crop": [480, 0, 960, 540],
+      "outWidth": 960,
+      "gap": 4,
       "left": { "effect": "original" },
-      "right": { "effect": "blockify", "params": { "levels": 4 } }
+      "right": { "effect": "blockify", "params": {} }
     },
     {
       "name": "block-mosaic",

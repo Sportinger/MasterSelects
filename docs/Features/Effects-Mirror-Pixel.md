@@ -60,7 +60,7 @@ Tip: Top / Bottom on a landscape gives a calm reflection in water.
 Shifts the red and blue colour layers apart, like a misprinted poster or a
 glitching screen.
 - **Amount** – how far red and blue move, each in its own direction, as a share of the picture width (of the height when vertical). 0.005 (the default) is a fine fringe, 0.01 a clear glitch.
-- **Angle** – the direction, in degrees: 0° sideways, 90° up and down.
+- **Angle** – the direction, in degrees: 0° sideways, 90° up and down (Offset mode only).
 - **Mode** – **Offset** shifts the whole picture; **Lens** leaves the middle clean and lets the fringes grow towards the edges, like a cheap lens.
 
 Tip: keyframe Amount in short bursts for glitch hits on the beat.
@@ -87,15 +87,15 @@ middle of the picture until it is clear.
 ### Blockify
 <figure class="docs-shot docs-shot--float-right">
 
-![A detail of the night street with its neon signs, left half as it is; right half in blocks of a few strong colours, the dark areas broken into a checker pattern of near-black blocks](assets/effects/blockify.webp)
+![A detail of the night street with its neon signs, twice: on top as it is; below in large blocks, the pink spiral, the teal K and the orange sign turned into blocky shapes of a few flat colours on dark navy, grey and black, with a light block pattern where shades change](assets/effects/blockify.webp)
 
-<figcaption>Left: original. Right: Levels 4. A detail, enlarged.</figcaption>
+<figcaption>Top: original. Bottom: the default settings (Levels 8, Dither 0.5). A detail.</figcaption>
 </figure>
 
 Pixelates and reduces the colours, for the look of an old computer game.
 - **Block Size** – the size of the blocks, measured like Pixel Size.
 - **Levels** – how many shades each colour keeps. 8 (the default) gives 512 colours, 4 a bold 64-colour palette, 2 a hard poster look.
-- **Dither** – breaks smooth shading, such as a dark stage, into a regular pattern of blocks instead of flat bands; 0 turns it off.
+- **Dither** – breaks the bands where shades change into a regular pattern of blocks. 0.5 (the default) keeps a dark stage calm, 1 is a full retro checker, 0 gives flat bands. Black and the darkest shades stay flat.
 - **Amount** – mixes the blocks with the original picture.
 
 <div class="docs-float-end"></div>
@@ -282,8 +282,11 @@ Notes for developers. The recipes live in
   pixels per cell, then spread 64 pairs of taps. A Pixel Size that rounds to one
   rendered pixel or less leaves the picture unchanged (only a negative size is
   reported); Blockify and Block Mosaic raise smaller sizes to 1 and 2 pixels and say so.
+  The Mosaic Glitch transition animates Pixel Size from and to 0, so its cuts stay
+  clean at 4K too.
 - **Blockify** rounds each channel to Levels steps (2–64) after adding the block's
-  4 × 4 Bayer threshold − 0.5, times Dither; black and white stay exact.
+  4 × 4 Bayer threshold − 0.5, times Dither and a shadow guard (c / w)², where w is
+  one level step but at most 0.25: black, white and dark haze stay flat.
 - **Block Mosaic** hashes each 2 × 2 group, adds a seed of fract(step × (0.618,
   0.755)) and hashes again; a group is large above 0.68. The step is
   floor(time × Speed) on the timeline clock, so seeking and export repeat it.

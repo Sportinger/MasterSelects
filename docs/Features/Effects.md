@@ -836,7 +836,8 @@ Pixelate, Blockify and Block Mosaic share one centred cell grid (sizes in pixels
 of a 1080p frame, rounded to whole rendered pixels) and an exact two-pass cell
 average of the premultiplied frame (three passes in all); cells wider than 128
 rendered pixels average evenly spread taps. Blockify's dither is a 4 × 4 Bayer
-threshold per block. Block Mosaic draws its large tiles from timeline time, so
+threshold per block that fades out over the darkest level step, so black stays
+flat. Block Mosaic draws its large tiles from timeline time, so
 seeking and export reproduce the same pattern; bound colour nodes read the
 canonical effect colour (including eight-digit hex alpha) without recompiling.
 Untouched saved graphs and graph-less saved effects move to the current recipes
@@ -848,10 +849,15 @@ pixels, Blockify and Block Mosaic at Amount 0) skip the built-in recipe.
 readback) the untouched Kaleidoscope, Mirror, RGB Split and Pixelate recipes run
 as one hand-written whole-frame pass with the same mappings, frame edges and
 premultiplied reads, within 1/255 of the graphs in tests; Pixelate averages every
-cell exactly there. The pass runs before the layer's other CPU effects, so it is
-used only when nothing that moves or mixes pixels comes earlier in the stack
-(uniform colour adjustments may precede Kaleidoscope and Mirror). Other stacks,
-and edited graphs, run as ordered graph plans.
+cell exactly there. The pass runs before the layer's other CPU effects. Pointwise
+effects in front of it (Brightness, Contrast, Saturation, Hue Shift, Invert,
+Exposure, Temperature, Vibrance, Levels, Threshold, Posterize, Chroma Key,
+Vignette, Scanlines, Grain) join it as whole-frame steps in stack order, with
+8-bit values between effects like the GPU, so a grade or a key before Pixelate or
+Kaleidoscope stays exact and fast. A distort, blur, glow, sharpen or feedback
+effect in front of it, and edited graphs, run the layer as ordered graph plans,
+which are much slower. The pass keeps one float copy of the frame (two for a
+chain of resampling effects) and frees it after two idle seconds.
 
 ### Editable blur kernels
 
