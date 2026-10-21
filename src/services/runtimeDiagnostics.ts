@@ -1,5 +1,6 @@
 import { redactObject, redactSecrets } from './security/redact';
 import { announceEditRejection, isEditRejection } from './editRejection';
+import { isMediaPlayInterruption } from '../utils/mediaPlayInterruption';
 
 export type RuntimeDiagnosticLevel = 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
 
@@ -333,6 +334,17 @@ export function installRuntimeDiagnostics(): void {
   window.addEventListener('unhandledrejection', (event) => {
     if (handleEditRejection(event, event.reason, 'unhandledrejection')) return;
     const details = getErrorDetails(event.reason);
+    // A play() superseded by pause()/load() is expected media behaviour: keep a breadcrumb, never an error report.
+    if (isMediaPlayInterruption(event.reason)) {
+      event.preventDefault();
+      recordDiagnostic({
+        source: 'unhandledrejection',
+        level: 'INFO',
+        message: `Media playback start superseded: ${details.message}`,
+        details: { errorName: details.name },
+      });
+      return;
+    }
     recordDiagnostic({
       source: 'unhandledrejection',
       level: 'ERROR',

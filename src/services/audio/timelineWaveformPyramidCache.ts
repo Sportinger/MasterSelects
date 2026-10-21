@@ -421,7 +421,8 @@ async function decodeTimelineWaveformAnalysisForFile(file: File, options: Genera
       const reader = new MediaAudioRangeReader(file);
       try {
         audioBuffer = await reader.read(0, duration);
-      } catch {
+      } catch (fallbackError) {
+        log.debug('Container audio fallback could not decode the source either', { file: file.name, fallbackError });
         throw decodeError;
       } finally {
         reader.dispose();

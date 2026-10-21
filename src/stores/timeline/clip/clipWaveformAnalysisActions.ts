@@ -17,6 +17,7 @@ import {
   clearAudioAnalysisJobUpdate,
   createAudioAnalysisJobUpdate,
   isAudioAnalysisCancellation,
+  isUndecodableAudioSourceError,
   isUnreadableClipSourceError,
   resolveClipSourceFile,
   updateAudioAnalysisJobProgress,
@@ -184,6 +185,11 @@ export async function generateWaveformForClipAction(
       log.debug('Waveform generation cancelled', { clipId });
     } else if (isUnreadableClipSourceError(e)) {
       log.warn('Waveform source became unavailable', { clipId });
+    } else if (isUndecodableAudioSourceError(e)) {
+      log.warn('Waveform unavailable: the browser could not decode this clip\'s audio; the clip stays without a waveform', {
+        clipId,
+        reason: e instanceof Error ? e.message : String(e),
+      });
     } else {
       log.error('Waveform generation failed', e);
     }

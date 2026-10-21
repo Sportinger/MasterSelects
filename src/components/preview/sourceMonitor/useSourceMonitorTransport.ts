@@ -4,7 +4,9 @@ import {
   useRef,
   useState,
 } from 'react';
+import { Logger } from '../../../services/logger';
 import type { MediaFile } from '../../../stores/mediaStore';
+import { isMediaPlayInterruption } from '../../../utils/mediaPlayInterruption';
 import type { CodecSourceMonitorHandle } from './CodecSourceMonitorCanvas';
 import {
   clampTime,
@@ -12,6 +14,8 @@ import {
   MIN_MARK_GAP_SECONDS,
   normalizeDuration,
 } from './sourceMonitorTimecode';
+
+const log = Logger.create('SourceMonitorTransport');
 
 interface SourceMonitorTransportOptions {
   autoplayRequestId: number;
@@ -197,11 +201,16 @@ export function useSourceMonitorTransport({
       currentTimeRef.current = start;
       setCurrentTime(start);
     }
-    void media.play().catch(() => {
+    void media.play().catch((error: unknown) => {
+      // A pause or source change superseded this play(): nothing failed, so do not reload.
+      if (isMediaPlayInterruption(error)) return;
       try {
         media.load();
         media.currentTime = clampTime(playbackStart, timelineDuration);
-        void media.play();
+        void media.play().catch((retryError: unknown) => {
+          if (isMediaPlayInterruption(retryError)) return;
+          log.warn('Source monitor playback could not start', retryError);
+        });
       } catch {
         // The explicit transport button remains available after a native failure.
       }
