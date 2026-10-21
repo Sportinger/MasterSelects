@@ -7,6 +7,7 @@ import starlight from '@astrojs/starlight';
 // "## Documentation Index" sections of docs/Features/README.md.
 const sidebarFile = new URL('./src/generated/sidebar.json', import.meta.url);
 const featureGroups = JSON.parse(fs.readFileSync(sidebarFile, 'utf8'));
+const docsClipsScript = new URL('./src/scripts/docsClips.js', import.meta.url);
 
 // The site's own pages lead the Getting Started group.
 const startPages = [
@@ -30,12 +31,14 @@ export default defineConfig({
         'Browser-based media editor and agent-friendly foundation for video, audio, motion, 3D, and creative tools.',
       logo: { src: './src/assets/ms-mark.png' },
       customCss: ['./src/styles/custom.css'],
+      // Docs clips start when scrolled into view and respect reduced motion (inline: a few lines).
+      head: [{ tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsClipsScript, 'utf8') }],
       sidebar,
     }),
-    // A running `astro dev` restarts when a sync changes the generated groups.
+    // A running `astro dev` restarts when a sync changes the generated groups or the clip script changes.
     {
       name: 'masterselects-feature-sidebar',
-      hooks: { 'astro:config:setup': ({ addWatchFile }) => addWatchFile(sidebarFile) },
+      hooks: { 'astro:config:setup': ({ addWatchFile }) => { addWatchFile(sidebarFile); addWatchFile(docsClipsScript); } },
     },
   ],
 });

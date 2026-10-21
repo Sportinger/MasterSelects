@@ -58,6 +58,19 @@
   border-radius: .5rem;
 }
 .sl-markdown-content .docs-shot > p { margin: 0; }
+/* Clips: muted loops in the same frame as the pictures. width/height (from the poster, see
+   sync-features.mjs) reserve their box before the video loads; the poster shows until it plays. */
+.sl-markdown-content .docs-clip video {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: .5rem;
+  background: #111;
+  object-fit: contain;
+}
+.sl-markdown-content .docs-clip video:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
 .sl-markdown-content .docs-shot figcaption {
   margin-top: .65rem;
   color: var(--sl-color-gray-2);

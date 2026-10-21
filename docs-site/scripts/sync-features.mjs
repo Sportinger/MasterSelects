@@ -10,7 +10,9 @@
 //   --build   always clear the Astro content cache (production builds)
 //
 // The site lives under the `/docs` base, so every generated route starts with /docs.
-// Pictures become links to the full-size file, with width/height and lazy loading.
+// Pictures become links to the full-size file, with width/height and lazy loading. Clips
+// (<video> with an MP4 and a WebP poster from the same assets folder) get site URLs, their poster's
+// size and a lazy, motion-aware start (see convertVideoTag).
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -91,8 +93,31 @@ function readAsset(relativePath) {
   catch { return undefined; }
 }
 
+/**
+ * Docs clips: `<video src="assets/…" poster="assets/…" autoplay muted loop playsinline preload="none">`
+ * in a `docs-shot docs-clip` figure. The asset URLs become site URLs; a clip without width/height
+ * takes its poster's size (no layout shift). `autoplay` becomes `data-docs-autoplay` plus
+ * `controls`: the page script (src/scripts/docsClips.js) removes the controls and plays the clip
+ * only while it is in view, and never under prefers-reduced-motion, where the poster and the
+ * controls stay. Without scripts the clip still plays from its controls.
+ */
+function convertVideoTag(tag) {
+  let html = tag.replace(/(\s(?:src|poster)=")(?:\.\/)?(assets\/[^"]+)"/g, (_, attribute, asset) => `${attribute}${siteBase}/${asset}"`);
+  if (!/\swidth="/.test(html) || !/\sheight="/.test(html)) {
+    const poster = tag.match(/\sposter="(?:\.\/)?(assets\/[^"]+)"/)?.[1];
+    const size = poster && imageSize(readAsset(poster) ?? new Uint8Array());
+    if (size) html = html.replace(/\s(?:width|height)="[^"]*"/g, '').replace(/^<video\b/, `<video width="${size.width}" height="${size.height}"`);
+    else console.warn(`Clip ${tag.slice(0, 80)}…: no width/height and no readable poster; the page shifts when it loads.`);
+  }
+  if (/\sautoplay(?=[\s>=])/.test(html)) html = html.replace(/\sautoplay(?:="[^"]*")?(?=[\s>])/, ' data-docs-autoplay controls');
+  return html;
+}
+
 function convert(markdown, { title }) {
   let body = markdown;
+  // Not inside fenced code: a page may show the clip markup as an example.
+  body = body.split(/(^```[^\n]*\n[\s\S]*?^```[ \t]*$)/m)
+    .map((part, index) => (index % 2 ? part : part.replace(/<video\s[^>]*\bsrc="[^>]*>/g, convertVideoTag))).join('');
   // Drop the repo-internal "[Back to Project](../../README.md)" back-link line.
   body = body.replace(/^\[Back to [^\]]+\]\([^)]*\)\s*\n+/i, '');
   // The first H1 becomes the frontmatter title.
