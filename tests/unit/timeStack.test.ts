@@ -7,7 +7,9 @@ import { prepareImageEffect } from '../../src/services/operators/imageEffectRunt
 import { timeStack } from '../../src/effects/time/time-stack';
 import { timeStackDecay, timeStackSettings } from '../../src/effects/time/time-stack/settings';
 import { blendSequencePixel } from '../../src/services/operators/sequenceBlend';
-import { effectOperatorCompileContext, effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { effectOperatorCompileContext, effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { instantiateEffectPreset } from '../../src/services/nodeGraph/effectPresetLibrary';
+import { getEffectDescriptorForPath } from '../../src/services/properties/effectProperties';
 import { unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
 
 const defaults = Object.fromEntries(Object.entries(timeStack.params).map(([key, schema]) => [key, schema.default]));
@@ -56,6 +58,35 @@ describe('Time Stack graph', () => {
     expect(migratePersistedEffectOperatorGraph({ ...old, params: { ...old.params, decay: 0.5 } } as never).params.decay).toBe(0.5);
   });
 
+  it('renders a Time Stack stored without Decay (old preset or project) with Decay 1 before and after saving', () => {
+    // An effect preset saved before Decay existed: no decay param, the pre-Decay graph.
+    const preset = { id: 'p', label: 'Old stack', effect: { type: 'time-stack', enabled: true,
+      params: { count: 20, offset: 0.1, blendMode: 'darken' }, operatorGraph: createLegacyTimeStackGraph() } };
+    const live = instantiateEffectPreset(preset as never);
+    expect(live.params.decay).toBeUndefined();
+    const saved = migratePersistedEffectOperatorGraph(live);
+    expect(saved.params.decay).toBe(1);
+    // Every reader agrees on 1: the graph parameters, the inspector helper and the property registry.
+    expect(effectOperatorParams(live).decay).toBe(1);
+    expect(effectOperatorParams(saved).decay).toBe(1);
+    expect(timeStackDecay(live.params).decay).toBe(1);
+    const clip = { effects: [live] } as never;
+    const path = `effect.${live.id}.decay`;
+    expect(getEffectDescriptorForPath(path, clip)?.read?.(clip, path)).toBe(1);
+    // Same image before and after the save round trip.
+    const samples: [number, number, number, number][] = [[0.2, 0.3, 0.4, 1], [0.7, 0.1, 0.5, 0.8], [0.4, 0.9, 0.2, 1]];
+    const render = (effect: typeof live) => evaluateImageOperatorPlan(prepareImageEffect({ ...effect, params: { ...effect.params, count: 3, offset: 1 } }).plan!,
+      samples[0], { timelineTimeSeconds: 0, uv: [0.5, 0.5], sampleInputHistory: (_uv, delay) => samples[Math.round(delay)] });
+    expect(render(live)).toEqual(render(saved));
+    // A fresh effect stores its 0.8 explicitly and keeps it.
+    expect(effectOperatorParams({ type: 'time-stack', params: { ...defaults } }).decay).toBe(0.8);
+  });
+
+  it('reads count and offset given as numeric text like the graph does, and null as the default', () => {
+    expect(timeStackSettings({ count: '12', offset: '0.5' })).toMatchObject({ count: 12, offset: 0.5 });
+    expect(timeStackSettings({ count: null, offset: 'abc' })).toMatchObject({ count: 20, offset: 0.1 });
+  });
+
   it('draws the current frame first and older copies over it: Decay trails the subject in Lighten, buries it in Normal', () => {
     // 20 copies, the current frame white and every past frame black. Independent reference: the share of the
     // current frame after compositing copy i (opacity decay^i) over it in order.
@@ -89,7 +120,7 @@ describe('Time Stack graph', () => {
   });
 
   it('turns out-of-range Decay into a defined, reported value', () => {
-    expect(timeStackDecay({})).toEqual({ decay: 0.8, clamped: false, invalid: false });
+    expect(timeStackDecay({})).toEqual({ decay: 1, clamped: false, invalid: false });
     expect(timeStackDecay({ decay: 0.5 })).toEqual({ decay: 0.5, clamped: false, invalid: false });
     expect(timeStackDecay({ decay: -2 })).toEqual({ decay: 0.0001, clamped: true, invalid: false });
     expect(timeStackDecay({ decay: 7 })).toEqual({ decay: 1, clamped: true, invalid: false });

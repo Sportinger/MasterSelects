@@ -54,8 +54,10 @@ export const chromaKey: EffectDefinition = {
       graphOnly: true,
       options: [{ value: 'result', label: 'Final result' }, { value: 'matte', label: 'Matte' }],
     },
-    tolerance: { type: 'number', label: 'Tolerance', default: 0.2, min: 0, max: 1, step: 0.01, animatable: false, hidden: true, deprecated: RETIRED },
-    softness: { type: 'number', label: 'Edge Softness (retired)', default: 0.1, min: 0, max: 0.5, step: 0.01, animatable: false, hidden: true, deprecated: RETIRED },
+    // Animatable as before the rebuild: an edited old graph still reads them (and their keyframes); the new
+    // keyer hides them, and its inspector lists stored values and keyframes as no longer used.
+    tolerance: { type: 'number', label: 'Tolerance', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true, hidden: true, deprecated: RETIRED },
+    softness: { type: 'number', label: 'Edge Softness (retired)', default: 0.1, min: 0, max: 0.5, step: 0.01, animatable: true, hidden: true, deprecated: RETIRED },
   },
 
   packUniforms: (params) => {

@@ -24,8 +24,10 @@ that cover what is below (**Normal**) bury the current frame under the faded cop
 Decay 0.8 and 20 instances it keeps under 1 % of the result (at Decay 1 none). The
 inspector says so when Normal is chosen with Decay below 1.
 
-Saved projects keep their look: Time Stacks saved before Decay existed load with
-Decay 1 (`migratePersistedEffectOperatorGraph`), their stored blend mode stays,
+Saved projects keep their look: a Time Stack stored without Decay (a project or an
+effect preset from before Decay existed) renders with Decay 1, the parameter's
+`legacyDefault`, in the graph, the inspector and the property registry, and saving
+writes that 1 (`migratePersistedEffectOperatorGraph`); its stored blend mode stays,
 untouched saved graphs gain the Decay nodes, and graphs edited before Decay existed
 stay as saved (the inspector notes that Decay has no effect there, and tools report it
 for `decay`).

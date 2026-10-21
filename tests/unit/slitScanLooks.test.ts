@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { SLIT_SCAN_LOOKS, SLIT_SCAN_LOOK_KEYS, applySlitScanLook, slitScanLookOf } from '../../src/effects/time/slit-scan/looks';
-import { slitScanParams } from '../../src/effects/time/slit-scan/parameters';
+import { slitScanNumber, slitScanParams } from '../../src/effects/time/slit-scan/parameters';
+import { effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 
 describe('Slit Scan looks', () => {
   it('set every look key to a value the parameter accepts, and only the Time and Wave sections', () => {
@@ -37,5 +38,14 @@ describe('Slit Scan looks', () => {
 
   it('blends adjacent frames by default for new effects, like the runtime fallback of older saved ones', () => {
     expect(slitScanParams.temporalInterpolation.default).toBe('linear');
+  });
+
+  it('reads null, NaN and text numbers with the graph\'s rule, so the history window and the graph delay agree', () => {
+    for (const delay of [null, Number.NaN, 'abc', '2.5', 2.5]) {
+      const graphDelay = Number(effectOperatorParams({ type: 'slit-scan', params: { delay } }).delay);
+      expect(slitScanNumber({ delay }, 'delay'), String(delay)).toBe(Math.min(60, Math.max(0, graphDelay)));
+    }
+    expect(slitScanNumber({ delay: null }, 'delay')).toBe(1);
+    expect(slitScanNumber({ delay: '2.5' }, 'delay')).toBe(2.5);
   });
 });

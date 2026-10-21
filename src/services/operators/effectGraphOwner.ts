@@ -306,8 +306,10 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   const params = { ...effect.params };
   delete params[EFFECT_GRAPH_PARAM];
   if (effect.type === 'grain' && params.seed === undefined) params.seed = 0;
-  // Time Stacks saved before Decay existed kept every copy at full opacity; new ones default to 0.8.
-  if ((effect.type as string) === 'time-stack' && params.decay === undefined) params.decay = 1;
+  // Store the value an effect saved before a parameter existed renders with (e.g. Time Stack Decay 1).
+  for (const [id, spec] of Object.entries(getEffect(effect.type)?.params ?? {})) {
+    if (spec.legacyDefault !== undefined && params[id] === undefined) params[id] = spec.legacyDefault;
+  }
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {
@@ -365,7 +367,8 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
   if (effect.type === 'splat-exploration') return { ...defaultSplatGraph(true).params, ...effect.params };
   if (isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' || isComputeImageEffectType(effect.type)) {
     const definition = getEffect(effect.type);
-    const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.default]));
+    // A parameter missing from stored params predates it: render with its legacy value where it has one.
+    const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.legacyDefault ?? spec.default]));
     const resolved = { ...defaults, ...effect.params };
     for (const [id, spec] of Object.entries(definition?.params ?? {})) {
       if (spec.type === 'color' && typeof spec.default === 'string') {

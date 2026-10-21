@@ -4,7 +4,8 @@ import type { Effect } from '../../types/effects';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
-import { isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { isDefaultChromaKeyGraph } from '../operators/chromaKeyGraphUpgrade';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
@@ -460,11 +461,18 @@ function effectFilterPart(
   }
 }
 
+/** A layer whose only effect is an untouched Chroma Key. Every loaded project stores its graph, and that graph is
+ * the recipe the scalar CPU keyer renders: it takes the keyer, not the graph interpreter (hundreds of times slower for this graph). */
+function soleDefaultChromaKey(effects: readonly Effect[]): boolean {
+  if (effects.length !== 1 || effects[0].type !== 'chroma-key') return false;
+  try { return isDefaultChromaKeyGraph(effectOperatorGraph(effects[0], { inspectionOnly: true })); } catch { return false; }
+}
+
 export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
-  const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
+  const hasPersistedImageGraph = !soleDefaultChromaKey(activeEffects) && activeEffects.some(effect => isImageGraphEffectType(effect.type)
     && (effect.operatorGraph || effect.params.operatorGraph !== undefined));
   if (hasPersistedImageGraph) {
     if (!activeEffects.every(effect => isImageGraphEffectType(effect.type))) return null;
@@ -499,10 +507,11 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   if (feedbackEffectCount > 0 && activeVisualEffectCount !== feedbackEffectCount) {
     return null;
   }
-  // The CPU pass applies its adjustments in a fixed order and Chroma Key measures the screen from the layer
-  // source: keyed together with any other effect or a colour grade, export would differ from the GPU preview.
+  // The CPU pass applies its adjustments in a fixed order and every Chroma Key measures the screen from the layer
+  // source: keyed together with any other effect (a second key too) or a colour grade, export would differ from
+  // the GPU preview, where each effect sees the one before.
   const chromaKeyCount = pixelEffects.chromaKeyAdjustments?.length ?? 0;
-  if (chromaKeyCount > 0 && (activeVisualEffectCount !== chromaKeyCount || (pixelEffects.colorGradePrimaryNodes?.length ?? 0) > 0)) {
+  if (chromaKeyCount > 0 && (chromaKeyCount !== 1 || activeVisualEffectCount !== 1 || (pixelEffects.colorGradePrimaryNodes?.length ?? 0) > 0)) {
     return null;
   }
   delete pixelEffects.feedbackEffectCount;

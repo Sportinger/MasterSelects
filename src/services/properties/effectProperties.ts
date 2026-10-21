@@ -7,6 +7,7 @@ import type { PropertyDescriptor, PropertyValueType } from '../../types/property
 import type { PropertyRegistry } from './PropertyRegistry';
 import { faceCableDescriptors } from './faceCableProperties';
 import { exposedGraphValues } from '../operators/exposedGraphValueList';
+import { effectParamDefinitions } from '../operators/effectParamVisibility';
 
 /** Instance-owned graph controls participate in the same property contract as catalog parameters. */
 function graphParameters(effect: TimelineEffect): Record<string, EffectParam> {
@@ -63,7 +64,8 @@ function createEffectDescriptor(
     },
     read: (clip) => {
       const current = clip.effects.find((candidate) => candidate.id === effectId);
-      return current?.params[paramName] ?? param.default;
+      // An instance stored before the parameter existed renders it at its legacy value (effects/types.ts).
+      return current ? current.params[paramName] ?? param.legacyDefault ?? param.default : param.default;
     },
     write: (clip, value) => ({
       ...clip,
@@ -97,8 +99,11 @@ export function getEffectDescriptorsForClip(clip: TimelineClip): PropertyDescrip
   return clip.effects.flatMap((effect) => {
     const effectDefinition = getEffect(effect.type);
     if (!effectDefinition) return [];
+    // A retired parameter that this instance's edited graph still reads is a live property again (keyframe tools).
+    const params = Object.values(effectDefinition.params).some(param => param.deprecated)
+      ? effectParamDefinitions(effect) : effectDefinition.params;
 
-    return [...faceCableDescriptors(effect), ...Object.entries({ ...graphParameters(effect), ...effectDefinition.params })
+    return [...faceCableDescriptors(effect), ...Object.entries({ ...graphParameters(effect), ...params })
       .filter(([name, param]) => !param.hidden || effect.type === 'face-cables' && name.startsWith('globalWind'))
       .map(([paramName, param]) => createEffectDescriptor(effectDefinition, effect, paramName, param))];
   });

@@ -1,8 +1,10 @@
-import { useMemo, type PointerEvent } from 'react';
+import { useEffect, useMemo, useState, type PointerEvent } from 'react';
 import type { EffectControlProps } from '../../../effects/types';
 import type { EffectOperatorGraph } from '../../../types/operatorGraph';
-import { effectOperatorGraph } from '../../../services/operators/effectGraphOwner';
+import { graphBoundParameters } from '../../../services/operators/effectParamVisibility';
 import { chromaKey } from '../../../effects/keying/chroma-key';
+import { chromaKeyScreenProbeMessage, probeChromaKeyScreen } from '../../../effects/keying/chroma-key/screenProbe';
+import { useMediaStore } from '../../../stores/mediaStore';
 import {
   CHROMA_KEY_DEFAULT_SCREEN_COLOR, CHROMA_KEY_FULL_SCREEN_PURITY, chromaKeyHexColor, chromaKeyNumbers, chromaKeyScreen, chromaKeyScreenPurity,
   chromaKeySpillMethod,
@@ -24,21 +26,44 @@ const LABEL: Record<string, string> = {
   clipBlack: 'Clip Black', clipWhite: 'Clip White', spillSuppression: 'Spill Suppression', edgeSoftness: 'Edge Softness', edgeShrink: 'Shrink / Grow',
 };
 const RETIRED = [['tolerance', 'Tolerance'], ['softness', 'old Edge Softness']] as const;
+const NEW_KEYER = ['keyColor', 'screenColor', 'view', 'clipBlack', 'clipWhite', 'edgeShrink', 'edgeSoftness', 'spillSuppression', 'spillMethod'] as const;
 const status = (text: string) => <p className="tracking-panel-status" role="status">{text}</p>;
+const NO_THUMBNAILS: string[] = [];
+
+/** Whether the clip's thumbnails show the chosen screen at all (screenProbe.ts); undefined until known. */
+function useScreenProbe(clipId: string | undefined, screen: ReturnType<typeof chromaKeyScreen>, enabled: boolean): string | undefined {
+  const thumbnails = useTimelineStore(state => state.clips.find(item => item.id === clipId)?.thumbnails ?? NO_THUMBNAILS);
+  const mediaId = useTimelineStore(state => {
+    const clip = state.clips.find(item => item.id === clipId); return clip?.source?.mediaFileId ?? clip?.mediaFileId;
+  });
+  const mediaThumbnail = useMediaStore(state => state.files.find(file => file.id === mediaId)?.thumbnailUrl);
+  const urls = useMemo(() => thumbnails.length ? thumbnails : mediaThumbnail ? [mediaThumbnail] : NO_THUMBNAILS, [thumbnails, mediaThumbnail]);
+  const [result, setResult] = useState<{ key: string; message?: string }>();
+  const key = `${screen}|${urls.join('|').length}|${urls[0] ?? ''}`;
+  useEffect(() => {
+    if (!enabled) return;
+    let current = true;
+    void probeChromaKeyScreen(urls, screen).then(found => { if (current) setResult({ key, message: chromaKeyScreenProbeMessage(found, screen) }); });
+    return () => { current = false; };
+  }, [enabled, key, screen, urls]);
+  return enabled && result?.key === key ? result.message : undefined;
+}
 
 /** Chroma Key inspector: screen choice, matte levels, edge and spill in the shared Resolve inspector rows.
  * A graph edited before the screen-matte rebuild keeps the old Rec.601 key: it gets the controls it reads. */
 export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId, operatorGraph }: EffectControlProps & { operatorGraph?: EffectOperatorGraph }) {
-  const legacyGraph = useMemo(() => {
-    try { return !effectOperatorGraph({ type: 'chroma-key', params: {}, operatorGraph }, { inspectionOnly: true }).nodes.some(node => node.bindings.value === 'clipBlack'); }
-    catch { return false; }
-  }, [operatorGraph]);
+  // The old Rec.601 key is recognised by what it reads (Tolerance, Edge Softness), not by a missing new control:
+  // an edited new graph keeps the new card and names the controls it no longer reads.
+  const bound = useMemo(() => graphBoundParameters({ type: 'chroma-key', params: {}, operatorGraph }), [operatorGraph]);
+  const legacyGraph = !!bound && RETIRED.some(([key]) => bound.has(key));
+  const unread = bound && !legacyGraph ? NEW_KEYER.filter(key => !bound.has(key)) : [];
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
   const clip = useTimelineStore(state => state.clips.find(item => item.id === clipId));
   // Keyframes on the retired parameters (from the old keyer) still exist but no longer act on the new key.
   const retiredKeyframes = useTimelineStore(state => RETIRED.filter(([key]) => !!clipId && !!effectInstanceId
     && state.hasKeyframes(clipId, `effect.${effectInstanceId}.${key}` as AnimatableProperty)).map(([key]) => key).join(','));
   const screen = chromaKeyScreen(params.keyColor);
+  const noScreen = useScreenProbe(clipId, screen, !legacyGraph && params.view !== 'matte');
   const screenColor = typeof params.screenColor === 'string' ? params.screenColor : CHROMA_KEY_DEFAULT_SCREEN_COLOR;
   const greyPick = !legacyGraph && screen === 'custom' && chromaKeyScreenPurity(chromaKeyHexColor(screenColor)) < CHROMA_KEY_FULL_SCREEN_PURITY;
   const numbers = chromaKeyNumbers(params);
@@ -91,6 +116,7 @@ export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId, 
         defaultValue={CHROMA_KEY_DEFAULT_SCREEN_COLOR} onChange={value => change('screenColor', value)} />
         : <p className="tracking-panel-status">Screen color is measured from every frame.</p>}
       {greyPick && status('This color is too grey to key. Pick the screen itself, where it is most saturated.')}
+      {noScreen && status(noScreen)}
       <ResolveInspectorRow label="View">
         <InspectorSelect ariaLabel="Chroma Key view" value={params.view === 'matte' ? 'matte' : 'result'} options={chromaKey.params.view.options!}
           onChange={value => change('view', value)} />
@@ -111,6 +137,7 @@ export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId, 
           onChange={value => change('spillMethod', value)} />
       </ResolveInspectorRow>
     </ResolveInspectorSection>
+    {unread.length > 0 && status(`This edited node graph does not read ${unread.map(key => LABEL[key] ?? chromaKey.params[key].label).join(', ')}, so ${unread.length > 1 ? 'they have' : 'it has'} no effect.`)}
     {oldCustom && status(`The old Custom key keyed pure green; Picked color now keys the colour above (${screenColor.toUpperCase()}). `
       + 'Pick your screen colour, or choose Green to measure it.')}
     {retired.length > 0 && status(`From the old keyer, no longer used: ${retired.join(', ')}. Set the key with Clip Black and Clip White.`)}

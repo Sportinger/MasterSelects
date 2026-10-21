@@ -44,6 +44,38 @@
     }
   }
 
+  /* Three fields (X/Y/Z) in one row need the stacked row up to 300 px: beside a 78 px label they shrink to
+     about 45 px each and collide with their axis letters. Other rows keep the wide layout down to 280 px. */
+  @container (max-width: 300px) {
+    .resolve-inspector-row:has(> .resolve-inspector-row-control > .resolve-inspector-values--triple) {
+      min-height: 41px;
+      grid-template-columns: minmax(0, 1fr) var(--resolve-inspector-action-width);
+      grid-template-rows: 18px auto;
+      row-gap: 2px;
+    }
+
+    .resolve-inspector-row:has(> .resolve-inspector-row-control > .resolve-inspector-values--triple) > .resolve-inspector-row-label {
+      grid-column: 1;
+      grid-row: 1;
+      text-align: left;
+    }
+
+    .resolve-inspector-row:has(> .resolve-inspector-row-control > .resolve-inspector-values--triple) > .resolve-inspector-row-control {
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      grid-column: 1 / -1;
+      grid-row: 2;
+      justify-self: start;
+    }
+
+    .resolve-inspector-row:has(> .resolve-inspector-row-control > .resolve-inspector-values--triple) > .resolve-inspector-row-actions {
+      grid-column: 2;
+      grid-row: 1;
+      justify-self: end;
+    }
+  }
+
   /* 280, not 300: the default 1600 px window gives the Properties tab about 292 px once its scrollbar
      shows, and effect cards nest rows a further ~50 px in; 280 keeps their sliders there. */
   @container (max-width: 280px) {

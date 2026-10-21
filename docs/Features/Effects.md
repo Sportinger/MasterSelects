@@ -99,7 +99,7 @@ and source. Other effects and structural settings are not implicitly enabled.
 - `generate` holds the [Memory Leak](./Memory-Leak.md) generator, which
   reinterprets leftover bytes of the FFmpeg wasm heap as pixels through the
   byte-texture binding described below.
-- `time` contains Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
+- `time` contains Time Stack and Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
 ## Glow on transparent and 3D layers
 
@@ -265,8 +265,9 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
   new effects) routed the profile back to Wave, so Radial scan and Time rings rendered as
   Wave. Saved graphs are upgraded on load (the nodes move to the profile folder) and
   now render the chosen profile; muting Protected Center removes only the protection.
-- **Time** and **Wave** come first in the Slit Scan inspector, followed by **Sampling**
-  and **Preview quality** (collapsed), because these sections have no bypass switch. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Time opens by default. **Preview quality**
+- **Time** and **Wave** come first in the Slit Scan inspector, followed by the collapsed
+  **Sampling**, **Motion compensation** (with its header switch) and **Preview quality**
+  sections; 3D geometry and the other switchable sections follow. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Time opens by default. **Preview quality**
   switches between Small preview
   (160 px maximum edge) and Full size. Both use the same source timestamps and sample
   count. New Slit Scan effects default to resident GPU history, 4 GiB history memory,
@@ -799,8 +800,11 @@ folds both measurement passes away. See
 upgrade; edited ones keep reading the retired Tolerance and Edge Softness: their
 inspector shows those controls, and tools report the new parameters as unused there.
 The worker CPU keyer (software preview and export readback) keys only a layer whose
-sole effect is Chroma Key; with other effects or a colour grade it declines, since its
-fixed order and source-frame screen measurement would differ from the GPU.
+sole effect is one Chroma Key, also when the layer stores the untouched graph (every
+loaded project does); with other effects, a second key or a colour grade it declines,
+since its fixed order and source-frame screen measurement would differ from the GPU.
+An automatic key on a clip without that screen colour keys nothing; the inspector and
+`addEffect`/`updateEffect` say so, checked on the clip's thumbnails.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
 feedback decay, and final RGBA mixing as shared nodes. Detail changes frequency,

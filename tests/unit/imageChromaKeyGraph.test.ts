@@ -10,6 +10,11 @@ import { prepareImageEffect } from '../../src/services/operators/imageEffectRunt
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { createLegacyChromaKeyGraph } from '../../src/services/operators/legacyChromaKeyEffectGraph';
 import { applyWorkerSoftwareImageGraphs } from '../../src/services/render/workerSoftwareImageGraphs';
+import { migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
+import { applyWorkerSoftwarePixelEffects } from '../../src/services/render/workerSoftwarePixelEffects';
+import { getDefaultParams } from '../../src/effects';
+import type { Layer } from '../../src/types';
 
 type Rgba = [number, number, number, number];
 const SCREEN: [number, number, number] = [60 / 255, 150 / 255, 70 / 255];
@@ -265,6 +270,76 @@ describe('Chroma Key with values tools and keyframes can send', () => {
     expect(alpha / (width * height)).toBeCloseTo(499 / 1920, 2);
     // The array-per-pixel version took about 1.2 s here; scalar work is well under a quarter of that.
     expect(elapsed).toBeLessThan(300);
+  });
+});
+
+describe('Chroma Key on the worker CPU path of a loaded project', () => {
+  // Every loaded project stores its Chroma Key graph (migratePersistedEffectOperatorGraph).
+  const loaded = (params: Record<string, unknown> = {}, graph = createDefaultChromaKeyGraph()) => migratePersistedEffectOperatorGraph(
+    { id: 'key', name: 'Chroma Key', type: 'chroma-key', enabled: true, params: { ...getDefaultParams('chroma-key'), ...params } as never, operatorGraph: graph });
+  const layer = (...effects: ReturnType<typeof loaded>[]) => ({ id: 'layer', effects }) as unknown as Layer;
+  const renderPlan = (plan: NonNullable<ReturnType<typeof workerSoftwareEffectPlanForLayer>>, data: Uint8ClampedArray, width: number, height: number) => {
+    const output = data.slice(), imageData = { data: output };
+    const context = { getImageData: () => imageData, putImageData: () => undefined } as unknown as OffscreenCanvasRenderingContext2D;
+    applyWorkerSoftwarePixelEffects(context, width, height, { pixelEffects: plan.pixelEffects } as never, 0);
+    return output;
+  };
+  // An unevenly lit screen (brighter at the top), a solid performer and a see-through veil (half screen, half fabric).
+  const frame = (width: number, height: number) => raster(width, height, (x, y) => {
+    const light = 1.1 - .25 * y / height, screen: Rgba = [SCREEN[0] * light, SCREEN[1] * light, SCREEN[2] * light, 1];
+    if (x > width * .45 && x < width * .7) return [.86, .78 - y / height * .2, .7, 1];
+    return x > width * .15 && x < width * .3 ? [.5 * screen[0] + .45, .5 * screen[1] + .4, .5 * screen[2] + .35, 1] : screen;
+  });
+
+  it('keys an untouched saved graph with the scalar CPU keyer, matching the graph interpreter', () => {
+    const effect = loaded({ clipBlack: .2, spillMethod: 'max' }), plan = workerSoftwareEffectPlanForLayer(layer(effect))!;
+    expect(plan.pixelEffects.chromaKeyAdjustments).toHaveLength(1);
+    expect(plan.pixelEffects.imageOperatorPlans).toBeUndefined();
+    const width = 64, height = 36, data = frame(width, height);
+    const keyed = renderPlan(plan, data, width, height), graph = data.slice();
+    applyWorkerSoftwareImageGraphs(graph, width, height, [prepareImageEffect(effect).plan!], 0);
+    for (let index = 0; index < keyed.length; index++) expect(Math.abs(keyed[index] - graph[index]), `byte ${index}`).toBeLessThanOrEqual(2);
+    // An upgraded old Rec.601 save takes the same path; an edited or folder-muted graph stays on the interpreter.
+    expect(workerSoftwareEffectPlanForLayer(layer(loaded({}, createLegacyChromaKeyGraph())))!.pixelEffects.chromaKeyAdjustments).toHaveLength(1);
+    const muted = structuredClone(effectOperatorGraph({ type: 'chroma-key', params: getDefaultParams('chroma-key') }));
+    muted.groups = muted.groups!.map(group => group.id === 'organized-chroma-key-shrink' ? { ...group, bypassed: true } : group);
+    expect(workerSoftwareEffectPlanForLayer(layer(loaded({}, muted)))?.pixelEffects.chromaKeyAdjustments).toBeUndefined();
+  });
+
+  it('keys a 1080p frame of a loaded project within a frame budget', () => {
+    const plan = workerSoftwareEffectPlanForLayer(layer(loaded()))!, data = frame(1920, 1080);
+    const started = performance.now();
+    renderPlan(plan, data, 1920, 1080);
+    // The graph interpreter took about a minute for this frame; the whole worker pixel pass with the scalar
+    // keyer takes about 0.3-0.4 s here (the key itself under 0.1 s). The budget leaves room for a loaded machine.
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
+
+  it('keeps two keys on one layer off the CPU keyer: the second would measure the source, not the first key\'s output', () => {
+    // Saved graphs run in order on the interpreter, so the second key sees the first one's output.
+    const two = workerSoftwareEffectPlanForLayer(layer(loaded(), { ...loaded(), id: 'key-2' }))!;
+    expect(two.pixelEffects.chromaKeyAdjustments).toBeUndefined();
+    expect(two.pixelEffects.imageOperatorPlans).toHaveLength(2);
+    const fresh = (id: string) => ({ id, name: 'Chroma Key', type: 'chroma-key', enabled: true, params: getDefaultParams('chroma-key') });
+    expect(workerSoftwareEffectPlanForLayer({ id: 'layer', effects: [fresh('a'), fresh('b')] } as unknown as Layer)).toBeNull();
+    expect(workerSoftwareEffectPlanForLayer({ id: 'layer', effects: [fresh('a')] } as unknown as Layer)?.pixelEffects.chromaKeyAdjustments).toHaveLength(1);
+  });
+});
+
+describe('Cache Image Max size', () => {
+  it('follows a Max size bound to an effect parameter, and recompiles when that value changes', () => {
+    const graph = createDefaultChromaKeyGraph();
+    const grid = graph.nodes.find(node => node.id === 'screen-grid')!;
+    grid.bindings = { maxEdge: 'edgeShrink' }; grid.constants = {};
+    const gridEdge = (edgeShrink: unknown) => prepareImageEffect({ type: 'chroma-key', params: { ...getDefaultParams('chroma-key'), edgeShrink }, operatorGraph: graph })
+      .plan!.resources!.find(resource => resource.id === 'image-resource:screen-grid:image')?.maxEdge;
+    expect(gridEdge(8)).toBe(8);
+    expect(gridEdge(12)).toBe(12);
+    // 0, negative and unusable values keep the full size; the constant form still works.
+    expect(gridEdge(0)).toBeUndefined();
+    expect(gridEdge(-4)).toBeUndefined();
+    expect(prepareImageEffect({ type: 'chroma-key', params: getDefaultParams('chroma-key') }).plan!.resources!
+      .find(resource => resource.id === 'image-resource:screen-grid:image')?.maxEdge).toBe(64);
   });
 });
 

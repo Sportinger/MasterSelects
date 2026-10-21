@@ -33,6 +33,9 @@ export interface EffectParam {
   // Read only through the effect's operator graph: hidden (and reported by tools) when an
   // edited graph no longer binds it.
   graphOnly?: boolean;
+  // Value an instance saved before this parameter existed renders with (its params lack the key).
+  // New effects store `default` explicitly (getDefaultParams), so only old saves and presets get this.
+  legacyDefault?: number | boolean | string;
 }
 
 /**
