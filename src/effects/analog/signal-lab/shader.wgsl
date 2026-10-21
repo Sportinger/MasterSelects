@@ -2,19 +2,28 @@ const PI: f32 = 3.141592653589793;
 const TAU: f32 = 6.283185307179586;
 const SIGNAL_WIDTH: i32 = 864;
 const SIGNAL_HEIGHT: i32 = 313;
-const DECODED_WIDTH: i32 = 360;
+// One decoded pixel per active PAL sample (BT.601: 702 picture samples at 13.5 MHz) and per field line.
+const DECODED_WIDTH: i32 = 702;
 const DECODED_HEIGHT: i32 = 288;
-const ACTIVE_START: i32 = 162;
+// The picture starts behind a 16-sample margin after the burst and ends 16 samples before the line
+// does. Both margins carry the picture's edge colour (a TV overscans them), so filters at the frame
+// edges and small sync shifts read picture instead of blanking.
+const ACTIVE_START: i32 = 146;
+const PICTURE_MARGIN: i32 = 16;
 const ACTIVE_TOP: i32 = 12;
 const SAMPLE_RATE_MHZ: f32 = 13.5;
+const PAL_SUBCARRIER_MHZ: f32 = 4.43361875;
 const PAL_SUBCARRIER_RATIO: f32 = 4.43361875 / 13.5;
 const PAL_CYCLES_PER_LINE: f32 = 4.43361875 * 64.0;
-// Broadcast chroma (U/V) bandwidth of about 1.3 MHz, as a Gaussian sigma in 13.5 MHz samples.
-const ENCODE_CHROMA_SIGMA: f32 = 1.4;
+// Luma filters are symmetric FIRs of 2 * LUMA_REACH + 1 taps (shared by a workgroup).
+const LUMA_REACH: i32 = 20;
+const LUMA_TAPS: u32 = 41u;
 // Gain of the chroma high-pass (sample minus its 3-sample mean) at the subcarrier frequency.
 const SUBCARRIER_HIGHPASS_GAIN: f32 = 0.981;
 // First sample after the sync pulse: chroma separation ignores the sync edge before it.
 const BURST_GATE_START: i32 = 90;
+// Legacy fixed-schedule bloom offset: 1.75 samples of the former 360-wide raster, as a share of the width.
+const LEGACY_BLOOM_OFFSET: f32 = 1.75 / 360.0;
 
 struct AnalogParams {
   outputSize: vec2f,
@@ -149,41 +158,96 @@ fn gaussianWeight(offset: f32, sigma: f32) -> f32 {
   return exp(-0.5 * offset * offset / (sigma * sigma));
 }
 
-// Band-limited YUV of one PAL sample, read from the source frame at uv. The source is averaged
-// over the sample's footprint (21 half-sample taps, two sub-rows of the line), so a 4K frame does
-// not alias into the 702-sample line. Luma is low-passed by Luma Bandwidth; chroma to about
-// 1.3 MHz. Luma in the subcarrier band is trapped ([1 2 3 2 1] / 9 over whole samples: below 10 %
-// from 3.4 to 5.5 MHz) except for the Y/C Crosstalk share, which reaches the chroma decoder as
-// cross-colour on fine detail.
-fn bandLimitedYuv(uv: vec2f, sampleStep: f32, lineStep: f32) -> vec3f {
-  let lumaSigma = mix(1.0, 0.55, clamp(params.lumaBandwidth, 0.0, 1.0));
-  // Low-passed luma at this sample and its two neighbours on either side.
-  var luma = array<f32, 5>(0.0, 0.0, 0.0, 0.0, 0.0);
-  var lumaWeights = array<f32, 5>(0.0, 0.0, 0.0, 0.0, 0.0);
-  var chroma = vec2f(0.0);
-  var chromaWeight = 0.0;
-  for (var tap = -10; tap <= 10; tap += 1) {
-    let offset = f32(tap) * 0.5;
-    let position = uv.x + offset * sampleStep;
-    let rgb = (sourceBilinear(vec2f(position, uv.y - 0.25 * lineStep)).rgb
-      + sourceBilinear(vec2f(position, uv.y + 0.25 * lineStep)).rgb) * 0.5;
-    let yuv = rgbToYuv(rgb);
-    for (var neighbour = 0; neighbour < 5; neighbour += 1) {
-      let weight = gaussianWeight(offset - f32(neighbour - 2), lumaSigma);
-      luma[neighbour] += yuv.x * weight;
-      lumaWeights[neighbour] += weight;
-    }
-    let chromaTap = gaussianWeight(offset, ENCODE_CHROMA_SIGMA);
-    chroma += yuv.yz * chromaTap;
-    chromaWeight += chromaTap;
-  }
-  for (var neighbour = 0; neighbour < 5; neighbour += 1) { luma[neighbour] /= max(lumaWeights[neighbour], 1e-6); }
-  let trapped = (luma[0] + 2.0 * luma[1] + 3.0 * luma[2] + 2.0 * luma[3] + luma[4]) / 9.0;
-  return vec3f(mix(trapped, luma[2], clamp(params.ycCrosstalk, 0.0, 1.0)), chroma / chromaWeight);
+fn raisedCosineFall(x: f32) -> f32 {
+  return select(select(0.5 + 0.5 * cos(PI * x), 0.0, x >= 1.0), 1.0, x <= 0.0);
 }
 
+// Luma Bandwidth sets the luma cutoff of the whole PAL chain: 2.5 MHz at 0 to 5.5 MHz at 1.
+fn lumaCutoffMhz() -> f32 {
+  return 2.5 + 3.0 * clamp(params.lumaBandwidth, 0.0, 1.0);
+}
+
+// Chroma Bandwidth sets the decoder's U/V cutoff: 0.6 MHz at 0 to 1.3 MHz at 1.
+fn chromaCutoffMhz() -> f32 {
+  return 0.6 + 0.7 * clamp(params.chromaBandwidth, 0.0, 1.0);
+}
+
+// Wanted filter response at f MHz: a low-pass to `cutoff` (raised-cosine edge `transition` MHz
+// wide, centred on the cutoff) whose band around the 4.43 MHz subcarrier (±halfWidth MHz plus a
+// raised-cosine edge) is reduced by `notch` (1 = removed).
+fn filterResponse(f: f32, cutoff: f32, transition: f32, notch: f32, halfWidth: f32, edge: f32) -> f32 {
+  let lowPass = raisedCosineFall((f - cutoff) / transition + 0.5);
+  let band = raisedCosineFall((abs(f - PAL_SUBCARRIER_MHZ) - halfWidth) / edge);
+  return lowPass * (1.0 - notch * band);
+}
+
+// Tap `k` of the symmetric 41-tap FIR with that response (frequency sampling, Hann window).
+// Callers divide by the sum of all taps, so the filter passes flat areas unchanged.
+fn filterTap(k: i32, cutoff: f32, transition: f32, notch: f32, halfWidth: f32, edge: f32) -> f32 {
+  let step = SAMPLE_RATE_MHZ * 0.5 / 96.0;
+  var sum = 0.0;
+  for (var index = 0; index < 96; index += 1) {
+    let f = (f32(index) + 0.5) * step;
+    sum += filterResponse(f, cutoff, transition, notch, halfWidth, edge) * cos(TAU * f * f32(k) / SAMPLE_RATE_MHZ);
+  }
+  return sum * (0.5 + 0.5 * cos(PI * f32(k) / f32(LUMA_REACH + 1)));
+}
+
+fn footprintCoverage(start: f32, end: f32, texel: i32) -> f32 {
+  return max(0.0, min(f32(texel + 1), end) - max(f32(texel), start));
+}
+
+// The source averaged over the footprint of one PAL sample and field line (a box over every source
+// texel it covers, alpha-weighted so transparent texels do not tint edges), as YUV. Any source
+// resolution maps onto the same 702 x 288 raster without skipping rows or columns; a source smaller
+// than the raster is read with a one-texel box, which interpolates linearly.
 @compute @workgroup_size(8, 8)
-fn palEncodeCompute(@builtin(global_invocation_id) invocation: vec3u) {
+fn palFootprintCompute(@builtin(global_invocation_id) invocation: vec3u) {
+  if (invocation.x >= u32(DECODED_WIDTH) || invocation.y >= u32(DECODED_HEIGHT)) { return; }
+  let dimensions = vec2i(textureDimensions(sourceTexture));
+  let size = vec2f(dimensions);
+  let cell = size / vec2f(f32(DECODED_WIDTH), f32(DECODED_HEIGHT));
+  let centre = (vec2f(invocation.xy) + 0.5) * cell;
+  let halfSize = max(cell, vec2f(1.0)) * 0.5;
+  let start = centre - halfSize;
+  let end = centre + halfSize;
+  let first = vec2i(floor(start));
+  let last = vec2i(ceil(end)) - 1;
+  var weighted = vec3f(0.0);
+  var plain = vec3f(0.0);
+  var coverage = 0.0;
+  var area = 0.0;
+  for (var y = first.y; y <= last.y; y += 1) {
+    let wy = footprintCoverage(start.y, end.y, y);
+    for (var x = first.x; x <= last.x; x += 1) {
+      let weight = wy * footprintCoverage(start.x, end.x, x);
+      let texel = textureLoad(sourceTexture, clamp(vec2i(x, y), vec2i(0), dimensions - 1), 0);
+      weighted += texel.rgb * texel.a * weight;
+      plain += texel.rgb * weight;
+      coverage += texel.a * weight;
+      area += weight;
+    }
+  }
+  let rgb = select(plain / max(area, 1e-6), weighted / max(coverage, 1e-6), coverage > 1e-4 * area);
+  textureStore(stageOutput, vec2i(invocation.xy), vec4f(rgbToYuv(rgb), 1.0));
+}
+
+var<workgroup> encodeLumaKernel: array<f32, 41>;
+var<workgroup> encodeChromaKernel: array<f32, 41>;
+
+// PAL encoder. Luma is low-passed to the Luma Bandwidth cutoff, and its share in the band the
+// decoder reads as chroma (the subcarrier ± the decoder's U/V cutoff) is removed except for the
+// Y/C Crosstalk share, which then shows as cross-colour on fine detail. Chroma (U/V) is low-passed
+// to 1.3 MHz. The picture samples read the footprint raster written by palFootprintCompute.
+@compute @workgroup_size(8, 8)
+fn palEncodeCompute(@builtin(global_invocation_id) invocation: vec3u, @builtin(local_invocation_index) local: u32) {
+  if (local < LUMA_TAPS) {
+    let notch = 1.0 - clamp(params.ycCrosstalk, 0.0, 1.0);
+    let tap = i32(local) - LUMA_REACH;
+    encodeLumaKernel[local] = filterTap(tap, lumaCutoffMhz(), 1.0, notch, chromaCutoffMhz() + 0.35, 0.4);
+    encodeChromaKernel[local] = filterTap(tap, 1.3, 0.6, 0.0, 0.0, 1.0);
+  }
+  workgroupBarrier();
   if (invocation.x >= u32(SIGNAL_WIDTH) || invocation.y >= u32(SIGNAL_HEIGHT)) { return; }
   let sample = i32(invocation.x);
   let line = i32(invocation.y);
@@ -198,18 +262,27 @@ fn palEncodeCompute(@builtin(global_invocation_id) invocation: vec3u) {
     composite = -0.3;
   } else if (sample >= 95 && sample < 129) {
     composite = 0.15 * sin(phase);
-  } else if (sample >= ACTIVE_START && line >= ACTIVE_TOP && line < ACTIVE_TOP + DECODED_HEIGHT) {
-    let uv = vec2f(
-      f32(sample - ACTIVE_START) / f32(SIGNAL_WIDTH - ACTIVE_START - 1),
-      f32(line - ACTIVE_TOP) / f32(DECODED_HEIGHT - 1)
-    );
-    let sampleStep = 1.0 / f32(SIGNAL_WIDTH - ACTIVE_START - 1);
-    let lineStep = 1.0 / f32(DECODED_HEIGHT - 1);
-    yuv = bandLimitedYuv(uv, sampleStep, lineStep);
+  } else if (sample >= ACTIVE_START - PICTURE_MARGIN && line >= ACTIVE_TOP && line < ACTIVE_TOP + DECODED_HEIGHT) {
+    let column = sample - ACTIVE_START;
+    let row = line - ACTIVE_TOP;
+    var luma = 0.0;
+    var lumaSum = 0.0;
+    var chroma = vec2f(0.0);
+    var chromaSum = 0.0;
+    for (var offset = -LUMA_REACH; offset <= LUMA_REACH; offset += 1) {
+      let footprint = textureLoad(stageInput, vec2i(clamp(column + offset, 0, DECODED_WIDTH - 1), row), 0).xyz;
+      let lumaWeight = encodeLumaKernel[offset + LUMA_REACH];
+      luma += footprint.x * lumaWeight;
+      lumaSum += lumaWeight;
+      let chromaWeight = encodeChromaKernel[offset + LUMA_REACH];
+      chroma += footprint.yz * chromaWeight;
+      chromaSum += chromaWeight;
+    }
+    yuv = vec3f(luma / lumaSum, chroma / chromaSum);
     let phaseError = params.palPhaseErrorDegrees * PI / 180.0 * lineVSign(line);
     let chromaPhase = phase + phaseError;
-    let chroma = yuv.y * sin(chromaPhase) + lineVSign(line) * yuv.z * cos(chromaPhase);
-    composite = yuv.x * 0.7 + chroma * 0.18 * clamp(params.chromaLevel, 0.0, 2.0);
+    let modulated = yuv.y * sin(chromaPhase) + lineVSign(line) * yuv.z * cos(chromaPhase);
+    composite = yuv.x * 0.7 + modulated * 0.18 * clamp(params.chromaLevel, 0.0, 2.0);
   }
 
   textureStore(stageOutput, vec2i(sample, line), vec4f(composite, yuv));
@@ -302,19 +375,36 @@ fn vhsChromaNoise(sample: i32, line: i32, salt: u32) -> f32 {
   return mix(randomSigned(cell, line, salt), randomSigned(cell + 1, line, salt), blend * blend * (3.0 - 2.0 * blend));
 }
 
-// VHS colour-under transport. The deck separates luma and chroma, records chroma far below its
-// broadcast bandwidth and plays it back re-modulated on a stable reference: luma jitters with the
-// tape (time-base error, tracking, head switching), chroma smears sideways and lags but keeps its
-// hue (saturation drops slightly at slower speeds). Taps sit on whole samples with weights
-// centred on the jittered position, so a fractional read does not weaken the subcarrier.
+var<workgroup> tapeLumaKernel: array<f32, 41>;
+
+// Tape luma cutoff in MHz: about 3 MHz in SP, 2.6 in LP and 2.2 in EP, lower with Tape Wear. VHS
+// Stage moves it from 6 MHz (no tape filtering) to that value.
+fn tapeLumaCutoffMhz() -> f32 {
+  let speed = clamp(params.tapeSpeed, 0.0, 2.0);
+  let tape = max(3.0 - speed * 0.4 - params.tapeWear * 0.5, 0.5);
+  return mix(6.0, tape, clamp(params.vhsAmount, 0.0, 1.0));
+}
+
+// VHS colour-under transport. The deck separates luma and chroma, records luma at its own lower
+// bandwidth and chroma far below its broadcast bandwidth, and plays chroma back re-modulated on a
+// stable reference: luma jitters with the tape (time-base error, tracking, head switching), chroma
+// smears sideways and lags but keeps its hue (saturation drops slightly at slower speeds). Taps
+// sit on whole samples (a fractional read would weaken the subcarrier); luma is filtered at the
+// two samples around the jittered position and interpolated. VHS Stage fades the whole stage in
+// from the untouched signal, so a keyframed fade-in starts without a step.
 @compute @workgroup_size(8, 8)
-fn vhsTransportCompute(@builtin(global_invocation_id) invocation: vec3u) {
+fn vhsTransportCompute(@builtin(global_invocation_id) invocation: vec3u, @builtin(local_invocation_index) local: u32) {
+  if (local < LUMA_TAPS) {
+    tapeLumaKernel[local] = filterTap(i32(local) - LUMA_REACH, tapeLumaCutoffMhz(), 1.0, 1.0, 0.75, 0.7);
+  }
+  workgroupBarrier();
   if (invocation.x >= u32(SIGNAL_WIDTH) || invocation.y >= u32(SIGNAL_HEIGHT)) { return; }
   let sample = i32(invocation.x);
   let line = i32(invocation.y);
+  let incoming = stageLoad(vec2i(sample, line));
   let vhsAmount = clamp(params.vhsAmount, 0.0, 1.0);
   if (vhsAmount <= 0.0001) {
-    textureStore(stageOutput, vec2i(sample, line), stageLoad(vec2i(sample, line)));
+    textureStore(stageOutput, vec2i(sample, line), incoming);
     return;
   }
 
@@ -330,47 +420,55 @@ fn vhsTransportCompute(@builtin(global_invocation_id) invocation: vec3u) {
   let headOffset = headZone * params.headSwitching * (3.5 + 2.5 * randomSigned(line, 0, 0xd317u));
   let warpedSample = f32(sample) + vhsAmount * (transportOffset + trackingBand * 6.5 + headOffset);
 
-  // Taps around the jittered read position (whole samples, weights centred on the fraction).
+  // Samples base - LUMA_REACH ... base + LUMA_REACH + 1 around the jittered read position.
   let base = i32(floor(warpedSample));
   let fraction = warpedSample - f32(base);
   // Tape noise enters before the playback luma filter (as on a deck), so it stays below the
   // subcarrier band and does not decode as colour confetti.
   let noiseLevel = vhsAmount
     * (0.02 + params.tapeWear * 0.13 + trackingBand * 0.3 + headZone * params.headSwitching * 0.25 + speedPenalty * 0.045);
-  var taps: array<f32, 23>;
-  var noise: array<f32, 23>;
-  for (var index = 0; index < 23; index += 1) {
-    taps[index] = stageLoad(vec2i(base + index - 11, line)).x;
-    noise[index] = randomSigned(base + index - 11 + 16, line, 0xa3c59u) * noiseLevel;
+  // The noise is smoothed over three samples ([1 2 1] / 4), so it streaks along the line like tape
+  // noise instead of forming specks.
+  var taps: array<f32, 42>;
+  var noise: array<f32, 42>;
+  var previousNoise = randomSigned(base - LUMA_REACH + 15, line, 0xa3c59u);
+  var currentNoise = randomSigned(base - LUMA_REACH + 16, line, 0xa3c59u);
+  for (var index = 0; index < 42; index += 1) {
+    let position = base + index - LUMA_REACH;
+    let nextNoise = randomSigned(position + 17, line, 0xa3c59u);
+    taps[index] = stageLoad(vec2i(position, line)).x;
+    noise[index] = (previousNoise + 2.0 * currentNoise + nextNoise) * 0.25 * noiseLevel;
+    previousNoise = currentNoise;
+    currentNoise = nextNoise;
   }
-  // Tape bandwidths: luma about 3 MHz (SP) to 2.2 MHz (EP); chroma about 0.5 MHz and less with
-  // Chroma Bleed, which also delays chroma by up to 2.5 samples (colour lags to the right).
-  let lumaSigma = clamp(mix(0.35, 0.45 + speed * 0.1 + params.tapeWear * 0.2, vhsAmount), 0.3, 2.0);
+  // Playback luma: the tape low-pass (the subcarrier band removed) at base and base + 1.
+  var lumaA = 0.0;
+  var lumaB = 0.0;
+  var kernelSum = 0.0;
+  for (var index = 0; index < 41; index += 1) {
+    let weight = tapeLumaKernel[index];
+    lumaA += (taps[index] + noise[index]) * weight;
+    lumaB += (taps[index + 1] + noise[index + 1]) * weight;
+    kernelSum += weight;
+  }
+  let luma = mix(lumaA, lumaB, fraction) / kernelSum;
+  // Tape chroma: about 0.5 MHz and less with Chroma Bleed, which also delays chroma by up to
+  // 2.5 samples (colour lags to the right).
   let chromaSigma = clamp(mix(1.4, 3.0 + speed * 0.5 + params.chromaBleed * 1.5, vhsAmount), 0.5, 5.0);
   let chromaDelay = clamp(vhsAmount * params.chromaBleed * 2.5, -4.0, 4.0);
   // Sync and blanking before the burst carry no chroma; keep the sync edge out of the burst.
   let gateStart = select(-1000, BURST_GATE_START, sample >= BURST_GATE_START);
-  var luma = 0.0;
-  var lumaWeight = 0.0;
   var chroma = vec2f(0.0);
   var chromaWeight = 0.0;
   for (var offset = -10; offset <= 10; offset += 1) {
-    let index = offset + 11;
+    let index = offset + LUMA_REACH;
     let mean = (taps[index - 1] + taps[index] + taps[index + 1]) / 3.0;
-    // Playback luma: the 3-sample mean applied twice keeps luma and tape noise out of the chroma band.
-    let trap = (taps[index - 2] + 2.0 * taps[index - 1] + 3.0 * taps[index] + 2.0 * taps[index + 1] + taps[index + 2]) / 9.0;
-    let noiseTrap = (noise[index - 2] + 2.0 * noise[index - 1] + 3.0 * noise[index] + 2.0 * noise[index + 1] + noise[index + 2]) / 9.0;
-    let distance = f32(offset) - fraction;
-    let wl = gaussianWeight(distance, lumaSigma);
-    luma += (trap + noiseTrap) * wl;
-    lumaWeight += wl;
     let position = base + offset;
-    let wc = select(gaussianWeight(distance + chromaDelay, chromaSigma), 0.0, position < gateStart);
+    let wc = select(gaussianWeight(f32(offset) - fraction + chromaDelay, chromaSigma), 0.0, position < gateStart);
     let phase = palPhase(f32(position), f32(line));
     chroma += (taps[index] - mean) * vec2f(sin(phase), cos(phase)) * wc;
     chromaWeight += wc;
   }
-  luma /= max(lumaWeight, 1e-6);
   // Demodulated chroma in composite units (amplitude of the sin and cos carriers).
   chroma *= 2.0 / max(chromaWeight * SUBCARRIER_HIGHPASS_GAIN, 1e-6);
   // The burst passes unchanged; the picture loses a little saturation and gains sideways chroma streaks.
@@ -404,7 +502,9 @@ fn vhsTransportCompute(@builtin(global_invocation_id) invocation: vec3u) {
   );
 
   tapeSignal += dropoutEdge * params.dropout * randomSigned(sample, line, 0xf12c7u) * 0.32;
-  textureStore(stageOutput, vec2i(sample, line), vec4f(tapeSignal, center.y, dropoutMask, trackingBand + headZone));
+  // Fade the stage in over the first tenth of VHS Stage (continuous from the untouched signal).
+  let stageMix = smoothstep(0.0, 0.1, vhsAmount);
+  textureStore(stageOutput, vec2i(sample, line), vec4f(mix(incoming.x, tapeSignal, stageMix), center.y, dropoutMask, trackingBand + headZone));
 }
 
 @compute @workgroup_size(1, 1)
@@ -444,32 +544,34 @@ fn decodedSample(sample: i32, line: i32) -> f32 {
   return stageLoad(vec2i(sample, line)).x;
 }
 
+var<workgroup> decodeLumaKernel: array<f32, 41>;
+var<workgroup> decodeChromaKernel: array<f32, 41>;
+
 // Separates one decoded sample into Y and U/V.
-// - Luma: the 3-sample mean nulls the 4.43 MHz subcarrier; Luma Bandwidth blends it with a
-//   softer 5-tap version, and Y/C Crosstalk lets the raw composite (dot crawl) through.
-// - Chroma: the composite minus its 3-sample mean (no luma below the subcarrier band, exactly
-//   zero for flat areas) is demodulated with the burst-locked phase and low-passed by a Gaussian
-//   window; Chroma Bandwidth sets its width (about 0.4 to 1.0 MHz).
+// - Luma: a low-pass to the Luma Bandwidth cutoff with a notch over the chroma band (about 3.6
+//   to 5.2 MHz removed); Y/C Crosstalk lets the raw composite (dot crawl) through.
+// - Chroma: the composite minus its 3-sample mean (exactly zero for flat areas) is demodulated with
+//   the burst-locked phase and low-passed to the Chroma Bandwidth cutoff (0.6 to 1.3 MHz).
 fn decodeYuvAt(sample: i32, line: i32, burstPhase: f32) -> vec3f {
-  var composite: array<f32, 17>;
-  for (var index = 0; index < 17; index += 1) {
-    composite[index] = decodedSample(sample + index - 8, line);
+  var composite: array<f32, 43>;
+  for (var index = 0; index < 43; index += 1) {
+    composite[index] = decodedSample(sample + index - LUMA_REACH - 1, line);
   }
-  let chromaSigma = mix(2.6, 1.1, clamp(params.chromaBandwidth, 0.0, 1.0));
   var chroma = vec2f(0.0);
   var weightSum = 0.0;
-  for (var offset = -7; offset <= 7; offset += 1) {
-    let index = offset + 8;
+  var filteredLuma = 0.0;
+  var lumaSum = 0.0;
+  for (var offset = -LUMA_REACH; offset <= LUMA_REACH; offset += 1) {
+    let index = offset + LUMA_REACH + 1;
     let mean = (composite[index - 1] + composite[index] + composite[index + 1]) / 3.0;
-    let weight = gaussianWeight(f32(offset), chromaSigma);
+    let weight = decodeChromaKernel[offset + LUMA_REACH];
     let phase = palPhase(f32(sample + offset), f32(line)) + burstPhase;
     chroma += (composite[index] - mean) * vec2f(sin(phase), cos(phase)) * weight;
     weightSum += weight;
+    filteredLuma += composite[index] * decodeLumaKernel[offset + LUMA_REACH];
+    lumaSum += decodeLumaKernel[offset + LUMA_REACH];
   }
-  let lumaWide = (composite[7] + composite[8] + composite[9]) / 3.0;
-  let lumaNarrow = (composite[6] + 3.0 * composite[7] + 4.0 * composite[8] + 3.0 * composite[9] + composite[10]) / 12.0;
-  let filteredLuma = mix(lumaNarrow, lumaWide, clamp(params.lumaBandwidth, 0.0, 1.0));
-  let luma = mix(filteredLuma, composite[8], clamp(params.ycCrosstalk, 0.0, 1.0));
+  let luma = mix(filteredLuma / lumaSum, composite[LUMA_REACH + 1], clamp(params.ycCrosstalk, 0.0, 1.0));
   let scale = 2.0 / max(weightSum * 0.18 * SUBCARRIER_HIGHPASS_GAIN, 0.001);
   return vec3f(
     clamp(luma / 0.7, -0.15, 1.25),
@@ -479,7 +581,13 @@ fn decodeYuvAt(sample: i32, line: i32, burstPhase: f32) -> vec3f {
 }
 
 @compute @workgroup_size(8, 8)
-fn palDecodeCompute(@builtin(global_invocation_id) invocation: vec3u) {
+fn palDecodeCompute(@builtin(global_invocation_id) invocation: vec3u, @builtin(local_invocation_index) local: u32) {
+  if (local < LUMA_TAPS) {
+    let tap = i32(local) - LUMA_REACH;
+    decodeLumaKernel[local] = filterTap(tap, lumaCutoffMhz(), 1.0, 1.0, 0.8, 0.5);
+    decodeChromaKernel[local] = filterTap(tap, chromaCutoffMhz(), 0.5, 0.0, 0.0, 1.0);
+  }
+  workgroupBarrier();
   if (invocation.x >= u32(DECODED_WIDTH) || invocation.y >= u32(DECODED_HEIGHT)) { return; }
   let outputPixel = vec2i(invocation.xy);
   let receiverAmount = clamp(params.receiverAmount, 0.0, 1.0);
@@ -494,9 +602,8 @@ fn palDecodeCompute(@builtin(global_invocation_id) invocation: vec3u) {
   let falseLock = (1.0 - state.w) * syncInstability;
   let randomTear = randomSigned(signalLine, i32(floor(params.time * 50.0)), 0x731bu) * falseLock * 34.0;
   let syncOffset = state.x * receiverAmount + randomTear;
-  let activeSpan = f32(SIGNAL_WIDTH - ACTIVE_START - 1);
-  let nominalSample = f32(ACTIVE_START) + (f32(outputPixel.x) + 0.5) / f32(DECODED_WIDTH) * activeSpan;
-  let sample = i32(round(nominalSample + syncOffset));
+  // One decoded pixel per picture sample; the sync offset shifts the read along the line.
+  let sample = ACTIVE_START + outputPixel.x + i32(round(syncOffset));
   let effectiveColorLock = mix(1.0, clamp(params.colorLock, 0.0, 1.0), receiverAmount);
   let phaseCorrection = state.y * effectiveColorLock;
   var yuv = decodeYuvAt(sample, signalLine, phaseCorrection);
@@ -552,9 +659,12 @@ fn analogResolveCompute(@builtin(global_invocation_id) invocation: vec3u) {
   let centered = uv * 2.0 - 1.0;
   let curved = centered * (1.0 + dot(centered, centered) * params.curvature * crtAmount * 0.12);
   let displayUv = curved * 0.5 + 0.5;
-  let inside = select(0.0, 1.0, all(displayUv >= vec2f(0.0)) && all(displayUv <= vec2f(1.0)));
+  // Tube coverage, anti-aliased over one output pixel.
+  let insideLow = clamp(displayUv * params.outputSize + 0.5, vec2f(0.0), vec2f(1.0));
+  let insideHigh = clamp((1.0 - displayUv) * params.outputSize + 0.5, vec2f(0.0), vec2f(1.0));
+  let inside = (insideLow.x * insideHigh.x) * (insideLow.y * insideHigh.y);
   let decoded = mix(sourceBilinear(displayUv).rgb, decodedBilinear(displayUv), signalAmount);
-  let bloomOffset = vec2f(1.75 / f32(DECODED_WIDTH), 0.0);
+  let bloomOffset = vec2f(LEGACY_BLOOM_OFFSET, 0.0);
   let bloomDecoded = (decodedBilinear(displayUv - bloomOffset) + decodedBilinear(displayUv + bloomOffset)) * 0.5;
   let bloomOriginal = (sourceBilinear(displayUv - bloomOffset).rgb + sourceBilinear(displayUv + bloomOffset).rgb) * 0.5;
   let bloomColor = mix(bloomOriginal, bloomDecoded, signalAmount);

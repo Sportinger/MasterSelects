@@ -74,6 +74,12 @@ describe('typed node port contracts', () => {
     const proxy = folded.nodes.find(node => node.id === 'reads-proxy')!;
     // X feeds the sink; Y and Z of the same split are not results. A node with no used output still offers it.
     expect(proxy.outputs.map(port => port.metadata?.groupEndpoint)).toEqual([{ nodeId: 'split', portId: 'x' }, { nodeId: 'loose', portId: 'value' }]);
+    // A composition keeps every output it declares, also an unwired sibling of a used output.
+    const declared = (id: string, portId: string) => ({ id, label: id.toUpperCase(), type: 'number' as const, endpoints: [{ nodeId: 'split', portId }] });
+    const composed: NodeGraph = { ...graph, groups: graph.groups!.map(group => group.id !== 'reads' ? group : { ...group, composition: {
+      operatorId: 'compose.test', description: 'Test composition', position: { x: 0, y: 0 }, inputs: [], outputs: [declared('first', 'x'), declared('second', 'y')] } }) };
+    const composedProxy = foldOperatorGroups(composed, { version: 1, nodes: [], groups: { reads: { collapsed: true } } }).nodes.find(node => node.id === 'reads-proxy')!;
+    expect(composedProxy.outputs.map(port => port.id)).toEqual(expect.arrayContaining(['first', 'second']));
   });
 
   it('retains distinct Flock signals and generic clip ports', () => {

@@ -5,7 +5,7 @@ import { TEXT_ATLAS_DEFAULT_CHARACTERS, TEXT_ATLAS_MAX_CHARACTERS } from './imag
 
 const port = (id: string, type: OperatorPort['type'], label: string, required = false): OperatorPort =>
   ({ id, type, label, required, ...(type === 'image' && required
-    ? { contract: { formats: ['decoded-frame', 'analog-decoded-360x288-rgba16f'] } } : {}) });
+    ? { contract: { formats: ['decoded-frame', 'analog-decoded-702x288-rgba16f'] } } : {}) });
 
 const imageOperator = (definition: Omit<OperatorDefinition, 'version' | 'invalidates' | 'runtime' | 'state' | 'fusion'>): OperatorDefinition => ({
   ...definition,

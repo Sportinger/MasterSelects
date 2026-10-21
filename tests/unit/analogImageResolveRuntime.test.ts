@@ -64,7 +64,7 @@ describe('Analog image resolve runtime', () => {
     const options = { commandEncoder: gpu.encoder as never, definition, plan, instanceId: 'effect', inputView: {} as never,
       outputView: {} as never, width: 320, height: 180, timelineTimeSeconds: 3 };
     runtime.encode(options); runtime.encode({ ...options, timelineTimeSeconds: 4 });
-    expect(gpu.labels).toEqual(['analog-encode-encode', 'analog-resolve-image-resolve', 'analog-encode-encode', 'analog-resolve-image-resolve']);
+    expect(gpu.labels).toEqual(['analog-encode-footprint', 'analog-encode-encode', 'analog-resolve-image-resolve', 'analog-encode-footprint', 'analog-encode-encode', 'analog-resolve-image-resolve']);
     expect(gpu.shaders.filter(shader => shader.includes('analogImageResolveCompute'))).toHaveLength(1);
     expect(gpu.buffers.filter(buffer => buffer.size === 272)).toHaveLength(1);
     expect(gpu.device.queue.writeBuffer).toHaveBeenCalledTimes(4);

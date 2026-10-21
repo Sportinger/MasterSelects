@@ -114,6 +114,40 @@ async function checkPalSeparation(device: GPUDevice, runtime: AnalogSignalRuntim
     + `default cross-colour on subcarrier stripes p99 ${crossColour.p99.toFixed(1)}/255; ${notes.join(', ')}; VHS chroma noise along ${along.toFixed(2)} / across ${across.toFixed(2)}`;
 }
 
+/** Frame edges, bandwidths and the VHS fade-in, against plain maths on the source. */
+async function checkPalEdgesAndBandwidth(device: GPUDevice, runtime: AnalogSignalRuntime): Promise<string> {
+  // 1. A flat grey frame decodes without colour at the left and right frame edges (no blanking reaches the filters).
+  const grey = await renderImage(device, runtime, 'pal-edge-grey', 1920, 270, () => [.55, .55, .55, 1], CLEAN);
+  let edgeChroma = 0;
+  for (let y = 10; y < 260; y++) for (const x of [0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 1895, 1903, 1907, 1911, 1913, 1915, 1916, 1917, 1918, 1919]) {
+    edgeChroma = Math.max(edgeChroma, saturation(grey(x, y)) * 255);
+  }
+  if (edgeChroma > 3) throw new Error(`Flat grey shows colour at the frame edges: ${edgeChroma.toFixed(1)}/255`);
+  // 2. Luma bandwidth: contrast of a luma sine at 2.6 MHz (BT.601: 702 samples span the width).
+  const contrast = async (id: string, megahertz: number, params: Record<string, number | string>) => {
+    const width = 1404, period = 13.5 / megahertz * width / 702;
+    const read = await renderImage(device, runtime, id, width, 96, x => { const v = .5 + .25 * Math.sin(2 * Math.PI * x / period); return [v, v, v, 1]; }, params);
+    let sin = 0, cos = 0, count = 0;
+    for (let y = 20; y < 76; y += 4) for (let x = 100; x < width - 100; x++, count++) {
+      const [r, g, b] = read(x, y), luma = .299 * r + .587 * g + .114 * b, angle = 2 * Math.PI * x / period;
+      sin += luma * Math.sin(angle); cos += luma * Math.cos(angle);
+    }
+    return Math.hypot(sin, cos) * 2 / count / .25;
+  };
+  const broadcast = await contrast('pal-band-broadcast', 2.6, CLEAN);
+  const tapeLp = await contrast('pal-band-vhs-lp', 2.6, { ...CLEAN, vhsAmount: 1, tapeSpeed: 'lp', tracking: 0, dropout: 0, headSwitching: 0, timebaseError: 0, tapeWear: 0 });
+  if (broadcast < .8) throw new Error(`PAL broadcast is too soft: ${broadcast.toFixed(2)} of a 2.6 MHz luma sine`);
+  if (tapeLp > broadcast * .7) throw new Error(`VHS LP is not softer than broadcast: ${tapeLp.toFixed(2)} against ${broadcast.toFixed(2)} at 2.6 MHz`);
+  // 3. VHS Stage fades in without a step: 0 and 0.002 differ by at most one 8-bit rounding step on a detailed source.
+  const detail = (x: number, y: number): Rgba => [(x * 37 + y * 11) % 256 / 255, (x * 13 + y * 67) % 256 / 255, (x * 83 + y * 7) % 256 / 255, 1];
+  const off = await renderImage(device, runtime, 'pal-vhs-off', 512, 288, detail, { ...CLEAN, vhsAmount: 0 });
+  const faint = await renderImage(device, runtime, 'pal-vhs-faint', 512, 288, detail, { ...CLEAN, vhsAmount: .002 });
+  let step = 0;
+  for (let y = 0; y < 288; y++) for (let x = 0; x < 512; x++) for (let c = 0; c < 3; c++) step = Math.max(step, Math.abs(off(x, y)[c] - faint(x, y)[c]) * 255);
+  if (step > 1.5) throw new Error(`VHS Stage 0.002 changes the picture by ${step.toFixed(1)}/255`);
+  return `edge chroma on flat grey ${edgeChroma.toFixed(1)}/255; 2.6 MHz luma contrast broadcast ${broadcast.toFixed(2)}, VHS LP ${tapeLp.toFixed(2)}; VHS 0 to 0.002 step ${step.toFixed(1)}/255`;
+}
+
 export async function checkAnalogSignalGpu(): Promise<string> {
   const adapter = await navigator.gpu?.requestAdapter(); if (!adapter) throw new Error('WebGPU adapter unavailable');
   const device = await adapter.requestDevice(), runtime = new AnalogSignalRuntime(device);
@@ -144,8 +178,9 @@ export async function checkAnalogSignalGpu(): Promise<string> {
       if (first[index] !== expected || bypassPixels[index] !== expected) throw new Error(`Analog graph changed source alpha at ${x},${y}`);
     }
     const separation = await checkPalSeparation(device, runtime);
+    const edges = await checkPalEdgesAndBandwidth(device, runtime);
     const validation = await device.popErrorScope(); if (validation) throw new Error(`WebGPU validation: ${validation.message}`);
-    return `compiled default equals fixed legacy schedule; RF/VHS bypass equality; source alpha preserved; ${separation}`;
+    return `compiled default equals fixed legacy schedule; RF/VHS bypass equality; source alpha preserved; ${separation}; ${edges}`;
   } finally { runtime.clear(); device.destroy(); }
 }
 

@@ -193,11 +193,12 @@ export function compileAnalogSignalGraph(graph: EffectOperatorGraph, params: Rec
     if (!lineage.some(stage => stage.kind === 'rf')) decode.params.rfAmount = 0;
     if (!lineage.some(stage => stage.kind === 'vhs')) decode.params.vhsAmount = 0;
   }
-  // Luma Bandwidth and Y/C Crosstalk describe the whole PAL chain: PAL Encode band-limits luma and
-  // notches the subcarrier band by the values of the decoder it feeds (the first, when it feeds several).
+  // Luma Bandwidth, Chroma Bandwidth and Y/C Crosstalk describe the whole PAL chain: PAL Encode band-limits
+  // luma and removes it from the band the decoder reads as chroma by the values of the decoder it feeds
+  // (the first, when it feeds several).
   for (const decode of decodeStages) {
     const encode = signalLineage(decode.input).find(stage => stage.kind === 'encode');
-    if (encode) for (const id of ['lumaBandwidth', 'ycCrosstalk']) if (encode.params[id] === undefined && decode.params[id] !== undefined) encode.params[id] = decode.params[id];
+    if (encode) for (const id of ['lumaBandwidth', 'chromaBandwidth', 'ycCrosstalk']) if (encode.params[id] === undefined && decode.params[id] !== undefined) encode.params[id] = decode.params[id];
   }
   for (const resolve of stages.filter(stage => stage.kind === 'resolve')) {
     const decode = resolve.input ? stageById.get(resolve.input) : undefined;

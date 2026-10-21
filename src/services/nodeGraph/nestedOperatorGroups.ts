@@ -87,9 +87,10 @@ export function foldOperatorGroups(graph: NodeGraph, state?: ClipNodeGraph, expa
       return id;
     };
     for (const node of members) {
-      // A node whose result is used through some outputs (e.g. Split Vector's X) does not offer its
-      // unused sibling outputs (Y, Z) as folder results; a node with no used output still does.
-      const usesSomeOutput = node.outputs.some(port => edges.some(e => e.fromNodeId === node.id && e.fromPortId === port.id));
+      // In a plain folder, a node whose result is used through some outputs (e.g. Split Vector's X)
+      // does not offer its unused sibling outputs (Y, Z) as folder results; a node with no used output
+      // still does. A composition keeps every output it declares, wired or not.
+      const usesSomeOutput = !g.composition && node.outputs.some(port => edges.some(e => e.fromNodeId === node.id && e.fromPortId === port.id));
       for (const port of [...node.inputs, ...node.outputs]) {
         const connected = edges.filter(e => port.direction === 'input' ? e.toNodeId === node.id && e.toPortId === port.id : e.fromNodeId === node.id && e.fromPortId === port.id);
         if (!connected.length && port.direction === 'output' && usesSomeOutput) continue;

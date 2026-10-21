@@ -17,13 +17,13 @@ describe('Analog Signal legacy Display Resolve migration', () => {
   it('expands a real PAL decode into one flat, idempotent island', () => {
     const migrated = migrateAnalogSignalGraph(legacy());
     expect(migrated.nodes.some(item => item.operator === 'analog.display-resolve')).toBe(false);
-    expect(migrated.nodes).toHaveLength(136);
-    expect(migrated.edges).toHaveLength(203);
+    expect(migrated.nodes).toHaveLength(147);
+    expect(migrated.edges).toHaveLength(228);
     expect(migrated.edges.find(item => item.id === 'outgoing')).toMatchObject({ from: 'resolve-active-select', output: 'image' });
     expect(migrated.edges).toContainEqual(expect.objectContaining({ from: 'decode', output: 'signalAmount', to: 'resolve-signal-clamp', input: 'value' }));
     expect(migrated.layout['resolve-zero']).toEqual({ x: 900, y: 240 });
     expect(migrated.groups?.find(group => group.id === 'legacy-group')?.nodeIds).toEqual(expect.arrayContaining(['frame', 'resolve-zero', 'output']));
-    expect(migrated.groups?.find(group => group.id === 'resolve-group')?.nodeIds).toHaveLength(133);
+    expect(migrated.groups?.find(group => group.id === 'resolve-group')?.nodeIds).toHaveLength(144);
     expect(migrated.nodes.find(item => item.id === 'resolve-amount')).toMatchObject({ bindings: { value: 'mix-key' } });
     expect(migrated.nodes.find(item => item.id === 'resolve-crtAmount')).toMatchObject({ bindings: { value: 'crt-key' }, constants: { value: .4 } });
     expect(migrateAnalogSignalGraph(migrated)).toEqual(migrated);

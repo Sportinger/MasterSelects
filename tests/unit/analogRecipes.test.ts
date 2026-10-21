@@ -96,14 +96,21 @@ describe('CRT Screen recipe', () => {
     }
   });
 
-  it('keeps thin detail between line centres (a line averages the picture over its height)', () => {
-    // 240 lines on 1080 rows: centres every 4.5 rows. A bright row at 4 lies between the first two centres.
-    const row = (y: number): Pixel => y === 4 || y === 13 ? [1, 1, 1, 1] : [0, 0, 0, 1];
-    const source = (_x: number, y: number) => row(y);
-    const output = render('crt-screen', { curvature: 0, maskStrength: 0, flicker: 0, scanlines: 1, lineCount: 240 }, source, [4, 1080]);
-    const light = (from: number, to: number, read: (y: number) => number) => Array.from({ length: to - from }, (_, i) => read(from + i)).reduce((a, b) => a + b);
-    const shown = light(0, 18, y => toLinear(output(2, y)[1])), original = light(0, 18, y => toLinear(row(y)[1]));
-    expect(shown / original).toBeGreaterThan(.8);
+  it('keeps every row of a line at any line height (thin detail is never skipped)', () => {
+    // One bright row at each row offset inside a line: the light shown around it stays that of the row.
+    // 4.5 px lines (240 at 1080), 9 px (240 at 2160 and 120 at 1080) and 18 px (60 at 1080).
+    for (const [height, lines] of [[1080, 240], [2160, 240], [1080, 120], [1080, 60]] as const) {
+      const period = height / lines, start = Math.round(period * 2);
+      for (let offset = 0; offset < Math.ceil(period); offset++) {
+        const bright = start + offset;
+        const output = render('crt-screen', { curvature: 0, maskStrength: 0, flicker: 0, scanlines: 1, lineCount: lines },
+          (_x, y) => y === bright ? [1, 1, 1, 1] : [0, 0, 0, 1], [4, height]);
+        let shown = 0;
+        for (let y = start - Math.ceil(period * 2); y < start + Math.ceil(period * 3); y++) shown += toLinear(output(2, y)[1]);
+        expect(shown, `${lines} lines at ${height} rows, row ${offset} of the line`).toBeGreaterThan(.8);
+        expect(shown, `${lines} lines at ${height} rows, row ${offset} of the line`).toBeLessThan(1.25);
+      }
+    }
   });
 
   it('fades lines that would be closer than 2.25 px instead of aliasing', () => {
@@ -162,6 +169,23 @@ describe('Glitch recipe', () => {
         expect(texels.has(value.toFixed(3)) || halves.has(value.toFixed(3))).toBe(true);
       }
     }
+  });
+
+  it('only tints flat areas slightly where blocks swap channels (no solid placeholder tiles)', () => {
+    // Flat sky: a full channel rotation would turn it mint; flat blocks rotate at most 0.15 of the way.
+    const sky = (): Pixel => [.36, .55, .8, 1];
+    let largest = 0, swappedFrames = 0;
+    for (const time of [.1, .35, .59, .85, 1.1, 1.35, 1.6, 1.85, 2.1, 2.35]) {
+      const output = render('glitch', { amount: 1, density: 1, split: 0 }, sky, [96, 54], time);
+      let frameLargest = 0;
+      for (let y = 0; y < 54; y++) for (let x = 0; x < 96; x++) output(x, y).slice(0, 3).forEach((value, channel) => {
+        frameLargest = Math.max(frameLargest, Math.abs(value - sky()[channel]));
+      });
+      if (frameLargest > 1e-3) swappedFrames++;
+      largest = Math.max(largest, frameLargest);
+    }
+    expect(swappedFrames).toBeGreaterThan(0);
+    expect(largest).toBeLessThan(.07);
   });
 
   it('moves almost nothing at a faint Intensity (block offsets round to the nearest block)', () => {
@@ -227,6 +251,20 @@ describe('Film Prism recipe', () => {
     for (const pixel of row) expect(pixel[3]).toBeCloseTo(1, 3);
   });
 
+  it('keeps a hard edge sharp in brightness at the default Fringe: only colour spreads', () => {
+    // Default Fringe 0.5 on 540 rows: reads spread ±4 px along Angle 0. The luma step stays within 2 px.
+    const edge = (x: number): Pixel => x < 32 ? [0, 0, 0, 1] : [1, 1, 1, 1];
+    const output = render('film-prism', { mode: 'prism', angle: 0, grain: 0 }, edge, [64, 540]);
+    const row = Array.from({ length: 64 }, (_, x) => output(x, 270));
+    const luma = row.map(([r, g, b]) => .2126 * r + .7152 * g + .0722 * b);
+    expect(luma.filter(value => value > .1 && value < .9).length).toBeLessThanOrEqual(2);
+    for (let x = 0; x < 30; x++) expect(luma[x], `x ${x}`).toBeLessThan(.1);
+    for (let x = 34; x < 64; x++) expect(luma[x], `x ${x}`).toBeGreaterThan(.9);
+    // The edge still gains a coloured fringe on both sides.
+    expect(Math.max(...row.slice(26, 32).map(([r, , b]) => Math.abs(r - b)))).toBeGreaterThan(.05);
+    expect(Math.max(...row.slice(32, 38).map(([r, , b]) => Math.abs(r - b)))).toBeGreaterThan(.05);
+  });
+
   it('leaves the frame centre clean in the Lens shape', () => {
     const output = render('film-prism', { mode: 'lens', amount: 1, grain: 0 }, line, [64, 64]);
     expectPixel(output(32, 32), [1, 1, 1, 1], 2e-2);
@@ -250,8 +288,8 @@ describe('Film Prism recipe', () => {
 describe('analog recipes open as readable stage folders', () => {
   const stages: Record<string, string[]> = {
     'crt-screen': ['Tube Shape & Rim', 'Scanline Beams', 'Phosphor Mask', 'Hum Bar & Flutter', 'Light Out & Alpha'],
-    glitch: ['Burst Clock', 'Torn Rows', 'Block Copies', 'Read Position & RGB Split', 'Channel Reads', 'Channel Swap & Alpha'],
-    'film-prism': ['Fringe Spread & Direction', 'Tap Positions', 'Spectrum Reads & Sum', 'Grain Noise', 'Grain Strength', 'Add Grain & Alpha'],
+    glitch: ['Burst Clock', 'Torn Rows', 'Block Copies', 'Read Position & RGB Split', 'Channel Reads & Swap', 'Colour & Alpha'],
+    'film-prism': ['Fringe Spread & Direction', 'Tap Positions', 'Spectrum Reads & Sum', 'Sharp Brightness', 'Grain Noise', 'Grain Strength', 'Add Grain & Alpha'],
   };
   for (const [type, labels] of Object.entries(stages)) {
     it(`${type} puts every computation in a stage folder (no folder dropped for a cycle)`, () => {
@@ -278,6 +316,14 @@ describe('Holo recipe', () => {
     const full = difference(1);
     expect(full).toBeGreaterThan(size[0] * size[1] * .05);
     for (const amount of [.35, .7]) expect(difference(amount) / full).toBeCloseTo(amount, 2);
+  });
+
+  it('keeps true black black away from outlines and lights the outline of a bright shape', () => {
+    // A bright square on black at full Amount and Stripes: the floor stays black, the square's outline gains foil.
+    const square = (x: number, y: number): Pixel => x >= 24 && x < 40 && y >= 12 && y < 24 ? [.8, .8, .8, 1] : [0, 0, 0, 1];
+    const output = render('holo', { amount: 1, stripes: 1 }, square, [64, 36]);
+    for (const [x, y] of [[4, 4], [60, 4], [4, 32], [60, 32], [10, 18]]) expect(Math.max(...output(x, y).slice(0, 3)), `${x},${y}`).toBeLessThan(.01);
+    expect(Math.max(...output(23, 18).slice(0, 3))).toBeGreaterThan(.1);
   });
 
   it('stays inside [0, 1] and lights outlines the same at any resolution (edge reach in frame heights)', () => {

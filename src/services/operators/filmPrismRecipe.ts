@@ -1,6 +1,6 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { premultipliedSourceCache, type GraphPort } from './blurGraphBuilder';
-import { AnalogRecipeBuilder } from './analogRecipeBuilder';
+import { AnalogRecipeBuilder, straightSample } from './analogRecipeBuilder';
 import { FILM_PRISM_GRAIN_SIZE_RANGE, FILM_PRISM_REACH, FILM_PRISM_SPECTRUM, FILM_PRISM_GRAIN_FPS, FILM_PRISM_GRAIN_CYCLE,
   FILM_PRISM_GRAIN_FRAME_ROWS } from '../../effects/analog/filmPrismLimits';
 
@@ -8,7 +8,9 @@ import { FILM_PRISM_GRAIN_SIZE_RANGE, FILM_PRISM_REACH, FILM_PRISM_SPECTRUM, FIL
  * Film Prism recipe (see docs/Features/Effects-Analog.md).
  * - Fringe: the picture is read at seven positions spread along the dispersion direction and each
  *   read adds to red, green and blue with its spectrum weight (FILM_PRISM_SPECTRUM), so edges
- *   break into a smooth red-to-blue rainbow instead of three hard copies. Each read moves by a fixed
+ *   break into a smooth red-to-blue rainbow instead of three hard copies. The spread only adds
+ *   colour: brightness (Rec. 709 luma) comes from the pixel itself wherever it has coverage, so the
+ *   picture stays sharp and only its edges gain coloured fringes. Each read moves by a fixed
  *   per-pixel offset within its seventh of the spread, so wide fringes dither instead of stepping. Lens: the reads scale
  *   about the frame centre by up to ±Fringe x FILM_PRISM_REACH (stronger towards the corners).
  *   Prism: the reads shift along Angle (degrees, counter-clockwise from the right) by up to
@@ -124,10 +126,17 @@ export function createDefaultFilmPrismGraph(): EffectOperatorGraph {
   const sums = fringe(g, cache);
   const coverage = g.max('finish-alpha', g.max('finish-alpha-rg', sums.red.alpha, sums.green.alpha), sums.blue.alpha);
   const safe = g.max('finish-safe-alpha', coverage, 'coverage-floor');
-  const straight = g.add('finish-straight', 'math.divide-ieee.rgb-scalar', { a: g.rgb3('finish-premultiplied', sums.red.colour, sums.green.colour, sums.blue.colour), b: safe });
+  const spread = g.add('finish-spread', 'math.divide-ieee.rgb-scalar', { a: g.rgb3('finish-premultiplied', sums.red.colour, sums.green.colour, sums.blue.colour), b: safe });
+  // Luma stays sharp: the spread reads only add colour. Where the frame is covered, the brightness
+  // comes from the pixel itself; past a cut-out's edge (no coverage) the spread fringe stays as it is.
+  const sharp = straightSample(g, 'sharp', cache, ['uv', 'uv']);
+  const spreadLuma = g.add('finish-spread-luma', 'color.luminance-rec709.rgb', { rgb: spread });
+  const sharpLuma = g.add('finish-sharp-luma', 'color.luminance-rec709.rgb', { rgb: sharp.rgb });
+  const luma = g.mix('finish-luma', spreadLuma, sharpLuma, g.clamp('finish-sharp-coverage', sharp.alpha, 'zero', 'one'));
+  const straight = g.addRgb('finish-straight', spread, g.rgbConstant('finish-luma-shift', g.sub('finish-luma-difference', luma, spreadLuma)));
   // Grain: strongest in the mid-tones (4 l (1 - l) + 0.25), up to ±0.12 at Grain 1.
-  const luma = g.clamp('grain-luma', g.add('grain-luma-raw', 'color.luminance-rec709.rgb', { rgb: straight }), 'zero', 'one');
-  const midtones = g.plus('grain-midtones', g.mul('grain-midtone-curve', g.mul('grain-midtone-l', luma, g.sub('grain-midtone-inverse', 'one', luma)), g.number('grain-midtone-scale', 4)), g.number('grain-floor', .25));
+  const grainLuma = g.clamp('grain-luma', luma, 'zero', 'one');
+  const midtones = g.plus('grain-midtones', g.mul('grain-midtone-curve', g.mul('grain-midtone-l', grainLuma, g.sub('grain-midtone-inverse', 'one', grainLuma)), g.number('grain-midtone-scale', 4)), g.number('grain-floor', .25));
   const amplitude = g.mul('grain-amplitude', g.mul('grain-strength', 'grain-clamped', g.number('grain-scale', .12)), midtones);
   const grain = g.rgbConstant('grain-rgb', g.mul('grain-offset', grainNoise(g), amplitude));
   const rgb = g.add('finish-rgb', 'math.clamp.rgb-scalar', { value: g.addRgb('finish-grained', straight, grain), min: 'zero', max: 'one' });

@@ -1,14 +1,19 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import type { LookDefinition, LookStackEntry } from './types';
-import { lookEntryOriginalGraph } from './lookStackEffects';
+import { lookEntryOriginalGraph, lookEntryRecipeOnlyParams } from './lookStackEffects';
 
-/** A custom Look saved before an analog effect's 2026-10 rebuild keeps that effect's original look. */
+/**
+ * A custom Look saved before an analog effect's 2026-10 rebuild keeps that effect's original look:
+ * the original graph, without the rebuilt recipe's own default parameters (as a pinned saved effect).
+ */
 function keepOriginalAnalogLook(look: LookDefinition, entry: LookStackEntry, clipId: string, effectId: string): void {
   const operatorGraph = lookEntryOriginalGraph(look, entry), state = useTimelineStore.getState();
   const clip = state.clips.find(candidate => candidate.id === clipId);
   if (!operatorGraph || !clip) return;
-  state.updateClip(clipId, { effects: clip.effects.map(effect => effect.id === effectId ? { ...effect, operatorGraph } : effect) });
+  const recipeOnly = lookEntryRecipeOnlyParams(look, entry);
+  state.updateClip(clipId, { effects: clip.effects.map(effect => effect.id === effectId ? { ...effect, operatorGraph,
+    params: Object.fromEntries(Object.entries(effect.params).filter(([id]) => !recipeOnly.has(id))) } : effect) });
 }
 
 export function applyLookToClip(look: LookDefinition, clipId: string): void {

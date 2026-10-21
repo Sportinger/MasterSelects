@@ -54,6 +54,8 @@ export const waveLines = createCatalogEffect({
   id: 'wave-lines', name: 'Wave Lines', category: 'analog', shader, entryPoint: 'waveLinesFragment', animated: true,
   params: {
     scale: { type: 'number', label: 'Line Density', default: 14, min: 3, max: 80, step: 1, group: 'Pattern' },
+    // A graphic line-art look: from about 0.5 the drawing covers most of the picture, so new effects start at 0.3.
+    amount: { type: 'number', label: 'Amount', default: 0.3, min: 0, max: 1, step: 0.01, group: 'Style' },
     colorA: { type: 'color', label: 'Lines', default: '#111827', group: 'Color' },
     colorB: { type: 'color', label: 'Background', default: '#f8fafc', group: 'Color' },
   },

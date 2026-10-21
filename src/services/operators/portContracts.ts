@@ -14,7 +14,7 @@ export const SIGNAL_FORMAT_LABELS: Record<string, string> = {
   'rgba-texture': '2D RGBA color texture',
   'pal-composite-864x313-rgba16f': 'PAL composite signal · 864×313 RGBA16F',
   'receiver-lines-313-rgba16f': 'Receiver line analysis · 313 RGBA16F entries',
-  'analog-decoded-360x288-rgba16f': 'Analog decoded image · 360×288 RGBA16F',
+  'analog-decoded-702x288-rgba16f': 'Analog decoded image · 702×288 RGBA16F',
   'nearest-seed-rgba16float': 'Nearest-seed field · RGBA16F pixel records',
   'uv-transform': 'UV scale + offset (U, V)',
   'surface-material': 'Color texture / solid RGB + opacity',

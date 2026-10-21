@@ -77,6 +77,25 @@ describe('EffectsTab numeric controls', () => {
     expect(container.querySelectorAll('.resolve-inspector-row, [class*="resolve"]').length).toBeGreaterThan(0);
   });
 
+  it('renders colour parameters of Resolve-row effects as a swatch, hex field and reset', () => {
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
+    const holo: Effect = { id: 'holo-colours', type: 'holo', name: 'Holo', enabled: true,
+      params: { amount: .35, stripes: .6, speed: 1, colorA: '#123456', colorB: '#f472b6' } };
+    render(<EffectsTab clipId="clip:effects-controls" effects={[holo]} />);
+    expect(hasResolveEffectParamRow({ type: 'color' })).toBe(true);
+    expect(screen.getByLabelText('Spectrum A')).toHaveAttribute('type', 'color');
+    const hex = screen.getByLabelText('Spectrum B hex');
+    expect(hex).toHaveValue('#f472b6');
+    fireEvent.change(hex, { target: { value: 'ABC' } });
+    fireEvent.keyDown(hex, { key: 'Enter' });
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'holo-colours', expect.objectContaining({ colorB: '#aabbcc' }));
+    fireEvent.change(hex, { target: { value: 'not a colour' } });
+    fireEvent.blur(hex);
+    expect(hex).toHaveValue('#f472b6');
+    fireEvent.click(screen.getByLabelText('Reset Spectrum A'));
+    expect(patch).toHaveBeenLastCalledWith('clip:effects-controls', 'holo-colours', expect.objectContaining({ colorA: '#22d3ee' }));
+  });
+
   it('uses the shared Transform-style labeled draggable value without a separate slider', () => {
     const brightness: Effect = {
       id: 'effect:brightness:test',

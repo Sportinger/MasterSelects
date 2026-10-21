@@ -11,8 +11,8 @@ import { CRT_LINE_COUNT_RANGE, CRT_MASK_SIZE_RANGE, CRT_MIN_LINE_PX, CRT_MIN_STR
  *   k = 0.18 * Curvature * Mix. Outside the tube is transparent; the corners are rounded with
  *   radius 5 % of the frame height and a one-pixel soft edge; the rim darkens by up to 40 %.
  * - Scanlines: Line Count beams over the frame height. Each line's light is the picture averaged
- *   in linear light over the line's height (four reads), so thin detail between line centres is
- *   not skipped. Each output pixel adds the two nearest lines with a Gaussian beam profile in linear
+ *   in linear light over every row of the line (a cached box of an eighth of a line, read eight
+ *   times), so thin detail between line centres is never skipped at any line height. Each output pixel adds the two nearest lines with a Gaussian beam profile in linear
  *   light; the beam width grows from 0.16 to 0.42 line heights with the line's brightness (never
  *   below half a pixel), so dark parts show lines and highlights bloom into the gaps. Each beam
  *   carries the light of its line (the profile is normalized to its area), so the average
@@ -103,17 +103,47 @@ function linearLightCache(g: AnalogRecipeBuilder): string {
   return g.add('source-cache', 'image.materialize', { image: ['source-premultiplied', 'image'] });
 }
 
-/** A line's light: the cached picture averaged over the line's height (four reads), as straight linear rgb. */
-function lineLight(g: AnalogRecipeBuilder, id: string, cache: string, x: GraphPort, centre: GraphPort): string {
-  const reads = [-3 / 8, -1 / 8, 1 / 8, 3 / 8].map((offset, index) => {
-    const tap = `${id}-tap${index}`;
-    const y = g.plus(`${tap}-y`, centre, g.mul(`${tap}-offset`, 'scan-line-height', g.number(`${tap}-share`, offset)));
-    g.add(`${tap}-sample`, 'image.sample', { image: [cache, 'image'], uv: g.vec2(`${tap}-uv`, x, y) });
-    return g.add(tap, 'convert.image-to-vec4', { image: [`${tap}-sample`, 'image'] });
+/** Average of equally weighted vec4 reads (a power of two of them) by a tree of even mixes. */
+function average(g: AnalogRecipeBuilder, id: string, reads: string[]): string {
+  let level = reads, depth = 0;
+  while (level.length > 1) {
+    const current = level, round = depth++;
+    level = Array.from({ length: current.length / 2 }, (_, index) =>
+      g.add(`${id}-mix${round}-${index}`, 'math.mix.vec4', { a: current[2 * index], b: current[2 * index + 1], t: 'half' }));
+  }
+  return level[0];
+}
+
+/** `count` reads of `image` down the column x, from `start` in steps of `step` (uv), as vec4 values. */
+function columnReads(g: AnalogRecipeBuilder, id: string, image: string, x: GraphPort, start: GraphPort, step: GraphPort, count: number): string[] {
+  let y: GraphPort = start;
+  return Array.from({ length: count }, (_, index) => {
+    if (index) y = g.plus(`${id}-y${index}`, y, step);
+    g.add(`${id}-sample${index}`, 'image.sample', { image: [image, 'image'], uv: g.vec2(`${id}-uv${index}`, x, y) });
+    return g.add(`${id}-read${index}`, 'convert.image-to-vec4', { image: [`${id}-sample${index}`, 'image'] });
   });
-  const first = g.add(`${id}-mix-a`, 'math.mix.vec4', { a: reads[0], b: reads[1], t: 'half' });
-  const second = g.add(`${id}-mix-b`, 'math.mix.vec4', { a: reads[2], b: reads[3], t: 'half' });
-  g.add(`${id}-average`, 'convert.vec4-to-image', { value: g.add(`${id}-mix`, 'math.mix.vec4', { a: first, b: second, t: 'half' }) });
+}
+
+/**
+ * The cache box-filtered down the frame over an eighth of a line height (16 reads, spaced at most one
+ * pixel apart up to 128 px lines). A line's eight reads of this box, an eighth of a line apart,
+ * together average every row of the line exactly (box * comb = box), at any line height.
+ */
+function lineBox(g: AnalogRecipeBuilder, cache: string): string {
+  const [x, y] = g.split2('line-box-uv', ['uv', 'uv']);
+  const width = g.div('line-box-width', 'scan-line-height', g.number('eight', 8));
+  const step = g.div('line-box-step', width, g.number('sixteen', 16));
+  const start = g.sub('line-box-start', y, g.mul('line-box-reach', width, g.number('line-box-reach-share', 15 / 32)));
+  const sum = average(g, 'line-box', columnReads(g, 'line-box', cache, x, start, step, 16));
+  g.add('line-box-image', 'convert.vec4-to-image', { value: sum });
+  return g.add('line-box', 'image.materialize', { image: ['line-box-image', 'image'] });
+}
+
+/** A line's light: the line box read eight times over the line's height (every row once), as straight linear rgb. */
+function lineLight(g: AnalogRecipeBuilder, id: string, box: string, x: GraphPort, centre: GraphPort): string {
+  const start = g.sub(`${id}-start`, centre, 'scan-line-reach');
+  const sum = average(g, id, columnReads(g, id, box, x, start, 'line-box-width', 8));
+  g.add(`${id}-average`, 'convert.vec4-to-image', { value: sum });
   g.add(`${id}-split`, 'vector.split.rgba', { image: [`${id}-average`, 'image'] });
   const alpha = g.add(`${id}-alpha`, 'convert.alpha-to-scalar', { alpha: [`${id}-split`, 'alpha'] });
   return g.add(`${id}-linear`, 'math.divide-ieee.rgb-scalar', { a: [`${id}-split`, 'rgb'], b: g.max(`${id}-safe-alpha`, alpha, 'coverage-floor') });
@@ -128,12 +158,14 @@ function scanlines(g: AnalogRecipeBuilder, cache: string) {
   const linePx = g.div('scan-line-px', ['resolution-split', 'y'], 'line-count-clamped');
   g.div('scan-sigma-floor', g.number('scan-sigma-floor-px', .5), linePx);
   g.div('scan-line-height', 'one', 'line-count-clamped');
+  g.mul('scan-line-reach', 'scan-line-height', g.number('scan-line-reach-share', 7 / 16));
+  const box = lineBox(g, cache);
   const position = g.mul('scan-position', y, 'line-count-clamped');
   const first = g.fn('scan-first', 'floor', g.sub('scan-shifted', position, 'half'));
   const d0 = g.sub('scan-d0', g.sub('scan-offset', position, 'half'), first), d1 = g.sub('scan-d1', 'one', d0);
   const y0 = g.div('scan-y0', g.plus('scan-centre0', first, 'half'), 'line-count-clamped');
   const y1 = g.div('scan-y1', g.plus('scan-centre1', first, g.number('one-point-five', 1.5)), 'line-count-clamped');
-  const line0 = lineLight(g, 'line0', cache, x, y0), line1 = lineLight(g, 'line1', cache, x, y1);
+  const line0 = lineLight(g, 'line0', box, x, y0), line1 = lineLight(g, 'line1', box, x, y1);
   const sum = g.addRgb('scan-beams', g.scaleRgb('scan-beam0', line0, beam(g, 'scan-w0', d0, line0)),
     g.scaleRgb('scan-beam1', line1, beam(g, 'scan-w1', d1, line1)));
   // Lines thinner than CRT_MIN_LINE_PX cannot be drawn without aliasing; they fade to the flat picture.

@@ -24,8 +24,8 @@ const context = { namedImages: [
 describe('Analog Display Resolve image island', () => {
   it('is a flat, grouped graph built only from registered generic operators', () => {
     const { island } = fixture();
-    expect(island.nodes).toHaveLength(133);
-    expect(island.edges).toHaveLength(202);
+    expect(island.nodes).toHaveLength(144);
+    expect(island.edges).toHaveLength(227);
     expect(island.output).toEqual({ node: 'resolve-active-select', port: 'image' });
     expect(island.groups[0].nodeIds).toHaveLength(island.nodes.length);
     expect(island.layout['resolve-zero']).toEqual({ x: 600, y: 200 });

@@ -8,6 +8,7 @@ import { createLegacyCrtScreenGraph } from '../../src/services/operators/legacyC
 import { createLegacyHoloGraph } from '../../src/services/operators/legacyHoloGraph';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
+import { getDefaultParams, getEffect } from '../../src/effects';
 
 const custom = (stack: LookDefinition['stack']): LookDefinition => ({ id: 'mine', name: 'Mine', category: 'custom', tags: [], builtIn: false,
   thumbnail: { kind: 'generated' }, stack });
@@ -40,6 +41,26 @@ describe('Look entries saved before the analog rebuild', () => {
     expect(matchesEffectRecipe(applied[0].operatorGraph!, crt.operatorGraph!)).toBe(true);
     expect(matchesEffectRecipe(applied[1].operatorGraph!, holo.operatorGraph!)).toBe(true);
     expect(applied[2].operatorGraph && matchesEffectRecipe(applied[2].operatorGraph, createLegacyCrtScreenGraph())).toBeFalsy();
+  });
+
+  it('carry no rebuilt-recipe parameters, so no note talks about controls their graph does not have', () => {
+    // An old CRT Look on a 720 x 480 composition: the new recipe would warn about fine lines and mask stripes.
+    const look = custom([OLD_CRT]);
+    const [thumbnail] = lookThumbnailEffects(look);
+    const clip = createMockClip({ id: 'c', effects: [] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] } as never);
+    applyLookToClip(look, 'c');
+    const [applied] = useTimelineStore.getState().clips[0].effects;
+    const definition = getEffect('crt-screen')!;
+    for (const params of [thumbnail.params, applied.params]) {
+      expect(params).toMatchObject({ scale: 3, amount: .7 });
+      expect(params).not.toHaveProperty('lineCount');
+      expect(params).not.toHaveProperty('maskSize');
+      expect('paramWarnings' in definition ? definition.paramWarnings?.(params as never, 720, 480) ?? [] : []).toEqual([]);
+    }
+    // A current CRT effect at that size does get the notes (the check above is not vacuous).
+    const current = 'paramWarnings' in definition ? definition.paramWarnings?.({ ...getDefaultParams('crt-screen'), lineCount: 240, maskSize: .5 }, 720, 480) ?? [] : [];
+    expect(current.length).toBeGreaterThan(0);
   });
 
   it('built-in analog Looks carry the new recipe parameters', () => {

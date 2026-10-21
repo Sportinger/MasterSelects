@@ -13,7 +13,8 @@ import { GLITCH_BAND_RANGE, GLITCH_SEED_RANGE, GLITCH_STATE_CYCLE, GLITCH_STATES
  *   plus thin slices that jitter by up to 2 %.
  * - Blocks: square blocks (Bands rows of them) are copied from another place by whole blocks (the
  *   offset rounds to the nearest block, so a faint Intensity moves nothing); about one in ten of
- *   them reads from further away and half-rotates its colour channels, scaled with the burst.
+ *   them reads from further away and rotates its colour channels, up to half with the burst on
+ *   textured blocks and only 0.15 on flat ones (no solid placeholder tiles on sky).
  * - RGB Split: red and blue read from either side of green, wider inside torn rows and blocks.
  * Every read lands on a texel centre, so the picture stays sharp and transparent pixels never
  * bleed; alpha moves with the displaced pixels.
@@ -125,8 +126,21 @@ function blocks(g: AnalogRecipeBuilder) {
   const cells = g.unary('block-offset-cells', 'math.floor.vec2', g.add2('block-offset-rounded',
     g.mul2('block-offset-grid', g.vec2('block-offset-raw', dx, dy), grid), 'half-vec2'));
   g.binary('block-offset', 'math.divide-ieee.vec2', cells, grid);
-  // Rotation share follows the burst: half at full strength (hue shifts, not flat placeholder tiles).
-  const rotation = g.mul('block-rotation', g.smooth('block-rotation-level', 'zero', g.number('block-rotation-full', .35), 'state-level'), 'half');
+  // Texture of the copied block: the luma range over four points inside it. A flat block (sky) only
+  // tints slightly (rotation share 0.15), a textured one rotates up to half, so a swap never paints
+  // a flat area as a solid placeholder tile.
+  const sourceCell = g.add2('block-source-cell', g.vec2('block-cell-vector', cx, cy), cells);
+  const lumas = [[.25, .25], [.75, .25], [.25, .75], [.75, .75]].map(([qx, qy], index) => {
+    const point = g.add2(`block-texture${index}-cell`, sourceCell, g.vec2(`block-texture${index}-quarter`, g.number(`block-texture${index}-x`, qx), g.number(`block-texture${index}-y`, qy)));
+    const split = read(g, `block-texture${index}`, g.binary(`block-texture${index}-point`, 'math.divide-ieee.vec2', point, grid));
+    return g.add(`block-texture${index}-luma`, 'color.luminance-rec709.rgb', { rgb: [split, 'rgb'] });
+  });
+  const range = g.sub('block-texture-range', g.max('block-texture-max', g.max('block-texture-max-a', lumas[0], lumas[1]), g.max('block-texture-max-b', lumas[2], lumas[3])),
+    g.min('block-texture-min', g.min('block-texture-min-a', lumas[0], lumas[1]), g.min('block-texture-min-b', lumas[2], lumas[3])));
+  const texture = g.smooth('block-texture', g.number('block-texture-flat', .03), g.number('block-texture-full', .15), range);
+  const share = g.mix('block-rotation-share', g.number('block-rotation-flat', .15), 'half', texture);
+  // Rotation share follows the burst and the texture: up to half at full strength.
+  const rotation = g.mul('block-rotation', g.smooth('block-rotation-level', 'zero', g.number('block-rotation-full', .35), 'state-level'), share);
   g.mul('block-rotate', g.mul('block-rotate-active', swap, active), rotation);
   return active;
 }

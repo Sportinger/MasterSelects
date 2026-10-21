@@ -10,8 +10,10 @@ import { HOLO_BANDS_X, HOLO_BANDS_Y, HOLO_EDGE_REACH } from '../../effects/analo
  *   Stripes blends from an even Spectrum A/B tint (0) to the full bands (1).
  * - Edge sheen: brightness differences across ±HOLO_EDGE_REACH of the frame height (the same at
  *   every resolution) light the spectrum up along outlines.
- * - Foil: screen(colour x 0.8, spectrum x (0.25 + 0.75 x edge)) stays inside [0, 1], so Amount mixes
- *   linearly from the source (0) to the full foil (1).
+ * - Foil: screen(colour x 0.85, vivid spectrum x (0.25 x tone + 0.75 x edge)) stays inside [0, 1], so
+ *   Amount mixes linearly from the source (0) to the full foil (1). The spectrum is pushed 1.6x away
+ *   from its grey (clamped); tone = smoothstep(0.02, 0.35, brightness), so true blacks stay black
+ *   except along outlines.
  * - Alpha: the pixel's own colour is read at its texel centre and keeps its alpha; the edge reads
  *   weigh brightness by coverage, so cut-out silhouettes get an outline.
  */
@@ -70,9 +72,16 @@ export function createDefaultHoloGraph(): EffectOperatorGraph {
   const rgb: GraphPort = ['pixel-split', 'rgb'];
   const luma = g.add('pixel-luma', 'color.luminance-rec709.rgb', { rgb });
   edges(g); bands(g, luma);
+  // Vivid spectrum: the band colours pushed 1.6x away from their own grey, so the foil reads iridescent, not milky.
+  const spectrumGrey = g.rgbConstant('spectrum-grey', g.add('spectrum-luma', 'color.luminance-rec709.rgb', { rgb: 'spectrum' }));
+  const vivid = g.add('spectrum-vivid', 'math.clamp.rgb-scalar', { value: g.addRgb('spectrum-vivid-raw', spectrumGrey,
+    g.scaleRgb('spectrum-vivid-chroma', g.binary('spectrum-chroma', 'math.subtract.rgb', 'spectrum', spectrumGrey), g.number('spectrum-vividness', 1.6))), min: 'zero', max: 'one' });
+  // The even sheen follows the picture's tones (none on true black), the outline sheen lights up edges anywhere.
+  const tone = g.smooth('foil-tone', g.number('foil-tone-black', .02), g.number('foil-tone-full', .35), luma);
+  const light = g.plus('foil-light', g.mul('foil-light-tone', tone, g.number('foil-light-base', .25)), g.mul('foil-light-edge', 'edge', g.number('foil-light-edge-scale', .75)));
   // Foil = screen(base, sheen) = base + sheen (1 - base): bounded, so Amount reads as strength.
-  const sheen = g.scaleRgb('foil-sheen', 'spectrum', g.plus('foil-light', g.number('foil-light-base', .25), g.mul('foil-light-edge', 'edge', g.number('foil-light-edge-scale', .75))));
-  const base = g.scaleRgb('foil-base', rgb, g.number('foil-base-scale', .8));
+  const sheen = g.scaleRgb('foil-sheen', vivid, light);
+  const base = g.scaleRgb('foil-base', rgb, g.number('foil-base-scale', .85));
   const headroom = g.binary('foil-headroom', 'math.subtract.rgb', g.rgbConstant('one-rgb', 'one'), base);
   const foil = g.addRgb('foil', base, g.mulRgb('foil-screen', sheen, headroom));
   const mixed = g.mixRgb('finish-rgb', rgb, foil, 'amount-clamped');

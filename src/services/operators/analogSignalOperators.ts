@@ -12,7 +12,7 @@ const parameter = (id: AnalogSignalLabParameterId): OperatorParameter => {
 const parameters = (...ids: AnalogSignalLabParameterId[]) => [...new Set(ids)].map(parameter);
 const PAL = ['pal-composite-864x313-rgba16f'];
 const LINES = ['receiver-lines-313-rgba16f'];
-const DECODED = ['analog-decoded-360x288-rgba16f'];
+const DECODED = ['analog-decoded-702x288-rgba16f'];
 const operator = (id: string, label: string, inputs: OperatorPort[], outputs: OperatorPort[], ids: AnalogSignalLabParameterId[],
   bypass?: 'passthrough'): OperatorDefinition => ({ id, version: 1, label, description: `${label} stage of the existing Analog Signal Lab compute pipeline.`,
     inputs, outputs, parameters: parameters(...ids), invalidates: 'appearance', runtime: 'builtin', state: 'stateless', fusion: 'pass-boundary',

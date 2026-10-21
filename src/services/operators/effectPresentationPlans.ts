@@ -56,35 +56,37 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       'scan-depth': 'Beam Depth', 'mask-factor:rgb': 'Mask', 'flicker-gain': 'Flicker Gain', 'flat-alpha': 'Coverage', 'zero-rgb': 'Black', 'line0-linear': 'Line Light', 'line1-linear': 'Next Line Light',
       'scan-d0': 'Distance to Line', 'scan-d1': 'Distance to Next Line', 'scan-w0-weight': 'Beam Weight', 'scan-w1-weight': 'Next Beam Weight',
       'scan-sigma-floor': 'Half-Pixel Floor', 'scan-line-height': 'Line Height', 'scan-w0-brightness': 'Line Brightness',
+      'line-box': 'Line Box (cached)', 'line-box-width': 'Box Height', 'scan-line-reach': 'Line Reach',
       'source-cache': 'Linear Light Source', ...clampLabels({ amount: 'Mix', curvature: 'Curvature', 'line-count': 'Line Count', 'scanline-depth': 'Line Depth',
         'mask-strength': 'Mask Strength', 'mask-size': 'Mask Size', flicker: 'Flicker' }) },
     // Only the parameter clamps are controls: the beams' own luma clamps belong to Scanline Beams.
     stage: ({ id }) => /-clamped$/.test(id) && !/^scan-/.test(id) ? 'controls' : /^(source-|zero-rgb$|gamma-rgb$)/.test(id) ? 'premultiply'
       : /^(screen-|one-vec2$|half-vec2$)/.test(id) ? 'screen'
-        : /^(scan-|flat-|line[01]-)/.test(id) ? 'scan'
+        : /^(scan-|flat-|line[01]-|line-box)/.test(id) ? 'scan'
           : /^mask-/.test(id) ? 'mask' : /^flicker-/.test(id) ? 'flicker'
             : id === 'resolution-split' ? 'sources' : 'finish',
   };
   if (type === 'glitch') return {
     labels: { state: 'Burst Clock', tear: 'Torn Rows', block: 'Block Copies', read: 'Read Position & RGB Split',
-      channels: 'Channel Reads', finish: 'Channel Swap & Alpha' },
+      channels: 'Channel Reads & Swap', finish: 'Colour & Alpha' },
     portLabels: { 'state-tick': 'Glitch State', 'state-seed': 'Seed Key', 'state-level': 'Burst Level', 'tear-shift': 'Tear Shift',
       'tear-active': 'Row Torn', 'block-offset': 'Block Offset', 'block-active': 'Block Moved', 'block-rotate': 'Swap Channels',
       'read-uv': 'Read Position', 'state-seed-key': 'Seed Key Offset', 'state-strength': 'Burst Strength', 'state-burst': 'Glitching', 'split-shift': 'Split Shift', 'red-read-uv': 'Red Read Position', 'blue-read-uv': 'Blue Read Position',
       'red-alpha': 'Red Alpha', 'green-alpha': 'Green Alpha', 'blue-alpha': 'Blue Alpha',
-      'red-premultiplied': 'Red', 'green-premultiplied': 'Green', 'blue-premultiplied': 'Blue',
+      'red-premultiplied': 'Red', 'green-premultiplied': 'Green', 'blue-premultiplied': 'Blue', 'finish-rotated': 'Swapped Colour',
       ...clampLabels({ amount: 'Intensity', density: 'Density', bands: 'Bands', split: 'RGB Split', seed: 'Seed' }) },
     stage: ({ id }) => /^(amount|density|bands|split|seed)-clamped$/.test(id) ? 'controls'
       : /^(uv-split|resolution-split|half-vec2)$/.test(id) ? 'sources' : /^state-/.test(id) ? 'state' : /^tear-/.test(id) ? 'tear'
         : /^block-/.test(id) ? 'block' : /^(read-|split-|red-read-uv$|blue-read-uv$)/.test(id) ? 'read'
-          : /^(red|green|blue)-/.test(id) ? 'channels' : 'finish',
+          : /^(red|green|blue)-|^finish-(r|g|b|rotated|rotated-vector)$/.test(id) ? 'channels' : 'finish',
   };
   if (type === 'film-prism') return {
     labels: { premultiply: 'Premultiplied Source (cached)', spread: 'Fringe Spread & Direction', positions: 'Tap Positions',
-      spectrum: 'Spectrum Reads & Sum', noise: 'Grain Noise', grain: 'Grain Strength', finish: 'Add Grain & Alpha' },
+      spectrum: 'Spectrum Reads & Sum', sharpen: 'Sharp Brightness', noise: 'Grain Noise', grain: 'Grain Strength', finish: 'Add Grain & Alpha' },
     portLabels: { 'source-cache': 'Premultiplied Source', 'fringe-reach': 'Reach', 'fringe-jitter': 'Jitter', 'fringe-direction': 'Direction',
       'fringe-centred': 'From Centre', 'fringe-is-prism': 'Is Prism', 'grain-noise': 'Grain Noise', 'grain-rgb': 'Grain',
-      'finish-straight': 'Fringed Colour', 'finish-alpha': 'Coverage',
+      'finish-spread': 'Fringed Colour', 'finish-straight': 'Sharp Fringed Colour', 'finish-luma': 'Brightness', 'sharp-rgb': 'Pixel Colour',
+      'sharp-alpha': 'Pixel Coverage', 'finish-alpha': 'Coverage',
       ...Object.fromEntries(FILM_PRISM_SPECTRUM.flatMap((_, index) => (['Red', 'Green', 'Blue'] as const)
         .map(colour => [`fringe-tap${index}-${colour.toLowerCase()}`, `${colour} Share`]))),
       'grain-midtones': 'Mid-tone Weight', 'grain-amplitude': 'Grain Amount', 'grain-luma': 'Brightness',
@@ -93,7 +95,8 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     stage: ({ id }) => /^(amount|grain|grain-size)-clamped$/.test(id) ? 'controls'
       : /^(resolution-split|half-vec2)$/.test(id) ? 'sources' : /^source-/.test(id) ? 'premultiply'
         : /^fringe-tap\d+-(t|position|reach|scale|lens|lens-offset|shift|prism|prism-offset|uv)$/.test(id) ? 'positions'
-          : /^fringe-(tap|red|green|blue)|^finish-(alpha-rg|alpha|safe-alpha|premultiplied-vector|premultiplied|straight)$/.test(id) ? 'spectrum'
+          : /^fringe-(tap|red|green|blue)|^finish-(alpha-rg|alpha|safe-alpha|premultiplied-vector|premultiplied|spread)$/.test(id) ? 'spectrum'
+            : /^sharp-|^finish-(spread-luma|sharp-luma|sharp-coverage|luma|luma-difference|luma-shift|straight)$/.test(id) ? 'sharpen'
             : /^fringe-/.test(id) ? 'spread'
               : /^grain-(luma|midtone|floor|amplitude|strength|scale|offset|rgb)/.test(id) ? 'grain'
                 : /^grain-/.test(id) ? 'noise' : 'finish',

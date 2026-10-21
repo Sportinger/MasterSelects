@@ -1,5 +1,6 @@
 // Generic effect parameter rows in the shared Resolve inspector design (AGENTS.md section 9):
-// slider + number + reset for numbers, InspectorSelect for choices. Effects opt in through
+// slider + number + reset for numbers, InspectorSelect for choices, swatch + hex + reset for
+// colours. Effects opt in through
 // RESOLVE_ROW_EFFECTS (resolveEffectRows.ts) as their inspector is revised.
 import { useTimelineStore } from '../../../stores/timeline';
 import { createEffectProperty } from '../../../types/animationProperties';
@@ -7,6 +8,7 @@ import type { EffectParam } from '../../../effects/types';
 import { getParameterSourceTarget } from '../../../services/parameterSources/parameterSourceTargets';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
+import { ResolveInspectorColorRow } from './resolveInspector/ResolveInspectorColorRow';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
 import { EffectKeyframeToggle } from './shared';
@@ -39,6 +41,9 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
     <InspectorSelect ariaLabel={definition.label} value={String(value)} options={definition.options ?? []}
       onChange={next => { set(next); onParamCommit?.(paramName, 'select', 'select'); }} />
   </ResolveInspectorRow>;
+  if (definition.type === 'color') return <ResolveInspectorColorRow label={definition.label} value={String(value)}
+    defaultValue={String(definition.default)} onChange={set}
+    onCommit={method => onParamCommit?.(paramName, 'select', method === 'type' ? 'type' : method)} />;
   if (definition.type !== 'number') return null;
   if (sourceTarget && clipId) return <ParameterSourceNumberRow clipId={clipId} property={property} />;
   const min = definition.min ?? 0, max = definition.max ?? 1, number = typeof value === 'number' ? value : Number(definition.default);
