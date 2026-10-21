@@ -14,7 +14,7 @@ import { migratePersistedEffectOperatorGraph } from '../../src/services/operator
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
 import { applyWorkerSoftwarePixelEffects } from '../../src/services/render/workerSoftwarePixelEffects';
 import { getDefaultParams } from '../../src/effects';
-import type { Layer } from '../../src/types';
+import type { Layer } from '../../src/types/layers';
 
 type Rgba = [number, number, number, number];
 const SCREEN: [number, number, number] = [60 / 255, 150 / 255, 70 / 255];
