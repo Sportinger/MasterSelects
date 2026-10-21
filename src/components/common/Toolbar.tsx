@@ -451,7 +451,7 @@ export function Toolbar({
       </div>
 
       {isSettingsOpen && <SettingsDialog onClose={closeSettings} />}
-      {showArchiveDialog && <RepositoryArchiveDialog onClose={() => setShowArchiveDialog(false)} />}
+      {showArchiveDialog && <RepositoryArchiveDialog projectName={isProjectOpen ? projectName : undefined} onClose={() => setShowArchiveDialog(false)} />}
       {showBrowserProjectDialog && (
         <BrowserProjectOpenDialog
           onClose={() => setShowBrowserProjectDialog(false)}

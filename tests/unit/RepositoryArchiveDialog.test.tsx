@@ -21,8 +21,9 @@ describe('archive export lifetime', () => {
     state.export.mockImplementation(async (_selection, suppliedOutput, signal, session) => {
       expect(signal.aborted).toBe(false); expect(session).toBe(state.session); await suppliedOutput.close();
     });
-    const close = vi.fn(); const view = render(<RepositoryArchiveDialog onClose={close} />);
+    const close = vi.fn(); const view = render(<RepositoryArchiveDialog onClose={close} projectName="ArchiveRoundTrip" />);
     fireEvent.click(screen.getByRole('button', { name: 'Export .msproj' }));
+    expect(state.pick).toHaveBeenCalledWith('ArchiveRoundTrip');
     view.unmount();
     await act(async () => { finishPicker(output); });
     expect(state.export).toHaveBeenCalledOnce(); expect(output.close).toHaveBeenCalledOnce();

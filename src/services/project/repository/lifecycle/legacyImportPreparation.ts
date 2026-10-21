@@ -9,6 +9,9 @@ import { openLegacySource, RepositoryArchiveSourceError, type ReadOnlyProjectSou
 import { importLegacyRepository } from '../import/legacyImport';
 import { newRepositoryDescriptor } from './RepositoryLifecycle';
 import { PROJECT_FOLDER_MEDIA_SOURCE_ROOT_ID, type ProjectMediaSourceRoot } from '../../types/project.types';
+import { Logger } from '../../../logger';
+
+const log = Logger.create('ProjectArchiveImport');
 
 const IMPORTS = '.masterselects/imports/';
 
@@ -145,7 +148,9 @@ export async function prepareLegacyImport(request: LegacyImportRequest): Promise
       const stagingOwner = await restored.acquireOwner('archive-stage-' + importId);
       if (!stagingOwner) throw new RepositoryError('ownership', 'Archive restore staging is owned by another session');
       try {
+        log.info('Restoring repository archive', { importId });
         const manifest = await restoreRepositoryArchive(readFileChunks(source, packagePath), restored, stagingOwner);
+        log.info('Repository archive restored; copying it into the project', { importId });
         const current = await fileDigest(source, packagePath);
         if (current.hash !== packageIdentity?.hash || current.length !== packageIdentity?.length) throw new RepositoryError('conflict', 'Archive source changed during restore');
         const duplicated = await prepareArchive(restored, manifest.repository, manifest.targetCommit, target, owner,
