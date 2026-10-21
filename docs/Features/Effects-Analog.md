@@ -47,13 +47,14 @@ Tip: Speed 0 freezes one glitch; change Seed for a different pattern.
 ### Film Prism
 <figure class="docs-shot docs-shot--float-right">
 
-![The night street with neon signs, original left and with Film Prism right: the edges of the signs and shop windows split into soft red-to-blue rainbow fringes, and fine film grain covers the picture](assets/effects/film-prism.webp)
+![Film Prism on the night street with neon signs, Fringe 0.8, Grain 0.35. Left: the whole frame, sharp, with faint coloured edges on the signs. Right: the teal arrow sign enlarged three times: its tubes stay sharp and gain a red edge on one side and a green-blue edge on the other, and fine grain covers the dark sign board](assets/effects/film-prism.webp)
 
-<figcaption>Left: original. Right: Fringe 0.8, Grain 0.35, Lens shape.</figcaption>
+<figcaption>Fringe 0.8, Grain 0.35, Lens shape. Left: the whole frame. Right: the arrow sign, enlarged 3× pixel for pixel.</figcaption>
 </figure>
 
-The look of film shot through a cheap lens or a glass prism: edges break into
-soft rainbow fringes, and a fine, living film grain lies over the picture.
+The look of film shot through a cheap lens or a glass prism: edges gain soft
+rainbow fringes, and a fine, living film grain lies over the picture. The picture
+itself stays sharp; only the colours spread.
 - **Fringe** – how far the colours split at edges.
 - **Shape** – Lens: the fringes grow towards the corners. Prism: the same everywhere, in the direction of Prism Angle.
 - **Grain** and **Grain Size** – how strong and how coarse the grain is.
@@ -70,10 +71,12 @@ Tip: Grain Speed 0 freezes the grain, for still images.
 
 Sends the picture through a simulated PAL television chain – antenna, video tape
 and tube TV – with real faults: noise, ghost images, rolling, colour that bleeds
-and tracking errors. It is the most realistic analog look, and the deepest.
+and tracking errors. It is the most realistic analog look, and the deepest. A
+broadcast stays fairly sharp from side to side; a VHS tape is clearly softer.
 - **RF / Antenna Stage**, **VHS Stage** and **CRT Stage** – how strongly each part of the chain acts; 0 leaves it out.
 - **Signal Strength** – weaker reception adds noise; very weak reception makes the picture roll.
 - **Tracking Error** and **Tape Wear** – the typical faults of a worn VHS tape.
+- **Luma Bandwidth** – how sharp the picture is from side to side (2.5 to 5.5 MHz).
 - **Y/C Crosstalk** – how much fine detail turns into colour moiré, as on a real PAL TV. 0 keeps detail clean.
 
 Tip: start from the Looks PAL Broadcast, Weak Antenna or Worn VHS and adjust from there.
@@ -85,7 +88,7 @@ Tip: start from the Looks PAL Broadcast, Weak Antenna or Worn VHS and adjust fro
 **Holo** lays a holographic foil over the picture: diagonal rainbow bands between
 Spectrum A and B that bend with the picture's tones and light up along outlines.
 **Amount** goes from the original (0) to the full foil (1); **Stripes** from an even
-tint to full bands.
+tint to full bands. Black stays black, except along outlines.
 
 **Ribbon Scan** rolls soft horizontal ribbons down the picture that push it sideways.
 **Displacement** grows gently: at the default 0.3 a face stays readable, at 1 the
@@ -94,23 +97,29 @@ or wrap around to the other side.
 
 ### The rest
 
-**Wave Lines** draws the picture as wavy lines. **Crystal Glass**, **Glass
+**Wave Lines** redraws the picture as wavy black lines on a light background, a
+graphic line-art look: from about Amount 0.5 the drawing covers most of the picture,
+so new Wave Lines start at 0.3. **Crystal Glass**, **Glass
 Dispersion** and **Pixel Sort** are marked *Experimental* in the effect list; the
 effect card says why. Start them low: their defaults are gentle for that reason.
 
 **Saved projects:** CRT Screen, Glitch, Film Prism, Holo and Ribbon Scan were rebuilt
 in this update. Effects and custom Looks saved before it keep their earlier look and
 controls; add the effect again for the new version. The built-in Looks use the new
-versions. Analog Signal Lab's PAL decoder and tape were fixed: saved Analog Signal
-Lab effects keep their settings but look cleaner (no colour dots on detail, a worn
-tape keeps its colours).
+versions. Analog Signal Lab's PAL chain was fixed, on purpose for every saved effect:
+saved Analog Signal Lab effects keep their settings but look cleaner and sharper (no
+colour dots on detail or at the frame edges, a worn tape keeps its colours and is
+softer than a broadcast). There is no switch back to the earlier look. New Wave Lines
+start at Amount 0.3; saved ones keep theirs.
 
 **Known limitations:** Crystal Glass's facets stretch with the frame shape and have
 hard seams, and strong Refraction doubles edges into ghost copies. Glass
 Dispersion's cells change size with the frame resolution, and strong Dispersion
 looks like blocks of RGB noise. Pixel Sort only sorts runs of up to 16 pixels, so
 smooth areas such as sky get a fine pattern of vertical stripes instead of long
-sorted streaks. CRT Screen has no bloom of its own (add Glow).
+sorted streaks. CRT Screen has no bloom of its own (add Glow). Analog Signal Lab
+works on one PAL field of 288 lines, so its picture has half the line detail of a
+full PAL frame from top to bottom.
 
 <div class="docs-float-end"></div>
 
@@ -151,17 +160,18 @@ one effect. [Node Workspace](./Node-Workspace.md) shows how to add and connect n
 
 <figure class="docs-shot docs-shot--graph">
 
-![The Glitch graph: Parameters and Burst Clock at the left feed Torn Rows and Block Copies below; their Row Torn, Tear Shift, Block Moved and Block Offset outputs and the Burst Level feed Read Position & RGB Split; it and the Input Frame feed Channel Reads, which feeds Channel Swap & Alpha together with Swap Channels from Block Copies](assets/effects/graphs/glitch.webp)
+![The stage folders of Glitch from left to right: Parameters feed Burst Clock; Burst Clock feeds Torn Rows and Block Copies; both feed Read Position & RGB Split, which feeds Channel Reads & Swap; Block Copies also sends Swap Channels and the Input Frame sends the frame to Channel Reads & Swap, which feeds Colour & Alpha](assets/effects/graphs/glitch-stages.svg)
 
-<figcaption>Glitch opened in the Node Workspace (the Constants and Coordinates folders and the Output card left out).</figcaption>
+<figcaption>The stage folders of Glitch and the main signals between them (a diagram; the Node Workspace also shows the Constants and Coordinates folders and each folder's ports).</figcaption>
 </figure>
 
 All three first decide **where** to read the picture, then **what light** to show.
 In Glitch, **Burst Clock** decides when the signal breaks, **Torn Rows** and **Block
 Copies** decide where, **Read Position & RGB Split** moves the three colour reads,
-**Channel Reads** reads the picture there and **Channel Swap & Alpha** puts the colours
-back together. CRT Screen bends the read position into a tube (**Tube Shape & Rim**),
-Film Prism spreads it into seven reads along a rainbow (**Tap Positions**).
+**Channel Reads & Swap** reads the picture there and swaps the channels of a few
+blocks, and **Colour & Alpha** puts the colours back together. CRT Screen bends the read position into a tube (**Tube Shape & Rim**),
+Film Prism spreads it into seven reads along a rainbow (**Tap Positions**) and then
+puts the sharp brightness of the pixel back (**Sharp Brightness**).
 
 Sizes count against the frame (lines per picture height, pixels at 1080 lines), so
 export, 4K and a full-quality preview look the same. Every random choice comes from
@@ -215,13 +225,13 @@ Remix: for a glitch that never pauses, select **State Burst Base** and set it fr
 
 <figure class="docs-shot docs-shot--graph">
 
-![Inside Film Prism's Grain Strength: Luminance is clamped between Zero and One; One minus it times it, times Grain Midtone Scale (4), plus Grain Floor (0.25), times Grain times Grain Scale (0.12)](assets/effects/graphs/film-prism-grain.webp)
+![Inside Film Prism's Grain Strength: Brightness is clamped between Zero and One; One minus it times it, times Grain Midtone Scale (4), plus Grain Floor (0.25), times Grain times Grain Scale (0.12)](assets/effects/graphs/film-prism-grain.webp)
 
 <figcaption>Grain Strength: 4 · l · (1 − l) + 0.25, times Grain × 0.12, where l is the brightness.</figcaption>
 </figure>
 
 Real film grain shows most in the mid-tones. **Grain Strength** takes the brightness
-of the fringed picture (**Luminance**, **Clamp**), forms 4 × l × (1 − l) with
+of the pixel (**Brightness** from Sharp Brightness, **Clamp**), forms 4 × l × (1 − l) with
 **Subtract** and two **Multiply** nodes (1 in the mid-tones, 0 in pure black and
 white), adds **Grain Floor** and scales the result by Grain × **Grain Scale**.
 
@@ -260,14 +270,22 @@ formulas and history in [Effects: CRT Screen](./Effects.md#crt-screen) and
   Ribbon Scan shifts by Displacement² × 6 % of the width; Holo's outlines compare
   brightness ±0.2 % of the frame height apart.
 - **Light and sampling.** CRT Screen caches the frame once as premultiplied linear
-  light (`rgba16float`) and reads it 9 times per pixel: one flat read and 4 per line,
-  averaged over the line's height. Each beam is divided by its area, so dark, mid and
+  light (`rgba16float`), then a second cache averages it down the frame over an
+  eighth of a line height (16 reads, at most one pixel apart up to 128 px lines).
+  Each pixel reads that 8 times per line, an eighth of a line apart, so a line
+  averages every one of its rows at any line height (export, 4K or coarse Line
+  Count): a single bright row keeps 0.94 to 1.08 of its light wherever it lies in
+  the line. Each beam is divided by its area, so dark, mid and
   bright tones keep their exposure, and both masks keep the average light (the Slot
   Mask divides its slot term by its mean). Film Prism (7 reads) and Ribbon Scan (2)
-  read a premultiplied cache bilinearly, so cut-out edges keep their colour. Glitch
-  reads the frame 3 times at texel centres and wraps around the edges; swapped blocks
-  mix their rotated channels half into their own. Glitch and Film Prism keep each
-  channel's coverage.
+  read a premultiplied cache bilinearly, so cut-out edges keep their colour; Film
+  Prism then replaces the Rec. 709 luma of the spread with that of the pixel where it
+  has coverage (only colour spreads; a hard edge stays within 2 px in brightness).
+  Glitch reads the frame 3 times at texel centres and wraps around the edges; swapped
+  blocks mix their rotated channels up to half into their own on textured blocks
+  and 0.15 on flat ones (luma range of four points of the copied block below 0.03).
+  Glitch and Film Prism keep each channel's coverage. Holo's even sheen is weighted
+  by smoothstep(0.02, 0.35, brightness), so true blacks stay black.
 - **Time.** Glitch changes 12 × Speed times per timeline second, Film Prism's grain
   24 × Grain Speed times; Speed 0 freezes either. Counters cycle (1024 states, 997
   grain frames). CRT flicker and Holo's bands follow timeline time. Preview,
@@ -293,20 +311,26 @@ formulas and history in [Effects: CRT Screen](./Effects.md#crt-screen) and
 - **Stage folders.** The folders are presentation only (`effectPresentationPlans.ts`)
   and appear on the untouched recipe; a saved original CRT graph opens with the
   folders it had before the rebuild. A graph with your own folders keeps them. A
-  folded folder offers only the outputs that are used, not the unused components of
-  a Split node.
+  folded plain folder offers only the outputs that are used, not the unused
+  components of a Split node; a composition keeps every output it declares.
 - **Saved projects.** Effects and custom Looks saved before the rebuild keep their
   original graphs (`legacyCrtScreenGraph.ts`, `legacyGlitchGraph.ts`,
   `legacyFilmPrismGraph.ts`, `legacyHoloGraph.ts`, `legacyRibbonScanGraph.ts`, pinned
-  by `analogLegacyGraphs.ts`), in Look thumbnails too; add the effect again for the
-  new version.
-- **Analog Signal Lab** is a six-pass compute effect on a 360 × 288 PAL working
-  raster, independent of the frame size. PAL Encode averages the source over each
-  sample's footprint and traps luma in the subcarrier band except for the Y/C
-  Crosstalk share; PAL Decode separates chroma as the composite minus its 3-sample
-  mean and low-passes the demodulated U/V; VHS Transport records chroma
-  colour-under (sideways chroma noise, hue kept, saturation 0.93 / 0.87 / 0.81 at
-  SP / LP / EP). Details in [Effects: Analog Signal Lab](./Effects.md#analog-signal-lab).
+  by `analogLegacyGraphs.ts`), in Look thumbnails too, without the new recipe's
+  own parameters; add the effect again for the new version.
+- **Analog Signal Lab** is a compute effect on a 702 × 288 PAL raster (one decoded
+  pixel per 13.5 MHz picture sample and field line), independent of the frame size.
+  A footprint pass box-averages the source over each sample and line (every source
+  row and column, alpha-weighted). PAL Encode low-passes luma to the Luma Bandwidth
+  cutoff (2.5 to 5.5 MHz) and removes it from the band the decoder reads as chroma
+  except for the Y/C Crosstalk share; PAL Decode notches luma over about 3.6 to 5.2 MHz and
+  low-passes the demodulated U/V to 0.6 to 1.3 MHz (Chroma Bandwidth). The filters are
+  41-tap FIRs built per workgroup. The picture carries 16 samples of its edge colour
+  into the blanking on either side, so filters at the frame edges and small sync
+  shifts read picture, not black. VHS Transport low-passes luma to 3 / 2.6 / 2.2 MHz
+  (SP / LP / EP, lower with Tape Wear), records chroma colour-under (sideways chroma
+  noise, hue kept, saturation 0.93 / 0.87 / 0.81) and fades in over the first tenth
+  of VHS Stage. Details in [Effects: Analog Signal Lab](./Effects.md#analog-signal-lab).
   Pixel Sort is a compute effect with segments of at most 16 px.
 - **Pictures on this page.** `scripts/effect-lab.mjs --pairs`,
   `scripts/effect-graph-shot.mjs` and `scripts/effect-editor-shot.mjs`, each with an

@@ -59,14 +59,22 @@
       "out": "docs/Features/assets/effects/film-prism.webp",
       "image": "neon_rain_street",
       "width": 1920,
-      "crop": [
-        1123,
-        0,
-        797,
-        600
-      ],
       "left": {
-        "effect": "original"
+        "effect": "film-prism",
+        "params": {
+          "amount": 0.8,
+          "grain": 0.35
+        },
+        "times": [
+          0.5
+        ],
+        "crop": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "zoom": 0.25
       },
       "right": {
         "effect": "film-prism",
@@ -76,7 +84,15 @@
         },
         "times": [
           0.5
-        ]
+        ],
+        "crop": [
+          640,
+          165,
+          160,
+          90
+        ],
+        "zoom": 3,
+        "smooth": false
       }
     },
     {

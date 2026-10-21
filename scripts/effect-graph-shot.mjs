@@ -12,7 +12,8 @@
 //   open=a,b           open these folders too (label slug, `parent/child` path or group id)
 //   focus=folder       only the contents of this folder; values from outside become named stub
 //                      cards (Constants excepted)
-//   rows=n             split a focused folder's flow into n rows (default: landscape fit)
+//   rows=n             split a focused folder's flow into n rows (default: landscape fit); with
+//                      plumbing=hide on an overview, wrap its stages into n rows (default: one)
 //   break=a,b          start a new row at these node ids instead (keeps short cables)
 //   only=a,b           with focus: just these nodes (local ids, see --list), laid out compactly;
 //                      their other inputs become named stubs (a recipe, not the whole folder) and

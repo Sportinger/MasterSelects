@@ -218,7 +218,9 @@ export function buildEffectGraphDoc(query: EffectGraphDocQuery, overrides: Recor
     : query.chain ? full : cropToGroup(full, EFFECT_GRAPH_DOC_GROUP);
   // Without plumbing the stages read as one path: lay them out like a recipe, so no cable runs
   // behind a stage it does not belong to (the editor's flow layout allows that).
-  const graph = query.plumbing === 'hide' && !focus && !query.chain ? fixedLayout(compactRecipeLayout(omitNodes(withoutPlumbing(cropped), query.omit)))
+  // An overview given rows= or break= wraps its stages into rows too (left to right, then the next row).
+  const wrapped = (recipe: NodeGraph) => query.rows === 'auto' && !query.breaks.length ? recipe : wrapFlowRows(recipe, query.rows, query.breaks);
+  const graph = query.plumbing === 'hide' && !focus && !query.chain ? fixedLayout(wrapped(compactRecipeLayout(omitNodes(withoutPlumbing(cropped), query.omit))))
     : omitNodes(query.plumbing === 'hide' && !focus ? withoutPlumbing(cropped) : cropped, query.omit);
   // The canvas refits per graph id: one id per level keeps a refit when the level changes.
   const id = `${full.id}:${query.effectType}:${query.level}:${query.open.join('+')}:${query.focus ?? ''}:${query.rows}:${query.breaks.join('+')}:${query.only.join('+')}`
