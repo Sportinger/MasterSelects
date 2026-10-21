@@ -216,8 +216,10 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
       const descriptor = kernelScopes.get(item.value!);
       if (!descriptor) throw new Error(`Image kernel scope ${String(item.value)} is missing.`);
       const result = { sum: [0, 0, 0, 0], weightSum: 0 };
+      // Captured loop-invariant values of this scope reach the kernel term lexically.
+      const lexical = descriptor.captures?.length ? values : undefined;
       for (let x = -extent; x <= extent; x++) for (let y = -extent; y <= extent; y++) {
-        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y]);
+        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y], undefined, undefined, lexical);
         const sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
         for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight;
         result.weightSum += weight;
@@ -230,8 +232,9 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
       const descriptor = rectScopes.get(item.value!);
       if (!descriptor) throw new Error(`Image rectangular kernel scope ${String(item.value)} is missing.`);
       const result = { sum: [0, 0, 0, 0], weightSum: 0 };
+      const lexical = descriptor.captures?.length ? values : undefined;
       for (let x = 0; x < width; x++) for (let y = 0; y < height; y++) {
-        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y]), sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
+        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y], undefined, undefined, lexical), sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
         for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight; result.weightSum += weight;
       }
       kernelResults.set(item.value!, result); values.push(result.sum);

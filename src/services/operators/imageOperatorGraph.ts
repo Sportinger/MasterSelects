@@ -12,7 +12,7 @@ import { resolveImageOperatorChoice, type ImageOperatorCompileContext } from './
 import { IMAGE_FRAME_HISTORY_RESOURCE_ID, type ImageOperatorResourceSampling } from './imageOperatorResources';
 import { imageDegreesToRadians } from './imageAngleSemantics';
 import { validateImageOperatorValues, type ImageOperatorValueBinding } from './imageOperatorValueBindings';
-import { commonPureImageBranchValues, hasUpstreamImageDerivative } from './imageOperatorScopes';
+import { commonPureImageBranchValues, hasUpstreamImageDerivative, kernelInvariantValues } from './imageOperatorScopes';
 import { lowerMarchingSquaresTopology } from './imageOperatorJointLowering';
 import type { ImageOperatorExternalResource } from './imageOperatorExternalResources';
 import type { ImageOperatorFieldResource } from './imageOperatorFieldResources';
@@ -69,17 +69,31 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   const externalResources: ImageOperatorExternalResource[] = [];
   const fieldResources: ImageOperatorFieldResource[] = [];
   const sampleScopes: ImageOperatorSampleScope[] = [];
-  const kernelScopes: Array<{ id: number; sample: number; weight: number }> = [];
-  const rectScopes: Array<{ id: number; sample: number; weight: number }> = [];
+  const kernelScopes: Array<{ id: number; sample: number; weight: number; captures?: number[] }> = [];
+  const rectScopes: Array<{ id: number; sample: number; weight: number; captures?: number[] }> = [];
   const sequenceScopes: Array<{ id: number; sample: number; weight: number; blend?: boolean }> = [];
   const segmentSortScopes: Array<{ id: number; sample: number }> = [];
   const quadtreeScopes: Array<{ id: number; sample: number }> = [];
   const scopeBySource = new Map<string, number>(), scopeParents = new Map<number, number>(), capturable = new Set<string>(); let nextScopeId = 1;
+  const kernelCaptures = new Map<number, Set<number>>();
+  /** Evaluate a kernel's loop-invariant values once in the enclosing scope; the term reads them as arguments. */
+  const hoistKernelInvariants = (current: BoundOperatorNode, inputs: readonly string[], parentScope: number, scope: number) => {
+    for (const value of kernelInvariantValues(inputs.map(input => source(current, input)), nodes, incoming)) {
+      const key = `${parentScope}:${value.node.id}:${value.output}`, register = visit(value.node, value.output);
+      if (!registers.has(key)) registers.set(key, register);
+      capturable.add(key);
+    }
+    scopeParents.set(scope, parentScope); kernelCaptures.set(scope, new Set());
+  };
   let activeScope = 0, activeKernelScope: number | undefined, activeSequenceScope: number | undefined, activePixelLoad = false, activeSegmentSort = false, activeQuadtree = false;
   const reducerContext = (): ImageOperatorSampleScope['reducerContext'] => activeKernelScope !== undefined
     ? { kind: 'kernel', id: activeKernelScope }
     : activeSequenceScope !== undefined ? { kind: 'sequence', id: activeSequenceScope } : undefined;
   const reducerContextKey = (capture = reducerContext()) => capture ? `${capture.kind}:${capture.id}` : 'root';
+  const capturesOf = (scope: number) => {
+    const captures = [...kernelCaptures.get(scope) ?? []].toSorted((a, b) => a - b);
+    return captures.length ? { captures } : {};
+  };
   const emit = (instruction: ImagePlanInstruction) => {
     if (instructions.length >= IMAGE_SCOPED_INSTRUCTION_LIMIT) {
       throw new Error(`Image graph scoped expansion exceeds ${IMAGE_SCOPED_INSTRUCTION_LIMIT} instructions.`);
@@ -100,9 +114,16 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
   function visit(current: BoundOperatorNode, output: string): number {
     const cacheKey = `${activeScope}:${current.id}:${output}`;
     const cached = registers.get(cacheKey); if (cached !== undefined) return cached;
-    for (let scope = scopeParents.get(activeScope); scope !== undefined; scope = scopeParents.get(scope)) {
+    let crossedKernel = false;
+    for (let child = activeScope, scope = scopeParents.get(activeScope); scope !== undefined; child = scope, scope = scopeParents.get(scope)) {
+      if (child === activeKernelScope) crossedKernel = true;
       const parentKey = `${scope}:${current.id}:${output}`;
-      if (capturable.has(parentKey)) return registers.get(parentKey)!;
+      if (capturable.has(parentKey)) {
+        const captured = registers.get(parentKey)!;
+        // A value from outside a kernel term reaches it as an argument (see kernelInvariantValues).
+        if (crossedKernel) kernelCaptures.get(activeKernelScope!)!.add(captured);
+        return captured;
+      }
     }
     const visitKey = `${activeScope}:${current.id}`;
     if (visiting.has(visitKey)) throw new Error('Image graph contains a cycle.');
@@ -220,10 +241,11 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         const existingSum = registers.get(`${activeScope}:${current.id}:sum`);
         if (existingSum !== undefined) { register = output === 'sum' ? existingSum : registers.get(`${activeScope}:${current.id}:weightSum`)!; break; }
         const parentScope = activeScope, extent = visitSource(current, 'extent'), scope = nextScopeId++;
+        hoistKernelInvariants(current, ['sample', 'weight'], parentScope, scope);
         activeScope = scope; activeKernelScope = scope;
         const sample = visitSource(current, 'sample'), weight = visitSource(current, 'weight');
         activeScope = parentScope; activeKernelScope = undefined;
-        kernelScopes.push({ id: scope, sample, weight });
+        kernelScopes.push({ id: scope, sample, weight, ...capturesOf(scope) });
         const sum = emit({ nodeId: current.id, operation: 'kernel-sum', type: 'vec4', inputs: [extent], value: scope });
         const weightSum = emit({ nodeId: current.id, operation: 'kernel-weight-sum', type: 'scalar', inputs: [sum], value: scope });
         registers.set(`${parentScope}:${current.id}:sum`, sum); registers.set(`${parentScope}:${current.id}:weightSum`, weightSum);
@@ -234,7 +256,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         const existing = registers.get(`${activeScope}:${current.id}:sum`);
         if (existing !== undefined) { register = output === 'sum' ? existing : registers.get(`${activeScope}:${current.id}:weightSum`)!; break; }
         const parentScope = activeScope, width = visitSource(current, 'width'), height = visitSource(current, 'height'), scope = nextScopeId++;
-        activeScope = scope; activeKernelScope = scope; const sample = visitSource(current, 'sample'), weight = visitSource(current, 'weight'); activeScope = parentScope; activeKernelScope = undefined; rectScopes.push({ id: scope, sample, weight });
+        hoistKernelInvariants(current, ['sample', 'weight'], parentScope, scope);
+        activeScope = scope; activeKernelScope = scope; const sample = visitSource(current, 'sample'), weight = visitSource(current, 'weight'); activeScope = parentScope; activeKernelScope = undefined; rectScopes.push({ id: scope, sample, weight, ...capturesOf(scope) });
         const sum = emit({ nodeId: current.id, operation: 'rect-sum', type: 'vec4', inputs: [width, height], value: scope });
         const weightSum = emit({ nodeId: current.id, operation: 'rect-weight-sum', type: 'scalar', inputs: [sum], value: scope });
         registers.set(`${parentScope}:${current.id}:sum`, sum); registers.set(`${parentScope}:${current.id}:weightSum`, weightSum); register = output === 'sum' ? sum : weightSum; break;

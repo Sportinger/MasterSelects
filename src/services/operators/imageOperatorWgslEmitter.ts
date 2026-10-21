@@ -1,6 +1,6 @@
 import type { ImageOperatorCapability, ImageOperatorSampleScope, ImagePlanInstruction } from './imageOperatorGraph';
 import type { ImageOperatorResourceSampling } from './imageOperatorResources';
-import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
+import { emitImageReducerWgsl, imageInstructionWgslType, kernelCaptureParameters } from './imageOperatorReducerWgsl';
 import { pointwiseOperation } from './fields/pointwiseOperations';
 import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_COORDINATE_ROTATION_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL, IMAGE_RADIAL_PROJECTION_WGSL, IMAGE_VECTOR_WGSL } from './imageOperatorWgsl';
 import { INPUT_HISTORY_SAMPLE_WGSL } from './inputHistorySampling';
@@ -18,7 +18,7 @@ const hash = (value: string) => {
   for (let index = 0; index < value.length; index++) { result ^= value.charCodeAt(index); result = Math.imul(result, 0x01000193); }
   return (result >>> 0).toString(16).padStart(8, '0');
 };
-interface ReducerScope { id: number; sample: number; weight: number; blend?: boolean }
+interface ReducerScope { id: number; sample: number; weight: number; blend?: boolean; captures?: readonly number[] }
 export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstruction[]; output: number; capabilities: ImageOperatorCapability[];
   sampleScopes: ImageOperatorSampleScope[]; kernelScopes: ReducerScope[]; rectScopes: ReducerScope[]; sequenceScopes: ReducerScope[];
   segmentSortScopes: readonly { id: number; sample: number }[];
@@ -30,6 +30,8 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
     ...(capabilities.includes('time') ? ['timelineTimeSeconds'] : []),
     ...(parameterValues.length ? ['imageParameters'] : [])].join(', ');
   const sampleScopeById = new Map(sampleScopes.map(scope => [scope.id, scope]));
+  const capturedArguments = (scopes: readonly ReducerScope[], id: number) =>
+    kernelCaptureParameters(instructions, scopes.find(scope => scope.id === id) ?? {}).names.map(name => `, ${name}`).join('');
   const reducerCallArgs = (scope: number) => {
     const capture = sampleScopeById.get(scope)?.reducerContext;
     return capture?.kind === 'kernel' ? ', kernelIndex' : capture?.kind === 'sequence' ? ', sequenceIndex, sequenceT' : '';
@@ -59,7 +61,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
         ? `evaluateImageScope${item.value}(${imageSampleScopeNeedsSource(instructions, item.value!) ? `sampleImageGraphSource(${args[0]})` : 'vec4f(0.0)'}, ${contextCallArgs(args[0])}${reducerCallArgs(item.value!)})`
       : item.operation === 'load-image'
         ? `evaluateImageScope${item.value}(${imageScopeReadsPrimaryInput(instructions, item.value!) ? `loadImageGraphSource(imageGraphPixelCoordinate(${args[0]}, inputResolution))` : 'vec4f(0.0)'}, (vec2f(imageGraphPixelCoordinate(${args[0]}, inputResolution)) + 0.5) / inputResolution, imageGraphPixelCoordinate(${args[0]}, inputResolution)${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''}${reducerCallArgs(item.value!)})`
-      : item.operation === 'kernel-sum' ? `imageKernelReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
+      : item.operation === 'kernel-sum' ? `imageKernelReduce${item.value}(${args[0]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''}${capturedArguments(kernelScopes, item.value!)})`
       : item.operation === 'segment-sort-luma' ? `imageSegmentSort${item.value}(${args[0]}, inputUv, inputResolution${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'quadtree-partition' ? `imageQuadtreePartition${item.value}(${args.join(', ')}, inputUv, inputResolution${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'quadtree-origin' ? `${args[0]}.xy` : item.operation === 'quadtree-size' ? `${args[0]}.z`
@@ -67,7 +69,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation.startsWith('marching-squares-') ? item.operation === 'marching-squares-count'
         ? `f32(topologyResult${item.inputs[0]}.count)` : `topologyResult${item.inputs[0]}.${item.operation.at(-1)}`
       : item.operation === 'kernel-weight-sum' ? `kernelResult${item.inputs[0]}.weightSum`
-      : item.operation === 'rect-sum' ? `imageRectReduce${item.value}(${args[0]}, ${args[1]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
+      : item.operation === 'rect-sum' ? `imageRectReduce${item.value}(${args[0]}, ${args[1]}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''}${capturedArguments(rectScopes, item.value!)})`
       : item.operation === 'rect-weight-sum' ? `rectResult${item.inputs[0]}.weightSum`
       : item.operation === 'sequence-sum' ? `imageSequenceReduce${item.value}(${args.join(', ')}, pixel, inputUv${capabilities.includes('resolution') ? ', inputResolution' : ''}${capabilities.includes('time') ? ', timelineTimeSeconds' : ''}${parameterValues.length ? ', imageParameters' : ''})`
       : item.operation === 'sequence-weight-sum' ? `sequenceResult${item.inputs[0]}.weightSum`
@@ -89,7 +91,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation === 'fractal-noise2d' ? `imageGraphFractalNoise(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'rgb-to-hsv' ? `imageGraphRgbToHsv(${args[0]})` : item.operation === 'hsv-to-rgb' ? `imageGraphHsvToRgb(${args[0]})`
       : `vec4f(${args[0]}, ${args[1]})`;
-    const type = item.type === 'image' || item.type === 'vec4' ? 'vec4f' : item.type === 'rgb' || item.type === 'vec3' ? 'vec3f' : item.type === 'vec2' ? 'vec2f' : item.type === 'boolean' ? 'bool' : 'f32';
+    const type = imageInstructionWgslType(item.type);
     if (item.operation === 'kernel-sum') return `  let kernelResult${index} = ${expression};\n  let v${index}: vec4f = kernelResult${index}.sum;`;
     if (item.operation === 'rect-sum') return `  let rectResult${index} = ${expression};\n  let v${index}: vec4f = rectResult${index}.sum;`;
     if (item.operation === 'sequence-sum') return `  let sequenceResult${index} = ${expression};\n  let v${index}: vec4f = sequenceResult${index}.sum;`;
