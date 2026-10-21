@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useTimelineStore } from '../../src/stores/timeline';
 
 import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
+import { hasResolveEffectParamRow } from '../../src/components/panels/properties/resolveEffectRows';
+import { getEffect } from '../../src/effects';
+import type { EffectParam } from '../../src/effects/types';
 import type { Effect } from '../../src/types/effects';
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
@@ -46,6 +49,21 @@ describe('EffectsTab numeric controls', () => {
     expect(screen.getByLabelText('Amount')).toBeVisible();
     expect(screen.queryByLabelText('Samples')).toBeNull();
     expect(screen.queryByText('Quality')).toBeNull();
+  });
+
+  it('keeps the generic control for parameter types without a Resolve row in a Resolve-row effect', () => {
+    const params = getEffect('gaussian-blur')!.params as Record<string, EffectParam>;
+    params.previewToggle = { type: 'boolean', label: 'Preview Toggle', default: false };
+    try {
+      const effect: Effect = { id: 'gaussian-boolean', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewToggle: true } };
+      render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
+      expect(screen.getByText('Preview Toggle')).toBeInTheDocument();
+      expect(screen.getByLabelText('Radius slider')).toBeInTheDocument();
+      expect(hasResolveEffectParamRow({ type: 'boolean' })).toBe(false);
+      expect(hasResolveEffectParamRow({ type: 'select' })).toBe(true);
+    } finally {
+      delete params.previewToggle;
+    }
   });
 
   it('renders blur controls as Resolve inspector rows: slider, number and reset, and Type as an inspector select', () => {

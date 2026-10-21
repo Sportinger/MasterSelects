@@ -25,7 +25,7 @@ interface ResolveEffectParamRowProps {
     inputMethod: 'click' | 'drag' | 'keyboard' | 'reset' | 'select' | 'type') => void;
 }
 
-/** One parameter row; returns null for types without a Resolve row yet (callers fall back). */
+/** One parameter row for the types `hasResolveEffectParamRow` accepts (callers check it first). */
 export function ResolveEffectParamRow({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit }: ResolveEffectParamRowProps) {
   const property = `effect.${effect.id}.${paramName}`;
   // A parameter that can take a node source gets the source-aware row.

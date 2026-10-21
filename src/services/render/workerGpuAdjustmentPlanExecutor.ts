@@ -9,6 +9,7 @@ import {
   type MotionAdjustmentWorkerGpuPass,
 } from '../motionDesign/adjustment/workerGpuAdjustmentPlan';
 import { workerGpuAdjustmentMaskLookupId } from './workerGpuAdjustmentMaskRenderer';
+import { encodeWorkerAdjustmentBlurPass, WORKER_ADJUSTMENT_BLUR_INTERMEDIATE_FORMAT } from './workerGpuAdjustmentBlur';
 
 const FULLSCREEN_VERTEX_SHADER = `
 struct VertexOutput {
@@ -50,46 +51,9 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
 }
 `;
 
-const BLUR_FRAGMENT_SHADER = `
-struct BlurParams {
-  direction: vec2f,
-  texelSize: vec2f,
-  radius: f32,
-  samples: f32,
-  _pad: vec2f,
-};
-
-@group(0) @binding(0) var frameSampler: sampler;
-@group(0) @binding(1) var frameTexture: texture_2d<f32>;
-@group(0) @binding(2) var<uniform> params: BlurParams;
-
-@fragment
-fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
-  if (params.radius < 0.5) {
-    return textureSample(frameTexture, frameSampler, input.uv);
-  }
-  let sampleRadius = i32(clamp(params.samples, 1.0, 64.0));
-  let sigma = max(params.radius / 3.0, 0.0001);
-  let denominator = 2.0 * sigma * sigma;
-  let stepSize = params.radius / f32(sampleRadius);
-  var color = vec4f(0.0);
-  var totalWeight = 0.0;
-  for (var index = -sampleRadius; index <= sampleRadius; index += 1) {
-    let distancePixels = f32(index) * stepSize;
-    let weight = exp(-(distancePixels * distancePixels) / denominator);
-    let offset = params.direction * params.texelSize * distancePixels;
-    color += textureSample(frameTexture, frameSampler, input.uv + offset) * weight;
-    totalWeight += weight;
-  }
-  return color / max(totalWeight, 0.000001);
-}
-`;
-
 interface AdjustmentEffectPipelineResources {
   readonly colorMatrixPipeline: GPURenderPipeline;
   readonly colorMatrixLayout: GPUBindGroupLayout;
-  readonly blurPipeline: GPURenderPipeline;
-  readonly blurLayout: GPUBindGroupLayout;
 }
 
 export interface WorkerGpuAdjustmentExecutorResources {
@@ -133,22 +97,11 @@ function getEffectResources(device: GPUDevice): AdjustmentEffectPipelineResource
     label: 'worker-gpu-adjustment-plan-color-matrix',
     code: `${FULLSCREEN_VERTEX_SHADER}\n${COLOR_MATRIX_FRAGMENT_SHADER}`,
   });
-  const blurModule = device.createShaderModule({
-    label: 'worker-gpu-adjustment-plan-blur',
-    code: `${FULLSCREEN_VERTEX_SHADER}\n${BLUR_FRAGMENT_SHADER}`,
-  });
   const colorMatrixLayout = device.createBindGroupLayout({
     entries: [
       { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'read-only-storage' } },
-    ],
-  });
-  const blurLayout = device.createBindGroupLayout({
-    entries: [
-      { binding: 0, visibility: GPUShaderStage.FRAGMENT, sampler: {} },
-      { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: {} },
-      { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } },
     ],
   });
   const colorMatrixPipeline = device.createRenderPipeline({
@@ -158,14 +111,7 @@ function getEffectResources(device: GPUDevice): AdjustmentEffectPipelineResource
     fragment: { module: colorModule, entryPoint: 'fragmentMain', targets: [{ format: 'rgba8unorm' }] },
     primitive: { topology: 'triangle-list' },
   });
-  const blurPipeline = device.createRenderPipeline({
-    label: 'worker-gpu-adjustment-separable-blur-pipeline',
-    layout: device.createPipelineLayout({ bindGroupLayouts: [blurLayout] }),
-    vertex: { module: blurModule, entryPoint: 'vertexMain' },
-    fragment: { module: blurModule, entryPoint: 'fragmentMain', targets: [{ format: 'rgba8unorm' }] },
-    primitive: { topology: 'triangle-list' },
-  });
-  const created = { colorMatrixPipeline, colorMatrixLayout, blurPipeline, blurLayout };
+  const created = { colorMatrixPipeline, colorMatrixLayout };
   effectResourcesByDevice.set(device, created);
   return created;
 }
@@ -176,17 +122,18 @@ function createRenderTexture(
   height: number,
   label: string,
   transientResources: Array<{ destroy(): void }>,
+  format: GPUTextureFormat = 'rgba8unorm',
 ): GPUTexture {
   const texture = device.createTexture({
     label,
     size: { width, height },
-    format: 'rgba8unorm',
+    format,
     usage:
       GPUTextureUsage.RENDER_ATTACHMENT
       | GPUTextureUsage.TEXTURE_BINDING
       | GPUTextureUsage.COPY_SRC
       | GPUTextureUsage.COPY_DST
-      | GPUTextureUsage.STORAGE_BINDING,
+      | (format === 'rgba8unorm' ? GPUTextureUsage.STORAGE_BINDING : 0),
   });
   transientResources.push(texture);
   return texture;
@@ -361,27 +308,20 @@ function encodeEffectPass(
     readonly transientResources: Array<{ destroy(): void }>;
   },
 ): void {
+  if (input.pass.primitive === 'separable-gaussian-blur') {
+    // The editor's Gaussian Blur kernel (workerGpuAdjustmentBlur.ts); `samples` has no effect.
+    encodeWorkerAdjustmentBlurPass({ ...input, direction: input.pass.direction, radius: input.pass.parameters.radius });
+    return;
+  }
   const resources = getEffectResources(input.device);
-  const isColorMatrix = input.pass.primitive === 'color-matrix-4x5';
   const buffer = input.device.createBuffer({
-    size: isColorMatrix ? 80 : 32,
-    usage: (isColorMatrix ? GPUBufferUsage.STORAGE : GPUBufferUsage.UNIFORM) | GPUBufferUsage.COPY_DST,
+    size: 80,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
   });
   input.transientResources.push(buffer);
-  if (isColorMatrix) {
-    input.device.queue.writeBuffer(buffer, 0, new Float32Array(input.pass.matrix));
-  } else {
-    const values = new Float32Array(8);
-    values[0] = input.pass.direction === 'horizontal' ? 1 : 0;
-    values[1] = input.pass.direction === 'vertical' ? 1 : 0;
-    values[2] = 1 / input.width;
-    values[3] = 1 / input.height;
-    values[4] = input.pass.parameters.radius;
-    values[5] = input.pass.parameters.samples;
-    input.device.queue.writeBuffer(buffer, 0, values);
-  }
-  const layout = isColorMatrix ? resources.colorMatrixLayout : resources.blurLayout;
-  const pipeline = isColorMatrix ? resources.colorMatrixPipeline : resources.blurPipeline;
+  input.device.queue.writeBuffer(buffer, 0, new Float32Array(input.pass.matrix));
+  const layout = resources.colorMatrixLayout;
+  const pipeline = resources.colorMatrixPipeline;
   const bindGroup = input.device.createBindGroup({
     layout,
     entries: [
@@ -550,12 +490,15 @@ export function encodeWorkerGpuAdjustmentPlan(
           break;
         }
         case 'apply-adjustment-effect': {
+          // The horizontal blur pass keeps its premultiplied result in rgba16float for the vertical one.
           const texture = createRenderTexture(
             input.device,
             input.width,
             input.height,
             pass.outputResourceId,
             transientResources,
+            pass.primitive === 'separable-gaussian-blur' && pass.direction === 'horizontal'
+              ? WORKER_ADJUSTMENT_BLUR_INTERMEDIATE_FORMAT : 'rgba8unorm',
           );
           const view = texture.createView();
           encodeEffectPass({

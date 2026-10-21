@@ -1,7 +1,9 @@
 // What blur parameters do on a given instance, said instead of done silently: retired and
 // graph-only parameters follow the instance's graph, zero strength skips the passes, and limits
 // at the frame size come back as notes.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { EffectsPipeline } from '../../src/effects/EffectsPipeline';
+import { nodePreviewTextureTap } from '../../src/services/nodePreview/NodePreviewTextureTap';
 import { blurBudgetNotes } from '../../src/effects/blur/blurSampling';
 import { effectParamDefinitions, unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
 import { isNeutralBlurEffect } from '../../src/services/operators/blurIdentity';
@@ -66,6 +68,29 @@ describe('zero-strength blurs skip their passes', () => {
     edited.nodes.find(node => node.id === 'coverage-floor')!.constants = { value: 0.5 };
     expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0 }, operatorGraph: edited }, 1920, 1080)).toBe(false);
     expect(isNeutralBlurEffect({ type: 'sharpen', params: { radius: 0 } }, 1920, 1080)).toBe(false);
+  });
+});
+
+describe('a skipped zero-strength blur still feeds its effect preview', () => {
+  afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
+
+  it('captures the unchanged input as the effect output and renders no pass', () => {
+    vi.stubGlobal('GPUShaderStage', { FRAGMENT: 2 });
+    vi.stubGlobal('GPUBufferUsage', { UNIFORM: 1, COPY_DST: 2, STORAGE: 4 });
+    vi.stubGlobal('GPUTextureUsage', { RENDER_ATTACHMENT: 1, TEXTURE_BINDING: 2, COPY_DST: 4, COPY_SRC: 8 });
+    const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => undefined),
+      createShaderModule: vi.fn(() => ({})), createBindGroupLayout: vi.fn(() => ({})), createPipelineLayout: vi.fn(() => ({})),
+      createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: vi.fn(() => ({})) })), createBindGroup: vi.fn(() => ({})),
+      createBuffer: vi.fn(() => ({ destroy: vi.fn() })), createSampler: vi.fn(() => ({})), createTexture: vi.fn(() => ({ createView: () => ({}), destroy: vi.fn() })),
+      queue: { writeBuffer: vi.fn() } } as unknown as GPUDevice;
+    const beginRenderPass = vi.fn(), encoder = { beginRenderPass } as unknown as GPUCommandEncoder;
+    const capture = vi.spyOn(nodePreviewTextureTap, 'capture').mockImplementation(() => {});
+    const input = { label: 'input' } as unknown as GPUTextureView, view = () => ({}) as GPUTextureView;
+    const result = new EffectsPipeline(device).applyEffects(encoder, [{ id: 'soft', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true,
+      params: { radius: 0 } }], {} as GPUSampler, input, view(), view(), view(), 1920, 1080);
+    expect(result).toEqual({ finalView: input, swapped: false });
+    expect(beginRenderPass).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledWith('effect:soft', device, encoder, expect.anything(), input, 1920, 1080);
   });
 });
 

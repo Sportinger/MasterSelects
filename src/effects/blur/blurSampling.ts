@@ -30,8 +30,9 @@
  * - Motion: the direction is the on-screen angle in pixels; the streak reaches
  *   Length * |(cos * W, sin * H)| to each side (the legacy UV length: a share of the width
  *   when horizontal, of the height when vertical).
- * - Negative amounts reverse the range (legacy behaviour): Motion draws the same streak,
- *   Zoom streaks inward, Radial Zoom outward, Spin turns the other way. Scales stay >= 0.05.
+ * - Below 0, Motion and Radial Blur leave the picture unchanged, as their legacy shaders did
+ *   (keyframe overshoot or a tool call can produce negative amounts); Zoom Blur streaks inward,
+ *   as it did on the GPU before. Scales stay >= 0.05.
  */
 
 /** Radius unit: pixels on a frame whose shorter side is this long. */
@@ -114,8 +115,14 @@ export function radialBlurMode(mode: unknown): 'zoom' | 'spin' {
   return mode === 'spin' ? 'spin' : 'zoom';
 }
 
+/** The amount a directional blur renders with: Motion and Radial Blur clamp at 0 (legacy pass-through). */
+export function directionalBlurAmount(type: DirectionalBlurType, amount: unknown): number {
+  const value = finite(amount, type === 'motion-blur' ? 0.05 : type === 'zoom-blur' ? 0.3 : 0.5);
+  return type === 'zoom-blur' ? value : Math.max(0, value);
+}
+
 export function directionalBlurPlan(type: DirectionalBlurType, params: DirectionalBlurParams, width: number, height: number): DirectionalBlurPlan {
-  const amount = finite(params.amount, type === 'motion-blur' ? 0.05 : type === 'zoom-blur' ? 0.3 : 0.5);
+  const amount = directionalBlurAmount(type, params.amount);
   const center: [number, number] = [finite(params.centerX, 0.5) * width, finite(params.centerY, 0.5) * height];
   const farthest = Math.hypot(Math.max(center[0], width - center[0]), Math.max(center[1], height - center[1]));
   const radius = (pixel: [number, number]) => Math.hypot(pixel[0] - center[0], pixel[1] - center[1]);
@@ -212,6 +219,9 @@ export function blurBudgetNotes(type: string, params: Record<string, unknown>, w
       + `${2 * SEPARABLE_MAX_PAIRS_PER_SIDE} px a pass reads texel by texel: its reads are spread ${taps.stride.toFixed(2)} px apart, so fine detail can shimmer.`] : [];
   }
   if (!isDirectional(type)) return [];
+  const requested = finite(params.amount, Number.NaN);
+  if (type !== 'zoom-blur' && requested < 0) return [`${type === 'motion-blur' ? 'Length' : 'Amount'} ${requested} is below 0: `
+    + `${type === 'motion-blur' ? 'Motion' : 'Radial'} Blur leaves the picture unchanged (as in earlier versions).`];
   const plan = directionalBlurPlan(type, params, width, height);
   const farthest = Math.hypot(Math.max(plan.center[0], width - plan.center[0]), Math.max(plan.center[1], height - plan.center[1]));
   const fineSpan = plan.step * (plan.group === 'translate' ? 1 : farthest);
@@ -219,7 +229,7 @@ export function blurBudgetNotes(type: string, params: Record<string, unknown>, w
   if (fineSpan > DIRECTIONAL_MAX_FINE_TAPS) notes.push(`The streak reaches ${Math.round(plan.step * plan.coarseTaps * (plan.group === 'translate' ? 1 : farthest))} px `
     + `on this ${width}×${height} frame, beyond the ${DIRECTIONAL_MAX_COARSE_TAPS} × ${DIRECTIONAL_MAX_FINE_TAPS} reads per pixel: reads are up to `
     + `${(fineSpan / DIRECTIONAL_MAX_FINE_TAPS).toFixed(1)} px apart, so the longest streaks can look stepped.`);
-  const amount = finite(params.amount, type === 'motion-blur' ? 0.05 : type === 'zoom-blur' ? 0.3 : 0.5);
+  const amount = directionalBlurAmount(type, params.amount);
   const farUv = Math.hypot(Math.max(plan.center[0], width - plan.center[0]) / width, Math.max(plan.center[1], height - plan.center[1]) / height);
   const minimumScale = type === 'zoom-blur' ? 1 + ZOOM_SCALE_PER_AMOUNT * amount
     : plan.group === 'scale' ? 1 - RADIAL_SCALE_PER_AMOUNT * amount * farUv : 1;

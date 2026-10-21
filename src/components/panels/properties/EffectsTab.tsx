@@ -41,7 +41,7 @@ import { trackEditorControlCommitted } from '../../../services/productAnalytics'
 import { EffectGpuFailureNotice } from './EffectGpuFailureNotice';
 import { EffectBudgetNotice } from './EffectBudgetNotice';
 import { ResolveEffectParamRow } from './ResolveEffectParamRow';
-import { RESOLVE_ROW_EFFECTS } from './resolveEffectRows';
+import { hasResolveEffectParamRow, RESOLVE_ROW_EFFECTS } from './resolveEffectRows';
 import { effectParamDefinitions } from '../../../services/operators/effectParamVisibility';
 import './effectValueControls.css';
 
@@ -270,9 +270,10 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   const resolveRows = RESOLVE_ROW_EFFECTS.has(effect.type);
   const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false) => {
     const value = effect.params[paramName] ?? paramDef.default;
-    const resolved = resolveRows ? <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef} value={value} effect={effect}
-      clipId={clipId} onChange={onChange} onDragStart={onDragStart} onDragEnd={onDragEnd} onParamCommit={onParamCommit} /> : null;
-    return resolved ?? renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, noMaxLimit, onDragStart, onDragEnd, onParamCommit);
+    // Decide before creating the element: a rendered-null Resolve row would hide the parameter.
+    if (resolveRows && hasResolveEffectParamRow(paramDef)) return <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef}
+      value={value} effect={effect} clipId={clipId} onChange={onChange} onDragStart={onDragStart} onDragEnd={onDragEnd} onParamCommit={onParamCommit} />;
+    return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, noMaxLimit, onDragStart, onDragEnd, onParamCommit);
   };
   const ExtraControls = EXTRA_CONTROLS_REGISTRY[effectDef.id];
   const ungroupedParams = parameterGroups.find((group) => group.id === '__ungrouped__')?.params ?? [];

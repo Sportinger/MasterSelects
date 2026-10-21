@@ -29,21 +29,24 @@ fn isMotion() -> bool { return params.kind < 0.5; }
 fn isRadial() -> bool { return params.kind > 1.5; }
 fn isSpin() -> bool { return isRadial() && params.mode > 0.5; }
 
+// Motion and Radial Blur pass the picture through below 0 (legacy); Zoom Blur streaks inward.
+fn blurAmount() -> f32 { return select(max(params.amount, 0.0), params.amount, params.kind > 0.5 && params.kind < 1.5); }
+
 // Group range for the pixel at `uv`: start, signed length; longest range; longest in pixels.
-// Negative amounts reverse the range; counts and the box length use its magnitude (z, w).
+// Counts and the box length use the range's magnitude (z, w).
 fn directionalRange(uv: vec2f) -> vec4f {
   if (isMotion()) {
-    let halfLength = params.amount * length(vec2f(cos(params.angle), sin(params.angle)) * resolution());
+    let halfLength = blurAmount() * length(vec2f(cos(params.angle), sin(params.angle)) * resolution());
     return vec4f(-halfLength, halfLength * 2.0, abs(halfLength * 2.0), abs(halfLength * 2.0));
   }
   let center = blurCenter();
   let farthest = length(vec2f(max(center.x, params.width - center.x), max(center.y, params.height - center.y)));
   if (!isRadial()) {
-    let span = log(max(1.0 + params.amount * 0.5, 0.05));
+    let span = log(max(1.0 + blurAmount() * 0.5, 0.05));
     return vec4f(0.0, span, abs(span), abs(span) * farthest);
   }
-  let arc = params.amount * 0.3490658503988659;
-  let shrinkRate = params.amount * 0.2;
+  let arc = blurAmount() * 0.3490658503988659;
+  let shrinkRate = blurAmount() * 0.2;
   let centerUv = vec2f(params.centerX, params.centerY);
   let zoomLength = log(max(1.0 - shrinkRate * length(uv - centerUv), 0.05));
   let farUv = length(vec2f(max(centerUv.x, 1.0 - centerUv.x), max(centerUv.y, 1.0 - centerUv.y)));
