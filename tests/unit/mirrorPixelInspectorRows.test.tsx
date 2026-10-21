@@ -47,7 +47,7 @@ describe('mirror, split and pixel inspector rows', () => {
     const color = getEffect('block-mosaic')!.params.colorA, changed = vi.fn();
     render(<ResolveEffectParamRow paramName="colorA" definition={color} value="#ff8800" effect={{ id: 'mosaic-1', params: { colorA: '#ff8800', grout: 2 } }}
       onChange={changed} />);
-    expect(screen.getByText('#FF8800')).toBeTruthy();
+    expect(screen.getByLabelText('Grout Color hex')).toHaveValue('#ff8800');
     fireEvent.click(screen.getByRole('button', { name: 'Reset Grout Color' }));
     expect(changed).toHaveBeenLastCalledWith({ colorA: color.default, grout: 2 });
   });
