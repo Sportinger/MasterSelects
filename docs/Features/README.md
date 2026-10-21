@@ -43,100 +43,154 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 
 ## Documentation Index
 
-### Core Editing
+<!-- Each section below is one sidebar group of the documentation site, in this order (docs-site/scripts/sync-features.mjs).
+     The site puts its Welcome and Overview pages first in Getting Started; the link text is the sidebar label.
+     A "docs-sidebar: collapsed" comment under a heading starts that group collapsed. Pages without a row land in a final
+     "More" group, except Effects-*.md and Transitions-*.md pages, which join the Effects or Transitions group. -->
+
+### Getting Started
+
+| Document | Description |
+|---|---|
+| [UI Panels](./UI-Panels.md) | Dock layout, panel catalog, properties tabs, shared touch support, and workspace surfaces |
+| [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Current shortcut registry, playback controls, and preset behavior |
+| [Android App](./Android-App.md) | Bundled offline editor, Android file import and export, build/signing instructions, and device limits |
+
+### Editing
 
 | Document | Description |
 |---|---|
 | [Timeline](./Timeline.md) | Tracks, clips, nested comps, markers, selection, and editing flow |
-| [Transition Compositions](./Transition-Compositions.md) | Mapped-v3 transition source layout, templates, parity, and explicit legacy upgrades |
-| [Dissolve Transitions](./Transitions-Dissolve.md) | Crossfade with a filmstrip: how to apply it, its controls, and how picture and sound fade |
-| [Timeline Rulers](./Timeline-Rulers.md) | Stacked multi-ruler lanes (time/timecode/frames/bars/tempo) via the **Rulers** checklist, TempoMap-driven bars+beats, and per-composition persistence (#257) |
-| [Tempo And Metronome](./Tempo-And-Metronome.md) | Editable tempo track with BPM/meter flags and ramps, tempo-driven grid and snapping, MIDI content that follows tempo, and a metronome click (#299) |
-| [Score Tracks](./Score-Tracks.md) | Audio-section score tracks with pencil-drawn score clips and a detached score-editor window — scorewriter infrastructure (#366) |
-| [Annotations](./Annotations.md) | Timed notes on compositions and source media: Annotations panel, ruler bars with drag/trim/keyboard nudge, clip linking, reader popover, project persistence |
-| [Consumer Contract](./Consumer-Contract.md) | Checkout consent (Terms, Withdrawal Policy, immediate performance), contract confirmation email, online withdrawal form, and the §312k cancellation button |
-| [Slot Grid](./Slot-Grid.md) | 12x4 live grid overlay, slot clip trimming, layer triggering, and deck warmup behavior |
-| [Keyframes](./Keyframes.md) | Animated properties, shared keyframe nodes, effect params, masks, fades, easing, and visibility rules |
 | [Preview](./Preview.md) | Main preview, source monitor, output windows, RAM preview, and target routing |
-| [UI Panels](./UI-Panels.md) | Dock layout, panel catalog, properties tabs, shared touch support, and workspace surfaces |
-| [Inspector Performance](./Inspector-Performance.md) | Worker-prepared image graph controls, bounded drag updates, and shared undo transactions |
+| [Keyframes](./Keyframes.md) | Animated properties, shared keyframe nodes, effect params, masks, fades, easing, and visibility rules |
+| [Masks](./Masks.md) | Overlay mask editing, whole-path keyframes, feathering, and stored modes |
+| [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
+| [Dynamic Captions](./Captions.md) | Transcript-driven text clips, cut-aware grouping, strict line paging, highlights, direct word correction, and preview/export parity |
+| [Motion Design](./Motion-Design.md) | Motion layer schema, property registry, rectangle/ellipse shape editing, GPU renderer, and persistence/export plumbing |
+| [Vector Animation](./Vector-Animation.md) | Lottie/Rive import, runtime playback, bounce modes, state-machine keyframes, Rive data binding, and export behavior |
+| [Image Mode](./Image-Mode.md) | Image documents as still compositions, Image workspace layout, Layers panel, entry points, and current limitations |
+| [Notebook](./Documents.md) | Project notes, scene and label marks, linked passages, document import with original views, and screenplay layout and export |
+| [Annotations](./Annotations.md) | Timed notes on compositions and source media: Annotations panel, ruler bars with drag/trim/keyboard nudge, clip linking, reader popover, project persistence |
+| [Timeline Rulers](./Timeline-Rulers.md) | Stacked multi-ruler lanes (time/timecode/frames/bars/tempo) via the **Rulers** checklist, TempoMap-driven bars+beats, and per-composition persistence (#257) |
+| [Slot Grid](./Slot-Grid.md) | 12x4 live grid overlay, slot clip trimming, layer triggering, and deck warmup behavior |
+
+### Effects
+
+| Document | Description |
+|---|---|
+| [Effects Overview](./Effects.md) | 98-effect registry, live media thumbnails, fisheye lens correction, glyph/compute/tracking runtimes, physical PAL/RF/VHS emulation, split compare, and timeline transitions |
+| [Blur Effects](./Effects-Blur.md) | The five blurs with before/after pictures, their controls in the editor, the node graphs behind them, and technical notes |
+| [Color Effects](./Effects-Color.md) | Brightness, Contrast, Exposure, Levels, Saturation, Vibrance, Temperature, Hue Shift and Invert with split-screen pictures, their controls, the colour recipes behind them, and technical notes |
+| [Distort Effects](./Effects-Distort.md) | Bulge & Pinch, Twirl, Wave, Fisheye Lens, Lens Correction, Guided Perspective and AI Edge Fill with before/after pictures, their controls, the read-position graph behind them, and technical notes |
+| [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md) | Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block Mosaic with before/after pictures, their controls, the graphs behind them, and technical notes |
+| [Keying and Time Effects](./Effects-Keying-Time.md) | Chroma Key, Time Stack and Slit Scan with before/after pictures, inspector, graph recipes and technical notes |
+| [Stylize Effects](./Effects-Stylize.md) | Glow, Film Grain, Vignette, Sharpen, Edge Detect, Posterize, Threshold and Scanlines with before/after pictures, their controls, the recipes behind them, and technical notes |
+| [Color Correction](./Color-Correction.md) | Node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
+| [Time Stack](./Time-Stack.md) | Delayed video instances blended in an editable node group: instance count, time offset, blend modes, and the GPU frame cache |
+| [Slit Scan 3D](./Slit-Scan-3D.md) | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
+| [Memory Leak](./Memory-Leak.md) | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
 | [Node Workspace](./Node-Workspace.md) | Unified clip nodes, reusable operators, effect-order synchronization, 3D dependencies and execution boundaries |
 | [Node Catalog](./Node-Catalog.md) | Registered building blocks, typed contracts, implementation ownership and reuse boundaries |
-| [Scene Streams](./Scene-Streams.md) | Named, re-runnable `ms-scene-v1` timeline blocks, live streaming in FlashBoard and `runEditorStream` |
-| [Operator Graph Compiler](./Operator-Graph-Compiler.md) | Initial local image DAG IR, fused Invert lowering, reuse decisions and current integration boundary |
-| [Keyboard Shortcuts](./Keyboard-Shortcuts.md) | Current shortcut registry, playback controls, and preset behavior |
 
-### Rendering And Media
+### Transitions
+
+| Document | Description |
+|---|---|
+| [Dissolve Transitions](./Transitions-Dissolve.md) | Crossfade with a filmstrip: how to apply it, its controls, and how picture and sound fade |
+| [Transition Compositions](./Transition-Compositions.md) | Mapped-v3 transition source layout, templates, parity, and explicit legacy upgrades |
+
+### Audio
+
+| Document | Description |
+|---|---|
+| [Audio Overview](./Audio.md) | Playback sync, clip audio state, waveform/spectral display, recording, and export |
+| [Audio Workstation](./Audio-Workstation.md) | Audio architecture, timeline detail mode, docked mixer, artifact refs, and analysis efficiency |
+| [Audio Intelligence](./Audio-Intelligence.md) | Persisted audio analysis as source-time evidence for the Analysis workspace, Agent Timeline, AI tools, and non-destructive audio edits |
+| [Tempo And Metronome](./Tempo-And-Metronome.md) | Editable tempo track with BPM/meter flags and ramps, tempo-driven grid and snapping, MIDI content that follows tempo, and a metronome click (#299) |
+| [Score Tracks](./Score-Tracks.md) | Audio-section score tracks with pencil-drawn score clips and a detached score-editor window — scorewriter infrastructure (#366) |
+| [MuScriptor Music-to-MIDI](./MuScriptor.md) | Local Native Helper audio-to-MIDI transcription, model setup, instrument mapping, and atomic timeline commit |
+
+### 3D and Scans
+
+| Document | Description |
+|---|---|
+| [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
+| [Flock Clips](./Flock-Clips.md) | GPU particle swarms defined by an editable node graph: presets, Properties/Node Workspace editing, source-time keyframes, deterministic seek, precompute cache, links/trails/glyphs, and export |
+| [Weave](./Weave.md) | Curve-node fabric, knots and threading, fiber rendering (Hashed, 4x Coverage, Analytic), shadows and cloth |
+| [Path Tracing](./Path-Tracing.md) | Path traced 3D scene: fiber BVH, hair BSDF, ReSTIR, radiance cache, SVGF and upscaler preview, OIDN, export Render Quality, physical camera |
+| [Browser 3D Scan](./3D-Scan.md) | Browser-local Camera Solve, FPS-aligned camera/stabilization tracks, project-backed COLMAP data, sparse previews, and capability-gated Brush WebGPU training |
+| [Surface Tracking](./Surface-Tracking.md) | Reusable tracking assets, ordinary clip attachments, preview editing, sparse/dense geometry inspection, editable camera/mesh scenes, and native footprint sequences |
+
+### Media and Export
+
+| Document | Description |
+|---|---|
+| [Media Panel](./Media-Panel.md) | Import flow, RAW-copy promotion, folders, compositions, and relinking |
+| [Media Discovery](./Media-Discovery.md) | Open-media catalogs, meme templates, source attribution, and local Native Helper web downloads |
+| [Media Downloads](./Download-Panel.md) | yt-dlp-backed downloads, platform mapping, and cookie retry behavior |
+| [Screen Capture](./Screen-Capture.md) | Screen/window/tab recording, audio mixing, recovery, and diagnostics; the WebCodecs crop/scale tier is currently disabled |
+| [Live Inputs](./Live-Inputs.md) | Parallel live visual sources, timeline placement, reconnection, composition feedback, and real-time export |
+| [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
+| [Scene-Cut Detection](./Scene-Cut-Detection.md) | Frame-accurate hard-cut detection during proxy generation and its timeline display |
+| [Export](./Export.md) | WebCodecs fast/precise export, animated GIF, FFmpeg intermediates, image frame/sequence export, audio-only export, FCPXML, and project-persistent presets |
+| [Project Persistence](./Project-Persistence.md) | Continuous saving, project handoff, storage backends, media relinking, archives and recovery |
+| [Project Repository and Durable History](./Project-Repository.md) | Immutable revisions, branching undo, worker publication, workspace views, journals and artifact retention |
+| [Native Helper](./Native-Helper.md) | Local HTTP/WebSocket APIs, auth startup token, and helper-backed flows |
+| [H.265 / HEVC Decoding](./HEVC-Decoding.md) | Native-first H.265 playback with a local WASM fallback, shared consumers, and diagnostics |
+| [ProRes Browser Decode](./ProRes-Browser-Decode.md) | Experimental TurboRes-backed progressive ProRes 422 import, preview, Source Monitor, proxy, audio, export, and lifecycle gates |
+| [MXF Browser Decode](./MXF-Browser-Decode.md) | In development (flag `mxfBrowserDecode`): TypeScript MXF demux and metadata, per-essence decode via WebCodecs, TurboRes, or an LGPL libavcodec WASM build |
+
+### AI
+
+| Document | Description |
+|---|---|
+| [AI Integration](./AI-Integration.md) | Hosted kernel chat, public editor-tool boundary, segmentation, transcription, and bridge behavior |
+| [FlashBoard](./FlashBoard.md) | Media Panel generation plus Auto/Story prompt paths with default Codex Direct and optional hosted Fast |
+| [AI Studio](./AI-Studio.md) | Parallel AI workspaces with Media-drop references, local dictation, fitted result tiles, Source Monitor opening, and direct timeline drag-out |
+| [Story Workflow](./Seedance-Preproduction.md) | Docked preproduction workflow for directions, treatment, sources, master looks, keyframes, progress, and review |
+| [Editable Motion Graphics](./Editable-Motion-Graphics.md) | Native animated lower thirds compiled from chat into editable text, Motion shapes, keyframes, and six-frame temporal review |
+| [Scene Streams](./Scene-Streams.md) | Named, re-runnable `ms-scene-v1` timeline blocks, live streaming in FlashBoard and `runEditorStream` |
+| [AI Depth Map](./Depth-Estimation.md) | Local Depth Anything V2 depth estimation for the current frame or live playback, and reusable depth-video baking |
+| [Face Analysis](./Face-Analysis.md) | Browser-local face detection and anonymous identity grouping with YuNet and SFace, without uploading frames |
+| [Guest Hosted AI Access](./Guest-Hosted-AI-Access.md) | Anonymous hosted-AI sessions, 400 welcome credits, correct sign-in state, and hashed abuse limits |
+| [Live Credit Burn Meter](./Credit-Burn-Meter.md) | Always-visible authoritative reserve bar, confirmed run spend, settlement motion, replay safety, and reduced-motion behavior |
+
+### Developers
+<!-- docs-sidebar: collapsed -->
 
 | Document | Description |
 |---|---|
 | [GPU Engine](./GPU-Engine.md) | WebGPU engine, render loop, fallback paths, caches, and export boundary |
 | [Linux / Mesa GPU](./Linux-Mesa-GPU.md) | **Read before touching any canvas/GPU code** — Mesa silent-failure modes and the rules/gates that prevent "blank on Linux" regressions |
 | [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
-| [ProRes Browser Decode](./ProRes-Browser-Decode.md) | Experimental TurboRes-backed progressive ProRes 422 import, preview, Source Monitor, proxy, audio, export, and lifecycle gates |
-| [MXF Browser Decode](./MXF-Browser-Decode.md) | In development (flag `mxfBrowserDecode`): TypeScript MXF demux and metadata, per-essence decode via WebCodecs, TurboRes, or an LGPL libavcodec WASM build |
-| [Effects](./Effects.md) | 98-effect registry, live media thumbnails, fisheye lens correction, glyph/compute/tracking runtimes, physical PAL/RF/VHS emulation, split compare, and timeline transitions |
-| [Blur Effects](./Effects-Blur.md) | The five blurs with before/after pictures, their controls in the editor, the node graphs behind them, and technical notes |
-| [Distort Effects](./Effects-Distort.md) | Bulge & Pinch, Twirl, Wave, Fisheye Lens, Lens Correction, Guided Perspective and AI Edge Fill with before/after pictures, their controls, the read-position graph behind them, and technical notes |
-| [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md) | Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block Mosaic with before/after pictures, their controls, the graphs behind them, and technical notes |
-| [Color Effects](./Effects-Color.md) | Brightness, Contrast, Exposure, Levels, Saturation, Vibrance, Temperature, Hue Shift and Invert with split-screen pictures, their controls, the colour recipes behind them, and technical notes |
-| [Keying and Time Effects](./Effects-Keying-Time.md) | Chroma Key, Time Stack and Slit Scan with before/after pictures, inspector, graph recipes and technical notes |
-| [Stylize Effects](./Effects-Stylize.md) | Glow, Film Grain, Vignette, Sharpen, Edge Detect, Posterize, Threshold and Scanlines with before/after pictures, their controls, the recipes behind them, and technical notes |
-| [Slit Scan 3D](./Slit-Scan-3D.md) | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
-| [Memory Leak](./Memory-Leak.md) | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
-| [Color Correction](./Color-Correction.md) | Node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
-| [Image Mode](./Image-Mode.md) | Image documents as still compositions, Image workspace layout, Layers panel, entry points, and current limitations |
-| [Masks](./Masks.md) | Overlay mask editing, whole-path keyframes, feathering, and stored modes |
-| [Surface Tracking](./Surface-Tracking.md) | Reusable tracking assets, ordinary clip attachments, preview editing, sparse/dense geometry inspection, editable camera/mesh scenes, and native footprint sequences |
-| [Text Clips](./Text-Clips.md) | Canvas-backed text rendering, typography controls, and timeline text items |
-| [Dynamic Captions](./Captions.md) | Transcript-driven text clips, cut-aware grouping, strict line paging, highlights, direct word correction, and preview/export parity |
-| [Motion Design](./Motion-Design.md) | Motion layer schema, property registry, rectangle/ellipse shape editing, GPU renderer, and persistence/export plumbing |
-| [3D Layers](./3D-Layers.md) | Shared-scene path, native Gaussian splats, cameras, and splat effectors |
-| [Flock Clips](./Flock-Clips.md) | GPU particle swarms defined by an editable node graph: presets, Properties/Node Workspace editing, source-time keyframes, deterministic seek, precompute cache, links/trails/glyphs, and export |
-| [Weave](./Weave.md) | Curve-node fabric, knots and threading, fiber rendering (Hashed, 4x Coverage, Analytic), shadows and cloth |
-| [Path Tracing](./Path-Tracing.md) | Path traced 3D scene: fiber BVH, hair BSDF, ReSTIR, radiance cache, SVGF and upscaler preview, OIDN, export Render Quality, physical camera |
-| [Browser 3D Scan](./3D-Scan.md) | Browser-local Camera Solve, FPS-aligned camera/stabilization tracks, project-backed COLMAP data, sparse previews, and capability-gated Brush WebGPU training |
-| [Vector Animation](./Vector-Animation.md) | Lottie/Rive import, runtime playback, bounce modes, state-machine keyframes, Rive data binding, and export behavior |
-| [Audio](./Audio.md) | Playback sync, clip audio state, waveform/spectral display, recording, and export |
-| [Screen Capture](./Screen-Capture.md) | Screen/window/tab recording, audio mixing, recovery, and diagnostics; the WebCodecs crop/scale tier is currently disabled |
-| [Live Inputs](./Live-Inputs.md) | Parallel live visual sources, timeline placement, reconnection, composition feedback, and real-time export |
-| [Audio Workstation](./Audio-Workstation.md) | Audio architecture, timeline detail mode, docked mixer, artifact refs, and analysis efficiency |
-| [Export](./Export.md) | WebCodecs fast/precise export, animated GIF, FFmpeg intermediates, image frame/sequence export, audio-only export, FCPXML, and project-persistent presets |
-| [Proxy System](./Proxy-System.md) | Proxy generation, on-disk frame layout, audio proxies, and warmup behavior |
-| [Media Panel](./Media-Panel.md) | Import flow, RAW-copy promotion, folders, compositions, and relinking |
-| [Media Discovery](./Media-Discovery.md) | Open-media catalogs, meme templates, source attribution, and local Native Helper web downloads |
-| [Project Persistence](./Project-Persistence.md) | Continuous saving, project handoff, storage backends, media relinking, archives and recovery |
-| [Project Repository and Durable History](./Project-Repository.md) | Immutable revisions, branching undo, worker publication, workspace views, journals and artifact retention |
 | [Signal IR](./Signal-IR.md) | Contract layer for universal media signals, capability-gated runtime providers, and the Wasm/WIT ABI |
-| [Media Downloads](./Download-Panel.md) | yt-dlp-backed downloads, platform mapping, and cookie retry behavior |
-| [Native Helper](./Native-Helper.md) | Local HTTP/WebSocket APIs, auth startup token, and helper-backed flows |
+| [Operator Graph Compiler](./Operator-Graph-Compiler.md) | Initial local image DAG IR, fused Invert lowering, reuse decisions and current integration boundary |
+| [Inspector Performance](./Inspector-Performance.md) | Worker-prepared image graph controls, bounded drag updates, and shared undo transactions |
+| [Kernel Client](./Kernel-Client.md) | Public Cloudflare routes, Hosted Agent V2 lifecycle, deterministic compile flow, authentication, and recovery behavior |
+| [AI Bridge Control](./AI-Bridge-Control.md) | Authenticated session, schema, execution, replay, history, and MCP access to the live in-app AI tool surface |
+| [Security](./Security.md) | Trust boundaries, bridge auth, allowed roots, secret handling, and limitations |
+| [Debugging](./Debugging.md) | Logger service, runtime monitors, log sync, and AI-facing debug tools |
+| [Playback Debugging](./Playback-Debugging.md) | Focused workflow for preview stalls, drift, and decode/render mismatches |
+| [OCR Analysis](./OCR-Analysis.md) | Agent Timeline contracts and a tested local OCR pipeline that is not yet wired into the analysis job |
+| [Documentation Website](./Documentation-Site.md) | The /docs site: page sync from docs/Features, sidebar groups from this index, build integration, hosting, and checks |
+| [Landing Page](./Landing-Page.md) | Disabled landing chooser, direct editor routing, and the retained Chat/Medium entry routes |
 
-### AI, Security, And Operations
+### Testing and Operations
+<!-- docs-sidebar: collapsed -->
 
 | Document | Description |
 |---|---|
-| [Landing Page](./Landing-Page.md) | Disabled landing chooser, direct editor routing, and the retained Chat/Medium entry routes |
-| [AI Integration](./AI-Integration.md) | Hosted kernel chat, public editor-tool boundary, segmentation, transcription, and bridge behavior |
-| [Kernel Client](./Kernel-Client.md) | Public Cloudflare routes, Hosted Agent V2 lifecycle, deterministic compile flow, authentication, and recovery behavior |
-| [Editable Motion Graphics](./Editable-Motion-Graphics.md) | Native animated lower thirds compiled from chat into editable text, Motion shapes, keyframes, and six-frame temporal review |
-| [AI Bridge Control](./AI-Bridge-Control.md) | Authenticated session, schema, execution, replay, history, and MCP access to the live in-app AI tool surface |
 | [LAN Device Testing](./LAN-Device-Testing.md) | HTTPS dev server for real iPad/phone testing over Wi-Fi — certificate rules (Apple's 398-day limit), device trust setup, and bridge access |
-| [MuScriptor Music-to-MIDI](./MuScriptor.md) | Local Native Helper audio-to-MIDI transcription, model setup, instrument mapping, and atomic timeline commit |
-| [Credit Claims](./Credit-Claims.md) | Cloudflare-backed reward links for manually granted hosted credits |
-| [Guest Hosted AI Access](./Guest-Hosted-AI-Access.md) | Anonymous hosted-AI sessions, 400 welcome credits, correct sign-in state, and hashed abuse limits |
-| [Live Credit Burn Meter](./Credit-Burn-Meter.md) | Always-visible authoritative reserve bar, confirmed run spend, settlement motion, replay safety, and reduced-motion behavior |
-| [FlashBoard](./FlashBoard.md) | Media Panel generation plus Auto/Story prompt paths with default Codex Direct and optional hosted Fast |
-| [AI Studio](./AI-Studio.md) | Parallel AI workspaces with Media-drop references, local dictation, fitted result tiles, Source Monitor opening, and direct timeline drag-out |
-| [Story Workflow](./Seedance-Preproduction.md) | Docked preproduction workflow for directions, treatment, sources, master looks, keyframes, progress, and review |
-| [Debugging](./Debugging.md) | Logger service, runtime monitors, log sync, and AI-facing debug tools |
-| [Playback Debugging](./Playback-Debugging.md) | Focused workflow for preview stalls, drift, and decode/render mismatches |
 | [Windows Beta Testing](./Windows-Beta-Testing.md) | Unattended native project dialogs, editing, exact export verification, playback and cleanup |
-| [Codex Usage Monitoring](./Codex-Usage-Monitoring.md) | Local Codex session parser for per-turn token usage, stale-run detection, and Git commit attribution |
+| [Flex EQ Visual QA](./Flex-EQ-Visual-QA.md) | Deterministic dev-server route with seeded flexible-equalizer fixtures for visual checks |
+| [Agent Timeline Benchmarking](./Agent-Timeline-Benchmarking.md) | Development-bridge runner that collects local-media Agent Timeline benchmarks |
 | [Product Analytics](./Product-Analytics.md) | Privacy-controlled semantic events, D1 funnels, effect/slider usage, sessions, and feature engagement |
+| [Codex Usage Monitoring](./Codex-Usage-Monitoring.md) | Local Codex session parser for per-turn token usage, stale-run detection, and Git commit attribution |
 | [Social Operations](./Social-Operations.md) | Private Fassandra console with Stats, Accounts, and Planning plus an aggregate-only server-to-server data boundary |
-| [Security](./Security.md) | Trust boundaries, bridge auth, allowed roots, secret handling, and limitations |
 | [Visitor Notifier](./Visitor-Notifier.md) | Cloudflare visit feed, `/api/visits`, and the Windows tray notifier workflow |
 | [Telegram Dev Chat](./Telegram-Dev-Chat.md) | BotFather, Cloudflare secrets, webhook setup, reply workflow, verification, and recovery for the two-way developer chat |
+| [Credit Claims](./Credit-Claims.md) | Cloudflare-backed reward links for manually granted hosted credits |
+| [Consumer Contract](./Consumer-Contract.md) | Checkout consent (Terms, Withdrawal Policy, immediate performance), contract confirmation email, online withdrawal form, and the §312k cancellation button |
 
 ---
 

@@ -202,5 +202,102 @@ if (hasAssets) {
   }
 }
 
+// Sidebar groups come from the "## Documentation Index" of docs/Features/README.md:
+// every "### Section" there becomes one sidebar group in the same order and every
+// linked table row one entry, labelled with its link text. A
+// `<!-- docs-sidebar: collapsed -->` line under a heading starts that group
+// collapsed. astro.config.mjs reads the result from src/generated/sidebar.json.
+const sidebarOut = path.join(here, '..', 'src', 'generated', 'sidebar.json');
+// Category pages can land before their index row. They join the group of their
+// anchor page, after the last listed page of the same family (alphabetically
+// among themselves). Every other page without a row goes into a final "More" group.
+const sidebarFamilies = [
+  { prefix: 'Effects-', anchor: 'Effects.md' },
+  { prefix: 'Transitions-', anchor: 'Transition-Compositions.md' },
+];
+
+function readIndexSections(markdown) {
+  const sections = [];
+  let inIndex = false;
+  let section;
+  for (const line of markdown.split(/\r?\n/u)) {
+    if (/^##\s/u.test(line)) {
+      inIndex = /^##\s+Documentation Index\s*$/iu.test(line);
+      section = undefined;
+      continue;
+    }
+    if (!inIndex) continue;
+    const heading = line.match(/^###\s+(.+?)\s*$/u);
+    if (heading) {
+      section = { label: heading[1], collapsed: false, rows: [] };
+      sections.push(section);
+      continue;
+    }
+    if (!section) continue;
+    if (/^<!--\s*docs-sidebar:\s*collapsed\s*-->$/iu.test(line.trim())) section.collapsed = true;
+    const row = line.match(/^\|\s*\[([^\]]+)\]\((?:\.\/)?([^)#\s/]+\.md)(?:#[^)\s]*)?\)\s*\|/u);
+    if (row) section.rows.push({ label: row[1].trim(), file: row[2] });
+  }
+  return sections;
+}
+
+function buildSidebar() {
+  const sections = sourceFiles.includes('README.md') ? readIndexSections(readSourceFile('README.md')) : [];
+  if (!sections.length) console.warn('Sidebar: docs/Features/README.md has no "## Documentation Index" sections; every page goes into "More".');
+  const groupOf = new Map();
+  const groups = sections.map(({ label, collapsed, rows }) => {
+    const group = { label, collapsed, entries: [] };
+    for (const row of rows) {
+      if (!slugByFile.has(row.file)) {
+        console.warn(`Sidebar: the index lists ${row.file} under "${label}", but the page does not exist; skipped.`);
+      } else if (groupOf.has(row.file)) {
+        console.warn(`Sidebar: ${row.file} is listed under "${groupOf.get(row.file).label}" and again under "${label}"; kept the first row.`);
+      } else {
+        groupOf.set(row.file, group);
+        group.entries.push(row);
+      }
+    }
+    return group;
+  });
+  const more = { label: 'More', collapsed: false, entries: [] };
+  const unlisted = sourceFiles.filter((file) => file !== 'README.md' && !groupOf.has(file)).toSorted();
+  for (const file of unlisted) {
+    const family = sidebarFamilies.find(({ prefix }) => file.startsWith(prefix));
+    const home = family && groupOf.get(family.anchor);
+    if (home) {
+      const last = home.entries.findLastIndex((entry) => entry.file === family.anchor || entry.file.startsWith(family.prefix));
+      home.entries.splice(last + 1, 0, { file });
+      console.warn(`Sidebar: ${file} has no row in the feature index; placed in "${home.label}" by its name. Add a row to docs/Features/README.md.`);
+    } else {
+      more.entries.push({ file });
+      console.warn(`Sidebar: ${file} has no row in the feature index; listed under "More". Add a row to docs/Features/README.md.`);
+    }
+  }
+  const filled = groups.filter((group) => {
+    if (!group.entries.length) console.warn(`Sidebar: the index section "${group.label}" lists no existing page; group left out.`);
+    return group.entries.length > 0;
+  });
+  if (more.entries.length) filled.push(more);
+  return filled.map(({ label, collapsed, entries }) => ({
+    label,
+    ...(collapsed ? { collapsed: true } : {}),
+    // Pages without an index row keep their own title as the label.
+    items: entries.map(({ label: itemLabel, file }) => ({
+      ...(itemLabel ? { label: itemLabel } : {}),
+      slug: `features/${slugByFile.get(file)}`,
+    })),
+  }));
+}
+
+const sidebar = buildSidebar();
+const sidebarJson = `${JSON.stringify(sidebar, null, 2)}\n`;
+// Rewrite only on change: a running `astro dev` restarts when this file changes.
+if (!fs.existsSync(sidebarOut) || fs.readFileSync(sidebarOut, 'utf8') !== sidebarJson) {
+  fs.mkdirSync(path.dirname(sidebarOut), { recursive: true });
+  fs.writeFileSync(sidebarOut, sidebarJson);
+}
+const sidebarEntries = sidebar.reduce((sum, group) => sum + group.items.length, 0);
+console.log(`Sidebar: ${sidebar.length} groups, ${sidebarEntries} feature pages.`);
+
 const sourceLabel = sourceRef ? `Git ref ${sourceRef}` : 'working tree';
 console.log(`Converted ${converted} feature pages + overview from ${sourceLabel}; assets ${hasAssets ? 'copied' : 'not found'}.`);
