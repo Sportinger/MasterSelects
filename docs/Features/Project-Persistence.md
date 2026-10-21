@@ -217,6 +217,37 @@ failures can stop further content edits before the pending budget is exceeded.
 Retry or protect the pending work before changing projects; a failed flush is
 not treated as permission to discard it.
 
+### Folder access paused while a project is open
+
+Chrome can also withdraw a session-only grant while the project is open, for
+example after the tab sat in the background. The editor treats that as a pause,
+not as a failure or a missing file:
+
+- **Detection.** The storage worker reports a refused read or write
+  (`NotAllowedError`/`SecurityError`) with the repository code `access`
+  (`permission` stays reserved for repository policy refusals). Returning to the
+  tab, window focus and a 30-second check also query the project folder and the
+  media locations this session already opened, so the pause shows before a save
+  fails.
+- **One toolbar state.** The toolbar shows "Folder access was paused by the
+  browser" with **Re-allow**; the save status reads **Access paused** (not
+  "Save failed") and re-allows on click, as does Ctrl/Cmd+S.
+- **No data loss.** Edits keep committing in the tab; their writes stay queued
+  in order. Re-allow asks for the project folder first (Chrome's restore prompt
+  can bring back the other folders with it), then the media folders and files of
+  this session, and republishes every queued write before the pause clears. If
+  the browser refuses, the pause and the queue stay.
+- **No relink dialog.** Media whose saved location only waits for the prompt,
+  and whose access worked earlier in this session, stay "not opened yet"
+  instead of offline; export explains the pause. After Re-allow they open from
+  their saved locations. Media that still cannot be read then go to the
+  Reconnect media dialog as before; locations never allowed in this session
+  (e.g. after a browser restart) keep using the Resume and Reconnect flows above.
+- **Interrupted writes.** A write cut off after its file was created leaves an
+  empty file whose removal the browser also refused. Immutable records are
+  never empty, so a later retry finishes that file instead of failing with a
+  conflict.
+
 ## Save status and lifecycle
 
 Save status belongs to the active repository session. Its operation receipt
@@ -351,6 +382,9 @@ projects as well as cached handles.
 
 - **Folder permission is missing:** reconnect the existing project directory or
   its external source folder.
+- **"Folder access was paused by the browser":** click **Re-allow** and accept
+  the browser prompt; choose "Allow on every visit" to avoid it. Queued changes
+  are saved afterwards.
 - **Project is read-only:** use **Take over editing** in the toolbar. If the
   writing tab does not answer within a few seconds while it still holds the
   lock (a frozen or suspended tab), the toolbar says so: switch to that tab or

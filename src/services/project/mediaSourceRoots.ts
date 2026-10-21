@@ -54,6 +54,11 @@ async function storedRootHandle(rootId: string): Promise<FileSystemDirectoryHand
   }
 }
 
+/** Stored handle of a media folder (the open project folder for its shared root id). */
+export function getMediaSourceRootHandle(rootId: string): Promise<FileSystemDirectoryHandle | null> {
+  return storedRootHandle(rootId);
+}
+
 async function sameDirectory(
   left: FileSystemDirectoryHandle,
   right: FileSystemDirectoryHandle,

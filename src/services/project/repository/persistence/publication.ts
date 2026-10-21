@@ -54,7 +54,8 @@ export async function preparePublication(batch: PublicationBatch, descriptor: Re
   return { commit, reference: { commitId: commit.commitId, hash: await hashBytes(bytes) }, records, segments: builder.segments, bytes };
 }
 async function writeVerified(backend: RepositoryBackend, path: string, bytes: Uint8Array, signal?: AbortSignal): Promise<void> {
-  const existing = await backend.stat(path);
+  // Zero length is an interrupted write (see directoryBackend), not published content: finish it.
+  const existing = await backend.stat(path).then(stat => stat?.length ? stat : null);
   if (existing && existing.length !== bytes.length) throw new RepositoryError('corrupt', `Immutable path has conflicting length: ${path}`);
   if (!existing) {
     try { await backend.writeNew(path, oneChunk(bytes), signal); }
@@ -74,9 +75,9 @@ export async function writePublication(backend: RepositoryBackend, owner: Reposi
   await validateCommit(backend, publication.commit, { repositoryId: publication.commit.repositoryId }, signal, proofs);
   await owner.assertOwned();
   const path = commitPath(publication.commit.commitId);
-  if (backend.publishCommit && !await backend.stat(path)) {
+  if (backend.publishCommit && !(await backend.stat(path))?.length) {
     try { await backend.publishCommit(path, publication.bytes, publication.commit.previous, owner, signal); }
-    catch (cause) { if (!await backend.stat(path)) throw cause; }
+    catch (cause) { if (!(await backend.stat(path))?.length) throw cause; }
   }
   await writeVerified(backend, path, publication.bytes, signal);
 }

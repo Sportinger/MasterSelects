@@ -28,6 +28,8 @@ import type {
 } from '../ProjectNameDialog';
 
 import { resumePendingProject } from '../../../services/project/pendingProjectResume';
+import { getFolderAccessPause, isFolderAccessPaused } from '../../../services/project/folderAccess/folderAccessPause';
+import { resumeFolderAccess } from '../../../services/project/folderAccess/folderAccessResume';
 
 const log = Logger.create('Toolbar');
 
@@ -71,6 +73,12 @@ export function useToolbarProjectActions({
     }
     setShowSavedToast(false);
     try {
+      // Folder access paused by the browser: this gesture re-allows it and resumes the queued saves.
+      if (isFolderAccessPaused() && !await resumeFolderAccess() && getFolderAccessPause().project) {
+        reportProjectSaveFailure(projectFileService.getProjectHandle());
+        window.alert('Project not saved yet. Allow access to the project folder in the browser prompt; your changes are kept in this tab.');
+        return;
+      }
       // Request access from the Save gesture, before asynchronous serialization.
       const handle = projectFileService.getProjectHandle();
       if (handle?.requestPermission

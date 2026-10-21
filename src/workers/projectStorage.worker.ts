@@ -4,7 +4,7 @@ import { readCommit, commitPath } from '../services/project/repository/persisten
 import { CommittedMetadataReader } from '../services/project/repository/index/CommittedMetadataReader';
 import { StreamHash } from '../services/project/repository/segments/streamHash';
 import { RepositoryJournalReader, createJournalIndexCache } from '../services/project/repository/journal/RepositoryJournalReader';
-import { RepositoryError, type RepositoryBackend, type RepositoryDescriptor, type RepositoryOwner } from '../services/project/repository/contracts';
+import { RepositoryError, toRepositoryError, type RepositoryBackend, type RepositoryDescriptor, type RepositoryOwner } from '../services/project/repository/contracts';
 import { createFsaRepositoryBackend } from '../services/project/repository/backends/fsaBackend';
 import { createOpfsRepositoryBackend } from '../services/project/repository/backends/opfsBackend';
 import { adoptBrowserStorageKind } from '../services/project/core/browserStorageRoot';
@@ -352,7 +352,8 @@ scope.onmessage = event => {
       const data = await run;
       scope.postMessage({ requestId: envelope.requestId, sessionEpoch: epoch, ok: true, data });
     } catch (error) {
-      const failure = error instanceof RepositoryError ? error : new RepositoryError('io', String(error));
+      // Access withdrawn by the browser must reach the tab as `access`, not as a generic I/O failure.
+      const failure = toRepositoryError(error);
       scope.postMessage({ requestId: envelope.requestId, sessionEpoch: envelope.sessionEpoch, ok: false, error: { code: failure.code, message: failure.message } });
     } finally { requests.delete(envelope.requestId); }
   })();

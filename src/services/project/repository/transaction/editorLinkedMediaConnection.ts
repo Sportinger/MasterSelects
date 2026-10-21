@@ -16,6 +16,7 @@ import { selectDemandedLinkedMedia } from './linkedMediaDemandSelection';
 import { playheadState } from '../../../layerBuilder/PlayheadState';
 import { entityKey } from '../domains/jsonBoundary';
 import { decodeOwnedAggregate, object } from './domainAdapters/aggregatePlan';
+import { isMediaAccessPaused } from '../../folderAccess/folderAccessPause';
 
 type ProjectMedia = ProjectFile['media'][number];
 const log = Logger.create('LinkedMediaConnection');
@@ -58,7 +59,11 @@ export async function prepareTimelineLinkedMedia(): Promise<void> {
   const timeline = getRepositoryStore('timeline')?.getState() as TimelineStore | undefined;
   if (!timeline) return;
   const ids = selectDemandedLinkedMedia(timeline.clips, timeline.playheadPosition, true);
-  const results = await Promise.all([...ids].filter(isLinkedMediaDeferred).map(requestLinkedMedia));
+  const wanted = [...ids].filter(isLinkedMediaDeferred);
+  const results = await Promise.all(wanted.map(requestLinkedMedia));
+  if (wanted.some(isMediaAccessPaused)) {
+    throw new Error('Folder access was paused by the browser. Click Re-allow in the toolbar, then export again.');
+  }
   if (results.some(result => !result)) {
     throw new Error('A media source required by this composition is unavailable. Relink it before exporting.');
   }
@@ -77,6 +82,8 @@ function createDemandOpener(session: RepositorySession | null, items: readonly P
   return (id: string): Promise<boolean> => {
     const previous = inflight.get(id); if (previous) return previous;
     const item = sources.get(id); if (!session || !item) return Promise.resolve(false);
+    // Waiting for Re-allow: no new probe on every playhead or selection change.
+    if (isMediaAccessPaused(id)) return Promise.resolve(false);
     const current = () => getEditorRepositorySession() === session;
     const run = (async () => {
       if (active >= CONNECTION_CONCURRENCY) await new Promise<void>(resolve => waiters.push(resolve)); else active++;
@@ -85,15 +92,19 @@ function createDemandOpener(session: RepositorySession | null, items: readonly P
         const batch: MediaFile[] = [];
         const connected = await connect(item, current, file => batch.push(file), true);
         if (!current()) return false;
+        // Access paused by the browser is not a missing file: the media stays unopened until Re-allow.
+        if (!connected && await pauseMediaIfAccessLapsed(item, sessionProjectFolder(session))) return false;
         finishLinkedMediaDemand(id);
         if (connected) await applyConnectedMedia(batch); else markMissingLinkedMedia([id]);
         return connected;
       } catch (error) {
+        if (current() && await pauseMediaIfAccessLapsed(item, sessionProjectFolder(session)).catch(() => false)) return false;
         if (current()) { finishLinkedMediaDemand(id); markMissingLinkedMedia([id]); }
         log.warn('Saved media location unavailable', { id, error }); return false;
       } finally { const resume = waiters.shift(); if (resume) resume(); else active--; }
     })();
-    inflight.set(id, run); return run;
+    // A settled open is not cached: paused media are opened again after Re-allow.
+    inflight.set(id, run); void run.finally(() => { if (inflight.get(id) === run) inflight.delete(id); }); return run;
   };
 }
 function observeDemand(session: RepositorySession): () => void {
@@ -144,11 +155,22 @@ async function checkCompositionSources(session: RepositorySession, timeline: Tim
     await withSourceIdentitiesPaused(() => connectAll(session, items, () => {}, true));
     if (!current()) return;
     const files = (getRepositoryStore('media')?.getState() as MediaState | undefined)?.files ?? [];
-    const missing = items.filter(item => isLinkedMediaDeferred(item.id) && !files.find(file => file.id === item.id)?.file).map(item => item.id);
+    const unopened = items.filter(item => isLinkedMediaDeferred(item.id) && !files.find(file => file.id === item.id)?.file);
+    const missing: string[] = [];
+    for (const item of unopened) if (!await pauseMediaIfAccessLapsed(item, sessionProjectFolder(session))) missing.push(item.id);
+    if (!current()) return;
     for (const id of missing) finishLinkedMediaDemand(id);
     markMissingLinkedMedia(missing);
     if (missing.length) log.info('Composition sources checked', { checked: items.length, missing: missing.length });
   } finally { running--; notify(); }
+}
+function sessionProjectFolder(session: RepositorySession): FileSystemDirectoryHandle | null {
+  const location = session.location as RepositorySession['location'] | undefined;
+  return location?.kind === 'fsa' ? location.handle : null;
+}
+// Loaded on use: the access checks reach the project services, which this hot path must not load eagerly.
+async function pauseMediaIfAccessLapsed(item: ProjectMedia, projectFolder: FileSystemDirectoryHandle | null): Promise<boolean> {
+  return (await import('../../folderAccess/mediaLocationAccess')).pauseMediaIfAccessLapsed(item, projectFolder);
 }
 function markMissingLinkedMedia(ids: readonly string[]): void {
   if (!ids.length) return;
@@ -229,13 +251,18 @@ async function connect(item: ProjectMedia, current: () => boolean, stage: (file:
       const file = new File([blob], item.name, { type: blob.type });
       const url = await createRenderablePrimaryMediaObjectUrl(item.id, file);
       if (!current()) return false;
-      stage({ ...existing, file, url }); return true;
+      stage({ ...existing, file, url }); noteMediaOpened(item); return true;
     }
   }
   const [hydrated] = await convertProjectMediaToStore([item], { hydrateFiles: true, deferCacheChecks: true, trustSavedLocation });
   if (!hydrated?.file || !current()) return false;
-  stage(hydrated);
+  stage(hydrated); noteMediaOpened(item);
   return true;
+}
+/** Locations that opened prove folder access; a later lapse on them pauses instead of going offline. */
+function noteMediaOpened(item: ProjectMedia): void {
+  void import('../../folderAccess/mediaLocationAccess').then(access => access.rememberMediaLocationAccess(item))
+    .catch(error => log.debug('Could not remember media access', { id: item.id, error }));
 }
 
 async function applyConnectedMedia(batch: MediaFile[]): Promise<void> {
