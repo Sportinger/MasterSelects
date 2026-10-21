@@ -28,7 +28,7 @@ and source. Other effects and structural settings are not implicitly enabled.
   `geometry`, `tracking`, and `time`.
 - `generate` holds the generators described in [Generate Effects](./Effects-Generate.md):
   Color Wheel, Perspective Grid, Stick Figure, Flocking, Weave and the
-  [Memory Leak](./Memory-Leak.md) generator, which reinterprets leftover bytes of
+  [Memory Leak](./effects/memory-leak.md) generator, which reinterprets leftover bytes of
   the FFmpeg wasm heap as pixels through the byte-texture binding described below.
 - `time` contains Time Stack and Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
@@ -146,13 +146,13 @@ grades that have not stored their default values yet.
 
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
-- `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md) and, for Pixelate, Kaleidoscope, Mirror and RGB Split, [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
+- `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Lens & Distort](./Effects-Distort.md) and, for Pixelate, [Pixel & Mosaic](./Effects-Pixel.md)
 - `stylize` (13): Vignette, Grain, Sharpen, Posterize, Glow, Sheen, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate; for Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate see [Painterly, Relief and Particle Effects](./Effects-Stylize-Art.md)
 - `keying` (1): Chroma Key
 - `generate` (6, see [Generate Effects](./Effects-Generate.md)): **Color Wheel** (an HSV wheel filling the layer or drawn as an anti-aliased disc), **Perspective Grid** (a scrolling vanishing-point floor grid with filtered lines whose width is set in 1080p pixels at the front edge), **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes)), **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)), **Weave** (curve-node yarn and fabric in 3D; see [Weave](./Weave.md)) and Memory Leak
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
 - `analog` (10): CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and compute Pixel Sort (user guide: [Analog Effects](./Effects-Analog.md))
-- `pixel` (2): Blockify and Block Mosaic; see [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
+- `pixel` (2): Blockify and Block Mosaic; see [Pixel & Mosaic](./Effects-Pixel.md)
 - `glyph` (18): ASCII, word/number/symbol matrices, code, collage, brand, and stitch treatments
 - `geometry` (11): compute Voronoi, Quadtree, and Contour plus engraving, textile, outline, and brick treatments
 - `tracking` (8): subject, motion/HUD/CCTV, kinetic trace, rain, stardust, and hand-particle treatments
@@ -635,7 +635,7 @@ preserve source alpha and use one fullscreen pass.
 
 #### Editable mirror, split and pixel graphs
 
-User guide with pictures: [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md).
+User guide with pictures: [Lens & Distort](./Effects-Distort.md) (Kaleidoscope, Mirror, RGB Split) and [Pixel & Mosaic](./Effects-Pixel.md).
 All six effects read a premultiplied `rgba16float` copy of the frame and
 unpremultiply the result, so transparent pixels never darken an edge or a cell.
 Kaleidoscope, Mirror and RGB Split follow **Frame Edges** (Mirror, Clamp,

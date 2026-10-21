@@ -6,7 +6,7 @@ import { applyWorkerSoftwareMirrorPixelEffects, workerSoftwareMirrorPixelAdjustm
 
 /**
  * Independent CPU references for the Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block
- * Mosaic recipes (docs/Features/Effects-Mirror-Pixel.md), evaluated on discrete images through the
+ * Mosaic recipes (docs/Features/Effects-Pixel.md and docs/Features/effects/), evaluated on discrete images through the
  * real multi-pass plans: cached passes are textures of the frame size read with bilinear filtering
  * and stored as float16, like the GPU's rgba16float caches.
  */

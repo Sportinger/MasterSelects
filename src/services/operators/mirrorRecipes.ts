@@ -2,7 +2,7 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { BlurGraphBuilder, premultipliedSourceCache, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
 
 /**
- * Kaleidoscope, Mirror and RGB Split recipes (see docs/Features/Effects-Mirror-Pixel.md).
+ * Kaleidoscope, Mirror and RGB Split recipes (see docs/Features/effects/kaleidoscope.md, mirror.md and rgb-split.md).
  *
  * - Frame space: offsets from the centre are measured in units of the shorter frame side, so
  *   kaleidoscope wedges stay round and angles are on-screen angles on any aspect ratio.

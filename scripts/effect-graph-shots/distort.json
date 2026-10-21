@@ -2,6 +2,7 @@
   "shots": [
     "twirl?plumbing=hide&cables=avoid",
     "twirl?focus=twirl-angle&rows=2&cables=avoid&marks=twirl-falloff-squared:above:64,twirl-angle:above:64@twirl-angle",
-    "wave?focus=wave-displacement&only=wave-x-cycles,wave-x-angle,wave-x-phase,wave-y-sine,wave-y-offset,wave-y&break=wave-y-offset&cables=avoid&marks=wave-uv-split:y:below,wave-y-sine:below,wave-y-offset:below:64@wave-displacement"
+    "wave?focus=wave-displacement&only=wave-x-cycles,wave-x-angle,wave-x-phase,wave-y-sine,wave-y-offset,wave-y&break=wave-y-offset&cables=avoid&marks=wave-uv-split:y:below,wave-y-sine:below,wave-y-offset:below:64@wave-displacement",
+    "bulge?focus=bulge-and-pinch-curve&only=bulge-r2,bulge-inside,bulge-inside-clamped,bulge-weight,bulge-weighted,bulge-exponent,bulge-scale,bulge-moved&break=bulge-weighted&cables=avoid&name.bulge-strength=Strength&marks=bulge-weight:above:64,bulge-weighted:below:64@bulge-curve"
   ]
 }

@@ -117,14 +117,13 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | [Overview](./Effects-Blur.md) | `blur` | The five blurs with before/after pictures, their controls in the editor, the node graphs behind them, and technical notes |
 | [Overview](./Effects-Stylize.md) | `stylize` | Glow, Film Grain, Vignette, Sharpen, Edge Detect, Posterize, Threshold and Scanlines with before/after pictures, their controls, the recipes behind them, and technical notes |
 | [Painterly, relief and particles](./Effects-Stylize-Art.md) | `stylize` | Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate with before/after pictures, their controls, how they are built, and technical notes |
-| [Overview](./Effects-Distort.md) | `distort` | Bulge & Pinch, Twirl, Wave, Fisheye Lens, Lens Correction, Guided Perspective and AI Edge Fill with before/after pictures, their controls, the read-position graph behind them, and technical notes |
-| [Mirror, split and pixel](./Effects-Mirror-Pixel.md) | `pixel` | Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block Mosaic with before/after pictures, their controls, the graphs behind them, and technical notes |
+| [Overview](./Effects-Distort.md) | `distort` | Which lens or distort effect to use, the read-position idea they share, Shape and Frame Edges, and technical notes |
+| [Overview](./Effects-Pixel.md) | `pixel` | Which pixel or mosaic effect to use, the cell-average recipe they share, and technical notes |
 | [Overview](./Effects-Analog.md) | `analog` | CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and Pixel Sort with before/after pictures, their controls, the recipes behind them, and technical notes |
-| [Memory Leak](./Memory-Leak.md) | `analog` | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
 | [Overview](./Effects-Keying-Time.md) | `keying` | Chroma Key, Time Stack and Slit Scan with before/after pictures, inspector, graph recipes and technical notes |
 | [Time Stack](./Time-Stack.md) | `time` | Delayed video instances blended in an editable node group: instance count, time offset, blend modes, and the GPU frame cache |
 | [Slit Scan 3D](./Slit-Scan-3D.md) | `time` | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
-| [Overview](./Effects-Generate.md) | `generate` | Color Wheel, Perspective Grid and Stick Figure, plus the Flocking, Weave and Memory Leak generators, with before/after pictures, their controls, how they are built and technical notes |
+| [Overview](./Effects-Generate.md) | `generate` | Which generator to use (also Flocking, Weave and Memory Leak), the three ways they build a picture, and technical notes |
 
 <!-- planned:
 | [Overview](./Effects-Print.md) | `print` | Print & Halftone |

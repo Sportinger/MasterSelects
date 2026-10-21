@@ -4,7 +4,7 @@
 
 Breaks the image into tiles that sample from randomly jittered, drifting positions; Scale sets tile size, Amount the scatter distance.
 
-Group: [Pixel & Mosaic](../Effects-Mirror-Pixel.md) · [How to add an effect](../Effects.md#add-an-effect)
+Group: [Pixel & Mosaic](../Effects-Pixel.md) · [How to add an effect](../Effects.md#add-an-effect)
 
 <figure class="docs-shot">
 

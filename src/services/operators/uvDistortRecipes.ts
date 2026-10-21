@@ -2,7 +2,7 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { BlurGraphBuilder, premultipliedSourceCache, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
 
 /**
- * Wave, Twirl and Bulge & Pinch recipes (see docs/Features/Effects-Distort.md).
+ * Wave, Twirl and Bulge & Pinch recipes (see docs/Features/effects/wave.md, twirl.md and bulge.md).
  *
  * - Frame space: Shape "circle" measures offsets from the centre in units of the shorter
  *   frame side, so circles stay round on any aspect ratio and Radius means the same part

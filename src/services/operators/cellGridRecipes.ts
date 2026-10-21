@@ -2,7 +2,7 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { BlurGraphBuilder, normalizeNodes, premultipliedSourceCache, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
 
 /**
- * Pixelate, Blockify and Block Mosaic recipes (see docs/Features/Effects-Mirror-Pixel.md).
+ * Pixelate, Blockify and Block Mosaic recipes (see docs/Features/Effects-Pixel.md).
  *
  * - Cell size: pixels of a 1080p frame (shorter side 1080 px), rounded to whole rendered pixels
  *   (at least 1), so preview, export and 4K compositions show the same blocks relative to the
