@@ -29,8 +29,10 @@ import {
   type AudioProxyGenerationUpdate,
 } from '../../src/services/audio/AudioProxyService';
 import type { MediaFile } from '../../src/stores/mediaStore/types';
+import { clearSharedSourceAudioDecodeState } from '../../src/services/audio/decode/sharedSourceAudioDecode';
 
 afterEach(() => {
+  clearSharedSourceAudioDecodeState();
   vi.resetAllMocks();
   vi.restoreAllMocks();
 });

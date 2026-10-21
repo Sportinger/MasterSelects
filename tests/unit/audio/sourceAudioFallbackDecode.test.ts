@@ -1,16 +1,29 @@
 import { describe, expect, it, vi } from 'vitest';
 
-const runVirtualCommand = vi.fn();
+const { runVirtualCommand, load } = vi.hoisted(() => ({ runVirtualCommand: vi.fn(), load: vi.fn(async () => {}) }));
 vi.mock('../../../src/engine/ffmpeg', () => ({
   FFmpegBridge: { isSupported: () => true },
-  getFFmpegBridge: () => ({ load: vi.fn(async () => {}), runVirtualCommand }),
+  getFFmpegBridge: () => ({ load, runVirtualCommand }),
+}));
+const readAll = vi.hoisted(() => vi.fn());
+vi.mock('../../../src/engine/audio/exportPipeline/MediaAudioRangeReader', () => ({
+  MediaAudioRangeReader: class MediaAudioRangeReader {
+    readAll = readAll;
+    dispose = () => {};
+  },
 }));
 
 import {
+  containerAudioDecodeAttempt,
   decodeSourceAudioWithFallbacks,
   ffmpegAudioDecodeAttempt,
   type SourceAudioDecodeAttempt,
 } from '../../../src/services/audio/decode/sourceAudioFallbackDecode';
+import {
+  isDurableSourceAudioDecodeFailure,
+  isSourceAudioMissingError,
+  SourceAudioDecodeChainError,
+} from '../../../src/services/audio/decode/sourceAudioDecodeFailures';
 import { AudioDecodeServiceError } from '../../../src/services/audio/decode/errors';
 
 const file = new File([new Uint8Array(16)], 'clip.ogg', { type: 'audio/ogg' });
@@ -77,6 +90,38 @@ describe('decodeSourceAudioWithFallbacks', () => {
     expect(error).toMatchObject({ name: 'AudioDecodeServiceError', code: 'decode-failed', jobId: 'job-1', cause: browserError });
     expect(error.message).toContain('browser: Unable to decode audio data');
     expect(error.message).toContain('ffmpeg: FFmpeg exited with code 1');
+  });
+
+  it('stops the chain when the container holds no audio track, so FFmpeg never copies the file', async () => {
+    const noTrack = Object.assign(new Error('Media source has no audio track'), { name: 'MediaAudioRangeError', code: 'no-audio-track' });
+    readAll.mockRejectedValueOnce(noTrack);
+    const calls: string[] = [];
+    const error = await decodeSourceAudioWithFallbacks(file, [
+      {
+        id: 'browser',
+        decode: async () => { calls.push('browser'); throw new DOMException('Unable to decode audio data', 'EncodingError'); },
+      },
+      containerAudioDecodeAttempt,
+      attempt('ffmpeg', calls, buffer),
+    ]).catch(caught => caught);
+    expect(calls).toEqual(['browser']);
+    expect(error).toBeInstanceOf(SourceAudioDecodeChainError);
+    expect(isSourceAudioMissingError(error)).toBe(true);
+    expect(isDurableSourceAudioDecodeFailure(error)).toBe(true);
+  });
+
+  it('marks read errors and an unloadable FFmpeg as transient, so the failure is not remembered', async () => {
+    load.mockRejectedValueOnce(new Error('Failed to fetch ffmpeg-core.wasm'));
+    const error = await decodeSourceAudioWithFallbacks(file, [
+      attempt('browser', [], new Error('Unable to decode audio data')),
+      ffmpegAudioDecodeAttempt,
+    ]).catch(caught => caught) as SourceAudioDecodeChainError;
+    expect(error.failures.map(failure => [failure.decoderId, failure.transient])).toEqual([
+      ['browser', false],
+      ['ffmpeg.wasm', true],
+    ]);
+    expect(error.failures[1].message).toContain('FFmpeg could not be loaded');
+    expect(isDurableSourceAudioDecodeFailure(error)).toBe(false);
   });
 
   it('stops the chain on cancellation', async () => {

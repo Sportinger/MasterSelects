@@ -1,4 +1,4 @@
-// Whole-source audio decode with ordered fallbacks for waveform analysis.
+// Whole-source audio decode with ordered fallbacks for the waveform and the audio proxy.
 //
 // Browser decodeAudioData rejects some sources other decoders handle (Safari
 // with Ogg/Opus/WebM audio, files with odd headers). Before a clip is left
@@ -12,6 +12,15 @@
 import { readBlobAsArrayBuffer } from '../../../importers/fileIdentity';
 import { Logger } from '../../logger';
 import { AudioDecodeServiceError, errorMessage, isCancellationError } from './errors';
+import {
+  isTransientSourceAudioDecodeError,
+  SourceAudioDecodeChainError,
+  SourceAudioDecoderUnavailableError,
+  SourceAudioHasNoTrackError,
+  type SourceAudioDecodeFailure,
+} from './sourceAudioDecodeFailures';
+
+export type { SourceAudioDecodeFailure } from './sourceAudioDecodeFailures';
 
 const log = Logger.create('SourceAudioFallbackDecode');
 
@@ -23,11 +32,6 @@ export const FFMPEG_AUDIO_DECODE_MAX_SOURCE_BYTES = 512 * 1024 * 1024;
 export interface SourceAudioDecodeAttempt {
   id: string;
   decode: (file: File, signal?: AbortSignal) => Promise<AudioBuffer>;
-}
-
-export interface SourceAudioDecodeFailure {
-  decoderId: string;
-  message: string;
 }
 
 export interface SourceAudioDecodeResult {
@@ -44,7 +48,8 @@ function isAbort(error: unknown, signal: AbortSignal | undefined): boolean {
 
 /**
  * Runs the attempts in order and returns the first decoded buffer. Cancellation
- * stops the chain immediately. When every path fails, one AudioDecodeServiceError
+ * stops the chain immediately, and so does a path that proves the source has no
+ * audio track. When every path fails, one SourceAudioDecodeChainError
  * (`decode-failed`) names each path and its reason, with the first error as cause.
  */
 export async function decodeSourceAudioWithFallbacks(
@@ -53,7 +58,7 @@ export async function decodeSourceAudioWithFallbacks(
   signal?: AbortSignal,
 ): Promise<SourceAudioDecodeResult> {
   const failures: SourceAudioDecodeFailure[] = [];
-  let firstError: unknown;
+  const errors: unknown[] = [];
   for (const attempt of attempts) {
     signal?.throwIfAborted();
     try {
@@ -68,18 +73,24 @@ export async function decodeSourceAudioWithFallbacks(
       return { buffer, decoderId: attempt.id, failures };
     } catch (error) {
       if (isAbort(error, signal)) throw error;
-      firstError ??= error;
-      failures.push({ decoderId: attempt.id, message: errorMessage(error) });
+      errors.push(error);
+      failures.push({
+        decoderId: attempt.id,
+        message: errorMessage(error),
+        transient: isTransientSourceAudioDecodeError(error),
+      });
       log.debug('Source audio decode path failed', { file: file.name, decoderId: attempt.id, error });
+      if (error instanceof SourceAudioHasNoTrackError) break;
     }
   }
 
+  const firstError = errors[0];
   const jobId = firstError instanceof AudioDecodeServiceError ? firstError.jobId : 'source-audio-fallback';
-  throw new AudioDecodeServiceError(
+  throw new SourceAudioDecodeChainError(
     `No audio decode path could decode ${file.name || 'the source'}: ${
       failures.map(failure => `${failure.decoderId}: ${failure.message}`).join('; ') || 'no decoder was tried'
     }`,
-    { code: 'decode-failed', jobId, cause: firstError },
+    { jobId, failures, errors },
   );
 }
 
@@ -91,6 +102,12 @@ export const containerAudioDecodeAttempt: SourceAudioDecodeAttempt = {
     const reader = new MediaAudioRangeReader(file);
     try {
       return await reader.readAll(signal);
+    } catch (error) {
+      // FFmpeg would copy the whole file into WASM only to find the same empty track list.
+      if ((error as { code?: unknown } | null)?.code === 'no-audio-track') {
+        throw new SourceAudioHasNoTrackError(errorMessage(error), { cause: error });
+      }
+      throw error;
     } finally {
       reader.dispose();
     }
@@ -115,9 +132,13 @@ export const ffmpegAudioDecodeAttempt: SourceAudioDecodeAttempt = {
       import('../../../engine/ffmpeg'),
       import('../../../engine/audio/exportPipeline/WavPcmRangeReader'),
     ]);
-    if (!FFmpegBridge.isSupported()) throw new Error('WebAssembly is not available');
+    if (!FFmpegBridge.isSupported()) throw new SourceAudioDecoderUnavailableError('WebAssembly is not available');
     const bridge = getFFmpegBridge();
-    await bridge.load();
+    try {
+      await bridge.load();
+    } catch (error) {
+      throw new SourceAudioDecoderUnavailableError(`FFmpeg could not be loaded: ${errorMessage(error)}`, { cause: error });
+    }
     signal?.throwIfAborted();
     const inputPath = ffmpegInputPath(file.name);
     const outputPath = '/output/waveform-source.wav';
