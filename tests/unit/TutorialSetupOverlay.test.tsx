@@ -36,6 +36,31 @@ describe('TutorialSetupOverlay', () => {
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
+  it('survives browser translation replacing its text nodes when going back', () => {
+    // Google Translate swaps every text node for <font><font>…</font></font>.
+    // Production crash 81fc519b29ff390c: "removeChild ... not a child of this node".
+    const simulateTranslation = (root: Element) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const textNodes: Text[] = [];
+      while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
+      textNodes.forEach((textNode) => {
+        const outer = document.createElement('font');
+        const inner = document.createElement('font');
+        inner.textContent = textNode.data;
+        outer.appendChild(inner);
+        textNode.replaceWith(outer);
+      });
+    };
+    const { container } = render(<TutorialSetupOverlay onCancel={vi.fn()} onComplete={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'DaVinci Resolve' }));
+    simulateTranslation(container);
+
+    expect(() => fireEvent.click(screen.getByRole('button', { name: 'Back' }))).not.toThrow();
+    expect(container.querySelectorAll('.tutorial-setup-choice')).toHaveLength(5);
+    expect(screen.getByText('Where are you coming from?')).toBeTruthy();
+  });
+
   it('can be ended from every setup state', () => {
     const onCancel = vi.fn();
     render(<TutorialSetupOverlay onCancel={onCancel} onComplete={vi.fn()} />);

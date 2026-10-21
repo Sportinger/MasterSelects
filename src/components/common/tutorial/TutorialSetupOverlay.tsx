@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { ClippyMascot } from './ClippyMascot';
 import { productAnalytics } from '../../../services/productAnalytics';
@@ -84,13 +84,22 @@ export function TutorialSetupOverlay({
           <span>{selectedLabel ? '2 / 2' : '1 / 2'}</span>
         </div>
 
+        {/*
+          The two steps are keyed so React swaps whole elements instead of
+          diffing loose text nodes inside the shared <p>. Browser translation
+          (Google Translate) replaces those text nodes with <font> wrappers, and
+          a later in-place diff then failed with "removeChild ... not a child"
+          and crashed the editor root. Text next to dynamic children stays in
+          its own <span> for the same reason.
+        */}
         <div className="tutorial-setup-content">
           {selectedLabel ? (
-            <>
+            <Fragment key="confirmation">
             <h1>Shortcuts switched</h1>
             <p>
-              Your keyboard shortcuts now follow the <strong>{selectedLabel}</strong> layout.
-              You can change this anytime in Settings → Shortcuts.
+              <span>Your keyboard shortcuts now follow the </span>
+              <strong>{selectedLabel}</strong>
+              <span> layout. You can change this anytime in Settings → Shortcuts.</span>
             </p>
             <div className="tutorial-setup-confirmation">
               <span className="tutorial-setup-confirmation-mark">✓</span>
@@ -99,9 +108,9 @@ export function TutorialSetupOverlay({
                 <span>Shortcut preset is active</span>
               </div>
             </div>
-            </>
+            </Fragment>
           ) : (
-            <>
+            <Fragment key="background">
             <h1>Where are you coming from?</h1>
             <p>We’ll match familiar shortcuts, then walk through the editor from start to finish.</p>
             <div className="tutorial-setup-grid">
@@ -116,7 +125,7 @@ export function TutorialSetupOverlay({
                 </button>
               ))}
             </div>
-            </>
+            </Fragment>
           )}
         </div>
 
