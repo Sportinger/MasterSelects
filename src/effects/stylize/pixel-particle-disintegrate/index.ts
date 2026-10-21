@@ -1,12 +1,14 @@
 // Pixel Particle Disintegration render effect
 
 import type { EffectDefinition } from '../../types';
+import { particleBudgetNotes } from './budget';
 
 export const pixelParticleDisintegrate: EffectDefinition = {
   id: 'pixel-particle-disintegrate',
   name: 'Pixel Particle Disintegrate',
   category: 'stylize',
   pipelineKind: 'particle-render',
+  paramWarnings: (params, width, height) => particleBudgetNotes(params, width, height),
 
   params: {
     progress: {
@@ -26,6 +28,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 64,
       step: 1,
       animatable: false,
+      group: 'Particles',
     },
     particleSize: {
       type: 'number',
@@ -35,6 +38,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 4,
       step: 0.05,
       animatable: true,
+      group: 'Particles',
     },
     spread: {
       type: 'number',
@@ -44,6 +48,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 2,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     depth: {
       type: 'number',
@@ -53,6 +58,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 2,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     curlStrength: {
       type: 'number',
@@ -62,6 +68,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 2,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     turbulence: {
       type: 'number',
@@ -71,6 +78,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 1.5,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     directionX: {
       type: 'number',
@@ -80,6 +88,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 2,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     directionY: {
       type: 'number',
@@ -89,6 +98,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 2,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     gravity: {
       type: 'number',
@@ -98,6 +108,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 2,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     spin: {
       type: 'number',
@@ -107,6 +118,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 4,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     stagger: {
       type: 'number',
@@ -116,6 +128,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 0.95,
       step: 0.01,
       animatable: true,
+      group: 'Release',
     },
     gustStrength: {
       type: 'number',
@@ -125,6 +138,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 1.5,
       step: 0.01,
       animatable: true,
+      group: 'Motion',
     },
     gustScale: {
       type: 'number',
@@ -134,6 +148,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 18,
       step: 0.1,
       animatable: false,
+      group: 'Motion',
     },
     windSweep: {
       type: 'number',
@@ -143,6 +158,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 1,
       step: 0.01,
       animatable: true,
+      group: 'Release',
     },
     releaseContrast: {
       type: 'number',
@@ -152,6 +168,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 1.5,
       step: 0.01,
       animatable: true,
+      group: 'Release',
     },
     tail: {
       type: 'number',
@@ -161,6 +178,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 1,
       step: 0.01,
       animatable: true,
+      group: 'Release',
     },
     seed: {
       type: 'number',
@@ -209,6 +227,17 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       max: 1,
       step: 0.01,
       animatable: true,
+      group: 'Particles',
+    },
+    fade: {
+      type: 'number',
+      label: 'Fade',
+      default: 0.7,
+      min: 0,
+      max: 1,
+      step: 0.01,
+      animatable: true,
+      group: 'Particles',
     },
     shape: {
       type: 'select',
@@ -220,6 +249,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
         { value: 'shard', label: 'Shard' },
       ],
       animatable: false,
+      group: 'Particles',
     },
   },
 };

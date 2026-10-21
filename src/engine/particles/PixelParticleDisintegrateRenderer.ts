@@ -2,6 +2,19 @@ import type { Effect } from '../../types/effects';
 import { GpuUniformRing } from '../core/gpuUniformRing';
 import shaderSource from './shaders/PixelParticleDisintegrate.wgsl?raw';
 import { compileParticleDisintegrateGraph } from '../../services/operators/particleDisintegrateGraph';
+import { particleGrid, type ParticleGrid } from '../../effects/stylize/pixel-particle-disintegrate/budget';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('PixelParticleDisintegrate');
+const budgetWarnings = new Set<string>();
+/** Over budget the grid gets coarser cells: say so once per effect, quality and cell size. */
+function warnBudgetOnce(effectId: string, quality: string, grid: ParticleGrid): void {
+  const key = `${effectId}|${quality}|${grid.cellSize}`;
+  if (budgetWarnings.has(key)) return;
+  if (budgetWarnings.size > 256) budgetWarnings.clear();
+  budgetWarnings.add(key);
+  log.warn(`Particle budget: ${quality} draws ${grid.cellSize} px cells instead of ${grid.requestedCellSize} px (${grid.columns} x ${grid.rows} particles, budget ${grid.budget}).`);
+}
 
 export interface PixelParticleDisintegrateRenderOptions {
   readonly commandEncoder: GPUCommandEncoder;
@@ -235,23 +248,11 @@ export class PixelParticleDisintegrateRenderer {
     const plan = compileParticleDisintegrateGraph(options.effect.operatorGraph, options.effect.params as Record<string, unknown>);
     const raw = plan.params;
     const progress = clamp(finiteParam(raw, 'progress', 0), 0, 1);
-    const requestedCellSize = clamp(finiteParam(raw, 'cellSize', 8), 1, 256);
-    const maxPreviewParticles = Math.floor(clamp(finiteParam(raw, 'maxPreviewParticles', 60000), 1, 1_000_000));
-    const maxExportParticles = Math.floor(clamp(finiteParam(raw, 'maxExportParticles', 180000), 1, 1_000_000));
-    const hardMaxInstances = Math.floor(clamp(finiteParam(raw, 'maxInstances', 220000), 1, 1_000_000));
-    const qualityBudget = options.quality === 'export' ? maxExportParticles : maxPreviewParticles;
-    const budget = Math.max(1, Math.min(qualityBudget, hardMaxInstances));
-    const initialColumns = Math.max(1, Math.ceil(options.outputWidth / requestedCellSize));
-    const initialRows = Math.max(1, Math.ceil(options.outputHeight / requestedCellSize));
-    const initialCount = initialColumns * initialRows;
-    const clampedByBudget = initialCount > budget;
-    const cellSize = clampedByBudget
-      ? Math.ceil(requestedCellSize * Math.sqrt(initialCount / budget))
-      : requestedCellSize;
-    const columns = Math.max(1, Math.ceil(options.outputWidth / cellSize));
-    const rows = Math.max(1, Math.ceil(options.outputHeight / cellSize));
+    const grid = particleGrid(raw, options.outputWidth, options.outputHeight, options.quality);
+    if (grid.clampedByBudget) warnBudgetOnce(options.effect.id, options.quality, grid);
+    const { cellSize, columns, rows, clampedByBudget } = grid;
     // A muted render node or an unconnected particle chain shows the input unchanged.
-    const particleCount = plan.passthrough ? 0 : Math.min(columns * rows, budget, hardMaxInstances);
+    const particleCount = plan.passthrough ? 0 : columns * rows;
     const flatAlpha = plan.passthrough ? 1 : 0;
     const particleAlpha = 1;
 
@@ -286,6 +287,8 @@ export class PixelParticleDisintegrateRenderer {
     f32[25] = clamp(finiteParam(raw, 'gustScale', 5.5), 0.5, 32);
     f32[26] = clamp(finiteParam(raw, 'windSweep', 0.35), 0, 1);
     f32[27] = clamp(finiteParam(raw, 'releaseContrast', 0.65), 0, 2);
+    // Effects saved before Fade existed have none: 0 keeps their particles opaque until the end.
+    f32[28] = clamp(finiteParam(raw, 'fade', 0), 0, 1);
 
     return { uniformBuffer, particleCount, columns, rows, cellSize, clampedByBudget };
   }

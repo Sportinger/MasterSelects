@@ -27,6 +27,7 @@ struct ParticleParams {
   gustScale: f32,
   windSweep: f32,
   releaseContrast: f32,
+  fade: f32,
 };
 
 struct FlatVertexOutput {
@@ -109,11 +110,46 @@ fn flatVertexMain(@builtin(vertex_index) vertexIndex: u32) -> FlatVertexOutput {
   return out;
 }
 
+/** Straight-alpha source texel at an integer pixel, clamped to the frame. */
+fn loadSource(pixel: vec2i) -> vec4f {
+  let size = vec2i(textureDimensions(sourceTexture));
+  return textureLoad(sourceTexture, clamp(pixel, vec2i(0), size - vec2i(1)), 0);
+}
+
+/** Bilinear read that mixes premultiplied texels, so transparent neighbours never darken an edge. */
+fn samplePremultiplied(uv: vec2f) -> vec4f {
+  let position = uv * vec2f(textureDimensions(sourceTexture)) - vec2f(0.5);
+  let base = floor(position);
+  let f = position - base;
+  let cell = vec2i(base);
+  let a = loadSource(cell); let b = loadSource(cell + vec2i(1, 0));
+  let c = loadSource(cell + vec2i(0, 1)); let d = loadSource(cell + vec2i(1, 1));
+  let pa = vec4f(a.rgb * a.a, a.a); let pb = vec4f(b.rgb * b.a, b.a);
+  let pc = vec4f(c.rgb * c.a, c.a); let pd = vec4f(d.rgb * d.a, d.a);
+  return mix(mix(pa, pb, f.x), mix(pc, pd, f.x), f.y);
+}
+
+/** Centre of the cell (in uv) that covers `uv`. */
+fn cellCenter(uv: vec2f) -> vec2f {
+  let grid = vec2f(f32(max(params.columns, 1u)), f32(max(params.rows, 1u)));
+  let cell = min(floor(uv * grid), grid - vec2f(1.0));
+  return (cell + vec2f(0.5)) / grid;
+}
+
 @fragment
 fn flatFragmentMain(input: FlatVertexOutput) -> @location(0) vec4f {
-  let color = textureSample(sourceTexture, sourceSampler, input.uv);
-  let alpha = clamp(params.flatAlpha, 0.0, 1.0);
-  return vec4f(color.rgb * alpha, color.a * alpha);
+  let color = loadSource(vec2i(floor(input.uv * vec2f(textureDimensions(sourceTexture)))));
+  let premultiplied = vec4f(color.rgb * color.a, color.a);
+  // Passthrough (muted render node or unconnected chain): the whole input, unchanged.
+  if (params.flatAlpha > 0.5) {
+    return premultiplied;
+  }
+  // Cells that are not released yet stay in place as exact source pixels (progress 0 is the
+  // original picture); a released cell is drawn by its particle instead.
+  if (cellRelease(cellCenter(input.uv)).local > 0.0) {
+    return vec4f(0.0);
+  }
+  return premultiplied * globalFade();
 }
 
 @fragment
@@ -122,6 +158,51 @@ fn resolveFragmentMain(input: FlatVertexOutput) -> @location(0) vec4f {
   let alpha = clamp(premul.a, 0.0, 1.0);
   let rgb = select(vec3f(0.0), premul.rgb / max(alpha, 0.00001), alpha > 0.00001);
   return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), alpha);
+}
+
+struct CellRelease {
+  local: f32,
+  gustField: f32,
+  gustPocket: f32,
+  detailRelease: f32,
+  seedUv: vec2f,
+};
+
+/** When the cell at `baseUv` lets go (0 = still in place, 1 = at the end of its Tail). */
+fn cellRelease(baseUv: vec2f) -> CellRelease {
+  let seedUv = baseUv + vec2f(params.seed * 0.013, params.seed * 0.017);
+  let progress = clamp(params.progress, 0.0, 1.0);
+  let gustStrength = clamp(params.gustStrength, 0.0, 2.0);
+  let gustScale = max(params.gustScale, 0.5);
+  let windDir = safeNormalize(vec2f(params.directionX, params.directionY) + vec2f(0.42, -0.72));
+  let windAxis = dot(baseUv - vec2f(0.5), windDir);
+  let windOrder = clamp((windAxis + 0.70710678) * 0.70710678, 0.0, 1.0);
+  let windDelay = windOrder * clamp(params.windSweep, 0.0, 1.0) * 0.45;
+  let gustField = fbm2(baseUv * gustScale + vec2f(params.seed * 0.031, params.seed * 0.047));
+  let gustPocket = smoothstep(0.32, 0.9, gustField);
+  let detailRelease = hash12(seedUv * 17.13);
+  let releaseBlend = clamp(gustStrength, 0.0, 1.0);
+  let releaseField = mix(detailRelease, gustPocket, releaseBlend);
+  let contrastedRelease = clamp(
+    (releaseField - 0.5) * (1.0 + clamp(params.releaseContrast, 0.0, 2.0)) + 0.5,
+    0.0,
+    1.0
+  );
+  let delay = clamp((1.0 - contrastedRelease) * clamp(params.stagger, 0.0, 0.95) + windDelay, 0.0, 0.98);
+  let tail = max(params.tail, 0.02);
+  let localRaw = smoothstep(delay, min(delay + tail, 1.25), progress);
+  var release: CellRelease;
+  release.local = localRaw * localRaw * (3.0 - 2.0 * localRaw);
+  release.gustField = gustField;
+  release.gustPocket = gustPocket;
+  release.detailRelease = detailRelease;
+  release.seedUv = seedUv;
+  return release;
+}
+
+/** Everything fades out over the last 18 % of Progress. */
+fn globalFade() -> f32 {
+  return 1.0 - smoothstep(0.82, 1.0, clamp(params.progress, 0.0, 1.0));
 }
 
 @vertex
@@ -144,31 +225,28 @@ fn particleVertexMain(
     (f32(row) + 0.5) / f32(rows)
   );
   let sourceCellUv = vec2f(1.0 / f32(columns), 1.0 / f32(rows));
-  let seedUv = baseUv + vec2f(params.seed * 0.013, params.seed * 0.017);
-  let rnd = hash22(seedUv);
-  let progress = clamp(params.progress, 0.0, 1.0);
+  let release = cellRelease(baseUv);
+  let local = release.local;
+  var out: ParticleVertexOutput;
+  if (local <= 0.0) {
+    // Not released: the flat pass draws this cell; a degenerate quad rasterizes nothing.
+    out.position = vec4f(-2.0, -2.0, 0.0, 1.0);
+    out.sourceUv = baseUv;
+    out.localUv = vec2f(0.5);
+    out.alpha = 0.0;
+    out.shape = 0.0;
+    return out;
+  }
+  let rnd = hash22(release.seedUv);
   let gustStrength = clamp(params.gustStrength, 0.0, 2.0);
-  let gustScale = max(params.gustScale, 0.5);
   let windDir = safeNormalize(vec2f(params.directionX, params.directionY) + vec2f(0.42, -0.72));
-  let windAxis = dot(baseUv - vec2f(0.5), windDir);
-  let windOrder = clamp((windAxis + 0.70710678) * 0.70710678, 0.0, 1.0);
-  let windDelay = windOrder * clamp(params.windSweep, 0.0, 1.0) * 0.45;
-  let gustField = fbm2(baseUv * gustScale + vec2f(params.seed * 0.031, params.seed * 0.047));
-  let gustPocket = smoothstep(0.32, 0.9, gustField);
-  let detailRelease = hash12(seedUv * 17.13);
-  let releaseBlend = clamp(gustStrength, 0.0, 1.0);
-  let releaseField = mix(detailRelease, gustPocket, releaseBlend);
-  let contrastedRelease = clamp(
-    (releaseField - 0.5) * (1.0 + clamp(params.releaseContrast, 0.0, 2.0)) + 0.5,
-    0.0,
-    1.0
-  );
-  let delay = clamp((1.0 - contrastedRelease) * clamp(params.stagger, 0.0, 0.95) + windDelay, 0.0, 0.98);
-  let tail = max(params.tail, 0.02);
-  let localRaw = smoothstep(delay, min(delay + tail, 1.25), progress);
-  let local = localRaw * localRaw * (3.0 - 2.0 * localRaw);
-  let fadeOut = 1.0 - smoothstep(0.82, 1.0, progress);
-  let particleAlpha = fadeOut * clamp(params.particleAlpha, 0.0, 1.0);
+  let gustField = release.gustField;
+  let gustPocket = release.gustPocket;
+  let detailRelease = release.detailRelease;
+  // Fade: a particle thins out and shrinks over the second half of its own flight.
+  let fade = clamp(params.fade, 0.0, 1.0);
+  let lifeFade = 1.0 - fade * smoothstep(0.35, 1.0, local);
+  let particleAlpha = globalFade() * lifeFade * clamp(params.particleAlpha, 0.0, 1.0);
 
   let angle = rnd.x * 6.2831853;
   let randomDir = vec2f(cos(angle), sin(angle));
@@ -204,10 +282,13 @@ fn particleVertexMain(
   let s = sin(spinAngle);
   let corner = corners[vertexIndex];
   let rotated = vec2f(corner.x * c - corner.y * s, corner.x * s + corner.y * c);
-  let size = max(params.cellSize, 1.0) * max(params.particleSize, 0.01) * perspective;
-  let ndcSize = vec2f(size / max(params.width, 1.0) * 2.0, size / max(params.height, 1.0) * 2.0);
+  // A released particle starts as its exact cell, then grows to Particle Size and takes its
+  // shape over the first quarter of its flight (no jump when it lets go).
+  let lift = smoothstep(0.0, 0.25, local);
+  let lifeScale = 1.0 - 0.5 * fade * smoothstep(0.5, 1.0, local);
+  let scale = mix(1.0, max(params.particleSize, 0.01), lift) * perspective * lifeScale;
+  let ndcSize = vec2f(2.0 / f32(columns), 2.0 / f32(rows)) * scale;
 
-  var out: ParticleVertexOutput;
   out.position = vec4f(center + rotated * ndcSize, 0.0, 1.0);
   out.sourceUv = clamp(
     baseUv + vec2f(corner.x * sourceCellUv.x, -corner.y * sourceCellUv.y),
@@ -216,21 +297,24 @@ fn particleVertexMain(
   );
   out.localUv = corner + vec2f(0.5);
   out.alpha = particleAlpha;
-  out.shape = f32(params.shape);
+  // Shape blend: integer part = shape, fraction = how far the square has turned into it.
+  out.shape = f32(params.shape) + min(lift, 0.999);
   return out;
 }
 
 @fragment
 fn particleFragmentMain(input: ParticleVertexOutput) -> @location(0) vec4f {
+  let shape = floor(input.shape);
+  let lift = input.shape - shape;
   var mask = 1.0;
-  if (input.shape > 0.5 && input.shape < 1.5) {
+  if (shape > 0.5 && shape < 1.5) {
     let dist = distance(input.localUv, vec2f(0.5));
     mask = 1.0 - smoothstep(0.5 - params.softness * 0.35, 0.5, dist);
-  } else if (input.shape >= 1.5) {
+  } else if (shape >= 1.5) {
     let shard = 1.0 - smoothstep(0.42, 0.5, abs(input.localUv.x + input.localUv.y - 1.0));
     mask = max(shard, 1.0 - smoothstep(0.46, 0.5, max(abs(input.localUv.x - 0.5), abs(input.localUv.y - 0.5))));
   }
-  let color = textureSample(sourceTexture, sourceSampler, input.sourceUv);
-  let alpha = clamp(input.alpha * mask, 0.0, 1.0);
-  return vec4f(color.rgb * alpha, color.a * alpha);
+  let coverage = mix(1.0, mask, lift);
+  let color = samplePremultiplied(input.sourceUv);
+  return color * clamp(input.alpha * coverage, 0.0, 1.0);
 }

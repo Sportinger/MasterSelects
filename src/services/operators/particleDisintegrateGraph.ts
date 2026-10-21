@@ -54,7 +54,10 @@ export function compileParticleDisintegrateGraph(graph: EffectOperatorGraph | un
   const value = (node: BoundOperatorNode, id: string): OperatorValue => {
     const spec = getEffectOperator(node.operator)?.parameters.find(param => param.id === id);
     const binding = node.bindings[id];
-    return (typeof binding === 'string' ? params[binding] as OperatorValue | undefined : node.constants?.[id]) ?? spec?.default ?? 0;
+    // A parameter added after the graph was saved has neither binding nor constant: it reads the
+    // effect parameter of the same id (node parameters reuse the effect's ids), e.g. Fade.
+    return (typeof binding === 'string' ? params[binding] as OperatorValue | undefined : node.constants?.[id] ?? params[id] as OperatorValue | undefined)
+      ?? spec?.default ?? 0;
   };
   const resolved: Record<string, unknown> = { ...params };
   const copy = (node: BoundOperatorNode) => {

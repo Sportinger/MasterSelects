@@ -154,6 +154,8 @@ export interface ParticleRenderEffectDefinition {
   params: Record<string, EffectParam>;
   requiresContinuousRender?: boolean;
   customControls?: ComponentType<EffectControlProps>;
+  // Notes on values the renderer clamps or changes at this output size (see FullscreenEffectDefinition).
+  paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
 }
 
 export interface ComputeEffectDefinition {

@@ -308,6 +308,8 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   const params = { ...effect.params };
   delete params[EFFECT_GRAPH_PARAM];
   if (effect.type === 'grain' && params.seed === undefined) params.seed = 0;
+  // Effects saved before Fade existed keep their particles opaque over the flight.
+  if (effect.type === PARTICLE_DISINTEGRATE && params.fade === undefined) params.fade = 0;
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {
