@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Logger } from '../../../services/logger';
 import { failProjectLoadProgress } from '../../../services/project/load/loadProgress';
+import { isProjectBackendUnavailable } from '../../../services/project/projectBackendAvailability';
 import { reportProjectSaveFailure } from '../../../services/project/projectSaveStatus';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import {
@@ -120,7 +121,8 @@ export function useToolbarProjectActions({
         setIsProjectOpen(true);
       }
     } catch (error) {
-      log.error('Failed to open project', error);
+      if (isProjectBackendUnavailable(error)) log.warn('Project folder selection unavailable', { message: error.message });
+      else log.error('Failed to open project', error);
       // Keep the import error visible; clearing progress would discard its detail.
       failProjectLoadProgress(error);
     } finally {

@@ -1,5 +1,8 @@
 import { useCallback, useRef, useState, type Dispatch, type MouseEvent as ReactMouseEvent, type SetStateAction } from 'react';
 import { Logger } from '../../../../services/logger';
+import { noteCaughtEditRejection, READ_ONLY_PROJECT_MESSAGE } from '../../../../services/editRejection';
+import { RepositoryError } from '../../../../services/project/repository/contracts';
+import { getActiveRepositorySession } from '../../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import type {
   CameraItem,
   Composition,
@@ -20,6 +23,13 @@ import { isUserVisibleComposition } from '../../../../stores/mediaStore/composit
 import type { TrackingAsset } from '../../../../types/trackingAsset';
 
 const log = Logger.create('MediaPanel');
+const warnDelete = (message: string, data?: unknown) => log.warn(`Media delete: ${message}`, data);
+
+/** A read-only project refuses deletes; explain that before any media is touched. */
+function rejectDeleteInReadOnlyProject(): boolean {
+  if (getActiveRepositorySession()?.opening.writable !== false) return false;
+  return noteCaughtEditRejection(new RepositoryError('ownership', READ_ONLY_PROJECT_MESSAGE), warnDelete);
+}
 
 type MediaStoreState = ReturnType<typeof useMediaStore.getState>;
 
@@ -229,6 +239,10 @@ export function useMediaPanelRenameDeleteCommands({
   }, [compositions, folders, textItems, solidItems, meshItems, cameraItems, lightItems, splatEffectorItems, mathSceneItems, motionShapeItems, signalAssets, trackingAssets, deleteMediaFilesEverywhere, removeSignalAsset, removeTrackingAsset, moveTrackingAsset, removeComposition, removeFolder, removeTextItem, removeSolidItem, removeMeshItem, removeCameraItem, removeLightItem, removeSplatEffectorItem, removeMathSceneItem, removeMotionShapeItem, closeContextMenu]);
 
   const handleDelete = useCallback(async () => {
+    if (rejectDeleteInReadOnlyProject()) {
+      closeContextMenu();
+      return;
+    }
     const selectedIdSet = new Set(selectedIds);
     const selectedFiles = files.filter(file => selectedIdSet.has(file.id));
     const selectedFileIds = selectedFiles.map((file) => file.id);
@@ -247,17 +261,26 @@ export function useMediaPanelRenameDeleteCommands({
       }
     }
 
-    await deleteSelectedItems([...selectedIds], selectedFileIds);
+    try {
+      await deleteSelectedItems([...selectedIds], selectedFileIds);
+    } catch (error) {
+      if (!noteCaughtEditRejection(error, warnDelete)) throw error;
+    }
   }, [selectedIds, files, getMediaFileUsages, deleteSelectedItems, closeContextMenu]);
 
   const confirmMediaDelete = useCallback(async () => {
     if (!deleteConfirmation || deleteConfirmationBusy) return;
+    if (rejectDeleteInReadOnlyProject()) {
+      setDeleteConfirmation(null);
+      return;
+    }
     setDeleteConfirmationBusy(true);
     try {
       await deleteSelectedItems(deleteConfirmation.selectedIds, deleteConfirmation.fileIds);
       setDeleteConfirmation(null);
     } catch (error) {
-      log.error('Failed to delete media items', error);
+      if (noteCaughtEditRejection(error, warnDelete)) setDeleteConfirmation(null);
+      else log.error('Failed to delete media items', error);
     } finally {
       setDeleteConfirmationBusy(false);
     }

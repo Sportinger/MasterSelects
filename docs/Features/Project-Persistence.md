@@ -272,7 +272,11 @@ projects as well as cached handles.
 - **Folder permission is missing:** reconnect the existing project directory or
   its external source folder.
 - **Project is read-only:** inspect its owner/capability status; another session
-  may own the writer.
+  may own the writer. Deleting media in a read-only tab is refused up front with
+  the read-only notice instead of failing midway.
+- **No project folder picker:** browsers without the File System Access API
+  (Firefox, Safari) open project folders only through a running Native Helper;
+  without it, Open Project shows that guidance and logs a warning, not an error.
 - **Writes are pending or failed:** inspect the storage error, restore access or
   available space, and retry. A pending edit is not yet a confirmed disk save.
 - **The history index is unavailable:** records remain authoritative; allow

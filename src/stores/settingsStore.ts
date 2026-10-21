@@ -555,7 +555,7 @@ export const useSettingsStore = create<SettingsState>()(
 
       loadIntegrationCredentials: async () => {
         try {
-          set({ youtubeApiKey: await youtubeCredentialManager.get() ?? '' });
+          set({ youtubeApiKey: await youtubeCredentialManager.getOrNullIfStorageUnavailable() ?? '' });
           log.info('Integration credentials loaded from encrypted storage');
         } catch (err) {
           set({ youtubeApiKey: '' });

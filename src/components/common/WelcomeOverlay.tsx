@@ -13,6 +13,7 @@ import { openExistingProject } from '../../services/projectSync';
 import { NativeHelperClient } from '../../services/nativeHelper/NativeHelperClient';
 import { loadProjectToStores } from '../../services/project/projectLoad';
 import { syncStoresToProject } from '../../services/project/projectSave';
+import { isProjectBackendUnavailable } from '../../services/project/projectBackendAvailability';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { resetStoryboardProjectState } from '../../stores/storyboardStore';
 import {
@@ -287,6 +288,11 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
         // User cancelled - not an error
         return;
       }
+      if (isProjectBackendUnavailable(e)) {
+        log.warn('Project folder selection unavailable', { message: e.message });
+        setError(e.message);
+        return;
+      }
       log.error('Failed to open project', e);
       setError('Failed to open project. Please try again.');
     } finally {
@@ -342,6 +348,11 @@ export function WelcomeOverlay({ onComplete, noFadeOnClose = false }: WelcomeOve
         setError('No valid project found. Select a folder containing an .msproj package or legacy project.json');
       }
     } catch (e) {
+      if (isProjectBackendUnavailable(e)) {
+        log.warn('Project folder selection unavailable', { message: e.message });
+        setError(e.message);
+        return;
+      }
       log.error('Native project open failed', e);
       setError('Failed to open project.');
     } finally {
