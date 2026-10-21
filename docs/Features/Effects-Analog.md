@@ -2,16 +2,20 @@
 
 Ten effects that make a picture look as if it came through an old TV, a worn tape,
 a film lens or a broken digital signal.
-Add one in **Properties → Effects → + Add Effect**.
+Add one in **Properties → Effects → + Add Effect**: type part of its name, click it,
+then drag its sliders while the preview follows.
+
+<figure class="docs-shot docs-clip">
+<video src="assets/effects/clips/add-glitch.mp4" poster="assets/effects/clips/add-glitch.webp" width="1280" height="716" autoplay muted loop playsinline preload="none" aria-label="Screen recording: the pointer clicks + Add Effect in Properties, Effects, types glitch and clicks the Glitch tile; the Glitch card appears, the pointer drags its Density slider to 1 and the preview of the dancer breaks up"></video>
+<figcaption>Adding Glitch: + Add Effect, type glitch, click the tile, drag Density.</figcaption>
+</figure>
 
 ## The analog effects
 
 ### CRT Screen
-<figure class="docs-shot docs-shot--float-right">
-
-![CRT Screen at its default settings on the night street with neon signs. Left: the whole frame, bulging slightly, with rounded corners; outside the tube the layer is transparent and shows dark grey here. Right: the pink spiral sign enlarged three times, drawn in horizontal lines with fine red, green and blue stripes](assets/effects/crt-screen.webp)
-
-<figcaption>CRT Screen at its defaults. Left: the whole frame. Right: the spiral sign, enlarged 3× pixel for pixel.</figcaption>
+<figure class="docs-shot docs-clip docs-shot--float-right">
+<video src="assets/effects/clips/crt-screen.mp4" poster="assets/effects/clips/crt-screen.webp" width="1206" height="338" autoplay muted loop playsinline preload="none" aria-label="CRT Screen on the dancing figure. Left: the whole frame, bulging, with rounded corners and a faint darker band rolling down. Right: part of the dancer enlarged three times, drawn in horizontal lines with fine red, green and blue stripes"></video>
+<figcaption>CRT Screen, Flicker 0.8. Left: the whole frame. Right: enlarged 3× pixel for pixel.</figcaption>
 </figure>
 
 Turns the picture into an old tube TV: glowing lines, a fine pattern of red, green
@@ -27,11 +31,9 @@ lines and stripes are too fine for the smaller preview and fade out there; the e
 shows them.
 
 ### Glitch
-<figure class="docs-shot docs-shot--float-left">
-
-![The dancer, original left and with Glitch right: rows of the picture are torn sideways with red, green and blue fringes, and a few square blocks are moved, one near the top right with shifted colours](assets/effects/glitch.webp)
-
-<figcaption>Left: original. Right: Intensity 0.75, Density 0.45, one frame of a burst.</figcaption>
+<figure class="docs-shot docs-clip docs-shot--float-left">
+<video src="assets/effects/clips/glitch.mp4" poster="assets/effects/clips/glitch.webp" width="962" height="490" autoplay muted loop playsinline preload="none" aria-label="The dancer turning, original left and with Glitch right: in short bursts rows of the picture tear sideways with red, green and blue fringes and square blocks jump, with clean frames in between"></video>
+<figcaption>Left: original. Right: Intensity 0.75, Density 0.45 – bursts with clean frames between.</figcaption>
 </figure>
 
 A broken digital signal: rows of the picture tear sideways, blocks jump to the
@@ -45,11 +47,9 @@ in between, and plays back the same way every time.
 Tip: Speed 0 freezes one glitch; change Seed for a different pattern.
 
 ### Film Prism
-<figure class="docs-shot docs-shot--float-right">
-
-![Film Prism on the night street with neon signs, Fringe 0.8, Grain 0.35. Left: the whole frame, sharp, with faint coloured edges on the signs. Right: the teal arrow sign enlarged three times: its tubes stay sharp and gain a red edge on one side and a green-blue edge on the other, and fine grain covers the dark sign board](assets/effects/film-prism.webp)
-
-<figcaption>Fringe 0.8, Grain 0.35, Lens shape. Left: the whole frame. Right: the arrow sign, enlarged 3× pixel for pixel.</figcaption>
+<figure class="docs-shot docs-clip docs-shot--float-right">
+<video src="assets/effects/clips/film-prism.mp4" poster="assets/effects/clips/film-prism.webp" width="1206" height="338" autoplay muted loop playsinline preload="none" aria-label="Film Prism on the dancing figure. Left: the whole frame with coloured edges. Right: part of the dancer enlarged three times: the white dress gains a red edge on one side and a blue-green edge on the other, and fine grain moves over the picture"></video>
+<figcaption>Fringe 1, Prism shape, Grain 0.4. Left: the whole frame. Right: enlarged 3× pixel for pixel; the grain moves.</figcaption>
 </figure>
 
 The look of film shot through a cheap lens or a glass prism: edges gain soft
@@ -62,10 +62,8 @@ itself stays sharp; only the colours spread.
 Tip: Grain Speed 0 freezes the grain, for still images.
 
 ### Analog Signal Lab
-<figure class="docs-shot docs-shot--float-left">
-
-![The dancer, original left and through Analog Signal Lab's Worn VHS Look right: the picture is softer and keeps its warm cream colours; fine horizontal noise streaks run across the dark background, heavier in a band near the top where the tracking slips and along the bottom edge where the video heads switch](assets/effects/analog-signal-lab.webp)
-
+<figure class="docs-shot docs-clip docs-shot--float-left">
+<video src="assets/effects/clips/analog-signal-lab.mp4" poster="assets/effects/clips/analog-signal-lab.webp" width="962" height="534" autoplay muted loop playsinline preload="none" aria-label="The dancer, original left and through Analog Signal Lab's Worn VHS Look right: softer, warm cream colours kept, noise streaks crawling through the dark background and along the bottom edge where the video heads switch"></video>
 <figcaption>Left: original. Right: the Worn VHS Look.</figcaption>
 </figure>
 
@@ -332,7 +330,9 @@ formulas and history in [Effects: CRT Screen](./Effects.md#crt-screen) and
   noise, hue kept, saturation 0.93 / 0.87 / 0.81) and fades in over the first tenth
   of VHS Stage. Details in [Effects: Analog Signal Lab](./Effects.md#analog-signal-lab).
   Pixel Sort is a compute effect with segments of at most 16 px.
-- **Pictures on this page.** `scripts/effect-lab.mjs --pairs`,
+- **Pictures and clips on this page.** `scripts/doc-clip.mjs` (the four effect
+  loops and the operation clip, `scripts/doc-clips/analog.json`; see
+  [Effects: Docs clips](./Effects.md#docs-clips-motion-and-editor-operations)),
   `scripts/effect-graph-shot.mjs` and `scripts/effect-editor-shot.mjs`, each with an
   `analog.json` manifest next to it (`scripts/effect-*-shots/`).
 
