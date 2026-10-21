@@ -1,0 +1,40 @@
+{
+  "shots": [
+    {
+      "name": "perspective-grid-inspector",
+      "effect": "perspective-grid",
+      "params": {
+        "horizon": 0.7,
+        "columns": 16,
+        "rows": 4,
+        "lineWidth": 3,
+        "opacity": 1
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 320,
+      "alt": "Properties \u2192 Effects with a Perspective Grid card in its Grid, Motion and Look sections, beside the preview with cyan floor lines under the dancer",
+      "marks": [
+        {
+          "target": "Horizon",
+          "label": "Horizon: where the floor ends"
+        },
+        {
+          "target": "Line Width",
+          "label": "Line Width of the nearest lines"
+        },
+        {
+          "target": "Blend",
+          "label": "Blend: glowing (Add) or solid (Normal) lines"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ],
+      "viewport": {
+        "width": 1800,
+        "height": 1300
+      }
+    }
+  ]
+}
