@@ -25,7 +25,7 @@ type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
  * numbers outside a parameter's rendered range, blur limits at the active composition size and
  * the effect's own notes on values it clamps or cannot show: tools say so instead of failing silently.
  */
-function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
+export function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
   if (!effect) return [];
   const composition = useMediaStore.getState().getActiveComposition();
   const definitions = getEffect(effect.type)?.params ?? {};

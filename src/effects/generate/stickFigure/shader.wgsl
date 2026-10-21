@@ -4,7 +4,7 @@ struct StickFigureParams {
   // output width/height, limb radius, head radius (output pixels)
   size: vec4f,
   color: vec4f,
-  // opacity, unused
+  // opacity, head style (0 = filled disc, 1 = ring with the limb thickness), unused
   style: vec4f,
   // Twelve joints in output pixels (see SKELETON_JOINTS), two per vec4.
   joints: array<vec4f, 6>,
@@ -35,7 +35,10 @@ fn stickFigureFragment(input: VertexOutput) -> @location(0) vec4f {
     vec2u(0u, 1u), vec2u(1u, 2u), vec2u(1u, 4u), vec2u(4u, 5u), vec2u(1u, 6u),
     vec2u(6u, 7u), vec2u(0u, 8u), vec2u(8u, 9u), vec2u(0u, 10u), vec2u(10u, 11u)
   );
-  var distance = length(point - stickFigureJoint(3u)) - params.size.w;
+  let headDistance = length(point - stickFigureJoint(3u));
+  // A ring keeps its outer edge at the head radius; the neck meets it at the chin.
+  let ringCentre = max(params.size.w - params.size.z, 0.0);
+  var distance = select(headDistance - params.size.w, abs(headDistance - ringCentre) - params.size.z, params.style.y > 0.5);
   for (var index = 0u; index < 10u; index = index + 1u) {
     let segment = segments[index];
     distance = min(distance, stickFigureCapsule(point, stickFigureJoint(segment.x), stickFigureJoint(segment.y), params.size.z));

@@ -117,13 +117,24 @@ const along = (from: SkeletonPoint, direction: SkeletonPoint, length: number): S
 const screenAngle = (direction: SkeletonPoint) => Math.atan2(direction.y, direction.x) / RAD;
 const finiteOr = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 
-/** Missing or invalid fields fall back to the defaults; lengths never go negative. */
+/**
+ * Figure pixels a position or length may reach (100 frame heights). Beyond it 32-bit GPU maths
+ * loses whole pixels, so the drawing would break up; the effect's params report the clamp.
+ */
+export const SKELETON_COORDINATE_LIMIT = 100000;
+
+/**
+ * Missing or invalid fields fall back to the defaults; lengths never go negative, positions and
+ * lengths stay within ±SKELETON_COORDINATE_LIMIT. Angles are free (any number of turns).
+ */
 export function normalizeSkeleton(skeleton?: Partial<SkeletonShapeDefinition>): SkeletonShapeDefinition {
   const defaults = createDefaultSkeletonShape();
   const result = { ...defaults } as SkeletonShapeDefinition;
   for (const key of SKELETON_NUMERIC_KEYS) {
     const value = finiteOr(skeleton?.[key], defaults[key]);
-    result[key] = (SKELETON_LENGTH_KEYS as readonly string[]).includes(key) ? Math.max(0, value) : value;
+    if (isSkeletonAngleKey(key)) { result[key] = value; continue; }
+    const min = (SKELETON_LENGTH_KEYS as readonly string[]).includes(key) ? 0 : -SKELETON_COORDINATE_LIMIT;
+    result[key] = Math.min(SKELETON_COORDINATE_LIMIT, Math.max(min, value));
   }
   const mode = skeleton?.groundMode;
   result.groundMode = mode === 'off' || mode === 'floor' || mode === 'plant' ? mode : defaults.groundMode;

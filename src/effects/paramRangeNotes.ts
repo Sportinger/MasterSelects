@@ -28,7 +28,10 @@ export function paramRangeNotes(definitions: Record<string, EffectParam>, values
     const rendered = renderMin !== undefined && value < renderMin ? renderMin : renderMax !== undefined && value > renderMax ? renderMax : value;
     if (rendered === value) return [];
     const side = value < rendered ? 'below' : 'above';
+    // A one-sided range names its only limit ("the rendered minimum (0)"), not an infinite end.
+    const range = renderMin !== undefined && renderMax !== undefined ? `the rendered range (${format(renderMin)} to ${format(renderMax)})`
+      : `the rendered ${side === 'below' ? 'minimum' : 'maximum'} (${format(rendered)})`;
     return [{ param, label: definition.label, value, rendered,
-      message: `${definition.label} ${format(value)} is ${side} the rendered range (${format(renderMin ?? -Infinity)} to ${format(renderMax ?? Infinity)}) and renders as ${format(rendered)}${side === 'below' && definition.renderMinLook ? ` (${definition.renderMinLook})` : ''}.` }];
+      message: `${definition.label} ${format(value)} is ${side} ${range} and renders as ${format(rendered)}${side === 'below' && definition.renderMinLook ? ` (${definition.renderMinLook})` : ''}.` }];
   });
 }

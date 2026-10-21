@@ -1,13 +1,17 @@
-// Color Wheel: HSV hue/saturation wheel inside the layer's alpha (use on an ellipse or solid).
+// Color Wheel: HSV hue/saturation wheel. Fill Layer keeps it inside the layer's alpha (use on an
+// ellipse or solid); Disc draws an anti-aliased wheel over the layer (a Blank clip shows only it).
 
 struct ColorWheelParams {
-  rotation: f32,
-  spin: f32,
+  // Hue at angle 0, in turns: Hue Rotation + Spin × time, wrapped on the CPU.
+  hueOffset: f32,
   saturation: f32,
   value: f32,
   mixAmount: f32,
   aspect: f32,
-  time: f32,
+  // 0 = fill layer, 1 = disc
+  shape: f32,
+  // Output pixels across the shorter frame side (the disc's diameter).
+  shortSide: f32,
   _pad: f32,
 };
 
@@ -29,8 +33,16 @@ fn colorWheelFragment(input: VertexOutput) -> @location(0) vec4f {
   if (params.aspect >= 1.0) { centered.x = centered.x * params.aspect; } else { centered.y = centered.y / params.aspect; }
   let radius = length(centered);
   let angle = atan2(centered.y, centered.x);
-  let hue = fract(angle * 0.15915494 + params.rotation + params.spin * params.time);
+  let hue = fract(angle * 0.15915494 + params.hueOffset);
   let saturation = clamp(radius * 2.0 * params.saturation, 0.0, 1.0);
   let wheel = hsvToRgb(vec3f(hue, saturation, params.value));
-  return vec4f(mix(source.rgb, wheel, clamp(params.mixAmount, 0.0, 1.0)), source.a);
+  let amount = clamp(params.mixAmount, 0.0, 1.0);
+  if (params.shape < 0.5) {
+    return vec4f(mix(source.rgb, wheel, amount), source.a);
+  }
+  // One output pixel of anti-aliasing on the rim, at any resolution.
+  let coverage = clamp((0.5 - radius) * params.shortSide + 0.5, 0.0, 1.0) * amount;
+  let outAlpha = coverage + source.a * (1.0 - coverage);
+  let rgb = (wheel * coverage + source.rgb * source.a * (1.0 - coverage)) / max(outAlpha, 1e-5);
+  return vec4f(rgb, outAlpha);
 }

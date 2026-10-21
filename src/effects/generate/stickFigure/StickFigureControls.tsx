@@ -20,8 +20,9 @@ const EASINGS: ReadonlyArray<{ value: EasingType; label: string }> = [
   { value: 'ease-in', label: 'Ease in' }, { value: 'ease-out', label: 'Ease out' },
 ];
 
-/** Pose library, colour and one-click gait wiring below the generic Stick Figure parameters. */
-export default function StickFigureControls({ params, onChange, clipId = '', effectInstanceId = '' }: EffectControlProps) {
+/** Pose library, one-click gait wiring and the action lane below the generic Stick Figure parameters
+ * (Color is the Style group's colour row). */
+export default function StickFigureControls({ params, clipId = '', effectInstanceId = '' }: EffectControlProps) {
   const [library, setLibrary] = useState(listSkeletonPoses);
   const [poseId, setPoseId] = useState('stand');
   const [easing, setEasing] = useState<EasingType>('ease-in-out');
@@ -106,10 +107,6 @@ export default function StickFigureControls({ params, onChange, clipId = '', eff
               {gait[0].toUpperCase() + gait.slice(1)}
             </button>
           ))}
-        </ResolveInspectorRow>
-        <ResolveInspectorRow label="Color">
-          <input type="color" aria-label="Stick figure color" value={String(params.color ?? '#ffffff').slice(0, 7)}
-            onChange={event => onChange({ ...params, color: event.target.value })} />
         </ResolveInspectorRow>
       </ResolveInspectorSection>
       {ready && <StickFigureActionLane clipId={clipId} effectId={effectInstanceId} actionsParam={params.actions} />}

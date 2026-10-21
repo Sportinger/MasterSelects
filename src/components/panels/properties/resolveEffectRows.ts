@@ -4,7 +4,8 @@
  */
 export const RESOLVE_ROW_EFFECTS: ReadonlySet<string> = new Set(['gaussian-blur', 'box-blur', 'motion-blur', 'radial-blur', 'zoom-blur',
   'wave', 'twirl', 'bulge', 'kaleidoscope', 'mirror', 'rgb-split', 'pixelate', 'blockify', 'block-mosaic',
-  'brightness', 'contrast', 'saturation', 'vibrance', 'exposure', 'levels', 'hue-shift', 'temperature']);
+  'brightness', 'contrast', 'saturation', 'vibrance', 'exposure', 'levels', 'hue-shift', 'temperature',
+  'color-wheel', 'perspective-grid', 'stick-figure']);
 
 /** Parameter types that have a Resolve row (ResolveEffectParamRow); others keep the generic control. */
 export function hasResolveEffectParamRow(definition: { type: string }): boolean {
