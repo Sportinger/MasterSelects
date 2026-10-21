@@ -18,6 +18,9 @@ import { glowQualityNote, resolveGlowSampling } from './glow/glowSampling';
 export default function StylizeRecipeNote({ clipId, effectInstanceId, effectId, params }: EffectControlProps) {
   const graph = useTimelineStore(store => store.clips.find(clip => clip.id === clipId)?.effects
     .find(effect => effect.id === effectInstanceId)?.operatorGraph);
+  // Read through selectors (no imperative store access): the note re-renders when keyframes change.
+  const clipKeyframes = useTimelineStore(store => clipId ? store.clipKeyframes.get(clipId) : undefined);
+  const disablePropertyKeyframes = useTimelineStore(store => store.disablePropertyKeyframes);
   const [error, setError] = useState<string | null>(null);
   const update = STYLIZE_RECIPE_UPDATES[effectId as keyof typeof STYLIZE_RECIPE_UPDATES];
   const earlier = !!update && !!clipId && !!effectInstanceId && isEarlierStylizeGraph(effectId, graph);
@@ -35,8 +38,7 @@ export default function StylizeRecipeNote({ clipId, effectInstanceId, effectId, 
         Object.assign(target, next);
         Object.assign(values, update.resetParams ?? {});
       });
-      const { clipKeyframes, disablePropertyKeyframes } = useTimelineStore.getState();
-      const keyframed = new Set((clipKeyframes.get(clipId) ?? []).map(keyframe => keyframe.property));
+      const keyframed = new Set((clipKeyframes ?? []).map(keyframe => keyframe.property));
       for (const [name, value] of Object.entries(update.resetParams ?? {})) {
         const property = `effect.${effectInstanceId}.${name}` as AnimatableProperty;
         if (keyframed.has(property)) disablePropertyKeyframes(clipId, property, value);
