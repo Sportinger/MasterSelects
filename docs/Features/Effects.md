@@ -594,13 +594,13 @@ grades that have not stored their default values yet.
 
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
-- `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md)
+- `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md) and, for Pixelate, Kaleidoscope, Mirror and RGB Split, [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
 - `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
 - `keying` (1): Chroma Key
 - `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
 - `analog` (10): glitch, crystal/glass, ribbon, CRT, prism, wave, hologram, compute Pixel Sort, and Analog Signal Lab
-- `pixel` (2): Blockify and Block Mosaic
+- `pixel` (2): Blockify and Block Mosaic; see [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
 - `glyph` (18): ASCII, word/number/symbol matrices, code, collage, brand, and stitch treatments
 - `geometry` (11): compute Voronoi, Quadtree, and Contour plus engraving, textile, outline, and brick treatments
 - `tracking` (8): subject, motion/HUD/CCTV, kinetic trace, rain, stardust, and hand-particle treatments
@@ -823,21 +823,21 @@ their former wall-clock animation even for legacy graph-less effects. Grain adds
 an explicit Seed control with default `0`; existing controls keep their original
 ranges and defaults. Both preserve source alpha and use one fullscreen pass.
 
-Pixelate, Mirror and RGB Split expose editable coordinate and sampling graphs.
-Sampling follows the connected upstream image expression, so rewiring math before
-the sample changes the real result. Pixelate uses the render resolution; Mirror
-keeps its boolean Horizontal/Vertical controls; RGB Split preserves center alpha.
-Each retains its existing parameter defaults and one fullscreen render pass.
-
-Blockify and Block Mosaic use the same coordinate/sampling compiler. Their graphs
-expose cell snapping, quantization or tile borders, and blending; both retain the
-alpha of the snapped sample and the original edge clamp. Block Mosaic replaces
-wall-clock animation with composition timeline time, including for legacy effects,
-so seeking and export reproduce the same tile pattern. Its hash uses the shared
-shader implementation. Bound color nodes read the canonical effect color (including
-eight-digit hex alpha) and update uniforms without recompiling the pipeline.
-Original parameter IDs, ranges and defaults remain unchanged; each effect uses
-one fullscreen pass.
+Kaleidoscope, Mirror and RGB Split read a premultiplied `rgba16float` copy of
+the frame (two passes) and unpremultiply the result; their reads beyond the frame
+follow **Frame Edges** (Mirror, Clamp, Transparent). Angles are on-screen angles,
+stored in radians and shown in degrees. RGB Split's alpha is the largest of its
+three channel reads. Pixelate, Blockify and Block Mosaic share one centred cell
+grid (sizes in pixels of a 1080p frame, rounded to whole rendered pixels) and an
+exact two-pass cell average of the premultiplied frame (three passes in all); cells
+wider than 128 rendered pixels average evenly spread taps. Block Mosaic picks its
+large tiles from timeline time, so seeking and export reproduce the same pattern;
+bound colour nodes read the canonical effect colour (including eight-digit hex
+alpha) without recompiling. Untouched saved graphs and graph-less saved effects
+move to the current recipes with values that keep their look where it can be kept;
+see [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md). Neutral settings
+(RGB Split Amount 0, Mirror with both axes off, 1-pixel Pixelate cells, Blockify
+and Block Mosaic at Amount 0) skip the built-in recipe.
 
 ### Editable blur kernels
 
@@ -1033,7 +1033,8 @@ bypasses were edited are kept exactly as authored and keep the legacy sampling.
 ### Editable UV distortions
 
 Wave, Twirl, Bulge & Pinch and Kaleidoscope use editable UV/math graphs followed
-by a single image sample. Wave, Twirl and Bulge & Pinch (see
+by a single image sample (Kaleidoscope: two, crossfaded between neighbouring whole
+segment counts). Wave, Twirl and Bulge & Pinch (see
 [Distort Effects](./Effects-Distort.md)) read that sample from a premultiplied
 `rgba16float` copy of the frame and unpremultiply the result (two passes), so a
 magnified or squeezed transparent edge keeps its colour; at zero strength (Wave
@@ -1046,9 +1047,8 @@ and Bulge graphs, and effects saved before effects owned a graph, move to the
 current recipes with Stretch to Frame, Clamp and (Wave) Speed 0, which keeps the
 saved Wave and Twirl look; Bulge gets the smooth curve. The worker CPU fallback
 renders the untouched recipes with a hand-written pass that matches the graph.
-Kaleidoscope keeps its original single-pass recipe with fractional segment counts
-and its reflected angular fold. Rewiring the sample to the original UV bypasses
-the distortion.
+Kaleidoscope is covered with the mirror effects: see
+[Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md).
 
 The image operator catalog also offers two-dimensional rotation and radial
 projection/inverse-projection primitives for equidistant, equisolid,
