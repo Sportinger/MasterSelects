@@ -20,6 +20,15 @@ export interface LifecycleHooks {
 }
 export interface RepositoryLifecycleState { session: RepositorySession | null; switching: boolean; error: string | null; }
 
+/** Marks a failure of `prepare`, before the active mapping was touched. */
+class PrepareFailure {
+  readonly cause: unknown;
+  constructor(cause: unknown) { this.cause = cause; }
+}
+export function isCancellation(error: unknown): boolean {
+  return error instanceof RepositoryError && error.code === 'cancelled' || error instanceof DOMException && error.name === 'AbortError';
+}
+
 /** One HMR-stable owner serializes every open, close, scratch handoff and explicit save. */
 export class RepositoryLifecycle {
   private active: RepositorySession | null = null;
@@ -50,7 +59,9 @@ export class RepositoryLifecycle {
       // Source reading/validation and target staging do not replace the active mapping.
 
       this.hooks.progress?.({ phase: 'opening' });
-      const prepared = await prepare(progress => this.hooks.progress?.(progress));
+      let prepared: PreparedRepository;
+      try { prepared = await prepare(progress => this.hooks.progress?.(progress)); }
+      catch (error) { throw new PrepareFailure(error); }
 
       const previous = this.active;
       if (previous) { await this.hooks.beforeReceipt?.(previous); }
@@ -99,9 +110,13 @@ export class RepositoryLifecycle {
         }
         throw error;
       } finally { this.switching = false; barrier.release(); this.notify(); }
-    }).catch(error => {
-      this.error = error instanceof Error ? error.message : String(error);
-      this.hooks.progress?.({ phase: 'failed', error: this.error }); this.notify();
+    }).catch((failure: unknown) => {
+      const preparing = failure instanceof PrepareFailure; const error = preparing ? failure.cause : failure;
+      const message = error instanceof Error ? error.message : String(error);
+      // A failed or cancelled preparation never touched the active project: its save state stays as it was,
+      // and the caller reports the failure. Without an active project the error explains the missing recovery.
+      if (!preparing || !this.active && !isCancellation(error)) this.error = message;
+      this.hooks.progress?.({ phase: 'failed', error: message }); this.notify();
       throw error;
     });
   }

@@ -73,4 +73,27 @@ describe('streaming ZIP extraction backpressure', () => {
     }, undefined, { stallMs: 100 })).rejects.toMatchObject({ code: 'io', message: expect.stringContaining('stalled') });
     expect(Date.now() - started).toBeLessThan(2_000);
   });
+
+  it('keeps the watchdog quiet while a consumer reports progress without reading entry bytes', async () => {
+    // A resumed restore digests the already staged copy of an entry after its archive bytes were read.
+    const zip = await archive([['segments/a.bin', pattern(300_000, 1)], ['segments/b.bin', pattern(300_000, 2)]]);
+    const seen: string[] = [];
+    await extractZip(source(zip), async (entry, reportProgress) => {
+      for await (const _chunk of entry.chunks) { /* drain */ }
+      for (let step = 0; step < 6; step++) { await delay(40); reportProgress(); }
+      seen.push(entry.path);
+    }, undefined, { stallMs: 100 });
+    expect(seen).toEqual(['segments/a.bin', 'segments/b.bin']);
+  });
+
+  it('cancels promptly while the producer waits for a slow consumer', async () => {
+    const zip = await archive([['segments/a.bin', pattern(600_000, 1)], ['segments/b.bin', pattern(600_000, 2)]]);
+    const controller = new AbortController(); let reads = 0;
+    const started = Date.now();
+    const run = extractZip(source(zip), async entry => {
+      for await (const _chunk of entry.chunks) { reads++; if (reads === 1) controller.abort(); await delay(20); }
+    }, controller.signal, { stallMs: 10_000 });
+    await expect(run).rejects.toMatchObject({ code: 'cancelled' });
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
 });

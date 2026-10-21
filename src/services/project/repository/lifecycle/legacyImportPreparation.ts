@@ -1,4 +1,4 @@
-import type { RepositoryBackend, RepositoryDescriptor } from '../contracts';
+import type { RepositoryBackend, RepositoryDescriptor, RepositoryOwner } from '../contracts';
 import { RepositoryError } from '../contracts';
 import type { RepositoryLocation, RepositoryOpenProgress } from '../storageWorkerProtocol';
 import { fileDigest, readFileChunks, readJson, writeJson } from '../archive/streamIO';
@@ -108,7 +108,48 @@ export interface LegacyImportRequest {
   inPlace: boolean;
   workspaceId: string;
   backendFor(location: RepositoryLocation): Promise<RepositoryBackend>;
+  /** Removes a browser-storage staging folder once the archive restore no longer needs it. */
+  removeStaging?(path: string): Promise<void>;
+  /** Cancels the conversion; a cancelled archive restore removes its staging. */
+  signal?: AbortSignal;
   onProgress?(progress: RepositoryOpenProgress): void;
+}
+
+const assertNotCancelled = (signal?: AbortSignal) => { if (signal?.aborted) throw new RepositoryError('cancelled', 'Project import cancelled'); };
+
+/**
+ * Restores a repository archive into browser-storage staging, then copies it into the target. The staging
+ * copy is removed once the target holds the project, and after a failure unless a separate-folder import can
+ * resume from it (an in-place import starts over under a new id, so its staging would only leak storage).
+ */
+async function restoreArchiveIntoTarget(request: LegacyImportRequest, packagePath: string, packageIdentity: { hash: string; length: number } | null,
+  importId: string, descriptor: RepositoryDescriptor, target: RepositoryBackend, owner: RepositoryOwner): Promise<RepositoryDescriptor> {
+  const { source, signal } = request;
+  const stagingPath = 'repository-archive-staging/' + importId;
+  const restored = await request.backendFor({ kind: 'opfs', path: stagingPath });
+  const stagingOwner = await restored.acquireOwner('archive-stage-' + importId);
+  if (!stagingOwner) throw new RepositoryError('ownership', 'Archive restore staging is owned by another session');
+  let keepStaging = false;
+  try {
+    log.info('Restoring repository archive', { importId });
+    const manifest = await restoreRepositoryArchive(readFileChunks(source, packagePath, signal), restored, stagingOwner, signal);
+    log.info('Repository archive restored; copying it into the project', { importId });
+    const current = await fileDigest(source, packagePath, signal);
+    if (current.hash !== packageIdentity?.hash || current.length !== packageIdentity?.length) throw new RepositoryError('conflict', 'Archive source changed during restore');
+    const duplicated = await prepareArchive(restored, manifest.repository, manifest.targetCommit, target, owner,
+      { history: { kind: 'all' }, journals: 'all', workspace: manifest.workspace, media: 'linked', targetRepositoryId: descriptor.repositoryId, signal });
+    return duplicated.repository;
+  } catch (error) {
+    const isCancel = Boolean(signal?.aborted) || error instanceof RepositoryError && error.code === 'cancelled';
+    keepStaging = !request.inPlace && !isCancel;
+    if (!isCancel) throw error;
+    log.info('Repository archive restore cancelled', { importId });
+    // Callers see one cancellation type, also when a backend rejected with the signal's AbortError.
+    throw error instanceof RepositoryError ? error : new RepositoryError('cancelled', 'Project import cancelled');
+  } finally {
+    await stagingOwner.release();
+    if (!keepStaging) await request.removeStaging?.(stagingPath).catch(error => log.warn('Archive restore staging could not be removed', { importId, error }));
+  }
 }
 
 /**
@@ -116,7 +157,8 @@ export interface LegacyImportRequest {
  * are added; every old file stays byte-identical and media resolve through the project folder itself.
  */
 export async function prepareLegacyImport(request: LegacyImportRequest): Promise<{ descriptor: RepositoryDescriptor; location: RepositoryLocation }> {
-  const { source, workspaceId, backendFor, inPlace, target: location } = request;
+  const { source, workspaceId, backendFor, inPlace, target: location, signal } = request;
+  assertNotCancelled(signal);
   const packagePath = await findLegacyPackage(source);
   const chosen = await chooseImport(source, await backendFor(location), inPlace);
   const { importId, target } = chosen; let { descriptor } = chosen;
@@ -125,7 +167,7 @@ export async function prepareLegacyImport(request: LegacyImportRequest): Promise
   const owner = await target.acquireOwner(descriptor.repositoryId);
   if (!owner) throw new RepositoryError('ownership', inPlace ? 'The project folder is read-only or open in another tab' : 'Import target is owned by another session');
   try {
-    const packageIdentity = packagePath ? await fileDigest(source, packagePath) : null;
+    const packageIdentity = packagePath ? await fileDigest(source, packagePath, signal) : null;
     let mediaSourceRoot: ProjectMediaSourceRoot | undefined;
     if (inPlace) {
       const name = request.sourceHandle?.name ?? (location.kind === 'fsa' ? null : location.path.split(/[\\/]/).filter(Boolean).at(-1));
@@ -138,25 +180,13 @@ export async function prepareLegacyImport(request: LegacyImportRequest): Promise
       await storeProjectMediaSourceRootHandle(mediaSourceRoot.id, request.sourceHandle);
     }
     try {
-      const bundle = await openLegacySource(source, packagePath ? { kind: 'package', path: packagePath } : { kind: 'directory' }, { staging: target, importId, inPlace });
+      const bundle = await openLegacySource(source, packagePath ? { kind: 'package', path: packagePath } : { kind: 'directory' }, { staging: target, importId, inPlace, signal });
       request.onProgress?.({ phase: 'importing' });
-      await importLegacyRepository(bundle, descriptor, target, owner, { importId, workspaceId, mediaSourceRoot,
+      await importLegacyRepository(bundle, descriptor, target, owner, { importId, workspaceId, mediaSourceRoot, signal,
         onProgress: processedRecords => request.onProgress?.({ phase: 'importing', processedRecords }) });
     } catch (error) {
       if (!(error instanceof RepositoryArchiveSourceError) || !packagePath) throw error;
-      const restored = await backendFor({ kind: 'opfs', path: 'repository-archive-staging/' + importId });
-      const stagingOwner = await restored.acquireOwner('archive-stage-' + importId);
-      if (!stagingOwner) throw new RepositoryError('ownership', 'Archive restore staging is owned by another session');
-      try {
-        log.info('Restoring repository archive', { importId });
-        const manifest = await restoreRepositoryArchive(readFileChunks(source, packagePath), restored, stagingOwner);
-        log.info('Repository archive restored; copying it into the project', { importId });
-        const current = await fileDigest(source, packagePath);
-        if (current.hash !== packageIdentity?.hash || current.length !== packageIdentity?.length) throw new RepositoryError('conflict', 'Archive source changed during restore');
-        const duplicated = await prepareArchive(restored, manifest.repository, manifest.targetCommit, target, owner,
-          { history: { kind: 'all' }, journals: 'all', workspace: manifest.workspace, media: 'linked', targetRepositoryId: descriptor.repositoryId });
-        descriptor = duplicated.repository;
-      } finally { await stagingOwner.release(); }
+      descriptor = await restoreArchiveIntoTarget(request, packagePath, packageIdentity, importId, descriptor, target, owner);
     }
   } finally { await owner.release(); }
   return { descriptor, location };

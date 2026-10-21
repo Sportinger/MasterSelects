@@ -211,6 +211,11 @@ binary artifacts are reused. Saving a keyframe does not rebuild a complete
 Workspace changes such as playhead, zoom, scroll and dock layout use coalesced
 view slots. They do not append content revisions on every playback tick. Each
 view has two slots so an interrupted update can retain its last valid value.
+A workspace that lacks a view (a new tab, browser or machine) takes it from the
+workspace that wrote it most recently. Each slot stores its write time
+(`updatedAt`), because the Native Helper backend reports no file times; slots
+written before that field existed fall back to the file time, and equal times
+pick the lowest workspace id, so every reader chooses the same source.
 
 Pending recovery data is bounded. Storage pressure, lost permissions and I/O
 failures can stop further content edits before the pending budget is exceeded.
@@ -323,6 +328,13 @@ archive order, so a small entry never waits behind a later entry that still
 needs input (this ordering once hung the import at "Reading selected project
 10%"). If no entry makes progress for two minutes, the restore fails with an
 "Archive extraction stalled" error naming the entry instead of hanging silently.
+Work on an entry that does not read archive bytes (digesting an already staged
+copy of a large file when a restore resumes) reports progress itself, so it
+never trips the watchdog. A repository archive is recognised at its first
+repository entry instead of being buffered in memory as an old package first.
+The restore stages into `repository-archive-staging/<import>`; that copy is
+removed once the project holds it, after a failed in-place import, and after a
+cancel. Only a failed import into a separate folder keeps it, to resume from.
 
 Duplicates receive a new repository identity and retain the content lineage.
 Incremental backups preserve the source's immutable descriptor and commit chain;
@@ -365,8 +377,13 @@ projects as well as cached handles.
   The archive is streamed from disk into browser storage; the log line
   `Project archive copied into browser storage` reports setup and copy times.
   An incomplete copy or an import that does not open is removed again and
-  reported. The start-up project chooser offers the same import below the stored
-  projects. The stored-project list shows only folders with a project
+  reported. While the import runs, **Cancel import** (or Escape, or closing the
+  dialog) aborts the copy, the archive restore or the conversion; the partial
+  project folder and its staging are removed and the open project stays as it
+  was, including its save status. The start-up project chooser offers the same
+  import below the stored projects, where **Back** turns into **Cancel import**
+  while it runs. A failed or cancelled open of another project never marks the
+  open project as "Save failed". The stored-project list shows only folders with a project
   (`project.msrepo.json`, `project.json` or a not yet imported `.msproj`), not
   model caches or repository staging folders.
 - **Writes are pending or failed:** inspect the storage error, restore access or

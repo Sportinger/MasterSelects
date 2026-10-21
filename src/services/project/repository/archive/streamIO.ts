@@ -21,9 +21,9 @@ export async function* readFileChunks(backend: Pick<RepositoryBackend, 'read' | 
   }
   if ((await backend.stat(path))?.length !== stat.length) throw new RepositoryError('conflict', 'Transport source changed during read');
 }
-export async function fileDigest(backend: Pick<RepositoryBackend, 'read' | 'stat'>, path: string, signal?: AbortSignal): Promise<{ hash: string; length: number }> {
+export async function fileDigest(backend: Pick<RepositoryBackend, 'read' | 'stat'>, path: string, signal?: AbortSignal, onChunk?: () => void): Promise<{ hash: string; length: number }> {
   const hash = new StreamHash(); let length = 0;
-  for await (const chunk of readFileChunks(backend, path, signal)) { hash.update(chunk); length += chunk.length; }
+  for await (const chunk of readFileChunks(backend, path, signal)) { hash.update(chunk); length += chunk.length; onChunk?.(); }
   return { hash: hash.digest(), length };
 }
 export async function copyImmutable(source: RepositoryBackend, target: RepositoryBackend, path: string, expected?: { hash: string; length: number }, signal?: AbortSignal): Promise<void> {

@@ -72,8 +72,8 @@ export class ProjectCoreService {
   async listStoredProjects(): Promise<string[]> {
     const root = await acquireProjectRoot('opfs', { throwOnFailure: true }); return root ? listProjectFolderNames(root) : [];
   }
-  async openStoredProject(path: string): Promise<boolean> {
-    await openRepositoryProject({ kind: 'opfs', path }); await this.adoptSession(await directoryForOpfs(path)); return true;
+  async openStoredProject(path: string, options: { signal?: AbortSignal } = {}): Promise<boolean> {
+    await openRepositoryProject({ kind: 'opfs', path }, { signal: options.signal }); await this.adoptSession(await directoryForOpfs(path)); return true;
   }
   async loadProject(handle: FileSystemDirectoryHandle): Promise<boolean> {
     const location: RepositoryLocation = resolveProjectRootMode() === 'opfs' || isAndroidAutoRestoreProjectHandle(handle) ? { kind: 'opfs', path: handle.name } : { kind: 'fsa', handle };

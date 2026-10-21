@@ -339,11 +339,11 @@ export async function openExistingProject(): Promise<boolean> {
  * Open a project by name from browser storage. WebKit offers no folder
  * picker, so the app lists the stored projects and opens the chosen one.
  */
-export async function openStoredProject(name: string): Promise<boolean> {
+export async function openStoredProject(name: string, options: { signal?: AbortSignal } = {}): Promise<boolean> {
   const startedAt = Date.now();
   const trace = beginOperationTrace('project_open', 'load');
   try {
-    const success = await projectFileService.openStoredProject(name);
+    const success = await projectFileService.openStoredProject(name, options);
     if (!success) {
       trackProjectActionFailure('open', startedAt, trace, 'storage_error', 'storage_unavailable', 'load');
       return false;
@@ -375,12 +375,13 @@ export async function openStoredProject(name: string): Promise<boolean> {
 /**
  * Copy an exported .msproj archive into browser storage and open it there.
  * Browsers without a folder picker or Native Helper restore projects this way;
- * an import that does not open leaves no half-imported project behind.
+ * an import that does not open, fails or is cancelled through `signal` leaves
+ * no half-imported project behind.
  */
-export async function openProjectArchive(file: File): Promise<boolean> {
-  const name = await storeProjectArchiveInBrowser(file);
+export async function openProjectArchive(file: File, signal?: AbortSignal): Promise<boolean> {
+  const name = await storeProjectArchiveInBrowser(file, signal);
   try {
-    if (await openStoredProject(name)) return true;
+    if (await openStoredProject(name, { signal })) return true;
   } catch (error) {
     await discardStoredProjectArchive(name);
     throw error;

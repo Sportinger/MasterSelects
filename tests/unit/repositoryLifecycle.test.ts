@@ -122,6 +122,31 @@ describe('repository lifecycle handoff', () => {
 });
 
 
+describe('failed or cancelled project preparation', () => {
+  const lifecycleWithPhases = (phases: string[]) => new RepositoryLifecycle({ async barrier() { return { release() {} }; },
+    async activate() {}, install() {}, progress(value) { phases.push(value.phase); } });
+
+  it('keeps the open project and its save state when another project fails to prepare', async () => {
+    const first = fakeSession('first');
+    vi.spyOn(RepositorySession, 'open').mockResolvedValueOnce(first);
+    const phases: string[] = []; const lifecycle = lifecycleWithPhases(phases);
+    await lifecycle.open(prepared('first'));
+    await expect(lifecycle.open(async () => { throw new Error('Archive is corrupt'); })).rejects.toThrow('Archive is corrupt');
+    expect(lifecycle.getSession()).toBe(first);
+    // A stale lifecycle error would show "Save failed" for the untouched open project.
+    expect(lifecycle.getState().error).toBeNull();
+    expect(phases.at(-1)).toBe('failed');
+  });
+
+  it('records a preparation failure without an open project, but never a cancellation', async () => {
+    const phases: string[] = []; const lifecycle = lifecycleWithPhases(phases);
+    await expect(lifecycle.open(async () => { throw new DOMException('Cancelled', 'AbortError'); })).rejects.toThrow('Cancelled');
+    expect(lifecycle.getState().error).toBeNull();
+    await expect(lifecycle.open(async () => { throw new Error('Storage unavailable'); })).rejects.toThrow('Storage unavailable');
+    expect(lifecycle.getState().error).toBe('Storage unavailable');
+  });
+});
+
 describe('save retries', () => {
   it('retries the failed queue before capture, inside the serialized lifecycle', async () => {
     const target = fakeSession('retry'); const order: string[] = [];

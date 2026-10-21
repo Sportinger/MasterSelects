@@ -14,7 +14,8 @@ type BrowserProjectAction = () => Promise<string | null>;
 interface BrowserProjectOpenDialogProps {
   onClose(): void;
   onOpenStored(name: string): Promise<string | null>;
-  onImportArchive(file: File): Promise<string | null>;
+  /** The signal aborts when the person cancels; the import then removes its partial copy. */
+  onImportArchive(file: File, signal: AbortSignal): Promise<string | null>;
 }
 
 const blurAfterPointer = (event: PointerEvent<HTMLElement>) => event.currentTarget.blur();
@@ -28,9 +29,11 @@ export function BrowserProjectOpenDialog({ onClose, onOpenStored, onImportArchiv
   const dialog = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const mounted = useRef(true);
+  const importAbort = useRef<AbortController | null>(null);
   const [projects, setProjects] = useState<string[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     mounted.current = true;
@@ -46,23 +49,46 @@ export function BrowserProjectOpenDialog({ onClose, onOpenStored, onImportArchiv
       setProjects([]);
       setError(`Stored projects could not be listed. ${storageFailure ?? (cause instanceof Error ? cause.message : '')}`.trim());
     });
-    return () => { mounted.current = false; if (focus?.isConnected) focus.focus(); };
+    return () => {
+      mounted.current = false;
+      // Closing the dialog while an archive import runs cancels it.
+      importAbort.current?.abort();
+      if (focus?.isConnected) focus.focus();
+    };
   }, []);
 
-  async function run(key: string, action: BrowserProjectAction) {
+  async function run(key: string, action: BrowserProjectAction, controller?: AbortController) {
     setBusy(key);
     setError(null);
     const message = await action();
+    if (importAbort.current === controller) importAbort.current = null;
     if (!mounted.current) return;
-    if (message === null) { onClose(); return; }
+    setCancelling(false);
+    // A cancelled import has cleaned up after itself; the person asked to leave the dialog.
+    if (message === null || controller?.signal.aborted) { onClose(); return; }
     setError(message);
     setBusy(null);
+  }
+
+  function importArchive(file: File) {
+    const controller = new AbortController();
+    importAbort.current = controller;
+    void run('archive', () => onImportArchive(file, controller.signal), controller);
+  }
+
+  /** Cancel closes the dialog, or stops a running archive import (the dialog closes once it has stopped). */
+  function cancel() {
+    if (busy === 'archive' && importAbort.current) {
+      if (!importAbort.current.signal.aborted) { setCancelling(true); importAbort.current.abort(); }
+      return;
+    }
+    if (!busy) onClose();
   }
 
   return <div className="project-name-dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <div className="project-name-dialog repository-archive-dialog" ref={dialog} role="dialog" aria-modal="true" aria-labelledby={titleId}
       onKeyDown={event => {
-        if (event.key === 'Escape' && !busy) { event.preventDefault(); onClose(); }
+        if (event.key === 'Escape' && (!busy || busy === 'archive')) { event.preventDefault(); cancel(); }
         if (event.key === 'Tab') {
           const controls = Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled)') ?? []);
           const first = controls[0], last = controls[controls.length - 1];
@@ -91,12 +117,14 @@ export function BrowserProjectOpenDialog({ onClose, onOpenStored, onImportArchiv
         onChange={event => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = '';
-          if (file) void run('archive', () => onImportArchive(file));
+          if (file) importArchive(file);
         }} />
       <p>Project folders on disk open in Chrome or Edge, or with the MasterSelects Native Helper running on this computer.</p>
       {error && <p role="alert">{error}</p>}
       <div className="repository-archive-actions">
-        <button type="button" disabled={busy !== null} onPointerUp={blurAfterPointer} onClick={onClose}>Cancel</button>
+        <button type="button" disabled={(busy !== null && busy !== 'archive') || cancelling} onPointerUp={blurAfterPointer} onClick={cancel}>
+          {busy === 'archive' ? (cancelling ? 'Cancelling import…' : 'Cancel import') : 'Cancel'}
+        </button>
       </div>
     </div>
   </div>;
