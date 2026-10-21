@@ -16,6 +16,7 @@ interface TimelineClipCanvasMediaStatusSource {
   audioProxyStatus?: string;
   audioProxyProgress?: number;
   hasProxyAudio?: boolean;
+  decodeError?: string;
   sceneCutAnalysis?: {
     cuts: readonly { timestamp: number }[];
   };
@@ -30,6 +31,7 @@ export function createTimelineClipCanvasMediaStatusMap(
     audioProxyStatus: file.audioProxyStatus,
     audioProxyProgress: file.audioProxyProgress,
     hasProxyAudio: file.hasProxyAudio,
+    decodeError: file.decodeError,
     sceneCutTimestamps: file.sceneCutAnalysis?.cuts.map((cut) => cut.timestamp),
   }]));
 }

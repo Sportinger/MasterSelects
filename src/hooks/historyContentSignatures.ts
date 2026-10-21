@@ -71,6 +71,7 @@ const MEDIA_FILE_HISTORY_SIGNATURE_SKIP_KEYS = new Set([
   'waveformProgress',
   'waveformStatus',
   'audioAnalysisRefs',
+  'decodeError',
 ]);
 
 function isHistorySignatureBinaryPayload(value: unknown): boolean {

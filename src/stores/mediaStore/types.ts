@@ -193,6 +193,8 @@ export interface MediaFile extends MediaItem, MediaVideoTrackMetadata {
   externalOrigin?: ExternalMediaOrigin;
   // Import loading state
   isImporting?: boolean;
+  // Transient: why this image could not be decoded (not persisted; cleared on the next successful decode)
+  decodeError?: string;
   vectorAnimation?: VectorAnimationMetadata;
   liveInput?: LiveInputSource;
   sourceAnnotations?: SourceAnnotation[];

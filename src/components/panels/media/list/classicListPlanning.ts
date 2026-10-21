@@ -277,6 +277,7 @@ export function getClassicMediaColumnText(item: ProjectItem, colId: Exclude<Medi
         : ('duration' in item && item.duration ? formatMediaDuration(item.duration) : '\u2013');
     }
     case 'resolution':
+      if (mediaFile?.decodeError) return 'Cannot decode';
       if (mediaFile?.type === 'audio') return getAudioWaveformColumnLabel(mediaFile);
       if (signalAsset) return getSignalKindLabel(signalAsset);
       if (trackingAsset) return getTrackingAssetStateLabel(trackingAsset);
