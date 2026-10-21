@@ -86,7 +86,7 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
     distance: {
       type: 'number',
       label: 'Distance',
-      default: 1,
+      default: 0.85,
       min: 0.2,
       max: 6,
       step: 0.01,
@@ -232,6 +232,18 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
       step: 1,
       animatable: false,
       quality: true,
+    },
+    shading: {
+      type: 'select',
+      label: 'Shading',
+      default: 'hue',
+      options: [
+        { value: 'hue', label: 'Keep column colour' },
+        { value: 'legacy', label: 'Darker sides (saved before 2026-10)' },
+      ],
+      animatable: false,
+      // Set to 'legacy' by the load migration for effects saved before the hue-keeping shading.
+      hidden: true,
     },
     reset: {
       type: 'boolean',

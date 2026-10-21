@@ -67,23 +67,14 @@ fn safeNormalize(v: vec2f) -> vec2f {
   return v / len;
 }
 
-fn valueNoise(p: vec2f) -> f32 {
-  let i = floor(p);
-  let f = fract(p);
-  let u = f * f * (3.0 - 2.0 * f);
-  let a = hash12(i);
-  let b = hash12(i + vec2f(1.0, 0.0));
-  let c = hash12(i + vec2f(0.0, 1.0));
-  let d = hash12(i + vec2f(1.0, 1.0));
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
-
-fn fbm2(p: vec2f) -> f32 {
-  let n0 = valueNoise(p) * 0.5;
-  let n1 = valueNoise(p * 2.0 + vec2f(19.1, 7.3)) * 0.25;
-  let n2 = valueNoise(p * 4.0 + vec2f(3.7, 41.2)) * 0.125;
-  let n3 = valueNoise(p * 8.0 + vec2f(29.5, 13.9)) * 0.0625;
-  return (n0 + n1 + n2 + n3) / 0.9375;
+/**
+ * Gust field: gradient Fractal Noise (imageGraphFractalNoise, prepended from the shared Fractal Noise
+ * node) with 4 octaves that each turn by 37.5 degrees, so no lattice axis survives the release
+ * contrast (value noise turned one lattice square into an axis-aligned pocket, a hard "censor bar").
+ * Spread by 1.4 around 0.5 to keep the value-noise field's spread (std 0.13), so pockets stay as large.
+ */
+fn gustNoise(p: vec2f) -> f32 {
+  return clamp(0.5 + (imageGraphFractalNoise(p, 4.0, 0.5) - 0.5) * 1.4, 0.0, 1.0);
 }
 
 fn flatPosition(vertexIndex: u32) -> vec2f {
@@ -178,7 +169,7 @@ fn cellRelease(baseUv: vec2f) -> CellRelease {
   let windAxis = dot(baseUv - vec2f(0.5), windDir);
   let windOrder = clamp((windAxis + 0.70710678) * 0.70710678, 0.0, 1.0);
   let windDelay = windOrder * clamp(params.windSweep, 0.0, 1.0) * 0.45;
-  let gustField = fbm2(baseUv * gustScale + vec2f(params.seed * 0.031, params.seed * 0.047));
+  let gustField = gustNoise(baseUv * gustScale + vec2f(params.seed * 0.031, params.seed * 0.047));
   let gustPocket = smoothstep(0.32, 0.9, gustField);
   let detailRelease = hash12(seedUv * 17.13);
   let releaseBlend = clamp(gustStrength, 0.0, 1.0);
@@ -306,10 +297,12 @@ fn particleVertexMain(
 fn particleFragmentMain(input: ParticleVertexOutput) -> @location(0) vec4f {
   let shape = floor(input.shape);
   let lift = input.shape - shape;
+  let dist = distance(input.localUv, vec2f(0.5));
+  // At least one screen pixel of edge, so Softness 0 is a crisp circle, not smoothstep(0.5, 0.5, d).
+  let edge = max(clamp(params.softness, 0.0, 1.0) * 0.35, max(fwidth(dist), 1e-4));
   var mask = 1.0;
   if (shape > 0.5 && shape < 1.5) {
-    let dist = distance(input.localUv, vec2f(0.5));
-    mask = 1.0 - smoothstep(0.5 - params.softness * 0.35, 0.5, dist);
+    mask = 1.0 - smoothstep(0.5 - edge, 0.5, dist);
   } else if (shape >= 1.5) {
     let shard = 1.0 - smoothstep(0.42, 0.5, abs(input.localUv.x + input.localUv.y - 1.0));
     mask = max(shard, 1.0 - smoothstep(0.46, 0.5, max(abs(input.localUv.x - 0.5), abs(input.localUv.y - 0.5))));

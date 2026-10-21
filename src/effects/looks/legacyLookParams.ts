@@ -1,5 +1,6 @@
 import { withLegacyMirrorPixelControls } from '../../services/operators/mirrorPixelGraphUpgrade';
 import { withLegacyAcuarelaGraph } from '../../services/operators/acuarelaIdentity';
+import { withLegacySheenParams } from '../stylize/sheen/legacy';
 
 type Params = Record<string, number | boolean | string>;
 
@@ -10,6 +11,9 @@ type Params = Record<string, number | boolean | string>;
  */
 export function withLegacyLookParams(effectId: string, params: Params): Params {
   const controls = withLegacyMirrorPixelControls(effectId, params) as Params;
-  const fade = effectId === 'pixel-particle-disintegrate' && controls.fade === undefined ? { ...controls, fade: 0 } : controls;
-  return withLegacyAcuarelaGraph(effectId, fade);
+  const particles = effectId === 'pixel-particle-disintegrate'
+    ? { ...controls, fade: controls.fade ?? 0, cellReference: controls.cellReference ?? 'output' } : controls;
+  const sheen = effectId === 'sheen' ? withLegacySheenParams(particles)
+    : effectId === 'voxel-relief' && particles.shading === undefined ? { ...particles, shading: 'legacy' } : particles;
+  return withLegacyAcuarelaGraph(effectId, sheen);
 }

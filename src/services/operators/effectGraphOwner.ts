@@ -41,6 +41,8 @@ import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectTy
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultGlowGraph } from './glowEffectGraph';
 import { upgradeGlowGraph } from './glowGraphUpgrade';
+import { clampSmokeGainGraph, shoulderRom1GainGraph } from './smokeGainUpgrade';
+import { withLegacySheenParams } from '../../effects/stylize/sheen/legacy';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
 import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
@@ -241,7 +243,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     if (known && known.signature === signature && (options.inspectionOnly || known.params === effect.params)) return known.graph;
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
-      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved) : saved;
+      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
+      : effectType === 'rom1' ? shoulderRom1GainGraph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved) : saved;
     const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
@@ -274,7 +277,8 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   const legacy = effect.params[EFFECT_GRAPH_PARAM];
   if (!hasEffectOperatorGraph(effect.type)) {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
-    return effect;
+    // Sheen saved before the falloff profile keeps its flat-topped band and even light.
+    return (effect.type as string) === 'sheen' && effect.params.profile === undefined ? { ...effect, params: withLegacySheenParams(effect.params) } : effect;
   }
   effect = upgradePersistedMirrorPixelEffect(upgradePersistedUvDistortEffect(effect));
   // A valid Weave document with unfinished wiring is an editable draft, not
@@ -310,6 +314,10 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   if (effect.type === 'grain' && params.seed === undefined) params.seed = 0;
   // Effects saved before Fade existed keep their particles opaque over the flight.
   if (effect.type === PARTICLE_DISINTEGRATE && params.fade === undefined) params.fade = 0;
+  // Effects saved before Cell Size counted 1080p pixels keep their output-pixel grid.
+  if (effect.type === PARTICLE_DISINTEGRATE && params.cellReference === undefined) params.cellReference = 'output';
+  // Voxel Relief saved before the hue-keeping shading keeps its darker, greying sides.
+  if (effect.type === 'voxel-relief' && params.shading === undefined) params.shading = 'legacy';
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {

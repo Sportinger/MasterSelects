@@ -547,8 +547,12 @@ fn voxelShade(hit: VoxelHit, ray: VoxelRay) -> vec4f {
   let halfVector = normalize(lightDir - ray.direction);
   let specular = pow(max(dot(normal, halfVector), 0.0), 30.0) * 0.06;
   let topness = abs(normal.z);
-  let faceBias = mix(0.68, 1.08, topness);
-  let light = (clamp(params.ambient, 0.0, 1.5) + diffuse * max(params.lightStrength, 0.0)) * faceBias;
+  // Hue-keeping shading (default): sides stay at least 55 % of the column colour and tall columns
+  // brighten their own colour. pad2 = 1 is the darker, greying shading of effects saved before 2026-10.
+  let legacyShading = params.pad2 > 0.5;
+  let faceBias = mix(select(0.84, 0.68, legacyShading), 1.08, topness);
+  let rawLight = (clamp(params.ambient, 0.0, 1.5) + diffuse * max(params.lightStrength, 0.0)) * faceBias;
+  let light = select(max(rawLight, 0.55 * (1.0 - topness)), rawLight, legacyShading);
 
   var color = mix(vec3f(luminance(source.rgb)), source.rgb, clamp(params.colorMix, 0.0, 1.0));
 
@@ -559,7 +563,7 @@ fn voxelShade(hit: VoxelHit, ray: VoxelRay) -> vec4f {
     let edge = smoothstep(0.78, 1.0, max(edgeLocal.x, edgeLocal.y));
     let edgeShade = 1.0 - edge * clamp(params.edgeDarkness, 0.0, 1.0) * 0.36;
     let heightLift = smoothstep(0.0, voxelMaximumHeight(), hit.sample.cell.height) * 0.12;
-    color = color * edgeShade + vec3f(heightLift);
+    color = select(color * edgeShade * (1.0 + heightLift), color * edgeShade + vec3f(heightLift), legacyShading);
   }
 
   let shaded = clamp(color * light + vec3f(specular), vec3f(0.0), vec3f(1.0));

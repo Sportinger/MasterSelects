@@ -8,11 +8,7 @@ import { voxelReliefParamWarnings } from './warnings';
 import { VOXEL_RELIEF_PARAMS } from './parameters';
 import { compileVoxelGraph } from '../../../services/operators/voxelGraph';
 
-/** A non-numeric or non-finite value (tools, broken data) falls back to the default instead of NaN uniforms. */
-const finite = (value: unknown, fallback: number) => {
-  const number = typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : Number.NaN;
-  return Number.isFinite(number) ? number : fallback;
-};
+import { finiteUniform as finite } from '../../_shared/effectUniformParams';
 
 export const voxelRelief: EffectDefinition = {
   id: 'voxel-relief',
@@ -63,14 +59,15 @@ export const voxelRelief: EffectDefinition = {
       finite(params.lightElevation, 45),
       finite(params.floorBrightness, 0.1),
       finite(params.edgeDarkness, 0.68),
-      finite(params.distance, 1),
+      finite(params.distance, 0.85),
       finite(params.centerX, 0.5),
       finite(params.centerY, 0.5),
       finite(params.roll, 0),
       params.lightFollow === true ? 1 : 0,
       params.limitToVideo !== false ? 1 : 0,
       graph.primitiveShape === 'sphere' ? 1 : graph.primitiveShape === 'cylinder' ? 2 : 0,
-      0,
+      // Effects saved before 2026-10 keep the darker, greying side shading (load migration).
+      params.shading === 'legacy' ? 1 : 0,
       ...graph.heightUV,
       ...graph.colorUV,
       ...graph.tint, graph.opacity,

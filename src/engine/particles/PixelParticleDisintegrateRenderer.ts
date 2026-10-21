@@ -1,6 +1,7 @@
 import type { Effect } from '../../types/effects';
 import { GpuUniformRing } from '../core/gpuUniformRing';
-import shaderSource from './shaders/PixelParticleDisintegrate.wgsl?raw';
+import particleShaderSource from './shaders/PixelParticleDisintegrate.wgsl?raw';
+import { IMAGE_FRACTAL_NOISE_WGSL } from '../../services/operators/imageNoiseSemantics';
 import { compileParticleDisintegrateGraph } from '../../services/operators/particleDisintegrateGraph';
 import { particleGrid, type ParticleGrid } from '../../effects/stylize/pixel-particle-disintegrate/budget';
 import { Logger } from '../../services/logger';
@@ -9,11 +10,11 @@ const log = Logger.create('PixelParticleDisintegrate');
 const budgetWarnings = new Set<string>();
 /** Over budget the grid gets coarser cells: say so once per effect, quality and cell size. */
 function warnBudgetOnce(effectId: string, quality: string, grid: ParticleGrid): void {
-  const key = `${effectId}|${quality}|${grid.cellSize}`;
+  const key = `${effectId}|${quality}|${grid.cellSize}|${grid.unit}`;
   if (budgetWarnings.has(key)) return;
   if (budgetWarnings.size > 256) budgetWarnings.clear();
   budgetWarnings.add(key);
-  log.warn(`Particle budget: ${quality} draws ${grid.cellSize} px cells instead of ${grid.requestedCellSize} px (${grid.columns} x ${grid.rows} particles, budget ${grid.budget}).`);
+  log.warn(`Particle budget: ${quality} draws ${grid.cellSize} px cells instead of ${grid.requestedCellSize} px (${grid.unit}; ${grid.columns} x ${grid.rows} particles, budget ${grid.budget}).`);
 }
 
 export interface PixelParticleDisintegrateRenderOptions {
@@ -52,6 +53,8 @@ interface ParticleResources {
 }
 
 const UNIFORM_SIZE = 128;
+/** The gust field uses the shared Fractal Noise node's WGSL (gradient noise, turned octaves). */
+export const PIXEL_PARTICLE_DISINTEGRATE_WGSL = `${IMAGE_FRACTAL_NOISE_WGSL}\n${particleShaderSource}`;
 
 const rendererByDevice = new WeakMap<GPUDevice, PixelParticleDisintegrateRenderer>();
 
@@ -168,7 +171,7 @@ export class PixelParticleDisintegrateRenderer {
 
     const module = this.device.createShaderModule({
       label: 'pixel-particle-disintegrate-shader',
-      code: shaderSource,
+      code: PIXEL_PARTICLE_DISINTEGRATE_WGSL,
     });
     const bindGroupLayout = this.device.createBindGroupLayout({
       label: 'pixel-particle-disintegrate-bind-group-layout',
@@ -250,7 +253,8 @@ export class PixelParticleDisintegrateRenderer {
     const progress = clamp(finiteParam(raw, 'progress', 0), 0, 1);
     const grid = particleGrid(raw, options.outputWidth, options.outputHeight, options.quality);
     if (grid.clampedByBudget) warnBudgetOnce(options.effect.id, options.quality, grid);
-    const { cellSize, columns, rows, clampedByBudget } = grid;
+    const { columns, rows, clampedByBudget } = grid;
+    const cellSize = grid.cellPixels;
     // A muted render node or an unconnected particle chain shows the input unchanged.
     const particleCount = plan.passthrough ? 0 : columns * rows;
     const flatAlpha = plan.passthrough ? 1 : 0;

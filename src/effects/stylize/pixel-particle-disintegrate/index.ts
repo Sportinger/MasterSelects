@@ -23,6 +23,7 @@ export const pixelParticleDisintegrate: EffectDefinition = {
     cellSize: {
       type: 'number',
       label: 'Cell Size',
+      // Pixels of a 1080p frame (shorter side); see budget.ts for effects saved in output pixels.
       suffix: 'px',
       default: 8,
       min: 2,
@@ -239,6 +240,18 @@ export const pixelParticleDisintegrate: EffectDefinition = {
       step: 0.01,
       animatable: true,
       group: 'Particles',
+    },
+    cellReference: {
+      type: 'select',
+      label: 'Cell Size Unit',
+      default: '1080p',
+      options: [
+        { value: '1080p', label: 'Pixels of a 1080p frame' },
+        { value: 'output', label: 'Output pixels (saved before 2026-10)' },
+      ],
+      animatable: false,
+      // Set to 'output' by the load migration for effects saved before Cell Size followed the frame size.
+      hidden: true,
     },
     shape: {
       type: 'select',
