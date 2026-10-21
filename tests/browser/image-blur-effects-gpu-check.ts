@@ -1,4 +1,5 @@
 import common from '../../src/effects/_shared/commonShader';
+import { createEarlierStylizeGraph } from '../../src/services/operators/stylizeRecipes';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { boxBlur } from '../../src/effects/blur/box';
 import { gaussianBlur } from '../../src/effects/blur/gaussian';
@@ -100,7 +101,8 @@ export async function checkBlurEffectsGpu(device: GPUDevice): Promise<number> {
       device.queue.writeTexture({ texture: source }, sourcePixels, { bytesPerRow: rowPitch }, [item.width, item.height]);
       const legacy = sharpen as FullscreenEffectDefinition;
       const params = effectOperatorParams({ type: item.type, params: item.params });
-      const graph = imageGraphDefinition({ type: item.type, params }, legacy);
+      // The registered shader is the earlier (pre-2026-10-21) Sharpen; saved projects keep that recipe.
+      const graph = imageGraphDefinition({ type: item.type, params, operatorGraph: createEarlierStylizeGraph(item.type) }, legacy);
       const expected = await render(device, sampler, source.createView(), target, readback, legacy, params, item.width, item.height);
       const actual = await render(device, sampler, source.createView(), target, readback, graph, params, item.width, item.height);
       if (expected.some((value, index) => value !== actual[index])) {

@@ -81,6 +81,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md) | Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block Mosaic with before/after pictures, their controls, the graphs behind them, and technical notes |
 | [Color Effects](./Effects-Color.md) | Brightness, Contrast, Exposure, Levels, Saturation, Vibrance, Temperature, Hue Shift and Invert with split-screen pictures, their controls, the colour recipes behind them, and technical notes |
 | [Keying and Time Effects](./Effects-Keying-Time.md) | Chroma Key, Time Stack and Slit Scan with before/after pictures, inspector, graph recipes and technical notes |
+| [Stylize Effects](./Effects-Stylize.md) | Glow, Film Grain, Vignette, Sharpen, Edge Detect, Posterize, Threshold and Scanlines with before/after pictures, their controls, the recipes behind them, and technical notes |
 | [Slit Scan 3D](./Slit-Scan-3D.md) | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |
 | [Memory Leak](./Memory-Leak.md) | Generator that shows real leftover bytes of the FFmpeg wasm heap as 8/16/32-bit pixels, with clip feeding, per-frame motion, and freezable blocks |
 | [Color Correction](./Color-Correction.md) | Node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |

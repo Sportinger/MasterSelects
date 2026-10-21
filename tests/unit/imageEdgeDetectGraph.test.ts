@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
+import { createEarlierEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
 const luma = (rgb: readonly number[]) => rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
@@ -7,7 +7,7 @@ const sample = ([u, v]: [number, number]): [number, number, number, number] => [
 
 describe('edge detect image graph', () => {
   it('uses exactly eight shared samples and stays below the graph limit', () => {
-    const graph = createDefaultEdgeDetectGraph();
+    const graph = createEarlierEdgeDetectGraph();
     expect(graph.nodes.length).toBeLessThanOrEqual(64);
     expect(graph.nodes.filter(node => node.operator === 'image.sample')).toHaveLength(8);
     expect(graph.nodes.filter(node => node.operator === 'color.luminance-rec709.image')).toHaveLength(8);
@@ -18,7 +18,7 @@ describe('edge detect image graph', () => {
   });
 
   it('matches the independent scalar Sobel order, samples the expected lattice, and forces alpha one', () => {
-    const graph = createDefaultEdgeDetectGraph(), coordinates: Array<[number, number]> = [];
+    const graph = createEarlierEdgeDetectGraph(), coordinates: Array<[number, number]> = [];
     const uv: [number, number] = [0.5, 0.5], dx = 0.1, dy = 0.05, strength = 2.3;
     const context = { uv, resolution: [10, 20] as [number, number], sampleImage: (at: [number, number]) => { coordinates.push(at); return sample(at); } };
     const result = evaluateImageOperatorPlan(compileImageOperatorGraph(graph, { strength, invert: false }), sample(uv), context);

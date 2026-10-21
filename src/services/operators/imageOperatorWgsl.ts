@@ -7,6 +7,15 @@ export const imageF32 = (value: number) => Number.isInteger(value) ? `${value}.0
 export const imageParameterExpression = (slot: number) => `imageParameters.values[${Math.floor(slot / 4)}].${'xyzw'[slot % 4]}`;
 export const IMAGE_PARAMETER_WGSL = `struct ImageOperatorParameters { values: array<vec4f, ${IMAGE_OPERATOR_PARAMETER_VEC4_COUNT}>, };`;
 export const IMAGE_HASH2D_WGSL = hash2d.replace('fn hash(', 'fn imageGraphHash2d(');
+/** PCG2D (Jarzynski & Olano 2020) of the whole-number cell; the top 24 bits give an exact f32 in [0, 1). */
+export const IMAGE_CELL_HASH_WGSL = `fn imageGraphCellHash(p: vec2f) -> f32 {
+  var v = bitcast<vec2u>(vec2i(floor(p))) * 1664525u + 1013904223u;
+  v.x += v.y * 1664525u; v.y += v.x * 1664525u;
+  v = v ^ (v >> vec2u(16u));
+  v.x += v.y * 1664525u; v.y += v.x * 1664525u;
+  v = v ^ (v >> vec2u(16u));
+  return f32(v.x >> 8u) / 16777216.0;
+}`;
 export const IMAGE_GAUSSIAN_WGSL = gaussian.replace('fn gaussian(', 'fn imageGraphGaussian(');
 export const IMAGE_COORDINATE_ROTATION_WGSL = coordinateRotation;
 export const IMAGE_VECTOR_WGSL = `fn imageGraphNormalize2(value: vec2f) -> vec2f {

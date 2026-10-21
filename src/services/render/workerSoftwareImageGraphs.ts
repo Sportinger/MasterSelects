@@ -1,6 +1,7 @@
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { createImageOperatorEvaluator } from '../operators/imageOperatorEvaluation';
 import { pointwiseOperation } from '../operators/fields/pointwiseOperations';
+import { imageResourceSize } from '../operators/imageResourceScale';
 import { glyphAtlasCacheKey } from '../../effects/_shared/glyphAtlasPlan';
 import { rasterizeGlyphAtlas } from '../../effects/_shared/glyphAtlasRaster';
 import { IMAGE_FRAME_HISTORY_RESOURCE_ID } from '../operators/imageOperatorResources';
@@ -125,9 +126,7 @@ function applyMaterializedPasses(data: Uint8ClampedArray, width: number, height:
   const descriptors = new Map((plan.resources ?? []).map(resource => [resource.id, resource]));
   const produced = new Map<string, FloatRaster>();
   for (const { pass, resources } of passes) {
-    const maxEdge = pass.outputResource ? descriptors.get(pass.outputResource)?.maxEdge : undefined;
-    const scale = maxEdge ? Math.min(1, maxEdge / Math.max(width, height)) : 1;
-    const passWidth = Math.max(1, Math.round(width * scale)), passHeight = Math.max(1, Math.round(height * scale));
+    const { width: passWidth, height: passHeight } = imageResourceSize(pass.outputResource ? descriptors.get(pass.outputResource) : undefined, width, height);
     const samplers = new Map([...resources].map(([id, resource]) => [id, snapshotSampler(resource.pixels, resource.width, resource.height)]));
     const loaders = new Map([...resources].map(([id, resource]) => [id, snapshotPixelLoader(resource.pixels, resource.width, resource.height)]));
     for (const [id, raster] of produced) {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { POSTERIZE_PARAMS, THRESHOLD_PARAMS } from '../../src/effects/stylize/pointwiseParams';
-import { createDefaultPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
 import { setOperatorParameter } from '../../src/services/operators/effectGraphEditing';
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
@@ -14,7 +14,7 @@ afterEach(() => useTimelineStore.setState(initial));
 const effect = (type: 'threshold' | 'posterize', params = getDefaultParams(type)): Effect =>
   ({ id: `${type}-fx`, name: type, type, enabled: true, params });
 const run = (type: 'threshold' | 'posterize', params: Record<string, unknown>, pixel: [number, number, number, number]) =>
-  evaluateImageOperatorPlan(compileImageOperatorGraph(createDefaultPointwiseEffectGraph(type), params), pixel);
+  evaluateImageOperatorPlan(compileImageOperatorGraph(createEarlierPointwiseEffectGraph(type), params), pixel);
 
 describe('pointwise effect graph ownership', () => {
   it('shares the exact legacy schemas and preserves them for graph-bound values', () => {
@@ -27,7 +27,7 @@ describe('pointwise effect graph ownership', () => {
   it('uses strict Rec.709 threshold comparison and keeps alpha outside the math', () => {
     expect(run('threshold', { level: 0.5 }, [0.5, 0.5, 0.5, 0.35])).toEqual([0, 0, 0, 0.35]);
     expect(run('threshold', { level: 0.5 }, [0.5001, 0.5001, 0.5001, 0.35])).toEqual([1, 1, 1, 0.35]);
-    const graph = createDefaultPointwiseEffectGraph('threshold');
+    const graph = createEarlierPointwiseEffectGraph('threshold');
     expect(graph.nodes.map(node => node.operator)).toContain('color.luminance-rec709.rgb');
     expect(graph.edges).toContainEqual(expect.objectContaining({ from: 'split', output: 'alpha', to: 'combine', input: 'alpha' }));
   });
@@ -35,7 +35,7 @@ describe('pointwise effect graph ownership', () => {
   it('matches posterize floor/divide semantics without a final clamp', () => {
     const result = run('posterize', { levels: 6 }, [1, 0.5, 0, 0.35]);
     expect(result).toEqual([1.2, 0.6, 0, 0.35]);
-    const graph = createDefaultPointwiseEffectGraph('posterize');
+    const graph = createEarlierPointwiseEffectGraph('posterize');
     expect(graph.nodes.some(node => node.operator === 'math.clamp.rgb')).toBe(false);
     expect(graph.edges).toContainEqual(expect.objectContaining({ from: 'divide', output: 'value', to: 'combine', input: 'rgb' }));
   });
@@ -48,7 +48,7 @@ describe('pointwise effect graph ownership', () => {
   });
 
   it('executes rewired threshold branches and retains the stable posterize binding', () => {
-    const threshold = createDefaultPointwiseEffectGraph('threshold');
+    const threshold = createEarlierPointwiseEffectGraph('threshold');
     threshold.edges.find(edge => edge.to === 'select' && edge.input === 'falseValue')!.from = 'white';
     threshold.edges.find(edge => edge.to === 'select' && edge.input === 'trueValue')!.from = 'black';
     expect(evaluateImageOperatorPlan(compileImageOperatorGraph(threshold, { level: 0.5 }), [0.2, 0.2, 0.2, 0.35])).toEqual([1, 1, 1, 0.35]);

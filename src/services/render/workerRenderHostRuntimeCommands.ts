@@ -161,12 +161,18 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly outputBlack: number;
     readonly outputWhite: number;
   }[];
+  /** Current Threshold (effects/stylize/pointwiseModel.ts): Softness 0 is the strict step. */
   readonly thresholdAdjustments?: readonly {
     readonly level: number;
+    readonly softness?: number;
   }[];
+  /** Current Posterize (effects/stylize/pointwiseModel.ts): Softness rounds the steps, Brightness Only keeps hue. */
   readonly posterizeAdjustments?: readonly {
     readonly levels: number;
+    readonly softness?: number;
+    readonly brightnessOnly?: boolean;
   }[];
+  /** Current Vignette (graphless effects): distance with the corners at 1, Roundness 0 = frame shape, 1 = circle in pixels. */
   readonly vignetteAdjustments?: readonly {
     readonly amount: number;
     readonly size: number;
@@ -184,13 +190,16 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly radius: number;
   }[];
   readonly glowAdjustments?: readonly {
+    /** 'bloom': a graphless (current) Glow (workerSoftwareBloom.ts), Radius in 1080p pixels; otherwise the earlier ring Glow. */
+    readonly recipe?: 'bloom';
     readonly amount: number;
     readonly threshold: number;
     readonly radius: number;
     readonly softness: number;
-    readonly rings: number;
-    readonly samplesPerRing: number;
+    readonly rings?: number;
+    readonly samplesPerRing?: number;
   }[];
+  /** Current Scanlines (effects/stylize/scanlines/scanlinesModel.ts): too dense lines fade into an even darkening. */
   readonly scanlineAdjustments?: readonly {
     readonly density: number;
     readonly opacity: number;

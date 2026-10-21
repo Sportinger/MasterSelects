@@ -10,7 +10,8 @@ import {
 import type { JsonObject } from '../../motionDesign/adjustment/contracts';
 import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../../motionDesign/adjustment/supportedEffectContractAdapter';
 import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/supportedEffects';
-import { effectParamDefinitions, graphBoundParameters, unusedParamWarnings } from '../../operators/effectParamVisibility';
+import { effectDefinitionNotes, effectParamDefinitions, graphBoundParameters, unusedParamWarnings } from '../../operators/effectParamVisibility';
+import { earlierStylizeRecipeNote } from '../../operators/stylizeRecipes';
 import { chromaKeyScreen } from '../../../effects/keying/chroma-key/keyerContract';
 import { chromaKeyScreenProbeMessage, probeChromaKeyScreen } from '../../../effects/keying/chroma-key/screenProbe';
 import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
@@ -23,7 +24,9 @@ type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 /**
  * Accepted parameters that do nothing on this instance (retired, or not read by its edited graph),
  * numbers outside a parameter's rendered range, blur limits at the active composition size and
- * the effect's own notes on values it clamps or cannot show: tools say so instead of failing silently.
+ * the effect's own notes on values it clamps or cannot show: tools say so instead of failing
+ * silently. The effect's own notes describe its current recipe; an instance that runs an earlier
+ * saved stylize recipe gets one note naming that version instead.
  */
 function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
   if (!effect) return [];
@@ -33,19 +36,13 @@ function effectParamWarnings(effect: Effect | undefined, names: readonly string[
   const unusable = names.flatMap(name => definitions[name]?.type === 'number' && isUnusableEffectNumber(effect.params[name])
     ? [`${name}: ${typeof effect.params[name] === 'string' ? JSON.stringify(effect.params[name]) : String(effect.params[name])} is not a finite number, so the default ${definitions[name].default} is used.`] : []);
   const set = Object.fromEntries(names.map(name => [name, effect.params[name]]));
+  const width = composition?.width ?? 1920, height = composition?.height ?? 1080;
+  // The effect's own notes are judged on the recipe this instance runs (effectDefinitionNotes).
+  const earlier = names.length ? earlierStylizeRecipeNote(effect.type, effect.operatorGraph) : undefined;
   return [...unusable, ...unusedParamWarnings(effect, names),
     ...paramRangeNotes(definitions, set, effect.operatorGraph).map(note => `${note.param}: ${note.message}`),
-    ...blurBudgetNotes(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080),
-    ...(names.length ? definitionParamWarnings(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080) : [])];
-}
-
-/** Values the effect itself clamps or cannot show (its `paramWarnings`), judged on the resulting parameters. */
-function definitionParamWarnings(effectType: string, params: Record<string, unknown>, width: number, height: number): string[] {
-  const definition = getEffect(effectType);
-  if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
-  try {
-    return definition.paramWarnings(params as Record<string, number | boolean | string>, width, height);
-  } catch { return []; }
+    ...blurBudgetNotes(effect.type, effect.params, width, height),
+    ...(earlier ? [earlier] : names.length ? effectDefinitionNotes(effect, width, height) : [])];
 }
 
 /** An automatic Chroma Key on a clip without that screen colour keys nothing: say so (checked on the clip's

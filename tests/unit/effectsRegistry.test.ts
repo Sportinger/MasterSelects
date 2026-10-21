@@ -543,10 +543,13 @@ describe('Quality parameter properties', () => {
     }
   });
 
-  it('glow effect should have quality parameters (rings, samplesPerRing)', () => {
+  it('glow keeps the ring quality parameters only for Glows saved with the ring version', () => {
     const glow = getEffect('glow')!;
-    expect(glow.params.rings.quality).toBe(true);
-    expect(glow.params.samplesPerRing.quality).toBe(true);
+    for (const name of ['rings', 'samplesPerRing']) {
+      expect(glow.params[name]).toMatchObject({ hidden: true, animatable: false, deprecated: expect.any(String) });
+      expect(glow.params[name].quality).toBeUndefined();
+    }
+    expect(getDefaultParams('glow')).not.toHaveProperty('rings');
   });
 
   it('gaussian-blur keeps its retired samples definition for saved projects, new instances leave it out', () => {
@@ -936,9 +939,10 @@ describe('Specific effect definitions', () => {
     expect(mirror.params.vertical.default).toBe(false);
   });
 
-  it('glow should have 6 parameters with correct types', () => {
+  it('glow should have 7 parameters with correct types', () => {
     const glow = getEffect('glow')!;
-    expect(Object.keys(glow.params)).toHaveLength(6);
+    expect(Object.keys(glow.params)).toHaveLength(7);
+    expect(glow.params.color).toMatchObject({ type: 'color', default: '#ffffff', graphOnly: true });
     expect(glow.params.amount.type).toBe('number');
     expect(glow.params.threshold.type).toBe('number');
     expect(glow.params.radius.type).toBe('number');
@@ -962,15 +966,16 @@ describe('Specific effect definitions', () => {
     expect(glow.uniformSize).toBe(32);
   });
 
-  it('uses the iPad-tuned defaults for Glow and Voxel Relief', () => {
+  it('uses the bloom defaults for Glow (the iPad-tuned ring values stay with saved ring Glows) and Voxel Relief', () => {
     const glow = getEffect('glow')!;
     const voxelRelief = getEffect('voxel-relief')!;
 
     expect(Object.fromEntries(Object.entries(glow.params).map(([key, value]) => [key, value.default]))).toEqual({
-      amount: 5,
-      threshold: 0.7935,
-      radius: 1,
-      softness: 0.496,
+      amount: 2.5,
+      threshold: 0.95,
+      softness: 0.5,
+      radius: 80,
+      color: '#ffffff',
       rings: 6.85,
       samplesPerRing: 17.95,
     });

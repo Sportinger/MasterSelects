@@ -233,7 +233,7 @@ const EffectParams = memo(function EffectParams(props: EffectParamsViewProps) {
   return <EffectSectionBypass clipId={clipId} effectId={effect.id}>
     <ExposedGraphValueControls clipId={clipId} effect={effect} />
     <EffectParamsContent {...props} onChange={onChange} onParamCommit={onParamCommit} />
-    <EffectBudgetNotice effectType={effect.type} params={effect.params} />
+    <EffectBudgetNotice effectType={effect.type} params={effect.params} operatorGraph={effect.operatorGraph} />
   </EffectSectionBypass>;
 }, (previous, next) => previous.clipId === next.clipId
   && previous.effect.id === next.effect.id && previous.effect.type === next.effect.type

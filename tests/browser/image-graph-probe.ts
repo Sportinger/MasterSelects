@@ -17,6 +17,7 @@ import { checkImageMaterializationGpu } from './image-materialization-gpu-check'
 import { checkDirectionalBlurGpu } from './image-directional-blur-gpu-check';
 import { checkEdgeDetectGpu } from './image-edge-detect-gpu-check';
 import { checkGlowGpu } from './image-glow-gpu-check';
+import { checkStylizeRecipesGpu } from './image-stylize-recipes-gpu-check';
 import { checkUvDistortGpu } from './image-uv-distort-gpu-check';
 import { checkImageOpticsGpu } from './image-optics-gpu-check';
 import { checkImageReducerBranchesGpu } from './image-reducer-branch-gpu-check';
@@ -333,6 +334,7 @@ async function checkGpu() {
     const directionalBlurComparisons = await checkDirectionalBlurGpu(device);
     const edgeDetectComparisons = await checkEdgeDetectGpu(device);
     const glowComparisons = await checkGlowGpu(device);
+    const stylizeComparisons = await checkStylizeRecipesGpu(device);
     const uvDistortComparisons = await checkUvDistortGpu(device);
     const opticsComparisons = await checkImageOpticsGpu(device);
     const choiceComparisons = await checkImageChoiceGpu(device);
@@ -340,7 +342,7 @@ async function checkGpu() {
     const reducerBranchComparisons = await checkImageReducerBranchesGpu(device);
     const fisheyeGraphComparisons = await checkFisheyeGraphGpu(device);
     await checkImageNamedInputsGpu(device);
-    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, ${directionalBlurComparisons} directional-blur, ${edgeDetectComparisons} edge-detect, ${glowComparisons} Glow, ${uvDistortComparisons} UV-distort, ${opticsComparisons} optics, ${choiceComparisons} choice, ${reducerBranchComparisons} reducer-branch, and ${fisheyeGraphComparisons} Fisheye-graph shader comparisons`;
+    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, ${directionalBlurComparisons} directional-blur, ${edgeDetectComparisons} edge-detect, ${glowComparisons} Glow, ${stylizeComparisons} current stylize recipe (GPU vs CPU), ${uvDistortComparisons} UV-distort, ${opticsComparisons} optics, ${choiceComparisons} choice, ${reducerBranchComparisons} reducer-branch, and ${fisheyeGraphComparisons} Fisheye-graph shader comparisons`;
     const validation = await device.popErrorScope();
     if (validation) throw new Error(validation.message);
     return `PASS: 64 RGBA pixels — legacy/default byte equality; bypass and rewired output equal input; alpha preserved; actual GPU output changes; ${workerResult}; no validation errors.`;

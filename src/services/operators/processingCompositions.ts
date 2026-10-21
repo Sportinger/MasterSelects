@@ -3,7 +3,7 @@ import { createLegacyMotionBlurGraph, createLegacyRadialBlurGraph } from './lega
 import { createDefaultGaussianBlurGraph } from './blurEffectGraphs';
 import { createLegacyContrastGraph, createLegacySaturationGraph } from './legacyColorEffectGraphs';
 import { createLegacyGlowGraph } from './glowEffectGraph';
-import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
+import { createEarlierEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultAsciiGraph, createDefaultAsciiGhostGraph } from './asciiEffectGraph';
 
 const ascii = createDefaultAsciiGraph();
@@ -63,7 +63,7 @@ export const PROCESSING_COMPOSITIONS = [
     // alpha-weighted sample into the multiply separately from the luminance input.
     legacyInputs: { 'sample-energy-value': [{ nodeId: 'bright-sample', portId: 'a' }] },
   }),
-  extractImageComposition(createDefaultEdgeDetectGraph(), {
+  extractImageComposition(createEarlierEdgeDetectGraph(), {
     id: 'color.sobel-magnitude', label: 'Edge Strength (Taps)',
     description: 'Compute the Sobel magnitude from eight neighboring luminance samples, preserving the original expression order.',
     members: ['negative-tl', 'two-l', 'gx-left-mid', 'gx-left', 'gx-tr', 'two-r', 'gx-right-mid', 'gx',

@@ -54,9 +54,9 @@ describe('EffectsTab numeric controls', () => {
 
   it('keeps the generic control for parameter types without a Resolve row in a Resolve-row effect', () => {
     const params = getEffect('gaussian-blur')!.params as Record<string, EffectParam>;
-    params.previewNote = { type: 'text', label: 'Preview Note', default: '' };
+    params.previewNote = { type: 'text', label: 'Preview Note', default: 'a' };
     try {
-      const effect: Effect = { id: 'gaussian-text', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewNote: 'a' } };
+      const effect: Effect = { id: 'gaussian-text', type: 'gaussian-blur', name: 'Gaussian Blur', enabled: true, params: { radius: 4, previewNote: 'b' } };
       render(<EffectsTab clipId="clip:effects-controls" effects={[effect]} />);
       expect(screen.getByText('Preview Note')).toBeInTheDocument();
       expect(screen.getByLabelText('Radius slider')).toBeInTheDocument();
@@ -79,6 +79,22 @@ describe('EffectsTab numeric controls', () => {
     // Mirror's Angle is stored in radians and edited in degrees, like Kaleidoscope Rotation.
     expect(screen.getByLabelText('Angle slider')).toBeInTheDocument();
     expect(container.querySelectorAll('.resolve-effect-checkbox')).toHaveLength(2);
+  });
+
+  it('shows stylize switches and colours as Resolve rows (Glow Color, Edge Detect Invert) and writes them', () => {
+    const patch = vi.spyOn(useTimelineStore.getState(), 'updateClipEffect').mockImplementation(() => {});
+    const glow: Effect = { id: 'glow-color', type: 'glow', name: 'Glow', enabled: true, params: { amount: 1, threshold: 0.6, softness: 0.5, radius: 40, color: '#ffaa33cc' } };
+    const edge: Effect = { id: 'edge-invert', type: 'edge-detect', name: 'Edge Detect', enabled: true, params: { strength: 1, width: 1, colorize: 0, invert: false } };
+    render(<EffectsTab clipId="clip:effects-controls" effects={[glow, edge]} />);
+    const color = screen.getByLabelText('Color', { selector: 'input[type="color"]' }) as HTMLInputElement;
+    expect(color.value).toBe('#ffaa33');
+    expect(screen.getByLabelText('Threshold slider')).toBeInTheDocument();
+    const invert = screen.getByLabelText('Invert', { selector: 'input[type="checkbox"]' }) as HTMLInputElement;
+    expect(invert.checked).toBe(false);
+    fireEvent.click(invert);
+    expect(JSON.stringify(patch.mock.calls)).toContain('"invert":true');
+    expect(hasResolveEffectParamRow({ type: 'boolean' })).toBe(true);
+    expect(hasResolveEffectParamRow({ type: 'color' })).toBe(true);
   });
 
   it('renders blur controls as Resolve inspector rows: slider, number and reset, and Type as an inspector select', () => {

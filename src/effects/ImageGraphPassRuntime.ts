@@ -7,6 +7,7 @@ import { motionAnalysisMaxEdge } from './time/motionAnalysisQuality';
 import { createCheckedPipeline } from '../engine/core/gpuPipelineGuard';
 import { EffectGpuPipelineError } from './effectGpuFailures';
 import { Logger } from '../services/logger';
+import { imageResourceSize } from '../services/operators/imageResourceScale';
 
 const log = Logger.create('ImageGraphPassRuntime');
 
@@ -134,9 +135,7 @@ export class ImageGraphPassRuntime {
     for (const pass of passes) {
       if (pass.inputResources.length > 8) throw new Error(`Image graph pass ${pass.id} exceeds eight resource inputs.`);
       for (const id of pass.inputResources) if (!ids.has(id) || !produced.has(id)) throw new Error(`Image graph pass ${pass.id} reads unavailable resource ${id}.`);
-      const maxEdge = pass.outputResource ? descriptors.get(pass.outputResource)?.maxEdge : undefined;
-      const scale = maxEdge ? Math.min(1, maxEdge / Math.max(options.width, options.height)) : 1;
-      const width = Math.max(1, Math.round(options.width * scale)), height = Math.max(1, Math.round(options.height * scale));
+      const { width, height } = imageResourceSize(pass.outputResource ? descriptors.get(pass.outputResource) : undefined, options.width, options.height);
       const packed = packImageOperatorRuntimeUniforms(pass.program, options.timelineTimeSeconds, width, height, metadata);
       const payloadIdentity = packed ? Array.from(new Uint32Array(packed.buffer, packed.byteOffset, packed.byteLength / 4)).join(',') : '';
       const inputIdentities = pass.inputResources.map(id => identities.get(id) ?? `local:${id}`);

@@ -1,4 +1,5 @@
 import common from '../../src/effects/_shared/commonShader';
+import { createEarlierStylizeGraph } from '../../src/services/operators/stylizeRecipes';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { vignette } from '../../src/effects/stylize/vignette';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
@@ -46,7 +47,8 @@ export async function checkVignetteGpu(device: GPUDevice, sampler: GPUSampler): 
   device.queue.writeTexture({ texture: source }, fixture, { bytesPerRow }, [width, height]);
   try {
     for (const item of cases) {
-      const graph = imageGraphDefinition({ type: 'vignette', params: item.params }, vignette as FullscreenEffectDefinition);
+      // The registered shader is the earlier (pre-2026-10-21) Vignette; saved projects keep that recipe.
+      const graph = imageGraphDefinition({ type: 'vignette', params: item.params, operatorGraph: createEarlierStylizeGraph('vignette') }, vignette as FullscreenEffectDefinition);
       const expected = await render(device, sampler, source.createView(), target, readback, vignette as FullscreenEffectDefinition, item.params);
       const actual = await render(device, sampler, source.createView(), target, readback, graph, item.params);
       const mismatch = expected.findIndex((value, index) => value !== actual[index]);

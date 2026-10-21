@@ -8,8 +8,13 @@ const edge = (from: string, output: string, to: string, input: string): Operator
 const literal = (id: string, value: number) => node(id, 'values.number', {}, { value });
 const row = (ids: readonly string[], y: number) => Object.fromEntries(ids.map((id, index) => [id, { x: index * 300, y }]));
 
+/**
+ * Earlier recipes of Vignette, Scanlines and Film Grain (before 2026-10-21). Saved projects keep
+ * them; `stylizeRecipes.ts` recognizes them so the inspector can offer the current recipe.
+ */
+
 /** Exact legacy vignette math. UV is fragment context, deliberately not texture-transform UV. */
-export function createDefaultVignetteGraph(): EffectOperatorGraph {
+export function createEarlierVignetteGraph(): EffectOperatorGraph {
   const nodes = [
     node('frame', 'image.frame'), node('split', 'vector.split.rgba'), node('uv', 'image.normalized-uv'),
     literal('half', 0.5), node('half-vec2', 'convert.scalar-to-vec2'), node('center', 'math.subtract.vec2'),
@@ -51,7 +56,7 @@ export function createDefaultVignetteGraph(): EffectOperatorGraph {
 }
 
 /** Exact legacy scanline phase and darkening, driven by deterministic timeline time. */
-export function createDefaultScanlinesGraph(): EffectOperatorGraph {
+export function createEarlierScanlinesGraph(): EffectOperatorGraph {
   const nodes = [node('frame', 'image.frame'), node('split', 'vector.split.rgba'), node('uv', 'image.normalized-uv'), node('uv-split', 'vector.split.vec2'),
     node('time', 'image.timeline-time'), node('speed', 'values.number', { value: 'speed' }), literal('point-one', 0.1), node('time-speed', 'math.multiply.scalar'),
     node('scroll', 'math.multiply.scalar'), node('phase-y', 'math.add.scalar'), node('density', 'values.number', { value: 'density' }), node('density-phase', 'math.multiply.scalar'),
@@ -76,7 +81,7 @@ export function createDefaultScanlinesGraph(): EffectOperatorGraph {
 }
 
 /** Exact legacy sine-dot grain with explicit deterministic time and seed phase. */
-export function createDefaultGrainGraph(): EffectOperatorGraph {
+export function createEarlierGrainGraph(): EffectOperatorGraph {
   const nodes = [node('frame', 'image.frame'), node('split', 'vector.split.rgba'), node('uv', 'image.normalized-uv'), node('time', 'image.timeline-time'),
     node('size', 'values.number', { value: 'size' }), literal('hundred', 100), node('uv-scale', 'math.divide-ieee.scalar'), node('uv-scale2', 'convert.scalar-to-vec2'),
     node('grain-uv', 'math.multiply.vec2'), node('speed', 'values.number', { value: 'speed' }), node('scaled-time', 'math.multiply.scalar'),
@@ -113,11 +118,4 @@ export function createDefaultGrainGraph(): EffectOperatorGraph {
       ...row(['size', 'hundred', 'uv-scale', 'uv-scale2', 'point-one', 'point-zero-seven', 'dot-x', 'dot-y', 'dot-vector'], 1600),
       ...row(['seed', 'hash-scale', 'two', 'one', 'half', 'amount', 'zero', 'zero-rgb', 'one-rgb'], 2000),
     } };
-}
-
-export function createDefaultContextualEffectGraph(type: EditableContextualEffectType): EffectOperatorGraph {
-  if (type === 'vignette') return createDefaultVignetteGraph();
-  if (type === 'scanlines') return createDefaultScanlinesGraph();
-  if (type === 'grain') return createDefaultGrainGraph();
-  throw new Error(`Unsupported contextual effect: ${String(type)}`);
 }

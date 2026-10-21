@@ -473,11 +473,12 @@ describe('worker software painter', () => {
       const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
       return t * t * (3 - 2 * t);
     };
+    // Graphless Vignettes are the current recipe: at Roundness 1 a circle in pixels with the
+    // corners at distance 1, and a feather of at least 1.5 px (here wider than Softness 0.5).
+    const halfDiagonal = Math.hypot(3, 1) / 2;
     const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      const distance = Math.abs(uvX - 0.5) * 2;
-      const vignette = 1 - smoothstep(0.2, 0.7, distance);
-      const factor = (1 - 0.8) + vignette * 0.8;
+      const distance = Math.abs(x + 0.5 - 1.5) / halfDiagonal;
+      const factor = 1 - 0.8 * smoothstep(0.2, 0.2 + Math.max(0.5, 1.5 / halfDiagonal), distance);
       return Math.round(200 * factor);
     };
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
@@ -546,29 +547,23 @@ describe('worker software painter', () => {
   });
 
   it('applies scanlines using timeline time in the worker pixel pass', () => {
-    const inputPixels = new Uint8ClampedArray([
-      100, 100, 100, 255,
-    ]);
+    // 64 rows at Density 1: lines 4 px apart, just visible (closer lines fade into an even darkening).
+    const height = 64, row = 10, inputPixels = new Uint8ClampedArray(height * 4).map((_, index) => (index & 3) === 3 ? 255 : 100);
     const timelineTime = 1.25;
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      1,
-      1,
-      {
-        brightness: 0,
-        scanlineAdjustments: [{ density: 1, opacity: 0.5, speed: 2 }],
-      },
-      timelineTime,
-    );
+    const outputPixels = drawLayerWithPixels(inputPixels, 1, height,
+      { brightness: 0, scanlineAdjustments: [{ density: 1, opacity: 0.5, speed: 2 }] }, timelineTime);
 
-    const uvY = 0.5;
+    const uvY = (row + 0.5) / height;
     const scrollOffset = timelineTime * 2 * 0.1;
     const scanline = Math.sin((uvY + scrollOffset) * 1 * 100) * 0.5 + 0.5;
     const darken = 1 - 0.5 * (1 - scanline);
     const expected = Math.round(100 * darken);
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
+    expect(outputPixels ? Array.from(outputPixels.slice(row * 4, row * 4 + 4)) : null).toEqual([
       expected, expected, expected, 255,
     ]);
+    // A single pixel row cannot show lines: it gets their average darkening.
+    expect(Array.from(drawLayerWithPixels(new Uint8ClampedArray([100, 100, 100, 255]), 1, 1,
+      { brightness: 0, scanlineAdjustments: [{ density: 1, opacity: 0.5, speed: 2 }] }, timelineTime)!)).toEqual([75, 75, 75, 255]);
   });
 
   it('applies grain using deterministic timeline time in the worker pixel pass', () => {

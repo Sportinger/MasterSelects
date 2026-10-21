@@ -22,6 +22,7 @@ import {
   applyScanlineAdjustment, applyTemperatureAdjustment, applyThresholdAdjustment, applyVibranceAdjustment, applyVignetteAdjustment,
   clamp01, finiteNumber, luma,
 } from './workerSoftwarePointwiseEffects';
+import { applyWorkerSoftwareBloom, prepareWorkerSoftwareBloom } from './workerSoftwareBloom';
 
 function clampByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)));
@@ -313,7 +314,15 @@ export function applyWorkerSoftwarePixelEffects(
   const chromaKeyers = chromaKeyAdjustments.map(adjustment => prepareChromaKeyCpu(chromaKeyCpuScreen(sourceData, adjustment, width, height), adjustment));
   const keyed = new Float64Array(4);
   // Glow is a separable neighborhood prefilter; build it once per frame, then sample rings per pixel.
-  const glowFields = glowAdjustments.map(adjustment => prepareWorkerSoftwareGlow(sourceData, width, height, adjustment));
+  // 'bloom': graphless (current) Glows; otherwise the earlier ring Glow.
+  const glowFields = glowAdjustments.map(adjustment => {
+    if (adjustment.recipe !== 'bloom') {
+      const ring = prepareWorkerSoftwareGlow(sourceData, width, height, adjustment);
+      return (x: number, y: number) => applyWorkerSoftwareGlow(ring, sourceData, x, y);
+    }
+    const bloom = prepareWorkerSoftwareBloom(sourceData, width, height, adjustment);
+    return (x: number, y: number) => applyWorkerSoftwareBloom(bloom, sourceData, x, y);
+  });
   for (let y = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1) {
       const targetIndex = (y * width + x) * 4;
@@ -363,9 +372,7 @@ export function applyWorkerSoftwarePixelEffects(
         [r, g, b] = applyPosterizeAdjustment([r, g, b], adjustment);
       }
       for (const adjustment of vignetteAdjustments) {
-        const uvX = (x + 0.5) / width;
-        const uvY = (y + 0.5) / height;
-        [r, g, b] = applyVignetteAdjustment([r, g, b], adjustment, uvX, uvY);
+        [r, g, b] = applyVignetteAdjustment([r, g, b], adjustment, x + 0.5, y + 0.5, width, height);
       }
       for (const keyer of chromaKeyers) {
         chromaKeyCpuKey(keyer, r, g, b, alpha, x, y, keyed);
@@ -380,11 +387,11 @@ export function applyWorkerSoftwarePixelEffects(
         [r, g, b, alpha] = applySharpenAdjustment(sourceData, width, height, uvX, uvY, adjustment);
       }
       for (const glow of glowFields) {
-        [r, g, b, alpha] = applyWorkerSoftwareGlow(glow, sourceData, x, y);
+        [r, g, b, alpha] = glow(x, y);
       }
       for (const adjustment of scanlineAdjustments) {
         const uvY = (y + 0.5) / height;
-        [r, g, b] = applyScanlineAdjustment([r, g, b], adjustment, uvY, timelineTime);
+        [r, g, b] = applyScanlineAdjustment([r, g, b], adjustment, uvY, timelineTime, height);
       }
       for (const adjustment of grainAdjustments) {
         const uvX = (x + 0.5) / width;

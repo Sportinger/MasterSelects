@@ -3,6 +3,7 @@
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
 import { THRESHOLD_PARAMS } from '../pointwiseParams';
+import { thresholdParamNotes } from '../pointwiseModel';
 
 export const threshold: EffectDefinition = {
   id: 'threshold',
@@ -14,6 +15,8 @@ export const threshold: EffectDefinition = {
   uniformSize: 16,
 
   params: THRESHOLD_PARAMS,
+
+  paramWarnings: (params) => thresholdParamNotes(params),
 
   packUniforms: (params) => {
     return new Float32Array([

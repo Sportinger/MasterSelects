@@ -1,7 +1,11 @@
-// CRT Scanlines Effect
+// CRT Scanlines Effect - a sine line pattern over the frame height that fades into an even
+// darkening where the lines get too dense to show. Rendering is owned by the editable operator
+// graph (services/operators/scanlinesEffectGraph.ts); its contract is scanlinesModel.ts.
+// Scanlines saved before 2026-10-21 keep their earlier graph; shader.wgsl only prewarms.
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { scanlinesParamNotes } from './scanlinesModel';
 
 export const scanlines: EffectDefinition = {
   id: 'scanlines',
@@ -11,6 +15,8 @@ export const scanlines: EffectDefinition = {
   shader,
   entryPoint: 'scanlinesFragment',
   uniformSize: 16,
+  // The earlier recipe of saved projects: a note and an update offer.
+  extraControls: () => import('../StylizeRecipeNote'),
 
   params: {
     density: {
@@ -41,6 +47,8 @@ export const scanlines: EffectDefinition = {
       animatable: false,
     },
   },
+
+  paramWarnings: (params, width, height) => scanlinesParamNotes(params, width, height),
 
   packUniforms: (params, _width, _height, timelineTimeSeconds = 0) => {
     const time = Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0;

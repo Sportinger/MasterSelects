@@ -3,7 +3,7 @@ import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
 import { glow } from '../../src/effects/stylize/glow';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
-import { createDefaultGlowGraph } from '../../src/services/operators/glowEffectGraph';
+import { createRingGlowGraph } from '../../src/services/operators/glowEffectGraph';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 
 const rowPitch = 256;
@@ -77,7 +77,7 @@ async function renderReference(device: GPUDevice, sampler: GPUSampler, source: G
 }
 
 async function renderGraph(device: GPUDevice, runtime: ImageGraphPassRuntime, sampler: GPUSampler, source: GPUTexture, target: GPUTexture,
-  readback: GPUBuffer, graph: ReturnType<typeof createDefaultGlowGraph>, params: Record<string, unknown>, width: number, height: number, instanceId: string) {
+  readback: GPUBuffer, graph: ReturnType<typeof createRingGlowGraph>, params: Record<string, unknown>, width: number, height: number, instanceId: string) {
   const plan = compileImageOperatorGraph(graph, params);
   if (plan.passes?.length !== 3) throw new Error(`${instanceId}: Glow compiled to ${plan.passes?.length ?? 1} passes instead of 3`);
   const encoder = device.createCommandEncoder();
@@ -107,7 +107,7 @@ export async function checkGlowGpu(device: GPUDevice): Promise<number> {
         if (item.name === 'default-fractional-counts' && (params.rings !== 6.85 || params.samplesPerRing !== 17.95))
           throw new Error(`Glow owner defaults changed: rings=${params.rings}, samplesPerRing=${params.samplesPerRing}`);
         const expected = await renderReference(device, sampler, source, target, readback, params, item.width, item.height);
-        const actual = await renderGraph(device, runtime, sampler, source, target, readback, createDefaultGlowGraph(), params, item.width, item.height, `glow-${item.name}`);
+        const actual = await renderGraph(device, runtime, sampler, source, target, readback, createRingGlowGraph(), params, item.width, item.height, `glow-${item.name}`);
         // Both paths keep rgba16float intermediates; allow one 8-bit step for float evaluation order.
         if (maxDelta(expected, actual) > 1) throw new Error(`${item.name}: ${mismatch(expected, actual)}`);
         for (let y = 0; y < item.height; y++) for (let x = 0; x < item.width; x++) {
@@ -116,7 +116,7 @@ export async function checkGlowGpu(device: GPUDevice): Promise<number> {
         }
         comparisons++;
         if (item.name === 'default-fractional-counts') {
-          const edited = createDefaultGlowGraph(); edited.nodes.find(node => node.id === 'ten')!.constants = { value: 8 };
+          const edited = createRingGlowGraph(); edited.nodes.find(node => node.id === 'ten')!.constants = { value: 8 };
           const changed = await renderGraph(device, runtime, sampler, source, target, readback, edited, params, item.width, item.height, 'glow-edited');
           if (changed.every((value, index) => value === actual[index])) throw new Error('Edited Glow radius coefficient did not change output');
           comparisons++;

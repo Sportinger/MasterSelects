@@ -69,6 +69,16 @@ export function effectPortLabels(type: string): Record<string, string> | undefin
   return effectPresentationPlan(type)?.portLabels ?? GRAPH_PORT_LABELS[type];
 }
 
+const GLOW_PORTS: Record<string, string> = { 'source-split:rgb': 'Source Color', 'source-alpha': 'Source Alpha', 'bright-cache': 'Bright Light',
+  'tap-weight': 'Tap Weight', 'up-uv': 'Up Read Position', 'down-uv': 'Down Read Position', 'level-weight': 'Level Weight',
+  'top-level-weight': 'Top Level Weight', 'glow-core-weight': 'Level 0 Weight', 'glow-light': 'Glow Light', 'glow-amount': 'Glow Amount', 'glow-tinted': 'Tinted Glow', 'color-rgb': 'Glow Color', 'glow-scaled': 'Glow',
+  'resolve-premultiplied': 'Premultiplied Source', 'glow-negative': '−Glow', 'euler-rgb': 'e', 'one-rgb': 'One', 'resolve-falloff': 'exp(−Glow)',
+  'resolve-room': 'Room (1 − Picture)', 'resolve-remaining': 'Room × exp(−Glow)', 'resolve-result': 'Picture screened with Glow',
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, index) => [[`down-${index + 1}-cache`, `Level ${index + 1} (1/${2 ** (index + 1)} size)`],
+    [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`]]).flat()) };
+// Threshold and Posterize: the hard step and the soft ramp that Softness blends in.
+const POINTWISE_PORTS = { compare: 'Above Level', hard: 'Hard Step', ramp: 'Soft Ramp', soft: 'Softness On', smooth: 'Soft Steps', steps: 'Steps' };
+
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
   if (type === 'crt-screen') return {
@@ -107,13 +117,59 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^(coarse-|longest-px|step)/.test(id) ? 'count'
           : /^(result|coverage-floor)/.test(id) ? 'finish' : 'range',
   };
-  if (type === 'sharpen') return {
+  if (type === 'sharpen-earlier') return {
     labels: { sampling: 'Kernel Sampling', weight: 'Gaussian Weight', average: 'Weighted Average', finish: 'Sharpen & Alpha' },
     stage: ({ id }) => includes(REDUCE, id) ? 'average'
       : /^(sigma|two-sigma|distance-squared|negative-distance|exponent|weight$|radius-half)/.test(id) ? 'weight'
         : /^(frame|uv|resolution|index|one-vec2|texel-size|offset|radius-vec2|scaled-offset|sample)/.test(id) ? 'sampling' : 'finish',
   };
+  if (type === 'sharpen') return {
+    labels: { size: 'Radius & Window Size', premultiply: 'Premultiplied Source (cached)', horizontal: 'Horizontal Blur Pass', rows: 'Row: Darkest & Brightest',
+      vertical: 'Vertical Blur Pass', window: 'Window: Darkest & Brightest', detail: 'Unsharp Mask (brightness)', halo: 'Halo Limit', finish: 'Apply to Color & Alpha' },
+    portLabels: { ...SEPARABLE_PORTS, 'sharpened-luma': 'Sharpened Brightness', 'window-darkest': 'Darkest Nearby', 'window-brightest': 'Brightest Nearby',
+      detail: 'Detail', 'row-max': 'Row Brightest', 'row-min': 'Row Darkest', 'row-cache': 'Rows (blur, darkest, brightest)', 'row-tap-luma': 'Tap Brightness',
+      'window-range': 'Range', 'halo-margin-raw': 'Range × Overshoot', 'halo-margin': 'Margin', 'halo-ceiling-raw': 'Brightest + Margin', 'halo-ceiling': 'Ceiling',
+      'halo-floor-raw': 'Darkest − Margin', 'halo-floor': 'Floor', 'roll-off-scale': 'Roll-off Scale', 'excess-above-raw': 'Sharpened − Ceiling', 'excess-above': 'Excess Above',
+      'excess-below': 'Excess Below', 'inside-range': 'Within Floor…Ceiling', 'roll-off-above-share': 'Excess / Scale', 'roll-off-above-ratio': '1 + Excess / Scale',
+      'roll-off-above-log': 'ln(1 + Excess / Scale)', 'roll-off-above': 'Rolled-off Excess', 'roll-off-below': 'Rolled-off Excess Below',
+      'limited-luma-up': 'Within + Rolled-off Excess', 'limited-luma': 'Limited Brightness', 'limited-change': 'Limited Change',
+      overshoot: 'Overshoot', 'margin-floor': 'Margin Floor', 'roll-off': 'Roll Off' },
+    stage: ({ id }) => /^(source-premultiplied|source-cache)/.test(id) ? 'premultiply' : /^horizontal-/.test(id) ? 'horizontal'
+      : /^(row-|empty-row-)/.test(id) ? 'rows' : /^vertical-/.test(id) ? 'vertical'
+        : /^(column-|window-(brightest|darkest|bright-total|dark-total))/.test(id) ? 'window'
+          : /^(window-range|halo-|overshoot|margin-floor|roll-off|excess-|inside-range|limited-luma)/.test(id) ? 'halo'
+            : /^(source-split|source-luma|blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
+              : /^(limited-change|luma-change|result-|combine)/.test(id) ? 'finish' : 'size',
+  };
+  if (type === 'vignette') return {
+    labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
+    portLabels: { distance: 'Distance (corners = 1)', falloff: 'Falloff', gain: 'Brightness Gain', dither: 'Dither' },
+    stage: ({ id }) => /^(minimum-feather|feather|falloff|outer-edge|gain|darkening)/.test(id) ? 'falloff' : /^(pixel$|dither)/.test(id) ? 'dither'
+      : /^(source-split|shaded|dithered|clamped|combine)$/.test(id) ? 'finish' : 'shape',
+  };
+  if (type === 'grain') return {
+    labels: { cells: 'Grain Cells (Size)', pattern: 'Pattern per Frame (Speed, Seed)', noise: 'Smooth Noise', mix: 'Layers & Color Grain',
+      response: 'Film Response (midtones)', finish: 'Add Grain & Alpha' },
+    portLabels: { 'grain-uv': 'Grain Position', 'pattern-offset': 'Pattern Offset', 'grain-mono': 'Monochrome Grain', 'grain-rgb': 'Grain', response: 'Response', strength: 'Strength' },
+    stage: ({ id }) => /^(size-safe|pixel-scale|short-side|cell-px|pixel$|grain-uv)/.test(id) ? 'cells' : /^(pattern-|seed-)/.test(id) ? 'pattern'
+      : /^(corner-|grain-(layer-\d|red-noise|green-noise|blue-noise))/.test(id) ? 'noise' : /^grain-(?!scaled)/.test(id) ? 'mix'
+        : /^(response|source-luma|strength)/.test(id) ? 'response' : 'finish',
+  };
+  if (type === 'scanlines') return {
+    labels: { lines: 'Line Pattern (Density, Scroll)', fade: 'Fade Dense Lines', finish: 'Darken & Alpha' },
+    portLabels: { wave: 'Line Wave', 'line-visibility': 'Line Visibility', pattern: 'Pattern', gain: 'Brightness Gain' },
+    stage: ({ id }) => /^(resolution-split|line-|frame-turns|frequency-safe|frequency-magnitude|pattern|half-wave)/.test(id) ? 'fade'
+      : /^(opacity-limited|gain|darkening|gap|source-split|shaded|combine)$/.test(id) ? 'finish' : 'lines',
+  };
   if (type === 'glow') return {
+    labels: { bright: 'Bright Pass (ramp to white)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid: Halve the Light',
+      up: 'Pyramid: Add Levels Back Up', finish: 'Glow Resolve & Alpha' },
+    portLabels: GLOW_PORTS,
+    stage: ({ id }) => /^(bright-|source-)/.test(id) ? 'bright'
+      : /^(tap-|texel$|one-vec2$|up-offset$|up-uv$|down-offset$|down-uv$|level-|top-level-|finest-)/.test(id) ? 'kernel'
+        : /^down-/.test(id) ? 'down' : /^up-/.test(id) ? 'up' : 'finish',
+  };
+  if (type === 'glow-earlier') return {
     labels: { count: 'Ring & Sample Counts', spacing: 'Sample Spacing & Prefilter Size', taps: 'Horizontal Prefilter Taps',
       bright: 'Bright Pass', horizontal: 'Horizontal Prefilter', vertical: 'Vertical Prefilter', sampling: 'Ring Sampling',
       weight: 'Ring Weight', finish: 'Glow Resolve & Alpha' },
@@ -126,10 +182,17 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
                 : /^(ring-progress|gaussian-sigma|ring-weight|sample-weight)/.test(id) ? 'weight'
                   : /^(index-components|ring$|ring-stagger|angle|direction|ring-radius|ring-offset|ring-sample)/.test(id) ? 'sampling' : 'finish',
   };
-  if (type === 'edge-detect') return {
+  if (type === 'edge-detect-earlier') return {
     labels: { sampling: 'Neighbor Luminance', gradient: 'Sobel Gradient', finish: 'Edge Output' },
     stage: ({ id }) => /^(negative-tl|two-[lrtb]$|g[xy]|gradient|magnitude)/.test(id) ? 'gradient'
       : includes('strength scaled clamped inverse invert selected rgba image', id) ? 'finish' : 'sampling',
+  };
+  if (type === 'edge-detect') return {
+    labels: { scale: 'Line Width (sigma & window)', window: 'Window Taps (premultiplied brightness)', gradient: 'Gradient & Edge Strength', finish: 'Line Color & Alpha' },
+    portLabels: { sigma: 'Sigma (px)', reach: 'Reach (px)', 'window-size': 'Window Size', 'tap-moment': 'Moments', edge: 'Edge', 'line-color': 'Line Color' },
+    stage: ({ id }) => /^(pixel-scale|short-side|width-safe|sigma|two-sigma|reach|window-size)/.test(id) ? 'scale'
+      : /^(tap-|window-reduce|window-index)/.test(id) ? 'window'
+        : /^(window-|gradient-(sums|length|normalized)|edge-contrast|edge-raw|edge-falloff|edge-negative|strength-safe|edge$)/.test(id) ? 'gradient' : 'finish',
   };
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
     labels: { premultiply: 'Premultiplied Source (cached)', space: 'Centre, Shape & Radius', phase: 'Phase & Speed', edges: 'Frame Edges & Sampling',
@@ -149,7 +212,8 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     inputLabels: { 'hue-lch-combine:x': 'Lightness', 'hue-lch-combine:y': 'Chroma', 'hue-lch-combine:z': 'Hue' },
     stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
-  if (COLORS.has(type)) return ORIGINAL_COLOR_PRESENTATION;
+  // Threshold and Posterize name their hard step and soft ramp (Softness, 2026-10-21).
+  if (COLORS.has(type)) return type === 'threshold' || type === 'posterize' ? { ...ORIGINAL_COLOR_PRESENTATION, portLabels: POINTWISE_PORTS } : ORIGINAL_COLOR_PRESENTATION;
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
     labels: { grid: 'Cell Grid', source: 'Cell Sampling & Tone', index: 'Glyph Selection', atlas: 'Atlas Sampling', appearance: 'Ink & Appearance', feedback: 'Feedback Resolve' },
     stage: ({ id }) => /^(tiny-vec2|almost-vec2)$/.test(id) ? 'sources'

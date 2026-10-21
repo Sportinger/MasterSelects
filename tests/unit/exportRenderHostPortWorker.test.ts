@@ -876,13 +876,13 @@ describe('worker-first export render host port', () => {
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
       .toMatchObject({
+        // A graphless Glow is the current bloom; the earlier ring counts are not read.
         glowAdjustments: [{
+          recipe: 'bloom',
           amount: 0.6,
           threshold: 0.35,
           radius: 2,
           softness: 0.7,
-          rings: 2,
-          samplesPerRing: 8,
         }],
       });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
@@ -983,11 +983,10 @@ describe('worker-first export render host port', () => {
     exportRenderHostPort.setResolution(1920, 1080);
 
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
-    expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
-      .toMatchObject({
-        scanlineAdjustments: [{ density: 5, opacity: 0.25, speed: 2 }],
-        grainAdjustments: [{ amount: 0.1, size: 1.5, speed: 1.25 }],
-      });
+    // Film Grain's current recipe has no hand-written twin: the layer runs both graphs in order.
+    const pixelEffects = mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects;
+    expect(pixelEffects.grainAdjustments).toBeUndefined();
+    expect(pixelEffects.imageOperatorPlans).toHaveLength(2);
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
     expect(mockFactory.engine.render).not.toHaveBeenCalled();
     expect(mockFactory.engine.readPixels).not.toHaveBeenCalled();

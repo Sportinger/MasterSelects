@@ -11,11 +11,15 @@ import { COLOR_RECIPE_EFFECT_TYPES } from '../operators/colorEffectGraphs';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
+import { GLOW_DEFAULTS } from '../../effects/stylize/glow/glowBloom';
 import { chromaKeyHexColor, chromaKeyNumbers, chromaKeyScreen, chromaKeySpillMethod } from '../../effects/keying/chroma-key/keyerContract';
 import type { ChromaKeyCpuSettings } from '../../effects/keying/chroma-key/keyerCpu';
 import { workerSoftwareUvDistortAdjustment, type WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
 import { workerSoftwareMirrorPixelAdjustment, type WorkerSoftwareMirrorPixelAdjustment } from './workerSoftwareMirrorPixelEffects';
 import { isWorkerSoftwarePointwiseEffect, workerSoftwarePointwiseStep, type WorkerSoftwarePointwiseStep } from './workerSoftwarePointwiseEffects';
+
+/** Recipes without a hand-written twin: the color recipes and Film Grain always run their graph (see workerSoftwarePointwiseEffects.ts). */
+const GRAPH_ONLY_RECIPES: ReadonlySet<string> = new Set([...COLOR_RECIPE_EFFECT_TYPES, 'grain']);
 
 /** Built-in recipes with a hand-written worker CPU pass (edited graphs run through the graph interpreter). */
 const HAND_WRITTEN_MIRROR_PIXEL = new Set(['kaleidoscope', 'mirror', 'pixelate', 'rgb-split']);
@@ -115,12 +119,13 @@ interface MutableWorkerSoftwarePixelEffects {
   edgeDetectAdjustments?: { strength: number; invert: boolean }[];
   sharpenAdjustments?: { amount: number; radius: number }[];
   glowAdjustments?: {
+    recipe?: 'bloom';
     amount: number;
     threshold: number;
     radius: number;
     softness: number;
-    rings: number;
-    samplesPerRing: number;
+    rings?: number;
+    samplesPerRing?: number;
   }[];
   scanlineAdjustments?: { density: number; opacity: number; speed: number }[];
   grainAdjustments?: { amount: number; size: number; speed: number }[];
@@ -202,7 +207,6 @@ function addPointwiseEffect(pixelEffects: MutableWorkerSoftwarePixelEffects, ste
     case 'posterize': (pixelEffects.posterizeAdjustments ??= []).push(step.adjustment); return '';
     case 'vignette': (pixelEffects.vignetteAdjustments ??= []).push(step.adjustment); return '';
     case 'scanlines': (pixelEffects.scanlineAdjustments ??= []).push(step.adjustment); return '';
-    case 'grain': (pixelEffects.grainAdjustments ??= []).push(step.adjustment); return '';
   }
 }
 
@@ -282,14 +286,14 @@ function effectFilterPart(
       });
       return '';
     case 'glow':
+      // A graphless Glow (the Vignette Bloom transition builds them) is the current bloom; the
+      // worker renders it with a CPU pyramid of the same recipe (workerSoftwareBloom.ts).
       (pixelEffects.glowAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 5),
-        threshold: finiteEffectNumber(effect.params.threshold, 0.7935),
-        radius: Math.max(0, finiteEffectNumber(effect.params.radius, 1)),
-        softness: Math.max(0.001, finiteEffectNumber(effect.params.softness, 0.496)),
-        // Clamped and truncated by the shared Glow sampling contract, like the GPU graph.
-        rings: finiteEffectNumber(effect.params.rings, 6.85),
-        samplesPerRing: finiteEffectNumber(effect.params.samplesPerRing, 17.95),
+        recipe: 'bloom',
+        amount: finiteEffectNumber(effect.params.amount, GLOW_DEFAULTS.amount),
+        threshold: finiteEffectNumber(effect.params.threshold, GLOW_DEFAULTS.threshold),
+        radius: Math.max(0, finiteEffectNumber(effect.params.radius, GLOW_DEFAULTS.radius)),
+        softness: Math.max(0, finiteEffectNumber(effect.params.softness, GLOW_DEFAULTS.softness)),
       });
       return '';
     case 'wave':
@@ -398,13 +402,13 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
-  // Saved graphs, and the color recipes (graph-only, see colorEffectGraphs.ts; their pointwise
-  // programs are memoized per colour), evaluate their graphs exactly. Built-in Wave, Twirl, Bulge,
+  // Saved graphs, and the color recipes and Film Grain (graph-only; pointwise color programs are
+  // memoized per colour), evaluate their graphs exactly. Built-in Wave, Twirl, Bulge,
   // Kaleidoscope, Mirror, Pixelate and RGB Split keep a hand-written pass even with a stored copy of
   // their recipe (interpreting their graph per pixel is far slower); edited graphs run as graphs.
   // A sole untouched Chroma Key takes the CPU keyer instead (see soleDefaultChromaKey).
   const hasPersistedImageGraph = !soleDefaultChromaKey(activeEffects) && activeEffects.some(effect => isImageGraphEffectType(effect.type)
-    && (COLOR_RECIPE_EFFECT_TYPES.has(effect.type) || ((effect.operatorGraph || effect.params.operatorGraph !== undefined)
+    && (GRAPH_ONLY_RECIPES.has(effect.type) || ((effect.operatorGraph || effect.params.operatorGraph !== undefined)
       && workerSoftwareUvDistortAdjustment(effect) === undefined
       && !(HAND_WRITTEN_MIRROR_PIXEL.has(effect.type) && rendersBuiltInMirrorPixelRecipe(effect)))));
   const graphPlans = (): WorkerSoftwareEffectPlan | null => {

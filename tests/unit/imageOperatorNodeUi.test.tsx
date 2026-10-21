@@ -14,6 +14,7 @@ import { createDefaultMirrorGraph } from '../../src/services/operators/samplingE
 import { createDefaultBlockMosaicGraph } from '../../src/services/operators/blockEffectGraphs';
 import { OperatorColorInput } from '../../src/components/panels/nodes/workspace/OperatorColorInput';
 import { createDefaultSharpenGraph } from '../../src/services/operators/blurEffectGraphs';
+import { createEarlierVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 
 const initial = useTimelineStore.getState();
 const owner = {};
@@ -146,7 +147,8 @@ describe('image operator node UI', () => {
   });
 
   it('keeps UV-dependent distances as image previews while exposing uniform operands', () => {
-    const effect: Effect = { id: 'vignette-ui', name: 'Vignette', type: 'vignette', enabled: true, params: {} };
+    // The earlier Vignette (saved projects) scales its UV distance by a constant 2.
+    const effect: Effect = { id: 'vignette-ui', name: 'Vignette', type: 'vignette', enabled: true, params: {}, operatorGraph: createEarlierVignetteGraph() };
     const clip = createMockClip({ id: 'vignette-clip', effects: [effect] });
     const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'distance')!;
     const request = { key: 'distance', revision: '1', time: 0, clipId: clip.id, node,

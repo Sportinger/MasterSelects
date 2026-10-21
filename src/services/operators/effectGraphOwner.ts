@@ -34,7 +34,11 @@ import { createLegacyColorEffectGraph } from './legacyColorEffectGraphs';
 import { ORIGINAL_COLOR_PRESENTATION } from './effectPresentationPlans';
 import { getEffect } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
-import { createDefaultContextualEffectGraph, type EditableContextualEffectType } from './contextualEffectGraphs';
+import type { EditableContextualEffectType } from './contextualEffectGraphs';
+import { createDefaultGrainGraph } from './grainEffectGraph';
+import { createDefaultSharpenGraph } from './sharpenEffectGraph';
+import { createDefaultVignetteGraph } from './vignetteEffectGraph';
+import { createDefaultScanlinesGraph } from './scanlinesEffectGraph';
 import { createDefaultSamplingEffectGraph, type EditableSamplingEffectType } from './samplingEffectGraphs';
 import { createDefaultBlockEffectGraph, type EditableBlockEffectType } from './blockEffectGraphs';
 import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
@@ -42,8 +46,9 @@ import { finiteEffectNumber } from '../../effects/_shared/effectNumberParam';
 import { createDefaultBlurEffectGraph, type EditableBlurEffectType } from './blurEffectGraphs';
 import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectType } from './directionalBlurEffectGraphs';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
-import { createDefaultGlowGraph } from './glowEffectGraph';
+import { createDefaultGlowGraph } from './glowBloomEffectGraph';
 import { upgradeGlowGraph } from './glowGraphUpgrade';
+import { createEarlierStylizeGraph, stylizePresentation, upgradePointwiseStylizeGraph } from './stylizeRecipes';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
 import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
@@ -181,8 +186,9 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         || effectType === 'vector-tiling' || effectType === 'embroidery' || effectType === 'outline' || effectType === 'bricks'
         ? () => createDefaultGeometryFragmentGraph(effectType)
       : effectType === 'threshold' || effectType === 'posterize' ? () => createDefaultPointwiseEffectGraph(effectType)
-        : effectType === 'vignette' || effectType === 'scanlines' || effectType === 'grain'
-          ? () => createDefaultContextualEffectGraph(effectType)
+        : effectType === 'grain' ? createDefaultGrainGraph
+        : effectType === 'vignette' ? createDefaultVignetteGraph
+        : effectType === 'scanlines' ? createDefaultScanlinesGraph
         : effectType === 'ascii' ? createDefaultAsciiGraph
         : effectType === 'number-field' ? createDefaultNumberFieldGraph
         : effectType === 'grid-glyph' ? createDefaultGridGlyphGraph
@@ -227,7 +233,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
           ? () => createDefaultSamplingEffectGraph(effectType)
         : effectType === 'blockify' || effectType === 'block-mosaic'
           ? () => createDefaultBlockEffectGraph(effectType)
-        : effectType === 'box-blur' || effectType === 'gaussian-blur' || effectType === 'sharpen'
+        : effectType === 'sharpen' ? createDefaultSharpenGraph
+        : effectType === 'box-blur' || effectType === 'gaussian-blur'
           ? () => createDefaultBlurEffectGraph(effectType)
         : effectType === 'motion-blur' || effectType === 'radial-blur' || effectType === 'zoom-blur'
           ? () => createDefaultDirectionalBlurGraph(effectType)
@@ -245,11 +252,16 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
-        : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved) : saved;
+        : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved)
+          : upgradePointwiseStylizeGraph(effectType, saved);
+    // Stylize effects saved with their earlier recipe (before 2026-10-21) keep it and its folder plan
+    // (its own presentation type, e.g. 'glow-earlier').
+    const stylizeEarlier = stylizePresentation(effectType, presented);
     // A saved original color graph (before 2026-10) keeps its original folders; the recipe stages fit only the recipe.
-    const earlier = COLOR_RECIPE_EFFECT_TYPES.has(effectType) && effectType !== 'hue-shift' ? { key: 'original-color', plan: ORIGINAL_COLOR_PRESENTATION,
+    const colorEarlier = COLOR_RECIPE_EFFECT_TYPES.has(effectType) && effectType !== 'hue-shift' ? { key: 'original-color', plan: ORIGINAL_COLOR_PRESENTATION,
       createDefault: () => createLegacyColorEffectGraph(effectType as EditableColorEffectType) } : undefined;
-    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback, earlier);
+    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), stylizeEarlier?.key ?? effectType,
+      stylizeEarlier?.createDefault ?? fallback, colorEarlier);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
@@ -268,14 +280,17 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
 }
 
 /**
- * Project-file entry point. A color effect saved before effect graphs existed (no graph at all,
- * projects before 2026-09-21) rendered the original color math, so it gets that graph instead of
- * the 2026-10 recipe; a graphless effect in the running editor is a new one and keeps the recipe.
+ * Project-file entry point. An effect saved before effect graphs existed (no graph at all) rendered
+ * an earlier recipe, so it gets that graph instead of the current one and the project keeps its
+ * look: a color effect (projects before 2026-09-21) the original color math, a rebuilt stylize
+ * effect (2026-10-21) its earlier recipe. A graphless effect in the running editor is a new one
+ * and keeps the current recipe.
  */
 export function migrateLoadedEffectOperatorGraph(effect: Effect): Effect {
   const graphless = !effect.operatorGraph && effect.params[EFFECT_GRAPH_PARAM] === undefined;
-  return migratePersistedEffectOperatorGraph(graphless && COLOR_RECIPE_EFFECT_TYPES.has(effect.type)
-    ? { ...effect, operatorGraph: createLegacyColorEffectGraph(effect.type as EditableColorEffectType) } : effect);
+  const earlier = !graphless ? undefined : COLOR_RECIPE_EFFECT_TYPES.has(effect.type)
+    ? createLegacyColorEffectGraph(effect.type as EditableColorEffectType) : createEarlierStylizeGraph(effect.type);
+  return migratePersistedEffectOperatorGraph(earlier ? { ...effect, operatorGraph: earlier } : effect);
 }
 
 /** Converts the former JSON parameter into the canonical effect-owned field.

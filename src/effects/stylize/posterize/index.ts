@@ -3,6 +3,7 @@
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
 import { POSTERIZE_PARAMS } from '../pointwiseParams';
+import { posterizeParamNotes } from '../pointwiseModel';
 
 export const posterize: EffectDefinition = {
   id: 'posterize',
@@ -14,6 +15,8 @@ export const posterize: EffectDefinition = {
   uniformSize: 16,
 
   params: POSTERIZE_PARAMS,
+
+  paramWarnings: (params) => posterizeParamNotes(params),
 
   packUniforms: (params) => {
     return new Float32Array([

@@ -17,6 +17,17 @@ import { evaluateOpticalFlow, evaluateDirectionalSmooth, evaluateMotionConsisten
 import { imageIntegerCellOrigin } from './imageCoordinateSemantics';
 import { decodeBytePixel8, decodeBytePixel16, decodeBytePixel32, type BytePixelFloatMode } from './bytePixelSemantics';
 
+/** CPU twin of IMAGE_CELL_HASH_WGSL (PCG2D of the whole-number cell). */
+export const imageCellHash = (value: readonly number[]) => {
+  let x = (Math.floor(value[0]) | 0) >>> 0, y = (Math.floor(value[1]) | 0) >>> 0;
+  x = (Math.imul(x, 1664525) + 1013904223) >>> 0; y = (Math.imul(y, 1664525) + 1013904223) >>> 0;
+  x = (x + Math.imul(y, 1664525)) >>> 0; y = (y + Math.imul(x, 1664525)) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0; y = (y ^ (y >>> 16)) >>> 0;
+  x = (x + Math.imul(y, 1664525)) >>> 0; y = (y + Math.imul(x, 1664525)) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  return (x >>> 8) / 16777216;
+};
+
 const imageHash2d = (value: number[]) => {
   const x = value[0] * 127.1 + value[1] * 311.7, y = value[0] * 269.5 + value[1] * 183.3;
   return imageFract(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453);
@@ -271,6 +282,7 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     else if (item.operation === 'project-radius') values.push(projectImageRadius(args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'unproject-radius') values.push(unprojectImageRadius(args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'hash2d-vec2') values.push(imageHash2d(args[0] as number[]));
+    else if (item.operation === 'cell-hash-vec2') values.push(imageCellHash(args[0] as number[]));
     else if (item.operation === 'rgb-to-hsv') values.push(imageRgbToHsv(args[0] as [number, number, number]));
     else if (item.operation === 'hsv-to-rgb') values.push(imageHsvToRgb(args[0] as [number, number, number]));
     else if (item.operation === 'rgb-to-oklch') values.push(rgbToOklch(args[0] as number[]));

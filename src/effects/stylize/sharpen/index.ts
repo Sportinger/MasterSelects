@@ -1,7 +1,11 @@
-// Sharpen Effect - High Quality Unsharp Mask
+// Sharpen Effect - a brightness unsharp mask with a halo limit.
+// Rendering is owned by the editable operator graph (services/operators/sharpenEffectGraph.ts);
+// its contract is sharpenModel.ts. Sharpens saved before 2026-10-21 keep their earlier graph
+// (blurEffectGraphs.ts); shader.wgsl only prewarms the generic effect layout.
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { sharpenParamNotes } from './sharpenModel';
 
 export const sharpen: EffectDefinition = {
   id: 'sharpen',
@@ -11,6 +15,8 @@ export const sharpen: EffectDefinition = {
   shader,
   entryPoint: 'sharpenFragment',
   uniformSize: 16,
+  // The earlier recipe of saved projects: a note and an update offer.
+  extraControls: () => import('../StylizeRecipeNote'),
 
   params: {
     amount: {
@@ -32,6 +38,8 @@ export const sharpen: EffectDefinition = {
       animatable: true,
     },
   },
+
+  paramWarnings: (params, width, height) => sharpenParamNotes(params, width, height),
 
   packUniforms: (params, width, height) => {
     return new Float32Array([

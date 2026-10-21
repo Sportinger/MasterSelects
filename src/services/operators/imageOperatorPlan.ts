@@ -6,6 +6,7 @@ import type { ImageOperatorPlan, ImageOperatorPreviewTarget } from './imageOpera
 import { materializeMotionImages } from './motionImagePasses';
 import { bypassIdentityImageFilters } from './imageFilterShortcuts';
 import { expandTemporalSmoothing } from './temporalSmoothPasses';
+import { cacheImageScale } from './imageResourceScale';
 
 type CompileSingle = (graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget) => ImageOperatorPlan;
 /** Cache Image `maxEdge` (pixels of the longer side; 0 = full size, at most 8192), a constant or a bound
@@ -16,7 +17,7 @@ export function materializeMaxEdge(node: Pick<BoundOperatorNode, 'bindings' | 'c
   const value = finiteEffectNumber(typeof binding === 'string' ? params[binding] : node.constants?.maxEdge, 0);
   return value >= 1 ? Math.round(Math.min(8192, value)) : undefined;
 }
-interface Cut { nodeId: string; producerNodeId: string; producerPort: string; resourceId: string; passId: string; edgeId?: string; maxEdge?: number }
+interface Cut { nodeId: string; producerNodeId: string; producerPort: string; resourceId: string; passId: string; edgeId?: string; maxEdge?: number; scale?: number }
 
 /** Adds explicit and required neighborhood barriers while every pass still uses the canonical image instruction compiler. */
 export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params: Record<string, unknown>, compileSingle: CompileSingle,
@@ -56,9 +57,10 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
   for (const item of graph.nodes) if (item.operator === 'image.materialize' && reachable.has(item.id)) {
     const source = incoming.get(`${item.id}:image`);
     if (!source) throw new Error(`Image materialize ${item.id}:image is not connected.`);
+    if (item.bindings.scale !== undefined) throw new Error(`Cache Image ${item.id}: Resolution is a fixed setting and cannot be bound to a parameter.`);
     cuts.push({ nodeId: item.id, producerNodeId: source.from, producerPort: source.output,
       resourceId: `image-resource:${item.id}:image`, passId: `image-pass:${item.id}`,
-      maxEdge: materializeMaxEdge(item, params) });
+      maxEdge: materializeMaxEdge(item, params), scale: cacheImageScale(item.constants) });
   }
   const hasNeighborhoodUpstream = (id: string, seen = new Set<string>()): boolean => {
     if (seen.has(id)) return false; seen.add(id);
@@ -113,7 +115,10 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
   const passes: Array<{ id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string }> = ordered.map(cut => ({ id: cut.passId, program: programs.get(cut.resourceId)!,
     inputResources: programs.get(cut.resourceId)!.resourceInputs ?? [], outputResource: cut.resourceId }));
   passes.push({ id: 'image-pass:final', program: finalProgram, inputResources: finalProgram.resourceInputs ?? [] });
-  const resources = ordered.map(cut => ({ id: cut.resourceId, producerPassId: cut.passId, format: 'rgba16float' as const, maxEdge: cut.maxEdge }));
+  const resources = ordered.map(cut => ({ id: cut.resourceId, producerPassId: cut.passId, format: 'rgba16float' as const, maxEdge: cut.maxEdge,
+    ...(cut.scale ? { scale: cut.scale } : {}) }));
+  // Reduced-resolution caches change texture sizes, not shader code: they still need their own plan key.
+  const scaleKey = ordered.some(cut => cut.scale) ? `-scale-${ordered.map(cut => cut.scale ?? 1).join('_')}` : '';
   const externalResources = passes.flatMap(pass => pass.program.externalResources ?? [])
     .filter((resource, index, all) => all.findIndex(candidate => candidate.id === resource.id) === index);
   const fieldResources = passes.flatMap(pass => pass.program.fieldResources ?? [])
@@ -121,7 +126,7 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
   const frameHistoryResource = passes.find(pass => pass.program.frameHistoryResource)?.program.frameHistoryResource;
   const previewResourceId = preview?.direction === 'output' && preview.portId === 'image'
     ? cuts.find(cut => cut.nodeId === preview.nodeId && !cut.edgeId)?.resourceId : undefined;
-  return { ...finalProgram, passes, resources, key: `${finalProgram.key}-plan-${passes.map(pass => pass.program.key).join('-')}`,
+  return { ...finalProgram, passes, resources, key: `${finalProgram.key}-plan-${passes.map(pass => pass.program.key).join('-')}${scaleKey}`,
     ...(externalResources.length ? { externalResources } : {}), ...(fieldResources.length ? { fieldResources } : {}),
     ...(frameHistoryResource ? { frameHistoryResource } : {}),
     ...(previewResourceId ? { previewResourceId } : {}) };

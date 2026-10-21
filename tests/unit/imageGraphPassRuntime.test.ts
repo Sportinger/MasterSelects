@@ -106,6 +106,25 @@ describe('ImageGraphPassRuntime', () => {
     expect(destroyed.every(destroy => destroy.mock.calls.length === 1)).toBe(true);
   });
 
+  it('renders each scaled Cache Image pass into a texture of its own size', () => {
+    const sizes: Array<{ width: number; height: number }> = [];
+    const createTexture = vi.fn((descriptor: GPUTextureDescriptor) => { sizes.push(descriptor.size as { width: number; height: number }); const view = {}; return { destroy: vi.fn(), createView: () => view }; });
+    const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}), queue: { writeBuffer: vi.fn() }, createTexture,
+      createShaderModule: vi.fn(() => ({})), createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: () => ({}) })), createBindGroup: vi.fn(() => ({})), createBuffer: vi.fn(() => ({})) } as unknown as GPUDevice;
+    const encoder = { beginRenderPass: vi.fn(() => ({ setPipeline() {}, setBindGroup() {}, draw() {}, end() {} })) } as unknown as GPUCommandEncoder;
+    const half = base('half'), quarter = base('quarter', ['half']), final = base('final', ['quarter']);
+    const plan = { ...final, passes: [{ id: 'half-pass', program: half, inputResources: [], outputResource: 'half' },
+      { id: 'quarter-pass', program: quarter, inputResources: ['half'], outputResource: 'quarter' }, { id: 'final-pass', program: final, inputResources: ['quarter'] }],
+    resources: [{ id: 'half', producerPassId: 'half-pass', format: 'rgba16float' as const, scale: 0.5 },
+      { id: 'quarter', producerPassId: 'quarter-pass', format: 'rgba16float' as const, scale: 1 / 1024 }] };
+    const runtime = new ImageGraphPassRuntime(device);
+    runtime.encode({ encoder, sampler: {} as GPUSampler, source: { kind: 'texture', view: {} as GPUTextureView }, width: 1921, height: 1081,
+      timelineTimeSeconds: 0, outputView: {} as GPUTextureView, instanceId: 'scaled', plan });
+    // Rounded, never below one pixel.
+    expect(sizes).toEqual([{ width: 961, height: 541 }, { width: 2, height: 1 }]);
+    runtime.dispose();
+  });
+
   it('ignores a batch released after an encoder switch: its textures already serve the new encoder', () => {
     const createTexture = vi.fn(() => { const view = {}; return { destroy: vi.fn(), createView: () => view }; });
     const pipeline = { getBindGroupLayout: () => ({}) };

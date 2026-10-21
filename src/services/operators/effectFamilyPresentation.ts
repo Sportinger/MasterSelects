@@ -91,7 +91,7 @@ function organizeAsRecipe(source: EffectOperatorGraph, composed: EffectOperatorG
         'color.soft-bright-pass': 'bright', 'color.sobel-magnitude': 'gradient', 'sampling.bounded-count': 'count',
         // Glow normalizes inside each prefilter pass; its stage follows the owning pass, not the final resolve.
         // Glow and the multi-pass blurs normalize inside each pass; the stage follows the owning pass.
-        'sampling.normalize-rgba': type === 'sharpen' ? 'average' : ['glow', 'box-blur', 'gaussian-blur', 'motion-blur', 'radial-blur', 'zoom-blur', 'pixelate', 'blockify', 'block-mosaic'].includes(type) ? '' : 'finish',
+        'sampling.normalize-rgba': type === 'sharpen-earlier' ? 'average' : ['glow', 'glow-earlier', 'sharpen', 'box-blur', 'gaussian-blur', 'motion-blur', 'radial-blur', 'zoom-blur', 'pixelate', 'blockify', 'block-mosaic'].includes(type) ? '' : 'finish',
         'sampling.texel-offset.vec2': 'sampling', 'sampling.gaussian-weight.vec2': 'weight', 'coordinates.centered-scale.vec2': 'sampling',
       };
       const shared = sharedStages[node.operator];

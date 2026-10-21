@@ -210,9 +210,11 @@ describe('image graph lifecycle parity', () => {
       params: type === 'scanlines' ? { density: 5, opacity: 0.6, speed: 2, seed: 0 }
         : { amount: 0.25, size: 1.2, speed: 2, seed: 0 } };
     const plan = compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
-    const atOne = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 1 });
-    const repeated = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 1 });
-    const sought = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 2.25 });
+    // The current recipes measure in pixels (line fade, 1080p-relative grain cells): a 720p frame shows the lines.
+    const context = { uv: [0.37, 0.61] as [number, number], resolution: [1280, 720] as [number, number] };
+    const atOne = evaluateImageOperatorPlan(plan, pixel, { ...context, timelineTimeSeconds: 1 });
+    const repeated = evaluateImageOperatorPlan(plan, pixel, { ...context, timelineTimeSeconds: 1 });
+    const sought = evaluateImageOperatorPlan(plan, pixel, { ...context, timelineTimeSeconds: 2.25 });
     expect(repeated).toEqual(atOne);
     expect(sought).not.toEqual(atOne);
     expect(plan.key).toBe(compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)).key);

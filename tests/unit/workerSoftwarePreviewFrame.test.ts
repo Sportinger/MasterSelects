@@ -1829,13 +1829,13 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
+      // A graphless Glow is the current bloom; the earlier ring counts are not read.
       glowAdjustments: [{
+        recipe: 'bloom',
         amount: 0.6,
         threshold: 0.35,
         radius: 2,
         softness: 0.7,
-        rings: 2,
-        samplesPerRing: 8,
       }],
     });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
@@ -1843,7 +1843,7 @@ describe('worker software preview frame builder', () => {
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
   });
 
-  it('carries scanlines and grain into worker software pixel effects', async () => {
+  it('carries scanlines into worker software pixel effects and runs grain as its graph', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({
         effects: [
@@ -1868,10 +1868,13 @@ describe('worker software preview frame builder', () => {
 
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
-    expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
-      scanlineAdjustments: [{ density: 5, opacity: 0.25, speed: 2 }],
-      grainAdjustments: [{ amount: 0.1, size: 1.5, speed: 1.25 }],
-    });
+    // Film Grain has no hand-written twin of its current recipe: the layer runs both graphs in order.
+    expect(frame.frame.layers[0]?.pixelEffects.grainAdjustments).toBeUndefined();
+    expect(frame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toHaveLength(2);
+    // Scanlines alone stay on the hand-written pixel pass.
+    const scanlinesOnly = await buildWorkerSoftwarePreviewFrame([solidLayer({ effects: [{ id: 'scanlines-a', type: 'scanlines', name: 'Scanlines',
+      enabled: true, params: { density: 5, opacity: 0.25, speed: 2 } }] })], { width: 640, height: 360 });
+    expect(scanlinesOnly.frame.layers[0]?.pixelEffects).toMatchObject({ scanlineAdjustments: [{ density: 5, opacity: 0.25, speed: 2 }] });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);

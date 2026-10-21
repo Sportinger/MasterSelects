@@ -6,7 +6,7 @@ import type { Layer } from '../../src/types/layers';
 import { shouldUseLayerVideoFramePresenter } from '../../src/services/render/workerRenderHostRuntimeHandlers';
 import { uploadWorkerVideoFrameTexture, workerGpuOperatorProgramCacheKey, workerGpuOperatorProgramPresentationKey, workerVideoFrameNeedsStraightAlphaUpload } from '../../src/services/render/workerGpuOperatorPipeline';
 import { hasCompositorRenderLayer } from '../../src/services/render/workerGpuVideoFrameCompositor';
-import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 
 function layerWithEditedInvert(): Layer {
   const graph = createDefaultInvertImageGraph();
@@ -69,7 +69,7 @@ describe('worker GPU image operator program', () => {
   it('does not transport a UV-capable edited pixel effect as an inline operator', () => {
     const layer = { opacity: 1, blendMode: 'normal', effects: [
       { id: 'brightness-uv', name: 'Brightness', type: 'brightness', enabled: true, params: { amount: 0.2 },
-        operatorGraph: createDefaultVignetteGraph() },
+        operatorGraph: createEarlierVignetteGraph() },
     ] } as unknown as Layer;
     const style = resolveWorkerGpuVideoPresentationLayerStyle(layer);
     expect(style.operatorProgram).toBeUndefined();

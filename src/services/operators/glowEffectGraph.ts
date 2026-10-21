@@ -83,12 +83,13 @@ function prefilterPass(prefix: 'horizontal' | 'vertical', sampleFrom: string, ca
 }
 
 /**
- * Glow v2: bright pass → horizontal and vertical Gaussian prefilter (two cached
- * rgba16float passes) → ring sampling of the prefiltered light with per-axis pixel
- * offsets and adaptive per-ring sample counts → premultiplied additive resolve.
- * See `glowSampling.ts` for the shared contract the WGSL reference and CPU path follow.
+ * Glow v2 (2026-10, now the ring version saved Glows keep): bright pass → horizontal and
+ * vertical Gaussian prefilter (two cached rgba16float passes) → ring sampling of the
+ * prefiltered light with per-axis pixel offsets and adaptive per-ring sample counts →
+ * premultiplied additive resolve. See `glowSampling.ts` for the shared contract the WGSL
+ * reference and CPU path follow. New Glows use the bloom (`glowBloomEffectGraph.ts`).
  */
-export function createDefaultGlowGraph(): EffectOperatorGraph {
+export function createRingGlowGraph(): EffectOperatorGraph {
   const horizontal = prefilterPass('horizontal', 'light-sample', 'horizontal-cache');
   const vertical = prefilterPass('vertical', 'vertical-sample', 'prefiltered-cache');
   const nodes: BoundOperatorNode[] = [

@@ -2,6 +2,8 @@ import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { withLegacyMirrorPixelControls } from '../../services/operators/mirrorPixelGraphUpgrade';
 import { COLOR_RECIPE_EFFECT_TYPES } from '../../services/operators/colorEffectGraphs';
+import { hasEarlierStylizeRecipe, isEarlierStylizeGraph, stylizeNewInstanceParams } from '../../services/operators/stylizeRecipes';
+import { getEffect } from '..';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { checkedLookEntryOperatorGraph } from './lookEntryGraph';
 import type { LookDefinition, LookStackEntry } from './types';
@@ -13,11 +15,18 @@ export function applyLookToClip(look: LookDefinition, clipId: string): string[] 
   startBatch(`Apply look: ${look.name}`);
   try {
     for (const entry of look.stack) {
+      // A stored graph, a stylize effect's earlier recipe or the original color math (lookEntryGraph.ts).
       const { graph: operatorGraph, problem } = checkedLookEntryOperatorGraph(look, entry);
       if (problem) problems.push(problem);
       const effectId = addClipEffect(clipId, entry.effectId, operatorGraph ? { operatorGraph } : undefined);
       // A custom Look saved before an effect gained controls lacks them: give them the values that keep its look.
-      const params = look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params);
+      const saved = look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params);
+      // Values a new instance starts with differently (Posterize Brightness Only) keep what an entry
+      // saved without them meant: the parameter default.
+      const definitions = getEffect(entry.effectId)?.params ?? {};
+      const unsaved = Object.fromEntries(Object.keys(stylizeNewInstanceParams(entry.effectId)).filter(name => !(name in saved) && definitions[name])
+        .map(name => [name, definitions[name].default]));
+      const params = { ...unsaved, ...saved };
       if (Object.keys(params).length > 0) updateClipEffect(clipId, effectId, params);
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }
@@ -32,6 +41,7 @@ export function stackFromClipEffects(
   return effects.map((effect) => ({
     effectId: effect.type,
     enabled: effect.enabled !== false,
+    ...(hasEarlierStylizeRecipe(effect.type) && isEarlierStylizeGraph(effect.type, effect.operatorGraph) ? { recipe: 'earlier' as const } : {}),
     params: Object.fromEntries(Object.entries(effect.params ?? {}).filter(([, value]) => (
       typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
     ))) as Record<string, number | boolean | string>,
