@@ -1,5 +1,5 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { EFFECT_GRAPH_PARAM } from './effectGraph';
+import { EFFECT_GRAPH_PARAM, readEffectGraph } from './effectGraph';
 import { matchesEffectRecipe } from './effectFamilyPresentation';
 import { createLegacyAcuarelaGraph, hasLegacyAcuarelaParams } from './acuarelaEffectGraph';
 import { createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
@@ -34,4 +34,15 @@ export function isNeutralAcuarelaEffect(effect: { type: string; params: Record<s
 export function withLegacyAcuarelaGraph<T extends Record<string, unknown>>(type: string, params: T): T {
   if (type !== 'acuarela' || params[EFFECT_GRAPH_PARAM] !== undefined || !hasLegacyAcuarelaParams(params)) return params;
   return { ...params, [EFFECT_GRAPH_PARAM]: JSON.stringify(createLegacyAcuarelaGraph()) };
+}
+
+/** True when the instance renders with the smoke recipe's frame history (saved smoke effects, or a graph built on it). */
+export function rendersAcuarelaSmokeRecipe(effect: { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }): boolean {
+  if (effect.type !== 'acuarela') return false;
+  let graph = effect.operatorGraph;
+  if (!graph && typeof effect.params[EFFECT_GRAPH_PARAM] === 'string') {
+    try { graph = readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], createDefaultAcuarelaGraph); } catch { return false; }
+  }
+  if (!graph) return hasLegacyAcuarelaParams(effect.params);
+  return graph.nodes.some(node => node.operator === 'image.frame-history');
 }

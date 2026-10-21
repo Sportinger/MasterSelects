@@ -18,7 +18,8 @@
 //   { "name", "out": "docs/Features/assets/effects/<file>.webp", "image": "neon_rain_street",
 //     "width": 1920, "crop": [x, y, w, h] (px of the rendered frame), "zoom": 1.5 (enlarges the
 //     crop, for small lights), "gap": 6,
-//     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ... } }
+//     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ..., "times": [...] } }
+// (`times`: timeline seconds rendered in order, for feedback effects that build up over frames)
 // (an effect of "original" is the unchanged image).
 // `"layout": "split"` shows one picture: the crop (default: the whole frame) of the left side up to
 // `"split"` (0.5) of its width, the right side's crop after it, and a thin light divider; `"stack"`
@@ -33,7 +34,7 @@ import { encodeDocShotWebp } from './docShotWebp.mjs';
 async function composePair(page, entry) {
   const side = spec => page.evaluate(job => window.__effectLab.render(job), {
     effectId: spec.effect === 'original' ? 'gaussian-blur' : spec.effect, image: `${entry.image}.jpg`, width: entry.width ?? 1920,
-    params: spec.params ?? {}, bypass: spec.effect === 'original' });
+    params: spec.params ?? {}, bypass: spec.effect === 'original', times: spec.times });
   const [left, right] = [await side(entry.left), await side(entry.right)];
   for (const [label, cell] of [['left', left], ['right', right]]) if (cell.gpuFailure) throw new Error(`${entry.name} ${label}: ${cell.gpuFailure}`);
   const png = await page.evaluate(async ({ left, right, crop, gap, zoom, layout, split, outWidth }) => {

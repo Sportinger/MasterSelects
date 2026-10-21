@@ -6,6 +6,7 @@ import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { hasLegacyAcuarelaParams } from '../operators/acuarelaEffectGraph';
+import { rendersAcuarelaSmokeRecipe } from '../operators/acuarelaIdentity';
 import { rendersBuiltInMirrorPixelRecipe } from '../operators/mirrorPixelGraphUpgrade';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
@@ -233,8 +234,7 @@ function effectFilterPart(
   if (pointwise) return addPointwiseEffect(pixelEffects, pointwise);
   switch (effectType) {
     case 'acuarela':
-      // The hand-written CPU mirror covers only the original smoke recipe; the watercolour recipe
-      // runs as a graph plan (workerSoftwareEffectPlanForLayer).
+      // The hand-written CPU mirror covers only the original smoke recipe (see workerSoftwareEffectPlanForLayer).
       if (!hasLegacyAcuarelaParams(effect.params)) return null;
       if (!canAddFeedbackEffect(pixelEffects)) return null;
       (pixelEffects.acuarelaAdjustments ??= []).push({
@@ -389,6 +389,10 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
+  // The watercolour Acuarela interprets about 300 graph nodes and a 49-tap wash per pixel: on the CPU
+  // that is minutes per 1080p frame. It is unsupported here, so preview and export fall back to the
+  // main-thread GPU renderer (the frame diagnostics name it); only the smoke recipe has a CPU pass.
+  if (activeEffects.some(effect => effect.type === 'acuarela' && !rendersAcuarelaSmokeRecipe(effect))) return null;
   // Built-in Wave, Twirl and Bulge keep a hand-written pass even with a stored copy of their
   // recipe (interpreting their graph per pixel is far slower); edited graphs run as graphs.
   const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
@@ -413,9 +417,7 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
       return { filter: 'none', pixelEffects: graphEffects };
     } catch { return null; }
   };
-  // Watercolour Acuarela has no hand-written CPU pass (only the legacy smoke recipe does): its graph runs as a plan.
-  const watercolorAcuarela = activeEffects.some(effect => effect.type === 'acuarela' && !hasLegacyAcuarelaParams(effect.params));
-  if (hasPersistedImageGraph || watercolorAcuarela || handWrittenMirrorPixelOutOfOrder(activeEffects)) return graphPlans();
+  if (hasPersistedImageGraph || handWrittenMirrorPixelOutOfOrder(activeEffects)) return graphPlans();
   // The hand-written pass holds one resampling effect; stacked built-in distorts (Wave then
   // Twirl, Kaleidoscope then Fisheye then Motion Blur, …) run as ordered graph plans instead of skipping the layer.
   const stackedFallback = () => activeEffects.some(effect => workerSoftwareUvDistortAdjustment(effect) || HAND_WRITTEN_MIRROR_PIXEL.has(effect.type))

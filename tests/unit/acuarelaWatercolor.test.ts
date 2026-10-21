@@ -133,12 +133,14 @@ describe('Acuarela saved with the watery-smoke recipe', () => {
     expect(withLegacyAcuarelaGraph('glow', SMOKE)).toBe(SMOKE);
   });
 
-  it('runs the hand-written CPU pass only for the smoke recipe in worker software rendering', () => {
+  it('runs the smoke recipe on the worker CPU and leaves the watercolour to the GPU fallback', () => {
     const smoke = workerSoftwareEffectPlanForLayer(layer(effect(SMOKE)))!;
     expect(smoke.pixelEffects.acuarelaAdjustments).toHaveLength(1);
-    const paint = workerSoftwareEffectPlanForLayer(layer(effect(watercolour())))!;
-    expect(paint.pixelEffects.acuarelaAdjustments).toBeUndefined();
-    expect(paint.pixelEffects.imageOperatorPlans).toHaveLength(1);
+    // Stored smoke graphs keep running as graph plans with their history.
+    expect(workerSoftwareEffectPlanForLayer(layer(migratePersistedEffectOperatorGraph(effect(SMOKE))))?.pixelEffects.imageOperatorPlans).toHaveLength(1);
+    // The watercolour is unsupported in software (minutes per frame), fresh or stored: the frame falls back to the GPU renderer.
+    expect(workerSoftwareEffectPlanForLayer(layer(effect(watercolour())))).toBeNull();
+    expect(workerSoftwareEffectPlanForLayer(layer(migratePersistedEffectOperatorGraph(effect(watercolour()))))).toBeNull();
   });
 
   it('skips the watercolour at Mix 0 but never the smoke recipe, whose history keeps running', () => {
