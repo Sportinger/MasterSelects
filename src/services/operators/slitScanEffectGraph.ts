@@ -59,20 +59,23 @@ export function createDefaultSlitScanGraph(): EffectOperatorGraph {
   const isWave = binary('is-wave', 'compare.greater.scalar', profile, n('wave-threshold', 1.5));
   const offset = select('profile-offset', isWave, select('linear-or-center', isCenter, linear, radial), wave);
 
-  section('scan-protection', 'Protected Center', '#f59e0b');
+  // Radial and ring profiles measure the aspect-corrected distance from Center X/Y. They belong to the
+  // profile, not to Protected Center: muting that folder must only drop the protection mask.
   const size = node('size', 'vector.split.vec2', { value: resolution }, 'x');
   const aspect = binary('aspect', 'math.divide-ieee.scalar', size, { node: size.node, port: 'y' });
   const scale = node('aspect-scale', 'vector.combine.vec2', { x: aspect, y: one });
   const distance = unary('radius-distance', 'vector.length.vec2', binary('aspect-uv', 'math.multiply.vec2', centered, scale));
-  const smooth = node('feather-mask', 'math.smoothstep.scalar', { value: distance, edge0: protect, edge1: add('feather-edge', protect, feather) });
-  const hasProtection = binary('has-protection', 'compare.greater.scalar', protect, zero);
-  const mask = select('protection-mask', hasProtection, one, smooth);
   const radius = mul('radial-distance', distance, two);
   const ringCycles = add('ring-cycles', add('ring-position', mul('ring-frequency', radius, waves), phase), mul('ring-time', time, speed));
   const rings = add('rings', half, mul('ring-amplitude', half, unary('ring-sine', 'math.sin.scalar', mul('ring-radians', ringCycles, n('ring-tau', Math.PI * 2)))));
   const isRadial = binary('is-radial', 'compare.greater.scalar', profile, n('radial-threshold', 2.5));
   const isRings = binary('is-rings', 'compare.greater.scalar', profile, n('rings-threshold', 3.5));
   const spatialOffset = select('spatial-profile', isRadial, offset, select('radial-profile', isRings, clamp('radial-scan', radius), rings));
+
+  section('scan-protection', 'Protected Center', '#f59e0b');
+  const smooth = node('feather-mask', 'math.smoothstep.scalar', { value: distance, edge0: protect, edge1: add('feather-edge', protect, feather) });
+  const hasProtection = binary('has-protection', 'compare.greater.scalar', protect, zero);
+  const mask = select('protection-mask', hasProtection, one, smooth);
 
   section('scan-history', 'Time Sampling & Mix', '#10b981');
   const count = binary('band-count', 'math.max.scalar', unary('integer-bands', 'math.floor.scalar', bands), two);

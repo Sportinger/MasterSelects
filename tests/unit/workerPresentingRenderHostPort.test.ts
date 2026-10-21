@@ -4738,7 +4738,6 @@ describe('worker presenting render host port', () => {
             inlineContrast: 1,
             inlineSaturation: 1,
             inlineInvert: false,
-            chromaKeyMode: 0,
             levelsEnabled: false,
             complexEffectCount: topLayer.effects.length,
             renderLayer: expect.objectContaining({

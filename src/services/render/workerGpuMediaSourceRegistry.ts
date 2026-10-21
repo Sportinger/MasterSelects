@@ -52,10 +52,6 @@ export interface WorkerGpuVideoPresentationLayerStyle {
   readonly vignetteSize: number;
   readonly vignetteSoftness: number;
   readonly vignetteRoundness: number;
-  readonly chromaKeyMode: number;
-  readonly chromaKeyTolerance: number;
-  readonly chromaKeySoftness: number;
-  readonly chromaKeySpill: number;
   readonly scanlineDensity: number;
   readonly scanlineOpacity: number;
   readonly scanlineSpeed: number;
@@ -244,10 +240,6 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
     vignetteSize: 0.5,
     vignetteSoftness: 0.5,
     vignetteRoundness: 1,
-    chromaKeyMode: 0,
-    chromaKeyTolerance: 0.2,
-    chromaKeySoftness: 0.1,
-    chromaKeySpill: 0.5,
     scanlineDensity: 0,
     scanlineOpacity: 0,
     scanlineSpeed: 0,

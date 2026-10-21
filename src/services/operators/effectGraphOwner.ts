@@ -36,6 +36,7 @@ import { createDefaultContextualEffectGraph, type EditableContextualEffectType }
 import { createDefaultSamplingEffectGraph, type EditableSamplingEffectType } from './samplingEffectGraphs';
 import { createDefaultBlockEffectGraph, type EditableBlockEffectType } from './blockEffectGraphs';
 import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
+import { finiteEffectNumber } from '../../effects/_shared/effectNumberParam';
 import { createDefaultBlurEffectGraph, type EditableBlurEffectType } from './blurEffectGraphs';
 import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectType } from './directionalBlurEffectGraphs';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
@@ -305,6 +306,8 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   const params = { ...effect.params };
   delete params[EFFECT_GRAPH_PARAM];
   if (effect.type === 'grain' && params.seed === undefined) params.seed = 0;
+  // Time Stacks saved before Decay existed kept every copy at full opacity; new ones default to 0.8.
+  if ((effect.type as string) === 'time-stack' && params.decay === undefined) params.decay = 1;
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {
@@ -368,6 +371,9 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
       if (spec.type === 'color' && typeof spec.default === 'string') {
         resolved[id] = normalizeCatalogColor(resolved[id] as number | boolean | string | undefined, spec.default);
       }
+      // NaN, Infinity, null (JSON's NaN) or text in a number parameter render the default instead of
+      // failing the graph; tools and the effect's inspector report such values (effectNumberParam.ts).
+      if (spec.type === 'number' && typeof spec.default === 'number') resolved[id] = finiteEffectNumber(resolved[id], spec.default);
     }
     if (effect.type === 'fisheye') {
       return { ...resolved, ...normalizeFisheyeParameters(resolved) };

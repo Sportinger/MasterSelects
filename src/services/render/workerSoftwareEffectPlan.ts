@@ -499,6 +499,12 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   if (feedbackEffectCount > 0 && activeVisualEffectCount !== feedbackEffectCount) {
     return null;
   }
+  // The CPU pass applies its adjustments in a fixed order and Chroma Key measures the screen from the layer
+  // source: keyed together with any other effect or a colour grade, export would differ from the GPU preview.
+  const chromaKeyCount = pixelEffects.chromaKeyAdjustments?.length ?? 0;
+  if (chromaKeyCount > 0 && (activeVisualEffectCount !== chromaKeyCount || (pixelEffects.colorGradePrimaryNodes?.length ?? 0) > 0)) {
+    return null;
+  }
   delete pixelEffects.feedbackEffectCount;
   delete pixelEffects.sourceResamplingEffectCount;
   return {

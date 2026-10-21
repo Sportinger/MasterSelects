@@ -27,6 +27,14 @@ describe('Slit Scan looks', () => {
     expect(applySlitScanLook(saved, 'nope')).toBe(saved);
   });
 
+  it('reads Custom while a Look value is animated (keyframes or a node source decide it, not the Look)', () => {
+    const applied = applySlitScanLook({}, 'fall');
+    expect(slitScanLookOf(applied, ['delay'])).toBe('custom');
+    expect(slitScanLookOf(applied, ['speed'])).toBe('custom');
+    // Keys outside the Look (here Protection strength and Time factor) do not matter.
+    expect(slitScanLookOf(applied, ['maskStrength', 'timeFactor'])).toBe('fall');
+  });
+
   it('blends adjacent frames by default for new effects, like the runtime fallback of older saved ones', () => {
     expect(slitScanParams.temporalInterpolation.default).toBe('linear');
   });

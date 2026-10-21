@@ -47,6 +47,7 @@ import { checkComputePixelSortGraphGpu } from './compute-pixel-sort-graph-gpu-ch
 import { checkComputeQuadtreeGraphGpu } from './compute-quadtree-graph-gpu-check';
 import { checkComputeContourGraphGpu } from './compute-contour-graph-gpu-check';
 import { checkImageGeometryPatternsGpu } from './image-geometry-patterns-gpu-check';
+import { checkChromaKeyGraphGpu } from './image-chroma-key-graph-gpu-check';
 import { checkRom1GraphGpu } from './image-rom1-graph-gpu-check';
 import { checkMemoryLeakGraphGpu } from './image-memory-leak-graph-gpu-check';
 
@@ -78,6 +79,14 @@ async function checkGpu() {
       const validation = await device.popErrorScope();
       if (validation) throw new Error(validation.message);
       return `PASS: ${comparisons} ROM1 comparisons; strict legacy RGBA8 parity, timeline, extrema, history alpha, and bypass verified.`;
+    } finally { device.destroy(); }
+  }
+  if (suite === 'chroma-key') {
+    try {
+      const comparisons = await checkChromaKeyGraphGpu(device);
+      const validation = await device.popErrorScope();
+      if (validation) throw new Error(validation.message);
+      return `PASS: ${comparisons} Chroma Key comparisons; the multi-pass screen-matte plan (grid and colour caches, edge passes, picked colour, matte view) and an edited Rec.601 graph match the CPU pass runner within 2/255.`;
     } finally { device.destroy(); }
   }
   if (suite === 'contour-type') {

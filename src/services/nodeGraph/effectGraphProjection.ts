@@ -13,7 +13,7 @@ import { operatorEnabled } from '../operators/effectGraph';
 import { mathNodeSymbol } from './mathNodeSymbol';
 import { compositionGroupInterface } from '../operators/operatorComposition';
 import { operatorGroupBypassRoutes, operatorGroupRenderer } from '../operators/operatorGroupBypass';
-import { effectPresentationPlan } from '../operators/effectPresentationPlans';
+import { effectPortLabels } from '../operators/effectPresentationPlans';
 
 export const effectGraphId = (clipId: string, effectId: string) => `clip-graph:${clipId}:effect:${effectId}`;
 
@@ -28,7 +28,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
   }
   const supported = addableEffectOperators(effect.type);
   const parameters = getEffect(effect.type)?.params as Record<string, { label?: string }> | undefined;
-  const portLabels = effectPresentationPlan(effect.type)?.portLabels;
+  const portLabels = effectPortLabels(effect.type);
   return {
     id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip', issue: graph.incomplete,
     nodes: graph.nodes.map(node => {

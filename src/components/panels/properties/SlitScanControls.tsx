@@ -16,7 +16,9 @@ import { hybridTemporalSampleLimit } from '../../../effects/time/sourceTemporalL
 import { SlitScanTimeFieldControls } from './SlitScanTimeFieldControls';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 import { slitScanFullResolutionFactor } from '../../../effects/time/slit-scan/timeFactor';
-import { SLIT_SCAN_LOOKS, applySlitScanLook, slitScanLookOf } from '../../../effects/time/slit-scan/looks';
+import { SLIT_SCAN_LOOKS, SLIT_SCAN_LOOK_KEYS, applySlitScanLook, slitScanLookOf } from '../../../effects/time/slit-scan/looks';
+import { isParameterNodeDriven } from '../../../services/parameterSources/parameterSourceTargets';
+import { finiteEffectNumber } from '../../../effects/_shared/effectNumberParam';
 
 export function SlitScanControls({ params, onChange, clipId, effectInstanceId, operatorGraph }: EffectControlProps & { operatorGraph?: EffectOperatorGraph }) {
   const motionStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(`${effectInstanceId}:dis`));
@@ -43,6 +45,16 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
     : params.temporalMotion !== 'motion' ? 'Off · shifts each frame along DIS optical flow to the exact requested time.'
     : `${motionStatus || 'DIS · waiting for source pairs…'}${params.temporalBatch === 'block' ? ' · export renders individual frames' : ''}`;
   const selectedMask = masks?.find(mask => mask.id === params.protectionMask);
+  // Look values with keyframes or a node source keep animating: a Look cannot set them, so it reads Custom.
+  const animatedLookKeys = useTimelineStore(state => {
+    const clip = state.clips.find(item => item.id === clipId);
+    return clip && effectInstanceId ? SLIT_SCAN_LOOK_KEYS.filter(key => state.hasKeyframes(clip.id, `effect.${effectInstanceId}.${key}` as AnimatableProperty)
+      || isParameterNodeDriven(clip, `effect.${effectInstanceId}.${key}`)).join(',') : '';
+  });
+  const animatedLookLabels = animatedLookKeys ? animatedLookKeys.split(',').map(key => slitScanParams[key].label).join(', ') : '';
+  // The graph clamps Delay to 0–60 s (safe-delay); a saved or tool-set value beyond that is said, not hidden.
+  const rawDelay = finiteEffectNumber(params.delay, Number(slitScanParams.delay.default));
+  const delayOutOfRange = rawDelay < slitScanParams.delay.min! || rawDelay > slitScanParams.delay.max!;
   const changeNumber = (key: string, value: number) => clipId && effectInstanceId
     ? setPropertyValue(clipId, `effect.${effectInstanceId}.${key}` as AnimatableProperty, value)
     : onChange({ ...params, [key]: value });
@@ -50,10 +62,14 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
       bypassGroupId={({ 'Time map': 'time-map', 'Subject protection': 'subject-protection', 'Protected center': 'scan-protection' } as Record<string, string>)[group]}
       defaultOpen={group === 'Time'} {...section}>
       {group === 'Time' && <ResolveInspectorRow label="Look">
-        <InspectorSelect ariaLabel="Slit Scan look" value={slitScanLookOf(params)}
+        <InspectorSelect ariaLabel="Slit Scan look" value={slitScanLookOf(params, animatedLookKeys ? animatedLookKeys.split(',') : [])}
           options={[...SLIT_SCAN_LOOKS.map(item => ({ value: item.id, label: item.label })), { value: 'custom', label: 'Custom', disabled: true }]}
           onChange={value => onChange(applySlitScanLook(params, value))} />
       </ResolveInspectorRow>}
+      {group === 'Time' && animatedLookLabels && <p className="tracking-panel-status" role="status">
+        Animated, so a Look leaves it as it is: {animatedLookLabels}.</p>}
+      {group === 'Time' && delayOutOfRange && <p className="tracking-panel-status" role="status">
+        Delay {rawDelay} s is outside 0–60 s and is used as {slitScanNumber(params, 'delay')} s.</p>}
       {Object.entries(slitScanParams).filter(([key, parameter]) => parameter.group === group && !['temporalMode', 'temporalResolution'].includes(key)).map(([key, parameter]) => {
         if (key === 'temporalMemory' && params.temporalStorage !== 'resident') return null;
         if (key === 'temporalBatch' && !originalHistory) return null;
@@ -99,8 +115,9 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
       {group === 'Sampling' && Number(params.seamSmoothing) > 0 && seamStatus &&
         <ResolveInspectorRow label="Seam smoothing"><span role="status" title={seamStatus}>{seamStatus}</span></ResolveInspectorRow>}
   </ResolveInspectorSection>;
-  // The look of the scan first (Time, Wave); storage and sampling technicalities below, collapsed.
-  return <div className="effects-tab transform-tab-compact">
+  // The look of the scan first (Time, Wave); storage and sampling technicalities below, collapsed. The wrapper is
+  // no container of its own: rows size by the Properties tab like every effect card (ResolveInspectorNarrow.css).
+  return <div className="effects-tab effect-sections">
     {renderGroup('Time')}
     {renderGroup('Wave')}
     {renderGroup('Sampling')}

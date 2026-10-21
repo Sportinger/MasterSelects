@@ -6,6 +6,19 @@ import { evaluateMaterializedImage } from '../helpers/evaluateMaterializedImage'
 import { effectOperatorCompileContext, effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 import { InputHistoryClock, inputHistorySize } from '../../src/effects/time/InputHistoryClock';
 import { withSlitScanProtection } from '../../src/services/operators/slitScanProtectionGraph';
+import { createInitialSlitScanGraph } from '../../src/services/operators/slitScanGraphUpgrade';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
+
+/** Time map value (delay in seconds) across one row, through the owner exactly as the editor resolves a saved graph. */
+function timeRow(saved: EffectOperatorGraph, overrides: Record<string, number | string>) {
+  const params = { ...getDefaultParams('slit-scan'), ...overrides };
+  const effect = { type: 'slit-scan', params, operatorGraph: saved };
+  const plan = compileImageOperatorGraph(effectOperatorGraph(effect), params, effectOperatorCompileContext(effect));
+  return [0.1, 0.3, 0.5, 0.7, 0.9].map(x => evaluateMaterializedImage(plan, [0, 0, 0, 1], {
+    uv: [x, 0.3], resolution: [100, 100], timelineTimeSeconds: 0, sampleResource: () => [0, 0, 0, 1],
+    sampleInputHistory: (_uv, delay, current) => delay === 0 ? current : [delay, delay, delay, 1], sampleMotionHistory: () => [0, 0, 0, 1],
+  })[0]);
+}
 
 function sample(uv: [number, number], overrides: Record<string, number | string> = {}, time = 0) {
   const params = { ...getDefaultParams('slit-scan'), ...overrides };
@@ -89,6 +102,27 @@ describe('Slit Scan editable time displacement', () => {
     expect(restored.nodes.find(node => node.id === 'tau')!.constants).toEqual({ value: 3 });
     expect(() => compileImageOperatorGraph(graph, getDefaultParams('slit-scan'), { ...effectOperatorCompileContext({ type: 'slit-scan' }), allowInputHistory: false })).toThrow(/history/i);
     expect(graph.groups?.some(group => group.id === 'scan-motion')).toBe(true);
+  });
+  it('keeps Radial scan and Time rings while Protected Center is muted (new effects), also in graphs saved with the old folder', () => {
+    const fresh = createInitialSlitScanGraph();
+    expect(fresh.groups!.find(group => group.id === 'scan-protection')!.bypassed).toBe(true);
+    // Independent reference: radial = clamp(2 * aspect distance from the centre), here at y = 0.3 on a square frame.
+    const radial = [0.1, 0.3, 0.5, 0.7, 0.9].map(x => Math.min(1, 2 * Math.hypot(x - 0.5, 0.3 - 0.5)));
+    timeRow(fresh, { profile: 'radial', delay: 1 }).forEach((value, index) => expect(value).toBeCloseTo(radial[index], 4));
+    expect(timeRow(fresh, { profile: 'rings', delay: 1 })).not.toEqual(timeRow(fresh, { profile: 'wave', delay: 1 }));
+    expect(timeRow(fresh, { profile: 'radial', delay: 1 })).not.toEqual(timeRow(fresh, { profile: 'wave', delay: 1 }));
+    // A graph saved before the fix: profile nodes inside Protected Center, whose mute routed the profile to Wave.
+    const saved = structuredClone(fresh);
+    const protection = saved.groups!.find(group => group.id === 'scan-protection')!, profile = saved.groups!.find(group => group.id === 'scan-wave')!;
+    const moved = ['size', 'aspect', 'aspect-scale', 'aspect-uv', 'radius-distance', 'radial-distance', 'rings', 'is-radial', 'is-rings', 'radial-scan', 'radial-profile', 'spatial-profile'];
+    profile.nodeIds = profile.nodeIds.filter(id => !moved.includes(id)); protection.nodeIds.push(...moved);
+    protection.bypassOutputs = { ...protection.bypassOutputs, 'spatial-profile:value': { nodeId: 'profile-offset', portId: 'value' } };
+    timeRow(saved, { profile: 'radial', delay: 1 }).forEach((value, index) => expect(value).toBeCloseTo(radial[index], 4));
+    const restored = effectOperatorGraph({ type: 'slit-scan', params: getDefaultParams('slit-scan'), operatorGraph: saved });
+    expect(restored.groups!.find(group => group.id === 'scan-protection')!.nodeIds).not.toContain('spatial-profile');
+    expect(restored.groups!.find(group => group.id === 'scan-protection')!.bypassed).toBe(true);
+    // Muting Protected Center still removes the protection itself.
+    expect(timeRow(fresh, { profile: 'linear', delay: 1, protect: 0.9 })[2]).toBeCloseTo(0.5, 4);
   });
   it('supports aspect-aware radial scans, animated rings and discrete time bands', () => {
     expect(sample([0.5, 0.5], { profile: 'radial' })[0]).toBe(0);

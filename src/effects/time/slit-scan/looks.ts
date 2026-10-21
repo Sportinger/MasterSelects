@@ -16,19 +16,21 @@ const look = (id: string, label: string, values: Partial<Record<LookKey, number 
 
 /** Starting points for the scan, each a complete set of the Look keys. */
 export const SLIT_SCAN_LOOKS: readonly SlitScanLook[] = [
-  look('sweep', 'Sweep · left → right', { profile: 'linear', angle: 0, delay: 1 }),
-  look('fall', 'Falling time · top → bottom', { profile: 'linear', angle: 90, delay: 1.5 }),
-  look('center', 'Out from the center', { profile: 'center', delay: 1.5 }),
+  look('sweep', 'Sweep', { profile: 'linear', angle: 0, delay: 1 }),
+  look('fall', 'Falling time', { profile: 'linear', angle: 90, delay: 1.5 }),
+  look('center', 'Center out', { profile: 'center', delay: 1.5 }),
   look('folds', 'Wave folds', { profile: 'wave', delay: 1.5, waves: 2, speed: 0.15 }),
   look('radial', 'Radial bloom', { profile: 'radial', delay: 1.5 }),
   look('rings', 'Time rings', { profile: 'rings', delay: 2, waves: 3, speed: 0.25 }),
-  look('steps', 'Time steps · 12 bands', { profile: 'linear', angle: 0, delay: 2, bands: 12 }),
+  look('steps', 'Time steps', { profile: 'linear', angle: 0, delay: 2, bands: 12 }),
 ];
 
 const same = (a: unknown, b: number | string) => typeof b === 'number' ? Math.abs(Number(a) - b) < 1e-6 : a === b;
 
-/** The Look whose values the params carry, or 'custom' once any of them differs. */
-export function slitScanLookOf(params: Record<string, unknown>): string {
+/** The Look whose values the params carry, or 'custom' once any of them differs or is animated (keyframes or
+ * a node source decide that value at render time, not the static value a Look writes). */
+export function slitScanLookOf(params: Record<string, unknown>, animatedKeys: readonly string[] = []): string {
+  if (animatedKeys.some(key => (SLIT_SCAN_LOOK_KEYS as readonly string[]).includes(key))) return 'custom';
   const value = (key: LookKey) => params[key] ?? slitScanParams[key].default;
   return SLIT_SCAN_LOOKS.find(item => SLIT_SCAN_LOOK_KEYS.every(key => same(value(key), item.params[key])))?.id ?? 'custom';
 }

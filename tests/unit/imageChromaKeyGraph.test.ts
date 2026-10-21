@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { chromaKey } from '../../src/effects/keying/chroma-key';
 import { chromaKeyNumbers } from '../../src/effects/keying/chroma-key/keyerContract';
-import { chromaKeyCpuPixel, chromaKeyCpuScreen } from '../../src/effects/keying/chroma-key/keyerCpu';
+import { chromaKeyCpuKey, chromaKeyCpuPixel, chromaKeyCpuScreen, prepareChromaKeyCpu } from '../../src/effects/keying/chroma-key/keyerCpu';
 import { createDefaultChromaKeyGraph } from '../../src/services/operators/chromaKeyEffectGraph';
 import { upgradeChromaKeyGraph } from '../../src/services/operators/chromaKeyGraphUpgrade';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
@@ -75,11 +75,15 @@ describe('Chroma Key screen-matte graph', () => {
   });
 
   it('adds no full-resolution pass while Edge Softness and Shrink/Grow are 0', () => {
-    const passes = (params: Record<string, unknown>) => prepareImageEffect({ type: 'chroma-key', params }).plan!.passes!.map(pass => pass.outputResource ?? 'final');
+    const passes = (params: Record<string, unknown>) => prepareImageEffect({ type: 'chroma-key', params }).plan!.passes?.map(pass => pass.outputResource ?? 'final') ?? ['final'];
     expect(passes({})).toEqual(['image-resource:screen-grid:image', 'image-resource:screen-color-estimate:image', 'final']);
     expect(passes({ edgeSoftness: 2 })).toContain('image-resource:edge-soften-rows:image');
     expect(passes({ edgeSoftness: 2 })).not.toContain('image-resource:edge-shrink-rows:image');
     expect(passes({ edgeShrink: -1 })).toContain('image-resource:edge-shrunk-cache:image');
+    // A picked colour needs no measurement: the Screen Grid and Screen Color passes are folded away.
+    expect(passes({ keyColor: 'custom' })).toEqual(['final']);
+    expect(passes({ keyColor: 'custom', view: 'matte' })).toEqual(['final']);
+    expect(passes({ keyColor: 'blue' })).toEqual(['image-resource:screen-grid:image', 'image-resource:screen-color-estimate:image', 'final']);
   });
 
   it.each([
@@ -206,9 +210,12 @@ describe('Chroma Key screen-matte graph', () => {
   it('clamps out-of-range values, reports them, and still renders a defined image', () => {
     expect(chromaKeyNumbers({ spillSuppression: 7, edgeSoftness: -3, edgeShrink: 400, clipBlack: 1.5, clipWhite: -2 })).toEqual({
       clipBlack: 1, clipWhite: 0, spill: 1, softness: 0, shrink: 20, clamped: ['clipBlack', 'clipWhite', 'spillSuppression', 'edgeSoftness', 'edgeShrink'],
+      invalid: [], reversed: true,
     });
-    expect(chromaKeyNumbers({ clipBlack: Number.NaN, edgeSoftness: 'wide' })).toMatchObject({ clipBlack: .3, softness: 0, clamped: ['clipBlack', 'edgeSoftness'] });
-    expect(chromaKeyNumbers({}).clamped).toEqual([]);
+    expect(chromaKeyNumbers({ clipBlack: Number.NaN, edgeSoftness: 'wide', clipWhite: '0.6' }))
+      .toMatchObject({ clipBlack: .3, clipWhite: .6, softness: 0, clamped: [], invalid: ['clipBlack', 'edgeSoftness'], reversed: false });
+    expect(chromaKeyNumbers({ clipBlack: .7, clipWhite: .5 })).toMatchObject({ clamped: [], reversed: true });
+    expect(chromaKeyNumbers({})).toMatchObject({ clamped: [], invalid: [], reversed: false });
     const width = SAMPLES.length, data = raster(width, 1, x => SAMPLES[x]);
     for (const params of [{ clipBlack: 1.5, clipWhite: -2, spillSuppression: 7 }, { clipBlack: -4, clipWhite: -3 }, { clipBlack: -1, clipWhite: 3 }]) {
       const output = runGraph(data, width, 1, { keyColor: 'custom', screenColor: hex(SCREEN), ...params });
@@ -221,6 +228,43 @@ describe('Chroma Key screen-matte graph', () => {
         if (expected[3] > .02) for (let index = 0; index < 3; index++) expect(actual[index]).toBeCloseTo(clamp01(expected[index]), 2);
       }
     }
+  });
+});
+
+describe('Chroma Key with values tools and keyframes can send', () => {
+  it('renders NaN, Infinity, null (JSON NaN) and text at the default and numeric text as its number, instead of failing the graph', () => {
+    const width = SAMPLES.length, data = raster(width, 1, x => SAMPLES[x]);
+    const base = { keyColor: 'custom', screenColor: hex(SCREEN) };
+    const reference = runGraph(data, width, 1, base);
+    for (const key of ['clipBlack', 'clipWhite', 'spillSuppression', 'edgeSoftness', 'edgeShrink']) {
+      for (const value of [Number.NaN, Number.POSITIVE_INFINITY, null, 'abc', '']) {
+        expect(() => runGraph(data, width, 1, { ...base, [key]: value }), `${key}=${String(value)}`).not.toThrow();
+        expect(runGraph(data, width, 1, { ...base, [key]: value }), `${key}=${String(value)}`).toEqual(reference);
+      }
+    }
+    expect(runGraph(data, width, 1, { ...base, clipBlack: '0.4' })).toEqual(runGraph(data, width, 1, { ...base, clipBlack: .4 }));
+  });
+
+  it('keys a 1080p frame on the worker CPU path within a frame budget (scalar per-pixel work)', () => {
+    const width = 1920, height = 1080, data = new Uint8ClampedArray(width * height * 4);
+    for (let index = 0; index < width * height; index++) {
+      const x = index % width, subject = x > 700 && x < 1200;
+      data.set(subject ? [220, 200, 180, 255] : [60, 150 + (x % 40), 70, 255], index * 4);
+    }
+    const settings = { screen: 'green', screenColor: SCREEN, clipBlack: .3, clipWhite: .85, spillSuppression: 1, view: 'result' } as const;
+    const out = new Float64Array(4);
+    const started = performance.now();
+    const keyer = prepareChromaKeyCpu(chromaKeyCpuScreen(data, settings, width, height), settings);
+    let alpha = 0;
+    for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 4;
+      chromaKeyCpuKey(keyer, data[offset] / 255, data[offset + 1] / 255, data[offset + 2] / 255, 1, x, y, out);
+      alpha += out[3];
+    }
+    const elapsed = performance.now() - started;
+    expect(alpha / (width * height)).toBeCloseTo(499 / 1920, 2);
+    // The array-per-pixel version took about 1.2 s here; scalar work is well under a quarter of that.
+    expect(elapsed).toBeLessThan(300);
   });
 });
 

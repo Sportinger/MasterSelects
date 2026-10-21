@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, type PointerEvent } from 'react';
 import type { EffectControlProps } from '../../../effects/types';
 import type { EffectOperatorGraph } from '../../../types/operatorGraph';
 import { effectOperatorGraph } from '../../../services/operators/effectGraphOwner';
@@ -7,61 +7,90 @@ import {
   CHROMA_KEY_DEFAULT_SCREEN_COLOR, CHROMA_KEY_FULL_SCREEN_PURITY, chromaKeyHexColor, chromaKeyNumbers, chromaKeyScreen, chromaKeyScreenPurity,
   chromaKeySpillMethod,
 } from '../../../effects/keying/chroma-key/keyerContract';
+import { finiteEffectNumber } from '../../../effects/_shared/effectNumberParam';
 import { getParameterSourceTarget } from '../../../services/parameterSources/parameterSourceTargets';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { AnimatableProperty } from '../../../types/animationProperties';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
+import { ResolveInspectorColorRow } from './resolveInspector/ResolveInspectorColorRow';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorRow, ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
 import { KeyframeToggle } from './shared';
 
-type NumberKey = 'clipBlack' | 'clipWhite' | 'edgeShrink' | 'edgeSoftness' | 'spillSuppression';
+type NumberKey = 'clipBlack' | 'clipWhite' | 'edgeShrink' | 'edgeSoftness' | 'spillSuppression' | 'tolerance' | 'softness';
 const SUFFIX: Partial<Record<NumberKey, string>> = { edgeShrink: 'px', edgeSoftness: 'px' };
-const CLAMPED_LABEL: Record<string, string> = {
+const LABEL: Record<string, string> = {
   clipBlack: 'Clip Black', clipWhite: 'Clip White', spillSuppression: 'Spill Suppression', edgeSoftness: 'Edge Softness', edgeShrink: 'Shrink / Grow',
 };
+const RETIRED = [['tolerance', 'Tolerance'], ['softness', 'old Edge Softness']] as const;
+const status = (text: string) => <p className="tracking-panel-status" role="status">{text}</p>;
 
-/** Chroma Key inspector: screen choice, matte levels, edge and spill in the shared Resolve inspector rows. */
+/** Chroma Key inspector: screen choice, matte levels, edge and spill in the shared Resolve inspector rows.
+ * A graph edited before the screen-matte rebuild keeps the old Rec.601 key: it gets the controls it reads. */
 export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId, operatorGraph }: EffectControlProps & { operatorGraph?: EffectOperatorGraph }) {
-  // A graph edited before the screen-matte rebuild still keys with the retired Tolerance/Edge Softness.
   const legacyGraph = useMemo(() => {
     try { return !effectOperatorGraph({ type: 'chroma-key', params: {}, operatorGraph }, { inspectionOnly: true }).nodes.some(node => node.bindings.value === 'clipBlack'); }
     catch { return false; }
   }, [operatorGraph]);
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
   const clip = useTimelineStore(state => state.clips.find(item => item.id === clipId));
+  // Keyframes on the retired parameters (from the old keyer) still exist but no longer act on the new key.
+  const retiredKeyframes = useTimelineStore(state => RETIRED.filter(([key]) => !!clipId && !!effectInstanceId
+    && state.hasKeyframes(clipId, `effect.${effectInstanceId}.${key}` as AnimatableProperty)).map(([key]) => key).join(','));
   const screen = chromaKeyScreen(params.keyColor);
   const screenColor = typeof params.screenColor === 'string' ? params.screenColor : CHROMA_KEY_DEFAULT_SCREEN_COLOR;
-  const greyPick = screen === 'custom' && chromaKeyScreenPurity(chromaKeyHexColor(screenColor)) < CHROMA_KEY_FULL_SCREEN_PURITY;
-  const clamped = chromaKeyNumbers(params).clamped;
+  const greyPick = !legacyGraph && screen === 'custom' && chromaKeyScreenPurity(chromaKeyHexColor(screenColor)) < CHROMA_KEY_FULL_SCREEN_PURITY;
+  const numbers = chromaKeyNumbers(params);
   const change = (key: string, value: number | string) => onChange({ ...params, [key]: value });
-  const changeNumber = (key: NumberKey, value: number) => clipId && effectInstanceId
+  const changeNumber = (key: NumberKey, value: number) => clipId && effectInstanceId && chromaKey.params[key].animatable
     ? setPropertyValue(clipId, `effect.${effectInstanceId}.${key}` as AnimatableProperty, value)
     : change(key, value);
-  const numberRow = (key: NumberKey) => {
+  /** `label` shortens the name inside its section (Edge → Softness); tools and screen readers keep the full name. */
+  const numberRow = (key: NumberKey, label?: string) => {
     const definition = chromaKey.params[key];
     const property = `effect.${effectInstanceId}.${key}`;
     if (clip && effectInstanceId && getParameterSourceTarget(clip, property)) return <ParameterSourceNumberRow key={key} clipId={clip.id} property={property} />;
-    const value = typeof params[key] === 'number' ? params[key] as number : definition.default as number;
-    return <ResolveInspectorNumberRow key={key} label={definition.label} value={value} defaultValue={definition.default as number}
+    const value = finiteEffectNumber(params[key], definition.default as number);
+    return <ResolveInspectorNumberRow key={key} label={label ?? definition.label} ariaLabel={definition.label} value={value} defaultValue={definition.default as number}
       min={definition.min!} max={definition.max!} step={definition.step!} decimals={2} suffix={SUFFIX[key]}
-      keyframeToggle={clipId && effectInstanceId ? <KeyframeToggle clipId={clipId} property={property as AnimatableProperty} value={value} /> : undefined}
+      keyframeToggle={clipId && effectInstanceId && definition.animatable ? <KeyframeToggle clipId={clipId} property={property as AnimatableProperty} value={value} /> : undefined}
       onChange={next => changeNumber(key, next)} />;
   };
-  // Pointer activation must not leave a focus ring on selects, buttons or the colour well (keyboard focus stays visible).
-  return <div className="effects-tab transform-tab-compact" onPointerUp={event => {
-    if (event.target instanceof Element) event.target.closest<HTMLElement>('button, select, input[type="color"]')?.blur();
-  }}>
+  const screenRow = <ResolveInspectorRow label="Screen">
+    <InspectorSelect wheelSelection ariaLabel="Chroma Key screen" value={screen} options={chromaKey.params.keyColor.options!}
+      onChange={value => change('keyColor', value)} />
+  </ResolveInspectorRow>;
+  // Pointer activation must not leave a focus ring on selects or buttons (keyboard focus stays visible).
+  const blurPointerFocus = (event: PointerEvent) => {
+    if (event.target instanceof Element) event.target.closest<HTMLElement>('button, select')?.blur();
+  };
+  if (legacyGraph) return <div className="effects-tab effect-sections" onPointerUp={blurPointerFocus}>
+    <ResolveInspectorSection title="Key (edited graph)" indicator="none">
+      {screenRow}
+      {numberRow('tolerance')}
+      {numberRow('softness')}
+      {numberRow('spillSuppression')}
+    </ResolveInspectorSection>
+    {status('This node graph was edited before the keyer was rebuilt, so it still keys with Tolerance and Edge Softness. '
+      + 'Clip Black/White, Shrink/Grow, Spill Method, View and a picked screen colour need the new keyer: re-add Chroma Key to use them.')}
+  </div>;
+
+  const retiredValues = RETIRED.filter(([key]) => {
+    const value = params[key];
+    return value !== undefined && finiteEffectNumber(value, NaN) !== chromaKey.params[key].default;
+  }).map(([key, label]) => `${label} ${finiteEffectNumber(params[key], NaN).toFixed(2)}`);
+  const retiredAnimated = RETIRED.filter(([key]) => retiredKeyframes.split(',').includes(key)).map(([, label]) => `${label} keyframes`);
+  const retired = [...retiredValues, ...retiredAnimated];
+  // Before the rebuild 'Custom' keyed pure green and stored no screen colour.
+  const oldCustom = screen === 'custom' && params.screenColor === undefined;
+  return <div className="effects-tab effect-sections" onPointerUp={blurPointerFocus}>
     <ResolveInspectorSection title="Key" indicator="none">
-      <ResolveInspectorRow label="Screen">
-        <InspectorSelect wheelSelection ariaLabel="Chroma Key screen" value={screen} options={chromaKey.params.keyColor.options!}
-          onChange={value => change('keyColor', value)} />
-      </ResolveInspectorRow>
-      {screen === 'custom' ? <ResolveInspectorRow label="Screen color">
-        <input type="color" aria-label="Chroma Key screen color" value={screenColor} onChange={event => change('screenColor', event.target.value)} />
-      </ResolveInspectorRow> : <p className="tracking-panel-status">Screen color is measured from every frame.</p>}
-      {greyPick && <p className="tracking-panel-status" role="status">This color is too grey to key. Pick the screen itself, where it is most saturated.</p>}
+      {screenRow}
+      {screen === 'custom' ? <ResolveInspectorColorRow label="Screen color" ariaLabel="Chroma Key screen color" value={screenColor}
+        defaultValue={CHROMA_KEY_DEFAULT_SCREEN_COLOR} onChange={value => change('screenColor', value)} />
+        : <p className="tracking-panel-status">Screen color is measured from every frame.</p>}
+      {greyPick && status('This color is too grey to key. Pick the screen itself, where it is most saturated.')}
       <ResolveInspectorRow label="View">
         <InspectorSelect ariaLabel="Chroma Key view" value={params.view === 'matte' ? 'matte' : 'result'} options={chromaKey.params.view.options!}
           onChange={value => change('view', value)} />
@@ -73,20 +102,20 @@ export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId, 
     </ResolveInspectorSection>
     <ResolveInspectorSection title="Edge" indicator="none">
       {numberRow('edgeShrink')}
-      {numberRow('edgeSoftness')}
+      {numberRow('edgeSoftness', 'Softness')}
     </ResolveInspectorSection>
     <ResolveInspectorSection title="Spill" indicator="none">
-      {numberRow('spillSuppression')}
-      <ResolveInspectorRow label="Spill Method">
+      {numberRow('spillSuppression', 'Suppression')}
+      <ResolveInspectorRow label="Method">
         <InspectorSelect ariaLabel="Chroma Key spill method" value={chromaKeySpillMethod(params.spillMethod)} options={chromaKey.params.spillMethod.options!}
           onChange={value => change('spillMethod', value)} />
       </ResolveInspectorRow>
     </ResolveInspectorSection>
-    {legacyGraph && <p className="tracking-panel-status" role="status">
-      This node graph was edited before the keyer was rebuilt and still uses the old Tolerance key, so these controls have no effect. Re-add Chroma Key to use them.
-    </p>}
-    {clamped.length > 0 && <p className="tracking-panel-status" role="status">
-      Out of range, used at its limit: {clamped.map(key => CLAMPED_LABEL[key] ?? key).join(', ')}.
-    </p>}
+    {oldCustom && status(`The old Custom key keyed pure green; Picked color now keys the colour above (${screenColor.toUpperCase()}). `
+      + 'Pick your screen colour, or choose Green to measure it.')}
+    {retired.length > 0 && status(`From the old keyer, no longer used: ${retired.join(', ')}. Set the key with Clip Black and Clip White.`)}
+    {numbers.reversed && status('Clip Black is at or above Clip White, so the matte is a hard cut at Clip Black.')}
+    {numbers.clamped.length > 0 && status(`Out of range, used at its limit: ${numbers.clamped.map(key => LABEL[key] ?? key).join(', ')}.`)}
+    {numbers.invalid.length > 0 && status(`Not a number, used at its default: ${numbers.invalid.map(key => LABEL[key] ?? key).join(', ')}.`)}
   </div>;
 }

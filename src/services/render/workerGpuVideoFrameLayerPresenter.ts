@@ -57,8 +57,7 @@ export interface WorkerGpuVideoFramePresentLayer {
   readonly blurRadius?: number; readonly exposure?: number; readonly exposureOffset?: number; readonly exposureGamma?: number;
   readonly temperature?: number; readonly tint?: number; readonly vibrance?: number; readonly thresholdLevel?: number;
   readonly posterizeLevels?: number; readonly vignetteAmount?: number; readonly vignetteSize?: number; readonly vignetteSoftness?: number;
-  readonly vignetteRoundness?: number; readonly chromaKeyMode?: number; readonly chromaKeyTolerance?: number; readonly chromaKeySoftness?: number;
-  readonly chromaKeySpill?: number; readonly scanlineDensity?: number; readonly scanlineOpacity?: number; readonly scanlineSpeed?: number;
+  readonly vignetteRoundness?: number; readonly scanlineDensity?: number; readonly scanlineOpacity?: number; readonly scanlineSpeed?: number;
   readonly grainAmount?: number; readonly grainSize?: number; readonly grainSpeed?: number;
   readonly waveAmplitudeX?: number; readonly waveAmplitudeY?: number; readonly waveFrequencyX?: number; readonly waveFrequencyY?: number;
   readonly twirlAmount?: number; readonly twirlRadius?: number; readonly twirlCenterX?: number; readonly twirlCenterY?: number;
@@ -292,10 +291,7 @@ function createLayerUniformBuffer(
   f32(88, finiteNumber(layer.vignetteSize, 0.5));
   f32(92, finiteNumber(layer.vignetteSoftness, 0.5));
   f32(96, finiteNumber(layer.vignetteRoundness, 1));
-  u32(100, Math.max(0, Math.floor(finiteNumber(layer.chromaKeyMode, 0))));
-  f32(104, finiteNumber(layer.chromaKeyTolerance, 0.2));
-  f32(108, finiteNumber(layer.chromaKeySoftness, 0.1));
-  f32(112, finiteNumber(layer.chromaKeySpill, 0.5));
+  // 100..115: reserved (retired chroma key), left at 0.
   f32(116, finiteNumber(layer.scanlineDensity, 0));
   f32(120, finiteNumber(layer.scanlineOpacity, 0));
   f32(124, finiteNumber(layer.scanlineSpeed, 0));

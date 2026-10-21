@@ -1,6 +1,9 @@
+import { finiteEffectNumber } from '../../_shared/effectNumberParam';
 export const TIME_STACK_MAX_COUNT = 32;
 /** Decay below this is used at this value (pow(0, 0) is undefined on the GPU); 1 keeps every instance at full opacity. */
 export const TIME_STACK_MIN_DECAY = 0.0001;
+/** New Time Stacks fade each older copy to 80 %; effects saved before Decay existed load with 1 (effectGraphOwner.ts). */
+export const TIME_STACK_DEFAULT_DECAY = 0.8;
 export function timeStackSettings(params: Record<string, unknown>, localTime = Infinity) {
   const finite = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
   const count = Math.max(1, Math.min(TIME_STACK_MAX_COUNT, Math.trunc(finite(params.count, 20))));
@@ -10,11 +13,13 @@ export function timeStackSettings(params: Record<string, unknown>, localTime = I
   return { count, offset, activeCount, delays };
 }
 
-/** Decay as the graph uses it (clamped to TIME_STACK_MIN_DECAY..1) and whether the saved value was out of range. */
-export function timeStackDecay(params: Record<string, unknown>): { decay: number; clamped: boolean } {
+/** Decay as the graph uses it (an unusable value at the default, then clamped to TIME_STACK_MIN_DECAY..1)
+ * and whether the saved value was out of range or not a number. */
+export function timeStackDecay(params: Record<string, unknown>): { decay: number; clamped: boolean; invalid: boolean } {
   const raw = params.decay;
-  if (raw === undefined) return { decay: 1, clamped: false };
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return { decay: 1, clamped: true };
-  const decay = Math.min(1, Math.max(TIME_STACK_MIN_DECAY, raw));
-  return { decay, clamped: raw < 0 || raw > 1 };
+  if (raw === undefined) return { decay: TIME_STACK_DEFAULT_DECAY, clamped: false, invalid: false };
+  const value = finiteEffectNumber(raw, NaN);
+  if (!Number.isFinite(value)) return { decay: TIME_STACK_DEFAULT_DECAY, clamped: false, invalid: true };
+  const decay = Math.min(1, Math.max(TIME_STACK_MIN_DECAY, value));
+  return { decay, clamped: value < 0 || value > 1, invalid: false };
 }

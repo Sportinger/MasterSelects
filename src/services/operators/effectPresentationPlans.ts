@@ -26,6 +26,22 @@ const DIRECTIONAL_PORTS = { ...BLUR_PORTS, 'amount-positive': 'Amount ≥ 0', di
   'coarse-sample:image': 'Coarse Sample', 'radial-log-scale': 'Zoom Range', 'radial-longest': 'Longest Zoom', 'spin-arc': 'Spin Arc',
   'spin-start': 'Spin Start', 'zoom-end-scale': 'End Scale' };
 
+// What the outputs that cross into Chroma Key's Spill folder carry (the docs' Spill recipe shows the same names).
+const CHROMA_KEY_PORTS = { 'unmix-color': 'Color', 'screen-channel': 'Screen Channel', 'screen-other-channels': 'Other Channels',
+  'screen-found': 'Screen Found', 'spill-primary': 'Screen Level', 'spill-other': 'Stronger Other', 'spill-other-sum': 'Other Sum',
+  'spill-other-mean': 'Other Mean', 'spill-is-gentle': 'Is Gentle', 'spill-limit': 'Limit', 'spill-strength': 'Strength', 'spill-excess': 'Excess' };
+/** Effects whose folders come from their own graph (no presentation plan) can still name what outputs carry. */
+const GRAPH_PORT_LABELS: Record<string, Record<string, string>> = {
+  'slit-scan': { 'smooth-or-banded': 'Time Map', 'subject-protected': 'Protection', 'safe-delay': 'Delay (s)',
+    'masked-delay': 'Protected Time', 'sample-delay': 'Delay per Pixel' },
+  'time-stack': { 'decay-clamped': 'Decay', opacity: 'Opacity', delay: 'Delay', history: 'Past Frame' },
+};
+
+/** Names of what outputs carry (node id or `id:port`) for an effect's graph: card outputs and folder ports show them. */
+export function effectPortLabels(type: string): Record<string, string> | undefined {
+  return effectPresentationPlan(type)?.portLabels ?? GRAPH_PORT_LABELS[type];
+}
+
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
   if (type === 'crt-screen') return {
@@ -39,6 +55,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
               : /^(masked-color|scanned-color|flickered-color|mixed-color|combine)$/.test(id) ? 'finish' : 'curvature',
   };
   if (type === 'chroma-key') return {
+    portLabels: CHROMA_KEY_PORTS,
     labels: { channel: 'Screen Channel', grid: 'Screen Grid (64 px cache)', average: 'Screen Average (1 px cache)', screen: 'Screen Color',
       matte: 'Screen Matte & Clip', kernel: 'Edge Sizes', cache: 'Matte Cache', shrink: 'Shrink / Grow (soft min/max)',
       soften: 'Edge Softness (blur)', edge: 'Edge Result', unmix: 'Screen Subtraction', spill: 'Spill Suppression', view: 'View & Output' },

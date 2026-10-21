@@ -44,7 +44,9 @@
     }
   }
 
-  @container (max-width: 300px) {
+  /* 280, not 300: the default 1600 px window gives the Properties tab about 292 px once its scrollbar
+     shows, and effect cards nest rows a further ~50 px in; 280 keeps their sliders there. */
+  @container (max-width: 280px) {
     .resolve-inspector-section,
     .effect-params {
       --resolve-inspector-label-width: 60px;

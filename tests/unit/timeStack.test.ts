@@ -7,12 +7,14 @@ import { prepareImageEffect } from '../../src/services/operators/imageEffectRunt
 import { timeStack } from '../../src/effects/time/time-stack';
 import { timeStackDecay, timeStackSettings } from '../../src/effects/time/time-stack/settings';
 import { blendSequencePixel } from '../../src/services/operators/sequenceBlend';
-import { effectOperatorCompileContext, effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { effectOperatorCompileContext, effectOperatorGraph, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { unusedParamWarnings } from '../../src/services/operators/effectParamVisibility';
 
 const defaults = Object.fromEntries(Object.entries(timeStack.params).map(([key, schema]) => [key, schema.default]));
 const context = { allowInputHistory: true, parameterSchema: timeStack.params };
 const frame: [number, number, number, number] = [0.8, 0.6, 0.4, 1];
-const plan = (params: Record<string, unknown> = {}) => compileImageOperatorGraph(createDefaultTimeStackGraph(), { ...defaults, ...params }, context);
+// The structural tests compare equal-opacity copies (Decay 1); Decay has its own tests below.
+const plan = (params: Record<string, unknown> = {}) => compileImageOperatorGraph(createDefaultTimeStackGraph(), { ...defaults, decay: 1, ...params }, context);
 
 describe('Time Stack graph', () => {
   it('uses one temporal sampler for twenty distinct offsets and darkens each RGB channel', () => {
@@ -47,8 +49,29 @@ describe('Time Stack graph', () => {
     expect(result[3]).toBeCloseTo(0.85);
   });
 
-  it('defaults new stacks to Lighten (lit performers on a dark stage) with Decay 1', () => {
-    expect(defaults).toMatchObject({ blendMode: 'lighten', decay: 1, count: 20, offset: 0.1 });
+  it('defaults new stacks to Lighten (lit performers on a dark stage) with Decay 0.8; saves from before Decay load with 1', () => {
+    expect(defaults).toMatchObject({ blendMode: 'lighten', decay: 0.8, count: 20, offset: 0.1 });
+    const old = { id: 'ts', name: 'Time Stack', type: 'time-stack', enabled: true, params: { count: 20, offset: 0.1, blendMode: 'darken' } };
+    expect(migratePersistedEffectOperatorGraph(old as never).params).toMatchObject({ decay: 1, blendMode: 'darken' });
+    expect(migratePersistedEffectOperatorGraph({ ...old, params: { ...old.params, decay: 0.5 } } as never).params.decay).toBe(0.5);
+  });
+
+  it('draws the current frame first and older copies over it: Decay trails the subject in Lighten, buries it in Normal', () => {
+    // 20 copies, the current frame white and every past frame black. Independent reference: the share of the
+    // current frame after compositing copy i (opacity decay^i) over it in order.
+    const share = (decay: number) => Array.from({ length: 19 }, (_, i) => 1 - decay ** (i + 1)).reduce((product, keep) => product * keep, 1);
+    const run = (blendMode: string, decay: number) => evaluateImageOperatorPlan(plan({ count: 20, offset: 0.1, blendMode, decay }), [1, 1, 1, 1], {
+      timelineTimeSeconds: 0, uv: [0.5, 0.5], sampleInputHistory: (_uv, delay) => delay > 0 ? [0, 0, 0, 1] : [1, 1, 1, 1] })[0];
+    expect(run('lighten', 0.8)).toBeCloseTo(1, 5);
+    expect(run('normal', 0.8)).toBeCloseTo(share(0.8), 4);
+    expect(run('normal', 0.8)).toBeLessThan(0.01);
+    expect(run('normal', 1)).toBeCloseTo(0, 5);
+  });
+
+  it('tells tools that Decay does nothing on a graph edited before it existed', () => {
+    const edited = createLegacyTimeStackGraph(); edited.nodes.find(node => node.id === 'delay')!.bypassed = true;
+    expect(unusedParamWarnings({ type: 'time-stack', params: defaults, operatorGraph: edited }, ['decay'])).toEqual([expect.stringContaining('decay')]);
+    expect(unusedParamWarnings({ type: 'time-stack', params: defaults }, ['decay'])).toEqual([]);
   });
 
   it('fades older instances by Decay: instance i blends with opacity decay^i', () => {
@@ -66,11 +89,16 @@ describe('Time Stack graph', () => {
   });
 
   it('turns out-of-range Decay into a defined, reported value', () => {
-    expect(timeStackDecay({})).toEqual({ decay: 1, clamped: false });
-    expect(timeStackDecay({ decay: 0.5 })).toEqual({ decay: 0.5, clamped: false });
-    expect(timeStackDecay({ decay: -2 })).toEqual({ decay: 0.0001, clamped: true });
-    expect(timeStackDecay({ decay: 7 })).toEqual({ decay: 1, clamped: true });
-    expect(timeStackDecay({ decay: Number.NaN })).toEqual({ decay: 1, clamped: true });
+    expect(timeStackDecay({})).toEqual({ decay: 0.8, clamped: false, invalid: false });
+    expect(timeStackDecay({ decay: 0.5 })).toEqual({ decay: 0.5, clamped: false, invalid: false });
+    expect(timeStackDecay({ decay: -2 })).toEqual({ decay: 0.0001, clamped: true, invalid: false });
+    expect(timeStackDecay({ decay: 7 })).toEqual({ decay: 1, clamped: true, invalid: false });
+    expect(timeStackDecay({ decay: Number.NaN })).toEqual({ decay: 0.8, clamped: false, invalid: true });
+    // The render path uses the same value for unusable input (effectOperatorParams), never a failing graph.
+    for (const decay of [Number.NaN, null, 'abc', Number.POSITIVE_INFINITY]) {
+      const effect = { type: 'time-stack', params: { ...defaults, count: 3, offset: 1, decay } };
+      expect(() => prepareImageEffect(effect), String(decay)).not.toThrow();
+    }
     for (const decay of [-2, 7, 0]) {
       const result = evaluateImageOperatorPlan(plan({ count: 3, offset: 1, decay }), frame, { timelineTimeSeconds: 0, uv: [0, 0],
         sampleInputHistory: (_uv, delay) => delay > 0 ? [1, 1, 1, 1] : frame });
@@ -86,8 +114,8 @@ describe('Time Stack graph', () => {
     const run = (graph: typeof legacy, params: Record<string, unknown>) => evaluateImageOperatorPlan(
       compileImageOperatorGraph(graph, { ...defaults, count: 3, offset: 1, ...params }, context), samples[0],
       { timelineTimeSeconds: 0, uv: [0.5, 0.5], sampleInputHistory: (_uv, delay) => samples[Math.round(delay)] });
-    // A saved project has no Decay value: the default 1 renders exactly what the old graph rendered.
-    const saved = { ...defaults, blendMode: 'darken' } as Record<string, unknown>; delete saved.decay;
+    // A saved project loads with Decay 1 (migratePersistedEffectOperatorGraph): exactly what the old graph rendered.
+    const saved = { ...defaults, blendMode: 'darken', decay: 1 } as Record<string, unknown>;
     expect(run(upgraded, saved)).toEqual(run(legacy, saved));
     const edited = createLegacyTimeStackGraph(); edited.layout.stack = { x: 1, y: 2 }; edited.nodes.find(node => node.id === 'delay')!.bypassed = true;
     expect(upgradeTimeStackGraph(edited)).toBe(edited);

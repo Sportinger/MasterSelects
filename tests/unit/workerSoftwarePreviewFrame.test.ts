@@ -1757,6 +1757,16 @@ describe('worker software preview frame builder', () => {
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
   });
 
+  it('declines chroma key keyed together with another pixel effect (the CPU order and screen measurement would differ)', async () => {
+    const exposure = { id: 'exposure-a', type: 'exposure', name: 'Exposure', enabled: true, params: { exposure: 1, offset: 0, gamma: 1 } };
+    const key = { id: 'chroma-key-a', type: 'chroma-key', name: 'Chroma Key', enabled: true, params: { keyColor: 'green' } };
+    for (const effects of [[exposure, key], [key, exposure]]) {
+      const frame = await buildWorkerSoftwarePreviewFrame([solidLayer({ effects } as Parameters<typeof solidLayer>[0])], { width: 640, height: 360 });
+      expect(frame.frame.layers).toHaveLength(0);
+      expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(1);
+    }
+  });
+
   it('carries edge detect into worker software pixel effects', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({

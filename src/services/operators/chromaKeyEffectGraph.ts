@@ -3,7 +3,7 @@ import {
   CHROMA_KEY_BLUE_PRIOR, CHROMA_KEY_DARK_FLOOR, CHROMA_KEY_FULL_SCREEN_PURITY, CHROMA_KEY_GAUSSIAN_MAX_TAPS_PER_SIDE,
   CHROMA_KEY_GAUSSIAN_REACH_SIGMAS, CHROMA_KEY_GREEN_PRIOR, CHROMA_KEY_LOCAL_PRIOR_WEIGHT, CHROMA_KEY_LOCAL_PURITY_TRUST, CHROMA_KEY_MAX_EDGE_PX, CHROMA_KEY_UNMIX_TRUST, CHROMA_KEY_MIN_SCREEN_PURITY, CHROMA_KEY_PRIOR_WEIGHT,
   CHROMA_KEY_SHRINK_REACH_SIGMAS, CHROMA_KEY_SHRINK_SHARPNESS, CHROMA_KEY_SHRINK_SIGMA_DIVISOR, CHROMA_KEY_SOFTNESS_SIGMA_DIVISOR,
-  CHROMA_KEY_REFERENCE_HEIGHT, CHROMA_KEY_SCREEN_AVERAGE_EXTENT, CHROMA_KEY_SCREEN_CELL_EXTENT, CHROMA_KEY_SCREEN_COVERAGE,
+  CHROMA_KEY_MIN_CLIP_SPAN, CHROMA_KEY_REFERENCE_HEIGHT, CHROMA_KEY_SCREEN_AVERAGE_EXTENT, CHROMA_KEY_SCREEN_CELL_EXTENT, CHROMA_KEY_SCREEN_COVERAGE,
   CHROMA_KEY_SCREEN_GRID_EDGE, CHROMA_KEY_SCREEN_WEIGHT_LEVEL, CHROMA_KEY_SCREEN_WEIGHT_PURITY,
 } from '../../effects/keying/chroma-key/keyerContract';
 import { BlurGraphBuilder, type GraphPort } from './blurGraphBuilder';
@@ -32,6 +32,8 @@ export function createDefaultChromaKeyGraph(): EffectOperatorGraph {
   // Screen channel: Green screen, Blue screen, or the strongest channel of the picked colour.
   g.number('screen-custom-threshold', 1.5);
   const isCustom = g.add('screen-is-custom', 'math.step.scalar', { edge: 'screen-custom-threshold', value: 'key-color' });
+  // As a condition the compiler folds per render: a picked colour drops the Screen Grid and Screen Color passes.
+  const isPicked: GraphPort = [g.binary('screen-is-picked', 'compare.greater.scalar', 'key-color', 'screen-custom-threshold'), 'condition'];
   const isBlueOrCustom = g.add('screen-is-blue-or-custom', 'math.step.scalar', { edge: 'half', value: 'key-color' });
   const isBlue = g.binary('screen-is-blue', 'math.subtract.scalar', isBlueOrCustom, isCustom);
   const picked = g.add('screen-picked-rgb', 'convert.vec4-to-rgb', { value: 'screen-color' });
@@ -98,7 +100,8 @@ export function createDefaultChromaKeyGraph(): EffectOperatorGraph {
     { bindings: {}, constants: { maxEdge: 1 } });
 
   // Screen colour used by the key: the estimate (with a faint preset prior while no screen is seen) or the pick.
-  const stats = g.add('screen-stats', 'image.sample', { image: [screenStats, 'image'], uv: centre });
+  const statsSource = g.add('screen-stats-source', 'control.select.image', { condition: isPicked, falseValue: [screenStats, 'image'], trueValue: ['frame', 'image'] });
+  const stats = g.add('screen-stats', 'image.sample', { image: [statsSource, 'image'], uv: centre });
   const statsSplit = g.add('screen-stats-split', 'vector.split.rgba', { image: [stats, 'image'] });
   const coverage = g.add('screen-coverage', 'convert.alpha-to-scalar', { alpha: [statsSplit, 'alpha'] });
   const prior = g.add('screen-prior', 'math.mix.rgb', { a: rgbConstant('screen-green-prior', CHROMA_KEY_GREEN_PRIOR), b: rgbConstant('screen-blue-prior', CHROMA_KEY_BLUE_PRIOR), t: isBlue });
@@ -120,7 +123,7 @@ export function createDefaultChromaKeyGraph(): EffectOperatorGraph {
   // becomes a hard cut at Clip Black.
   const clipBlack = g.add('matte-clip-black', 'math.clamp.scalar', { value: 'clip-black', min: 'zero', max: 'one' });
   const clipWhite = g.add('matte-clip-white', 'math.clamp.scalar', { value: 'clip-white', min: 'zero', max: 'one' });
-  const clipRange = g.binary('matte-clip-range', 'math.max.scalar', g.binary('matte-clip-span', 'math.subtract.scalar', clipWhite, clipBlack), g.number('matte-clip-min-span', 1e-3));
+  const clipRange = g.binary('matte-clip-range', 'math.max.scalar', g.binary('matte-clip-span', 'math.subtract.scalar', clipWhite, clipBlack), g.number('matte-clip-min-span', CHROMA_KEY_MIN_CLIP_SPAN));
 
   // Screen matte of this pixel, then Clip Black/White as levels.
   const sourceSplit = g.add('matte-source-split', 'vector.split.rgba', { image: ['frame', 'image'] });
@@ -214,7 +217,9 @@ export function createDefaultChromaKeyGraph(): EffectOperatorGraph {
   // Grid's local mean (the frame estimate where no cell saw screen, the pick for a picked colour), dimmed
   // like the matte dims it for pixels darker than the screen.
   g.number('unmix-local-prior', CHROMA_KEY_LOCAL_PRIOR_WEIGHT);
-  const localSplit = g.add('unmix-local-split', 'vector.split.rgba', { image: [g.add('unmix-local-read', 'image.sample', { image: [grid, 'image'], uv: ['uv', 'uv'] }), 'image'] });
+  // (A picked colour reads the frame instead of the grid; the pick is used regardless, below.)
+  const localSource = g.add('unmix-local-source', 'control.select.image', { condition: isPicked, falseValue: [grid, 'image'], trueValue: ['frame', 'image'] });
+  const localSplit = g.add('unmix-local-split', 'vector.split.rgba', { image: [g.add('unmix-local-read', 'image.sample', { image: [localSource, 'image'], uv: ['uv', 'uv'] }), 'image'] });
   const localScreen = g.add('unmix-local-screen', 'math.divide-ieee.rgb-scalar', {
     a: g.binary('unmix-local-sum', 'math.add.rgb', [localSplit, 'rgb'], g.add('unmix-local-prior-term', 'math.multiply.rgb-scalar', { a: screen, b: 'unmix-local-prior' })),
     b: g.binary('unmix-local-total', 'math.add.scalar', g.add('unmix-local-weight', 'convert.alpha-to-scalar', { alpha: [localSplit, 'alpha'] }), 'unmix-local-prior') });

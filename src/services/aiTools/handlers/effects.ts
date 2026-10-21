@@ -13,6 +13,7 @@ import { effectParamDefinitions, unusedParamWarnings } from '../../operators/eff
 import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { Effect } from '../../../types/effects';
+import { isUnusableEffectNumber } from '../../../effects/_shared/effectNumberParam';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -23,7 +24,11 @@ type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
   if (!effect) return [];
   const composition = useMediaStore.getState().getActiveComposition();
-  return [...unusedParamWarnings(effect, names),
+  const definitions = getEffect(effect.type)?.params ?? {};
+  // Number parameters that are not a finite number render at their default (effectOperatorParams).
+  const unusable = names.flatMap(name => definitions[name]?.type === 'number' && isUnusableEffectNumber(effect.params[name])
+    ? [`${name}: ${typeof effect.params[name] === 'string' ? JSON.stringify(effect.params[name]) : String(effect.params[name])} is not a finite number, so the default ${definitions[name].default} is used.`] : []);
+  return [...unusable, ...unusedParamWarnings(effect, names),
     ...blurBudgetNotes(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080)];
 }
 

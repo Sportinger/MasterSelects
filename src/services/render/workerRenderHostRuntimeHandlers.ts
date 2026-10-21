@@ -863,7 +863,6 @@ export function shouldUseLayerVideoFramePresenter(layers: readonly WorkerGpuWebC
     (layer.thresholdLevel ?? -1) >= 0 ||
     Math.abs((layer.posterizeLevels ?? 0)) > 0.000001 ||
     Math.abs((layer.vignetteAmount ?? 0)) > 0.000001 ||
-    Math.abs((layer.chromaKeyMode ?? 0)) > 0.000001 ||
     Math.abs((layer.scanlineOpacity ?? 0)) > 0.000001 ||
     Math.abs((layer.grainAmount ?? 0)) > 0.000001 ||
     Math.abs((layer.waveAmplitudeX ?? 0)) > 0.000001 ||
@@ -1001,10 +1000,6 @@ async function readGpuVideoFrameLayersForPresentation(input: {
     vignetteSize: layer.vignetteSize,
     vignetteSoftness: layer.vignetteSoftness,
     vignetteRoundness: layer.vignetteRoundness,
-    chromaKeyMode: layer.chromaKeyMode,
-    chromaKeyTolerance: layer.chromaKeyTolerance,
-    chromaKeySoftness: layer.chromaKeySoftness,
-    chromaKeySpill: layer.chromaKeySpill,
     scanlineDensity: layer.scanlineDensity,
     scanlineOpacity: layer.scanlineOpacity,
     scanlineSpeed: layer.scanlineSpeed,

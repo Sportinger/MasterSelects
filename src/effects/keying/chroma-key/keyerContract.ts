@@ -20,6 +20,8 @@
 // fabric lose the screen tint without turning olive) or L = max(c_o) (Gentle: keeps yellows on a green
 // screen and cyans on a blue one, but leaves an olive/teal cast on hair).
 
+import { finiteEffectNumber } from '../../_shared/effectNumberParam';
+
 /** Edge Softness and Shrink/Grow are pixels on a 1080p frame (shorter side). */
 export const CHROMA_KEY_REFERENCE_HEIGHT = 1080;
 /** Below this share of the screen's primary channel a pixel is compared by purity, not difference. */
@@ -61,6 +63,8 @@ export const CHROMA_KEY_GAUSSIAN_MAX_TAPS_PER_SIDE = 32;
 /** Edge Softness and |Shrink/Grow| beyond this (1080p px) are clamped; the inspector says so. */
 export const CHROMA_KEY_MAX_EDGE_PX = 20;
 export const CHROMA_KEY_DEFAULT_SCREEN_COLOR = '#4c9a55';
+/** Clip White - Clip Black below this is used as this span (a reversed pair becomes a hard cut at Clip Black). */
+export const CHROMA_KEY_MIN_CLIP_SPAN = 1e-3;
 
 export type ChromaKeyScreen = 'green' | 'blue' | 'custom';
 export type ChromaKeySpillMethod = 'average' | 'max';
@@ -100,26 +104,31 @@ export interface ChromaKeyNumbers {
   shrink: number;
   /** Parameters that arrived outside their usable range and were clamped (for the inspector). */
   clamped: string[];
+  /** Parameters that were not a number at all (NaN, Infinity, text) and are used at their default. */
+  invalid: string[];
+  /** Clip Black at or above Clip White: the matte becomes a hard cut at Clip Black. */
+  reversed: boolean;
 }
 
-/** The numbers the graph actually uses (the graph applies the same clamps). A value outside its usable
- * range is used at the limit, an unusable one (NaN, text) as the default; both are listed in `clamped`. */
+/** The numbers the graph actually uses (effectOperatorParams turns unusable values into the default,
+ * the graph applies the same clamps). Clamped and invalid values are listed for the inspector. */
 export function chromaKeyNumbers(params: Record<string, unknown>): ChromaKeyNumbers {
-  const clamped: string[] = [];
+  const clamped: string[] = [], invalid: string[] = [];
   const read = (key: string, fallback: number, min: number, max: number) => {
     const raw = params[key];
     if (raw === undefined) return fallback;
-    if (typeof raw !== 'number' || !Number.isFinite(raw)) { clamped.push(key); return fallback; }
-    const result = Math.min(max, Math.max(min, raw));
-    if (result !== raw) clamped.push(key);
+    const value = finiteEffectNumber(raw, NaN);
+    if (!Number.isFinite(value)) { invalid.push(key); return fallback; }
+    const result = Math.min(max, Math.max(min, value));
+    if (result !== value) clamped.push(key);
     return result;
   };
+  const clipBlack = read('clipBlack', 0.3, 0, 1), clipWhite = read('clipWhite', 0.85, 0, 1);
   return {
-    clipBlack: read('clipBlack', 0.3, 0, 1),
-    clipWhite: read('clipWhite', 0.85, 0, 1),
+    clipBlack, clipWhite,
     spill: read('spillSuppression', 1, 0, 1),
     softness: read('edgeSoftness', 0, 0, CHROMA_KEY_MAX_EDGE_PX),
     shrink: read('edgeShrink', 0, -CHROMA_KEY_MAX_EDGE_PX, CHROMA_KEY_MAX_EDGE_PX),
-    clamped,
+    clamped, invalid, reversed: clipWhite - clipBlack < CHROMA_KEY_MIN_CLIP_SPAN,
   };
 }

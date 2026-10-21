@@ -150,7 +150,8 @@ describe('effect graph doc shots: graph selection', () => {
     expect(cableCrossings(graph.nodes, graph.edges)).toEqual([]);
     // Omitted stubs leave no gap: the recipe is laid out without them.
     const lean = doc('?effect=time-stack&only=index,offset,delay,history,stack,opacity&omit=uv:uv,frame:image,count:value,mode:value').graph;
-    expect(lean.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label)).toEqual(['Clamp']);
+    // Unnamed, a stub carries what the editor calls its source's output (Time Stack's port label "Decay", not "Clamp").
+    expect(lean.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label)).toEqual(['Decay']);
     const bottom = (nodes: typeof lean.nodes) => Math.max(...nodes.map(node => node.layout.y + getNodeHeight(node)));
     expect(bottom(lean.nodes)).toBeLessThan(bottom(graph.nodes));
     // A name that matches no stub fails instead of being ignored.
