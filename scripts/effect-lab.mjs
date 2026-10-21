@@ -35,6 +35,9 @@
 // `"layout": "split"` shows one picture: the crop (default: the whole frame) of the left side up to
 // `"split"` (0.5) of its width, the right side's crop after it, and a thin light divider; `"stack"`
 // puts the two crops one above the other with `gap` between them. `"outWidth"` scales the result.
+// `"layout": "compare"` makes the pair of a docs compare slider: the same crop (default: the whole
+// frame) of both sides at the same size, side by side without a gap, `outWidth` (default 1600) wide
+// in all, always even; `alt` and `caption` go into the printed <figure class="docs-shot docs-compare">.
 // Needs a running Vite of this checkout (`npx vite --port 5175 --strictPort`).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -70,7 +73,17 @@ async function composePair(page, entry) {
       }
       else if (typeof backdrop === 'string' && backdrop.startsWith('#')) { context.fillStyle = backdrop; context.fillRect(left, top, w, h); }
     };
-    if (layout === 'split' || layout === 'stack') {
+    if (layout === 'compare') {
+      // Two halves of exactly the same size, no gap: the docs slider stacks them and clips one.
+      const [x, y, w, h] = crops[0];
+      const half = Math.floor(Math.min(outWidth ?? 1600, 1600, 2 * w * cells[0].zoom) / 2);
+      const ch = Math.round(half * h / w);
+      start(half * 2, ch); smoothing(cells[0].smooth);
+      for (const [index, bitmap] of bitmaps.entries()) {
+        paintBackdrop(index * half, 0, half, ch);
+        context.drawImage(bitmap, x, y, w, h, index * half, 0, half, ch);
+      }
+    } else if (layout === 'split' || layout === 'stack') {
       const [x, y, w, h] = crops[0], scale = outWidth ? outWidth / w : cells[0].zoom;
       const cw = Math.round(w * scale), ch = Math.round(h * scale);
       start(cw, layout === 'stack' ? ch * 2 + gap : ch); smoothing(cells[0].smooth);
@@ -109,6 +122,12 @@ async function composePair(page, entry) {
   return Buffer.from(png, 'base64');
 }
 
+/** The docs figure of a compare pair (paths relative to docs/Features; from effects/ pages write ../assets/…). */
+function compareFigure(entry) {
+  const src = path.relative(path.resolve('docs/Features'), path.resolve(entry.out)).split(path.sep).join('/');
+  return `<figure class="docs-shot docs-compare">\n\n![${entry.alt ?? entry.name}](${src})\n\n<figcaption>${entry.caption ?? ''}</figcaption>\n</figure>\n`;
+}
+
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
 const url = option('--url', 'http://localhost:5175');
@@ -134,10 +153,12 @@ try {
     const entries = JSON.parse(fs.readFileSync(option('--pairs'), 'utf8')).pairs.filter(entry => !option('--only') || entry.name === option('--only'));
     if (!entries.length) throw new Error(`No pair ${option('--only')} in ${option('--pairs')}`);
     for (const entry of entries) {
-      const encoded = await encodeDocShotWebp(page, await composePair(page, entry), { maxBytes: entry.maxBytes ?? 200000, maxPixelWidth: 1600 });
+      const compare = entry.layout === 'compare';
+      const encoded = await encodeDocShotWebp(page, await composePair(page, entry), { maxBytes: entry.maxBytes ?? 200000, maxPixelWidth: 1600, pair: compare });
       fs.mkdirSync(path.dirname(path.resolve(entry.out)), { recursive: true });
       fs.writeFileSync(path.resolve(entry.out), encoded.buffer);
       console.log(`${entry.out}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes, quality ${encoded.quality}`);
+      if (compare) console.log(compareFigure(entry));
     }
     if (errors.length) console.log(`page errors: ${[...new Set(errors)].join(' | ')}`);
   } else {

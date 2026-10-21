@@ -31,18 +31,21 @@ const toLimited = 'scale=in_range=full:out_range=limited:in_color_matrix=bt709:o
  * The layout filter for an effect clip: input 0 is the effect export, input 1 the original.
  *   single  the crop of the effect
  *   pair    original | effect, the same crop side by side with `gap` px between them
+ *   compare the pair of a docs compare slider: original | effect at exactly the same size, no gap
  *   split   one picture: the original up to `split` of the width, the effect after a thin line
  *   detail  the crop of the effect (whole frame) | a `zoom`× pixel-for-pixel detail at `detail` [x, y]
  * Returns { graph (ending in [c]), width, height }.
  */
 function layoutGraph(clip, frame) {
   const [x, y, w, h] = clip.crop ?? [0, 0, frame.width, frame.height];
-  const gap = clip.gap ?? 6, layout = clip.layout ?? 'single';
-  const halves = layout === 'pair' || layout === 'detail';
-  const cellWidth = even(halves ? (clip.width - gap) / 2 : clip.width), cellHeight = even(cellWidth * h / w);
+  const layout = clip.layout ?? 'single', gap = layout === 'compare' ? 0 : clip.gap ?? 6;
+  const halves = layout === 'pair' || layout === 'compare' || layout === 'detail';
+  const outWidth = clip.width ?? 960;
+  const cellWidth = even(halves ? (outWidth - gap) / 2 : outWidth), cellHeight = even(cellWidth * h / w);
   const fit = (input, flags = 'lanczos') => `[${input}:v]${toLimited},crop=${w}:${h}:${x}:${y},scale=${cellWidth}:${cellHeight}:flags=${flags}`;
   const width = halves ? cellWidth * 2 + gap : cellWidth;
   if (layout === 'single') return { graph: `${fit(0)}[c]`, width, height: cellHeight };
+  if (layout === 'compare') return { width, height: cellHeight, graph: `${fit(1)}[l];${fit(0)}[r];[l][r]hstack[c]` };
   if (layout === 'pair') return { width, height: cellHeight,
     graph: `${fit(1)},pad=${cellWidth + gap}:${cellHeight}:0:0:color=0x111111[l];${fit(0)}[r];[l][r]hstack[c]` };
   if (layout === 'split') {
@@ -57,7 +60,7 @@ function layoutGraph(clip, frame) {
       + `[a]crop=${w}:${h}:${x}:${y},scale=${cellWidth}:${cellHeight}:flags=area,pad=${cellWidth + gap}:${cellHeight}:0:0:color=0x111111[l];`
       + `[b]crop=${dw}:${dh}:${Math.round(dx)}:${Math.round(dy)},scale=${cellWidth}:${cellHeight}:flags=neighbor[r];[l][r]hstack[c]` };
   }
-  throw new Error(`${clip.name}: unknown layout "${layout}" (single, pair, split or detail)`);
+  throw new Error(`${clip.name}: unknown layout "${layout}" (single, pair, compare, split or detail)`);
 }
 
 /**
@@ -91,10 +94,13 @@ export function writePoster(video, poster, time = 0) {
   return fs.statSync(poster).size;
 }
 
-/** Effect clip from editor exports: `effect` (and `original` for pair/split) → MP4 + poster. */
+/** Layouts that show the original beside the effect, so they need an export without the effect. */
+export const ORIGINAL_LAYOUTS = ['pair', 'compare', 'split'];
+
+/** Effect clip from editor exports: `effect` (and `original` for pair, compare and split) → MP4 + poster. */
 export function encodeEffectClip(clip, { effect, original, output, poster }) {
   const frame = probeVideo(effect);
-  if (['pair', 'split'].includes(clip.layout) && !original) throw new Error(`${clip.name}: layout ${clip.layout} needs the original export`);
+  if (ORIGINAL_LAYOUTS.includes(clip.layout) && !original) throw new Error(`${clip.name}: layout ${clip.layout} needs the original export`);
   const layout = layoutGraph(clip, frame);
   const fps = clip.fps ?? Math.round(frame.fps * 1000) / 1000;
   const graph = `${layout.graph};${loopGraph('c', { duration: frame.frames / frame.fps, fps, crossfade: clip.loop ?? 0.5 })}`;

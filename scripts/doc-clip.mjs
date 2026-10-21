@@ -17,8 +17,9 @@
 //   effect, params   effect id and parameters on top of its defaults
 //   range            [start, end] timeline seconds exported (default: the whole source)
 //   loop             seconds of crossfade from the end into the start (default 0.5; 0: plain cut)
-//   layout           single (default) | pair (original | effect) | split (original left, effect
-//                    right of `split`, default 0.5) | detail (crop | `zoom`× detail at `detail` [x, y])
+//   layout           single (default) | pair (original | effect) | compare (original | effect without a
+//                    gap, for a docs compare slider) | split (original left, effect right of `split`,
+//                    default 0.5) | detail (crop | `zoom`× detail at `detail` [x, y])
 //   crop             [x, y, w, h] px of the exported frame; width (output px, default 960), gap (6)
 //   fps, exportFps (both default to the source's), maxBytes (default 1.5 MB), crf (start value,
 //   default 20), poster (seconds into the clip)
@@ -41,7 +42,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { humanMouse } from './docClipPointer.mjs';
-import { encodeEffectClip, encodeRecording, probeVideo } from './docClipVideo.mjs';
+import { ORIGINAL_LAYOUTS, encodeEffectClip, encodeRecording, probeVideo } from './docClipVideo.mjs';
 
 const args = process.argv.slice(2);
 const valued = ['--only', '--url', '--media', '--out', '--keep'];
@@ -111,7 +112,7 @@ async function effectClip(page, clip, work) {
   const { tool, item, clipId, duration } = await openProject(page, mediaPath(clip.source ?? shotList.source));
   const [start, end] = clip.range ?? [0, duration];
   const range = { start, end, item, fps: clip.exportFps ?? item.fps ?? 30 };
-  const original = ['pair', 'split'].includes(clip.layout)
+  const original = ORIGINAL_LAYOUTS.includes(clip.layout)
     ? await exportRange(page, range, path.join(work, `${clip.name}.original.mp4`)) : undefined;
   const added = await tool('addEffect', { clipId, effectType: clip.effect, params: clip.params ?? {} });
   for (const note of [added?.warnings, added?.notes, added?.paramWarnings].flat().filter(Boolean)) console.log(`${clip.name}: ${JSON.stringify(note)}`);
@@ -189,8 +190,9 @@ async function operationClip(page, clip, work, viewport) {
 function figure(clip, size) {
   const src = path.relative(path.resolve('docs/Features'), path.join(out, `${clip.name}.mp4`));
   const float = clip.float ? ` docs-shot--float-${clip.float}` : '';
+  const compare = clip.layout === 'compare' ? ' docs-compare' : '';
   const label = (clip.alt ?? clip.name).replace(/"/g, '&quot;');
-  return `<figure class="docs-shot docs-clip${float}">\n<video src="${src}" poster="${src.replace(/\.mp4$/, '.webp')}" width="${size.width}" height="${size.height}" `
+  return `<figure class="docs-shot docs-clip${compare}${float}">\n<video src="${src}" poster="${src.replace(/\.mp4$/, '.webp')}" width="${size.width}" height="${size.height}" `
     + `autoplay muted loop playsinline preload="none" aria-label="${label}"></video>\n<figcaption>${clip.caption ?? ''}</figcaption>\n</figure>`;
 }
 
