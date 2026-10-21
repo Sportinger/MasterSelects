@@ -113,6 +113,53 @@
   dominant-baseline: central;
 }
 
+/* Live callouts (src/scripts/docsCallouts.js): each callout rests at 10 % and comes to full strength
+   while its word in the text (or the callout itself) is hovered; a line with right-angle corners runs
+   from the word to the callout. */
+.docs-callouts-live .docs-callout {
+  opacity: 0.1;
+  pointer-events: visiblePainted;
+  transition: opacity 0.2s ease;
+}
+.docs-callouts-live .docs-callout.is-active { opacity: 1; }
+.sl-markdown-content .docs-callout-word {
+  cursor: pointer;
+  border-radius: 3px;
+  text-decoration: underline dotted #ffd54a 2px;
+  text-underline-offset: 3px;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+:root[data-theme='light'] .sl-markdown-content .docs-callout-word { text-decoration-color: #b98900; }
+.sl-markdown-content .docs-callout-word.is-active {
+  background-color: rgb(255 213 74 / 0.22);
+  box-shadow: 0 0 0 2px rgb(255 213 74 / 0.22);
+}
+.docs-callout-link {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.docs-callout-link.is-active { opacity: 1; }
+.docs-callout-link path {
+  fill: none;
+  stroke: #ffd54a;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.7));
+  transition: stroke-dashoffset 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.docs-callout-link circle { fill: #ffd54a; filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.7)); }
+@media (prefers-reduced-motion: reduce) {
+  .docs-callout-link path, .docs-callouts-live .docs-callout { transition: none; }
+}
+
 /* Floating shots: the text runs beside the picture on wide screens and below it on phones.
    Use <figure class="docs-shot docs-shot--float-right"> (or --float-left) around the image. */
 @media (min-width: 50rem) {
