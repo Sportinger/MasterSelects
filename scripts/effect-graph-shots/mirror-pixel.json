@@ -1,0 +1,8 @@
+{
+  "shots": [
+    "pixelate?plumbing=hide&omit=output&cables=avoid",
+    "block-mosaic?focus=large-tiles&only=large-cell,large-position,large-index,time-step-vec2,hash-input,hash,is-large,tile-size&cables=avoid@block-mosaic-large-tiles",
+    "kaleidoscope?focus=wedge-fold&only=base-angle,angle,fold-low-wedge,compound-shared-fold-low-progress,fold-low-turned,fold-low-direction,fold-low-moved&cables=avoid@kaleidoscope-wedge-fold",
+    "rgb-split?focus=channel-merge-and-straight-alpha&only=red-split,green-split,blue-split,combined&layout=float@rgb-split-channel-merge"
+  ]
+}

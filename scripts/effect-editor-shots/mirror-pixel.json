@@ -1,0 +1,32 @@
+{
+  "shots": [
+    {
+      "name": "kaleidoscope-inspector",
+      "effect": "kaleidoscope",
+      "params": {
+        "segments": 8
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 600,
+      "alt": "Properties → Effects with a Kaleidoscope card at Segments 8, beside the preview: the dancer folded into an eight-part flower",
+      "marks": [
+        {
+          "target": "Segments",
+          "label": "Segments"
+        },
+        {
+          "target": "Source Angle",
+          "label": "Source Angle, which part of the picture the mirrors show"
+        },
+        {
+          "target": "Frame Edges",
+          "label": "Frame Edges, what fills reads past the picture"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ]
+    }
+  ]
+}

@@ -823,6 +823,9 @@ their former wall-clock animation even for legacy graph-less effects. Grain adds
 an explicit Seed control with default `0`; existing controls keep their original
 ranges and defaults. Both preserve source alpha and use one fullscreen pass.
 
+### Editable mirror, split and pixel graphs
+
+User guide with pictures: [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md).
 Kaleidoscope, Mirror and RGB Split read a premultiplied `rgba16float` copy of
 the frame (two passes) and unpremultiply the result; their reads beyond the frame
 follow **Frame Edges** (Mirror, Clamp, Transparent). Angles are on-screen angles,
@@ -1048,7 +1051,7 @@ current recipes with Stretch to Frame, Clamp and (Wave) Speed 0, which keeps the
 saved Wave and Twirl look; Bulge gets the smooth curve. The worker CPU fallback
 renders the untouched recipes with a hand-written pass that matches the graph.
 Kaleidoscope is covered with the mirror effects: see
-[Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md).
+[Editable mirror, split and pixel graphs](#editable-mirror-split-and-pixel-graphs).
 
 The image operator catalog also offers two-dimensional rotation and radial
 projection/inverse-projection primitives for equidistant, equisolid,
