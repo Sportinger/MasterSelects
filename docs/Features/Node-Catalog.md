@@ -246,7 +246,10 @@ lowbias32 bit mix plus PCG2D on the exact float bits. Use the integer hash for n
 graphs: the sine hash shows diagonal stripes on cell grids and loses quality on
 large keys, the integer hash stays uniform for any key (Glitch and Film Prism use
 it), and for the same key it gives bit-identical values on the GPU and in the CPU
-evaluator.
+evaluator. Feed it whole numbers (cell indices, counters, integer salts): the GPU
+computes keys in 32-bit floats and the CPU in 64-bit, so only exact integers below
+2^24 reach the hash as the same bits on both. Both are one Random node: its
+inspector's **Algorithm** choice switches between Sine and Integer (PCG).
 
 ## Categories, names and visibility
 

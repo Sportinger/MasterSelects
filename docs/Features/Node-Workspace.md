@@ -365,7 +365,10 @@ Value outputs carry their parameter or constant names in the folder interface.
 Other folder ports are named after what they carry, not after the node type that
 computes it: an effect's presentation plan names its key outputs (Sigma, Tap
 Count, Box Length, Is Spin), and outputs with their own label (UV, Resolution)
-keep it; only unnamed outputs of several-output nodes read `Node: Port`.
+keep it; only unnamed outputs of several-output nodes read `Node: Port`. A node
+whose result is used through some of its outputs offers only those: the unused Y and
+Z of a Split Vector whose X feeds another node are not folder outputs. A node with no
+used output still offers all of them, so a new result can be wired out.
 
 The Fisheye upgrade preserves all primitive IDs, parameter bindings, sampling
 scopes and arithmetic, generating the identical shader without additional passes.

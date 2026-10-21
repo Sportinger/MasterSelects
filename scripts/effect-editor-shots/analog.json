@@ -5,8 +5,8 @@
       "effect": "crt-screen",
       "params": {},
       "image": "neon_rain_street.jpg",
-      "preview": 380,
-      "alt": "Properties, Effects with a CRT Screen card at its defaults: Mix, Curvature, Line Count 240, Line Depth, the Mask controls and Flicker, beside the preview showing the night street as a curved tube picture",
+      "preview": 0,
+      "alt": "The CRT Screen card in Properties, Effects at its defaults: Mix, Curvature, Line Count 240, Line Depth, Mask (Aperture Grille), Mask Strength, Mask Size, Flicker and Speed, each a slider with a value field and reset",
       "marks": [
         {
           "target": "Curvature",
@@ -30,7 +30,10 @@
       "hide": [
         "Particle Out"
       ],
-      "height": 1500
+      "height": 1500,
+      "gutter": 56,
+      "layout": "float",
+      "width": 1800
     }
   ]
 }

@@ -5,20 +5,29 @@
       "out": "docs/Features/assets/effects/crt-screen.webp",
       "image": "neon_rain_street",
       "width": 1920,
-      "crop": [
-        260,
-        0,
-        530,
-        400
-      ],
       "left": {
-        "effect": "original"
+        "effect": "crt-screen",
+        "params": {},
+        "crop": [
+          0,
+          0,
+          1920,
+          1080
+        ],
+        "zoom": 0.25
       },
       "right": {
         "effect": "crt-screen",
-        "params": {}
-      },
-      "zoom": 1.5
+        "params": {},
+        "crop": [
+          573,
+          37,
+          160,
+          90
+        ],
+        "zoom": 3,
+        "smooth": false
+      }
     },
     {
       "name": "glitch",
@@ -77,9 +86,9 @@
       "width": 1920,
       "crop": [
         560,
-        100,
+        140,
         797,
-        860
+        940
       ],
       "left": {
         "effect": "original"
@@ -95,7 +104,7 @@
           "tapeSpeed": "lp",
           "tracking": 0.3,
           "dropout": 0.15,
-          "tapeWear": 0.35,
+          "tapeWear": 0.25,
           "chromaBleed": 0.6,
           "headSwitching": 0.7,
           "crtAmount": 0.2

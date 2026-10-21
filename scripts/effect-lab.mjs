@@ -15,9 +15,10 @@
 // image and puts the same crop of both side by side as a WebP:
 //   { "name", "out": "docs/Features/assets/effects/<file>.webp", "image": "neon_rain_street",
 //     "width": 1920, "crop": [x, y, w, h] (px of the rendered frame), "zoom": 1.5 (enlarges the
-//     crop, for small lights), "gap": 6,
+//     crop, for small lights), "smooth": false (nearest-neighbour enlargement), "gap": 6,
 //     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ..., "times": [0.5] } }
-//     (a side's optional "times" renders an animated effect at those timeline seconds; the last one is kept)
+//     (a side's optional "times" renders an animated effect at those timeline seconds; the last one is kept;
+//      a side's own "crop", "zoom" and "smooth" override the entry's, e.g. a whole frame beside a magnified detail)
 // (an effect of "original" is the unchanged image).
 // Needs a running Vite of this checkout (`npx vite --port 5175 --strictPort`).
 import fs from 'node:fs';
@@ -32,20 +33,25 @@ async function composePair(page, entry) {
     params: spec.params ?? {}, bypass: spec.effect === 'original', times: spec.times });
   const [left, right] = [await side(entry.left), await side(entry.right)];
   for (const [label, cell] of [['left', left], ['right', right]]) if (cell.gpuFailure) throw new Error(`${entry.name} ${label}: ${cell.gpuFailure}`);
-  const png = await page.evaluate(async ({ left, right, crop, gap, zoom }) => {
-    const [x, y, w, h] = crop, cw = Math.round(w * zoom), ch = Math.round(h * zoom);
-    const canvas = new OffscreenCanvas(cw * 2 + gap, ch), context = canvas.getContext('2d');
+  // Each side may set its own crop, zoom and smooth (e.g. a whole frame beside a magnified detail).
+  const view = spec => ({ crop: spec.crop ?? entry.crop, zoom: spec.zoom ?? entry.zoom ?? 1, smooth: spec.smooth ?? entry.smooth ?? true });
+  const png = await page.evaluate(async ({ cells, gap }) => {
+    const sizes = cells.map(({ crop, zoom }) => [Math.round(crop[2] * zoom), Math.round(crop[3] * zoom)]);
+    const canvas = new OffscreenCanvas(sizes[0][0] + gap + sizes[1][0], Math.max(sizes[0][1], sizes[1][1])), context = canvas.getContext('2d');
     context.fillStyle = '#111'; context.fillRect(0, 0, canvas.width, canvas.height);
-    context.imageSmoothingQuality = 'high';
-    for (const [index, data] of [left, right].entries()) {
+    let x = 0;
+    for (const [index, { data, crop, smooth }] of cells.entries()) {
+      // smooth: false enlarges with nearest-neighbour, so scanlines and mask stripes stay crisp.
+      context.imageSmoothingEnabled = smooth; context.imageSmoothingQuality = 'high';
       const bitmap = await createImageBitmap(await (await fetch(data)).blob());
-      context.drawImage(bitmap, x, y, w, h, index * (cw + gap), 0, cw, ch);
+      context.drawImage(bitmap, crop[0], crop[1], crop[2], crop[3], x, 0, sizes[index][0], sizes[index][1]);
+      x += sizes[index][0] + gap;
     }
     const blob = await canvas.convertToBlob({ type: 'image/png' });
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return btoa(binary);
-  }, { left: left.png, right: right.png, crop: entry.crop, gap: entry.gap ?? 6, zoom: entry.zoom ?? 1 });
+  }, { cells: [{ data: left.png, ...view(entry.left) }, { data: right.png, ...view(entry.right) }], gap: entry.gap ?? 6 });
   return Buffer.from(png, 'base64');
 }
 
