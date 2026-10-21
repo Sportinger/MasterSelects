@@ -35,8 +35,10 @@ function followEndpoints(route: Route, cable: RoutedCable): NodeGraphPoint[] {
  * a pointer-dragged card still uses the direct interactive cable.
  */
 export function useCableAvoidance(cables: RoutedCable[], nodes: readonly NodeGraphNode[], paused: boolean,
-  groupBounds?: ReadonlyMap<string, NodeBounds>, groups?: NodeGraph['groups'], dragging = false): RoutedCable[] {
-  const enabled = useSettingsStore(state => state.nodeCableAvoid);
+  groupBounds?: ReadonlyMap<string, NodeBounds>, groups?: NodeGraph['groups'], dragging = false, forced = false): RoutedCable[] {
+  const preferred = useSettingsStore(state => state.nodeCableAvoid);
+  // A graph can require it (NodeGraph.cableRouting); the editor preference stays untouched.
+  const enabled = preferred || forced;
   const [routes, setRoutes] = useState<ReadonlyMap<string, Route>>(() => new Map());
   const worker = useRef<Worker | null>(null), revision = useRef(0);
 

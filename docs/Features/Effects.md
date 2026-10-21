@@ -1512,7 +1512,11 @@ stubs, so a picture shows a recipe instead of the whole folder (`--list` prints 
 ids; a composition's `@` may be left out); each wrapped row is as tall as its own
 cards; `plumbing=hide` leaves out the Constants
 and Coordinates & Resources folders and their cables, so an overview reads as one
-path; `chain=1` keeps the clip source and output. Folder ports are named after what
+path; `chain=1` keeps the clip source and output; `cables=avoid` routes the cables
+around the cards like the Node Workspace's **Avoid** button (`NodeGraph.cableRouting`),
+so no cable runs behind a stub or a wrapped row and shows the wrong wiring. The page
+mounts the canvas only once the clip is in the timeline store: a first placement with
+default preview panes would push stacked cards apart for good. Folder ports are named after what
 they carry ("Sigma", "Tap Count"): an effect's presentation plan names its key
 outputs (`portLabels` in `effectPresentationPlans.ts`). Folder headers stay
 clickable for exploring. The page is part of dev builds only.
@@ -1525,11 +1529,14 @@ Chrome as WebP (at most 1600 px wide and 200 KB) into
 `node scripts/effect-graph-shot.mjs 'gaussian-blur?plumbing=hide'`,
 with a Vite of the checkout running (`npx vite --port 5176 --strictPort`). A shot
 is `<effect>[?query][@file name]`; `--list` prints the folders and node ids of each
-effect. Cables that bend out past the cards (the last cable of a wrapped row) stay
-inside the crop.
-`marks=id[:from],…` in a shot's query adds numbered callouts on those node cards
-and prints the figure markup (`layout=float` sizes them for a picture beside the
-text). The docs site links every picture to its full-size file and lets node
+effect. Cables that bend out past the cards (the last cable of a wrapped row, or an
+avoiding route) stay inside the crop.
+`marks=id[:from][:reach],…` in a shot's query adds numbered callouts on those node
+cards (a stub id such as `wave-uv-split:y` keeps its colon; `reach` is the arrow
+length in overlay units, default 84) and prints the figure markup (`layout=float`
+sizes them for a picture beside the text). The crop grows into the canvas margin,
+with extra room above and below for vertical callouts, so an arrow keeps its length
+instead of shrinking to a badge on the card edge. The docs site links every picture to its full-size file and lets node
 graphs scroll sideways on narrow screens.
 
 ### Effect editor excerpts
@@ -1543,7 +1550,9 @@ the docs `<figure>` with numbered callouts on the named controls (parameter
 labels, `tab:Effects`, `bypass`, `remove`, `add` or `preview:x,y`) in the
 `docs-shot-overlay` style; `layout: "float"` sizes them for a picture beside the
 text. `top: "tabs"` crops below the dock tab row (from the Properties sub-tabs),
-`preview` sets the width of the preview strip, and `hide` leaves named buttons that
+`preview` sets the width of the preview strip (0: the card alone), a mark's `reach`
+sets its arrow length (the crop grows to keep it), a parameter callout points at the
+label text, and `hide` leaves named buttons that
 the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
 `--only <name>` recaptures one shot. A control the script cannot find stops it
 with the card's text, so a renamed parameter does not silently drop a callout.

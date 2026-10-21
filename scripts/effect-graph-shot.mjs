@@ -19,8 +19,12 @@
 //   plumbing=hide      leave out the Constants and Coordinates & Resources folders and their
 //                      cables (overview pictures: the stages read as one path)
 //   chain=1            keep the clip chain (source, transform, output) around the effect
-// (a composition's `@` id may be given without its `@`) and two picture options: marks=id[:from],...  numbered callouts on these node cards (from =
-// left|right|above|below), printed with the figure markup; layout=full|float sizes the callouts.
+//   cables=avoid       route cables around cards (the Node Workspace's Avoid), so no cable runs
+//                      behind a card; use it whenever a wrapped row or a stub hides a cable
+// (a composition's `@` id may be given without its `@`) and two picture options:
+// marks=id[:from][:reach],...  numbered callouts on these node cards (from = left|right|above|below,
+// reach = arrow length in overlay units, default 84), printed with the figure markup; the crop
+// grows into the canvas margin so every arrow keeps its length; layout=full|float sizes the callouts.
 // The file is `<out>/<name or effect>.webp`. `--list` prints every shot's folders and node ids instead.
 //
 // The page is laid out `--width` CSS pixels wide (smaller for tall graphs) and captured at
@@ -31,7 +35,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeDocShotWebp } from './docShotWebp.mjs';
-import { calloutOverlay, docsFigure } from './docShotFigure.mjs';
+import { calloutOverlay, cropWithCallouts, docsFigure } from './docShotFigure.mjs';
 
 const args = process.argv.slice(2);
 const valueOptions = new Set(['--url', '--out', '--width', '--max-height', '--scale', '--max-bytes', '--manifest']);
@@ -55,7 +59,13 @@ const parseShot = (spec) => {
   const [target, name] = spec.split('@');
   const [effect, query = ''] = target.split('?');
   const params = new URLSearchParams(query);
-  const marks = (params.get('marks') ?? '').split(',').filter(Boolean).map(item => { const [id, from] = item.split(':'); return { id, from: from || 'left' }; });
+  // `id[:from][:reach]`; stub ids contain a colon themselves (`wave-uv-split:y`), so read from the end.
+  const marks = (params.get('marks') ?? '').split(',').filter(Boolean).map(item => {
+    const parts = item.split(':');
+    const reach = /^\d+$/.test(parts.at(-1)) && parts.length > 1 ? Number(parts.pop()) : undefined;
+    const from = ['left', 'right', 'above', 'below'].includes(parts.at(-1)) && parts.length > 1 ? parts.pop() : 'left';
+    return { id: parts.join(':'), from, ...(reach !== undefined ? { reach } : {}) };
+  });
   const layout = params.get('layout') ?? 'full';
   params.delete('marks'); params.delete('layout');
   return { effect, query: params.toString(), name: name || effect, marks, layout };
@@ -95,7 +105,10 @@ try {
     const bend = state.overhang ?? { left: 0, top: 0, right: 0, bottom: 0 };
     const extraX = 2 * Math.max(bend.left, bend.right), extraY = extraX ? 0 : 2 * Math.max(bend.top, bend.bottom);
     const zoom = Math.min((cssWidth - margin) / (width + extraX), (maxCssHeight - margin) / (height + extraY));
-    const viewport = { width: Math.ceil((width + extraX) * zoom + margin), height: Math.ceil((height + extraY) * zoom + margin) };
+    // Callouts above or below cards get spare canvas above and below the graph: the Fit is set by
+    // the width, so the graph stays the same size and the crop can grow into the room.
+    const calloutRoom = shot.marks.some(mark => mark.from === 'above' || mark.from === 'below') ? 120 : 0;
+    const viewport = { width: Math.ceil((width + extraX) * zoom + margin), height: Math.ceil((height + extraY) * zoom + margin) + calloutRoom };
     await page.setViewportSize(viewport);
     // The worker canvas reports readiness on the canvas element; cards, cables and the flow
     // layout settle in the following frames. Then the canvas' own Fit frames the settled graph.
@@ -129,6 +142,12 @@ try {
     }), shot.marks.map(mark => mark.id));
     const missing = boxes.filter(box => box.missing).map(box => box.missing);
     if (missing.length) throw new Error(`${shot.name}: no node card ${missing.join(', ')} (use --list for the ids)`);
+    // Callouts keep their full arrows: the crop grows into the canvas margin where they need room.
+    if (clip && shot.marks.length) {
+      const grown = cropWithCallouts({ layout: shot.layout, crop: { left: clip.x, top: clip.y, right: clip.x + clip.width, bottom: clip.y + clip.height },
+        boxes, marks: shot.marks, bounds: { left: 0, top: 0, right: viewport.width, bottom: viewport.height } });
+      Object.assign(clip, { x: grown.left, y: grown.top, width: grown.right - grown.left, height: grown.bottom - grown.top });
+    }
     const png = await page.screenshot({ type: 'png', ...(clip ? { clip } : {}) });
     const encoded = await encodeDocShotWebp(page, png, { maxBytes, maxPixelWidth })
       .catch(error => { throw new Error(`${shot.name}: ${error.message} Use focus/open or --max-bytes.`); });

@@ -509,7 +509,11 @@ the obstacle search reruns after the drop. Groups containing an endpoint remain
 accessible; unrelated groups, including nested frames, are obstacles. Backward links
 also detour around such groups. Links without a
 clear path inside the search budget and hidden legacy DOM rendering keep direct
-routes. Avoid is an editor preference like the line style.
+routes, and so do facing ports closer than their two port stubs (a value card right
+before its consumer): a grid route there would double back in a loop. Avoid is an
+editor preference like the line style; a graph can also require it
+(`NodeGraph.cableRouting: 'avoid'`, used by the docs graph pictures) without
+changing the preference.
 
 ### Cable branch points
 

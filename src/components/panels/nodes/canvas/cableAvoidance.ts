@@ -208,6 +208,9 @@ export function routeAroundCards(obstacles: readonly AvoidRect[], cables: readon
     const startStub = [STUB, 24, 12].find(stub => !blocked(...cell(cable.from.x + stub, cable.from.y)));
     const endStub = [STUB, 24, 12].find(stub => !blocked(...cell(cable.to.x - stub, cable.to.y)));
     if (startStub === undefined || endStub === undefined) continue;
+    // Facing ports closer than both port stubs (a value card right before its consumer): a grid
+    // route would have to double back in a loop. The direct cable already stays in the gap.
+    if (cable.to.x > cable.from.x && cable.to.x - cable.from.x < startStub + endStub) continue;
     const start = cell(cable.from.x + startStub, cable.from.y), goal = cell(cable.to.x - endStub, cable.to.y);
     const shared = cable.source ? used.get(cable.source) : undefined;
     const nearbyGroups = blockingGroups.filter(rect => rect.x <= Math.max(cable.from.x, cable.to.x) + WINDOW * CELL
