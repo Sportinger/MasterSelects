@@ -1,0 +1,9 @@
+{
+  "about": "Published /docs URLs that moved, old → new (Documentation-Site.md, Redirects). A redirect waits while its old page is still published and starts working once that page is gone.",
+  "redirects": {
+    "/docs/features/time-stack/": "/docs/effects/time-stack/",
+    "/docs/features/slit-scan-3d/": "/docs/effects/slit-scan/#3d-time-surfaces",
+    "/docs/features/memory-leak/": "/docs/effects/memory-leak/",
+    "/docs/features/scene-cut-detection/": "/docs/features/proxy-system/#scene-cuts"
+  }
+}
