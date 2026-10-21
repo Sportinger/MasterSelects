@@ -10,14 +10,15 @@ import type {
 import { Logger } from '../../services/logger';
 import { buildEncodeArgs, audioBufferToPCM } from './bridge/ffmpegEncodeArgs';
 import { parseEncodeProgressLine, containerMimeType } from './bridge/ffmpegLogParsing';
+import { FFmpegExportMemoryError, RawFrameBuffer, isAllocationFailure } from './bridge/rawFrameBuffer';
 
 const log = Logger.create('FFmpegBridge');
 
 // FFmpeg WASM core interface (direct core, not @ffmpeg/ffmpeg wrapper)
 interface FFmpegCore {
   FS: {
-    writeFile: (path: string, data: Uint8Array) => void;
-    readFile: (path: string) => Uint8Array;
+    writeFile: (path: string, data: Uint8Array, opts?: { canOwn?: boolean }) => void;
+    readFile: (path: string) => Uint8Array<ArrayBuffer>;
     unlink: (path: string) => void;
     readdir: (path: string) => string[];
     mkdir: (path: string) => void;
@@ -291,22 +292,50 @@ export class FFmpegBridge {
     onProgress?: (progress: FFmpegProgress) => void,
     audioBuffer?: AudioBuffer | null
   ): Promise<Blob> {
-    if (!this.ffmpeg) {
-      await this.load();
-    }
-    if (!this.ffmpeg) {
-      throw new Error('FFmpeg not loaded');
-    }
-
+    if (frames.length === 0) throw new Error('No frames to encode');
     this.cancelled = false;
-    this.onProgress = onProgress;
-    this.logs = [];
-    this.totalFrames = frames.length;
-    this.startTime = performance.now();
-
-    const fs = this.ffmpeg.FS;
-
+    const rawFrames = RawFrameBuffer.allocate(settings.width, settings.height, frames.length);
     try {
+      for (const frame of frames) {
+        if (this.cancelled) throw new Error('Cancelled');
+        rawFrames.writeFrame(frame);
+      }
+    } catch (error) {
+      rawFrames.release();
+      throw error;
+    }
+    return this.encodeRawFrames(rawFrames, settings, onProgress, audioBuffer);
+  }
+
+  /**
+   * Encode frames that were rendered straight into a preallocated
+   * RawFrameBuffer. The buffer's bytes become the MEMFS input file without
+   * another copy; allocation failures surface as FFmpegExportMemoryError.
+   */
+  async encodeRawFrames(
+    rawFrames: RawFrameBuffer,
+    settings: FFmpegExportSettings,
+    onProgress?: (progress: FFmpegProgress) => void,
+    audioBuffer?: AudioBuffer | null
+  ): Promise<Blob> {
+    const frameCount = rawFrames.frameCount;
+    const rawBytes = rawFrames.byteLength;
+    try {
+      if (frameCount === 0) throw new Error('No frames to encode');
+      if (!this.ffmpeg) {
+        await this.load();
+      }
+      if (!this.ffmpeg) {
+        throw new Error('FFmpeg not loaded');
+      }
+
+      this.onProgress = onProgress;
+      this.logs = [];
+      this.totalFrames = frameCount;
+      this.startTime = performance.now();
+
+      const fs = this.ffmpeg.FS;
+
       // Clean up any previous files first to reset FFmpeg state
       this.cleanup();
 
@@ -314,43 +343,23 @@ export class FFmpegBridge {
       try { fs.mkdir('/input'); } catch { /* exists */ }
       try { fs.mkdir('/output'); } catch { /* exists */ }
 
-      // Concatenate all frames into a single raw file
-      // This bypasses the pattern matching issue in WASM FFmpeg's image2 demuxer
-      const frameSize = frames[0].byteLength;
-      const totalSize = frameSize * frames.length;
-      log.debug(`Writing ${frames.length} frames (${(totalSize / 1024 / 1024).toFixed(1)} MB)...`);
-      log.debug(`Frame size: ${frameSize} bytes (expected: ${settings.width * settings.height * 4})`);
-
-      // Debug: check if frames have unique content
-      if (frames.length >= 2) {
-        let sameCount = 0;
-        for (let i = 0; i < Math.min(100, frameSize); i++) {
-          if (frames[0][i] === frames[1][i]) sameCount++;
-        }
-        log.debug(`Frame 0 vs 1: ${sameCount}/100 bytes identical (should be <90 if different)`);
-      }
-
-      const allFrames = new Uint8Array(totalSize);
-      for (let i = 0; i < frames.length; i++) {
-        if (this.cancelled) throw new Error('Cancelled');
-        allFrames.set(frames[i], i * frameSize);
-      }
-
-      fs.writeFile('/input/frames.raw', allFrames);
-      log.debug(`Wrote /input/frames.raw: ${allFrames.byteLength} bytes`);
+      // One raw file bypasses the pattern matching issue in WASM FFmpeg's
+      // image2 demuxer. canOwn lets MEMFS keep our bytes instead of copying.
+      log.debug(`Writing ${frameCount} frames (${(rawBytes / 1024 / 1024).toFixed(1)} MB)...`);
+      fs.writeFile('/input/frames.raw', rawFrames.take(), { canOwn: true });
 
       // Write audio if provided
       const supportsAudio = settings.container !== 'gif' && settings.codec !== 'gif';
       let hasAudio = false;
       if (supportsAudio && audioBuffer && audioBuffer.length > 0) {
         const audioData = audioBufferToPCM(audioBuffer);
-        fs.writeFile('/input/audio.raw', new Uint8Array(audioData.buffer));
+        fs.writeFile('/input/audio.raw', new Uint8Array(audioData.buffer), { canOwn: true });
         hasAudio = true;
         log.debug(`Audio: ${audioBuffer.duration.toFixed(2)}s, ${audioBuffer.sampleRate}Hz`);
       }
 
       // Build FFmpeg arguments (using single file input)
-      const args = buildEncodeArgs(settings, frames.length, hasAudio ? audioBuffer : null);
+      const args = buildEncodeArgs(settings, frameCount, hasAudio ? audioBuffer : null);
       log.debug('Running: ffmpeg', args.join(' '));
 
       // NOTE: Do NOT call reset() here - it clears the virtual filesystem!
@@ -368,16 +377,21 @@ export class FFmpegBridge {
         throw new Error(`FFmpeg exited with code ${exitCode}`);
       }
 
-      // Read output file
+      // Free the raw input before the output is copied out of MEMFS.
+      this.cleanupDirectory('/input');
+
+      // readFile returns a fresh, standalone copy that can back the Blob directly.
       const outputPath = `/output/output.${settings.container}`;
       const data = fs.readFile(outputPath);
       log.info(`Output file size: ${(data.byteLength / 1024 / 1024).toFixed(2)} MB`);
-
-      // Create a copy of the data to ensure it's a standard ArrayBuffer
-      const buffer = new ArrayBuffer(data.byteLength);
-      new Uint8Array(buffer).set(data);
-      return new Blob([buffer], { type: containerMimeType(settings.container) });
+      return new Blob([data], { type: containerMimeType(settings.container) });
+    } catch (error) {
+      if (isAllocationFailure(error) && !(error instanceof FFmpegExportMemoryError)) {
+        throw new FFmpegExportMemoryError(rawBytes, frameCount, settings.width, settings.height);
+      }
+      throw error;
     } finally {
+      rawFrames.release();
       this.cleanup();
     }
   }
@@ -386,27 +400,24 @@ export class FFmpegBridge {
    * Clean up virtual filesystem
    */
   private cleanup(): void {
+    this.cleanupDirectory('/input');
+    this.cleanupDirectory('/output');
+  }
+
+  private cleanupDirectory(directory: string): void {
     if (!this.ffmpeg) return;
     const fs = this.ffmpeg.FS;
-
+    let entries: string[];
     try {
-      // Clean input files
-      const inputFiles = fs.readdir('/input');
-      for (const file of inputFiles) {
-        if (file !== '.' && file !== '..') {
-          try { fs.unlink(`/input/${file}`); } catch { /* ignore */ }
-        }
+      entries = fs.readdir(directory);
+    } catch {
+      // Not created yet (first run) - nothing to clean.
+      return;
+    }
+    for (const file of entries) {
+      if (file !== '.' && file !== '..') {
+        try { fs.unlink(`${directory}/${file}`); } catch (e) { log.warn(`Cleanup error for ${directory}/${file}`, e); }
       }
-
-      // Clean output files
-      const outputFiles = fs.readdir('/output');
-      for (const file of outputFiles) {
-        if (file !== '.' && file !== '..') {
-          try { fs.unlink(`/output/${file}`); } catch { /* ignore */ }
-        }
-      }
-    } catch (e) {
-      log.warn('Cleanup error', e);
     }
   }
 

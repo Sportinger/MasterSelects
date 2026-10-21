@@ -4,6 +4,11 @@
 // Main bridge class
 export { FFmpegBridge, getFFmpegBridge } from './FFmpegBridge';
 export type { FFmpegHeapState, FFmpegVirtualCommandInput } from './FFmpegBridge';
+export {
+  FFmpegExportMemoryError,
+  RawFrameBuffer,
+  isAllocationFailure,
+} from './bridge/rawFrameBuffer';
 
 // Codec definitions and presets
 export {
