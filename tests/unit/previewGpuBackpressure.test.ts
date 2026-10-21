@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PREVIEW_GPU_FENCE_TIMEOUT_MS, renderWithPreviewBackpressure } from '../../src/engine/engineCore/previewGpuBackpressure';
+import {
+  PREVIEW_GPU_FENCE_TIMEOUT_MS,
+  PREVIEW_GPU_WARMUP_FENCE_TIMEOUT_MS,
+  renderWithPreviewBackpressure,
+} from '../../src/engine/engineCore/previewGpuBackpressure';
+import { Logger } from '../../src/services/logger';
 
 function gpu() {
   let resolve!: () => void, reject!: (error: Error) => void;
@@ -56,10 +61,15 @@ describe('preview GPU backpressure', () => {
     g.resolve(); await Promise.resolve(); expect(wake).toHaveBeenCalledOnce();
   });
 
-  it('reopens the preview when a GPU completion fence never settles', async () => {
+  it('reopens the preview when a GPU completion fence of a warmed-up device never settles', async () => {
     vi.useFakeTimers();
     try {
-      const device = { queue: { onSubmittedWorkDone: vi.fn(() => new Promise<void>(() => {})) } } as unknown as GPUDevice;
+      const device = { queue: { onSubmittedWorkDone: vi.fn()
+        .mockReturnValueOnce(Promise.resolve())
+        .mockImplementation(() => new Promise<void>(() => {})) } } as unknown as GPUDevice;
+      // The first frame completes: the device is warmed up.
+      renderWithPreviewBackpressure(device, false, vi.fn(), vi.fn());
+      await Promise.resolve(); await Promise.resolve();
       const submitted: string[] = [];
       const wake = vi.fn(() => renderWithPreviewBackpressure(device, false, () => submitted.push('latest'), wake));
       renderWithPreviewBackpressure(device, false, () => submitted.push('first'), wake);
@@ -80,9 +90,30 @@ describe('preview GPU backpressure', () => {
       const g = gpu(), wake = vi.fn();
       renderWithPreviewBackpressure(g.device, false, vi.fn(), wake);
       renderWithPreviewBackpressure(g.device, false, vi.fn(), wake);
-      await vi.advanceTimersByTimeAsync(PREVIEW_GPU_FENCE_TIMEOUT_MS);
+      await vi.advanceTimersByTimeAsync(PREVIEW_GPU_WARMUP_FENCE_TIMEOUT_MS);
       g.resolve(); await Promise.resolve();
       expect(wake).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('gives the first fences after device creation a longer window and logs that release as info', async () => {
+    vi.useFakeTimers();
+    try {
+      Logger.clear();
+      const device = { queue: { onSubmittedWorkDone: vi.fn(() => new Promise<void>(() => {})) } } as unknown as GPUDevice;
+      const wake = vi.fn();
+      renderWithPreviewBackpressure(device, false, vi.fn(), wake);
+      renderWithPreviewBackpressure(device, false, vi.fn(), wake);
+      await vi.advanceTimersByTimeAsync(PREVIEW_GPU_FENCE_TIMEOUT_MS);
+      expect(wake).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(PREVIEW_GPU_WARMUP_FENCE_TIMEOUT_MS - PREVIEW_GPU_FENCE_TIMEOUT_MS);
+      expect(wake).toHaveBeenCalledOnce();
+      expect(Logger.getBuffer('WARN').filter(entry => entry.module === 'PreviewGpuBackpressure')).toEqual([]);
+
+      // After the warm-up, the next unsettled fence is a real stall: short window and a warning.
+      renderWithPreviewBackpressure(device, false, vi.fn(), wake);
+      await vi.advanceTimersByTimeAsync(PREVIEW_GPU_FENCE_TIMEOUT_MS);
+      expect(Logger.getBuffer('WARN').filter(entry => entry.module === 'PreviewGpuBackpressure')).toHaveLength(1);
     } finally { vi.useRealTimers(); }
   });
 });

@@ -195,12 +195,14 @@ Targeted coverage: `gpuUniformRing.test.ts`, `gpuFrameScopedRenderers.test.ts`
 - Playback is limited to about 60 fps.
 - Scrubbing is limited to about 60 fps unless a fresh video frame arrives, which bypasses the limiter.
 - A render request is consumed only by a frame that reaches the render callback. Frames skipped during device recovery, export, or while editor content publication is blocked (project open or composition switch) keep the request, so the first frame after the gate reopens shows the change. A direct `renderHostPort.render()` made while publication is blocked becomes such a request instead of being dropped.
-- The preview keeps one GPU submission in flight and coalesces newer requests until `onSubmittedWorkDone()` settles. A completion fence that does not settle within 1 second releases the queue, renders the newest request, and logs `Preview GPU completion did not settle` with a running count, so a stalled fence can no longer freeze the preview until a reload.
+- The preview keeps one GPU submission in flight and coalesces newer requests until `onSubmittedWorkDone()` settles. A completion fence that does not settle within 1 second releases the queue, renders the newest request, and logs `Preview GPU completion did not settle` with a running count, so a stalled fence can no longer freeze the preview until a reload. Until a device completed its first preview fence (pipeline and shader compilation at cold start), the window is 5 seconds and a release is logged at info, so the warning always means a stall of a warmed-up device.
 
 ### Watchdog
 
 - A watchdog checks for stalls every 2 seconds.
 - If the render loop stops producing frames for about 3 seconds while it should be active, it wakes the loop or restarts it.
+- Stall time is measured only while frames are wanted and possible: idle periods, a hidden tab, export, device recovery and a held publication (project switch, editing handed to another tab) advance the baseline instead of counting as a stall.
+- When the browser delivers no animation frames although the page reports visible (background or occluded window), the check is paused; a one-shot probe frame tells this apart from a loop that lost its callback, which is restarted with a warning.
 
 ### Export And RAM Preview
 

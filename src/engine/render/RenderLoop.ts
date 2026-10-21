@@ -64,6 +64,10 @@ export class RenderLoop {
   // baseline, which advances while the document is hidden.
   private watchdogStallBaseline = 0;
   private watchdogSawHiddenDocument = false;
+  // Last animation frame delivered to the loop. A background or occluded window can stop
+  // animation frames while the document still reports visible; that is not a render stall.
+  private lastRafTick = 0;
+  private rafProbePending = false;
 
   private readonly IDLE_TIMEOUT = 1000; // 1s before idle
   private readonly IDLE_SUPPRESSION_TIMEOUT = 3000; // bounded reload warmup
@@ -105,10 +109,12 @@ export class RenderLoop {
     this.isIdle = false;
     this.renderCount = 0;
     this.playbackNextRenderTime = 0;
+    this.lastRafTick = performance.now();
     log.info('Starting');
 
     const loop = (timestamp: number) => {
       if (!this.isRunning) return;
+      this.lastRafTick = Math.max(timestamp, this.lastRafTick);
 
       let didRender = false;
 
@@ -351,11 +357,13 @@ export class RenderLoop {
 
     const now = performance.now();
 
-    // During recovery or export, don't interfere
-    if (this.callbacks.isRecovering()) return;
-    if (this.callbacks.isExporting()) return;
-    // A project switch holds publication; its pending request is not a stall.
-    if (readEditorContentPublication().blocked) return;
+    // During recovery, export or a held publication (project switch, editing handed to another
+    // tab) frames are skipped on purpose. That time is not a stall either: advance the baseline,
+    // or the first check after the hold would report the whole hold as a render stall.
+    if (this.callbacks.isRecovering() || this.callbacks.isExporting() || readEditorContentPublication().blocked) {
+      this.watchdogStallBaseline = now;
+      return;
+    }
 
     // Hidden tab: RAF is paused by the browser, so a growing render gap is
     // not a stall. Warning here would also re-arm renderRequested on every
@@ -373,25 +381,32 @@ export class RenderLoop {
       return;
     }
 
+    if (this.animationId !== null && now - this.lastRafTick > this.WATCHDOG_STALL_THRESHOLD) {
+      this.handleSilentAnimationFrames(now);
+      return;
+    }
+
+    // If nothing is asking the render loop to stay awake, a long gap is the
+    // expected idle state. This can happen in background/unfocused tabs before
+    // the RAF loop gets a chance to flip `isIdle` itself.
+    const hasRenderDemand =
+      (this.isPlaying && this.timelineVisualDemand) ||
+      (this.isScrubbing && this.timelineVisualDemand) ||
+      this.continuousRender ||
+      this.renderRequested ||
+      this.idleSuppressed ||
+      (this.hasActiveVideo && now - this.lastActivityTime <= this.IDLE_TIMEOUT);
     const timeSinceRender = now - Math.max(this.lastSuccessfulRender, this.watchdogStallBaseline);
+    if (!hasRenderDemand) {
+      // Idle time is not stall time: a request arriving after a long idle period
+      // must not be measured against the last render before that period.
+      this.watchdogStallBaseline = now;
+      if (timeSinceRender > this.WATCHDOG_STALL_THRESHOLD) this.isIdle = true;
+      return;
+    }
 
     // Check if we're stalled (no render for too long while we should be rendering)
     if (timeSinceRender > this.WATCHDOG_STALL_THRESHOLD) {
-      // If nothing is asking the render loop to stay awake, a long gap is the
-      // expected idle state. This can happen in background/unfocused tabs before
-      // the RAF loop gets a chance to flip `isIdle` itself.
-      const hasRenderDemand =
-        (this.isPlaying && this.timelineVisualDemand) ||
-        (this.isScrubbing && this.timelineVisualDemand) ||
-        this.continuousRender ||
-        this.renderRequested ||
-        this.idleSuppressed ||
-        (this.hasActiveVideo && now - this.lastActivityTime <= this.IDLE_TIMEOUT);
-      if (!hasRenderDemand) {
-        this.isIdle = true;
-        return;
-      }
-
       log.warn(`Render stall detected: ${timeSinceRender.toFixed(0)}ms since last render (idle=${this.isIdle}, playing=${this.isPlaying})`);
 
       // Force wake from idle
@@ -407,6 +422,26 @@ export class RenderLoop {
         this.start();
       }
     }
+  }
+
+  /**
+   * No animation frame reached the loop although one is scheduled. Either the browser holds
+   * frames for this page (background tab or occluded window that still reports visible: a
+   * render gap there is not a stall) or the loop lost its callback. A one-shot probe frame
+   * tells them apart: if the probe runs while the loop does not, the loop is restarted.
+   */
+  private handleSilentAnimationFrames(now: number): void {
+    this.watchdogStallBaseline = now;
+    if (this.rafProbePending) return;
+    this.rafProbePending = true;
+    log.debug('No animation frames from the browser; render stall check paused', { sinceLastFrameMs: Math.round(now - this.lastRafTick) });
+    requestAnimationFrame(() => {
+      this.rafProbePending = false;
+      if (!this.isRunning || this.lastRafTick >= now) return;
+      log.warn('Render loop stopped receiving animation frames - restarting');
+      this.stop();
+      this.start();
+    });
   }
 
   private keepDeferredRequest(pendingRequest: boolean, reason: string): void {
