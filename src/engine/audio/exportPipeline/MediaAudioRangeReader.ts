@@ -9,9 +9,13 @@ import {
 import { createBuffer } from '../audioBufferFactory';
 
 export class MediaAudioRangeError extends Error {
-  constructor(message: string) {
+  /** 'no-audio-track': the container was read and holds no audio track at all. */
+  readonly code: 'no-audio-track' | undefined;
+
+  constructor(message: string, code?: 'no-audio-track') {
     super(message);
     this.name = 'MediaAudioRangeError';
+    this.code = code;
   }
 }
 
@@ -44,7 +48,7 @@ export class MediaAudioRangeReader {
     this.trackPromise ??= (async () => {
       const track = await this.input.getPrimaryAudioTrack();
       if (!track) {
-        throw new MediaAudioRangeError('Media source has no audio track');
+        throw new MediaAudioRangeError('Media source has no audio track', 'no-audio-track');
       }
       if (!(await track.canDecode())) {
         throw new MediaAudioRangeError(

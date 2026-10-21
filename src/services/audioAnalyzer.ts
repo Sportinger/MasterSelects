@@ -4,6 +4,9 @@
 import { Logger } from './logger';
 import { useMediaStore } from '../stores/mediaStore';
 import { getSharedAudioDecodeService } from './audio/AudioDecodeService';
+import { BROWSER_AUDIO_DECODE_DECODER_ID } from './audio/decode/browserFallbackRuntime';
+import { isUndecodableAudioSourceError } from './audio/decode/errors';
+import { decodeSourceAudioShared } from './audio/decode/sharedSourceAudioDecode';
 
 const log = Logger.create('AudioAnalyzer');
 
@@ -39,21 +42,33 @@ class AudioAnalyzer {
       return null;
     }
 
+    const file = mediaFile.file;
     try {
-      return await getSharedAudioDecodeService().decodeAudioBuffer(
-        { kind: 'file', file: mediaFile.file },
-        {
-          mediaFileId,
-          sourceFingerprint: mediaFile.fileHash || mediaFile.id,
-          metadata: {
-            source: 'audio-analyzer',
-            sourceFileName: mediaFile.file.name,
-            sourceFileSize: mediaFile.file.size,
-          },
+      // Same decode chain (browser, container/WebCodecs, FFmpeg) and sharing as proxy and waveform.
+      const { buffer } = await decodeSourceAudioShared(file, {
+        browserAttempt: {
+          id: BROWSER_AUDIO_DECODE_DECODER_ID,
+          decode: () => getSharedAudioDecodeService().decodeAudioBuffer(
+            { kind: 'file', file },
+            {
+              mediaFileId,
+              sourceFingerprint: mediaFile.fileHash || mediaFile.id,
+              metadata: {
+                source: 'audio-analyzer',
+                sourceFileName: file.name,
+                sourceFileSize: file.size,
+              },
+            },
+          ),
         },
-      );
+      });
+      return buffer;
     } catch (error) {
-      log.error('Failed to decode audio', error);
+      if (isUndecodableAudioSourceError(error)) {
+        log.warn('No decoder could read the audio of this file', { mediaFileId, name: file.name, error });
+      } else {
+        log.error('Failed to decode audio', error);
+      }
       return null;
     }
   }
