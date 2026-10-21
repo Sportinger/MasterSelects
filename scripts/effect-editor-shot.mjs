@@ -17,8 +17,8 @@
 //            dock tab row down; preview/top do not apply
 //   hide     button texts left out of the picture (e.g. an unrelated quick-add button)
 //   layout   "full" (docs column) or "float" (beside text): sizes the callouts, default "full"
-//   viewport { width, height } of the editor window (default 1600 x 900): a wider window gives the
-//            Properties panel room, so an effect with sections shows its rows with sliders
+//   viewport { width, height } of the editor window (default 1600 x 900, either may be left out): a
+//            wider window gives the Properties panel room for its full rows, a taller one fits a long card
 //   height   browser viewport height in CSS px (default 900; with viewport, viewport wins): taller for an
 //            effect card with many rows, so the whole card fits; the picture never runs past the bottom of
 //            the Properties panel
@@ -215,7 +215,8 @@ function figure(shot, file, crop, boxes) {
 
 // One browser per shot: a fresh project in its own private file system, and one GPU device at a time.
 for (const shot of shots) {
-  const viewport = shot.viewport ?? { width: shot.width ?? defaultViewport.width, height: shot.height ?? defaultViewport.height };
+  // A shot's viewport (or width/height) overrides the default browser window.
+  const viewport = { ...defaultViewport, ...(shot.width ? { width: shot.width } : {}), ...(shot.height ? { height: shot.height } : {}), ...(shot.viewport ?? {}) };
   const browser = await chromium.launch({ channel: 'chrome', headless: false, args: [...launchArgs, `--window-size=${viewport.width},${viewport.height + 120}`] });
   try {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });

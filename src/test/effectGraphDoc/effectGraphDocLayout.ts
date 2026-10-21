@@ -182,14 +182,15 @@ export function edgeCablePoints(from: NodeGraphNode, to: NodeGraphNode, edge: No
  * Cables that run through a card other than their own two ends: a reader would take them for a
  * connection of that card. The docs shot fails on them (effect-graph-shot.mjs).
  */
-export function cableCrossings(nodes: readonly NodeGraphNode[], edges: readonly NodeGraphEdge[], inset = -CABLE_CLEARANCE): Array<{ edge: NodeGraphEdge; card: NodeGraphNode }> {
+export function cableCrossings(nodes: readonly NodeGraphNode[], edges: readonly NodeGraphEdge[], inset = -CABLE_CLEARANCE,
+  pointsOf: typeof edgeCablePoints = edgeCablePoints): Array<{ edge: NodeGraphEdge; card: NodeGraphNode }> {
   const byId = new Map(nodes.map(node => [node.id, node]));
   const boxes = nodes.map(node => ({ node, box: boxOf(node) }));
   const found: Array<{ edge: NodeGraphEdge; card: NodeGraphNode }> = [];
   for (const edge of edges) {
     const from = byId.get(edge.fromNodeId), to = byId.get(edge.toNodeId);
     if (!from || !to || from === to) continue;
-    const points = edgeCablePoints(from, to, edge);
+    const points = pointsOf(from, to, edge);
     for (const { node, box } of boxes) if (node !== from && node !== to && points.some(point => inside(box, point, inset))) found.push({ edge, card: node });
   }
   return found;

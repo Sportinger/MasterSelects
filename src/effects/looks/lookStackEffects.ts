@@ -33,9 +33,10 @@ export function lookEntryRecipeOnlyParams(look: Pick<LookDefinition, 'builtIn'>,
  */
 export function lookThumbnailEffects(look: LookDefinition,
   operatorGraph: (entry: LookStackEntry) => EffectOperatorGraph | undefined = entry => lookEntryOriginalGraph(look, entry),
-  savedParams: (entry: LookStackEntry) => Record<string, unknown> = entry => entry.params) {
+  savedParams: (entry: LookStackEntry) => Record<string, unknown> = entry => entry.params,
+  omittedParams: (entry: LookStackEntry, graph: EffectOperatorGraph | undefined) => Iterable<string> = entry => lookEntryRecipeOnlyParams(look, entry)) {
   return look.stack.map((entry, index) => {
-    const graph = operatorGraph(entry), recipeOnly = lookEntryRecipeOnlyParams(look, entry);
+    const graph = operatorGraph(entry), recipeOnly = new Set(omittedParams(entry, graph));
     const defaults = Object.fromEntries(Object.entries(getDefaultParams(entry.effectId)).filter(([id]) => !recipeOnly.has(id)));
     return {
       id: `${look.id}:${index}`,

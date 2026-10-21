@@ -1,0 +1,9 @@
+{
+  "shots": [
+    "acuarela?plumbing=hide&omit=output,organized-acuarela-controls,organized-acuarela-space,organized-acuarela-simplify,organized-acuarela-shadows,organized-acuarela-paper,organized-acuarela-blooms,organized-acuarela-pigment,organized-acuarela-finish&cables=avoid@acuarela",
+    "acuarela?plumbing=hide&omit=frame,output,organized-acuarela-controls,organized-acuarela-space,organized-acuarela-premultiply,organized-acuarela-bleed,organized-acuarela-wash&cables=avoid@acuarela-paint",
+    "acuarela?focus=pigment-density&only=density-pool-granulation,density-terms,density-excess,density-change,density-painted&cables=avoid&marks=density-terms:right,density-painted:below@acuarela-pigment-density",
+    "voxel-relief?open=column-geometry",
+    "pixel-particle-disintegrate?open=forces&cables=avoid"
+  ]
+}

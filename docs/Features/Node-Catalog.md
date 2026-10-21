@@ -262,6 +262,14 @@ into smooth value noise; Vignette uses two per pixel as its anti-banding dither.
 Use Random (Integer Hash) when the key itself is already the exact integer to hash,
 Random (Cell) when a coordinate should give one value per cell.
 
+**Fractal Noise** (`noise.fractal2d.vec2`) is smooth gradient noise at a Position in
+noise cells (one cell is one blob), summed over Octaves (1-8; each doubles the frequency,
+turned by 37.5° so the octaves never line up) with Roughness (0-1) as each octave's share.
+It returns 0-1 around a 0.5 mean. Its lattice hash is the integer PCG2D hash, so it stays
+clean at large positions, where Random (Hash) (a sine hash) turns into diagonal streaks;
+use it for paper, clouds and organic masks (Acuarela builds its paper, wet patches and
+blooms from it). GPU and CPU evaluation match within float rounding.
+
 **Cache Image** (`image.materialize`) has a **Resolution** setting (Full, 1/2 …
 1/1024): the cached pass renders at that fraction of the frame (at least one
 pixel) and later passes read it with normalized UV, so it acts as a smooth, cheaper
@@ -302,8 +310,8 @@ Lines & Engraving, Textile & Craft, Text & Glyph, Analog & Glitch, Keying, Time,
 Tracking & Overlays, 3D & Particles); the registry `category` stays internal.
 Looks of one engine with identical parameters are styles: the Effects tab shows a
 **Style** selector that switches in place and keeps the effect ID, values and
-keyframes (a customized node graph restarts from the new look's default). Rom1 is
-kept for saved projects and reachable as a style of Acuarela.
+keyframes (a customized node graph restarts from the new look's default). Rom1, the
+watery-smoke look, is its own effect again since Acuarela became a watercolour.
 Audio effects use six groups: Level & Channels, EQ & Filter, Dynamics, Repair,
 Time & Space, Character & Advanced.
 

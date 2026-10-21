@@ -108,13 +108,17 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   ));
   let normal = normalize(input.localNormal);
   let diffuse = max(dot(normal, lightDir), 0.0);
-  let faceBias = mix(0.68, 1.08, abs(normal.z));
-  let lighting = clamp(voxel.light.z + diffuse * voxel.light.w, 0.0, 2.0) * faceBias;
+  // Hue-keeping shading like the 2D raymarcher (texture.y = 1: darker sides of effects saved before 2026-10).
+  let legacyShading = voxel.texture.y > 0.5;
+  let topness = abs(normal.z);
+  let faceBias = mix(select(0.84, 0.68, legacyShading), 1.08, topness);
+  let rawLighting = clamp(voxel.light.z + diffuse * voxel.light.w, 0.0, 2.0) * faceBias;
+  let lighting = select(max(rawLighting, 0.55 * (1.0 - topness)), rawLighting, legacyShading);
   let sourceRgb = mix(vec3f(luminance(input.sourceColor.rgb)), input.sourceColor.rgb, clamp(voxel.shade.x, 0.0, 1.0));
   let edgeDistance = max(abs(input.localUv.x - 0.5), abs(input.localUv.y - 0.5)) * 2.0;
   let edge = smoothstep(0.86, 1.0, edgeDistance);
   var color = sourceRgb * lighting;
   color *= 1.0 - edge * clamp(voxel.shade.y, 0.0, 1.0) * 0.72;
-  color += vec3f(input.height01 * 0.045);
+  color = select(color * (1.0 + input.height01 * 0.045), color + vec3f(input.height01 * 0.045), legacyShading);
   return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)) * voxel.height.w * voxel.graphTintOpacity.a, voxel.graphTintOpacity.a);
 }

@@ -28,7 +28,9 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
   }
   const supported = addableEffectOperators(effect.type);
   const parameters = getEffect(effect.type)?.params as Record<string, { label?: string }> | undefined;
-  const portLabels = effectPortLabels(effect.type), inputLabels = effectPresentationPlan(effect.type)?.inputLabels;
+  const plan = effectPresentationPlan(effect.type);
+  // A saved smoke-recipe Acuarela shares the effect id but not the watercolour's node meanings.
+  const portLabels = plan?.portLabelsApply && !plan.portLabelsApply(graph) ? undefined : effectPortLabels(effect.type), inputLabels = plan?.inputLabels;
   // A clamp that limits a bound parameter to its render range carries that parameter ("Amount"),
   // so the folder ports it feeds are not called "Clamp: Value".
   const boundParameters = new Map(graph.nodes.filter(n => n.operator.startsWith('values.') && typeof n.bindings.value === 'string')

@@ -46,8 +46,9 @@ export interface EffectParam {
   // How the lower render limit looks (e.g. "almost black" for a gamma floor), added to that notice.
   renderMinLook?: string;
   // Display only (effectParamDisplay in paramDisplay.ts): inspectors show value × displayScale
-  // with this unit (Hue Shift stores turns and shows degrees; Exposure shows " EV"). Stored
-  // values, keyframes and tool calls keep the parameter's own unit.
+  // with this unit after the value (Hue Shift stores turns and shows degrees; Exposure " EV",
+  // Acuarela Wash "px", Sheen Angle "°"). Stored values, keyframes and tool calls keep the
+  // parameter's own unit.
   displayScale?: number;
   unit?: string;
   // Value an instance saved before this parameter existed renders with (its params lack the key).
@@ -172,6 +173,8 @@ export interface ParticleRenderEffectDefinition {
   params: Record<string, EffectParam>;
   requiresContinuousRender?: boolean;
   customControls?: ComponentType<EffectControlProps>;
+  // Notes on values the renderer clamps or changes at this output size (see FullscreenEffectDefinition).
+  paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
 }
 
 export interface ComputeEffectDefinition {

@@ -7,9 +7,13 @@ struct SheenParams {
   softness: f32,
   intensity: f32,
   aspect: f32,
+  pixelSize: f32,
+  highlights: f32,
+  color: vec4f,
+  plateau: f32,
   _pad0: f32,
   _pad1: f32,
-  color: vec4f,
+  _pad2: f32,
 };
 
 @group(0) @binding(0) var texSampler: sampler;
@@ -27,10 +31,32 @@ fn sheenFragment(input: VertexOutput) -> @location(0) vec4f {
   let extent = 0.5 * (abs(direction.x) * params.aspect + abs(direction.y));
   let along = dot(centered, direction) / max(extent, 1e-4);
   // position 0..1 sweeps the band from fully outside one side to fully outside the other.
-  let center = mix(-1.0 - params.width, 1.0 + params.width, params.position);
   let halfWidth = max(params.width, 1e-4);
-  let hard = halfWidth * (1.0 - clamp(params.softness, 0.0, 1.0));
-  let band = 1.0 - smoothstep(hard, halfWidth, abs(along - center));
-  let light = params.color.rgb * band * params.intensity * params.color.a * color.a;
-  return vec4f(color.rgb + light, color.a);
+  let center = mix(-1.0 - halfWidth, 1.0 + halfWidth, params.position);
+  let softness = clamp(params.softness, 0.0, 1.0);
+  let pixel = params.pixelSize / max(extent, 1e-4);
+  let distanceToCenter = abs(along - center);
+  var band: f32;
+  if (params.plateau > 0.5) {
+    // Saved before 2026-10: flat top, Softness fades the outer part of the width.
+    let soft = max(halfWidth * softness, pixel);
+    band = 1.0 - smoothstep(halfWidth - soft, halfWidth, distanceToCenter);
+  } else {
+    // Falloff from the centre: exp(-4.5 t^p) with p = 2 / Softness, so Softness 1 is a Gaussian
+    // (Width is where the light has faded out) and lower Softness flattens the top toward a hard
+    // band; the band edge itself gets one pixel of anti-aliasing.
+    let t = min(distanceToCenter / halfWidth, 2.0);
+    let shape = 2.0 / max(softness, 0.02);
+    let edge = min(pixel / halfWidth, 1.0);
+    band = exp(-4.5 * pow(t, shape)) * (1.0 - smoothstep(1.0 - edge, 1.0, t));
+  }
+  // Highlights: the light catches bright surfaces more than dark voids (luma weight).
+  let luma = dot(clamp(color.rgb, vec3f(0.0), vec3f(1.0)), vec3f(0.2126, 0.7152, 0.0722));
+  let catchLight = mix(1.0, luma, clamp(params.highlights, 0.0, 1.0));
+  let light = params.color.rgb * band * max(params.intensity, 0.0) * params.color.a * catchLight;
+  // Soft additive highlight: c + light for a faint sheen, approaching white without a flat
+  // clipped plateau, so the layer's own detail stays visible inside a strong band.
+  let headroom = max(vec3f(1.0) - color.rgb, vec3f(1e-4));
+  let lit = vec3f(1.0) - headroom * exp(-light / headroom);
+  return vec4f(select(color.rgb, lit, color.rgb < vec3f(1.0)), color.a);
 }

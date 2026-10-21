@@ -10,7 +10,7 @@ struct VoxelUniforms {
   height: vec4f,  // scale, base, contrast, opacity
   light: vec4f,   // angle, elevation, ambient, strength
   shade: vec4f,   // color mix, edge darkness, floor brightness, texture width
-  texture: vec4f, // texture height, padding
+  texture: vec4f, // texture height, legacy shading (1 = saved before 2026-10), shape, padding
   graphHeightUV: vec4f,
   graphColorUV: vec4f,
   graphTintOpacity: vec4f,

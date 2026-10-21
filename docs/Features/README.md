@@ -86,6 +86,7 @@ MasterSelects is a browser-based WebGPU compositor and media editor with timelin
 | [Keying and Time Effects](./Effects-Keying-Time.md) | Chroma Key, Time Stack and Slit Scan with before/after pictures, inspector, graph recipes and technical notes |
 | [Stylize Effects](./Effects-Stylize.md) | Glow, Film Grain, Vignette, Sharpen, Edge Detect, Posterize, Threshold and Scanlines with before/after pictures, their controls, the recipes behind them, and technical notes |
 | [Analog Effects](./Effects-Analog.md) | CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and Pixel Sort with before/after pictures, their controls, the recipes behind them, and technical notes |
+| [Painterly, Relief and Particle Effects](./Effects-Stylize-Art.md) | Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate with before/after pictures, their controls, how they are built, and technical notes |
 | [Color Correction](./Color-Correction.md) | Node/list color tab, graph data model, GPU pipeline, scopes, and realtime grading workflow |
 | [Time Stack](./Time-Stack.md) | Delayed video instances blended in an editable node group: instance count, time offset, blend modes, and the GPU frame cache |
 | [Slit Scan 3D](./Slit-Scan-3D.md) | Reference time surfaces, DIS deformation, source-pair motion bands, scene cameras and geometry settings |

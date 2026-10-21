@@ -79,7 +79,7 @@ fn acuarelaFragment(input: VertexOutput) -> @location(0) vec4f {
   let smearB = textureSample(inputTex, texSampler, clamp(input.uv - offset * 0.65, vec2f(0.0), vec2f(1.0)));
   let smearC = textureSample(inputTex, texSampler, clamp(input.uv + vec2f(-offset.y, offset.x) * 0.5, vec2f(0.0), vec2f(1.0)));
 
-  let gain = max(params.gain, 0.0) * 0.35;
+  let gain = clamp(params.gain, 0.0, 1.0) * 0.35;
   let liftedSource = vec4f(
     clamp(source.rgb + vec3f(gain) * source.a, vec3f(0.0), vec3f(1.0)),
     source.a

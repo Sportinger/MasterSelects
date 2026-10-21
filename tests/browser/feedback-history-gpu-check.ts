@@ -1,5 +1,5 @@
 import { EffectsPipeline, type EffectFrameHistoryContext } from '../../src/effects/EffectsPipeline';
-import { createDefaultAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
+import { createLegacyAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
 import { effectOperatorCompileContext, effectOperatorParams, isImageGraphEffectType } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 
@@ -15,7 +15,7 @@ export async function checkFeedbackHistoryGpu(device: GPUDevice): Promise<number
   const pingView = ping.createView(), pongView = pong.createView();
   const sampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear' });
   const readback = device.createBuffer({ size: 256, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-  const operatorGraph = createDefaultAcuarelaGraph(), decay = .5;
+  const operatorGraph = createLegacyAcuarelaGraph(), decay = .5;
   const decayNode = operatorGraph.nodes.find(node => node.id === 'feedback-decay');
   if (!decayNode) throw new Error('Canonical Acuarela feedback-decay node is unavailable.');
   decayNode.constants = { ...decayNode.constants, value: decay };

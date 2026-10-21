@@ -72,7 +72,9 @@ fn rom1Fragment(input: VertexOutput) -> @location(0) vec4f {
   let feedback = textureSample(feedbackTex, texSampler, feedbackSampleUv) * rom1EdgeMask(warpedUv);
   let wetSource = textureSample(inputTex, texSampler, feedbackSampleUv);
 
-  let gain = max(params.gain, 0.0);
+  // Gain knee (smokeGainUpgrade.ts): unchanged up to 0.25, then eases toward 0.5 instead of lifting to white.
+  let gainInput = max(params.gain, 0.0);
+  let gain = min(gainInput, 0.25) + 0.25 * (1.0 - exp(0.0 - max(gainInput - 0.25, 0.0) / 0.25));
   let liftedSource = vec4f(
     clamp(mix(source.rgb, wetSource.rgb, 0.18) + vec3f(gain) * source.a, vec3f(0.0), vec3f(1.0)),
     source.a

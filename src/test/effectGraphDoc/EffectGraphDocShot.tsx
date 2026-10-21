@@ -15,7 +15,7 @@ import { useTimelineStore } from '../../stores/timeline';
 import {
   EFFECT_GRAPH_DOC_CLIP_ID, buildEffectGraphDoc, effectGraphDocTrack, parseEffectGraphDocQuery, type EffectGraphDoc, type EffectGraphDocQuery,
 } from './effectGraphDocModel';
-import { cableCrossings } from './effectGraphDocLayout';
+import { cableCrossings, edgeCablePoints } from './effectGraphDocLayout';
 import '../../components/panels/nodes/NodeWorkspacePanel.css';
 import './EffectGraphDocShot.css';
 
@@ -35,12 +35,10 @@ declare global { interface Window { __effectGraphDoc?: EffectGraphDocState; __ef
 
 const noop = () => {};
 
-/** Cables leaving the last card of a wrapped row bend out past the frame before they turn back.
- * With `cableRouting: 'avoid'` the routes around the cards decide instead (as the canvas draws them). */
-function cableOverhang(graph: NodeGraph, placed: NodeGraph['nodes'], bounds: { left: number; top: number; right: number; bottom: number }) {
+/** Every cable's sampled path as the canvas draws it: from plug tip to plug tip (24 units out from
+ * the port dots, connectionPlugs.ts), around the cards when `cableRouting` is 'avoid'. */
+function drawnCables(graph: NodeGraph, placed: NodeGraph['nodes']) {
   const byId = new Map(placed.map(node => [node.id, node]));
-  const overhang = { left: 0, top: 0, right: 0, bottom: 0 };
-  // Plug tips sit 24 units out from the port dots (connectionPlugs.ts).
   const cables = graph.edges.flatMap(edge => {
     const from = byId.get(edge.fromNodeId), to = byId.get(edge.toNodeId);
     if (!from || !to) return [];
@@ -50,8 +48,15 @@ function cableOverhang(graph: NodeGraph, placed: NodeGraph['nodes'], bounds: { l
   const routes = graph.cableRouting === 'avoid'
     ? routeAroundCards(placed.map(node => ({ x: node.layout.x, y: node.layout.y, width: getNodeWidth(node), height: getNodeHeight(node) })), cables)
     : undefined;
-  for (const cable of cables) {
-    for (const point of sampleCableRoute(cableRoute(cable.from, cable.to, 'curved', routes?.get(cable.id)))) {
+  return new Map(cables.map(cable => [cable.id, sampleCableRoute(cableRoute(cable.from, cable.to, 'curved', routes?.get(cable.id)))]));
+}
+
+/** Cables leaving the last card of a wrapped row bend out past the frame before they turn back.
+ * With `cableRouting: 'avoid'` the routes around the cards decide instead (as the canvas draws them). */
+function cableOverhang(cables: ReturnType<typeof drawnCables>, bounds: { left: number; top: number; right: number; bottom: number }) {
+  const overhang = { left: 0, top: 0, right: 0, bottom: 0 };
+  for (const points of cables.values()) {
+    for (const point of points) {
       overhang.left = Math.max(overhang.left, bounds.left - point.x); overhang.right = Math.max(overhang.right, point.x - bounds.right);
       overhang.top = Math.max(overhang.top, bounds.top - point.y); overhang.bottom = Math.max(overhang.bottom, point.y - bounds.bottom);
     }
@@ -91,7 +96,10 @@ export function EffectGraphDocShot() {
     const placed = doc.graph.nodes.map(node => ({ ...node, layout: placement.nodes[node.id] ?? node.layout }));
     const bounds = annotatedGraphBounds(doc.graph, placed);
     const label = (id: string) => placed.find(node => node.id === id)?.label ?? id;
-    const crossings = cableCrossings(placed, doc.graph.edges)
+    // Avoid-routed cables are checked along the routes the canvas draws, not the direct curves.
+    const cables = drawnCables(doc.graph, placed);
+    const crossings = cableCrossings(placed, doc.graph.edges, undefined,
+      doc.graph.cableRouting === 'avoid' ? (from, to, edge) => cables.get(edge.id) ?? edgeCablePoints(from, to, edge) : undefined)
       .map(({ edge, card }) => `${label(edge.fromNodeId)} → ${label(edge.toNodeId)} runs through ${card.label}`);
     const displaced = doc.graph.nodes.flatMap(node => {
       const at = placement.nodes[node.id];
@@ -109,7 +117,7 @@ export function EffectGraphDocShot() {
       return { zoom, titleSize: paintedTitleSize(context, scene, zoom) };
     };
     window.__effectGraphDoc = { ready: true, title: doc.title, nodes: doc.graph.nodes.length, edges: doc.graph.edges.length,
-      crossings, displaced, overhang: cableOverhang(doc.graph, placed, bounds),
+      crossings, displaced, overhang: cableOverhang(cables, bounds),
       bounds: { width: Math.round(bounds.right - bounds.left), height: Math.round(bounds.bottom - bounds.top) }, folders: doc.groups,
       cards: doc.graph.nodes.map(node => `${node.id.split('/').at(-1)} (${node.label})`) };
   }, [doc, result.error, clips, clipKeyframes, getSourceTimeForClip]);

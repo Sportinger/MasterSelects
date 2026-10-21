@@ -4,8 +4,11 @@ import shader from './shader.wgsl?raw';
 import { scalarFieldShader } from '../../../shaders/scalarFieldShader';
 import { packScalarField } from '../../../services/operators/scalarField';
 import type { EffectDefinition } from '../../types';
+import { voxelReliefParamWarnings } from './warnings';
 import { VOXEL_RELIEF_PARAMS } from './parameters';
 import { compileVoxelGraph } from '../../../services/operators/voxelGraph';
+
+import { finiteUniform as finite } from '../../_shared/effectUniformParams';
 
 export const voxelRelief: EffectDefinition = {
   id: 'voxel-relief',
@@ -28,6 +31,7 @@ export const voxelRelief: EffectDefinition = {
   },
 
   params: VOXEL_RELIEF_PARAMS,
+  paramWarnings: voxelReliefParamWarnings,
 
   packUniforms: (params, width, height) => {
     const graph = compileVoxelGraph(params);
@@ -35,34 +39,35 @@ export const voxelRelief: EffectDefinition = {
     const reset = params.reset === true ? 1 : 0;
 
     return new Float32Array([
-      Number(params.columns ?? 107.4),
-      Number(params.height ?? 1.2),
-      Number(params.baseHeight ?? 0.015),
-      Number(params.gap ?? 0.06),
-      Number(params.tilt ?? 87),
-      Number(params.yaw ?? 0),
-      Number(params.perspective ?? 0.22),
-      Number(params.heightContrast ?? 3),
-      Number(params.ambient ?? 0.58),
-      Number(params.lightStrength ?? 0.48),
-      Number(params.temporalBlend ?? 0.08),
-      Number(params.colorMix ?? 0.95),
+      finite(params.columns, 107.4),
+      finite(params.height, 1.2),
+      finite(params.baseHeight, 0.015),
+      finite(params.gap, 0.06),
+      finite(params.tilt, 87),
+      finite(params.yaw, 0),
+      finite(params.perspective, 0.22),
+      finite(params.heightContrast, 3),
+      finite(params.ambient, 0.58),
+      finite(params.lightStrength, 0.48),
+      finite(params.temporalBlend, 0.08),
+      finite(params.colorMix, 0.95),
       width,
       height,
-      Number(params.maxSteps ?? 72),
+      finite(params.maxSteps, 72),
       reset,
-      Number(params.lightAngle ?? 310),
-      Number(params.lightElevation ?? 45),
-      Number(params.floorBrightness ?? 0.1),
-      Number(params.edgeDarkness ?? 0.68),
-      Number(params.distance ?? 1),
-      Number(params.centerX ?? 0.5),
-      Number(params.centerY ?? 0.5),
-      Number(params.roll ?? 0),
+      finite(params.lightAngle, 310),
+      finite(params.lightElevation, 45),
+      finite(params.floorBrightness, 0.1),
+      finite(params.edgeDarkness, 0.68),
+      finite(params.distance, 0.8),
+      finite(params.centerX, 0.5),
+      finite(params.centerY, 0.5),
+      finite(params.roll, 0),
       params.lightFollow === true ? 1 : 0,
       params.limitToVideo !== false ? 1 : 0,
       graph.primitiveShape === 'sphere' ? 1 : graph.primitiveShape === 'cylinder' ? 2 : 0,
-      0,
+      // Effects saved before 2026-10 keep the darker, greying side shading (load migration).
+      params.shading === 'legacy' ? 1 : 0,
       ...graph.heightUV,
       ...graph.colorUV,
       ...graph.tint, graph.opacity,

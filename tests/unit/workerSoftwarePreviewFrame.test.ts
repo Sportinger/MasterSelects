@@ -2173,7 +2173,8 @@ describe('worker software preview frame builder', () => {
             type: 'acuarela',
             name: 'Acuarela',
             enabled: true,
-            params: {},
+            // The original smoke recipe (saved before the watercolour): its hand-written feedback pass.
+            params: { strength: 0.32 },
           },
           {
             id: 'invert-a',

@@ -10,10 +10,13 @@ describe('shared feedback parameters', () => {
   it('provides one non-animatable reset/continuous owner schema to every feedback definition', () => {
     expect(FEEDBACK_HISTORY_LOOP_PARAM).toEqual({ type: 'select', label: 'History Loop', default: 'reset',
       options: [{ value: 'reset', label: 'Reset' }, { value: 'continuous', label: 'Continuous' }], animatable: false });
-    for (const definition of [acuarela, rom1, voxelRelief, asciiGhost, kineticTrace]) {
+    for (const definition of [rom1, voxelRelief, asciiGhost, kineticTrace]) {
       expect(definition.usesFeedback).toBe(true);
       expect(definition.params.historyLoop).toBe(FEEDBACK_PARAMETERS.historyLoop);
     }
+    // Acuarela keeps the schema for effects saved with its smoke recipe; only graphs with frame history show it.
+    expect(acuarela.params.historyLoop).toMatchObject(FEEDBACK_HISTORY_LOOP_PARAM);
+    expect(acuarela.params.historyLoop.deprecated).toMatch(/watery-smoke/);
   });
 
   it('defaults absent or invalid legacy values to reset and preserves valid serialized values', () => {

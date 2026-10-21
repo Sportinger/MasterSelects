@@ -77,7 +77,7 @@ describe('node workspace context menu', () => {
     expect(view.getByRole('menuitem', { name: 'Oscillator (Control)' })).toBeVisible();
   });
 
-  it('shows effects in look groups and hides styles that are only kept for saved projects', async () => {
+  it('shows effects in look groups, including Rom1 since Acuarela became a watercolour', async () => {
     const user = userEvent.setup(), view = setup();
     await user.click(view.getByRole('button', { name: 'Effects' }));
     await user.click(view.getByRole('button', { name: 'Keying' }));
@@ -85,7 +85,7 @@ describe('node workspace context menu', () => {
     expect(view.onEffect).toHaveBeenCalledWith('chroma-key');
     await user.click(view.getByRole('button', { name: 'Light & Stylize' }));
     expect(view.getByRole('menuitem', { name: 'Acuarela' })).toBeVisible();
-    expect(view.queryByRole('menuitem', { name: 'Rom1' })).toBeNull();
+    expect(view.getByRole('menuitem', { name: 'Rom1' })).toBeVisible();
   });
 
   it('opens nested submenus from the keyboard and closes them with Escape', async () => {
