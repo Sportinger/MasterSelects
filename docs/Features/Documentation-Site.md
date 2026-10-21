@@ -23,7 +23,7 @@ Each page type has a fixed template: [Page templates](#page-templates).
 | A filter (it changes the clip's picture) whose look is static | original \| effect still (split) | `scripts/effect-lab.mjs --pairs` |
 | A filter that moves or depends on time | a short loop on moving footage, in place of the still | `scripts/doc-clip.mjs` |
 | A generator (it draws its own picture or 3D structure: Weave, Flocking, Stick Figure) | the effect alone on black: a still, or a loop when it moves | `scripts/effect-lab.mjs`, `scripts/doc-clip.mjs` |
-| The presets of an effect | a strip of small stills, one per preset, labelled with its name | `scripts/effect-lab.mjs --pairs` |
+| The presets of an effect | a strip of small stills, one per preset, labelled with its name | `scripts/effect-lab.mjs --presets` |
 | How to do something in the editor (add, drag, trim) | a clip with a visible pointer | `scripts/doc-clip.mjs`, `"kind": "operation"` |
 | A part of the editor (inspector, panel) | a still with yellow numbered callouts | `scripts/effect-editor-shot.mjs` |
 | A node graph | a graph picture | `scripts/effect-graph-shot.mjs` |
@@ -52,7 +52,7 @@ Each page type has a fixed template: [Page templates](#page-templates).
 0 to 50 pixels, default 10.
 ```
 
-**Presets.** Every effect comes with presets: three to five named starting points that show the range of what it can do. They belong to the effect itself and are picked in its card, not only shown in the docs; an effect without presets gets some built before its page is written. The page lists every preset under `## Presets`, each with a short paragraph (what it looks like and when to use it) and its still in the preset strip.
+**Presets.** Every effect comes with presets: three to five named starting points that show the range of what it can do. They belong to the effect itself (`presets` in its definition, [Effect system](./Effect-System.md#contracts-and-invariants)) and are picked in the **Preset** row of its card; an effect without presets gets some built, and checked in renders, before its page is written. Name a preset after the picture it makes ("Heat Haze", "Rain Curtain"), not after its values. The page lists every preset under `## Presets`: the preset strip in a `docs-shot docs-shot--detail` figure (`node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json --only <id>`, which reads names and values from the registry), one sentence on the Preset row, then one short paragraph per preset that starts with its name in bold: what it looks like and when to use it.
 
 **Formatting.**
 
@@ -74,7 +74,7 @@ The tools encode to fit, and the sync warns about anything over. Reshoot only wh
 
 **Before you commit.**
 
-1. For effect pages: `node scripts/effect-docs.mjs`, then `npx vitest run tests/unit/effectDocsCatalog.test.ts tests/unit/docsSiteSync.test.ts`.
+1. For effect pages: `node scripts/effect-docs.mjs` (it also reports a hand-written page whose control or preset paragraphs no longer match the card), then `npx vitest run tests/unit/effectDocsCatalog.test.ts tests/unit/docsSiteSync.test.ts`.
 2. `npm run sync` in `docs-site/` must report no new warnings (links, alt text, posters, budgets).
 3. Open the changed pages in a docs dev server on a free port (`npx astro dev --port <port>` in `docs-site/`), 1440 px and 420 px wide. Check that there is no sideways scrolling, the pictures load, floats drop below the text on a phone and the clips play.
 4. Commit only the sources and assets. The site files are generated and untracked ([Generated output](#generated-output)).
@@ -144,7 +144,7 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 
 | Part | Made by |
 |---|---|
-| `effects/catalog.json`: names, groups, card text, page, still, clip and thumbnail paths | `node scripts/effect-docs.mjs` (never by hand) |
+| `effects/catalog.json`: names, groups, card text, page, still, clip, thumbnail and preset strip paths, preset names | `node scripts/effect-docs.mjs` (never by hand) |
 | The controls table between `<!-- generated:controls start -->` and `<!-- generated:controls end -->` (basic pages, and hand-written pages not yet moved to paragraphs) | the same script, refreshed on every run |
 | Basic pages (marked `<!-- effect-docs: basic page sha=… -->` as the first line under the title) | the same script, rewritten on every run while the page still matches the marker's hash |
 | Rows of an effect's own card, the section order and folding of long cards, "Go deeper" links of basic pages, special thumbnails | `scripts/effectDocsExtras.mjs` (by hand, per effect id) |
@@ -152,7 +152,8 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 
 - After you add or rewrite an effect page, add a picture or change an effect's parameters, run `node scripts/effect-docs.mjs` and commit what it changes. `npx vitest run tests/unit/effectDocsCatalog.test.ts` fails when the catalog, a controls block or a basic page is out of date, when a page is not named after an effect id, when a visible effect has no page of its own, when a basic page was edited under its marker or a page's controls markers are broken, or when an effect lacks a still or a thumbnail (unless `PICTURE_PENDING` in `scripts/effectDocsCatalog.mjs` names why) or a thumbnail is over 30 KB.
 - **A basic page edited by hand.** The marker line carries a hash of the page as the script wrote it. When the page no longer matches it, the script leaves the page alone and reports `effects/<id>.md was edited by hand: delete its marker line to keep the edits (it becomes a hand-written page), or restore the file`; the drift test fails with the same text. The marker counts only as the first line under the `#` title.
-- To write a page by hand, start from its basic page and delete the marker line, or write the file before running the script. `node scripts/effect-docs.mjs --controls <id>` prints every control with its limits and default: the source for the control paragraphs.
+- To write a page by hand, start from its basic page and delete the marker line, or write the file before running the script. `node scripts/effect-docs.mjs --controls <id>` prints the controls table, one paragraph skeleton per control under its `###` section with the limits sentence filled in ("2 to 80 px, default 14 px."), and the presets with their values: the source for the paragraphs.
+- **The paragraph check.** When a hand-written page replaces its generated table with paragraphs (it deletes the block with both markers), `node scripts/effect-docs.mjs` and the drift test check its `## Controls`: one paragraph per card control, starting with the card label in bold, in card order, under the `###` of its card section, and stating its limits sentence exactly as `--controls` prints it. A paragraph for a control the card no longer shows fails too; **Style** and **Preset** paragraphs are allowed. For an effect with presets, every hand-written page needs `## Presets` with a bold paragraph per preset (and none for a preset that is gone) and the preset strip `../assets/effects/presets/<id>.webp`. A changed limit, label or preset therefore fails the test until the page says so (`scripts/effectDocsPageCheck.mjs`).
 - `--basic` writes basic pages for every visible effect without a page (`--basic halftone,print` for chosen effect or group ids); it never touches an existing page. `--thumbs` makes the missing gallery thumbnails (`assets/effects/thumbs/<id>.webp`, 400 × 250 or smaller, ≤ 30 KB) from the effect half of each still; `--thumbs --force` remakes them all, `--thumbs --force text,riso` only those effect or group ids. An effect's `thumb` in `effectDocsExtras.mjs` picks another region of the still (`region`, fractions of it) or names the Effect Lab file that renders the thumbnail (`shot`, such as `scripts/effect-lab-shots/color-thumbs.json`: the dancer split down the middle for the subtle tonal effects). `--lab-manifest <file>` writes an Effect Lab `--pairs` manifest for basic pages without a still, `--reshoot <ids or groups>` adds basic pages that have one. Basic stills are a whole-frame split, except the Text & Glyph looks (an enlarged detail of the dancer, original and effect side by side, so the characters can be read) and the tracking overlays (both whole frames side by side, so the seam never cuts the target box).
 - **The generated controls table** lists the card's rows in card order with their range and default. Ranges and defaults show as many decimals as they need. Resource references stored as text (`…Id` parameters) are left out. `effectDocsExtras.mjs` adds what the registry cannot say: `rows` of an effect's own card (hidden parameters it renders, buttons, pickers), the card's `sections` order and `sectionLabels`, `omit`/`omitSections`, a `note` for cards without fixed rows, and `open`: only those sections stay in the table, every other one folds into its own `<details>` (Slit Scan). It also gives basic pages `deeper` links ("Go deeper:" under Technical details).
 - The card text is the first sentence of a hand-written page (a basic page uses the first clause of the in-app description), so write that sentence to stand alone, in under about 110 characters.
@@ -166,7 +167,7 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 3. `Group: [<picker label>](../Effects-<Group>.md) · [How to add an effect](../Effects.md#add-an-effect)`. Without an overview page, link the catalog section: `./index.md#print--halftone`.
 4. One picture with a caption. A static effect gets an original | effect still (`scripts/effect-lab.mjs --pairs`, `"layout": "split"`, saved as `../assets/effects/<id>.webp`); a moving or time-based effect (catalog `moving`) gets a short loop on moving footage (`scripts/doc-clip.mjs`, `../assets/effects/clips/<id>.mp4` with its `.webp` poster). Reuse the existing still or clip; make a new one only when the page would otherwise have none.
 5. `**Use it for:**` two or three uses, then two to four key controls, one line each in everyday words (`- **Radius** – how soft it gets.`; their full paragraphs follow under `## Controls`), then one `**Tip:**`.
-6. `## Presets`: the preset strip and one short paragraph per preset ([Style guide](#style-guide)).
+6. `## Presets`: the preset strip with a caption, one sentence on the **Preset** row, then one short paragraph per preset, its name in bold ([Style guide](#style-guide)). Basic pages list the preset names in one line until the page is written by hand.
 7. `## Controls`: one short paragraph per control, under a `###` for each card section, with its limits and default ([Style guide](#style-guide)). A basic page keeps the generated table until it is written by hand; when you write a page by hand, replace its table (the block with both markers) with paragraphs.
 8. `## Node setup`: a focused graph picture (`scripts/effect-graph-shot.mjs`) only when it teaches something, two or three sentences on its stages and one `**Remix:**` change a reader can follow. Style effects of one engine get two sentences and a link to the engine instead of a graph.
 9. `## Technical details`: compact facts (units, transparency, saved projects, limits) and links: [Effect system](./Effect-System.md) (its *Per-effect notes* hold the implementation notes of single effects), [Node Catalog](./Node-Catalog.md).
@@ -251,7 +252,7 @@ The Markdown shortcut `![Glitch on a dancer](../assets/effects/clips/glitch.mp4)
                 "thumb": "assets/effects/thumbs/gaussian-blur.webp" }] }
 ```
 
-Paths are relative to `docs/Features`. Further fields: `basic` (a generated basic page), `clip` (`assets/effects/clips/<id>.mp4`), `engine` (the shared engine of style effects), `moving` (time-based, so it gets a loop), `experimental` and `hidden`. Without the catalog, cards show the page title (or the id) and no picture.
+Paths are relative to `docs/Features`. Further fields: `basic` (a generated basic page), `clip` (`assets/effects/clips/<id>.mp4`), `engine` (the shared engine of style effects), `moving` (time-based, so it gets a loop; also looks that move with the playhead, `timelineAnimated`), `presets` (preset names in card order), `presetStrip` (`assets/effects/presets/<id>.webp`), `experimental` and `hidden`. Without the catalog, cards show the page title (or the id) and no picture.
 
 **Budgets** for pictures, thumbnails and clips: [Style guide](#style-guide). `scripts/docShotWebp.mjs` encodes pictures to fit, `scripts/doc-clip.mjs` clips.
 
@@ -284,7 +285,11 @@ effects (or `original`) on one image, crops the same region of both (`crop`, in
 pixels of the rendered frame, `zoom` enlarges it) and puts them side by side as a
 WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`;
 `"backdrop": "checker"` or a flat colour (`"#3c6ec8"`, readable at float size) shows
-transparent pixels.
+transparent pixels. `--presets scripts/effect-lab-shots/presets.json [--only <id>]` makes the
+preset strip of an effect page: every preset its definition declares, rendered on one image
+(`image`, `crop`, `times` for a moving effect), in rows of `columns` (two for four presets) with the
+preset name under each cell, as `docs/Features/assets/effects/presets/<id>.webp`. One entry per
+effect in `presets.json`; names and values always come from the registry.
 
 ### Effect graph pictures
 
