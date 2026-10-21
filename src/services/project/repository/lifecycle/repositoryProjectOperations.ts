@@ -3,7 +3,7 @@ import { RepositoryError } from '../contracts';
 import { encodeProjectDomains, PROJECT_ENTITY_KEY } from '../domains/projectDomains';
 import { createRepositoryProject } from './defaultProject';
 import { prepareNewRepository, prepareRepositoryOpen, backendForLocation, type RepositoryOpenOptions } from './repositoryLocations';
-import { openEditorRepository, getActiveRepositorySession, repositoryWorkspaceId, flushEditorRepository, readEditorRepositoryProject } from './editorRepositoryLifecycle';
+import { openEditorRepository, getActiveRepositorySession, repositoryWorkspaceId, flushEditorRepository } from './editorRepositoryLifecycle';
 import { splitProjectWorkspace } from './workspaceProjection';
 import { recoverRepository } from '../persistence/recovery';
 import { prepareArchive } from '../archive/selectiveArchive';
@@ -49,11 +49,13 @@ export async function createRepositoryAt(location: RepositoryLocation, name: str
   return session;
 }
 export async function renameRepositoryProject(name: string): Promise<boolean> {
-  const session = getActiveRepositorySession(); const project = readEditorRepositoryProject();
-  if (!session || !project || !name.trim()) return false;
-  const encoded = encodeProjectDomains({ ...project, name: name.trim() });
+  const session = getActiveRepositorySession(); const root = session?.coordinator.getProjection().entities.get(PROJECT_ENTITY_KEY);
+  const trimmed = name.trim(); const value = root?.value;
+  if (!session || !root || !trimmed || !value || typeof value !== 'object' || Array.isArray(value)) return false;
+  // Only the root entity changes. Re-encoding the whole decoded project would reject repository-internal
+  // adjuncts such as the $sourceIdentity proof of verified media, which broke Save As and Save permanently.
   const token = session.coordinator.begin('Rename project', 'user');
-  try { session.coordinator.write(token, PROJECT_ENTITY_KEY, encoded.entities.get(PROJECT_ENTITY_KEY)!);
+  try { session.coordinator.write(token, PROJECT_ENTITY_KEY, { ...root, value: { ...value, name: trimmed } });
     const committed = session.coordinator.commit(token); await session.coordinator.flush(committed.receipt); return true;
   } catch (error) { try { session.coordinator.cancel(token); } catch { /* Committed operations remain recoverable. */ } throw error; }
 }

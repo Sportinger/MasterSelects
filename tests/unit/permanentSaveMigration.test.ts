@@ -43,6 +43,10 @@ const state = vi.hoisted(() => ({
   scratch: false,
   lockedNames: new Set<string>(),
   createRepositoryAt: null as null | ((location: Record<string, unknown>) => Promise<void>),
+  moveIdentity: vi.fn(async (..._args: string[]) => true),
+}));
+vi.mock('../../src/services/project/repository/backends/repositoryLocationIdentity', () => ({
+  moveRepositoryLocationIdentity: state.moveIdentity,
 }));
 vi.mock('../../src/services/project/core/indexedDbEntryStore', () => ({
   openIndexedDbEntryStore: async () => state.temporaryStore,
@@ -145,6 +149,8 @@ describe('moving projects that are not open', () => {
 
     const moved = await migration.moveTemporaryProject('My Project');
     expect(moved).toEqual({ from: 'My Project', to: 'My Project (2)', removedTemporary: true });
+    // The copy keeps its repository id, so it takes over the writer registration instead of opening read-only.
+    expect(state.moveIdentity).toHaveBeenCalledWith('repo-My Project', `indexeddb:${location.origin}:My Project`, `opfs:${location.origin}:My Project (2)`);
     const copy = await persistentRoot.getDirectoryHandle('My Project (2)');
     const segment = await (await (await (await copy.getDirectoryHandle('.masterselects')).getDirectoryHandle('segments')).getFileHandle('s1.msseg')).getFile();
     expect(segment.size).toBe(3 * 1024 * 1024);
