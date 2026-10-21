@@ -17,6 +17,9 @@
 //     crop, for small lights), "gap": 6,
 //     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ... } }
 // (an effect of "original" is the unchanged image).
+// `"layout": "split"` shows one picture: the crop (default: the whole frame) of the left side up to
+// `"split"` (0.5) of its width, the right side's crop after it, and a thin light divider; `"stack"`
+// puts the two crops one above the other with `gap` between them. `"outWidth"` scales the result.
 // Needs a running Vite of this checkout (`npx vite --port 5175 --strictPort`).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -30,20 +33,31 @@ async function composePair(page, entry) {
     params: spec.params ?? {}, bypass: spec.effect === 'original' });
   const [left, right] = [await side(entry.left), await side(entry.right)];
   for (const [label, cell] of [['left', left], ['right', right]]) if (cell.gpuFailure) throw new Error(`${entry.name} ${label}: ${cell.gpuFailure}`);
-  const png = await page.evaluate(async ({ left, right, crop, gap, zoom }) => {
-    const [x, y, w, h] = crop, cw = Math.round(w * zoom), ch = Math.round(h * zoom);
-    const canvas = new OffscreenCanvas(cw * 2 + gap, ch), context = canvas.getContext('2d');
+  const png = await page.evaluate(async ({ left, right, crop, gap, zoom, layout, split, outWidth }) => {
+    const bitmaps = [await createImageBitmap(await (await fetch(left)).blob()), await createImageBitmap(await (await fetch(right)).blob())];
+    const [x, y, w, h] = crop ?? [0, 0, bitmaps[0].width, bitmaps[0].height];
+    const scale = !outWidth ? zoom : layout === 'pair' ? (outWidth - gap) / (w * 2) : outWidth / w;
+    const cw = Math.round(w * scale), ch = Math.round(h * scale);
+    const size = layout === 'split' ? [cw, ch] : layout === 'stack' ? [cw, ch * 2 + gap] : [cw * 2 + gap, ch];
+    const canvas = new OffscreenCanvas(size[0], size[1]), context = canvas.getContext('2d');
     context.fillStyle = '#111'; context.fillRect(0, 0, canvas.width, canvas.height);
     context.imageSmoothingQuality = 'high';
-    for (const [index, data] of [left, right].entries()) {
-      const bitmap = await createImageBitmap(await (await fetch(data)).blob());
-      context.drawImage(bitmap, x, y, w, h, index * (cw + gap), 0, cw, ch);
+    if (layout === 'split') {
+      const cut = Math.round(w * split);
+      context.drawImage(bitmaps[0], x, y, cut, h, 0, 0, Math.round(cut * scale), ch);
+      context.drawImage(bitmaps[1], x + cut, y, w - cut, h, Math.round(cut * scale), 0, cw - Math.round(cut * scale), ch);
+      context.fillStyle = 'rgba(255, 255, 255, 0.85)'; context.fillRect(Math.round(cut * scale) - 1, 0, 2, ch);
+    } else {
+      for (const [index, bitmap] of bitmaps.entries()) {
+        context.drawImage(bitmap, x, y, w, h, layout === 'stack' ? 0 : index * (cw + gap), layout === 'stack' ? index * (ch + gap) : 0, cw, ch);
+      }
     }
     const blob = await canvas.convertToBlob({ type: 'image/png' });
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return btoa(binary);
-  }, { left: left.png, right: right.png, crop: entry.crop, gap: entry.gap ?? 6, zoom: entry.zoom ?? 1 });
+  }, { left: left.png, right: right.png, crop: entry.crop, gap: entry.gap ?? 6, zoom: entry.zoom ?? 1, layout: entry.layout ?? 'pair',
+    split: entry.split ?? 0.5, outWidth: entry.outWidth });
   return Buffer.from(png, 'base64');
 }
 

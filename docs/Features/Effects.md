@@ -826,21 +826,32 @@ ranges and defaults. Both preserve source alpha and use one fullscreen pass.
 ### Editable mirror, split and pixel graphs
 
 User guide with pictures: [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md).
-Kaleidoscope, Mirror and RGB Split read a premultiplied `rgba16float` copy of
-the frame (two passes) and unpremultiply the result; their reads beyond the frame
-follow **Frame Edges** (Mirror, Clamp, Transparent). Angles are on-screen angles,
-stored in radians and shown in degrees. RGB Split's alpha is the largest of its
-three channel reads. Pixelate, Blockify and Block Mosaic share one centred cell
-grid (sizes in pixels of a 1080p frame, rounded to whole rendered pixels) and an
-exact two-pass cell average of the premultiplied frame (three passes in all); cells
-wider than 128 rendered pixels average evenly spread taps. Block Mosaic picks its
-large tiles from timeline time, so seeking and export reproduce the same pattern;
-bound colour nodes read the canonical effect colour (including eight-digit hex
-alpha) without recompiling. Untouched saved graphs and graph-less saved effects
-move to the current recipes with values that keep their look where it can be kept;
-see [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md). Neutral settings
-(RGB Split Amount 0, Mirror with both axes off, 1-pixel Pixelate cells, Blockify
-and Block Mosaic at Amount 0) skip the built-in recipe.
+All six effects read a premultiplied `rgba16float` copy of the frame and
+unpremultiply the result, so transparent pixels never darken an edge or a cell.
+Kaleidoscope, Mirror and RGB Split follow **Frame Edges** (Mirror, Clamp,
+Transparent; Transparent fades over one source pixel by lowering alpha only) for
+reads beyond the frame. Angles are on-screen angles, stored in radians and shown
+in degrees. RGB Split's alpha is the largest of its three channel reads.
+Pixelate, Blockify and Block Mosaic share one centred cell grid (sizes in pixels
+of a 1080p frame, rounded to whole rendered pixels) and an exact two-pass cell
+average of the premultiplied frame (three passes in all); cells wider than 128
+rendered pixels average evenly spread taps. Blockify's dither is a 4 × 4 Bayer
+threshold per block. Block Mosaic draws its large tiles from timeline time, so
+seeking and export reproduce the same pattern; bound colour nodes read the
+canonical effect colour (including eight-digit hex alpha) without recompiling.
+Untouched saved graphs and graph-less saved effects move to the current recipes
+with values that keep their look where it can be kept. Neutral settings (RGB
+Split Amount 0, Mirror with both axes off, Pixelate cells below two rendered
+pixels, Blockify and Block Mosaic at Amount 0) skip the built-in recipe.
+
+**Worker CPU fallback.** Without WebGPU (software preview, worker-first export
+readback) the untouched Kaleidoscope, Mirror, RGB Split and Pixelate recipes run
+as one hand-written whole-frame pass with the same mappings, frame edges and
+premultiplied reads, within 1/255 of the graphs in tests; Pixelate averages every
+cell exactly there. The pass runs before the layer's other CPU effects, so it is
+used only when nothing that moves or mixes pixels comes earlier in the stack
+(uniform colour adjustments may precede Kaleidoscope and Mirror). Other stacks,
+and edited graphs, run as ordered graph plans.
 
 ### Editable blur kernels
 
