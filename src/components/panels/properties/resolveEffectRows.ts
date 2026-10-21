@@ -9,3 +9,10 @@ export const RESOLVE_ROW_EFFECTS: ReadonlySet<string> = new Set(['gaussian-blur'
 export function hasResolveEffectParamRow(definition: { type: string }): boolean {
   return definition.type === 'number' || definition.type === 'select' || definition.type === 'boolean' || definition.type === 'color';
 }
+
+/** Decimals a step implies (0.5 → 1, 0.05 → 2, 0.001 → 3), so values read like the slider moves. */
+export function stepDecimals(step: number): number {
+  if (!(step > 0)) return 0;
+  const fraction = /\.(\d+)$/.exec(String(Number(step.toPrecision(6))))?.[1];
+  return Math.min(4, fraction ? fraction.length : step >= 1 ? 0 : Math.ceil(-Math.log10(step)));
+}

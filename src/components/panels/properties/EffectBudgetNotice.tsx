@@ -4,11 +4,18 @@ import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
 
 const size = (value: unknown, fallback: number) => typeof value === 'number' && value > 0 ? value : fallback;
 
-/** The effect's own notes on values it clamps, ignores or cannot show (`paramWarnings`). */
+/**
+ * The effect's own notes on values it clamps, ignores or cannot show (`paramWarnings`). Tool
+ * results name parameters by id ("levels: 1 is …"); the inspector names them by their label.
+ */
 function definitionNotes(effectType: string, params: Record<string, unknown>, width: number, height: number): string[] {
   const definition = getEffect(effectType);
   if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
-  try { return definition.paramWarnings(params as Record<string, number | boolean | string>, width, height); } catch { return []; }
+  const labelled = (note: string) => note.replace(/^([A-Za-z][\w-]*): /, (prefix, id: string) => {
+    const label = Object.hasOwn(definition.params, id) ? definition.params[id].label : undefined;
+    return label ? `${label}: ` : prefix;
+  });
+  try { return definition.paramWarnings(params as Record<string, number | boolean | string>, width, height).map(labelled); } catch { return []; }
 }
 
 /**

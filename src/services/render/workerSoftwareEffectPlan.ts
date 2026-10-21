@@ -14,6 +14,23 @@ import { workerSoftwareMirrorPixelAdjustment, type WorkerSoftwareMirrorPixelAdju
 
 /** Built-in recipes with a hand-written worker CPU pass (edited graphs run through the graph interpreter). */
 const HAND_WRITTEN_MIRROR_PIXEL = new Set(['kaleidoscope', 'mirror', 'pixelate', 'rgb-split']);
+/** Spatially uniform colour adjustments: they give the same picture before or after a pure resampling. */
+const UNIFORM_COLOUR_EFFECTS = new Set(['brightness', 'exposure', 'temperature', 'vibrance', 'levels', 'threshold', 'posterize',
+  'chroma-key', 'contrast', 'saturation', 'hue-shift', 'invert']);
+
+/**
+ * The hand-written mirror/pixel pass runs on the whole frame before every other worker CPU effect,
+ * so it may only follow effects it commutes with: other built-in mirror/pixel effects (applied in
+ * stack order) and, for the pure resampling of Kaleidoscope and Mirror, uniform colour adjustments.
+ * Anything else earlier in the stack (a distort, blur, glow, vignette, grain, or any effect before
+ * Pixelate's average or RGB Split's per-channel reads) would run after it on the CPU; such layers
+ * run as ordered graph plans instead (see workerSoftwareEffectPlanForLayer).
+ */
+export function handWrittenMirrorPixelOutOfOrder(activeEffects: readonly Pick<Effect, 'type'>[]): boolean {
+  return activeEffects.some((effect, index) => HAND_WRITTEN_MIRROR_PIXEL.has(effect.type)
+    && activeEffects.slice(0, index).some(earlier => !HAND_WRITTEN_MIRROR_PIXEL.has(earlier.type)
+      && !((effect.type === 'kaleidoscope' || effect.type === 'mirror') && UNIFORM_COLOUR_EFFECTS.has(earlier.type))));
+}
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
@@ -442,10 +459,11 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
       return { filter: 'none', pixelEffects: graphEffects };
     } catch { return null; }
   };
-  if (hasPersistedImageGraph) return graphPlans();
+  if (hasPersistedImageGraph || handWrittenMirrorPixelOutOfOrder(activeEffects)) return graphPlans();
   // The hand-written pass holds one resampling effect; stacked built-in distorts (Wave then
-  // Twirl, …) run as ordered graph plans instead of skipping the layer.
-  const stackedFallback = () => activeEffects.some(effect => workerSoftwareUvDistortAdjustment(effect)) ? graphPlans() : null;
+  // Twirl, Kaleidoscope then Fisheye then Motion Blur, …) run as ordered graph plans instead of skipping the layer.
+  const stackedFallback = () => activeEffects.some(effect => workerSoftwareUvDistortAdjustment(effect) || HAND_WRITTEN_MIRROR_PIXEL.has(effect.type))
+    ? graphPlans() : null;
   const parts: string[] = [];
   let activeVisualEffectCount = 0;
   for (const effect of layer.effects) {

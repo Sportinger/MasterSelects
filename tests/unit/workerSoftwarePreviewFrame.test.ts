@@ -2122,6 +2122,25 @@ describe('worker software preview frame builder', () => {
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(true);
   });
 
+  it('runs Kaleidoscope after a resampling effect as ordered graph plans instead of out of stack order', async () => {
+    const frame = await buildWorkerSoftwarePreviewFrame(
+      [solidLayer({
+        effects: [
+          { id: 'motion-blur-a', type: 'motion-blur', name: 'Motion Blur', enabled: true, params: { amount: 0.05, angle: 0 } },
+          { id: 'kaleidoscope-a', type: 'kaleidoscope', name: 'Kaleidoscope', enabled: true, params: { segments: 6, rotation: 0 } },
+        ],
+      })],
+      { width: 640, height: 360 },
+    );
+
+    expect(frame.frame.layers).toHaveLength(1);
+    // The hand-written mirror/pixel pass would run before the blur; the graphs keep Motion Blur first.
+    expect(frame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toHaveLength(2);
+    expect(frame.frame.layers[0]?.pixelEffects.mirrorPixelAdjustments).toBeUndefined();
+    expect(frame.frame.layers[0]?.pixelEffects.motionBlurAdjustments).toBeUndefined();
+    expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
+  });
+
   it('stacks Wave and Twirl as ordered graph plans', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({

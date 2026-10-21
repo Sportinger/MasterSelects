@@ -12,19 +12,62 @@
     --resolve-inspector-control-action-gap: 14px;
   }
 
-  /* Switches and colour wells sit at the start of the control column, sized like the row's fields. */
+  /* Switches and colour wells sit at the start of the control column, sized like the row's fields.
+     The switch is drawn with the inspector tokens (a native box would be a white square when off). */
   .resolve-effect-checkbox {
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    box-sizing: border-box;
     width: 14px;
     height: 14px;
     margin: 0;
-    accent-color: var(--accent);
+    border: 1px solid var(--border-strong);
+    border-radius: 2px;
+    background: var(--input-bg);
     cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 90ms ease, border-color 90ms ease;
+  }
+
+  .resolve-effect-checkbox:hover {
+    border-color: var(--text-secondary);
+  }
+
+  .resolve-effect-checkbox:checked {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  /* The check glyph: a rotated corner in the accent's text colour. */
+  .resolve-effect-checkbox:checked::after {
+    content: '';
+    position: absolute;
+    left: 3.5px;
+    top: 0.5px;
+    width: 3.5px;
+    height: 7.5px;
+    border: solid var(--text-on-accent);
+    border-width: 0 1.5px 1.5px 0;
+    transform: rotate(45deg);
+  }
+
+  .resolve-effect-checkbox:focus:not(:focus-visible) {
+    outline: none;
   }
 
   .resolve-effect-color {
     display: inline-flex;
     align-items: center;
+    gap: 8px;
     height: var(--resolve-inspector-row-height);
+  }
+
+  .resolve-effect-color-hex {
+    color: var(--text-secondary);
+    font-family: var(--font-mono, ui-monospace, monospace);
+    font-size: 11px;
+    user-select: text;
   }
 
   .resolve-effect-color input[type="color"] {

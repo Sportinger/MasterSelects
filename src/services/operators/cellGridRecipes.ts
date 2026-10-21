@@ -14,10 +14,10 @@ import { BlurGraphBuilder, normalizeNodes, premultipliedSourceCache, unpremultip
  *   average CELL_MAX_PAIRS evenly spread pixel pairs per row and column). The average reads the
  *   premultiplied rgba16float copy of the frame and is unpremultiplied, so transparent pixels
  *   never darken a cell.
- * - Blockify posterizes the cell colour to Levels steps per channel; Block Mosaic merges some
- *   2 × 2 groups of tiles into one large tile (re-chosen Speed times per second) and draws grout
- *   lines between tiles. Amount mixes the result with the original (premultiplied, so alpha
- *   follows).
+ * - Blockify posterizes the cell colour to Levels steps per channel, with an ordered 4 × 4 Bayer
+ *   dither per cell (Dither); Block Mosaic merges some 2 × 2 groups of tiles into one large tile
+ *   (re-drawn Speed times per second) and draws grout lines between tiles. Amount mixes the result
+ *   with the original (premultiplied, so alpha follows).
  */
 export const CELL_REFERENCE_HEIGHT = 1080;
 /** Pair taps per pass: cells up to 128 rendered pixels wide are averaged exactly. */
@@ -26,6 +26,10 @@ export const BLOCKIFY_MIN_LEVELS = 2;
 export const BLOCKIFY_MAX_LEVELS = 64;
 /** Share of 2 × 2 tile groups merged into one large tile (the original 0.68 hash threshold). */
 export const MOSAIC_LARGE_THRESHOLD = .68;
+/** Per shuffle step, the hash seed moves by these irrational fractions, so no step repeats or shifts the last one. */
+export const MOSAIC_SHUFFLE_RATE = [.6180339887, .7548776662] as const;
+/** Added to grid indices before the Bayer lookup, which reads nonnegative cells (a multiple of 4, exact in f32). */
+export const BAYER_INDEX_OFFSET = 65536;
 
 function sources(g: BlurGraphBuilder): void {
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
@@ -157,7 +161,9 @@ export function createDefaultBlockifyGraph(): EffectOperatorGraph {
   const cell = renderedPixels(g, 'cell-px', 'scale', 'one');
   cellGrid(g, cell);
   const { rgb, alpha } = straightColour(g, 'cell', cellAverage(g));
-  // Levels steps per channel: round(c × (L − 1)) / (L − 1).
+  // Levels steps per channel: floor(c × (L − 1) + 0.5 + d) / (L − 1). The ordered dither d is the
+  // cell's 4 × 4 Bayer threshold − 0.5 (within ±0.47 of a step) times Dither, so dark gradients
+  // break into a regular pattern instead of flat bands; black and white stay exact.
   g.bound('levels', 'levels');
   g.binary('levels-shifted', 'math.add.scalar', 'levels', 'half');
   g.unary('levels-rounded', 'math.floor.scalar', 'levels-shifted');
@@ -165,7 +171,16 @@ export function createDefaultBlockifyGraph(): EffectOperatorGraph {
   g.add('levels-count', 'math.clamp.scalar', { value: 'levels-rounded', min: 'levels-minimum', max: 'levels-maximum' });
   g.binary('poster-steps', 'math.subtract.scalar', 'levels-count', 'one');
   g.add('poster-scaled', 'math.multiply.rgb-scalar', { a: rgb, b: 'poster-steps' });
-  g.unary('poster-half', 'convert.scalar-to-rgb', 'half');
+  g.number('bayer-offset', BAYER_INDEX_OFFSET);
+  g.unary('bayer-offset-vec2', 'convert.scalar-to-vec2', 'bayer-offset');
+  g.binary('bayer-cell', 'math.add.vec2', 'grid-index', 'bayer-offset-vec2');
+  g.unary('bayer', 'pattern.bayer4.vec2', 'bayer-cell');
+  g.binary('bayer-centred', 'math.subtract.scalar', 'bayer', 'half');
+  g.bound('dither', 'dither');
+  g.add('dither-amount', 'math.clamp.scalar', { value: 'dither', min: 'zero', max: 'one' });
+  g.binary('dither-offset', 'math.multiply.scalar', 'bayer-centred', 'dither-amount');
+  g.binary('dither-shift', 'math.add.scalar', 'dither-offset', 'half');
+  g.unary('poster-half', 'convert.scalar-to-rgb', 'dither-shift');
   g.binary('poster-shifted', 'math.add.rgb', 'poster-scaled', ['poster-half', 'rgb']);
   g.unary('poster-floor', 'math.floor.rgb', 'poster-shifted');
   g.add('poster', 'math.divide-ieee.rgb-scalar', { a: 'poster-floor', b: 'poster-steps' });
@@ -178,17 +193,25 @@ export function createDefaultBlockMosaicGraph(): EffectOperatorGraph {
   sources(g);
   g.bound('scale', 'scale');
   const tile = renderedPixels(g, 'tile-px', 'scale', 'two');
-  // Large tiles: a 2 × 2 group of tiles, picked per group by a hash that changes Speed times per second.
+  // Large tiles: a 2 × 2 group of tiles, picked per group by a chained hash: the group's own hash
+  // plus a seed that jumps by irrational fractions Speed times per second, so every step draws a
+  // fresh pattern (adding the step to the index would only slide the last one diagonally).
   g.binary('large-px', 'math.multiply.scalar', tile, 'two');
   g.unary('large-cell', 'convert.scalar-to-vec2', 'large-px');
   g.binary('large-position', 'math.divide-ieee.vec2', 'from-origin', 'large-cell');
   g.unary('large-index', 'math.floor.vec2', 'large-position');
+  g.add('group-hash', 'noise.hash2d.vec2', { value: 'large-index' });
   g.add('time', 'image.timeline-time');
   g.bound('speed', 'speed');
   g.binary('time-speed', 'math.multiply.scalar', ['time', 'value'], 'speed');
   g.unary('time-step', 'math.floor.scalar', 'time-speed');
   g.unary('time-step-vec2', 'convert.scalar-to-vec2', 'time-step');
-  g.binary('hash-input', 'math.add.vec2', 'large-index', 'time-step-vec2');
+  g.number('shuffle-rate-x', MOSAIC_SHUFFLE_RATE[0]); g.number('shuffle-rate-y', MOSAIC_SHUFFLE_RATE[1]);
+  g.add('shuffle-rate', 'vector.combine.vec2', { x: 'shuffle-rate-x', y: 'shuffle-rate-y' });
+  g.binary('shuffle-scaled', 'math.multiply.vec2', 'time-step-vec2', 'shuffle-rate');
+  g.unary('shuffle-seed', 'math.fract.vec2', 'shuffle-scaled');
+  g.add('group-key', 'vector.combine.vec2', { x: 'group-hash', y: 'zero' });
+  g.binary('hash-input', 'math.add.vec2', 'group-key', 'shuffle-seed');
   g.add('hash', 'noise.hash2d.vec2', { value: 'hash-input' });
   g.number('large-threshold', MOSAIC_LARGE_THRESHOLD);
   g.add('is-large', 'compare.greater.scalar', { a: 'hash', b: 'large-threshold' });

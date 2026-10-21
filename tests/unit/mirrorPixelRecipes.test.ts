@@ -209,15 +209,21 @@ describe('Pixelate recipe', () => {
   });
 });
 
+/** The canonical 4 × 4 Bayer matrix: threshold (k + 0.5) / 16 of a (possibly negative) cell index. */
+const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
+const bayer = (cx: number, cy: number) => (BAYER[((cy % 4) + 4) % 4][((cx % 4) + 4) % 4] + .5) / 16;
+
 describe('Blockify and Block Mosaic recipes', () => {
-  it('Blockify posterizes the cell average to Levels steps and mixes with the original by Amount', () => {
+  it('Blockify posterizes the cell average to Levels steps with a per-cell Bayer dither and mixes with the original by Amount', () => {
     const width = 12, height = 8, cell = 3, size = cell * 1080 / 8;
-    for (const [levels, amount] of [[6, 1], [3, .4], [2.4, 2]] as const) {
-      const evaluate = createImagePassEvaluator(plan('blockify', { scale: size, levels, amount }), [width, height], discreteImage(width, height, texel), { filterResources: true, float16: true });
-      for (const [x, y] of [[4, 5], [9, 1], [11, 7]]) {
+    for (const [levels, amount, dither] of [[6, 1, 1], [3, .4, 0], [2.4, 2, .5], [5, 1, -3]] as const) {
+      const evaluate = createImagePassEvaluator(plan('blockify', { scale: size, levels, amount, dither }), [width, height], discreteImage(width, height, texel), { filterResources: true, float16: true });
+      for (const [x, y] of [[4, 5], [9, 1], [11, 7], [0, 0], [2, 3]]) {
         const average = referenceAverage(texel, referenceCell(x, y, cell, width, height)), [r, g, b, a] = straight(average);
+        if (a < .05) continue;
         const steps = clamp(Math.floor(levels + .5), 2, 64) - 1, t = clamp(amount, 0, 1);
-        const poster = [r, g, b].map(value => Math.floor(value * steps + .5) / steps);
+        const shift = .5 + (bayer(Math.floor((x + .5 - 6) / cell), Math.floor((y + .5 - 4) / cell)) - .5) * clamp(dither, 0, 1);
+        const poster = [r, g, b].map(value => Math.floor(value * steps + shift) / steps);
         const original = premultiply(texel(x, y));
         const mixed = [...poster.map(value => value * a), a].map((value, channel) => original[channel] + (value - original[channel]) * t) as Pixel;
         expectClose(evaluate([(x + .5) / width, (y + .5) / height]), straight(mixed), 2);
@@ -225,8 +231,28 @@ describe('Blockify and Block Mosaic recipes', () => {
     }
   });
 
-  /** The shared sine hash (noise.hash2d) of a large-tile index. */
+  it('Blockify dither keeps black and white exact and the average shade of a flat area', () => {
+    const width = 16, height = 16, cell = 2, size = cell * 1080 / 16;
+    for (const level of [0, 1, .1, .37]) {
+      const evaluate = createImagePassEvaluator(plan('blockify', { scale: size, levels: 6, amount: 1, dither: 1 }), [width, height],
+        discreteImage(width, height, () => [level, level, level, 1]), { filterResources: true, float16: true });
+      let sum = 0;
+      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+        const value = evaluate([(x + .5) / width, (y + .5) / height])[0];
+        // Every block is one of the six levels.
+        expect(Math.abs(value * 5 - Math.round(value * 5))).toBeLessThan(1e-3);
+        sum += value;
+      }
+      // 8 × 8 blocks hold the 4 × 4 Bayer pattern four times: the mean is the flat shade (within half a 1/16 step).
+      expect(sum / (width * height)).toBeCloseTo(level, 1);
+      if (level === 0 || level === 1) expect(sum / (width * height)).toBe(level);
+    }
+  });
+
+  /** The shared sine hash (noise.hash2d). */
   const hash = ([x, y]: UV) => fract(Math.sin((x * 127.1 + y * 311.7) * 12.9898 + (x * 269.5 + y * 183.3) * 78.233) * 43758.5453);
+  /** Large-tile choice of a 2 × 2 group at a shuffle step: the group's hash plus an irrational step seed, hashed again. */
+  const isLargeGroup = ([gx, gy]: UV, step: number) => hash([hash([gx, gy]) + fract(step * .6180339887), fract(step * .7548776662)]) > .68;
 
   it('Block Mosaic draws whole square tiles: small ones or aligned 2 × 2 groups, never L-shapes', () => {
     const width = 40, height = 24, tile = 2, size = tile * 1080 / height, time = 3.4, speed = 1.5;
@@ -235,13 +261,38 @@ describe('Blockify and Block Mosaic recipes', () => {
     let large = 0;
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
       const ox = Math.floor(width / 2), oy = Math.floor(height / 2);
-      const group: UV = [Math.floor((x + .5 - ox) / (tile * 2)) + Math.floor(time * speed), Math.floor((y + .5 - oy) / (tile * 2)) + Math.floor(time * speed)];
-      const isLarge = hash(group) > .68; if (isLarge) large++;
+      const group: UV = [Math.floor((x + .5 - ox) / (tile * 2)), Math.floor((y + .5 - oy) / (tile * 2))];
+      const isLarge = isLargeGroup(group, Math.floor(time * speed)); if (isLarge) large++;
       const expected = straight(referenceAverage(texel, referenceCell(x, y, isLarge ? tile * 2 : tile, width, height)));
       const actual = evaluate([(x + .5) / width, (y + .5) / height]);
       if (expected[3] > .05) expectClose(actual, expected, 2);
     }
     expect(large).toBeGreaterThan(0);
+  });
+
+  it('Block Mosaic reshuffles: the next step is a new pattern, not the last one shifted', () => {
+    const groups = 24, flags = (step: number) => Array.from({ length: groups }, (_, y) => Array.from({ length: groups }, (_, x) => isLargeGroup([x - 12, y - 12], step)));
+    const share = (a: boolean[][], b: boolean[][], dx: number, dy: number) => {
+      let same = 0, count = 0;
+      for (let y = 2; y < groups - 2; y++) for (let x = 2; x < groups - 2; x++) { same += Number(a[y][x] === b[y + dy][x + dx]); count++; }
+      return same / count;
+    };
+    for (const step of [0, 1, 7, 1000]) {
+      const now = flags(step), next = flags(step + 1);
+      const large = now.flat().filter(Boolean).length / (groups * groups);
+      expect(large).toBeGreaterThan(.2); expect(large).toBeLessThan(.45);
+      // Two unrelated patterns with ~32 % large tiles agree on ~56 % of the groups; a shifted copy would agree on all.
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) expect(share(now, next, dx, dy)).toBeLessThan(.8);
+    }
+    // The graph draws the same choice: a large group at one step, small at the next.
+    const width = 32, height = 32, tile = 2, size = tile * 1080 / height;
+    const largeAt = (step: number) => {
+      const evaluate = createImagePassEvaluator(plan('block-mosaic', { scale: size, grout: 0, amount: 1, speed: 1 }), [width, height],
+        discreteImage(width, height, (x, y) => [x / width, y / height, .5, 1]), { filterResources: true, timelineTimeSeconds: step + .5 });
+      // Pixel (16, 16) starts group (0, 0): a large tile averages 4 pixels per axis, a small one 2.
+      return evaluate([16.5 / width, 16.5 / height])[0] * width > 17.2;
+    };
+    for (const step of [0, 1, 2, 3, 4, 5]) expect(largeAt(step)).toBe(isLargeGroup([0, 0], step));
   });
 
   it('Block Mosaic grout: Grout Width split over both sides of every tile edge, one pixel soft', () => {
@@ -252,7 +303,7 @@ describe('Blockify and Block Mosaic recipes', () => {
     const origin: UV = [24, 16];
     for (const y of [4, 13, 20]) for (let x = 0; x < width; x++) {
       const pixel: UV = [x + .5, y + .5];
-      const cell = hash([Math.floor((pixel[0] - origin[0]) / (tile * 2)), Math.floor((pixel[1] - origin[1]) / (tile * 2))]) > .68 ? tile * 2 : tile;
+      const cell = isLargeGroup([Math.floor((pixel[0] - origin[0]) / (tile * 2)), Math.floor((pixel[1] - origin[1]) / (tile * 2))], 0) ? tile * 2 : tile;
       const start = pixel.map((value, axis) => origin[axis] + Math.floor((value - origin[axis]) / cell) * cell);
       const distance = Math.min(...pixel.map((value, axis) => Math.min(value - start[axis], start[axis] + cell - value)));
       // Grout 2 px: one pixel on each side of the edge (the grout colour is black).

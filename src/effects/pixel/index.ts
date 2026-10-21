@@ -22,18 +22,22 @@ function packBlock(params: Params, width: number, height: number, time: number, 
   return new Float32Array([
     Math.max(1, width), Math.max(1, height),
     finite(params.scale, scaleFallback), finite(params.amount, 1),
-    finite(params.levels, 6), finite(params.grout, 2),
+    finite(params.levels, 8), finite(params.grout, 2),
     time, finite(params.speed, 0),
+    finite(params.dither, 1), 0, 0, 0,
     ...colorToRgba(params.colorA, '#111827'),
   ]);
 }
 
 export const blockify: EffectDefinition = {
   id: 'blockify', name: 'Blockify', category: 'pixel',
-  shader: `${common}\n${shader}`, entryPoint: 'blockifyFragment', uniformSize: 48,
+  shader: `${common}\n${shader}`, entryPoint: 'blockifyFragment', uniformSize: 64,
   params: {
     scale: { type: 'number', label: 'Block Size', default: 16, min: 2, max: 128, step: 1, animatable: true },
-    levels: { type: 'number', label: 'Levels', default: 6, min: BLOCKIFY_MIN_LEVELS, max: 16, step: 1, animatable: true, graphOnly: true },
+    // Steps per channel: 8 (512 colours) with the dither keeps dark, low-key footage calm; fewer is a harder poster look.
+    levels: { type: 'number', label: 'Levels', default: 8, min: BLOCKIFY_MIN_LEVELS, max: 16, step: 1, animatable: true, graphOnly: true },
+    // Ordered 4 × 4 Bayer dither per block before rounding: 0 rounds to the nearest level (flat bands), 1 a full retro pattern.
+    dither: { type: 'number', label: 'Dither', default: 1, min: 0, max: 1, step: 0.01, animatable: true, graphOnly: true },
     amount,
     angle: retired('Blockify', 'Angle', 'number', 0),
     colorA: retired('Blockify', 'Ink', 'color', '#111827'),
@@ -41,26 +45,32 @@ export const blockify: EffectDefinition = {
   },
   paramWarnings: (params, width, height) => {
     const levels = params.levels;
-    return [...cellSizeWarnings('scale', params.scale, 1, width, height), ...amountWarnings(params.amount),
+    const dither = params.dither;
+    return [...cellSizeWarnings('scale', params.scale, 1, width, height, 'blocks are 1 pixel wide, so only the colour levels apply'),
+      ...amountWarnings(params.amount),
       ...(typeof levels === 'number' && (levels < BLOCKIFY_MIN_LEVELS - .5 || levels >= BLOCKIFY_MAX_LEVELS + .5)
-        ? [`levels: ${levels} is outside ${BLOCKIFY_MIN_LEVELS}–${BLOCKIFY_MAX_LEVELS}; Blockify uses ${levels < BLOCKIFY_MIN_LEVELS ? BLOCKIFY_MIN_LEVELS : BLOCKIFY_MAX_LEVELS}.`] : [])];
+        ? [`levels: ${levels} is outside ${BLOCKIFY_MIN_LEVELS}–${BLOCKIFY_MAX_LEVELS}; Blockify uses ${levels < BLOCKIFY_MIN_LEVELS ? BLOCKIFY_MIN_LEVELS : BLOCKIFY_MAX_LEVELS}.`] : []),
+      ...(typeof dither === 'number' && (dither < 0 || dither > 1) ? [`dither: ${dither} is outside 0–1; Blockify uses ${dither < 0 ? 0 : 1}.`] : [])];
   },
   packUniforms: (params, width, height) => packBlock(params, width, height, 0, 16),
 };
 
 export const blockMosaic: EffectDefinition = {
   id: 'block-mosaic', name: 'Block Mosaic', category: 'pixel',
-  shader: `${common}\n${shader}`, entryPoint: 'blockMosaicFragment', uniformSize: 48,
+  // Reshuffles on the timeline clock (seek and export repeat it), never on wall-clock time.
+  requiresContinuousRender: false,
+  shader: `${common}\n${shader}`, entryPoint: 'blockMosaicFragment', uniformSize: 64,
   params: {
     scale: { type: 'number', label: 'Tile Size', default: 22, min: 4, max: 128, step: 1, animatable: true },
     grout: { type: 'number', label: 'Grout Width', default: 2, min: 0, max: 12, step: 0.5, animatable: true, graphOnly: true },
     amount,
     colorA: { type: 'color', label: 'Grout Color', default: '#111827' },
-    speed: { type: 'number', label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true },
+    // Large-tile reshuffles per second; 0 keeps the layout still until animated.
+    speed: { type: 'number', label: 'Speed', default: 0, min: 0, max: 5, step: 0.05, animatable: true },
     angle: retired('Block Mosaic', 'Angle', 'number', 0),
     colorB: retired('Block Mosaic', 'Paper', 'color', '#f8fafc'),
   },
-  paramWarnings: (params, width, height) => [...cellSizeWarnings('scale', params.scale, 2, width, height), ...amountWarnings(params.amount),
+  paramWarnings: (params, width, height) => [...cellSizeWarnings('scale', params.scale, 2, width, height, 'tiles are 2 pixels wide'), ...amountWarnings(params.amount),
     ...(typeof params.grout === 'number' && params.grout < 0 ? [`grout: ${params.grout} is below 0; Block Mosaic draws no grout.`] : [])],
   packUniforms: (params, width, height, time = 0) => packBlock(params, width, height, time, 22),
 };

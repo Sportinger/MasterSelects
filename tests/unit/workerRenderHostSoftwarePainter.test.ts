@@ -856,4 +856,48 @@ describe('worker software painter', () => {
       Math.round(rowBilinear([10, 50, 90], 0.5 + reach)), 0, 0, 255,
     ]);
   });
+
+  describe('Kaleidoscope, Mirror, RGB Split and Pixelate in a stack', () => {
+    type StackEffect = { type: string; params: Record<string, number | string | boolean> };
+    const twirl: StackEffect = { type: 'twirl', params: { amount: 3, radius: .6, centerX: .45, centerY: .5 } };
+    const kaleidoscope: StackEffect = { type: 'kaleidoscope', params: { segments: 5, rotation: .3 } };
+    const layerOf = (effects: StackEffect[]) => ({ id: 'stack-layer', effects: effects.map((effect, index) => ({ id: `fx-${index}-${effect.type}`,
+      name: effect.type, enabled: true, ...effect })) } as unknown as Layer);
+    const plan = (effects: StackEffect[]) => workerSoftwareEffectPlanForLayer(layerOf(effects))!;
+    const width = 24, height = 14;
+    const input = new Uint8ClampedArray(width * height * 4).map((_, index) => {
+      const pixel = index >> 2, x = pixel % width, y = Math.floor(pixel / width);
+      return [x * 10 + y * 3, y * 17 + (x % 5) * 9, (x * y * 7) % 256, 255][index & 3];
+    });
+    const draw = (effects: StackEffect[], pixels = input) => drawLayerWithPixels(pixels, width, height, plan(effects).pixelEffects)!;
+
+    it('runs them first as one hand-written pass only when nothing that moves or mixes pixels comes before them', () => {
+      expect(plan([kaleidoscope, twirl]).pixelEffects).toMatchObject({ mirrorPixelAdjustments: [{ type: 'kaleidoscope' }], uvDistortAdjustments: [{ kind: 'twirl' }] });
+      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, kaleidoscope]).pixelEffects.mirrorPixelAdjustments).toHaveLength(1);
+      expect(plan([{ type: 'mirror', params: {} }, { type: 'pixelate', params: { size: 30 } }]).pixelEffects.mirrorPixelAdjustments).toHaveLength(2);
+      // A resampling or neighbourhood effect first, or anything before Pixelate's average or RGB Split's
+      // per-channel reads, would run after the hand-written pass: the layer runs as ordered graph plans.
+      for (const earlier of [twirl, { type: 'motion-blur', params: { amount: .05, angle: 0 } }, { type: 'zoom-blur', params: { amount: .3 } }]) {
+        const stacked = plan([earlier, kaleidoscope]).pixelEffects;
+        expect(stacked.mirrorPixelAdjustments).toBeUndefined();
+        expect(stacked.imageOperatorPlanOwners?.map(owner => JSON.parse(owner.feedbackKey)[1])).toEqual([`fx-0-${earlier.type}`, 'fx-1-kaleidoscope']);
+      }
+      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, { type: 'pixelate', params: { size: 30 } }]).pixelEffects.imageOperatorPlans).toHaveLength(2);
+      expect(plan([{ type: 'vibrance', params: { amount: .5 } }, { type: 'rgb-split', params: { amount: .05 } }]).pixelEffects.imageOperatorPlans).toHaveLength(2);
+    });
+
+    it('renders Twirl then Kaleidoscope differently from Kaleidoscope then Twirl, each as its effects one after the other', () => {
+      const twirlFirst = draw([twirl, kaleidoscope]), kaleidoscopeFirst = draw([kaleidoscope, twirl]);
+      let differing = 0;
+      for (let index = 0; index < twirlFirst.length; index += 4) {
+        differing += Number([0, 1, 2].some(channel => Math.abs(twirlFirst[index + channel] - kaleidoscopeFirst[index + channel]) > 8));
+      }
+      expect(differing).toBeGreaterThan(width * height / 5);
+      // Independent reference: each effect alone, applied in stack order.
+      for (const [stacked, [first, second]] of [[twirlFirst, [twirl, kaleidoscope]], [kaleidoscopeFirst, [kaleidoscope, twirl]]] as const) {
+        const reference = draw([second], draw([first]));
+        for (let index = 0; index < stacked.length; index += 1) expect(Math.abs(stacked[index] - reference[index])).toBeLessThanOrEqual(3);
+      }
+    });
+  });
 });

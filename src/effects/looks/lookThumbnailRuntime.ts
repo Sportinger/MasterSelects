@@ -2,6 +2,7 @@ import { EffectsPipeline } from '../EffectsPipeline';
 import { getDefaultParams } from '..';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { Logger } from '../../services/logger';
+import { withLegacyMirrorPixelControls } from '../../services/operators/mirrorPixelGraphUpgrade';
 import type { LookDefinition } from './types';
 import { fitThumbnailToWidthRect } from './lookThumbnailGeometry';
 import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
@@ -191,7 +192,8 @@ class LookThumbnailRuntime {
       type: entry.effectId,
       name: entry.effectId,
       enabled: entry.enabled,
-      params: { ...getDefaultParams(entry.effectId), ...entry.params },
+      // As applyLookToClip: a custom Look saved before an effect gained controls gets the values that keep its look.
+      params: { ...getDefaultParams(entry.effectId), ...(look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params)) },
     }));
     const encoder = device.createCommandEncoder();
     const result = this.pipeline.applyEffects(

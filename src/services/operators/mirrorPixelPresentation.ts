@@ -12,7 +12,9 @@ const CELL_PORTS = { 'pixel-scale': 'Pixel Scale', 'cell-px': 'Cell (px)', 'tile
   'row-sequence:index': 'Tap Index', 'column-sequence:index': 'Tap Index', poster: 'Posterized', 'levels-count': 'Levels', 'mix-amount': 'Amount (0–1)',
   'is-large': 'Large Tile', 'large-px': 'Large Tile (px)', hash: 'Random', 'time-step': 'Shuffle Step', 'grout-px': 'Grout (px)', 'edge-distance': 'Distance to Edge',
   'tile-coverage': 'Tile Coverage', mosaic: 'Tiles & Grout', 'mixed-image': 'Mixed', 'large-position': 'Large Grid Position', 'large-index': 'Large Tile Index',
-  'hash-input': 'Shuffled Index', 'grid-low-split:x': 'Cell Start X', 'grid-high-split:x': 'Cell End X', 'grid-low-split:y': 'Cell Start Y',
+  'hash-input': 'Shuffled Key', 'group-hash': 'Group Random', 'shuffle-seed': 'Shuffle Seed', 'large-cell': 'Large Tile Size', 'time-step-vec2': 'Shuffle Step',
+  'shuffle-rate': 'Shuffle Rate', 'shuffle-scaled': 'Scaled Step', 'group-key': 'Group Key', bayer: 'Bayer Threshold',
+  'bayer-cell': 'Bayer Cell', 'dither-amount': 'Dither (0–1)', 'dither-shift': 'Rounding Offset', 'grid-index': 'Cell Index', 'grid-low-split:x': 'Cell Start X', 'grid-high-split:x': 'Cell End X', 'grid-low-split:y': 'Cell Start Y',
   'grid-high-split:y': 'Cell End Y', 'resolution-split:x': 'Frame Width', 'resolution-split:y': 'Frame Height', 'uv-split:x': 'UV X', 'uv-split:y': 'UV Y' };
 
 export function mirrorPixelPresentationPlan(type: string): EffectPresentationPlan | undefined {
@@ -50,10 +52,10 @@ export function mirrorPixelPresentationPlan(type: string): EffectPresentationPla
     stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : finish(id) ? 'finish'
       : /^row-/.test(id) || id === 'pairs-limit' ? 'row' : /^column-/.test(id) ? 'column'
         : /^(cell-px|tile-px|short-side|pixel-scale)/.test(id) ? 'size'
-          : /^(levels|poster)/.test(id) || type === 'blockify' && STRAIGHT.test(id) ? 'poster'
+          : /^(levels|poster|bayer|dither)/.test(id) || type === 'blockify' && STRAIGHT.test(id) ? 'poster'
             : /^(grout|edge-|tile-inside|tile-coverage|mosaic$)/.test(id) || STRAIGHT.test(id) ? 'grout'
               : /^(effect-|original|mix-|mixed)/.test(id) ? 'mix'
-                : /^(large-|time-|hash|is-large|tile-size)/.test(id) ? 'tiles'
+                : /^(large-|time-|hash|is-large|tile-size|group-|shuffle-)/.test(id) ? 'tiles'
                   : /^(pixel|origin-raw|origin|from-origin|zero-vec2|half-vec2)$/.test(id) ? 'position' : 'grid',
   };
   return undefined;

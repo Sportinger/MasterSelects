@@ -29,6 +29,8 @@ interface ResolveInspectorNumberRowProps {
   hardMin?: number;
   hardMax?: number;
   disabled?: boolean;
+  /** Row tooltip, e.g. why a disabled row has no effect. */
+  title?: string;
   persistenceKey?: string;
   /** MIDI learn / guided target of the numeric field. */
   midiTarget?: ComponentProps<typeof LabeledValue>['midiTarget'];
@@ -38,7 +40,7 @@ interface ResolveInspectorNumberRowProps {
 
 /** Transform-style slider, editable field and reset action for effect inspectors. */
 export function ResolveInspectorNumberRow({
-  label, ariaLabel = label, value, defaultValue, min, max, step, disabled = false,
+  label, ariaLabel = label, value, defaultValue, min, max, step, disabled = false, title,
   persistenceKey, onChange, onReset, keyframeToggle, actions, suffix, decimals, sensitivity = 2,
   onDragStart, onDragEnd, onCommit, numberMin = min, numberMax = max, hardMin = -Infinity, hardMax = Infinity, midiTarget,
 }: ResolveInspectorNumberRowProps) {
@@ -50,7 +52,7 @@ export function ResolveInspectorNumberRow({
   const change = (next: number) => {
     if (Number.isFinite(next)) onChange(Math.max(hardMin, Math.min(hardMax, next)));
   };
-  return <ResolveInspectorRow label={label} disabled={disabled} className={actions ? 'resolve-inspector-row--extra-action' : undefined} actions={<>
+  return <ResolveInspectorRow label={label} disabled={disabled} title={title} className={actions ? 'resolve-inspector-row--extra-action' : undefined} actions={<>
     {actions}
     {keyframeToggle}
     <ResolveInspectorIconButton ariaLabel={`Reset ${label}`} className="resolve-inspector-reset-button"

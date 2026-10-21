@@ -35,6 +35,9 @@ export interface EffectParam {
   graphOnly?: boolean;
   // Stored in radians (project data, keyframes, tools); the effect inspector shows and edits degrees.
   displayUnit?: 'degrees';
+  // Acts only while another parameter has one of these values (RGB Split's Angle in Offset mode):
+  // otherwise the inspector dims the row and shows `note`.
+  activeWhen?: { param: string; values: readonly (string | number | boolean)[]; note: string };
 }
 
 /**

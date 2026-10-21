@@ -1,5 +1,6 @@
 import type { Effect } from '../../types/effects';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
+import { colorToRgba } from '../../effects/_shared/catalogColor';
 import { EFFECT_GRAPH_PARAM, readEffectGraph } from './effectGraph';
 import { matchesEffectRecipe } from './effectFamilyPresentation';
 import { expandOperatorCompositions } from './operatorComposition';
@@ -12,20 +13,29 @@ import { createDefaultKaleidoscopeGraph, createDefaultMirrorGraph, createDefault
 
 export type MirrorPixelEffectType = 'kaleidoscope' | 'mirror' | 'rgb-split' | 'pixelate' | 'blockify' | 'block-mosaic';
 
+/** The pre-review Block Mosaic drew its grout in Grout Color × 0.35. */
+const LEGACY_GROUT_SHADE = .35;
+const shadedColor = (value: unknown, shade: number) => `#${colorToRgba(typeof value === 'string' ? value : undefined, '#111827').slice(0, 3)
+  .map(channel => Math.round(channel * shade * 255).toString(16).padStart(2, '0')).join('')}`;
+
 /**
  * Per effect: the shipped recipe before the mirror/pixel review, the current recipe and the values of
- * the new controls that keep a saved effect's look. Kaleidoscope (Stretch to Frame, Clamp) and
- * RGB Split (Clamp) look exactly as before apart from the alpha-edge fix; Mirror needs no values.
- * Pixelate, Blockify and Block Mosaic deliberately change: 1080p-based cell sizes, a centred grid
- * and averaged cell colours. Blockify keeps 8 levels, Block Mosaic a 1-pixel grout.
+ * the new controls that keep a saved effect's look (plus rewrites of old values whose meaning
+ * changed, applied together with them). Kaleidoscope (Stretch to Frame, Clamp) and RGB Split
+ * (Clamp) look exactly as before apart from the alpha-edge fix; Mirror needs no values. Pixelate,
+ * Blockify and Block Mosaic deliberately change: 1080p-based cell sizes, a centred grid and
+ * averaged cell colours. Blockify keeps 8 levels without dither, Block Mosaic a 1-pixel grout in
+ * its old, darker colour.
  */
-const RECIPES: Record<MirrorPixelEffectType, { legacy: () => EffectOperatorGraph; current: () => EffectOperatorGraph; legacyParams: Record<string, number | string> }> = {
+const RECIPES: Record<MirrorPixelEffectType, { legacy: () => EffectOperatorGraph; current: () => EffectOperatorGraph; legacyParams: Record<string, number | string>;
+  legacyRewrite?: (params: Effect['params']) => Effect['params'] }> = {
   kaleidoscope: { legacy: createLegacyKaleidoscopeGraph, current: createDefaultKaleidoscopeGraph, legacyParams: { shape: 'frame', edges: 'clamp' } },
   mirror: { legacy: createLegacyMirrorGraph, current: createDefaultMirrorGraph, legacyParams: {} },
   'rgb-split': { legacy: createLegacyRgbSplitGraph, current: createDefaultRgbSplitGraph, legacyParams: { edges: 'clamp' } },
   pixelate: { legacy: createLegacyPixelateGraph, current: createDefaultPixelateGraph, legacyParams: {} },
-  blockify: { legacy: createLegacyBlockifyGraph, current: createDefaultBlockifyGraph, legacyParams: { levels: 8 } },
-  'block-mosaic': { legacy: createLegacyBlockMosaicGraph, current: createDefaultBlockMosaicGraph, legacyParams: { grout: 1 } },
+  blockify: { legacy: createLegacyBlockifyGraph, current: createDefaultBlockifyGraph, legacyParams: { levels: 8, dither: 0 } },
+  'block-mosaic': { legacy: createLegacyBlockMosaicGraph, current: createDefaultBlockMosaicGraph, legacyParams: { grout: 1 },
+    legacyRewrite: params => ({ colorA: shadedColor(params.colorA, LEGACY_GROUT_SHADE) }) },
 };
 const legacyGraphs = new Map<MirrorPixelEffectType, EffectOperatorGraph>();
 const currentGraphs = new Map<MirrorPixelEffectType, EffectOperatorGraph>();
@@ -39,8 +49,9 @@ export function isMirrorPixelEffectType(type: string): type is MirrorPixelEffect
  */
 export function withLegacyMirrorPixelControls(type: string, params: Effect['params']): Effect['params'] {
   if (!isMirrorPixelEffectType(type)) return params;
-  const missing = Object.entries(RECIPES[type].legacyParams).filter(([id]) => params[id] === undefined);
-  return missing.length ? { ...params, ...Object.fromEntries(missing) } : params;
+  const recipe = RECIPES[type];
+  const missing = Object.entries(recipe.legacyParams).filter(([id]) => params[id] === undefined);
+  return missing.length ? { ...params, ...recipe.legacyRewrite?.(params), ...Object.fromEntries(missing) } : params;
 }
 
 /**

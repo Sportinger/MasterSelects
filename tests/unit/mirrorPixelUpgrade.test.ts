@@ -29,8 +29,10 @@ const cases: Case[] = [
   ['mirror', createLegacyMirrorGraph, createDefaultMirrorGraph, { horizontal: true, vertical: true }, {}],
   ['rgb-split', createLegacyRgbSplitGraph, createDefaultRgbSplitGraph, { amount: .02, angle: 1.2 }, { edges: 'clamp' }],
   ['pixelate', createLegacyPixelateGraph, createDefaultPixelateGraph, { size: 10 }, {}],
-  ['blockify', createLegacyBlockifyGraph, createDefaultBlockifyGraph, { scale: 16, amount: .75, angle: 0, colorA: '#111827', colorB: '#f8fafc' }, { levels: 8 }],
-  ['block-mosaic', createLegacyBlockMosaicGraph, createDefaultBlockMosaicGraph, { scale: 22, amount: .75, angle: 0, colorA: '#111827', colorB: '#f8fafc', speed: 1 }, { grout: 1 }],
+  ['blockify', createLegacyBlockifyGraph, createDefaultBlockifyGraph, { scale: 16, amount: .75, angle: 0, colorA: '#111827', colorB: '#f8fafc' }, { levels: 8, dither: 0 }],
+  // The old grout was Grout Color × 0.35: #111827 → #06080e (17, 24, 39 × 0.35, rounded).
+  ['block-mosaic', createLegacyBlockMosaicGraph, createDefaultBlockMosaicGraph, { scale: 22, amount: .75, angle: 0, colorA: '#111827', colorB: '#f8fafc', speed: 1 },
+    { grout: 1, colorA: '#06080e' }],
 ];
 
 /** A graph as projects saved it: packed compositions, folders and a moved layout. */
@@ -124,6 +126,18 @@ describe('saved mirror and pixel effects', () => {
     expect(builtIn.params).toMatchObject({ segments: 8, shape: 'circle', edges: 'mirror' });
   });
 
+  it('keeps the darker grout of a saved Block Mosaic, once, and of an old custom Look', () => {
+    const migrated = migratePersistedEffectOperatorGraph(effect('block-mosaic', { scale: 22, amount: 1, colorA: '#ffffff', speed: 0 }));
+    // White × 0.35 = 89.25 → #595959, the colour the old recipe drew.
+    expect(migrated.params).toMatchObject({ grout: 1, colorA: '#595959' });
+    expect(migratePersistedEffectOperatorGraph(migrated).params.colorA).toBe('#595959');
+    const clip = createMockClip({ id: 'mosaic-look-clip' });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: clip.trackId })] });
+    applyLookToClip({ id: 'old-mosaic', name: 'Old', category: 'editorial', tags: [], builtIn: false, thumbnail: { kind: 'generated' },
+      stack: [{ effectId: 'block-mosaic', enabled: true, params: { scale: 18, colorA: '#ffffff' } }] }, clip.id);
+    expect(useTimelineStore.getState().clips[0].effects[0].params).toMatchObject({ grout: 1, colorA: '#595959' });
+  });
+
   it('builds new transition effects with the new controls, so they look the same after a reload', () => {
     const { effects } = buildEffectMaterializationFromRecipe(kaleidoscopeTransition.recipe, 'outgoing', 'clip', 1);
     expect(effects[0].params).toMatchObject({ shape: 'circle', edges: 'mirror' });
@@ -163,9 +177,14 @@ describe('neutral settings and reported values', () => {
     expect(warnings('mirror', { horizontal: false, vertical: false })).toEqual([expect.stringContaining('unchanged')]);
     expect(warnings('mirror', { keep: 'middle' })).toEqual([expect.stringContaining('keep')]);
     expect(warnings('rgb-split', { mode: 'radial' })).toEqual([expect.stringContaining('mode')]);
-    expect(warnings('pixelate', { size: .2 })).toEqual([expect.stringContaining('unchanged')]);
+    // Below one rendered pixel Pixelate is the picture itself (the end of a reveal): only a negative size is reported.
+    expect(warnings('pixelate', { size: .2 })).toEqual([]);
+    expect(warnings('pixelate', { size: 0 })).toEqual([]);
+    expect(warnings('pixelate', { size: -3 })).toEqual([expect.stringContaining('unchanged')]);
     expect(warnings('pixelate', { size: 12 })).toEqual([]);
-    expect(warnings('blockify', { scale: 16, levels: 1, amount: 2 })).toHaveLength(2);
+    expect(warnings('blockify', { scale: 16, levels: 1, amount: 2, dither: 3 })).toHaveLength(3);
+    // 1-pixel blocks still posterize: the note must not say the picture is unchanged.
+    expect(warnings('blockify', { scale: .2, levels: 6, amount: 1, dither: 1 })).toEqual([expect.stringContaining('only the colour levels apply')]);
     expect(warnings('block-mosaic', { scale: 22, grout: -1, amount: .5 })).toEqual([expect.stringContaining('grout')]);
   });
 });

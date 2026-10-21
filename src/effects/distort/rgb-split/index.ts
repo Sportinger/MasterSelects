@@ -32,7 +32,7 @@ export const rgbSplit: EffectDefinition = {
     amount: {
       type: 'number',
       label: 'Amount',
-      default: 0.01,
+      default: 0.005,
       min: 0,
       max: 0.1,
       step: 0.001,
@@ -48,6 +48,7 @@ export const rgbSplit: EffectDefinition = {
       step: 0.01,
       animatable: true,
       displayUnit: 'degrees',
+      activeWhen: { param: 'mode', values: ['offset'], note: 'Offset mode only: Lens splits outwards from the centre.' },
     },
     mode: { type: 'select', label: 'Mode', default: 'offset', options: RGB_SPLIT_MODE_OPTIONS, graphOnly: true },
     edges: EDGES_PARAM,
@@ -55,7 +56,7 @@ export const rgbSplit: EffectDefinition = {
 
   paramWarnings: rgbSplitWarnings,
   packUniforms: (params, width, height) => new Float32Array([
-    distortNumber(params.amount, 0.01),
+    distortNumber(params.amount, 0.005),
     distortNumber(params.angle, 0),
     params.mode === 'lens' ? 1 : 0,
     edgeIndex(params.edges),

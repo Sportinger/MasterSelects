@@ -10,8 +10,9 @@ import { InspectorSelect } from '../../inspector/InspectorSelect';
 import { OperatorColorInput } from '../nodes/workspace/OperatorColorInput';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
-import { ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
 import { EffectKeyframeToggle } from './shared';
+import { stepDecimals } from './resolveEffectRows';
 import './effectResolveRows.css';
 
 type Value = number | boolean | string;
@@ -37,18 +38,25 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
     return !!clip && !!getParameterSourceTarget(clip, property);
   });
   const set = (next: Value) => onChange({ ...effect.params, [paramName]: next });
-  if (definition.type === 'select') return <ResolveInspectorRow label={definition.label}>
+  // A parameter that acts only in another parameter's mode is dimmed (still keyframeable) with the reason.
+  const when = definition.activeWhen, controller = when ? effect.params[when.param] : undefined;
+  const inactive = !!when && controller !== undefined && !when.values.includes(controller);
+  const title = inactive ? when?.note : undefined;
+  if (definition.type === 'select') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title}>
     <InspectorSelect ariaLabel={definition.label} value={String(value)} options={definition.options ?? []}
       onChange={next => { set(next); onParamCommit?.(paramName, 'select', 'select'); }} />
   </ResolveInspectorRow>;
   // Pointer focus on the checkbox is cleared by the Effects tab; the colour well blurs itself after a pointer pick.
-  if (definition.type === 'boolean') return <ResolveInspectorRow label={definition.label}>
+  if (definition.type === 'boolean') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title}>
     <input type="checkbox" className="resolve-effect-checkbox" aria-label={definition.label} checked={value === true}
       onChange={event => { set(event.target.checked); onParamCommit?.(paramName, 'checkbox', 'click'); }} />
   </ResolveInspectorRow>;
-  if (definition.type === 'color') return <ResolveInspectorRow label={definition.label}>
+  if (definition.type === 'color') return <ResolveInspectorRow label={definition.label} disabled={inactive} title={title} actions={
+    <ResolveInspectorIconButton ariaLabel={`Reset ${definition.label}`} className="resolve-inspector-reset-button"
+      onClick={() => { set(String(definition.default)); onParamCommit?.(paramName, 'select', 'reset'); }}><ResolveResetIcon /></ResolveInspectorIconButton>}>
     <span className="resolve-effect-color">
       <OperatorColorInput ariaLabel={definition.label} value={String(value)} onChange={next => { set(next); onParamCommit?.(paramName, 'select', 'select'); }} />
+      <span className="resolve-effect-color-hex">{String(value).replace(/^#?/, '#').toUpperCase()}</span>
     </span>
   </ResolveInspectorRow>;
   if (definition.type !== 'number') return null;
@@ -59,7 +67,7 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
   const min = definition.min ?? 0, max = definition.max ?? 1, number = typeof value === 'number' ? value : Number(definition.default);
   return <ResolveInspectorNumberRow label={definition.label} value={number * scale} defaultValue={Number(definition.default) * scale}
     min={min * scale} max={max * scale} step={degrees ? 1 : definition.step ?? 0.01} sensitivity={Math.max(0.5, (max - min) * scale / 100)}
-    suffix={degrees ? '°' : undefined} decimals={degrees ? 0 : undefined}
+    suffix={degrees ? '°' : undefined} decimals={degrees ? 0 : stepDecimals(definition.step ?? 0.01)} disabled={inactive} title={title}
     persistenceKey={`effect.${clipId ?? 'global'}.${effect.id}.${paramName}`}
     midiTarget={clipId ? { clipId, property: createEffectProperty(effect.id, paramName), label: definition.label, currentValue: number, min, max } : null}
     onChange={next => set(next / scale)} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={method => onParamCommit?.(paramName, 'number', method)}
