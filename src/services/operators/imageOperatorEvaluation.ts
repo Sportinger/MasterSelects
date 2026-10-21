@@ -9,6 +9,7 @@ import { normalizeImageVector2 } from './imageVectorSemantics';
 import { evaluateImageDerivativeQuad, type ImageDerivativeMode } from './imageOperatorDerivatives';
 import { evaluateImageBayer4 } from './imagePatternSemantics';
 import { sortImageSegment } from './imageSegmentSortSemantics';
+import { imageHashPcg2d } from './imageHashPcg';
 import { partitionImageQuadtree } from './imageQuadtreePartitionSemantics';
 import { imageSampleScopeNeedsSource, imageScopeReadsPrimaryInput } from './imageOperatorScopes';
 import { marchingSquaresTopology } from './marchingSquaresTopology';
@@ -283,6 +284,7 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     else if (item.operation === 'unproject-radius') values.push(unprojectImageRadius(args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'hash2d-vec2') values.push(imageHash2d(args[0] as number[]));
     else if (item.operation === 'cell-hash-vec2') values.push(imageCellHash(args[0] as number[]));
+    else if (item.operation === 'hash2d-pcg-vec2') values.push(imageHashPcg2d(args[0] as number[]));
     else if (item.operation === 'rgb-to-hsv') values.push(imageRgbToHsv(args[0] as [number, number, number]));
     else if (item.operation === 'hsv-to-rgb') values.push(imageHsvToRgb(args[0] as [number, number, number]));
     else if (item.operation === 'rgb-to-oklch') values.push(rgbToOklch(args[0] as number[]));

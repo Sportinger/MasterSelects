@@ -241,20 +241,33 @@ primitive patterns can adopt the same definitions across image effects.
 The numeric Value family exposes Float and Integer variants in the inspector;
 Integer truncates toward zero and keeps the number-port contract.
 
-Two small image nodes carry the rebuilt stylize recipes and are free to reuse:
+## Random nodes
 
-- **Random (Cell)** (`noise.cell-hash.vec2`) gives a uniform value from 0 to 1 for
-  each whole-number cell of its input (the input is rounded down), from an integer
-  PCG hash: identical on every GPU and in the software renderer, and without the
-  stripes a sine hash (Random (Hash)) shows at large coordinates. Film Grain blends
-  four of them into smooth value noise; Vignette uses two per pixel as its
-  anti-banding dither.
-- **Cache Image** (`image.materialize`) has a **Resolution** setting (Full, 1/2 …
-  1/1024): the cached pass renders at that fraction of the frame (at least one
-  pixel) and later passes read it with normalized UV, so it acts as a smooth, cheaper
-  copy. It is a fixed setting: it decides texture sizes before rendering, so it
-  cannot be animated or bound to a parameter (the compiler says so). Glow builds its
-  bloom pyramid from ten such levels.
+Image graphs offer two deterministic hashes of a Vector 2 key, both returning a
+number in [0, 1): **Random (Hash)** (`noise.hash2d.vec2`), the original sine hash
+that older effects keep, and **Random (Integer Hash)** (`noise.hash2d-pcg.vec2`), a
+lowbias32 bit mix plus PCG2D on the exact float bits. Use the integer hash for new
+graphs: the sine hash shows diagonal stripes on cell grids and loses quality on
+large keys, the integer hash stays uniform for any key (Glitch and Film Prism use
+it), and for the same key it gives bit-identical values on the GPU and in the CPU
+evaluator. Feed it whole numbers (cell indices, counters, integer salts): the GPU
+computes keys in 32-bit floats and the CPU in 64-bit, so only exact integers below
+2^24 reach the hash as the same bits on both. Both are one Random node: its
+inspector's **Algorithm** choice switches between Sine and Integer (PCG).
+
+**Random (Cell)** (`noise.cell-hash.vec2`) is a separate node for one value per
+whole-number cell: it rounds its input down and hashes the cell with PCG2D,
+identical on every GPU and in the software renderer. Film Grain blends four of them
+into smooth value noise; Vignette uses two per pixel as its anti-banding dither.
+Use Random (Integer Hash) when the key itself is already the exact integer to hash,
+Random (Cell) when a coordinate should give one value per cell.
+
+**Cache Image** (`image.materialize`) has a **Resolution** setting (Full, 1/2 …
+1/1024): the cached pass renders at that fraction of the frame (at least one
+pixel) and later passes read it with normalized UV, so it acts as a smooth, cheaper
+copy. It is a fixed setting: it decides texture sizes before rendering, so it
+cannot be animated or bound to a parameter (the compiler says so). Glow builds its
+bloom pyramid from ten such levels.
 
 ## Categories, names and visibility
 

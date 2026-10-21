@@ -12,7 +12,8 @@
     --resolve-inspector-control-action-gap: 14px;
   }
 
-  /* Switches and colour wells sit at the start of the control column, sized like the row's fields.
+  /* Switches sit at the start of the control column, sized like the row's fields (colours use
+     ResolveInspectorColorRow).
      The switch is drawn with the inspector tokens (a native box would be a white square when off). */
   .resolve-effect-checkbox {
     appearance: none;
@@ -56,34 +57,6 @@
     outline: none;
   }
 
-  /* The colour row takes the number rows' columns (.resolve-inspector-slider-value): the well spans
-     the slider track, the hex sits where their values sit, in the face and colour of those numbers. */
-  .resolve-effect-color {
-    height: var(--resolve-inspector-row-height);
-  }
-
-  .resolve-effect-color-hex {
-    padding: 2px 3px;
-    color: #5b8abf;
-    font-family: var(--font-family);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    text-align: right;
-    user-select: text;
-  }
-
-  .resolve-effect-color input[type="color"] {
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 0;
-    height: 18px;
-    padding: 1px;
-    border: 1px solid var(--border-strong);
-    border-radius: 2px;
-    background: var(--input-bg);
-    cursor: pointer;
-  }
-
   /* Why a dimmed row does nothing right now (EffectParam.activeWhen): neutral, under the control column. */
   .resolve-effect-row-note {
     margin: -3px 0 4px calc(var(--resolve-inspector-label-width) + var(--resolve-inspector-label-control-gap));
@@ -92,8 +65,7 @@
     line-height: 1.3;
   }
 
-  .resolve-effect-checkbox:focus-visible,
-  .resolve-effect-color input[type="color"]:focus-visible {
+  .resolve-effect-checkbox:focus-visible {
     outline: 1px solid var(--accent) !important;
     outline-offset: 1px !important;
   }

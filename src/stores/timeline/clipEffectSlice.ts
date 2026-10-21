@@ -136,6 +136,11 @@ function reconcileEffectRemovalInNodeGraph(
   });
 }
 
+/** Initial params without the ones a caller leaves out (a Look entry pinned to an original analog graph). */
+function withoutParams(params: Effect['params'], omit: readonly string[] | undefined): Effect['params'] {
+  return omit?.length ? Object.fromEntries(Object.entries(params).filter(([id]) => !omit.includes(id))) : params;
+}
+
 export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get) => ({
   addClipEffect: (clipId, effectType, options) => {
     const { clipKeyframes, invalidateCache } = get();
@@ -153,13 +158,13 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       name: effectType === FLOCKING_EFFECT_TYPE ? 'Flocking' : effectType === 'lens-correction' ? 'Lens Correction' : effectType === 'guided-perspective' ? 'Guided Perspective' : effectType === 'stick-figure' ? 'Stick Figure' : effectType,
       type: effectType as EffectType,
       enabled: true,
-      params: { ...getDefaultEffectParams(effectType), ...stylizeNewInstanceParams(effectType), ...(effectType === 'slit-scan' ? {
+      params: withoutParams({ ...getDefaultEffectParams(effectType), ...stylizeNewInstanceParams(effectType), ...(effectType === 'slit-scan' ? {
         stabilizationEnabled: false,
         geometryMode: '2d',
         geometrySampler: 'history',
         geometryLastMode: 'motion-surface',
         geometryPromoted3D: false,
-      } : {}) },
+      } : {}) }, options?.omitParams),
       ...(recipeGraph ? { operatorGraph: recipeGraph } : {}),
     };
     const keyframes = clipKeyframes.get(clipId) ?? [];

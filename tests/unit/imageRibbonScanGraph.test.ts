@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultRibbonScanGraph } from '../../src/services/operators/ribbonScanEffectGraph';
+import { createLegacyRibbonScanGraph } from '../../src/services/operators/legacyRibbonScanGraph';
+import { createDefaultRibbonScanGraph } from '../../src/services/operators/ribbonScanRecipe';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { effectOperatorGraph, effectOperatorParams, isImageGraphEffectType, isLocalImageEffectType } from '../../src/services/operators/effectGraphOwner';
 import { getDefaultParams } from '../../src/effects';
@@ -37,7 +38,7 @@ describe('Ribbon Scan image graph', () => {
   });
 
   it('uses two explicit shared samples and catalog-owned bindings', () => {
-    const graph = createDefaultRibbonScanGraph();
+    const graph = createLegacyRibbonScanGraph();
     expect(graph.nodes.filter(node => node.operator === 'image.sample').map(node => node.id)).toEqual(['original-sample', 'shifted-sample']);
     expect(graph.nodes.find(node => node.id === 'scale')?.bindings).toEqual({ value: 'scale' });
     expect(graph.nodes.find(node => node.id === 'amount')?.bindings).toEqual({ value: 'amount' });
@@ -46,7 +47,7 @@ describe('Ribbon Scan image graph', () => {
   });
 
   it('matches legacy phase, clamp, mixing order and shifted alpha', () => {
-    const params = { scale: 4.5, amount: .8, speed: .35 }, plan = compileImageOperatorGraph(createDefaultRibbonScanGraph(), params);
+    const params = { scale: 4.5, amount: .8, speed: .35 }, plan = compileImageOperatorGraph(createLegacyRibbonScanGraph(), params);
     expect(plan.capabilities).toEqual(expect.arrayContaining(['uv', 'time', 'sample']));
     for (const context of [{ uv: [.02, .12] as [number, number], timelineTimeSeconds: 0 },
       { uv: [.53, .71] as [number, number], timelineTimeSeconds: 1.25 }, { uv: [.998, .97] as [number, number], timelineTimeSeconds: 4 }]) {
@@ -57,7 +58,7 @@ describe('Ribbon Scan image graph', () => {
 
   it('retains amount-zero and minimum-scale behavior without changing shifted alpha semantics', () => {
     const params = { scale: 1, amount: 0, speed: 1 }, context = { uv: [.4, .33] as [number, number], timelineTimeSeconds: .75, sampleImage: sample };
-    const actual = evaluateImageOperatorPlan(compileImageOperatorGraph(createDefaultRibbonScanGraph(), params), [0, 0, 0, 0], context);
+    const actual = evaluateImageOperatorPlan(compileImageOperatorGraph(createLegacyRibbonScanGraph(), params), [0, 0, 0, 0], context);
     expect(actual).toEqual(reference(context.uv, context.timelineTimeSeconds, params.scale, params.amount, params.speed));
     expect(actual[3]).toBe(sample(clampUv(context.uv))[3]);
   });

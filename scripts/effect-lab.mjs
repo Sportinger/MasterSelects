@@ -8,6 +8,7 @@
 //       [--images dancer_stage,harbor_town,neon_rain_street] [--width 960]
 //       [--times 0,0.033,0.067] [--url http://localhost:5175]
 //       [--inset 0.7]   # image at 70 % on transparency; the sheet shows cells over a checkerboard
+//   A variant may carry its own "times" (e.g. one variant per frame of an animation) instead of --times.
 //   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>]
 //
 // Each variant renders on each image; "original" (effect bypassed) is always the first column.
@@ -15,8 +16,10 @@
 // image and puts the same crop of both side by side as a WebP:
 //   { "name", "out": "docs/Features/assets/effects/<file>.webp", "image": "neon_rain_street",
 //     "width": 1920, "crop": [x, y, w, h] (px of the rendered frame), "zoom": 1.5 (enlarges the
-//     crop, for small lights), "gap": 6,
-//     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ... } }
+//     crop, for small lights), "smooth": false (nearest-neighbour enlargement), "gap": 6,
+//     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ..., "times": [0.5] } }
+//     (a side's optional "times" renders an animated effect at those timeline seconds; the last one is kept;
+//      a side's own "crop", "zoom" and "smooth" override the entry's, e.g. a whole frame beside a magnified detail)
 // (an effect of "original" is the unchanged image).
 // `"layout": "split"` shows one picture: the crop (default: the whole frame) of the left side up to
 // `"split"` (0.5) of its width, the right side's crop after it, and a thin light divider; `"stack"`
@@ -31,34 +34,53 @@ import { encodeDocShotWebp } from './docShotWebp.mjs';
 async function composePair(page, entry) {
   const side = spec => page.evaluate(job => window.__effectLab.render(job), {
     effectId: spec.effect === 'original' ? 'gaussian-blur' : spec.effect, image: `${entry.image}.jpg`, width: entry.width ?? 1920,
-    params: spec.params ?? {}, bypass: spec.effect === 'original' });
+    params: spec.params ?? {}, bypass: spec.effect === 'original', times: spec.times });
   const [left, right] = [await side(entry.left), await side(entry.right)];
   for (const [label, cell] of [['left', left], ['right', right]]) if (cell.gpuFailure) throw new Error(`${entry.name} ${label}: ${cell.gpuFailure}`);
-  const png = await page.evaluate(async ({ left, right, crop, gap, zoom, layout, split, outWidth }) => {
-    const bitmaps = [await createImageBitmap(await (await fetch(left)).blob()), await createImageBitmap(await (await fetch(right)).blob())];
-    const [x, y, w, h] = crop ?? [0, 0, bitmaps[0].width, bitmaps[0].height];
-    const scale = !outWidth ? zoom : layout === 'pair' ? (outWidth - gap) / (w * 2) : outWidth / w;
-    const cw = Math.round(w * scale), ch = Math.round(h * scale);
-    const size = layout === 'split' ? [cw, ch] : layout === 'stack' ? [cw, ch * 2 + gap] : [cw * 2 + gap, ch];
-    const canvas = new OffscreenCanvas(size[0], size[1]), context = canvas.getContext('2d');
-    context.fillStyle = '#111'; context.fillRect(0, 0, canvas.width, canvas.height);
-    context.imageSmoothingQuality = 'high';
-    if (layout === 'split') {
-      const cut = Math.round(w * split);
-      context.drawImage(bitmaps[0], x, y, cut, h, 0, 0, Math.round(cut * scale), ch);
-      context.drawImage(bitmaps[1], x + cut, y, w - cut, h, Math.round(cut * scale), 0, cw - Math.round(cut * scale), ch);
-      context.fillStyle = 'rgba(255, 255, 255, 0.85)'; context.fillRect(Math.round(cut * scale) - 1, 0, 2, ch);
+  // Each side may set its own crop, zoom and smooth (e.g. a whole frame beside a magnified detail);
+  // split and stack show both sides through the left side's crop.
+  const view = spec => ({ crop: spec.crop ?? entry.crop, zoom: spec.zoom ?? entry.zoom ?? 1, smooth: spec.smooth ?? entry.smooth ?? true });
+  const png = await page.evaluate(async ({ cells, gap, layout, split, outWidth }) => {
+    const bitmaps = await Promise.all(cells.map(async cell => createImageBitmap(await (await fetch(cell.data)).blob())));
+    const crops = cells.map((cell, index) => cell.crop ?? [0, 0, bitmaps[index].width, bitmaps[index].height]);
+    let canvas, context;
+    const start = (width, height) => {
+      canvas = new OffscreenCanvas(width, height); context = canvas.getContext('2d');
+      context.fillStyle = '#111'; context.fillRect(0, 0, canvas.width, canvas.height);
+    };
+    // smooth: false enlarges with nearest-neighbour, so scanlines and mask stripes stay crisp.
+    const smoothing = smooth => { context.imageSmoothingEnabled = smooth; context.imageSmoothingQuality = 'high'; };
+    if (layout === 'split' || layout === 'stack') {
+      const [x, y, w, h] = crops[0], scale = outWidth ? outWidth / w : cells[0].zoom;
+      const cw = Math.round(w * scale), ch = Math.round(h * scale);
+      start(cw, layout === 'stack' ? ch * 2 + gap : ch); smoothing(cells[0].smooth);
+      if (layout === 'split') {
+        const cut = Math.round(w * split);
+        context.drawImage(bitmaps[0], x, y, cut, h, 0, 0, Math.round(cut * scale), ch);
+        context.drawImage(bitmaps[1], x + cut, y, w - cut, h, Math.round(cut * scale), 0, cw - Math.round(cut * scale), ch);
+        context.fillStyle = 'rgba(255, 255, 255, 0.85)'; context.fillRect(Math.round(cut * scale) - 1, 0, 2, ch);
+      } else {
+        for (const [index, bitmap] of bitmaps.entries()) context.drawImage(bitmap, x, y, w, h, 0, index * (ch + gap), cw, ch);
+      }
     } else {
+      let sizes = cells.map(({ zoom }, index) => [crops[index][2] * zoom, crops[index][3] * zoom]);
+      if (outWidth) { const factor = (outWidth - gap) / (sizes[0][0] + sizes[1][0]); sizes = sizes.map(([w, h]) => [w * factor, h * factor]); }
+      sizes = sizes.map(([w, h]) => [Math.round(w), Math.round(h)]);
+      start(sizes[0][0] + gap + sizes[1][0], Math.max(sizes[0][1], sizes[1][1]));
+      let x = 0;
       for (const [index, bitmap] of bitmaps.entries()) {
-        context.drawImage(bitmap, x, y, w, h, layout === 'stack' ? 0 : index * (cw + gap), layout === 'stack' ? index * (ch + gap) : 0, cw, ch);
+        smoothing(cells[index].smooth);
+        const crop = crops[index];
+        context.drawImage(bitmap, crop[0], crop[1], crop[2], crop[3], x, 0, sizes[index][0], sizes[index][1]);
+        x += sizes[index][0] + gap;
       }
     }
     const blob = await canvas.convertToBlob({ type: 'image/png' });
     const bytes = new Uint8Array(await blob.arrayBuffer());
     let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return btoa(binary);
-  }, { left: left.png, right: right.png, crop: entry.crop, gap: entry.gap ?? 6, zoom: entry.zoom ?? 1, layout: entry.layout ?? 'pair',
-    split: entry.split ?? 0.5, outWidth: entry.outWidth });
+  }, { cells: [{ data: left.png, ...view(entry.left) }, { data: right.png, ...view(entry.right) }], gap: entry.gap ?? 6,
+    layout: entry.layout ?? 'pair', split: entry.split ?? 0.5, outWidth: entry.outWidth });
   return Buffer.from(png, 'base64');
 }
 
@@ -106,7 +128,8 @@ try {
       const original = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, bypass: true, inset });
       row.push({ label: 'original', ...original });
       for (const variant of variants) {
-        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params, times, inset, recipe: variant.recipe });
+        const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params,
+          times: variant.times ?? times, inset, recipe: variant.recipe });
         row.push({ label: variant.label, params: variant.params, ...result });
       }
       for (const cell of row) {

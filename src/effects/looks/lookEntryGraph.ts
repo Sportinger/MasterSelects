@@ -2,6 +2,7 @@ import { COLOR_RECIPE_EFFECT_TYPES, type EditableColorEffectType } from '../../s
 import { migratePersistedEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
 import { createLegacyColorEffectGraph } from '../../services/operators/legacyColorEffectGraphs';
 import { createEarlierStylizeGraph } from '../../services/operators/stylizeRecipes';
+import { lookEntryOriginalGraph } from './lookStackEffects';
 import { Logger } from '../../services/logger';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import type { EffectType } from '../../types/effects';
@@ -12,12 +13,16 @@ const log = Logger.create('LookEntryGraph');
 
 /**
  * The graph an applied Look entry needs: its saved graph, the earlier recipe of a stylize effect
- * saved with it (`recipe: 'earlier'`, before 2026-10-21), or for a custom Look saved before the
+ * saved with it (`recipe: 'earlier'`, before 2026-10-21), the original graph of an analog effect
+ * in a custom Look saved before its 2026-10 rebuild, or for a custom Look saved before the
  * 2026-10 color rebuild the original color math, so an old Look keeps its look.
  */
 export function lookEntryOperatorGraph(look: Pick<LookDefinition, 'builtIn' | 'schemaVersion'>, entry: LookStackEntry): EffectOperatorGraph | undefined {
   if (entry.operatorGraph) return structuredClone(entry.operatorGraph);
   if (entry.recipe === 'earlier') return createEarlierStylizeGraph(entry.effectId);
+  // A custom Look entry saved before its analog effect's 2026-10 rebuild keeps the original graph.
+  const analog = lookEntryOriginalGraph(look, entry);
+  if (analog) return analog;
   if (look.builtIn || look.schemaVersion || !COLOR_RECIPE_EFFECT_TYPES.has(entry.effectId)) return undefined;
   return createLegacyColorEffectGraph(entry.effectId as EditableColorEffectType);
 }

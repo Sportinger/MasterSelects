@@ -374,6 +374,9 @@ nodes read `Node: Port`. A plan can also name inputs whose operator names say
 nothing: Hue Shift's Combine Vector reads Lightness, Chroma and Hue instead of X, Y
 and Z. Saved original color graphs (before 2026-10) keep their original folders
 (Color Processing, Clamp & Alpha); the recipe stages apply only to the recipe.
+A node whose result is used through some of its outputs offers only those: the
+unused Y and Z of a Split Vector whose X feeds another node are not folder outputs.
+A node with no used output still offers all of them, so a new result can be wired out.
 
 The Fisheye upgrade preserves all primitive IDs, parameter bindings, sampling
 scopes and arithmetic, generating the identical shader without additional passes.

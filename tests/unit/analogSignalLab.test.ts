@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest';
 
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { isComputeEffectDefinition } from '../../src/effects/types';
+import shader from '../../src/effects/analog/signal-lab/shader.wgsl?raw';
+import { ANALOG_SIGNAL_CLAMPED_PARAMS } from '../../src/effects/analog/signal-lab';
+import { ANALOG_SIGNAL_LAB_PARAMS } from '../../src/effects/analog/signal-lab/parameters';
+
+/** Character spans of every clamp(...) call in the shader, found by matching parentheses. */
+function clampSpans(code: string): Array<[number, number]> {
+  const spans: Array<[number, number]> = [];
+  for (const match of code.matchAll(/\bclamp\(/g)) {
+    let depth = 0, index = match.index! + 'clamp'.length;
+    for (; index < code.length; index++) { if (code[index] === '(') depth++; if (code[index] === ')' && --depth === 0) break; }
+    spans.push([match.index!, index]);
+  }
+  return spans;
+}
 
 describe('Analog Signal Lab effect', () => {
   it('registers the dedicated multi-pass analog compute mode', () => {
@@ -77,5 +91,28 @@ describe('Analog Signal Lab effect', () => {
     expect(effect.params.chromaLevel).toBeDefined();
     expect(effect.params.ycCrosstalk).toBeDefined();
     expect(effect.params.palPhaseError).toBeDefined();
+  });
+
+  it('reports a value as clamped exactly when the signal model clamps it', () => {
+    // Uniform fields named differently from their parameter.
+    const field: Record<string, string> = { ghostPhase: 'ghostPhaseDegrees', palPhaseError: 'palPhaseErrorDegrees' };
+    const spans = clampSpans(shader);
+    const inClamp = (index: number) => spans.some(([start, end]) => index > start && index < end);
+    for (const [id, definition] of Object.entries(ANALOG_SIGNAL_LAB_PARAMS)) {
+      if (definition.type !== 'number' || id === 'seed') continue;
+      const uses = [...shader.matchAll(new RegExp(`params\\.${field[id] ?? id}\\b`, 'g'))].map(match => match.index!);
+      expect(uses.length, id).toBeGreaterThan(0);
+      if (ANALOG_SIGNAL_CLAMPED_PARAMS.has(id)) expect(uses.filter(index => !inClamp(index)), `${id} is read unclamped`).toEqual([]);
+      else {
+        // Used as given: never simply clamped to its declared range (wider bounds against extremes are fine).
+        const number = (value: number | undefined) => `${value}(?:\\.0)?`;
+        const plain = new RegExp(`clamp\\(params\\.${field[id] ?? id}, ${number(definition.min)}, ${number(definition.max)}\\)`);
+        expect(plain.test(shader), `${id} is clamped to its range but reported as used as given`).toBe(false);
+      }
+    }
+    const effect = getEffect('analog-signal-lab');
+    if (!isComputeEffectDefinition(effect)) throw new Error('Analog Signal Lab is unavailable');
+    expect(effect.paramWarnings?.({ ...getDefaultParams(effect.id), vhsAmount: 2 }).join(' ')).toMatch(/VHS Stage 2 .* renders as 1/);
+    expect(effect.paramWarnings?.({ ...getDefaultParams(effect.id), tapeWear: 2 }).join(' ')).toMatch(/Tape Wear 2 .* uses it as given/);
   });
 });

@@ -17,6 +17,14 @@
 //            dock tab row down; preview/top do not apply
 //   hide     button texts left out of the picture (e.g. an unrelated quick-add button)
 //   layout   "full" (docs column) or "float" (beside text): sizes the callouts, default "full"
+//   viewport { width, height } of the editor window (default 1600 x 900): a wider window gives the
+//            Properties panel room, so an effect with sections shows its rows with sliders
+//   height   browser viewport height in CSS px (default 900; with viewport, viewport wins): taller for an
+//            effect card with many rows, so the whole card fits; the picture never runs past the bottom of
+//            the Properties panel
+//   width    browser viewport width in CSS px (default 1600): narrower for a narrower Properties panel
+//   gutter   CSS px of plain panel-coloured margin left of the inspector (with preview 0), where the
+//            callout numbers sit without covering a control
 //   marks    numbered callouts, in order. A mark is a target or { target, from, reach, label }:
 //              a parameter row label ("Radius", "Center X"; the arrow points at the label text),
 //              "tab:<sub-tab>" ("tab:Effects"), "bypass", "remove", "add" (+ Add Effect) or
@@ -26,8 +34,6 @@
 //              empty rest of its row; from = left (default) | right | above | below places the
 //              number, reach its arrow length (overlay units, default 84; the crop grows to keep it);
 //              label goes into the printed caption.
-//   viewport { width, height } of the editor window (default 1600 x 900): a wider window gives the
-//            Properties panel room, so an effect with sections shows its rows with sliders
 //   alt, caption  printed into the figure
 // Needs a Vite of this checkout (`npx vite --port 5176 --strictPort`); each shot's project lives in
 // a throwaway browser context.
@@ -48,12 +54,11 @@ const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
 const out = path.resolve(option('--out', 'docs/Features/assets/effects/editor'));
 const imageDir = path.resolve('tests/browser/effect-lab/images');
 const defaultViewport = { width: 1600, height: 900 };
-let viewport = defaultViewport;
 
 const launchArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan',
   '--ignore-gpu-blocklist', '--window-position=0,0'];
 
-async function openNodes(page, shot) {
+async function openNodes(page, shot, viewport) {
   await page.getByRole('tab', { name: 'Nodes', exact: true }).first().click();
   await page.getByRole('combobox', { name: 'Node graph source' }).click();
   await page.getByRole('option').filter({ hasText: shot.image ?? 'harbor_town.jpg' }).first().click();
@@ -66,7 +71,7 @@ async function openNodes(page, shot) {
   await page.waitForTimeout(2500);
 }
 
-async function setUp(page, shot) {
+async function setUp(page, shot, viewport) {
   const tool = async (name, input) => {
     const result = await page.evaluate(([toolName, toolInput]) => window.aiTools.execute(toolName, toolInput), [name, input]);
     if (!result?.success) throw new Error(`${name}: ${result?.error ?? 'failed'}`);
@@ -104,7 +109,7 @@ async function setUp(page, shot) {
 }
 
 /** Crop (CSS px) and the target box of every mark, measured in the page. */
-function measure({ preview, top, marks, view }) {
+function measure({ preview, top, marks, view, gutter }) {
   const box = element => { const rect = element.getBoundingClientRect(); return { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }; };
   // A label's own text, not the row or bar it fills: callouts end at the words.
   const textBox = element => {
@@ -175,8 +180,17 @@ function measure({ preview, top, marks, view }) {
   const tabRow = top === 'tabs' ? [...panel.querySelectorAll('button, [role=tab]')].find(element => element.textContent.trim().startsWith('Effects'))?.parentElement : undefined;
   const cropTop = top === 'card' ? cardBox.top - 8 : tabRow ? tabRow.getBoundingClientRect().top : panelBox.top;
   // A card taller than the panel scrolls inside it: the picture ends at the panel, not in the timeline below.
-  const crop = { left: Math.max(0, panelBox.left - preview), top: Math.max(0, cropTop), right: panelBox.right,
+  const crop = { left: Math.max(0, panelBox.left - preview - gutter), top: Math.max(0, cropTop), right: panelBox.right,
     bottom: Math.min(window.innerHeight, panelBox.bottom, cardBox.bottom + 12) };
+  if (gutter) {
+    // A plain margin in the panel's colour: the callout numbers sit here, never on a control.
+    const cover = document.createElement('div');
+    let background = 'transparent';
+    for (let element = card; element && /rgba\(0, 0, 0, 0\)|transparent/.test(background); element = element.parentElement) background = getComputedStyle(element).backgroundColor;
+    Object.assign(cover.style, { position: 'fixed', left: `${crop.left}px`, top: `${crop.top}px`, width: `${panelBox.left - crop.left}px`,
+      height: `${crop.bottom - crop.top}px`, background, zIndex: '2147483647', pointerEvents: 'none' });
+    document.body.append(cover);
+  }
   return { crop, marks: marks.map(mark => {
     const target = typeof mark === 'string' ? mark : mark.target;
     const found = find(target);
@@ -201,7 +215,7 @@ function figure(shot, file, crop, boxes) {
 
 // One browser per shot: a fresh project in its own private file system, and one GPU device at a time.
 for (const shot of shots) {
-  viewport = shot.viewport ?? defaultViewport;
+  const viewport = shot.viewport ?? { width: shot.width ?? defaultViewport.width, height: shot.height ?? defaultViewport.height };
   const browser = await chromium.launch({ channel: 'chrome', headless: false, args: [...launchArgs, `--window-size=${viewport.width},${viewport.height + 120}`] });
   try {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
@@ -214,9 +228,9 @@ for (const shot of shots) {
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await setUp(page, shot);
-    if (shot.view === 'nodes') await openNodes(page, shot);
-    const { crop, marks, text } = await page.evaluate(measure, { preview: shot.preview ?? 380, top: shot.top ?? 'panel', marks: shot.marks ?? [], view: shot.view ?? 'inspector' });
+    await setUp(page, shot, viewport);
+    if (shot.view === 'nodes') await openNodes(page, shot, viewport);
+    const { crop, marks, text } = await page.evaluate(measure, { preview: shot.preview ?? 380, top: shot.top ?? 'panel', marks: shot.marks ?? [], view: shot.view ?? 'inspector', gutter: shot.gutter ?? 0 });
     const missing = marks.filter(mark => mark.missing).map(mark => mark.missing);
     if (missing.length) {
       await page.screenshot({ path: path.join(out, `${shot.name}.missing.png`) }).catch(() => {});

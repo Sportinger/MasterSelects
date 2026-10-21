@@ -618,7 +618,7 @@ grades that have not stored their default values yet.
 - `keying` (1): Chroma Key
 - `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
-- `analog` (10): glitch, crystal/glass, ribbon, CRT, prism, wave, hologram, compute Pixel Sort, and Analog Signal Lab
+- `analog` (10): CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and compute Pixel Sort (user guide: [Analog Effects](./Effects-Analog.md))
 - `pixel` (2): Blockify and Block Mosaic; see [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
 - `glyph` (18): ASCII, word/number/symbol matrices, code, collage, brand, and stitch treatments
 - `geometry` (11): compute Voronoi, Quadtree, and Contour plus engraving, textile, outline, and brick treatments
@@ -736,7 +736,7 @@ history source removes its runtime dependency, and a direct source-to-output
 connection bypasses the watercolor processing.
 
 `ComputeEffectRuntime` adds storage-texture compute passes to the normal
-ping-pong effect stack. Pixel Sort uses bounded segments, Voronoi uses a
+ping-pong effect stack. Pixel Sort uses bounded segments of at most 16 pixels, Voronoi uses a
 jump-flood sequence, Quadtree Zoom evaluates hierarchical block variance, and
 Contour uses marching-squares cases with interpolated edge crossings. Compute
 and fragment effects can be mixed in one clip stack and use the same preview,
@@ -758,8 +758,15 @@ Rec.709 luminance eligibility, amount mixing, and source-alpha preservation.
 The sort keeps legacy duplicate-last padding, nearest-even segment-size rounding,
 and strict greater-than comparisons for ties. Its inputs can be rewired or
 bypassed; the default graph still emits a single compute pass. Effect controls
-retain their authoritative defaults, including segment size 16, amount 0.8,
-and threshold 0.45.
+retain their authoritative defaults, including segment size 16, amount 0.5
+(0.8 before 2026-10; saved effects keep their value), and threshold 0.45. Pixel
+Sort is marked experimental in the effect list, the inspector and tool results.
+Because every run is at most 16 pixels long and the threshold
+only decides which pixels take the sorted colour, the result is a fine streaky
+texture, not the long sorted streaks of classic pixel sorting; that needs a
+row-wide interval sort as its own compute stage. Segment sizes outside 4 to 16,
+Amount outside 0 to 1 and a Threshold of 1 or more are reported in the inspector
+and tool results.
 
 Quadtree Zoom exposes a bounded adaptive partition with jointly computed cell
 origin and size. Its six-level search preserves the legacy five-sample variance
@@ -1337,45 +1344,115 @@ Z validity, W reserved), not color images, and require declared stage provenance
 
 ### CRT Screen
 
-CRT Screen stores its editable generic image graph with the effect. Curvature,
-scanlines, phosphor-mask channels, flicker and final blending remain connected
-operators with the original effect parameter and keyframe IDs. Flicker reads
-composition timeline time, so preview, seeking and export share the same clock.
+User guide: [Analog Effects](./Effects-Analog.md#crt-screen). CRT Screen is a
+frame-relative recipe (`src/services/operators/crtScreenRecipe.ts`): a barrel-warped
+tube (`k = 0.18 × Curvature × Mix`, rounded corners of 5 % of the frame height,
+transparent outside, rim darkened by up to 40 %), Line Count Gaussian scanline beams
+over the frame height (16 to 1080; the control and the recipe clamp share one range)
+whose width grows from 0.16 to 0.42 line heights with the line's brightness and
+never drops below half an output pixel, and an Aperture Grille or Slot Mask whose
+stripe width is Mask Size pixels at 1080 lines. Each pixel adds the two nearest
+lines. A line's light is the picture averaged over every row of the line: a second
+cache box-filters the frame down over an eighth of a line height (16 reads), and
+each line reads that eight times an eighth of a line apart, so thin detail between
+line centres is never skipped at any line height (tested at 4.5, 9 and 18 px lines:
+a single bright row keeps 0.94 to 1.08 of its light at every offset), and each beam profile is
+divided by its area (√(2π) × width), so a beam spreads its line's light without
+adding or losing any: dark, mid and bright tones keep their average exposure
+(within 5 %, tested from grey 0.1 to 0.75). Both masks keep the average light; the
+Slot Mask divides its slot term by its mean (1 − 0.7 × 0.14). Bright areas can clip
+where a beam or a mask stripe peaks. Lines closer than 2.25 output pixels and
+stripes below 1 pixel fade out instead of aliasing, and the inspector and tool
+results say so. Sizes count against the frame being rendered, so a reduced Preview
+Quality shows fewer pixels per line: at 0.25 a 1080p composition renders 270 rows,
+and the default 240 lines and 2 px stripes fade in the preview while the export shows
+them. Flicker is a slow rolling hum bar plus a brightness flutter on composition
+timeline time. All reads come from caches of the frame as premultiplied linear
+light (`rgba16float`: the frame, and its line box), so filtered reads average light and
+cut-out edges keep their colour. Values outside the rendered ranges are clamped and
+reported.
 
-Untouched CRT graphs organize into Screen Curvature, Clamped Image Sampling,
-Scanlines, RGB Phosphor Mask, Timeline Flicker, and Color Mix & Sampled Alpha,
-alongside parameter, constant and source folders. A stage consisting of one
-shared block stays as that expandable block rather than gaining an extra folder.
-Saved user groups, wiring and explicit ungrouping remain authoritative.
+Effects saved before the 2026-10 rebuild keep the original graph
+(`legacyCrtScreenGraph.ts`: 2 px scanlines, per-pixel mask stripes, clamped edges):
+a saved graph stays as saved, and a graph-less effect or custom Look entry without
+the recipe's Line Count parameter is given the frozen original on load
+(`analogLegacyGraphs.ts`). The new controls are `graphOnly`, the retired Mask
+Density (`scale`) and the unused Angle and colours are `deprecated`, so each
+instance shows exactly the controls its graph reads.
 
-Four reusable compositions expose the existing primitives: Radial UV Curvature
-(UV, curvature and amount), RGB Stripe Mask (horizontal UV, pixel width, stripe
-width and low/high levels), Sine Gain (phase, amplitude and base), and Clamped
-Image Sample (image, UV and clamp bounds). The same Sine Gain recipe serves CRT
-scanlines and flicker. Exact clamped-sampling regions in Glitch share the sampling
-recipe, including alpha. Final CRT mixing still preserves alpha from the curved
-sample; no GPU pass, clock, parameter binding or shader formula is added.
+The four reusable compositions Radial UV Curvature, RGB Stripe Mask, Sine Gain and
+Clamped Image Sample are still extracted from the original CRT graph and keep their
+definitions.
 
 The separate Scanlines effect retains its scrolling/density phase and operand
 order. Film Grain uses its own Random (Cell) value noise rather than Glitch's
 Hash 2D or CRT's sine gain. Shared primitive operators already cover
 those differences; similarity alone is not treated as an identical recipe.
 
-Glitch and Film Prism likewise store editable generic graphs. Glitch composes
-its band ticks, shared hash and channel samples explicitly; Film Prism exposes
-radial sampling and the shared noise calculation. Both read composition
-timeline time and retain their catalog parameter and keyframe IDs.
+Glitch, Film Prism, Holo and Ribbon Scan were rebuilt the same way (`glitchRecipe.ts`,
+`filmPrismRecipe.ts`, `holoRecipe.ts`, `ribbonScanRecipe.ts`; originals in
+`legacyGlitchGraph.ts`, `legacyFilmPrismGraph.ts`, `legacyHoloGraph.ts` and
+`legacyRibbonScanGraph.ts`, pinned for old data by the Density, Grain, Stripes and
+Edges markers).
+Glitch changes state 12 × Speed times per timeline second (Speed 0 freezes it):
+Density decides how many states glitch (a 20 % floor, all at 1) and how many rows
+tear and blocks move; torn rows split at a random height and shift by up to 15 %
+of the width, thin slices by up to 2 %, square blocks copy whole blocks (the offset
+rounds to the nearest block, so a faint Intensity moves nothing), one in ten of them
+reads from four times as far and blends its rotated channels into its own, up to
+half on a textured block and 0.15 on a flat one (the luma range of four points in
+the copied block, smoothstep 0.03 to 0.15; scaled with the burst level), so a swap
+never paints sky as a solid tile, and RGB Split widens inside the damage. Every read
+lands on a texel centre and wraps around the frame, so the picture stays sharp; each
+channel keeps its own coverage. The state counter cycles every 1024 states; seed and
+cycle fold into 509 seed keys by an integer modulo, and every roll adds its own
+integer salt, so all hash keys are exact integers below 2^24.
+Film Prism reads seven spectrum-weighted taps (stratified per-pixel jitter, reach
+±1.5 % at Fringe 1) either scaled about the centre (Lens) or shifted along Prism
+Angle in frame heights (Prism); only colour spreads: the Rec. 709 luma of the
+spread is replaced by the pixel's own where it has coverage, so the picture stays
+sharp (a hard edge stays within 2 px in brightness at the default Fringe). It adds
+two octaves of mid-tone-weighted value-noise
+grain sized in pixels at 1080 lines, renewed 24 × Grain Speed times a second. Grain
+corner keys are the integer cell indices plus 16384 key rows per grain frame (997
+frames per cycle), so two cells that share a corner hash bit-identical keys at any
+resolution: no seams. Because every key of both recipes is an exact integer, the GPU
+(f32) and the worker software path (f64) hash the same bits.
+
+Both recipes use `noise.hash2d-pcg.vec2` (Random (Integer Hash)): a lowbias32 bit mix followed by PCG2D on the exact float bits. Unlike the
+shared sine hash `noise.hash2d.vec2`, it shows no diagonal stripes on cell grids and
+stays uniform for large or fractional keys; the sine hash itself is unchanged, so
+other effects keep their look.
+
+Opened in the Node Workspace, the untouched recipes show stage folders
+(`effectPresentationPlans.ts`, presentation only): CRT Screen Tube Shape & Rim,
+Scanline Beams, Phosphor Mask, Hum Bar & Flutter and Light Out & Alpha; Glitch Burst
+Clock, Torn Rows, Block Copies, Read Position & RGB Split, Channel Reads & Swap and
+Colour & Alpha; Film Prism Fringe Spread & Direction, Tap Positions, Spectrum Reads &
+Sum, Sharp Brightness, Grain Noise, Grain Strength and Add Grain & Alpha. Folder ports carry the
+parameter or signal they pass (Line Count, Burst Level, Tap 1 Position).
 
 Crystal and Glass Dispersion expose their facet direction, refraction offsets
 and image sampling as editable generic graphs. Their vector normalization uses
 the native operation shared by the compiler and evaluator; sampled alpha is
-preserved, and shimmer/pulse animation reads composition timeline time.
+preserved, and shimmer/pulse animation reads composition timeline time. Both are
+marked experimental (an `experimental` note on the effect definition: the effect
+list shows "(Experimental)", the inspector and tool results give the reason):
+Crystal's facets are squares of the frame with hard seams and strong Refraction
+ghosts edges; Glass Dispersion's cells are sized in output pixels and split red and
+blue per cell into RGB blocks. Their Amount defaults are 0.3 (0.75 before 2026-10).
 
-Holo exposes its timeline-driven interference, spectrum blend and luminance-edge
-response as an editable generic graph while preserving source alpha. GPU shaders
-retain native automatic derivatives, whose fine/coarse choice is device-defined;
-the deterministic software backend explicitly evaluates automatic derivatives
-as coarse fragment quads rather than claiming universal CPU/GPU byte equality.
+Holo (`holoRecipe.ts`) mixes linearly from the source (Amount 0) to a bounded foil
+(Amount 1): screen(colour × 0.85, vivid spectrum × (0.25 × tone + 0.75 × edge)),
+where tone = smoothstep(0.02, 0.35, brightness) keeps true blacks black away from
+outlines and the vivid spectrum is pushed 1.6 × away from its own grey. The spectrum blends
+Spectrum A and B by diagonal interference bands (phase 12u + 19v + 2 × Speed × time
++ 4 × brightness; Stripes blends from an even tint to the full bands), and the edge
+term compares brightness × coverage ±0.2 % of the frame height apart (four reads),
+so outlines have the same width at every resolution. Amount defaults to 0.35. The
+original Holo graph (per-pixel derivatives, saturating at every Amount) stays in
+`legacyHoloGraph.ts` for saved effects; its GPU shader keeps native automatic
+derivatives, which the software backend evaluates as coarse fragment quads.
 
 Halftone and Pattern Halftone share an editable generic graph construction for
 rotated cell coordinates, luminance-derived mark size, ink mixing and preserved
@@ -1405,25 +1482,64 @@ undisplaced pixel.
 
 ### Ribbon Scan
 
-Ribbon Scan exposes its phase, smoothstep ribbon mask, horizontal displacement,
-sampling and RGB blend as a generic image graph. Both samples retain the original
-UV clamp; output alpha comes from the displaced sample. Scale, amount and speed
-bind to the existing effect parameters, and animation uses composition time.
+Ribbon Scan (`ribbonScanRecipe.ts`) scrolls Ribbons bands (`scale`, at least 3)
+over the frame height by Speed bands per second; inside a band the picture shifts
+sideways by sin(2π phase) × Displacement² × 6 % of the frame width (`amount`,
+default 0.3: at most 0.54 %), so the low half of the control stays subtle. Edges
+(`edges`) mirrors or wraps reads past the frame edge instead of repeating the border
+pixel. Both reads come from a premultiplied cache and blend premultiplied. The
+original graph (up to 8 % shift, clamped edges) stays in `legacyRibbonScanGraph.ts`
+for saved effects.
 
 ### Wave Lines
 
 Wave Lines uses shared luminance, coordinate, scalar and color operators for its
-animated line mask and nested color blend. The two colors remain bound to the
-catalog parameters and use the common color normalization. Source alpha is
-preserved; preview and export use the same composition timeline clock.
+animated line mask and nested color blend. Line Density (`scale`, at least 3) and
+the Lines and Background colours remain bound to the catalog parameters and use the
+common color normalization. Source alpha is preserved; preview and export use the
+same composition timeline clock. Wave Lines is a graphic line-art look that covers
+most of the picture from about Amount 0.5; new Wave Lines start at Amount 0.3 (the
+catalog default 0.75 before 2026-10), saved ones keep their value.
+
+Crystal Glass (Facets, at least 4 across each axis, so facets stretch with the frame
+shape), Glass Dispersion (Cell Size in output pixels, so the pattern changes with
+the resolution) and Wave Lines keep their graphs; their unused catalog controls are
+retired and values below a shader floor are reported instead of being silently
+raised. The controls of CRT Screen, Glitch, Film Prism, Holo, Ribbon Scan, Crystal
+Glass, Glass Dispersion, Wave Lines and Pixel Sort use the shared Resolve inspector
+rows (slider, value field, keyframe and reset; `RESOLVE_ROW_EFFECTS`); their colour
+parameters (Holo's Spectrum A and B, Wave Lines' Lines and Background) use the
+shared colour row `ResolveInspectorColorRow` (swatch, hex field and reset; pointer
+activation leaves no focus ring, keyboard focus shows the product ring). Colour
+parameters had no inspector control in the generic rows before.
 
 ### Analog Signal Lab
 
-`Analog Signal Lab` is a dedicated six-pass compute effect rather than a
+`Analog Signal Lab` is a dedicated compute effect (a source footprint pass plus the six stage passes) rather than a
 screen-space RGB glitch. It encodes the source as a 13.5 MHz PAL composite
 field, applies a complex-equivalent terrestrial channel, passes the recovered
 signal through an optional VHS transport, measures horizontal sync and color
 burst per line, decodes PAL, and resolves an optional CRT display stage.
+
+PAL Encode averages the source over each sample's footprint (21 half-sample taps,
+two sub-rows), low-passes luma by Luma Bandwidth (Gaussian σ 1.0 to 0.55 samples)
+and chroma to about 1.3 MHz, and traps luma in the subcarrier band with a
+[1 2 3 2 1] / 9 kernel over whole samples, except for the Y/C Crosstalk share. PAL
+Decode separates chroma as the composite minus its 3-sample mean (exactly zero for
+flat areas), demodulates it with the burst-locked phase and low-passes U/V with a
+Gaussian window (σ 2.6 to 1.1 samples, about 0.7 to 1.6 MHz, by Chroma Bandwidth). Flat colours therefore
+decode without colour from luma, Chroma Level 0 stays monochrome, and only fine
+stripes near 4.43 MHz show cross-colour, in proportion to Y/C Crosstalk. PAL Encode
+reads Luma Bandwidth and Y/C Crosstalk from the PAL Decode it feeds.
+
+VHS Transport models colour-under recording: it separates luma and chroma around
+the jittered tape position with taps on whole samples (a fractional read would
+weaken the subcarrier), low-passes luma to about 3 MHz (SP) to 2.2 MHz (EP) after
+adding the tape noise, so noise stays out of the chroma band, records chroma at
+roughly 0.6 MHz (SP) and less at slower speeds and with Chroma Bleed (which also
+delays it by up to 2.5 samples), adds chroma noise that is smooth along the line (sideways streaks), and
+re-modulates chroma on the stable reference: hue survives the time-base error, and
+saturation drops to 0.93 / 0.87 / 0.81 at SP / LP / EP. The burst passes unchanged.
 
 Select the clip in the timeline to edit its executable node group: Frame,
 PAL Encode, RF Channel, VHS Transport, Receiver Analysis, PAL Decode,
@@ -1437,7 +1553,7 @@ Decoded and resolved node previews tap the actual GPU output on demand.
 New graphs expand Display Resolve into a group of shared math, coordinate,
 sampling, and color nodes: curvature, bloom, scanlines, phosphor mask, flicker,
 and blending are editable connections rather than an opaque display shader.
-The default remains six compute passes; the display group adds no pass.
+The default runs seven compute passes (the source footprint pass and the six stages); the display group adds no pass.
 Its decoder signal-strength input follows the actual connected transport
 stages, including bypass. Original straight alpha is preserved. Complete saved
 Display Resolve graphs expand on load while preserving bindings, constants,
@@ -1450,10 +1566,35 @@ receiver tuning and sync/color lock, PAL simple/delay-line/comb decoder modes,
 VHS tracking/dropouts/time-base error/tape wear/chroma bleed/head switching and
 SP/LP/EP speed, plus CRT scanlines, phosphor mask, bloom, curvature, and field
 flicker. Noise is seeded and driven by timeline time, so preview and export are
-repeatable.
+repeatable. The built-in Looks PAL Broadcast, Weak Antenna and Worn VHS are starting
+points. Values outside a control's range are reported: the Mix, stage (VHS Stage
+included), bandwidth, Chroma Level, Y/C, Signal Strength and Color Lock values are
+clamped, the others are used as given; a unit test checks the list against the
+shader. Saved projects: the 2026-10 PAL chain fix changes how every saved Analog
+Signal Lab effect looks, on purpose and without a switch back (no colour confetti on
+detail or at the frame edges, a sharper broadcast, VHS keeps its colours and is
+softer than broadcast); their settings are unchanged.
+`tests/browser/analog-signal-gpu-check.ts` checks grey, Chroma Level 0, colour bars
+through PAL and VHS LP, the VHS noise direction, colour at the frame edges of a flat
+grey frame (0.5/255), a 2.6 MHz luma sine (broadcast 0.80, VHS LP 0.40 of its
+contrast) and the VHS Stage fade-in (0 against 0.002: one 8-bit step at most)
+against plain maths on the GPU.
 
-The realtime path models one 313-line PAL field with a 360x288 decoded working
-raster while retaining the 864-sample line timing. When the effect is attached
+The realtime path models one 313-line PAL field at BT.601 sampling (864 samples per
+line at 13.5 MHz, 702 of them picture) and decodes it to a 702 × 288 raster, one
+pixel per picture sample and field line. A footprint pass first box-averages the
+source over each sample and line (alpha-weighted, every source row and column, so a
+4K or 8K frame is not skipped). PAL Encode low-passes luma to the Luma Bandwidth
+cutoff (2.5 to 5.5 MHz) and removes the luma the decoder would read as chroma
+(subcarrier ± the U/V cutoff + 0.35 MHz) except for the Y/C Crosstalk share; chroma
+is low-passed to 1.3 MHz. PAL Decode notches luma over about 3.6 to 5.2 MHz and
+low-passes the demodulated U/V to 0.6 to 1.3 MHz (Chroma Bandwidth). The filters are
+41-tap frequency-sampled FIRs (Hann window) computed once per workgroup. The picture
+continues 16 samples into the blanking on both sides with its edge colour, so the
+filters and small sync shifts near the frame edges read picture, not blanking. VHS
+Transport low-passes luma itself to 3, 2.6 and 2.2 MHz (SP, LP, EP; Tape Wear lowers
+it by up to 0.5 MHz), smooths its tape noise along the line and fades the whole
+stage in over VHS Stage 0 to 0.1, so a keyframed fade-in has no step. When the effect is attached
 to a video/image plane switched to 3D, the analog stack is evaluated into a
 per-layer texture before native scene projection. The disturbance therefore
 foreshortens, rotates, and scales with the plane instead of being applied to

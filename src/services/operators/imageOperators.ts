@@ -6,7 +6,7 @@ import { CACHE_IMAGE_SCALE_OPTIONS } from './imageResourceScale';
 
 const port = (id: string, type: OperatorPort['type'], label: string, required = false): OperatorPort =>
   ({ id, type, label, required, ...(type === 'image' && required
-    ? { contract: { formats: ['decoded-frame', 'analog-decoded-360x288-rgba16f'] } } : {}) });
+    ? { contract: { formats: ['decoded-frame', 'analog-decoded-702x288-rgba16f'] } } : {}) });
 
 const imageOperator = (definition: Omit<OperatorDefinition, 'version' | 'invalidates' | 'runtime' | 'state' | 'fusion'>): OperatorDefinition => ({
   ...definition,
@@ -329,7 +329,10 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
   imageOperator({ id: 'noise.hash2d.vec2', family: 'noise.hash2d', variant: 'vec2', label: 'Random (Hash)', description: 'Deterministic shared two-dimensional sine hash.',
     inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
   imageOperator({ id: 'noise.cell-hash.vec2', family: 'noise.cell-hash', variant: 'vec2', label: 'Random (Cell)',
-    description: 'Uniform random value from 0 to 1 for each whole-number cell of the input (the input is rounded down), from an integer PCG hash: identical on every GPU and in software, and free of the stripes a sine hash shows at large coordinates. Neighbouring cells are unrelated; offset the input to get another pattern.',
+    description: 'Uniform random value from 0 to 1 for each whole-number cell of the input (the input is rounded down), from an integer PCG hash: identical on every GPU and in software, and free of the stripes a sine hash shows at large coordinates. Neighbouring cells are unrelated; offset the input to get another pattern. For a random value of exact (also fractional) keys use Random (Integer Hash).',
+    inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
+  imageOperator({ id: 'noise.hash2d-pcg.vec2', family: 'noise.hash2d', variant: 'pcg', label: 'Random (Integer Hash)',
+    description: 'Deterministic integer hash (bit mix + PCG2D) of the exact input bits, uniform in [0, 1) for any input size. Unlike the sine hash it shows no stripes for large, small or fractional keys; it does not round its input (for one value per whole-number cell use Random (Cell)).',
     inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
   imageOperator({ id: 'vector.dot.vec2', family: 'vector.dot', variant: 'vec2', label: 'Dot Product', description: 'Dot product of two vec2 values.',
     inputs: [port('a', 'vec2', 'A', true), port('b', 'vec2', 'B', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),

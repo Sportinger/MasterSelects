@@ -1,0 +1,39 @@
+{
+  "shots": [
+    {
+      "name": "crt-screen-inspector",
+      "effect": "crt-screen",
+      "params": {},
+      "image": "neon_rain_street.jpg",
+      "preview": 0,
+      "alt": "The CRT Screen card in Properties, Effects at its defaults: Mix, Curvature, Line Count 240, Line Depth, Mask (Aperture Grille), Mask Strength, Mask Size, Flicker and Speed, each a slider with a value field and reset",
+      "marks": [
+        {
+          "target": "Curvature",
+          "label": "Curvature: how much the screen bulges"
+        },
+        {
+          "target": "Line Count",
+          "label": "Line Count: lines down the picture"
+        },
+        {
+          "target": "Mask Strength",
+          "label": "Mask Strength: the red, green and blue stripes"
+        },
+        {
+          "target": "bypass",
+          "from": "below",
+          "label": "Bypass, to compare with the original"
+        }
+      ],
+      "top": "card",
+      "hide": [
+        "Particle Out"
+      ],
+      "height": 1500,
+      "gutter": 56,
+      "layout": "float",
+      "width": 1800
+    }
+  ]
+}

@@ -8,7 +8,8 @@ const STYLIZE_RESOLVE_ROW_EFFECTS = ['glow', 'grain', 'sharpen', 'vignette', 'sc
 export const RESOLVE_ROW_EFFECTS: ReadonlySet<string> = new Set(['gaussian-blur', 'box-blur', 'motion-blur', 'radial-blur', 'zoom-blur',
   'wave', 'twirl', 'bulge', 'kaleidoscope', 'mirror', 'rgb-split', 'pixelate', 'blockify', 'block-mosaic',
   'brightness', 'contrast', 'saturation', 'vibrance', 'exposure', 'levels', 'hue-shift', 'temperature',
-  ...STYLIZE_RESOLVE_ROW_EFFECTS]);
+  ...STYLIZE_RESOLVE_ROW_EFFECTS,
+  'crt-screen', 'glitch', 'film-prism', 'holo', 'ribbon-scan', 'crystal', 'glass-dispersion', 'wave-lines', 'pixel-sort']);
 
 /** Parameter types that have a Resolve row (ResolveEffectParamRow); others keep the generic control. */
 export function hasResolveEffectParamRow(definition: { type: string }): boolean {

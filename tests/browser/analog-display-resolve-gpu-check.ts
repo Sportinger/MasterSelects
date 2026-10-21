@@ -6,7 +6,7 @@ import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../../
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import { compileImageOperatorPreview } from '../../src/services/operators/imageOperatorGraph';
 
-const width = 23, height = 17, rowPitch = 256, decodedWidth = 360, decodedHeight = 288, decodedRowPitch = 5888;
+const width = 23, height = 17, rowPitch = 256, decodedWidth = 702, decodedHeight = 288, decodedRowPitch = 11264;
 const displayBounds = (boundary: 'min' | 'max') => Object.fromEntries(ANALOG_DISPLAY_PARAMETER_IDS.map(id => {
   const spec = ANALOG_SIGNAL_LAB_PARAMS[id];
   if (spec.type !== 'number') throw new Error(`Analog display parameter ${id} is not numeric.`);

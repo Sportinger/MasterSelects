@@ -13,8 +13,12 @@ class Builder {
   binary(id: string, operator: string, a: Ref, b: Ref) { const out = this.node(id, operator); this.edge(a, out, 'a'); this.edge(b, out, 'b'); return out; }
 }
 
-/** Granular equivalent of holoFragment, retaining native automatic derivatives. */
-export function createDefaultHoloGraph(): EffectOperatorGraph {
+/**
+ * The Holo graph as it shipped before the 2026-10 analog review (colour mix scaled by pixel derivatives, saturating at every Amount). Frozen: saved effects
+ * that still carry it keep their look and graph-less old effects are given it on load
+ * (analogLegacyGraphs.ts). Never change it.
+ */
+export function createLegacyHoloGraph(): EffectOperatorGraph {
   const g = new Builder(), frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const time = g.node('time', 'image.timeline-time'), speed = g.node('speed', 'values.number', 'value', { value: 'speed' });
   const amount = g.node('amount', 'values.number', 'value', { value: 'amount' });

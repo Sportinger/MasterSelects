@@ -2,7 +2,7 @@ import common from '../../src/effects/_shared/commonShader';
 import { colorToRgba } from '../../src/effects/_shared/catalogColor';
 import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDefinition';
 import { holo } from '../../src/effects/analog';
-import { createDefaultHoloGraph } from '../../src/services/operators/holoEffectGraph';
+import { createLegacyHoloGraph } from '../../src/services/operators/legacyHoloGraph';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
@@ -86,7 +86,7 @@ async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTexture
 }
 
 function directGraph(): EffectOperatorGraph {
-  const graph = structuredClone(createDefaultHoloGraph());
+  const graph = structuredClone(createLegacyHoloGraph());
   const frame = graph.nodes.find(node => node.operator === 'image.frame'), output = graph.nodes.find(node => node.operator === 'image.output');
   if (!frame || !output) throw new Error('Holo default graph lacks image boundaries');
   graph.edges = graph.edges.filter(edge => edge.to !== output.id);
@@ -105,7 +105,7 @@ export async function checkHoloGraphGpu(device: GPUDevice): Promise<number> {
   try {
     for (const item of cases) {
       const values = resolved(item.params), context = { parameterSchema: holo.params };
-      const plan = compileImageOperatorGraph(createDefaultHoloGraph(), values, context);
+      const plan = compileImageOperatorGraph(createLegacyHoloGraph(), values, context);
       const expected = await render(device, sampler, source.createView(), target, readback, holo.shader, holo.entryPoint, legacyUniforms(values, item.time));
       const actual = await render(device, sampler, source.createView(), target, readback,
         imageGraphProgramShader(plan, 'holoGraphFragment'), 'holoGraphFragment', packImageOperatorRuntimeUniforms(plan, item.time, width, height));

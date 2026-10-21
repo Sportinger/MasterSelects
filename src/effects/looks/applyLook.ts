@@ -7,6 +7,7 @@ import { getEffect } from '..';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { checkedLookEntryOperatorGraph } from './lookEntryGraph';
 import type { LookDefinition, LookStackEntry } from './types';
+import { lookEntryRecipeOnlyParams } from './lookStackEffects';
 
 /** Applies a Look; returns the problems of stored graphs that could not be used (those entries render the current recipe). */
 export function applyLookToClip(look: LookDefinition, clipId: string): string[] {
@@ -15,10 +16,13 @@ export function applyLookToClip(look: LookDefinition, clipId: string): string[] 
   startBatch(`Apply look: ${look.name}`);
   try {
     for (const entry of look.stack) {
-      // A stored graph, a stylize effect's earlier recipe or the original color math (lookEntryGraph.ts).
+      // A stored graph, a stylize effect's earlier recipe, an analog effect's original graph or the
+      // original color math (lookEntryGraph.ts). An original analog graph starts without the rebuilt
+      // recipe's own parameters, like a pinned saved effect.
       const { graph: operatorGraph, problem } = checkedLookEntryOperatorGraph(look, entry);
       if (problem) problems.push(problem);
-      const effectId = addClipEffect(clipId, entry.effectId, operatorGraph ? { operatorGraph } : undefined);
+      const omitParams = [...lookEntryRecipeOnlyParams(look, entry)];
+      const effectId = addClipEffect(clipId, entry.effectId, operatorGraph ? { operatorGraph, ...(omitParams.length ? { omitParams } : {}) } : undefined);
       // A custom Look saved before an effect gained controls lacks them: give them the values that keep its look.
       const saved = look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params);
       // Values a new instance starts with differently (Posterize Brightness Only) keep what an entry

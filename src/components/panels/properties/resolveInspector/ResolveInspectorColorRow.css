@@ -1,42 +1,49 @@
 @layer features {
-  /* Colour well + hex in a Resolve inspector row (ResolveInspectorColorRow.tsx): the well is bordered
-     and sized like the numeric fields beside it. */
-  .resolve-inspector-color-value {
+  /* Colour row of the Resolve inspector: swatch and hex field fill the control column. */
+  .resolve-inspector-color {
     display: grid;
     min-width: 0;
-    grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 6px;
     align-items: center;
-    column-gap: 8px;
   }
 
-  .resolve-inspector-color-swatch {
+  .resolve-inspector-color input {
     box-sizing: border-box;
-    width: 40px;
-    height: 24px;
-    padding: 2px;
+    height: 20px;
     border: 1px solid var(--separator-color);
-    border-radius: 1px;
+    border-radius: 2px;
     background: var(--input-bg);
-    cursor: pointer;
-    -webkit-appearance: none;
-    appearance: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
-  .resolve-inspector-color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
-  .resolve-inspector-color-swatch::-webkit-color-swatch { border: 0; border-radius: 0; }
-  .resolve-inspector-color-swatch::-moz-color-swatch { border: 0; border-radius: 0; }
+  .resolve-inspector-color input[type="color"] {
+    width: 26px;
+    padding: 1px;
+    cursor: pointer;
+  }
 
-  .resolve-inspector-color-swatch:hover:not(:disabled) { border-color: var(--border-strong); }
-  .resolve-inspector-color-swatch:focus:not(:focus-visible) { outline: 0; }
-  .resolve-inspector-color-swatch:focus-visible { border-color: var(--accent); }
-  .resolve-inspector-color-swatch:disabled { cursor: default; opacity: 0.45; }
-
-  .resolve-inspector-color-hex {
-    overflow: hidden;
-    color: var(--text-muted);
-    font-size: 11px;
+  .resolve-inspector-color input[type="text"] {
+    width: 100%;
+    min-width: 0;
+    padding: 0 6px;
+    color: var(--text-primary);
+    font: inherit;
     font-variant-numeric: tabular-nums;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  }
+
+  /* No ring after mouse, pen or touch activation; keyboard focus shows the product ring. */
+  .resolve-inspector-color input:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .resolve-inspector-color input:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .resolve-inspector-color input:disabled {
+    opacity: .5;
+    cursor: default;
   }
 }

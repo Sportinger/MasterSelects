@@ -1,6 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorGroup } from '../../types/operatorGraph';
 import { expandOperatorCompositions, sameCompositionNode } from './operatorComposition';
-import { effectPresentationPlan, type EffectPresentationPlan } from './effectPresentationPlans';
+import { effectPresentationPlan, legacyEffectPresentationPlans, type EffectPresentationPlan } from './effectPresentationPlans';
 
 const originals = new Map<string, EffectOperatorGraph>();
 const cache = new WeakMap<EffectOperatorGraph, Map<string, EffectOperatorGraph>>();
@@ -61,23 +61,28 @@ export interface EarlierEffectRecipe { key: string; createDefault: () => EffectO
 /** The untouched recipe gets a one-time readable layout. Saved edits, folder boundaries and ungrouping win. */
 export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed: EffectOperatorGraph, type: string,
   createDefault: () => EffectOperatorGraph, earlier?: EarlierEffectRecipe): EffectOperatorGraph {
-  const organized = organizeAsRecipe(source, composed, type, type, createDefault, effectPresentationPlan(type));
-  return organized === composed && earlier
-    ? organizeAsRecipe(source, composed, type, `${type}|${earlier.key}`, earlier.createDefault, earlier.plan) : organized;
-}
-
-function organizeAsRecipe(source: EffectOperatorGraph, composed: EffectOperatorGraph, type: string, recipeKey: string,
-  createDefault: () => EffectOperatorGraph, plan: EffectPresentationPlan | undefined): EffectOperatorGraph {
-  if (!plan || source.effectPresentationRules || source.incomplete || source.groups?.some(group => !group.composition)) return composed;
-  const cached = cache.get(source)?.get(recipeKey); if (cached) return cached;
-  let original = originals.get(recipeKey);
-  if (!original) { original = createDefault(); originals.set(recipeKey, original); }
-  if (!matchesEffectRecipe(source, original)) return composed;
+  const current = effectPresentationPlan(type);
+  // The current recipe first, then earlier recipes that saved effects may still run (each with its
+  // own folders): the caller's (the original color graphs) and the effect's legacy plans (analog).
+  const candidates: Array<{ key: string; create: () => EffectOperatorGraph; plan: EffectPresentationPlan }> = [
+    ...(current ? [{ key: type, create: createDefault, plan: current }] : []),
+    ...(earlier ? [{ key: `${type}|${earlier.key}`, create: earlier.createDefault, plan: earlier.plan }] : []),
+    ...legacyEffectPresentationPlans(type).map((entry, index) => ({ key: `${type}:legacy-${index}`, ...entry }))];
+  if (!candidates.length || source.effectPresentationRules || source.incomplete || source.groups?.some(group => !group.composition)) return composed;
+  const cached = cache.get(source)?.get(type); if (cached) return cached;
+  const recipeOf = (key: string, create: () => EffectOperatorGraph) => {
+    let original = originals.get(key);
+    if (!original) { original = create(); originals.set(key, original); }
+    return original;
+  };
+  const match = candidates.find(candidate => matchesEffectRecipe(source, recipeOf(candidate.key, candidate.create)));
+  if (!match) return composed;
+  const plan = match.plan, original = recipeOf(match.key, match.create);
   const originalNodes = new Map(original.nodes.map(node => [node.id, node]));
   const labels = { controls: 'Parameters', constants: 'Constants', sources: 'Coordinates & Resources', ...plan.labels };
   const members = new Map<string, string[]>();
   for (const node of composed.nodes) {
-    if (['image.frame', 'image.output'].includes(node.operator) || node.id === 'split' && type !== 'mirror'
+    if (['image.frame', 'image.output'].includes(node.operator) || node.id === 'split' && type !== 'mirror' && type !== 'glitch'
       || node.id === 'rgba' && type === 'invert') continue;
     let stage: string;
     if (node.operator.startsWith('values.')) stage = literal(node) ? 'constants' : 'controls';
@@ -104,6 +109,6 @@ function organizeAsRecipe(source: EffectOperatorGraph, composed: EffectOperatorG
     color: '#6b99bd', nodeIds, collapsedByDefault: true,
   }));
   const graph: EffectOperatorGraph = { ...composed, effectPresentationRules: 1, groups: [...(composed.groups ?? []), ...readableGroups(composed, groups)] };
-  const byType = cache.get(source) ?? new Map(); byType.set(recipeKey, graph); cache.set(source, byType);
+  const byType = cache.get(source) ?? new Map(); byType.set(type, graph); cache.set(source, byType);
   return graph;
 }

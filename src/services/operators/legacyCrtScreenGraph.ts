@@ -27,8 +27,13 @@ class GraphBuilder {
   }
 }
 
-/** Granular graph matching the legacy crtScreenFragment operation order. Owner schema remains catalog-owned. */
-export function createDefaultCrtScreenGraph(): EffectOperatorGraph {
+/**
+ * The CRT Screen graph as it shipped before the 2026-10 analog review (2 px scanlines, per-pixel
+ * mask stripes, clamped edges). Frozen: saved effects that still carry it keep their look, graph-less
+ * old effects are given it on load (analogLegacyGraphs.ts), and the shared Screen compositions are
+ * extracted from it. Never change it.
+ */
+export function createLegacyCrtScreenGraph(): EffectOperatorGraph {
   const g = new GraphBuilder();
   const frame = g.node('frame', 'image.frame'), uv = g.node('uv', 'image.normalized-uv'), resolution = g.node('resolution', 'image.resolution');
   const uvSplit = g.unary('uv-split', 'vector.split.vec2', uv), resolutionSplit = g.unary('resolution-split', 'vector.split.vec2', resolution);

@@ -6,8 +6,8 @@ import { analogImageResolveShader } from './analogImageResolveShader';
 
 interface PipelineState {
   signature: string;
-  pipelines: Record<AnalogSignalStageKind, GPUComputePipeline>;
-  layouts: Record<AnalogSignalStageKind, GPUBindGroupLayout>;
+  pipelines: Record<AnalogSignalStageKind | 'footprint', GPUComputePipeline>;
+  layouts: Record<AnalogSignalStageKind | 'footprint', GPUBindGroupLayout>;
 }
 interface InstanceResources {
   planKey: string;
@@ -23,7 +23,10 @@ export interface AnalogImagePreviewInputs {
 }
 
 const SIGNAL_SIZE = [864, 313] as const;
-const DECODED_SIZE = [360, 288] as const;
+/** One decoded pixel per active PAL sample (702) and field line (288); also the encoder's source-footprint raster. */
+export const ANALOG_DECODED_SIZE = [702, 288] as const;
+const DECODED_SIZE = ANALOG_DECODED_SIZE;
+const footprintId = (nodeId: string) => `${nodeId}:footprint`;
 
 export class AnalogSignalRuntime {
   private readonly device: GPUDevice;
@@ -88,7 +91,15 @@ export class AnalogSignalRuntime {
       const entries: GPUBindGroupEntry[] = [{ binding: 2, resource: { buffer: uniform } }];
       if (stage.kind === 'encode') {
         this.requireExternalSource(resources, stage.input, stage);
-        entries.push({ binding: 1, resource: options.inputView }, { binding: 4, resource: output });
+        // The source averaged over each PAL sample's footprint, then encoded from that raster.
+        const footprint = resources.textures.get(footprintId(stage.nodeId))!.createView();
+        const pass = options.commandEncoder.beginComputePass({ label: `analog-${stage.nodeId}-footprint` });
+        pass.setPipeline(state.pipelines.footprint);
+        pass.setBindGroup(0, this.device.createBindGroup({ layout: state.layouts.footprint, entries: [
+          { binding: 1, resource: options.inputView }, { binding: 2, resource: { buffer: uniform } }, { binding: 4, resource: footprint },
+        ] }));
+        pass.dispatchWorkgroups(Math.ceil(DECODED_SIZE[0] / 8), Math.ceil(DECODED_SIZE[1] / 8)); pass.end();
+        entries.push({ binding: 3, resource: footprint }, { binding: 4, resource: output });
       }
       else if (stage.kind === 'decode') entries.push(
         { binding: 3, resource: this.requireTexture(resources, stage.input, stage).createView() }, { binding: 4, resource: output },
@@ -120,19 +131,20 @@ export class AnalogSignalRuntime {
     this.clear();
     const uniform: GPUBindGroupLayoutEntry = { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } };
     const layout = (entries: GPUBindGroupLayoutEntry[]) => this.device.createBindGroupLayout({ entries });
-    const layouts: Record<AnalogSignalStageKind, GPUBindGroupLayout> = {
-      encode: layout([{ binding: 1, visibility: GPUShaderStage.COMPUTE, texture: {} }, uniform, { binding: 4, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } }]),
+    const layouts: Record<AnalogSignalStageKind | 'footprint', GPUBindGroupLayout> = {
+      footprint: layout([{ binding: 1, visibility: GPUShaderStage.COMPUTE, texture: {} }, uniform, { binding: 4, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } }]),
+      encode: undefined as never,
       rf: layout([uniform, { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } }, { binding: 4, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } }]),
       vhs: undefined as never, analyze: layout([uniform, { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } }, { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }]),
       decode: layout([uniform, { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } }, { binding: 4, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } }, { binding: 6, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } }]),
       resolve: layout([{ binding: 1, visibility: GPUShaderStage.COMPUTE, texture: {} }, uniform, { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'unfilterable-float' } }, { binding: 5, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba8unorm' } }]),
     };
-    layouts.vhs = layouts.rf;
+    layouts.vhs = layouts.rf; layouts.encode = layouts.rf;
     const module = this.device.createShaderModule({ code: definition.shader });
-    const make = (kind: AnalogSignalStageKind, entryPoint: string) => this.device.createComputePipeline({
+    const make = (kind: AnalogSignalStageKind | 'footprint', entryPoint: string) => this.device.createComputePipeline({
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [layouts[kind]] }), compute: { module, entryPoint },
     });
-    const pipelines = { encode: make('encode', 'palEncodeCompute'), rf: make('rf', 'rfChannelCompute'), vhs: make('vhs', 'vhsTransportCompute'),
+    const pipelines = { footprint: make('footprint', 'palFootprintCompute'), encode: make('encode', 'palEncodeCompute'), rf: make('rf', 'rfChannelCompute'), vhs: make('vhs', 'vhsTransportCompute'),
       analyze: make('analyze', 'receiverAnalyzeCompute'), decode: make('decode', 'palDecodeCompute'), resolve: make('resolve', definition.entryPoint) };
     return this.pipelineState = { signature, layouts, pipelines };
   }
@@ -145,6 +157,7 @@ export class AnalogSignalRuntime {
     const result: InstanceResources = { planKey: resourceKey, textures: new Map(), lineStates: new Map(), uniformBuffers: new Map() };
     for (const stage of plan.stages) {
       if (stage.kind === 'encode' || stage.kind === 'rf' || stage.kind === 'vhs') result.textures.set(stage.nodeId, this.createTexture(stage.nodeId, ...SIGNAL_SIZE));
+      if (stage.kind === 'encode') result.textures.set(footprintId(stage.nodeId), this.createTexture(footprintId(stage.nodeId), ...DECODED_SIZE));
       if (stage.kind === 'decode') result.textures.set(stage.nodeId, this.createTexture(stage.nodeId, ...DECODED_SIZE));
       if (stage.kind === 'analyze') result.lineStates.set(stage.nodeId, this.device.createBuffer({ size: SIGNAL_SIZE[1] * 16, usage: GPUBufferUsage.STORAGE, label: `analog-${stage.nodeId}-lines` }));
     }

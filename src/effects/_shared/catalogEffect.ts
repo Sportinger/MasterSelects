@@ -17,6 +17,12 @@ export interface CatalogEffectOptions {
   animated?: boolean;
   clock?: 'timeline';
   variantMap?: Record<string, number>;
+  /** Shared base parameters this effect never reads, with the reason tools return; kept hidden so saved values still load. */
+  retired?: Record<string, string>;
+  /** Notes for values the recipe clamps or cannot show (see FullscreenEffectDefinition.paramWarnings). */
+  paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
+  /** Why the effect is still experimental (FullscreenEffectDefinition.experimental). */
+  experimental?: string;
 }
 const BASE_PARAMS: Record<string, EffectParam> = {
   scale: {
@@ -42,12 +48,10 @@ function numberParam(params: Record<string, Primitive>, key: string, fallback: n
 
 export function createCatalogEffect(options: CatalogEffectOptions): EffectDefinition {
   const params = Object.fromEntries(
-    Object.entries({ ...BASE_PARAMS, ...options.params }).map(([name, param]) => [
-      name,
-      param.type === 'number' && param.animatable === undefined
-        ? { ...param, animatable: true }
-        : param,
-    ]),
+    Object.entries({ ...BASE_PARAMS, ...options.params }).map(([name, param]) => {
+      const animatable = param.type === 'number' && param.animatable === undefined ? { ...param, animatable: true } : param;
+      return [name, options.retired?.[name] ? { ...animatable, deprecated: options.retired[name] } : animatable];
+    }),
   );
   if (options.animated && !params.speed) {
     params.speed = {
@@ -65,6 +69,8 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
     uniformSize: 64,
     params,
     requiresContinuousRender: options.clock === 'timeline' ? false : options.animated,
+    ...(options.paramWarnings ? { paramWarnings: options.paramWarnings } : {}),
+    ...(options.experimental ? { experimental: options.experimental } : {}),
     packUniforms: (values, width, height, timelineTimeSeconds = 0) => {
       const colorA = colorToRgba(values.colorA, '#111827');
       const colorB = colorToRgba(values.colorB, '#f8fafc');

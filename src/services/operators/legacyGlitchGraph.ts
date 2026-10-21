@@ -17,8 +17,12 @@ class Builder {
   vec2(id: string, x: Ref, y: Ref) { const out = this.node(id, 'vector.combine.vec2', 'value'); this.edge(x, out, 'x'); this.edge(y, out, 'y'); return out; }
 }
 
-/** Granular equivalent of glitchFragment using the same shared hash2d WGSL source. */
-export function createDefaultGlitchGraph(): EffectOperatorGraph {
+/**
+ * The Glitch graph as it shipped before the 2026-10 analog review (equal bands, constant RGB offset,
+ * clamped edges). Frozen: saved effects that still carry it keep their look and graph-less old
+ * effects are given it on load (analogLegacyGraphs.ts). Never change it.
+ */
+export function createLegacyGlitchGraph(): EffectOperatorGraph {
   const g = new Builder();
   const frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const uvSplit = g.node('uv-split', 'vector.split.vec2', 'x'); g.edge(uv, uvSplit, 'value');

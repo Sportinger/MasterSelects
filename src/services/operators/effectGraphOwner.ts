@@ -58,15 +58,16 @@ import { organizeEffectFamilyGraph } from './effectFamilyPresentation';
 import { upgradePersistedUvDistortEffect } from './uvDistortGraphUpgrade';
 import { upgradePersistedMirrorPixelEffect } from './mirrorPixelGraphUpgrade';
 import { normalizeFisheyeParameters } from '../../effects/distort/fisheye/normalization';
-import { createDefaultCrtScreenGraph } from './crtScreenEffectGraph';
-import { createDefaultRibbonScanGraph } from './ribbonScanEffectGraph';
+import { createDefaultCrtScreenGraph } from './crtScreenRecipe';
+import { pinOriginalAnalogGraph } from './analogLegacyGraphs';
+import { createDefaultRibbonScanGraph } from './ribbonScanRecipe';
 import { createDefaultWaveLinesGraph } from './waveLinesEffectGraph';
-import { createDefaultGlitchGraph } from './glitchEffectGraph';
-import { createDefaultFilmPrismGraph } from './filmPrismEffectGraph';
+import { createDefaultGlitchGraph } from './glitchRecipe';
+import { createDefaultFilmPrismGraph } from './filmPrismRecipe';
 import { createDefaultCrystalGraph } from './crystalEffectGraph';
 import { createDefaultGlassDispersionGraph } from './glassDispersionEffectGraph';
 import { createDefaultHalftoneGraph, type EditableHalftoneEffectType } from './halftoneEffectGraphs';
-import { createDefaultHoloGraph } from './holoEffectGraph';
+import { createDefaultHoloGraph } from './holoRecipe';
 import { createDefaultRisoGraph, type EditableRisoEffectType } from './risoEffectGraphs';
 import { createDefaultDitherGraph, type EditableDitherEffectType } from './ditherEffectGraphs';
 import { createDefaultPaperPrintGraph } from './paperPrintEffectGraph';
@@ -309,6 +310,8 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
     return effect;
   }
+  // Graph-less analog effects from before their 2026-10 rebuild keep their original look.
+  effect = pinOriginalAnalogGraph(effect);
   effect = upgradePersistedMirrorPixelEffect(upgradePersistedUvDistortEffect(effect));
   // A valid Weave document with unfinished wiring is an editable draft, not
   // an unloadable project. Keep every node/cable; reject structural corruption.

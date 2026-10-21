@@ -387,6 +387,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         inputs: [visitSource(current, 'value')] }); break;
       case 'noise.cell-hash.vec2': register = emit({ nodeId: current.id, operation: 'cell-hash-vec2', type: 'scalar',
         inputs: [visitSource(current, 'value')] }); break;
+      case 'noise.hash2d-pcg.vec2': register = emit({ nodeId: current.id, operation: 'hash2d-pcg-vec2', type: 'scalar',
+        inputs: [visitSource(current, 'value')] }); break;
       case 'convert.rgb-to-hsv': register = emit({ nodeId: current.id, operation: 'rgb-to-hsv', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;
       case 'convert.hsv-to-rgb': register = emit({ nodeId: current.id, operation: 'hsv-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
       case 'convert.rgb-to-oklch': register = emit({ nodeId: current.id, operation: 'rgb-to-oklch', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;

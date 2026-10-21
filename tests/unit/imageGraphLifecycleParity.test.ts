@@ -170,7 +170,7 @@ describe('image graph lifecycle parity', () => {
       const derivativeContext = type === 'holo' ? { uv: [45.5 / 64, 13.5 / 37] as [number, number],
         pixelCoordinate: [45, 13] as [number, number], derivativeAutoMode: 'coarse' as const } : { uv: [.71, .36] as [number, number] };
       const sampleImage = ([u, v]: [number, number]): [number, number, number, number] => [u, v, u * .3 + v * .2, .2 + u * .6];
-      // Wave, Twirl and Bulge read a premultiplied source cache: their plans are pass chains.
+      // Wave, Twirl, Bulge, CRT Screen and Film Prism read a premultiplied cache pass: their plans are pass chains.
       return { plan, value: plan.passes?.length ? evaluateImagePasses(plan, derivativeContext.uv, [64, 37], sampleImage, { timelineTimeSeconds })
         : evaluateImageOperatorPlan(plan, pixel, { ...derivativeContext, resolution: [64, 37], timelineTimeSeconds, sampleImage }) };
     };
@@ -193,7 +193,9 @@ describe('image graph lifecycle parity', () => {
       const seekTimes = type === 'wave-lines' || type === 'film-prism' || type === 'crystal' || type === 'glass-dispersion' || type === 'holo' || type === 'riso-glow'
         || type === 'scatter-mosaic' || type === 'drift-lines' ? [0, .8]
         : type === 'glitch-grid' ? [0, 1.9] : type === 'glitch' ? [0, 1.2] : [.25, 1.25];
-      expect(evaluate(sampled, seekTimes[0]).value).not.toEqual(evaluate(sampled, seekTimes[1]).value);
+      // Glitch changes in bursts: a single pixel may sit unglitched at both times, so it scans a second of states.
+      if (type === 'glitch') expect(new Set(Array.from({ length: 12 }, (_, step) => JSON.stringify(evaluate(sampled, step / 12).value))).size).toBeGreaterThan(1);
+      else expect(evaluate(sampled, seekTimes[0]).value).not.toEqual(evaluate(sampled, seekTimes[1]).value);
     }
     const serialized = createSerializableTimelineState(useTimelineStore.getState());
     await useTimelineStore.getState().loadState(JSON.parse(JSON.stringify(serialized)));

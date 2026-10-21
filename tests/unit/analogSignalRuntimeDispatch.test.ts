@@ -33,9 +33,9 @@ describe('Analog Signal graph runtime dispatch', () => {
     const rendered = new AnalogSignalRuntime(gpu.device as never).encode({ commandEncoder: gpu.encoder as never, definition, plan,
       instanceId: 'effect', inputView: {} as never, outputView: {} as never, width: 1920, height: 1080, timelineTimeSeconds: 2 });
     expect(rendered).toBe(true);
-    expect(gpu.labels).toEqual(['analog-encode-encode', 'analog-rf-rf', 'analog-vhs-vhs', 'analog-analyze-analyze', 'analog-decode-decode', `analog-${plan.output}-image-resolve`]);
+    expect(gpu.labels).toEqual(['analog-encode-footprint', 'analog-encode-encode', 'analog-rf-rf', 'analog-vhs-vhs', 'analog-analyze-analyze', 'analog-decode-decode', `analog-${plan.output}-image-resolve`]);
     expect(plan.stages.at(-1)?.imageProgram).toBeDefined();
-    expect(gpu.dispatches).toEqual([[108, 40], [108, 40], [108, 40], [1, 313], [45, 36], [240, 135]]);
+    expect(gpu.dispatches).toEqual([[88, 36], [108, 40], [108, 40], [108, 40], [1, 313], [88, 36], [240, 135]]);
   });
 
   it('does no GPU work for direct frame output and omits bypassed RF/VHS stages', () => {
@@ -50,6 +50,6 @@ describe('Analog Signal graph runtime dispatch', () => {
     const bypassPlan = compileAnalogSignalGraph(bypass, {});
     runtime.encode({ commandEncoder: gpu.encoder as never, definition, plan: bypassPlan, instanceId: 'bypass',
       inputView: {} as never, outputView: {} as never, width: 640, height: 360, timelineTimeSeconds: 0 });
-    expect(gpu.labels).toEqual(['analog-encode-encode', 'analog-analyze-analyze', 'analog-decode-decode', `analog-${bypassPlan.output}-image-resolve`]);
+    expect(gpu.labels).toEqual(['analog-encode-footprint', 'analog-encode-encode', 'analog-analyze-analyze', 'analog-decode-decode', `analog-${bypassPlan.output}-image-resolve`]);
   });
 });
