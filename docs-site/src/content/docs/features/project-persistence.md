@@ -107,6 +107,22 @@ Persistent-storage permission reduces eviction risk but does not prevent a
 user from deleting site data. OPFS projects do not become independent backups
 merely because the browser remembers their names.
 
+WebKit (every iOS/iPadOS browser) can refuse OPFS with an opaque `UnknownError`
+while its storage process resumes, in Private Browsing, in in-app browsers or on
+a nearly full device. Opening the project root and the scratch recovery retries
+once; if OPFS stays unavailable, browser projects switch to an IndexedDB
+fallback (`ms-browser-project-storage`) that serves the same directory/file
+handle surface, so project creation, saving, scratch recovery and `.msproj`
+export keep working. The choice is made on the first storage access and kept
+for the tab (`sessionStorage`), and the storage worker adopts the editor's
+choice, so one project never spans both stores. While the fallback is active
+the save status reads "Temporary storage", explains that Private Browsing and
+in-app browsers may delete the project when the window closes, and opens the
+`.msproj` archive export on click. Fallback projects in a later tab where OPFS
+works are not listed there; export them first. Only when IndexedDB refuses as
+well do project dialogs and the save status explain the cause instead of the
+raw browser text. iOS, iPadOS and Android never try the desktop Native Helper.
+
 The Native Helper checks granted paths and negotiates repository write support.
 A connected helper with ordinary file commands does not by itself prove that
 it can safely own a repository writer. Native protocol or ownership failures
@@ -115,6 +131,14 @@ are reported rather than silently weakening the commit protocol.
 Only one writer owns a repository. A second session can browse read-only.
 Read-only history navigation does not publish project changes or bypass the
 active writer's ownership.
+
+A read-only tab shows **Take over editing** next to the save status; its
+tooltip names when the writing tab started editing and whether it is in the
+background. The action asks the writing tab to save, reopen itself read-only
+(it then says "Editing moved to another tab") and release the writer lock;
+this tab then reopens the project with write access. If no tab holds the lock
+(the writer was closed, or folder access was missing), the action reads
+**Enable editing** and reopens directly, requesting folder access first.
 
 ## Continuous saving
 
@@ -268,8 +292,22 @@ projects as well as cached handles.
 
 - **Folder permission is missing:** reconnect the existing project directory or
   its external source folder.
-- **Project is read-only:** inspect its owner/capability status; another session
-  may own the writer.
+- **Project is read-only:** use **Take over editing** in the toolbar. If the
+  writing tab does not answer within a few seconds while it still holds the
+  lock (a frozen or suspended tab), the toolbar says so: switch to that tab or
+  close it and try again. Deleting media in a read-only tab is refused up front
+  with the read-only notice instead of failing midway.
+- **No project folder picker:** browsers without the File System Access API
+  (Firefox, Safari) open project folders only through a running Native Helper.
+  Without it, File > Open Project lists the projects stored in this browser and
+  offers **Import .msproj archive**: the archive is copied into a new
+  browser-storage project folder (`Name`, `Name (2)`, …) and opened there, which
+  restores a repository archive or converts an older `.msproj` package in place.
+  An incomplete copy or an import that does not open is removed again and
+  reported. The start-up project chooser offers the same import below the stored
+  projects. The stored-project list shows only folders with a project
+  (`project.msrepo.json`, `project.json` or a not yet imported `.msproj`), not
+  model caches or repository staging folders.
 - **Writes are pending or failed:** inspect the storage error, restore access or
   available space, and retry. A pending edit is not yet a confirmed disk save.
 - **The history index is unavailable:** records remain authoritative; allow
