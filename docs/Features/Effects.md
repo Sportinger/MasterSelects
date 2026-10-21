@@ -1189,6 +1189,14 @@ shared sine hash `noise.hash2d.vec2`, it shows no diagonal stripes on cell grids
 stays uniform for large or fractional keys; the sine hash itself is unchanged, so
 other effects keep their look.
 
+Opened in the Node Workspace, the untouched recipes show stage folders
+(`effectPresentationPlans.ts`, presentation only): CRT Screen Tube Shape & Rim,
+Scanline Beams, Phosphor Mask, Hum Bar & Flutter and Light Out & Alpha; Glitch Burst
+Clock, Torn Rows, Block Copies, Read Position & RGB Split, Channel Reads and Channel
+Swap & Alpha; Film Prism Fringe Spread & Direction, Tap Positions, Spectrum Reads &
+Sum, Grain Noise, Grain Strength and Add Grain & Alpha. Folder ports carry the
+parameter or signal they pass (Line Count, Burst Level, Tap 1 Position).
+
 Crystal and Glass Dispersion expose their facet direction, refraction offsets
 and image sampling as editable generic graphs. Their vector normalization uses
 the native operation shared by the compiler and evaluator; sampled alpha is
