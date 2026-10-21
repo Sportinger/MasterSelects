@@ -151,7 +151,7 @@ grades that have not stored their default values yet.
 - `keying` (1): Chroma Key
 - `generate` (6, see [Generate Effects](./Effects-Generate.md)): **Color Wheel** (an HSV wheel filling the layer or drawn as an anti-aliased disc), **Perspective Grid** (a scrolling vanishing-point floor grid with filtered lines whose width is set in 1080p pixels at the front edge), **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes)), **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)), **Weave** (curve-node yarn and fabric in 3D; see [Weave](./Weave.md)) and Memory Leak
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
-- `analog` (10): CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and compute Pixel Sort (user guide: [Analog Effects](./Effects-Analog.md))
+- `analog` (10): CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and compute Pixel Sort (user guide: [Analog & Glitch](./Effects-Analog.md))
 - `pixel` (2): Blockify and Block Mosaic; see [Pixel & Mosaic](./Effects-Pixel.md)
 - `glyph` (18): ASCII, word/number/symbol matrices, code, collage, brand, and stitch treatments
 - `geometry` (11): compute Voronoi, Quadtree, and Contour plus engraving, textile, outline, and brick treatments
@@ -1726,7 +1726,7 @@ color operations remain after the graph stack.
 
 ### CRT Screen
 
-User guide: [Analog Effects](./Effects-Analog.md#crt-screen). CRT Screen is a
+User guide: [CRT Screen](./effects/crt-screen.md). CRT Screen is a
 frame-relative recipe (`src/services/operators/crtScreenRecipe.ts`): a barrel-warped
 tube (`k = 0.18 × Curvature × Mix`, rounded corners of 5 % of the frame height,
 transparent outside, rim darkened by up to 40 %), Line Count Gaussian scanline beams

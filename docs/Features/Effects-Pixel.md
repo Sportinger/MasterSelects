@@ -17,7 +17,7 @@ drift. Add one in **Properties → Effects → + Add Effect → Pixel & Mosaic**
 | blocks with a few poster colours | [Pixel Poster](./effects/pixel-poster.md) |
 | tiles that jitter and drift | [Scatter Mosaic](./effects/scatter-mosaic.md) |
 | shattered-glass cells | [Voronoi](./effects/voronoi.md) |
-| streaks of sorted pixels | [Pixel Sort](#pixel-sort) |
+| streaks of sorted pixels | [Pixel Sort](./effects/pixel-sort.md) |
 
 ## The shared idea
 

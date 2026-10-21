@@ -17,7 +17,7 @@ photos. Add one in **Properties → Effects → + Add Effect → Lens & Distort*
 | a symmetric pattern | [Kaleidoscope](./effects/kaleidoscope.md) |
 | a mirror image | [Mirror](./effects/mirror.md) |
 | colour fringes, a glitch | [RGB Split](./effects/rgb-split.md) |
-| glass, prism and foil | [Film Prism](#film-prism), [Holo](#holo), [Crystal Glass](#crystal-glass), [Glass Dispersion](#glass-dispersion) |
+| glass, prism and foil | [Film Prism](./effects/film-prism.md), [Holo](./effects/holo.md), [Crystal Glass](./effects/crystal.md), [Glass Dispersion](./effects/glass-dispersion.md) |
 | straight lines in a photo | [Lens Correction](./effects/lens-correction.md), then [Guided Perspective](./effects/guided-perspective.md) |
 | a full frame after a correction | [AI Edge Fill](./effects/ai-edge-fill.md) |
 

@@ -16,7 +16,7 @@ Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effe
 - **Curvature** – how much the screen bulges. Outside the curved tube the layer is transparent, so the layer below shows through. 0 keeps the picture flat and fills the frame.
 - **Mask** and **Mask Strength** – the stripe pattern of the screen: Aperture Grille (straight stripes) or Slot Mask (stripes with small breaks).
 
-**Tip:** put a black solid below the layer for a TV frame, and add [Glow](../Effects-Stylize.md#glow) after CRT Screen for the soft bloom of a real tube. If the lines vanish in the preview, raise the Preview Quality: at ¼ they are too fine to draw, and the export still shows them.
+**Tip:** put a black solid below the layer for a TV frame, and add [Glow](./glow.md) after CRT Screen for the soft bloom of a real tube. If the lines vanish in the preview, raise the Preview Quality: at ¼ they are too fine to draw, and the export still shows them.
 
 ## Controls
 
