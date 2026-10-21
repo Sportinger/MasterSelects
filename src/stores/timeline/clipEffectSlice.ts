@@ -136,7 +136,7 @@ function reconcileEffectRemovalInNodeGraph(
 }
 
 export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get) => ({
-  addClipEffect: (clipId, effectType) => {
+  addClipEffect: (clipId, effectType, options) => {
     const { clipKeyframes, invalidateCache } = get();
     const clips = get().clips;
     // One swarm per clip: adding Flocking again returns the existing effect.
@@ -155,7 +155,8 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
         geometryPromoted3D: false,
       } : {}) },
       // Effects whose look is a versioned recipe carry it from the start (a graphless color effect in a project file is legacy).
-      ...(effectType === 'slit-scan' ? { operatorGraph: createInitialSlitScanGraph() }
+      ...(options?.operatorGraph ? { operatorGraph: options.operatorGraph }
+        : effectType === 'slit-scan' ? { operatorGraph: createInitialSlitScanGraph() }
         : COLOR_RECIPE_EFFECT_TYPES.has(effectType) ? { operatorGraph: createDefaultColorEffectGraph(effectType as EditableColorEffectType) } : {}),
     };
     const keyframes = clipKeyframes.get(clipId) ?? [];

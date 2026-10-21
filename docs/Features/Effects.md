@@ -828,10 +828,17 @@ previous recipes stay in `legacyColorEffectGraphs.ts`). A color effect stored
 without any graph (projects from before 2026-09-21) is given the original graph when
 the project file is converted (`migrateLoadedEffectOperatorGraph` in
 `loadTimelineHydration.ts`); `addClipEffect` gives new color effects the recipe graph,
-so a graphless effect in the running editor is never mistaken for an old one. Custom
-Looks without `schemaVersion` (saved before the rebuild) apply their color effects
-with the original graphs; Look schema 2 stores each color effect's graph per stack
-entry. Saved original graphs keep their original Node Workspace folders (Color
+so a graphless effect in the running editor is never mistaken for an old one.
+`editMotionAdjustment` (`create`/`configure`, which replace the whole effect list from
+parameters) keeps the graph of every effect whose id and type it keeps and gives new
+color effects the recipe (`adjustmentEffectGraphs.ts`). Custom Looks without
+`schemaVersion` (saved before the rebuild) apply their color effects with the original
+graphs; Look schema 2 stores each color effect's graph per stack entry. A stored Look
+graph is validated like a project-file graph when the Look is applied or drawn as a
+thumbnail (`checkedLookEntryOperatorGraph`); a graph that no longer validates is logged,
+named in the Looks panel and replaced by the recipe. `getClipDetails` lists each effect
+graph only as a summary (`nodes`, `edges`, for color effects `state`: `recipe`,
+`original` or `edited`); `getOperatorGraph` returns the graph. Saved original graphs keep their original Node Workspace folders (Color
 Processing, Clamp & Alpha); the recipe stages are only applied to the unedited recipe.
 
 The worker software render modes evaluate the same graphs instead of their former
@@ -842,8 +849,9 @@ effect is skipped as `unsupported-effects`. Adjustment layers in the worker GPU
 modes still use the motion-adjustment 4×5 colour matrix for Brightness, Contrast and
 Saturation (linear offset, linear contrast, Rec.709 matrix saturation), which matches
 only the original graphs: each other such effect is reported once per layer in the
-`WorkerGpuAdjustment` log and in the adjustment inspector
-(`adjustment-color-recipe-unsupported`, `workerGpuAdjustmentColorParity.ts`).
+`WorkerGpuAdjustment` log and, while a worker render host mode is selected, in the
+adjustment inspector (`adjustment-color-recipe-unsupported`,
+`workerGpuAdjustmentColorParity.ts`).
 GPU-against-CPU parity of the recipes (within one 8-bit step, including the OkLCh and
 sRGB helpers) is checked by `tests/browser/image-graph-probe.html?suite=color-recipes`;
 `colorRecipeWgsl.test.ts` validates every recipe module with naga where it is installed.
@@ -1540,7 +1548,8 @@ inside the effect wrapped into rows (`rows=n` sets the count, `break=a,b` starts
 rows at these node ids instead) and named stub cards for the values that come from
 outside the folder (Constants excepted); `only=a,b` (with `focus`) keeps just
 these node ids, laid out compactly left to right, and turns their other inputs into
-stubs, so a picture shows a recipe instead of the whole folder (`--list` prints the
+stubs (the folder's own unpicked number cards, such as a Clamp's 0 and 1, are left
+out; say so in the caption), so a picture shows a recipe instead of the whole folder (`--list` prints the
 ids; a composition's `@` may be left out); each wrapped row is as tall as its own
 cards; `plumbing=hide` leaves out the Constants
 and Coordinates & Resources folders and their cables, so an overview reads as one

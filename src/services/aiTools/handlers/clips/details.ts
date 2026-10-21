@@ -4,6 +4,7 @@ import { resolveClipTranscriptWindow } from '../../../transcription/clipTranscri
 import { getGaussianSplatGpuRenderer } from '../../../../engine/gaussian/core/GaussianSplatGpuRenderer';
 import { resolveSharedSplatSceneKey } from '../../../../engine/scene/runtime/SharedSplatRuntimeUtils';
 import { ensureRenderForDiagnostics } from '../renderOnce';
+import { summarizeClipEffectGraphs } from './effectGraphSummary';
 import type { TimelineStore } from './runtime';
 import { useMediaStore } from '../../../../stores/mediaStore';
 import {
@@ -147,7 +148,8 @@ export async function handleGetClipDetails(
       renderDiagnostics,
       gaussianRenderDebug,
       gaussianTargetSummary,
-      effects: clip.effects || [],
+      // Graphs are summarised (several KB each); getOperatorGraph returns the full graph.
+      effects: summarizeClipEffectGraphs(clip.effects || []),
       masks: clip.masks || [],
       transcript: resolveClipTranscriptWindow(clip),
       analysisStatus: clip.analysisStatus ?? sourceArtifacts.analysisStatus,

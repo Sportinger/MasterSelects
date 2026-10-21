@@ -14,7 +14,9 @@ import { convertProjectCompositionToStore } from '../../src/services/project/loa
 import type { ProjectComposition } from '../../src/services/project/types/composition.types';
 import type { ProjectClip } from '../../src/services/project/types';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { summarizeClipEffectGraphs } from '../../src/services/aiTools/handlers/clips/effectGraphSummary';
 import type { Effect } from '../../src/types/effects';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 /**
@@ -115,6 +117,33 @@ describe('saved color effects keep their look', () => {
     }
   });
 
+  it('checks a stored Look graph before it enters the clip and reports a corrupt one', () => {
+    const broken = { nodes: [{ id: 'gone', operator: 'color.retired-operator', bindings: {} }], edges: [] } as unknown as EffectOperatorGraph;
+    const look: LookDefinition = { id: 'custom-broken', name: 'Broken', category: 'custom', thumbnail: { kind: 'generated' }, tags: ['custom'],
+      builtIn: false, schemaVersion: LOOK_SCHEMA_VERSION, stack: [{ effectId: 'brightness', enabled: true, params: { amount: 0.3 }, operatorGraph: broken }] };
+    const problems = applyLookToClip(look, 'clip-look');
+    expect(problems).toEqual([expect.stringMatching(/^Look "Broken": the saved brightness graph cannot be used \(.+\); it renders the current brightness instead\.$/)]);
+    const [effect] = useTimelineStore.getState().clips[0].effects;
+    expect(matchesEffectRecipe(effect.operatorGraph!, createDefaultColorEffectGraph('brightness'))).toBe(true);
+    expect(effect.params.amount).toBe(0.3);
+  });
+
+  it('summarises effect graphs for getClipDetails and names the color math they render', () => {
+    const recipe = createDefaultColorEffectGraph('brightness');
+    const literal = recipe.nodes.find(node => node.operator.startsWith('values.') && node.constants && !Object.keys(node.bindings).length)!;
+    const edited: EffectOperatorGraph = { ...recipe, nodes: recipe.nodes.map(node => node === literal
+      ? { ...node, constants: Object.fromEntries(Object.entries(node.constants!).map(([key, value]) => [key, typeof value === 'number' ? value + 0.5 : value])) } : node) };
+    const effects: Effect[] = [
+      savedEffect('brightness', {}, recipe), { ...savedEffect('exposure', {}, createLegacyColorEffectGraph('exposure')), id: 'original' },
+      { ...savedEffect('brightness', {}, edited), id: 'edited' }, { id: 'invert', name: 'invert', type: 'invert', enabled: true, params: {} },
+    ];
+    const summary = summarizeClipEffectGraphs(effects);
+    expect(summary.map(effect => effect.operatorGraph && 'read' in effect.operatorGraph ? effect.operatorGraph.state : 'none'))
+      .toEqual(['recipe', 'original', 'edited', 'none']);
+    expect(summary[0].operatorGraph).toEqual({ nodes: recipe.nodes.length, edges: recipe.edges.length, state: 'recipe', read: 'getOperatorGraph' });
+    expect(JSON.stringify(summary).length).toBeLessThan(1500);
+  });
+
   it('groups a saved original color graph into its original folders, not the recipe stages', () => {
     const original = effectOperatorGraph(savedEffect('exposure', {}, createLegacyColorEffectGraph('exposure')));
     expect(original.groups?.map(group => group.label).toSorted()).toEqual(['Clamp & Alpha', 'Color Processing', 'Constants', 'Parameters']);
@@ -136,9 +165,12 @@ describe('saved color effects keep their look', () => {
     ];
     expect(workerGpuAdjustmentColorDivergences(effects).map(item => [item.effectId, item.code]))
       .toEqual([['new-graphless', ADJUSTMENT_COLOR_RECIPE_UNSUPPORTED], ['new-recipe', ADJUSTMENT_COLOR_RECIPE_UNSUPPORTED]]);
-    expect(getMotionAdjustmentDiagnostics('adjustment-1', effects, 'normal').message)
+    const worker = { workerRenderMode: true };
+    expect(getMotionAdjustmentDiagnostics('adjustment-1', effects, 'normal', worker).message)
       .toContain('Worker GPU render modes still draw brightness, contrast with the original linear math.');
-    expect(getMotionAdjustmentDiagnostics('adjustment-1', effects.slice(2), 'normal').message).not.toContain('Worker GPU');
+    expect(getMotionAdjustmentDiagnostics('adjustment-1', effects.slice(2), 'normal', worker).message).not.toContain('Worker GPU');
+    // The default (main) render host draws the graphs, so the inspector stays quiet there.
+    expect(getMotionAdjustmentDiagnostics('adjustment-1', effects, 'normal').message).not.toContain('Worker GPU');
   });
 });
 

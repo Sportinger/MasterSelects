@@ -99,8 +99,8 @@ describe('MotionAdjustmentTab MD7 authoring', () => {
     expect(diagnostics).toEqual({
       compatible: true,
       effectCount: 2,
-      // A new Brightness (no saved original graph) runs the 2026-10 curve, which the worker GPU matrix does not reproduce.
-      message: '2 supported effects ready on preview, nested comps, targets, and export. Worker GPU render modes still draw brightness with the original linear math.',
+      // The worker GPU note belongs to the opt-in worker render modes only (see colorEffectSavedLook.test.ts).
+      message: '2 supported effects ready on preview, nested comps, targets, and export.',
     });
   });
 

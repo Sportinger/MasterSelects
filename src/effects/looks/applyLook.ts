@@ -2,26 +2,26 @@ import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { COLOR_RECIPE_EFFECT_TYPES } from '../../services/operators/colorEffectGraphs';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { lookEntryOperatorGraph } from './lookEntryGraph';
+import { checkedLookEntryOperatorGraph } from './lookEntryGraph';
 import type { LookDefinition, LookStackEntry } from './types';
 
-export function applyLookToClip(look: LookDefinition, clipId: string): void {
+/** Applies a Look; returns the problems of stored graphs that could not be used (those entries render the current recipe). */
+export function applyLookToClip(look: LookDefinition, clipId: string): string[] {
   const { addClipEffect, updateClipEffect, setClipEffectEnabled } = useTimelineStore.getState();
+  const problems: string[] = [];
   startBatch(`Apply look: ${look.name}`);
   try {
     for (const entry of look.stack) {
-      const effectId = addClipEffect(clipId, entry.effectId);
-      const operatorGraph = lookEntryOperatorGraph(look, entry);
-      if (operatorGraph) {
-        const state = useTimelineStore.getState(), clip = state.clips.find(candidate => candidate.id === clipId);
-        if (clip) state.updateClip(clipId, { effects: clip.effects.map(effect => effect.id === effectId ? { ...effect, operatorGraph } : effect) });
-      }
+      const { graph: operatorGraph, problem } = checkedLookEntryOperatorGraph(look, entry);
+      if (problem) problems.push(problem);
+      const effectId = addClipEffect(clipId, entry.effectId, operatorGraph ? { operatorGraph } : undefined);
       if (Object.keys(entry.params).length > 0) updateClipEffect(clipId, effectId, entry.params);
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }
   } finally {
     endBatch();
   }
+  return problems;
 }
 export function stackFromClipEffects(
   effects: Array<{ type: string; enabled?: boolean; params?: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }>,

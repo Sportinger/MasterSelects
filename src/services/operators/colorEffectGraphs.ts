@@ -157,7 +157,7 @@ export function createDefaultExposureGraph(): EffectOperatorGraph {
   return finish(g, clampRgb(g, 'clamp', g.binary('tone-gamma', 'math.power.rgb', positive, inverse)));
 }
 
-/** Input black/white remap (equal points become a hard threshold, swapped points a negative), gamma, output range. */
+/** Input black/white remap (equal points become a hard per-channel threshold, swapped points a negative), gamma, output range. */
 export function createDefaultLevelsGraph(): EffectOperatorGraph {
   const g = begin();
   const zero = g.number('range-zero', 0);
