@@ -6,6 +6,7 @@ import { FileStorageService, fileStorageService } from './core/FileStorageServic
 import { NativeFileStorageService, nativeFileStorageService } from './core/NativeFileStorageService';
 import { NativeProjectCoreService } from './core/NativeProjectCoreService';
 import { NativeHelperClient } from '../nativeHelper/NativeHelperClient';
+import { canHostNativeHelper } from './core/browserStorageFailure';
 import { ProjectCoreService } from './core/ProjectCoreService';
 import { AnalysisService } from './domains/AnalysisService';
 import { TranscriptService, type StoredTranscript } from './domains/TranscriptService';
@@ -136,6 +137,7 @@ class ProjectFileService {
     return this.nativeCoreService;
   }
   private async ensureNativeBackendReady(): Promise<NativeProjectCoreService | null> {
+    if (!canHostNativeHelper()) return null; // iOS/Android: browser storage only, logged once
     const previousBackend = this._activeBackend;
     const nativeCore = this.ensureNativeBackend();
     const abandonNativeBackend = (): null => {
@@ -156,7 +158,6 @@ class ProjectFileService {
     }
     return nativeCore;
   }
-
 
   /** Get the currently active backend */
   get activeBackend(): ProjectBackend {
@@ -205,7 +206,6 @@ class ProjectFileService {
   getNativeFileStorage(): NativeFileStorageService | null {
     return this.nativeFileStorage;
   }
-
 
   /** Helper to get the active core service */
   private get core(): ProjectCoreService | NativeProjectCoreService {

@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { Logger } from '../../../services/logger';
 import { failProjectLoadProgress } from '../../../services/project/load/loadProgress';
 import { reportProjectSaveFailure } from '../../../services/project/projectSaveStatus';
+import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import {
   projectFileService,
   type RecentProjectEntry,
@@ -227,6 +228,11 @@ export function useToolbarProjectActions({
       setNeedsPermission(false);
       return null;
     } catch (error) {
+      const storageFailure = describeBrowserStorageFailure(error);
+      if (storageFailure) {
+        log.warn('Project creation blocked: browser storage is unavailable', error);
+        return `The project could not be created. ${storageFailure}`;
+      }
       log.error('Project creation failed', error);
       return 'The project could not be created. Please check the selected folder and try again.';
     } finally {

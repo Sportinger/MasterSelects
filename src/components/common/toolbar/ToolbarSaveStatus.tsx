@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { getActiveRepositorySession, getRepositoryLifecycleState, isScratchRepository } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
+import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import './ToolbarSaveStatus.css';
 
 function readStatus() {
   const session = getActiveRepositorySession();
   const lifecycle = getRepositoryLifecycleState();
   if (!session) return lifecycle.error
-    ? { phase: 'failed', label: 'Recovery unavailable', detail: lifecycle.error + ' Changes are not saved in this browser.' }
+    ? { phase: 'failed', label: 'Recovery unavailable', detail: (describeBrowserStorageFailure(lifecycle.error) ?? lifecycle.error) + ' Changes are not saved in this browser.' }
     : { phase: 'saving', label: 'Preparing recovery\u2026', detail: 'Browser recovery is starting. Changes are not saved yet.' };
   const state = session.coordinator.getStatus();
   const local = session.location.kind === 'opfs' ? ' - Browser local' : '';

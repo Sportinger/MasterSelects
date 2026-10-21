@@ -18,6 +18,7 @@ import { PROJECT_FOLDERS } from '../../core/constants';
 import type { ProjectFile } from '../../types/project.types';
 import { directoryForOpfs } from './repositoryLocations';
 import { splitProjectWorkspace, readProjectWorkspace } from './workspaceProjection';
+import { retryTransientStorage } from '../../core/browserStorageFailure';
 
 let installedCleanup = (import.meta.hot?.data?.repositoryInstalledCleanup as (() => void) | undefined) ?? null;
 let projectWorkspace: JsonValue = (import.meta.hot?.data?.repositoryWorkspace as JsonValue | undefined) ?? {};
@@ -127,7 +128,8 @@ export async function reactivateEditorRepository(): Promise<void> {
 export function isScratchRepository(): boolean { const session = getActiveRepositorySession(); return session?.location.kind === 'opfs' && session.location.path.startsWith('repository-scratch/'); }
 export async function ensureEditorScratchRepository(): Promise<void> {
   if (getActiveRepositorySession()) return;
-  await lifecycle.ensureScratch(async () => {
+  // Open-or-create is idempotent (an existing descriptor reopens), so one retry is safe.
+  await retryTransientStorage(() => lifecycle.ensureScratch(async () => {
     if (typeof navigator.storage?.getDirectory !== 'function' || !supportsRepositoryWritableStreams()) {
       throw new RepositoryError('unsupported', 'Browser recovery is unavailable. Update your browser before creating or editing projects.');
     }
@@ -141,7 +143,7 @@ export async function ensureEditorScratchRepository(): Promise<void> {
     prepared.initialize = { entities: domains.entities, journals: domains.journals,
       workspace: Object.fromEntries(splitProjectWorkspace(domains.workspace).map(part => [part.key, part.value])) };
     return prepared;
-  });
+  }), 'Opening scratch recovery');
 }
 if (import.meta.hot) {
   import.meta.hot.dispose(data => { data.repositoryInstalledCleanup = installedCleanup; data.repositoryWorkspace = projectWorkspace;

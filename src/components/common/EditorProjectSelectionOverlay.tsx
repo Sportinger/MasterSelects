@@ -22,6 +22,7 @@ import {
   openStoredProject,
 } from '../../services/projectSync';
 import { getProjectWriteSupportError, resolveProjectRootMode } from '../../services/project/core/projectRootAccess';
+import { describeBrowserStorageFailure } from '../../services/project/core/browserStorageFailure';
 import { validateProjectName } from './projectNameValidation';
 import { Logger } from '../../services/logger';
 import './EditorProjectSelectionOverlay.css';
@@ -31,6 +32,12 @@ const log = Logger.create('ProjectSelection');
 /** A failed project action must say why, and must reach the error log; a bare
  * "could not be opened" left both the person and production diagnostics blind. */
 function reportProjectActionError(action: string, error: unknown, fallback: string): string {
+  // Private Browsing, in-app browsers or low space: explain it instead of reporting a code error.
+  const storageFailure = describeBrowserStorageFailure(error);
+  if (storageFailure) {
+    log.warn(`Project ${action} blocked: browser storage is unavailable`, error);
+    return `${fallback} ${storageFailure}`;
+  }
   log.error(`Project ${action} failed`, error);
   const reason = error instanceof Error ? error.message.trim() : '';
   return reason && reason !== fallback ? `${fallback} ${reason}` : fallback;

@@ -103,6 +103,13 @@ Persistent-storage permission reduces eviction risk but does not prevent a
 user from deleting site data. OPFS projects do not become independent backups
 merely because the browser remembers their names.
 
+WebKit (every iOS/iPadOS browser) can refuse OPFS with an opaque `UnknownError`
+while its storage process resumes, in Private Browsing, in in-app browsers or on
+a nearly full device. Opening the project root and the scratch recovery retries
+once; if storage stays unavailable, project dialogs and the save status explain
+the cause instead of the raw browser text. iOS, iPadOS and Android never try the
+desktop Native Helper.
+
 The Native Helper checks granted paths and negotiates repository write support.
 A connected helper with ordinary file commands does not by itself prove that
 it can safely own a repository writer. Native protocol or ownership failures
