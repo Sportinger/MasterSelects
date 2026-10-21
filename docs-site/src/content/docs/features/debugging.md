@@ -496,6 +496,8 @@ the Reload notice instead of reloading in a loop.
 
 ### Composition video-load failures
 
+`CompositionRenderer` only prepares sources for video, image, vector-animation and generated-canvas clips (text, solid, math scene, transition overlay). Audio, 3D, MIDI and other clip types are owned by other runtimes and are neither loaded nor reported there. When visual clips still end up without any source, it logs one warning, "no sources loaded for N visual clips", with each clip's real `sourceType` and `mediaFileId`; it repeats only when the composition's clip set changes, not on every re-prepare.
+
 `CompositionRenderer` video-load errors include `mediaErrorCode` (1 aborted, 2 network, 3 decode, 4 unsupported source, or null), `readyState`, `networkState`, `fileSize`, and `mimeType`, captured before cleanup resets the media element. These fields distinguish browser-reported failure classes; code 4 alone does not prove an unsupported codec, and a decode failure does not prove a corrupt file. No source URL or raw browser error message is added. Older events without these fields cannot be classified retroactively.
 
 ### Cancelled clip analysis
