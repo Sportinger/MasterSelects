@@ -98,6 +98,11 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // The body scrolls on short screens: bring a new result or error into view.
+  useEffect(() => {
+    if (notice || error) dialog.current?.querySelector<HTMLElement>('[role=status], [role=alert]')?.scrollIntoView?.({ block: 'nearest' });
+  }, [notice, error]);
+
   // Focus the one recommended action (not the name field, which would raise the iPad keyboard).
   const checking = environment.checking;
   useEffect(() => {

@@ -195,7 +195,8 @@ Targeted coverage: `gpuUniformRing.test.ts`, `gpuFrameScopedRenderers.test.ts`
 - Playback is limited to about 60 fps.
 - Scrubbing is limited to about 60 fps unless a fresh video frame arrives, which bypasses the limiter.
 - A render request is consumed only by a frame that reaches the render callback. Frames skipped during device recovery, export, or while editor content publication is blocked (project open or composition switch) keep the request, so the first frame after the gate reopens shows the change. A direct `renderHostPort.render()` made while publication is blocked becomes such a request instead of being dropped.
-- The preview keeps one GPU submission in flight and coalesces newer requests until `onSubmittedWorkDone()` settles. A completion fence that does not settle within 1 second releases the queue, renders the newest request, and logs `Preview GPU completion did not settle` with a running count, so a stalled fence can no longer freeze the preview until a reload.
+- During playback and scrubbing the preview keeps one GPU submission in flight and coalesces newer requests until `onSubmittedWorkDone()` settles; a paused preview admits a second submission so a seek or edit is shown at once even when an earlier fence settles late (WebKit). A completion fence that does not settle within 1 second releases the queue, renders the newest request, and logs `Preview GPU completion did not settle` with a running count, so a stalled fence can no longer freeze the preview until a reload.
+- Paused and scrub-settle holds re-present the previous composite only while the current layers show the same clips and sources; a frame whose raster or nested composition is not ready yet on another clip renders empty instead of keeping the previous clip's picture, and canvas/image rasters that were not collected request follow-up frames.
 
 ### Watchdog
 

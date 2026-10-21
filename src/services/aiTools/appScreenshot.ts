@@ -1,5 +1,6 @@
 import type { Options as ModernScreenshotOptions } from 'modern-screenshot';
 
+import { renderHostPort } from '../render/renderHostPort';
 import type { ToolResult } from './types';
 
 const DEFAULT_SCALE = 1;
@@ -9,6 +10,28 @@ const MAX_OUTPUT_DIMENSION = 8_192;
 const MAX_OUTPUT_PIXELS = 12_000_000;
 const MAX_SOURCE_DIMENSION = 32_768;
 const MAX_SETTLE_MS = 5_000;
+// WebKit reads a WebGPU canvas back from its presentation swap chain, which can hold a
+// frame from before the latest present (an iPad screenshot showed the previous clip's
+// text while the editor had already drawn the new one). Presenting the current state
+// on a few consecutive frames leaves every swap buffer with the frame on screen.
+const PREVIEW_PRESENT_FRAMES = 3;
+const FRAME_WAIT_FALLBACK_MS = 100;
+
+function nextFrame(): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, FRAME_WAIT_FALLBACK_MS);
+    requestAnimationFrame(() => { clearTimeout(timer); resolve(); });
+  });
+}
+
+/** Re-presents the preview so a DOM capture of its WebGPU canvas shows the current frame. */
+export async function settlePreviewPresentation(frames = PREVIEW_PRESENT_FRAMES): Promise<void> {
+  for (let frame = 0; frame < frames; frame += 1) {
+    renderHostPort.requestRender();
+    await nextFrame();
+  }
+  await nextFrame();
+}
 
 interface CaptureGeometry {
   appliedScale: number;
@@ -109,6 +132,7 @@ export async function handleCaptureAppScreenshot(
     if (wait > 0) {
       await new Promise((resolve) => setTimeout(resolve, wait));
     }
+    await settlePreviewPresentation();
 
     const { domToPng } = await import('modern-screenshot');
     const dataUrl = await domToPng(root, captureOptions(geometry));

@@ -8,9 +8,18 @@ import { AI_TOOLS } from '../../src/services/aiTools/definitions';
 import { getRegisteredToolHandlerNames } from '../../src/services/aiTools/handlers';
 import { checkToolAccess, getToolPolicy } from '../../src/services/aiTools/policy';
 
-const { domToPng } = vi.hoisted(() => ({ domToPng: vi.fn() }));
+const { domToPng, requestRender } = vi.hoisted(() => ({ domToPng: vi.fn(), requestRender: vi.fn() }));
 
 vi.mock('modern-screenshot', () => ({ domToPng }));
+vi.mock('../../src/services/render/renderHostPort', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/services/render/renderHostPort')>();
+  return {
+    ...actual,
+    renderHostPort: new Proxy(actual.renderHostPort, {
+      get: (target, key) => key === 'requestRender' ? requestRender : Reflect.get(target, key),
+    }),
+  };
+});
 
 function setDimension(target: object, property: string, value: number): void {
   Object.defineProperty(target, property, { configurable: true, value });
@@ -62,6 +71,14 @@ describe('captureAppScreenshot', () => {
       outputPixels: { height: 900, width: 1_440 },
       sourceCssPixels: { height: 900, width: 1_440 },
     });
+  });
+
+  it('re-presents the preview on several frames before reading its canvas', async () => {
+    const order: string[] = [];
+    requestRender.mockImplementation(() => { order.push('present'); });
+    domToPng.mockImplementation(async () => { order.push('capture'); return 'data:image/png;base64,AAAA'; });
+    await handleCaptureAppScreenshot({});
+    expect(order).toEqual(['present', 'present', 'present', 'capture']);
   });
 
   it('captures full-page dimensions and safely reduces oversized output', () => {

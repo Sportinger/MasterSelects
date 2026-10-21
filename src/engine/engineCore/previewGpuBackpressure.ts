@@ -1,7 +1,14 @@
 import { Logger } from '../../services/logger';
+import type { Layer } from '../core/types';
 import { retainHmrSingleton } from './hmrSingleton';
 
-interface PreviewQueue { busy: boolean; requestLatest?: () => void; stalledFences: number }
+interface PreviewQueue {
+  /** One entry per submission whose completion fence has not settled; `null` marks a continuous frame. */
+  inFlight: Array<string | null>;
+  requestLatest?: () => void;
+  stalledFences: number;
+  saturated: boolean;
+}
 const queues = retainHmrSingleton({ hot: import.meta.hot?.data ? import.meta.hot : undefined,
   key: 'previewGpuQueues', create: () => new WeakMap<GPUDevice, PreviewQueue>() });
 const log = Logger.create('PreviewGpuBackpressure');
@@ -14,23 +21,87 @@ const log = Logger.create('PreviewGpuBackpressure');
  */
 export const PREVIEW_GPU_FENCE_TIMEOUT_MS = 1000;
 
-/** Keep one preview submission in flight. Skipped requests retain no layers, media or old times. */
+/**
+ * Safety bound for distinct paused targets in flight. Paused requests are discrete
+ * (a seek, a new clip, an edit) and arrive at input rate, so this is only reached when
+ * fences stop settling; reaching it is logged, never silent.
+ */
+export const PREVIEW_GPU_PAUSED_TARGET_LIMIT = 6;
+
+/**
+ * How a preview request is admitted.
+ * - `continuous` (playback, scrubbing): one submission in flight; newer frames coalesce
+ *   so a slow GPU drops stale frames instead of queueing them.
+ * - paused with a `target`: a request for a new picture is submitted at once, however
+ *   many earlier paused submissions are still pending (WebKit settles fences late). Only
+ *   a request for a target that is already in flight waits and coalesces.
+ */
+export interface PreviewSubmissionPolicy {
+  continuous: boolean;
+  /** Identity of the requested picture: timeline time plus layer identities. */
+  target?: string;
+}
+
+const CONTINUOUS: PreviewSubmissionPolicy = { continuous: true };
+
+/** Identity of a paused preview request: composition, timeline time and layer identities. */
+export function previewSubmissionTarget(layers: ReadonlyArray<Layer | null | undefined>,
+  frameContext?: { compositionId: string; timelineTimeSeconds: number }): string {
+  const time = frameContext ? `${frameContext.compositionId}@${frameContext.timelineTimeSeconds}` : 'store';
+  const ids = layers.map(layer => (layer ? `${layer.id}:${layer.sourceClipId ?? ''}` : '-'));
+  return `${time}|${ids.join(',')}`;
+}
+
+/** Policy for a preview render: continuous while playing or scrubbing, otherwise keyed by its target. */
+export function previewSubmissionPolicy(continuous: boolean, layers: ReadonlyArray<Layer | null | undefined>,
+  frameContext?: { compositionId: string; timelineTimeSeconds: number }): PreviewSubmissionPolicy {
+  return continuous ? CONTINUOUS : { continuous: false, target: previewSubmissionTarget(layers, frameContext) };
+}
+
+/** Diagnostics for the preview queue of one GPU device. */
+export function getPreviewGpuBackpressureState(device: GPUDevice | null):
+  { inFlight: number; pendingRequest: boolean; stalledFences: number } | null {
+  const state = device ? queues.get(device) : undefined;
+  return state ? { inFlight: state.inFlight.length, pendingRequest: Boolean(state.requestLatest),
+    stalledFences: state.stalledFences } : null;
+}
+
+function admits(state: PreviewQueue, policy: PreviewSubmissionPolicy): boolean {
+  if (state.inFlight.length === 0) return true;
+  if (policy.continuous || policy.target === undefined) return false;
+  if (state.inFlight.includes(policy.target)) return false;
+  if (state.inFlight.length >= PREVIEW_GPU_PAUSED_TARGET_LIMIT) {
+    if (!state.saturated) {
+      state.saturated = true;
+      log.warn('Preview GPU queue saturated; deferring a paused frame until a fence settles', {
+        inFlight: state.inFlight.length, limit: PREVIEW_GPU_PAUSED_TARGET_LIMIT, stalledFences: state.stalledFences,
+      });
+    }
+    return false;
+  }
+  return true;
+}
+
+/** Keep the preview's submissions in flight bounded. Skipped requests retain no layers, media or old times. */
 export function renderWithPreviewBackpressure(device: GPUDevice | null, exact: boolean,
-  render: () => void, requestLatest: () => void): void {
+  render: () => void, requestLatest: () => void, policy: PreviewSubmissionPolicy = CONTINUOUS): void {
   // Export and RAM-preview generation own exact-frame sequencing and must never drop frames.
   if (!device || exact) { render(); return; }
   let state = queues.get(device);
-  if (!state) { state = { busy: false, stalledFences: 0 }; queues.set(device, state); }
-  if (state.busy) { state.requestLatest = requestLatest; return; }
+  if (!state) { state = { inFlight: [], stalledFences: 0, saturated: false }; queues.set(device, state); }
+  if (!admits(state, policy)) { state.requestLatest = requestLatest; return; }
   const queue = state;
-  queue.busy = true;
+  const entry = policy.continuous ? null : policy.target ?? null;
+  queue.inFlight.push(entry);
   let settled = false;
   let timeout: ReturnType<typeof setTimeout> | null = null;
   const release = (completed: boolean) => {
     if (settled) return;
     settled = true;
     if (timeout !== null) clearTimeout(timeout);
-    queue.busy = false;
+    const index = queue.inFlight.indexOf(entry);
+    if (index >= 0) queue.inFlight.splice(index, 1);
+    queue.saturated = false;
     const wake = queue.requestLatest;
     queue.requestLatest = undefined;
     // Device loss recovery owns the next render after a rejected fence.

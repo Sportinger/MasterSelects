@@ -195,6 +195,10 @@ elsewhere. Desktop and Android behave as described above.
   outside Safari under More options) and stays until the page runs from the Home Screen or
   `navigator.storage.persisted()` returns true; it is not dismissible. While
   persistence is still being checked it stays hidden, so it does not flicker.
+- The dialog renders above the workspace bar and fits the visible viewport
+  (dynamic viewport height minus the safe areas, e.g. iPad landscape at
+  1180x734): its content scrolls and the footer with **Close**/**Done** stays
+  visible. A new result or error scrolls into view.
 - **In the Home Screen app** there is no Home Screen step and no hint for
   browser-local projects: browser storage is the permanent place. A temporary
   project still gets Keep in this browser first and the `.msproj` download as

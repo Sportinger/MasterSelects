@@ -152,6 +152,21 @@ describe('SavePermanentlyDialog', () => {
     expect(optionTitles()).toEqual(['Download a backup', 'Ask to keep it']);
   });
 
+  it('renders above the workspace bar with a scrolling body and a footer that keeps Close/Done visible', () => {
+    state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab', persistentBrowserStorage: true };
+    const { container } = renderDialog({ activeTemporary: false });
+    const dialog = screen.getByRole('dialog');
+    // Portaled to the body: the toolbar's stacking context sits below the workspace bar.
+    expect(container.contains(dialog)).toBe(false);
+    expect(dialog.closest('.project-name-dialog-backdrop')?.parentElement).toBe(document.body);
+    const body = dialog.querySelector('.save-permanently-body');
+    const footer = dialog.querySelector('.save-permanently-footer');
+    expect(body?.querySelector('.save-permanently-options')).toBeTruthy();
+    expect(footer?.parentElement).toBe(dialog);
+    expect(body?.contains(footer!)).toBe(false);
+    expect(footer?.textContent).toBe('Close');
+  });
+
   it('treats browser storage as permanent in the Home Screen app, archive as backup', () => {
     state.environment = { ...state.environment, appleMobile: true, homeScreen: 'home-screen-app', persistentBrowserStorage: true };
     renderDialog();

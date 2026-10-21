@@ -366,6 +366,7 @@ export class RenderDispatcher {
       isPlaying,
     });
     const importTime = performance.now() - t1;
+    this.previewCompositeHold.requestFrameForMissingRasters(layers, layerData, isPlaying || isExporting);
     const debugSnapshot: RenderDispatcherDebugSnapshot = this.debugSnapshotFacet.createRenderDebugSnapshot(
       layers,
       layerData,
@@ -508,7 +509,8 @@ export class RenderDispatcher {
     if (hasDeferredNestedComp && isExporting) {
       throw new Error('Export frame deferred because a nested composition was not ready');
     }
-    if (hasDeferredNestedComp && layerData.length === 0 && !isExporting) {
+    if (hasDeferredNestedComp && layerData.length === 0 && !isExporting
+      && this.previewCompositeHold.showsSameSources(layers, frameContext)) {
       const heldCompositeRendered = this.previewCompositeHold.renderHeld(device);
       if (heldCompositeRendered) {
         this.recordMainPreviewFrame('nested-stall-hold', undefined, {
