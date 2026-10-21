@@ -485,6 +485,21 @@ deploy, but the script names them so the sync can be committed afterwards. Any o
 file the build changes stops it. The script also runs when started on Windows, where
 its path is a drive path rather than a `file://` string.
 
+Both deploy scripts start their tools through `scripts/run-command.mjs` without a
+shell: `git` and `gh` run directly, `npx wrangler` runs the project's own
+`node_modules/wrangler/bin/wrangler.js` with node, and only the `npm`/`npx` `.cmd`
+shims on Windows go through `cmd.exe` with every argument quoted and escaped (no
+DEP0190 warning, no unescaped arguments). A missing program is named (`git was not
+found`), and a missing or logged-out GitHub CLI stops the CI check with "GitHub CLI gh
+was not found / is not authenticated; run `gh auth login`". `--dist <dir>` other than
+`dist` requires `--skip-build`, because `build:deploy` always writes `dist`; build
+there with `vite build --outDir <dir>` first. The build plugins in
+`tools/buildAssetPlugins.ts` write the FFmpeg core and the compressed SAM2 runtime into
+the resolved `build.outDir`/`build.assetsDir`, and write nothing when the dev server
+closes. `.gitattributes` keeps `*.mjs`, `*.cjs`, `*.sh` and other shebang scripts LF on
+Windows checkouts, since a CRLF after `#!` breaks shells and vitest imports;
+`tests/unit/scriptLineEndings.test.ts` guards that.
+
 The pre-module bootstrap (`public/app-bootstrap.js`) only records the running version
 and logs `[Version] Update detected`. It no longer reloads or clears Cache Storage:
 the loaded page already is the deployed build, so that reload doubled every recovery
