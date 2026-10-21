@@ -1,5 +1,6 @@
 import type { Keyframe, AnimatableProperty } from '../types';
 import { interpolateKeyframes } from './keyframeInterpolation';
+import { keyframesForProperty } from './keyframePropertyIndex';
 
 /**
  * Speed Integration Utility
@@ -27,23 +28,7 @@ export function calculateSourceTime(
   clipLocalTime: number,
   defaultSpeed: number
 ): number {
-  // Filter speed keyframes and sort by time
-  const speedKeyframes = keyframes
-    .filter(k => k.property === 'speed')
-    .sort((a, b) => a.time - b.time);
-
-  // No speed keyframes - simple multiplication
-  if (speedKeyframes.length === 0) {
-    return clipLocalTime * defaultSpeed;
-  }
-
-  // Single keyframe - use that constant speed
-  if (speedKeyframes.length === 1) {
-    return clipLocalTime * speedKeyframes[0].value;
-  }
-
-  // Multiple keyframes - integrate using trapezoidal rule
-  return integrateSpeedCurve(keyframes, speedKeyframes, clipLocalTime, defaultSpeed);
+  return integrateKeyframedRate(keyframes, 'speed' as AnimatableProperty, clipLocalTime, defaultSpeed);
 }
 
 /**
@@ -59,21 +44,11 @@ export function getSpeedAtTime(
 }
 
 /**
- * Integrate the speed curve from 0 to endTime (see integrateKeyframedRate).
- */
-function integrateSpeedCurve(
-  keyframes: Keyframe[],
-  speedKeyframes: Keyframe[],
-  endTime: number,
-  defaultSpeed: number
-): number {
-  return integrateRateSamples(keyframes, speedKeyframes, 'speed' as AnimatableProperty, endTime, defaultSpeed);
-}
-
-/**
  * Area under any keyframed rate curve (value per second) from 0 to `endTime`: the distance a
  * keyframed Speed or Spin has travelled. Used for clip speed and for effect rate parameters
- * (EffectParam.integratedAs), so a keyed ramp moves continuously instead of jumping.
+ * (EffectParam.integratedAs), so a keyed ramp moves continuously instead of jumping. Without keys
+ * it is endTime × defaultValue, with one key endTime × its value; with more keys an `endTime` at or
+ * before 0 gives 0 (playback never asks for it). Cost per call: O(log K) (see rateIntegralTable).
  */
 export function integrateKeyframedRate(
   keyframes: Keyframe[],
@@ -81,63 +56,102 @@ export function integrateKeyframedRate(
   endTime: number,
   defaultValue: number,
 ): number {
-  const rateKeyframes = keyframes.filter(k => k.property === property).sort((a, b) => a.time - b.time);
-  if (rateKeyframes.length === 0) return endTime * defaultValue;
-  if (rateKeyframes.length === 1) return endTime * rateKeyframes[0].value;
-  return integrateRateSamples(keyframes, rateKeyframes, property, endTime, defaultValue);
+  const keys = keyframesForProperty(keyframes, property);
+  if (keys.length === 0) return endTime * defaultValue;
+  if (keys.length === 1) return endTime * keys[0].value;
+  if (!(endTime > 0)) return 0;
+  const table = rateIntegralTable(keyframes, property, keys);
+  return rateIntegralTo(keyframes, property, table, endTime) - rateIntegralTo(keyframes, property, table, 0);
 }
 
 /**
- * Adaptive trapezoidal integration of a keyframed curve from 0 to endTime:
- * 1. Sample the curve at keyframe times and ten intermediate points per segment
- *    (more accurate for bezier curves)
- * 2. Trapezoidal rule: integral = sum of (value_i + value_{i+1}) / 2 * dt; a hold keyframe stays flat
+ * Signed area under a keyframed rate curve from `from` to `to` (either may be negative or lie
+ * outside the keys): before the first key the curve holds the first key's value, after the last key
+ * the last one's. Cost per call: O(log K).
  */
-function integrateRateSamples(
+export function integrateKeyframedRateBetween(
   keyframes: Keyframe[],
-  rateKeyframes: Keyframe[],
   property: AnimatableProperty,
-  endTime: number,
-  defaultValue: number
+  from: number,
+  to: number,
+  defaultValue: number,
 ): number {
-  // Edge cases
-  if (!(endTime > 0)) return 0;
+  const keys = keyframesForProperty(keyframes, property);
+  if (keys.length === 0) return (to - from) * defaultValue;
+  if (keys.length === 1) return (to - from) * keys[0].value;
+  const table = rateIntegralTable(keyframes, property, keys);
+  return rateIntegralTo(keyframes, property, table, to) - rateIntegralTo(keyframes, property, table, from);
+}
 
-  // Collect all sample points (keyframe times + intermediate samples)
-  const samplePoints: number[] = [0];
-  for (const kf of rateKeyframes) {
-    if (kf.time > 0 && kf.time < endTime) {
-      samplePoints.push(kf.time);
+/**
+ * Integration of a keyframed rate is a lookup into a table of cumulative segment integrals, built
+ * once per keyframe array (timeline edits replace keyframe arrays and objects, as for
+ * keyframesForProperty) and property. A query binary-searches its segment and integrates only the
+ * partial last segment, so playback no longer integrates every segment from 0 on every frame.
+ *
+ * Each segment between two key times is sampled at SAMPLES_PER_SEGMENT equal steps with the
+ * trapezoidal rule (exact for linear segments, accurate for eased and bezier ones); a hold key
+ * stays flat until the next key.
+ */
+interface RateIntegralTable {
+  readonly keys: readonly Keyframe[];
+  /** cumulative[i] = area from keys[0].time to keys[i].time. */
+  readonly cumulative: Float64Array;
+}
+
+const SAMPLES_PER_SEGMENT = 10;
+const rateIntegralTables = new WeakMap<readonly Keyframe[], Map<AnimatableProperty, RateIntegralTable>>();
+
+function rateIntegralTable(keyframes: Keyframe[], property: AnimatableProperty, keys: readonly Keyframe[]): RateIntegralTable {
+  let byProperty = rateIntegralTables.get(keyframes);
+  if (!byProperty) { byProperty = new Map(); rateIntegralTables.set(keyframes, byProperty); }
+  let table = byProperty.get(property);
+  if (!table) {
+    const cumulative = new Float64Array(keys.length);
+    for (let i = 1; i < keys.length; i++) {
+      cumulative[i] = cumulative[i - 1] + segmentArea(keyframes, property, keys[i - 1], keys[i].time);
     }
+    table = { keys, cumulative };
+    byProperty.set(property, table);
   }
-  samplePoints.push(endTime);
+  return table;
+}
 
-  const samplesPerSegment = 10;
-  const allSamplePoints: number[] = [];
-  for (let i = 0; i < samplePoints.length - 1; i++) {
-    const start = samplePoints[i];
-    const end = samplePoints[i + 1];
-    const dt = (end - start) / samplesPerSegment;
-    for (let j = 0; j < samplesPerSegment; j++) {
-      allSamplePoints.push(start + j * dt);
-    }
+/** Area from the first key's time to `time` (negative before it). */
+function rateIntegralTo(keyframes: Keyframe[], property: AnimatableProperty, { keys, cumulative }: RateIntegralTable, time: number): number {
+  const first = keys[0], last = keys.length - 1;
+  if (time <= first.time) return (time - first.time) * first.value;
+  if (time >= keys[last].time) return cumulative[last] + (time - keys[last].time) * keys[last].value;
+  // The last key at or before `time`: with equal times the segment starts at the last of them.
+  let lo = 0, hi = last;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >>> 1;
+    if (keys[mid].time <= time) lo = mid; else hi = mid;
   }
-  allSamplePoints.push(endTime);
+  return cumulative[lo] + segmentArea(keyframes, property, keys[lo], time);
+}
 
-  // Remove duplicates and sort
-  const uniqueSamples = [...new Set(allSamplePoints)].sort((a, b) => a - b);
-
-  let integral = 0;
-  for (let i = 0; i < uniqueSamples.length - 1; i++) {
-    const t0 = uniqueSamples[i];
-    const t1 = uniqueSamples[i + 1];
-    const value0 = interpolateKeyframes(keyframes, property, t0, defaultValue);
-    const segment = rateKeyframes.findLast(key => key.time <= t0);
-    const value1 = segment?.hold ? value0 : interpolateKeyframes(keyframes, property, t1, defaultValue);
-    // Trapezoidal rule: area = (y0 + y1) / 2 * width
-    integral += (value0 + value1) / 2 * (t1 - t0);
+/**
+ * Area of the segment that starts at `segmentKey`, from its time to `end` (at most the next key).
+ * The curve leaves a key at that key's value, so a second key at the same time is a jump, not a
+ * ramp over the first sample step; a hold key stays flat.
+ */
+function segmentArea(keyframes: Keyframe[], property: AnimatableProperty, segmentKey: Keyframe, end: number): number {
+  const start = segmentKey.time;
+  if (!(end > start)) return 0;
+  if (segmentKey.hold) return segmentKey.value * (end - start);
+  const dt = (end - start) / SAMPLES_PER_SEGMENT;
+  let area = 0;
+  let t0 = start;
+  let value0 = segmentKey.value;
+  for (let step = 1; step <= SAMPLES_PER_SEGMENT; step++) {
+    const t1 = step === SAMPLES_PER_SEGMENT ? end : start + step * dt;
+    const value1 = interpolateKeyframes(keyframes, property, t1, segmentKey.value);
+    area += (value0 + value1) / 2 * (t1 - t0);
+    t0 = t1;
+    value0 = value1;
   }
-  return integral;
+  return area;
 }
 
 /**
@@ -179,12 +193,8 @@ export function calculateTimelineDuration(
   // Handle edge cases
   if (sourceDuration <= 0) return 0;
 
-  const speedKeyframes = keyframes
-    .filter(k => k.property === 'speed')
-    .sort((a, b) => a.time - b.time);
-
   // No keyframes - simple division using absolute speed
-  if (speedKeyframes.length === 0) {
+  if (keyframesForProperty(keyframes, 'speed' as AnimatableProperty).length === 0) {
     const absSpeed = Math.abs(defaultSpeed);
     return absSpeed > 0.001 ? sourceDuration / absSpeed : sourceDuration * 1000; // Cap at 1000x duration
   }

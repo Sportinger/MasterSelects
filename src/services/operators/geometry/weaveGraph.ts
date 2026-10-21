@@ -81,8 +81,9 @@ export function createWaveStrandsGraph(): EffectOperatorGraph {
 }
 
 // New Weaves start as a smaller sheet (about two thirds of the frame width, three fifths of its height)
-// in a softer, darker wool, so the clip under it stays readable. Saved Weaves store their graph and keep
-// their look (the 2.4 × 1.6 sheet with 24 × 16 threads in preset wool).
+// in a softer, darker wool, so the clip under it stays readable; its 40 × 24 cloth cells are square
+// (0.04 × 0.04). Saved Weaves store their graph and keep their look (the 2.4 × 1.6 sheet with
+// 24 × 16 threads in preset wool and a 40 × 27 cloth).
 const FABRIC_NODES: Spec[] = [
   ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 16, wefts: 10, width: 1.6, height: 0.96, crimp: 0.03, resolution: 16 }],
   ['yarn', 'geometry.yarn-profile', 1320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
@@ -96,7 +97,7 @@ const FABRIC_NODES: Spec[] = [
 const CLOTH_NODES: Spec[] = [
   ['wind', 'forces.wind', 1320, 620, { direction: [0.2, 0, 1], strength: 0.35, gust: 0.5 }],
   ['swirl', 'forces.turbulence', 1320, 860, { strength: 0.15, frequency: 1.5 }],
-  ['cloth', 'geometry.cloth-sheet', 1640, 620, { columns: 40, rows: 27, width: 1.6, height: 0.96, pin: 'corners', stretch: 0.9, bend: 0.6,
+  ['cloth', 'geometry.cloth-sheet', 1640, 620, { columns: 40, rows: 24, width: 1.6, height: 0.96, pin: 'corners', stretch: 0.9, bend: 0.6,
     damping: 0.5, substeps: 6, preroll: 2 }],
   ['bind', 'geometry.surface-bind', 2280, 80, { height: 1 }],
 ];

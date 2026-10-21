@@ -1,9 +1,9 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { withLegacyMirrorPixelControls } from '../../services/operators/mirrorPixelGraphUpgrade';
 import { COLOR_RECIPE_EFFECT_TYPES } from '../../services/operators/colorEffectGraphs';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { checkedLookEntryOperatorGraph } from './lookEntryGraph';
+import { checkedLookEntryOperatorGraph, lookEntryParams } from './lookEntryGraph';
+import { withLegacyDefaultParams, withoutRuntimeTravelParams } from '../index';
 import type { LookDefinition, LookStackEntry } from './types';
 
 /** Applies a Look; returns the problems of stored graphs that could not be used (those entries render the current recipe). */
@@ -17,7 +17,7 @@ export function applyLookToClip(look: LookDefinition, clipId: string): string[] 
       if (problem) problems.push(problem);
       const effectId = addClipEffect(clipId, entry.effectId, operatorGraph ? { operatorGraph } : undefined);
       // A custom Look saved before an effect gained controls lacks them: give them the values that keep its look.
-      const params = look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params);
+      const params = lookEntryParams(look, entry);
       if (Object.keys(params).length > 0) updateClipEffect(clipId, effectId, params);
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }
@@ -26,15 +26,21 @@ export function applyLookToClip(look: LookDefinition, clipId: string): string[] 
   }
   return problems;
 }
+/**
+ * A Look stack from clip effects. A parameter an instance does not store renders at its
+ * `legacyDefault` (saved before the parameter existed); the entry stores that value explicitly, so the
+ * Look applies and previews as the clip looked rather than with the new default.
+ */
 export function stackFromClipEffects(
   effects: Array<{ type: string; enabled?: boolean; params?: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }>,
 ): LookStackEntry[] {
   return effects.map((effect) => ({
     effectId: effect.type,
     enabled: effect.enabled !== false,
-    params: Object.fromEntries(Object.entries(effect.params ?? {}).filter(([, value]) => (
-      typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
-    ))) as Record<string, number | boolean | string>,
+    params: withoutRuntimeTravelParams(effect.type, withLegacyDefaultParams(effect.type, Object.fromEntries(
+      Object.entries(effect.params ?? {}).filter(([, value]) => (
+        typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
+      ))) as Record<string, number | boolean | string>)),
     // Color graphs are small and self-contained; other graphs may reference clip resources.
     ...(effect.operatorGraph && COLOR_RECIPE_EFFECT_TYPES.has(effect.type) ? { operatorGraph: structuredClone(effect.operatorGraph) } : {}),
   }));

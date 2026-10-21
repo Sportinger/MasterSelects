@@ -301,7 +301,10 @@ Rotation keyframes that start a segment show the active path next to the keyfram
 Speed is a first-class animatable property in the UI.
 
 - The store maps speed to source time through integration of the speed curve.
-- Variable speed uses trapezoidal integration for smooth ramps.
+- Variable speed uses trapezoidal integration for smooth ramps. The cumulative area at
+  every key is cached per keyframe array, so a frame looks up its segment and integrates
+  only that part (O(log K) instead of every segment from 0). Effect rates such as
+  Perspective Grid Speed use the same integration.
 - Negative values play the source backwards.
 - The duration math uses absolute speed for inverse duration calculation and handles zero defensively.
 

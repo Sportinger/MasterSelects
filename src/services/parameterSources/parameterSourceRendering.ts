@@ -1,5 +1,6 @@
 import type { Effect } from '../../types/effects';
 import type { Keyframe } from '../../types/keyframes';
+import type { ParameterSourceBinding } from '../../types/parameterSources';
 import { compileRuntimeColorGrade, ensureColorCorrectionState, getActiveColorVersion } from '../../types/colorCorrection';
 import { interpolateKeyframes } from '../../utils/keyframeInterpolation';
 import { createParameterSourceEvaluator } from './parameterSourceEvaluation';
@@ -25,26 +26,38 @@ export function applyParameterSourcesToEffects(clip: ParameterSourceClip, keys: 
       && ((binding.source && binding.enabled !== false) || binding.localMode === 'constant'));
     if (!entries.length) return effect;
     const params = { ...effect.params };
-    for (const [path] of entries) {
+    for (const [path, binding] of entries) {
       const name = path.slice(prefix.length);
       params[name] = evaluator.resolve(path).value;
-      dropKeyedRateTravel(effect, name, params);
+      reportOnce(effect, name, dropKeyedRateTravel(effect, name, params, binding));
     }
     return { ...effect, params };
   });
 }
 
-/** A rate a source drives (Speed, Spin) moves at rate × time: the travel integrated from its keyframes
- * would otherwise win and the source would be ignored without a word (EffectParam.integratedAs). */
-function dropKeyedRateTravel(effect: Effect, name: string, params: Effect['params']): void {
+/**
+ * A rate (Speed, Spin) whose binding overrides its keyframes moves at rate × time: the travel
+ * integrated from those keyframes (EffectParam.integratedAs) would otherwise win, and the source or
+ * the Constant mode would be ignored without a word. Removes the travel from `params` and returns
+ * the note to log, or undefined when the parameter has no keyed travel.
+ */
+export function dropKeyedRateTravel(effect: Pick<Effect, 'type' | 'name'>, name: string, params: Effect['params'],
+  binding: Pick<ParameterSourceBinding, 'source' | 'enabled' | 'localMode'>): string | undefined {
   const travel = getEffect(effect.type)?.params[name]?.integratedAs;
-  if (!travel || !(travel in params)) return;
+  if (!travel || !(travel in params)) return undefined;
   delete params[travel];
+  return binding.source && binding.enabled !== false
+    ? `${effect.name} ${name} is driven by a source, so it runs at ${name} × time; its keyframes do not set the travelled distance.`
+    : `${effect.name} ${name} is set to Constant, so it runs at its constant value × time; its keyframes are ignored.`;
+}
+
+function reportOnce(effect: Effect, name: string, note: string | undefined): void {
+  if (!note) return;
   const key = `${effect.id}\0${name}`;
   if (reportedSourceRates.has(key)) return;
   if (reportedSourceRates.size > 256) reportedSourceRates.clear();
   reportedSourceRates.add(key);
-  log.warn(`${effect.name} ${name} is driven by a source, so it runs at ${name} × time; its keyframes do not set the travelled distance.`);
+  log.warn(note);
 }
 const reportedSourceRates = new Set<string>();
 

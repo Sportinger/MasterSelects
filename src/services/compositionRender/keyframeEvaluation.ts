@@ -27,8 +27,9 @@ export function evaluateCompositionClipTransform(
   stabilizationEnabled?: boolean,
   sourceClip?: Partial<ParameterSourceClip>,
 ): ClipTransform {
+  // Pass the clip's own array: the keyframe property index is cached per array (a copy re-sorts every key).
   const interpolated = keyframes?.length
-    ? getInterpolatedClipTransform([...keyframes], localTime, baseTransform, { stabilizationEnabled })
+    ? getInterpolatedClipTransform(keyframes as Keyframe[], localTime, baseTransform, { stabilizationEnabled })
     : baseTransform;
   return sourceClip?.nodeGraph?.parameterSources && typeof sourceClip.startTime === 'number'
     ? applyParameterSourcesToTransform({ ...sourceClip, startTime: sourceClip.startTime, effects: sourceClip.effects ?? [],

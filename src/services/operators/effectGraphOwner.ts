@@ -32,7 +32,7 @@ import { migrateAnalogSignalGraph } from './analogSignalMigration';
 import { COLOR_RECIPE_EFFECT_TYPES, createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
 import { createLegacyColorEffectGraph } from './legacyColorEffectGraphs';
 import { ORIGINAL_COLOR_PRESENTATION } from './effectPresentationPlans';
-import { getEffect } from '../../effects';
+import { getEffect, withoutRuntimeTravelParams } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
 import { createDefaultContextualEffectGraph, type EditableContextualEffectType } from './contextualEffectGraphs';
 import { createDefaultSamplingEffectGraph, type EditableSamplingEffectType } from './samplingEffectGraphs';
@@ -280,8 +280,12 @@ export function migrateLoadedEffectOperatorGraph(effect: Effect): Effect {
 
 /** Converts the former JSON parameter into the canonical effect-owned field.
  * Canonical data always wins, but is still validated before it can enter runtime state. */
-/** Name the effect a failed migration belongs to; a bare graph error leaves the project unopenable without a clue. */
+/** Name the effect a failed migration belongs to; a bare graph error leaves the project unopenable without a clue.
+ * Every persisted effect passes here (project load and save, nested compositions, presets), so it also
+ * drops runtime-only travel saved before 2026-10-21 (withoutRuntimeTravelParams). */
 export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
+  const params = withoutRuntimeTravelParams(effect.type, effect.params);
+  if (params !== effect.params) effect = { ...effect, params };
   try { return migratePersistedEffectGraph(effect); } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`Effect "${effect.name}" (${effect.type}): ${reason}`, { cause: error });

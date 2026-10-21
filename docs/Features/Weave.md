@@ -201,8 +201,9 @@ last curves rather than inventing a remaining parent.
 
 A new Weave effect starts with a plain weave of fuzzy three-ply yarns (16 warps and
 10 wefts over 1.6 × 0.96 scene units, about two thirds of the frame wide, in a muted
-grey custom wool) on a sail held at its corners. Weaves saved before 2026-10-21 keep
-the graph stored with them (the 2.4 × 1.6 sheet with 24 × 16 threads in white wool):
+grey custom wool) on a sail held at its corners, simulated as 40 × 24 square cloth
+cells. Weaves saved before 2026-10-21 keep the graph stored with them (the 2.4 × 1.6
+sheet with 24 × 16 threads in white wool and a 40 × 27 cloth):
 
 | Group | What it does | Exposed values |
 |---|---|---|

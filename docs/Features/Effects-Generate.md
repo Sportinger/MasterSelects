@@ -256,11 +256,21 @@ Shared helpers for finite reads and choice warnings live in
   limits: Columns 2000, Row Density 1000, Line Width 1000, Horizon Fade 100.
 - **Keyframed rates.** Speed and Spin declare `integratedAs`. The timeline and the
   composition evaluator (nested compositions, transitions, export) share one keyframe
-  step that adds the distance a keyed rate has travelled: v(0) × clip start + the area
-  under the curve, so it equals rate × time while the rate is constant and adding the
-  first key does not move the pattern. Unkeyed, the rate runs from the timeline (or
-  composition) time. The travel values are runtime-only: stored ones are dropped and
-  tools do not store them. Scroll and hue are wrapped on the CPU in double precision.
+  step (`evaluateEffectKeyframes`) that adds the distance a keyed rate has travelled:
+  the area under the curve from the start of the render clock (−clip start in clip
+  time) to now, with the first key's value held before it. It equals rate × time while
+  the rate is constant, adding the first key does not move the pattern, and a head trim
+  (keys stay on the timeline, at negative clip times) keeps the phase of a keyed ramp.
+  Unkeyed, the rate runs from the timeline (or composition) time. The step evaluates
+  the clip's own keyframe array, so the property index and a table of cumulative segment
+  integrals are built once per edit: a frame binary-searches its segment and integrates
+  only that part (O(log K); 1000 keys took 28 ms per frame before, now about 1 µs). Two
+  keys at one time are a jump. Effects without keys keep their identity. The travel
+  values are runtime-only: project, composition, preset and undo-history loads drop
+  stored ones, tools and Looks do not store them, and an instance that still carries
+  one renders without it (one log line). A node source or the Constant mode on a rate
+  runs it at rate × time and logs which of the two overrides the keys. Scroll and hue
+  are wrapped on the CPU in double precision.
 - **Color Wheel.** Hue Rotation and Spin are stored in turns (shown in ° and °/s).
   Radius is a share of the shorter side, Center X/Y of the layer. Disc has a 1-px
   anti-aliased edge and composites as straight-alpha "over"; `ccw` flips screen y.
@@ -280,7 +290,9 @@ Shared helpers for finite reads and choice warnings live in
   "Preparing 3D scene" time.
 - **Saved projects.** Choices and numbers an old instance lacks render, and show in
   the inspector, at their `legacyDefault`: Shape Fill layer, Direction clockwise,
-  Radius 0.5, Lines Even width, the rig's rest pose. New defaults (Grid Opacity 0.8,
+  Radius 0.5, Lines Even width, the rig's rest pose. A Look saved from such an instance
+  stores these values, and custom Looks saved earlier without them apply and preview
+  with them too (built-in Looks use the current defaults). New defaults (Grid Opacity 0.8,
   Line Width 3 px and Lines Thin with depth; Wheel Disc, Radius 45 % and Saturation 1;
   the walking Stick Figure stance; the smaller grey Weave sheet) apply only to new
   instances; a saved Weave keeps the graph stored with it. Deliberate changes for saved

@@ -1,10 +1,8 @@
 import { EffectsPipeline } from '../EffectsPipeline';
-import { getDefaultParams } from '..';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { Logger } from '../../services/logger';
-import { withLegacyMirrorPixelControls } from '../../services/operators/mirrorPixelGraphUpgrade';
 import type { LookDefinition } from './types';
-import { checkedLookEntryOperatorGraph } from './lookEntryGraph';
+import { lookPreviewEffects } from './lookEntryGraph';
 import { fitThumbnailToWidthRect } from './lookThumbnailGeometry';
 import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
 
@@ -188,15 +186,7 @@ class LookThumbnailRuntime {
     const pingView = ping.createView();
     const pongView = pong.createView();
     const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    const effects = look.stack.map((entry, index) => ({
-      id: `${look.id}:${index}`,
-      type: entry.effectId,
-      name: entry.effectId,
-      enabled: entry.enabled,
-      // As applyLookToClip: a custom Look saved before an effect gained controls gets the values that keep its look.
-      params: { ...getDefaultParams(entry.effectId), ...(look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params)) },
-      operatorGraph: checkedLookEntryOperatorGraph(look, entry).graph,
-    }));
+    const effects = lookPreviewEffects(look);
     const encoder = device.createCommandEncoder();
     const result = this.pipeline.applyEffects(
       encoder,

@@ -53,9 +53,11 @@ export interface EffectParam {
   // Value an instance saved before this parameter existed renders with (its params lack the key).
   // New effects store `default` explicitly (getDefaultParams), so only old saves and presets get this.
   legacyDefault?: number | boolean | string;
-  // A rate per second (Speed, Spin) that may be keyframed: while it has keyframes, the timeline
-  // writes the area under its curve from the clip start (value × seconds) into the runtime-only
-  // param named here, and packers use that travel instead of value × time, so a ramp moves smoothly.
+  // A rate per second (Speed, Spin) that may be keyframed: while it has keyframes, every render path
+  // (evaluateEffectKeyframes) writes the area under its curve since the start of the clock the effect
+  // renders with (value × seconds; before the first key its value holds) into the runtime-only param
+  // named here, and packers use that travel instead of value × time, so a ramp moves smoothly. Never
+  // stored: loading strips it (withoutRuntimeTravelParams).
   integratedAs?: string;
 }
 

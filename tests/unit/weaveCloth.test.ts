@@ -19,7 +19,7 @@ describe('Weave cloth', () => {
   it('reads the shared force nodes into the cloth spec', () => {
     const graph = createDefaultWeaveGraph();
     expect(validateWeaveGraph(graph)).toEqual([]);
-    expect(defaultSpec(graph)).toMatchObject({ columns: 40, rows: 27, substeps: 6, pin: 4, gravity: 0, drag: 0,
+    expect(defaultSpec(graph)).toMatchObject({ columns: 40, rows: 24, substeps: 6, pin: 4, gravity: 0, drag: 0,
       winds: [{ direction: [0.2, 0, 1], strength: 0.35, gust: 0.5 }], turbulence: [{ strength: 0.15, frequency: 1.5 }] });
     const offered = new Set(addableEffectOperators('weave').map(operator => operator.id));
     for (const id of ['geometry.cloth-sheet', 'geometry.surface-bind', 'forces.wind', 'forces.gravity', 'forces.turbulence', 'forces.drag']) expect(offered.has(id), id).toBe(true);

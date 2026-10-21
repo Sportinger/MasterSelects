@@ -1,6 +1,6 @@
-// Generate effects saved before a parameter existed show what they render (legacyDefault), and keyed
-// rates (Perspective Grid Speed, Color Wheel Spin) travel the same way on every render path: timeline,
-// nested compositions, transition-mapped clips, node sources and tools.
+// Generate effects saved before a parameter existed show what they render (legacyDefault), also when
+// saved into a Look, and keyed rates (Perspective Grid Speed, Color Wheel Spin) travel the same way on
+// every render path: timeline, nested compositions, transition-mapped clips, node sources and tools.
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getDefaultParams, getRenderedDefaultParams } from '../../src/effects';
@@ -10,7 +10,10 @@ import { toPrimitiveEffectParams } from '../../src/effects/_shared/effectUniform
 import { EffectsTab } from '../../src/components/panels/properties/EffectsTab';
 import { evaluateCompositionClipEffects } from '../../src/services/compositionRender/keyframeEvaluation';
 import { evaluateTransitionMappedAnimation } from '../../src/services/compositionRender/transitionMappedAnimation';
-import { applyParameterSourcesToEffects } from '../../src/services/parameterSources/parameterSourceRendering';
+import { dropKeyedRateTravel } from '../../src/services/parameterSources/parameterSourceRendering';
+import { applyLookToClip, stackFromClipEffects } from '../../src/effects/looks/applyLook';
+import { lookEntryParams, lookPreviewEffects } from '../../src/effects/looks/lookEntryGraph';
+import type { LookDefinition } from '../../src/effects/looks/types';
 import { executeAITool } from '../../src/services/aiTools';
 import { useTimelineStore } from '../../src/stores/timeline';
 import { getLegacyEffectKeyframeBaseValue } from '../../src/stores/timeline/keyframes/audioEffectKeyframeValues';
@@ -20,13 +23,6 @@ import { migratePersistedEffectOperatorGraph } from '../../src/services/operator
 import type { Effect } from '../../src/types/effects';
 import type { Keyframe } from '../../src/types/keyframes';
 import type { TimelineClip, TransitionSourceMapV2 } from '../../src/types/timeline';
-
-// Speed and Spin are not source targets today (no operator graph), so a binding would be rejected;
-// the evaluator is stubbed to check the render guard for rates that become drivable.
-vi.mock('../../src/services/parameterSources/parameterSourceEvaluation', async importOriginal => ({
-  ...await importOriginal<object>(),
-  createParameterSourceEvaluator: () => ({ resolve: () => ({ value: 3, kind: 'constant' }) }),
-}));
 
 type Params = Record<string, number | boolean | string>;
 const SCROLL = 3;
@@ -96,12 +92,51 @@ describe('Saved generators in the inspector', () => {
   });
 });
 
+describe('Saved generators in Looks', () => {
+  // Stored before Shape, Direction, Radius (Color Wheel) and Lines (Perspective Grid) existed.
+  const oldWheel = { rotation: 0, spin: 0, saturation: 1.2, value: 1, mix: 1 };
+  const oldGrid = { horizon: 0.66, columns: 14, rows: 6, lineWidth: 0, speed: 1.5, offset: 0, color: '#2ee6ff', opacity: 0.16, fade: 1.4, blend: 'add' };
+  const look = (stack: LookDefinition['stack'], builtIn = false): LookDefinition =>
+    ({ id: 'saved-look', name: 'Saved', category: 'custom', thumbnail: { kind: 'generated' }, tags: [], builtIn, stack, schemaVersion: 2 });
+  const legacyValues = (params: Record<string, unknown>) => [params.shape, params.direction, params.radius];
+
+  it('saves a Look from saved generators with the values they render', () => {
+    const [wheel, gridEntry] = stackFromClipEffects([
+      { type: 'color-wheel', params: oldWheel }, { type: 'perspective-grid', params: { ...oldGrid, speedTravel: 4 } }]);
+    expect(legacyValues(wheel.params)).toEqual(['fill', 'cw', 0.5]);
+    expect(gridEntry.params.widthMode).toBe('screen');
+    expect(gridEntry.params).not.toHaveProperty('speedTravel');
+    // A new instance stores every parameter, so nothing is replaced.
+    expect(stackFromClipEffects([{ type: 'color-wheel', params: getDefaultParams('color-wheel') }])[0].params).toEqual(getDefaultParams('color-wheel'));
+  });
+
+  it('applies and previews an older custom Look as it looked, a built-in one with the current defaults', () => {
+    useTimelineStore.setState({ clips: [createMockClip({ id: 'clip-look', trackId: 'v0' })], tracks: [createMockTrack({ id: 'v0', type: 'video' })],
+      clipKeyframes: new Map() });
+    const saved = look([{ effectId: 'color-wheel', enabled: true, params: oldWheel }, { effectId: 'perspective-grid', enabled: true, params: oldGrid }]);
+    applyLookToClip(saved, 'clip-look');
+    const [wheel, gridEffect] = useTimelineStore.getState().clips[0].effects;
+    expect(legacyValues(wheel.params)).toEqual(['fill', 'cw', 0.5]);
+    expect(gridEffect.params.widthMode).toBe('screen');
+    const [previewWheel, previewGrid] = lookPreviewEffects(saved);
+    expect(legacyValues(previewWheel.params)).toEqual(['fill', 'cw', 0.5]);
+    expect(previewGrid.params.widthMode).toBe('screen');
+    expect(colorWheel.packUniforms(previewWheel.params as Params, 1920, 1080, 0)![5]).toBe(0); // fill, as the saved wheel rendered
+    const builtIn = look(saved.stack, true);
+    expect(legacyValues(lookPreviewEffects(builtIn)[0].params)).toEqual(['disc', 'ccw', 0.45]);
+    expect(lookEntryParams(builtIn, builtIn.stack[0])).toBe(oldWheel);
+  });
+});
+
 describe('Weave default', () => {
   it('starts new Weaves as a smaller grey sheet, and saving pins a Weave to its graph', () => {
     const graph = createDefaultWeaveGraph();
     const constants = (id: string) => graph.nodes.find(node => node.id === id)!.constants!;
     expect(constants('pattern')).toMatchObject({ warps: 16, wefts: 10, width: 1.6, height: 0.96 });
-    expect(constants('cloth')).toMatchObject({ width: 1.6, height: 0.96 });
+    expect(constants('cloth')).toMatchObject({ columns: 40, rows: 24, width: 1.6, height: 0.96 });
+    // Square cloth cells: the sheet's columns and rows divide its width and height evenly.
+    const cloth = constants('cloth') as Record<string, number>;
+    expect(cloth.width / cloth.columns).toBeCloseTo(cloth.height / cloth.rows, 9);
     expect(constants('fiber')).toMatchObject({ preset: 'custom', color: '#8a857c' });
     // Project and timeline serialization run this: a graphless Weave is saved with the graph it renders.
     const saved = migratePersistedEffectOperatorGraph({ id: 'w', type: 'weave', name: 'Weave', enabled: true, params: {} });
@@ -174,13 +209,24 @@ describe('Keyed rates on every render path', () => {
     }
   });
 
-  it('lets a node source drive a keyed rate (at rate × time) instead of silently ignoring it', () => {
-    const keyed = { ...grid(), params: { ...getDefaultParams('perspective-grid'), speedTravel: 12.5 } };
-    const clip = { effects: [keyed], startTime: 0, nodeGraph: { parameterSources: { targets: {
-      'effect.grid.speed': { localMode: 'constant' } } } } } as never;
-    const [driven] = applyParameterSourcesToEffects(clip, [], 1, [keyed]);
-    expect(driven.params.speedTravel).toBeUndefined();
-    expect(scrollOf(driven, 2.25)).toBeCloseTo(0.75, 6); // 3 rows/s × 2.25 s
+  it('lets a node source or the Constant mode override a keyed rate (at rate × time) and says which', () => {
+    // The guard parameter sources apply after the keyframes (applyParameterSourcesToEffects).
+    const travelled = () => ({ ...getDefaultParams('perspective-grid'), speed: 3, speedTravel: 12.5 });
+    const driven = travelled();
+    const source = dropKeyedRateTravel(grid(), 'speed', driven, { source: { nodeId: 'lfo', portId: 'value' } });
+    expect(driven.speedTravel).toBeUndefined();
+    expect(scrollOf(grid(driven), 2.25)).toBeCloseTo(0.75, 6); // 3 rows/s × 2.25 s
+    expect(source).toContain('Perspective Grid speed is driven by a source');
+    const constant = travelled();
+    const note = dropKeyedRateTravel(grid(), 'speed', constant, { localMode: 'constant' });
+    expect(constant.speedTravel).toBeUndefined();
+    expect(note).toContain('is set to Constant');
+    expect(note).not.toContain('source');
+    // A disabled source falls back to Constant only when that mode is set; without travel nothing happens.
+    expect(dropKeyedRateTravel(grid(), 'speed', travelled(), { source: { nodeId: 'lfo', portId: 'value' }, enabled: false, localMode: 'constant' }))
+      .toContain('is set to Constant');
+    expect(dropKeyedRateTravel(grid(), 'speed', getDefaultParams('perspective-grid'), { localMode: 'constant' })).toBeUndefined();
+    expect(dropKeyedRateTravel(grid(), 'columns', travelled(), { localMode: 'constant' })).toBeUndefined();
   });
 
   it('never stores travel given to the effect tools and says so', async () => {

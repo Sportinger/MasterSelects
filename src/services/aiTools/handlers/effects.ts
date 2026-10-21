@@ -1,5 +1,5 @@
 import { useTimelineStore } from '../../../stores/timeline';
-import { getAllEffects, getDefaultParams, getEffect, hasEffect, getCategoriesWithEffects, resolveEffectTypeId } from '../../../effects';
+import { getAllEffects, getDefaultParams, getEffect, hasEffect, getCategoriesWithEffects, resolveEffectTypeId, effectRateTravelParams, withoutRuntimeTravelParams } from '../../../effects';
 import { paramRangeNotes } from '../../../effects/paramRangeNotes';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
@@ -81,15 +81,8 @@ function normalizeNumberParams(effectType: string, params: Record<string, unknow
 /** Travel parameters (speedTravel, spinTravel) are computed while rendering from a keyframed rate
  * (EffectParam.integratedAs). A stored value would freeze the pattern, so tools never store one. */
 function withoutRuntimeParams(effectType: string, params: Record<string, unknown>): { params: Record<string, unknown>; warnings: string[] } {
-  const rates = Object.entries(getEffect(effectType)?.params ?? {}).filter(([, definition]) => definition.integratedAs);
-  const runtime = Object.keys(params).flatMap(name => {
-    const rate = rates.find(([, definition]) => definition.integratedAs === name);
-    return rate ? [[name, rate[0]] as const] : [];
-  });
-  if (!runtime.length) return { params, warnings: [] };
-  const kept = { ...params };
-  for (const [name] of runtime) delete kept[name];
-  return { params: kept, warnings: runtime.map(([name, rate]) =>
+  const runtime = effectRateTravelParams(effectType).filter(([, travel]) => travel in params);
+  return { params: withoutRuntimeTravelParams(effectType, params), warnings: runtime.map(([rate, name]) =>
     `${name}: computed while rendering from the keyframed ${rate}, so it was not stored; set or keyframe ${rate} instead.`) };
 }
 
