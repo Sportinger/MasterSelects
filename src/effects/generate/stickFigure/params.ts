@@ -9,9 +9,19 @@ import {
 } from '../../../services/rig/skeletonRig';
 
 const DEFAULTS = createDefaultSkeletonShape();
-const number = (key: SkeletonNumericKey, group: string, min: number, max: number, extra: Partial<EffectParam>): EffectParam => ({
-  type: 'number', label: SKELETON_KEY_LABELS[key], default: DEFAULTS[key], min, max, step: 1, animatable: true, group, ...extra,
-});
+/** A new Stick Figure starts in an open stance (arms away from the body, a step), so it reads as a
+ * figure instead of one vertical stroke. Figures saved without a joint render the rig's rest pose
+ * (skeletonFromParams), which `legacyDefault` shows; the rig defaults themselves are unchanged. */
+export const STICK_FIGURE_NEW_POSE: Partial<Record<SkeletonNumericKey, number>> = {
+  spine: 4, head: -4, shoulderL: 30, elbowL: 35, shoulderR: -25, elbowR: 20, hipL: 16, kneeL: 18, hipR: -12, kneeR: 6,
+};
+const number = (key: SkeletonNumericKey, group: string, min: number, max: number, extra: Partial<EffectParam>): EffectParam => {
+  const pose = STICK_FIGURE_NEW_POSE[key];
+  return {
+    type: 'number', label: SKELETON_KEY_LABELS[key], default: pose ?? DEFAULTS[key], min, max, step: 1, animatable: true, group,
+    ...(pose !== undefined && pose !== DEFAULTS[key] ? { legacyDefault: DEFAULTS[key] } : {}), ...extra,
+  };
+};
 // Angles turn freely (any number of degrees); positions and lengths are figure pixels, which the rig
 // keeps within ±SKELETON_COORDINATE_LIMIT so a runaway keyframe or driver never breaks the drawing.
 const angle = (key: SkeletonNumericKey) => number(key, 'Pose', -180, 180, { unit: '°' });

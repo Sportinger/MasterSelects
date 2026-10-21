@@ -59,13 +59,7 @@ export function getSpeedAtTime(
 }
 
 /**
- * Integrate the speed curve from 0 to endTime using adaptive trapezoidal integration.
- *
- * The algorithm:
- * 1. Sample the speed curve at keyframe times and intermediate points
- * 2. Use trapezoidal rule: integral = sum of (speed_i + speed_{i+1}) / 2 * dt
- *
- * For smooth bezier curves, we sample more densely.
+ * Integrate the speed curve from 0 to endTime (see integrateKeyframedRate).
  */
 function integrateSpeedCurve(
   keyframes: Keyframe[],
@@ -73,32 +67,57 @@ function integrateSpeedCurve(
   endTime: number,
   defaultSpeed: number
 ): number {
+  return integrateRateSamples(keyframes, speedKeyframes, 'speed' as AnimatableProperty, endTime, defaultSpeed);
+}
+
+/**
+ * Area under any keyframed rate curve (value per second) from 0 to `endTime`: the distance a
+ * keyframed Speed or Spin has travelled. Used for clip speed and for effect rate parameters
+ * (EffectParam.integratedAs), so a keyed ramp moves continuously instead of jumping.
+ */
+export function integrateKeyframedRate(
+  keyframes: Keyframe[],
+  property: AnimatableProperty,
+  endTime: number,
+  defaultValue: number,
+): number {
+  const rateKeyframes = keyframes.filter(k => k.property === property).sort((a, b) => a.time - b.time);
+  if (rateKeyframes.length === 0) return endTime * defaultValue;
+  if (rateKeyframes.length === 1) return endTime * rateKeyframes[0].value;
+  return integrateRateSamples(keyframes, rateKeyframes, property, endTime, defaultValue);
+}
+
+/**
+ * Adaptive trapezoidal integration of a keyframed curve from 0 to endTime:
+ * 1. Sample the curve at keyframe times and ten intermediate points per segment
+ *    (more accurate for bezier curves)
+ * 2. Trapezoidal rule: integral = sum of (value_i + value_{i+1}) / 2 * dt; a hold keyframe stays flat
+ */
+function integrateRateSamples(
+  keyframes: Keyframe[],
+  rateKeyframes: Keyframe[],
+  property: AnimatableProperty,
+  endTime: number,
+  defaultValue: number
+): number {
   // Edge cases
-  if (endTime <= 0) return 0;
+  if (!(endTime > 0)) return 0;
 
   // Collect all sample points (keyframe times + intermediate samples)
   const samplePoints: number[] = [0];
-
-  // Add keyframe times up to endTime
-  for (const kf of speedKeyframes) {
+  for (const kf of rateKeyframes) {
     if (kf.time > 0 && kf.time < endTime) {
       samplePoints.push(kf.time);
     }
   }
-
-  // Add endTime
   samplePoints.push(endTime);
 
-  // Add intermediate samples between keyframes for better accuracy
-  // Especially important for bezier curves
   const samplesPerSegment = 10;
   const allSamplePoints: number[] = [];
-
   for (let i = 0; i < samplePoints.length - 1; i++) {
     const start = samplePoints[i];
     const end = samplePoints[i + 1];
     const dt = (end - start) / samplesPerSegment;
-
     for (let j = 0; j < samplesPerSegment; j++) {
       allSamplePoints.push(start + j * dt);
     }
@@ -108,22 +127,16 @@ function integrateSpeedCurve(
   // Remove duplicates and sort
   const uniqueSamples = [...new Set(allSamplePoints)].sort((a, b) => a - b);
 
-  // Trapezoidal integration
   let integral = 0;
-
   for (let i = 0; i < uniqueSamples.length - 1; i++) {
     const t0 = uniqueSamples[i];
     const t1 = uniqueSamples[i + 1];
-    const dt = t1 - t0;
-
-    const speed0 = getSpeedAtTime(keyframes, t0, defaultSpeed);
-    const segment = speedKeyframes.findLast(key => key.time <= t0);
-    const speed1 = segment?.hold ? speed0 : getSpeedAtTime(keyframes, t1, defaultSpeed);
-
+    const value0 = interpolateKeyframes(keyframes, property, t0, defaultValue);
+    const segment = rateKeyframes.findLast(key => key.time <= t0);
+    const value1 = segment?.hold ? value0 : interpolateKeyframes(keyframes, property, t1, defaultValue);
     // Trapezoidal rule: area = (y0 + y1) / 2 * width
-    integral += (speed0 + speed1) / 2 * dt;
+    integral += (value0 + value1) / 2 * (t1 - t0);
   }
-
   return integral;
 }
 

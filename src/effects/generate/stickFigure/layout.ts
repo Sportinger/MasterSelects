@@ -1,9 +1,12 @@
 // Where the Stick Figure is drawn in its layer (output pixels), shared by the uniform packer and the
 // notes that tell the inspector and tools when a figure cannot be seen (no silent failure).
 import {
+  createDefaultSkeletonShape,
   facingX,
   figureMirror,
+  SKELETON_COORDINATE_LIMIT,
   SKELETON_JOINTS,
+  SKELETON_LENGTH_KEYS,
   SKELETON_SEGMENTS,
   skeletonFromParams,
   solveSkeleton,
@@ -35,18 +38,41 @@ export function stickFigureLayout(params: Params, width: number, height: number)
   };
 }
 
+/** Largest ring half stroke as a share of the head radius (the opening is at least 1 − 2 × this). */
+export const STICK_FIGURE_RING_MAX_HALF_STROKE = 0.25;
+
+/** The Ring head: a stroke as thick as the limbs, but at most a quarter of the head radius each side
+ * of its centre line, so the opening keeps at least half the head radius however thick the lines are;
+ * the outer edge stays at the head radius. */
+export function stickFigureRing(limbRadius: number, headRadius: number): { centre: number; halfStroke: number } {
+  const halfStroke = Math.min(limbRadius, headRadius * STICK_FIGURE_RING_MAX_HALF_STROKE);
+  return { centre: headRadius - halfStroke, halfStroke };
+}
+
 const scaleOf = (params: Params) => typeof params.scale === 'number' && Number.isFinite(params.scale) ? params.scale : 1;
 
-/** Settings that leave nothing to see: a figure scaled to nothing, or one entirely outside its layer. */
+/** Lengths whose stored value is drawable but which Scale pushes past the rig limit (renderMax only sees the stored value). */
+function scaledLengthNotes(params: Params): string[] {
+  const scale = scaleOf(params), defaults = createDefaultSkeletonShape();
+  const over = SKELETON_LENGTH_KEYS.filter(key => {
+    const stored = typeof params[key] === 'number' && Number.isFinite(params[key]) ? params[key] as number : defaults[key];
+    return stored <= SKELETON_COORDINATE_LIMIT && stored * scale > SKELETON_COORDINATE_LIMIT;
+  });
+  return over.length ? [`${over.join(', ')}: times Scale ${scale} is longer than ${SKELETON_COORDINATE_LIMIT} figure px, so it is drawn at ${SKELETON_COORDINATE_LIMIT}.`] : [];
+}
+
+/** Settings that leave nothing to see (a figure scaled to nothing, or one entirely outside its layer) and
+ * scaled lengths the rig clamps. `width`/`height`: the composition size, which the off-frame check uses. */
 export function stickFigureWarnings(params: Params, width = 1920, height = 1080): string[] {
   if (scaleOf(params) <= 0) return [`scale: ${scaleOf(params)} gives the figure no size, so it is drawn as a dot at the pelvis. Use a scale above 0 (1 = 1080p proportions).`];
+  const notes = scaledLengthNotes(params);
   const { joints, limbRadius, headRadius } = stickFigureLayout(params, width, height);
   const pad = Math.max(limbRadius, headRadius);
   const inside = SKELETON_SEGMENTS.some(([a, b]) => segmentTouchesFrame(joints[a], joints[b], pad, width, height))
     || joints.some(joint => joint.x > -pad && joint.x < width + pad && joint.y > -pad && joint.y < height + pad);
-  if (inside) return [];
+  if (inside) return notes;
   const pelvis = joints[0];
-  return [`The whole figure lies outside its layer (pelvis at ${Math.round(pelvis.x)}, ${Math.round(pelvis.y)} px of a ${width}×${height} frame), so nothing is drawn; check Pelvis X/Y, Lift and Ground Y.`];
+  return [...notes, `The whole figure lies outside its layer (pelvis at ${Math.round(pelvis.x)}, ${Math.round(pelvis.y)} px, judged at the ${width}×${height} composition size and the saved pose, before actions move it), so nothing is drawn; check Pelvis X/Y, Lift and Ground Y.`];
 }
 
 /** Coarse test: the segment's bounding box (grown by `pad`) overlaps the frame. */

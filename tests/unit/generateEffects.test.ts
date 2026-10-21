@@ -11,19 +11,24 @@ import { perspectiveGrid, PERSPECTIVE_GRID_PARAMS } from '../../src/effects/gene
 import { stickFigure } from '../../src/effects/generate/stickFigure';
 import { STICK_FIGURE_PARAMS } from '../../src/effects/generate/stickFigure/params';
 import { memoryLeakWarnings } from '../../src/effects/generate/memoryLeak/memoryWindow';
-import { normalizeSkeleton, SKELETON_COORDINATE_LIMIT, solveSkeleton } from '../../src/services/rig/skeletonRig';
+import { normalizeSkeleton, SKELETON_COORDINATE_LIMIT, skeletonFromParams, solveSkeleton } from '../../src/services/rig/skeletonRig';
 import { executeAITool } from '../../src/services/aiTools';
 import { useTimelineStore } from '../../src/stores/timeline';
-import { createMockTrack } from '../helpers/mockData';
+import { createMockClip, createMockTrack } from '../helpers/mockData';
+import { integrateKeyframedRate } from '../../src/utils/speedIntegration';
+import type { AnimatableProperty } from '../../src/types/animationProperties';
+import type { Effect } from '../../src/types/effects';
+import type { Keyframe } from '../../src/types/keyframes';
 
 type Params = Record<string, number | boolean | string>;
+const GRID_SCROLL = 3;
 const pack = (definition: typeof perspectiveGrid, params: Params, width = 1920, height = 1080, time = 0) =>
   Array.from(definition.packUniforms({ ...getDefaultParams(definition.id), ...params }, width, height, time) ?? []);
 // Values keyframes, bezier overshoot and tools can deliver without any clamping.
 const HOSTILE = [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, -1e12, 1e12, 0, -0.5];
 
 describe('Perspective Grid', () => {
-  const field = { horizon: 0, columns: 1, rows: 2, scroll: 3, linePixels: 4, fade: 5, opacity: 6, blend: 7, width: 12, height: 13 } as const;
+  const field = { horizon: 0, columns: 1, rows: 2, scroll: 3, linePixels: 4, fade: 5, opacity: 6, blend: 7, width: 12, height: 13, screenWidth: 14 } as const;
 
   it('keeps the stored half width in 1080p pixels and scales the line with the output height', () => {
     expect(pack(perspectiveGrid, { lineWidth: 1 })[field.linePixels]).toBe(2);
@@ -58,10 +63,72 @@ describe('Perspective Grid', () => {
     expect(perspectiveGrid.paramWarnings?.({ ...getDefaultParams('perspective-grid'), blend: 'screen' })).toEqual(['blend: "screen" is not an option; using add.']);
     expect(perspectiveGrid.paramWarnings?.(getDefaultParams('perspective-grid'))).toEqual([]);
   });
+
+  it('keeps saved grids at their even screen width and names settings that draw no lines', () => {
+    const saved = { horizon: 0.66, columns: 14, rows: 6, speed: 1.5, offset: 0, lineWidth: 0, fade: 1.4, opacity: 0.16, color: '#2ee6ff' };
+    // Old look at 1080p: a core of 2 × Line Width px plus a one-pixel rim, so Line Width 0 is a hairline.
+    expect(perspectiveGrid.packUniforms(saved, 1920, 1080, 0)?.slice(field.linePixels, field.linePixels + 1)[0]).toBe(1);
+    expect(perspectiveGrid.packUniforms({ ...saved, lineWidth: 1.5 }, 1920, 1080, 0)?.[field.screenWidth]).toBe(1);
+    expect(perspectiveGrid.paramWarnings?.(saved)).toEqual([]);
+    const fresh = getDefaultParams('perspective-grid');
+    expect(fresh.widthMode).toBe('floor');
+    expect(perspectiveGrid.paramWarnings?.({ ...fresh, lineWidth: 0 })?.[0]).toMatch(/^lineWidth: 0 draws no lines/);
+    expect(perspectiveGrid.paramWarnings?.({ ...fresh, columns: 0, rows: 0 })).toEqual(['columns and rows: both are 0, so no lines are drawn.']);
+    expect(perspectiveGrid.paramWarnings?.({ ...fresh, widthMode: 'world' })?.[0]).toBe('widthMode: "world" is not an option; using floor.');
+  });
+});
+
+describe('Keyframed Speed and Spin', () => {
+  const initial = useTimelineStore.getState();
+  afterEach(() => useTimelineStore.setState(initial));
+  const key = (id: string, property: string, time: number, value: number) =>
+    ({ id, clipId: 'gen', time, property, value, easing: 'linear' }) as Keyframe;
+
+  it('integrates a linear ramp exactly (area under the curve)', () => {
+    const ramp = [key('a', 'effect.fx.speed', 0, 0), key('b', 'effect.fx.speed', 2, 4)];
+    // v(t) = 2t: travel t².
+    for (const t of [0.5, 1, 2]) expect(integrateKeyframedRate(ramp, 'effect.fx.speed' as AnimatableProperty, t, 0)).toBeCloseTo(t * t, 6);
+    // Held at 4 after the last key.
+    expect(integrateKeyframedRate(ramp, 'effect.fx.speed' as AnimatableProperty, 3, 0)).toBeCloseTo(8, 6);
+  });
+
+  it('scrolls the grid and turns the wheel continuously through a keyed ramp', () => {
+    const effects = [
+      { id: 'grid', name: 'Perspective Grid', type: 'perspective-grid', enabled: true, params: getDefaultParams('perspective-grid') },
+      { id: 'wheel', name: 'Color Wheel', type: 'color-wheel', enabled: true, params: getDefaultParams('color-wheel') },
+    ] as Effect[];
+    useTimelineStore.setState({
+      clips: [createMockClip({ id: 'gen', startTime: 0, duration: 4, trackId: 'v0', effects })],
+      tracks: [createMockTrack({ id: 'v0', type: 'video' })],
+      clipKeyframes: new Map([['gen', [key('a', 'effect.grid.speed', 0, 0), key('b', 'effect.grid.speed', 2, 10),
+        key('c', 'effect.wheel.spin', 1, 0.5), key('d', 'effect.wheel.spin', 3, -0.5)]]]),
+    });
+    expect(PERSPECTIVE_GRID_PARAMS.speed.animatable).toBe(true);
+    expect(COLOR_WHEEL_PARAMS.spin.animatable).toBe(true);
+    const frame = 1 / 30;
+    let previous: { scroll: number; hue: number } | undefined;
+    for (let t = 0; t <= 3; t += frame) {
+      const [grid, wheel] = useTimelineStore.getState().getInterpolatedEffects('gen', t);
+      // Travel since the clip start: v(t) = 5t up to 2 s → 2.5 t² rows.
+      if (t <= 2) expect(grid.params.speedTravel).toBeCloseTo(2.5 * t * t, 3);
+      const scroll = perspectiveGrid.packUniforms(grid.params as Params, 1920, 1080, t + 100)![GRID_SCROLL];
+      const hue = colorWheel.packUniforms(wheel.params as Params, 1920, 1080, t + 100)![0];
+      if (previous) {
+        // Per frame the scroll moves at most the top speed × one frame (wrapped to one row); no jumps.
+        const step = (scroll - previous.scroll + 1) % 1;
+        expect(Math.min(step, 1 - step)).toBeLessThanOrEqual(10 * frame + 1e-4);
+        const turn = (hue - previous.hue + 1) % 1;
+        expect(Math.min(turn, 1 - turn)).toBeLessThanOrEqual(0.5 * frame + 1e-4);
+      }
+      previous = { scroll, hue };
+    }
+    // Without keyframes the rate still runs from the timeline time.
+    expect(pack(perspectiveGrid, { speed: 0.25 }, 1920, 1080, 2)[GRID_SCROLL]).toBeCloseTo(0.5, 6);
+  });
 });
 
 describe('Color Wheel', () => {
-  const field = { hueOffset: 0, saturation: 1, value: 2, mix: 3, aspect: 4, shape: 5, shortSide: 6 } as const;
+  const field = { hueOffset: 0, saturation: 1, value: 2, mix: 3, aspect: 4, shape: 5, shortSide: 6, radius: 7, centerX: 8, centerY: 9, counterClockwise: 10 } as const;
 
   it('wraps Hue Rotation plus Spin × time into one turn and shows both in degrees', () => {
     expect(pack(colorWheel, { rotation: 0.25, spin: 1 }, 1920, 1080, 10.5)[field.hueOffset]).toBeCloseTo(0.75, 6);
@@ -70,19 +137,39 @@ describe('Color Wheel', () => {
     expect(COLOR_WHEEL_PARAMS.rotation).toMatchObject({ displayScale: 360, unit: '°' });
   });
 
-  it('fills the layer for wheels saved without Shape and draws a disc only when asked', () => {
-    expect(colorWheel.packUniforms({ rotation: 0, saturation: 1.2, value: 1, mix: 1 }, 1920, 1080, 0)?.[field.shape]).toBe(0);
-    expect(pack(colorWheel, {})[field.shape]).toBe(0);
-    expect(pack(colorWheel, { shape: 'disc' }, 1280, 720)[field.shape]).toBe(1);
-    expect(pack(colorWheel, { shape: 'disc' }, 1280, 720)[field.shortSide]).toBe(720);
-    expect(colorWheel.paramWarnings?.({ ...getDefaultParams('color-wheel'), shape: 'ring' })).toEqual(['shape: "ring" is not an option; using fill.']);
+  it('draws a disc for new wheels and fills the layer for wheels saved without Shape', () => {
+    const saved = colorWheel.packUniforms({ rotation: 0, saturation: 1.2, value: 1, mix: 1 }, 1920, 1080, 0)!;
+    // Saved: fill, full colour at the shorter edge (radius 0.5), centred, clockwise.
+    expect([saved[field.shape], saved[field.radius], saved[field.centerX], saved[field.centerY], saved[field.counterClockwise]])
+      .toEqual([0, 0.5, 0.5, 0.5, 0]);
+    const fresh = pack(colorWheel, {}, 1280, 720);
+    expect([fresh[field.shape], fresh[field.shortSide], fresh[field.counterClockwise]]).toEqual([1, 720, 1]);
+    expect(fresh[field.radius]).toBeCloseTo(0.45, 6);
+    expect(pack(colorWheel, { shape: 'fill' })[field.shape]).toBe(0);
+    expect(pack(colorWheel, { radius: 0.2, centerX: 0.25, centerY: 0.75 }).slice(field.radius, field.centerY + 1).map(v => Number(v.toFixed(5))))
+      .toEqual([0.2, 0.25, 0.75]);
+    expect(colorWheel.paramWarnings?.({ ...getDefaultParams('color-wheel'), shape: 'ring', direction: 'up' }))
+      .toEqual(['shape: "ring" is not an option; using disc.', 'direction: "up" is not an option; using ccw.']);
+    expect(pack(colorWheel, { shape: 'ring', direction: 'up' }).filter((_, index) => index === field.shape || index === field.counterClockwise)).toEqual([1, 1]);
     // A one-sided render range names its limit instead of an infinite end.
-    expect(paramRangeNotes(COLOR_WHEEL_PARAMS, { saturation: -1 })[0].message).toBe('Saturation -1 is below the rendered minimum (0) and renders as 0.');
+    expect(paramRangeNotes(STICK_FIGURE_PARAMS, { thickness: -1 })[0].message).toBe('Line Thickness -1 is below the rendered range (0 to 100000) and renders as 0.');
+    expect(paramRangeNotes(PERSPECTIVE_GRID_PARAMS, { columns: -1 })[0].message).toBe('Columns -1 is below the rendered range (0 to 2000) and renders as 0.');
+  });
+
+  it('names radius and centre clamps in the units of their rows in the inspector', () => {
+    const [radius] = paramRangeNotes(COLOR_WHEEL_PARAMS, { radius: 0 }, undefined, { display: true });
+    expect(radius.message).toBe('Radius 0% is below the rendered range (0.1% to 1000%) and renders as 0.1%.');
+    const [horizon, lineWidth] = paramRangeNotes(PERSPECTIVE_GRID_PARAMS, { horizon: 1.5, lineWidth: -2 }, undefined, { display: true });
+    expect(horizon.message).toBe('Horizon 150% is above the rendered range (0% to 98%) and renders as 98%.');
+    expect(lineWidth.message).toBe('Line Width -4 px is below the rendered range (0 px to 2000 px) and renders as 0 px.');
+    // Tool results keep stored units.
+    expect(paramRangeNotes(PERSPECTIVE_GRID_PARAMS, { horizon: 1.5 })[0].message).toBe('Horizon 1.5 is above the rendered range (0 to 0.98) and renders as 0.98.');
   });
 
   it.each(HOSTILE)('packs only finite values for %s', value => {
-    const data = pack(colorWheel, { rotation: value, spin: value, saturation: value, value, mix: value }, 1920, 1080, 5);
+    const data = pack(colorWheel, { rotation: value, spin: value, saturation: value, value, mix: value, radius: value, centerX: value, centerY: value }, 1920, 1080, 5);
     expect(data.every(Number.isFinite)).toBe(true);
+    expect(data[field.radius]).toBeGreaterThan(0);
     expect(data[field.hueOffset]).toBeGreaterThanOrEqual(0);
     expect(data[field.hueOffset]).toBeLessThan(1);
     expect(data[field.mix]).toBeGreaterThanOrEqual(0);
@@ -119,6 +206,23 @@ describe('Stick Figure robustness', () => {
     expect(stickFigure.paramWarnings?.({ ...defaults, rootX: -1010, shoulderR: 90, elbowR: 0 }, 1920, 1080)).toEqual([]);
     expect(stickFigure.paramWarnings?.({ ...defaults, headStyle: 'hollow' }, 1920, 1080)).toEqual(['headStyle: "hollow" is not an option; using filled.']);
     expect(paramRangeNotes(STICK_FIGURE_PARAMS, { opacity: 3, torso: -4 }).map(note => note.param)).toEqual(['torso', 'opacity']);
+  });
+
+  it('starts new figures in an open stance and keeps the rest pose for figures saved without joints', () => {
+    const fresh = solveSkeleton({ ...skeletonFromParams(getDefaultParams('stick-figure')), groundMode: 'off' }).joints;
+    const rest = solveSkeleton({ ...skeletonFromParams({}), groundMode: 'off' }).joints;
+    // Hands and feet stand clear of the torso line, so the figure does not read as one stroke.
+    const spread = (joints: typeof fresh) => Math.min(Math.abs(joints.handL.x - joints.handR.x), Math.abs(joints.footL.x - joints.footR.x));
+    expect(spread(fresh)).toBeGreaterThan(40);
+    expect(spread(rest)).toBeLessThan(40);
+    expect(STICK_FIGURE_PARAMS.shoulderL).toMatchObject({ default: 30, legacyDefault: 8 });
+  });
+
+  it('names lengths that Scale pushes past the drawable limit', () => {
+    const defaults = getDefaultParams('stick-figure');
+    expect(stickFigure.paramWarnings?.({ ...defaults, torso: 90000, scale: 2 }, 1920, 1080)?.[0])
+      .toBe(`torso: times Scale 2 is longer than ${SKELETON_COORDINATE_LIMIT} figure px, so it is drawn at ${SKELETON_COORDINATE_LIMIT}.`);
+    expect(stickFigure.paramWarnings?.({ ...defaults, torso: 90000, scale: 1 }, 1920, 1080)?.some(note => /times Scale/.test(note))).toBe(false);
   });
 
   it('draws the head as a ring only when asked (saved figures keep the filled head)', () => {

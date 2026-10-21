@@ -4,7 +4,7 @@ import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
 import { colorToRgba } from '../../_shared/catalogColor';
 import { STICK_FIGURE_PARAMS } from './params';
-import { stickFigureLayout, stickFigureWarnings } from './layout';
+import { stickFigureLayout, stickFigureRing, stickFigureWarnings } from './layout';
 import { generatorChoiceWarnings } from '../generatorParams';
 
 export const stickFigure: EffectDefinition = {
@@ -26,8 +26,9 @@ export const stickFigure: EffectDefinition = {
     const { joints, limbRadius, headRadius } = stickFigureLayout(params, width, height);
     const [r, g, b, a] = colorToRgba(params.color, '#ffffff');
     const opacity = typeof params.opacity === 'number' && Number.isFinite(params.opacity) ? params.opacity : 1;
+    const ring = stickFigureRing(limbRadius, headRadius);
     const data = new Float32Array(36);
-    data.set([width, height, limbRadius, headRadius, r, g, b, a, opacity, params.headStyle === 'ring' ? 1 : 0, 0, 0]);
+    data.set([width, height, limbRadius, headRadius, r, g, b, a, opacity, params.headStyle === 'ring' ? 1 : 0, ring.centre, ring.halfStroke]);
     joints.forEach((joint, index) => {
       data[12 + index * 2] = joint.x;
       data[13 + index * 2] = joint.y;

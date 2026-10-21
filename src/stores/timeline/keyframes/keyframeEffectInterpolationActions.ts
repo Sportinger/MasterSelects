@@ -2,6 +2,8 @@ import type { AnimatableProperty, KeyframeActions, SliceCreator } from '../types
 import { applyParameterSourcesToEffects, evaluateParameterSourceColorGrade } from '../../../services/parameterSources/parameterSourceRendering';
 import { getHexColorChannel, rgbColorToHex } from '../../../utils/colorParam';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
+import { integrateKeyframedRate } from '../../../utils/speedIntegration';
+import { getEffect } from '../../../effects';
 import {
   getLegacyEffectKeyframeBaseValue,
   mergeLegacyEffectParamPatch,
@@ -83,6 +85,11 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
           { ...effect, params: newParams },
           { [paramName]: interpolatedValue },
         );
+        // A keyed rate (Speed, Spin) also gets the distance it has travelled (EffectParam.integratedAs).
+        const integratedAs = getEffect(effect.type)?.params[paramName]?.integratedAs;
+        if (integratedAs) {
+          newParams[integratedAs] = integrateKeyframedRate(keyframes, propertyKey as AnimatableProperty, clipLocalTime, baseValue);
+        }
       });
 
       return { ...effect, params: newParams };
