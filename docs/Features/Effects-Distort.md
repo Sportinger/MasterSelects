@@ -9,7 +9,7 @@ Bulge & Pinch, Twirl, Wave and Fisheye Lens keep pictures with transparency
 ## Seven Lens & Distort effects
 
 The **Lens & Distort** menu also holds Kaleidoscope, Mirror, RGB Split, Crystal,
-Glass Dispersion, Film Prism and Holo; see [Effects](./Effects.md#current-effect-categories).
+Glass Dispersion, Film Prism and Holo; see [Effect system](./Effect-System.md#current-effect-categories).
 
 ### Bulge & Pinch
 <figure class="docs-shot docs-shot--float-right">
@@ -131,7 +131,7 @@ Tip: add it directly after Lens Correction and draw guides along long edges far 
 
 Fills the empty borders that Lens Correction and Guided Perspective leave on a
 still photo with an AI-generated continuation of the scene, so the frame is full
-again. It uses the cloud AI service and its credits; see [AI Edge Fill](./Effects.md#ai-edge-fill).
+again. It uses the cloud AI service and its credits; see [AI Edge Fill](./Effect-System.md#ai-edge-fill).
 
 <div class="docs-float-end"></div>
 
@@ -275,10 +275,10 @@ shaders with their own controls and have no node graph.
 
 Notes for developers. The recipes live in
 `src/services/operators/uvDistortRecipes.ts`; more in
-[Effects: editable UV distortions](./Effects.md#editable-uv-distortions),
-[Fisheye Lens](./Effects.md#fisheye-lens),
-[Lens Correction](./Effects.md#lens-correction),
-[Guided Perspective](./Effects.md#guided-perspective),
+[Effect system: editable UV distortions](./Effect-System.md#editable-uv-distortions),
+[Fisheye Lens](./Effect-System.md#fisheye-lens),
+[Lens Correction](./Effect-System.md#lens-correction),
+[Guided Perspective](./Effect-System.md#guided-perspective),
 [Node Catalog](./Node-Catalog.md) and
 [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 

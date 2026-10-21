@@ -231,8 +231,8 @@ instead of Time Map.
 
 ## Technical details
 
-Notes for developers. Effect details live in [Effects](./Effects.md#editable-keying-and-feedback-graphs),
-[Slit Scan](./Effects.md#slit-scan), [Time Stack](./Time-Stack.md) and
+Notes for developers. Effect details live in [Effect system](./Effect-System.md#editable-keying-and-feedback-graphs),
+[Slit Scan](./Effect-System.md#slit-scan), [Time Stack](./Time-Stack.md) and
 [Slit Scan 3D](./Slit-Scan-3D.md); nodes in [Node Catalog](./Node-Catalog.md),
 compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 

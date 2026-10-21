@@ -253,8 +253,8 @@ phosphor mask and flicker.
 Notes for developers. The recipes live in `src/services/operators/crtScreenRecipe.ts`,
 `glitchRecipe.ts`, `filmPrismRecipe.ts`, `holoRecipe.ts` and `ribbonScanRecipe.ts`
 (shared helpers in `analogRecipeBuilder.ts`);
-formulas and history in [Effects: CRT Screen](./Effects.md#crt-screen) and
-[Effects: Analog Signal Lab](./Effects.md#analog-signal-lab), nodes in
+formulas and history in [Effect system: CRT Screen](./Effect-System.md#crt-screen) and
+[Effect system: Analog Signal Lab](./Effect-System.md#analog-signal-lab), nodes in
 [Node Catalog](./Node-Catalog.md#random-nodes), compilation in
 [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 
@@ -328,11 +328,11 @@ formulas and history in [Effects: CRT Screen](./Effects.md#crt-screen) and
   shifts read picture, not black. VHS Transport low-passes luma to 3 / 2.6 / 2.2 MHz
   (SP / LP / EP, lower with Tape Wear), records chroma colour-under (sideways chroma
   noise, hue kept, saturation 0.93 / 0.87 / 0.81) and fades in over the first tenth
-  of VHS Stage. Details in [Effects: Analog Signal Lab](./Effects.md#analog-signal-lab).
+  of VHS Stage. Details in [Effect system: Analog Signal Lab](./Effect-System.md#analog-signal-lab).
   Pixel Sort is a compute effect with segments of at most 16 px.
 - **Pictures and clips on this page.** `scripts/doc-clip.mjs` (the four effect
   loops and the operation clip, `scripts/doc-clips/analog.json`; see
-  [Effects: Docs clips](./Effects.md#docs-clips-motion-and-editor-operations)),
+  [Documentation Website: Docs clips](./Documentation-Site.md#docs-clips-motion-and-editor-operations)),
   `scripts/effect-graph-shot.mjs` and `scripts/effect-editor-shot.mjs`, each with an
   `analog.json` manifest next to it (`scripts/effect-*-shots/`).
 

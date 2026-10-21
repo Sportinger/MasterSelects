@@ -319,7 +319,7 @@ and Straight Alpha Output; each pass uses one Pair Tap Offsets, two kernel weigh
 and one Merge Pair Weights block, so another kernel (a tent, a custom curve) only
 replaces the two weight nodes. Motion, Radial and Zoom Blur are organized into
 Premultiplied Source (cached), Blur Range, Tap Counts & Box Length, Stage A (short
-box, cached), Stage B (coarse taps) and Straight Alpha Output. Details: [Effects → Editable blur kernels](./Effects.md#editable-blur-kernels).
+box, cached), Stage B (coarse taps) and Straight Alpha Output. Details: [Effect system → Editable blur kernels](./Effect-System.md#editable-blur-kernels).
 **Natural Logarithm** and **Ceiling** are available as scalar math nodes.
 
 The same organization now covers Sharpen,

@@ -1,0 +1,45 @@
+# Matrix Rain
+
+<!-- effect-docs: basic page, written by scripts/effect-docs.mjs. Delete this line to write the page by hand (template B in Documentation-Site.md). -->
+
+Covers the image with falling green code characters with bright moving heads, like digital rain; Speed sets the fall rate, Cell Size the glyph size.
+
+Group: [Text & Glyph](./index.md#text--glyph) · [How to add an effect](../Effects.md#add-an-effect)
+
+<figure class="docs-shot">
+
+![Matrix Rain on the harbour town: the original on the left, Matrix Rain at its default settings on the right](../assets/effects/matrix.webp)
+
+<figcaption>Left: the original. Right: Matrix Rain at its default settings, one frame of its movement.</figcaption>
+</figure>
+
+*A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*
+
+## Controls
+
+<!-- generated:controls start -->
+| Control | Range | Default |
+|---|---|---|
+| **Grid** | | |
+| Cell Size | 4 to 72 | 14 |
+| **Style** | | |
+| Amount | 0 to 1 | 1 |
+| Invert Ramp | on or off | off |
+| **Glyphs** | | |
+| Ramp | standard, detailed, blocks, binary, numeric, symbols | symbols |
+| Custom Ramp | text | empty |
+| Font | Monospace, Serif, Sans Serif | Monospace |
+| Weight | 200 to 900 | 600 |
+| **Color** | | |
+| Color Source | Source, Duotone | Source |
+| Dark | a colour | `#081018` |
+| Light | a colour | `#e8fff5` |
+| **Motion** | | |
+| Speed | 0 to 5 | 1 |
+<!-- generated:controls end -->
+
+**Styles:** the **Style** menu in the effect card switches to another look with the same controls and keyframes: [Tag Pills](./capsule-cloud.md), [Data Hatching](./data-hatch.md), [Dither Text](./dither-text.md), [Glyph Matrix](./glyph-matrix.md), [Dither Glow](./pixel-dither.md), [Retro Matrix](./retro-matrix.md), [Symbol Matrix](./symbol-matrix.md), [Creative UI Collage](./ui-collage.md).
+
+## Technical details
+
+Matrix Rain is one look of the glyph engine; its looks share one node setup. It keeps moving while the playhead stands still. How effects are stored, rendered and exported: [Effect system](../Effect-System.md). Its building blocks: [Node Catalog](../Node-Catalog.md).

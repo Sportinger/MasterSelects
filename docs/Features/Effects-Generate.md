@@ -236,7 +236,7 @@ graph of Flocking is described in [Flock Clips](./Flock-Clips.md#graph-model).
 ## Technical details
 
 Notes for developers. Registry, uniforms and the byte-texture binding are in
-[Effects](./Effects.md#registry-and-ui), nodes in [Node Catalog](./Node-Catalog.md),
+[Effect system](./Effect-System.md#registry-and-ui), nodes in [Node Catalog](./Node-Catalog.md),
 graph compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 Shared helpers for finite reads and choice warnings live in
 `src/effects/generate/generatorParams.ts`.

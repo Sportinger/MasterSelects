@@ -282,7 +282,7 @@ Blur's Zoom fade (1 − t/2).
 ## Technical details
 
 Notes for developers. The contract lives in `src/effects/blur/blurSampling.ts`;
-formulas and history in [Effects: editable blur kernels](./Effects.md#editable-blur-kernels),
+formulas and history in [Effect system: editable blur kernels](./Effect-System.md#editable-blur-kernels),
 nodes in [Node Catalog](./Node-Catalog.md), compilation in
 [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 

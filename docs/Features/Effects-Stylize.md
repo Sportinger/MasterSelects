@@ -275,9 +275,9 @@ Width into its search window.
 ## Technical details
 
 Notes for developers. Formulas and history live in
-[Effects: editable color effect graphs](./Effects.md#editable-color-effect-graphs)
+[Effect system: editable color effect graphs](./Effect-System.md#editable-color-effect-graphs)
 (Threshold, Posterize, Vignette, Scanlines, Film Grain) and
-[Effects: editable blur kernels](./Effects.md#editable-blur-kernels) (Sharpen,
+[Effect system: editable blur kernels](./Effect-System.md#editable-blur-kernels) (Sharpen,
 Edge Detect, Glow); nodes in [Node Catalog](./Node-Catalog.md#composed-coordinate-nodes),
 compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 

@@ -294,4 +294,4 @@ The Tracking inspector also contains **Track face precisely**, its preview
 control net, and **Stabilize face / lips**. These controls analyze the selected
 video independently of surface reconstruction. The separate **Face Cables**
 effect consumes that clip's precise result and supports iris-centered attachments.
-See [face tracking and cables](Effects.md#precise-face-control-net).
+See [face tracking and cables](Effect-System.md#precise-face-control-net).

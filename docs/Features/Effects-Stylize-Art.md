@@ -248,14 +248,14 @@ Notes for developers. Formulas and history are in [Effects](./Effects.md), nodes
 - **Acuarela passes.** Four passes: a premultiplied source cache, two edge-aware washes, and
   one pass for tones, eased Bousseau pigment density, paper and a premultiplied Mix. Recipe:
   `src/services/operators/acuarelaWatercolorGraph.ts`; kernels, sigmas and the wobble cap are in
-  [Effects: glyph, cell and compute effects](./Effects.md#glyph-cell-and-compute-effects).
+  [Effect system: glyph, cell and compute effects](./Effect-System.md#glyph-cell-and-compute-effects).
 - **Units and cost.** Wash and Bleed are pixels of a 1080p frame (its shorter side), so preview,
   export and 4K match; Grain Size is a scale factor of the paper grain (1 = standard). Flow is
   cycles per second. Acuarela takes about 3–4 ms per 1080p frame after a first frame of
   about 250–350 ms with the graph compile (desktop Vulkan).
 - **Rom1 Gain.** The lift equals Gain up to 0.25, then eases toward 0.5, so the frame never
   turns white. Rom1 builds every frame on the previous result (History Loop and Reset control
-  it); see [Effects: editable keying and feedback graphs](./Effects.md#editable-keying-and-feedback-graphs).
+  it); see [Effect system: editable keying and feedback graphs](./Effect-System.md#editable-keying-and-feedback-graphs).
 - **Sheen light.** The band's light falls off from its middle as exp(−4.5 t^(2 / Softness)) (t = 0
   in the middle, 1 at Width; one pixel of anti-aliasing at the edge), is weighted by the colour's
   luminance through Highlights, and lifts each colour with a soft shoulder,
@@ -263,12 +263,12 @@ Notes for developers. Formulas and history are in [Effects](./Effects.md), nodes
 - **Voxel Relief.** The 2D relief is raymarched (Ray Steps); as a 3D scene object it uses
   instancing. Block sides keep at least 55 % of the column colour. The default Distance 0.8
   fills the layer at the default Tilt. Values its shader clamps are named in the effect card
-  and tool results; see [Effects: editable Voxel Relief nodes](./Effects.md#editable-voxel-relief-nodes).
+  and tool results; see [Effect system: editable Voxel Relief nodes](./Effect-System.md#editable-voxel-relief-nodes).
 - **Particles.** One particle per Cell Size cell, up to the Preview (60,000) and Export (180,000)
   Particle Budget and the Hard Particle Limit (220,000); over budget the cells grow until the grid
   fits, and the effect card says so. The release pockets come from gradient Fractal Noise, and
   each cell's release time is its rank among all cells, spread evenly over Progress 0 to about
-  0.84 at the defaults. See [Effects: particle render effects](./Effects.md#particle-render-effects).
+  0.84 at the defaults. See [Effect system: particle render effects](./Effect-System.md#particle-render-effects).
 - **Saved projects.** Acuarela effects saved with the earlier smoke look keep it (their Gain is
   clamped to 0–1). Sheen saved before keeps its flat-topped band and even light, Voxel Relief its
   darker sides (and Distance 1 if it was saved before Distance existed), particles their

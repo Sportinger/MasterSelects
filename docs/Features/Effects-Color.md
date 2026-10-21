@@ -321,7 +321,7 @@ of the **Multiply** (1), in place of **Skin Weight**.
 
 Notes for developers. The recipes live in `src/services/operators/colorEffectGraphs.ts`
 (tuning in `COLOR_RECIPE`); formulas in
-[Effects: editable color effect graphs](./Effects.md#editable-color-effect-graphs),
+[Effect system: editable color effect graphs](./Effect-System.md#editable-color-effect-graphs),
 blocks in the [Node Catalog](./Node-Catalog.md) and the graph contract in the
 [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 

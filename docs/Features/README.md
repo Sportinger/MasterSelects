@@ -65,7 +65,7 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 
 | Document | Description |
 |---|---|
-| [Using effects](./Effects.md) | Add, adjust, reorder, compare and bypass effects; styles, parameter sources and Looks |
+| [Using effects](./Effects.md) | Add, adjust, compare, reorder and animate effects; parameter sources, styles, presets and the node setup |
 
 <!-- planned:
 | [Import media](./guides/import-media.md) | Files, folders, downloads and the Media panel |
@@ -102,10 +102,10 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 
 | Document | Description |
 |---|---|
+| [Effect catalog](./effects/index.md) | Every effect of the app, by picker group, with a picture and a link to its page |
 | [Nodes basics](./Node-Workspace.md) | The Nodes canvas of a clip: nodes, cables, operators, effect order and execution boundaries |
 
 <!-- planned:
-| [Effect catalog](./effects/index.md) | Every effect of the app, by picker group |
 | [How effects are built](./Effect-Nodes.md) | How to open, read and remix an effect's node setup |
 -->
 
@@ -262,6 +262,7 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 
 | Document | Description |
 |---|---|
+| [Effect system](./Effect-System.md) | Effect registry, picker groups, pipelines and runtimes, editable effect graphs, and per-effect implementation notes |
 | [GPU Engine](./GPU-Engine.md) | WebGPU engine, render loop, fallback paths, caches, and export boundary |
 | [Linux / Mesa GPU](./Linux-Mesa-GPU.md) | **Read before touching any canvas/GPU code** — Mesa silent-failure modes and the rules/gates that prevent "blank on Linux" regressions |
 | [Media Runtime](./Media-Runtime.md) | Shared source/runtime registry, decode sessions, frame-provider reuse, and slot/background playback bindings |
@@ -288,7 +289,6 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 | [Documentation Website](./Documentation-Site.md) | The /docs site: page sync, sidebar, page templates, media rules, build and hosting |
 
 <!-- planned:
-| [Effect system](./Effect-System.md) | Effect registry, pipelines, runtimes |
 | [Timeline internals](./Timeline-Internals.md) | Timeline store, clip actions and rendering internals |
 | [Media panel internals](./Media-Internals.md) | Import pipeline, media store and relinking internals |
 -->

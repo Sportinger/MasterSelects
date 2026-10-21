@@ -256,7 +256,7 @@ Split Vector into **G** of **Combine Vector**. Green then moves with blue.
 
 Notes for developers. The recipes live in
 `src/services/operators/mirrorRecipes.ts` and `cellGridRecipes.ts`; more in
-[Effects: editable mirror, split and pixel graphs](./Effects.md#editable-mirror-split-and-pixel-graphs)
+[Effect system: editable mirror, split and pixel graphs](./Effect-System.md#editable-mirror-split-and-pixel-graphs)
 (premultiplied reads, the worker CPU fallback),
 [Node Catalog](./Node-Catalog.md#composed-coordinate-nodes) (Mirror Repeat) and
 [Operator Graph Compiler](./Operator-Graph-Compiler.md).

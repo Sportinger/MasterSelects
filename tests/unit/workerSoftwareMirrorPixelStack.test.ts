@@ -1,7 +1,7 @@
 // Worker CPU fallback (software preview, worker-first export): pointwise effects in front of the
 // built-in Kaleidoscope, Mirror, RGB Split and Pixelate run as whole-frame steps in stack order
 // (fast and exact), instead of after them or through the slow graph interpreter
-// (docs/Features/Effects.md#editable-mirror-split-and-pixel-graphs).
+// (docs/Features/Effect-System.md#editable-mirror-split-and-pixel-graphs).
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { WorkerRenderSoftwareFrame } from '../../src/services/render/workerRenderHostRuntimeCommands';
 import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
