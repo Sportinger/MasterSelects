@@ -291,3 +291,27 @@ describe('ScrubbingCache background preload runtime reporting', () => {
     expect(timelineRuntimeCoordinator.getBridgeStats().policies.background.budgetReport.usage.htmlMediaElements).toBe(6);
   });
 });
+
+describe('ScrubbingCache retired media URLs', () => {
+  it('drops preload sessions and frames of a primary media URL that a reopen retired', async () => {
+    const { createPrimaryMediaObjectUrl, revokeAllMediaObjectUrls } = await import('../../src/services/project/mediaObjectUrlManager');
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValueOnce('blob:retire-old').mockReturnValueOnce('blob:retire-new');
+    const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+    const cache = new ScrubbingCache({} as unknown as GPUDevice);
+    const clear = vi.spyOn(cache, 'clearScrubbingCache').mockImplementation(() => undefined);
+    try {
+      const file = new File(['video'], 'clip.mp4', { type: 'video/mp4' });
+      createPrimaryMediaObjectUrl('media-retire', file);
+      createPrimaryMediaObjectUrl('media-retire', file);
+      expect(clear).toHaveBeenCalledWith('blob:retire-old');
+      cache.destroy();
+      clear.mockClear();
+      createPrimaryMediaObjectUrl('media-retire', file);
+      expect(clear).not.toHaveBeenCalled();
+    } finally {
+      revokeAllMediaObjectUrls();
+      createObjectURL.mockRestore();
+      revokeObjectURL.mockRestore();
+    }
+  });
+});

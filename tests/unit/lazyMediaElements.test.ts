@@ -18,6 +18,7 @@ import {
   releaseAllLazyTimelineImageElements,
 } from '../../src/services/timeline/lazyImageElements';
 import {
+  createPrimaryMediaObjectUrl,
   getLazyMediaElementObjectUrlKey,
   mediaObjectUrlManager,
   revokeAllMediaObjectUrls,
@@ -454,6 +455,30 @@ describe('lazy timeline media elements', () => {
 
     expect(regeneratedClip.source?.videoElement).toBe(firstElement);
     expect(createElement.mock.calls.filter(([tagName]) => tagName === 'video')).toHaveLength(1);
+  });
+
+  it('rebuilds a lazy element whose primary media URL a reopen replaced, even while the store still lists the old URL', () => {
+    vi.spyOn(URL, 'createObjectURL')
+      .mockReturnValueOnce('blob:primary-before-reopen')
+      .mockReturnValueOnce('blob:primary-after-reopen');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(noop);
+    const videoTrack = makeTrack('video', 'track-v1');
+    const clip = makeClip('reopened-clip', videoTrack, 'video', 'media-reopen');
+    const before = createPrimaryMediaObjectUrl('media-reopen', clip.file!);
+    const mediaFiles = [{ id: 'media-reopen', name: clip.name, type: 'video', url: before, duration: 4 }];
+
+    hydrateTimelineMediaWindow(makeContext({ clips: [clip], tracks: [videoTrack], mediaFiles, now: 1000 }));
+    const firstElement = clip.source?.videoElement;
+    expect(firstElement?.getAttribute('src')).toBe('blob:primary-before-reopen');
+
+    // The reopen opens the media again; the old URL is retired while the store entry still names it.
+    createPrimaryMediaObjectUrl('media-reopen', clip.file!);
+    // Released at once, so it stops streaming from the retired URL even if no frame renders.
+    expect(firstElement?.getAttribute('src')).toBeNull();
+    hydrateTimelineMediaWindow(makeContext({ clips: [clip], tracks: [videoTrack], mediaFiles, now: 1016 }));
+
+    expect(clip.source?.videoElement).not.toBe(firstElement);
+    expect(clip.source?.videoElement?.getAttribute('src')).toBe('blob:primary-after-reopen');
   });
 
   it('hydrates HTML video in worker GPU-only mode when WebCodecs playback is disabled', () => {

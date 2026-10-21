@@ -16,6 +16,7 @@ import { RamPreviewCache } from './scrubbingCache/ramPreviewCache';
 import { ScrubTextureCache } from './scrubbingCache/scrubTextureCache';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { GIB, normalizeScrubRamGB } from '../../services/scrubCacheMemory';
+import { onPrimaryMediaObjectUrlRetired } from '../../services/project/mediaObjectUrlManager';
 
 const log = Logger.create('ScrubbingCache');
 
@@ -58,6 +59,7 @@ export class ScrubbingCache {
   private readonly lastFrameCache: LastFrameCache;
   private readonly ramPreviewCache = new RamPreviewCache();
   private readonly unsubscribeRamBudget: () => void;
+  private readonly unsubscribeRetiredUrls: () => void;
 
   constructor(device: GPUDevice, onBackgroundFrameCached?: () => void) {
     this.scrubTextureCache = new ScrubTextureCache(device, onBackgroundFrameCached);
@@ -71,6 +73,8 @@ export class ScrubbingCache {
       onBackgroundFrameCached
     );
     this.lastFrameCache = new LastFrameCache(device);
+    // A reopen retires the media URL old preload videos stream from; drop them and their frames.
+    this.unsubscribeRetiredUrls = onPrimaryMediaObjectUrlRetired(url => this.clearScrubbingCache(url));
   }
 
   // Compat surface restored after the scrubbingCache/ split: thin delegation
@@ -372,6 +376,7 @@ export class ScrubbingCache {
 
   destroy(): void {
     this.unsubscribeRamBudget();
+    this.unsubscribeRetiredUrls();
     this.clearAll();
   }
 }

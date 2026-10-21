@@ -1,4 +1,4 @@
-import { createRenderablePrimaryMediaObjectUrl } from '../../mediaObjectUrlManager';
+import { createRenderablePrimaryMediaObjectUrl, resolveCurrentPrimaryMediaObjectUrl } from '../../mediaObjectUrlManager';
 import type { ProjectFile } from '../../types/project.types';
 import type { MediaState } from '../../../../stores/mediaStore/types';
 import type { RepositorySession } from '../RepositorySession';
@@ -234,11 +234,36 @@ async function connectAll(session: RepositorySession, items: readonly ProjectMed
   } finally { running--; notify(); }
 }
 
+/**
+ * One open per media at a time: the playhead demand and the composition check both open the same
+ * source on reopen. Two opens created two primary object URLs; the second revoked the first while
+ * the store and the media elements kept it (ERR_FILE_NOT_FOUND on every element load).
+ */
+const opening = new Map<string, Promise<MediaFile | 'open' | null>>();
+
 async function connect(item: ProjectMedia, current: () => boolean, stage: (file: MediaFile) => void, trustSavedLocation = false): Promise<boolean> {
-  const mediaStore = getRepositoryStore('media'); if (!mediaStore) return false;
-  const existing = (mediaStore.getState() as MediaState).files.find(file => file.id === item.id);
-  if (!existing) return false;
-  if (existing.file) return true;
+  let run = opening.get(item.id);
+  if (!run) {
+    const started = openLinkedMedia(item, current, trustSavedLocation);
+    run = started;
+    opening.set(item.id, started);
+    void started.then(() => undefined, () => undefined).finally(() => { if (opening.get(item.id) === started) opening.delete(item.id); });
+  }
+  const opened = await run;
+  if (opened === 'open') return true;
+  if (!opened || !current()) return false;
+  stage(opened);
+  return true;
+}
+
+function readMediaEntry(id: string): MediaFile | undefined {
+  return (getRepositoryStore('media')?.getState() as MediaState | undefined)?.files.find(file => file.id === id);
+}
+
+async function openLinkedMedia(item: ProjectMedia, current: () => boolean, trustSavedLocation: boolean): Promise<MediaFile | 'open' | null> {
+  const existing = readMediaEntry(item.id);
+  if (!existing) return null;
+  if (existing.file) return 'open';
   // Automatic access trusts the exact saved location; explicit reconnects validate the replacement.
   const session = getEditorRepositorySession();
   const projection = session?.coordinator?.getProjection();
@@ -248,16 +273,20 @@ async function connect(item: ProjectMedia, current: () => boolean, stage: (file:
   if (session && identity.identityStatus === 'verified' && typeof identity.contentHash === 'string' && typeof identity.byteLength === 'number') {
     const blob = await session.client.readBlob({ hash: identity.contentHash, length: identity.byteLength });
     if (blob && blob.size === identity.byteLength && current()) {
+      // Another path may have opened it meanwhile; a new primary URL would revoke the one in use.
+      if (readMediaEntry(item.id)?.file) return 'open';
       const file = new File([blob], item.name, { type: blob.type });
       const url = await createRenderablePrimaryMediaObjectUrl(item.id, file);
-      if (!current()) return false;
-      stage({ ...existing, file, url }); noteMediaOpened(item); return true;
+      if (!current()) return null;
+      noteMediaOpened(item);
+      return { ...existing, file, url };
     }
   }
+  if (readMediaEntry(item.id)?.file) return 'open';
   const [hydrated] = await convertProjectMediaToStore([item], { hydrateFiles: true, deferCacheChecks: true, trustSavedLocation });
-  if (!hydrated?.file || !current()) return false;
-  stage(hydrated); noteMediaOpened(item);
-  return true;
+  if (!hydrated?.file || !current()) return null;
+  noteMediaOpened(item);
+  return hydrated;
 }
 /** Locations that opened prove folder access; a later lapse on them pauses instead of going offline. */
 function noteMediaOpened(item: ProjectMedia): void {
@@ -272,8 +301,15 @@ async function applyConnectedMedia(batch: MediaFile[]): Promise<void> {
   const connected = new Map(batch.map(file => [file.id, file]));
   withRepositoryHydration(() => mediaStore.setState({ files: (mediaStore.getState() as MediaState).files.map(entry => {
     const hydrated = connected.get(entry.id);
-    return hydrated && !entry.file ? { ...entry, file: hydrated.file, url: hydrated.url,
-      hasFileHandle: hydrated.hasFileHandle, thumbnailUrl: entry.thumbnailUrl ?? hydrated.thumbnailUrl } : entry;
+    if (!hydrated) return entry;
+    if (!entry.file) {
+      return { ...entry, file: hydrated.file, url: hydrated.url,
+        hasFileHandle: hydrated.hasFileHandle, thumbnailUrl: entry.thumbnailUrl ?? hydrated.thumbnailUrl };
+    }
+    // Already open: keep it, unless this open replaced (revoked) the primary URL the entry still holds.
+    const currentUrl = entry.url && resolveCurrentPrimaryMediaObjectUrl(entry.id, entry.url);
+    return entry.url && currentUrl !== entry.url && hydrated.url && currentUrl === hydrated.url
+      ? { ...entry, url: hydrated.url } : entry;
   }) }));
   for (const hydrated of batch) {
     const file = hydrated.file;

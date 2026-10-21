@@ -9,7 +9,10 @@ import {
   createMediaObjectUrl,
   createRenderablePrimaryMediaObjectUrl,
   getLazyMediaElementObjectUrlKey,
+  isRevokedPrimaryMediaObjectUrl,
   mediaObjectUrlManager,
+  onPrimaryMediaObjectUrlRetired,
+  resolveCurrentPrimaryMediaObjectUrl,
 } from '../project/mediaObjectUrlManager';
 import type { RuntimeProviderDemand } from '../../timeline';
 import type { HtmlMediaResourceDescriptor, RenderResourceDescriptor } from './runtimeCoordinatorTypes';
@@ -57,6 +60,16 @@ const LAZY_MEDIA_OWNER_DATASET_KEY = 'msLazyTimelineOwner';
 
 const lazyMediaRecords = new Map<string, LazyMediaRecord>();
 const nativeReferenceResolutions = new Map<string, Promise<void>>();
+
+// A reopen retires the primary URL these elements stream from: release them now; the next
+// hydration builds them from the current source instead of loading a revoked URL.
+let stopRetiredUrlWatch: (() => void) | null = null;
+function ensureRetiredUrlWatch(): void {
+  stopRetiredUrlWatch ??= onPrimaryMediaObjectUrlRetired(url => {
+    for (const record of [...lazyMediaRecords.values()]) if (record.sourceUrl === url) detachRecord(record);
+  });
+}
+import.meta.hot?.dispose(() => { stopRetiredUrlWatch?.(); });
 
 type NativeReferenceClient = {
   parseFileReferenceUrl?: (url: string | undefined) => string | null;
@@ -130,6 +143,12 @@ function shouldAttachFreshLazyElement(
   const attachedElement = getAttachedElement(clip, kind);
   const expectedOwner = getRecordKey(kind, clip.id);
   const currentRecord = lazyMediaRecords.get(expectedOwner);
+  // A reopen replaced (revoked) the primary URL this element streams from: rebuild it from the current source.
+  if (currentRecord && isRevokedPrimaryMediaObjectUrl(currentRecord.sourceUrl)) {
+    detachRecord(currentRecord, ctx);
+    if (attachedElement === currentRecord.element) setAttachedElement(clip, kind, undefined);
+    return true;
+  }
   if (!attachedElement) {
     if (!currentRecord) return true;
 
@@ -259,7 +278,8 @@ function getLazySource(ctx: FrameContext, clip: TimelineClip, kind: LazyMediaKin
   managedObjectUrl?: LazyMediaRecord['managedObjectUrl'];
 } | null {
   const mediaFile = getMediaFileForLazyClip(ctx, clip);
-  const mediaUrl = mediaFile?.url;
+  // A primary URL replaced by a newer open is revoked: use the current one, or the runtime File below.
+  const mediaUrl = mediaFile?.url && resolveCurrentPrimaryMediaObjectUrl(mediaFile.id, mediaFile.url);
   const nativeReferenceUrl = mediaUrl && parseNativeFileReferenceUrl(mediaUrl)
     ? mediaUrl
     : null;
@@ -1120,6 +1140,7 @@ function collectDesiredClips(
 
 export function hydrateTimelineMediaWindow(ctx: FrameContext): void {
   if (typeof document === 'undefined') return;
+  ensureRetiredUrlWatch();
 
   const now = ctx.now;
   const desired = new Set<string>();
