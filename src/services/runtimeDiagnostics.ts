@@ -239,8 +239,15 @@ export function getOriginalConsoleMethod(
   return fallback ? fallback.bind(console) : undefined;
 }
 
+// Logger console lines start with a wall-clock time: "17:23:24 [Module] ...".
+const LOGGER_TIME_PREFIX = /^\d{2}:\d{2}:\d{2} (?=\[[^\]\s]+\] )/;
+
 function recordConsole(method: CapturedConsoleMethod, args: unknown[]): void {
   const serializedArgs = args.map((arg) => serializeArg(arg));
+  // The Logger keeps its own structured entry; its console copy drops the
+  // clock prefix so one failure keeps one stable message across sessions.
+  const viaLogger = typeof args[0] === 'string' && LOGGER_TIME_PREFIX.test(args[0]);
+  if (viaLogger) serializedArgs[0] = serializedArgs[0].replace(LOGGER_TIME_PREFIX, '');
   const message = serializedArgs.join(' ');
   const firstError = args.find((arg): arg is Error => arg instanceof Error);
   // TFLite initialization can arrive through the console.error channel.
@@ -253,7 +260,11 @@ function recordConsole(method: CapturedConsoleMethod, args: unknown[]): void {
     message: message || `[console.${method}]`,
     args: serializedArgs,
     stack: firstError?.stack,
-    details: firstError ? { method, errorName: firstError.name } : { method },
+    details: {
+      method,
+      ...(firstError ? { errorName: firstError.name } : {}),
+      ...(viaLogger ? { logger: true } : {}),
+    },
   });
 }
 

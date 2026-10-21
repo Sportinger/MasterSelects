@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebGPUContext } from '../../src/engine/core/WebGPUContext';
+import { DeviceLossPolicy, REPEATED_LOSS_LIMIT, whenPageVisible } from '../../src/engine/core/deviceLossPolicy';
+import { describeGPURecoveryFailure } from '../../src/engine/core/gpuInitializationFailure';
 
 const log = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -222,9 +224,15 @@ describe('WebGPUContext', () => {
     requestAdapter.mockResolvedValue(null);
     const failed = vi.fn();
     context.onRecoveryFailed(failed);
+    log.error.mockClear();
     lose({ reason: 'unknown', message: 'driver reset' });
     await vi.advanceTimersByTimeAsync(2_000);
     expect(failed).toHaveBeenCalledExactlyOnceWith('adapter_unavailable');
+    // One incident, one error: refused adapters per attempt are warnings.
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('GPU recovery failed',
+      { attempts: 3, failure: 'adapter_unavailable', lostDevice: 'driver reset' });
+    expect(log.warn).toHaveBeenCalledWith('Failed to get GPU adapter (all attempts); recovery attempt 3', undefined);
+    expect(describeGPURecoveryFailure('adapter_unavailable')).toContain('reload the editor');
     expect(context.recovering).toBe(false);
     expect(context.initialized).toBe(false);
     expect(context.getDevice()).toBeNull();
@@ -493,5 +501,31 @@ describe('WebGPUContext', () => {
     expect(requestAdapter).toHaveBeenCalledTimes(3);
     expect(context.recovering).toBe(false);
     expect(log.error).toHaveBeenCalledTimes(1);
+    expect(log.error).toHaveBeenCalledWith('Device lost', vkLoss.message);
+  });
+
+  it('keeps hidden, unloading, and frozen pages out of the repeated-loss count until they return', () => {
+    const policy = new DeviceLossPolicy(() => 0);
+    const resumed = vi.fn();
+    try {
+      window.dispatchEvent(new Event('pagehide'));
+      for (let i = 0; i <= REPEATED_LOSS_LIMIT; i++) {
+        expect(policy.classify()).toEqual({ kind: 'background', report: 'warn', recover: 'when-visible' });
+      }
+      window.dispatchEvent(new Event('pageshow'));
+      document.dispatchEvent(new Event('freeze'));
+      whenPageVisible(resumed);
+      setVisibility('hidden');
+      document.dispatchEvent(new Event('resume'));
+      expect(resumed).not.toHaveBeenCalled();
+      expect(policy.classify().kind).toBe('background');
+    } finally {
+      window.dispatchEvent(new Event('pageshow'));
+      document.dispatchEvent(new Event('resume'));
+      setVisibility('visible');
+    }
+    expect(resumed).toHaveBeenCalledOnce();
+    expect(policy.classify()).toEqual({ kind: 'unexpected', report: 'error', recover: 'now', occurrence: 1 });
+    expect(policy.classify()).toMatchObject({ kind: 'unexpected', report: 'warn', occurrence: 2 });
   });
 });

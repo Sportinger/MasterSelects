@@ -67,6 +67,15 @@ reports it as "Device was destroyed.") is a warning and recovery waits until the
 page is visible again. Three real losses within a minute stop recovery and show
 a driver-reset message instead of looping lose/recover.
 
+Each loss incident files at most one error. The first real loss's error waits
+for the recovery outcome: a recovered device reports `Device lost`, while a
+recovery that gives up (for example when Chrome refuses a new adapter after
+repeated GPU-process crashes) reports only `GPU recovery failed`, including the
+original loss message. The individual recovery attempts in between are
+warnings. The preview then says the GPU stopped responding and asks to save and
+reload the editor to restore it. The console capture in runtime diagnostics
+drops the Logger's clock prefix so a logged failure keeps one stable message.
+
 Targeted coverage: `webgpuContext.test.ts`, `contextRecoveryWiring.test.ts`,
 and `outputCanvasRecovery.test.ts` under `tests/unit/`.
 

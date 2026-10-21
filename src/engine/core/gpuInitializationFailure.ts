@@ -26,3 +26,18 @@ export function describeGPUInitializationFailure(failure: GPUInitializationFailu
       return 'The preview renderer could not be initialized. Save your work if possible, then reload the editor.';
   }
 }
+
+/**
+ * Product copy when recovery after a device loss gives up. The GPU worked
+ * earlier in this session, so setup advice would mislead; a reload restores it.
+ */
+export function describeGPURecoveryFailure(failure: GPUInitializationFailure | null): string {
+  switch (failure) {
+    case 'adapter_timeout':
+    case 'device_timeout':
+    case 'device_lost_repeatedly':
+      return describeGPUInitializationFailure(failure);
+    default:
+      return 'The GPU stopped responding and the browser did not provide a new one, so the preview is paused. Save your work, then reload the editor to restore the GPU; if it stays unavailable, restart the browser.';
+  }
+}

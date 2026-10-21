@@ -24,3 +24,13 @@ it('does not downgrade arbitrary INFO prefixes on the error channel', () => {
   console.error('INFO: another subsystem failed');
   expect(getRecentRuntimeDiagnosticEntries(1)[0]).toMatchObject({ level: 'ERROR' });
 });
+
+it('drops the Logger clock prefix so a logged failure keeps one stable message', () => {
+  installRuntimeDiagnostics();
+  console.error('17:23:24 [WebGPUContext] \u274c ', 'Device lost', 'driver reset');
+  expect(getRecentRuntimeDiagnosticEntries(1)[0]).toMatchObject({
+    level: 'ERROR',
+    message: '[WebGPUContext] \u274c  Device lost driver reset',
+    details: { method: 'error', logger: true },
+  });
+});
