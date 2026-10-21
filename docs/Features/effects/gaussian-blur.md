@@ -5,9 +5,9 @@ transitions and anything that should simply look soft.
 
 Group: [Blur & Sharpen](../Effects-Blur.md) · [How to add an effect](../Effects.md#add-an-effect)
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-compare">
 
-![Original left, Gaussian Blur (Radius 12) right, on the harbour image](../assets/effects/gaussian-blur.webp)
+![The harbour town, original left and with Gaussian Blur at Radius 12 right: boats, houses and the mountain go soft and their edges melt into the sky and the water](../assets/effects/gaussian-blur.webp)
 
 <figcaption>Left: original. Right: Radius 12.</figcaption>
 </figure>

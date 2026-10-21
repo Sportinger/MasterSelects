@@ -20,10 +20,10 @@ Each page type has a fixed template: [Page templates](#page-templates).
 
 | The page shows | Medium | Made with |
 |---|---|---|
-| A filter (it changes the clip's picture) whose look is static | original \| effect still (split) | `scripts/effect-lab.mjs --pairs` |
-| A filter that moves or depends on time | a short loop on moving footage, in place of the still | `scripts/doc-clip.mjs` |
-| A generator (it draws its own picture or 3D structure: Weave, Flocking, Stick Figure) | the effect alone on black: a still, or a loop when it moves | `scripts/effect-lab.mjs`, `scripts/doc-clip.mjs` |
-| The presets of an effect | a strip of small stills, one per preset, labelled with its name | `scripts/effect-lab.mjs --pairs` |
+| A filter (it changes the clip's picture) whose look is static | a [compare slider](#compare-sliders) on a still: drag the line between original and effect | `scripts/effect-lab.mjs --pairs`, `"layout": "compare"` |
+| A filter that moves or depends on time | a compare slider on a short loop of moving footage | `scripts/doc-clip.mjs`, `"layout": "compare"` |
+| A generator (it draws its own picture or 3D structure: Weave, Flocking, Stick Figure) | the effect alone on black, no compare: a still, or a loop when it moves | `scripts/effect-lab.mjs`, `scripts/doc-clip.mjs` |
+| The presets of an effect | a strip of small stills, one per preset, labelled with its name (no compare) | `scripts/effect-lab.mjs --pairs` |
 | How to do something in the editor (add, drag, trim) | a clip with a visible pointer | `scripts/doc-clip.mjs`, `"kind": "operation"` |
 | A part of the editor (inspector, panel) | a still with yellow numbered callouts | `scripts/effect-editor-shot.mjs` |
 | A node graph | a graph picture | `scripts/effect-graph-shot.mjs` |
@@ -57,6 +57,7 @@ Each page type has a fixed template: [Page templates](#page-templates).
 **Formatting.**
 
 - A picture is `<figure class="docs-shot">` with a `<figcaption>`; `docs-shot--float-right` or `--float-left` puts the top picture beside the text.
+- A filter's picture is a compare: `docs-compare` on the figure around its pair ([Compare sliders](#compare-sliders)).
 - Tables have at most four short columns.
 - No manual table of contents and no change-log wording.
 - Details: [Pictures, clips, diagrams and galleries](#pictures-clips-diagrams-and-galleries).
@@ -164,7 +165,7 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 1. `# <Name>`, exactly the catalog name.
 2. One or two sentences: what it does and what for, in everyday words. The first one becomes the card text.
 3. `Group: [<picker label>](../Effects-<Group>.md) · [How to add an effect](../Effects.md#add-an-effect)`. Without an overview page, link the catalog section: `./index.md#print--halftone`.
-4. One picture with a caption. A static effect gets an original | effect still (`scripts/effect-lab.mjs --pairs`, `"layout": "split"`, saved as `../assets/effects/<id>.webp`); a moving or time-based effect (catalog `moving`) gets a short loop on moving footage (`scripts/doc-clip.mjs`, `../assets/effects/clips/<id>.mp4` with its `.webp` poster). Reuse the existing still or clip; make a new one only when the page would otherwise have none.
+4. One picture with a caption. A filter gets a [compare slider](#compare-sliders): a still pair (`scripts/effect-lab.mjs --pairs`, `"layout": "compare"`, saved as `../assets/effects/<id>.webp`) or, when it moves or depends on time (catalog `moving`), a loop pair on moving footage (`scripts/doc-clip.mjs`, `"layout": "compare"`, `../assets/effects/clips/<id>.mp4` with its `.webp` poster). A generator shows its effect alone on black. Pages that still show a split still or a pair with a gap keep it until they are converted; reuse an existing compare pair, make a new one when the page is written or rewritten.
 5. `**Use it for:**` two or three uses, then two to four key controls, one line each in everyday words (`- **Radius** – how soft it gets.`; their full paragraphs follow under `## Controls`), then one `**Tip:**`.
 6. `## Presets`: the preset strip and one short paragraph per preset ([Style guide](#style-guide)).
 7. `## Controls`: one short paragraph per control, under a `###` for each card section, with its limits and default ([Style guide](#style-guide)). A basic page keeps the generated table until it is written by hand; when you write a page by hand, replace its table (the block with both markers) with paragraphs.
@@ -185,9 +186,9 @@ transitions and anything that should simply look soft.
 
 Group: [Blur & Sharpen](../Effects-Blur.md) · [How to add an effect](../Effects.md#add-an-effect)
 
-<figure class="docs-shot">
+<figure class="docs-shot docs-compare">
 
-![Original left, Gaussian Blur (Radius 12) right, on the harbour image](../assets/effects/gaussian-blur.webp)
+![The harbour town, original left and with Gaussian Blur at Radius 12 right](../assets/effects/gaussian-blur.webp)
 
 <figcaption>Left: original. Right: Radius 12.</figcaption>
 </figure>
@@ -255,6 +256,42 @@ Paths are relative to `docs/Features`. Further fields: `basic` (a generated basi
 
 **Budgets** for pictures, thumbnails and clips: [Style guide](#style-guide). `scripts/docShotWebp.mjs` encodes pictures to fit, `scripts/doc-clip.mjs` clips.
 
+### Compare sliders
+
+A filter is shown as a compare: original and effect in one picture, split by a white line with a small round handle that the reader drags from side to side. It starts in the middle. A click or tap moves the line there, a sideways drag moves it along (a vertical swipe still scrolls the page), and the arrow keys, Home and End move it once it has keyboard focus. Small tags in the top corners name both sides.
+
+**The source is a pair:** original | effect, the same view at the same size side by side, without a gap. GitHub and the raw Markdown simply show both. Put `docs-compare` on the figure:
+
+```markdown
+<figure class="docs-shot docs-compare">
+
+![The harbour town, original left and with Gaussian Blur at Radius 12 right](../assets/effects/gaussian-blur.webp)
+
+<figcaption>Left: original. Right: Radius 12.</figcaption>
+</figure>
+```
+
+A loop is the clip figure with `docs-compare` added (`doc-clip.mjs` prints it):
+
+```html
+<figure class="docs-shot docs-clip docs-compare">
+<video src="../assets/effects/clips/glitch.mp4" poster="../assets/effects/clips/glitch.webp" width="960" height="492" autoplay muted loop playsinline preload="none" aria-label="…"></video>
+<figcaption>Left: original. Right: Intensity 0.75, Density 0.45.</figcaption>
+</figure>
+```
+
+- The tags read "Original" and the page title. `data-before="…"` and `data-after="…"` on the figure name them otherwise, for two effects side by side (`data-before="Box Blur" data-after="Gaussian Blur"`).
+- The alt text (or the video's `aria-label`) describes both sides; the slider itself is announced as "Compare original and Gaussian Blur" (the tags' names).
+- The caption names what changed ("Left: original. Right: Radius 12."); it stays true on GitHub too.
+- Not a compare: generators (alone on black), preset strips and a whole frame beside an enlarged detail (`"layout": "detail"`).
+
+**Making the pair.** Both tools take `"layout": "compare"` and print the figure:
+
+- Stills: an Effect Lab entry in `scripts/effect-lab-shots/<group>.json` with `"left": { "effect": "original" }` and the effect on the right. Both sides get the same crop (default: the whole frame) at the same size; `outWidth` (default and at most 1600) is the width of the whole pair, always even, within 200 KB. `alt` and `caption` go into the printed figure. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json --only gaussian-blur --url http://localhost:<vite port>`.
+- Loops: a `doc-clip.mjs` entry in `scripts/doc-clips/<group>.json`; `width` is the whole pair (default 960), within 1.5 MB and 12 s. Set `poster` to a moment where the effect shows: it is what readers who prefer reduced motion compare. `node scripts/doc-clip.mjs scripts/doc-clips/analog.json --only glitch --media <folder> --url http://localhost:<vite port>`.
+
+**How the site shows it.** The sync (`docs-site/scripts/lib/compare.mjs`) builds a box of one half's size from the asset's own size, so the page never shifts; until `docs-site/src/scripts/docsCompare.js` runs, it reads as a split picture. A loop loads one file: both halves are drawn from its single video, frame by frame, so original and effect stay in sync. It plays only while it is on screen; under reduced motion the poster's halves stay, the line still moves and a small play button starts the loop. The sync reports a pair with an odd width, halves wider than 2.5:1 or narrower than 1:2 (likely a single frame, not a pair), and a poster of another size than its clip. It cannot see a gap or a split frame inside a pair, so look at every new pair yourself.
+
 ## Shot and clip tooling
 
 The scripts that make the pictures and clips. Each prints the figure HTML to paste; [Effect pages](#effect-pages) says which picture an effect page needs.
@@ -282,7 +319,8 @@ landmarks, temporal source, tracking) render without it and are checked in the
 editor instead. `--pairs <file>` writes docs close-ups: each entry renders two
 effects (or `original`) on one image, crops the same region of both (`crop`, in
 pixels of the rendered frame, `zoom` enlarges it) and puts them side by side as a
-WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`;
+WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`
+(`"layout": "compare"` makes the gap-free pair of a [compare slider](#compare-sliders));
 `"backdrop": "checker"` or a flat colour (`"#3c6ec8"`, readable at float size) shows
 transparent pixels.
 
@@ -397,8 +435,9 @@ list per docs page (`scripts/doc-clips/analog.json`):
 
 - An **effect clip** puts the source video on the timeline, adds the effect with the
   given parameters and exports the `range` through `debugExport` (the export panel's
-  `FrameExporter`, at the source size and frame rate), for `pair` and `split` also once
-  without the effect. ffmpeg builds the layout – `single`, `pair` (original | effect),
+  `FrameExporter`, at the source size and frame rate), for `pair`, `compare` and `split`
+  also once without the effect. ffmpeg builds the layout – `single`, `pair` (original | effect),
+  `compare` (the same without a gap, for a [compare slider](#compare-sliders)),
   `split` (one picture, original left of a thin line) or `detail` (the frame | a 3×
   pixel-for-pixel detail at `detail` [x, y]) – and a seamless loop: the last `loop`
   seconds (default 0.5) fade into the first, so the clip ends on the frame it starts with.
@@ -453,11 +492,12 @@ The sync reports, without failing:
 
 - links to a missing page or to a heading the target page does not have (heading ids as Starlight makes them: the github-slugger rules in `docs-site/scripts/lib/slug.mjs`);
 - pictures without alt text, clips without a poster or label;
+- compare figures whose pair cannot be two equal halves (odd width, implausible halves) or whose poster and clip differ in size;
 - assets over their budget;
 - index rows for missing pages, pages listed twice, pages without a row, unknown directives;
 - redirects that wait, or point nowhere.
 
-The sidebar logic is covered by `tests/unit/docsSiteSync.test.ts`.
+The sidebar logic is covered by `tests/unit/docsSiteSync.test.ts`, the compare sliders (sync and client script) by `tests/unit/docsCompareSlider.test.ts`.
 
 ## Hosting and routing
 

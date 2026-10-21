@@ -13,7 +13,7 @@
         0.5,
         5.5
       ],
-      "layout": "pair",
+      "layout": "compare",
       "crop": [
         380,
         100,
@@ -24,7 +24,8 @@
       "float": "left",
       "alt": "The dancer turning, original left and with Glitch right: in short bursts rows of the picture tear sideways with red, green and blue fringes and square blocks jump, with clean frames in between",
       "caption": "Left: original. Right: Intensity 0.75, Density 0.45 – bursts with clean frames between.",
-      "loop": 0.35
+      "loop": 0.35,
+      "poster": 1.1
     },
     {
       "name": "crt-screen",

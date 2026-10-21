@@ -4,8 +4,8 @@ A broken digital signal: rows tear sideways, blocks jump and the colours split, 
 
 Group: [Analog & Glitch](../Effects-Analog.md) · [How to add an effect](../Effects.md#add-an-effect)
 
-<figure class="docs-shot docs-clip">
-<video src="../assets/effects/clips/glitch.mp4" poster="../assets/effects/clips/glitch.webp" width="962" height="490" autoplay muted loop playsinline preload="none" aria-label="The dancer turning, original left and with Glitch right: in short bursts rows of the picture tear sideways with red, green and blue fringes and square blocks jump, with clean frames in between"></video>
+<figure class="docs-shot docs-clip docs-compare docs-shot--float-left">
+<video src="../assets/effects/clips/glitch.mp4" poster="../assets/effects/clips/glitch.webp" width="960" height="492" autoplay muted loop playsinline preload="none" aria-label="The dancer turning, original left and with Glitch right: in short bursts rows of the picture tear sideways with red, green and blue fringes and square blocks jump, with clean frames in between"></video>
 <figcaption>Left: original. Right: Intensity 0.75, Density 0.45 – bursts with clean frames between.</figcaption>
 </figure>
 
