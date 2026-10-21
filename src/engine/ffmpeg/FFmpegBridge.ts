@@ -8,20 +8,21 @@ import type {
   FFmpegVideoCodec,
 } from './types';
 import { Logger } from '../../services/logger';
-import { buildEncodeArgs, audioBufferToPCM } from './bridge/ffmpegEncodeArgs';
-import { parseEncodeProgressLine, containerMimeType } from './bridge/ffmpegLogParsing';
-import { FFmpegExportMemoryError, RawFrameBuffer, isAllocationFailure } from './bridge/rawFrameBuffer';
+import { parseEncodeProgressLine } from './bridge/ffmpegLogParsing';
+import { FFmpegFrameStream, type FFmpegFrameStreamHost } from './bridge/ffmpegFrameStream';
 
 const log = Logger.create('FFmpegBridge');
 
 // FFmpeg WASM core interface (direct core, not @ffmpeg/ffmpeg wrapper)
 interface FFmpegCore {
   FS: {
-    writeFile: (path: string, data: Uint8Array, opts?: { canOwn?: boolean }) => void;
+    writeFile: (path: string, data: Uint8Array | string, opts?: { canOwn?: boolean }) => void;
     readFile: (path: string) => Uint8Array<ArrayBuffer>;
     unlink: (path: string) => void;
     readdir: (path: string) => string[];
     mkdir: (path: string) => void;
+    rmdir?: (path: string) => void;
+    stat?: (path: string) => { size: number };
   };
   exec?: (...args: string[]) => number;
   callMain?: (args: string[]) => number;
@@ -58,11 +59,12 @@ export class FFmpegBridge {
   private logs: FFmpegLogEntry[] = [];
   private onProgress?: (progress: FFmpegProgress) => void;
   private onLog?: (log: FFmpegLogEntry) => void;
-  private cancelled = false;
   private totalFrames = 0;
   private startTime = 0;
   private heapEpoch = 0;
   private heapListeners = new Set<(epoch: number) => void>();
+  private activeStream: FFmpegFrameStream | null = null;
+  private streamCounter = 0;
 
   /**
    * Check if FFmpeg WASM is supported in this browser
@@ -280,11 +282,9 @@ export class FFmpegBridge {
   }
 
   /**
-   * Encode frames to video using FFmpeg
-   * @param frames - Array of raw RGBA frame data
-   * @param settings - Export settings (resolution, codec, etc.)
-   * @param onProgress - Progress callback
-   * @param audioBuffer - Optional mixed audio buffer to include
+   * Encode already collected RGBA frames. Goes through the same bounded
+   * segment stream as the export runner, so FFmpeg never needs one buffer
+   * for the whole clip.
    */
   async encode(
     frames: Uint8Array[],
@@ -293,106 +293,81 @@ export class FFmpegBridge {
     audioBuffer?: AudioBuffer | null
   ): Promise<Blob> {
     if (frames.length === 0) throw new Error('No frames to encode');
-    this.cancelled = false;
-    const rawFrames = RawFrameBuffer.allocate(settings.width, settings.height, frames.length);
+    const stream = await this.openFrameStream(settings, frames.length);
     try {
-      for (const frame of frames) {
-        if (this.cancelled) throw new Error('Cancelled');
-        rawFrames.writeFrame(frame);
-      }
-    } catch (error) {
-      rawFrames.release();
-      throw error;
+      for (const frame of frames) stream.writeFrame(frame);
+      return await stream.finish(audioBuffer, onProgress);
+    } finally {
+      stream.abort();
     }
-    return this.encodeRawFrames(rawFrames, settings, onProgress, audioBuffer);
   }
 
   /**
-   * Encode frames that were rendered straight into a preallocated
-   * RawFrameBuffer. The buffer's bytes become the MEMFS input file without
-   * another copy; allocation failures surface as FFmpegExportMemoryError.
+   * Start a streaming encode: write RGBA frames with writeFrame() while they
+   * are rendered, then call finish(). Raw memory stays bounded to one segment
+   * (see ffmpegFrameStream.ts). cancel() stops the stream at the next segment.
    */
-  async encodeRawFrames(
-    rawFrames: RawFrameBuffer,
+  async openFrameStream(
     settings: FFmpegExportSettings,
-    onProgress?: (progress: FFmpegProgress) => void,
-    audioBuffer?: AudioBuffer | null
-  ): Promise<Blob> {
-    const frameCount = rawFrames.frameCount;
-    const rawBytes = rawFrames.byteLength;
+    expectedFrames: number,
+    options: { segmentBudgetBytes?: number } = {},
+  ): Promise<FFmpegFrameStream> {
+    if (!this.ffmpeg) await this.load();
+    const core = this.ffmpeg;
+    if (!core) throw new Error('FFmpeg not loaded');
+    if (this.activeStream) {
+      log.warn('Aborting a previous FFmpeg frame stream that was never finished');
+      this.activeStream.abort();
+    }
+    this.streamCounter += 1;
+    const host: FFmpegFrameStreamHost = {
+      fs: core.FS,
+      run: (args, label, progress) => this.runEncodeCommand(args, label, progress),
+      onClosed: (closed) => {
+        if (this.activeStream === closed) this.activeStream = null;
+      },
+    };
+    const stream = new FFmpegFrameStream(host, {
+      settings,
+      expectedFrames,
+      directory: `/export-${this.streamCounter}`,
+      segmentBudgetBytes: options.segmentBudgetBytes,
+    });
+    this.activeStream = stream;
+    log.debug(`Frame stream opened: ${stream.segmentFrames} frames per segment`);
+    return stream;
+  }
+
+  private runEncodeCommand(
+    args: string[],
+    label: string,
+    progress?: { totalFrames: number; onProgress?: (progress: FFmpegProgress) => void },
+  ): void {
+    const core = this.ffmpeg;
+    if (!core) throw new Error('FFmpeg not loaded');
+    this.logs = [];
+    this.onProgress = progress?.onProgress;
+    this.totalFrames = progress?.totalFrames ?? 0;
+    this.startTime = performance.now();
+    log.debug(`Running (${label}): ffmpeg`, args.join(' '));
+    let exitCode: number;
     try {
-      if (frameCount === 0) throw new Error('No frames to encode');
-      if (!this.ffmpeg) {
-        await this.load();
-      }
-      if (!this.ffmpeg) {
-        throw new Error('FFmpeg not loaded');
-      }
-
-      this.onProgress = onProgress;
-      this.logs = [];
-      this.totalFrames = frameCount;
-      this.startTime = performance.now();
-
-      const fs = this.ffmpeg.FS;
-
-      // Clean up any previous files first to reset FFmpeg state
-      this.cleanup();
-
-      // Create directories (they may already exist)
-      try { fs.mkdir('/input'); } catch { /* exists */ }
-      try { fs.mkdir('/output'); } catch { /* exists */ }
-
-      // One raw file bypasses the pattern matching issue in WASM FFmpeg's
-      // image2 demuxer. canOwn lets MEMFS keep our bytes instead of copying.
-      log.debug(`Writing ${frameCount} frames (${(rawBytes / 1024 / 1024).toFixed(1)} MB)...`);
-      fs.writeFile('/input/frames.raw', rawFrames.take(), { canOwn: true });
-
-      // Write audio if provided
-      const supportsAudio = settings.container !== 'gif' && settings.codec !== 'gif';
-      let hasAudio = false;
-      if (supportsAudio && audioBuffer && audioBuffer.length > 0) {
-        const audioData = audioBufferToPCM(audioBuffer);
-        fs.writeFile('/input/audio.raw', new Uint8Array(audioData.buffer), { canOwn: true });
-        hasAudio = true;
-        log.debug(`Audio: ${audioBuffer.duration.toFixed(2)}s, ${audioBuffer.sampleRate}Hz`);
-      }
-
-      // Build FFmpeg arguments (using single file input)
-      const args = buildEncodeArgs(settings, frameCount, hasAudio ? audioBuffer : null);
-      log.debug('Running: ffmpeg', args.join(' '));
-
-      // NOTE: Do NOT call reset() here - it clears the virtual filesystem!
-      // The files we just wrote would be deleted.
-
-      // Execute FFmpeg (callMain is synchronous but may take a while)
-      log.info('Starting FFmpeg encode...');
-      const encodeStart = performance.now();
-      const exitCode = this.execute(args);
-      const encodeTime = ((performance.now() - encodeStart) / 1000).toFixed(2);
-      log.info(`FFmpeg finished in ${encodeTime}s with exit code ${exitCode}`);
-
-      if (exitCode !== 0) {
-        log.error('FFmpeg logs:', this.logs.map(l => l.message).join('\n'));
-        throw new Error(`FFmpeg exited with code ${exitCode}`);
-      }
-
-      // Free the raw input before the output is copied out of MEMFS.
-      this.cleanupDirectory('/input');
-
-      // readFile returns a fresh, standalone copy that can back the Blob directly.
-      const outputPath = `/output/output.${settings.container}`;
-      const data = fs.readFile(outputPath);
-      log.info(`Output file size: ${(data.byteLength / 1024 / 1024).toFixed(2)} MB`);
-      return new Blob([data], { type: containerMimeType(settings.container) });
+      exitCode = this.execute(args);
     } catch (error) {
-      if (isAllocationFailure(error) && !(error instanceof FFmpegExportMemoryError)) {
-        throw new FFmpegExportMemoryError(rawBytes, frameCount, settings.width, settings.height);
-      }
+      // An exception thrown out of the wasm call leaves the core mid-run;
+      // drop it so the next command starts on a freshly loaded core.
+      log.warn(`FFmpeg aborted while ${label}; the core will be reloaded`, error);
+      this.terminate();
       throw error;
     } finally {
-      rawFrames.release();
-      this.cleanup();
+      this.onProgress = undefined;
+      core.reset?.();
+    }
+    log.info(`FFmpeg ${label} finished in ${((performance.now() - this.startTime) / 1000).toFixed(2)}s`);
+    if (exitCode !== 0) {
+      const detail = this.logs.slice(-8).map(entry => entry.message).join('\n');
+      log.warn(`FFmpeg exited with code ${exitCode} while ${label}`, detail);
+      throw new Error(`FFmpeg exited with code ${exitCode} while ${label}${detail ? `:\n${detail}` : ''}`);
     }
   }
 
@@ -425,8 +400,9 @@ export class FFmpegBridge {
    * Cancel current export
    */
   cancel(): void {
-    this.cancelled = true;
+    this.activeStream?.cancel();
   }
+
 
   /**
    * Get accumulated logs
@@ -484,7 +460,6 @@ export class FFmpegBridge {
       throw new Error('FFmpeg not loaded. Call load() first.');
     }
 
-    this.cancelled = false;
     this.logs = [];
 
     const fs = this.ffmpeg.FS;

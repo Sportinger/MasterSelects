@@ -298,10 +298,13 @@ The FFmpeg path is a separate CPU-based export pipeline.
 ### Current Build Characteristics
 
 - Loads the FFmpeg core from the local `/ffmpeg` path on demand.
-- Uses a single synchronous `callMain()` execution model.
-- Blocks the UI while encoding is running.
+- Runs FFmpeg synchronously; the UI is blocked while one segment or the final join is encoding.
 - Reports progress from FFmpeg log output where possible.
-- Holds the whole range uncompressed in memory (width x height x 4 bytes per frame). The buffer is reserved once before rendering and handed to FFmpeg without further copies; when the browser cannot provide it, the export stops immediately with a "Not enough memory" message that names the required size and suggests WebCodecs, a shorter range, or a lower resolution or frame rate.
+- Streams frames in bounded segments (`src/engine/ffmpeg/bridge/ffmpegFrameStream.ts`): rendered frames fill one reused RGBA buffer of about 256 MB (32 frames at 1080p, 8 at 4K); each full buffer is encoded into a compressed segment file in the FFmpeg memory filesystem, and the end of the export joins all segments with the concat demuxer (stream copy) and encodes the audio once. All FFmpeg export codecs are intra-only, so the copy join is exact. GIF segments are a lossless UT Video intermediate and the join runs the palette pass for the whole clip.
+- Peak raw memory is therefore one segment, independent of the export length. What still grows with the length is the compressed file: the segments, then the joined file and its copy for the download (roughly 2-3x the final file size at the end). Example: 20 s of 1080p30 ProRes 422 HQ is about 550 MB of output instead of 4.6 GB of raw frames; 600 frames of 720p MJPEG peaked at about 480 MB of buffers in a Node run of the real FFmpeg core instead of 2.1 GB raw. The practical limit is the encoded size, so heavy profiles (ProRes 4444 XQ, FFV1, UT Video) reach it first.
+- Out of memory is reported by stage: the segment buffer (halved automatically down to one frame before giving up), the encoded segments, or the finished file. Each message names the size and suggests a more compact codec or profile, a shorter range, or WebCodecs.
+- Cancel takes effect at the next segment boundary, including during encoding; temporary files are removed. A JavaScript exception thrown out of an FFmpeg run makes the bridge reload the core before the next command.
+- Known pre-existing quirk: MXF with PCM audio drops the last video frame in this FFmpeg 5.1 core, with or without segments.
 
 ### Supported Video Codecs
 
@@ -386,9 +389,9 @@ WebCodecs decoder startup submits a bounded search window of up to 32 samples be
 
 1. Render each frame through the GPU engine.
 2. Read pixels from the GPU.
-3. Write frames into one preallocated raw buffer that FFmpeg takes over without copying.
+3. Write frames into the bounded segment buffer; every full buffer is encoded into a compressed segment.
 4. Extract audio if enabled and the selected output supports audio.
-5. Run FFmpeg encoding.
+5. Join the segments (stream copy, or the GIF palette pass) and mux the audio.
 
 ### Limitation
 
