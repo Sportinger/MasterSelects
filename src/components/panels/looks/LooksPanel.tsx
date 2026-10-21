@@ -31,6 +31,7 @@ export function LooksPanel() {
   const saveCustomLook = useLookStore((state) => state.saveCustomLook);
   const removeCustomLook = useLookStore((state) => state.removeCustomLook);
   const [newLookName, setNewLookName] = useState('');
+  const [applyNotice, setApplyNotice] = useState<string | null>(null);
 
   const selectedClipId = primarySelectedClipId && selectedClipIds.has(primarySelectedClipId)
     ? primarySelectedClipId
@@ -61,13 +62,18 @@ export function LooksPanel() {
         <button type="button" disabled={!selectedClip || !newLookName.trim() || selectedClip.effects.length === 0} onClick={saveCurrent}>Save</button>
       </div>
       {!selectedClip && <p className="looks-panel-hint">Select a visual clip to apply or save a look.</p>}
+      {applyNotice && <p className="looks-panel-hint looks-panel-notice" role="status">{applyNotice}</p>}
       <div className="looks-grid">
         {looks.map((look) => (
           <LookTile
             key={look.id}
             look={look}
             sourceFrameId={sourceFrameId}
-            onApply={() => { if (selectedClipId) applyLookToClip(look, selectedClipId); }}
+            onApply={() => {
+              if (!selectedClipId) return;
+              const problems = applyLookToClip(look, selectedClipId);
+              setApplyNotice(problems.length ? problems.join(' ') : null);
+            }}
             onDelete={look.builtIn ? undefined : () => removeCustomLook(look.id)}
           />
         ))}

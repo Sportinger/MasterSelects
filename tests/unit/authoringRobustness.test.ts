@@ -67,6 +67,26 @@ describe('effect parameter validation', () => {
       .flatMap(category => category.effects).find(effect => effect.id === 'lens-correction')!;
     expect(lens.params.map(param => param.name)).toContain('sourceAspect');
   });
+
+  it('says when a value lies outside the rendered range and what renders instead', async () => {
+    const clip = createMockClip({ id: 'c', trackId: 't', duration: 4, effects: [] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 't' })], clipKeyframes: new Map() });
+    const added = await executeAITool('addEffect', { clipId: 'c', effectType: 'saturation', params: { amount: -1 } }, 'internal');
+    expect((added.data as { warnings?: string[] }).warnings).toEqual(['amount: Amount -1 is below the rendered range (0 to 10) and renders as 0.']);
+    const effectId = (added.data as { effectId: string }).effectId;
+    const inside = await executeAITool('updateEffect', { clipId: 'c', effectId, params: { amount: 4 } }, 'internal');
+    expect((inside.data as { warnings?: string[] }).warnings).toBeUndefined();
+    const gamma = await executeAITool('addEffect', { clipId: 'c', effectType: 'exposure', params: { gamma: 0 } }, 'internal');
+    expect((gamma.data as { warnings?: string[] }).warnings).toEqual([expect.stringMatching(/^gamma: Gamma 0 is below the rendered range \(0\.2 to 10\) and renders as 0\.2 \(very dark\)\.$/)]);
+    const levels = await executeAITool('addEffect', { clipId: 'c', effectType: 'levels', params: { gamma: 0 } }, 'internal');
+    expect((levels.data as { warnings?: string[] }).warnings).toEqual([expect.stringMatching(/^gamma: Gamma 0 is below the rendered range \(0\.1 to 10\) and renders as 0\.1 \(almost black\)\.$/)]);
+    const above = await executeAITool('addEffect', { clipId: 'c', effectType: 'levels', params: { gamma: 12 } }, 'internal');
+    expect((above.data as { warnings?: string[] }).warnings).toEqual(['gamma: Gamma 12 is above the rendered range (0.1 to 10) and renders as 10.']);
+    const listed = await executeAITool('listEffects', {}, 'internal');
+    const saturation = (listed.data as { categories: { effects: { id: string; params: { name: string; renderRange?: unknown }[] }[] }[] }).categories
+      .flatMap(category => category.effects).find(effect => effect.id === 'saturation')!;
+    expect(saturation.params[0]).toMatchObject({ name: 'amount', renderRange: [0, 10] });
+  });
 });
 
 describe('action lanes follow split and trim', () => {

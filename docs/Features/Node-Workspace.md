@@ -291,8 +291,11 @@ cannot connect, the node stays unconnected there and the original cable remains.
 
 The Fisheye node groups include Lens Projection, Chromatic Aberration, Lens Vignette
 and Lens Coverage; its other processing areas are advanced building parts.
-The **Color & Mask** category includes **Hue Shift**, built from the existing RGB/HSV
-conversion, vector and scalar math nodes rather than a separate opaque operator.
+The **Color & Mask** category includes **Hue Shift** (the HSV block of Hue Shift
+graphs saved before 2026-10) and the colour recipe blocks of the rebuilt colour
+effects (Brightness Curve, Contrast Curve, Exposure (Stops), White Balance,
+Saturation (Gamut-Safe), Hue Rotate (OkLCh)), all built from existing conversion,
+vector and scalar math nodes rather than separate opaque operators.
 These are also available from the inspector's **Add node** selector in other
 supported image-effect graphs. The parameter and constant folders are organization
 for the original effect, not separate processing blocks.
@@ -364,8 +367,13 @@ of its original leaf endpoints; expanding still reveals the individual wires.
 Value outputs carry their parameter or constant names in the folder interface.
 Other folder ports are named after what they carry, not after the node type that
 computes it: an effect's presentation plan names its key outputs (Sigma, Tap
-Count, Box Length, Is Spin), and outputs with their own label (UV, Resolution)
-keep it; only unnamed outputs of several-output nodes read `Node: Port`.
+Count, Box Length, Is Spin), a clamp that limits a bound parameter to its render
+range carries that parameter's name (Amount, Exposure, Gamma), and outputs with
+their own label (UV, Resolution) keep it; only unnamed outputs of several-output
+nodes read `Node: Port`. A plan can also name inputs whose operator names say
+nothing: Hue Shift's Combine Vector reads Lightness, Chroma and Hue instead of X, Y
+and Z. Saved original color graphs (before 2026-10) keep their original folders
+(Color Processing, Clamp & Alpha); the recipe stages apply only to the recipe.
 
 The Fisheye upgrade preserves all primitive IDs, parameter bindings, sampling
 scopes and arithmetic, generating the identical shader without additional passes.
@@ -375,11 +383,13 @@ folder but never across its boundary. Migration revisions avoid regrouping a
 previously ungrouped instance. Nested instances retain their children's identities
 and positions through save/reopen and detach locally when edited.
 
-Hue Shift uses the same expandable composition model for its RGB-to-HSV conversion,
-wrapped hue addition and HSV-to-RGB conversion. Its Shift value remains outside the
-shared interior as a normal effect-owned parameter, so keyframes and the original
-0–1 turns contract stay intact. Existing flat Hue Shift graphs are recognized by
-structure and retain their primitive IDs when the composition is opened.
+Hue Shift uses the same expandable composition model: new instances rotate hue in
+OkLCh (RGB to OkLCh, wrapped hue addition, OkLCh to RGB); graphs saved before
+2026-10 keep their RGB-to-HSV block. Its Shift value remains outside the shared
+interior as a normal effect-owned parameter, so keyframes and the original 0–1
+turns contract stay intact (the inspector shows degrees). Existing flat Hue Shift
+graphs are recognized by structure and retain their primitive IDs when the
+composition is opened.
 
 The definitions can be added to other image-effect graphs. Exact structural
 recognition also replaces matching, ungrouped primitive patterns when an existing
@@ -660,8 +670,8 @@ the effect through history and project save/load.
 
 The same applies to Exposure, Levels, Hue Shift, Temperature and Vibrance. Their
 inspectors retain the original parameter schemas and keyframes while the canvas
-shows the actual scalar/RGB arithmetic, HSV conversion, channel reducers and
-range/gamma stages. Rewiring those nodes changes the compiled result; source alpha
+shows the actual scalar/RGB arithmetic, colour-space conversions (sRGB/linear,
+OkLCh, HSV), channel reducers and range/gamma stages. Rewiring those nodes changes the compiled result; source alpha
 continues directly to the final combine node.
 
 Threshold exposes Rec.709 luminance, strict comparison and scalar selection as

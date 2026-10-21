@@ -6,6 +6,7 @@ import { createDefaultInvertImageGraph } from '../../src/services/operators/imag
 import { checkImageCompositeGpu } from './image-composite-gpu-check';
 import { checkWorkerImageGraphGpu } from './image-worker-gpu-check';
 import { checkRemainingColorEffectsGpu } from './image-color-effects-gpu-check';
+import { checkColorRecipesGpu } from './image-color-recipes-gpu-check';
 import { checkPointwiseEffectsGpu } from './image-pointwise-effects-gpu-check';
 import { checkVignetteGpu } from './image-vignette-gpu-check';
 import { checkTimeEffectsGpu } from './image-time-effects-gpu-check';
@@ -63,6 +64,14 @@ async function checkGpu() {
       const validation = await device.popErrorScope();
       if (validation) throw new Error(validation.message);
       return `PASS: ${blur} blur, ${directional} directional-blur and ${materialization} materialization comparisons; the blur pass chains match their WGSL references and keep hard alpha edges clean; no validation errors.`;
+    } finally { device.destroy(); }
+  }
+  if (suite === 'color-recipes') {
+    try {
+      const comparisons = await checkColorRecipesGpu(device);
+      const validation = await device.popErrorScope();
+      if (validation) throw new Error(validation.message);
+      return `PASS: ${comparisons} color recipe cases; GPU within one 8-bit step of the CPU evaluator on every texel; no validation errors.`;
     } finally { device.destroy(); }
   }
   if (suite === 'memory-leak') {

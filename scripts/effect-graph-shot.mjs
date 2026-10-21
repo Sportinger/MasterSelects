@@ -15,8 +15,9 @@
 //   rows=n             split a focused folder's flow into n rows (default: landscape fit)
 //   break=a,b          start a new row at these node ids instead (keeps short cables)
 //   only=a,b           with focus: just these nodes (local ids, see --list), laid out compactly;
-//                      their other inputs become named stubs (a recipe, not the whole folder) and
-//                      the literal values they read from Constants become value cards
+//                      their other inputs become named stubs (a recipe, not the whole folder),
+//                      the literal values they read from Constants become value cards, and the
+//                      folder's own unpicked number cards (limits such as 0 and 1) are left out
 //   constants=hide     with only: leave those literal values cut instead
 //   plumbing=hide      leave out the Constants and Coordinates & Resources folders and their
 //                      cables (overview pictures: the stages read as one path, laid out afresh

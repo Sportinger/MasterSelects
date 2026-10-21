@@ -28,7 +28,13 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
   }
   const supported = addableEffectOperators(effect.type);
   const parameters = getEffect(effect.type)?.params as Record<string, { label?: string }> | undefined;
-  const portLabels = effectPresentationPlan(effect.type)?.portLabels;
+  const { portLabels, inputLabels } = effectPresentationPlan(effect.type) ?? {};
+  // A clamp that limits a bound parameter to its render range carries that parameter ("Amount"),
+  // so the folder ports it feeds are not called "Clamp: Value".
+  const boundParameters = new Map(graph.nodes.filter(n => n.operator.startsWith('values.') && typeof n.bindings.value === 'string')
+    .map(n => [n.id, parameters?.[n.bindings.value as string]?.label]));
+  const clampedParameters = new Map(graph.edges.filter(e => e.input === 'value' && boundParameters.get(e.from)
+    && graph.nodes.find(n => n.id === e.to)?.operator.startsWith('math.clamp.')).map(e => [e.to, boundParameters.get(e.from)!]));
   return {
     id: effectGraphId(clip.id, effect.id), owner: { kind: 'clip', id: clip.id, name: clip.name }, domain: 'clip', issue: graph.incomplete,
     nodes: graph.nodes.map(node => {
@@ -46,10 +52,13 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
       return { id: node.id, operatorId: operator.id, label: valueTitle ?? operator.label, description: operator.description,
         connectionVariants: operatorAdaptiveVariants(operator, supported),
         kind: ['media.source', 'image.frame', 'audio.input', 'splat.source'].includes(operator.id) ? 'source' : ['scene.output', 'render.voxel', 'render.pixel-particles', 'image.output', 'audio.output', 'scene.render'].includes(operator.id) ? 'output' : 'effect',
-        runtime: operator.runtime, inputs: operator.inputs.map(p => projectPort(p, 'input')), outputs: operator.outputs.map(p => {
+        runtime: operator.runtime, inputs: operator.inputs.map(p => {
+          const named = inputLabels?.[`${node.id}:${p.id}`], projected = projectPort(p, 'input');
+          return named ? { ...projected, label: named } : projected;
+        }), outputs: operator.outputs.map(p => {
           // A presentation plan may name what an output carries ("Sigma"); folder ports show it.
           const projected = projectPort(p, 'output');
-          const carried = portLabels?.[`${node.id}:${p.id}`] ?? (operator.outputs.length === 1 || p.id === 'value' ? portLabels?.[node.id] : undefined);
+          const carried = portLabels?.[`${node.id}:${p.id}`] ?? (operator.outputs.length === 1 || p.id === 'value' ? portLabels?.[node.id] ?? clampedParameters.get(node.id) : undefined);
           return carried ? { ...projected, label: carried, metadata: { ...projected.metadata, carriedLabel: true } } : projected;
         }),
         params: { targetClipId: clip.id, operatorOwnerType: effect.type, enabled: operatorEnabled(node, effect.params), bypassable: graph.domain === 'voxel' || graph.domain === 'scene' || !!operator.bypass,

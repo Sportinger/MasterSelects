@@ -874,9 +874,11 @@ describe('worker software painter', () => {
     it('runs them first as one hand-written pass only when nothing that moves or mixes pixels comes before them', () => {
       expect(plan([kaleidoscope, twirl]).pixelEffects).toMatchObject({ mirrorPixelAdjustments: [{ type: 'kaleidoscope' }], uvDistortAdjustments: [{ kind: 'twirl' }] });
       // Pointwise effects in front join the pass as whole-frame steps in stack order (see workerSoftwareMirrorPixelStack.test.ts).
-      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, kaleidoscope]).pixelEffects).toMatchObject({
-        mirrorPixelAdjustments: [{ type: 'pointwise', step: { kind: 'exposure' } }, { type: 'kaleidoscope' }] });
-      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, kaleidoscope]).pixelEffects.exposureAdjustments).toBeUndefined();
+      expect(plan([{ type: 'posterize', params: { levels: 4 } }, kaleidoscope]).pixelEffects).toMatchObject({
+        mirrorPixelAdjustments: [{ type: 'pointwise', step: { kind: 'posterize' } }, { type: 'kaleidoscope' }] });
+      expect(plan([{ type: 'posterize', params: { levels: 4 } }, kaleidoscope]).pixelEffects.posterizeAdjustments).toBeUndefined();
+      // The rebuilt color recipes have no hand-written twin: their layer runs as exact graph plans.
+      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, kaleidoscope]).pixelEffects.mirrorPixelAdjustments).toBeUndefined();
       expect(plan([{ type: 'mirror', params: {} }, { type: 'pixelate', params: { size: 30 } }]).pixelEffects.mirrorPixelAdjustments).toHaveLength(2);
       // A resampling or neighbourhood effect first would run after the hand-written pass: the layer runs as ordered graph plans.
       for (const earlier of [twirl, { type: 'motion-blur', params: { amount: .05, angle: 0 } }, { type: 'zoom-blur', params: { amount: .3 } }]) {

@@ -790,17 +790,75 @@ the legacy shader. Direct source wiring prunes history resources and processing.
 
 ### Editable color effect graphs
 
-Brightness, Contrast, Saturation, Invert, Exposure, Levels, Hue Shift,
-Temperature, and Vibrance expose editable node groups.
-Their math is compiled into the existing image processing path: a single
-eligible effect stays inline, while effect stacks retain their ordered passes
-and intermediate clamps. Bound Amount nodes retain the effect's original
-range, default, and keyframe property; alpha bypasses the RGB calculations.
-The other exposed parameters likewise retain their original IDs and ranges.
-Hue Shift uses HSV conversion and wrapped hue in turns; it is not the
-Resolve-style workspace's YIQ hue rotation. Levels retains its original
-unguarded normalization: equal input black/white points remain a singular
-case with backend-dependent output, rather than silently gaining an epsilon.
+Brightness, Contrast, Saturation, Vibrance, Exposure, Levels, Hue Shift,
+Temperature and Invert are editable node graphs; the user page is
+[Color Effects](./Effects-Color.md). A single color effect on a clip runs inside
+the composite pass; in a stack each one runs as its own pass, in stack order. Alpha
+bypasses the RGB math. New instances (since the 2026-10 rebuild,
+`colorEffectGraphs.ts`, tuning in `COLOR_RECIPE`) compute:
+
+- **Brightness**: per channel `y = x·m / (x·m + 1 − x)` with `m = 2^(2.5 · Amount)`;
+  black and white stay fixed, so there is no grey veil.
+- **Contrast**: S-curve `y = x^c / (x^c + (1 − x)^c)`, slope `c` = Amount at
+  mid-grey 0.5; highlights and shadows roll off instead of clipping. Per channel,
+  so strong values also raise saturation.
+- **Saturation**: mix of Rec.709 luma and RGB by Amount, stopped where the first
+  channel reaches 0 or 1, so hue and luma stay (gamut-safe).
+- **Vibrance**: the same gamut-safe mix, with Amount weighted by `1 − S` (HSV
+  saturation) and up to 70 % less on skin hues (a Gaussian around 0.07 turns, about 25°),
+  faded in over HSV value 0.15–0.35 and out over saturation 0.6–0.8 (dark warm
+  floors and saturated orange light are not skin).
+- **Exposure**: `2^EV` in linear light (exact sRGB transfer both ways), then the
+  display-referred Offset and Gamma of the original effect.
+- **Temperature / Tint**: channel gains in linear light. Per Temperature unit red
+  rises and blue falls by 0.6 stops each (1.2 stops apart); per Tint unit green falls
+  0.5 stops and red and blue rise 0.25. The gains are scaled so grey keeps its Rec.709
+  luminance; black stays black.
+- **Hue Shift**: rotation in OkLCh by Shift turns (the inspector shows degrees);
+  lightness and chroma stay, colours that leave sRGB are clamped.
+- **Levels**: unchanged remap, but equal input points act as a hard per-channel threshold and
+  swapped points as a negative (range `max(|white − black|, 1e-4)` with its sign).
+- **Invert**: `1 − rgb`, unchanged.
+
+Inputs are limited to 0–1 (the effect chain carries 8-bit display-referred colour).
+Values outside a parameter's render range (`renderMin`/`renderMax`: Brightness ±4,
+Contrast and Saturation 0–10, Vibrance −1 to 4, Exposure ±20 EV, Gamma 0.2–10 for
+Exposure and 0.1–10 for Levels, Temperature and Tint ±4) are clamped by the graph's
+`<param>-clamped` node; the inspector and the add/update effect tools say what
+renders instead (a gamma floor adds "very dark" or "almost black").
+
+Saved work keeps its look. Projects keep the graph they were saved with (the
+previous recipes stay in `legacyColorEffectGraphs.ts`). A color effect stored
+without any graph (projects from before 2026-09-21) is given the original graph when
+the project file is converted (`migrateLoadedEffectOperatorGraph` in
+`loadTimelineHydration.ts`); `addClipEffect` gives new color effects the recipe graph,
+so a graphless effect in the running editor is never mistaken for an old one.
+`editMotionAdjustment` (`create`/`configure`, which replace the whole effect list from
+parameters) keeps the graph of every effect whose id and type it keeps and gives new
+color effects the recipe (`adjustmentEffectGraphs.ts`). Custom Looks without
+`schemaVersion` (saved before the rebuild) apply their color effects with the original
+graphs; Look schema 2 stores each color effect's graph per stack entry. A stored Look
+graph is validated like a project-file graph when the Look is applied or drawn as a
+thumbnail (`checkedLookEntryOperatorGraph`); a graph that no longer validates is logged,
+named in the Looks panel and replaced by the recipe. `getClipDetails` lists each effect
+graph only as a summary (`nodes`, `edges`, for color effects `state`: `recipe`,
+`original` or `edited`); `getOperatorGraph` returns the graph. Saved original graphs keep their original Node Workspace folders (Color
+Processing, Clamp & Alpha); the recipe stages are only applied to the unedited recipe.
+
+The worker software render modes evaluate the same graphs instead of their former
+shortcuts; programs that read only their own pixel (all color recipes) are evaluated
+once per distinct RGBA8 colour of the frame (about 0.2–0.4 s for a 1080p photo,
+`workerSoftwareImageGraphs.ts`). A layer that mixes them with the retired `blur`
+effect is skipped as `unsupported-effects`. Adjustment layers in the worker GPU
+modes still use the motion-adjustment 4×5 colour matrix for Brightness, Contrast and
+Saturation (linear offset, linear contrast, Rec.709 matrix saturation), which matches
+only the original graphs: each other such effect is reported once per layer in the
+`WorkerGpuAdjustment` log and, while a worker render host mode is selected, in the
+adjustment inspector (`adjustment-color-recipe-unsupported`,
+`workerGpuAdjustmentColorParity.ts`).
+GPU-against-CPU parity of the recipes (within one 8-bit step, including the OkLCh and
+sRGB helpers) is checked by `tests/browser/image-graph-probe.html?suite=color-recipes`;
+`colorRecipeWgsl.test.ts` validates every recipe module with naga where it is installed.
 
 Threshold and Posterize also expose executable pointwise groups. Threshold
 uses Rec.709 luminance and a strict greater-than comparison (equality is black).
@@ -850,13 +908,15 @@ readback) the untouched Kaleidoscope, Mirror, RGB Split and Pixelate recipes run
 as one hand-written whole-frame pass with the same mappings, frame edges and
 premultiplied reads, within 1/255 of the graphs in tests; Pixelate averages every
 cell exactly there. The pass runs before the layer's other CPU effects. Pointwise
-effects in front of it (Brightness, Contrast, Saturation, Hue Shift, Invert,
-Exposure, Temperature, Vibrance, Levels, Threshold, Posterize, Chroma Key,
-Vignette, Scanlines, Grain) join it as whole-frame steps in stack order, with
-8-bit values between effects like the GPU, so a grade or a key before Pixelate or
-Kaleidoscope stays exact and fast. A distort, blur, glow, sharpen or feedback
-effect in front of it, and edited graphs, run the layer as ordered graph plans,
-which are much slower. The pass keeps one float copy of the frame (two for a
+effects in front of it (Invert, Threshold, Posterize, Chroma Key, Vignette,
+Scanlines, Grain) join it as whole-frame steps in stack order, with 8-bit values
+between effects like the GPU, so a key or a vignette before Pixelate or
+Kaleidoscope stays exact and fast. The rebuilt color effects (Brightness,
+Contrast, Saturation, Exposure, Levels, Hue Shift, Temperature, Vibrance) have no
+hand-written twin: a layer with one runs as ordered graph plans, the color
+programs once per distinct colour ([Color Effects](./Effects-Color.md)). A
+distort, blur, glow, sharpen or feedback effect in front of the pass, and edited
+graphs, run the layer as ordered graph plans too, which are much slower. The pass keeps one float copy of the frame (two for a
 chain of resampling effects) and frees it after two idle seconds.
 
 ### Editable blur kernels
@@ -985,7 +1045,7 @@ compositions extracted from them (Bounded Sample Count, Scale UV).
 The organization/reuse pass also covers Glow, Edge Detect, Wave, Twirl, Bulge,
 Pixelate, Mirror, RGB Split, Blockify, Block Mosaic, the basic color effects and
 all ASCII/Glyph variants. Glow exposes Soft Bright Pass, Edge Detect exposes
-Sobel Magnitude, and Saturation/Vibrance share Luma Saturation. Glyph Cell Grid,
+Sobel Magnitude, and Saturation/Vibrance share Saturation (Gamut-Safe). Glyph Cell Grid,
 Tone to Glyph Index and Glyph Atlas Alpha share compatible glyph computations.
 ASCII Ghost's Decay & Max RGBA accepts its current and previous frames explicitly;
 the existing history resource, reset policy and clock remain unchanged. These
@@ -1397,14 +1457,11 @@ The `performanceMonitor` service can also reset quality parameters to defaults w
 
 ## Inline Effects
 
-These effects are applied directly in the composite shader instead of running as separate effect passes:
-
-- Brightness
-- Contrast
-- Saturation
-- Invert
-
-That keeps them zero-overhead relative to the full ping-pong effect chain.
+When a clip has exactly one enabled effect and it is a pointwise image graph
+(Brightness, Contrast, Saturation, Vibrance, Exposure, Levels, Hue Shift,
+Temperature, Invert, Threshold or Posterize), its compiled program runs inside the
+composite shader instead of a separate effect pass. Stacks of several effects run
+as ordered passes so their order is kept.
 
 ## Particle Render Effects
 
@@ -1538,7 +1595,9 @@ rows at these node ids instead) and named stub cards for the values that come fr
 outside the folder (Constants excepted); `only=a,b` (with `focus`) keeps just
 these node ids and turns their other inputs into stubs, so a picture shows a recipe
 instead of the whole folder (`--list` prints the ids; a composition's `@` may be
-left out). The literal values the picks read from the Constants folder appear as
+left out). The folder's own unpicked number cards, such as a Clamp's 0 and 1, are
+left out instead of stubbed (say so in the caption). The literal values the picks
+read from the Constants folder appear as
 their own value cards ("Taper Gain −2"; `constants=hide` leaves them cut). A recipe
 is laid out afresh (`compactRecipeLayout`): columns follow the cables, each card as
 far right as its consumers allow; fed cards sit level with their highest source;

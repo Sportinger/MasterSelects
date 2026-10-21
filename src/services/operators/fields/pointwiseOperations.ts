@@ -1,5 +1,6 @@
 import { evaluateScalarOperation } from '../scalarOperationSemantics';
 import { imageFract } from '../imageColorSemantics';
+import { linearToSrgb, linearToSrgbWgsl, srgbToLinear, srgbToLinearWgsl } from '../imageColorSpaceSemantics';
 import { roundImageScalarEven } from '../imageRoundingSemantics';
 import { fieldNoise, fieldRamp, fieldShapeDistance } from './fieldFunctions';
 
@@ -107,6 +108,8 @@ export const POINTWISE_OPERATIONS: Readonly<Record<string, PointwiseOperation>> 
     evaluate: args => vec(args[0])[0] * 0.299 + vec(args[0])[1] * 0.587 + vec(args[0])[2] * 0.114 },
   'luminance-rec709': { wgsl: args => `dot(${args[0]}.rgb, vec3f(0.2126, 0.7152, 0.0722))`,
     evaluate: args => vec(args[0])[0] * 0.2126 + vec(args[0])[1] * 0.7152 + vec(args[0])[2] * 0.0722 },
+  'srgb-to-linear-rgb': { wgsl: args => srgbToLinearWgsl(args[0]), evaluate: args => vec(args[0]).map(srgbToLinear) },
+  'linear-to-srgb-rgb': { wgsl: args => linearToSrgbWgsl(args[0]), evaluate: args => vec(args[0]).map(linearToSrgb) },
   'vec4-to-rgb': { wgsl: args => `${args[0]}.rgb`, evaluate: args => vec(args[0]).slice(0, 3) },
   'rgb-to-vec3': identity, 'vec3-to-rgb': identity, 'image-to-vec4': identity, 'vec4-to-image': identity,
   'split-component': { wgsl: (args, value) => `${args[0]}[${value}]`, evaluate: (args, value) => vec(args[0])[value ?? 0] },

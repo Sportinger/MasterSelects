@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { EXPOSURE_PARAMS, HUE_SHIFT_PARAMS, LEVELS_PARAMS, TEMPERATURE_PARAMS, VIBRANCE_PARAMS } from '../../src/effects/color/remainingColorParams';
 import { createDefaultColorEffectGraph, type EditableColorEffectType } from '../../src/services/operators/colorEffectGraphs';
+import { createLegacyColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
 import { expandOperatorCompositions, packOperatorCompositions } from '../../src/services/operators/operatorComposition';
 import { setOperatorParameter } from '../../src/services/operators/effectGraphEditing';
 import { effectOperatorGraph, effectOperatorParams, migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
@@ -15,8 +16,9 @@ const initial = useTimelineStore.getState();
 afterEach(() => useTimelineStore.setState(initial));
 const effect = (type: typeof TYPES[number], params = getDefaultParams(type)): Effect =>
   ({ id: `${type}-fx`, name: type, type, enabled: true, params });
+// Saved projects carry the original recipes; their formulas must stay exact (the rebuilt ones are in colorEffectRecipes.test.ts).
 const evaluate = (type: EditableColorEffectType, params: Record<string, unknown>, pixel: [number, number, number, number]) =>
-  evaluateImageOperatorPlan(compileImageOperatorGraph(createDefaultColorEffectGraph(type), params), pixel);
+  evaluateImageOperatorPlan(compileImageOperatorGraph(createLegacyColorEffectGraph(type), params), pixel);
 
 describe('remaining editable color effect graphs', () => {
   it('shares the exact legacy parameter schemas with graph metadata', () => {
@@ -40,7 +42,7 @@ describe('remaining editable color effect graphs', () => {
     expect(effectOperatorGraph(JSON.parse(JSON.stringify(canonical)) as Effect)).toEqual(graph);
   });
 
-  it('matches the five legacy shader formulas with changed parameters', () => {
+  it('keeps the five legacy shader formulas in the recipes saved projects carry', () => {
     const pixel: [number, number, number, number] = [0.2, 0.4, 0.8, 0.35];
     expect(evaluate('exposure', { exposure: 1, offset: 0.1, gamma: 1 }, pixel)).toEqual([0.5, 0.9, 1, 0.35]);
     const levels = evaluate('levels', { inputBlack: 0.2, inputWhite: 0.8, gamma: 1, outputBlack: 0.1, outputWhite: 0.9 }, pixel);
@@ -55,9 +57,9 @@ describe('remaining editable color effect graphs', () => {
       .forEach((value, index) => expect(vibrance[index]).toBeCloseTo(value, 5));
   });
 
-  it('packs Hue Shift as an editable reusable HSV composition and preserves the legacy graph exactly', () => {
-    const original = createDefaultColorEffectGraph('hue-shift');
-    const graph = effectOperatorGraph(effect('hue-shift'));
+  it('packs a saved HSV Hue Shift as an editable reusable HSV composition and preserves the legacy graph exactly', () => {
+    const original = createLegacyColorEffectGraph('hue-shift');
+    const graph = effectOperatorGraph({ ...effect('hue-shift'), operatorGraph: createLegacyColorEffectGraph('hue-shift') });
     const group = graph.groups?.find(item => item.composition?.instance.operator === 'color.hue-shift.rgb');
     expect(group).toBeDefined();
     expect(graph.colorCompositionRules).toBe(1);
@@ -71,12 +73,15 @@ describe('remaining editable color effect graphs', () => {
     const plan = compileImageOperatorGraph(graph, { shift: .5 });
     const pixel = evaluateImageOperatorPlan(plan, [1, 0, 0, .35]);
     [0, 1, 1, .35].forEach((value, index) => expect(pixel[index]).toBeCloseTo(value, 4));
+    // New instances rotate in OkLCh through the shared Hue Rotate (OkLCh) block.
+    const current = effectOperatorGraph(effect('hue-shift'));
+    expect(current.groups?.some(item => item.composition?.instance.operator === 'color.oklch-hue-rotate.rgb')).toBe(true);
   });
 
   it('executes changed graph wiring and persists stable bound parameter edits', () => {
     const graph = createDefaultColorEffectGraph('levels');
-    graph.edges.find(edge => edge.to === 'output-mix' && edge.input === 'a')!.from = 'outputWhite-rgb';
-    graph.edges.find(edge => edge.to === 'output-mix' && edge.input === 'b')!.from = 'outputBlack-rgb';
+    graph.edges.find(edge => edge.to === 'output-range' && edge.input === 'a')!.from = 'outputWhite-rgb';
+    graph.edges.find(edge => edge.to === 'output-range' && edge.input === 'b')!.from = 'outputBlack-rgb';
     const rewired = evaluateImageOperatorPlan(compileImageOperatorGraph(graph, getDefaultParams('levels')), [0.2, 0.4, 0.8, 0.35]);
     [0.8, 0.6, 0.2, 0.35].forEach((value, index) => expect(rewired[index]).toBeCloseTo(value, 5));
 

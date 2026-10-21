@@ -56,20 +56,29 @@ afterEach(() => { vi.useRealTimers(); });
 
 describe('worker CPU mirror and pixel pass with pointwise effects in front', () => {
   const exposure: StackEffect = { type: 'exposure', params: { exposure: .6, gamma: 1.3 } };
+  const posterize: StackEffect = { type: 'posterize', params: { levels: 3 } };
   const pixelate: StackEffect = { type: 'pixelate', params: { size: 54 } };
 
-  it('keeps a grade before Pixelate on the hand-written pass, in stack order and exact', () => {
+  it('keeps a posterize before Pixelate on the hand-written pass, in stack order and exact', () => {
     const width = 320, height = 180, input = picture(width, height);
-    const stacked = plan([exposure, pixelate]).pixelEffects;
-    // Hand-written: no graph interpreter (100× slower), the grade as the first whole-frame step.
+    const stacked = plan([posterize, pixelate]).pixelEffects;
+    // Hand-written: no graph interpreter (100× slower), the posterize as the first whole-frame step.
     expect(stacked.imageOperatorPlans).toBeUndefined();
-    expect(stacked.exposureAdjustments).toBeUndefined();
+    expect(stacked.posterizeAdjustments).toBeUndefined();
     expect(stacked.mirrorPixelAdjustments?.map(step => step.type)).toEqual(['pointwise', 'pixelate']);
     // Independent reference: each effect alone, applied in stack order.
-    const reference = draw([pixelate], draw([exposure], input, width, height), width, height);
+    const reference = draw([pixelate], draw([posterize], input, width, height), width, height);
     expect(premultipliedDifference(run(input, width, height, stacked), reference)).toBeLessThanOrEqual(3);
-    // And the other order really is different: Pixelate averages first, then the gamma curve.
-    expect(premultipliedDifference(draw([pixelate, exposure], input, width, height), reference)).toBeGreaterThan(8);
+    // And the other order really is different: Pixelate averages first, then the levels snap.
+    expect(premultipliedDifference(draw([pixelate, posterize], input, width, height), reference)).toBeGreaterThan(8);
+  });
+
+  it('runs a rebuilt color recipe in front (Exposure, Contrast) as exact graph plans instead of a hand-written step', () => {
+    for (const grade of [exposure, { type: 'contrast', params: { amount: 1.8 } }] as StackEffect[]) {
+      const stacked = plan([grade, pixelate]).pixelEffects;
+      expect(stacked.mirrorPixelAdjustments).toBeUndefined();
+      expect(stacked.imageOperatorPlans).toHaveLength(2);
+    }
   });
 
   it('keys before a zoomed Kaleidoscope or an angled Mirror exactly as the effects one after the other', () => {
@@ -89,16 +98,7 @@ describe('worker CPU mirror and pixel pass with pointwise effects in front', () 
     }
   });
 
-  it('applies a Contrast in front as its GPU formula instead of a late canvas filter', () => {
-    const width = 40, height = 24, input = picture(width, height);
-    const contrast = plan([{ type: 'contrast', params: { amount: 1.8 } }, { type: 'mirror', params: { angle: .3 } }]);
-    expect(contrast.filter).toBe('none');
-    expect(contrast.pixelEffects.mirrorPixelAdjustments?.[0]).toEqual({ type: 'pointwise', step: { kind: 'contrast', amount: 1.8 } });
-    // Reference: clamp((c − 0.5) × amount + 0.5) on the bytes, then the Mirror alone.
-    const graded = input.map((value, index) => (index & 3) === 3 ? value : Math.round(Math.min(1, Math.max(0, (value / 255 - .5) * 1.8 + .5)) * 255));
-    expect(premultipliedDifference(run(input, width, height, contrast.pixelEffects),
-      draw([{ type: 'mirror', params: { angle: .3 } }], graded, width, height))).toBeLessThanOrEqual(2);
-    // Behind the mirror/pixel effects they stay canvas filters.
+  it('keeps Invert behind the mirror/pixel effects a canvas filter', () => {
     expect(plan([{ type: 'mirror', params: {} }, { type: 'invert', params: {} }]).filter).toBe('invert(1)');
   });
 

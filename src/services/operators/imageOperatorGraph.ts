@@ -387,6 +387,8 @@ function compileImageOperatorTarget(graph: EffectOperatorGraph, params: Record<s
         inputs: [visitSource(current, 'value')] }); break;
       case 'convert.rgb-to-hsv': register = emit({ nodeId: current.id, operation: 'rgb-to-hsv', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;
       case 'convert.hsv-to-rgb': register = emit({ nodeId: current.id, operation: 'hsv-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
+      case 'convert.rgb-to-oklch': register = emit({ nodeId: current.id, operation: 'rgb-to-oklch', type: 'vec3', inputs: [visitSource(current, 'rgb')] }); break;
+      case 'convert.oklch-to-rgb': register = emit({ nodeId: current.id, operation: 'oklch-to-rgb', type: 'rgb', inputs: [visitSource(current, 'value')] }); break;
       default: throw new Error(`Unsupported local image operator: ${current.operator}`);
     }
     visiting.delete(visitKey); registers.set(cacheKey, register); return register;

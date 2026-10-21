@@ -209,10 +209,15 @@ export function buildEffectGraphDoc(query: EffectGraphDocQuery, overrides: Recor
   const full = project(clip);
   const focus = query.focus ? folders.find(folder => matches(folder, query.focus!)) : undefined;
   const placed = focus ? withCanvasPlacement(full) : full;
-  // Constants are literal numbers (their cards show the value); other outside inputs get named stubs.
-  const skip = (source: NodeGraph['nodes'][number]) => source.label === 'Constants' || (query.plumbing === 'hide' && PLUMBING_FOLDERS.has(source.label));
   const folder = focus ? cropToGroup(placed, focus.id) : undefined;
   const picked = folder && query.only.length ? keepOnly(folder, query.only) : folder;
+  // A hand-picked recipe leaves out the folder's own unpicked number cards (limits such as 0 and 1)
+  // instead of stubbing them; the caption says so.
+  const leftOut = new Set(folder && picked && picked !== folder ? folder.nodes.filter(node => node.operatorId?.startsWith('values.')
+    && node.inputs.length === 0 && !picked.nodes.some(kept => kept.id === node.id)).map(node => node.id) : []);
+  // Constants are literal numbers (their cards show the value); other outside inputs get named stubs.
+  const skip = (source: NodeGraph['nodes'][number]) => leftOut.has(source.id) || source.label === 'Constants'
+    || (query.plumbing === 'hide' && PLUMBING_FOLDERS.has(source.label));
   // A focused folder is laid out here (rows, stubs, picks); the canvas must not re-flow it.
   const fixedLayout = (graph: NodeGraph): NodeGraph => ({ ...graph, groups: graph.groups?.map(({ layoutMode: _flow, ...group }) => group) });
   // A recipe (only=) is laid out afresh with its stubs and constants; a whole folder keeps its flow and gets stub columns.

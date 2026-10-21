@@ -33,11 +33,23 @@ export interface EffectParam {
   // Read only through the effect's operator graph: hidden (and reported by tools) when an
   // edited graph no longer binds it.
   graphOnly?: boolean;
-  // Stored in radians (project data, keyframes, tools); the effect inspector shows and edits degrees.
+  // Stored in radians (project data, keyframes, tools); the effect inspector shows and edits whole
+  // degrees (the preset of displayScale 180/π with unit "°" and one-degree steps).
   displayUnit?: 'degrees';
   // Acts only while another parameter has one of these values (RGB Split's Angle in Offset mode):
   // otherwise the inspector dims the row and shows `note`.
   activeWhen?: { param: string; values: readonly (string | number | boolean)[]; note: string };
+  // Rendered range for numbers that may arrive outside min/max (keyframe overshoot, tools,
+  // node drivers). The effect graph clamps to it; the inspector and tool results say so.
+  renderMin?: number;
+  renderMax?: number;
+  // How the lower render limit looks (e.g. "almost black" for a gamma floor), added to that notice.
+  renderMinLook?: string;
+  // Display only (effectParamDisplay in paramDisplay.ts): inspectors show value × displayScale
+  // with this unit (Hue Shift stores turns and shows degrees; Exposure shows " EV"). Stored
+  // values, keyframes and tool calls keep the parameter's own unit.
+  displayScale?: number;
+  unit?: string;
 }
 
 /**

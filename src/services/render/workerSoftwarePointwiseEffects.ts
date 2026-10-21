@@ -1,22 +1,19 @@
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
-import { imageHsvToRgb, imageRgbToHsv } from '../operators/imageColorSemantics';
 
 /**
  * Worker CPU colour effects that read only their own pixel and its place in the frame. Behind
  * the built-in mirror/pixel effects they run in the per-pixel loop (workerSoftwarePixelEffects.ts)
- * or, for Contrast, Saturation, Hue Shift and Invert, as a canvas filter. In front of one they run
- * as whole-frame steps in stack order (workerSoftwareMirrorPixelEffects.ts), so a grade or a key
- * before Pixelate or Kaleidoscope is exact without the slow graph interpreter.
+ * or, for Invert, as a canvas filter. In front of one they run as whole-frame steps in stack order
+ * (workerSoftwareMirrorPixelEffects.ts), so a key, a vignette or a posterize before Pixelate or
+ * Kaleidoscope is exact without the slow graph interpreter. The rebuilt color recipes (Brightness,
+ * Contrast, Saturation, Exposure, Levels, Hue Shift, Temperature, Vibrance; COLOR_RECIPE_EFFECT_TYPES)
+ * are not steps here: their curves, linear light and OkLCh have no hand-written twin, so a layer
+ * with one runs as exact graph plans with memoized pointwise programs (workerSoftwareImageGraphs.ts).
  */
 type Adjustment<K extends keyof WorkerRenderSoftwarePixelEffects> = NonNullable<WorkerRenderSoftwarePixelEffects[K]> extends readonly (infer T)[] ? T : never;
 
 export type WorkerSoftwarePointwiseStep =
-  | { readonly kind: 'brightness' | 'contrast' | 'saturation' | 'hue-shift'; readonly amount: number }
   | { readonly kind: 'invert' }
-  | { readonly kind: 'exposure'; readonly adjustment: Adjustment<'exposureAdjustments'> }
-  | { readonly kind: 'temperature'; readonly adjustment: Adjustment<'temperatureAdjustments'> }
-  | { readonly kind: 'vibrance'; readonly adjustment: Adjustment<'vibranceAdjustments'> }
-  | { readonly kind: 'levels'; readonly adjustment: Adjustment<'levelsAdjustments'> }
   | { readonly kind: 'threshold'; readonly adjustment: Adjustment<'thresholdAdjustments'> }
   | { readonly kind: 'posterize'; readonly adjustment: Adjustment<'posterizeAdjustments'> }
   | { readonly kind: 'vignette'; readonly adjustment: Adjustment<'vignetteAdjustments'> }
@@ -24,8 +21,7 @@ export type WorkerSoftwarePointwiseStep =
   | { readonly kind: 'scanlines'; readonly adjustment: Adjustment<'scanlineAdjustments'> }
   | { readonly kind: 'grain'; readonly adjustment: Adjustment<'grainAdjustments'> };
 
-const POINTWISE_EFFECTS: ReadonlySet<string> = new Set(['brightness', 'contrast', 'saturation', 'hue-shift', 'invert', 'exposure',
-  'temperature', 'vibrance', 'levels', 'threshold', 'posterize', 'vignette', 'chroma-key', 'scanlines', 'grain']);
+const POINTWISE_EFFECTS: ReadonlySet<string> = new Set(['invert', 'threshold', 'posterize', 'vignette', 'chroma-key', 'scanlines', 'grain']);
 
 export function isWorkerSoftwarePointwiseEffect(type: string): boolean {
   return POINTWISE_EFFECTS.has(type);
@@ -38,16 +34,7 @@ export function workerSoftwarePointwiseStep(type: string, params: Readonly<Recor
     return typeof raw === 'number' && Number.isFinite(raw) ? raw : fallback;
   };
   switch (type) {
-    case 'brightness': return { kind: type, amount: value('amount', 0) };
-    case 'contrast':
-    case 'saturation': return { kind: type, amount: value('amount', 1) };
-    case 'hue-shift': return { kind: type, amount: value('shift', 0) };
     case 'invert': return { kind: type };
-    case 'exposure': return { kind: type, adjustment: { exposure: value('exposure', 0), offset: value('offset', 0), gamma: Math.max(0.001, value('gamma', 1)) } };
-    case 'temperature': return { kind: type, adjustment: { temperature: value('temperature', 0), tint: value('tint', 0) } };
-    case 'vibrance': return { kind: type, adjustment: { amount: value('amount', 0) } };
-    case 'levels': return { kind: type, adjustment: { inputBlack: value('inputBlack', 0), inputWhite: value('inputWhite', 1),
-      gamma: Math.max(0.001, value('gamma', 1)), outputBlack: value('outputBlack', 0), outputWhite: value('outputWhite', 1) } };
     case 'threshold': return { kind: type, adjustment: { level: value('level', 0.5) } };
     case 'posterize': return { kind: type, adjustment: { levels: Math.max(2, value('levels', 6)) } };
     case 'vignette': return { kind: type, adjustment: { amount: value('amount', 0.5), size: value('size', 0.5), softness: value('softness', 0.5),
@@ -62,32 +49,13 @@ export function workerSoftwarePointwiseStep(type: string, params: Readonly<Recor
 
 type Rgb = readonly [number, number, number];
 
-/**
- * One step on a straight pixel (0…1) at uv; returns straight rgba. Brightness, Contrast,
- * Saturation, Hue Shift and Invert follow their GPU graphs (services/operators/colorEffectGraphs.ts).
- */
+/** One step on a straight pixel (0…1) at uv; returns straight rgba. */
 export function applyWorkerSoftwarePointwiseStep(step: WorkerSoftwarePointwiseStep, r: number, g: number, b: number, a: number,
   uvX: number, uvY: number, timelineTime: number): readonly [number, number, number, number] {
   const rgb: Rgb = [r, g, b];
   let out: Rgb;
   switch (step.kind) {
-    case 'brightness': out = [r + step.amount, g + step.amount, b + step.amount]; break;
-    case 'contrast': out = rgb.map(c => (c - 0.5) * step.amount + 0.5) as unknown as Rgb; break;
-    case 'saturation': {
-      const gray = r * 0.299 + g * 0.587 + b * 0.114;
-      out = rgb.map(c => gray * (1 - step.amount) + c * step.amount) as unknown as Rgb;
-      break;
-    }
-    case 'hue-shift': {
-      const [h, s, v] = imageRgbToHsv([r, g, b]);
-      out = imageHsvToRgb([fract(h + step.amount), s, v]);
-      break;
-    }
     case 'invert': out = [1 - r, 1 - g, 1 - b]; break;
-    case 'exposure': out = applyExposureAdjustment(rgb, step.adjustment); break;
-    case 'temperature': out = applyTemperatureAdjustment(rgb, step.adjustment); break;
-    case 'vibrance': out = applyVibranceAdjustment(rgb, step.adjustment); break;
-    case 'levels': out = applyLevelsAdjustment(rgb, step.adjustment); break;
     case 'threshold': out = applyThresholdAdjustment(rgb, step.adjustment); break;
     case 'posterize': out = applyPosterizeAdjustment(rgb, step.adjustment); break;
     case 'vignette': out = applyVignetteAdjustment(rgb, step.adjustment, uvX, uvY); break;

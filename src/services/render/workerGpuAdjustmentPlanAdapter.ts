@@ -13,6 +13,25 @@ import type { MotionAdjustmentRenderSurface } from '../motionDesign/adjustment/s
 import type { RenderSurfaceFrameContext } from './renderHostTypes';
 import type { WorkerGpuRenderIntent } from './workerGpuRuntimeCommands';
 import type { WorkerGpuVideoPresentationLayer } from './workerGpuMediaSourceRegistry';
+import { Logger } from '../logger';
+import { workerGpuAdjustmentColorDivergences } from './workerGpuAdjustmentColorParity';
+
+const log = Logger.create('WorkerGpuAdjustment');
+const reportedDivergences = new Set<string>();
+
+/** Says once per effect and look when an adjustment color effect renders with the matrix instead of its graph. */
+function reportColorDivergences(layers: readonly Layer[]): void {
+  for (const layer of layers) {
+    if (layer.source?.type !== 'motion-adjustment') continue;
+    for (const divergence of workerGpuAdjustmentColorDivergences(layer.effects)) {
+      const key = `${layer.sourceClipId ?? layer.id}:${divergence.effectId}`;
+      if (reportedDivergences.has(key)) continue;
+      if (reportedDivergences.size >= 256) reportedDivergences.clear();
+      reportedDivergences.add(key);
+      log.warn(divergence.message, { code: divergence.code, layerId: layer.sourceClipId ?? layer.id, effectId: divergence.effectId });
+    }
+  }
+}
 
 type WorkerGpuAdjustmentVideoSourceBinding = Pick<
   WorkerGpuVideoPresentationLayer,
@@ -205,6 +224,7 @@ export function buildWorkerGpuAdjustmentExecutionPlan(
   const admittedLayers = [...input.layers]
     .reverse()
     .filter((layer) => layer.visible && layer.opacity > 0);
+  reportColorDivergences(admittedLayers);
 
   // Resolve every source before invoking the frozen adapter/planners. Unsupported
   // runtime kinds and stale/conflicting bindings therefore always fail closed.

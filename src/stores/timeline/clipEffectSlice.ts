@@ -25,6 +25,7 @@ import {
 import { cleanupEffectParamTimelineState } from './helpers/propertyTimelineCleanup';
 import { reconcileRemovedParameterTargets } from '../../services/parameterSources/parameterSourceLifecycle';
 import { createInitialSlitScanGraph } from '../../services/operators/slitScanGraphUpgrade';
+import { COLOR_RECIPE_EFFECT_TYPES, createDefaultColorEffectGraph, type EditableColorEffectType } from '../../services/operators/colorEffectGraphs';
 import { reconcileSlitScanDuration } from './helpers/slitScanDuration';
 import { FLOCKING_EFFECT_TYPE, flockingEffectOf } from '../../services/flock/flockEffect';
 import { createFlockPresetDefinition } from '../../services/flock/presets/flockPresets';
@@ -135,7 +136,7 @@ function reconcileEffectRemovalInNodeGraph(
 }
 
 export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get) => ({
-  addClipEffect: (clipId, effectType) => {
+  addClipEffect: (clipId, effectType, options) => {
     const { clipKeyframes, invalidateCache } = get();
     const clips = get().clips;
     // One swarm per clip: adding Flocking again returns the existing effect.
@@ -153,7 +154,10 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
         geometryLastMode: 'motion-surface',
         geometryPromoted3D: false,
       } : {}) },
-      ...(effectType === 'slit-scan' ? { operatorGraph: createInitialSlitScanGraph() } : {}),
+      // Effects whose look is a versioned recipe carry it from the start (a graphless color effect in a project file is legacy).
+      ...(options?.operatorGraph ? { operatorGraph: options.operatorGraph }
+        : effectType === 'slit-scan' ? { operatorGraph: createInitialSlitScanGraph() }
+        : COLOR_RECIPE_EFFECT_TYPES.has(effectType) ? { operatorGraph: createDefaultColorEffectGraph(effectType as EditableColorEffectType) } : {}),
     };
     const keyframes = clipKeyframes.get(clipId) ?? [];
     set({

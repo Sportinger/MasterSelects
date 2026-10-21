@@ -43,6 +43,7 @@ import {
 } from './mutationPlanner';
 import { planMotionAdjustmentOperations } from './operationPlanner';
 import { adaptTimelineEffectsToMotionAdjustmentContracts } from './supportedEffectContractAdapter';
+import { withAdjustmentEffectGraphs } from './adjustmentEffectGraphs';
 import {
   SUPPORTED_ADJUSTMENT_EFFECT_TYPES,
   isSupportedAdjustmentEffectType,
@@ -298,7 +299,7 @@ function planCreate(
       opacity,
       blendMode,
     },
-    effects: parsedEffects.timelineEffects,
+    effects: withAdjustmentEffectGraphs(parsedEffects.timelineEffects, []),
     isLoading: false,
   };
   const currentStack = buildAdjustmentStack(state.clips, state.tracks, state, compositionId);
@@ -371,7 +372,7 @@ function planConfigure(
   const blendMode = args.blendMode === undefined
     ? parseBlendMode(target.transform.blendMode)
     : parseBlendMode(args.blendMode);
-  const nextEffects = parsedEffects?.timelineEffects ?? target.effects;
+  const nextEffects = parsedEffects ? withAdjustmentEffectGraphs(parsedEffects.timelineEffects, target.effects) : target.effects;
   const nextClip: TimelineClip = {
     ...target,
     transform: { ...target.transform, opacity, blendMode },

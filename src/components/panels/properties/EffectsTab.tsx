@@ -43,6 +43,7 @@ import { EffectBudgetNotice } from './EffectBudgetNotice';
 import { ResolveEffectParamRow } from './ResolveEffectParamRow';
 import { hasResolveEffectParamRow, RESOLVE_ROW_EFFECTS } from './resolveEffectRows';
 import { effectParamDefinitions } from '../../../services/operators/effectParamVisibility';
+import { EffectParamRangeNotice } from './EffectParamRangeNotice';
 import './effectValueControls.css';
 
 type PrimitiveEffectParamValue = number | boolean | string;
@@ -354,7 +355,8 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
 
 interface EffectsTabProps {
   clipId: string;
-  effects: Array<{ id: string; name: string; type: string; enabled: boolean; params: EffectParamsRecord }>;
+  effects: Array<{ id: string; name: string; type: string; enabled: boolean; params: EffectParamsRecord;
+    operatorGraph?: import('../../../types/operatorGraph').EffectOperatorGraph }>;
   isAudioClip?: boolean;
 }
 
@@ -638,6 +640,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                   }}>×</button>
                 </div>
                 <EffectGpuFailureNotice effectType={effect.type} />
+                <EffectParamRangeNotice effectType={effect.type} params={primitiveParams} graph={effect.operatorGraph} />
                 {!isCollapsed && (
                   <div className="effect-params">
                     <EffectStyleRow clipId={clipId} effect={effect} />

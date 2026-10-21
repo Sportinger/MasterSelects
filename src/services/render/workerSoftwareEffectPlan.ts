@@ -6,6 +6,7 @@ import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { rendersBuiltInMirrorPixelRecipe } from '../operators/mirrorPixelGraphUpgrade';
+import { COLOR_RECIPE_EFFECT_TYPES } from '../operators/colorEffectGraphs';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
@@ -194,18 +195,10 @@ export function canvasBlurSigmaPx(type: 'gaussian-blur' | 'box-blur', radius: nu
 
 const DEFAULT_OUTPUT_SIZE = { width: 1920, height: 1080 } as const;
 
-/** A pointwise effect behind the mirror/pixel pass: the per-pixel loop, or a canvas filter (Contrast, Saturation, Hue Shift, Invert). */
+/** A pointwise effect behind the mirror/pixel pass: the per-pixel loop, or a canvas filter (Invert). */
 function addPointwiseEffect(pixelEffects: MutableWorkerSoftwarePixelEffects, step: WorkerSoftwarePointwiseStep): string {
   switch (step.kind) {
-    case 'brightness': pixelEffects.brightness += step.amount; return '';
-    case 'contrast': return `contrast(${Math.max(0, step.amount)})`;
-    case 'saturation': return `saturate(${Math.max(0, step.amount)})`;
-    case 'hue-shift': return `hue-rotate(${step.amount * 360}deg)`;
     case 'invert': return 'invert(1)';
-    case 'exposure': (pixelEffects.exposureAdjustments ??= []).push(step.adjustment); return '';
-    case 'temperature': (pixelEffects.temperatureAdjustments ??= []).push(step.adjustment); return '';
-    case 'vibrance': (pixelEffects.vibranceAdjustments ??= []).push(step.adjustment); return '';
-    case 'levels': (pixelEffects.levelsAdjustments ??= []).push(step.adjustment); return '';
     case 'threshold': (pixelEffects.thresholdAdjustments ??= []).push(step.adjustment); return '';
     case 'posterize': (pixelEffects.posterizeAdjustments ??= []).push(step.adjustment); return '';
     case 'vignette': (pixelEffects.vignetteAdjustments ??= []).push(step.adjustment); return '';
@@ -385,11 +378,14 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
-  // Built-in Wave, Twirl and Bulge keep a hand-written pass even with a stored copy of their
-  // recipe (interpreting their graph per pixel is far slower); edited graphs run as graphs.
+  // Saved graphs, and the color recipes (graph-only, see colorEffectGraphs.ts; their pointwise
+  // programs are memoized per colour), evaluate their graphs exactly. Built-in Wave, Twirl, Bulge,
+  // Kaleidoscope, Mirror, Pixelate and RGB Split keep a hand-written pass even with a stored copy of
+  // their recipe (interpreting their graph per pixel is far slower); edited graphs run as graphs.
   const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
-    && (effect.operatorGraph || effect.params.operatorGraph !== undefined) && workerSoftwareUvDistortAdjustment(effect) === undefined
-    && !(HAND_WRITTEN_MIRROR_PIXEL.has(effect.type) && rendersBuiltInMirrorPixelRecipe(effect)));
+    && (COLOR_RECIPE_EFFECT_TYPES.has(effect.type) || ((effect.operatorGraph || effect.params.operatorGraph !== undefined)
+      && workerSoftwareUvDistortAdjustment(effect) === undefined
+      && !(HAND_WRITTEN_MIRROR_PIXEL.has(effect.type) && rendersBuiltInMirrorPixelRecipe(effect)))));
   const graphPlans = (): WorkerSoftwareEffectPlan | null => {
     if (!activeEffects.every(effect => isImageGraphEffectType(effect.type))) return null;
     try {

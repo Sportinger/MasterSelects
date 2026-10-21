@@ -2,6 +2,7 @@ import type { ImageOperatorCapability, ImageOperatorSampleScope, ImagePlanInstru
 import type { ImageOperatorResourceSampling } from './imageOperatorResources';
 import { emitImageReducerWgsl } from './imageOperatorReducerWgsl';
 import { pointwiseOperation } from './fields/pointwiseOperations';
+import { IMAGE_OKLCH_WGSL } from './imageColorSpaceSemantics';
 import { imageF32 as f32, imageParameterExpression as parameterExpression, IMAGE_COLOR_WGSL, IMAGE_COORDINATE_ROTATION_WGSL, IMAGE_GAUSSIAN_WGSL, IMAGE_HASH2D_WGSL, IMAGE_PARAMETER_WGSL, IMAGE_RADIAL_PROJECTION_WGSL, IMAGE_VECTOR_WGSL } from './imageOperatorWgsl';
 import { INPUT_HISTORY_SAMPLE_WGSL } from './inputHistorySampling';
 import { OPTICAL_FLOW_WGSL, HISTORY_OPTICAL_FLOW_WGSL } from './opticalFlowWgsl';
@@ -86,6 +87,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       : item.operation === 'unproject-radius' ? `imageGraphUnprojectRadius(${args[0]}, ${args[1]}, ${args[2]})`
       : item.operation === 'hash2d-vec2' ? `imageGraphHash2d(${args[0]})`
       : item.operation === 'rgb-to-hsv' ? `imageGraphRgbToHsv(${args[0]})` : item.operation === 'hsv-to-rgb' ? `imageGraphHsvToRgb(${args[0]})`
+      : item.operation === 'rgb-to-oklch' ? `imageGraphRgbToOklch(${args[0]})` : item.operation === 'oklch-to-rgb' ? `imageGraphOklchToRgb(${args[0]})`
       : `vec4f(${args[0]}, ${args[1]})`;
     const type = item.type === 'image' || item.type === 'vec4' ? 'vec4f' : item.type === 'rgb' || item.type === 'vec3' ? 'vec3f' : item.type === 'vec2' ? 'vec2f' : item.type === 'boolean' ? 'bool' : 'f32';
     if (item.operation === 'kernel-sum') return `  let kernelResult${index} = ${expression};\n  let v${index}: vec4f = kernelResult${index}.sum;`;
@@ -136,7 +138,7 @@ export function emitImageOperatorWgsl(input: { instructions: ImagePlanInstructio
       ...(instructions.some(item => item.operation === 'source-motion') ? [HISTORY_OPTICAL_FLOW_WGSL] : []),
       ...(instructions.some(item => item.operation === 'optical-flow') ? [OPTICAL_FLOW_WGSL] : []),
       ...(instructions.some(item => ['directional-smooth', 'motion-consistency', 'temporal-deformation', 'mask-overlay'].includes(item.operation)) ? [MOTION_IMAGE_WGSL] : []),
-      IMAGE_COLOR_WGSL, pixelLoadWgsl, ...(instructions.some(item => item.operation === 'hash2d-vec2') ? [IMAGE_HASH2D_WGSL] : []),
+      IMAGE_COLOR_WGSL, ...(instructions.some(item => item.operation === 'rgb-to-oklch' || item.operation === 'oklch-to-rgb') ? [IMAGE_OKLCH_WGSL] : []), pixelLoadWgsl, ...(instructions.some(item => item.operation === 'hash2d-vec2') ? [IMAGE_HASH2D_WGSL] : []),
       ...(instructions.some(item => item.operation === 'gaussian-scalar') ? [IMAGE_GAUSSIAN_WGSL] : []), ...(parameterValues.length ? [IMAGE_PARAMETER_WGSL] : []),
       ...(instructions.some(item => item.operation === 'rotate-vec2') ? [IMAGE_COORDINATE_ROTATION_WGSL] : []),
       ...(instructions.some(item => item.operation === 'normalize-vec2') ? [IMAGE_VECTOR_WGSL] : []),

@@ -11,13 +11,11 @@ import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNu
 import { ResolveInspectorIconButton, ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
 import { KeyframeToggle } from './shared';
 import type { AnimatableProperty } from '../../../types/animationProperties';
+import type { ParamDisplay } from '../../../effects/paramDisplay';
 import './ParameterSourceControls.css';
 
-/** How the row shows a stored value: e.g. radians stored, whole degrees shown (EffectParam.displayUnit). */
-export interface ParameterSourceDisplay { readonly scale: number; readonly suffix?: string; readonly decimals?: number; readonly step?: number }
-
 export function ParameterSourceNumberRow({ clipId, property, disabled = false, display }: {
-  clipId: string; property: string; disabled?: boolean; display?: ParameterSourceDisplay;
+  clipId: string; property: string; disabled?: boolean; display?: ParamDisplay;
 }) {
   const clip = useTimelineStore(state => state.clips.find(item => item.id === clipId));
   const keys = useTimelineStore(state => state.clipKeyframes.get(clipId));
@@ -33,7 +31,9 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false, d
     const result = createParameterSourceEvaluator(clip, keys ?? [], Math.max(0, Math.min(clip.duration, playhead - clip.startTime))).resolve(property);
     value = result.value; kind = result.kind === 'node' ? 'Node' : result.kind === 'keyframes' ? 'Keys' : 'Fixed';
   } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); kind = 'Error'; }
-  const scale = display?.scale ?? 1, scaled = (limit: number | undefined) => limit === undefined ? undefined : limit * scale;
+  // Display units only (the caller's, else the target's: Hue Shift turns as degrees); stored values stay in the target's unit.
+  const shownAs = display ?? target.display, scale = shownAs?.scale ?? 1;
+  const scaled = (limit: number | undefined) => limit === undefined ? undefined : limit * scale;
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (failure) { setMessage(failure instanceof Error ? failure.message : String(failure)); } };
   const nodes = clip.nodeGraph?.parameterSources?.graph.nodes ?? [];
   const selection = driven ? `node:${binding!.source!.nodeId}|${binding!.source!.portId}` : binding?.localMode === 'constant' ? 'fixed' : 'auto';
@@ -44,7 +44,7 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false, d
   }}>
     <ResolveInspectorNumberRow label={target.label} ariaLabel={target.label} value={value * scale} defaultValue={target.defaultValue * scale}
       min={target.min * scale} max={target.max * scale} hardMin={scaled(target.hardMin)} hardMax={scaled(target.hardMax)}
-      step={display?.step ?? target.step} suffix={display?.suffix} decimals={display?.decimals}
+      step={shownAs?.step ?? target.step * scale} suffix={shownAs?.suffix} decimals={shownAs?.decimals}
       disabled={readOnly || driven || !!error} persistenceKey={`parameter.${property}`}
       onReset={next => safely(() => { if (!readOnly && !driven) setParameterBaseValue(clipId, property, next / scale); })}
       onChange={next => safely(() => {

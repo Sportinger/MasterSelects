@@ -105,7 +105,8 @@ Earlier local-estimator probes do not validate DIS. Build/test execution is paus
 live DIS quality and performance have not yet been verified.
 
 The catalog includes the 15 Fisheye processing groups, the shared coordinate
-compositions and the expandable HSV-based Hue Shift composition. To insert one,
+compositions, the colour recipe blocks of the colour effects and the HSV-based Hue
+Shift composition of older saved graphs. To insert one,
 select an image effect or an internal node and use
 **right-click → Reusable Nodes**, or the inspector's **Add node** selector.
 Each entry exposes its typed boundary and can be expanded after insertion.
@@ -154,7 +155,10 @@ Further reusable processing recipes are available in the same menu:
 | Sampling | Bounded Sample Count | Explicit count, minimum and maximum; integer truncation remains with the reducer. |
 | Sampling | Pair Tap Offsets; Merge Pair Weights | Sequence index, pairs per side and texel stride give the near/far texel offsets, a centre gate and the side; two kernel weights then merge into one linear-filtered tap (exact for any weights). Used by Box and Gaussian Blur. |
 | Coordinates | Scale From Center | Direction, scalar scale and center; no hidden UV or resolution source. |
-| Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. |
+| Color | Brightness Curve; Contrast Curve | 0–1 RGB and the amount; black and white stay fixed (odds curve with gain `2^(2.5·Brightness)`, S-curve with slope Contrast at mid-grey). Used by Brightness and Contrast. |
+| Color | Exposure (Stops); White Balance | RGB and stops, or Temperature and Tint (per unit red up and blue down 0.6 stops each; Tint green down 0.5, red and blue up 0.25); the light math runs between sRGB to Linear and Linear to sRGB, not clamped. Used by Exposure and Temperature. |
+| Color | Saturation (Gamut-Safe); Hue Rotate (OkLCh) | 0–1 RGB and amount (≥ 0) mixed with Rec.709 luma up to the gamut edge; or RGB and a shift in turns rotated in OkLCh, not clamped. Used by Saturation, Vibrance and Hue Shift. |
+| Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. Kept for colour effects saved before 2026-10. |
 | Color | Soft Bright Pass; Sobel Magnitude | Explicit threshold edges and image, or eight neighboring luminance values; no hidden sampling pass. |
 | Glyph | Glyph Cell Grid; Tone to Glyph Index; Glyph Atlas Alpha | Explicit UV/resolution/cell size, tone/invert/count, and atlas image/dimensions/index/local UV/clamp bounds. Atlas loading stays outside the recipes. |
 | Feedback | Decay & Max RGBA | Componentwise `max(current, previous * decay)`; both images and decay are inputs. The block is stateless and never advances history. |
@@ -254,6 +258,7 @@ cards show a short form of the same category ("Math", "Color Group").
   details** switch shows compiler facts such as family, execution and state.
 - **Families** appear as one entry and switch their saved variant in the inspector:
   Value (Float/Integer), Switch (Value, Vector 2, Image), Luminance (Rec.709/Rec.601),
+  sRGB to Linear/Linear to sRGB (exact sRGB transfer), RGB to OkLCh/OkLCh to RGB,
   Primitive (Box/Sphere/Cylinder), Derivative, Smallest Component, Temporal Smooth and
   the adaptive math and vector families.
 - **Names** are English Title Case nouns without type suffixes or implementation

@@ -6,6 +6,7 @@ import { levels } from '../../src/effects/color/levels';
 import { temperature } from '../../src/effects/color/temperature';
 import { vibrance } from '../../src/effects/color/vibrance';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
+import { createLegacyColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
 
 const effects = { exposure, levels, 'hue-shift': hueShift, temperature, vibrance } as const;
 type EffectType = keyof typeof effects;
@@ -23,7 +24,7 @@ const cases: Array<{ type: EffectType; params: Record<string, number> }> = [
   { type: 'vibrance', params: { amount: 1 } },
 ];
 
-async function renderDefinition(
+export async function renderDefinition(
   device: GPUDevice,
   sampler: GPUSampler,
   source: GPUTextureView,
@@ -79,7 +80,8 @@ export async function checkRemainingColorEffectsGpu(
   try {
     for (const item of cases) {
       const legacy = effects[item.type] as FullscreenEffectDefinition;
-      const graph = imageGraphDefinition({ type: item.type, params: item.params }, legacy);
+      // The registered shaders are the original math, which saved projects keep as their original graph.
+      const graph = imageGraphDefinition({ type: item.type, params: item.params, operatorGraph: createLegacyColorEffectGraph(item.type) }, legacy);
       const legacyBytes = await renderDefinition(device, sampler, source.createView(), target, readback,
         legacy, item.params, size);
       const graphBytes = await renderDefinition(device, sampler, source.createView(), target, readback,

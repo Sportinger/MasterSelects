@@ -209,7 +209,8 @@ describe('worker software preview frame builder', () => {
       id: 'adjustment-a',
       opacity: 0.75,
       source: { kind: 'adjustment' },
-      pixelEffects: { brightness: 0.2 },
+      // Brightness is a graph recipe: the accumulator runs its graph, as the GPU does.
+      pixelEffects: { brightness: 0, imageOperatorPlans: [expect.anything()] },
     });
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
   });
@@ -1515,27 +1516,6 @@ describe('worker software preview frame builder', () => {
             params: { radius: 6 },
           },
           {
-            id: 'contrast-a',
-            type: 'contrast',
-            name: 'Contrast',
-            enabled: true,
-            params: { amount: 1.5 },
-          },
-          {
-            id: 'saturation-a',
-            type: 'saturation',
-            name: 'Saturation',
-            enabled: true,
-            params: { amount: 0.8 },
-          },
-          {
-            id: 'hue-a',
-            type: 'hue-shift',
-            name: 'Hue Shift',
-            enabled: true,
-            params: { shift: 0.25 },
-          },
-          {
             id: 'invert-a',
             type: 'invert',
             name: 'Invert',
@@ -1548,11 +1528,27 @@ describe('worker software preview frame builder', () => {
     );
 
       expect(frame.frame.layers).toHaveLength(1);
-      expect(frame.frame.layers[0]?.filter).toBe('blur(6px) contrast(1.5) saturate(0.8) hue-rotate(90deg) invert(1)');
+      expect(frame.frame.layers[0]?.filter).toBe('blur(6px) invert(1)');
       expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({ brightness: 0 });
       expect(frame.diagnostics.skippedLayerCount).toBe(0);
       expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
     });
+
+  it('runs color recipes as their graphs in stack order and reports stacks it cannot evaluate', async () => {
+    const color = (id: string, type: string, params: Record<string, number>) => ({ id, type, name: type, enabled: true, params });
+    const recipes = [color('contrast-a', 'contrast', { amount: 1.5 }), color('saturation-a', 'saturation', { amount: 0.8 }),
+      color('hue-a', 'hue-shift', { shift: 0.25 }), color('invert-a', 'invert', {})] as Layer['effects'];
+    const frame = await buildWorkerSoftwarePreviewFrame([solidLayer({ effects: recipes })], { width: 640, height: 360 });
+    expect(frame.frame.layers).toHaveLength(1);
+    expect(frame.frame.layers[0]?.filter).toBe('none');
+    expect(frame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toHaveLength(4);
+    // A legacy CSS-only effect cannot share a stack with graph recipes: the layer is skipped and says why.
+    const mixed = await buildWorkerSoftwarePreviewFrame([solidLayer({ effects: [
+      { id: 'blur-a', type: 'blur', name: 'Blur', enabled: true, params: { radius: 6 } }, ...recipes] as Layer['effects'] })],
+    { width: 640, height: 360 });
+    expect(mixed.frame.layers).toHaveLength(0);
+    expect(mixed.diagnostics.skippedByReason['unsupported-effects']).toBe(1);
+  });
 
   it('keeps canvas-compatible registry blur effects on the worker software path', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
@@ -1585,7 +1581,7 @@ describe('worker software preview frame builder', () => {
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
   });
 
-  it('carries additive brightness into worker software pixel effects', async () => {
+  it('carries Brightness into worker software as its graph recipe', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({
         effects: [{
@@ -1601,12 +1597,12 @@ describe('worker software preview frame builder', () => {
 
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
-    expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({ brightness: 0.2 });
+    expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({ brightness: 0, imageOperatorPlans: [expect.anything()] });
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
   });
 
-  it('carries exposure into worker software pixel effects', async () => {
+  it('carries Exposure into worker software as its graph recipe', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({
         effects: [{
@@ -1622,15 +1618,14 @@ describe('worker software preview frame builder', () => {
 
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
-    expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
-      exposureAdjustments: [{ exposure: 1.25, offset: 0.05, gamma: 1.4 }],
-    });
+    expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({ imageOperatorPlans: [expect.anything()] });
+    expect(frame.frame.layers[0]?.pixelEffects.exposureAdjustments).toBeUndefined();
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
   });
 
-  it('carries temperature and vibrance into worker software pixel effects', async () => {
+  it('carries Temperature and Vibrance into worker software as their graph recipes', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({
         effects: [
@@ -1655,16 +1650,13 @@ describe('worker software preview frame builder', () => {
 
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
-    expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
-      temperatureAdjustments: [{ temperature: 0.75, tint: -0.25 }],
-      vibranceAdjustments: [{ amount: 0.4 }],
-    });
+    expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({ imageOperatorPlans: [expect.anything(), expect.anything()] });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
   });
 
-  it('carries levels, threshold, posterize, and vignette into worker software pixel effects', async () => {
+  it('carries Levels, Threshold, Posterize and Vignette into worker software as graphs in stack order', async () => {
     const frame = await buildWorkerSoftwarePreviewFrame(
       [solidLayer({
         effects: [
@@ -1710,16 +1702,7 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
-      levelsAdjustments: [{
-        inputBlack: 0.1,
-        inputWhite: 0.9,
-        gamma: 1.2,
-        outputBlack: 0.05,
-        outputWhite: 0.95,
-      }],
-      thresholdAdjustments: [{ level: 0.45 }],
-      posterizeAdjustments: [{ levels: 5 }],
-      vignetteAdjustments: [{ amount: 0.6, size: 0.45, softness: 0.25, roundness: 1.2 }],
+      imageOperatorPlans: [expect.anything(), expect.anything(), expect.anything(), expect.anything()],
     });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
@@ -2171,11 +2154,11 @@ describe('worker software preview frame builder', () => {
             params: {},
           },
           {
-            id: 'brightness-a',
-            type: 'brightness',
-            name: 'Brightness',
+            id: 'invert-a',
+            type: 'invert',
+            name: 'Invert',
             enabled: true,
-            params: { amount: 0.1 },
+            params: {},
           },
         ],
       })],

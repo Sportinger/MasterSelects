@@ -12,7 +12,7 @@ import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorIconButton, ResolveInspectorRow, ResolveResetIcon } from './resolveInspector/ResolveInspectorPrimitives';
 import { EffectKeyframeToggle } from './shared';
-import { stepDecimals } from './resolveEffectRows';
+import { effectParamDisplay } from '../../../effects/paramDisplay';
 import './effectResolveRows.css';
 
 type Value = number | boolean | string;
@@ -69,14 +69,16 @@ function ResolveEffectParamControl({ paramName, definition, value, effect, clipI
     </span>
   </ResolveInspectorRow>;
   if (definition.type !== 'number') return null;
-  // Radians stay the stored unit (keyframes, tools, MIDI); the rows read and edit whole degrees.
-  const scale = definition.displayUnit === 'degrees' ? 180 / Math.PI : 1, degrees = scale !== 1;
-  if (sourceTarget && clipId) return <ParameterSourceNumberRow clipId={clipId} property={property}
-    display={degrees ? { scale, suffix: '°', decimals: 0, step: 1 } : undefined} />;
   const min = definition.min ?? 0, max = definition.max ?? 1, number = typeof value === 'number' ? value : Number(definition.default);
-  return <ResolveInspectorNumberRow label={definition.label} value={number * scale} defaultValue={Number(definition.default) * scale}
-    min={min * scale} max={max * scale} step={degrees ? 1 : definition.step ?? 0.01} sensitivity={Math.max(0.5, (max - min) * scale / 100)}
-    suffix={degrees ? '°' : undefined} decimals={degrees ? 0 : stepDecimals(definition.step ?? 0.01)} disabled={inactive} title={title}
+  // Shown in display units (radians as whole degrees, turns as degrees, " EV"); the stored unit
+  // stays (keyframes, tools, MIDI). Typing may go beyond the slider up to the rendered range.
+  const display = effectParamDisplay(definition, number), scale = display.scale, shown = (stored: number) => stored * scale;
+  const unitRow = definition.displayUnit !== undefined || definition.displayScale !== undefined || definition.unit !== undefined;
+  if (sourceTarget && clipId) return <ParameterSourceNumberRow clipId={clipId} property={property} display={unitRow ? display : undefined} />;
+  return <ResolveInspectorNumberRow label={definition.label} value={shown(number)} defaultValue={shown(Number(definition.default))}
+    min={shown(min)} max={shown(max)} step={display.step ?? shown(definition.step ?? 0.01)} sensitivity={Math.max(0.5, shown(max - min) / 100)}
+    numberMin={shown(definition.renderMin ?? min)} numberMax={shown(definition.renderMax ?? max)} suffix={display.suffix}
+    decimals={display.decimals} disabled={inactive} title={title}
     persistenceKey={`effect.${clipId ?? 'global'}.${effect.id}.${paramName}`}
     midiTarget={clipId ? { clipId, property: createEffectProperty(effect.id, paramName), label: definition.label, currentValue: number, min, max } : null}
     onChange={next => set(next / scale)} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={method => onParamCommit?.(paramName, 'number', method)}

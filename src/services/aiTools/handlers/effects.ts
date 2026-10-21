@@ -1,5 +1,6 @@
 import { useTimelineStore } from '../../../stores/timeline';
 import { getAllEffects, getDefaultParams, getEffect, hasEffect, getCategoriesWithEffects, resolveEffectTypeId } from '../../../effects';
+import { paramRangeNotes } from '../../../effects/paramRangeNotes';
 import type { ToolResult } from '../types';
 import { selectClipAndOpenTab } from '../aiFeedback';
 import {
@@ -17,13 +18,16 @@ import type { Effect } from '../../../types/effects';
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
 /**
- * Accepted parameters that do nothing on this instance (retired, or not read by its edited graph)
- * and blur limits at the active composition size: tools say so instead of failing silently.
+ * Accepted parameters that do nothing on this instance (retired, or not read by its edited graph),
+ * numbers outside a parameter's rendered range, blur limits at the active composition size and
+ * the effect's own notes on values it clamps or cannot show: tools say so instead of failing silently.
  */
 function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
   if (!effect) return [];
   const composition = useMediaStore.getState().getActiveComposition();
+  const set = Object.fromEntries(names.map(name => [name, effect.params[name]]));
   return [...unusedParamWarnings(effect, names),
+    ...paramRangeNotes(getEffect(effect.type)?.params ?? {}, set, effect.operatorGraph).map(note => `${note.param}: ${note.message}`),
     ...blurBudgetNotes(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080),
     ...(names.length ? definitionParamWarnings(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080) : [])];
 }
@@ -52,6 +56,7 @@ export async function handleListEffects(): Promise<ToolResult> {
         min: param.min,
         max: param.max,
         step: param.step,
+        ...(param.renderMin !== undefined || param.renderMax !== undefined ? { renderRange: [param.renderMin ?? null, param.renderMax ?? null] } : {}),
         description: param.label || key,
       })),
     })),

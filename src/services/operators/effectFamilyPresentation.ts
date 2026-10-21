@@ -1,6 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorGroup } from '../../types/operatorGraph';
 import { expandOperatorCompositions, sameCompositionNode } from './operatorComposition';
-import { effectPresentationPlan } from './effectPresentationPlans';
+import { effectPresentationPlan, type EffectPresentationPlan } from './effectPresentationPlans';
 
 const originals = new Map<string, EffectOperatorGraph>();
 const cache = new WeakMap<EffectOperatorGraph, Map<string, EffectOperatorGraph>>();
@@ -55,14 +55,23 @@ function readableGroups(graph: EffectOperatorGraph, proposed: OperatorGroup[]): 
   }
 }
 
+/** An earlier recipe of the same effect (e.g. the original color graphs) with its own presentation. */
+export interface EarlierEffectRecipe { key: string; createDefault: () => EffectOperatorGraph; plan: EffectPresentationPlan }
+
 /** The untouched recipe gets a one-time readable layout. Saved edits, folder boundaries and ungrouping win. */
 export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed: EffectOperatorGraph, type: string,
-  createDefault: () => EffectOperatorGraph): EffectOperatorGraph {
-  const plan = effectPresentationPlan(type);
+  createDefault: () => EffectOperatorGraph, earlier?: EarlierEffectRecipe): EffectOperatorGraph {
+  const organized = organizeAsRecipe(source, composed, type, type, createDefault, effectPresentationPlan(type));
+  return organized === composed && earlier
+    ? organizeAsRecipe(source, composed, type, `${type}|${earlier.key}`, earlier.createDefault, earlier.plan) : organized;
+}
+
+function organizeAsRecipe(source: EffectOperatorGraph, composed: EffectOperatorGraph, type: string, recipeKey: string,
+  createDefault: () => EffectOperatorGraph, plan: EffectPresentationPlan | undefined): EffectOperatorGraph {
   if (!plan || source.effectPresentationRules || source.incomplete || source.groups?.some(group => !group.composition)) return composed;
-  const cached = cache.get(source)?.get(type); if (cached) return cached;
-  let original = originals.get(type);
-  if (!original) { original = createDefault(); originals.set(type, original); }
+  const cached = cache.get(source)?.get(recipeKey); if (cached) return cached;
+  let original = originals.get(recipeKey);
+  if (!original) { original = createDefault(); originals.set(recipeKey, original); }
   if (!matchesEffectRecipe(source, original)) return composed;
   const originalNodes = new Map(original.nodes.map(node => [node.id, node]));
   const labels = { controls: 'Parameters', constants: 'Constants', sources: 'Coordinates & Resources', ...plan.labels };
@@ -95,6 +104,6 @@ export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed:
     color: '#6b99bd', nodeIds, collapsedByDefault: true,
   }));
   const graph: EffectOperatorGraph = { ...composed, effectPresentationRules: 1, groups: [...(composed.groups ?? []), ...readableGroups(composed, groups)] };
-  const byType = cache.get(source) ?? new Map(); byType.set(type, graph); cache.set(source, byType);
+  const byType = cache.get(source) ?? new Map(); byType.set(recipeKey, graph); cache.set(source, byType);
   return graph;
 }

@@ -1,7 +1,7 @@
 import { extractImageComposition } from './extractImageComposition';
 import { createLegacyMotionBlurGraph, createLegacyRadialBlurGraph } from './legacyDirectionalBlurEffectGraphs';
 import { createDefaultGaussianBlurGraph } from './blurEffectGraphs';
-import { createDefaultContrastGraph, createDefaultSaturationGraph } from './colorEffectGraphs';
+import { createLegacyContrastGraph, createLegacySaturationGraph } from './legacyColorEffectGraphs';
 import { createLegacyGlowGraph } from './glowEffectGraph';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultAsciiGraph, createDefaultAsciiGhostGraph } from './asciiEffectGraph';
@@ -43,15 +43,16 @@ export const PROCESSING_COMPOSITIONS = [
     outputLabels: { 'horizontal-weight-value': 'Weight', 'horizontal-offset-px-value': 'Offset (texels)' },
     consumers: ['Image graphs', 'Gaussian Blur', 'Box Blur'],
   }),
-  extractImageComposition(createDefaultSaturationGraph(), {
+  // Extracted from the original Saturation/Contrast recipes so the shared definitions stay byte-stable.
+  extractImageComposition(createLegacySaturationGraph(), {
     id: 'color.luma-saturation.rgb', label: 'Saturation',
     description: 'Mix Rec.601 luminance with the original RGB using an explicit amount. Output is not clamped; alpha stays with the caller.',
-    members: ['luma', 'luma-rgb', 'mix'], consumers: ['Image graphs', 'Saturation', 'Vibrance'],
+    members: ['luma', 'luma-rgb', 'mix'], consumers: ['Image graphs', 'Saturation/Vibrance (saved before 2026-10)'],
   }),
-  extractImageComposition(createDefaultContrastGraph(), {
+  extractImageComposition(createLegacyContrastGraph(), {
     id: 'color.contrast-pivot.rgb', label: 'Contrast',
     description: 'Apply RGB contrast around 0.5. Output is not clamped; alpha stays with the caller.',
-    members: ['amount-rgb', 'half-rgb', 'subtract-half', 'multiply', 'add-half'], consumers: ['Image graphs', 'Contrast'],
+    members: ['amount-rgb', 'half-rgb', 'subtract-half', 'multiply', 'add-half'], consumers: ['Image graphs', 'Contrast (saved before 2026-10)'],
   }),
   // Extracted from the original Glow recipe so the shared definition stays byte-stable.
   extractImageComposition(createLegacyGlowGraph(), {
