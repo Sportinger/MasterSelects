@@ -1,7 +1,18 @@
 import { SEQUENCE_BLEND_WGSL } from './sequenceBlend';
 import type { ImageOperatorCapability, ImagePlanInstruction } from './imageOperatorGraph';
 
-interface ReducerScope { id: number; sample: number; weight: number; blend?: boolean }
+interface ReducerScope { id: number; sample: number; weight: number; blend?: boolean; captures?: readonly number[] }
+
+/** WGSL type of an instruction's value register. */
+export function imageInstructionWgslType(type: ImagePlanInstruction['type']): string {
+  return type === 'image' || type === 'vec4' ? 'vec4f' : type === 'rgb' || type === 'vec3' ? 'vec3f' : type === 'vec2' ? 'vec2f' : type === 'boolean' ? 'bool' : 'f32';
+}
+
+/** Captured enclosing-scope registers: `v{n}: type` parameters and `v{n}` arguments. */
+export function kernelCaptureParameters(instructions: readonly ImagePlanInstruction[], scope: Pick<ReducerScope, 'captures'>): { typed: string[]; names: string[] } {
+  const captures = scope.captures ?? [];
+  return { typed: captures.map(register => `v${register}: ${imageInstructionWgslType(instructions[register].type)}`), names: captures.map(register => `v${register}`) };
+}
 export function emitImageReducerWgsl(input: { instructions: ImagePlanInstruction[]; expressions: string[];
   kernelScopes: ReducerScope[]; sequenceScopes: ReducerScope[]; scopeParameters: string[];
   rectScopes: ReducerScope[];
@@ -14,12 +25,18 @@ export function emitImageReducerWgsl(input: { instructions: ImagePlanInstruction
   const body = (scope: ReducerScope) => expressions.filter((_line, index) => instructions[index].scope === scope.id).join('\n');
   const output: string[] = sequenceScopes.some(scope => scope.blend) ? [SEQUENCE_BLEND_WGSL] : [];
   if (kernelScopes.length || rectScopes.length) output.push('struct ImageKernelTerm { sample: vec4f, weight: f32 }', 'struct ImageKernelResult { sum: vec4f, weightSum: f32 }');
-  for (const scope of kernelScopes.toSorted((a, b) => b.id - a.id)) output.push(
-    `fn evaluateKernelTerm${scope.id}(${[...scopeParameters, 'kernelIndex: vec2f'].join(', ')}) -> ImageKernelTerm {\n  let pixel = inputColor;\n${body(scope)}\n  return ImageKernelTerm(v${scope.sample}, v${scope.weight});\n}`,
-    `fn imageKernelReduce${scope.id}(${['extentValue: f32', 'centerPixel: vec4f', 'inputUv: vec2f', ...typedContext].join(', ')}) -> ImageKernelResult {\n  let extent = i32(clamp(trunc(extentValue), 0.0, 64.0));\n  var sum = vec4f(0.0); var weightSum = 0.0;\n  for (var x = -extent; x <= extent; x++) { for (var y = -extent; y <= extent; y++) {\n    let term = evaluateKernelTerm${scope.id}(${['centerPixel', 'inputUv', ...context, 'vec2f(f32(x), f32(y))'].join(', ')}); sum += term.sample * term.weight; weightSum += term.weight;\n  }}\n  return ImageKernelResult(sum, weightSum);\n}`);
-  for (const scope of rectScopes.toSorted((a, b) => b.id - a.id)) output.push(
-    `fn evaluateRectTerm${scope.id}(${[...scopeParameters, 'kernelIndex: vec2f'].join(', ')}) -> ImageKernelTerm {\n  let pixel = inputColor;\n${body(scope)}\n  return ImageKernelTerm(v${scope.sample}, v${scope.weight});\n}`,
-    `fn imageRectReduce${scope.id}(${['widthValue: f32', 'heightValue: f32', 'centerPixel: vec4f', 'inputUv: vec2f', ...typedContext].join(', ')}) -> ImageKernelResult {\n  let width = i32(clamp(trunc(widthValue), 1.0, 64.0)); let height = i32(clamp(trunc(heightValue), 1.0, 64.0));\n  var sum = vec4f(0.0); var weightSum = 0.0;\n  for (var x = 0; x < width; x++) { for (var y = 0; y < height; y++) {\n    let term = evaluateRectTerm${scope.id}(${['centerPixel', 'inputUv', ...context, 'vec2f(f32(x), f32(y))'].join(', ')}); sum += term.sample * term.weight; weightSum += term.weight;\n  }}\n  return ImageKernelResult(sum, weightSum);\n}`);
+  for (const scope of kernelScopes.toSorted((a, b) => b.id - a.id)) {
+    const captured = kernelCaptureParameters(instructions, scope);
+    output.push(
+    `fn evaluateKernelTerm${scope.id}(${[...scopeParameters, ...captured.typed, 'kernelIndex: vec2f'].join(', ')}) -> ImageKernelTerm {\n  let pixel = inputColor;\n${body(scope)}\n  return ImageKernelTerm(v${scope.sample}, v${scope.weight});\n}`,
+    `fn imageKernelReduce${scope.id}(${['extentValue: f32', 'centerPixel: vec4f', 'inputUv: vec2f', ...typedContext, ...captured.typed].join(', ')}) -> ImageKernelResult {\n  let extent = i32(clamp(trunc(extentValue), 0.0, 64.0));\n  var sum = vec4f(0.0); var weightSum = 0.0;\n  for (var x = -extent; x <= extent; x++) { for (var y = -extent; y <= extent; y++) {\n    let term = evaluateKernelTerm${scope.id}(${['centerPixel', 'inputUv', ...context, ...captured.names, 'vec2f(f32(x), f32(y))'].join(', ')}); sum += term.sample * term.weight; weightSum += term.weight;\n  }}\n  return ImageKernelResult(sum, weightSum);\n}`);
+  }
+  for (const scope of rectScopes.toSorted((a, b) => b.id - a.id)) {
+    const captured = kernelCaptureParameters(instructions, scope);
+    output.push(
+    `fn evaluateRectTerm${scope.id}(${[...scopeParameters, ...captured.typed, 'kernelIndex: vec2f'].join(', ')}) -> ImageKernelTerm {\n  let pixel = inputColor;\n${body(scope)}\n  return ImageKernelTerm(v${scope.sample}, v${scope.weight});\n}`,
+    `fn imageRectReduce${scope.id}(${['widthValue: f32', 'heightValue: f32', 'centerPixel: vec4f', 'inputUv: vec2f', ...typedContext, ...captured.typed].join(', ')}) -> ImageKernelResult {\n  let width = i32(clamp(trunc(widthValue), 1.0, 64.0)); let height = i32(clamp(trunc(heightValue), 1.0, 64.0));\n  var sum = vec4f(0.0); var weightSum = 0.0;\n  for (var x = 0; x < width; x++) { for (var y = 0; y < height; y++) {\n    let term = evaluateRectTerm${scope.id}(${['centerPixel', 'inputUv', ...context, ...captured.names, 'vec2f(f32(x), f32(y))'].join(', ')}); sum += term.sample * term.weight; weightSum += term.weight;\n  }}\n  return ImageKernelResult(sum, weightSum);\n}`);
+  }
   if (sequenceScopes.length) output.push('struct ImageSequenceTerm { sample: vec4f, weight: f32 }', 'struct ImageSequenceResult { sum: vec4f, weightSum: f32 }');
   for (const scope of sequenceScopes.toSorted((a, b) => b.id - a.id)) output.push(
     `fn evaluateSequenceTerm${scope.id}(${[...scopeParameters, 'sequenceIndex: f32', 'sequenceT: f32'].join(', ')}) -> ImageSequenceTerm {\n  let pixel = inputColor;\n${body(scope)}\n  return ImageSequenceTerm(v${scope.sample}, v${scope.weight});\n}`,

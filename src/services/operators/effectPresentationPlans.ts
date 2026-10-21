@@ -2,6 +2,7 @@ import type { BoundOperatorNode, EffectOperatorGraph } from '../../types/operato
 import { mirrorPixelPresentationPlan } from './mirrorPixelPresentation';
 import { FILM_PRISM_SPECTRUM } from '../../effects/analog/filmPrismLimits';
 import { createLegacyCrtScreenGraph } from './legacyCrtScreenGraph';
+import { acuarelaPresentationPlan } from './acuarelaPresentation';
 
 export interface EffectPresentationPlan {
   labels: Record<string, string>;
@@ -11,6 +12,8 @@ export interface EffectPresentationPlan {
   portLabels?: Record<string, string>;
   /** What an input receives, by `id:port`, where the operator's own names (X, Y, Z) say nothing. */
   inputLabels?: Record<string, string>;
+  /** Port labels apply only to graphs this accepts (an effect id can carry more than one recipe). */
+  portLabelsApply?: (graph: Pick<EffectOperatorGraph, 'nodes'>) => boolean;
 }
 const includes = (list: string, id: string) => list.split(' ').includes(id);
 /** A clamped parameter's output carries the parameter, not "Clamp: Value". */
@@ -267,7 +270,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^space-(moved-delta|sample-uv)$/.test(id) ? 'coordinates' : /^space-/.test(id) ? 'space'
           : /^phase(-|$)/.test(id) ? 'phase' : 'coordinates',
   };
-  const mirrorPixel = mirrorPixelPresentationPlan(type);
+  const mirrorPixel = mirrorPixelPresentationPlan(type) ?? acuarelaPresentationPlan(type);
   if (mirrorPixel) return mirrorPixel;
   if (COLOR_RECIPES.has(type)) return {
     labels: { processing: 'Color Processing', ...Object.fromEntries(COLOR_STAGES.map(([, stage, label]) => [stage, label])) },

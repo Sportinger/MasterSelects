@@ -33,8 +33,9 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   valueBindings?: readonly ImageOperatorValueBinding[];
   fusion: 'inline'; capabilities: readonly ImageOperatorCapability[]; instructions: ImagePlanInstruction[]; output: number;
   sampleScopes: readonly ImageOperatorSampleScope[];
-  kernelScopes?: readonly { id: number; sample: number; weight: number }[];
-  rectScopes?: readonly { id: number; sample: number; weight: number }[];
+  /** `captures`: registers of the enclosing scope the kernel term reads (loop-invariant values computed once). */
+  kernelScopes?: readonly { id: number; sample: number; weight: number; captures?: readonly number[] }[];
+  rectScopes?: readonly { id: number; sample: number; weight: number; captures?: readonly number[] }[];
   sequenceScopes?: readonly { id: number; sample: number; weight: number; blend?: boolean }[];
   segmentSortScopes?: readonly { id: number; sample: number }[];
   quadtreeScopes?: readonly { id: number; sample: number }[];

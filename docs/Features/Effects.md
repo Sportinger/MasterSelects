@@ -614,7 +614,7 @@ grades that have not stored their default values yet.
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
 - `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md) and, for Pixelate, Kaleidoscope, Mirror and RGB Split, [Mirror, Split and Pixel Effects](./Effects-Mirror-Pixel.md)
-- `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
+- `stylize` (13): Vignette, Grain, Sharpen, Posterize, Glow, Sheen, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate; for Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate see [Painterly, Relief and Particle Effects](./Effects-Stylize-Art.md)
 - `keying` (1): Chroma Key
 - `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
 - `halftone` (13): dithering, halftone, Riso, print, poster, stitch, and animated mosaic treatments
@@ -729,11 +729,39 @@ ASCII Ghost combines the current result with explicit previous-frame history usi
 component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
 
-Acuarela uses generic noise, vector math, image sampling and blend operators with
-an explicit `image.frame-history` source. The runtime supplies the committed previous
-frame; editing the graph never stores textures in the project. Disconnecting the
-history source removes its runtime dependency, and a direct source-to-output
-connection bypasses the watercolor processing.
+Acuarela is a four-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
+premultiplied source cache, two edge-aware 7 x 7 washes with per-pixel jittered taps
+(each pixel turns and shifts its tap grid at random, so thin lines become fine grain
+instead of repeated copies; taps 0.6 sigma apart, weight
+`exp(-0.18 |k|^2 - |dc|^2 / (2 s_r^2))` with `dc` the premultiplied colour difference to
+the centre tap). The first wash reads at a position that wobbles by
+`min(Bleed (0.25 + 0.5 wet), 12)` pixels (so neighbouring pixels never read far-apart rows;
+above Bleed 16 only the second wash widens, and the effect card says so), sigma
+`Wash (1 + 0.3 wet)`, into `wash-first-cache`; the second smooths the first with sigma
+`0.6 Wash + 0.25 Bleed wet` into `wash-cache` (`wet` 0-1 in wet patches; colour tolerance
+`s_r` grows from 0.1 dry to 0.3 and 0.5 wet). The last pass groups the wash into tones
+(Simplify) and changes each colour like more or less pigment,
+`C' = C - (C - C^2) e`. The excess `e` eases instead of clamping (`1 - exp(-x)` for more
+pigment, `exp(x) - 1` for less, `x` = edge pooling + granulation + blooms), so the density
+`1 + e` stays inside 0-2, where the formula keeps every channel between `C^2` and
+`2C - C^2`: pooled edges become a deeper tint of their own colour, never black ink lines.
+Edge pooling compares the wash with a Gaussian mean of its 5 x 5 neighbourhood (1.5 px
+apart, sigma 2 px) through a smoothstep, a 2-4 px gradient on the darker side of each
+border. Granulation follows a paper height field, weighted toward mid-light washes (less on
+dense dark paint and near-white). Shadow Pigment then lifts black toward an indigo pigment,
+also on pooled edges, and Mix blends
+premultiplied. Its noise fields use the shared
+**Fractal Noise** node (`noise.fractal2d.vec2`, PCG-hashed gradient noise, 1-8 octaves),
+which stays free of the streaks Random (Hash) shows at large positions. Sizes are pixels
+of a 1080p frame; the recipe has no frame history and Mix 0 is skipped. Acuarela effects
+saved with the original watery-smoke recipe keep it: a stored graph renders as saved,
+and a graph-less effect with only the smoke parameters resolves to
+`createLegacyAcuarelaGraph()` (generic noise, vector math and blend operators with an
+explicit `image.frame-history` source, like Rom1). The smoke parameters are retired for
+the watercolour and shown only where a graph reads them; History Loop and Reset show only
+for graphs with frame history. The worker software renderer runs the smoke recipe on the
+CPU; the watercolour (minutes per frame there) is unsupported in software, so preview and
+export fall back to the main-thread GPU renderer.
 
 `ComputeEffectRuntime` adds storage-texture compute passes to the normal
 ping-pong effect stack. Pixel Sort uses bounded segments of at most 16 pixels, Voronoi uses a
@@ -819,7 +847,10 @@ An automatic key on a clip without that screen colour keys nothing; the inspecto
 `addEffect`/`updateEffect` say so, checked on the clip's thumbnails.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
-feedback decay, and final RGBA mixing as shared nodes. Detail changes frequency,
+feedback decay, and final RGBA mixing as shared nodes. Its source lift passes Gain through a
+knee: the lift equals Gain up to 0.25, then eases as `0.25 + 0.25 (1 - exp(-(Gain - 0.25) / 0.25))`
+toward 0.5 (`rom1GainLift`), so saved looks with typical Gain stay the same and large values
+wash the frame out instead of turning it white; saved graphs get the knee nodes on load. Detail changes frequency,
 not octave count; Speed scales displacement, not timeline time. Its history uses
 the shared seek/reset/loop contract, and feedback can raise output alpha as in
 the legacy shader. Direct source wiring prunes history resources and processing.
@@ -1716,16 +1747,35 @@ as ordered passes so their order is kept.
 
 `Pixel Particle Disintegrate` is a `particle-render` clip effect. It samples
 the live source texture into deterministic instanced quads and resolves a
-straight-alpha texture back into the normal layer compositor. At progress `0`
-the source is already represented by particle cells at their origin positions;
-progress moves, curls, and fades those cells rather than crossfading from a
-normal full-frame video plane. Particle release is driven by a deterministic
-gust field: coherent noise pockets, a wind-front delay, and the clip seed decide
+straight-alpha texture back into the normal layer compositor. Cells that have not
+been released are drawn by a flat pass as exact source pixels, so progress `0` is the
+untouched picture; a released cell becomes its particle, which starts as the exact
+cell, grows to Particle Size and takes its shape over the first quarter of its flight.
+Fade (0-1) thins and shrinks each particle over its own flight (effects saved before
+Fade read 0). Particles read the source premultiplied (manual bilinear), so cut-out
+edges keep their colour. Particle release is driven by a deterministic
+gust field: coherent noise pockets (4 octaves of the shared gradient Fractal Noise, turned
+per octave, so no pocket has straight lattice edges), a wind-front delay, and the clip seed decide
 which regions separate first, so the breakup starts in scattered islands and
-then grows without relying on accumulated simulation state. Each particle
+then grows without relying on accumulated simulation state. Those raw delays bunch up (the
+gust field's values cluster), so the renderer measures their spread for the current settings
+(33 quantiles over a sample of the cells, `releaseTiming.ts`) and the shader lays each cell's
+rank among them out evenly over a release window of 1.8 times the raw spread (at most 0.9):
+at the defaults the releases run from Progress 0 to about 0.84 and the visible picture thins
+out at an even rate (mean alpha about 0.82, 0.51 and 0.18 at Progress 0.25, 0.5 and 0.75).
+A flight ends at `delay + Tail (1 - delay)`, so every particle has landed by Progress 1. The
+flat pass finds a pixel's cell with integer arithmetic on its framebuffer position and the
+per-cell detail value is an integer hash, so the flat and particle passes agree exactly, also
+for fractional cells whose borders fall on pixel centres. Each particle
 carries UVs from its original source cell, so moving particles keep their
 assigned image patch instead of sampling from their new screen position. Preview
 and export use explicit render/media time instead of wall-clock time.
+The grid has one particle per Cell Size cell, with Cell Size in pixels of a 1080p frame
+(shorter side), so previews at any Preview Quality, thumbnails and exports cut the same
+grid; effects saved before keep counting output pixels (`cellReference: 'output'`, set on
+load, reported in the effect card). Above the preview or export particle budget the cells
+grow until the grid fits (rows are never dropped), the renderer logs it once, and the
+effect card names the cell sizes preview and export draw.
 
 This effect is terminal in the clip effect stack. Effects before it are pre-rendered
 into the particle source texture; effects after it are ignored with a renderer
@@ -1871,12 +1921,18 @@ checkout first (`npx vite --port 5175 --strictPort`), then for example
 `--list` prints every effect with its parameters, `--times` renders a frame
 sequence for temporal effects, and `--inset 0.7` places the image at 70 % on a
 transparent frame (the contact sheet shows cells over a checkerboard) to check
-alpha handling such as dark rims. Effects that need clip context (masks, face
+alpha handling such as dark rims. `--metrics` adds per-cell numbers to the summary: mean
+alpha (coverage, e.g. how far a particle outro has progressed), transparent pixels in the
+outer 8 px, and newly crushed black (channels below 20 where the original averaged above
+60); `--require-filled-border` fails the run when a variant leaves the frame border
+transparent. Effects that need clip context (masks, face
 landmarks, temporal source, tracking) render without it and are checked in the
 editor instead. `--pairs <file>` writes docs close-ups: each entry renders two
 effects (or `original`) on one image, crops the same region of both (`crop`, in
 pixels of the rendered frame, `zoom` enlarges it) and puts them side by side as a
-WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`.
+WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`;
+`"backdrop": "checker"` or a flat colour (`"#3c6ec8"`, readable at float size) shows
+transparent pixels.
 
 ### Effect graph pictures
 
@@ -2021,22 +2077,23 @@ Effects can opt into temporal feedback through `usesFeedback`. Feedback effects
 sample their own previous output frame on binding 3 and the pipeline maintains
 separate committed-history and current-output textures per composition/layer/effect.
 Repeated renders at the same timeline time re-evaluate against committed history;
-only advancing the frame promotes the latest current output. Acuarela and the frozen Rom1 snapshot
-use this path to build a watery smoke trail from animated fractal UV offsets.
+only advancing the frame promotes the latest current output. Rom1 and Acuarela effects
+saved with its original smoke recipe use this path to build a watery smoke trail from
+animated fractal UV offsets.
 Acuarela, Rom1 and glyph animation use the supplied composition timeline time
 (zero when omitted), not the wall clock. Explicit seeks, backwards jumps,
 owner revisions and export starts clear frame history. The saved, non-animatable
 `historyLoop` parameter chooses `reset` (the legacy/missing-value default) or
 `continuous` across explicit playback-loop boundaries. Render surfaces receive
 the same event revision so repeated renders consume a discontinuity only once.
-The worker software renderer mirrors standalone Acuarela/Rom1 feedback with a
+The worker software renderer mirrors standalone smoke-recipe Acuarela/Rom1 feedback with a
 composition/target/effect software feedback cache with the same two-history
 transition policy for preview and export readback;
 Voxel Relief uses the same binding to smooth a
 raymarched block-heightfield between video frames and remains a complex
 raymarch/feedback effect.
 
-Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled.
+Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled, with Distance 0.8 so the relief fills the layer at the default tilt (the Effect Lab's `--metrics --require-filled-border` check finds no transparent pixel in the outer 8 px of the three lab images at 960 and 1920 px; 0.85 left a wedge). Effects saved before Distance existed keep Distance 1 (set on load). Block sides keep at least 55 % of the column colour and tall columns brighten their own colour (2D raymarch and native 3D); effects saved before keep the darker, greying shading (`shading: 'legacy'`, set on load).
 With `Limit to Video` enabled, the raymarcher discards voxel cells outside the source rectangle and uses a finite source-sized floor, so orbit views show only the actual video footprint instead of repeating its edge pixels around the subject. Existing project instances retain their stored parameters.
 
 New Glows start from the bloom defaults (`GLOW_DEFAULTS`): Amount 2.5, Threshold 0.95, Softness 0.5, Radius 80 and white Color. Saved ring Glows keep their stored parameters (the earlier iPad-tuned preset was Amount 5, Threshold 0.7935, Radius 1, Softness 0.496, 6.85 rings and 17.95 samples per ring).

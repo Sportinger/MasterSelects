@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { getEffect } from '../../src/effects';
-import { createDefaultAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
+import { createLegacyAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
 import { createDefaultAsciiGhostGraph, createDefaultCapsuleCloudGraph, createDefaultDataHatchGraph, createDefaultDitherTextGraph, createDefaultGlyphMatrixGraph, createDefaultMatrixGraph, createDefaultPixelDitherGraph, createDefaultRetroMatrixGraph, createDefaultSymbolMatrixGraph, createDefaultUiCollageGraph } from '../../src/services/operators/asciiEffectGraph';
 import { EFFECT_GRAPH_PARAM } from '../../src/services/operators/effectGraph';
 import { editEffectGraph } from '../../src/services/operators/effectGraphEditing';
@@ -15,7 +15,7 @@ import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const initial = useTimelineStore.getState();
 const cases = [
-  { type: 'acuarela', name: 'Acuarela', factory: createDefaultAcuarelaGraph, speedDefault: 4, speedMax: 40, feedback: true },
+  { type: 'acuarela', name: 'Acuarela', factory: createLegacyAcuarelaGraph, speedDefault: 4, speedMax: 40, feedback: true },
   { type: 'glyph-matrix', name: 'Glyph Matrix', factory: createDefaultGlyphMatrixGraph, speedDefault: 1, speedMax: 5, feedback: false },
   { type: 'data-hatch', name: 'Data Hatching', factory: createDefaultDataHatchGraph, speedDefault: 1, speedMax: 5, feedback: false },
   { type: 'dither-text', name: 'Dither Text', factory: createDefaultDitherTextGraph, speedDefault: 1, speedMax: 5, feedback: false },

@@ -1,8 +1,11 @@
-// Rom1 - frozen snapshot of the current Acuarela-style watery feedback effect.
+// Rom1 - watery smoke: a frozen snapshot of the original Acuarela feedback look (Acuarela is a watercolour now).
+// It renders through its node graph (rom1EffectGraph.ts); this shader is that graph's reference.
 
 import shader from './shader.wgsl?raw';
+import { finiteUniform as finite } from '../../_shared/effectUniformParams';
 import type { EffectDefinition } from '../../types';
 import { FEEDBACK_PARAMETERS } from '../../_shared/feedbackParameters';
+import { rom1ParamWarnings } from './warnings';
 
 export const rom1: EffectDefinition = {
   id: 'rom1',
@@ -14,6 +17,8 @@ export const rom1: EffectDefinition = {
   uniformSize: 48,
   usesFeedback: true,
   requiresContinuousRender: true,
+
+  paramWarnings: rom1ParamWarnings,
 
   params: {
     ...FEEDBACK_PARAMETERS,
@@ -99,14 +104,15 @@ export const rom1: EffectDefinition = {
 
   packUniforms: (params, width, height, timelineTimeSeconds = 0) => {
     return new Float32Array([
-      params.opacity as number ?? 1,
-      params.gain as number ?? 0.01,
-      params.speed as number ?? 4,
-      params.detail as number ?? 4,
-      params.strength as number ?? 0.32,
-      params.density as number ?? 4,
-      params.gainX as number ?? 0.3,
-      params.gainY as number ?? 0.3,
+      finite(params.opacity, 1),
+      // The shader passes Gain through the knee (smokeGainUpgrade.ts), as the graph does.
+      finite(params.gain, 0.01),
+      finite(params.speed, 4),
+      finite(params.detail, 4),
+      finite(params.strength, 0.32),
+      finite(params.density, 4),
+      finite(params.gainX, 0.3),
+      finite(params.gainY, 0.3),
       width,
       height,
       Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,

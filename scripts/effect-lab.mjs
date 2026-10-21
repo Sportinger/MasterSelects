@@ -9,6 +9,13 @@
 //       [--times 0,0.033,0.067] [--url http://localhost:5175]
 //       [--inset 0.7]   # image at 70 % on transparency; the sheet shows cells over a checkerboard
 //   A variant may carry its own "times" (e.g. one variant per frame of an animation) instead of --times.
+//       [--quality export]  # particle-render effects: export particle budget instead of preview
+//       [--metrics]     # per cell: meanAlpha, edgeTransparent (alpha < 250 in the outer 8 px),
+//                       # newBlack (max channel < 20 where the original's mean is above 60)
+//       [--require-filled-border]  # with --metrics: fail when a variant leaves a transparent pixel in the
+//                       # outer 8 px (an effect that should fill the layer, e.g. Voxel Relief at its defaults)
+//   node scripts/effect-lab.mjs --compile-probe --effect voxel-relief [--width 1920]
+//       # first frame (waits for the driver to build the pipelines) vs steady frame, in a fresh page
 //   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>]
 //
 // Each variant renders on each image; "original" (effect bypassed) is always the first column.
@@ -20,7 +27,11 @@
 //     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ..., "times": [0.5] } }
 //     (a side's optional "times" renders an animated effect at those timeline seconds; the last one is kept;
 //      a side's own "crop", "zoom" and "smooth" override the entry's, e.g. a whole frame beside a magnified detail)
+// (`times`: timeline seconds rendered in order, for feedback effects that build up over frames)
+// `"backdrop": "checker"` shows transparent pixels as a checkerboard, `"#3c6ec8"` as a flat colour.
 // (an effect of "original" is the unchanged image).
+// `"backdrop": "checker"` draws a checkerboard behind both crops, so transparent pixels show; a colour
+// (`"backdrop": "#3c6ec8"`) fills them flat instead, which stays readable at float size.
 // `"layout": "split"` shows one picture: the crop (default: the whole frame) of the left side up to
 // `"split"` (0.5) of its width, the right side's crop after it, and a thin light divider; `"stack"`
 // puts the two crops one above the other with `gap` between them. `"outWidth"` scales the result.
@@ -40,7 +51,7 @@ async function composePair(page, entry) {
   // Each side may set its own crop, zoom and smooth (e.g. a whole frame beside a magnified detail);
   // split and stack show both sides through the left side's crop.
   const view = spec => ({ crop: spec.crop ?? entry.crop, zoom: spec.zoom ?? entry.zoom ?? 1, smooth: spec.smooth ?? entry.smooth ?? true });
-  const png = await page.evaluate(async ({ cells, gap, layout, split, outWidth }) => {
+  const png = await page.evaluate(async ({ cells, gap, layout, split, outWidth, backdrop }) => {
     const bitmaps = await Promise.all(cells.map(async cell => createImageBitmap(await (await fetch(cell.data)).blob())));
     const crops = cells.map((cell, index) => cell.crop ?? [0, 0, bitmaps[index].width, bitmaps[index].height]);
     let canvas, context;
@@ -50,17 +61,30 @@ async function composePair(page, entry) {
     };
     // smooth: false enlarges with nearest-neighbour, so scanlines and mask stripes stay crisp.
     const smoothing = smooth => { context.imageSmoothingEnabled = smooth; context.imageSmoothingQuality = 'high'; };
+    // "checker" shows transparent pixels as a checkerboard instead of the dark page; a flat colour
+    // ("#3c6ec8") reads as "nothing there" even at float size, where a checkerboard looks like dust.
+    const paintBackdrop = (left, top, w, h) => {
+      if (backdrop === 'checker') for (let ty = 0; ty < h; ty += 16) for (let tx = 0; tx < w; tx += 16) {
+        context.fillStyle = ((tx + ty) / 16) % 2 ? '#8c8c8c' : '#bdbdbd';
+        context.fillRect(left + tx, top + ty, Math.min(16, w - tx), Math.min(16, h - ty));
+      }
+      else if (typeof backdrop === 'string' && backdrop.startsWith('#')) { context.fillStyle = backdrop; context.fillRect(left, top, w, h); }
+    };
     if (layout === 'split' || layout === 'stack') {
       const [x, y, w, h] = crops[0], scale = outWidth ? outWidth / w : cells[0].zoom;
       const cw = Math.round(w * scale), ch = Math.round(h * scale);
       start(cw, layout === 'stack' ? ch * 2 + gap : ch); smoothing(cells[0].smooth);
       if (layout === 'split') {
+        paintBackdrop(0, 0, cw, ch);
         const cut = Math.round(w * split);
         context.drawImage(bitmaps[0], x, y, cut, h, 0, 0, Math.round(cut * scale), ch);
         context.drawImage(bitmaps[1], x + cut, y, w - cut, h, Math.round(cut * scale), 0, cw - Math.round(cut * scale), ch);
         context.fillStyle = 'rgba(255, 255, 255, 0.85)'; context.fillRect(Math.round(cut * scale) - 1, 0, 2, ch);
       } else {
-        for (const [index, bitmap] of bitmaps.entries()) context.drawImage(bitmap, x, y, w, h, 0, index * (ch + gap), cw, ch);
+        for (const [index, bitmap] of bitmaps.entries()) {
+          paintBackdrop(0, index * (ch + gap), cw, ch);
+          context.drawImage(bitmap, x, y, w, h, 0, index * (ch + gap), cw, ch);
+        }
       }
     } else {
       let sizes = cells.map(({ zoom }, index) => [crops[index][2] * zoom, crops[index][3] * zoom]);
@@ -71,6 +95,7 @@ async function composePair(page, entry) {
       for (const [index, bitmap] of bitmaps.entries()) {
         smoothing(cells[index].smooth);
         const crop = crops[index];
+        paintBackdrop(x, 0, sizes[index][0], sizes[index][1]);
         context.drawImage(bitmap, crop[0], crop[1], crop[2], crop[3], x, 0, sizes[index][0], sizes[index][1]);
         x += sizes[index][0] + gap;
       }
@@ -80,7 +105,7 @@ async function composePair(page, entry) {
     let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return btoa(binary);
   }, { cells: [{ data: left.png, ...view(entry.left) }, { data: right.png, ...view(entry.right) }], gap: entry.gap ?? 6,
-    layout: entry.layout ?? 'pair', split: entry.split ?? 0.5, outWidth: entry.outWidth });
+    layout: entry.layout ?? 'pair', split: entry.split ?? 0.5, outWidth: entry.outWidth, backdrop: entry.backdrop });
   return Buffer.from(png, 'base64');
 }
 
@@ -99,7 +124,11 @@ try {
   await page.goto(`${url}/tests/browser/effect-lab/index.html`);
   await page.waitForFunction(() => document.querySelector('#status')?.textContent === 'ready', null, { timeout: 120000 });
 
-  if (args.includes('--list')) {
+  if (args.includes('--compile-probe')) {
+    const job = { effectId: option('--effect'), image: 'dancer_stage.jpg', width: Number(option('--width', '1920')),
+      params: option('--params') ? JSON.parse(option('--params')) : {} };
+    console.log(JSON.stringify({ effectId: job.effectId, ...(await page.evaluate(probe => window.__effectLab.probeCompile(probe), job)), errors }));
+  } else if (args.includes('--list')) {
     console.log(JSON.stringify(await page.evaluate(() => window.__effectLab.describe()), null, 1));
   } else if (option('--pairs')) {
     const entries = JSON.parse(fs.readFileSync(option('--pairs'), 'utf8')).pairs.filter(entry => !option('--only') || entry.name === option('--only'));
@@ -122,6 +151,7 @@ try {
     const width = Number(option('--width', '960'));
     const times = option('--times') ? option('--times').split(',').map(Number) : undefined;
     const inset = option('--inset') ? Number(option('--inset')) : undefined;
+    const quality = option('--quality');
     const results = [];
     for (const image of images) {
       const row = [];
@@ -129,7 +159,7 @@ try {
       row.push({ label: 'original', ...original });
       for (const variant of variants) {
         const result = await page.evaluate(job => window.__effectLab.render(job), { effectId, image: `${image}.jpg`, width, params: variant.params,
-          times: variant.times ?? times, inset, recipe: variant.recipe });
+          times: variant.times ?? times, inset, recipe: variant.recipe, quality });
         row.push({ label: variant.label, params: variant.params, ...result });
       }
       for (const cell of row) {
@@ -138,6 +168,28 @@ try {
         cell.file = file;
       }
       results.push({ image, row });
+    }
+    // --metrics: coverage, transparent frame border and newly crushed black, against the original cell.
+    if (args.includes('--metrics')) for (const { row } of results) {
+      const metrics = await page.evaluate(async pngs => {
+        const read = async png => { const bitmap = await createImageBitmap(await (await fetch(png)).blob());
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height), context = canvas.getContext('2d');
+          context.drawImage(bitmap, 0, 0); return context.getImageData(0, 0, bitmap.width, bitmap.height); };
+        const original = await read(pngs[0]);
+        return Promise.all(pngs.map(async png => {
+          const { data, width, height } = await read(png);
+          let alpha = 0, edgeTransparent = 0, newBlack = 0;
+          for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+            const i = (y * width + x) * 4;
+            alpha += data[i + 3];
+            if ((x < 8 || y < 8 || x >= width - 8 || y >= height - 8) && data[i + 3] < 250) edgeTransparent += 1;
+            const before = (original.data[i] + original.data[i + 1] + original.data[i + 2]) / 3;
+            if (data[i + 3] > 0 && Math.max(data[i], data[i + 1], data[i + 2]) < 20 && before > 60) newBlack += 1;
+          }
+          return { meanAlpha: +(alpha / (255 * width * height)).toFixed(4), edgeTransparent, newBlack };
+        }));
+      }, row.map(cell => cell.png));
+      row.forEach((cell, index) => { cell.metrics = metrics[index]; });
     }
     // Contact sheet: rows = images, columns = original + variants, labels on top.
     const sheet = await page.evaluate(async ({ rows, effectId }) => {
@@ -170,10 +222,15 @@ try {
     const summary = {
       effectId, sheet: sheetFile, errors,
       cells: results.flatMap(({ image, row }) => row.map(cell => ({ image, label: cell.label, file: cell.file, renderMs: cell.renderMs,
-        gpuFailure: cell.gpuFailure, pipelineFailures: cell.pipelineFailures?.length ? cell.pipelineFailures : undefined }))),
+        gpuFailure: cell.gpuFailure, metrics: cell.metrics, pipelineFailures: cell.pipelineFailures?.length ? cell.pipelineFailures : undefined }))),
     };
     fs.writeFileSync(path.join(out, 'summary.json'), JSON.stringify(summary, null, 1));
     console.log(JSON.stringify(summary, null, 1));
+    if (args.includes('--require-filled-border')) {
+      const open = summary.cells.filter(cell => cell.label !== 'original' && cell.metrics?.edgeTransparent > 0);
+      if (open.length) throw new Error(`transparent frame border: ${open.map(cell => `${cell.image} ${cell.label} (${cell.metrics.edgeTransparent} px)`).join(', ')}`);
+      console.log('filled border: every variant covers the outer 8 px');
+    }
   }
 } finally {
   await browser.close();

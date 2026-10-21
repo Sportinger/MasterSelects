@@ -13,7 +13,7 @@ describe('worker software feedback history', () => {
     const layer = (historyLoop?: unknown): Layer => ({
       id: 'layer', name: 'Layer', visible: true, opacity: 1, blendMode: 'normal' as const,
       source: { type: 'solid' }, position: { x: 0, y: 0 }, scale: { x: 1, y: 1 }, rotation: 0,
-      effects: [{ id: 'water', name: 'Water', type: 'acuarela', enabled: true, params: { historyLoop } }],
+      effects: [{ id: 'water', name: 'Water', type: 'acuarela', enabled: true, params: { historyLoop, strength: 0.32 } }],
     });
     expect(workerSoftwareEffectPlanForLayer(layer('continuous'))?.pixelEffects.acuarelaAdjustments?.[0]?.historyLoop).toBe('continuous');
     expect(workerSoftwareEffectPlanForLayer(layer('invalid'))?.pixelEffects.acuarelaAdjustments?.[0]?.historyLoop).toBe('reset');

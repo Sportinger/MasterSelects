@@ -23,8 +23,18 @@ function noise2d(g:B,id:string,p:Ref,z:Ref,o:Ref,two:Ref,three:Ref){
   return mix('result',mix('row0',h00,h10,{node:fs.node,port:'x'}),mix('row1',h01,h11,{node:fs.node,port:'x'}),{node:fs.node,port:'y'});
 }
 
-/** Exact four-octave expansion of the legacy feedback watercolor shader. */
-export function createDefaultAcuarelaGraph():EffectOperatorGraph {
+/** Effects saved before the watercolour recipe carry the smoke parameters and none of the new ones. */
+export function hasLegacyAcuarelaParams(params: Record<string, unknown>): boolean {
+  return params.wash === undefined && params.bleed === undefined
+    && ['strength', 'density', 'detail', 'gainX', 'gainY', 'gain', 'speed'].some(id => params[id] !== undefined);
+}
+
+/**
+ * The original watery-smoke recipe, an exact four-octave expansion of the legacy feedback shader.
+ * Kept for Acuarela effects saved with it: their stored graph renders unchanged, and graph-less
+ * saved effects (smoke parameters only, see `hasLegacyAcuarelaParams`) resolve to it.
+ */
+export function createLegacyAcuarelaGraph():EffectOperatorGraph {
   const g=new B(),frame=g.node('frame','image.frame','image'),feedback=g.node('feedback','image.frame-history','image'),uv=g.node('uv','image.normalized-uv','uv');
   const bind=(id:string)=>g.node(id,id==='reset'?'values.boolean':'values.number','value',{value:id});
   const opacity=bind('opacity'),gain=bind('gain'),speed=bind('speed'),detail=bind('detail'),strength=bind('strength'),density=bind('density'),gainX=bind('gainX'),gainY=bind('gainY');
@@ -54,7 +64,7 @@ export function createDefaultAcuarelaGraph():EffectOperatorGraph {
   const split=(id:string,v:Ref)=>{const o=g.node(`${id}-split`,'vector.split.rgba','rgb');g.e(v,o,'image');return o;},alpha=(id:string,v:Ref)=>{const rgba=g.node(`${id}-vec4`,'convert.image-to-vec4');g.e(v,rgba,'image');const parts=g.node(`${id}-components`,'vector.split.vec4','x');g.e(rgba,parts,'value');return {node:parts.node,port:'w'};},ss=split('source',source),ws=split('wet',wet),as=split('a',a),bs=split('b',b),cs=split('c',c),fs=split('feedback',feedbackSample),sourceAlpha=alpha('source-alpha',source),feedbackAlphaValue=alpha('feedback-alpha',feedbackSample);
   const feedbackMaskEdge=(()=>{const us=g.node('warped-split','vector.split.vec2','x');g.e(warped,us,'value');const xMin=g.node('edge-x','math.min.scalar');g.e({node:us.node,port:'x'},xMin,'a');g.e(g.b('one-minus-x','math.subtract.scalar',one,{node:us.node,port:'x'}),xMin,'b');const yMin=g.node('edge-y','math.min.scalar');g.e({node:us.node,port:'y'},yMin,'a');g.e(g.b('one-minus-y','math.subtract.scalar',one,{node:us.node,port:'y'}),yMin,'b');const edge=g.node('edge-min','math.min.scalar');g.e(xMin,edge,'a');g.e(yMin,edge,'b');const mask=g.node('edge-mask','math.smoothstep.scalar');g.e(g.n('edge-low',-.005),mask,'edge0');g.e(g.n('edge-high',.025),mask,'edge1');g.e(edge,mask,'value');return mask;})();
   const feedbackRgb=g.node('feedback-masked','math.multiply.rgb-scalar');g.e({node:fs.node,port:'rgb'},feedbackRgb,'a');g.e(feedbackMaskEdge,feedbackRgb,'b');const feedbackAlpha=g.b('feedback-alpha-mask','math.multiply.scalar',feedbackAlphaValue,feedbackMaskEdge);
-  const gainValue=g.b('gain-value','math.multiply.scalar',(()=>{const o=g.node('safe-gain','math.max.scalar');g.e(gain,o,'a');g.e(z,o,'b');return o;})(),g.n('gain-scale',.35)); const gainRgb=g.node('gain-rgb','convert.scalar-to-rgb','rgb');g.e(gainValue,gainRgb,'value');const sourceAlphaGain=g.node('source-alpha-gain','math.multiply.rgb-scalar');g.e(gainRgb,sourceAlphaGain,'a');g.e(sourceAlpha,sourceAlphaGain,'b');const lifted=g.b('lifted-add','math.add.rgb',{node:ss.node,port:'rgb'},sourceAlphaGain),liftedClamp=g.node('lifted','math.clamp.rgb-scalar');g.e(lifted,liftedClamp,'value');g.e(z,liftedClamp,'min');g.e(one,liftedClamp,'max');
+  const gainValue=g.b('gain-value','math.multiply.scalar',(()=>{const o=g.node('safe-gain','math.clamp.scalar');g.e(gain,o,'value');g.e(z,o,'min');g.e(one,o,'max');return o;})(),g.n('gain-scale',.35)); const gainRgb=g.node('gain-rgb','convert.scalar-to-rgb','rgb');g.e(gainValue,gainRgb,'value');const sourceAlphaGain=g.node('source-alpha-gain','math.multiply.rgb-scalar');g.e(gainRgb,sourceAlphaGain,'a');g.e(sourceAlpha,sourceAlphaGain,'b');const lifted=g.b('lifted-add','math.add.rgb',{node:ss.node,port:'rgb'},sourceAlphaGain),liftedClamp=g.node('lifted','math.clamp.rgb-scalar');g.e(lifted,liftedClamp,'value');g.e(z,liftedClamp,'min');g.e(one,liftedClamp,'max');
   const quarter=g.n('quarter',.25),washSum=g.b('wash-1','math.add.rgb',{node:ws.node,port:'rgb'},{node:as.node,port:'rgb'}),washSum2=g.b('wash-2','math.add.rgb',washSum,{node:bs.node,port:'rgb'}),washSum3=g.b('wash-3','math.add.rgb',washSum2,{node:cs.node,port:'rgb'}),wash=g.node('wash','math.multiply.rgb-scalar');g.e(washSum3,wash,'a');g.e(quarter,wash,'b');
   const mixRgb=(id:string,x:Ref,y:Ref,t:Ref)=>{const o=g.node(id,'math.mix.rgb');g.e(x,o,'a');g.e(y,o,'b');g.e(t,o,'t');return o;},warpRaw=g.b('warp-mix-raw','math.multiply.scalar',strength,g.n('warp-factor',.92)),warpMix=g.node('warp-mix','math.clamp.scalar');g.e(warpRaw,warpMix,'value');g.e(z,warpMix,'min');g.e(g.n('warp-max',.92),warpMix,'max');const current=mixRgb('warped-current',liftedClamp,wash,warpMix);
   const decay=g.n('feedback-decay',.98),delayed=g.node('delayed-scaled','math.multiply.rgb-scalar');g.e(feedbackRgb,delayed,'a');g.e(decay,delayed,'b');const delayedClamp=g.node('delayed','math.clamp.rgb-scalar');g.e(delayed,delayedClamp,'value');g.e(z,delayedClamp,'min');g.e(one,delayedClamp,'max');

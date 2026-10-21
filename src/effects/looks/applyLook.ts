@@ -1,13 +1,11 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
-import { withLegacyMirrorPixelControls } from '../../services/operators/mirrorPixelGraphUpgrade';
 import { COLOR_RECIPE_EFFECT_TYPES } from '../../services/operators/colorEffectGraphs';
 import { hasEarlierStylizeRecipe, isEarlierStylizeGraph, stylizeNewInstanceParams } from '../../services/operators/stylizeRecipes';
 import { getEffect } from '..';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { checkedLookEntryOperatorGraph } from './lookEntryGraph';
+import { checkedLookEntryOperatorGraph, lookEntryOmittedParams, lookEntryParams } from './lookEntryGraph';
 import type { LookDefinition, LookStackEntry } from './types';
-import { lookEntryRecipeOnlyParams } from './lookStackEffects';
 
 /** Applies a Look; returns the problems of stored graphs that could not be used (those entries render the current recipe). */
 export function applyLookToClip(look: LookDefinition, clipId: string): string[] {
@@ -16,15 +14,16 @@ export function applyLookToClip(look: LookDefinition, clipId: string): string[] 
   startBatch(`Apply look: ${look.name}`);
   try {
     for (const entry of look.stack) {
-      // A stored graph, a stylize effect's earlier recipe, an analog effect's original graph or the
-      // original color math (lookEntryGraph.ts). An original analog graph starts without the rebuilt
-      // recipe's own parameters, like a pinned saved effect.
+      // A stored graph (or one carried in an old Look's values, such as the smoke Acuarela), a stylize
+      // effect's earlier recipe, an analog effect's original graph or the original color math
+      // (lookEntryGraph.ts). Such a graph starts without the parameters it never reads (the rebuilt
+      // analog recipe's own, the watercolour Acuarela's), like a pinned saved effect.
       const { graph: operatorGraph, problem } = checkedLookEntryOperatorGraph(look, entry);
       if (problem) problems.push(problem);
-      const omitParams = [...lookEntryRecipeOnlyParams(look, entry)];
+      const omitParams = lookEntryOmittedParams(look, entry, operatorGraph);
       const effectId = addClipEffect(clipId, entry.effectId, operatorGraph ? { operatorGraph, ...(omitParams.length ? { omitParams } : {}) } : undefined);
-      // A custom Look saved before an effect gained controls lacks them: give them the values that keep its look.
-      const saved = look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params);
+      // A custom Look saved before an effect gained controls or a new recipe lacks their values: give it the ones that keep its look.
+      const saved = lookEntryParams(look, entry);
       // Values a new instance starts with differently (Posterize Brightness Only) keep what an entry
       // saved without them meant: the parameter default.
       const definitions = getEffect(entry.effectId)?.params ?? {};

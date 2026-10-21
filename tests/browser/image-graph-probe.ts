@@ -52,6 +52,7 @@ import { checkImageGeometryPatternsGpu } from './image-geometry-patterns-gpu-che
 import { checkChromaKeyGraphGpu } from './image-chroma-key-graph-gpu-check';
 import { checkRom1GraphGpu } from './image-rom1-graph-gpu-check';
 import { checkMemoryLeakGraphGpu } from './image-memory-leak-graph-gpu-check';
+import { checkStylizeArtGpu } from './stylize-art-gpu-check';
 
 async function checkGpu() {
   const adapter = await navigator.gpu?.requestAdapter();
@@ -73,6 +74,14 @@ async function checkGpu() {
       const validation = await device.popErrorScope();
       if (validation) throw new Error(validation.message);
       return `PASS: ${comparisons} color recipe cases; GPU within one 8-bit step of the CPU evaluator on every texel; no validation errors.`;
+    } finally { device.destroy(); }
+  }
+  if (suite === 'stylize-art') {
+    try {
+      const summary = await checkStylizeArtGpu(device);
+      const validation = await device.popErrorScope();
+      if (validation) throw new Error(validation.message);
+      return `PASS: ${summary}; particles keep the exact picture at rest and in place, clean alpha edges and no straight release borders; Sheen adds light monotonically without clipping; no validation errors.`;
     } finally { device.destroy(); }
   }
   if (suite === 'memory-leak') {

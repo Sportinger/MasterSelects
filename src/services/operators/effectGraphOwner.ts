@@ -49,6 +49,8 @@ import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultGlowGraph } from './glowBloomEffectGraph';
 import { upgradeGlowGraph } from './glowGraphUpgrade';
 import { createEarlierStylizeGraph, stylizePresentation, upgradePointwiseStylizeGraph } from './stylizeRecipes';
+import { clampSmokeGainGraph, kneeRom1GainGraph } from './smokeGainUpgrade';
+import { withLegacySheenParams } from '../../effects/stylize/sheen/legacy';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
 import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
@@ -76,7 +78,8 @@ import { createDefaultToneGeometryGraph } from './toneGeometryEffectGraph';
 import { createDefaultCrossStitchGraph } from './crossStitchEffectGraph';
 import { createDefaultMotionHalftoneGraph, type EditableMotionHalftoneEffectType } from './motionHalftoneEffectGraphs';
 import { createDefaultAsciiGhostGraph, createDefaultAsciiGraph, createDefaultBrandGeneratorGraph, createDefaultCapsuleCloudGraph, createDefaultDataHatchGraph, createDefaultDitherTextGraph, createDefaultGlyphMatrixGraph, createDefaultGridGlyphGraph, createDefaultInscribeGraph, createDefaultMatrixGraph, createDefaultNumberFieldGraph, createDefaultPixelCodeGraph, createDefaultPixelDitherGraph, createDefaultRetroMatrixGraph, createDefaultStitchPosterGraph, createDefaultSymbolMatrixGraph, createDefaultUiCollageGraph, createDefaultWordMosaicGraph } from './asciiEffectGraph';
-import { createDefaultAcuarelaGraph } from './acuarelaEffectGraph';
+import { createLegacyAcuarelaGraph, hasLegacyAcuarelaParams } from './acuarelaEffectGraph';
+import { createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
 import { createDefaultVoronoiGraph } from './voronoiEffectGraph';
 import { createDefaultPixelSortGraph } from './pixelSortEffectGraph';
 import { createDefaultQuadtreeGraph } from './quadtreeEffectGraph';
@@ -212,7 +215,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'chroma-key' ? createDefaultChromaKeyGraph
         : effectType === 'rom1' ? createDefaultRom1Graph
         : effectType === 'memory-leak' ? createDefaultMemoryLeakGraph
-        : effectType === 'acuarela' ? createDefaultAcuarelaGraph
+        : effectType === 'acuarela' ? (hasLegacyAcuarelaParams(effect.params) ? createLegacyAcuarelaGraph : createDefaultAcuarelaGraph)
         : effectType === 'crt-screen' ? createDefaultCrtScreenGraph
         : effectType === 'ribbon-scan' ? createDefaultRibbonScanGraph
         : effectType === 'wave-lines' ? createDefaultWaveLinesGraph
@@ -254,7 +257,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
         : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved)
-          : upgradePointwiseStylizeGraph(effectType, saved);
+          : effectType === 'rom1' ? kneeRom1GainGraph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved)
+            : upgradePointwiseStylizeGraph(effectType, saved);
     // Stylize effects saved with their earlier recipe (before 2026-10-21) keep it and its folder plan
     // (its own presentation type, e.g. 'glow-earlier').
     const stylizeEarlier = stylizePresentation(effectType, presented);
@@ -308,7 +312,8 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   const legacy = effect.params[EFFECT_GRAPH_PARAM];
   if (!hasEffectOperatorGraph(effect.type)) {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
-    return effect;
+    // Sheen saved before the falloff profile keeps its flat-topped band and even light.
+    return (effect.type as string) === 'sheen' && effect.params.profile === undefined ? { ...effect, params: withLegacySheenParams(effect.params) } : effect;
   }
   // Graph-less analog effects from before their 2026-10 rebuild keep their original look.
   effect = pinOriginalAnalogGraph(effect);
@@ -348,6 +353,14 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   for (const [id, spec] of Object.entries(getEffect(effect.type)?.params ?? {})) {
     if (spec.legacyDefault !== undefined && params[id] === undefined) params[id] = spec.legacyDefault;
   }
+  // Effects saved before Fade existed keep their particles opaque over the flight.
+  if (effect.type === PARTICLE_DISINTEGRATE && params.fade === undefined) params.fade = 0;
+  // Effects saved before Cell Size counted 1080p pixels keep their output-pixel grid.
+  if (effect.type === PARTICLE_DISINTEGRATE && params.cellReference === undefined) params.cellReference = 'output';
+  // Voxel Relief saved before the hue-keeping shading keeps its darker, greying sides.
+  if (effect.type === 'voxel-relief' && params.shading === undefined) params.shading = 'legacy';
+  // Voxel Relief saved before Distance existed framed the relief at Distance 1 (the default is now 0.8).
+  if (effect.type === 'voxel-relief' && params.distance === undefined) params.distance = 1;
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {

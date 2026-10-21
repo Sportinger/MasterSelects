@@ -1,7 +1,22 @@
 import type { Effect } from '../../types/effects';
 import { GpuUniformRing } from '../core/gpuUniformRing';
-import shaderSource from './shaders/PixelParticleDisintegrate.wgsl?raw';
+import particleShaderSource from './shaders/PixelParticleDisintegrate.wgsl?raw';
+import { IMAGE_FRACTAL_NOISE_WGSL } from '../../services/operators/imageNoiseSemantics';
 import { compileParticleDisintegrateGraph } from '../../services/operators/particleDisintegrateGraph';
+import { particleGrid, type ParticleGrid } from '../../effects/stylize/pixel-particle-disintegrate/budget';
+import { releaseQuantiles, releaseWindow } from '../../effects/stylize/pixel-particle-disintegrate/releaseTiming';
+import { Logger } from '../../services/logger';
+
+const log = Logger.create('PixelParticleDisintegrate');
+const budgetWarnings = new Set<string>();
+/** Over budget the grid gets coarser cells: say so once per effect, quality and cell size. */
+function warnBudgetOnce(effectId: string, quality: string, grid: ParticleGrid): void {
+  const key = `${effectId}|${quality}|${grid.cellSize}|${grid.unit}`;
+  if (budgetWarnings.has(key)) return;
+  if (budgetWarnings.size > 256) budgetWarnings.clear();
+  budgetWarnings.add(key);
+  log.warn(`Particle budget: ${quality} draws ${grid.cellSize} px cells instead of ${grid.requestedCellSize} px (${grid.unit}; ${grid.columns} x ${grid.rows} particles, budget ${grid.budget}).`);
+}
 
 export interface PixelParticleDisintegrateRenderOptions {
   readonly commandEncoder: GPUCommandEncoder;
@@ -38,7 +53,10 @@ interface ParticleResources {
   readonly uniforms: GpuUniformRing;
 }
 
-const UNIFORM_SIZE = 128;
+/** 29 parameters, the release window, then 33 release quantiles as vec4s from byte 128 (releaseTiming.ts). */
+const UNIFORM_SIZE = 272;
+/** The gust field uses the shared Fractal Noise node's WGSL (gradient noise, turned octaves). */
+export const PIXEL_PARTICLE_DISINTEGRATE_WGSL = `${IMAGE_FRACTAL_NOISE_WGSL}\n${particleShaderSource}`;
 
 const rendererByDevice = new WeakMap<GPUDevice, PixelParticleDisintegrateRenderer>();
 
@@ -155,7 +173,7 @@ export class PixelParticleDisintegrateRenderer {
 
     const module = this.device.createShaderModule({
       label: 'pixel-particle-disintegrate-shader',
-      code: shaderSource,
+      code: PIXEL_PARTICLE_DISINTEGRATE_WGSL,
     });
     const bindGroupLayout = this.device.createBindGroupLayout({
       label: 'pixel-particle-disintegrate-bind-group-layout',
@@ -235,27 +253,16 @@ export class PixelParticleDisintegrateRenderer {
     const plan = compileParticleDisintegrateGraph(options.effect.operatorGraph, options.effect.params as Record<string, unknown>);
     const raw = plan.params;
     const progress = clamp(finiteParam(raw, 'progress', 0), 0, 1);
-    const requestedCellSize = clamp(finiteParam(raw, 'cellSize', 8), 1, 256);
-    const maxPreviewParticles = Math.floor(clamp(finiteParam(raw, 'maxPreviewParticles', 60000), 1, 1_000_000));
-    const maxExportParticles = Math.floor(clamp(finiteParam(raw, 'maxExportParticles', 180000), 1, 1_000_000));
-    const hardMaxInstances = Math.floor(clamp(finiteParam(raw, 'maxInstances', 220000), 1, 1_000_000));
-    const qualityBudget = options.quality === 'export' ? maxExportParticles : maxPreviewParticles;
-    const budget = Math.max(1, Math.min(qualityBudget, hardMaxInstances));
-    const initialColumns = Math.max(1, Math.ceil(options.outputWidth / requestedCellSize));
-    const initialRows = Math.max(1, Math.ceil(options.outputHeight / requestedCellSize));
-    const initialCount = initialColumns * initialRows;
-    const clampedByBudget = initialCount > budget;
-    const cellSize = clampedByBudget
-      ? Math.ceil(requestedCellSize * Math.sqrt(initialCount / budget))
-      : requestedCellSize;
-    const columns = Math.max(1, Math.ceil(options.outputWidth / cellSize));
-    const rows = Math.max(1, Math.ceil(options.outputHeight / cellSize));
+    const grid = particleGrid(raw, options.outputWidth, options.outputHeight, options.quality);
+    if (grid.clampedByBudget) warnBudgetOnce(options.effect.id, options.quality, grid);
+    const { columns, rows, clampedByBudget } = grid;
+    const cellSize = grid.cellPixels;
     // A muted render node or an unconnected particle chain shows the input unchanged.
-    const particleCount = plan.passthrough ? 0 : Math.min(columns * rows, budget, hardMaxInstances);
+    const particleCount = plan.passthrough ? 0 : columns * rows;
     const flatAlpha = plan.passthrough ? 1 : 0;
     const particleAlpha = 1;
 
-    const uniformBuffer = new ArrayBuffer(128);
+    const uniformBuffer = new ArrayBuffer(UNIFORM_SIZE);
     const f32 = new Float32Array(uniformBuffer);
     const u32 = new Uint32Array(uniformBuffer);
     f32[0] = progress;
@@ -286,6 +293,13 @@ export class PixelParticleDisintegrateRenderer {
     f32[25] = clamp(finiteParam(raw, 'gustScale', 5.5), 0.5, 32);
     f32[26] = clamp(finiteParam(raw, 'windSweep', 0.35), 0, 1);
     f32[27] = clamp(finiteParam(raw, 'releaseContrast', 0.65), 0, 2);
+    // Effects saved before Fade existed have none: 0 keeps their particles opaque until the end.
+    f32[28] = clamp(finiteParam(raw, 'fade', 0), 0, 1);
+    // Even release over Progress: how the raw delays of these settings spread (releaseTiming.ts).
+    const quantiles = releaseQuantiles({ seed: f32[13], gustStrength: f32[24], gustScale: f32[25], windSweep: f32[26], releaseContrast: f32[27],
+      stagger: f32[11], directionX: f32[7], directionY: f32[8] }, columns, rows);
+    f32[29] = releaseWindow(quantiles);
+    f32.set(quantiles, 32);
 
     return { uniformBuffer, particleCount, columns, rows, cellSize, clampedByBudget };
   }

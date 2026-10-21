@@ -6,6 +6,8 @@ import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
 import { effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { isDefaultChromaKeyGraph } from '../operators/chromaKeyGraphUpgrade';
+import { hasLegacyAcuarelaParams } from '../operators/acuarelaEffectGraph';
+import { rendersAcuarelaSmokeRecipe } from '../operators/acuarelaIdentity';
 import { rendersBuiltInMirrorPixelRecipe } from '../operators/mirrorPixelGraphUpgrade';
 import { COLOR_RECIPE_EFFECT_TYPES } from '../operators/colorEffectGraphs';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
@@ -227,6 +229,8 @@ function effectFilterPart(
   if (pointwise) return addPointwiseEffect(pixelEffects, pointwise);
   switch (effectType) {
     case 'acuarela':
+      // The hand-written CPU mirror covers only the original smoke recipe (see workerSoftwareEffectPlanForLayer).
+      if (!hasLegacyAcuarelaParams(effect.params)) return null;
       if (!canAddFeedbackEffect(pixelEffects)) return null;
       (pixelEffects.acuarelaAdjustments ??= []).push({
         feedbackKey: `${layerId}:${effect.id}`,
@@ -402,6 +406,10 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
+  // The watercolour Acuarela interprets about 300 graph nodes and a 49-tap wash per pixel: on the CPU
+  // that is minutes per 1080p frame. It is unsupported here, so preview and export fall back to the
+  // main-thread GPU renderer (the frame diagnostics name it); only the smoke recipe has a CPU pass.
+  if (activeEffects.some(effect => effect.type === 'acuarela' && !rendersAcuarelaSmokeRecipe(effect))) return null;
   // Saved graphs, and the color recipes and Film Grain (graph-only; pointwise color programs are
   // memoized per colour), evaluate their graphs exactly. Built-in Wave, Twirl, Bulge,
   // Kaleidoscope, Mirror, Pixelate and RGB Split keep a hand-written pass even with a stored copy of

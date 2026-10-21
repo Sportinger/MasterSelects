@@ -58,7 +58,9 @@
     grid-template-columns:
       var(--resolve-inspector-label-width)
       var(--resolve-inspector-label-control-gap)
-      var(--resolve-inspector-control-width)
+      /* The control gives way before the row overflows: rows indented in a nested section
+         (grouped effect parameters) would otherwise push their reset button out of the card. */
+      minmax(0, var(--resolve-inspector-control-width))
       minmax(var(--resolve-inspector-control-action-gap), 1fr)
       var(--resolve-inspector-action-width);
     column-gap: 0;

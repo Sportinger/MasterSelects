@@ -2,9 +2,8 @@ import { EffectsPipeline } from '../EffectsPipeline';
 import { lookThumbnailEffects } from './lookStackEffects';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { Logger } from '../../services/logger';
-import { withLegacyMirrorPixelControls } from '../../services/operators/mirrorPixelGraphUpgrade';
 import type { LookDefinition } from './types';
-import { checkedLookEntryOperatorGraph } from './lookEntryGraph';
+import { checkedLookEntryOperatorGraph, lookEntryOmittedParams, lookEntryParams } from './lookEntryGraph';
 import { fitThumbnailToWidthRect } from './lookThumbnailGeometry';
 import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
 
@@ -188,10 +187,10 @@ class LookThumbnailRuntime {
     const pingView = ping.createView();
     const pongView = pong.createView();
     const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    // As applyLookToClip: stored, earlier-stylize, original analog or original color graphs, and
-    // the values that keep an old custom Look's mirror/pixel look.
+    // As applyLookToClip: stored (or carried), earlier-stylize, original analog or original color
+    // graphs, the values that keep an old custom Look's look, without the values its graph never reads.
     const effects = lookThumbnailEffects(look, entry => checkedLookEntryOperatorGraph(look, entry).graph,
-      entry => look.builtIn ? entry.params : withLegacyMirrorPixelControls(entry.effectId, entry.params));
+      entry => lookEntryParams(look, entry), (entry, graph) => lookEntryOmittedParams(look, entry, graph));
     const encoder = device.createCommandEncoder();
     const result = this.pipeline.applyEffects(
       encoder,

@@ -24,7 +24,8 @@ describe('EffectsPipeline frame history', () => {
     } as unknown as GPUDevice;
     const pipeline = new EffectsPipeline(device);
     pipeline.prewarmEffect('acuarela');
-    const effect = { id: 'water', type: 'acuarela', name: 'Water', enabled: true, params: {} as Record<string, unknown> };
+    // The original smoke recipe (strength without watercolour values) keeps the frame history.
+    const effect = { id: 'water', type: 'acuarela', name: 'Water', enabled: true, params: { strength: 0.32 } as Record<string, unknown> };
     const pingTexture = { label: 'ping' } as unknown as GPUTexture;
     const pongTexture = { label: 'pong' } as unknown as GPUTexture;
     const pingView = { label: 'ping-view' } as unknown as GPUTextureView;
