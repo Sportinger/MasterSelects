@@ -20,8 +20,8 @@
         "effect": "glow",
         "params": {
           "amount": 2.5,
-          "threshold": 0.5,
-          "radius": 100
+          "threshold": 0.95,
+          "radius": 80
         }
       }
     },

@@ -4,13 +4,13 @@
       "name": "glow-inspector",
       "effect": "glow",
       "params": {
-        "amount": 1.6,
-        "threshold": 0.5,
-        "radius": 70
+        "amount": 2.5,
+        "threshold": 0.95,
+        "radius": 80
       },
       "image": "neon_rain_street.jpg",
       "preview": 380,
-      "alt": "Properties, Effects with a Glow card (Amount 1.6, Threshold 0.5, Softness 0.5, Radius 70, Color white) beside the glowing night street in the preview",
+      "alt": "Properties, Effects with a Glow card at its default values (Amount 2.5, Threshold 0.95, Softness 0.5, Radius 80, Color white) beside the glowing night street in the preview",
       "marks": [
         {
           "target": "Amount",

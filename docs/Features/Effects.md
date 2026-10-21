@@ -807,11 +807,14 @@ strict greater-than comparison (equality is black). Posterize uses
 clamped it). Since 2026-10-21 both have a **Softness** (default 0): Threshold ramps
 smoothly from Level − Softness/2 to Level + Softness/2 (a brightness width, 0–0.5);
 Posterize rounds each step edge into a smooth ramp of that share of a step (0–1).
-Posterize also has **Brightness Only** (off by default): the staircase runs on the
-brightest channel and the colour is scaled with it, so hue and saturation stay and
-light neutral areas cannot split into false colours where their channels cross a step
-apart. Softness 0 without Brightness Only renders exactly the earlier math, so
-untouched saved graphs simply read as the current recipe. Both preserve source alpha and the original ranges, defaults and
+Posterize also has **Brightness Only**: the staircase runs on the brightest channel
+and the colour is scaled with it, so hue and saturation stay and light neutral areas
+cannot split into false colours where their channels cross a step apart. New
+Posterize effects start with it on (`stylizeNewInstanceParams`); the parameter
+default stays off, which is what saved effects and Custom Look entries without the
+value mean, so they keep stepping each channel. Softness 0 without Brightness Only
+renders exactly the earlier math, so untouched saved graphs simply read as the
+current recipe. Both preserve source alpha and the original ranges, defaults and
 keyframe IDs; Levels below 2 and negative Softness are reported, not silently clamped.
 
 Vignette (contract `src/effects/stylize/vignette/vignetteModel.ts`) measures the
@@ -1007,14 +1010,22 @@ Saved custom layouts/groups are not automatically replaced by presentation stage
 2026-10-21) premultiplies the frame into a cache, blurs it with the separable
 Gaussian Blur passes (σ = Radius pixels of a 1080p frame, at least 0.25 px) and adds
 `Amount × (luma − blurred luma)` to R, G and B alike, so edges get crisp without
-colour fringes. A halo limit removes the bright and dark outlines of a classic unsharp
-mask: one Kernel Sum (Rect) over 5×5 taps spread evenly over ±max(σ, 1) px (read
-from the premultiplied cache, transparent taps weigh nothing) gives a smooth darkest
-and brightest brightness of the neighbourhood (means weighted by `exp(±64 × Δluma)`),
-and the change may approach that range plus 15 % of it softly, `room × (1 −
-exp(−change / room))`, so strong settings keep their gradation instead of flattening
-into plateaus. Nothing depends on the timeline time. Negative Amount softens; alpha
-is kept. Three passes. Sharpens saved
+colour fringes. A halo limit removes most of the bright and dark outlines of a
+classic unsharp mask. It takes a smooth darkest and brightest brightness of the
+neighbourhood within ±2σ (at least ±1 px), densely, one pixel apart (up to 24 taps
+per side, wider steps beyond): first along each row in the horizontal blur pass,
+whose cache then holds blurred brightness, blurred alpha, row brightest and row
+darkest; then down a column of those rows in the final pass (means weighted by
+`exp(±64 × Δluma)`; transparent taps weigh nothing, rows without an opaque tap are
+ignored). The sharpened brightness passes unchanged between Floor and Ceiling (that
+range ± a margin of 5 % of it, at least 0.04); beyond, the excess e rolls off as
+`s × ln(1 + e / s)` with s = half the margin. It keeps growing, so stronger settings
+keep adding contrast and neighbouring pixels never swap their order; a step edge's
+halo stays at about 18 % of the step at Amount 1 and about 26 % at Amount 5 (a
+plain unsharp mask overshoots by 40 % or more). At Amount 3–5 on strong texture the
+peaks are compressed, and two neighbours at a peak can round to the same level.
+Nothing depends on the timeline time. Negative Amount softens; alpha is kept. Three
+passes. Sharpens saved
 earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
 **Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,
@@ -1038,10 +1049,14 @@ stays available as a reusable block.
 **Glow** (contract `src/effects/stylize/glow/glowBloom.ts`, since 2026-10-21) is a
 lens bloom in 21 graph passes, most of them tiny:
 
-1. **Bright pass** (full size, cached): the share of each pixel's light above a soft
-   knee around Threshold, taken from the brightest channel so saturated lights glow
-   too; knee = Softness × Threshold. Light is premultiplied by alpha. The default
-   Threshold 0.8 keeps a mid-bright daylight sky out of the glow.
+1. **Bright pass** (full size, cached): each pixel's light times a smoothstep of its
+   brightest channel from `Threshold − Softness × min(Threshold, 1 − Threshold)` up
+   to white (1), where all of its light glows; premultiplied by alpha. The brightest
+   channel lets saturated neon glow; ending the ramp at white makes lamps and clipped
+   lights glow fully, so the default Threshold 0.95 (Amount 2.5, Radius 80) reads on
+   night and stage pictures while a daylight sky (brightest channel about 0.8) stays
+   out: on the lab's neon street the frame brightens by about 7 levels, on the
+   daylight harbour by about 4. A Threshold of 1 or more glows only above white.
 2. **Pyramid down**: ten Cache Images at 1/2 … 1/1024 of the frame, each a
    `[1 3 3 1]` reduction of the one above.
 3. **Pyramid up**: from the smallest level back up with a 3×3 tent; each level joins
@@ -1056,7 +1071,8 @@ lens bloom in 21 graph passes, most of them tiny:
    (wide glows grow without flooding the frame), × Amount × **Color**, is screened
    onto the premultiplied source with a soft roll-off, `1 − (1 − picture) ×
    exp(−glow)`: faint glows add their light, bright areas have less room left and
-   nothing passes white, so colours keep their hue and the frame cannot clip. Output
+   nothing passes white, so it never clips hard; very strong settings still approach
+   white and wash the colours out. Output
    alpha is `max(source alpha, brightest result channel)` and RGB is un-premultiplied
    by it, so the halo also appears around glyphs on transparent layers.
 
@@ -1065,7 +1081,7 @@ frames of `rgba16float` cache memory per Glow (the full-size bright pass plus tw
 pyramids of a third of a frame each). Radius stops
 widening the glow once the largest level is reached (about 1536 at 1080p); the
 inspector and tool results say so, as they do for negative values and for a
-Threshold whose knee starts above white (nothing can glow).
+Threshold at or above white (only HDR values glow).
 
 Glows saved before 2026-10-21 keep the **earlier ring version** (contract
 `glowSampling.ts`, graph `createRingGlowGraph`): a bright pass, a separable
@@ -1470,8 +1486,11 @@ borders. `Projector Flicker` uses deterministic generated-solid
 exposure pulses, `Film Roll` combines vertical transform overscan with
 transition-scoped Motion Blur, and `Vignette Bloom` uses registered `glow` and
 `vignette` effects on both transition participants (since 2026-10-21 tuned for the
-bloom Glow, Radius 60–240, and for the pixel-distance Vignette, Roundness 0 with Size
-and Softness divided by √2, the same falloff as before). `Light Sweep` uses a
+bloom Glow, Amount 0.1–1.4 and Radius 60–240, and for the pixel-distance Vignette,
+Roundness 0 with Size and Softness divided by √2, the same falloff as before). These
+effects carry no graph; the worker software preview renders them with the current
+recipes too (`workerSoftwareBloom.ts`, a CPU pyramid of the bloom, and the current
+Vignette distance). `Light Sweep` uses a
 cached transparent generated overlay canvas with a screen-blended diagonal
 highlight band, while `Light Leak` uses the same deterministic overlay
 primitive for warm edge streaks and analog wash. Those overlay canvases are
@@ -1673,7 +1692,7 @@ raymarch/feedback effect.
 Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled.
 With `Limit to Video` enabled, the raymarcher discards voxel cells outside the source rectangle and uses a finite source-sized floor, so orbit views show only the actual video footprint instead of repeating its edge pixels around the subject. Existing project instances retain their stored parameters.
 
-New Glows start from the bloom defaults: Amount 1, Threshold 0.6, Softness 0.5, Radius 40 and white Color. Saved ring Glows keep their stored parameters (the earlier iPad-tuned preset was Amount 5, Threshold 0.7935, Radius 1, Softness 0.496, 6.85 rings and 17.95 samples per ring).
+New Glows start from the bloom defaults (`GLOW_DEFAULTS`): Amount 2.5, Threshold 0.95, Softness 0.5, Radius 80 and white Color. Saved ring Glows keep their stored parameters (the earlier iPad-tuned preset was Amount 5, Threshold 0.7935, Radius 1, Softness 0.496, 6.85 rings and 17.95 samples per ring).
 
 ### Editable Voxel Relief nodes
 
