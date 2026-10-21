@@ -29,7 +29,7 @@ const LIFTABLE_BLEND_MODES = new Set<BlendMode>([
   'stencil-alpha', 'stencil-luma', 'silhouette-alpha', 'silhouette-luma', 'alpha-add',
 ]);
 
-export type TransitionCompositionBlendFallback = 'mixed-blend-modes' | 'unsupported-blend-mode';
+export type TransitionCompositionBlendFallback = 'mixed-blend-modes' | 'unsupported-blend-mode' | 'participants-not-found';
 
 /** One pass of the transition composition over the lower tracks. */
 export interface TransitionCompositionBlendPart {
@@ -126,15 +126,35 @@ function normalizeParticipantLayer(
   return { ...layer, blendMode: 'normal' };
 }
 
+function reportOnce(key: string, report: () => void): void {
+  if (reportedFallbacks.has(key)) return;
+  if (reportedFallbacks.size > 500) reportedFallbacks.clear();
+  reportedFallbacks.add(key);
+  report();
+}
+
 function reportFallback(
   transitionId: string,
   fallback: TransitionCompositionBlendFallback,
   participantBlendModes: readonly BlendMode[],
 ): void {
-  const key = `${transitionId}:${fallback}:${participantBlendModes.join(',')}`;
-  if (reportedFallbacks.has(key)) return;
-  if (reportedFallbacks.size > 500) reportedFallbacks.clear();
-  reportedFallbacks.add(key);
+  reportOnce(`${transitionId}:${fallback}:${participantBlendModes.join(',')}`, () => logFallback(
+    transitionId, fallback, participantBlendModes,
+  ));
+}
+
+function logFallback(
+  transitionId: string,
+  fallback: TransitionCompositionBlendFallback,
+  participantBlendModes: readonly BlendMode[],
+): void {
+  if (fallback === 'participants-not-found') {
+    log.warn(
+      'The clips of this transition were not found among its layers; their blend mode is drawn inside the transition, over a transparent background',
+      { transitionId, participantBlendModes },
+    );
+    return;
+  }
   if (fallback === 'mixed-blend-modes') {
     log.info(
       'The clips of this transition use different blend modes; each clip keeps its own mode, so the middle of the dissolve shows a little of the lower tracks',
@@ -150,6 +170,43 @@ function reportFallback(
 
 interface PartDraft extends TransitionCompositionBlendPart {
   key: string;
+}
+
+const isVisibleLayer = (layer: Layer) => layer.visible !== false && layer.opacity > 0;
+
+/**
+ * The Crossfade's 'plus' adds the incoming clip to everything below it in its
+ * part. Clips the user put below the transition's own clips inside the
+ * composition would be added too and overexpose the picture; they become their
+ * own part underneath, so the dissolve is composited over them exactly.
+ */
+function splitBelowPlusParticipants(
+  transitionId: string,
+  nestedLayers: Layer[],
+  participants: readonly ParticipantInfo[],
+): TransitionCompositionBlendPart[] | null {
+  let plusIndex = -1;
+  let lowestParticipantIndex = -1;
+  nestedLayers.forEach((layer, index) => {
+    if (!findParticipant(layer, participants)) return;
+    lowestParticipantIndex = index;
+    if (plusIndex < 0 && layer.blendMode === 'plus') plusIndex = index;
+  });
+  if (plusIndex < 0) return null;
+  const below = nestedLayers.slice(lowestParticipantIndex + 1);
+  if (!below.some(isVisibleLayer)) return null;
+  const between = nestedLayers.slice(plusIndex + 1, lowestParticipantIndex)
+    .filter((layer) => !findParticipant(layer, participants) && isVisibleLayer(layer));
+  if (between.length > 0) {
+    reportOnce(`${transitionId}:plus-between`, () => log.warn(
+      'A layer between the clips of this transition is added to the dissolve and brightens it; move it above or below both clips',
+      { transitionId, layerIds: between.map((layer) => layer.id) },
+    ));
+  }
+  return [
+    { blendMode: 'normal', nestedLayers: nestedLayers.slice(0, lowestParticipantIndex + 1) },
+    { blendMode: 'normal', nestedLayers: below },
+  ];
 }
 
 /**
@@ -185,7 +242,13 @@ export function resolveTransitionCompositionBlend(params: {
   const participantBlendModes = [...new Set(participants.filter((participant) => participant.clips.length > 0)
     .map((participant) => participant.mode))];
   if (participants.every((participant) => participant.mode === 'normal')) {
-    return { parts: [{ blendMode: 'normal', nestedLayers }], participantBlendModes };
+    const parts = splitBelowPlusParticipants(transitionId, nestedLayers, participants) ??
+      [{ blendMode: 'normal' as const, nestedLayers }];
+    return { parts, participantBlendModes };
+  }
+  if (nestedLayers.length > 0 && !nestedLayers.some((layer) => findParticipant(layer, participants))) {
+    reportFallback(transitionId, 'participants-not-found', participantBlendModes);
+    return { parts: [{ blendMode: 'normal', nestedLayers }], participantBlendModes, fallback: 'participants-not-found' };
   }
 
   const outerMode = (participant: ParticipantInfo): BlendMode =>

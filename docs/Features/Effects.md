@@ -1364,14 +1364,23 @@ through every transition (`transitionCompositionBlend`): the transition
 composition is drawn in parts, each composited in its own mode over the lower
 tracks. Clips sharing a mode form one part, solids and overlays (Dip, Light
 Leak, …) are separate parts, and clips with different modes are two parts
-(exact at both edges; mid-dissolve shows a little of the lower tracks). Audio
-(Include audio, or two audio clips) uses one plan for preview and export
-(`audioCrossfadePlanning`, `audioCrossfadeGains`): the fade runs only where both
-clips have sound, with 5 ms de-clicks when they overlap less than 10 ms, and
-export applies the gains before the clip and track effects. Audio curve: Equal
-power (default) or Equal gain. Retimed clips meet at the edit and nested
-crossfades are not rendered; the export log names both. Default length 1 s; the
-Transitions panel's length field is Auto unless a length is typed.
+(exact at both edges; mid-dissolve shows a little of the lower tracks). Clips
+added inside the composition below the transition's own clips are a separate
+Normal part, so `plus` does not add them; if the transition's clips cannot be
+found among the layers, their mode stays inside the composition and a warning is
+logged. Audio (Include audio, or two audio clips) uses one plan for preview,
+Properties and export (`audioCrossfadePlanning`, `audioCrossfadeGains`): the
+fade runs only where both clips have sound, with 5 ms de-clicks when they
+overlap less than 10 ms, and export applies the gains before the clip and track
+effects. Retimed, reversed or composition clips cannot play their extra footage
+in step, so they meet at the edit everywhere (Properties: "Cut (retimed
+clip)"). Audio curve: Equal power (default) or Equal gain. Nested crossfades are
+not rendered in export; the export log says so. Default length 1 s; the
+Transitions panel's length field is Auto unless a length is typed. Live check:
+in the editor on a real GPU, preview and export frames stayed within 1–5/255
+(preview) and H.264 noise (export) of (1−t)·A + t·B for video, alpha cards over
+a background, a 50 % incoming clip and two Screen clips, and the export audio
+matched the sources × planned gains to 0.001 dB.
 User guide with pictures: [Dissolve Transitions](./Transitions-Dissolve.md).
 
 The current user-facing suite is grouped by family in the Transitions panel and

@@ -1,6 +1,7 @@
 import {
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -54,6 +55,27 @@ const measureTouchPicker = (trigger: HTMLElement): TouchPickerLayout => {
   };
 };
 
+/** The visible vertical range of the nearest clipping ancestor (a scrolling panel), within the window. */
+const getClipBounds = (element: HTMLElement): { top: number; bottom: number } => {
+  for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+    const { overflowY } = getComputedStyle(parent);
+    if (overflowY !== 'visible') {
+      const rect = parent.getBoundingClientRect();
+      return { top: Math.max(0, rect.top), bottom: Math.min(window.innerHeight, rect.bottom) };
+    }
+  }
+  return { top: 0, bottom: window.innerHeight };
+};
+
+/** Opens the menu upward when it would run past the bottom of its panel and there is more room above. */
+const resolveMenuPlacement = (root: HTMLElement, menu: HTMLElement): 'above' | 'below' => {
+  const bounds = getClipBounds(root);
+  const rect = root.getBoundingClientRect();
+  const spaceBelow = bounds.bottom - rect.bottom;
+  const spaceAbove = rect.top - bounds.top;
+  return spaceBelow < menu.offsetHeight && spaceAbove > spaceBelow ? 'above' : 'below';
+};
+
 interface InspectorSelectProps<T extends string> {
   ariaLabel: string;
   disabled?: boolean;
@@ -92,9 +114,16 @@ export function InspectorSelect<T extends string>({
   const [activeValue, setActiveValue] = useState<T | undefined>(selectedOption?.value);
   const [touchPickerActive, setTouchPickerActive] = useState(false);
   const [touchPickerLayout, setTouchPickerLayout] = useState<TouchPickerLayout | null>(null);
+  const [menuPlacement, setMenuPlacement] = useState<'above' | 'below'>('below');
   const wheelValueRef = useRef<T | undefined>(selectedOption?.value);
 
   wheelValueRef.current = selectedOption?.value;
+
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const menu = menuRef.current;
+    setMenuPlacement(open && !touchPickerActive && root && menu ? resolveMenuPlacement(root, menu) : 'below');
+  }, [open, touchPickerActive]);
 
   useEffect(() => {
     if (!open) setActiveValue(selectedOption?.value);
@@ -323,6 +352,7 @@ export function InspectorSelect<T extends string>({
   const renderListbox = (touch: boolean) => (
     <div
       className={`inspector-select-menu${touch ? ' inspector-select-menu--touch' : ''}`}
+      data-placement={touch ? undefined : menuPlacement}
       id={listboxId}
       aria-label={ariaLabel}
       onScroll={handleTouchPickerScroll}

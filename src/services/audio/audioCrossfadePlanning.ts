@@ -1,3 +1,4 @@
+import type { Keyframe } from '../../types/keyframes';
 import type { TimelineClip } from '../../types/timeline';
 import {
   DEFAULT_TRANSITION_PLACEMENT,
@@ -9,6 +10,7 @@ import { getCrossfadeAudioCurve, getRuntimeTransition, getTransitionParamValue, 
 import { Logger } from '../logger';
 import { planAudioCrossfadeFade, type AudioCrossfadeFade } from './audioCrossfadeGains';
 import { isAutomaticCutFade } from './automaticCutDeClick';
+import { createClipSpeedSource } from '../timeline/retime/clipRetime';
 
 const log = Logger.create('AudioCrossfade');
 
@@ -21,6 +23,12 @@ export interface AudioCrossfadePair {
   plan: TransitionPlan;
   /** Where the sounds fade: only where both clips have real sound (see planAudioCrossfadeFade). */
   fade: AudioCrossfadeFade;
+  /**
+   * False when a clip is retimed, reversed or a composition: its extra footage
+   * cannot be played in step with the timeline, so the sounds meet at the edit
+   * (with a de-click) in preview and export alike.
+   */
+  usesHandles: boolean;
   /** The outgoing and incoming audio clips (for linked audio: the clips linked to the videos). */
   outgoingClip: TimelineClip;
   incomingClip: TimelineClip;
@@ -38,6 +46,19 @@ export interface AudioCrossfadePlanningOptions {
   /** Defaults to the preview audio-sync test: the clip source is audio. */
   isAudioSourceClip?: (clip: TimelineClip) => boolean;
   getMediaDuration?: TransitionSourceDurationResolver;
+  /** The clip's keyframes; speed keyframes make a clip retimed. */
+  getClipKeyframes?: (clipId: string) => readonly Keyframe[] | undefined;
+}
+
+/**
+ * Extra footage maps one timeline second to one source second only for clips
+ * played forward at normal speed; others cannot crossfade through it.
+ */
+export function canCrossfadeThroughHandles(clip: TimelineClip, keyframes: readonly Keyframe[] = []): boolean {
+  if (clip.isComposition || clip.reversed || clip.timeRemap) return false;
+  const speed = createClipSpeedSource(clip, [...keyframes]);
+  return Math.abs(speed.speedAt(0) - 1) < 1e-6 &&
+    Math.abs(speed.integrate(clip.duration) - clip.duration) < 1e-6;
 }
 
 /** Same rule as resolveAudioSyncMedia(clip).sourceType === 'audio' in preview audio sync. */
@@ -143,18 +164,25 @@ export function resolveAudioCrossfadeFromClip(
   });
   if (!plan) return { pair: null };
   const curve = getCrossfadeAudioCurve(getTransitionParamValue(transition, definition, 'audioCurve'));
-  const fade = planAudioCrossfadeFade(plan, curve);
+  const keyframesOf = (clip: TimelineClip) => options.getClipKeyframes?.(clip.id) ?? [];
+  const usesHandles = canCrossfadeThroughHandles(outgoingAudio, keyframesOf(outgoingAudio)) &&
+    canCrossfadeThroughHandles(incomingAudio, keyframesOf(incomingAudio));
+  const fade = planAudioCrossfadeFade(plan, curve, usesHandles);
   const bodyDuration = plan.bodyEnd - plan.bodyStart;
   if (fade.overlap < bodyDuration - 1e-3) {
-    reportOnce(`${transition.id}:short:${fade.overlap.toFixed(3)}`, () => log.info(
-      fade.kind === 'declick'
-        ? 'Audio crossfade has no extra sound beyond the cut; the sounds cut at the edit with a short de-click'
-        : 'Audio crossfade is shorter than the transition: it fades only where both clips have sound',
+    reportOnce(`${transition.id}:short:${usesHandles}:${fade.overlap.toFixed(3)}`, () => log.info(
+      !usesHandles
+        ? 'Audio crossfade on a retimed or reversed clip: it cannot use extra footage, so the sounds meet at the edit with a short de-click'
+        : fade.kind === 'declick'
+          ? 'Audio crossfade has no extra sound beyond the cut; the sounds cut at the edit with a short de-click'
+          : 'Audio crossfade is shorter than the transition: it fades only where both clips have sound',
       { transitionId: transition.id, transitionSeconds: bodyDuration, fadeSeconds: fade.overlap },
     ));
   }
   return {
-    pair: { kind, transitionId: transition.id, plan, fade, outgoingClip: outgoingAudio, incomingClip: incomingAudio },
+    pair: {
+      kind, transitionId: transition.id, plan, fade, usesHandles, outgoingClip: outgoingAudio, incomingClip: incomingAudio,
+    },
   };
 }
 

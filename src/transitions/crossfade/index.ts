@@ -81,6 +81,8 @@ export function getCrossfadeAudioGains(
 ): { outgoing: number; incoming: number } {
   const t = Number.isFinite(progress) ? Math.min(1, Math.max(0, progress)) : 0;
   if (curve === 'equal-gain') return { outgoing: 1 - t, incoming: t };
+  // Exact at the ends (cos(π/2) is 6e-17, not 0), so a finished fade is silent.
+  if (t === 1) return { outgoing: 0, incoming: 1 };
   return {
     outgoing: Math.cos(t * Math.PI / 2),
     incoming: Math.sin(t * Math.PI / 2),

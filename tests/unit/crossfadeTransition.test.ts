@@ -61,10 +61,13 @@ function buildComposition(
   incomingOpacity = 1,
   blendModes: [BlendMode, BlendMode] = ['normal', 'normal'],
 ): Composition {
-  const serializableClips = [
+  return buildCompositionFrom(type, [
     serializableClip('out', 0, outgoingOpacity, blendModes[0]),
     serializableClip('in', 2, incomingOpacity, blendModes[1]),
-  ];
+  ]);
+}
+
+function buildCompositionFrom(type: string, serializableClips: SerializableClip[]): Composition {
   const timelineClips = serializableClips.map(timelineClip);
   timelineClips[0].transitionOut = { id: 'transition-1', type, duration: 1, linkedClipId: 'in' };
   timelineClips[1].transitionIn = { id: 'transition-1', type, duration: 1, linkedClipId: 'out' };
@@ -139,6 +142,23 @@ describe('crossfade transition', () => {
     expect(opacityAt(incoming, 1)).toBeCloseTo(0.5);
     // Same for every recipe opacity primitive, e.g. the second half of Dip to Black.
     expect(opacityAt(source(buildComposition('dip-to-black', 1, 0.5), 'incoming'), 1)).toBeCloseTo(0.5);
+  });
+
+  it('still fades a clip at static opacity 0 that its own opacity keyframes make visible', () => {
+    const serializableClips = [serializableClip('out', 0, 0), serializableClip('in', 2)];
+    // Visible only through keyframes: the static value stays 0.
+    serializableClips[0].keyframes = [0, 2].map((time) => ({
+      id: `own-${time}`, clipId: 'out', time, property: 'opacity' as const, value: 1, easing: 'linear' as const,
+    }));
+    const composition = buildCompositionFrom('crossfade', serializableClips);
+    const outgoing = source(composition, 'outgoing');
+
+    expect(opacityAt(outgoing, 0)).toBeCloseTo(1);
+    expect(opacityAt(outgoing, 0.5)).toBeCloseTo(0.5);
+    expect(opacityAt(outgoing, 1)).toBeCloseTo(0);
+    // Without generated opacity keyframes (a wipe), the clip keeps its own animation.
+    const wipeOutgoing = source(buildCompositionFrom('wipe-left', serializableClips), 'outgoing');
+    expect(opacityAt(wipeOutgoing, 0.5)).toBeCloseTo(1);
   });
 
   it('upgrades stored crossfade compositions in place and keeps the user\'s changes inside them', () => {
@@ -390,6 +410,54 @@ describe('crossfade transition', () => {
     }
     expect(readFileSync(path.join(process.cwd(), 'src/shaders/composite.wgsl'), 'utf8'))
       .toContain('layerColor = vec4f(layerColor.rgb / layerColor.a, layerColor.a);');
+  });
+
+  it('dissolves to (1−t)·A + t·B on the CPU reference of the composite rules, also for transparent clips', () => {
+    // RGBA in 0..1. The rules follow composite.wgsl (guarded by the test above):
+    // normal: rgb = mix(base, layer, a·opacity), alpha = max(base.a, a·opacity);
+    // plus: rgb = base + layer·a·opacity, alpha = base.a + a·opacity (both clamped);
+    // a premultiplied source is straightened (rgb / a) before blending.
+    type Rgba = [number, number, number, number];
+    const clamp1 = (value: number) => Math.min(1, value);
+    const straighten = ([r, g, b, a]: Rgba): Rgba => a > 0 ? [r / a, g / a, b / a, a] : [r, g, b, a];
+    const normal = (base: Rgba, layer: Rgba, opacity: number, premultiplied = false): Rgba => {
+      const source = premultiplied ? straighten(layer) : layer;
+      const alpha = source[3] * opacity;
+      return [0, 1, 2].map((channel) => base[channel] + (source[channel] - base[channel]) * alpha)
+        .concat(Math.max(base[3], alpha)) as Rgba;
+    };
+    const plus = (base: Rgba, layer: Rgba, opacity: number): Rgba => {
+      const alpha = layer[3] * opacity;
+      return [0, 1, 2].map((channel) => clamp1(base[channel] + layer[channel] * alpha))
+        .concat(clamp1(base[3] + alpha)) as Rgba;
+    };
+    const transparent: Rgba = [0, 0, 0, 0];
+    // The transition composition: outgoing Normal at (1−t), incoming plus at t; then the parent draws it premultiplied.
+    const crossfadeOver = (background: Rgba, a: Rgba, b: Rgba, t: number, premultiplied = true) =>
+      normal(background, plus(normal(transparent, a, 1 - t), b, t), 1, premultiplied);
+    const expectRgb = (actual: Rgba, expected: number[]) =>
+      expected.forEach((value, channel) => expect(actual[channel]).toBeCloseTo(value, 6));
+
+    const harbour: Rgba = [0.2, 0.5, 0.9, 1];
+    const stage: Rgba = [0.9, 0.3, 0.1, 1];
+    const background: Rgba = [0.1, 0.1, 0.1, 1];
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      expectRgb(crossfadeOver(background, harbour, stage, t), [0, 1, 2].map((c) => (1 - t) * harbour[c] + t * stage[c]));
+    }
+
+    // A title (60 % alpha) dissolving into a keyed clip (30 % alpha) over the lower tracks:
+    // each clip as it looks alone over the background, mixed by t.
+    const title: Rgba = [1, 1, 1, 0.6];
+    const keyed: Rgba = [0.2, 0.8, 0.3, 0.3];
+    const over = (layer: Rgba) => normal(background, layer, 1);
+    for (const t of [0.25, 0.5, 0.75]) {
+      const expected = [0, 1, 2].map((c) => (1 - t) * over(title)[c] + t * over(keyed)[c]);
+      expectRgb(crossfadeOver(background, title, keyed, t), expected);
+      // Without straightening, partial alpha would be applied twice and darken the dissolve.
+      expect(crossfadeOver(background, title, keyed, t, false)[0]).toBeLessThan(expected[0] - 0.01);
+    }
+    // A title dissolving into an empty frame leaves only the background at the end.
+    expectRgb(crossfadeOver(background, title, transparent, 1), background.slice(0, 3));
   });
 
   it('offers an equal-gain audio curve for fades within one recording', () => {

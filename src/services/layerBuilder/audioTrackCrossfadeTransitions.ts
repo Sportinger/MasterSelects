@@ -64,6 +64,7 @@ export class AudioTrackCrossfadeTransitionSync {
     const options = {
       isAudioSourceClip: this.deps.isAudioSourceClip,
       getMediaDuration: (mediaFileId: string) => ctx.mediaFileById.get(mediaFileId)?.duration,
+      getClipKeyframes: ctx.getClipKeyframes,
     };
     for (const clip of ctx.clips) {
       const transition = clip.transitionOut;

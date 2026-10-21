@@ -7,6 +7,7 @@ import {
 } from '../../src/services/project/load/loadTimelineHydration';
 import type { ProjectComposition } from '../../src/services/project/projectFileService';
 import type { SerializableClip } from '../../src/types/timeline';
+import { Logger } from '../../src/services/logger';
 import { installFakeMediaStore } from '../helpers/fakeMediaStore';
 
 vi.mock('../../src/services/compositionRenderer', () => ({
@@ -450,5 +451,59 @@ describe('transition composition load migration', () => {
     expect(upgradedOutgoing.keyframes?.filter((keyframe) => keyframe.property === 'opacity').map((keyframe) => keyframe.value))
       .toEqual([1, 0]);
     expect(JSON.parse(upgraded.transitionComp!.templateParamsKey!)).toEqual({ params: [], revision: [1, 1] });
+  });
+  it('keeps a generated wipe mask and keyframe edited inside a stored composition when it is upgraded on load', () => {
+    const outgoing = clip('out', 0);
+    const incoming = clip('in', 2);
+    outgoing.transitionOut = { id: 'wipe-1', type: 'wipe-left', duration: 1, linkedClipId: 'in' };
+    incoming.transitionIn = { id: 'wipe-1', type: 'wipe-left', duration: 1, linkedClipId: 'out' };
+    const parent: Composition = {
+      id: 'parent', name: 'Parent', type: 'composition', parentId: null, createdAt: 1,
+      width: 1920, height: 1080, frameRate: 30, duration: 4, backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [outgoing, incoming], duration: 4 },
+    };
+    useMediaStore.setState({ compositions: [parent], activeCompositionId: 'parent', openCompositionIds: ['parent'] });
+    normalizeLoadedTransitionCompositions();
+
+    const created = useMediaStore.getState().compositions.find((composition) => composition.transitionComp?.kind === 'transition-comp')!;
+    const masked = created.timelineData!.clips.find((candidate) =>
+      candidate.masks?.some((mask) => mask.id.startsWith('transition-comp:')) &&
+      candidate.keyframes?.some((keyframe) => keyframe.id.startsWith(`${candidate.id}:kf:`)))!;
+    expect(masked).toBeDefined();
+    const generatedMask = masked.masks!.find((mask) => mask.id.startsWith('transition-comp:'))!;
+    const generatedKeyframe = masked.keyframes!.find((keyframe) => keyframe.id.startsWith(`${masked.id}:kf:`))!;
+    // Saved before the shared materializer revision, with a softer, inverted wipe edge and an eased keyframe.
+    const editedMask = { ...generatedMask, feather: 42, inverted: !generatedMask.inverted };
+    const editedKeyframe = { ...generatedKeyframe, easing: 'ease-in-out' as const };
+    const stale: Composition = {
+      ...created,
+      transitionComp: { ...created.transitionComp!, templateParamsKey: JSON.stringify({ params: [] }) },
+      timelineData: {
+        ...created.timelineData!,
+        clips: created.timelineData!.clips.map((candidate) => candidate.id === masked.id
+          ? {
+            ...candidate,
+            masks: candidate.masks!.map((mask) => mask.id === generatedMask.id ? editedMask : mask),
+            keyframes: candidate.keyframes!.map((keyframe) => keyframe.id === generatedKeyframe.id ? editedKeyframe : keyframe),
+          }
+          : candidate),
+      },
+    };
+    useMediaStore.setState({
+      compositions: useMediaStore.getState().compositions.map((composition) => composition.id === stale.id ? stale : composition),
+    });
+    Logger.clear();
+
+    normalizeLoadedTransitionCompositions();
+
+    expect(Logger.search('kept as edited')).toHaveLength(1);
+    const upgraded = useMediaStore.getState().compositions.find((composition) => composition.id === stale.id)!;
+    const upgradedClip = upgraded.timelineData!.clips.find((candidate) => candidate.id === masked.id)!;
+    expect(upgradedClip.masks?.find((mask) => mask.id === generatedMask.id)).toEqual(editedMask);
+    expect(upgradedClip.keyframes?.find((keyframe) => keyframe.id === generatedKeyframe.id)).toEqual(editedKeyframe);
+    // Untouched generated content is still the template's.
+    const otherKeyframes = masked.keyframes!.filter((keyframe) => keyframe.id !== generatedKeyframe.id);
+    expect(upgradedClip.keyframes?.filter((keyframe) => keyframe.id !== generatedKeyframe.id)).toEqual(otherKeyframes);
+    expect(JSON.parse(upgraded.transitionComp!.templateParamsKey!).revision).toEqual([1, 0]);
   });
 });

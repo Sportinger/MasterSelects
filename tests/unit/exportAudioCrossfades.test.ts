@@ -138,6 +138,19 @@ describe('audio crossfades in export', () => {
     expect(retimed.notes).toEqual([{ transitionId: 'x-a2', junctionTime: 4, reason: 'retimed-clip' }]);
     expect(gainAt(retimed.envelopes.get('a1'), 3.99)).toBe(1);
     expect(gainAt(retimed.envelopes.get('a1'), 4)).toBeLessThan(SILENT);
+    // Preview and Properties plan the same cut, so playback and export sound alike.
+    const previewClips = [clip('a1', 0, 'audio', { speed: 2, transitionOut: crossfade('a2') }), clip('a2', 4, 'audio')];
+    const preview = resolveAudioCrossfadeFromClip(previewClips[0], previewClips, { getMediaDuration }).pair!;
+    expect(preview).toMatchObject({ usesHandles: false, fade: { kind: 'declick', overlap: 0 } });
+    // Speed keyframes retime a clip as well.
+    const keyed = [clip('a1', 0, 'audio', { transitionOut: crossfade('a2') }), clip('a2', 4, 'audio')];
+    const speedKeys = [0, 4].map((time) => ({
+      id: `speed-${time}`, clipId: 'a1', time, property: 'speed' as const, value: time === 0 ? 1 : 2, easing: 'linear' as const,
+    })) as Keyframe[];
+    expect(resolveAudioCrossfadeFromClip(keyed[0], keyed, { getMediaDuration }).pair?.usesHandles).toBe(true);
+    expect(resolveAudioCrossfadeFromClip(keyed[0], keyed, {
+      getMediaDuration, getClipKeyframes: (clipId) => clipId === 'a1' ? speedKeys : undefined,
+    }).pair?.usesHandles).toBe(false);
 
     const outside = prepareExportAudioCrossfades({
       clips: [clip('a1', 0, 'audio', { transitionOut: crossfade('a2') }), clip('a2', 4, 'audio')],
@@ -163,23 +176,33 @@ describe('audio crossfades in export', () => {
     expect(prepared.clips[1].audioState?.editStack?.map((operation) => operation.id)).toEqual(['end']);
   });
 
-  it('applies the gains before the clip effects, so an effect tail decays from the faded sound', async () => {
+  it('applies the gains before the clip effects, so a delay tail decays from the faded sound', async () => {
     const rate = 100;
+    const delaySamples = 50;
     const source = createBuffer(1, 2 * rate, rate);
     source.getChannelData(0).fill(1);
     const received: Float32Array[] = [];
+    // A feedback delay (0.5 s, 50 %), as the audio-delay effect renders it.
     const effectRenderer = {
       renderEffectInstances: vi.fn(async (buffer: AudioBuffer) => {
-        received.push(buffer.getChannelData(0).slice());
-        return buffer;
+        const input = buffer.getChannelData(0);
+        received.push(input.slice());
+        const output = createBuffer(1, buffer.length, rate);
+        const wet = output.getChannelData(0);
+        for (let index = 0; index < buffer.length; index += 1) {
+          wet[index] = input[index] + (index >= delaySamples ? 0.5 * wet[index - delaySamples] : 0);
+        }
+        return output;
       }),
     };
     const outgoing = clip('a1', 0, 'audio', {
       duration: 2, inPoint: 0, outPoint: 2, speed: 1,
-      audioState: { effectStack: [{ id: 'verb', descriptorId: 'audio-volume', enabled: true, params: { volume: 1 } }] } as TimelineClip['audioState'],
+      audioState: {
+        effectStack: [{ id: 'echo', descriptorId: 'audio-delay', enabled: true, params: { time: 0.5, feedback: 0.5, mix: 1 } }],
+      } as TimelineClip['audioState'],
     });
     const envelope: AudioCrossfadeGainEnvelope = { role: 'outgoing', start: 1, end: 2, curve: 'equal-power' };
-    await new ClipAudioRenderService({
+    const rendered = await new ClipAudioRenderService({
       effectRenderer,
       extractor: { trimBuffer: (buffer: AudioBuffer) => buffer },
     }).render({ clip: outgoing, sourceBuffer: source, sourceIsClipRange: true, crossfadeEnvelopes: [envelope], effectTailSeconds: 1 });
@@ -190,8 +213,15 @@ describe('audio crossfades in export', () => {
     expect(input[50]).toBe(1);
     expect(input[150]).toBeCloseTo(Math.cos(0.5 * Math.PI / 2), 2);
     expect(input[199]).toBeLessThan(0.02);
-    // The effect tail starts from silence instead of a full-level sound snapping back.
+    // After the fade the outgoing gain stays at 0: no full-level sound snaps back under the tail.
+    expect(getAudioCrossfadeEnvelopeGain(envelope, 2.5)).toBe(0);
     expect(input.slice(200).every((sample) => sample === 0)).toBe(true);
+    // The tail is only the echo of the faded sound, decaying by half every 0.5 s.
+    const output = rendered.buffer.getChannelData(0);
+    for (let index = 200; index < 300; index += 1) {
+      expect(output[index]).toBeCloseTo(0.5 * output[index - delaySamples], 6);
+    }
+    expect(Math.max(...output.slice(250))).toBeLessThan(0.5 * Math.max(...output.slice(150, 200)) + 1e-6);
 
     // Unchanged clips keep their buffer.
     expect(applyAudioCrossfadeEnvelopes(source, [], 0)).toBe(source);

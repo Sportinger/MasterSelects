@@ -64,7 +64,6 @@ import {
 } from '../../../transitions';
 import { DEFAULT_TRANSITION_PLACEMENT, planTransition } from '../../../stores/timeline/editOperations/transitionPlanner';
 import { createTransitionMediaDurationResolver } from '../../../stores/timeline/editOperations/transitionMediaDurationResolver';
-import { resolveAudioCrossfadeFromClip } from '../../../services/audio/audioCrossfadePlanning';
 import type { TimelineClip } from '../../../types';
 import {
   DIP_OPTIONS,
@@ -137,9 +136,6 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
       getMediaDuration,
     });
   }, [displayDuration, displayOffset, getMediaDuration, incomingClip, outgoingClip, transition]);
-  const audio = useMemo(() => outgoingClip?.transitionOut?.type === 'crossfade'
-    ? resolveAudioCrossfadeFromClip(outgoingClip, clips, { getMediaDuration })
-    : null, [clips, getMediaDuration, outgoingClip]);
 
   const updateDuration = useCallback((nextDuration: number) => {
     if (!transition || !Number.isFinite(nextDuration) || nextDuration <= 0) return;
@@ -686,7 +682,8 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
         holdDuration={holdDuration}
         isAudioOnlyTransition={isAudioOnlyTransition}
         handledParamIds={handledParamIds}
-        audio={audio}
+        outgoingClip={outgoingClip}
+        getMediaDuration={getMediaDuration}
         onUpdateDuration={updateDuration}
         onUpdateParam={updateParam}
       />

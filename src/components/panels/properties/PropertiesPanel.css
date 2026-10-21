@@ -1409,6 +1409,18 @@
   justify-content: space-between;
 }
 
+.transition-select-row .inspector-select {
+  flex: 1;
+}
+
+/* The shared `.control-row span` rule (right-aligned secondary text) must not reach the select's own labels. */
+.transition-select-row .inspector-select span {
+  min-width: 0;
+  text-align: left;
+  font-size: inherit;
+  color: inherit;
+}
+
 .transition-checkbox-row input[type="checkbox"] {
   width: 16px;
   height: 16px;

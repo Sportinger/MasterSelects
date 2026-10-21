@@ -2,6 +2,7 @@ import type { ClipMask } from '../../types/masks';
 import type { Effect } from '../../types/effects';
 import type { Keyframe } from '../../types/keyframes';
 import type { SerializableClip } from '../../types/timeline';
+import { getTransitionOpacityReference } from './transitionSourceMap';
 
 /**
  * Content a transition template generates inside its composition: keyframes
@@ -68,7 +69,8 @@ function isUntouchedGeneratedKeyframe(existing: Keyframe, regenerated: Keyframe,
     return false;
   }
   if (sameNumber(existing.value, regenerated.value)) return true;
-  return existing.property === 'opacity' && sameNumber(existing.value * clipOpacity, regenerated.value);
+  return existing.property === 'opacity' &&
+    sameNumber(existing.value * getTransitionOpacityReference(clipOpacity), regenerated.value);
 }
 
 function findRegeneratedKeyframe(existing: Keyframe, regenerated: readonly Keyframe[]): Keyframe | undefined {

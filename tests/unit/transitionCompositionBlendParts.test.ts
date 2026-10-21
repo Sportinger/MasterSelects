@@ -4,6 +4,7 @@ import { buildTransitionCompositionLayersForExport } from '../../src/engine/expo
 import { cleanupLayerBuilder } from '../../src/engine/export/ExportLayerBuilder';
 import { resolveTransitionCompositionBlend } from '../../src/services/layerBuilder/transitionCompositionBlend';
 import { ensureTransitionCompositionForPair } from '../../src/services/timeline/transitionCompositionService';
+import { Logger } from '../../src/services/logger';
 import { useMediaStore, type Composition } from '../../src/stores/mediaStore';
 import { DEFAULT_TRANSFORM, useTimelineStore } from '../../src/stores/timeline';
 import { planTransition } from '../../src/stores/timeline/editOperations/transitionPlanner';
@@ -95,6 +96,39 @@ describe('transition composition blend parts', () => {
     ]);
   });
 
+  it('keeps clips added below the transition\'s clips out of the Crossfade\'s plus: they are their own part', () => {
+    const composition = buildComposition('crossfade', ['normal', 'normal']);
+    // Evaluated mid-transition, the incoming clip's recipe window draws it with 'plus'.
+    const evaluated = () => exportLayers(composition).map((layer) =>
+      layer.id.endsWith(':incoming') ? { ...layer, blendMode: 'plus' as const } : layer);
+    const summary = () => resolveTransitionCompositionBlend({
+      transitionId: 'transition-1', composition, nestedLayers: evaluated(), compositionTime: 0.5,
+    }).parts.map((part) => [part.blendMode, part.nestedLayers.map((layer) => `${layer.id.split(':').pop()}:${layer.blendMode}`)]);
+    expect(summary()).toEqual([['normal', ['incoming:plus', 'outgoing:normal']]]);
+    const timelineData = composition.timelineData!;
+    const background = { ...serializableClip('user-background', 0, 'normal'), trackId: 'user-track', startTime: 0, duration: 1 };
+    composition.timelineData = {
+      ...timelineData,
+      tracks: [...timelineData.tracks, { ...timelineData.tracks[timelineData.tracks.length - 1], id: 'user-track', name: 'Background' }],
+      clips: [...timelineData.clips, background],
+    };
+    // BG + out·(1−t) + in·t would overexpose; the dissolve is composited over the background instead.
+    expect(summary()).toEqual([
+      ['normal', ['incoming:plus', 'outgoing:normal']],
+      ['normal', ['nested-export-user-background:normal']],
+    ]);
+  });
+
+  it('says so when the transition\'s clips are not found among the layers instead of blending twice', () => {
+    const composition = buildComposition('crossfade', ['screen', 'screen']);
+    const anonymous = exportLayers(composition).map((layer, index) => ({ ...layer, id: `layer-${index}`, sourceClipId: undefined }));
+    Logger.clear();
+    const resolved = resolveTransitionCompositionBlend({ transitionId: 'lost-1', composition, nestedLayers: anonymous, compositionTime: 0.5 });
+    expect(resolved.fallback).toBe('participants-not-found');
+    expect(resolved.parts.map((part) => part.blendMode)).toEqual(['normal']);
+    expect(Logger.search('were not found among its layers')).toHaveLength(1);
+  });
+
   it('keeps a recipe mode that equals the clips\' own mode (Additive Dissolve between two Add clips)', () => {
     const composition = buildComposition('additive-dissolve', ['add', 'add']);
     expect(partSummary(composition)).toEqual([['add', ['incoming:add', 'outgoing:normal']]]);
@@ -114,25 +148,42 @@ describe('transition blend parts in the export layer builder', () => {
     useMediaStore.setState(initialMediaState);
   });
 
-  it('draws a Normal → Screen crossfade as two export layers with the clips\' own modes', () => {
-    const imageClip = (id: string, startTime: number, inPoint: number, blendMode: BlendMode): TimelineClip => ({
-      id, trackId: 'track-v1', name: id, file: new File([], `${id}.png`), startTime, duration: 8, inPoint, outPoint: inPoint + 8,
-      source: { type: 'image', imageElement: document.createElement('img'), naturalDuration: 120 },
-      transform: { ...structuredClone(DEFAULT_TRANSFORM), blendMode }, effects: [], isLoading: false,
-    });
-    const outgoing = { ...imageClip('clip-a', 0, 0, 'normal'), transitionOut: { id: 'mixed-fade', type: 'crossfade', duration: 2, linkedClipId: 'clip-b' } };
-    const incoming = { ...imageClip('clip-b', 8, 4, 'screen'), transitionIn: { id: 'mixed-fade', type: 'crossfade', duration: 2, linkedClipId: 'clip-a' } };
+  const imageClip = (id: string, startTime: number, inPoint: number, blendMode: BlendMode): TimelineClip => ({
+    id, trackId: 'track-v1', name: id, file: new File([], `${id}.png`), startTime, duration: 8, inPoint, outPoint: inPoint + 8,
+    source: { type: 'image', imageElement: document.createElement('img'), naturalDuration: 120 },
+    transform: { ...structuredClone(DEFAULT_TRANSFORM), blendMode }, effects: [], isLoading: false,
+  });
+  const exportCrossfade = (id: string, modes: [BlendMode, BlendMode]) => {
+    const outgoing = { ...imageClip('clip-a', 0, 0, modes[0]), transitionOut: { id, type: 'crossfade', duration: 2, linkedClipId: 'clip-b' } };
+    const incoming = { ...imageClip('clip-b', 8, 4, modes[1]), transitionIn: { id, type: 'crossfade', duration: 2, linkedClipId: 'clip-a' } };
     const plan = planTransition({
       outgoingClip: outgoing, incomingClip: incoming, transitionType: 'crossfade', requestedDuration: 2,
       placement: 'center', edgePolicy: 'hold', junctionTime: 8, getMediaDuration: () => 120,
     })!;
-
-    const layers = buildTransitionCompositionLayersForExport({
+    return buildTransitionCompositionLayersForExport({
       activeTransition: { plan, outgoingClip: outgoing, incomingClip: incoming },
       layerIndex: 0, parentCompositionId: 'export', parentTime: 8.5, layerIdPrefix: 'export',
       clipStates: new Map(), parallelDecoder: null, useParallelDecode: false, mediaFiles: [], mediaCompositions: [],
       outputWidth: 1920, outputHeight: 1080, frameRate: 30,
     });
+  };
+
+  it('blends a Screen → Screen crossfade once: the export layer is Screen, the clips inside dissolve in Normal and plus', () => {
+    Logger.clear();
+    const layers = exportCrossfade('screen-fade', ['screen', 'screen']);
+    expect(layers.map((layer) => [layer.id, layer.blendMode, layer.premultipliedAlpha])).toEqual([
+      ['export_transition_comp_0_screen-fade', 'screen', true],
+    ]);
+    const nested = layers[0].source?.nestedComposition?.layers ?? [];
+    expect(nested.map((layer) => [layer.id.split(':').pop(), layer.blendMode])).toEqual([
+      ['incoming', 'plus'],
+      ['outgoing', 'normal'],
+    ]);
+    expect(Logger.search('were not found among its layers')).toHaveLength(0);
+  });
+
+  it('draws a Normal → Screen crossfade as two export layers with the clips\' own modes', () => {
+    const layers = exportCrossfade('mixed-fade', ['normal', 'screen']);
 
     expect(layers.map((layer) => [layer.id, layer.blendMode, layer.premultipliedAlpha])).toEqual([
       ['export_transition_comp_0_mixed-fade', 'screen', true],

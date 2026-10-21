@@ -50,7 +50,7 @@
 }
 
 .transitions-duration-input::placeholder {
-  color: #888;
+  color: var(--text-secondary);
 }
 
 .transitions-duration-control:has(.transitions-duration-input:focus-visible) {

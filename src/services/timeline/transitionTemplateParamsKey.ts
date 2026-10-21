@@ -7,7 +7,8 @@ import { getRuntimeTransition } from '../../transitions';
  * keyframes, shared by every transition type. It is part of the template key,
  * so a stored composition built by an older materializer gets a targeted
  * upgrade of its generated content once (see transitionCompositionReuse).
- * 1: recipe opacity keyframes scale the clip's own opacity.
+ * 1: recipe opacity keyframes scale the clip's own opacity (1 for a clip at
+ *    static opacity 0, see getTransitionOpacityReference).
  */
 export const TRANSITION_MATERIALIZER_REVISION = 1;
 

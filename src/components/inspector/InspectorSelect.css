@@ -78,6 +78,11 @@
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.46);
   }
 
+  .inspector-select-menu[data-placement='above'] {
+    top: auto;
+    bottom: calc(100% + 1px);
+  }
+
   .inspector-select-group + .inspector-select-group {
     margin-top: 3px;
   }

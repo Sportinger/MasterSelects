@@ -16,6 +16,7 @@ import {
 } from './transitionCompositionSourceClips';
 import { buildBakedDatamoshTimelineData } from './datamoshTransitionComposition';
 import { getTransitionTemplateParamsKey } from './transitionTemplateParamsKey';
+import { getTransitionOpacityReference } from './transitionSourceMap';
 
 const TRANSITION_TEMPLATE_VERSION = 4;
 
@@ -50,6 +51,7 @@ export function buildOpacityKeyframesFromRecipe(
   /** Clip opacity the recipe scales; the mapped animation composes relative to it. */
   baseOpacity = 1,
 ): Keyframe[] {
+  const reference = getTransitionOpacityReference(baseOpacity);
   const keyframes = recipe
     .filter((primitive): primitive is Extract<TransitionPrimitive, { kind: 'opacity' }> =>
       primitive.kind === 'opacity' && primitive.target === target
@@ -60,11 +62,11 @@ export function buildOpacityKeyframesFromRecipe(
       const easing = primitive.curve ?? 'linear';
       return [
         {
-          ...makeKeyframe(clipId, 'opacity', start, primitive.from * baseOpacity, easing),
+          ...makeKeyframe(clipId, 'opacity', start, primitive.from * reference, easing),
           id: `${clipId}:kf:opacity:${index}:start`,
         },
         {
-          ...makeKeyframe(clipId, 'opacity', Math.max(start, end), primitive.to * baseOpacity, easing),
+          ...makeKeyframe(clipId, 'opacity', Math.max(start, end), primitive.to * reference, easing),
           id: `${clipId}:kf:opacity:${index}:end`,
         },
       ];

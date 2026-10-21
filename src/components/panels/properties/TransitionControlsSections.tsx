@@ -5,8 +5,13 @@ import {
   type TransitionParamDefinition,
   type TransitionParamValue,
 } from '../../../transitions';
+import { useMemo } from 'react';
+import { InspectorSelect } from '../../inspector/InspectorSelect';
+import type { TimelineClip } from '../../../types/timeline';
 import type { TimelineTransition } from '../../../types/timelineCore';
-import type { AudioCrossfadeResolution } from '../../../services/audio/audioCrossfadePlanning';
+import { resolveAudioCrossfadeFromClip } from '../../../services/audio/audioCrossfadePlanning';
+import { useTimelineStore } from '../../../stores/timeline';
+import type { TransitionSourceDurationResolver } from '../../../stores/timeline/editOperations/transitionPlanner';
 
 interface TransitionControlsSectionsProps {
   definition: TransitionDefinition;
@@ -20,8 +25,9 @@ interface TransitionControlsSectionsProps {
   isAudioOnlyTransition: boolean;
   /** Parameters an earlier section already shows (e.g. the dip colour). */
   handledParamIds: ReadonlySet<string>;
-  /** The sound this transition blends, or why Include audio blends nothing. */
-  audio: AudioCrossfadeResolution | null;
+  /** The clip before the cut; its Crossfade's sound is shown in the Audio row. */
+  outgoingClip: TimelineClip | null;
+  getMediaDuration: TransitionSourceDurationResolver;
   onUpdateDuration: (duration: number) => void;
   onUpdateParam: (paramId: string, value: TransitionParamValue) => void;
 }
@@ -59,10 +65,17 @@ export function TransitionControlsSections({
   holdDuration,
   isAudioOnlyTransition,
   handledParamIds,
-  audio,
+  outgoingClip,
+  getMediaDuration,
   onUpdateDuration,
   onUpdateParam,
 }: TransitionControlsSectionsProps) {
+  const clips = useTimelineStore(state => state.clips);
+  const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
+  // The same plan preview and export use: the sound this Crossfade blends, or why it blends none.
+  const audio = useMemo(() => outgoingClip?.transitionOut?.type === 'crossfade'
+    ? resolveAudioCrossfadeFromClip(outgoingClip, clips, { getMediaDuration, getClipKeyframes: id => clipKeyframes.get(id) })
+    : null, [clipKeyframes, clips, getMediaDuration, outgoingClip]);
   const params = getVisibleParams(definition, transition, isAudioOnlyTransition, handledParamIds);
   const fade = audio?.pair?.fade;
   const audioShortened = !!fade && fade.overlap < duration - 0.005;
@@ -100,7 +113,8 @@ export function TransitionControlsSections({
           <div className="control-row" title="The sound fades only where both clips have sound beyond the cut">
             <span className="prop-label">Audio</span>
             <span className={audioShortened ? 'transition-hold-value' : 'transition-static-value'}>
-              {fade.kind === 'declick' ? 'Cut (no extra sound)' : formatSeconds(fade.overlap)}
+              {!audio?.pair?.usesHandles ? 'Cut (retimed clip)'
+                : fade.kind === 'declick' ? 'Cut (no extra sound)' : formatSeconds(fade.overlap)}
             </span>
           </div>
         ) : null}
@@ -146,17 +160,15 @@ export function TransitionControlsSections({
           }
           if (param.type === 'select') {
             return (
-              <div className="control-row transition-param-row" key={paramId}>
-                <label className="prop-label" htmlFor={`transition-param-${paramId}`}>{param.label}</label>
-                <select
-                  id={`transition-param-${paramId}`}
+              <div className="control-row transition-param-row transition-select-row" key={paramId}>
+                <span className="prop-label">{param.label}</span>
+                <InspectorSelect
+                  ariaLabel={param.label}
                   value={String(value ?? param.defaultValue)}
-                  onChange={(event) => onUpdateParam(paramId, event.currentTarget.value)}
-                >
-                  {(param.options ?? []).map(option => (
-                    <option key={String(option.value)} value={String(option.value)}>{option.label}</option>
-                  ))}
-                </select>
+                  options={(param.options ?? []).map(option => ({ label: option.label, value: String(option.value) }))}
+                  onChange={(next) => onUpdateParam(paramId, next)}
+                  onReset={() => onUpdateParam(paramId, param.defaultValue)}
+                />
               </div>
             );
           }

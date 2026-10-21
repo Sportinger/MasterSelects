@@ -6,12 +6,7 @@ import {
   withoutCrossfadedCutDeClick,
   type AudioCrossfadePair,
 } from '../../../services/audio/audioCrossfadePlanning';
-import {
-  getAudioCrossfadeEnvelopes,
-  planAudioCrossfadeFade,
-  type AudioCrossfadeGainEnvelope,
-} from '../../../services/audio/audioCrossfadeGains';
-import { createClipSpeedSource } from '../../../services/timeline/retime/clipRetime';
+import { getAudioCrossfadeEnvelopes, type AudioCrossfadeGainEnvelope } from '../../../services/audio/audioCrossfadeGains';
 
 const EDGE_EPSILON = 1e-3;
 
@@ -30,14 +25,6 @@ export interface ExportAudioCrossfadePreparation {
   envelopes: Map<string, AudioCrossfadeGainEnvelope[]>;
   /** Crossfades rendered only partly, for the export log. */
   notes: ExportAudioCrossfadeNote[];
-}
-
-/** Handles map one timeline second to one source second only for clips played at normal speed. */
-function canExtendIntoHandle(clip: TimelineClip, keyframes: readonly Keyframe[]): boolean {
-  if (clip.isComposition || clip.reversed || clip.timeRemap) return false;
-  const speed = createClipSpeedSource(clip, keyframes);
-  return Math.abs(speed.speedAt(0) - 1) < 1e-6 &&
-    Math.abs(speed.integrate(clip.duration) - clip.duration) < 1e-6;
 }
 
 function addEnvelope(
@@ -98,24 +85,25 @@ export function prepareExportAudioCrossfades(input: {
   const envelopes = new Map<string, AudioCrossfadeGainEnvelope[]>();
   const notes: ExportAudioCrossfadeNote[] = [];
 
-  for (const pair of findAudioCrossfadePairs(input.clips, { getMediaDuration: input.getMediaDuration })) {
+  const pairs = findAudioCrossfadePairs(input.clips, {
+    getMediaDuration: input.getMediaDuration,
+    getClipKeyframes: (clipId) => clipKeyframes.get(clipId),
+  });
+  for (const pair of pairs) {
     const { plan } = pair;
     if (plan.bodyEnd <= input.startTime || plan.bodyStart >= input.endTime) continue;
     const outgoing = clipsById.get(pair.outgoingClip.id);
     const incoming = clipsById.get(pair.incomingClip.id);
     if (!outgoing || !incoming) continue;
 
-    const outgoingKeys = clipKeyframes.get(outgoing.id) ?? [];
     const incomingKeys = clipKeyframes.get(incoming.id) ?? [];
-    const canExtend = canExtendIntoHandle(outgoing, outgoingKeys) && canExtendIntoHandle(incoming, incomingKeys);
-    // Retimed clips cannot play their extra footage here: they meet at the edit.
-    const fade = canExtend ? pair.fade : planAudioCrossfadeFade(plan, pair.fade.curve, false);
-    const fadeEnvelopes = getAudioCrossfadeEnvelopes(fade);
+    // The planner already meets retimed clips at the edit, as preview plays them.
+    const fadeEnvelopes = getAudioCrossfadeEnvelopes(pair.fade);
     addEnvelope(envelopes, outgoing.id, fadeEnvelopes.outgoing);
     addEnvelope(envelopes, incoming.id, fadeEnvelopes.incoming);
     const outgoingClip = withoutCrossfadedCutDeClick(outgoing, 'outgoing');
     const incomingClip = withoutCrossfadedCutDeClick(incoming, 'incoming');
-    if (!canExtend) {
+    if (!pair.usesHandles) {
       notes.push({ transitionId: pair.transitionId, junctionTime: plan.junctionTime, reason: 'retimed-clip' });
       clipsById.set(outgoing.id, outgoingClip);
       clipsById.set(incoming.id, incomingClip);
