@@ -27,7 +27,9 @@ function formatMegabytes(bytes: number): string {
  * Explains why an image could not be loaded, so the failure is reported as an
  * actionable warning (relink, convert) instead of an unexplained error.
  */
-export async function describeImageLoadFailure(source: CompositionImageSource): Promise<string> {
+export async function describeImageLoadFailure(
+  source: Pick<CompositionImageSource, 'file' | 'name'>,
+): Promise<string> {
   const { file, name } = source;
   if (!file || file.size === 0) {
     return `Image ${name} is unavailable: no readable source file is attached; relink the media.`;

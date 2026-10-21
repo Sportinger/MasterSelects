@@ -184,6 +184,7 @@ Image and video-capable media items show a cursor-following preview tooltip only
 - Column headers for sorting and drag-to-reorder
 - Resizable name column (120px - 500px range, saved to localStorage)
 - Metadata columns keep a stable header set but show type-specific values. Audio files reuse the visual columns for waveform state, stem label, audio codec, and audio proxy state; still images show still/raster/image labels; Signal assets show signal kinds, provider, artifact count, file type, and diagnostics count.
+- Images the browser cannot decode (damaged, truncated, HEIC on an unsupported browser, revoked file access) are never silent: import, clip placement and the main preview image loader report through `src/services/mediaRuntime/imageDecodeFailure.ts`, which logs one explained `ImageDecode` warning per file (reusing `describeImageLoadFailure`), shows **Cannot decode** in the Resolution column, and marks timeline clips of that media with a red **BROKEN** badge. The flag is transient (not saved) and clears on the next successful decode, for example after relinking.
 
 ### Icons View
 - Thumbnail grid with file names below each item

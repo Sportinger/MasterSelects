@@ -6,6 +6,10 @@ import type { TimelineClip } from '../../../types/timeline';
 import { DEFAULT_TRANSFORM } from '../constants';
 import { useMediaStore } from '../../mediaStore';
 import { startTimelineImageHydration } from '../../../services/timeline/imageRuntimeHydrator';
+import {
+  clearImageDecodeFailure,
+  reportImageDecodeFailure,
+} from '../../../services/mediaRuntime/imageDecodeFailure';
 import { generateImageThumbnail } from '../helpers/thumbnailHelpers';
 import { generateClipId } from '../helpers/idGenerator';
 import { blobUrlManager } from '../helpers/blobUrlManager';
@@ -60,18 +64,26 @@ export async function loadImageMedia(params: LoadImageMediaParams): Promise<void
   const imageBlob = isRawImageFile(clip.file) ? await getRenderableImageBlob(clip.file) : clip.file;
   if (!isCurrent()) return;
   const imageUrl = blobUrlManager.create(clip.id, imageBlob, 'image');
-  const img = await new Promise<HTMLImageElement>((resolve) => {
+  const failureInput = { name: clip.file.name, file: clip.file, mediaFileId };
+  const img = await new Promise<HTMLImageElement | null>((resolve) => {
     startTimelineImageHydration({
       url: imageUrl,
-      onReady: resolve,
-      onError: (_event, image) => resolve(image),
+      onReady: (image) => {
+        clearImageDecodeFailure(failureInput);
+        resolve(image);
+      },
+      onError: () => {
+        // Keep the clip (it can be relinked), but explain why it renders nothing.
+        void reportImageDecodeFailure(failureInput);
+        resolve(null);
+      },
     });
   });
 
-  if (!isCurrent()) { URL.revokeObjectURL(imageUrl); img.removeAttribute('src'); return; }
+  if (!isCurrent()) { URL.revokeObjectURL(imageUrl); img?.removeAttribute('src'); return; }
 
-  // Generate thumbnail
-  const thumbnail = generateImageThumbnail(img);
+  // Generate thumbnail (a broken image has nothing to draw and would throw in drawImage)
+  const thumbnail = img ? generateImageThumbnail(img) : null;
   const thumbnails = thumbnail ? [thumbnail] : [];
 
   updateClip(clip.id, {

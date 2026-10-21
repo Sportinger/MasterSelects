@@ -3,6 +3,11 @@ import type { TimelineClip } from '../../types';
 import type { MediaFile } from '../../stores/mediaStore/types';
 import type { FrameContext } from '../layerBuilder/types';
 import { Logger } from '../logger';
+import {
+  clearImageDecodeFailure,
+  reportImageDecodeFailure,
+  type ImageDecodeFailureInput,
+} from '../mediaRuntime/imageDecodeFailure';
 import { renderHostPort } from '../render/renderHostPort';
 import type { RuntimeProviderDemand } from '../../timeline';
 import type { ImageCanvasResourceDescriptor, RenderResourceDescriptor } from './runtimeCoordinatorTypes';
@@ -37,6 +42,8 @@ interface LazyImageRecord {
   lastDesiredAt: number;
   createdAt: number;
   statusCallbacks: Set<(clipId: string) => void>;
+  /** Identifies the source for decode-failure reports; keeps the File reference only. */
+  failureInput: ImageDecodeFailureInput;
 }
 
 const log = Logger.create('LazyImageElements');
@@ -83,6 +90,19 @@ function getMediaFileForImageClip(ctx: LazyImageLookupContext, clip: TimelineCli
   }
 
   return clip.name ? ctx.mediaFileByName.get(clip.name) : undefined;
+}
+
+function getImageDecodeFailureInput(
+  ctx: LazyImageLookupContext,
+  clip: TimelineClip,
+  mediaFileId: string | undefined,
+): ImageDecodeFailureInput {
+  const mediaFile = getMediaFileForImageClip(ctx, clip);
+  return {
+    name: mediaFile?.name ?? clip.name,
+    file: getUsableFile(clip.file) ?? getUsableFile(clip.source?.file) ?? getUsableFile(mediaFile?.file),
+    mediaFileId,
+  };
 }
 
 function getPlannedLazyImageSource(ctx: LazyImageLookupContext, clip: TimelineClip): PlannedLazyImageSource | null {
@@ -280,16 +300,20 @@ function createImageRecord(ctx: LazyImageLookupContext, clip: TimelineClip): Laz
     lastDesiredAt: ctx.now,
     createdAt: ctx.now,
     statusCallbacks: new Set(),
+    failureInput: getImageDecodeFailureInput(ctx, clip, plannedSource.mediaFileId),
   };
 
   image.onload = () => {
     record.status = 'ready';
+    clearImageDecodeFailure(record.failureInput);
     reportLazyImageRecord(record);
     notifyStatusCallbacks(record);
     renderHostPort.requestRender();
   };
   image.onerror = () => {
     record.status = 'error';
+    // The record stays in 'error' while the clip remains desired, so this reports once per load attempt.
+    void reportImageDecodeFailure(record.failureInput);
     reportLazyImageRecord(record);
     notifyStatusCallbacks(record);
     renderHostPort.requestRender();

@@ -17,6 +17,7 @@ import {
 import { vectorAnimationRuntimeManager } from '../vectorAnimation/VectorAnimationRuntimeManager';
 import type { VectorAnimationProvider } from '../../types/vectorAnimation';
 import { Logger } from '../logger';
+import { reportImageDecodeFailure } from '../mediaRuntime/imageDecodeFailure';
 import { createBackgroundImageDemand, getRuntimeSrcKind } from './runtimeDemand';
 
 const log = Logger.create('LayerPlayback');
@@ -260,7 +261,7 @@ export function loadImageForLayerClip(
     onError: () => {
       host.pendingImageHydrations.delete(ownerId);
       clip.isLoading = false;
-      log.warn(`Failed to load image for background clip ${clip.name}`);
+      void reportImageDecodeFailure({ name: clip.name, file: clip.file, mediaFileId: clip.mediaFileId });
     },
     onStale: () => {
       host.pendingImageHydrations.delete(ownerId);
