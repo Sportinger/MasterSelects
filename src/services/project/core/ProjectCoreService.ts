@@ -58,6 +58,16 @@ export class ProjectCoreService {
     if (resolveProjectRootMode() !== 'fsa') throw new RepositoryError('unsupported', 'Project folder selection is unavailable');
     const handle = await acquireProjectRoot('fsa', { throwOnFailure: true }); return handle ? this.loadProject(handle) : false;
   }
+  /**
+   * Save permanently > Keep in this browser: duplicates the open project with its
+   * history into this browser's persistent storage (OPFS) and adopts it, so routed
+   * files (thumbnails, waveforms, caches) follow the copy. Recents are left to the
+   * caller, which records the copy only after verifying it.
+   */
+  async createProjectInBrowserStorage(path: string, name: string): Promise<boolean> {
+    await createRepositoryAt({ kind: 'opfs', path, store: 'opfs' }, name, true);
+    await this.adoptSession(undefined, false); return true;
+  }
   async listStoredProjects(): Promise<string[]> {
     const root = await acquireProjectRoot('opfs', { throwOnFailure: true }); return root ? listProjectFolderNames(root) : [];
   }
@@ -73,11 +83,13 @@ export class ProjectCoreService {
     }
     await openRepositoryProject(location); await this.adoptSession(handle); return true;
   }
-  private async adoptSession(fallback: FileSystemDirectoryHandle): Promise<void> {
+  private async adoptSession(fallback?: FileSystemDirectoryHandle, remember = true): Promise<void> {
     const session = getActiveRepositorySession(); if (!session) throw new Error('Repository activation did not finish');
-    const handle = session.location.kind === 'opfs' ? await directoryForOpfs(session.location.path)
+    const handle = session.location.kind === 'opfs' ? await directoryForOpfs(session.location.path, session.location.store)
       : session.location.kind === 'fsa' ? session.location.handle : fallback;
+    if (!handle) throw new Error('Repository activation has no project directory');
     this.projectHandle = handle; this.pendingHandle = null;
+    if (!remember) return;
     if (session.location.kind === 'opfs') await addRecentOpfsProject(session.location.path, this.getProjectData());
     else { await rememberLastProject(handle); await addRecentFsaProject(handle, this.getProjectData()); }
   }

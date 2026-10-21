@@ -37,7 +37,7 @@ export class RepositorySession {
     try {
 
       const opening = await client.request<StorageOpenResult>({ type: 'open', location: options.location,
-        descriptor: options.descriptor, workspaceId: options.workspaceId, browserStorage: getBrowserStorageKind() ?? undefined }, options.signal);
+        descriptor: options.descriptor, workspaceId: options.workspaceId, browserStorage: (options.location.kind === 'opfs' ? options.location.store : undefined) ?? getBrowserStorageKind() ?? undefined }, options.signal);
 
       const storage = new WorkerCoordinatorStorage(client, opening);
       const coordinator = new ProjectTransactionCoordinator(options.descriptor.repositoryId, options.workspaceId, storage, options.activation);

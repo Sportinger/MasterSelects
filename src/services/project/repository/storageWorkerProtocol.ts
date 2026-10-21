@@ -5,7 +5,8 @@ import type { BrowserStorageKind } from '../core/browserStorageRoot';
 
 export type RepositoryLocation =
   | { kind: 'fsa'; handle: FileSystemDirectoryHandle }
-  | { kind: 'opfs'; path: string }
+  /** Browser-local; `store` pins OPFS or the IndexedDB fallback, otherwise the tab's choice applies. */
+  | { kind: 'opfs'; path: string; store?: BrowserStorageKind }
   | { kind: 'native'; path: string };
 export interface DraftRecord {
   id: string; kind: RepositoryRecord['kind']; schemaVersion: 1;

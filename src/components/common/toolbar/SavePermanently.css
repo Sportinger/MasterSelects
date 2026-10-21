@@ -1,0 +1,54 @@
+@layer components {
+  .toolbar-save-permanently {
+    display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; height: 22px;
+    padding: 0 8px 0 3px; border: 1px solid var(--warning); border-radius: 999px;
+    background: var(--warning-dim); color: var(--warning-light);
+    font-size: var(--font-xs, 10px); font-weight: var(--font-semibold, 600); white-space: nowrap; cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .toolbar-save-permanently:hover { background: color-mix(in srgb, var(--warning) 28%, transparent); color: var(--text-primary); }
+  .toolbar-save-permanently:focus { outline: none; }
+  .toolbar-save-permanently:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .toolbar-save-permanently-badge {
+    padding: 1px 6px; border-radius: 999px; background: var(--warning); color: #1b1300;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  }
+  .toolbar-save-permanently-short { display: none; }
+  /* Phones: keep the badge and a short label rather than pushing the toolbar off screen. */
+  @media (max-width: 600px) {
+    .toolbar-save-permanently { padding-right: 6px; }
+    .toolbar-save-permanently-label { display: none; }
+    .toolbar-save-permanently-short { display: inline; }
+  }
+}
+
+@layer overlays {
+  .save-permanently-dialog { max-height: calc(100dvh - 48px); overflow-y: auto; }
+  .save-permanently-dialog .save-permanently-accent { background: linear-gradient(90deg, transparent, var(--warning), var(--warning-light), transparent); }
+  .repository-archive-dialog .save-permanently-warning { color: var(--text-primary); }
+  .save-permanently-warning strong { color: var(--warning-light); }
+  .repository-archive-dialog .save-permanently-name { flex-direction: column; align-items: stretch; gap: 4px; color: var(--text-secondary); }
+  .save-permanently-name input {
+    border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-tertiary);
+    color: var(--text-primary); padding: 6px 8px; font-size: 13px;
+  }
+  .save-permanently-options { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+  .repository-archive-dialog .save-permanently-option {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%;
+    padding: 10px 12px; text-align: left; cursor: pointer;
+  }
+  .repository-archive-dialog .save-permanently-option[data-recommended="true"] { border-color: var(--accent); }
+  .repository-archive-dialog .save-permanently-option:hover:not(:disabled),
+  .save-permanently-others button:hover:not(:disabled),
+  .save-permanently-persistence button:hover:not(:disabled) { background: var(--bg-hover); }
+  .save-permanently-option-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; }
+  .save-permanently-option-title em {
+    padding: 1px 6px; border-radius: 999px; background: var(--accent); color: #fff;
+    font-size: 9px; font-style: normal; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  }
+  .save-permanently-option-description { color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+  .save-permanently-others { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+  .repository-archive-dialog .save-permanently-persistence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .repository-archive-dialog .save-permanently-persistence button { padding: 3px 8px; font-size: 11px; }
+  .repository-archive-dialog .save-permanently-message { color: var(--text-primary); }
+}

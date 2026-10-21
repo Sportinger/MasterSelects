@@ -20,7 +20,7 @@ function readStatus() {
   const error = session.client?.error ?? state.error;
   if (error || lifecycle.error) return { phase: 'failed', label: 'Save failed' + local, detail: error?.message ?? lifecycle.error ?? 'Click to retry saving.' };
   if (state.confirmedSequence < state.appliedSequence || state.queuedBytes > 0) return { phase: 'saving', label: 'Saving\u2026' + local, detail: 'Saving your project changes.' };
-  if (temporary) return { phase: 'unsaved', label: (isScratchRepository() ? 'Browser recovery' : 'Saved') + local, detail: FALLBACK_STORAGE_NOTICE + ' Click to export it now.', exportArchive: true };
+  if (temporary) return { phase: 'unsaved', label: (isScratchRepository() ? 'Browser recovery' : 'Saved') + local, detail: FALLBACK_STORAGE_NOTICE + ' Click to save it permanently.', exportArchive: true };
   if (isScratchRepository()) return { phase: 'saved', label: 'Browser recovery', detail: 'Your project is saved in this browser. Choose Save to select a project folder.' };
   return { phase: 'saved', label: 'Saved' + local, detail: 'Your changes are saved. Press Ctrl+S to save your current workspace too.' };
 }

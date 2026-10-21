@@ -113,9 +113,33 @@ export keep working. The choice is made on the first storage access and kept
 for the tab (`sessionStorage`), and the storage worker adopts the editor's
 choice, so one project never spans both stores. While the fallback is active
 the save status reads "Temporary storage", explains that Private Browsing and
-in-app browsers may delete the project when the window closes, and opens the
-`.msproj` archive export on click. Fallback projects in a later tab where OPFS
-works are not listed there; export them first. Only when IndexedDB refuses as
+in-app browsers may delete the project when the window closes, and a warning
+styled **Temporary · Save permanently** button sits next to it (only "Save" on
+phone widths). Both open the *Save this project permanently* dialog, which
+offers only the destinations this device supports, best first:
+
+- **Save to a folder** (folder picker or Native Helper): the existing Save As
+  copy of the repository with history, journals and workspace views; the
+  editor switches to the folder.
+- **Keep in this browser** (when OPFS opens and accepts a write in this tab
+  now): the repository is copied into OPFS as a new repository and opened
+  there and adopted by the project core, so thumbnails, waveforms and caches
+  follow the copy; the tab then uses OPFS, also across reloads. Locations carry an
+  explicit `store` (`opfs`/`indexeddb`) so one tab can address both stores.
+- **Download .msproj archive** named after the project (full history); on
+  iPhone/iPad it lands in the Files app. The open project stays temporary.
+
+A temporary copy is removed only after its permanent copy is open, writable and
+contains the last confirmed revision; on any failure it stays and the dialog
+says so. The scratch browser recovery is never deleted. The dialog also shows
+whether the browser keeps its storage (`navigator.storage.persisted()`), can
+ask for it (`persist()`), and on iPhone/iPad notes that Safari grants persistence
+by its own heuristics, most likely for the Home Screen app, whose storage is
+separate. When a tab itself uses OPFS while projects remain in the fallback
+database (a tab still on the fallback only lists them, because Open Project
+would not find them there), the button reads "Move N temporary projects" and moves them with a
+byte-verified copy (SHA-256 per file) under their repository writer lock; a
+project open in another tab is skipped. Only when IndexedDB refuses as
 well do project dialogs and the save status explain the cause instead of the
 raw browser text. iOS, iPadOS and Android never try the desktop Native Helper.
 To test the fallback on a device whose OPFS works, start the dev server with

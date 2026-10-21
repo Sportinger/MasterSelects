@@ -10,12 +10,14 @@ import { prepareArchive } from '../archive/selectiveArchive';
 import { captureRuntimeArchiveSources } from '../archive/runtimeSources';
 import { backupRepository } from '../archive/repositoryBackup';
 import { acquireProjectRoot } from '../../core/projectRootAccess';
+import { resolveBrowserStore } from '../../core/browserStorageRoot';
 
 export async function openRepositoryProject(location: RepositoryLocation, options: RepositoryOpenOptions = {}) {
   const current = getActiveRepositorySession();
   if (current && current.location.kind === location.kind) {
     const same = location.kind === 'fsa' && current.location.kind === 'fsa' ? await location.handle.isSameEntry(current.location.handle)
-      : location.kind !== 'fsa' && current.location.kind !== 'fsa' && location.path === current.location.path;
+      : location.kind !== 'fsa' && current.location.kind !== 'fsa' && location.path === current.location.path
+        && (location.kind !== 'opfs' || current.location.kind !== 'opfs' || resolveBrowserStore(location.store) === resolveBrowserStore(current.location.store));
     if (same) return current;
   }
   return openEditorRepository(onProgress => prepareRepositoryOpen(location, repositoryWorkspaceId, onProgress, options));

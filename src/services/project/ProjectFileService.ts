@@ -294,6 +294,7 @@ class ProjectFileService {
   async createProjectInFolder(handle: FileSystemDirectoryHandle, name: string): Promise<boolean> {
     return this.coreService.createProjectInFolder(handle, name);
   }
+  createProjectInBrowserStorage(path: string, name: string): Promise<boolean> { return this.coreService.createProjectInBrowserStorage(path, name); }
 
   async openProject(): Promise<boolean> {
     if (this._activeBackend === 'fsa' && this.isFsaAvailable) return this.coreService.openProject();

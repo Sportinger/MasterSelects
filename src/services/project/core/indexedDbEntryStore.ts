@@ -108,3 +108,12 @@ export async function openIndexedDbEntryStore(): Promise<FallbackEntryStore> {
   } catch (error) { db.close(); throw error; }
   return store;
 }
+
+/**
+ * Whether this origin ever created the fallback database, without creating it.
+ * Unknown (no `indexedDB.databases()`) counts as absent: nothing is offered then.
+ */
+export async function fallbackStoreExists(): Promise<boolean> {
+  if (typeof indexedDB === 'undefined' || typeof indexedDB.databases !== 'function') return false;
+  try { return (await indexedDB.databases()).some(database => database.name === DATABASE_NAME); } catch { return false; }
+}

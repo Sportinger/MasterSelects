@@ -3,7 +3,7 @@ import { RepositoryError } from '../contracts';
 import type { RepositoryLocation, RepositoryOpenProgress } from '../storageWorkerProtocol';
 import { createFsaRepositoryBackend } from '../backends/fsaBackend';
 import { createOpfsRepositoryBackend } from '../backends/opfsBackend';
-import { getBrowserStorageRoot } from '../../core/browserStorageRoot';
+import { getBrowserStorageRoot, getBrowserStorageRootOf, resolveBrowserStore, type BrowserStorageKind } from '../../core/browserStorageRoot';
 import { createNativeRepositoryBackend } from '../backends/nativeBackend';
 import { NativeHelperClient } from '../../../nativeHelper/NativeHelperClient';
 import { readJson, writeJson } from '../archive/streamIO';
@@ -18,15 +18,15 @@ import type { PreparedRepository } from './RepositoryLifecycle';
 
 export async function backendForLocation(location: RepositoryLocation): Promise<RepositoryBackend> {
   if (location.kind === 'fsa') return createFsaRepositoryBackend(location.handle);
-  if (location.kind === 'opfs') return createOpfsRepositoryBackend(location.path);
+  if (location.kind === 'opfs') return createOpfsRepositoryBackend(location.path, location.store);
   return createNativeRepositoryBackend(location.path, NativeHelperClient);
 }
 /** Old-format folders are converted into a new repository instead of being opened in place. */
 export async function isLegacyProjectLocation(location: RepositoryLocation): Promise<boolean> {
   return isLegacyProjectBackend(await backendForLocation(location));
 }
-export async function directoryForOpfs(path: string): Promise<FileSystemDirectoryHandle> {
-  let root = await getBrowserStorageRoot();
+export async function directoryForOpfs(path: string, store?: BrowserStorageKind): Promise<FileSystemDirectoryHandle> {
+  let root = await (store ? getBrowserStorageRootOf(store) : getBrowserStorageRoot());
   for (const part of path.split('/')) {
     if (!part || part === '.' || part === '..') throw new RepositoryError('corrupt', 'Invalid OPFS project path');
     root = await root.getDirectoryHandle(part, { create: true });
@@ -54,6 +54,7 @@ export interface RepositoryOpenOptions {
 async function sameLocation(left: RepositoryLocation, right: RepositoryLocation): Promise<boolean> {
   if (left.kind === 'fsa' && right.kind === 'fsa') return left.handle.isSameEntry(right.handle);
   if (left.kind !== right.kind || left.kind === 'fsa' || right.kind === 'fsa') return false;
+  if (left.kind === 'opfs' && right.kind === 'opfs' && resolveBrowserStore(left.store) !== resolveBrowserStore(right.store)) return false;
   const normalize = (path: string) => path.replaceAll('\\', '/').replace(/\/$/, '');
   return normalize(left.path) === normalize(right.path);
 }
@@ -91,7 +92,7 @@ export async function prepareRepositoryOpen(location: RepositoryLocation, worksp
   if (location.kind === 'native') source = { sourceId: backend.locationId, locationId: backend.locationId,
     stat: path => backend.stat(path), read: (path, offset, length, signal) => backend.read(path, offset, length, signal),
     list: (prefix, cursor, limit, signal) => backend.list(prefix, cursor, limit, signal) };
-  else source = directorySource(location.kind === 'fsa' ? location.handle : await directoryForOpfs(location.path), backend.locationId, backend.locationId);
+  else source = directorySource(location.kind === 'fsa' ? location.handle : await directoryForOpfs(location.path, location.store), backend.locationId, backend.locationId);
   // Old files are only read; the repository is added beside them unless a separate folder was chosen.
   const target = options.legacyTarget ?? location;
   const inPlace = target === location || await sameLocation(target, location);
