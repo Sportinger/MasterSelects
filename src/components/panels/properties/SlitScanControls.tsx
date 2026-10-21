@@ -16,6 +16,7 @@ import { hybridTemporalSampleLimit } from '../../../effects/time/sourceTemporalL
 import { SlitScanTimeFieldControls } from './SlitScanTimeFieldControls';
 import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 import { slitScanFullResolutionFactor } from '../../../effects/time/slit-scan/timeFactor';
+import { SLIT_SCAN_LOOKS, applySlitScanLook, slitScanLookOf } from '../../../effects/time/slit-scan/looks';
 
 export function SlitScanControls({ params, onChange, clipId, effectInstanceId, operatorGraph }: EffectControlProps & { operatorGraph?: EffectOperatorGraph }) {
   const motionStatus = useSyncExternalStore(subscribeTemporalStatus, () => getTemporalStatus(`${effectInstanceId}:dis`));
@@ -47,7 +48,12 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
     : onChange({ ...params, [key]: value });
   const renderGroup = (group: string, section: { enabled?: boolean; onEnabledChange?: (enabled: boolean) => void } = {}) => <ResolveInspectorSection key={group} title={group}
       bypassGroupId={({ 'Time map': 'time-map', 'Subject protection': 'subject-protection', 'Protected center': 'scan-protection' } as Record<string, string>)[group]}
-      defaultOpen={group === 'Sampling' || group === 'Time'} {...section}>
+      defaultOpen={group === 'Time'} {...section}>
+      {group === 'Time' && <ResolveInspectorRow label="Look">
+        <InspectorSelect ariaLabel="Slit Scan look" value={slitScanLookOf(params)}
+          options={[...SLIT_SCAN_LOOKS.map(item => ({ value: item.id, label: item.label })), { value: 'custom', label: 'Custom', disabled: true }]}
+          onChange={value => onChange(applySlitScanLook(params, value))} />
+      </ResolveInspectorRow>}
       {Object.entries(slitScanParams).filter(([key, parameter]) => parameter.group === group && !['temporalMode', 'temporalResolution'].includes(key)).map(([key, parameter]) => {
         if (key === 'temporalMemory' && params.temporalStorage !== 'resident') return null;
         if (key === 'temporalBatch' && !originalHistory) return null;
@@ -93,11 +99,14 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
       {group === 'Sampling' && Number(params.seamSmoothing) > 0 && seamStatus &&
         <ResolveInspectorRow label="Seam smoothing"><span role="status" title={seamStatus}>{seamStatus}</span></ResolveInspectorRow>}
   </ResolveInspectorSection>;
+  // The look of the scan first (Time, Wave); storage and sampling technicalities below, collapsed.
   return <div className="effects-tab transform-tab-compact">
+    {renderGroup('Time')}
+    {renderGroup('Wave')}
     {renderGroup('Sampling')}
     {renderGroup('Motion compensation', { enabled: params.temporalMotion === 'motion',
       onEnabledChange: enabled => onChange({ ...params, temporalMotion: enabled ? 'motion' : 'off' }) })}
-    <ResolveInspectorSection title="Preview quality" defaultOpen>
+    <ResolveInspectorSection title="Preview quality" defaultOpen={false}>
       <ResolveInspectorRow label="Quality"><InspectorSelect ariaLabel="Slit Scan preview quality"
         value={params.temporalResolution === 'native' ? 'full' : 'preview'}
         options={[{ value: 'preview', label: 'Small preview · 160 px' }, { value: 'full', label: originalHistory ? 'Full size · original' : 'Full size · follows Proxy mode' }]}
@@ -108,8 +117,6 @@ export function SlitScanControls({ params, onChange, clipId, effectInstanceId, o
           onChange={value => onChange({ ...params, temporalPreview: value })} />
       </ResolveInspectorRow>}
     </ResolveInspectorSection>
-    {renderGroup('Time')}
-    {renderGroup('Wave')}
     <SlitScanGeometryControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} operatorGraph={operatorGraph} />
     <SlitScanStabilizationControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />
     <SlitScanTimeFieldControls params={params} onChange={onChange} clipId={clipId} effectInstanceId={effectInstanceId} />

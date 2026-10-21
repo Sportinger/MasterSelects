@@ -23,7 +23,8 @@ export const slitScanParams: Record<string, EffectParam> = {
     { value: 'full', label: 'Full resolution' },
     { value: 'adaptive', label: 'Adaptive · playback / scrub / edits' },
   ] },
-  temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'nearest', group: 'Sampling', options: [
+  // Blend is the default (and the runtime fallback for older saved effects): Nearest leaves hard stair steps.
+  temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'linear', group: 'Sampling', options: [
     { value: 'linear', label: 'Blend adjacent frames' }, { value: 'nearest', label: 'Nearest frame (no blending)' },
   ] },
   // Section switch in the inspector; the select value keeps room for other motion sources.

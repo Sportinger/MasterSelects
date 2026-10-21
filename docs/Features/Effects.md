@@ -254,11 +254,18 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
-- **Sampling**, **Preview quality**, **Time** and **Wave** appear first in the Slit Scan inspector because they have no section bypass switch. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Sampling opens by default. **Preview quality**
+- **Look** (top of the Time section) applies a starting point: Sweep · left → right
+  (the defaults), Falling time · top → bottom, Out from the center, Wave folds, Radial
+  bloom, Time rings or Time steps · 12 bands. A look sets only Profile, Angle, Delay,
+  Time bands, Mix, Waves, Phase and Speed; it reads **Custom** once any of them changes.
+- **Time** and **Wave** come first in the Slit Scan inspector, followed by **Sampling**
+  and **Preview quality** (collapsed), because these sections have no bypass switch. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Time opens by default. **Preview quality**
   switches between Small preview
   (160 px maximum edge) and Full size. Both use the same source timestamps and sample
   count. New Slit Scan effects default to resident GPU history, 4 GiB history memory,
-  Nearest temporal sampling, shared-source Hybrid export processing, 1920 samples,
+  Blend adjacent frames temporal sampling (Nearest leaves hard stair steps on moving
+  subjects; older saved effects without this setting already rendered with Blend),
+  shared-source Hybrid export processing, 1920 samples,
   zero scan smoothing, a 0.25 deformation threshold, Full size and Adaptive preview quality.
   The sample count is limited by the source's longer dimension in the inspector.
   Full size follows timeline Proxy mode for GPU cache: it uses the actual full JPEG proxy
