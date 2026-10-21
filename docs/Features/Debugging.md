@@ -457,13 +457,33 @@ React so it survives an unmounted root) explains why and offers a Reload button.
 
 Cloudflare Pages serves only the files of the active deployment, so a tab opened
 before a deploy fails to lazy-load its old chunk names afterwards (404, unless the
-edge cache still holds them). Before every production deploy run
-`npm run deploy:retain-assets` after `npm run build:deploy`: it lists the last eight
+edge cache still holds them). `npm run deploy:retain-assets` lists the last eight
 production deployments (`wrangler pages deployment list`), crawls each one's entry
 pages and `/assets/` chunks from its own `<id>.masterselects.pages.dev` URL and copies
 missing hashed files into `dist/assets`. Pages deduplicates uploads by hash, so the
 retained files add no upload cost; about 200 files per deployment are added. Old tabs
 then keep working until they reload; the recovery above covers anything older.
+
+Retention only helps when it runs before the upload, so production deploys go through
+`npm run deploy:pages` (`scripts/deploy-pages.mjs`, checks in
+`scripts/deploy-pages-checks.mjs`) instead of a manual `wrangler pages deploy`. It
+stops with `NOT DEPLOYED` and the failed check unless all of these hold: a green
+`Security Checks` run for HEAD (or HEAD only changes the version lines and release
+files of a green commit); a `dist` built by `npm run build:deploy` from exactly HEAD
+with `sourceDirty: false` and the `package.json` version; the new build's own entry
+chunks and `projectStorage.worker-*.js`; and, after retention, the live deployment's
+entry chunks and its storage worker in `dist/assets`. `--dry-run` runs every check and
+the retention into `dist` and prints the deploy command instead of running it;
+`--skip-build` checks an existing `dist`.
+
+The pre-module bootstrap (`public/app-bootstrap.js`) only records the running version
+and logs `[Version] Update detected`. It no longer reloads or clears Cache Storage:
+the loaded page already is the deployed build, so that reload doubled every recovery
+reload above, could alternate between two builds while a deploy propagates, and
+deleted downloaded AI models (depth, roto, face, audio and landmark caches) on every
+deploy. Worker-failure and chunk reloads share one session cooldown and the
+unsaved-project guard, so a tab that fails again right after its recovery reload shows
+the Reload notice instead of reloading in a loop.
 
 ### Composition video-load failures
 

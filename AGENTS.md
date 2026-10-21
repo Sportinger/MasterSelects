@@ -426,10 +426,17 @@ unit suite in six shards) must be green for the exact commit before it goes
 live. Run it on the task branch with `gh workflow run security.yml --ref
 <branch>` and wait for the result (`gh run watch`); targeted local tests are not
 enough, and the full suite must not run locally (it rotates the bridge token).
-Never deploy a commit with red CI. Then bump the version, build from a clean
-checkout (`sourceDirty: false`), run `npm run deploy:retain-assets`, deploy with
-`wrangler pages deploy dist --project-name masterselects --branch main`, and
-check `/build-info.json` on www.masterselects.com.
+Never deploy a commit with red CI. Then bump the version, commit it, and deploy
+from that clean checkout with `npm run deploy:pages` only; never run
+`wrangler pages deploy` by hand. The script refuses to deploy unless Security
+Checks are green for HEAD (or HEAD only bumps the version of a green commit),
+builds with `npm run build:deploy` (`sourceDirty: false`, exact HEAD), retains
+the last eight deployments' assets (`deploy:retain-assets`), verifies that
+`dist/assets` holds the live deployment's entry chunks and
+`projectStorage.worker-*.js`, and only then runs `wrangler pages deploy dist
+--project-name masterselects --branch main`. `npm run deploy:pages -- --dry-run`
+runs every check without deploying. Afterwards check `/build-info.json` on
+www.masterselects.com.
 
 Build warnings about mp4box, chunk sizes, and dynamic imports are
 pre-existing — not errors.

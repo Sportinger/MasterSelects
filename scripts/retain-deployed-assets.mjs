@@ -12,6 +12,9 @@
 //
 // Usage: node scripts/retain-deployed-assets.mjs [--dist dist] [--project masterselects]
 //          [--keep 6] [--origin https://<id>.masterselects.pages.dev ...] [--strict]
+// Production deploys go through `npm run deploy:pages` (scripts/deploy-pages.mjs), which runs
+// this retention and refuses to deploy unless the previous deployment's entry chunks and
+// project storage worker ended up in dist/assets.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -40,13 +43,20 @@ function parseArgs(argv) {
   return options;
 }
 
-function listProductionOrigins(project, keep) {
-  const output = execFileSync('npx', ['wrangler', 'pages', 'deployment', 'list',
-    '--project-name', project, '--environment', 'production', '--json'],
-  { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
-  const deployments = JSON.parse(output.slice(output.indexOf('[')));
+function runCommand(command, args) {
+  // npx is a .cmd shim on Windows, which execFile only starts through a shell.
+  return execFileSync(command, args, { encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+/** The newest `keep` production deployments, newest (the live one) first. */
+export function listProductionOrigins(project, keep, run = runCommand) {
+  const output = run('npx', ['wrangler', 'pages', 'deployment', 'list',
+    '--project-name', project, '--environment', 'production', '--json']);
+  const start = output.indexOf('[');
+  if (start < 0) throw new Error('wrangler pages deployment list returned no JSON list');
+  const deployments = JSON.parse(output.slice(start));
   // Newest first, as wrangler lists them.
-  return deployments.slice(0, keep).map(item => ({ origin: item.Deployment.replace(/\/+$/, ''), source: item.Source }));
+  return deployments.slice(0, keep).map(item => ({ origin: String(item.Deployment).replace(/\/+$/, ''), source: item.Source }));
 }
 
 export function extractAssetReferences(text) {
@@ -64,7 +74,12 @@ async function fetchAsset(url) {
   return { status: 200, bytes: Buffer.from(await response.arrayBuffer()) };
 }
 
-async function retainFromOrigin(origin, assetsDir, totals) {
+/**
+ * Copies every asset reachable from one deployment's entry pages into `assetsDir`. Returns the
+ * names its entry pages reference directly (`entries`) and every name the crawl reached
+ * (`reachable`), so a caller can check that the important ones really landed.
+ */
+export async function retainFromOrigin(origin, assetsDir, totals = { copied: new Set() }) {
   const queue = new Set();
   for (const page of ENTRY_PAGES) {
     try {
@@ -74,7 +89,7 @@ async function retainFromOrigin(origin, assetsDir, totals) {
   }
   const seen = new Set(queue);
   const pending = [...queue];
-  const result = { copied: 0, present: 0, missing: 0, unavailable: [] };
+  const result = { copied: 0, present: 0, missing: 0, unavailable: [], entries: new Set(queue), reachable: seen };
   while (pending.length) {
     const batch = pending.splice(0, CONCURRENCY);
     await Promise.all(batch.map(async (name) => {
