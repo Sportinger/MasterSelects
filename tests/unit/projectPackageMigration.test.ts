@@ -161,7 +161,7 @@ describe('project repository creation and legacy conversion', () => {
 
     const reopened = new ProjectCoreService(fileStorageService);
     expect(await reopened.restoreLastProject()).toBe(true);
-    expect(repo.openRepositoryProject).toHaveBeenLastCalledWith({ kind: 'opfs', path: 'Browser Cut' });
+    expect(repo.openRepositoryProject).toHaveBeenLastCalledWith({ kind: 'opfs', path: 'Browser Cut' }, { signal: undefined });
     expect(reopened.getProjectData()?.name).toBe('Browser Cut');
     // Rename also reacquires the origin root instead of reading projectsFolder.
     expect(await readProjectParent()).toBe(root);

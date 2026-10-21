@@ -5,7 +5,8 @@
 // transition overlay, solid). File-backed sources go through sourceLoaders.
 
 import type { MediaFile } from '../../stores/mediaStore/types';
-import type { SerializableClip, TimelineClip, TimelineSourceType } from '../../types';
+import type { SerializableClip, TimelineClip } from '../../types/timeline';
+import type { TimelineSourceType } from '../../types/timelineSource';
 import { isVectorAnimationSourceType } from '../../types/vectorAnimation';
 import { liveInputRuntime } from '../mediaRuntime/liveInputRuntime';
 import { renderFramedTextCanvas } from '../text/textCanvasFrame';
