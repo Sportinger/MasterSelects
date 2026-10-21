@@ -118,6 +118,8 @@ in-app browsers may delete the project when the window closes, and opens the
 works are not listed there; export them first. Only when IndexedDB refuses as
 well do project dialogs and the save status explain the cause instead of the
 raw browser text. iOS, iPadOS and Android never try the desktop Native Helper.
+To test the fallback on a device whose OPFS works, start the dev server with
+`VITE_MS_FORCE_BROWSER_STORAGE=indexeddb`; production builds ignore it.
 
 The Native Helper checks granted paths and negotiates repository write support.
 A connected helper with ordinary file commands does not by itself prove that

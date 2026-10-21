@@ -25,6 +25,8 @@ let fallbackRoot: Promise<FileSystemDirectoryHandle> | null = null;
 const listeners = new Set<() => void>();
 
 function readTabChoice(): string | null {
+  // Dev-only switch so a device whose OPFS works (e.g. an iPad on the LAN) can exercise the fallback.
+  if (import.meta.env.DEV && import.meta.env.VITE_MS_FORCE_BROWSER_STORAGE === 'indexeddb') return 'indexeddb';
   try { return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(TAB_CHOICE_KEY); } catch { return null; }
 }
 
