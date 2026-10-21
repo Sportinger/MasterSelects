@@ -9,6 +9,7 @@ import {
   IconArrowRight,
   IconFileImport,
   IconFolderOpen,
+  IconPlayerPlay,
   IconPlus,
 } from '@tabler/icons-react';
 import {
@@ -26,6 +27,7 @@ import {
 import { getProjectWriteSupportError, resolveProjectRootMode } from '../../services/project/core/projectRootAccess';
 import { describeBrowserStorageFailure } from '../../services/project/core/browserStorageFailure';
 import { isExpectedArchiveImportRejection } from '../../services/project/projectBackendAvailability';
+import { resumePendingProject } from '../../services/project/pendingProjectResume';
 import { validateProjectName } from './projectNameValidation';
 import { Logger } from '../../services/logger';
 import './EditorProjectSelectionOverlay.css';
@@ -76,6 +78,10 @@ export function EditorProjectSelectionOverlay({
   // projects already stored on this device. null means the list is not shown.
   const [storageMode] = useState(resolveProjectRootMode);
   const [storedProjects, setStoredProjects] = useState<string[] | null>(null);
+  // The last project only needs its folder access again (browser restart): one click resumes it.
+  const [pendingProjectName, setPendingProjectName] = useState(() => (
+    projectFileService.needsPermission() ? projectFileService.getPendingProjectName() : null
+  ));
   const completionTimerRef = useRef<number | null>(null);
   const archiveInputRef = useRef<HTMLInputElement>(null);
 
@@ -200,6 +206,25 @@ export function EditorProjectSelectionOverlay({
       }
       setError(reportProjectActionError('archive import', error, 'The project archive could not be imported.'));
     } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleResumePending = async () => {
+    if (busyAction) return;
+    setBusyAction('resume');
+    setError(null);
+    try {
+      if (await resumePendingProject()) {
+        setPendingProjectName(null);
+        completeSelection();
+        return;
+      }
+      setError('Folder access was not allowed. Click Resume again and allow access in the browser prompt.');
+    } catch (error) {
+      setError(reportProjectActionError('resume', error, 'The project could not be resumed.'));
+    } finally {
+      setPendingProjectName(projectFileService.needsPermission() ? projectFileService.getPendingProjectName() : null);
       setBusyAction(null);
     }
   };
@@ -349,6 +374,25 @@ export function EditorProjectSelectionOverlay({
             </div>
           ) : (
             <div className="editor-project-grid">
+              {pendingProjectName !== null && (
+                <button
+                  className="editor-project-box is-resume"
+                  disabled={busyAction !== null}
+                  title={`Allow folder access to “${pendingProjectName}” again`}
+                  type="button"
+                  onPointerUp={(event) => event.currentTarget.blur()}
+                  onClick={() => void handleResumePending()}
+                >
+                  <span className="editor-project-box-icon">
+                    <IconPlayerPlay aria-hidden="true" />
+                  </span>
+                  <span className="editor-project-box-copy">
+                    <strong>{busyAction === 'resume' ? 'Resuming…' : `Resume “${pendingProjectName}”`}</strong>
+                    <small>Allow folder access again; nothing needs relinking</small>
+                  </span>
+                  <IconArrowRight aria-hidden="true" />
+                </button>
+              )}
               <button
                 className="editor-project-box is-new"
                 disabled={busyAction !== null}

@@ -7,6 +7,7 @@ import { MAX_FILE_ACCESS_PROMPTS, getMediaReconnectProgress, mediaFilesNeedingAc
 import { getProjectMediaSourceRootStates } from '../../../services/project/mediaSourceRoots';
 import { isLinkedMediaConnectionRunning, subscribeLinkedMediaConnection } from '../../../services/project/repository/transaction/editorLinkedMediaConnection';
 import { getEditorRepositorySession, subscribeEditorRepositorySession } from '../../../services/project/repository/transaction/editorMutationRuntime';
+import { takeOverEditing } from '../../../services/project/repository/lifecycle/editorWriterHandover';
 import '../ProjectNameDialog.css';
 import './RepositoryArchiveDialog.css';
 
@@ -99,7 +100,9 @@ export function MediaReconnectHost() {
   const fileAccess = knownFiles.length > 0 && knownFiles.length <= MAX_FILE_ACCESS_PROMPTS;
   const oneClick = (folders.length > 0 || fileAccess) && !stillMissing;
   // Exactly one action; Escape, the backdrop and the close icon postpone it. Single files stay relinkable in the Media panel.
-  const primary = readOnly ? { label: 'Reload this tab', action: () => window.location.reload() }
+  // A read-only tab (e.g. the tab opened to check a new deploy while an older tab still writes) takes
+  // over editing instead of reloading: the writing tab saves and steps back, then media reconnect here.
+  const primary = readOnly ? { label: 'Take over editing', action: () => { void takeOverEditing(); } }
     : oneClick ? { label: 'Reconnect media', action: () => { void run(undefined, true); } }
     : picker ? { label: stillMissing && choseFolder ? 'Choose another folder…' : 'Choose folder…', action: () => { void chooseFolder(); } }
     : { label: 'Relink manually…', action: () => { close(); requestRelinkDialog(); } };
@@ -135,7 +138,7 @@ export function MediaReconnectHost() {
         <p>{busy ? `${PHASES[busy.phase]}${busy.total ? ` ${busy.done.toLocaleString()} / ${busy.total.toLocaleString()}` : ''}` : 'Opening the media of this composition'}</p>
       </div> : <>
         <p>{files(offline)} offline.{' '}
-          {readOnly ? 'This project is open for editing in another tab, so this tab cannot reconnect media. Reconnect them there, or close that tab and reload this one.'
+          {readOnly ? 'This project is open for editing in another tab, so this tab cannot save reconnected media. Take over editing here: the other tab saves its changes and switches to read-only.'
             : oneClick ? `Allow access to “${[...folders, ...(fileAccess ? knownFiles : [])].join('”, “')}” once to reconnect them.`
             : `Choose the folder that contains ${offline === 1 ? 'it' : 'them'}; a whole drive works too. MasterSelects finds and reconnects the files automatically.${knownFiles.length ? ` The folder picker opens where “${knownFiles[0]}” was last found.` : ''}`}</p>
         {oneClick && !readOnly && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a reload.</p>}

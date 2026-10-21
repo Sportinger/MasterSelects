@@ -109,6 +109,17 @@
   background: #1d1d1d;
 }
 
+.editor-project-box.is-resume {
+  background: #1b1f1b;
+  border-color: #4f6b4f;
+  grid-column: 1 / -1;
+}
+
+.editor-project-box.is-resume .editor-project-box-icon {
+  border-color: #5f805f;
+  color: #cfe8cf;
+}
+
 .editor-project-box:hover:not(:disabled) {
   background: #202020;
   border-color: #5c5c5c;

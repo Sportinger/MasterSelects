@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   reconnectMedia: vi.fn(),
   session: { opening: { writable: true } },
   external: null as null | { phase: string; done: number; total: number },
+  takeOverEditing: vi.fn(async () => true),
 }));
 
 vi.mock('../../src/stores/mediaStore', () => ({
@@ -29,6 +30,8 @@ vi.mock('../../src/services/project/repository/transaction/editorMutationRuntime
   getEditorRepositorySession: () => mocks.session,
   subscribeEditorRepositorySession: () => () => {},
 }));
+
+vi.mock('../../src/services/project/repository/lifecycle/editorWriterHandover', () => ({ takeOverEditing: mocks.takeOverEditing }));
 
 import { MediaReconnectHost } from '../../src/components/common/toolbar/MediaReconnectOverlay';
 
@@ -58,13 +61,15 @@ describe('MediaReconnectHost', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('tells a read-only tab to reconnect in the writing tab instead of failing', async () => {
+  it('lets a read-only tab take over editing instead of reloading or failing', async () => {
     mocks.session = { opening: { writable: false } };
     try {
       render(<MediaReconnectHost />);
       await waitFor(() => expect(screen.getByRole('dialog').textContent).toContain('open for editing in another tab'));
-      expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['×', 'Reload this tab']);
+      expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['×', 'Take over editing']);
       expect(mocks.reconnectMedia).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Take over editing' }));
+      expect(mocks.takeOverEditing).toHaveBeenCalledOnce();
     } finally { mocks.session = { opening: { writable: true } }; }
   });
 

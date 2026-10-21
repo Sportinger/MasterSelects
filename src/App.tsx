@@ -384,11 +384,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
     if (
       isProjectBootPending
       || isProjectPermissionPending
-      || shouldShowEditorProjectSelection(
-        initialExperience,
-        isProjectOpen,
-        isProjectPermissionPending,
-      )
+      || shouldShowEditorProjectSelection(initialExperience, isProjectOpen)
     ) return;
 
     startupTutorialScheduledRef.current = true;
@@ -537,11 +533,7 @@ function App({ initialExperience = 'editor' }: AppProps) {
       <WorkspaceBar />
       <TouchGooLayer />
       {isProjectOpen && !isProjectBootPending && !isStartLayout && <EditorFileDrop />}
-      {!isProjectBootPending && shouldShowEditorProjectSelection(
-        initialExperience,
-        isProjectOpen,
-        isProjectPermissionPending,
-      ) && (
+      {!isProjectBootPending && shouldShowEditorProjectSelection(initialExperience, isProjectOpen) && (
         <EditorProjectSelectionOverlay
           onProjectSelected={() => setIsProjectOpen(true)}
         />

@@ -43,10 +43,23 @@ All three use the same repository format. The browser's IndexedDB databases
 cache handles and derived metadata; they are not the authoritative project
 history. An unavailable index can be reconstructed from committed records.
 
-FSA handles may require permission again after reload. Reopening a recent
-project or restoring the last project's folder access also re-requests read
-access to that project's known media source folders in the same click, before
-the project loads, so linked media reconnect without a separate step. Media
+A deploy does not change stored project or media links: handles, recent
+projects, the workspace id and the repository stay as they are. What lapses is
+the browser's permission. Chrome keeps File System Access grants for the
+browsing session only (unless "Allow on every visit" was chosen): after a
+browser restart, or once every tab of the site was closed, a stored folder
+reports `prompt` again; a same-tab reload (including the version reload after a
+deploy) keeps it. The editor then does not reopen the project silently and does
+not treat it as lost. The **Choose project** dialog shows **Resume “<project>”**
+first (the toolbar shows the same Restore action, also while the startup
+recovery scratch is open): one click re-grants the stored folder handle, and
+Chrome's restore prompt brings back the folders and files allowed on the last
+visit. Reopening a recent project or resuming the last project also re-requests
+read access to that project's known media source folders and to media linked as
+single files (remembered with the recent entry; already granted ones cost no
+prompt, at most 8 further prompts) in the same click, before the project loads,
+so linked media reconnect without a separate step. Access that is still not
+granted is logged and offered by the Reconnect media dialog. Media
 that still lack access are offered in the Reconnect media dialog; choosing
 "Allow on every visit" in the browser prompt avoids the prompt after reloads.
 Media imported as single files (picker or drop) keep their exact saved file
@@ -69,9 +82,10 @@ own records the known source folder that contains it, so a reopen finds it
 without asking again. When a folder search finds several files for one media
 item and no saved path decides, the file named exactly like the media wins over
 files that only share an older saved file name (size and content are still
-verified). In a read-only tab (another tab writes the project) a chosen folder
-cannot save new media locations: its reconnect dialog says so and offers to reload
-the tab once the writing tab is closed. Opening a composition checks all of its
+verified). In a read-only tab (another tab writes the project, for example an older tab
+still open when a new deploy is checked in a second tab) a chosen folder cannot
+save new media locations: its reconnect dialog says so and offers **Take over
+editing**, which makes the writing tab save and switch to read-only. Opening a composition checks all of its
 sources in the background (nested clips and multicam angles included, the
 playhead first), so missing media surface together and the reconnect dialog
 appears once after the check instead of repeatedly during playback. Allowed

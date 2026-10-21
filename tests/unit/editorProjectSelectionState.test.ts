@@ -9,8 +9,4 @@ describe('editor project selection state', () => {
     expect(shouldShowEditorProjectSelection('medium', true)).toBe(false);
     expect(shouldShowEditorProjectSelection('chat', false)).toBe(false);
   });
-
-  it('keeps a stored project permission restore from being covered by the chooser', () => {
-    expect(shouldShowEditorProjectSelection('editor', false, true)).toBe(false);
-  });
 });
