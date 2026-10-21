@@ -711,13 +711,26 @@ component-wise decay, including alpha. Inscribe retains automatic GPU derivative
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
 
 Acuarela is a four-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
-premultiplied source cache, two edge-aware 7 x 7 washes with per-pixel jittered taps (the
-first read at a position that wobbles by up to Bleed pixels, capped at 12, into
-`wash-first-cache`; the second over the first, wider in wet patches, into `wash-cache`), and
-a pass that groups the wash into tones (Simplify), lifts black toward an indigo pigment
-(Shadow Pigment) and changes each colour like more or less pigment,
-`C' = C - (C - C^2)(d - 1)`, with the density `d` (clamped to 0-4) built from edge pooling,
-granulation on a paper height field (weighted toward light washes) and blooms. Mix blends
+premultiplied source cache, two edge-aware 7 x 7 washes with per-pixel jittered taps
+(each pixel turns and shifts its tap grid at random, so thin lines become fine grain
+instead of repeated copies; taps 0.6 sigma apart, weight
+`exp(-0.18 |k|^2 - |dc|^2 / (2 s_r^2))` with `dc` the premultiplied colour difference to
+the centre tap). The first wash reads at a position that wobbles by
+`min(Bleed (0.25 + 0.5 wet), 12)` pixels (so neighbouring pixels never read far-apart rows;
+above Bleed 16 only the second wash widens, and the effect card says so), sigma
+`Wash (1 + 0.3 wet)`, into `wash-first-cache`; the second smooths the first with sigma
+`0.6 Wash + 0.25 Bleed wet` into `wash-cache` (`wet` 0-1 in wet patches; colour tolerance
+`s_r` grows from 0.1 dry to 0.3 and 0.5 wet). The last pass groups the wash into tones
+(Simplify) and changes each colour like more or less pigment,
+`C' = C - (C - C^2) e`. The excess `e` eases instead of clamping (`1 - exp(-x)` for more
+pigment, `exp(x) - 1` for less, `x` = edge pooling + granulation + blooms), so the density
+`1 + e` stays inside 0-2, where the formula keeps every channel between `C^2` and
+`2C - C^2`: pooled edges become a deeper tint of their own colour, never black ink lines.
+Edge pooling compares the wash with a Gaussian mean of its 5 x 5 neighbourhood (1.5 px
+apart, sigma 2 px) through a smoothstep, a 2-4 px gradient on the darker side of each
+border. Granulation follows a paper height field, weighted toward mid-light washes (less on
+dense dark paint and near-white). Shadow Pigment then lifts black toward an indigo pigment,
+also on pooled edges, and Mix blends
 premultiplied. Its noise fields use the shared
 **Fractal Noise** node (`noise.fractal2d.vec2`, PCG-hashed gradient noise, 1-8 octaves),
 which stays free of the streaks Random (Hash) shows at large positions. Sizes are pixels
@@ -799,8 +812,9 @@ fullscreen output boundary rather than adding a new inline optimization.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
 feedback decay, and final RGBA mixing as shared nodes. Its source lift passes Gain through a
-soft shoulder, `0.35 (1 - exp(-max(Gain, 0) / 0.35))`, so large values wash the frame out
-instead of turning it white; saved graphs get the shoulder nodes on load. Detail changes frequency,
+knee: the lift equals Gain up to 0.25, then eases as `0.25 + 0.25 (1 - exp(-(Gain - 0.25) / 0.25))`
+toward 0.5 (`rom1GainLift`), so saved looks with typical Gain stay the same and large values
+wash the frame out instead of turning it white; saved graphs get the knee nodes on load. Detail changes frequency,
 not octave count; Speed scales displacement, not timeline time. Its history uses
 the shared seek/reset/loop contract, and feedback can raise output alpha as in
 the legacy shader. Direct source wiring prunes history resources and processing.
@@ -1437,7 +1451,16 @@ edges keep their colour. Particle release is driven by a deterministic
 gust field: coherent noise pockets (4 octaves of the shared gradient Fractal Noise, turned
 per octave, so no pocket has straight lattice edges), a wind-front delay, and the clip seed decide
 which regions separate first, so the breakup starts in scattered islands and
-then grows without relying on accumulated simulation state. Each particle
+then grows without relying on accumulated simulation state. Those raw delays bunch up (the
+gust field's values cluster), so the renderer measures their spread for the current settings
+(33 quantiles over a sample of the cells, `releaseTiming.ts`) and the shader lays each cell's
+rank among them out evenly over a release window of 1.8 times the raw spread (at most 0.9):
+at the defaults the releases run from Progress 0 to about 0.84 and the visible picture thins
+out at an even rate (mean alpha about 0.82, 0.51 and 0.18 at Progress 0.25, 0.5 and 0.75).
+A flight ends at `delay + Tail (1 - delay)`, so every particle has landed by Progress 1. The
+flat pass finds a pixel's cell with integer arithmetic on its framebuffer position and the
+per-cell detail value is an integer hash, so the flat and particle passes agree exactly, also
+for fractional cells whose borders fall on pixel centres. Each particle
 carries UVs from its original source cell, so moving particles keep their
 assigned image patch instead of sampling from their new screen position. Preview
 and export use explicit render/media time instead of wall-clock time.
@@ -1541,12 +1564,18 @@ checkout first (`npx vite --port 5175 --strictPort`), then for example
 `--list` prints every effect with its parameters, `--times` renders a frame
 sequence for temporal effects, and `--inset 0.7` places the image at 70 % on a
 transparent frame (the contact sheet shows cells over a checkerboard) to check
-alpha handling such as dark rims. Effects that need clip context (masks, face
+alpha handling such as dark rims. `--metrics` adds per-cell numbers to the summary: mean
+alpha (coverage, e.g. how far a particle outro has progressed), transparent pixels in the
+outer 8 px, and newly crushed black (channels below 20 where the original averaged above
+60); `--require-filled-border` fails the run when a variant leaves the frame border
+transparent. Effects that need clip context (masks, face
 landmarks, temporal source, tracking) render without it and are checked in the
 editor instead. `--pairs <file>` writes docs close-ups: each entry renders two
 effects (or `original`) on one image, crops the same region of both (`crop`, in
 pixels of the rendered frame, `zoom` enlarges it) and puts them side by side as a
-WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`.
+WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`;
+`"backdrop": "checker"` or a flat colour (`"#3c6ec8"`, readable at float size) shows
+transparent pixels.
 
 ### Effect graph pictures
 
@@ -1690,7 +1719,7 @@ Voxel Relief uses the same binding to smooth a
 raymarched block-heightfield between video frames and remains a complex
 raymarch/feedback effect.
 
-Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled, with Distance 0.85 so the relief fills the layer at the default tilt. Block sides keep at least 55 % of the column colour and tall columns brighten their own colour (2D raymarch and native 3D); effects saved before keep the darker, greying shading (`shading: 'legacy'`, set on load).
+Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled, with Distance 0.8 so the relief fills the layer at the default tilt (the Effect Lab's `--metrics --require-filled-border` check finds no transparent pixel in the outer 8 px of the three lab images at 960 and 1920 px; 0.85 left a wedge). Effects saved before Distance existed keep Distance 1 (set on load). Block sides keep at least 55 % of the column colour and tall columns brighten their own colour (2D raymarch and native 3D); effects saved before keep the darker, greying shading (`shading: 'legacy'`, set on load).
 With `Limit to Video` enabled, the raymarcher discards voxel cells outside the source rectangle and uses a finite source-sized floor, so orbit views show only the actual video footprint instead of repeating its edge pixels around the subject. Existing project instances retain their stored parameters.
 
 Glow also starts from the iPad-tuned preset: amount 5, threshold 0.7935, radius 1, softness 0.496, 6.85 rings, and 17.95 samples per ring. Existing Glow instances likewise retain their stored parameters.
