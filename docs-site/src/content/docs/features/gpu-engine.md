@@ -2,13 +2,13 @@
 title: "GPU Engine"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 WebGPU rendering, texture management, preview output, export capture, and GPU-backed analysis.
 
 > **Linux/Mesa:** GPU-accelerated canvas, worker `OffscreenCanvas`, and WebGPU
 > paths fail silently on open-source Mesa drivers. Before changing any
-> canvas/GPU code, read [Linux / Mesa GPU](/features/linux-mesa-gpu/).
+> canvas/GPU code, read [Linux / Mesa GPU](/docs/features/linux-mesa-gpu/).
 
 ---
 

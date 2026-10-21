@@ -2,7 +2,7 @@
 title: "Media Downloads"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 Paste and queue online media downloads through Discover or the Media panel, Native Helper, and `yt-dlp`.
 
@@ -180,6 +180,6 @@ For Native Helper-backed project persistence, completed downloads are fetched fr
 
 ## Related Features
 
-- [Media Panel](/features/media-panel/)
-- [Project Persistence](/features/project-persistence/)
-- [Native Helper](/features/native-helper/)
+- [Media Panel](/docs/features/media-panel/)
+- [Project Persistence](/docs/features/project-persistence/)
+- [Native Helper](/docs/features/native-helper/)

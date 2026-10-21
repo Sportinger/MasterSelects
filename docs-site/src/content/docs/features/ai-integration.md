@@ -2,7 +2,7 @@
 title: "AI Integration"
 ---
 
-[← Back to Index](/features/readme/)
+[← Back to Index](/docs/getting-started/overview/)
 
 Model-powered editing through the private hosted-agent kernel and shared public editor tool catalog, plus multi-provider AI video/image/audio generation, local scene description, transcription, browser-local SAM 2 segmentation, native-helper MatAnyone2 matting, and local MuScriptor music-to-MIDI.
 
@@ -35,7 +35,7 @@ Model-powered editing through the private hosted-agent kernel and shared public 
 > default. The
 > browser retains atomic tool validation, policy, confirmation, transactions,
 > undo, and execution.
-> See [Kernel Client](/features/kernel-client/) for routes and lifecycles.
+> See [Kernel Client](/docs/features/kernel-client/) for routes and lifecycles.
 
 ### Location
 - Floating FlashBoard composer chat mode
@@ -363,7 +363,7 @@ Timeline audio and video clips with audible audio expose **Music to MIDI...** ne
 
 MuScriptor is not a stem separator: it emits editable note timing, pitch, and instrument classes. The runtime and model cache are isolated from MatAnyone2. Published model weights are gated under CC BY-NC 4.0, so setup presents the license requirement and uses a transient user-supplied HuggingFace token only for the selected model download.
 
-See [MuScriptor Music-to-MIDI](/features/muscriptor/) for the complete runtime, mapping, license, and troubleshooting details.
+See [MuScriptor Music-to-MIDI](/docs/features/muscriptor/) for the complete runtime, mapping, license, and troubleshooting details.
 
 ---
 
@@ -457,7 +457,7 @@ copied into every project-context snapshot.
   surface; it is not yet part of the kernel's digest-pinned Fast V2 catalog
   (`KERNEL_PIN_PENDING_EDITOR_TOOL_NAMES`), which needs a lockstep kernel pin
   update, and it does not take one of the 128 provider slots of the FlashBoard
-  chat path. Details: [Media Panel](/features/media-panel/#duplicating-compositions).
+  chat path. Details: [Media Panel](/docs/features/media-panel/#duplicating-compositions).
 - `getMediaItems` lists the whole media panel, subfolders included, with each
   file's `folderPath` and per-type `fileCounts`; `folderId` narrows it to one
   subtree, `recursive: false` restores the one-folder listing, and
@@ -531,7 +531,7 @@ All mutating tools run inside the standard AI history batch (one undo step).
   `includeText` redaction and explicit external-data consent. Marker kind,
   timing, confidence, and counts remain available without text.
 
-See [Audio Intelligence](/features/audio-intelligence/) for artifacts, UI lanes,
+See [Audio Intelligence](/docs/features/audio-intelligence/) for artifacts, UI lanes,
 kernel evidence, and editing behavior.
 
 ---
@@ -601,7 +601,7 @@ Hosted `/api/ai/chat`, `/api/ai/video`, and hosted generation paths in `/api/ai/
 
 The preflight checks the request text and, separately, every attached image: captured frames and chat images (data URLs or base64 sources), plus start/end images, image inputs, and image references of generation requests (data or http URLs). Each image is classified in its own request, up to the newest 12 unique images per call. An image blocks the request when it is flagged `sexual`, `sexual/minors`, or `violence/graphic` (reported as `image:<category>`); other image flags such as non-graphic violence do not block. A failed image check blocks like a failed text check. Verdicts for inline image data are remembered per worker isolate by SHA-256 for one hour (up to 500 entries), so frames resent with a chat history are not classified again; failed checks and http-URL images are never cached. Video and audio references are not classified, and base64 bytes never enter the moderation text. This is a classifier, not a hash match against known-illegal material.
 
-Requests relayed to the private kernel through `/api/kernel/*` are checked at the Cloudflare edge before they are forwarded: the hosted-agent (Normal Path) turn start moderates the request text (non-graphic `violence` is allowed for editing requests) and inline `data-url` visual references, every `timeline.visual.capture-grid.v1` frame grid in an operation result is classified before the result reaches the kernel, and Seedance preproduction uploads are checked by classifying every contact sheet plus every fourth source frame. Blocked requests return `content_policy_violation` (HTTP 400), unavailable checks return `moderation_unavailable` (HTTP 503), and both are recorded in `ai_audit_events` without image bytes. Visual references sent as `authenticated-ref` are not classified at the edge. Direct Codex chats (`/api/direct-codex/ws`) are checked in the kernel relay: turn text as described in [Kernel Client](/features/kernel-client/), and every inline image in a client message (attached references and tool-result frames) with the same image categories. A blocked or unchecked reference rejects the turn; a blocked or unchecked tool-result frame is replaced by a text notice so the tool call still completes without the image.
+Requests relayed to the private kernel through `/api/kernel/*` are checked at the Cloudflare edge before they are forwarded: the hosted-agent (Normal Path) turn start moderates the request text (non-graphic `violence` is allowed for editing requests) and inline `data-url` visual references, every `timeline.visual.capture-grid.v1` frame grid in an operation result is classified before the result reaches the kernel, and Seedance preproduction uploads are checked by classifying every contact sheet plus every fourth source frame. Blocked requests return `content_policy_violation` (HTTP 400), unavailable checks return `moderation_unavailable` (HTTP 503), and both are recorded in `ai_audit_events` without image bytes. Visual references sent as `authenticated-ref` are not classified at the edge. Direct Codex chats (`/api/direct-codex/ws`) are checked in the kernel relay: turn text as described in [Kernel Client](/docs/features/kernel-client/), and every inline image in a client message (attached references and tool-result frames) with the same image categories. A blocked or unchecked reference rejects the turn; a blocked or unchecked tool-result frame is replaced by a text notice so the tool call still completes without the image.
 
 Async hosted media jobs that fail during provider status processing refund their original hosted credit charge once, update the failed usage event to zero credits, refresh the account balance, and show the user a failure dialog with the refunded credit amount and job ID.
 
@@ -740,7 +740,7 @@ The optional YouTube key is stored encrypted in IndexedDB via Web Crypto API. AI
 - Log output is redacted before buffering and before being exposed via the AI tool bridge
 - Development agent-control calls are loopback-only and tokened; the Native Helper does not forward editor tools
 
-See [Security](/features/security/) for the full security model.
+See [Security](/docs/features/security/) for the full security model.
 
 ---
 
@@ -768,10 +768,10 @@ See [Security](/features/security/) for the full security model.
 
 ## Related Features
 
-- [Timeline](/features/timeline/) - Editing interface
-- [Audio](/features/audio/) - Manual Timeline audio sync
-- [Media Panel](/features/media-panel/) - Organization
-- [Keyboard Shortcuts](/features/keyboard-shortcuts/)
+- [Timeline](/docs/features/timeline/) - Editing interface
+- [Audio](/docs/features/audio/) - Manual Timeline audio sync
+- [Media Panel](/docs/features/media-panel/) - Organization
+- [Keyboard Shortcuts](/docs/features/keyboard-shortcuts/)
 
 ---
 

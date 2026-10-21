@@ -2,14 +2,14 @@
 title: "FlashBoard"
 ---
 
-FlashBoard is the AI generation runtime shared by the Media Panel's bottom-right prompt tray and the dockable [AI Studio](/features/ai-studio/). Its compact composer supports text-to-video, image-to-video, image generation, ElevenLabs text-to-speech, and Suno music generation, with direct import into the Media Pool. Projects persist the last selected model plus per-model generation settings. Prompt refinement treats START and END frame references as supplied video anchors and focuses on the motion between them instead of redescribing the images.
+FlashBoard is the AI generation runtime shared by the Media Panel's bottom-right prompt tray and the dockable [AI Studio](/docs/features/ai-studio/). Its compact composer supports text-to-video, image-to-video, image generation, ElevenLabs text-to-speech, and Suno music generation, with direct import into the Media Pool. Projects persist the last selected model plus per-model generation settings. Prompt refinement treats START and END frame references as supplied video anchors and focuses on the motion between them instead of redescribing the images.
 
 ## What It Does
 
 FlashBoard is not a separate model backend. It is a composer/runtime layer on top of the existing AI services:
 
 - `cloud` for hosted Kie.ai video/image generation, Suno, ElevenLabs, account billing, and authenticated API relays
-- compact editor chat through the resumable Direct relay with three models on the same workflow: Fast (DeepSeek V4.1 Flash), Medium (GPT-5.6 Terra, medium reasoning, priority tier) and Slow (GPT-5.6 Sol, high reasoning, the default). The public editor still validates and executes only registered atomic tools through its normal policy, confirmation, transaction, and undo boundary. Production chat requires a signed-in session (see [Kernel Client](/features/kernel-client/))
+- compact editor chat through the resumable Direct relay with three models on the same workflow: Fast (DeepSeek V4.1 Flash), Medium (GPT-5.6 Terra, medium reasoning, priority tier) and Slow (GPT-5.6 Sol, high reasoning, the default). The public editor still validates and executes only registered atomic tools through its normal policy, confirmation, transaction, and undo boundary. Production chat requires a signed-in session (see [Kernel Client](/docs/features/kernel-client/))
 
 The Media Panel generator tray offers four collapsed launch actions: `Chat`, `Generate`, `Studio`, and `Downloads`. `Generate` opens the original compact media-generation prompt, while `Studio` opens the separate dock panel for parallel generation workspaces. Chat has exactly two product paths: `Auto` and `Story`. Inside Auto, the `Model` menu exposes only `Fast`, `Medium` and `Slow`. All three connect to the isolated Codex app-server through authenticated same-origin relays and differ only in model; Slow is the default. Logic is no longer exposed or requested by the product UI, and stale persisted Logic selections resolve to Direct.
 

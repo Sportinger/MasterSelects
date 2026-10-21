@@ -2,7 +2,7 @@
 title: "Memory Leak"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 `Memory Leak` is a `generate` effect that shows a block of real memory as if
 it were pixel data, in the spirit of the After Effects plug-in of the same
@@ -96,5 +96,5 @@ controls are shown.
 
 ## Related Docs
 
-- [Effects](/features/effects/)
-- [Export](/features/export/)
+- [Effects](/docs/features/effects/)
+- [Export](/docs/features/export/)

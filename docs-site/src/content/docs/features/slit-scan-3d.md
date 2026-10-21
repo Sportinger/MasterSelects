@@ -147,7 +147,7 @@ are reported; export rejects missing observations instead of substituting a mesh
 
 ## Scene and export
 
-The **3D geometry** switch appears at the top of the Slit Scan inspector.
+The **3D geometry** switch appears below the Preview quality section of the Slit Scan inspector.
 Bypassing restores both the 2D representation and the clip's 2D layer mode,
 including clips that were already 3D before the effect was enabled. It remembers the selected 3D mode
 and its settings. Pending geometry analysis stops after its submitted GPU pair;

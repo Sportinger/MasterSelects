@@ -66,7 +66,7 @@ Cubase Ruler Tracks; Ardour "Representing Time"; Pro Tools tempo maps.
   reader popover, arrow keys nudge the focused bar or handle by one frame
   (Shift: ten). The ruler context menu adds **Add annotation**, and on a bar
   **Link to clip** / **Detach from clip**. The **Annotation Bars** entry in the
-  timeline view menu hides them. See [Annotations](/features/annotations/).
+  timeline view menu hides them. See [Annotations](/docs/features/annotations/).
 - `src/components/timeline/utils/timelineGrid.ts` keeps the legacy zoom-driven
   `createTimelineGridPlan()` for the non-musical body grid, while fixed-format
   lane tick generators are separate. `src/timeline/tempo/barsGrid.ts` supplies

@@ -2,7 +2,7 @@
 title: "Media Runtime"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 Shared source/runtime registry for video, audio, and image playback state across timeline clips, preview sessions, and slot/background layers.
 
@@ -116,7 +116,7 @@ The media-runtime domain also owns object-URL, media-element, and scrub-audio le
 
 ## Related Features
 
-- [Preview](/features/preview/)
-- [GPU Engine](/features/gpu-engine/)
-- [Slot Grid](/features/slot-grid/)
-- [Playback Debugging](/features/playback-debugging/)
+- [Preview](/docs/features/preview/)
+- [GPU Engine](/docs/features/gpu-engine/)
+- [Slot Grid](/docs/features/slot-grid/)
+- [Playback Debugging](/docs/features/playback-debugging/)

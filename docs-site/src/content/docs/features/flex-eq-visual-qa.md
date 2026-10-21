@@ -2,7 +2,7 @@
 title: "Flex EQ Visual QA"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 The deterministic QA route for the flexible equalizer is available in the dev server at:
 
@@ -16,7 +16,7 @@ The route owns its fixture parameters locally and does not read project state. I
 
 ## Documentation Image
 
-![Flex EQ visual QA grid](/docs/assets/flex-eq/flex-eq-visual-qa.png)
+<a class="docs-shot-zoom" href="/docs/assets/flex-eq/flex-eq-visual-qa.png" title="Open the full-size picture"><img src="/docs/assets/flex-eq/flex-eq-visual-qa.png" alt="Flex EQ visual QA grid" width="1280" height="1320" decoding="async"></a>
 
 The screenshot source is `docs/Features/assets/docs-screenshot-manifest.json`.
 Run the dev server first, then regenerate it with:

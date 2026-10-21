@@ -2,7 +2,7 @@
 title: "Keyboard Shortcuts"
 ---
 
-[<- Back to Index](/features/readme/)
+[<- Back to Index](/docs/getting-started/overview/)
 
 Current shortcut bindings are routed through `shortcutRegistry`, so presets and per-action overrides update live from Settings.
 
@@ -114,7 +114,7 @@ On Mac, `Ctrl` maps to `Cmd` and `Alt` maps to `Option`.
 
 ### Tools
 
-Tool keys act on the surface clicked last, the Preview canvas or the Timeline (see [UI Panels](/features/ui-panels/#tools-panel)):
+Tool keys act on the surface clicked last, the Preview canvas or the Timeline (see [UI Panels](/docs/features/ui-panels/#tools-panel)):
 
 - `V` selects Move on the canvas, or the Select tool in the Timeline.
 - `H` selects the Hand tool and `Z` the Zoom tool of the target surface (new default bindings).
@@ -191,7 +191,7 @@ Preferences -> General -> Input Display can show recent key presses, mouse click
 
 ## Related Docs
 
-- [Timeline](/features/timeline/)
-- [Keyframes](/features/keyframes/)
-- [Preview](/features/preview/)
-- [Effects](/features/effects/)
+- [Timeline](/docs/features/timeline/)
+- [Keyframes](/docs/features/keyframes/)
+- [Preview](/docs/features/preview/)
+- [Effects](/docs/features/effects/)

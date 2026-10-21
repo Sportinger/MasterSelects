@@ -2,7 +2,7 @@
 title: "Media Panel"
 ---
 
-[← Back to Index](/features/readme/)
+[← Back to Index](/docs/getting-started/overview/)
 
 Import, organize, and manage media assets with folder structure, proxy generation, and three view modes.
 
@@ -49,7 +49,7 @@ unchanged and are retained for project save/relink; reopening develops the RAW
 again. Decoding is serialized and its runtime PNG cache is limited to 128 MiB.
 This is a fixed RAW development, without interactive RAW exposure/white-balance
 controls or a 16-bit RAW grading pipeline. Other camera RAW extensions are not
-yet advertised. See [Lens Correction](/features/effects/#lens-correction) for the Canon
+yet advertised. See [Lens Correction](/docs/features/effects/#lens-correction) for the Canon
 EF 24–105 mm profile dropdown and manual
 optical corrections.
 
@@ -101,7 +101,7 @@ Click the **+ Add** button for creating new items:
 - Drop outside the Timeline to import into Media and reveal the Media Panel. Drops inside the Media Panel preserve folder and Board placement.
 - Drop on the Timeline to place clips there using its existing track/position preview. Internal clip and media drags keep their usual behavior.
 - Paste clipboard images or files with `Ctrl+V` while the Media Panel is hovered
-- Paste a copied video link (YouTube and other `yt-dlp` sites) with `Ctrl+V` to open the in-panel download dialog with thumbnail and resolution choices ([Media Downloads](/features/download-panel/#url-paste))
+- Paste a copied video link (YouTube and other `yt-dlp` sites) with `Ctrl+V` to open the in-panel download dialog with thumbnail and resolution choices ([Media Downloads](/docs/features/download-panel/#url-paste))
 - Drag folders directly into the panel; nested folders are recreated inside the project
 - Multiple files supported
 - Attempts to acquire file handles via `getAsFileSystemHandle` for persistence
@@ -170,7 +170,7 @@ When supported (Chrome/Edge):
 - Placed in auto-created "Text" folder
 - Drag to timeline to create text clips
 - **Note:** These are defaults for Media Panel text items (Arial, 48px). Timeline text clips use Arial, 72px (from `DEFAULT_TEXT_PROPERTIES` in `stores/timeline/constants.ts`).
-- See [Text Clips](/features/text-clips/) for full details
+- See [Text Clips](/docs/features/text-clips/) for full details
 
 ---
 
@@ -227,7 +227,7 @@ Image and video-capable media items show a cursor-following preview tooltip only
 ### AI Generator Tray
 - A compact four-action launcher is available at the bottom right of the Media Panel without changing the current Classic, Icons, or Board view: **Chat**, **Generate**, **Studio**, and **Downloads**
 - Expanding the pill opens only the compact FlashBoard prompt composer: prompt field, model controls, ordered reference media cards, multi-shot controls, and the generate button
-- **Studio** opens the additional docked [AI Studio](/features/ai-studio/); it does not replace or change the compact **Generate** flow
+- **Studio** opens the additional docked [AI Studio](/docs/features/ai-studio/); it does not replace or change the compact **Generate** flow
 - Chat mode has exactly two prompt paths, `Auto` and `Story`. Auto defaults to resumable `Codex Direct` in development and production, with `Fast` (the same Direct workflow on DeepSeek V4.1 Flash) as the other visible model choice; Story uses the same Chat button to start or reopen the docked preproduction workflow
 - The Story run is not duplicated inside Media: Media retains the single prompt input and chat history, while direction, treatment, sources, master looks, keyframes, progress, and review stay in Story
 - Image, video, and audio files can be referenced from Classic, Icons, or Board view by right-clicking and choosing **Reference in AI Prompt**; the same menu changes to **Unreference from AI Prompt** when all selected media are already linked
@@ -373,7 +373,7 @@ Duplicate (context menu or `Ctrl+D`), copy/paste, and the AI tool
 - Changes in nested comp reflect in parent timeline
 
 ### Source Monitor
-- H.265/HEVC MP4/MOV files use the shared adaptive decoder for import thumbnails, hover playback and the source monitor. See [HEVC decoding](/features/hevc-decoding/).
+- H.265/HEVC MP4/MOV files use the shared adaptive decoder for import thumbnails, hover playback and the source monitor. See [HEVC decoding](/docs/features/hevc-decoding/).
 - Double-click a video or image file to open it in the source monitor
 - Double-clicking a completed AI Studio generation tile opens its imported media through the same Source Monitor path.
 - Image source monitor sessions include a `CROP` button. Applying a crop imports a new image beside the source, prefixed as `CROP <original name>`; in Board view the new node is placed beside the original node.
@@ -748,10 +748,10 @@ Run tests: `npx vitest run`
 
 ## Related Features
 
-- [Timeline](/features/timeline/) - Using media in edits
-- [Audio](/features/audio/) - Audio media handling
-- [Project Persistence](/features/project-persistence/) - Saving
-- [Export](/features/export/) - Rendering output
+- [Timeline](/docs/features/timeline/) - Using media in edits
+- [Audio](/docs/features/audio/) - Audio media handling
+- [Project Persistence](/docs/features/project-persistence/) - Saving
+- [Export](/docs/features/export/) - Rendering output
 
 ---
 

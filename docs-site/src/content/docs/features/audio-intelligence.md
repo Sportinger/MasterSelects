@@ -2,7 +2,7 @@
 title: "Audio Intelligence"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 Audio Intelligence turns persisted audio analysis into reusable source-time
 evidence for the Analysis workspace, Agent Timeline, AI tools, and

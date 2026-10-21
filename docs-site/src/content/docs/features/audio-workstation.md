@@ -2,7 +2,7 @@
 title: "Audio Workstation"
 ---
 
-[<- Back to Index](/features/readme/)
+[<- Back to Index](/docs/getting-started/overview/)
 
 The Advanced Audio Workstation turns audio from a clip-side utility into a project-wide signal system. The main editing surface remains the timeline: detailed waveform, spectral, region, image-in-spectrum, and repair operations happen in expanded audio lanes and Audio Focus mode. Docked panels support inspection and bus work, but they do not replace timeline editing.
 

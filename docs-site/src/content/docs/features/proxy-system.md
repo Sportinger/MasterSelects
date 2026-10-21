@@ -2,7 +2,7 @@
 title: "Proxy System"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 JPEG image proxy generation and playback for smoother scrubbing of large video files.
 

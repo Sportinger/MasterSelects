@@ -119,7 +119,7 @@ Explicit unknown or stale session IDs fail instead of silently targeting another
 
 ### Editor streams
 
-`POST /api/ai-tools` with `runEditorStream { text }` runs `ms-scene-v1` and `ms-nodegraph-v1` blocks in one call: validated first, then executed in order as one undo step (see [Scene Streams](/features/scene-streams/)). `{ scene }` re-runs a stored scene and `dryRun` only validates. Bridge calls arrive complete, so this is block execution, not token streaming; live record-by-record execution happens in FlashBoard Codex Direct.
+`POST /api/ai-tools` with `runEditorStream { text }` runs `ms-scene-v1` and `ms-nodegraph-v1` blocks in one call: validated first, then executed in order as one undo step (see [Scene Streams](/docs/features/scene-streams/)). `{ scene }` re-runs a stored scene and `dryRun` only validates. Bridge calls arrive complete, so this is block execution, not token streaming; live record-by-record execution happens in FlashBoard Codex Direct.
 
 ## FlashBoard Chat Runs
 

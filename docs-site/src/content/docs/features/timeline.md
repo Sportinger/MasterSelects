@@ -2,7 +2,7 @@
 title: "Timeline"
 ---
 
-[<- Back to Index](/features/readme/)
+[<- Back to Index](/docs/getting-started/overview/)
 
 The Timeline is the core editing interface for multi-track editing. It now covers video, audio, image, Lottie, Rive, text, solid, motion shape, mesh, composition, camera, and splat-effector clips, with keyframe lanes, transitions, multicam grouping, pick-whip parenting, and slot-grid playback.
 
@@ -302,7 +302,7 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 ### Keyframe Selection
 - Select keyframes by clicking the diamond.
 - `Delete` removes selected keyframes before it removes clips.
-- See [Keyframes](/features/keyframes/) for curve and property details.
+- See [Keyframes](/docs/features/keyframes/) for curve and property details.
 
 ---
 
@@ -337,16 +337,17 @@ Timeline snapping starts disabled unless a previous choice was saved. Hold `Shif
 - Vector animation clips inside nested comps render through the same canvas path used in the primary timeline and export flow.
 
 ### Transitions
+User guide with pictures: [Dissolve Transitions](/docs/features/transitions-dissolve/).
 - Transitions operate between adjacent clips on the same track.
 - The first-pass suite includes Crossfade, Dip to Black, Dip to White, Wipe Left, and Wipe Right.
 - Dragging a transition from the Transitions panel targets a clip junction. Hover preview shows the transition body, real source-handle coverage, and red hold-frame fallback coverage when the requested duration extends past available source material.
 - The default placement is virtual `center`: the transition body is centered on the cut without moving either clip. Preview and export sample the incoming left handle before the clip start and the outgoing right handle after the clip end; when either side lacks real source material, the nearest first/last frame is held and shown as red fallback coverage.
 - Existing transition bodies render on the timeline, can be selected, moved left/right by dragging the body, resized by dragging either edge, and expose duration plus handle/hold details in the transition-scoped Properties tab. Move snaps to the centered cut position and to available source-handle edges; resize snaps to the same source edges. Move and resize previews show the same source-handle and red hold-frame feedback. Transition durations are not capped by clip length; missing material is represented with hold-frame fallback.
 - Preview and export share the same transition planner and layer assembly. Wipe transitions use compositor transition metadata rather than clip effects.
-- Double-clicking a transition body opens its linked transition composition. Mapped-v3 has exactly one full-duration outgoing source clip and one incoming source clip; panels and generated layers may remain additional editable layers. Legacy segmented compositions prompt for an explicit upgrade and are otherwise opened unchanged. See [Transition Compositions](/features/transition-compositions/) for mapped timing, template versions, parity, and the backup lifecycle.
+- Double-clicking a transition body opens its linked transition composition. Mapped-v3 has exactly one full-duration outgoing source clip and one incoming source clip; panels and generated layers may remain additional editable layers. Legacy segmented compositions prompt for an explicit upgrade and are otherwise opened unchanged. See [Transition Compositions](/docs/features/transition-compositions/) for mapped timing, template versions, parity, and the backup lifecycle.
 
 ### Multicam
-- Sync via Audio is available for selected audio/video pairs. Hour-long recorder stems and large camera files are read streamed (see [Audio](/features/audio/#multicam-and-analysis)), and the AI chat can run the same sync and multicam build through `syncClipsViaAudio`, `getAudioSyncStatus` and `setMulticamMode`.
+- Sync via Audio is available for selected audio/video pairs. Hour-long recorder stems and large camera files are read streamed (see [Audio](/docs/features/audio/#multicam-and-analysis)), and the AI chat can run the same sync and multicam build through `syncClipsViaAudio`, `getAudioSyncStatus` and `setMulticamMode`.
 - Linked group movement preserves offsets so sync timing stays intact.
 - Multicam cut mode (the **Multicam** toggle in the Multi Preview) treats every video track with plain camera clips (speed 1, not reversed) as one camera angle, top track = key 1. The first activation rebuilds the program: at every moment only the topmost camera with material keeps a clip, the other camera tracks are cut out, and all clips of the composition, including the synchronized audio, join one linked group. The camera sources are stored on the composition, so a cut-out range can be refilled from the original material later.
 - With cut mode on, keys `1`-`4` switch cameras. During playback a key cuts at the playhead; the new camera runs until the next existing cut. While paused a key switches the whole segment under the playhead and keeps its boundaries. A camera fills only the part of the range where it has material, and pressing the key of the camera already on air does nothing. Every switch is one undo step.
@@ -420,7 +421,7 @@ The toolbar and wheel gestures drive playback and navigation:
 - Markers can be turned into `Stop Marker`s that automatically pause playback when crossed.
 - Marker MIDI bindings support `Jump To Marker`, `Play From Marker`, and `Jump To Marker And Stop`.
 - Left/Right arrows step frame by frame.
-- The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted). See [Timeline Rulers](/features/timeline-rulers/).
+- The ruler is a stack of independent **ruler lanes** (Time / Timecode / Frames / Bars+Beats) toggled from the **Rulers** checklist next to the View dropdown; each lane keeps a fixed format and only its tick density adapts to zoom (no frame↔time crossfade). Bars+Beats is projected through a per-composition TempoMap. Clicking a lane marks it active (highlighted). See [Timeline Rulers](/docs/features/timeline-rulers/).
 - The timeline **body** lane grid (behind clips, distinct from the ruler) still uses the active composition frame rate at deep zoom: the base time grid crossfades out while frame-accurate grid lines fade in with zoom.
 - Unselected clips keep persistent white edge brackets: each vertical edge has short top and bottom caps that fade inward, so adjacent clips form a visible `][` cut marker without obscuring thumbnails or waveforms. Selected clips retain the complete white outline.
 - `Alt+Scroll` or `Ctrl+Scroll` zooms the timeline around the mouse pointer by default; Preferences -> General -> Timeline can switch the zoom anchor to the playhead. While zooming in near either lane edge, a magnetic 48 px edge zone preserves the corresponding visible time boundary so the nearby beginning or end is not pushed offscreen. Timeline zoom remains contained behind the dedicated navigator instead of exposing a second native panel scrollbar. Faster wheel gestures use larger zoom steps.
@@ -517,11 +518,11 @@ The main hooks are `useClipDrag`, `useClipTrim`, `useClipFade`, `useTimelineKeyb
 
 ## Related Docs
 
-- [Keyframes](/features/keyframes/)
-- [Keyboard Shortcuts](/features/keyboard-shortcuts/)
-- [Slot Grid](/features/slot-grid/)
-- [Preview](/features/preview/)
-- [Audio](/features/audio/)
+- [Keyframes](/docs/features/keyframes/)
+- [Keyboard Shortcuts](/docs/features/keyboard-shortcuts/)
+- [Slot Grid](/docs/features/slot-grid/)
+- [Preview](/docs/features/preview/)
+- [Audio](/docs/features/audio/)
 
 Linked clip selections use a shared outline that follows the outer contour of the selected clip surfaces, including staggered edges and gaps. Individual selections retain their normal clip outline. Video and audio sections draw their respective portions independently.
 

@@ -54,7 +54,7 @@ The existing FlashBoard provider and billing boundary is unchanged: hosted jobs 
 
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 
 ## GPT Image 2.5

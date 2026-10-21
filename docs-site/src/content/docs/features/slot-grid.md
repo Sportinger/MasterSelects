@@ -2,7 +2,7 @@
 title: "Slot Grid"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 12x4 live grid overlay for composition triggering, per-composition slot-playback trim settings, and multi-layer background playback.
 
@@ -115,7 +115,7 @@ Warm decks let a prepared slot be adopted onto a live layer with less activation
 
 ## Related Features
 
-- [Timeline](/features/timeline/)
-- [UI Panels](/features/ui-panels/)
-- [Preview](/features/preview/)
-- [Media Runtime](/features/media-runtime/)
+- [Timeline](/docs/features/timeline/)
+- [UI Panels](/docs/features/ui-panels/)
+- [Preview](/docs/features/preview/)
+- [Media Runtime](/docs/features/media-runtime/)

@@ -2,7 +2,7 @@
 title: "Android App"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 The Android project packages the full built editor inside Android WebView. Local
 editing starts without internet, including the bundled FFmpeg WASM tier. Cloud AI,

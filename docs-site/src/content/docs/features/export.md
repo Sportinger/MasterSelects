@@ -2,7 +2,7 @@
 title: "Export"
 ---
 
-[Back to Index](/features/readme/)
+[Back to Index](/docs/getting-started/overview/)
 
 Video export, animated GIF export, image export, audio-only export, transparent stacked-alpha export, FFmpeg WASM intermediates, named export presets, batch source export, and FCPXML interchange.
 
@@ -72,7 +72,7 @@ per pixel, an adaptive threshold (pixels stop once their error is below it, afte
 samples), a time limit per frame and OIDN denoising. Path traced frames render
 bit-identically across exports. The progress shows a second level for the current
 frame: samples → denoise → encode, with the remaining time. See
-[Path Tracing](/features/path-tracing/). Export samples wait for pending geometry before
+[Path Tracing](/docs/features/path-tracing/). Export samples wait for pending geometry before
 accumulating, including motion-blur time slices, so placeholder frames are never
 counted as completed samples. Diagnostics include the render quality and render time.
 
@@ -466,5 +466,5 @@ adds a GPU-to-CPU copy.
 Export diagnostics retain the latest runner phase and ten-percent progress bucket
 under an ephemeral operation ID. The Cancel button and a runner returning no
 output are separate observed signals. Tab visibility/pagehide records remain
-nonterminal observations. See [Product analytics](/features/product-analytics/#operation-traces-and-observed-interruptions)
+nonterminal observations. See [Product analytics](/docs/features/product-analytics/#operation-traces-and-observed-interruptions)
 for privacy, delivery limits, and interpretation of incomplete runs.

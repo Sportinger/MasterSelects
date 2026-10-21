@@ -4,12 +4,12 @@ title: "Untitled"
 
 ﻿# Project Persistence
 
-[Back to feature index](/features/readme/)
+[Back to feature index](/docs/getting-started/overview/)
 
 Projects use a repository with continuous saving and durable, branching history.
 A repository can live in a selected filesystem folder, browser storage (OPFS),
 or a folder accessed through the Native Helper. See [Project Repository and
-Durable History](/features/project-repository/) for its format and transaction model.
+Durable History](/docs/features/project-repository/) for its format and transaction model.
 
 ## Choose and open a project
 
@@ -282,7 +282,7 @@ projects as well as cached handles.
 ## Implementation and verification
 
 The public repository format and module boundaries are documented in
-[Project Repository and Durable History](/features/project-repository/). Existing
+[Project Repository and Durable History](/docs/features/project-repository/). Existing
 media, audio, document and timeline codecs are shared with the editor's runtime
 restore paths. Provider orchestration remains in the separate private kernel.
 
@@ -290,5 +290,5 @@ Repository changes are verified with explicitly named regression tests, the
 final application build, relevant Native Helper checks and live editor flows.
 The full Vitest suite is not part of the shared-workspace verification command.
 
-Related features: [Media Panel](/features/media-panel/), [Timeline](/features/timeline/),
-[Audio](/features/audio/), [UI Panels](/features/ui-panels/).
+Related features: [Media Panel](/docs/features/media-panel/), [Timeline](/docs/features/timeline/),
+[Audio](/docs/features/audio/), [UI Panels](/docs/features/ui-panels/).

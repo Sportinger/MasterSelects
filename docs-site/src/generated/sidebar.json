@@ -105,6 +105,10 @@
         "slug": "features/effects-stylize"
       },
       {
+        "label": "Analog Effects",
+        "slug": "features/effects-analog"
+      },
+      {
         "label": "Color Correction",
         "slug": "features/color-correction"
       },

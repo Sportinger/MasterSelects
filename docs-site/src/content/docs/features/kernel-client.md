@@ -142,7 +142,7 @@ placement, entrance, exit, and temporal-review intent, then compiles one bound
 editor plan: hook preflight, native hook commit, and six-frame review capture.
 The public editor receives only the allowed operations and creates text,
 Motion backplates, and keyframes through its normal transaction and undo
-boundary. See [Editable Motion Graphics](/features/editable-motion-graphics/).
+boundary. See [Editable Motion Graphics](/docs/features/editable-motion-graphics/).
 
 The current hook preview operation is a revision-bound preflight. A truthful
 shadow-rendered, digest-bound pre-commit preview remains future work; the
