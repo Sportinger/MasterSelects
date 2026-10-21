@@ -6,6 +6,8 @@ import { createDefaultFilmPrismGraph } from '../../src/services/operators/filmPr
 import { getDefaultParams, getEffect } from '../../src/effects';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { createImagePassEvaluator, discreteImage, type Pixel } from '../helpers/imageGraphPasses';
+import { recognizeOperatorCompositions } from '../../src/services/operators/recognizeOperatorCompositions';
+import { organizeEffectFamilyGraph } from '../../src/services/operators/effectFamilyPresentation';
 
 type Params = Record<string, number | string | boolean>;
 const recipes: Record<string, () => EffectOperatorGraph> = {
@@ -187,4 +189,21 @@ describe('Film Prism recipe', () => {
     expect(first.some((value, i) => Math.abs(value - next[i]) > .01)).toBe(true);
     expect(frame(0, 0)).toEqual(frame(5, 0));
   });
+});
+
+describe('analog recipes open as readable stage folders', () => {
+  const stages: Record<string, string[]> = {
+    'crt-screen': ['Tube Shape & Rim', 'Scanline Beams', 'Phosphor Mask', 'Hum Bar & Flutter', 'Light Out & Alpha'],
+    glitch: ['Burst Clock', 'Torn Rows', 'Block Copies', 'Read Position & RGB Split', 'Channel Reads', 'Channel Swap & Alpha'],
+    'film-prism': ['Fringe Spread & Direction', 'Tap Positions', 'Spectrum Reads & Sum', 'Grain Noise', 'Grain Strength', 'Add Grain & Alpha'],
+  };
+  for (const [type, labels] of Object.entries(stages)) {
+    it(`${type} puts every computation in a stage folder (no folder dropped for a cycle)`, () => {
+      const graph = recipes[type]();
+      const organized = organizeEffectFamilyGraph(graph, recognizeOperatorCompositions(graph), type, recipes[type]);
+      expect(organized.groups!.map(group => group.label)).toEqual(expect.arrayContaining(['Parameters', 'Constants', ...labels]));
+      const grouped = new Set(organized.groups!.flatMap(group => group.nodeIds));
+      expect(organized.nodes.filter(node => !grouped.has(node.id)).map(node => node.id).toSorted()).toEqual(['frame', 'output']);
+    });
+  }
 });

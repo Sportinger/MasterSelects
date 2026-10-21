@@ -67,7 +67,7 @@ export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed:
   const labels = { controls: 'Parameters', constants: 'Constants', sources: 'Coordinates & Resources', ...plan.labels };
   const members = new Map<string, string[]>();
   for (const node of composed.nodes) {
-    if (['image.frame', 'image.output'].includes(node.operator) || node.id === 'split' && type !== 'mirror'
+    if (['image.frame', 'image.output'].includes(node.operator) || node.id === 'split' && type !== 'mirror' && type !== 'glitch'
       || node.id === 'rgba' && type === 'invert') continue;
     let stage: string;
     if (node.operator.startsWith('values.')) stage = literal(node) ? 'constants' : 'controls';

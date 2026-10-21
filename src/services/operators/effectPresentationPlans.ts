@@ -1,4 +1,5 @@
 import type { BoundOperatorNode } from '../../types/operatorGraph';
+import { FILM_PRISM_SPECTRUM } from '../../effects/analog/filmPrismLimits';
 
 export interface EffectPresentationPlan {
   labels: Record<string, string>;
@@ -8,6 +9,8 @@ export interface EffectPresentationPlan {
   portLabels?: Record<string, string>;
 }
 const includes = (list: string, id: string) => list.split(' ').includes(id);
+/** A clamped parameter's output carries the parameter, not "Clamp: Value". */
+const clampLabels = (labels: Record<string, string>) => Object.fromEntries(Object.entries(labels).map(([id, label]) => [`${id}-clamped`, label]));
 export const GLYPH_PRESENTATION_EFFECTS = new Set(['ascii', 'number-field', 'grid-glyph', 'pixel-code', 'word-mosaic',
   'glyph-matrix', 'data-hatch', 'brand-generator', 'stitch-poster', 'dither-text', 'symbol-matrix', 'pixel-dither',
   'retro-matrix', 'capsule-cloud', 'ui-collage', 'matrix', 'ascii-ghost', 'inscribe', 'contour-type']);
@@ -32,12 +35,49 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
     labels: { premultiply: 'Premultiplied Source (cached)', screen: 'Tube Shape & Rim', scan: 'Scanline Beams',
       mask: 'Phosphor Mask', flicker: 'Hum Bar & Flutter', finish: 'Light Out & Alpha' },
     portLabels: { 'screen-uv': 'Tube Position', 'screen-tube': 'Tube Coverage', 'screen-vignette': 'Rim Shade', 'scan-linear': 'Beam Light',
-      'scan-depth': 'Line Depth', 'mask-factor:rgb': 'Mask', 'flicker-gain': 'Flicker Gain' },
-    stage: ({ id }) => /-clamped$/.test(id) ? 'controls' : /^source-/.test(id) ? 'premultiply'
+      'scan-depth': 'Beam Depth', 'mask-factor:rgb': 'Mask', 'flicker-gain': 'Flicker Gain', 'flat-alpha': 'Coverage', 'zero-rgb': 'Black', 'line0-rgb': 'Line Colour', 'line1-rgb': 'Next Line Colour',
+      'scan-d0': 'Distance to Line', 'scan-d1': 'Distance to Next Line', 'scan-w0-weight': 'Beam Weight', 'scan-w1-weight': 'Next Beam Weight',
+      ...clampLabels({ amount: 'Mix', curvature: 'Curvature', 'line-count': 'Line Count', 'scanline-depth': 'Line Depth',
+        'mask-strength': 'Mask Strength', 'mask-size': 'Mask Size', flicker: 'Flicker' }) },
+    // Only the parameter clamps are controls: the beams' own luma clamps belong to Scanline Beams.
+    stage: ({ id }) => /-clamped$/.test(id) && !/^scan-/.test(id) ? 'controls' : /^source-/.test(id) ? 'premultiply'
       : /^(screen-|one-vec2$|half-vec2$)/.test(id) ? 'screen'
         : /^(scan-|flat-|line[01]-|zero-rgb$|gamma-rgb$)/.test(id) ? 'scan'
           : /^mask-/.test(id) ? 'mask' : /^flicker-/.test(id) ? 'flicker'
             : id === 'resolution-split' ? 'sources' : 'finish',
+  };
+  if (type === 'glitch') return {
+    labels: { state: 'Burst Clock', tear: 'Torn Rows', block: 'Block Copies', read: 'Read Position & RGB Split',
+      channels: 'Channel Reads', finish: 'Channel Swap & Alpha' },
+    portLabels: { 'state-tick': 'Glitch State', 'state-seed': 'Seed Key', 'state-level': 'Burst Level', 'tear-shift': 'Tear Shift',
+      'tear-active': 'Row Torn', 'block-offset': 'Block Offset', 'block-active': 'Block Moved', 'block-rotate': 'Swap Channels',
+      'read-uv': 'Read Position', 'state-burst-salt': 'Burst Key', 'state-strength': 'Burst Strength', 'state-burst': 'Glitching', 'split-shift': 'Split Shift', 'red-read-uv': 'Red Read Position', 'blue-read-uv': 'Blue Read Position',
+      'red-alpha': 'Red Alpha', 'green-alpha': 'Green Alpha', 'blue-alpha': 'Blue Alpha',
+      'red-premultiplied': 'Red', 'green-premultiplied': 'Green', 'blue-premultiplied': 'Blue',
+      ...clampLabels({ amount: 'Intensity', density: 'Density', bands: 'Bands', split: 'RGB Split', seed: 'Seed' }) },
+    stage: ({ id }) => /^(amount|density|bands|split|seed)-clamped$/.test(id) ? 'controls'
+      : /^(uv-split|resolution-split)$/.test(id) ? 'sources' : /^state-/.test(id) ? 'state' : /^tear-/.test(id) ? 'tear'
+        : /^block-/.test(id) ? 'block' : /^(read-|split-|red-read-uv$|blue-read-uv$)/.test(id) ? 'read'
+          : /^(red|green|blue)-|^half-vec2$/.test(id) ? 'channels' : 'finish',
+  };
+  if (type === 'film-prism') return {
+    labels: { premultiply: 'Premultiplied Source (cached)', spread: 'Fringe Spread & Direction', positions: 'Tap Positions',
+      spectrum: 'Spectrum Reads & Sum', noise: 'Grain Noise', grain: 'Grain Strength', finish: 'Add Grain & Alpha' },
+    portLabels: { 'source-cache': 'Premultiplied Source', 'fringe-reach': 'Reach', 'fringe-jitter': 'Jitter', 'fringe-direction': 'Direction',
+      'fringe-centred': 'From Centre', 'fringe-is-prism': 'Is Prism', 'grain-noise': 'Grain Noise', 'grain-rgb': 'Grain',
+      'finish-straight': 'Fringed Colour', 'finish-alpha': 'Coverage',
+      ...Object.fromEntries(FILM_PRISM_SPECTRUM.flatMap((_, index) => (['Red', 'Green', 'Blue'] as const)
+        .map(colour => [`fringe-tap${index}-${colour.toLowerCase()}`, `${colour} Share`]))),
+      'grain-midtones': 'Mid-tone Weight', 'grain-amplitude': 'Grain Amount', 'grain-luma': 'Brightness',
+      ...Object.fromEntries(FILM_PRISM_SPECTRUM.map((_, index) => [`fringe-tap${index}-uv`, `Tap ${index + 1} Position`])),
+      ...clampLabels({ amount: 'Fringe', grain: 'Grain', 'grain-size': 'Grain Size' }) },
+    stage: ({ id }) => /^(amount|grain|grain-size)-clamped$/.test(id) ? 'controls'
+      : /^(resolution-split|half-vec2)$/.test(id) ? 'sources' : /^source-/.test(id) ? 'premultiply'
+        : /^fringe-tap\d+-(t|position|reach|scale|lens|lens-offset|shift|prism|prism-offset|uv)$/.test(id) ? 'positions'
+          : /^fringe-(tap|red|green|blue)|^finish-(alpha-rg|alpha|safe-alpha|premultiplied-vector|premultiplied|straight)$/.test(id) ? 'spectrum'
+            : /^fringe-/.test(id) ? 'spread'
+              : /^grain-(luma|midtone|floor|amplitude|strength|scale|offset|rgb)/.test(id) ? 'grain'
+                : /^grain-/.test(id) ? 'noise' : 'finish',
   };
   if (type === 'gaussian-blur' || type === 'box-blur') return {
     labels: { premultiply: 'Premultiplied Source (cached)', size: 'Radius & Tap Count', horizontal: 'Horizontal Pass', vertical: 'Vertical Pass', finish: 'Straight Alpha Output' },
