@@ -25,6 +25,8 @@ import {
   openStoredProject,
 } from '../../services/projectSync';
 import { getProjectWriteSupportError, resolveProjectRootMode } from '../../services/project/core/projectRootAccess';
+import { isBrowserStorageFallbackActive } from '../../services/project/core/browserStorageRoot';
+import { orderRecentProjectsForChoice, recentProjectLocation } from '../../services/project/recentProjectLocation';
 import { describeBrowserStorageFailure } from '../../services/project/core/browserStorageFailure';
 import { isExpectedArchiveImportRejection } from '../../services/project/projectBackendAvailability';
 import { resumePendingProject } from '../../services/project/pendingProjectResume';
@@ -78,6 +80,8 @@ export function EditorProjectSelectionOverlay({
   // WebKit has no folder picker, so "open existing" becomes a list of the
   // projects already stored on this device. null means the list is not shown.
   const [storageMode] = useState(resolveProjectRootMode);
+  // Read on every render: the tab picks its browser store (OPFS or the temporary fallback) during startup.
+  const fallbackActive = isBrowserStorageFallbackActive();
   const [storedProjects, setStoredProjects] = useState<string[] | null>(null);
   // The last project only needs its folder access again (browser restart): one click resumes it.
   const [pendingProjectName, setPendingProjectName] = useState(() => (
@@ -443,25 +447,30 @@ export function EditorProjectSelectionOverlay({
                 </span>
                 <IconArrowRight aria-hidden="true" />
               </button>
-              {recentProjects.map((project, index) => (
-                <button
-                  className="editor-project-box"
-                  disabled={busyAction !== null}
-                  key={project.id}
-                  title={project.path || project.name}
-                  type="button"
-                  onClick={() => void handleOpenRecent(project)}
-                >
-                  <span className="editor-project-box-index">
-                    {String(index + 1).padStart(2, '0')}
-                  </span>
-                  <span className="editor-project-box-copy">
-                    <strong>{project.name}</strong>
-                    <small>{busyAction === project.id ? 'Opening…' : formatRecentDate(project.lastOpenedAt)}</small>
-                  </span>
-                  <IconArrowRight aria-hidden="true" />
-                </button>
-              ))}
+              {orderRecentProjectsForChoice(recentProjects, fallbackActive).map((project, index) => {
+                // The same name can exist as a folder project and as a kept temporary copy.
+                const location = recentProjectLocation(project, fallbackActive);
+                return (
+                  <button
+                    className="editor-project-box"
+                    data-location={location}
+                    disabled={busyAction !== null}
+                    key={project.id}
+                    title={`${project.path || project.name} (${location})`}
+                    type="button"
+                    onClick={() => void handleOpenRecent(project)}
+                  >
+                    <span className="editor-project-box-index">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <span className="editor-project-box-copy">
+                      <strong>{project.name}</strong>
+                      <small>{busyAction === project.id ? 'Opening…' : `${location} · ${formatRecentDate(project.lastOpenedAt)}`}</small>
+                    </span>
+                    <IconArrowRight aria-hidden="true" />
+                  </button>
+                );
+              })}
               {recentProjects.length === 0 && (
                 <div className="editor-project-empty">No recent projects</div>
               )}
