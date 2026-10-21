@@ -61,6 +61,18 @@ export const STARTER_LOOKS: LookDefinition[] = [
     fx('scatter-mosaic', { amount: 0.62, scale: 16, speed: 0.65 }),
     fx('posterize', { levels: 7 }),
   ]),
+  look('pal-broadcast', 'PAL Broadcast', 'analog', ['pal', 'tv', 'crt', 'signal'], [
+    fx('analog-signal-lab', { rfNoise: 0.06, impulseNoise: 0.02, ghostLevel: 0.08, syncInstability: 0.06, ycCrosstalk: 0.1,
+      crtAmount: 0.7, scanlines: 0.45, maskStrength: 0.3, bloom: 0.3, curvature: 0.2 }),
+  ]),
+  look('weak-antenna', 'Weak Antenna', 'analog', ['pal', 'tv', 'noise', 'ghost', 'signal'], [
+    fx('analog-signal-lab', { signalStrength: 0.38, rfNoise: 0.55, impulseNoise: 0.2, ghostLevel: 0.4, ghostDelayUs: 3.2,
+      syncInstability: 0.35, colorLock: 0.6 }),
+  ]),
+  look('worn-vhs', 'Worn VHS', 'analog', ['vhs', 'tape', 'tracking', 'retro'], [
+    fx('analog-signal-lab', { rfAmount: 0, vhsAmount: 1, tapeSpeed: 'lp', tracking: 0.3, dropout: 0.15, tapeWear: 0.35,
+      chromaBleed: 0.6, headSwitching: 0.7, crtAmount: 0.2 }),
+  ]),
   look('prism-film', 'Prism Film', 'analog', ['film', 'prism', 'grain'], [
     fx('film-prism', { amount: 0.6, grain: 0.25, speed: 1 }),
     fx('grain', { amount: 0.12 }),

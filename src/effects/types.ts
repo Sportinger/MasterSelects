@@ -163,6 +163,8 @@ export interface ComputeEffectDefinition {
   packUniforms: FullscreenEffectDefinition['packUniforms'];
   workgroupSize?: [number, number];
   computeMode?: 'single' | 'jump-flood' | 'analog-signal';
+  /** Notes for values the renderer clamps, ignores or cannot show (see FullscreenEffectDefinition.paramWarnings). */
+  paramWarnings?: FullscreenEffectDefinition['paramWarnings'];
   requiresContinuousRender?: boolean;
   customControls?: ComponentType<EffectControlProps>;
 }
