@@ -20,10 +20,12 @@ Each page type has a fixed template: [Page templates](#page-templates).
 
 | The page shows | Medium | Made with |
 |---|---|---|
-| An effect whose look is static | original \| effect still (split) | `scripts/effect-lab.mjs --pairs` |
-| An effect that moves or depends on time | a short loop on moving footage, in place of the still | `scripts/doc-clip.mjs` |
+| A filter (it changes the clip's picture) whose look is static | original \| effect still (split) | `scripts/effect-lab.mjs --pairs` |
+| A filter that moves or depends on time | a short loop on moving footage, in place of the still | `scripts/doc-clip.mjs` |
+| A generator (it draws its own picture or 3D structure: Weave, Flocking, Stick Figure) | the effect alone on black: a still, or a loop when it moves | `scripts/effect-lab.mjs`, `scripts/doc-clip.mjs` |
+| The presets of an effect | a strip of small stills, one per preset, labelled with its name | `scripts/effect-lab.mjs --pairs` |
 | How to do something in the editor (add, drag, trim) | a clip with a visible pointer | `scripts/doc-clip.mjs`, `"kind": "operation"` |
-| A part of the editor (inspector, panel) | a still with numbered callouts | `scripts/effect-editor-shot.mjs` |
+| A part of the editor (inspector, panel) | a still with yellow numbered callouts | `scripts/effect-editor-shot.mjs` |
 | A node graph | a graph picture | `scripts/effect-graph-shot.mjs` |
 | Tracks, time, before and after | an inline SVG diagram | by hand ([Diagrams](#pictures-clips-diagrams-and-galleries)) |
 
@@ -33,6 +35,7 @@ Each page type has a fixed template: [Page templates](#page-templates).
 - **Stills** use the shared Effect Lab images in `tests/browser/effect-lab/images/` (`dancer_stage`, `harbor_town`, `neon_rain_street`, `greenscreen_dancer`). Pick the one on which the effect reads best.
 - **Operation clips** are recorded in the real editor: the drawn pointer moves in eased arcs and ripples on every click. They are cropped to the panels that matter. Keep the real mouse off the recording window.
 - **Default settings**, unless the caption names the changed values ("Left: original. Right: Radius 12.").
+- **Yellow callouts.** Every picture of the editor points at what the text talks about with yellow numbered circles and arrows (`scripts/docShotFigure.mjs`, through `effect-editor-shot.mjs` and `effect-graph-shot.mjs`): one number per control or step, at most about five per picture. The caption explains every number.
 - **Alt text** says what the picture shows; the caption names every callout number.
 - **Look at every new picture and clip yourself** (a contact sheet for a batch) before you commit it. A broken or too dark render is not published: name it in `PICTURE_PENDING` (`scripts/effectDocsCatalog.mjs`) instead.
 
@@ -48,6 +51,8 @@ Each page type has a fixed template: [Page templates](#page-templates).
 30 and more turns shapes into light. Animate it from 0 for a focus pull.
 0 to 50 pixels, default 10.
 ```
+
+**Presets.** Every effect comes with presets: three to five named starting points that show the range of what it can do. They belong to the effect itself and are picked in its card, not only shown in the docs; an effect without presets gets some built before its page is written. The page lists every preset under `## Presets`, each with a short paragraph (what it looks like and when to use it) and its still in the preset strip.
 
 **Formatting.**
 
@@ -118,7 +123,7 @@ The `## Documentation Index` of `docs/Features/README.md` is the sidebar. The sy
 Simple at the top, deeper below. Every page ends in a fixed order, the deep parts always last.
 
 - **A. Guide** (`guides/<slug>.md`, ≤ 600 words, 3–6 annotated pictures). One sentence on what the reader will do, then "Try it interactively: **Info → Tutorials → …**" when an in-app tutorial exists. Numbered steps, each with its picture or clip. An "I want to… / Do this" table. It ends with "Go deeper:" links to the reference pages.
-- **B. Effect page** (`effects/<effect-id>.md`). What the effect does, one picture, its key controls in everyday words and a tip; then `## Controls` (one paragraph per control), `## Node setup` and `## Technical details`. The full contract with an example: [Effect pages](#effect-pages).
+- **B. Effect page** (`effects/<effect-id>.md`). What the effect does, one picture, its key controls in everyday words and a tip; then `## Presets`, `## Controls` (one paragraph per control), `## Node setup` and `## Technical details`. The full contract with an example: [Effect pages](#effect-pages).
 - **C. Effect group overview** (`Effects-<Group>.md`). The title is the picker label. One sentence and where to add an effect, then `<!-- docs-gallery: <group-id> -->`, then `## Which one?` (Look → Use), `## The shared idea` (one group graph) and `## Technical details`. The effects themselves are described on their effect pages, not here.
 - **D. Feature reference** (`<Page>.md`). One sentence and a link to its guide, an annotated picture, then `## Options` (one paragraph per control in UI order, with its limits and default, as in the [Style guide](#style-guide)), the formats or other lists the feature needs, `## Limits` in plain words and `## Technical details` (short, or a link to the developer page).
 - **E. Developer page** (Developers group). "For developers and agents. User docs: …", then `## Architecture` (with a diagram), `## Key files` (table), `## Contracts and invariants`, `## Tests` and `## Debugging`.
@@ -161,11 +166,12 @@ Every effect has one page: `docs/Features/effects/<effect-id>.md`, published at 
 3. `Group: [<picker label>](../Effects-<Group>.md) · [How to add an effect](../Effects.md#add-an-effect)`. Without an overview page, link the catalog section: `./index.md#print--halftone`.
 4. One picture with a caption. A static effect gets an original | effect still (`scripts/effect-lab.mjs --pairs`, `"layout": "split"`, saved as `../assets/effects/<id>.webp`); a moving or time-based effect (catalog `moving`) gets a short loop on moving footage (`scripts/doc-clip.mjs`, `../assets/effects/clips/<id>.mp4` with its `.webp` poster). Reuse the existing still or clip; make a new one only when the page would otherwise have none.
 5. `**Use it for:**` two or three uses, then two to four key controls, one line each in everyday words (`- **Radius** – how soft it gets.`; their full paragraphs follow under `## Controls`), then one `**Tip:**`.
-6. `## Controls`: one short paragraph per control, under a `###` for each card section, with its limits and default ([Style guide](#style-guide)). A basic page keeps the generated table until it is written by hand; when you write a page by hand, replace its table (the block with both markers) with paragraphs.
-7. `## Node setup`: a focused graph picture (`scripts/effect-graph-shot.mjs`) only when it teaches something, two or three sentences on its stages and one `**Remix:**` change a reader can follow. Style effects of one engine get two sentences and a link to the engine instead of a graph.
-8. `## Technical details`: compact facts (units, transparency, saved projects, limits) and links: [Effect system](./Effect-System.md) (its *Per-effect notes* hold the implementation notes of single effects), [Node Catalog](./Node-Catalog.md).
+6. `## Presets`: the preset strip and one short paragraph per preset ([Style guide](#style-guide)).
+7. `## Controls`: one short paragraph per control, under a `###` for each card section, with its limits and default ([Style guide](#style-guide)). A basic page keeps the generated table until it is written by hand; when you write a page by hand, replace its table (the block with both markers) with paragraphs.
+8. `## Node setup`: a focused graph picture (`scripts/effect-graph-shot.mjs`) only when it teaches something, two or three sentences on its stages and one `**Remix:**` change a reader can follow. Style effects of one engine get two sentences and a link to the engine instead of a graph.
+9. `## Technical details`: compact facts (units, transparency, saved projects, limits) and links: [Effect system](./Effect-System.md) (its *Per-effect notes* hold the implementation notes of single effects), [Node Catalog](./Node-Catalog.md).
 
-- The headings stay exactly `## Controls`, `## Node setup` and `## Technical details`, so links like `../effects/gaussian-blur.md#node-setup` work on every page. Add `###` inside them freely; add no other `##` above `## Controls`.
+- The headings stay exactly `## Presets`, `## Controls`, `## Node setup` and `## Technical details`, so links like `../effects/gaussian-blur.md#node-setup` work on every page. Add `###` inside them freely; add no other `##` above `## Presets`.
 - Links are relative to `docs/Features/effects/`: `../Effects-Blur.md`, `./box-blur.md`, `../Effect-System.md#editable-blur-kernels`, `../assets/effects/gaussian-blur.webp`.
 - When a group page's effect sections move into effect pages, the overview keeps a gallery: its cards carry the old heading slugs as ids, so `Effects-Blur.md#gaussian-blur` still lands on the Gaussian Blur card. Replace links to the old sections with links to the effect pages.
 
