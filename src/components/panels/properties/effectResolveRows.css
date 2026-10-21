@@ -99,5 +99,6 @@
   }
 
   /* Among Resolve rows, a parameter-source row sizes like its siblings (the panel is their container). */
-  .effect-params--resolve-rows > .parameter-source-control { container-type: normal; }
+  .effect-params--resolve-rows > .parameter-source-control,
+  .effect-sections .parameter-source-control { container-type: normal; }
 }

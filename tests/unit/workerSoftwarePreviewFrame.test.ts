@@ -1717,7 +1717,7 @@ describe('worker software preview frame builder', () => {
           type: 'chroma-key',
           name: 'Chroma Key',
           enabled: true,
-          params: { keyColor: 'green', tolerance: 0.2, softness: 0.1, spillSuppression: 0.5 },
+          params: { keyColor: 'green', clipBlack: 0.25, clipWhite: 0.8, spillSuppression: 0.5, spillMethod: 'max' },
         }],
       })],
       { width: 640, height: 360 },
@@ -1727,15 +1727,34 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
       chromaKeyAdjustments: [{
-        keyColor: 'green',
-        tolerance: 0.2,
-        softness: 0.1,
+        screen: 'green',
+        clipBlack: 0.25,
+        clipWhite: 0.8,
         spillSuppression: 0.5,
+        spillMethod: 'max',
+        view: 'result',
       }],
     });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);
     expect(frame.diagnostics.skippedLayerCount).toBe(0);
     expect(hasWorkerSoftwareBlockingSkips(frame.diagnostics)).toBe(false);
+  });
+
+  it('declines chroma key keyed together with another pixel effect (the CPU order and screen measurement would differ)', async () => {
+    const vignette = { id: 'vignette-a', type: 'vignette', name: 'Vignette', enabled: true, params: { amount: 0.5, size: 0.5, softness: 0.5, roundness: 1 } };
+    const key = { id: 'chroma-key-a', type: 'chroma-key', name: 'Chroma Key', enabled: true, params: { keyColor: 'green' } };
+    for (const effects of [[vignette, key], [key, vignette]]) {
+      const frame = await buildWorkerSoftwarePreviewFrame([solidLayer({ effects } as Parameters<typeof solidLayer>[0])], { width: 640, height: 360 });
+      expect(frame.frame.layers).toHaveLength(0);
+      expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(1);
+    }
+    // With a rebuilt color recipe the layer runs as ordered graph plans instead: each effect sees the one before.
+    const exposure = { id: 'exposure-a', type: 'exposure', name: 'Exposure', enabled: true, params: { exposure: 1, offset: 0, gamma: 1 } };
+    for (const effects of [[exposure, key], [key, exposure]]) {
+      const frame = await buildWorkerSoftwarePreviewFrame([solidLayer({ effects } as Parameters<typeof solidLayer>[0])], { width: 640, height: 360 });
+      expect(frame.frame.layers[0]?.pixelEffects.chromaKeyAdjustments).toBeUndefined();
+      expect(frame.frame.layers[0]?.pixelEffects.imageOperatorPlans).toHaveLength(2);
+    }
   });
 
   it('carries edge detect into worker software pixel effects', async () => {

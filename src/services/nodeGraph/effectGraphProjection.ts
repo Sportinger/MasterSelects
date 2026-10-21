@@ -13,7 +13,7 @@ import { operatorEnabled } from '../operators/effectGraph';
 import { mathNodeSymbol } from './mathNodeSymbol';
 import { compositionGroupInterface } from '../operators/operatorComposition';
 import { operatorGroupBypassRoutes, operatorGroupRenderer } from '../operators/operatorGroupBypass';
-import { effectPresentationPlan } from '../operators/effectPresentationPlans';
+import { effectPortLabels, effectPresentationPlan } from '../operators/effectPresentationPlans';
 
 export const effectGraphId = (clipId: string, effectId: string) => `clip-graph:${clipId}:effect:${effectId}`;
 
@@ -28,7 +28,7 @@ export function buildEffectOperatorGraph(clip: TimelineClip, effect: Effect): No
   }
   const supported = addableEffectOperators(effect.type);
   const parameters = getEffect(effect.type)?.params as Record<string, { label?: string }> | undefined;
-  const { portLabels, inputLabels } = effectPresentationPlan(effect.type) ?? {};
+  const portLabels = effectPortLabels(effect.type), inputLabels = effectPresentationPlan(effect.type)?.inputLabels;
   // A clamp that limits a bound parameter to its render range carries that parameter ("Amount"),
   // so the folder ports it feeds are not called "Clamp: Value".
   const boundParameters = new Map(graph.nodes.filter(n => n.operator.startsWith('values.') && typeof n.bindings.value === 'string')

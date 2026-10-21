@@ -4,12 +4,15 @@ import type { Effect } from '../../types/effects';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { prepareImageEffect } from '../operators/imageEffectRuntimePlan';
-import { effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../operators/effectGraphOwner';
+import { isDefaultChromaKeyGraph } from '../operators/chromaKeyGraphUpgrade';
 import { rendersBuiltInMirrorPixelRecipe } from '../operators/mirrorPixelGraphUpgrade';
 import { COLOR_RECIPE_EFFECT_TYPES } from '../operators/colorEffectGraphs';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
+import { chromaKeyHexColor, chromaKeyNumbers, chromaKeyScreen, chromaKeySpillMethod } from '../../effects/keying/chroma-key/keyerContract';
+import type { ChromaKeyCpuSettings } from '../../effects/keying/chroma-key/keyerCpu';
 import { workerSoftwareUvDistortAdjustment, type WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
 import { workerSoftwareMirrorPixelAdjustment, type WorkerSoftwareMirrorPixelAdjustment } from './workerSoftwareMirrorPixelEffects';
 import { isWorkerSoftwarePointwiseEffect, workerSoftwarePointwiseStep, type WorkerSoftwarePointwiseStep } from './workerSoftwarePointwiseEffects';
@@ -108,12 +111,7 @@ interface MutableWorkerSoftwarePixelEffects {
   thresholdAdjustments?: { level: number }[];
   posterizeAdjustments?: { levels: number }[];
   vignetteAdjustments?: { amount: number; size: number; softness: number; roundness: number }[];
-  chromaKeyAdjustments?: {
-    keyColor: 'green' | 'blue';
-    tolerance: number;
-    softness: number;
-    spillSuppression: number;
-  }[];
+  chromaKeyAdjustments?: ChromaKeyCpuSettings[];
   edgeDetectAdjustments?: { strength: number; invert: boolean }[];
   sharpenAdjustments?: { amount: number; radius: number }[];
   glowAdjustments?: {
@@ -203,7 +201,6 @@ function addPointwiseEffect(pixelEffects: MutableWorkerSoftwarePixelEffects, ste
     case 'threshold': (pixelEffects.thresholdAdjustments ??= []).push(step.adjustment); return '';
     case 'posterize': (pixelEffects.posterizeAdjustments ??= []).push(step.adjustment); return '';
     case 'vignette': (pixelEffects.vignetteAdjustments ??= []).push(step.adjustment); return '';
-    case 'chroma-key': (pixelEffects.chromaKeyAdjustments ??= []).push(step.adjustment); return '';
     case 'scanlines': (pixelEffects.scanlineAdjustments ??= []).push(step.adjustment); return '';
     case 'grain': (pixelEffects.grainAdjustments ??= []).push(step.adjustment); return '';
   }
@@ -257,6 +254,21 @@ function effectFilterPart(
         historyLoop: resolveFeedbackHistoryLoop(effect.params),
       });
       return '';
+    case 'chroma-key': {
+      const numbers = chromaKeyNumbers(effect.params);
+      // The CPU pixel pass has no neighbourhood kernel: decline instead of dropping the edge settings.
+      if (numbers.softness > 0 || numbers.shrink !== 0) return null;
+      (pixelEffects.chromaKeyAdjustments ??= []).push({
+        screen: chromaKeyScreen(effect.params.keyColor),
+        screenColor: chromaKeyHexColor(effect.params.screenColor),
+        clipBlack: numbers.clipBlack,
+        clipWhite: numbers.clipWhite,
+        spillSuppression: numbers.spill,
+        spillMethod: chromaKeySpillMethod(effect.params.spillMethod),
+        view: effect.params.view === 'matte' ? 'matte' : 'result',
+      });
+      return '';
+    }
     case 'edge-detect':
       (pixelEffects.edgeDetectAdjustments ??= []).push({
         strength: finiteEffectNumber(effect.params.strength, 1),
@@ -375,6 +387,13 @@ function effectFilterPart(
   }
 }
 
+/** A layer whose only effect is an untouched Chroma Key. Every loaded project stores its graph, and that graph is
+ * the recipe the scalar CPU keyer renders: it takes the keyer, not the graph interpreter (hundreds of times slower for this graph). */
+function soleDefaultChromaKey(effects: readonly Effect[]): boolean {
+  if (effects.length !== 1 || effects[0].type !== 'chroma-key') return false;
+  try { return isDefaultChromaKeyGraph(effectOperatorGraph(effects[0], { inspectionOnly: true })); } catch { return false; }
+}
+
 export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
@@ -383,7 +402,8 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   // programs are memoized per colour), evaluate their graphs exactly. Built-in Wave, Twirl, Bulge,
   // Kaleidoscope, Mirror, Pixelate and RGB Split keep a hand-written pass even with a stored copy of
   // their recipe (interpreting their graph per pixel is far slower); edited graphs run as graphs.
-  const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
+  // A sole untouched Chroma Key takes the CPU keyer instead (see soleDefaultChromaKey).
+  const hasPersistedImageGraph = !soleDefaultChromaKey(activeEffects) && activeEffects.some(effect => isImageGraphEffectType(effect.type)
     && (COLOR_RECIPE_EFFECT_TYPES.has(effect.type) || ((effect.operatorGraph || effect.params.operatorGraph !== undefined)
       && workerSoftwareUvDistortAdjustment(effect) === undefined
       && !(HAND_WRITTEN_MIRROR_PIXEL.has(effect.type) && rendersBuiltInMirrorPixelRecipe(effect)))));
@@ -426,6 +446,13 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   const feedbackEffectCount = (pixelEffects.acuarelaAdjustments?.length ?? 0)
     + (pixelEffects.rom1Adjustments?.length ?? 0);
   if (feedbackEffectCount > 0 && activeVisualEffectCount !== feedbackEffectCount) {
+    return null;
+  }
+  // The CPU pass applies its adjustments in a fixed order and every Chroma Key measures the screen from the layer
+  // source: keyed together with any other effect (a second key too) or a colour grade, export would differ from
+  // the GPU preview, where each effect sees the one before.
+  const chromaKeyCount = pixelEffects.chromaKeyAdjustments?.length ?? 0;
+  if (chromaKeyCount > 0 && (chromaKeyCount !== 1 || activeVisualEffectCount !== 1 || (pixelEffects.colorGradePrimaryNodes?.length ?? 0) > 0)) {
     return null;
   }
   delete pixelEffects.feedbackEffectCount;

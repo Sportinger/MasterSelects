@@ -238,10 +238,6 @@ export interface WorkerGpuWebCodecsFrameLayer {
   readonly vignetteSize?: number;
   readonly vignetteSoftness?: number;
   readonly vignetteRoundness?: number;
-  readonly chromaKeyMode?: number;
-  readonly chromaKeyTolerance?: number;
-  readonly chromaKeySoftness?: number;
-  readonly chromaKeySpill?: number;
   readonly scanlineDensity?: number;
   readonly scanlineOpacity?: number;
   readonly scanlineSpeed?: number;

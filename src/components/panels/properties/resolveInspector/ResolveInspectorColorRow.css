@@ -1,0 +1,42 @@
+@layer features {
+  /* Colour well + hex in a Resolve inspector row (ResolveInspectorColorRow.tsx): the well is bordered
+     and sized like the numeric fields beside it. */
+  .resolve-inspector-color-value {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 8px;
+  }
+
+  .resolve-inspector-color-swatch {
+    box-sizing: border-box;
+    width: 40px;
+    height: 24px;
+    padding: 2px;
+    border: 1px solid var(--separator-color);
+    border-radius: 1px;
+    background: var(--input-bg);
+    cursor: pointer;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
+  .resolve-inspector-color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+  .resolve-inspector-color-swatch::-webkit-color-swatch { border: 0; border-radius: 0; }
+  .resolve-inspector-color-swatch::-moz-color-swatch { border: 0; border-radius: 0; }
+
+  .resolve-inspector-color-swatch:hover:not(:disabled) { border-color: var(--border-strong); }
+  .resolve-inspector-color-swatch:focus:not(:focus-visible) { outline: 0; }
+  .resolve-inspector-color-swatch:focus-visible { border-color: var(--accent); }
+  .resolve-inspector-color-swatch:disabled { cursor: default; opacity: 0.45; }
+
+  .resolve-inspector-color-hex {
+    overflow: hidden;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

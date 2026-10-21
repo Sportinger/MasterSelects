@@ -95,7 +95,7 @@ async function checkGpu() {
       const comparisons = await checkChromaKeyGraphGpu(device);
       const validation = await device.popErrorScope();
       if (validation) throw new Error(validation.message);
-      return `PASS: ${comparisons} Chroma Key comparisons; strict legacy RGBA8 parity, key choices, extrema, alpha, and bypass verified.`;
+      return `PASS: ${comparisons} Chroma Key comparisons; the multi-pass screen-matte plan (grid and colour caches, edge passes, picked colour, matte view) and an edited Rec.601 graph match the CPU pass runner within 2/255.`;
     } finally { device.destroy(); }
   }
   if (suite === 'contour-type') {

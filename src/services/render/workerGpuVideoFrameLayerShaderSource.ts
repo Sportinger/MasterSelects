@@ -28,10 +28,11 @@ struct LayerParams {
   vignetteSize: f32,
   vignetteSoftness: f32,
   vignetteRoundness: f32,
-  chromaKeyMode: u32,
-  chromaKeyTolerance: f32,
-  chromaKeySoftness: f32,
-  chromaKeySpill: f32,
+  // Bytes 100..115 are reserved (the retired single-pass chroma key; Chroma Key renders as an image graph).
+  reserved100: u32,
+  reserved104: f32,
+  reserved108: f32,
+  reserved112: f32,
   scanlineDensity: f32,
   scanlineOpacity: f32,
   scanlineSpeed: f32,
@@ -277,20 +278,6 @@ fn applyColorEffects(color: vec4f, uv: vec2f) -> vec4f {
     let grainUv = uv * (100.0 / max(0.001, layer.grainSize)) + vec2f(layer.effectTime * layer.grainSpeed * 0.1, layer.effectTime * layer.grainSpeed * 0.07);
     let grain = noise(grainUv) * 2.0 - 1.0;
     rgb += vec3f(grain * layer.grainAmount * (1.0 - luminosity(rgb) * 0.5));
-  }
-  if (layer.chromaKeyMode != 0u) {
-    let key = select(vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0), layer.chromaKeyMode == 2u);
-    let diff = distance(rgb, key);
-    let keep = smoothstep(layer.chromaKeyTolerance, layer.chromaKeyTolerance + layer.chromaKeySoftness, diff);
-    alpha *= keep;
-    if (layer.chromaKeyMode == 1u) {
-      let spill = max(0.0, rgb.g - max(rgb.r, rgb.b)) * layer.chromaKeySpill;
-      rgb += vec3f(spill * 0.5, -spill, spill * 0.5);
-    }
-    if (layer.chromaKeyMode == 2u) {
-      let spill = max(0.0, rgb.b - max(rgb.r, rgb.g)) * layer.chromaKeySpill;
-      rgb += vec3f(spill * 0.5, spill * 0.5, -spill);
-    }
   }
   return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), clamp(alpha, 0.0, 1.0));
 }

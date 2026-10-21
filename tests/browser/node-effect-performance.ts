@@ -1,7 +1,6 @@
 import common from '../../src/effects/_shared/commonShader';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { exposure } from '../../src/effects/color/exposure';
-import { chromaKey } from '../../src/effects/keying/chroma-key';
 import { holo } from '../../src/effects/analog';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { measureEffectPipelineCpu } from './node-effect-pipeline-performance';
@@ -10,7 +9,6 @@ import { measureEffectPipelineCpu } from './node-effect-pipeline-performance';
 const PASSES = 12, ROUNDS = 12, TIME = 2.125;
 const fixtures: Array<{ definition: FullscreenEffectDefinition; overrides: Record<string, number | boolean | string> }> = [
   { definition: exposure as FullscreenEffectDefinition, overrides: { exposure: .7, gamma: 1.1, offset: .03 } },
-  { definition: chromaKey as FullscreenEffectDefinition, overrides: {} },
   { definition: holo as FullscreenEffectDefinition, overrides: {} },
 ];
 const output = document.querySelector<HTMLPreElement>('#result')!;

@@ -18,12 +18,16 @@
 //                      their other inputs become named stubs (a recipe, not the whole folder),
 //                      the literal values they read from Constants become value cards, and the
 //                      folder's own unpicked number cards (limits such as 0 and 1) are left out
+//                      (without focus: picked from the whole effect, for effects without folders)
+//   name.<id>=Label    with only: picture name of the stub fed by node <id> (or <id>:<port>, as the
+//                      error for an unknown id lists them), e.g. name.smooth-or-banded=Time map
 //   constants=hide     with only: leave those literal values cut instead
 //   plumbing=hide      leave out the Constants and Coordinates & Resources folders and their
 //                      cables (overview pictures: the stages read as one path, laid out afresh
 //                      so no cable runs behind a stage it does not belong to)
 //   omit=a,b           leave out these cards and their cables (local ids), e.g. omit=output: an
 //                      overview ends at the stage that hands the image back
+//                      (in a recipe also stubs, as <id>:<port>, before the layout: no gap)
 //   chain=1            keep the clip chain (source, transform, output) around the effect
 //   cables=avoid       route cables around cards (the Node Workspace's Avoid), so no cable runs
 //                      behind a card; use it whenever a wrapped row or a stub hides a cable

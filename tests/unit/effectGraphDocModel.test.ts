@@ -14,13 +14,14 @@ const labels = (search: string) => doc(search).graph.nodes.map(node => node.labe
 describe('effect graph doc shots: graph selection', () => {
   it('reads the query with stages as the default level and rejects unknown levels and row counts', () => {
     expect(parseEffectGraphDocQuery('?test=effect-graph&effect=box-blur')).toEqual({ effectType: 'box-blur', level: 'stages', open: [], focus: undefined,
-      rows: 'auto', breaks: [], only: [], plumbing: 'show', constants: 'show', omit: [], chain: false, cables: 'direct' });
+      rows: 'auto', breaks: [], only: [], names: {}, plumbing: 'show', constants: 'show', omit: [], chain: false, cables: 'direct' });
     expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&break=sample,reduce&plumbing=hide&constants=hide&omit=output&chain=1&cables=avoid'))
-      .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, breaks: ['sample', 'reduce'], only: [],
+      .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, breaks: ['sample', 'reduce'], only: [], names: {},
         plumbing: 'hide', constants: 'hide', omit: ['output'], chain: true, cables: 'avoid' });
     expect(() => parseEffectGraphDocQuery('?constants=dim')).toThrow(/constants/);
     expect(() => parseEffectGraphDocQuery('?cables=around')).toThrow(/Unknown cables/);
-    expect(() => parseEffectGraphDocQuery('?only=taper')).toThrow(/focus/);
+    expect(parseEffectGraphDocQuery('?only=taper&name.Blur-Range=Path').names).toEqual({ 'blur-range': 'Path' });
+    expect(() => parseEffectGraphDocQuery('?name.blur-range=Path')).toThrow(/only=/);
     expect(() => parseEffectGraphDocQuery('?plumbing=dim')).toThrow(/plumbing/);
     expect(() => parseEffectGraphDocQuery('?level=deep')).toThrow(/Unknown level/);
     expect(() => parseEffectGraphDocQuery('?rows=0')).toThrow(/rows/);
@@ -149,6 +150,28 @@ describe('effect graph doc shots: graph selection', () => {
     expect(cableCrossings(graph.nodes, graph.edges)).toEqual([]);
     expect(graph.overviewTitles).toBe('uniform');
     expect(() => doc('?effect=motion-blur&focus=stage-b-coarse-taps&only=nothing-here')).toThrow(/No node nothing-here/);
+  });
+
+  it('picks a recipe from an effect without folders and names its stub cards for the picture', () => {
+    // Time Stack has no folders: only= picks from the whole effect, the rest become stubs.
+    const { graph } = doc('?effect=time-stack&only=index,offset,delay,history,stack,decay,opacity&name.decay-clamped=Decay (clamped)');
+    const local = (id: string) => id.split('/').at(-1);
+    expect(graph.nodes.filter(node => !node.id.startsWith('doc-stub:')).map(node => local(node.id)).toSorted())
+      .toEqual(['decay', 'delay', 'history', 'index', 'offset', 'opacity', 'stack']);
+    const stubs = graph.nodes.filter(node => node.id.startsWith('doc-stub:'));
+    const named = stubs.find(node => node.label === 'Decay (clamped)')!;
+    expect(named.outputs[0].label).toBe('Decay (clamped)');
+    expect(graph.edges.some(edge => edge.fromNodeId === named.id && edge.toNodeId.endsWith('/opacity'))).toBe(true);
+    expect(stubs.map(node => node.label)).toEqual(expect.arrayContaining(['Frame', 'Instances', 'Blend mode']));
+    expect(cableCrossings(graph.nodes, graph.edges)).toEqual([]);
+    // Omitted stubs leave no gap: the recipe is laid out without them.
+    const lean = doc('?effect=time-stack&only=index,offset,delay,history,stack,opacity&omit=uv:uv,frame:image,count:value,mode:value').graph;
+    // Unnamed, a stub carries what the editor calls its source's output (Time Stack's port label "Decay", not "Clamp").
+    expect(lean.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label)).toEqual(['Decay']);
+    const bottom = (nodes: typeof lean.nodes) => Math.max(...nodes.map(node => node.layout.y + getNodeHeight(node)));
+    expect(bottom(lean.nodes)).toBeLessThan(bottom(graph.nodes));
+    // A name that matches no stub fails instead of being ignored.
+    expect(() => doc('?effect=time-stack&only=index,delay&name.nothing-here=X')).toThrow(/No stub nothing-here/);
   });
 
   it('lays recipes and overviews out so no cable runs through a card it does not connect', () => {

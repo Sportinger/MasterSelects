@@ -4,13 +4,13 @@
 import { getDefaultParams, getEffect } from '../../effects';
 import { buildClipNodeGraphDocument } from '../../services/nodeGraph/clipGraphDocument';
 import { buildUnifiedClipGraph } from '../../services/nodeGraph/unifiedClipGraph';
-import { hasEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
+import { effectOperatorGraph, hasEffectOperatorGraph } from '../../services/operators/effectGraphOwner';
 import { nodePreviewPreferenceKey } from '../../services/nodePreview/previewTypes';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type { EffectType } from '../../types/effects';
 import type { NodeGraph } from '../../types/nodeGraph';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
-import { compactRecipeLayout, withBoundaryStubs, withCanvasPlacement, wrapFlowRows } from './effectGraphDocLayout';
+import { DOC_STUB_PREFIX, compactRecipeLayout, withBoundaryStubs, withCanvasPlacement, wrapFlowRows } from './effectGraphDocLayout';
 
 /**
  * `stages`: the effect is open and its folders (stages, compositions) are folded, as when an
@@ -29,8 +29,12 @@ export interface EffectGraphDocQuery {
   rows: number | 'auto';
   /** Node ids that start a new row in a focused folder (instead of `rows`). */
   breaks: string[];
-  /** Only these node ids of the focused folder (local ids), laid out compactly; their other inputs become stubs. */
+  /** Only these node ids of the focused folder (or, without focus, of the whole effect: local ids), laid out
+   *  compactly; their other inputs become stubs. */
   only: string[];
+  /** Picture names for stub cards (`name.<source id>[:<port>]=<label>`): a stub otherwise carries its source's
+   *  generic title ("Switch", "Mix: Value"). Stubs are doc-only cards; real cards keep their editor names. */
+  names: Record<string, string>;
   /** `hide`: leave out the Constants and Coordinates & Resources folders and their cables, so the stages read as one path. */
   plumbing: 'show' | 'hide';
   /** With `only`: literal values the picks read from the Constants folder become value cards (`show`, default) or stay cut. */
@@ -83,10 +87,12 @@ export function parseEffectGraphDocQuery(search: string): EffectGraphDocQuery {
   const constants = params.get('constants') ?? 'show';
   if (constants !== 'show' && constants !== 'hide') throw new Error(`Unknown constants "${constants}": use show or hide.`);
   const only = listParam(params.get('only'));
-  if (only.length && !focus) throw new Error('only= picks nodes inside a focused folder: add focus=<folder>.');
   const cables = params.get('cables') ?? 'direct';
   if (cables !== 'direct' && cables !== 'avoid') throw new Error(`Unknown cables "${cables}": use direct or avoid.`);
-  return { effectType: params.get('effect')?.trim() || 'gaussian-blur', level, open: listParam(params.get('open')), focus,
+  const names = Object.fromEntries([...params].filter(([key, value]) => key.startsWith('name.') && value.trim())
+    .map(([key, value]) => [key.slice(5).trim().toLowerCase(), value.trim()]));
+  if (Object.keys(names).length && !only.length) throw new Error('name.<id>= names stub cards of a recipe: add only=<nodes>.');
+  return { names, effectType: params.get('effect')?.trim() || 'gaussian-blur', level, open: listParam(params.get('open')), focus,
     rows: rows ? Math.round(Number(rows)) : 'auto', breaks: listParam(params.get('break')), only, plumbing, constants, omit: listParam(params.get('omit')),
     chain: params.get('chain') === '1', cables };
 }
@@ -191,6 +197,22 @@ function omitNodes(graph: NodeGraph, tokens: readonly string[]): NodeGraph {
     groups: graph.groups?.map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => !dropped.has(id)) })) };
 }
 
+/** Gives the named stub cards their picture names; a name that matches no stub is an error, not ignored. */
+function nameStubs(graph: NodeGraph, names: Record<string, string>): NodeGraph {
+  const tokens = Object.keys(names);
+  if (!tokens.length) return graph;
+  const stubKey = (id: string) => { const key = id.slice(DOC_STUB_PREFIX.length); const port = key.lastIndexOf(':');
+    return { local: key.slice(0, port).split('/').at(-1)!.toLowerCase(), port: key.slice(port + 1).toLowerCase() }; };
+  const tokenOf = (id: string) => { const { local, port } = stubKey(id); return tokens.find(token => token === local || token === `${local}:${port}`); };
+  const stubs = graph.nodes.filter(node => node.id.startsWith(DOC_STUB_PREFIX));
+  const missing = tokens.filter(token => !stubs.some(node => tokenOf(node.id) === token));
+  if (missing.length) throw new Error(`No stub ${missing.join(', ')} to name. Stubs: ${stubs.map(node => { const { local, port } = stubKey(node.id); return `${local}:${port}`; }).join(', ') || 'none'}.`);
+  return { ...graph, nodes: graph.nodes.map(node => {
+    const token = node.id.startsWith(DOC_STUB_PREFIX) ? tokenOf(node.id) : undefined;
+    return token ? { ...node, label: names[token], outputs: node.outputs.map(port => ({ ...port, label: names[token] })) } : node;
+  }) };
+}
+
 /** Keeps the nodes, edges and folders inside one group (the effect, or a focused folder). */
 function cropToGroup(graph: NodeGraph, groupId: string): NodeGraph {
   const root = graph.groups?.find(group => group.id === groupId);
@@ -208,31 +230,40 @@ export function buildEffectGraphDoc(query: EffectGraphDocQuery, overrides: Recor
   const clip = effectGraphDocClip(query.effectType, states);
   const full = project(clip);
   const focus = query.focus ? folders.find(folder => matches(folder, query.focus!)) : undefined;
-  const placed = focus ? withCanvasPlacement(full) : full;
-  const folder = focus ? cropToGroup(placed, focus.id) : undefined;
+  // only= without focus picks from the whole effect (an effect without folders, e.g. Time Stack).
+  const pickRoot = !focus && query.only.length > 0;
+  const placed = focus || pickRoot ? withCanvasPlacement(full) : full;
+  const folder = focus ? cropToGroup(placed, focus.id) : pickRoot ? cropToGroup(placed, EFFECT_GRAPH_DOC_GROUP) : undefined;
   const picked = folder && query.only.length ? keepOnly(folder, query.only) : folder;
-  // A hand-picked recipe leaves out the folder's own unpicked number cards (limits such as 0 and 1)
-  // instead of stubbing them; the caption says so.
+  // A hand-picked recipe leaves out the folder's own unpicked literal number cards (limits such as 0
+  // and 1) instead of stubbing them; the caption says so. Values bound to an effect parameter
+  // (Instances, Blend mode) stay stubs: they are controls the reader knows.
+  const effect = clip.effects.find(item => item.type === query.effectType);
+  const boundValues = new Set(effect && hasEffectOperatorGraph(effect.type)
+    ? effectOperatorGraph(effect, { inspectionOnly: true }).nodes.filter(node => typeof node.bindings.value === 'string').map(node => node.id) : []);
   const leftOut = new Set(folder && picked && picked !== folder ? folder.nodes.filter(node => node.operatorId?.startsWith('values.')
-    && node.inputs.length === 0 && !picked.nodes.some(kept => kept.id === node.id)).map(node => node.id) : []);
+    && node.inputs.length === 0 && !(node.binding?.kind === 'effect-operator' && boundValues.has(node.binding.nodeId))
+    && !picked.nodes.some(kept => kept.id === node.id)).map(node => node.id) : []);
   // Constants are literal numbers (their cards show the value); other outside inputs get named stubs.
   const skip = (source: NodeGraph['nodes'][number]) => leftOut.has(source.id) || source.label === 'Constants'
     || (query.plumbing === 'hide' && PLUMBING_FOLDERS.has(source.label));
   // A focused folder is laid out here (rows, stubs, picks); the canvas must not re-flow it.
   const fixedLayout = (graph: NodeGraph): NodeGraph => ({ ...graph, groups: graph.groups?.map(({ layoutMode: _flow, ...group }) => group) });
   // A recipe (only=) is laid out afresh with its stubs and constants; a whole folder keeps its flow and gets stub columns.
-  const shaped = picked && query.only.length
-    ? compactRecipeLayout(withBoundaryStubs(picked, placed, skip, { constants: query.constants === 'show', place: false }))
+  // A recipe leaves out omitted cards (its stubs too, e.g. `omit=uv:uv`) before the layout, so they leave no gap.
+  const recipe = !!picked && query.only.length > 0;
+  const shaped = picked && recipe
+    ? compactRecipeLayout(omitNodes(nameStubs(withBoundaryStubs(picked, placed, skip, { constants: query.constants === 'show', place: false }), query.names), query.omit))
     : picked && withBoundaryStubs(picked, placed, skip);
   const cropped = shaped ? fixedLayout(wrapFlowRows(shaped, query.rows, query.breaks))
     : query.chain ? full : cropToGroup(full, EFFECT_GRAPH_DOC_GROUP);
   // Without plumbing the stages read as one path: lay them out like a recipe, so no cable runs
   // behind a stage it does not belong to (the editor's flow layout allows that).
-  const graph = query.plumbing === 'hide' && !focus && !query.chain ? fixedLayout(compactRecipeLayout(omitNodes(withoutPlumbing(cropped), query.omit)))
-    : omitNodes(query.plumbing === 'hide' && !focus ? withoutPlumbing(cropped) : cropped, query.omit);
+  const graph = query.plumbing === 'hide' && !folder && !query.chain ? fixedLayout(compactRecipeLayout(omitNodes(withoutPlumbing(cropped), query.omit)))
+    : omitNodes(query.plumbing === 'hide' && !folder ? withoutPlumbing(cropped) : cropped, recipe ? [] : query.omit);
   // The canvas refits per graph id: one id per level keeps a refit when the level changes.
   const id = `${full.id}:${query.effectType}:${query.level}:${query.open.join('+')}:${query.focus ?? ''}:${query.rows}:${query.breaks.join('+')}:${query.only.join('+')}`
-    + `:${query.plumbing}:${query.constants}:${query.omit.join('+')}:${query.chain ? 'chain' : 'effect'}:${query.cables}`;
+    + `:${query.plumbing}:${query.constants}:${query.omit.join('+')}:${query.chain ? 'chain' : 'effect'}:${query.cables}:${Object.entries(query.names).flat().join('+')}`;
   const values = graph.nodes.filter(node => node.operatorId?.startsWith('values.'));
   const shown = { ...clip, nodeGraph: { ...clip.nodeGraph!, previews: { enabled: false,
     nodes: Object.fromEntries(values.map(node => [nodePreviewPreferenceKey(clip.id, node), { enabled: true }])) } } };

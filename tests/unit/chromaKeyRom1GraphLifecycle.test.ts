@@ -10,7 +10,7 @@ import { createMockClip, createMockTrack } from '../helpers/mockData';
 
 const initial = useTimelineStore.getState();
 const cases = [
-  { type: 'chroma-key', id: 'chroma-fx', key: 'tolerance', values: [.12, .42], bypassNode: 'outer-tolerance' },
+  { type: 'chroma-key', id: 'chroma-fx', key: 'clipBlack', values: [.12, .42], bypassNode: 'matte-clip-range' },
   { type: 'rom1', id: 'rom1-fx', key: 'opacity', values: [.2, .85], bypassNode: 'wet-mix' },
 ] as const;
 
@@ -46,13 +46,16 @@ describe('Chroma Key and ROM1 graph lifecycle', () => {
     expect(edited.operatorGraph?.layout[testCase.bypassNode]).toEqual({ x: 444, y: 222 });
     expect(edited.params[testCase.key]).toBe(testCase.values[1]);
     expect(getHistoryStateView().undo()).toMatchObject({ operation: 'undo' });
-    expect(useTimelineStore.getState().clips[0].effects[0].operatorGraph).toEqual(original);
+    // Undo may restore the expanded form of packed shared compositions (also true for the blur graphs):
+    // compare what renders, the owner's resolved graph.
+    expect(effectOperatorGraph(useTimelineStore.getState().clips[0].effects[0]))
+      .toEqual(effectOperatorGraph({ ...canonical, operatorGraph: original }));
     expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
 
     const serialized = createSerializableTimelineState(useTimelineStore.getState());
     await useTimelineStore.getState().loadState(JSON.parse(JSON.stringify(serialized)));
     const restored = useTimelineStore.getState().clips[0].effects[0];
-    expect(effectOperatorGraph(restored)).toEqual(edited.operatorGraph);
+    expect(effectOperatorGraph(restored)).toEqual(effectOperatorGraph(edited));
     expect(restored.params[testCase.key]).toBe(testCase.values[1]);
     expect(useTimelineStore.getState().clipKeyframes.get(clip.id)?.map(key => [key.id, key.value]))
       .toEqual([[`${testCase.key}-0`, testCase.values[0]], [`${testCase.key}-2`, testCase.values[1]]]);

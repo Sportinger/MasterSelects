@@ -50,6 +50,9 @@ export interface EffectParam {
   // values, keyframes and tool calls keep the parameter's own unit.
   displayScale?: number;
   unit?: string;
+  // Value an instance saved before this parameter existed renders with (its params lack the key).
+  // New effects store `default` explicitly (getDefaultParams), so only old saves and presets get this.
+  legacyDefault?: number | boolean | string;
 }
 
 /**

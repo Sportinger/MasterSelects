@@ -4,11 +4,13 @@ import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntime
  * Worker CPU colour effects that read only their own pixel and its place in the frame. Behind
  * the built-in mirror/pixel effects they run in the per-pixel loop (workerSoftwarePixelEffects.ts)
  * or, for Invert, as a canvas filter. In front of one they run as whole-frame steps in stack order
- * (workerSoftwareMirrorPixelEffects.ts), so a key, a vignette or a posterize before Pixelate or
+ * (workerSoftwareMirrorPixelEffects.ts), so a vignette or a posterize before Pixelate or
  * Kaleidoscope is exact without the slow graph interpreter. The rebuilt color recipes (Brightness,
  * Contrast, Saturation, Exposure, Levels, Hue Shift, Temperature, Vibrance; COLOR_RECIPE_EFFECT_TYPES)
  * are not steps here: their curves, linear light and OkLCh have no hand-written twin, so a layer
  * with one runs as exact graph plans with memoized pointwise programs (workerSoftwareImageGraphs.ts).
+ * Neither is Chroma Key: it measures its screen from the whole layer source (keyerCpu.ts), so its CPU
+ * keyer runs only as a layer's sole effect, and a key among other effects runs as graph plans.
  */
 type Adjustment<K extends keyof WorkerRenderSoftwarePixelEffects> = NonNullable<WorkerRenderSoftwarePixelEffects[K]> extends readonly (infer T)[] ? T : never;
 
@@ -17,11 +19,10 @@ export type WorkerSoftwarePointwiseStep =
   | { readonly kind: 'threshold'; readonly adjustment: Adjustment<'thresholdAdjustments'> }
   | { readonly kind: 'posterize'; readonly adjustment: Adjustment<'posterizeAdjustments'> }
   | { readonly kind: 'vignette'; readonly adjustment: Adjustment<'vignetteAdjustments'> }
-  | { readonly kind: 'chroma-key'; readonly adjustment: Adjustment<'chromaKeyAdjustments'> }
   | { readonly kind: 'scanlines'; readonly adjustment: Adjustment<'scanlineAdjustments'> }
   | { readonly kind: 'grain'; readonly adjustment: Adjustment<'grainAdjustments'> };
 
-const POINTWISE_EFFECTS: ReadonlySet<string> = new Set(['invert', 'threshold', 'posterize', 'vignette', 'chroma-key', 'scanlines', 'grain']);
+const POINTWISE_EFFECTS: ReadonlySet<string> = new Set(['invert', 'threshold', 'posterize', 'vignette', 'scanlines', 'grain']);
 
 export function isWorkerSoftwarePointwiseEffect(type: string): boolean {
   return POINTWISE_EFFECTS.has(type);
@@ -39,8 +40,6 @@ export function workerSoftwarePointwiseStep(type: string, params: Readonly<Recor
     case 'posterize': return { kind: type, adjustment: { levels: Math.max(2, value('levels', 6)) } };
     case 'vignette': return { kind: type, adjustment: { amount: value('amount', 0.5), size: value('size', 0.5), softness: value('softness', 0.5),
       roundness: value('roundness', 1) } };
-    case 'chroma-key': return { kind: type, adjustment: { keyColor: params.keyColor === 'blue' ? 'blue' : 'green', tolerance: value('tolerance', 0.2),
-      softness: value('softness', 0.1), spillSuppression: value('spillSuppression', 0.5) } };
     case 'scanlines': return { kind: type, adjustment: { density: value('density', 5), opacity: value('opacity', 0.3), speed: value('speed', 0) } };
     case 'grain': return { kind: type, adjustment: { amount: value('amount', 0.1), size: Math.max(0.001, value('size', 1)), speed: value('speed', 1) } };
     default: return undefined;
@@ -61,7 +60,6 @@ export function applyWorkerSoftwarePointwiseStep(step: WorkerSoftwarePointwiseSt
     case 'vignette': out = applyVignetteAdjustment(rgb, step.adjustment, uvX, uvY); break;
     case 'scanlines': out = applyScanlineAdjustment(rgb, step.adjustment, uvY, timelineTime); break;
     case 'grain': out = applyGrainAdjustment(rgb, step.adjustment, uvX, uvY, timelineTime); break;
-    case 'chroma-key': return applyChromaKeyAdjustment([r, g, b, a], step.adjustment);
   }
   return [out[0], out[1], out[2], a];
 }
@@ -192,48 +190,6 @@ export function applyVignetteAdjustment(
   const vignette = 1 - smoothstep(size, size + softness, distance);
   const factor = 1 * (1 - amount) + vignette * amount;
   return [input[0] * factor, input[1] * factor, input[2] * factor];
-}
-
-function rgbToYcbcr(input: readonly [number, number, number]): readonly [number, number, number] {
-  const y = 0.299 * input[0] + 0.587 * input[1] + 0.114 * input[2];
-  const cb = 0.564 * (input[2] - y);
-  const cr = 0.713 * (input[0] - y);
-  return [y, cb, cr];
-}
-
-export function applyChromaKeyAdjustment(
-  input: readonly [number, number, number, number],
-  adjustment: Adjustment<'chromaKeyAdjustments'>,
-): readonly [number, number, number, number] {
-  const key: readonly [number, number, number] = adjustment.keyColor === 'blue'
-    ? [0, 0, 1]
-    : [0, 1, 0];
-  const sourceYcbcr = rgbToYcbcr([input[0], input[1], input[2]]);
-  const keyYcbcr = rgbToYcbcr(key);
-  const cbcrDistance = Math.hypot(sourceYcbcr[1] - keyYcbcr[1], sourceYcbcr[2] - keyYcbcr[2]);
-  const alpha = smoothstep(
-    finiteNumber(adjustment.tolerance, 0.2),
-    finiteNumber(adjustment.tolerance, 0.2) + finiteNumber(adjustment.softness, 0.1),
-    cbcrDistance,
-  );
-  const spillSuppression = Math.max(0, finiteNumber(adjustment.spillSuppression, 0.5));
-  let r = input[0];
-  let g = input[1];
-  let b = input[2];
-  if (spillSuppression > 0) {
-    if (adjustment.keyColor === 'green') {
-      const spillAmount = Math.max(0, g - Math.max(r, b)) * spillSuppression;
-      g -= spillAmount;
-      r += spillAmount * 0.5;
-      b += spillAmount * 0.5;
-    } else {
-      const spillAmount = Math.max(0, b - Math.max(r, g)) * spillSuppression;
-      b -= spillAmount;
-      r += spillAmount * 0.5;
-      g += spillAmount * 0.5;
-    }
-  }
-  return [r, g, b, input[3] * alpha];
 }
 
 function fract(value: number): number {

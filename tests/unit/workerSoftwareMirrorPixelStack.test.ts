@@ -81,15 +81,20 @@ describe('worker CPU mirror and pixel pass with pointwise effects in front', () 
     }
   });
 
-  it('keys before a zoomed Kaleidoscope or an angled Mirror exactly as the effects one after the other', () => {
+  it('applies a vignette before a zoomed Kaleidoscope or an angled Mirror exactly as the effects one after the other', () => {
     const width = 96, height = 54, input = picture(width, height);
-    const key: StackEffect = { type: 'chroma-key', params: { keyColor: 'green', tolerance: .2, softness: .1 } };
+    const vignette: StackEffect = { type: 'vignette', params: { amount: .7, size: .3, softness: .4, roundness: 1 } };
     for (const resampling of [{ type: 'kaleidoscope', params: { segments: 6, zoom: 3 } }, { type: 'mirror', params: { angle: .37 } },
       { type: 'rgb-split', params: { amount: .02, angle: .4 } }] as StackEffect[]) {
-      const stacked = draw([key, resampling], input, width, height);
-      const reference = draw([resampling], draw([key], input, width, height), width, height);
+      const stacked = draw([vignette, resampling], input, width, height);
+      const reference = draw([resampling], draw([vignette], input, width, height), width, height);
       expect(premultipliedDifference(stacked, reference)).toBeLessThanOrEqual(3);
     }
+    // Chroma Key measures its screen from the whole layer source (keyerCpu.ts): in front of one it is
+    // no whole-frame step, the layer runs as ordered graph plans.
+    const key = plan([{ type: 'chroma-key', params: { keyColor: 'green' } }, { type: 'kaleidoscope', params: { segments: 6 } }]).pixelEffects;
+    expect(key.mirrorPixelAdjustments).toBeUndefined();
+    expect(key.imageOperatorPlans).toHaveLength(2);
     // Threshold and Posterize (not linear) before Kaleidoscope as well.
     for (const colour of [{ type: 'threshold', params: { level: .45 } }, { type: 'posterize', params: { levels: 3 } }] as StackEffect[]) {
       const kaleidoscope: StackEffect = { type: 'kaleidoscope', params: { segments: 5, zoom: 3 } };

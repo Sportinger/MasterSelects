@@ -10,10 +10,13 @@ import {
 import type { JsonObject } from '../../motionDesign/adjustment/contracts';
 import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../../motionDesign/adjustment/supportedEffectContractAdapter';
 import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/supportedEffects';
-import { effectParamDefinitions, unusedParamWarnings } from '../../operators/effectParamVisibility';
+import { effectParamDefinitions, graphBoundParameters, unusedParamWarnings } from '../../operators/effectParamVisibility';
+import { chromaKeyScreen } from '../../../effects/keying/chroma-key/keyerContract';
+import { chromaKeyScreenProbeMessage, probeChromaKeyScreen } from '../../../effects/keying/chroma-key/screenProbe';
 import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { Effect } from '../../../types/effects';
+import { finiteEffectNumber, isUnusableEffectNumber } from '../../../effects/_shared/effectNumberParam';
 
 type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 
@@ -25,9 +28,13 @@ type TimelineStore = ReturnType<typeof useTimelineStore.getState>;
 function effectParamWarnings(effect: Effect | undefined, names: readonly string[]): string[] {
   if (!effect) return [];
   const composition = useMediaStore.getState().getActiveComposition();
+  const definitions = getEffect(effect.type)?.params ?? {};
+  // Number parameters that are not a finite number render at their default (effectOperatorParams).
+  const unusable = names.flatMap(name => definitions[name]?.type === 'number' && isUnusableEffectNumber(effect.params[name])
+    ? [`${name}: ${typeof effect.params[name] === 'string' ? JSON.stringify(effect.params[name]) : String(effect.params[name])} is not a finite number, so the default ${definitions[name].default} is used.`] : []);
   const set = Object.fromEntries(names.map(name => [name, effect.params[name]]));
-  return [...unusedParamWarnings(effect, names),
-    ...paramRangeNotes(getEffect(effect.type)?.params ?? {}, set, effect.operatorGraph).map(note => `${note.param}: ${note.message}`),
+  return [...unusable, ...unusedParamWarnings(effect, names),
+    ...paramRangeNotes(definitions, set, effect.operatorGraph).map(note => `${note.param}: ${note.message}`),
     ...blurBudgetNotes(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080),
     ...(names.length ? definitionParamWarnings(effect.type, effect.params, composition?.width ?? 1920, composition?.height ?? 1080) : [])];
 }
@@ -39,6 +46,32 @@ function definitionParamWarnings(effectType: string, params: Record<string, unkn
   try {
     return definition.paramWarnings(params as Record<string, number | boolean | string>, width, height);
   } catch { return []; }
+}
+
+/** An automatic Chroma Key on a clip without that screen colour keys nothing: say so (checked on the clip's
+ * thumbnails, at most a second). Not for a picked colour or an edited old Rec.601 key graph. */
+async function chromaKeyScreenWarnings(clipId: string, effect: Effect | undefined): Promise<string[]> {
+  if (effect?.type !== 'chroma-key') return [];
+  const screen = chromaKeyScreen(effect.params.keyColor);
+  if (screen === 'custom' || graphBoundParameters(effect)?.has('tolerance')) return [];
+  const clip = useTimelineStore.getState().clips.find(item => item.id === clipId);
+  const mediaId = clip?.source?.mediaFileId ?? clip?.mediaFileId;
+  const mediaThumbnail = useMediaStore.getState().files.find(file => file.id === mediaId)?.thumbnailUrl;
+  const urls = clip?.thumbnails?.length ? clip.thumbnails : mediaThumbnail ? [mediaThumbnail] : [];
+  const probe = probeChromaKeyScreen(urls, screen);
+  const found = await Promise.race([probe, new Promise<undefined>(resolve => {
+    const timer = setTimeout(resolve, 1000); void probe.finally(() => clearTimeout(timer));
+  })]);
+  const message = chromaKeyScreenProbeMessage(found, screen);
+  return message ? [message] : [];
+}
+
+/** Number parameters given as numeric text ("0.5") are stored as numbers, so every reader (graph, owner,
+ * inspector, worker plans) sees the same value; other unusable values stay and are reported. */
+function normalizeNumberParams(effectType: string, params: Record<string, unknown>): Record<string, unknown> {
+  const definitions = getEffect(effectType)?.params ?? {};
+  return Object.fromEntries(Object.entries(params).map(([name, value]) => [name,
+    definitions[name]?.type === 'number' && typeof value === 'string' && !isUnusableEffectNumber(value) ? finiteEffectNumber(value, 0) : value]));
 }
 
 export async function handleListEffects(): Promise<ToolResult> {
@@ -74,7 +107,8 @@ export async function handleAddEffect(
 ): Promise<ToolResult> {
   const clipId = args.clipId as string;
   const effectType = resolveEffectTypeId(String(args.effectType ?? ''));
-  const customParams = args.params as Record<string, unknown> | undefined;
+  const customParams = args.params && typeof args.params === 'object'
+    ? normalizeNumberParams(effectType, args.params as Record<string, unknown>) : undefined;
 
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
@@ -110,7 +144,7 @@ export async function handleAddEffect(
 
   invalidateCache();
   const added = useTimelineStore.getState().clips.find(c => c.id === clipId)?.effects.find(e => e.id === newEffect?.id);
-  const warnings = effectParamWarnings(added, Object.keys(customParams ?? {}));
+  const warnings = [...effectParamWarnings(added, Object.keys(customParams ?? {})), ...await chromaKeyScreenWarnings(clipId, added)];
 
   return {
     success: true,
@@ -169,14 +203,14 @@ export async function handleUpdateEffect(
 ): Promise<ToolResult> {
   const clipId = args.clipId as string;
   const effectId = args.effectId as string;
-  const params = args.params as Record<string, unknown>;
 
   const clip = timelineStore.clips.find(c => c.id === clipId);
   if (!clip) return { success: false, error: `Clip not found: ${clipId}` };
 
   const effect = clip.effects.find(e => e.id === effectId);
   if (!effect) return { success: false, error: `Effect not found: ${effectId}` };
-  if (!params || typeof params !== 'object') return { success: false, error: 'params must be an object.' };
+  if (!args.params || typeof args.params !== 'object') return { success: false, error: 'params must be an object.' };
+  const params = normalizeNumberParams(effect.type, args.params as Record<string, unknown>);
 
   // A misspelled parameter used to be stored silently and do nothing; reject it with the valid names.
   // Retired parameters stay accepted (saved projects carry them) but are not offered while they do nothing.
@@ -208,7 +242,8 @@ export async function handleUpdateEffect(
   selectClipAndOpenTab(clipId, 'effects');
 
   const updated = getClipEffects(clipId).find(item => item.id === effectId);
-  const warnings = effectParamWarnings(updated, Object.keys(params));
+  const warnings = [...effectParamWarnings(updated, Object.keys(params)),
+    ...'keyColor' in params ? await chromaKeyScreenWarnings(clipId, updated) : []];
   return {
     success: true,
     data: {

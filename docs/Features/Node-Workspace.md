@@ -884,11 +884,11 @@ samples separately count synchronous calls, cumulative CPU time and maximum job
 time, including work that previously escaped the scheduler through microtasks.
 
 The local development page `/tests/browser/node-effect-performance.html` compares
-Exposure, Chroma Key and Holo against their original registered shaders using
+Exposure and Holo against their original registered shaders using
 synthetic pixels at 1080p and 4K. It warms pipelines, alternates execution order,
 uses GPU timestamp queries when available, and checks output pixels. A separate
 CPU measurement exercises the real fullscreen `EffectsPipeline.applyEffects`
-for Chroma Key and Holo with stable graphs and no preview requests. Exposure is
+for Holo with stable graphs and no preview requests. Exposure is
 excluded from that CPU test because the editor normally fuses it into the
 compositor. Downloadable JSON keeps GPU execution and CPU preparation separate;
 these measurements do not represent whole-editor playback or decode performance.

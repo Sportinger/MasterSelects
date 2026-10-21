@@ -1,4 +1,5 @@
 import { EffectStyleRow } from './EffectStyleRow';
+import { ChromaKeyControls } from './ChromaKeyControls';
 import { TimeStackControls } from './TimeStackControls';
 import { LensCorrectionControls } from './LensCorrectionControls';
 import { GuidedPerspectiveControls } from './GuidedPerspectiveControls';
@@ -257,7 +258,8 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
     return exposedGraphValues(effect.operatorGraph).length ? null : <p className="effect-info">No parameters</p>;
   }
 
-  if (effect.type === 'time-stack') return <TimeStackControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
+  if (effect.type === 'chroma-key') return <ChromaKeyControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} operatorGraph={effect.operatorGraph} onChange={onChange} clipId={clipId} />;
+  if (effect.type === 'time-stack') return <TimeStackControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} operatorGraph={effect.operatorGraph} onChange={onChange} clipId={clipId} />;
   if (effect.type === 'lens-correction') return <LensCorrectionControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
   if (effect.type === 'guided-perspective') return <GuidedPerspectiveControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
 

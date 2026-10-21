@@ -1,4 +1,5 @@
 import type { WorkerRenderSoftwareFrame } from './workerRenderHostRuntimeCommands';
+import { chromaKeyCpuKey, chromaKeyCpuScreen, prepareChromaKeyCpu } from '../../effects/keying/chroma-key/keyerCpu';
 import type { RuntimePrimaryColorParams } from '../../types/colorCorrection';
 import { applyShadowHighlightTone } from '../../engine/color/shadowHighlightTone';
 import {
@@ -17,7 +18,7 @@ import { applyWorkerSoftwareImageGraphs } from './workerSoftwareImageGraphs';
 import { applyWorkerSoftwareMirrorPixelEffects } from './workerSoftwareMirrorPixelEffects';
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from './workerSoftwareGlow';
 import {
-  applyChromaKeyAdjustment, applyExposureAdjustment, applyGrainAdjustment, applyLevelsAdjustment, applyPosterizeAdjustment,
+  applyExposureAdjustment, applyGrainAdjustment, applyLevelsAdjustment, applyPosterizeAdjustment,
   applyScanlineAdjustment, applyTemperatureAdjustment, applyThresholdAdjustment, applyVibranceAdjustment, applyVignetteAdjustment,
   clamp01, finiteNumber, luma,
 } from './workerSoftwarePointwiseEffects';
@@ -306,6 +307,11 @@ export function applyWorkerSoftwarePixelEffects(
     || colorGradePrimaryNodes.length > 0
     ? new Uint8ClampedArray(data)
     : data;
+  // Chroma Key estimates its screen colour and local Screen Grid once per frame from the layer source pixels;
+  // the plan only allows it as the layer's sole pixel effect (workerSoftwareEffectPlan.ts), so those are the
+  // pixels it keys.
+  const chromaKeyers = chromaKeyAdjustments.map(adjustment => prepareChromaKeyCpu(chromaKeyCpuScreen(sourceData, adjustment, width, height), adjustment));
+  const keyed = new Float64Array(4);
   // Glow is a separable neighborhood prefilter; build it once per frame, then sample rings per pixel.
   const glowFields = glowAdjustments.map(adjustment => prepareWorkerSoftwareGlow(sourceData, width, height, adjustment));
   for (let y = 0; y < height; y += 1) {
@@ -361,8 +367,9 @@ export function applyWorkerSoftwarePixelEffects(
         const uvY = (y + 0.5) / height;
         [r, g, b] = applyVignetteAdjustment([r, g, b], adjustment, uvX, uvY);
       }
-      for (const adjustment of chromaKeyAdjustments) {
-        [r, g, b, alpha] = applyChromaKeyAdjustment([r, g, b, alpha], adjustment);
+      for (const keyer of chromaKeyers) {
+        chromaKeyCpuKey(keyer, r, g, b, alpha, x, y, keyed);
+        r = keyed[0]; g = keyed[1]; b = keyed[2]; alpha = keyed[3];
       }
       for (const adjustment of edgeDetectAdjustments) {
         [r, g, b, alpha] = applyEdgeDetectAdjustment(sourceData, width, height, x, y, adjustment);

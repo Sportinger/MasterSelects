@@ -1,4 +1,4 @@
-import { createDefaultTimeStackGraph } from './timeStackEffectGraph';
+import { createDefaultTimeStackGraph, upgradeTimeStackGraph } from './timeStackEffectGraph';
 import { upgradeSlitScanGraph } from './slitScanGraphUpgrade';
 import { SLIT_SCAN_PROTECTION_RESOURCE } from './slitScanProtectionGraph';
 import { SLIT_SCAN_TIME_MAP_RESOURCE } from './slitScanTimeMapGraph';
@@ -38,6 +38,7 @@ import { createDefaultContextualEffectGraph, type EditableContextualEffectType }
 import { createDefaultSamplingEffectGraph, type EditableSamplingEffectType } from './samplingEffectGraphs';
 import { createDefaultBlockEffectGraph, type EditableBlockEffectType } from './blockEffectGraphs';
 import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
+import { finiteEffectNumber } from '../../effects/_shared/effectNumberParam';
 import { createDefaultBlurEffectGraph, type EditableBlurEffectType } from './blurEffectGraphs';
 import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectType } from './directionalBlurEffectGraphs';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
@@ -75,6 +76,7 @@ import { createDefaultPixelSortGraph } from './pixelSortEffectGraph';
 import { createDefaultQuadtreeGraph } from './quadtreeEffectGraph';
 import { createDefaultContourGraph } from './contourEffectGraph';
 import { createDefaultChromaKeyGraph } from './chromaKeyEffectGraph';
+import { upgradeChromaKeyGraph } from './chromaKeyGraphUpgrade';
 import { createDefaultRom1Graph } from './rom1EffectGraph';
 import { createDefaultMemoryLeakGraph } from './memoryLeakEffectGraph';
 import { createDefaultContourTypeGraph } from './asciiEffectGraph';
@@ -242,7 +244,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     if (known && known.signature === signature && (options.inspectionOnly || known.params === effect.params)) return known.graph;
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
-      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved) : saved;
+      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
+        : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved) : saved;
     // A saved original color graph (before 2026-10) keeps its original folders; the recipe stages fit only the recipe.
     const earlier = COLOR_RECIPE_EFFECT_TYPES.has(effectType) && effectType !== 'hue-shift' ? { key: 'original-color', plan: ORIGINAL_COLOR_PRESENTATION,
       createDefault: () => createLegacyColorEffectGraph(effectType as EditableColorEffectType) } : undefined;
@@ -323,6 +326,10 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   const params = { ...effect.params };
   delete params[EFFECT_GRAPH_PARAM];
   if (effect.type === 'grain' && params.seed === undefined) params.seed = 0;
+  // Store the value an effect saved before a parameter existed renders with (e.g. Time Stack Decay 1).
+  for (const [id, spec] of Object.entries(getEffect(effect.type)?.params ?? {})) {
+    if (spec.legacyDefault !== undefined && params[id] === undefined) params[id] = spec.legacyDefault;
+  }
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {
@@ -380,12 +387,16 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
   if (effect.type === 'splat-exploration') return { ...defaultSplatGraph(true).params, ...effect.params };
   if (isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' || isComputeImageEffectType(effect.type)) {
     const definition = getEffect(effect.type);
-    const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.default]));
+    // A parameter missing from stored params predates it: render with its legacy value where it has one.
+    const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.legacyDefault ?? spec.default]));
     const resolved = { ...defaults, ...effect.params };
     for (const [id, spec] of Object.entries(definition?.params ?? {})) {
       if (spec.type === 'color' && typeof spec.default === 'string') {
         resolved[id] = normalizeCatalogColor(resolved[id] as number | boolean | string | undefined, spec.default);
       }
+      // NaN, Infinity, null (JSON's NaN) or text in a number parameter render the default instead of
+      // failing the graph; tools and the effect's inspector report such values (effectNumberParam.ts).
+      if (spec.type === 'number' && typeof spec.default === 'number') resolved[id] = finiteEffectNumber(resolved[id], spec.default);
     }
     if (effect.type === 'fisheye') {
       return { ...resolved, ...normalizeFisheyeParameters(resolved) };

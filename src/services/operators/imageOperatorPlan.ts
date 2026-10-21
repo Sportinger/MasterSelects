@@ -1,12 +1,21 @@
 import { applyOperatorGroupBypasses } from './operatorGroupBypass';
 import type { ImageOperatorCompileContext } from './imageOperatorChoice';
-import type { EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
+import { finiteEffectNumber } from '../../effects/_shared/effectNumberParam';
 import type { ImageOperatorPlan, ImageOperatorPreviewTarget } from './imageOperatorGraph';
 import { materializeMotionImages } from './motionImagePasses';
 import { bypassIdentityImageFilters } from './imageFilterShortcuts';
 import { expandTemporalSmoothing } from './temporalSmoothPasses';
 
 type CompileSingle = (graph: EffectOperatorGraph, params: Record<string, unknown>, preview?: ImageOperatorPreviewTarget) => ImageOperatorPlan;
+/** Cache Image `maxEdge` (pixels of the longer side; 0 = full size, at most 8192), a constant or a bound
+ * effect parameter read once per compile (imagePlanResourceSignature recompiles when it changes).
+ * Downscaled caches hold statistics and analysis images; reads from them are filtered like any other resource. */
+export function materializeMaxEdge(node: Pick<BoundOperatorNode, 'bindings' | 'constants'>, params: Record<string, unknown>): number | undefined {
+  const binding = node.bindings?.maxEdge;
+  const value = finiteEffectNumber(typeof binding === 'string' ? params[binding] : node.constants?.maxEdge, 0);
+  return value >= 1 ? Math.round(Math.min(8192, value)) : undefined;
+}
 interface Cut { nodeId: string; producerNodeId: string; producerPort: string; resourceId: string; passId: string; edgeId?: string; maxEdge?: number }
 
 /** Adds explicit and required neighborhood barriers while every pass still uses the canonical image instruction compiler. */
@@ -49,7 +58,7 @@ export function compileImageOperatorPassPlan(graph: EffectOperatorGraph, params:
     if (!source) throw new Error(`Image materialize ${item.id}:image is not connected.`);
     cuts.push({ nodeId: item.id, producerNodeId: source.from, producerPort: source.output,
       resourceId: `image-resource:${item.id}:image`, passId: `image-pass:${item.id}`,
-      maxEdge: item.id.startsWith('__motion-') ? Number(item.constants?.maxEdge) || undefined : undefined });
+      maxEdge: materializeMaxEdge(item, params) });
   }
   const hasNeighborhoodUpstream = (id: string, seen = new Set<string>()): boolean => {
     if (seen.has(id)) return false; seen.add(id);

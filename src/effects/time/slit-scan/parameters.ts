@@ -1,4 +1,5 @@
 import type { EffectParam } from '../../types';
+import { finiteEffectNumber } from '../../_shared/effectNumberParam';
 import { slitScanGeometryParams } from './geometryParameters';
 import { spaceTimeParams } from './spaceTimeParameters';
 import { MAX_HYBRID_TEMPORAL_SAMPLES } from '../sourceTemporalLimits';
@@ -23,7 +24,8 @@ export const slitScanParams: Record<string, EffectParam> = {
     { value: 'full', label: 'Full resolution' },
     { value: 'adaptive', label: 'Adaptive · playback / scrub / edits' },
   ] },
-  temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'nearest', group: 'Sampling', options: [
+  // Blend is the default (and the runtime fallback for older saved effects): Nearest leaves hard stair steps.
+  temporalInterpolation: { type: 'select', label: 'Temporal sampling', default: 'linear', group: 'Sampling', options: [
     { value: 'linear', label: 'Blend adjacent frames' }, { value: 'nearest', label: 'Nearest frame (no blending)' },
   ] },
   // Section switch in the inspector; the select value keeps room for other motion sources.
@@ -91,8 +93,9 @@ export const slitScanParams: Record<string, EffectParam> = {
   speed: number('Speed (cycles/s)', 0.15, -2, 2, 0.01, 'Wave'),
 };
 
+/** A number param clamped to its range; null, NaN or text read as the default, like the graph (effectNumberParam.ts). */
 export function slitScanNumber(params: Record<string, unknown>, key: string): number {
   const definition = slitScanParams[key];
-  const value = Number(params[key] ?? definition.default);
-  return Math.max(definition.min!, Math.min(definition.max!, Number.isFinite(value) ? value : Number(definition.default)));
+  const value = finiteEffectNumber(params[key], Number(definition.default));
+  return Math.max(definition.min!, Math.min(definition.max!, value));
 }

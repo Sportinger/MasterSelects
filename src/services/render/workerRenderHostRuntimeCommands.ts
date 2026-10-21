@@ -173,12 +173,8 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly softness: number;
     readonly roundness: number;
   }[];
-  readonly chromaKeyAdjustments?: readonly {
-    readonly keyColor: 'green' | 'blue';
-    readonly tolerance: number;
-    readonly softness: number;
-    readonly spillSuppression: number;
-  }[];
+  /** Chroma Key screen matte without the Edge kernel (see effects/keying/chroma-key/keyerCpu.ts). */
+  readonly chromaKeyAdjustments?: readonly import('../../effects/keying/chroma-key/keyerCpu').ChromaKeyCpuSettings[];
   readonly edgeDetectAdjustments?: readonly {
     readonly strength: number;
     readonly invert: boolean;

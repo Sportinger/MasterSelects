@@ -99,7 +99,7 @@ and source. Other effects and structural settings are not implicitly enabled.
 - `generate` holds the [Memory Leak](./Memory-Leak.md) generator, which
   reinterprets leftover bytes of the FFmpeg wasm heap as pixels through the
   byte-texture binding described below.
-- `time` contains Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
+- `time` contains Time Stack and Slit Scan. `transition` has no registered clip-stack effects and is hidden from the add-effect UI. Timeline transitions are implemented separately in `src/transitions/` because they own two clips, source handles, hold-frame policy, and export participants.
 
 ## Glow on transparent and 3D layers
 
@@ -254,11 +254,29 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
-- **Sampling**, **Preview quality**, **Time** and **Wave** appear first in the Slit Scan inspector because they have no section bypass switch. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Sampling opens by default. **Preview quality**
+- **Look** (top of the Time section) applies a starting point: Sweep (left → right, the
+  defaults), Falling time (top → bottom), Center out, Wave folds, Radial bloom, Time
+  rings or Time steps (12 bands). A look sets only Profile, Angle, Delay, Time bands,
+  Mix, Waves, Phase and Speed; it reads **Custom** once any of them changes, and while
+  any of them has keyframes or a node source (the inspector names those values, which
+  keep animating).
+- **Radial scan** and **Time rings** live in the Wave & Profile folder of the graph.
+  Earlier graphs kept them in the Protected Center folder, whose mute (the default for
+  new effects) routed the profile back to Wave, so Radial scan and Time rings rendered as
+  Wave. Saved graphs are upgraded on load (the nodes move to the profile folder) and
+  now render the chosen profile; muting Protected Center removes only the protection.
+- **Time** and **Wave** come first in the Slit Scan inspector, followed by the collapsed
+  **Sampling**, **Motion compensation** (with its header switch) and **Preview quality**
+  sections; 3D geometry and the other switchable sections follow. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Time opens by default. **Preview quality**
   switches between Small preview
   (160 px maximum edge) and Full size. Both use the same source timestamps and sample
   count. New Slit Scan effects default to resident GPU history, 4 GiB history memory,
-  Nearest temporal sampling, shared-source Hybrid export processing, 1920 samples,
+  Blend adjacent frames temporal sampling (**Sampling → Temporal sampling**; Nearest
+  leaves hard stair steps on moving subjects, Blend softens them into overlapping
+  ghosts but does not remove them on fast limbs: **Motion compensation** shifts each
+  frame along the optical flow for a continuous smear; older saved effects without
+  this setting already rendered with Blend),
+  shared-source Hybrid export processing, 1920 samples,
   zero scan smoothing, a 0.25 deformation threshold, Full size and Adaptive preview quality.
   The sample count is limited by the source's longer dimension in the inspector.
   Full size follows timeline Proxy mode for GPU cache: it uses the actual full JPEG proxy
@@ -776,11 +794,21 @@ cell-center luminance, contour bands, and screen-space derivative coverage.
 
 ### Editable keying and feedback graphs
 
-Chroma Key has an editable graph for Rec.601 YCbCr chrominance distance,
-tolerance/softness matte, and green/blue spill suppression. RGB stays straight;
-the matte multiplies source alpha. Existing key choices and parameter IDs remain
-unchanged, including the legacy Custom choice's green fallback. It retains its
-fullscreen output boundary rather than adding a new inline optimization.
+Chroma Key is an editable screen-difference keyer in three passes: a 64 px Screen
+Grid of screen-like colours, a 1 px Screen Color average (the automatic screen
+colour) and the key pass with Clip Black/White, optional Shrink/Grow and Edge
+Softness passes (pixels at 1080p, none while both are 0), screen subtraction with
+the local grid colour, and Neutral or Gentle spill suppression. A picked screen colour
+folds both measurement passes away. See
+[Keying and Time Effects](./Effects-Keying-Time.md). Untouched saved Rec.601 graphs
+upgrade; edited ones keep reading the retired Tolerance and Edge Softness: their
+inspector shows those controls, and tools report the new parameters as unused there.
+The worker CPU keyer (software preview and export readback) keys only a layer whose
+sole effect is one Chroma Key, also when the layer stores the untouched graph (every
+loaded project does); with other effects, a second key or a colour grade it declines,
+since its fixed order and source-frame screen measurement would differ from the GPU.
+An automatic key on a clip without that screen colour keys nothing; the inspector and
+`addEffect`/`updateEffect` say so, checked on the clip's thumbnails.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
 feedback decay, and final RGBA mixing as shared nodes. Detail changes frequency,
@@ -916,13 +944,16 @@ readback) the untouched Kaleidoscope, Mirror, RGB Split and Pixelate recipes run
 as one hand-written whole-frame pass with the same mappings, frame edges and
 premultiplied reads, within 1/255 of the graphs in tests; Pixelate averages every
 cell exactly there. The pass runs before the layer's other CPU effects. Pointwise
-effects in front of it (Invert, Threshold, Posterize, Chroma Key, Vignette,
-Scanlines, Grain) join it as whole-frame steps in stack order, with 8-bit values
-between effects like the GPU, so a key or a vignette before Pixelate or
-Kaleidoscope stays exact and fast. The rebuilt color effects (Brightness,
-Contrast, Saturation, Exposure, Levels, Hue Shift, Temperature, Vibrance) have no
-hand-written twin: a layer with one runs as ordered graph plans, the color
-programs once per distinct colour ([Color Effects](./Effects-Color.md)). A
+effects in front of it (Invert, Threshold, Posterize, Vignette, Scanlines, Grain)
+join it as whole-frame steps in stack order, with 8-bit values between effects
+like the GPU, so a vignette or a posterize before Pixelate or Kaleidoscope stays
+exact and fast. The rebuilt color effects (Brightness, Contrast, Saturation,
+Exposure, Levels, Hue Shift, Temperature, Vibrance) have no hand-written twin: a
+layer with one runs as ordered graph plans, the color programs once per distinct
+colour ([Color Effects](./Effects-Color.md)). Chroma Key measures its screen from
+the whole layer source, so its CPU keyer runs only as a layer's sole effect
+([Keying and Time Effects](./Effects-Keying-Time.md)); a stored key graph among
+other effects runs as graph plans. A
 distort, blur, glow, sharpen or feedback effect in front of the pass, and edited
 graphs, run the layer as ordered graph plans too, which are much slower. The pass keeps one float copy of the frame (two for a
 chain of resampling effects) and frees it after two idle seconds.
@@ -1697,6 +1728,17 @@ with extra room above and below for vertical callouts, so an arrow keeps its len
 instead of shrinking to a badge on the card edge. The docs site links every picture to its full-size file and lets node
 graphs scroll sideways on narrow screens.
 
+For an effect without folders (Time Stack), `only=` without `focus` picks the
+recipe from the whole effect. In a recipe, `omit=` also takes stubs (`uv:uv`, as
+the stub list names them) and leaves them out before the layout, so they leave no
+gap. A stub carries the name of what its source outputs: name those outputs in the
+effect's port labels (`portLabels` in `effectPresentationPlans.ts`, for example "Time
+Map" on Slit Scan's Switch), so the editor's cards and folder ports read the same.
+`name.<id>=Label` overrides a stub's name for the picture only; real cards keep their
+editor names, and a name that matches no stub fails with the list of stubs. Port
+labels show at about 9 px in the 720 px docs column while a picture is three cards
+wide (four: about 7 px): crop a recipe to the cards its text and remix need.
+
 ### Effect editor excerpts
 
 `scripts/effect-editor-shot.mjs <shot file>` shows where an effect's controls
@@ -1717,6 +1759,10 @@ label text, and `hide` leaves named buttons that
 the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
 `--only <name>` recaptures one shot. A control the script cannot find stops it
 with the card's text, so a renamed parameter does not silently drop a callout.
+`viewport: { width, height }` sets the editor window (default 1600 × 900). Keep the
+default width so the picture shows the inspector as most users see it; a taller window
+fits a long card. A card taller than the panel is cropped at the panel's bottom edge,
+not in the timeline below.
 
 ### When the GPU cannot build an effect
 
