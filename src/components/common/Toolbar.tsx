@@ -162,10 +162,14 @@ export function Toolbar({
   useEffect(() => {
     const updateProjectState = () => {
       const data = projectFileService.getProjectData();
+      // The startup recovery scratch has project data too; it must not hide the pending
+      // "Restore" action of the real project that is waiting for folder access.
+      const pendingPermission = projectFileService.needsPermission();
+      setNeedsPermission(pendingPermission);
+      if (pendingPermission) setPendingProjectName(projectFileService.getPendingProjectName());
       if (data) {
         setProjectName(data.name);
         setIsProjectOpen(true);
-        setNeedsPermission(false);
       } else {
         setProjectName('No Project Open');
         setIsProjectOpen(false);

@@ -1,6 +1,7 @@
 import { RepositoryError, type BlobReference, type RepositoryErrorCode } from '../contracts';
 import type { NativeCommandRequest, NativeBlobRequest, StorageFailure, StorageRequest, StorageSuccess, StorageOpenProgress, RepositoryOpenProgress } from '../storageWorkerProtocol';
 import type { NativeRepositoryClient } from '../backends/nativeBackend';
+import { reportWorkerLoadFailure } from '../../../../runtime/workerLoadFailure';
 
 interface PendingRequest { type: StorageRequest['type']; resolve: (value: unknown) => void; reject: (error: unknown) => void; removeAbort: () => void; }
 export class StorageWorkerClient {
@@ -12,6 +13,8 @@ export class StorageWorkerClient {
   private readonly nativeLeases = new Map<string, string>();
   private fault: RepositoryError | null = null;
   private phase: 'startup' | 'opening' | 'ready' = 'startup';
+  /** Whether the worker ever posted a message, i.e. its script loaded. */
+  private answered = false;
   private readonly faultListeners = new Set<() => void>();
   private readonly nativeClient?: NativeRepositoryClient;
   private readonly onOpenProgress?: (progress: RepositoryOpenProgress) => void;
@@ -20,6 +23,7 @@ export class StorageWorkerClient {
     this.nativeClient = nativeClient;
     this.worker = new Worker(new URL('../../../../workers/projectStorage.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = event => {
+      this.answered = true;
       const progress = event.data as StorageOpenProgress;
       if (progress.type === 'open-progress') {
         if (progress.sessionEpoch === this.sessionEpoch && !this.closed) {
@@ -42,7 +46,13 @@ export class StorageWorkerClient {
       }
       else request.reject(new RepositoryError(response.error.code, response.error.message));
     };
-    this.worker.onerror = event => this.fail(new RepositoryError('io', this.failureMessage(event.message || 'Project storage worker failed')));
+    this.worker.onerror = event => {
+      const error = new RepositoryError('io', this.failureMessage(event.message || 'Project storage worker failed'));
+      // Failing before any answer usually means a deploy removed this build's worker file: the boot
+      // recovery reloads the tab when a newer build is live (unsaved edits are kept and announced).
+      if (this.phase === 'startup' && !this.answered) reportWorkerLoadFailure(error.message);
+      this.fail(error);
+    };
     this.worker.onmessageerror = () => this.fail(new RepositoryError('corrupt', this.failureMessage('Project worker response could not be decoded')));
   }
   private failureMessage(message: string): string {

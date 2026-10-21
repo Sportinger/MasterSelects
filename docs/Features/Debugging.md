@@ -442,6 +442,12 @@ Three more paths lead into the same recovery (`src/runtime/chunkLoadRecovery.ts`
   event (`reload_waiting_online`) instead of failing again and spending the cooldown.
   Mobile tabs resumed from the background hit this most.
 - **Failed CSS preloads** ("Unable to preload CSS for …") count as chunk failures.
+- **Project storage worker that fails before answering.** A worker 404 raises no
+  chunk error, only `Project storage worker failed (storage phase: startup …)`.
+  `StorageWorkerClient` reports such a failure (`src/runtime/workerLoadFailure.ts`);
+  the recovery fetches the current page with `no-store` and reloads only when the
+  server now serves another build (app version or module entry differs). A real
+  worker error on the current build stays a visible error without a reload.
 
 When the automatic reload is not possible (cooldown, unsaved project) or waits for
 the connection, a plain-DOM notice (`src/runtime/chunkRecoveryNotice.ts`, outside

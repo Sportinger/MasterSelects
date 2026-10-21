@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-const mock = vi.hoisted(() => ({ getStoredHandle: vi.fn(), remove: vi.fn(), load: vi.fn(), permission: vi.fn(), request: vi.fn(), recent: vi.fn(), requestRoots: vi.fn() }));
+const mock = vi.hoisted(() => ({ getStoredHandle: vi.fn(), remove: vi.fn(), load: vi.fn(), permission: vi.fn(), request: vi.fn(), recent: vi.fn(), requestRoots: vi.fn(), requestFiles: vi.fn() }));
 const recentEntry = { id: 'recent', backend: 'fsa', name: 'Test project', handleKey: 'recentProject:recent' };
 vi.mock('../../src/services/projectDB', () => ({ projectDB: { getStoredHandle: mock.getStoredHandle } }));
 vi.mock('../../src/services/project/recentProjects', () => ({ getRecentProject: mock.recent, removeRecentProject: mock.remove }));
-vi.mock('../../src/services/project/mediaSourceRootAccess', () => ({ requestMediaSourceRootAccess: mock.requestRoots }));
+vi.mock('../../src/services/project/mediaSourceRootAccess', () => ({ requestMediaSourceRootAccess: mock.requestRoots, requestMediaFileAccess: mock.requestFiles }));
 import { openRecentProject, type RecentProjectOpeningContext } from '../../src/services/project/fileService/recentProjectOpening';
 const context = { isFsaAvailable: true, coreService: { loadProject: mock.load }, activateFsaBackend: vi.fn(), ensureNativeBackendReady: vi.fn() } as unknown as RecentProjectOpeningContext;
 beforeEach(() => {
-  vi.clearAllMocks(); mock.recent.mockReturnValue(recentEntry); mock.requestRoots.mockResolvedValue(undefined); mock.permission.mockResolvedValue('granted'); mock.request.mockResolvedValue('granted'); mock.load.mockResolvedValue(true);
+  vi.clearAllMocks(); mock.recent.mockReturnValue(recentEntry); mock.requestRoots.mockResolvedValue(undefined); mock.requestFiles.mockResolvedValue(undefined); mock.permission.mockResolvedValue('granted'); mock.request.mockResolvedValue('granted'); mock.load.mockResolvedValue(true);
   mock.getStoredHandle.mockResolvedValue({ kind: 'directory', queryPermission: mock.permission, requestPermission: mock.request });
 });
 describe('recent project recovery', () => {
@@ -33,6 +33,14 @@ describe('recent project recovery', () => {
     mock.load.mockImplementation(async () => { order.push('load'); return true; });
     await expect(openRecentProject(context, 'recent')).resolves.toBe(true);
     expect(mock.requestRoots).toHaveBeenCalledWith(['source-root:1']); expect(order).toEqual(['roots', 'load']);
+  });
+  it('re-allows linked media files in the same click, before loading', async () => {
+    mock.recent.mockReturnValue({ ...recentEntry, mediaFileIds: ['media-1', 'media-2'] });
+    const order: string[] = [];
+    mock.requestFiles.mockImplementation(async () => { order.push('files'); });
+    mock.load.mockImplementation(async () => { order.push('load'); return true; });
+    await expect(openRecentProject(context, 'recent')).resolves.toBe(true);
+    expect(mock.requestFiles).toHaveBeenCalledWith(['media-1', 'media-2']); expect(order).toEqual(['files', 'load']);
   });
   it('preserves denied access for later recovery', async () => {
     mock.permission.mockResolvedValue('prompt'); mock.request.mockResolvedValue('denied');

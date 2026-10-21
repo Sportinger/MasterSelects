@@ -23,7 +23,12 @@ export interface RecentProjectEntry {
   path?: string;
   /** Media folders of an FSA project, re-allowed by the click that opens it. */
   mediaSourceRootIds?: string[];
+  /** Media linked as single files (no project copy), re-allowed by the same click. */
+  mediaFileIds?: string[];
 }
+
+/** One click may prompt for a few files; Chrome's restore prompt usually grants them all at once. */
+const MAX_REMEMBERED_MEDIA_FILES = 200;
 
 function getStorage(): Storage | null {
   if (typeof window === 'undefined') {
@@ -181,6 +186,13 @@ function mediaSourceRootIdsOf(value: unknown): string[] | undefined {
   return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string' && id.length > 0) : undefined;
 }
 
+/** Linked media outside the project folder: their saved file access lapses with the browser session. */
+function linkedMediaFileIdsOf(projectData: ProjectFile | null): string[] | undefined {
+  if (!Array.isArray(projectData?.media)) return undefined;
+  return projectData.media.filter(media => media && typeof media.id === 'string' && !media.projectPath)
+    .map(media => media.id).slice(0, MAX_REMEMBERED_MEDIA_FILES);
+}
+
 function upsertEntry(entries: RecentProjectEntry[], nextEntry: RecentProjectEntry): RecentProjectEntry[] {
   return [
     nextEntry,
@@ -254,6 +266,7 @@ export async function addRecentFsaProject(
     lastOpenedAt: Date.now(),
     mediaSourceRootIds: mediaSourceRootIdsOf(projectData?.mediaSourceRoots?.map((root) => root.id))
       ?? mediaSourceRootIdsOf(existing?.mediaSourceRootIds),
+    mediaFileIds: linkedMediaFileIdsOf(projectData) ?? mediaSourceRootIdsOf(existing?.mediaFileIds),
   };
 
   await persistEntries(upsertEntry(entries, nextEntry));
@@ -263,6 +276,12 @@ export async function getRecentFsaProjectMediaSourceRootIds(handle: FileSystemDi
   if (resolveProjectRootMode() !== 'fsa') return [];
   const entry = await findFsaEntry(getRecentProjects(), handle);
   return mediaSourceRootIdsOf(entry?.mediaSourceRootIds) ?? [];
+}
+
+export async function getRecentFsaProjectMediaFileIds(handle: FileSystemDirectoryHandle): Promise<string[]> {
+  if (resolveProjectRootMode() !== 'fsa') return [];
+  const entry = await findFsaEntry(getRecentProjects(), handle);
+  return mediaSourceRootIdsOf(entry?.mediaFileIds) ?? [];
 }
 
 export async function rememberRecentFsaProjectMediaSourceRoots(

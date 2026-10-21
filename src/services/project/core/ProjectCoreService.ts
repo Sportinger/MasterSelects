@@ -6,8 +6,8 @@ import type { FileStorageService } from './FileStorageService';
 import type { ProjectFile, ProjectMediaFile, ProjectComposition, ProjectFolder } from '../types';
 import { acquireProjectRoot, getProjectWriteSupportError, resolveProjectRootMode, listProjectFolderNames } from './projectRootAccess';
 import { rememberLastProject, rememberProjectParent } from './projectDirectoryPersistence';
-import { addRecentFsaProject, addRecentOpfsProject, getRecentFsaProjectMediaSourceRootIds } from '../recentProjects';
-import { requestMediaSourceRootAccess } from '../mediaSourceRootAccess';
+import { addRecentFsaProject, addRecentOpfsProject, getRecentFsaProjectMediaFileIds, getRecentFsaProjectMediaSourceRootIds } from '../recentProjects';
+import { requestMediaFileAccess, requestMediaSourceRootAccess } from '../mediaSourceRootAccess';
 import { getTabLastProjectHandleKey, LEGACY_LAST_PROJECT_HANDLE_KEY, readLastOpfsProjectName } from '../tabProjectPersistence';
 import { openRepositoryProject, createRepositoryAt, renameRepositoryProject, createIndependentProjectBackup, repositoryHasUnsavedChanges } from '../repository/lifecycle/repositoryProjectOperations';
 import { closeEditorRepository, flushEditorRepository, getActiveRepositorySession, readEditorRepositoryProject, isScratchRepository } from '../repository/lifecycle/editorRepositoryLifecycle';
@@ -32,8 +32,9 @@ export class ProjectCoreService {
   async requestPendingPermission(): Promise<boolean> {
     const handle = this.pendingHandle; if (!handle) return false;
     if (await handle.requestPermission({ mode: 'readwrite' }) !== 'granted') return false;
-    // Same click as the folder prompt: media folders lose access on reload too.
+    // Same click as the folder prompt: media folders and linked files lost access with the browser session too.
     await requestMediaSourceRootAccess(await getRecentFsaProjectMediaSourceRootIds(handle));
+    await requestMediaFileAccess(await getRecentFsaProjectMediaFileIds(handle));
     const opened = await this.loadProject(handle); if (opened) this.pendingHandle = null; return opened;
   }
   async createProject(name: string, preserveCurrent = false): Promise<boolean> {
@@ -105,8 +106,10 @@ export class ProjectCoreService {
       const stored = await projectDB.getStoredHandle(getTabLastProjectHandleKey()) ?? await projectDB.getStoredHandle(LEGACY_LAST_PROJECT_HANDLE_KEY);
       if (!stored || stored.kind !== 'directory') return false;
       const handle = stored as FileSystemDirectoryHandle;
+      // Chrome keeps folder access only for the browsing session: after a browser restart the stored
+      // handle asks again. It stays the same project; one click re-grants it (see requestPendingPermission).
       const permission = await handle.queryPermission({ mode: 'readwrite' });
-      if (permission !== 'granted') { this.pendingHandle = handle; return false; }
+      if (permission !== 'granted') { this.pendingHandle = handle; log.info('Last project needs folder access again', { name: handle.name, permission }); return false; }
       return this.loadProject(handle);
     } catch (error) { log.warn('Repository restore failed; previous session retained', error); return false; }
   }

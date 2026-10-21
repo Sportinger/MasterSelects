@@ -13,6 +13,9 @@ const mocks = vi.hoisted(() => ({
   openExistingProject: vi.fn(),
   openRecentProject: vi.fn(),
   openStoredProject: vi.fn(),
+  needsPermission: vi.fn(),
+  getPendingProjectName: vi.fn(),
+  resumePendingProject: vi.fn(),
 }));
 
 vi.mock('../../src/services/project/core/projectRootAccess', () => ({
@@ -27,7 +30,13 @@ vi.mock('../../src/services/projectFileService', () => ({
     hasUnsavedChanges: mocks.hasUnsavedChanges,
     listStoredProjects: mocks.listStoredProjects,
     openRecentProject: mocks.openRecentProject,
+    needsPermission: mocks.needsPermission,
+    getPendingProjectName: mocks.getPendingProjectName,
   },
+}));
+
+vi.mock('../../src/services/project/pendingProjectResume', () => ({
+  resumePendingProject: mocks.resumePendingProject,
 }));
 
 vi.mock('../../src/services/projectSync', () => ({
@@ -54,6 +63,9 @@ beforeEach(() => {
   mocks.openExistingProject.mockResolvedValue(true);
   mocks.openRecentProject.mockResolvedValue(true);
   mocks.openStoredProject.mockResolvedValue(true);
+  mocks.needsPermission.mockReturnValue(false);
+  mocks.getPendingProjectName.mockReturnValue(null);
+  mocks.resumePendingProject.mockResolvedValue(true);
 });
 
 afterEach(() => {
@@ -63,6 +75,33 @@ afterEach(() => {
 });
 
 describe('Editor project selection overlay', () => {
+  it('offers one-click resume for the last project whose folder access lapsed', async () => {
+    mocks.needsPermission.mockReturnValue(true);
+    mocks.getPendingProjectName.mockReturnValue('Opera Night');
+    const onProjectSelected = vi.fn();
+    render(<EditorProjectSelectionOverlay onProjectSelected={onProjectSelected} />);
+
+    const resume = screen.getByRole('button', { name: /Resume “Opera Night”/ });
+    expect(screen.getAllByRole('button')[0]).toBe(resume);
+    mocks.needsPermission.mockReturnValue(false);
+    await act(async () => { fireEvent.click(resume); });
+    expect(mocks.resumePendingProject).toHaveBeenCalledOnce();
+    await act(async () => { await vi.advanceTimersByTimeAsync(250); });
+    expect(onProjectSelected).toHaveBeenCalledOnce();
+  });
+
+  it('keeps the resume action when the browser prompt is declined', async () => {
+    mocks.needsPermission.mockReturnValue(true);
+    mocks.getPendingProjectName.mockReturnValue('Opera Night');
+    mocks.resumePendingProject.mockResolvedValue(false);
+    const onProjectSelected = vi.fn();
+    render(<EditorProjectSelectionOverlay onProjectSelected={onProjectSelected} />);
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Resume/ })); });
+    expect(await screen.findByRole('alert')).toHaveTextContent('Folder access was not allowed');
+    expect(screen.getByRole('button', { name: /Resume “Opera Night”/ })).not.toBeDisabled();
+    expect(onProjectSelected).not.toHaveBeenCalled();
+  });
+
   it('shows a storage listing failure instead of claiming no projects exist', async () => {
     mocks.resolveProjectRootMode.mockReturnValue('opfs');
     mocks.listStoredProjects.mockRejectedValue(new DOMException('Storage access denied', 'SecurityError'));

@@ -14,7 +14,7 @@ beforeEach(async () => {
   reload = vi.fn();
   vi.stubGlobal('window', Object.assign(new EventTarget(), {
     sessionStorage: storage,
-    location: { reload },
+    location: { reload, pathname: '/editor' },
   }));
   const { installChunkLoadRecovery } = await import('../../src/runtime/chunkLoadRecovery');
   installChunkLoadRecovery();
@@ -116,5 +116,33 @@ describe('chunk load recovery', () => {
     expect(notice()?.dataset.kind).toBe('retry');
     notice()!.querySelector('button')!.click();
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  describe('storage worker that fails before answering', () => {
+    const page = (version: string, entry: string) => `<html><head><meta name="app-version" content="${version}">`
+      + `<script type="module" crossorigin src="/assets/${entry}"></script></head><body></body></html>`;
+    beforeEach(() => {
+      document.head.innerHTML = '<meta name="app-version" content="3.2.5"><script type="module" crossorigin src="/assets/index-old.js"></script>';
+    });
+    afterEach(() => { document.head.innerHTML = ''; });
+
+    async function workerFailure(served: string): Promise<void> {
+      const fetchMock = vi.fn(async () => new Response(served, { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+      const { reportWorkerLoadFailure } = await import('../../src/runtime/workerLoadFailure');
+      reportWorkerLoadFailure('Project storage worker failed (storage phase: startup; operations: open)');
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/editor', expect.objectContaining({ cache: 'no-store' })));
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    it('reloads the tab when a newer build was deployed', async () => {
+      await workerFailure(page('3.2.6', 'index-new.js'));
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('leaves a real worker error alone when the same build is still deployed', async () => {
+      await workerFailure(page('3.2.5', 'index-old.js'));
+      expect(reload).not.toHaveBeenCalled();
+    });
   });
 });

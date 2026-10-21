@@ -27,10 +27,7 @@ import type {
   ProjectNameDialogRequest,
 } from '../ProjectNameDialog';
 
-import {
-  markAndroidProjectAutoRestoreReady,
-  prepareAndroidProjectAutoRestore,
-} from '../../../services/project/androidProjectAutoRestore';
+import { resumePendingProject } from '../../../services/project/pendingProjectResume';
 
 const log = Logger.create('Toolbar');
 
@@ -340,62 +337,22 @@ export function useToolbarProjectActions({
 
   const handleRestorePermission = useCallback(async () => {
     setIsLoading(true);
-    setProjectLoadProgress({
-      phase: 'opening',
-      percent: 3,
-      message: 'Restoring project permission',
-      blocking: true,
-    });
-    const success = await projectFileService.requestPendingPermission();
-    if (success) {
-      const sourceHandle = projectFileService.getProjectHandle();
-      if (sourceHandle) {
-        let copiedFileCount = 0;
-        try {
-          setProjectLoadProgress({
-            phase: 'opening',
-            percent: 12,
-            message: 'Preparing automatic Android restore',
-            blocking: true,
-          });
-          const mirrorHandle = await prepareAndroidProjectAutoRestore(sourceHandle, () => {
-            copiedFileCount += 1;
-            if (copiedFileCount === 1 || copiedFileCount % 25 === 0) {
-              setProjectLoadProgress({
-                phase: 'opening',
-                percent: Math.min(85, 12 + copiedFileCount),
-                message: `Preparing automatic Android restore (${copiedFileCount} files)`,
-                blocking: true,
-              });
-            }
-          });
-          if (mirrorHandle) {
-            const alreadyUsingMirror = await sourceHandle.isSameEntry(mirrorHandle);
-            const mirrorLoaded = alreadyUsingMirror
-              || await projectFileService.loadProject(mirrorHandle);
-            if (mirrorLoaded) {
-              markAndroidProjectAutoRestoreReady(mirrorHandle);
-            } else {
-              log.warn('Android project mirror could not be opened; keeping the original project open');
-            }
-          }
-        } catch (error) {
-          log.warn('Could not prepare Android project auto-restore; keeping the original project open', error);
+    try {
+      if (await resumePendingProject()) {
+        const data = projectFileService.getProjectData();
+        if (data) {
+          setProjectName(data.name);
+          setIsProjectOpen(true);
         }
+        setNeedsPermission(false);
+        setPendingProjectName(null);
       }
-
-      await loadProjectToStores();
-      const data = projectFileService.getProjectData();
-      if (data) {
-        setProjectName(data.name);
-        setIsProjectOpen(true);
-      }
-      setNeedsPermission(false);
-      setPendingProjectName(null);
-    } else {
-      setProjectLoadProgress(null);
+    } catch (error) {
+      log.error('Project could not be resumed', error);
+      failProjectLoadProgress(error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [
     setIsLoading,
     setIsProjectOpen,
