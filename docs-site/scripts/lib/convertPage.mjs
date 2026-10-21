@@ -4,10 +4,12 @@
 // lines, expands <!-- docs-gallery: … --> cards and collects the page's anchors, so links
 // between pages can be checked. Pass 2 (convertPage) rewrites links and media for the site:
 // pages → /docs/<route>/, shared assets → /docs/assets/…, pictures → full-size links,
-// clips → reduced-motion-aware <video>. Code blocks and inline code are left untouched.
+// clips → reduced-motion-aware <video>, compare figures → before/after sliders (lib/compare.mjs).
+// Code blocks and inline code are left untouched.
 
 import path from 'node:path';
 import { Slugger, slug } from './slug.mjs';
+import { compareFigure, splitCompareFigures } from './compare.mjs';
 import { IMAGE_EXTENSIONS, VIDEO_EXTENSIONS, imageSize, mp4Info } from './media.mjs';
 import { SITE_BASE, isExternal, pageSlug, resolveFrom, routeUrl } from './routes.mjs';
 import { mergeEffectGroups } from './featureIndex.mjs';
@@ -270,20 +272,29 @@ export function convertPage({ body, title }, ctx) {
     return `<video class="docs-clip-video"${posterAttribute}${dimensions} muted loop playsinline controls preload="none" data-docs-autoplay aria-label="${escapeHtml(alt)}">${list}${track}</video>`;
   };
 
+  // Markdown links and pictures: pages → site routes, pictures → full-size links, clips → <video>.
+  const linkPass = (prose) => prose.replace(/(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu, (full, imagePrefix, label, target) => {
+    if (imagePrefix && !label.trim()) ctx.warn(`${ctx.file}: the picture ${target} has no alt text.`);
+    const result = resolveTarget(target, label || target);
+    if (result.text && imagePrefix) ctx.warn(`${ctx.file}: the picture ${target} lies outside docs/Features; only its alt text is shown.`);
+    if (result.text) return label;
+    if (!result.asset && !result.missing) return `${imagePrefix}[${label}](${result.url})`;
+    if (!imagePrefix) return `[${label}](${result.url})`;
+    if (result.asset && VIDEO_EXTENSIONS.test(result.asset)) return videoHtml(result.asset, label);
+    const size = result.bytes && IMAGE_EXTENSIONS.test(result.url) ? imageSize(result.bytes) : undefined;
+    const dimensions = size ? ` width="${size.width}" height="${size.height}"` : '';
+    const loading = pictures++ ? ' loading="lazy"' : '';
+    return `<a class="docs-shot-zoom" href="${result.url}" title="Open the full-size picture"><img src="${result.url}" alt="${escapeHtml(label)}"${dimensions}${loading} decoding="async"></a>`;
+  });
+  const compareContext = {
+    file: ctx.file, title, resolve: resolveTarget, asset: ctx.asset, checkAsset: ctx.checkAsset, assetUrl,
+    nextPicture: () => pictures++, warn: ctx.warn,
+  };
   const text = mapProse(body, (prose) => {
-    let out = prose.replace(/(!?)\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/gu, (full, imagePrefix, label, target) => {
-      if (imagePrefix && !label.trim()) ctx.warn(`${ctx.file}: the picture ${target} has no alt text.`);
-      const result = resolveTarget(target, label || target);
-      if (result.text && imagePrefix) ctx.warn(`${ctx.file}: the picture ${target} lies outside docs/Features; only its alt text is shown.`);
-      if (result.text) return label;
-      if (!result.asset && !result.missing) return `${imagePrefix}[${label}](${result.url})`;
-      if (!imagePrefix) return `[${label}](${result.url})`;
-      if (result.asset && VIDEO_EXTENSIONS.test(result.asset)) return videoHtml(result.asset, label);
-      const size = result.bytes && IMAGE_EXTENSIONS.test(result.url) ? imageSize(result.bytes) : undefined;
-      const dimensions = size ? ` width="${size.width}" height="${size.height}"` : '';
-      const loading = pictures++ ? ' loading="lazy"' : '';
-      return `<a class="docs-shot-zoom" href="${result.url}" title="Open the full-size picture"><img src="${result.url}" alt="${escapeHtml(label)}"${dimensions}${loading} decoding="async"></a>`;
-    });
+    // Compare figures become slider stages (lib/compare.mjs); the rest goes through the link pass.
+    // Both in page order, so only the page's first picture loads eagerly.
+    let out = splitCompareFigures(prose).map((part) => (typeof part === 'string' ? linkPass(part)
+      : compareFigure(part, compareContext) ?? linkPass(part.text))).join('');
     // Raw HTML (figures, clips from scripts/doc-clip.mjs): relative src/poster/href too.
     out = out.replace(/<[a-z][a-z0-9-]*\s[^>]*>/giu, (tag) => tag.replace(/(\s)(src|poster|href)="([^"]+)"/giu, (full, space, attribute, target) => {
       if (isExternal(target) || target.startsWith('/') || target.startsWith('#') || target.startsWith('data:')) return full;
@@ -303,7 +314,9 @@ export function convertPage({ body, title }, ctx) {
         list = /\bclass="/u.test(list) ? list.replace(/\bclass="/u, 'class="docs-clip-video ') : ` class="docs-clip-video"${list}`;
       }
       list = list.replace(/\sautoplay(?:="[^"]*")?(?=\s|$)/u, ' data-docs-autoplay');
-      for (const flag of ['muted', 'playsinline', 'controls']) if (!new RegExp(`\\s${flag}\\b`, 'u').test(list)) list += ` ${flag}`;
+      // A compare loop lies under its slider, which brings its own play button (docsCompare.js).
+      const flags = /\bdocs-compare-video\b/u.test(list) ? ['muted', 'playsinline'] : ['muted', 'playsinline', 'controls'];
+      for (const flag of flags) if (!new RegExp(`\\s${flag}\\b`, 'u').test(list)) list += ` ${flag}`;
       // Without width/height the clip takes its poster's size, so the page does not shift when it loads.
       const posterUrl = list.match(/\sposter="\/docs\/(assets\/[^"]+)"/u)?.[1];
       if (authored && posterUrl && !(/\swidth="/u.test(list) && /\sheight="/u.test(list))) {

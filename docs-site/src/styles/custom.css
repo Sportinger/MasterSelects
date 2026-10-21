@@ -154,6 +154,132 @@
 .sl-markdown-content .docs-clip-video:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
 .sl-markdown-content .docs-clip > p { margin: 0; }
 
+/* Compare sliders: <figure class="docs-shot docs-compare"> around a pair asset (original | effect at
+   the same size, no gap). The sync (scripts/lib/compare.mjs) builds a stage of one half's size: the
+   effect half below, the original half above it, clipped at --docs-compare. Without JavaScript it is
+   a split picture with a thin line; src/scripts/docsCompare.js marks it data-ready and makes the
+   line draggable (data-glide eases a jump, data-live shows a loop's canvas halves). */
+@property --docs-compare {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 50%;
+}
+.sl-markdown-content .docs-compare-stage {
+  --docs-compare: 50%;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: .5rem;
+  background: #111;
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-markdown-content .docs-compare-stage[data-ready] { cursor: ew-resize; }
+.sl-markdown-content .docs-compare-stage[data-glide] { transition: --docs-compare .18s ease-out; }
+.sl-markdown-content .docs-compare-before,
+.sl-markdown-content .docs-compare-after { position: absolute; inset: 0; overflow: hidden; }
+.sl-markdown-content .docs-compare-before { clip-path: inset(0 calc(100% - var(--docs-compare)) 0 0); }
+/* Each half shows its side of the pair: the picture is twice as wide as the stage. */
+.sl-markdown-content .docs-compare .docs-compare-stage img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.sl-markdown-content .docs-compare .docs-compare-after img { left: -100%; }
+.sl-markdown-content .docs-compare .docs-compare-frame {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+.sl-markdown-content .docs-compare .docs-compare-stage[data-live] .docs-compare-frame { display: block; }
+/* The loop's video lies under the halves, which show its frames. */
+.sl-markdown-content .docs-compare .docs-compare-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.sl-markdown-content .docs-compare-tag {
+  position: absolute;
+  top: .5rem;
+  padding: .05rem .4rem;
+  border-radius: .25rem;
+  background: rgb(0 0 0 / .5);
+  color: #fff;
+  font-size: .6875rem;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sl-markdown-content .docs-compare-before .docs-compare-tag { left: .5rem; }
+.sl-markdown-content .docs-compare-after .docs-compare-tag { right: .5rem; }
+/* The divider: a thin white line, and (once the script runs) a small round handle in its middle. */
+.sl-markdown-content .docs-compare-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--docs-compare);
+  width: 2px;
+  margin-left: -1px;
+  background: rgb(255 255 255 / .9);
+  box-shadow: 0 0 2px rgb(0 0 0 / .5);
+  outline: none;
+}
+.sl-markdown-content .docs-compare-stage[data-ready] .docs-compare-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2rem;
+  height: 2rem;
+  translate: -50% -50%;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: rgb(0 0 0 / .4) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23fff'%3E%3Cpath d='M8 5.5 3.5 10 8 14.5zM12 5.5l4.5 4.5-4.5 4.5z'/%3E%3C/svg%3E") center / 1.1rem no-repeat;
+  box-shadow: 0 1px 4px rgb(0 0 0 / .45);
+}
+.sl-markdown-content .docs-compare-handle:focus { outline: none; }
+.sl-markdown-content .docs-compare-handle:focus-visible::after {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+/* Play button of a loop under reduced motion or blocked autoplay (docsClips.js marks the video). */
+.sl-markdown-content .docs-compare-play {
+  position: absolute;
+  right: .5rem;
+  bottom: .5rem;
+  display: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / .55);
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-markdown-content .docs-compare-stage:has(> video[data-docs-manual]) .docs-compare-play { display: grid; }
+.sl-markdown-content .docs-compare-play svg { width: 1rem; height: 1rem; fill: currentColor; }
+.sl-markdown-content .docs-compare-play[data-playing] .docs-compare-play-icon,
+.sl-markdown-content .docs-compare-play:not([data-playing]) .docs-compare-pause-icon { display: none; }
+.sl-markdown-content .docs-compare-play:focus { outline: none; }
+.sl-markdown-content .docs-compare-play:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
+
 /* Edit diagrams: inline SVG with real <text>; everything inherits the theme through
    currentColor, and meaning never rests on colour alone (clips carry their letters). */
 .sl-markdown-content .docs-diagram svg {

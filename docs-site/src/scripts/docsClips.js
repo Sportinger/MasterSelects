@@ -5,12 +5,19 @@ const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const clips = [...document.querySelectorAll('video[data-docs-autoplay]')];
 const inView = new Set();
 
+// The loop of a compare slider lies under the slider: instead of its controls, docsCompare.js shows a
+// play button while the video is marked data-docs-manual.
+function setManual(video, manual) {
+  if (video.classList.contains('docs-compare-video')) video.toggleAttribute('data-docs-manual', manual);
+  else video.controls = manual;
+}
+
 function update(video) {
-  video.controls = reducedMotion.matches;
+  setManual(video, reducedMotion.matches);
   if (inView.has(video) && !reducedMotion.matches) {
     video.muted = true;
     // A blocked autoplay keeps the controls, so the clip can still be started by hand.
-    video.play().catch(() => { video.controls = true; });
+    video.play().catch(() => setManual(video, true));
   } else if (!video.paused) {
     video.pause();
   }
@@ -25,7 +32,7 @@ if (clips.length) {
     }
   }, { rootMargin: '200px 0px' });
   for (const video of clips) {
-    video.controls = reducedMotion.matches;
+    setManual(video, reducedMotion.matches);
     observer.observe(video);
   }
   reducedMotion.addEventListener('change', () => clips.forEach(update));

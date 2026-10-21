@@ -265,8 +265,10 @@ writeIfChanged(path.join(generatedDir, 'sidebar.json'), `${JSON.stringify(sideba
 writeIfChanged(path.join(generatedDir, 'redirects.json'), `${JSON.stringify(redirects.redirects, null, 2)}\n`);
 writeIfChanged(path.join(generatedDir, 'anchor-redirects.json'), `${JSON.stringify(anchorRedirects.anchors, null, 2)}\n`);
 
-for (const text of warnings) console.warn(text);
+// A figure that stays as written is checked again by the general pass: report each problem once.
+const uniqueWarnings = [...new Set(warnings)];
+for (const text of uniqueWarnings) console.warn(text);
 for (const text of infos) console.log(text);
 const sourceLabel = sourceRef ? `Git ref ${sourceRef}` : 'working tree';
 console.log(`Sidebar: ${sidebar.length} groups, ${countSidebarPages(sidebar)} entries; ${unpublished.size} pages unpublished. Effect groups from ${catalog.source}.`);
-console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects, ${anchorRedirects.count} anchor redirects; assets ${hasAssets ? 'copied' : 'not found'}; ${warnings.length} warnings.`);
+console.log(`Converted ${published.length - 1} pages + overview from ${sourceLabel}; ${redirects.active} redirects, ${anchorRedirects.count} anchor redirects; assets ${hasAssets ? 'copied' : 'not found'}; ${uniqueWarnings.length} warnings.`);

@@ -10,6 +10,7 @@ const sidebarFile = new URL('./src/generated/sidebar.json', import.meta.url);
 const redirectsFile = new URL('./src/generated/redirects.json', import.meta.url);
 const anchorRedirectsFile = new URL('./src/generated/anchor-redirects.json', import.meta.url);
 const docsClipsScript = new URL('./src/scripts/docsClips.js', import.meta.url);
+const docsCompareScript = new URL('./src/scripts/docsCompare.js', import.meta.url);
 function readGenerated(file, fallback) {
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -48,15 +49,17 @@ export default defineConfig({
         'Browser-based media editor and agent-friendly foundation for video, audio, motion, 3D, and creative tools.',
       logo: { src: './src/assets/ms-mark.png' },
       customCss: ['./src/styles/custom.css'],
-      // Docs clips start when scrolled into view and respect reduced motion (inline: a few lines).
+      // Docs clips start when scrolled into view and respect reduced motion; compare figures get
+      // their draggable divider (inline: a few lines each).
       head: [
         { tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsClipsScript, 'utf8') },
+        { tag: 'script', attrs: { type: 'module' }, content: fs.readFileSync(docsCompareScript, 'utf8') },
         ...(Object.keys(anchorRedirects).length ? [{ tag: 'script', content: anchorRedirectScript }] : []),
       ],
       sidebar,
     }),
     // A running `astro dev` restarts when a sync changes the generated sidebar or redirects,
-    // or when the clip script changes.
+    // or when the clip or compare script changes.
     {
       name: 'masterselects-feature-sidebar',
       hooks: {
@@ -65,6 +68,7 @@ export default defineConfig({
           addWatchFile(redirectsFile);
           addWatchFile(anchorRedirectsFile);
           addWatchFile(docsClipsScript);
+          addWatchFile(docsCompareScript);
         },
       },
     },
