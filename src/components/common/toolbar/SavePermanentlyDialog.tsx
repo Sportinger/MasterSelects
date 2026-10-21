@@ -3,6 +3,7 @@ import { Logger } from '../../../services/logger';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import { moveActiveProjectToPersistentBrowserStorage, moveTemporaryProject, type OpenBrowserStorageCopy } from '../../../services/project/permanentSave/browserStorageMigration';
 import { downloadActiveProjectArchive, saveActiveProjectToFolder } from '../../../services/project/permanentSave/permanentSaveActions';
+import { FolderCopyUnverifiedError } from '../../../services/project/permanentSave/folderCopyUnverifiedError';
 import { canMoveTemporaryProjects, resolvePermanentSaveDestinations, type PermanentSaveDestination } from '../../../services/project/permanentSave/permanentSaveOptions';
 import type { PermanentSaveStatus } from './usePermanentSaveStatus';
 import { useSavePermanentlyEnvironment } from './useSavePermanentlyEnvironment';
@@ -62,7 +63,10 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
       if (mounted.current && result) setMessage(result);
     } catch (cause) {
       log.warn(`Save permanently (${key}) did not complete`, cause);
-      if (mounted.current) setError(`${describe(cause)} Nothing was removed; the temporary project is unchanged.`);
+      // A folder copy that opened but did not verify explains itself: the editor already works on it.
+      const switched = cause instanceof FolderCopyUnverifiedError;
+      if (switched) onProjectChanged();
+      if (mounted.current) setError(switched ? cause.message : `${describe(cause)} Nothing was removed; the temporary project is unchanged.`);
     } finally {
       status.refresh(); environment.recheck();
       if (mounted.current) setBusy(null);
@@ -74,7 +78,8 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
       const result = await saveActiveProjectToFolder(name.trim() || projectName, createProject);
       if (result.status === 'cancelled') return 'No folder was chosen, or the project could not be saved there. The temporary project is unchanged.';
       onProjectChanged();
-      return `Saved permanently. "${name.trim() || projectName}" now opens from the chosen folder.${result.removedTemporary ? ' The temporary copy was removed.' : ''}`;
+      return `Saved permanently. "${name.trim() || projectName}" now opens from the chosen folder.${result.removedTemporary ? ' The temporary copy was removed.' : ''}`
+        + (result.unsavedChanges ? ` The latest changes are not saved there yet (${result.unsavedChanges}); the editor keeps trying, or press Save.` : '');
     },
     async browser() {
       const result = await moveActiveProjectToPersistentBrowserStorage(createBrowserStorageCopy);

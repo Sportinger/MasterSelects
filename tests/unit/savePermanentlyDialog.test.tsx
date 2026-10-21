@@ -93,6 +93,26 @@ describe('SavePermanentlyDialog', () => {
     await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/could not be verified.*Nothing was removed/));
   });
 
+  it('does not claim nothing changed when the editor already opened the unverified folder copy', async () => {
+    state.environment = { ...state.environment, folderPicker: true };
+    const { FolderCopyUnverifiedError } = await import('../../src/services/project/permanentSave/folderCopyUnverifiedError');
+    state.saveToFolder.mockRejectedValue(new FolderCopyUnverifiedError('its history could not be read'));
+    const onProjectChanged = vi.fn();
+    renderDialog({}, { onProjectChanged });
+    fireEvent.click(screen.getByText('Save to a folder…'));
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toMatch(/now opens from the chosen folder.*temporary copy was kept/));
+    expect(screen.getByRole('alert').textContent).not.toMatch(/Nothing was removed/);
+    expect(onProjectChanged).toHaveBeenCalledOnce();
+  });
+
+  it('says when the latest edits still wait for their save in the folder', async () => {
+    state.environment = { ...state.environment, folderPicker: true };
+    state.saveToFolder.mockResolvedValue({ status: 'saved', removedTemporary: true, unsavedChanges: 'disk busy' });
+    renderDialog();
+    fireEvent.click(screen.getByText('Save to a folder…'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/temporary copy was removed.*not saved there yet \(disk busy\)/));
+  });
+
   it('downloads the archive under the project name', async () => {
     state.download.mockResolvedValue('Stage Show.msproj');
     renderDialog();

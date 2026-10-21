@@ -1,7 +1,7 @@
 import type { CommitReference, RepositoryBackend, RepositoryDescriptor, RepositoryOwner } from '../contracts';
 import { RepositoryError } from '../contracts';
 import { recoverRepository } from '../persistence/recovery';
-import { prepareArchive, readArchiveManifest } from './selectiveArchive';
+import { prepareArchive, readArchiveManifest, writeArchiveManifest } from './selectiveArchive';
 import { extractZip, writeZip, type ArchiveSink } from './streamZip';
 import { readFileChunks, safePath } from './streamIO';
 import { StreamHash } from '../segments/streamHash';
@@ -14,6 +14,7 @@ const exportedPath = (path: string) => path === 'project.msrepo.json' || path ==
 export async function exportRepositoryArchive(source: RepositoryBackend, descriptor: RepositoryDescriptor, pin: CommitReference,
   staging: RepositoryBackend, owner: RepositoryOwner, options: ArchiveOptions, sink: ArchiveSink): Promise<RepositoryArchiveManifest> {
   const manifest = await prepareArchive(source, descriptor, pin, staging, owner, options);
+  await writeArchiveManifest(staging, manifest, options.signal);
   async function* entries() {
     let cursor: string | undefined;
     do {

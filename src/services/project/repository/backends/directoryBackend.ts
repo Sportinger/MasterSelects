@@ -13,6 +13,7 @@ export function repositoryPath(path: string): string[] {
 }
 export function checkAbort(signal?: AbortSignal): void { if (signal?.aborted) throw new RepositoryError('cancelled', 'Repository I/O cancelled'); }
 function translate(error: unknown): never { throw toRepositoryError(error); }
+const isNotFound = (error: unknown) => error instanceof DOMException && error.name === 'NotFoundError';
 
 export function directoryBackend(root: FileSystemDirectoryHandle, locationId: string, hasWritePermission = true, writableStreams = supportsRepositoryWritableStreams()): RepositoryBackend {
   let owner: RepositoryOwner | null = null;
@@ -32,20 +33,28 @@ export function directoryBackend(root: FileSystemDirectoryHandle, locationId: st
   };
   const writable = hasWritePermission && writableStreams
     && Boolean(navigator.locks) && !locationId.startsWith('fsa-readonly:');
+  function lookup(directory: FileSystemDirectoryHandle, part: string, prefix: string, create: boolean): Promise<FileSystemDirectoryHandle> {
+    const pending = directory.getDirectoryHandle(part, { create });
+    directories.set(prefix, pending);
+    void pending.catch(() => { if (directories.get(prefix) === pending) directories.delete(prefix); });
+    if (directories.size > 256) directories.delete(directories.keys().next().value!);
+    return pending;
+  }
   async function parent(path: string, create = false) {
     const parts = repositoryPath(path); const name = parts.pop()!; let directory = root;
     let prefix = '';
     for (const part of parts) {
       prefix += `${part}/`;
-      let pending = directories.get(prefix);
-      if (!pending) {
-        pending = directory.getDirectoryHandle(part, { create });
-        directories.set(prefix, pending);
-        const key = prefix;
-        void pending.catch(() => { if (directories.get(key) === pending) directories.delete(key); });
-        if (directories.size > 256) directories.delete(directories.keys().next().value!);
+      const pending = directories.get(prefix);
+      if (!pending) { directory = await lookup(directory, part, prefix, create); continue; }
+      try { directory = await pending; }
+      catch (error) {
+        // A reader's in-flight lookup (create: false) of a folder that does not exist yet must not fail a
+        // concurrent writer: on slow disks a view slot or artifact manifest write raced a stat of the same
+        // new folder and reported "A requested file or directory could not be found" for a write.
+        if (!create || !isNotFound(error)) throw error;
+        directory = await lookup(directory, part, prefix, true);
       }
-      directory = await pending;
     }
     return { directory, name };
   }
