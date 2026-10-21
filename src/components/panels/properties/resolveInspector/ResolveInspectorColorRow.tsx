@@ -8,7 +8,7 @@ import './ResolveInspectorColorRow.css';
 const HEX = /^#?([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
 /** `#rrggbb` or `#rrggbbaa` for a hex value (3, 6 or 8 digits, with or without #), or undefined when it is not one. */
-export function normalizeHexColor(text: string): string | undefined {
+function normalizeHexColor(text: string): string | undefined {
   const match = HEX.exec(text.trim());
   if (!match) return undefined;
   const digits = match[1].length === 3 ? [...match[1]].map(digit => digit + digit).join('') : match[1];
