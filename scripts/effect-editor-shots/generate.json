@@ -4,15 +4,15 @@
       "name": "perspective-grid-inspector",
       "effect": "perspective-grid",
       "params": {
-        "horizon": 0.7,
+        "horizon": 0.6,
         "columns": 16,
-        "rows": 4,
-        "lineWidth": 3,
+        "rows": 6,
+        "lineWidth": 5,
         "opacity": 1
       },
       "image": "dancer_stage.jpg",
-      "preview": 320,
-      "alt": "Properties \u2192 Effects with a Perspective Grid card in its Grid, Motion and Look sections, beside the preview with cyan floor lines under the dancer",
+      "preview": 0,
+      "alt": "The Perspective Grid card in Properties \u2192 Effects, open in its Grid, Motion and Look sections: Horizon 60 %, Columns 16, Row Density 6, Line Width 10 px, Lines Thin with depth, Speed 1.5 rows/s, Line Color, Opacity 1, Horizon Fade 1.4, Blend Add (glow); every number row has a keyframe diamond and a reset arrow",
       "marks": [
         {
           "target": "Horizon",
@@ -23,18 +23,23 @@
           "label": "Line Width of the nearest lines"
         },
         {
+          "target": "Lines",
+          "label": "Lines: thin with depth, or an even width"
+        },
+        {
           "target": "Blend",
           "label": "Blend: glowing (Add) or solid (Normal) lines"
         }
       ],
-      "top": "tabs",
+      "top": "card",
       "hide": [
         "Particle Out"
       ],
       "viewport": {
         "width": 1800,
         "height": 1300
-      }
+      },
+      "layout": "float"
     }
   ]
 }

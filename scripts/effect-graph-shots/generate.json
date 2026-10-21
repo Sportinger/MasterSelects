@@ -1,6 +1,6 @@
 {
   "shots": [
-    "memory-leak?only=uv,memory,scaled-uv,memory-pixel,decoded&name.interpreted-size=Memory Size&omit=float-mode:value,safe-float-gain:value&rows=1&marks=scaled-uv:above,decoded:above@memory-leak-read",
+    "memory-leak?only=uv,memory,scaled-uv,memory-pixel,decoded&name.interpreted-size=Memory Size&omit=float-mode:value,safe-float-gain:value,depth:value&rows=1&cables=avoid&marks=scaled-uv:below,decoded:below@memory-leak-read",
     "weave?omit=output&cables=avoid&crossings=allow@weave"
   ]
 }

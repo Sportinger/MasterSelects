@@ -862,7 +862,16 @@ Effect rows share one display rule (`effectParamDisplay` in
 Mirror, RGB Split), `displayScale` with `unit` shows a scaled unit (Hue Shift's turns
 as degrees) and `unit` alone a suffix (" EV") with as many decimals as the stored
 value needs; other rows show the decimals their step implies. Stored values,
-keyframes, tools and MIDI keep the parameter's own unit.
+keyframes, tools and MIDI keep the parameter's own unit. Render-range notes in the
+inspector use the same display (`paramRangeNotes(..., { display: true })`: "Horizon
+150% is above the rendered range (0% to 98%)"); tool results keep stored units.
+
+A rate parameter (per second) that may be keyframed declares `integratedAs`: while it
+has keyframes, `getInterpolatedEffects` writes the distance travelled since the clip
+start into that runtime-only param (`integrateKeyframedRate` in
+`src/utils/speedIntegration.ts`, shared with clip speed), and the packer uses it
+instead of rate × time, so a keyed ramp moves smoothly (Perspective Grid Speed, Color
+Wheel Spin; see [Generate Effects](./Effects-Generate.md#technical-details)).
 
 Saved work keeps its look. Projects keep the graph they were saved with (the
 previous recipes stay in `legacyColorEffectGraphs.ts`). A color effect stored
