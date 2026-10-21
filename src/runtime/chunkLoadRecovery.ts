@@ -1,6 +1,7 @@
 import { reportChunkLoadRecovery } from '../services/diagnostics/diagnosticReporter';
 import { canReloadAfterChunkFailure } from './chunkReloadGuard';
 import { hideChunkRecoveryNotice, showChunkRecoveryNotice } from './chunkRecoveryNotice';
+import { WORKER_LOAD_FAILURE_EVENT } from './workerLoadFailure';
 
 const CHUNK_RELOAD_MARKER = 'masterselects:chunk-reload';
 const CHUNK_RELOAD_COOLDOWN_MS = 60_000;
@@ -102,6 +103,33 @@ export function recoverFromChunkRenderError(error: unknown): boolean {
   return CHUNK_ERROR_PATTERN.test(message) && reloadOnce(message);
 }
 
+/** The deployed build's identity: app version and module entry, from a page's HTML. */
+function buildIdentity(html: string): string | null {
+  const version = /<meta\s+name="app-version"\s+content="([^"]*)"/i.exec(html)?.[1];
+  const entry = /<script[^>]+type="module"[^>]+src="([^"]*\/assets\/[^"]+)"/i.exec(html)?.[1];
+  if (!version || version === '__APP_VERSION__') return null;
+  return `${version} ${entry ?? ''}`;
+}
+
+/**
+ * A worker that failed before answering is only a stale deploy when the server now serves another
+ * build; otherwise the failure is a real worker error and must surface as one, without a reload.
+ */
+export async function recoverFromWorkerLoadFailure(reason: string): Promise<boolean> {
+  if (isOffline()) { reloadWhenOnline(reason); return false; }
+  const current = buildIdentity(document.documentElement.outerHTML);
+  if (!current) return false;
+  let deployed: string | null = null;
+  try {
+    const response = await fetch(window.location.pathname || '/', { cache: 'no-store', credentials: 'same-origin' });
+    if (response.ok) deployed = buildIdentity(await response.text());
+  } catch {
+    return false;
+  }
+  if (!deployed || deployed === current) return false;
+  return reloadOnce(`stale worker after deploy: ${reason}`);
+}
+
 export function installChunkLoadRecovery(): void {
   window.addEventListener('vite:preloadError', (event) => {
     const payload = (event as Event & { payload?: unknown }).payload;
@@ -109,6 +137,11 @@ export function installChunkLoadRecovery(): void {
     // Keep Vite's original rejection. preventDefault makes its preload helper
     // resolve undefined, which breaks React.lazy before navigation completes
     // (or when the unsaved-project warning cancels the reload).
+  });
+
+  window.addEventListener(WORKER_LOAD_FAILURE_EVENT, (event) => {
+    const detail = (event as CustomEvent<unknown>).detail;
+    void recoverFromWorkerLoadFailure(typeof detail === 'string' ? detail : 'worker failed to load');
   });
 
   window.addEventListener('unhandledrejection', (event) => {
