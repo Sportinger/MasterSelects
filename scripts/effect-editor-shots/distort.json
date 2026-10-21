@@ -1,0 +1,25 @@
+{
+  "shots": [
+    {
+      "name": "twirl-inspector",
+      "effect": "twirl",
+      "params": {
+        "amount": 3.49,
+        "radius": 0.6
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 640,
+      "alt": "The dancer swirled into a spiral in the preview, next to Properties, Effects, with Twirl at Twist 200 degrees, Radius 0.6, Shape Circle and Frame Edges Mirror",
+      "marks": [
+        {
+          "target": "Twist",
+          "label": "Twist, shown in degrees"
+        },
+        {
+          "target": "Frame Edges",
+          "label": "Frame Edges"
+        }
+      ]
+    }
+  ]
+}

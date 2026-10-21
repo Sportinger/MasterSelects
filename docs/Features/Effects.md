@@ -1004,6 +1004,8 @@ packed, folded or laid-out form of the original single-pass recipe) is upgraded
 to the new recipe on load; graphs whose nodes, wiring, exposed values or folder
 bypasses were edited are kept exactly as authored and keep the legacy sampling.
 
+### Editable UV distortions
+
 Wave, Twirl, Bulge & Pinch and Kaleidoscope use editable UV/math graphs followed
 by a single image sample. Wave, Twirl and Bulge & Pinch (see
 [Distort Effects](./Effects-Distort.md)) read that sample from a premultiplied
