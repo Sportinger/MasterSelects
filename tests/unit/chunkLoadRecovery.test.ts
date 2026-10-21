@@ -144,5 +144,34 @@ describe('chunk load recovery', () => {
       await workerFailure(page('3.2.5', 'index-old.js'));
       expect(reload).not.toHaveBeenCalled();
     });
+
+    it('keeps unsaved edits instead of reloading for a newer build', async () => {
+      const { preserveUnsavedProjectOnChunkFailure } = await import('../../src/runtime/chunkReloadGuard');
+      const dispose = preserveUnsavedProjectOnChunkFailure(() => true);
+      await workerFailure(page('3.2.6', 'index-new.js'));
+      expect(reload).not.toHaveBeenCalled();
+      expect(notice()?.dataset.kind).toBe('unsaved');
+      expect(window.sessionStorage.getItem(marker)).toBeNull();
+      dispose();
+    });
+
+    it('does not loop when the reloaded tab hits a worker failure again within the cooldown', async () => {
+      // Shares the session cooldown with chunk reloads: the reload that just happened set it.
+      window.sessionStorage.setItem(marker, String(Date.now()));
+      await workerFailure(page('3.2.6', 'index-new.js'));
+      expect(reload).not.toHaveBeenCalled();
+      expect(notice()?.dataset.kind).toBe('retry');
+    });
+
+    it('reloads once when several storage clients fail together', async () => {
+      const fetchMock = vi.fn(async () => new Response(page('3.2.6', 'index-new.js'), { status: 200 }));
+      vi.stubGlobal('fetch', fetchMock);
+      const { reportWorkerLoadFailure } = await import('../../src/runtime/workerLoadFailure');
+      reportWorkerLoadFailure('Project storage worker failed (storage phase: startup; operations: open)');
+      reportWorkerLoadFailure('Project storage worker failed (storage phase: startup; operations: listRecent)');
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(reload).toHaveBeenCalledTimes(1);
+    });
   });
 });
