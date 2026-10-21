@@ -186,7 +186,7 @@ export async function generateWaveformForClipAction(
     } else if (isUnreadableClipSourceError(e)) {
       log.warn('Waveform source became unavailable', { clipId });
     } else if (isUndecodableAudioSourceError(e)) {
-      log.warn('Waveform unavailable: the browser could not decode this clip\'s audio; the clip stays without a waveform', {
+      log.warn('Waveform unavailable: no audio decoder (browser, WebCodecs, FFmpeg) could decode this clip; the clip stays without a waveform', {
         clipId,
         reason: e instanceof Error ? e.message : String(e),
       });

@@ -160,6 +160,7 @@ Live routing uses `audioRoutingManager` when EQ, pan, above-unity gain, Aux send
 ## Waveforms
 
 - Audio clips generate waveforms from decoded audio data.
+- Whole-source waveform decoding tries the existing decode paths in order: browser `decodeAudioData` (AudioDecodeService), then container demux + WebCodecs `AudioDecoder` (`MediaAudioRangeReader.readAll`, any container mediabunny reads, duration from the container), then the shared FFmpeg WASM bridge decoding the first audio stream to float WAV (sources up to 512 MB). A fallback success is logged with the failed paths; only when every path fails does the clip stay without a waveform, with one warning naming each path and its reason (`src/services/audio/decode/sourceAudioFallbackDecode.ts`).
 - Import-time waveform generation produces the lightweight preview first, then writes the source waveform-pyramid artifact to the active project artifact store so subsequent timeline placements can reuse it.
 - Lightweight waveform previews preserve stereo and multichannel peak lanes in `waveformChannels`; the `waveform` array remains an aggregate fallback for projects and analysis helpers without channel lanes.
 - Timeline context-menu waveform regeneration refreshes the lightweight preview on request; source waveform-pyramid artifacts are generated at import time and reused by dragged timeline clips.

@@ -2,6 +2,7 @@ import { createBuffer } from '../audioBufferFactory';
 
 const HEADER_READ_BYTES = 64 * 1024;
 const MAX_HEADER_READ_BYTES = 1024 * 1024;
+const WAVE_FORMAT_EXTENSIBLE = 0xfffe;
 
 export interface AudioByteRangeSource {
   size?: number;
@@ -58,6 +59,18 @@ export function createFileAudioByteRangeSource(file: Blob): AudioByteRangeSource
       const safeStart = Math.max(0, Math.floor(start));
       const safeEnd = Math.min(file.size, Math.max(safeStart, Math.ceil(endExclusive)));
       return file.slice(safeStart, safeEnd).arrayBuffer();
+    },
+  };
+}
+
+/** In-memory WAV bytes, e.g. a decoder's output, read through the same range parser. */
+export function createBytesAudioByteRangeSource(bytes: Uint8Array): AudioByteRangeSource {
+  return {
+    size: bytes.byteLength,
+    async read(start, endExclusive) {
+      const safeStart = Math.min(bytes.byteLength, Math.max(0, Math.floor(start)));
+      const safeEnd = Math.min(bytes.byteLength, Math.max(safeStart, Math.ceil(endExclusive)));
+      return new Uint8Array(bytes.subarray(safeStart, safeEnd)).buffer;
     },
   };
 }
@@ -132,8 +145,18 @@ function parseWavMetadata(header: ArrayBuffer): WavPcmMetadata {
       if (chunkSize < 16) {
         throw new WavPcmRangeError('Audio proxy contains an invalid WAV format chunk');
       }
+      let audioFormat = view.getUint16(chunkDataOffset, true);
+      // WAVE_FORMAT_EXTENSIBLE (FFmpeg writes it for float, >16-bit, >2 channels, >48 kHz):
+      // the real format is the first two bytes of the sub-format GUID.
+      if (
+        audioFormat === WAVE_FORMAT_EXTENSIBLE
+        && chunkSize >= 26
+        && chunkDataOffset + 26 <= view.byteLength
+      ) {
+        audioFormat = view.getUint16(chunkDataOffset + 24, true);
+      }
       format = {
-        audioFormat: view.getUint16(chunkDataOffset, true),
+        audioFormat,
         channelCount: view.getUint16(chunkDataOffset + 2, true),
         sampleRate: view.getUint32(chunkDataOffset + 4, true),
         blockAlign: view.getUint16(chunkDataOffset + 12, true),
