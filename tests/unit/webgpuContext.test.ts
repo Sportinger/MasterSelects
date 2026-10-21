@@ -500,8 +500,29 @@ describe('WebGPUContext', () => {
     expect(failed).toHaveBeenCalledExactlyOnceWith('device_lost_repeatedly');
     expect(requestAdapter).toHaveBeenCalledTimes(3);
     expect(context.recovering).toBe(false);
-    expect(log.error).toHaveBeenCalledTimes(1);
-    expect(log.error).toHaveBeenCalledWith('Device lost', vkLoss.message);
+    // The first loss filed its error after recovering; the stop is a new incident with exactly one clear error.
+    expect(log.error).toHaveBeenCalledTimes(2);
+    expect(log.error).toHaveBeenNthCalledWith(1, 'Device lost', vkLoss.message);
+    expect(log.error).toHaveBeenNthCalledWith(2, 'GPU device lost repeatedly; recovery stopped',
+      expect.objectContaining({ message: vkLoss.message, kind: 'repeated', occurrence: 3, windowMs: 60_000 }));
+    expect(log.error.mock.calls[1][1]).not.toHaveProperty('firstLoss');
+  });
+
+  it('files one error when repeated losses stop recovery before the first loss was reported', async () => {
+    vi.useFakeTimers();
+    const { losers } = installLosableDevices();
+    const context = new WebGPUContext();
+    await context.initialize();
+    const failed = vi.fn();
+    context.onRecoveryFailed(failed);
+    // The page reloaded with two recent losses in the policy window: the next real loss is the third.
+    const policy = (context as unknown as { lossPolicy: DeviceLossPolicy }).lossPolicy;
+    policy.classify(); policy.classify(); policy.holdReport('earlier reset');
+    losers[0]({ reason: 'unknown', message: 'third reset' } as GPUDeviceLostInfo);
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(failed).toHaveBeenCalledExactlyOnceWith('device_lost_repeatedly');
+    expect(log.error).toHaveBeenCalledExactlyOnceWith('GPU device lost repeatedly; recovery stopped',
+      expect.objectContaining({ message: 'third reset', firstLoss: 'earlier reset', occurrence: 3 }));
   });
 
   it('carries a later incident loss into its recovery-failed error after the first loss was filed', async () => {

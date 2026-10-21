@@ -65,7 +65,11 @@ Only the first real loss per session is reported as an error; repeats are
 warnings. A loss while the page is hidden, frozen, or unloading (Android Chrome
 reports it as "Device was destroyed.") is a warning and recovery waits until the
 page is visible again. Three real losses within a minute stop recovery and show
-a driver-reset message instead of looping lose/recover.
+a driver-reset message instead of looping lose/recover. That stop is its own
+incident and files one error, `GPU device lost repeatedly; recovery stopped`,
+with the loss message, its occurrence and the window (and `firstLoss` when an
+earlier loss of the same run was still held), since the GPU stays unavailable
+afterwards.
 
 Each loss incident files at most one error. The first real loss's error waits
 for the recovery outcome: a recovered device reports `Device lost`, while a
