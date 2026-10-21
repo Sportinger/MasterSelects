@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { getActiveRepositorySession, getRepositoryLifecycleState, isScratchRepository } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import { FALLBACK_STORAGE_NOTICE, isBrowserStorageFallbackActive } from '../../../services/project/core/browserStorageRoot';
+import { getFolderAccessPause } from '../../../services/project/folderAccess/folderAccessPause';
+import { resumeFolderAccess } from '../../../services/project/folderAccess/folderAccessResume';
 import './ToolbarSaveStatus.css';
 
 function readStatus() {
@@ -17,6 +19,10 @@ function readStatus() {
   if (!session.opening.writable) return { phase: 'unsaved', label: 'Read-only' + local, detail: session.opening.ownershipReason
     ? 'This tab can browse history. ' + (session.opening.recovery.warnings.at(-1) ?? 'This project location cannot be written.')
     : 'This tab can browse history. Use Take over editing to edit here.' };
+  // Not a failed save: the browser paused folder access and the changes wait in this tab.
+  const access = getFolderAccessPause();
+  if (access.project && session.opening.writable) return { phase: 'unsaved', label: 'Access paused' + local, reallow: true,
+    detail: 'Folder access was paused by the browser. Your changes are kept in this tab. Click to re-allow access and save them.' };
   const error = session.client?.error ?? state.error;
   if (error || lifecycle.error) return { phase: 'failed', label: 'Save failed' + local, detail: error?.message ?? lifecycle.error ?? 'Click to retry saving.' };
   if (state.confirmedSequence < state.appliedSequence || state.queuedBytes > 0) return { phase: 'saving', label: 'Saving\u2026' + local, detail: 'Saving your project changes.' };
@@ -38,7 +44,7 @@ export function ToolbarSaveStatus({ onSave, onExportArchive }: { onSave: () => v
   return (
     <button className="toolbar-save-status" data-phase={status.phase} type="button"
       title={status.detail} disabled={status.phase === 'saving' || status.label.startsWith('Read-only')}
-      onPointerUp={event => event.currentTarget.blur()} onClick={'exportArchive' in status ? onExportArchive : onSave}>
+      onPointerUp={event => event.currentTarget.blur()} onClick={'reallow' in status ? () => { void resumeFolderAccess(); } : 'exportArchive' in status ? onExportArchive : onSave}>
       <span aria-hidden="true" className="toolbar-save-status-dot" />
       <span role="status" aria-live="polite">{status.label}</span>
     </button>

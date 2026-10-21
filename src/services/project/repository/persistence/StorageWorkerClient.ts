@@ -2,6 +2,7 @@ import { RepositoryError, type BlobReference, type RepositoryErrorCode } from '.
 import type { NativeCommandRequest, NativeBlobRequest, StorageFailure, StorageRequest, StorageSuccess, StorageOpenProgress, RepositoryOpenProgress } from '../storageWorkerProtocol';
 import type { NativeRepositoryClient } from '../backends/nativeBackend';
 import { reportWorkerLoadFailure } from '../../../../runtime/workerLoadFailure';
+import { noteFolderAccessFailure } from '../../folderAccess/folderAccessPause';
 
 interface PendingRequest { type: StorageRequest['type']; resolve: (value: unknown) => void; reject: (error: unknown) => void; removeAbort: () => void; }
 export class StorageWorkerClient {
@@ -44,7 +45,12 @@ export class StorageWorkerClient {
         if (request.type === 'open') this.phase = 'ready';
         request.resolve(response.data);
       }
-      else request.reject(new RepositoryError(response.error.code, response.error.message));
+      else {
+        const failure = new RepositoryError(response.error.code, response.error.message);
+        // The browser paused folder access: the toolbar offers Re-allow; queued saves wait for it.
+        noteFolderAccessFailure(failure);
+        request.reject(failure);
+      }
     };
     this.worker.onerror = event => {
       const error = new RepositoryError('io', this.failureMessage(event.message || 'Project storage worker failed'));

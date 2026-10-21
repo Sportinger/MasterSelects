@@ -2,6 +2,7 @@ import { RepositoryArchiveDialog } from './toolbar/RepositoryArchiveDialog';
 import { BrowserProjectOpenDialog } from './toolbar/BrowserProjectOpenDialog';
 import { LegacyImportTargetHost } from './toolbar/LegacyImportDialog';
 import { MediaReconnectHost } from './toolbar/MediaReconnectOverlay';
+import { ToolbarFolderAccess } from './toolbar/ToolbarFolderAccess';
 // Toolbar component - After Effects style menu bar
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -439,6 +440,7 @@ export function Toolbar({
         <ToolbarSavePermanently status={permanentSave} onOpen={() => setShowSavePermanently(true)} />
         <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} onExportArchive={() => setShowSavePermanently(true)} />
         <ToolbarWriteAccess />
+        <ToolbarFolderAccess />
         {(capturePhase === 'recording' || capturePhase === 'paused' || capturePhase === 'stopping') && (
           <button
             className={`toolbar-capture-rec${capturePhase === 'recording' ? ' recording' : ''}`}

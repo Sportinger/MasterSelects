@@ -77,12 +77,25 @@ export interface OperationReceipt {
   operationSequence: number;
   views: Record<string, number>;
 }
-export type RepositoryErrorCode = 'permission' | 'quota' | 'ownership' | 'conflict' | 'corrupt' | 'unsupported' | 'budget' | 'cancelled' | 'io';
+/**
+ * `access`: the browser withdrew (or never granted) folder access to a stored location, e.g. Chrome's
+ * session-only grant lapsed while the tab was in the background. Re-allowing the same handle resumes it.
+ * `permission`: a repository policy refused the operation (invalid or protected path).
+ */
+export type RepositoryErrorCode = 'permission' | 'access' | 'quota' | 'ownership' | 'conflict' | 'corrupt' | 'unsupported' | 'budget' | 'cancelled' | 'io';
 export class RepositoryError extends Error {
   public readonly code: RepositoryErrorCode;
   constructor(code: RepositoryErrorCode, message: string, options?: ErrorOptions) {
     super(message, options); this.code = code; this.name = 'RepositoryError';
   }
+}
+/** Maps a raw storage exception (DOMException or anything thrown) to a RepositoryError with a precise code. */
+export function toRepositoryError(error: unknown): RepositoryError {
+  if (error instanceof RepositoryError) return error;
+  const name = typeof error === 'object' && error !== null ? String((error as { name?: unknown }).name ?? '') : '';
+  const code: RepositoryErrorCode = name === 'QuotaExceededError' ? 'quota'
+    : name === 'NotAllowedError' || name === 'SecurityError' ? 'access' : 'io';
+  return new RepositoryError(code, error instanceof Error ? error.message : String(error), { cause: error });
 }
 export interface RepositoryCapabilities {
   rangeReads: boolean;

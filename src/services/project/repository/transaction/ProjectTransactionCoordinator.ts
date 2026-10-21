@@ -1,4 +1,4 @@
-import { REPOSITORY_LIMITS, RepositoryError } from '../contracts';
+import { REPOSITORY_LIMITS, RepositoryError, toRepositoryError } from '../contracts';
 import { canonicalJson, frozenJson } from '../segments/canonical';
 import type { CheckoutResult, EntityDTO, EntityKey, JsonValue, OperationReceipt, RepositoryProjection, RevisionMetadata, RecordReference, BlobReference } from '../contracts';
 
@@ -188,7 +188,7 @@ export class ProjectTransactionCoordinator {
       const item = this.pending.get(sequence);
       if (this.failed || !item) return;
       try { await this.runPending(sequence, item); }
-      catch (error) { this.failed = error instanceof RepositoryError ? error : new RepositoryError('io', String(error)); }
+      catch (error) { this.failed = toRepositoryError(error); }
       this.notify();
     });
   }
@@ -239,7 +239,7 @@ export class ProjectTransactionCoordinator {
         const item = this.pending.get(sequence);
         if (!item) continue; // confirmed as part of an earlier group in this retry
         try { await this.runPending(sequence, item); }
-        catch (error) { this.failed = error instanceof RepositoryError ? error : new RepositoryError('io', String(error)); break; }
+        catch (error) { this.failed = toRepositoryError(error); break; }
       }
       this.notify();
       if (this.failed) throw this.failed;
