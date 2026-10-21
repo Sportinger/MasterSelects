@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { create } from 'zustand';
 
 const { updatePanelData } = vi.hoisted(() => ({ updatePanelData: vi.fn() }));
 
@@ -26,8 +27,8 @@ import { useSlotGridPanelStore } from '../../src/stores/slotGridPanelStore';
 import { MULTI_INSTANCE_PANEL_TYPES } from '../../src/types/dock';
 
 beforeEach(() => {
-  act(() => useSlotGridPanelStore.setState({ modes: {} }));
-  updatePanelData.mockClear();
+  act(() => useSlotGridPanelStore.setState({ modes: {}, hostCounts: {} }));
+  updatePanelData.mockReset();
 });
 
 afterEach(cleanup);
@@ -71,5 +72,45 @@ describe('TimelineSlotPanelHost', () => {
     expect(updatePanelData).toHaveBeenCalledWith('timeline-main', {
       timelineSurfaceMode: 'timeline',
     });
+  });
+
+  it('does not loop when panel data written by the host feeds back into duplicated panel ids', () => {
+    type Mode = 'timeline' | 'slot-grid';
+    type Entry = { id: string; fallback: Mode; surface?: Mode };
+    const panels = create<{ entries: Entry[] }>(() => ({ entries: [
+      { id: 'a', fallback: 'timeline' },
+      { id: 'b', fallback: 'timeline', surface: 'timeline' },
+      { id: 'c', fallback: 'timeline' },
+      { id: 'a', fallback: 'slot-grid' },
+    ] }));
+    updatePanelData.mockImplementation((id: string, data: { timelineSurfaceMode: Mode }) => {
+      panels.setState(state => ({
+        entries: state.entries.map(entry => (
+          entry.id === id ? { ...entry, surface: data.timelineSurfaceMode } : entry
+        )),
+      }));
+    });
+    function Dock() {
+      const entries = panels(state => state.entries);
+      return entries.map((entry, index) => (
+        <TimelineSlotPanelHost
+          key={`${entry.id}:${index}`}
+          panelId={entry.id}
+          initialMode={entry.surface ?? entry.fallback}
+        />
+      ));
+    }
+
+    expect(() => render(<Dock />)).not.toThrow();
+    expect(screen.getAllByRole('button', { name: 'Timeline view' })).toHaveLength(2);
+    expect(useSlotGridPanelStore.getState().hostCounts).toEqual({ a: 2, b: 1, c: 1 });
+
+    act(() => panels.setState(state => ({ entries: state.entries.slice(0, 3) })));
+    expect(useSlotGridPanelStore.getState().modes).toEqual({
+      a: 'timeline',
+      b: 'slot-grid',
+      c: 'slot-grid',
+    });
+    expect(screen.getAllByRole('button', { name: 'Timeline view' })).toHaveLength(1);
   });
 });

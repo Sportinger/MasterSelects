@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useDockStore } from '../../../stores/dockStore';
 import {
   useSlotGridPanelStore,
@@ -24,16 +24,25 @@ export function TimelineSlotPanelHost({
   const showTimeline = useSlotGridPanelStore(state => state.showTimeline);
   const updatePanelData = useDockStore(state => state.updatePanelData);
 
+  // initialMode mirrors the panel data this host writes below. Re-registering on
+  // every data write fed the mode back into itself and could loop (React #185),
+  // so registration follows the panel id only and reads the latest initial mode.
+  const initialModeRef = useRef(initialMode);
+  initialModeRef.current = initialMode;
+
   useEffect(() => {
-    registerHost(panelId, initialMode);
+    registerHost(panelId, initialModeRef.current);
     return () => unregisterHost(panelId);
-  }, [initialMode, panelId, registerHost, unregisterHost]);
+  }, [panelId, registerHost, unregisterHost]);
 
   useEffect(() => {
     updatePanelData(panelId, { timelineSurfaceMode: mode });
   }, [mode, panelId, updatePanelData]);
 
+  const handleShowSlotGrid = useCallback(() => showSlotGrid(panelId), [panelId, showSlotGrid]);
+  const handleShowTimeline = useCallback(() => showTimeline(panelId), [panelId, showTimeline]);
+
   return mode === 'timeline'
-    ? <Timeline onShowSlotGrid={() => showSlotGrid(panelId)} />
-    : <SlotGridPanel onShowTimeline={() => showTimeline(panelId)} />;
+    ? <Timeline onShowSlotGrid={handleShowSlotGrid} />
+    : <SlotGridPanel onShowTimeline={handleShowTimeline} />;
 }
