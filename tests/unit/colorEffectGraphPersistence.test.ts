@@ -10,6 +10,7 @@ import type { Effect } from '../../src/types/effects';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { buildEffectOperatorGraph } from '../../src/services/nodeGraph/effectGraphProjection';
+import { foldOperatorGroups } from '../../src/services/nodeGraph/nestedOperatorGroups';
 import { imageOperatorValuePreview } from '../../src/services/nodePreview/imageOperatorPreviews';
 
 const initial = useTimelineStore.getState();
@@ -72,5 +73,20 @@ describe('editable color effect graphs', () => {
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'amount')).toMatchObject({ bindings: { value: 'amount' } });
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'amount')?.constants?.value).toBeUndefined();
     expect(() => setOperatorParameter(clip.id, canonical.id, 'amount', 'value', 1.25)).toThrow('outside its supported range');
+  });
+
+  it('names folder ports after the parameter a render-range clamp carries, not "Clamp: Value"', () => {
+    const outputs = (type: EditableColorEffectType, label: string) => {
+      const canonical = migratePersistedEffectOperatorGraph(effect(type));
+      const clip = createMockClip({ id: `${type}-ports`, effects: [canonical] });
+      // In the clip graph every stage folder sits inside the effect's group, which is what folds it.
+      const projected = buildEffectOperatorGraph(clip, canonical);
+      const folded = foldOperatorGroups({ ...projected, groups: projected.groups?.map(group => ({ ...group, parentId: group.parentId ?? 'effect' })) });
+      return folded.nodes.find(node => node.label === label)?.outputs.map(port => port.label);
+    };
+    expect(outputs('exposure', 'Parameters')).toEqual(['Exposure', 'Offset', 'Gamma']);
+    expect(outputs('temperature', 'Parameters')).toEqual(['Temperature', 'Tint']);
+    expect(outputs('vibrance', 'Skin Protection')).toEqual(['Skin Weight']);
+    expect(outputs('exposure', 'Offset & Gamma')).toEqual(['Toned RGB']);
   });
 });

@@ -367,8 +367,10 @@ of its original leaf endpoints; expanding still reveals the individual wires.
 Value outputs carry their parameter or constant names in the folder interface.
 Other folder ports are named after what they carry, not after the node type that
 computes it: an effect's presentation plan names its key outputs (Sigma, Tap
-Count, Box Length, Is Spin), and outputs with their own label (UV, Resolution)
-keep it; only unnamed outputs of several-output nodes read `Node: Port`.
+Count, Box Length, Is Spin), a clamp that limits a bound parameter to its render
+range carries that parameter's name (Amount, Exposure, Gamma), and outputs with
+their own label (UV, Resolution) keep it; only unnamed outputs of several-output
+nodes read `Node: Port`.
 
 The Fisheye upgrade preserves all primitive IDs, parameter bindings, sampling
 scopes and arithmetic, generating the identical shader without additional passes.

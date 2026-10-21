@@ -1,0 +1,18 @@
+{
+  "shots": [
+    {
+      "name": "exposure-inspector",
+      "effect": "exposure",
+      "params": { "exposure": 1 },
+      "image": "dancer_stage.jpg",
+      "preview": 380,
+      "alt": "The dancer on stage one stop brighter in the preview next to Properties, Effects, with Exposure at +1 EV, Offset 0 and Gamma 1",
+      "marks": [
+        { "target": "tab:Effects", "from": "below", "label": "Properties → Effects lists the selected clip's effects" },
+        { "target": "Exposure", "label": "Exposure in camera stops; the unit EV is shown in the field" },
+        { "target": "Gamma", "label": "Gamma, for the mid-tones" },
+        { "target": "bypass", "from": "above", "label": "Bypass, to compare with the original" }
+      ]
+    }
+  ]
+}

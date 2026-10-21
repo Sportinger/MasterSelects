@@ -20,6 +20,11 @@ const COLOR_STAGES: readonly [RegExp, string, string][] = [
   [/^measure-/, 'measure', 'Hue & Saturation'], [/^skin-/, 'skin', 'Skin Protection'], [/^gamut-/, 'gamut', 'Gamut-Safe Saturation'], [/^(range|remap)(-|$)/, 'remap', 'Input Black & White'],
   [/^gamma-/, 'gamma', 'Gamma'], [/^output-range$/, 'output', 'Output Range'], [/^hue-/, 'hue', 'Hue Rotation'],
 ];
+/** What the inner values of the color recipes carry (bound parameters name themselves after their clamp). */
+const COLOR_PORTS = { input: 'RGB 0–1', 'light-linear': 'Linear RGB', 'light-encoded': 'sRGB', 'tone-gamma': 'Toned RGB',
+  'measure-hsv-split:x': 'Hue (HSV)', 'measure-hsv-split:y': 'Saturation (HSV)', 'measure-hsv-split:z': 'Value (HSV)', 'skin-kept': 'Skin Weight', 'weight-saturation': 'Saturation Amount',
+  'hue-lch-split:x': 'Lightness', 'hue-lch-split:y': 'Chroma', 'hue-lch-split:z': 'Hue', 'hue-rgb': 'Rotated RGB',
+  'gain-balanced': 'Balanced Gains', 'range-safe': 'Input Range', 'remap-clamp': 'Normalized RGB', 'gamma-curve': 'Curved RGB', 'output-range': 'Levels RGB' };
 const REDUCE = 'reduce weight-vec4 average blurred';
 const BLUR_PORTS = { 'source-cache': 'Premultiplied Source', 'radius-px': 'Radius (px)', 'pixel-scale': 'Pixel Scale' };
 const SEPARABLE_PORTS = { ...BLUR_PORTS, sigma: 'Sigma', reach: 'Reach', pairs: 'Pairs', stride: 'Stride', 'tap-count': 'Tap Count',
@@ -92,6 +97,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   };
   if (COLORS.has(type)) return {
     labels: { processing: 'Color Processing', ...Object.fromEntries(COLOR_STAGES.map(([, stage, label]) => [stage, label])) },
+    portLabels: COLOR_PORTS,
     stage: ({ id }) => COLOR_STAGES.find(([pattern]) => pattern.test(id))?.[1] ?? 'processing',
   };
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
