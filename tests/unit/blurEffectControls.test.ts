@@ -67,6 +67,10 @@ describe('zero-strength blurs skip their passes', () => {
     const edited = createDefaultGaussianBlurGraph();
     edited.nodes.find(node => node.id === 'coverage-floor')!.constants = { value: 0.5 };
     expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0 }, operatorGraph: edited }, 1920, 1080)).toBe(false);
+    // Older projects keep the graph as a string parameter: an untouched recipe there is skipped too.
+    expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0, operatorGraph: JSON.stringify(createLegacyGaussianBlurGraph()) } }, 1920, 1080)).toBe(true);
+    expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0, operatorGraph: JSON.stringify(edited) } }, 1920, 1080)).toBe(false);
+    expect(isNeutralBlurEffect({ type: 'gaussian-blur', params: { radius: 0, operatorGraph: '{broken' } }, 1920, 1080)).toBe(false);
     expect(isNeutralBlurEffect({ type: 'sharpen', params: { radius: 0 } }, 1920, 1080)).toBe(false);
   });
 });

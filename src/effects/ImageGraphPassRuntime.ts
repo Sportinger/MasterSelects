@@ -15,7 +15,7 @@ export interface ImageGraphPassBatch {
   readonly encoded: Map<string, { view: GPUTextureView; identity: string }>;
   readonly resources: Map<string, { view: GPUTextureView; identity: string }>;
   /** Pooled pass textures this batch holds until `releaseBatch` or the next encoder. */
-  readonly leases: PooledPassTexture[];
+  readonly leases: PassTextureLease[];
   /** Set by `releaseBatch`: its views may already hold another effect's pass output. */
   released?: boolean;
   encoder?: GPUCommandEncoder;
@@ -32,6 +32,8 @@ export interface ImageGraphExternalResource {
 }
 /** A pass-boundary texture. Its content only lives from its producer pass to the end of one encode (or batch). */
 export interface PooledPassTexture { readonly texture: GPUTexture; readonly view: GPUTextureView; readonly key: string; lastUsed: number }
+/** One lease of a pool texture. The token tells a stale holder apart from the texture's current one. */
+export interface PassTextureLease { readonly item: PooledPassTexture; readonly token: number }
 /** Free pool textures unused for this many encoders are destroyed. */
 const STALE_ENCODERS = 120;
 
@@ -61,7 +63,9 @@ export class ImageGraphPassRuntime {
   private readonly pipelines = new Map<string, GPURenderPipeline>();
   private readonly failedPipelines = new Map<string, string>();
   private readonly free = new Map<string, PooledPassTexture[]>();
-  private readonly leased = new Set<PooledPassTexture>();
+  /** Leased textures and the token of their current lease. */
+  private readonly leased = new Map<PooledPassTexture, number>();
+  private nextLeaseToken = 0;
   private encoder?: GPUCommandEncoder;
   private generation = 0;
   private disposed = false;
@@ -109,13 +113,13 @@ export class ImageGraphPassRuntime {
     const descriptors = new Map(resources.map(item => [item.id, item]));
     const ids = new Set(descriptors.keys());
     this.beginEncoder(options.encoder);
-    const leases: PooledPassTexture[] = [];
+    const leases: PassTextureLease[] = [];
     try { return this.encodePasses(options, passes, descriptors, ids, leases); }
     finally { if (options.batch) options.batch.leases.push(...leases); else this.giveBack(leases); }
   }
 
   private encodePasses(options: EncodeImageGraphPassesOptions, passes: NonNullable<ImageOperatorPlan['passes']>,
-    descriptors: Map<string, NonNullable<ImageOperatorPlan['resources']>[number]>, ids: Set<string>, leases: PooledPassTexture[]): boolean {
+    descriptors: Map<string, NonNullable<ImageOperatorPlan['resources']>[number]>, ids: Set<string>, leases: PassTextureLease[]): boolean {
     const produced = new Set<string>();
     const localViews = new Map<string, GPUTextureView>(), identities = new Map<string, string>();
     const metadata = new Map<string, ImageOperatorResourceMetadata>();
@@ -141,7 +145,7 @@ export class ImageGraphPassRuntime {
       if (pass.outputResource && shared) { localViews.set(pass.outputResource, shared.view); identities.set(pass.outputResource, shared.identity); produced.add(pass.outputResource);
         options.batch?.resources.set(pass.outputResource, shared); if (pass.outputResource === options.stopAtResourceId) break; continue; }
       let output = options.outputView;
-      if (pass.outputResource) { const lease = this.lease(width, height); leases.push(lease); output = lease.view; }
+      if (pass.outputResource) { const lease = this.lease(width, height); leases.push(lease); output = lease.item.view; }
       if (!output) throw new Error(`Image graph pass ${pass.id} has no output resource.`);
       if (pass.outputResource && descriptors.get(pass.outputResource)?.producerPassId !== pass.id)
         throw new Error(`Image graph resource ${pass.outputResource} has the wrong producer.`);
@@ -206,7 +210,7 @@ export class ImageGraphPassRuntime {
   private beginEncoder(encoder: GPUCommandEncoder): void {
     if (encoder === this.encoder) return;
     this.encoder = encoder; this.generation++;
-    this.giveBack([...this.leased]);
+    this.giveBack([...this.leased].map(([item, token]) => ({ item, token })));
     const stale: PooledPassTexture[] = [];
     for (const [key, list] of this.free) {
       const kept = list.filter(item => this.generation - item.lastUsed <= STALE_ENCODERS || (stale.push(item), false));
@@ -216,7 +220,7 @@ export class ImageGraphPassRuntime {
     if (stale.length) void this.device.queue.onSubmittedWorkDone().then(() => stale.forEach(item => item.texture.destroy()), () => undefined);
   }
 
-  private lease(width: number, height: number): PooledPassTexture {
+  private lease(width: number, height: number): PassTextureLease {
     const key = `${width}x${height}`;
     const reused = this.free.get(key)?.pop();
     const item = reused ?? (() => {
@@ -224,13 +228,17 @@ export class ImageGraphPassRuntime {
         usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING });
       return { texture, view: texture.createView(), key, lastUsed: this.generation };
     })();
-    this.leased.add(item);
-    return item;
+    const token = ++this.nextLeaseToken;
+    this.leased.set(item, token);
+    return { item, token };
   }
 
-  private giveBack(items: readonly PooledPassTexture[]): void {
-    for (const item of items) {
-      if (!this.leased.delete(item)) continue;
+  /** Returns leases to the pool. A stale lease (its texture went back at an encoder switch and
+   * may be leased again by now) returns nothing, so it cannot free another holder's texture. */
+  private giveBack(leases: readonly PassTextureLease[]): void {
+    for (const { item, token } of leases) {
+      if (this.leased.get(item) !== token) continue;
+      this.leased.delete(item);
       item.lastUsed = this.generation;
       const list = this.free.get(item.key) ?? [];
       list.push(item); this.free.set(item.key, list);
@@ -243,6 +251,6 @@ export class ImageGraphPassRuntime {
   }
 
   dispose() { if (this.disposed) return; this.disposed = true;
-    for (const item of [...this.leased, ...[...this.free.values()].flat()]) item.texture.destroy();
+    for (const item of [...this.leased.keys(), ...[...this.free.values()].flat()]) item.texture.destroy();
     this.leased.clear(); this.free.clear(); this.pipelines.clear(); this.failedPipelines.clear(); }
 }

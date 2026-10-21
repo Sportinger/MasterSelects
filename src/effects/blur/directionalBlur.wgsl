@@ -4,9 +4,11 @@
 // `directionalBlurFine` (stage A, reading that cache) and `directionalBlurCoarse` (stage B,
 // reading the stage A cache) are its three passes, each reading its input on binding 1; the
 // GPU check compares them with the graph. `motionBlurFragment`, `zoomBlurFragment` and
-// `radialBlurFragment` are the registered single-pass entries for the generic effect layout
-// (pipeline prewarm only): they evaluate stage A at every coarse tap directly and premultiply
-// after filtering the straight source, an approximation at alpha edges.
+// `radialBlurFragment` are the registered single-pass entries of the generic effect layout.
+// GPU check only; never rendered: graph-owned effects render through their compiled graph and
+// `prewarmEffect` skips them. They evaluate stage A at every coarse tap directly (up to
+// 64 × 256 reads per pixel) and premultiply after filtering the straight source, an
+// approximation at alpha edges.
 
 struct DirectionalBlurParams {
   amount: f32,

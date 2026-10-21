@@ -106,6 +106,33 @@ describe('ImageGraphPassRuntime', () => {
     expect(destroyed.every(destroy => destroy.mock.calls.length === 1)).toBe(true);
   });
 
+  it('ignores a batch released after an encoder switch: its textures already serve the new encoder', () => {
+    const createTexture = vi.fn(() => { const view = {}; return { destroy: vi.fn(), createView: () => view }; });
+    const pipeline = { getBindGroupLayout: () => ({}) };
+    const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}), queue: { writeBuffer: vi.fn() }, createTexture,
+      createShaderModule: vi.fn(() => ({})), createRenderPipeline: vi.fn(() => pipeline), createBindGroup: vi.fn(() => ({})), createBuffer: vi.fn() } as unknown as GPUDevice;
+    const encoder = () => ({ beginRenderPass: vi.fn(() => ({ setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() })) }) as unknown as GPUCommandEncoder;
+    const producer = base('producer'), final = base('final', ['blur']);
+    const plan = { ...final, passes: [{ id: 'blur-pass', program: producer, inputResources: [], outputResource: 'blur' },
+      { id: 'final-pass', program: final, inputResources: ['blur'] }], resources: [{ id: 'blur', producerPassId: 'blur-pass', format: 'rgba16float' as const }] };
+    const runtime = new ImageGraphPassRuntime(device), common = { sampler: {} as GPUSampler,
+      source: { kind: 'texture' as const, view: {} as GPUTextureView }, timelineTimeSeconds: 0, plan, outputView: {} as GPUTextureView, width: 320, height: 180 };
+    const stale = runtime.createBatch(), current = runtime.createBatch();
+    runtime.encode({ ...common, encoder: encoder(), instanceId: 'previous-frame', batch: stale });
+    // The next encoder takes the texture back and leases it to a new batch.
+    runtime.encode({ ...common, encoder: encoder(), instanceId: 'this-frame', batch: current });
+    expect(createTexture).toHaveBeenCalledTimes(1);
+    expect(runtime.poolStats()).toEqual({ leased: 1, free: 0 });
+    // Releasing the stale batch must not return the texture the current batch still reads.
+    runtime.releaseBatch(stale);
+    expect(runtime.poolStats()).toEqual({ leased: 1, free: 0 });
+    runtime.encode({ ...common, encoder: current.encoder!, instanceId: 'other' });
+    expect(createTexture).toHaveBeenCalledTimes(2);
+    runtime.releaseBatch(current);
+    expect(runtime.poolStats()).toEqual({ leased: 0, free: 2 });
+    runtime.dispose();
+  });
+
   it('destroys pool textures that no encoder used for a while, after the queue finished', async () => {
     const destroyed: Array<ReturnType<typeof vi.fn>> = [];
     const createTexture = vi.fn(() => { const destroy = vi.fn(); destroyed.push(destroy); return { destroy, createView: () => ({}) }; });

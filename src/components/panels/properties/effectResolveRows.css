@@ -1,0 +1,17 @@
+@layer features {
+  /* Effect cards host Resolve rows (ResolveEffectParamRow) outside a section: the same columns
+     as .resolve-inspector-section (resolveInspector/ResolveInspector.css). Zero specificity, so
+     the narrow-panel values (ResolveInspectorNarrow.css) win whichever stylesheet loads last. */
+  :where(.effect-params) {
+    --resolve-inspector-row-height: 26px;
+    --resolve-inspector-label-width: 100px;
+    --resolve-inspector-control-width: 190px;
+    --resolve-inspector-action-width: 44px;
+    --resolve-inspector-action-gap: 5px;
+    --resolve-inspector-label-control-gap: 10px;
+    --resolve-inspector-control-action-gap: 14px;
+  }
+
+  /* Among Resolve rows, a parameter-source row sizes like its siblings (the panel is their container). */
+  .effect-params--resolve-rows > .parameter-source-control { container-type: normal; }
+}

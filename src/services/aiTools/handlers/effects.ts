@@ -34,7 +34,8 @@ export async function handleListEffects(): Promise<ToolResult> {
     effects: effects.map(e => ({
       id: e.id,
       name: e.name,
-      params: Object.entries(e.params).filter(([, param]) => !param.hidden).map(([key, param]) => ({
+      // Retired parameters (accepted, but they do nothing) are not offered; other hidden ones stay listed.
+      params: Object.entries(e.params).filter(([, param]) => !param.deprecated).map(([key, param]) => ({
         name: key,
         type: param.type,
         default: param.default,
@@ -163,11 +164,12 @@ export async function handleUpdateEffect(
   if (!params || typeof params !== 'object') return { success: false, error: 'params must be an object.' };
 
   // A misspelled parameter used to be stored silently and do nothing; reject it with the valid names.
-  // Hidden parameters stay accepted (saved projects carry them) but are not offered.
+  // Retired parameters stay accepted (saved projects carry them) but are not offered while they do nothing.
   const known = new Set([...Object.keys(getEffect(effect.type)?.params ?? {}), ...Object.keys(effect.params)]);
   const unknown = Object.keys(params).filter(name => !known.has(name));
   if (unknown.length) {
-    const valid = Object.entries(effectParamDefinitions(effect)).filter(([, definition]) => !definition.hidden).map(([name]) => name);
+    const definitions = effectParamDefinitions(effect);
+    const valid = [...known].filter(name => !(definitions[name]?.deprecated && definitions[name].hidden));
     return { success: false, error: `Unknown parameter${unknown.length > 1 ? 's' : ''} for ${effect.type}: ${unknown.join(', ')}. Valid: ${valid.toSorted().join(', ')}` };
   }
 

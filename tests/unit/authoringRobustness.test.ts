@@ -62,6 +62,10 @@ describe('effect parameter validation', () => {
     const blur = (listed.data as { categories: { effects: { id: string; params: { name: string }[] }[] }[] }).categories
       .flatMap(category => category.effects).find(effect => effect.id === 'gaussian-blur')!;
     expect(blur.params.map(param => param.name)).toEqual(['radius']);
+    // Only retired parameters leave the list: other effects' hidden inputs stay as before.
+    const lens = (listed.data as { categories: { effects: { id: string; params: { name: string }[] }[] }[] }).categories
+      .flatMap(category => category.effects).find(effect => effect.id === 'lens-correction')!;
+    expect(lens.params.map(param => param.name)).toContain('sourceAspect');
   });
 });
 

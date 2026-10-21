@@ -10,6 +10,7 @@ import { ParameterSourceNumberRow } from './ParameterSourceNumberRow';
 import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 import { ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
 import { EffectKeyframeToggle } from './shared';
+import './effectResolveRows.css';
 
 type Value = number | boolean | string;
 interface ResolveEffectParamRowProps {

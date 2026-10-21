@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { getEffect, getDefaultParams } from '../../src/effects';
 import {
-  SEPARABLE_MAX_PAIRS_PER_SIDE, blurPixelScale, directionalBlurPlan, directionalCoarseTaps, radialBlurMode, separableBlurTaps,
+  SEPARABLE_MAX_PAIRS_PER_SIDE, blurBudgetNotes, blurPixelScale, directionalBlurAmount, directionalBlurPlan, directionalCoarseTaps,
+  radialBlurMode, separableBlurTaps,
 } from '../../src/effects/blur/blurSampling';
+import { catalogText } from '../../src/services/nodeGraph/catalogText';
 import { upgradeBlurGraph } from '../../src/services/operators/blurGraphUpgrade';
 import { createDefaultBoxBlurGraph, createDefaultGaussianBlurGraph } from '../../src/services/operators/blurEffectGraphs';
 import { createDefaultMotionBlurGraph, createDefaultRadialBlurGraph, createDefaultZoomBlurGraph } from '../../src/services/operators/directionalBlurEffectGraphs';
@@ -129,6 +131,17 @@ describe('legacy blur graph upgrade', () => {
     for (const type of ['gaussian-blur', 'motion-blur', 'radial-blur', 'zoom-blur']) {
       expect(getEffect(type)!.params.samples).toMatchObject({ hidden: true, deprecated: expect.stringContaining('no effect') });
       expect(Object.values(getEffect(type)!.params).some(param => param.quality)).toBe(false);
+    }
+  });
+  it('tells the agent catalog the same sign rule the renderer applies below 0', () => {
+    for (const type of ['motion-blur', 'radial-blur', 'zoom-blur'] as const) {
+      const text = catalogText(`effect:${type}`).description ?? '';
+      const passesThrough = directionalBlurAmount(type, -0.2) === 0;
+      const notes = blurBudgetNotes(type, { ...getDefaultParams(type), amount: -0.2 }, 1920, 1080);
+      expect(notes.some(note => note.includes('leaves the picture unchanged'))).toBe(passesThrough);
+      if (passesThrough) expect(text).toMatch(/below 0[^.;]*(leaves the picture unchanged|the picture stays unchanged)/);
+      else expect(text).toMatch(/negative Amount streaks inward/);
+      expect(text).not.toMatch(/negative \w+ draws the same streak/);
     }
   });
 });

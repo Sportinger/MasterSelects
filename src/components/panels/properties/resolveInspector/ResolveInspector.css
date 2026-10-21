@@ -20,9 +20,7 @@
     grid-column: 3;
   }
 
-  /* Effect cards host Resolve rows (ResolveEffectParamRow) outside a section: same columns. */
-  .resolve-inspector-section,
-  .effect-params {
+  .resolve-inspector-section {
     --resolve-inspector-row-height: 26px;
     --resolve-inspector-label-width: 100px;
     --resolve-inspector-control-width: 190px;

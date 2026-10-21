@@ -268,6 +268,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   // Hidden/retired parameters follow what this instance's graph actually reads.
   const parameterGroups = groupEffectParameters(effectParamDefinitions(effect));
   const resolveRows = RESOLVE_ROW_EFFECTS.has(effect.type);
+  const rowsClass = (base: string) => resolveRows ? `${base} effect-params--resolve-rows` : base;
   const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false) => {
     const value = effect.params[paramName] ?? paramDef.default;
     // Decide before creating the element: a rendered-null Resolve row would hide the parameter.
@@ -297,7 +298,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   return (
     <>
       {ungroupedParams.length > 0 && (
-        <div className="effect-param-section">
+        <div className={rowsClass('effect-param-section')}>
           {ungroupedParams.map(([paramName, paramDef]) => row(paramName, paramDef))}
         </div>
       )}
@@ -305,7 +306,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
       {namedGroups.map((group) => {
         return (
           <ResolveInspectorSection key={group.id} title={group.label!} defaultOpen={group.id !== 'group:camera'}>
-              <div className="effect-quality-params">
+              <div className={rowsClass('effect-quality-params')}>
                 {group.params.map(([paramName, paramDef]) => row(paramName, paramDef))}
               </div>
           </ResolveInspectorSection>
@@ -329,7 +330,7 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
             )}
           </div>
           {qualityExpanded && (
-            <div className="effect-quality-params">
+            <div className={rowsClass('effect-quality-params')}>
               {/* Quality params have no max limit when dragging */}
               {qualityParams.map(([paramName, paramDef]) => row(paramName, paramDef, true))}
               <div className="effect-quality-warning">

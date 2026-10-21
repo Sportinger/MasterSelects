@@ -900,7 +900,8 @@ budget. Motion mirrors samples at the frame edge; Zoom and
 Radial keep the sampler's edge clamp (a mirrored zoom or spin path folds onto other
 rays, where the cached boxes no longer tile). Radial Blur gained **Type: Spin**
 (Amount 1 = a 20° arc); missing values keep the old Zoom look. A blur at zero
-strength (the built-in recipe only) is skipped by the effects pipeline, so its
+strength (the built-in recipe only, also when an older project stores it in the
+`operatorGraph` parameter) is skipped by the effects pipeline, so its
 input passes through exactly without running the passes. Its effect preview in the
 Node Workspace shows that input; while a preview of one of its inner nodes is open,
 the effect renders normally so those previews have pictures.
@@ -917,7 +918,9 @@ kernels; the GPU check (`image-graph-probe.html?suite=blur`) renders the same ed
 effect's batch) and returns to the pool, so all effects of a frame share a few
 textures per size; textures no encoder used for 120 encoders are destroyed.
 Releasing a batch also forgets its views and refuses further use, so nothing can
-read a cache the next effect has overwritten.
+read a cache the next effect has overwritten. Each lease carries a token: a batch
+released after the next encoder already took its textures back returns nothing,
+so it cannot free a texture another batch holds now.
 
 **Limits at the rendered size.** Tool results and the inspector state the limits at
 the size of the edited composition (the export size). The frame actually rendered
@@ -929,7 +932,9 @@ kernel is spread or capped there.
 **Worker hosts.** The opt-in worker render modes follow the same units: worker
 software draws Gaussian and Box as a canvas blur with the contract's sigma, and
 Motion, Radial (Zoom and Spin) and Zoom along the contract's paths in one stage of
-up to 64 taps with premultiplied alpha; worker GPU runs the blur graphs. Gaussian
+up to 64 taps with premultiplied alpha (longer streaks step visibly there; the
+`SoftwareBlur` log says so once per effect, size and streak); worker GPU runs the
+blur graphs. Gaussian
 Blur on a motion-adjustment layer in the worker GPU host
 (`workerGpuAdjustmentBlur.ts`) renders the tap list of `separableBlurTaps` itself:
 a premultiplied `rgba16float` source and horizontal pass, straight alpha after the
@@ -938,7 +943,8 @@ vertical pass, Radius relative to 1080p, Samples not read.
 **Retired Samples.** Gaussian, Motion, Radial and Zoom Blur choose their taps
 themselves. Their `samples` parameters stay in saved projects but are hidden, have
 no effect and are marked `deprecated`; `addEffect`/`updateEffect` accept them and
-return a warning, and `listEffects` no longer lists hidden parameters. New instances
+return a warning, and `listEffects` and the `updateEffect` list of valid names leave
+out retired (`deprecated`) parameters; other hidden parameters stay listed. New instances
 do not carry them (`getDefaultParams` leaves deprecated parameters out); graphs that
 still read one fall back to its catalog default. Visibility
 follows the instance's graph (`effectParamVisibility.ts`): an edited saved graph
@@ -1475,7 +1481,10 @@ sequence for temporal effects, and `--inset 0.7` places the image at 70 % on a
 transparent frame (the contact sheet shows cells over a checkerboard) to check
 alpha handling such as dark rims. Effects that need clip context (masks, face
 landmarks, temporal source, tracking) render without it and are checked in the
-editor instead.
+editor instead. `--pairs <file>` writes docs close-ups: each entry renders two
+effects (or `original`) on one image, crops the same region of both (`crop`, in
+pixels of the rendered frame, `zoom` enlarges it) and puts them side by side as a
+WebP, e.g. `node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json`.
 
 ### Effect graph pictures
 
@@ -1492,12 +1501,22 @@ group id; `focus=folder` shows only one folder, with the flow layout it has
 inside the effect wrapped into rows (`rows=n` sets the count, `break=a,b` starts
 rows at these node ids instead) and named stub cards for the values that come from
 outside the folder (Constants excepted); `only=a,b` (with `focus`) keeps just
-these node ids, laid out compactly left to right, and turns their other inputs into
-stubs, so a picture shows a recipe instead of the whole folder (`--list` prints the
-ids; a composition's `@` may be left out); each wrapped row is as tall as its own
-cards; `plumbing=hide` leaves out the Constants
-and Coordinates & Resources folders and their cables, so an overview reads as one
-path; `chain=1` keeps the clip source and output. Folder ports are named after what
+these node ids and turns their other inputs into stubs, so a picture shows a recipe
+instead of the whole folder (`--list` prints the ids; a composition's `@` may be
+left out). The literal values the picks read from the Constants folder appear as
+their own value cards ("Taper Gain −2"; `constants=hide` leaves them cut). A recipe
+is laid out afresh (`compactRecipeLayout`): columns follow the cables, each card as
+far right as its consumers allow; fed cards sit level with their highest source;
+stubs and constants sit beside the port they feed, in a free slot that no cable
+crosses (stacked at the canvas' 56-unit clearance, in port order); then cards that a
+long cable still runs through move up or down until no cable passes a card it does
+not connect, and back towards their first position as far as that allows. Each
+wrapped row is as tall as its own cards; `plumbing=hide` leaves out the Constants
+and Coordinates & Resources folders and their cables and lays the stages out the
+same way, so an overview reads as one path; `omit=a,b` leaves out cards (an
+overview without the effect's Output card); `chain=1` keeps the clip source and
+output. The page mounts the canvas only once the clip is in the timeline store, so
+its first placement does not reserve preview space under cards that have none. Folder ports are named after what
 they carry ("Sigma", "Tap Count"): an effect's presentation plan names its key
 outputs (`portLabels` in `effectPresentationPlans.ts`). Folder headers stay
 clickable for exploring. The page is part of dev builds only.
@@ -1511,7 +1530,14 @@ Chrome as WebP (at most 1600 px wide and 200 KB) into
 with a Vite of the checkout running (`npx vite --port 5176 --strictPort`). A shot
 is `<effect>[?query][@file name]`; `--list` prints the folders and node ids of each
 effect. Cables that bend out past the cards (the last cable of a wrapped row) stay
-inside the crop.
+inside the crop. Two checks keep pictures readable: a shot fails when a cable runs
+through (or within 8 units of) a card other than its two ends, since it would look
+like that card's connection (`crossings=allow` lets it pass with a warning), and a
+shot warns when card titles show below 11 px at the docs width of its layout (720 px
+full, 418 px float). Before warning, the script narrows the page step by step: a
+lower zoom letters titles larger relative to the cards, and the picture still
+fills the column. Folded cards show their › on the canvas (it used to be drawn
+only by the DOM button of an active card).
 `marks=id[:from],…` in a shot's query adds numbered callouts on those node cards
 and prints the figure markup (`layout=float` sizes them for a picture beside the
 text). The docs site links every picture to its full-size file and lets node
@@ -1525,8 +1551,11 @@ the timeline, adds the effect with the given parameters, opens Properties →
 Effects and captures the inspector with a strip of the preview as WebP (2× pixel
 density, at most 200 KB) into `docs/Features/assets/effects/editor/`. It prints
 the docs `<figure>` with numbered callouts on the named controls (parameter
-labels, `tab:Effects`, `bypass`, `remove`, `add` or `preview:x,y`) in the
-`docs-shot-overlay` style; `layout: "float"` sizes them for a picture beside the
+labels, `tab:Effects`, `bypass`, `remove`, `add` or `preview:x,y`; text targets end
+at the words, not at the empty rest of their row) in the
+`docs-shot-overlay` style; `view: "nodes"` captures the Nodes tab instead, with the
+clip picked as its graph source (targets `dock:Nodes`, `source`, `expand:<card>`
+for the › of a folded card, `port:<name>`); `layout: "float"` sizes them for a picture beside the
 text. `top: "tabs"` crops below the dock tab row (from the Properties sub-tabs),
 `preview` sets the width of the preview strip, and `hide` leaves named buttons that
 the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;

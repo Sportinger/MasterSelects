@@ -117,6 +117,7 @@ export function paintBase(ctx: DrawContext, scene: CanvasScene, view: CanvasView
       ctx.drawImage(sprite, -CARD_SPRITE_PAD, -CARD_SPRITE_PAD, node.width + CARD_SPRITE_PAD * 2, node.height + CARD_SPRITE_PAD * 2);
     } else drawNodeCard(ctx, node, theme);
     if (titleBoost > 1 && !node.laneRow) drawOverviewTitle(ctx, node, theme, titleBoost, titleCap);
+    if (node.expandable && !node.laneRow) drawExpandChevron(ctx, theme);
     ctx.restore();
   }
   if (import.meta.env.DEV) recordPaintPhase('paint-nodes', performance.now() - nodesStart, nodeCount);
@@ -164,10 +165,25 @@ function drawPlug(ctx: DrawContext, offset: number, color: string, highlighted: 
   box(ctx, offset - 5, -3, 10, 6, 2); ctx.fillStyle = highlighted ? color : theme.background; ctx.fill(); ctx.lineWidth = 1; ctx.stroke();
 }
 
+/** The › of a folded group's card, where its DOM expand button sits (that button only exists
+ * while the card is active), so every folded card shows that it opens. */
+function drawExpandChevron(ctx: DrawContext, theme: CanvasTheme) {
+  ctx.strokeStyle = theme.text; ctx.lineWidth = 1.6; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath();
+  ctx.moveTo(13, 36.5); ctx.lineTo(18, 41); ctx.lineTo(13, 45.5); ctx.stroke();
+}
+
 /** Zoomed-out titles grow in graph space so they stay legible in overviews. */
 export function overviewTitleBoost(zoom: number) { return Math.max(1, Math.min(4.4, 1.5 / zoom - 1)); }
 
-const OVERVIEW_TITLE_TOP = 30, OVERVIEW_LINE_HEIGHT = 1.12;
+/** The title size (graph units) most cards of `scene` are painted with at `zoom`; docs pictures check legibility with it. */
+export function paintedTitleSize(ctx: DrawContext, scene: CanvasScene, zoom: number): number {
+  const boost = overviewTitleBoost(zoom);
+  if (boost <= 1) return CARD_TITLE_SIZE;
+  const fits = scene.nodes.filter(node => !node.laneRow).map(node => fitOverviewTitle(ctx, node, boost).size).toSorted((a, b) => a - b);
+  return fits.length ? fits[Math.floor((fits.length - 1) / 2)] : 13 * boost;
+}
+
+const OVERVIEW_TITLE_TOP = 30, OVERVIEW_LINE_HEIGHT = 1.12, CARD_TITLE_SIZE = 13;
 /** Widest word per label at 1px bold, so overview repaints skip re-measuring. */
 const widestWordRatio = new Map<string, number>();
 
@@ -225,7 +241,7 @@ export function drawNodeCard(ctx: DrawContext, node: CanvasNode, theme: CanvasTh
     text(ctx, node.runtime, node.width - 28, 19, 50, theme.muted, 9, 400, 'right');
     if (node.viewerEnabled !== undefined) text(ctx, '◉', node.width - 9, 19, 14, node.viewerEnabled ? theme.accent : theme.muted, 12, 400, 'right');
     if (node.bypassable) text(ctx, 'Byp', node.width - 84, 19, 25, node.bypassed ? theme.accent : theme.muted, 9);
-    text(ctx, node.label, node.expandable ? 30 : 10, 46, node.width - (node.expandable ? 40 : 20), theme.text, 13, 600);
+    text(ctx, node.label, node.expandable ? 30 : 10, 46, node.width - (node.expandable ? 40 : 20), theme.text, CARD_TITLE_SIZE, 600);
     text(ctx, node.description, 10, 63, node.width - 20, theme.muted, 10);
     let badgeX = node.summarySegments?.timeline ? 300 : 10;
     const badgeY = node.summarySegments?.timeline ? 33 : 83;

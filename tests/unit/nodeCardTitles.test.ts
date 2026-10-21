@@ -4,7 +4,9 @@ import { buildEffectOperatorGraph } from '../../src/services/nodeGraph/effectGra
 import { paintBase, overviewTitleBoost } from '../../src/components/panels/nodes/canvas/rendering/paintNodeCanvas';
 import type { CanvasNode, CanvasScene, CanvasTheme } from '../../src/components/panels/nodes/canvas/rendering/nodeCanvasTypes';
 import type { Effect } from '../../src/types/effects';
-import { createMockClip } from '../helpers/mockData';
+import { createMockClip, createMockTrack } from '../helpers/mockData';
+import { buildClipNodeGraphDocument } from '../../src/services/nodeGraph/clipGraphDocument';
+import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipGraph';
 
 describe('node card titles', () => {
   it('titles value nodes driven by an effect parameter with that parameter, and keeps literals as Value', () => {
@@ -64,5 +66,39 @@ describe('node card titles', () => {
     const [shortUniform, longUniform] = titleSizes(true);
     expect(shortUniform).toBe(longUniform);
     expect(longUniform).toBe(longFit);
+  });
+  it('paints the › of a folded card after its overview title, so it shows without hovering', () => {
+    const strokes: Array<Array<[string, number, number]>> = [];
+    let path: Array<[string, number, number]> = [];
+    const order: string[] = [];
+    const state: Record<string | symbol, unknown> = { canvas: { width: 800, height: 600 } };
+    const context = new Proxy(state, {
+      get: (target, key) => key in target ? target[key] : key === 'measureText' ? (value: string) => ({ width: String(value).length * 6 })
+        : key === 'beginPath' ? () => { path = []; } : key === 'moveTo' || key === 'lineTo' ? (x: number, y: number) => { path.push([key, x, y]); }
+          : key === 'stroke' ? () => { strokes.push(path); order.push('stroke'); } : key === 'fillRect' ? () => { order.push('fill'); } : () => undefined,
+      set: (target, key, value) => { target[key] = value; return true; },
+    }) as unknown as CanvasRenderingContext2D;
+    const node: CanvasNode = { id: 'stage', label: 'Horizontal Pass', description: '', kind: 'effect', runtime: 'subgraph', x: 0, y: 0, width: 180,
+      height: 140, color: '#c9773c', selected: false, bypassed: false, bypassable: false, badges: [], ports: [], expandable: true };
+    const theme: CanvasTheme = { background: '#111', card: '#1b1b1b', text: '#eee', muted: '#888', border: '#333', accent: '#4af' };
+    paintBase(context, { nodes: [node], cables: [], groups: [], plugs: [] }, { zoom: 0.3, panX: 0, panY: 0, width: 800, height: 600, ratio: 1 }, theme);
+    const chevron = strokes.findIndex(points => points.length === 3 && points[0][0] === 'moveTo' && points[1][1] > points[0][1] && points[2][1] === points[0][1]);
+    expect(chevron).toBeGreaterThanOrEqual(0);
+    // Drawn after the last fill (the title band), inside the 30-unit slot left of the title.
+    expect(order.lastIndexOf('stroke')).toBeGreaterThan(order.lastIndexOf('fill'));
+    expect(Math.max(...strokes[chevron].map(([, x]) => x))).toBeLessThan(30);
+  });
+  it('titles an effect added by type id with its registered name on its card and folder', () => {
+    const effect: Effect = { id: 'fx', name: 'gaussian-blur', type: 'gaussian-blur', enabled: true, params: getDefaultParams('gaussian-blur') };
+    const clip = createMockClip({ id: 'named', trackId: 'v', effects: [effect] });
+    const track = createMockTrack({ id: 'v' });
+    const document = buildClipNodeGraphDocument(clip, track);
+    expect(document.graphs.flatMap(graph => graph.nodes).find(node => node.id === 'effect-fx')?.label).toBe('Gaussian Blur');
+    const unified = buildUnifiedClipGraph(document, clip, [clip], [], undefined, false);
+    expect(unified.groups?.find(group => group.effectId === 'fx')?.label).toBe('Gaussian Blur');
+    // A renamed effect keeps its own name.
+    const renamed = { ...clip, effects: [{ ...effect, name: 'Soft background' }] };
+    expect(buildUnifiedClipGraph(buildClipNodeGraphDocument(renamed, track), renamed, [renamed], [], undefined, false)
+      .groups?.find(group => group.effectId === 'fx')?.label).toBe('Soft background');
   });
 });

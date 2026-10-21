@@ -1,6 +1,9 @@
 import type { WorkerRenderSoftwareFrame, WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import { projectImageRadius, rotateImageCoordinate, unprojectImageRadius } from '../operators/imageOpticsSemantics';
-import { directionalBlurPlan, transformDirectionalPixel, type DirectionalBlurPlan, type DirectionalBlurType } from '../../effects/blur/blurSampling';
+import {
+  directionalBlurPlan, directionalBlurStreakPx, transformDirectionalPixel, type DirectionalBlurPlan, type DirectionalBlurType,
+} from '../../effects/blur/blurSampling';
+import { Logger } from '../logger';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -120,11 +123,27 @@ type DirectionalAdjustment = { readonly amount: number; readonly angle?: number;
   readonly centerY?: number; readonly mode?: 'zoom' | 'spin' };
 const SOFTWARE_DIRECTIONAL_MAX_TAPS = 64;
 const directionalPlans = new WeakMap<DirectionalAdjustment, { width: number; height: number; plan: DirectionalBlurPlan }>();
+const log = Logger.create('SoftwareBlur');
+const reportedTapCaps = new Set<string>();
+
+/** Longer streaks than the tap cap step visibly in the CPU preview: say so once per effect, size and streak. */
+function reportSoftwareTapCap(type: DirectionalBlurType, adjustment: DirectionalAdjustment, width: number, height: number): void {
+  const streak = directionalBlurStreakPx(type, adjustment, width, height);
+  if (!(streak + 1 > SOFTWARE_DIRECTIONAL_MAX_TAPS)) return;
+  const key = `${type}:${width}x${height}:${Math.round(streak)}`;
+  if (reportedTapCaps.has(key)) return;
+  if (reportedTapCaps.size > 256) reportedTapCaps.clear();
+  reportedTapCaps.add(key);
+  log.warn(`${type} in the software preview at ${width}×${height}: the ${Math.round(streak)} px streak is read with `
+    + `${SOFTWARE_DIRECTIONAL_MAX_TAPS} taps about ${(streak / SOFTWARE_DIRECTIONAL_MAX_TAPS).toFixed(1)} px apart, so it can look stepped `
+    + '(the GPU preview and the export use the two-stage graph).');
+}
 
 /**
  * Motion, Radial and Zoom Blur on the CPU: the shared sampling contract (blurSampling.ts) with
  * one stage of evenly spaced taps along each pixel's own range, up to 64 taps (the GPU graph
- * uses two stages and stays continuous beyond 64 px of streak). Alpha is premultiplied.
+ * uses two stages and stays continuous beyond 64 px of streak; longer streaks are logged).
+ * Alpha is premultiplied.
  */
 function applyDirectionalBlurAdjustment(
   type: DirectionalBlurType,
@@ -139,6 +158,7 @@ function applyDirectionalBlurAdjustment(
   if (!cached || cached.width !== width || cached.height !== height) {
     cached = { width, height, plan: directionalBlurPlan(type, adjustment, width, height) };
     directionalPlans.set(adjustment, cached);
+    reportSoftwareTapCap(type, adjustment, width, height);
   }
   const plan = cached.plan, pixel: [number, number] = [uvX * width, uvY * height];
   const { start, length } = plan.range(pixel);

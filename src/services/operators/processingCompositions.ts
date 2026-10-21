@@ -16,12 +16,12 @@ export const PROCESSING_COMPOSITIONS = [
     id: 'sampling.bounded-count', label: 'Bounded Sample Count',
     description: 'Bound a sample count using explicit lower/upper inputs, preserving the existing max, comparison and selection arithmetic. Truncation remains with the reducer.',
     members: ['samples-at-least-minimum', 'samples-over-maximum', 'count'], captureLiterals: false,
-    consumers: ['Image graphs', 'Gaussian Blur', 'Motion Blur', 'Radial Blur', 'Zoom Blur'],
+    consumers: ['Image graphs', 'Legacy saved blur graphs (Gaussian, Motion, Radial, Zoom)'],
   }),
   extractImageComposition(createLegacyRadialBlurGraph(), {
     id: 'coordinates.centered-scale.vec2', label: 'Scale UV',
     description: 'Scale a direction vector and add its center, using the existing scalar broadcast and vector math.',
-    members: ['scale-vec2', 'scaled-direction', 'sample-uv'], consumers: ['Image graphs', 'Radial Blur', 'Zoom Blur'],
+    members: ['scale-vec2', 'scaled-direction', 'sample-uv'], consumers: ['Image graphs', 'Legacy saved blur graphs (Radial, Zoom)'],
   }),
   // Linear-sampling pair taps of the separable Box/Gaussian Blur: one tap reads two texels at their weighted centre.
   extractImageComposition(gaussian, {

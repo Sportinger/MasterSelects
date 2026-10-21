@@ -2,10 +2,12 @@
 // (services/operators/blurEffectGraphs.ts), following effects/blur/blurSampling.ts.
 // Rendering is owned by the graph. `separableBlurPremultiply`, `separableBlurHorizontal` and
 // `separableBlurVertical` are its three passes (the GPU check compares them with the graph);
-// `gaussianBlurFragment` and `boxBlurFragment` are the registered single-pass entries for the
-// generic effect layout (pipeline prewarm only): they evaluate the horizontal pass at the two
-// cache rows a vertical tap filters and premultiply after filtering, an approximation at
-// alpha edges that the graph avoids with its premultiplied source cache.
+// `gaussianBlurFragment` and `boxBlurFragment` are the registered single-pass entries of the
+// generic effect layout. GPU check only; never rendered: graph-owned effects render through
+// their compiled graph and `prewarmEffect` skips them. They evaluate the horizontal pass at the
+// two cache rows a vertical tap filters (up to 512 × 255 reads per pixel, far too slow for a
+// frame) and premultiply after filtering, an approximation at alpha edges that the graph
+// avoids with its premultiplied source cache.
 
 struct SeparableBlurParams {
   radius: f32,  // pixels on a 1080p frame (shorter side 1080 px)

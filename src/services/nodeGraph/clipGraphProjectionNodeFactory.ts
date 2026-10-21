@@ -1,5 +1,6 @@
 import { getAudioEffect, hasAudioEffect } from '../../engine/audio/AudioEffectRegistry';
 import { sourceArtifactPorts } from './sourceArtifactPorts';
+import { getEffectDisplayName } from '../../effects';
 import { hasTextSourceGraph } from './textGraphProjection';
 import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import { ensureColorCorrectionState, getActiveColorVersion } from '../../types/colorCorrection';
@@ -269,7 +270,8 @@ export function createEffectNode(
     id: `effect-${effect.id}`,
     kind: 'effect',
     runtime: 'builtin',
-    label: effect.name || effect.type,
+    // New effects are named after their type id; cards show the registered name (Gaussian Blur).
+    label: effect.name ? getEffectDisplayName(effect) : effect.type,
     description: `${effect.enabled === false ? 'Disabled ' : ''}${effect.type} effect`,
     inputs: [inputPort('input', signalType, signalType)],
     outputs: [outputPort('output', signalType, signalType)],

@@ -1,6 +1,6 @@
 import { blurPixelScale, directionalBlurStreakPx } from '../../effects/blur/blurSampling';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { EFFECT_GRAPH_PARAM } from './effectGraph';
+import { EFFECT_GRAPH_PARAM, readEffectGraph } from './effectGraph';
 import { matchesEffectRecipe } from './effectFamilyPresentation';
 import { createDefaultBoxBlurGraph, createDefaultGaussianBlurGraph } from './blurEffectGraphs';
 import { createDefaultMotionBlurGraph, createDefaultRadialBlurGraph, createDefaultZoomBlurGraph } from './directionalBlurEffectGraphs';
@@ -25,6 +25,25 @@ function isRecipeGraph(type: UpgradableBlurEffectType, saved: EffectOperatorGrap
   return result;
 }
 
+/** Recipe checks of graphs saved in the legacy `params.operatorGraph` string, by type and string. */
+const legacyRecipes = new Map<string, boolean>();
+
+/** True when the instance runs the built-in recipe: no saved graph, or a saved copy of the current or legacy recipe. */
+function runsRecipe(type: UpgradableBlurEffectType, effect: { params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }): boolean {
+  if (effect.operatorGraph) return isRecipeGraph(type, effect.operatorGraph);
+  const legacy = effect.params[EFFECT_GRAPH_PARAM];
+  if (legacy === undefined || legacy === '') return true;
+  if (typeof legacy !== 'string') return false;
+  const key = `${type}\n${legacy}`;
+  let result = legacyRecipes.get(key);
+  if (result === undefined) {
+    try { result = isRecipeGraph(type, readEffectGraph(legacy, RECIPES[type])); } catch { result = false; }
+    if (legacyRecipes.size >= 64) legacyRecipes.clear();
+    legacyRecipes.set(key, result);
+  }
+  return result;
+}
+
 /**
  * A blur at zero strength renders its input unchanged: the pipeline skips it instead of running
  * its passes (the legacy shaders short-circuited too). Only for the built-in recipe, because an
@@ -34,7 +53,7 @@ export function isNeutralBlurEffect(effect: { type: string; params: Record<strin
   width: number, height: number): boolean {
   const type = effect.type;
   if (!isUpgradableBlurEffectType(type)) return false;
-  if (effect.operatorGraph ? !isRecipeGraph(type, effect.operatorGraph) : effect.params[EFFECT_GRAPH_PARAM] !== undefined) return false;
+  if (!runsRecipe(type, effect)) return false;
   if (type === 'gaussian-blur' || type === 'box-blur') {
     const radius = effect.params.radius;
     if (typeof radius !== 'number' || !Number.isFinite(radius)) return false;
