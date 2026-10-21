@@ -189,16 +189,21 @@ describe('docs site sidebar', () => {
     ]);
   });
 
-  it('reads the picker groups of the app, with the hidden effect left out', () => {
+  it('reads the picker groups of the app', () => {
     const source = fs.readFileSync(path.resolve(__dirname, '../../src/effects/effectCatalogGroups.ts'), 'utf8');
     const parsed = parseEffectGroups(source);
     expect(parsed?.groups.map((group: { id: string }) => group.id)).toEqual(
       ['color', 'blur', 'stylize', 'generate', 'distort', 'pixel', 'print', 'lines', 'textile', 'text', 'analog', 'keying', 'time', 'tracking', 'scene'],
     );
-    expect(parsed?.groups[1].label).toBe('Blur & Sharpen');
-    const catalog = loadEffectCatalog({ groupsSource: source });
-    expect(catalog.groups.find((group: { id: string }) => group.id === 'stylize')?.effects).not.toContain('rom1');
-    expect(catalog.source).toBe('effectCatalogGroups.ts');
+    expect(parsed?.groups[1]).toEqual({ id: 'blur', label: 'Blur & Sharpen', effects: ['box-blur', 'gaussian-blur', 'motion-blur', 'radial-blur', 'zoom-blur', 'sharpen'] });
+    expect(loadEffectCatalog({ groupsSource: source }).source).toBe('effectCatalogGroups.ts');
+  });
+
+  it('leaves effects hidden from the picker out of their group', () => {
+    for (const hidden of ["new Set(['rom1'])", "new Set<string>(['rom1'])"]) {
+      const source = `export const EFFECT_GROUPS = [\n  { id: 'stylize', label: 'Light & Stylize', effects: ['glow', 'rom1'] },\n] as const;\nexport const EFFECTS_HIDDEN_FROM_CATALOG: ReadonlySet<string> = ${hidden};`;
+      expect(loadEffectCatalog({ groupsSource: source }).groups[0].effects).toEqual(['glow']);
+    }
   });
 });
 

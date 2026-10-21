@@ -16,7 +16,7 @@ export function parseEffectGroups(source) {
   const groups = [...block.matchAll(/\{\s*id:\s*(['"])(.+?)\1,\s*label:\s*(['"])(.+?)\3,\s*effects:\s*\[([^\]]*)\]/gu)]
     .map(([, , id, , label, list]) => ({ id, label, effects: quoted(list) }));
   if (!groups.length) return undefined;
-  const hiddenList = source.match(/EFFECTS_HIDDEN_FROM_CATALOG[^=]*=\s*new Set\(\[([^\]]*)\]\)/u)?.[1];
+  const hiddenList = source.match(/EFFECTS_HIDDEN_FROM_CATALOG[^=]*=\s*new Set(?:<[^>]*>)?\(\[([^\]]*)\]\)/u)?.[1];
   return { groups, hidden: new Set(hiddenList ? quoted(hiddenList) : []) };
 }
 

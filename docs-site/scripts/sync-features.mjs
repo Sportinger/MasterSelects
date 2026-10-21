@@ -113,7 +113,8 @@ async function devServerRunning() {
   if (typeof url !== 'string') return false;
   try { await fetch(url, { signal: AbortSignal.timeout(1500) }); return true; } catch { return false; }
 }
-if (forBuild || !(await devServerRunning())) fs.rmSync(astroCacheDir, { recursive: true, force: true });
+const devServer = !forBuild && await devServerRunning();
+if (!devServer) fs.rmSync(astroCacheDir, { recursive: true, force: true });
 
 // Pages are updated in place: a running `astro dev` watches these files, and
 // removing the whole folder would end those watches (the site then keeps
@@ -209,15 +210,22 @@ for (const file of published) {
   writeIfChanged(path.join(contentDir, out), text);
   written.add(out);
 }
+let removedPages = 0;
 for (const folder of generatedContent) {
   const dir = path.join(contentDir, folder);
   if (!fs.existsSync(dir)) continue;
   for (const entry of fs.readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!entry.isFile()) continue;
     const relative = path.relative(contentDir, path.join(entry.parentPath ?? entry.path, entry.name)).split(path.sep).join('/');
-    if (!written.has(relative)) fs.rmSync(path.join(contentDir, relative), { force: true });
+    if (written.has(relative)) continue;
+    fs.rmSync(path.join(contentDir, relative), { force: true });
+    removedPages += 1;
   }
+  if (folder !== 'features' && !fs.readdirSync(dir).length) fs.rmdirSync(dir);
 }
+
+// The dev server restarts for the new sidebar at the same moment and misses the deletions.
+if (devServer && removedPages) report({ level: 'warn', text: `${removedPages} page(s) were removed: restart the running astro dev, which keeps serving them until then.` });
 
 // Shared assets (pictures, clips, posters, captions) move into the site's public/ folder.
 const assetFiles = sourceRef ? gitFiles.filter((name) => name.startsWith('assets/')) : [];
