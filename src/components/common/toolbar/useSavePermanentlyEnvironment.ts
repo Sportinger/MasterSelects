@@ -2,10 +2,9 @@ import { useEffect, useState } from 'react';
 import { projectFileService } from '../../../services/projectFileService';
 import { ensurePersistentStorage, isFsaPickerAvailable } from '../../../services/project/core/projectRootAccess';
 import { canUsePersistentBrowserStorage } from '../../../services/project/permanentSave/browserStorageMigration';
-import { isMobileAppleWebKit } from '../../../utils/mobileAppleWebKit';
-
-/** null while unknown; `unsupported` when the browser has no persistence API. */
-export type StoragePersistence = boolean | 'unsupported' | null;
+import type { StoragePersistence } from '../../../services/project/permanentSave/permanentSaveOptions';
+import { readStoragePersistence } from '../../../services/project/permanentSave/storagePersistence';
+import { isMobileAppleWebKit, resolveAppleHomeScreenMode, type AppleHomeScreenMode } from '../../../utils/mobileAppleWebKit';
 
 export interface SavePermanentlyEnvironment {
   checking: boolean;
@@ -14,13 +13,10 @@ export interface SavePermanentlyEnvironment {
   persistentBrowserStorage: boolean;
   persistence: StoragePersistence;
   appleMobile: boolean;
+  /** iPhone/iPad browser tab (storage Safari may evict) or Home Screen app. */
+  homeScreen: AppleHomeScreenMode;
   requestPersistence(): Promise<boolean>;
   recheck(): void;
-}
-
-async function readPersistence(): Promise<StoragePersistence> {
-  if (typeof navigator === 'undefined' || typeof navigator.storage?.persisted !== 'function') return 'unsupported';
-  try { return await navigator.storage.persisted(); } catch { return null; }
 }
 
 /** What this device offers for Save permanently, checked when the dialog opens. */
@@ -30,6 +26,7 @@ export function useSavePermanentlyEnvironment(): SavePermanentlyEnvironment {
     persistentBrowserStorage: false, persistence: null as StoragePersistence,
   }));
   const [generation, setGeneration] = useState(0);
+  const [homeScreen] = useState(() => resolveAppleHomeScreenMode());
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +36,7 @@ export function useSavePermanentlyEnvironment(): SavePermanentlyEnvironment {
       const [route, persistentBrowserStorage, persistence] = await Promise.all([
         folderPicker ? Promise.resolve('folder-picker') : projectFileService.resolveOpenProjectRoute().catch(() => 'unavailable'),
         canUsePersistentBrowserStorage(),
-        readPersistence(),
+        readStoragePersistence(),
       ]);
       if (!cancelled) setState({ checking: false, folderPicker, nativeHelper: route === 'native-helper', persistentBrowserStorage, persistence });
     })();
@@ -49,6 +46,7 @@ export function useSavePermanentlyEnvironment(): SavePermanentlyEnvironment {
   return {
     ...state,
     appleMobile: isMobileAppleWebKit(),
+    homeScreen,
     async requestPersistence() {
       const granted = await ensurePersistentStorage();
       setState(previous => ({ ...previous, persistence: granted }));

@@ -1,9 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resolvePermanentSaveDestinations, shouldOfferPermanentSave } from '../../src/services/project/permanentSave/permanentSaveOptions';
+import { resolvePermanentSaveDestinations, resolvePermanentSaveHint, shouldOfferPermanentSave } from '../../src/services/project/permanentSave/permanentSaveOptions';
 
 const state = vi.hoisted(() => ({
-  environment: { checking: false, folderPicker: false, nativeHelper: false, persistentBrowserStorage: false, persistence: false as boolean | 'unsupported' | null, appleMobile: false },
+  environment: { checking: false, folderPicker: false, nativeHelper: false, persistentBrowserStorage: false, persistence: false as boolean | 'unsupported' | null, appleMobile: false, homeScreen: 'none' as 'none' | 'browser-tab' | 'home-screen-app' },
   moveActive: vi.fn(),
   moveOne: vi.fn(),
   saveToFolder: vi.fn(),
@@ -23,11 +23,15 @@ vi.mock('../../src/services/project/permanentSave/permanentSaveActions', () => (
 import { SavePermanentlyDialog } from '../../src/components/common/toolbar/SavePermanentlyDialog';
 import { ToolbarSavePermanently } from '../../src/components/common/toolbar/ToolbarSavePermanently';
 
-type StatusOverrides = Partial<{ activeTemporary: boolean; scratch: boolean; persistentBrowserStorage: boolean; tabOnPersistentStorage: boolean; temporaryProjects: string[] }>;
+type StatusOverrides = Partial<{
+  activeTemporary: boolean; scratch: boolean; persistentBrowserStorage: boolean; tabOnPersistentStorage: boolean; temporaryProjects: string[];
+  activeBrowserLocal: boolean; homeScreen: 'none' | 'browser-tab' | 'home-screen-app'; persistence: boolean | 'unsupported' | null;
+}>;
 // A tab whose open project is temporary runs on the fallback; otherwise it uses OPFS.
 const status = (overrides: StatusOverrides = {}) => ({
   activeTemporary: true, scratch: false, persistentBrowserStorage: false, tabOnPersistentStorage: overrides.activeTemporary === false,
-  temporaryProjects: [] as string[], refresh: vi.fn(), ...overrides,
+  temporaryProjects: [] as string[], activeBrowserLocal: overrides.activeTemporary === false, homeScreen: 'none' as const, persistence: null,
+  refresh: vi.fn(), ...overrides,
 });
 const optionTitles = () => Array.from(document.querySelectorAll('.save-permanently-option-title')).map(node => node.firstChild?.textContent);
 
@@ -39,6 +43,28 @@ describe('save permanently destinations', () => {
     expect(resolvePermanentSaveDestinations({ ...base, nativeHelper: true })).toEqual(['folder', 'archive']);
     expect(resolvePermanentSaveDestinations({ ...base, folderPicker: true, persistentBrowserStorage: true })).toEqual(['folder', 'browser', 'archive']);
     expect(resolvePermanentSaveDestinations({ ...base, activeTemporary: false, folderPicker: true })).toEqual([]);
+  });
+
+  it('puts the Home Screen step first in an iPhone/iPad tab only', () => {
+    const base = { activeTemporary: true, folderPicker: false, nativeHelper: false, persistentBrowserStorage: true };
+    expect(resolvePermanentSaveDestinations({ ...base, homeScreen: 'browser-tab' })).toEqual(['home-screen', 'browser', 'archive']);
+    // A browser-local project: no move, the archive stays as the backup outside Safari.
+    expect(resolvePermanentSaveDestinations({ ...base, activeTemporary: false, activeBrowserLocal: true, homeScreen: 'browser-tab' })).toEqual(['home-screen', 'archive']);
+    expect(resolvePermanentSaveDestinations({ ...base, homeScreen: 'home-screen-app' })).toEqual(['browser', 'archive']);
+    expect(resolvePermanentSaveDestinations({ ...base, activeTemporary: false, activeBrowserLocal: true, homeScreen: 'home-screen-app' })).toEqual([]);
+    expect(resolvePermanentSaveDestinations({ ...base, activeTemporary: false, activeBrowserLocal: true, homeScreen: 'none' })).toEqual([]);
+  });
+
+  it('marks browser-local projects as not safe in an iPhone/iPad tab until storage is persisted', () => {
+    const base = { activeTemporary: false, activeBrowserLocal: true, persistentBrowserStorage: true, tabOnPersistentStorage: true, temporaryProjects: [] };
+    expect(resolvePermanentSaveHint({ ...base, homeScreen: 'browser-tab', persistence: false })).toBe('not-safe');
+    expect(resolvePermanentSaveHint({ ...base, homeScreen: 'browser-tab', persistence: 'unsupported' })).toBe('not-safe');
+    expect(resolvePermanentSaveHint({ ...base, homeScreen: 'browser-tab', persistence: true })).toBeNull();
+    // Still checking: no flicker.
+    expect(resolvePermanentSaveHint({ ...base, homeScreen: 'browser-tab', persistence: null })).toBeNull();
+    expect(resolvePermanentSaveHint({ ...base, homeScreen: 'home-screen-app', persistence: false })).toBeNull();
+    expect(resolvePermanentSaveHint({ ...base, homeScreen: 'none', persistence: false })).toBeNull();
+    expect(resolvePermanentSaveHint({ ...base, activeTemporary: true, activeBrowserLocal: false, homeScreen: 'browser-tab', persistence: false })).toBe('temporary');
   });
 
   it('shows the toolbar action for a temporary project or movable leftovers only', () => {
@@ -54,7 +80,7 @@ describe('save permanently destinations', () => {
 
 describe('SavePermanentlyDialog', () => {
   beforeEach(() => {
-    state.environment = { checking: false, folderPicker: false, nativeHelper: false, persistentBrowserStorage: false, persistence: false, appleMobile: false };
+    state.environment = { checking: false, folderPicker: false, nativeHelper: false, persistentBrowserStorage: false, persistence: false, appleMobile: false, homeScreen: 'none' };
     for (const mock of [state.moveActive, state.moveOne, state.saveToFolder, state.download]) mock.mockReset();
   });
   afterEach(cleanup);
@@ -63,13 +89,53 @@ describe('SavePermanentlyDialog', () => {
       createBrowserStorageCopy={vi.fn()} onProjectChanged={vi.fn()} {...props} />,
   );
 
-  it('offers only the archive on iPad Private Browsing, with the Home Screen note', () => {
-    state.environment.appleMobile = true;
+  it('recommends the Home Screen first on iPad Private Browsing, then the archive', () => {
+    state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab' };
     renderDialog();
     expect(screen.getByRole('heading').textContent).toBe('Save this project permanently');
-    expect(optionTitles()).toEqual(['Download .msproj archive']);
+    expect(optionTitles()).toEqual(['Add MasterSelects to the Home Screen', 'Download .msproj archive']);
+    expect(document.querySelector('.save-permanently-home-screen')?.getAttribute('data-recommended')).toBe('true');
     expect(screen.getByText(/lands in the Files app/)).toBeTruthy();
-    expect(screen.getByText(/opened from the Home Screen/)).toBeTruthy();
+    expect(screen.getByText(/Open as Web App/)).toBeTruthy();
+  });
+
+  it('orders Home Screen, Keep in this browser, Download and Ask to keep it in an iPad Safari tab', async () => {
+    state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab', persistentBrowserStorage: true };
+    state.download.mockResolvedValue('Stage Show.msproj');
+    renderDialog();
+    expect(optionTitles()).toEqual(['Add MasterSelects to the Home Screen', 'Keep in this browser', 'Download .msproj archive']);
+    expect(screen.getByText('Ask to keep it')).toBeTruthy();
+    const takeAlong = screen.getByText('Download .msproj to take along');
+    // The Home Screen step comes before every other control except the name.
+    expect(takeAlong.compareDocumentPosition(screen.getByText('Keep in this browser')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(takeAlong);
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Downloaded Stage Show\.msproj.*Home Screen app use Open Project > Import \.msproj archive/));
+    expect(state.download).toHaveBeenCalledWith('Stage Show');
+  });
+
+  it('does not call a Safari-tab browser copy permanent', async () => {
+    state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab', persistentBrowserStorage: true };
+    state.moveActive.mockResolvedValue({ from: 'Stage Show', to: 'Stage Show', removedTemporary: true, persisted: false });
+    renderDialog();
+    fireEvent.click(screen.getByText('Keep in this browser'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/^Kept in this browser.*seven days.*Home Screen/));
+  });
+
+  it('keeps a browser-local project safe from an iPad Safari tab', () => {
+    state.environment = { ...state.environment, appleMobile: true, homeScreen: 'browser-tab', persistentBrowserStorage: true };
+    renderDialog({ activeTemporary: false });
+    expect(screen.getByRole('heading').textContent).toBe('Keep this project safe');
+    expect(screen.getByText(/Not safe yet\./)).toBeTruthy();
+    expect(optionTitles()).toEqual(['Add MasterSelects to the Home Screen', 'Download .msproj archive']);
+    expect(screen.getByText(/backup outside Safari/)).toBeTruthy();
+  });
+
+  it('treats browser storage as permanent in the Home Screen app, archive as backup', () => {
+    state.environment = { ...state.environment, appleMobile: true, homeScreen: 'home-screen-app', persistentBrowserStorage: true };
+    renderDialog();
+    expect(optionTitles()).toEqual(['Keep in this browser', 'Download .msproj archive']);
+    expect(screen.queryByText('Download .msproj to take along')).toBeNull();
+    expect(screen.getByText(/Opened from the Home Screen/)).toBeTruthy();
   });
 
   it('lists folder, browser and archive on desktop Chrome and saves to a folder', async () => {
@@ -144,6 +210,20 @@ describe('ToolbarSavePermanently', () => {
 
   it('stays hidden for permanent projects', () => {
     const { container } = render(<ToolbarSavePermanently status={status({ activeTemporary: false })} onOpen={vi.fn()} />);
+    expect(container.textContent).toBe('');
+  });
+
+  it('marks a browser-local project in an iPad Safari tab until storage is persisted', () => {
+    const onOpen = vi.fn();
+    const { rerender, container } = render(<ToolbarSavePermanently status={status({ activeTemporary: false, homeScreen: 'browser-tab', persistence: false })} onOpen={onOpen} />);
+    const button = screen.getByRole('button');
+    expect(button.textContent).toBe('Not safe yetKeep safeKeep safe');
+    expect(button.getAttribute('data-hint')).toBe('not-safe');
+    fireEvent.click(button);
+    expect(onOpen).toHaveBeenCalledOnce();
+    rerender(<ToolbarSavePermanently status={status({ activeTemporary: false, homeScreen: 'browser-tab', persistence: true })} onOpen={onOpen} />);
+    expect(container.textContent).toBe('');
+    rerender(<ToolbarSavePermanently status={status({ activeTemporary: false, homeScreen: 'home-screen-app', persistence: false })} onOpen={onOpen} />);
     expect(container.textContent).toBe('');
   });
 });

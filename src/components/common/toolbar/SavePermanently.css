@@ -24,6 +24,7 @@
 
 @layer overlays {
   .save-permanently-dialog { max-height: calc(100dvh - 48px); overflow-y: auto; }
+  .save-permanently-dialog button { -webkit-tap-highlight-color: transparent; }
   .save-permanently-dialog .save-permanently-accent { background: linear-gradient(90deg, transparent, var(--warning), var(--warning-light), transparent); }
   .repository-archive-dialog .save-permanently-warning { color: var(--text-primary); }
   .save-permanently-warning strong { color: var(--warning-light); }
@@ -47,6 +48,15 @@
     font-size: 9px; font-style: normal; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
   }
   .save-permanently-option-description { color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+  /* iPhone/iPad tab: an instruction card with its own download button, not one clickable option. */
+  .repository-archive-dialog .save-permanently-home-screen {
+    gap: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-tertiary); cursor: default;
+  }
+  .repository-archive-dialog .save-permanently-option.save-permanently-home-screen:hover { background: var(--bg-tertiary); }
+  .save-permanently-steps { margin: 0; padding-left: 18px; color: var(--text-primary); font-size: 12px; line-height: 1.5; }
+  .save-permanently-steps strong { font-weight: 600; }
+  .repository-archive-dialog .save-permanently-take-along { margin-top: 2px; border-color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+  .repository-archive-dialog .save-permanently-take-along:hover:not(:disabled) { background: var(--bg-hover); }
   .save-permanently-others { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
   .repository-archive-dialog .save-permanently-persistence { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .repository-archive-dialog .save-permanently-persistence button { padding: 3px 8px; font-size: 11px; }
