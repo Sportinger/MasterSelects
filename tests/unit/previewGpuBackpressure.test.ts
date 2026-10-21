@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { renderWithPreviewBackpressure } from '../../src/engine/engineCore/previewGpuBackpressure';
+import { PREVIEW_GPU_FENCE_TIMEOUT_MS, renderWithPreviewBackpressure } from '../../src/engine/engineCore/previewGpuBackpressure';
 
 function gpu() {
   let resolve!: () => void, reject!: (error: Error) => void;
@@ -54,5 +54,35 @@ describe('preview GPU backpressure', () => {
     renderWithPreviewBackpressure(g.device, false, render, wake);
     expect(render).not.toHaveBeenCalled();
     g.resolve(); await Promise.resolve(); expect(wake).toHaveBeenCalledOnce();
+  });
+
+  it('reopens the preview when a GPU completion fence never settles', async () => {
+    vi.useFakeTimers();
+    try {
+      const device = { queue: { onSubmittedWorkDone: vi.fn(() => new Promise<void>(() => {})) } } as unknown as GPUDevice;
+      const submitted: string[] = [];
+      const wake = vi.fn(() => renderWithPreviewBackpressure(device, false, () => submitted.push('latest'), wake));
+      renderWithPreviewBackpressure(device, false, () => submitted.push('first'), wake);
+      // A new text clip arrives while the first fence is still pending.
+      renderWithPreviewBackpressure(device, false, () => submitted.push('text'), wake);
+      expect(submitted).toEqual(['first']);
+      await vi.advanceTimersByTimeAsync(PREVIEW_GPU_FENCE_TIMEOUT_MS - 1);
+      expect(wake).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(wake).toHaveBeenCalledOnce();
+      expect(submitted).toEqual(['first', 'latest']);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('does not wake twice when a late fence settles after the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const g = gpu(), wake = vi.fn();
+      renderWithPreviewBackpressure(g.device, false, vi.fn(), wake);
+      renderWithPreviewBackpressure(g.device, false, vi.fn(), wake);
+      await vi.advanceTimersByTimeAsync(PREVIEW_GPU_FENCE_TIMEOUT_MS);
+      g.resolve(); await Promise.resolve();
+      expect(wake).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
   });
 });

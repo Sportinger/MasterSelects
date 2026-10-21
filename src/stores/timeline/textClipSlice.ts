@@ -22,8 +22,18 @@ import {
   getTimelineGeneratedCanvasRuntimeDimensions,
   renderTimelineTextCanvasRuntime,
 } from '../../services/timeline/timelineGeneratedCanvasRuntime';
+import { subscribeTextFontRefresh } from '../../services/text/textFontRefresh';
 
 const log = Logger.create('TextClipSlice');
+
+// Text rasters redrawn after their web font loaded need fresh layers and a frame;
+// an idle preview would otherwise keep showing the fallback raster.
+const unsubscribeTextFontRefresh = subscribeTextFontRefresh(() => {
+  invalidateTextGpuBindings();
+  layerBuilder.invalidateCache();
+  renderHostPort.requestRender();
+});
+if (import.meta.hot) import.meta.hot.dispose(unsubscribeTextFontRefresh);
 
 function getActiveCompositionResolution(): { width: number; height: number } {
   const mediaState = useMediaStore.getState();
