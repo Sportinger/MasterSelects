@@ -19,6 +19,18 @@ interface EffectCatalogPickerProps {
   onSelect: (effectId: string) => void;
 }
 
+/**
+ * How well an effect's name answers a search: 0 the name itself, 1 a name starting with it,
+ * 2 a word of the name starting with it, 3 only the description, tags or category match.
+ * Searching "glitch" lists Glitch before the many effects tagged glitch.
+ */
+function nameMatchRank(name: string, query: string): number {
+  const normalizedName = name.toLocaleLowerCase();
+  if (normalizedName === query) return 0;
+  if (normalizedName.startsWith(query)) return 1;
+  return normalizedName.split(/[\s()/-]+/u).some((word) => word.startsWith(query)) ? 2 : 3;
+}
+
 export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectCatalogPickerProps) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const [query, setQuery] = useState('');
@@ -26,7 +38,7 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectC
   const categories = useMemo(() => groups.map((group) => group.category), [groups]);
   const tiles = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
-    return groups.flatMap((group) => (
+    const matches = groups.flatMap((group) => (
       category !== 'all' && group.category !== category
         ? []
         : group.effects
@@ -49,6 +61,10 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectC
             } satisfies LookDefinition,
           }))
     ));
+    // Name matches first; otherwise the catalog order stays (the sort is stable).
+    return normalizedQuery
+      ? matches.toSorted((a, b) => nameMatchRank(a.effect.name, normalizedQuery) - nameMatchRank(b.effect.name, normalizedQuery))
+      : matches;
   }, [category, groups, query]);
 
   const select = (effectId: string) => {

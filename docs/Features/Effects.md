@@ -7,7 +7,9 @@ MasterSelects has a modular GPU effect system built around registered effect mod
 ## Apply an effect to a clip
 
 Select a video clip in the timeline, open **Properties → Effects**, then expand
-**+ Add Effect**. Type a name such as `blur` to narrow the catalog. The thumbnails
+**+ Add Effect**. Type a name such as `blur` to narrow the catalog; effects whose
+name matches come first (`glitch` lists Glitch before the effects that only
+mention glitches in their description). The thumbnails
 preview each look using the selected clip, so you can compare treatments before
 applying one. Click **Gaussian Blur** to add it to the clip's effect stack.
 
