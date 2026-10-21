@@ -14,6 +14,7 @@ import { proxyFrameCache } from '../proxyFrameCache';
 import { getClipTimeInfo } from './FrameContext';
 import { pauseAudioElement } from './audioTrackElementUtils';
 import type { AudioSyncState, AudioSyncTarget, FrameContext } from './types';
+import type { AudioTrackProxyLookup } from './audioTrackProxyLoads';
 
 const EPSILON = 1e-6;
 
@@ -45,7 +46,7 @@ function getCrossfadeAudioRouteSettings(
 
 export interface AudioTrackCrossfadeTransitionSyncDeps {
   getClipAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
-  getAudioProxyElementForClip: (clip: TimelineClip) => HTMLAudioElement | null;
+  resolveAudioProxyForClip: (clip: TimelineClip) => AudioTrackProxyLookup;
   getClipSourceMediaFileId: (clip: TimelineClip) => string | undefined;
   isAudioSourceClip: (clip: TimelineClip) => boolean;
   pauseAudioTrackProxy: (clipId: string) => void;
@@ -222,14 +223,17 @@ export class AudioTrackCrossfadeTransitionSync {
     );
     const effectiveVolume = routeSettings.volume * editPreviewVolume * volumeMultiplier;
     const trackMuted = !ctx.unmutedAudioTrackIds.has(track.id) || routeSettings.muted || effectiveVolume <= 0.01;
-    const sourceAudioProxy = this.deps.getAudioProxyElementForClip(sourceClip);
-    const sourceAudioElement = sourceAudioProxy ?? this.deps.getClipAudioElement(sourceClip);
+    const proxyLookup = this.deps.resolveAudioProxyForClip(sourceClip);
+    const sourceAudioProxy = proxyLookup.element;
+    // While a ready proxy is still loading, stay silent instead of playing a possibly undecodable original.
+    const sourceAudioElement = sourceAudioProxy ?? (proxyLookup.pending ? null : this.deps.getClipAudioElement(sourceClip));
     const sourceMediaFileId = this.deps.getClipSourceMediaFileId(sourceClip);
 
     this.deps.stopStemBufferMixer(clip.id);
     this.deps.pauseStemAudioElements(clip.id);
 
     if (!sourceAudioElement) {
+      if (proxyLookup.pending) pauseAudioElement(this.deps.getClipAudioElement(sourceClip));
       if (sourceMediaFileId) {
         void proxyFrameCache.warmScrubAudioBuffer(sourceMediaFileId);
       }

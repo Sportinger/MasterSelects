@@ -27,6 +27,13 @@ interface CompositionFrame { width: number; height: number; }
 const isCanvasSourceType = (sourceType: ClipSourceType) => sourceType === 'text' || sourceType === 'solid'
   || sourceType === 'math-scene' || sourceType === 'transition-overlay' || isVectorAnimationSourceType(sourceType);
 
+/**
+ * Source types prepareComposition creates a clip source for. Audio, 3D, MIDI and other clip types are
+ * rendered or played by other runtimes, so the composition renderer neither loads nor reports them.
+ */
+export const preparesCompositionClipSource = (sourceType: ClipSourceType) =>
+  sourceType === 'video' || sourceType === 'image' || isCanvasSourceType(sourceType);
+
 /** Live inputs have no File/Blob: resolve their running presentation surface. */
 function adoptLiveInput(sources: CompositionSources, clip: TimelineClip, liveInputId: string): boolean {
   const fallbackVideo = liveInputRuntime.getVideoElement(liveInputId, true);
