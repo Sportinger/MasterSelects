@@ -86,7 +86,7 @@ export const VOXEL_RELIEF_PARAMS: Record<string, EffectParam> = {
     distance: {
       type: 'number',
       label: 'Distance',
-      default: 0.85,
+      default: 0.8,
       min: 0.2,
       max: 6,
       step: 0.01,

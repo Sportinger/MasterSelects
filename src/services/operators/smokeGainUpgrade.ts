@@ -1,10 +1,17 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
 
-/** Largest lift of Rom1's Gain shoulder: the smoke Acuarela's own maximum (Gain 1 x 0.35). */
-export const ROM1_GAIN_REACH = 0.35;
+/** Rom1's Gain knee: the lift equals Gain up to ROM1_GAIN_KNEE, then eases toward ROM1_GAIN_REACH. */
+export const ROM1_GAIN_KNEE = 0.25;
+export const ROM1_GAIN_REACH = 0.5;
+
+/** The lift Rom1 adds for a Gain: max(Gain, 0) up to the knee, then knee + room (1 - exp(-(g - knee) / room)). */
+export function rom1GainLift(gain: number): number {
+  const g = Math.max(Number.isFinite(gain) ? gain : 0, 0), room = ROM1_GAIN_REACH - ROM1_GAIN_KNEE;
+  return Math.min(g, ROM1_GAIN_KNEE) + room * (1 - Math.exp(-Math.max(g - ROM1_GAIN_KNEE, 0) / room));
+}
 
 const clamped = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
-const shouldered = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
+const kneed = new WeakMap<EffectOperatorGraph, EffectOperatorGraph>();
 
 /** The former `safe-gain = max(gain, 0)` of a smoke graph, with its two input edges. */
 function formerSafeGain(source: EffectOperatorGraph) {
@@ -39,34 +46,39 @@ export function clampSmokeGainGraph(source: EffectOperatorGraph): EffectOperator
 
 /**
  * Rom1 adds Gain to every pixel; its feedback keeps the brightest value, so a Gain near 1 turned
- * the whole frame white. Gain now passes a soft shoulder, lift = R (1 - exp(-max(Gain, 0) / R)) with
- * R = ROM1_GAIN_REACH: small values are unchanged (Gain 0.01 lifts 0.0099), large ones ease toward R,
- * so no value blanks the picture. Saved Rom1 graphs (safe-gain feeding gain-rgb directly) get the
- * shoulder inserted on load; the default graph is built the same way.
+ * the whole frame white. Gain now passes a knee (rom1GainLift): values up to ROM1_GAIN_KNEE lift
+ * exactly as before, so typical saved looks stay the same, and larger ones ease toward
+ * ROM1_GAIN_REACH, so no value blanks the picture. Saved Rom1 graphs (safe-gain feeding gain-rgb
+ * directly) get the knee inserted on load; the default graph is built the same way.
  */
-export function shoulderRom1GainGraph(source: EffectOperatorGraph): EffectOperatorGraph {
-  const known = shouldered.get(source); if (known) return known;
+export function kneeRom1GainGraph(source: EffectOperatorGraph): EffectOperatorGraph {
+  const known = kneed.get(source); if (known) return known;
   const into = source.edges.find(edge => edge.from === 'safe-gain' && edge.to === 'gain-rgb');
-  if (!formerSafeGain(source) || !into || source.nodes.some(item => item.id === 'gain-shoulder')) { shouldered.set(source, source); return source; }
+  if (!formerSafeGain(source) || !into || source.nodes.some(item => item.id === 'gain-knee')) { kneed.set(source, source); return source; }
   const node = (id: string, operator: string, value?: number): BoundOperatorNode =>
     ({ id, operator, operatorVersion: 1, bindings: {}, ...(value === undefined ? {} : { constants: { value } }) });
   const edge = (from: string, to: string, input: string): OperatorEdge => ({ id: `${from}-value-${to}-${input}`, from, output: 'value', to, input });
   const at = source.layout?.['safe-gain'] ?? { x: 0, y: 0 };
-  const added = [node('gain-shoulder-reach', 'values.number', ROM1_GAIN_REACH), node('gain-shoulder-ratio', 'math.divide-ieee.scalar'),
-    node('gain-shoulder-exponent', 'math.subtract.scalar'), node('gain-shoulder-decay', 'math.exp.scalar'),
-    node('gain-shoulder-rest', 'math.subtract.scalar'), node('gain-shoulder', 'math.multiply.scalar')];
+  const added = [node('gain-knee-threshold', 'values.number', ROM1_GAIN_KNEE), node('gain-knee-room', 'values.number', ROM1_GAIN_REACH - ROM1_GAIN_KNEE),
+    node('gain-knee-low', 'math.min.scalar'), node('gain-knee-over-raw', 'math.subtract.scalar'), node('gain-knee-over', 'math.max.scalar'),
+    node('gain-knee-ratio', 'math.divide-ieee.scalar'), node('gain-knee-exponent', 'math.subtract.scalar'), node('gain-knee-decay', 'math.exp.scalar'),
+    node('gain-knee-rest', 'math.subtract.scalar'), node('gain-knee-high', 'math.multiply.scalar'), node('gain-knee', 'math.add.scalar')];
   const result: EffectOperatorGraph = {
     ...source,
     nodes: [...source.nodes, ...added],
     edges: [...source.edges.filter(item => item !== into),
-      edge('safe-gain', 'gain-shoulder-ratio', 'a'), edge('gain-shoulder-reach', 'gain-shoulder-ratio', 'b'),
-      edge('zero', 'gain-shoulder-exponent', 'a'), edge('gain-shoulder-ratio', 'gain-shoulder-exponent', 'b'),
-      edge('gain-shoulder-exponent', 'gain-shoulder-decay', 'value'),
-      edge('one', 'gain-shoulder-rest', 'a'), edge('gain-shoulder-decay', 'gain-shoulder-rest', 'b'),
-      edge('gain-shoulder-rest', 'gain-shoulder', 'a'), edge('gain-shoulder-reach', 'gain-shoulder', 'b'),
-      { ...into, id: `gain-shoulder-value-gain-rgb-${into.input}`, from: 'gain-shoulder', output: 'value' }],
+      edge('safe-gain', 'gain-knee-low', 'a'), edge('gain-knee-threshold', 'gain-knee-low', 'b'),
+      edge('safe-gain', 'gain-knee-over-raw', 'a'), edge('gain-knee-threshold', 'gain-knee-over-raw', 'b'),
+      edge('gain-knee-over-raw', 'gain-knee-over', 'a'), edge('zero', 'gain-knee-over', 'b'),
+      edge('gain-knee-over', 'gain-knee-ratio', 'a'), edge('gain-knee-room', 'gain-knee-ratio', 'b'),
+      edge('zero', 'gain-knee-exponent', 'a'), edge('gain-knee-ratio', 'gain-knee-exponent', 'b'),
+      edge('gain-knee-exponent', 'gain-knee-decay', 'value'),
+      edge('one', 'gain-knee-rest', 'a'), edge('gain-knee-decay', 'gain-knee-rest', 'b'),
+      edge('gain-knee-rest', 'gain-knee-high', 'a'), edge('gain-knee-room', 'gain-knee-high', 'b'),
+      edge('gain-knee-low', 'gain-knee', 'a'), edge('gain-knee-high', 'gain-knee', 'b'),
+      { ...into, id: `gain-knee-value-gain-rgb-${into.input}`, from: 'gain-knee', output: 'value' }],
     layout: { ...source.layout, ...Object.fromEntries(added.map((item, index) => [item.id, { x: at.x + 60 * (index + 1), y: at.y + 120 }])) },
   };
-  shouldered.set(source, result); shouldered.set(result, result);
+  kneed.set(source, result); kneed.set(result, result);
   return result;
 }

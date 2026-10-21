@@ -1,5 +1,5 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../types/operatorGraph';
-import { shoulderRom1GainGraph } from './smokeGainUpgrade';
+import { kneeRom1GainGraph } from './smokeGainUpgrade';
 
 type Ref = { node: string; port: string };
 class Graph {
@@ -99,6 +99,6 @@ export function createDefaultRom1Graph(): EffectOperatorGraph {
   const opacityClamp = g.node('opacity-clamp', 'math.clamp.scalar'); g.edge(opacity, opacityClamp, 'value'); g.edge(zero, opacityClamp, 'min'); g.edge(one, opacityClamp, 'max');
   const mixed = g.node('mixed', 'math.mix.vec4'); g.edge(sourceValue, mixed, 'a'); g.edge(waterValue, mixed, 'b'); g.edge(opacityClamp, mixed, 't');
   const result = g.unary('result', 'convert.vec4-to-image', mixed, 'value', 'image'), output = g.node('output', 'image.output', ''); g.edge(result, output, 'image');
-  // Gain eases toward 0.35 instead of lifting every pixel to white (smokeGainUpgrade.ts, also for saved graphs).
-  return shoulderRom1GainGraph({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout });
+  // Gain passes a knee instead of lifting every pixel to white (smokeGainUpgrade.ts, also for saved graphs).
+  return kneeRom1GainGraph({ version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout });
 }

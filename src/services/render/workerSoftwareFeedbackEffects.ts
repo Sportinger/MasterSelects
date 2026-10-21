@@ -1,4 +1,4 @@
-import { ROM1_GAIN_REACH } from '../operators/smokeGainUpgrade';
+import { rom1GainLift } from '../operators/smokeGainUpgrade';
 import type { WorkerRenderSoftwarePixelEffects } from './workerRenderHostRuntimeCommands';
 import { transitionFrameHistory, type FrameHistoryDiscontinuity, type FrameHistoryLoopPolicy, type FrameHistoryState } from '../../effects/frameHistoryTransition';
 
@@ -352,8 +352,8 @@ function applyRom1Effect(input: {
   const edgeMask = feedbackEdgeMask(warpedUvX, warpedUvY);
   const feedback = sampleRgba(input.previous, input.width, input.height, warpedUvX, warpedUvY);
   const wetSource = sampleRgba(input.sourceData, input.width, input.height, warpedUvX, warpedUvY);
-  // Rom1's Gain shoulder (smokeGainUpgrade.ts): eases toward 0.35 instead of lifting to white.
-  const gain = (1 - Math.exp(-Math.max(params.gain, 0) / ROM1_GAIN_REACH)) * ROM1_GAIN_REACH;
+  // Rom1's Gain knee (smokeGainUpgrade.ts): unchanged up to 0.25, then eases toward 0.5 instead of lifting to white.
+  const gain = rom1GainLift(params.gain);
   const lifted = [
     clamp01(mix(input.current[0], wetSource[0], 0.18) + gain * input.current[3]),
     clamp01(mix(input.current[1], wetSource[1], 0.18) + gain * input.current[3]),

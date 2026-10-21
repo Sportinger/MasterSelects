@@ -105,7 +105,7 @@ export const rom1: EffectDefinition = {
   packUniforms: (params, width, height, timelineTimeSeconds = 0) => {
     return new Float32Array([
       finite(params.opacity, 1),
-      // The shader eases Gain through a soft shoulder (smokeGainUpgrade.ts), as the graph does.
+      // The shader passes Gain through the knee (smokeGainUpgrade.ts), as the graph does.
       finite(params.gain, 0.01),
       finite(params.speed, 4),
       finite(params.detail, 4),

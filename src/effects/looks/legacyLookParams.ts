@@ -14,6 +14,6 @@ export function withLegacyLookParams(effectId: string, params: Params): Params {
   const particles = effectId === 'pixel-particle-disintegrate'
     ? { ...controls, fade: controls.fade ?? 0, cellReference: controls.cellReference ?? 'output' } : controls;
   const sheen = effectId === 'sheen' ? withLegacySheenParams(particles)
-    : effectId === 'voxel-relief' && particles.shading === undefined ? { ...particles, shading: 'legacy' } : particles;
+    : effectId === 'voxel-relief' ? { ...particles, shading: particles.shading ?? 'legacy', distance: particles.distance ?? 1 } : particles;
   return withLegacyAcuarelaGraph(effectId, sheen);
 }

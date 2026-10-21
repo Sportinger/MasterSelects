@@ -59,7 +59,7 @@ export const voxelRelief: EffectDefinition = {
       finite(params.lightElevation, 45),
       finite(params.floorBrightness, 0.1),
       finite(params.edgeDarkness, 0.68),
-      finite(params.distance, 0.85),
+      finite(params.distance, 0.8),
       finite(params.centerX, 0.5),
       finite(params.centerY, 0.5),
       finite(params.roll, 0),

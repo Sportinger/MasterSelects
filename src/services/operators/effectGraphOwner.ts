@@ -41,7 +41,7 @@ import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectTy
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
 import { createDefaultGlowGraph } from './glowEffectGraph';
 import { upgradeGlowGraph } from './glowGraphUpgrade';
-import { clampSmokeGainGraph, shoulderRom1GainGraph } from './smokeGainUpgrade';
+import { clampSmokeGainGraph, kneeRom1GainGraph } from './smokeGainUpgrade';
 import { withLegacySheenParams } from '../../effects/stylize/sheen/legacy';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
@@ -244,7 +244,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
-      : effectType === 'rom1' ? shoulderRom1GainGraph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved) : saved;
+      : effectType === 'rom1' ? kneeRom1GainGraph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved) : saved;
     const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
@@ -318,6 +318,8 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   if (effect.type === PARTICLE_DISINTEGRATE && params.cellReference === undefined) params.cellReference = 'output';
   // Voxel Relief saved before the hue-keeping shading keeps its darker, greying sides.
   if (effect.type === 'voxel-relief' && params.shading === undefined) params.shading = 'legacy';
+  // Voxel Relief saved before Distance existed framed the relief at Distance 1 (the default is now 0.8).
+  if (effect.type === 'voxel-relief' && params.distance === undefined) params.distance = 1;
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {
