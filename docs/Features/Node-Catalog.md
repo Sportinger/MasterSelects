@@ -156,7 +156,7 @@ Further reusable processing recipes are available in the same menu:
 | Sampling | Pair Tap Offsets; Merge Pair Weights | Sequence index, pairs per side and texel stride give the near/far texel offsets, a centre gate and the side; two kernel weights then merge into one linear-filtered tap (exact for any weights). Used by Box and Gaussian Blur. |
 | Coordinates | Scale From Center | Direction, scalar scale and center; no hidden UV or resolution source. |
 | Color | Brightness Curve; Contrast Curve | 0–1 RGB and the amount; black and white stay fixed (odds curve with gain `2^(2.5·Brightness)`, S-curve with slope Contrast at mid-grey). Used by Brightness and Contrast. |
-| Color | Exposure (Stops); White Balance | RGB and stops, or Temperature and Tint; the light math runs between sRGB to Linear and Linear to sRGB, not clamped. Used by Exposure and Temperature. |
+| Color | Exposure (Stops); White Balance | RGB and stops, or Temperature and Tint (per unit red up and blue down 0.6 stops each; Tint green down 0.5, red and blue up 0.25); the light math runs between sRGB to Linear and Linear to sRGB, not clamped. Used by Exposure and Temperature. |
 | Color | Saturation (Gamut-Safe); Hue Rotate (OkLCh) | 0–1 RGB and amount (≥ 0) mixed with Rec.709 luma up to the gamut edge; or RGB and a shift in turns rotated in OkLCh, not clamped. Used by Saturation, Vibrance and Hue Shift. |
 | Color | Luma Saturation; Contrast Around Midgray | RGB processing only; clamping and alpha remain with the caller. Saturation uses Rec.601 luminance. Kept for colour effects saved before 2026-10. |
 | Color | Soft Bright Pass; Sobel Magnitude | Explicit threshold edges and image, or eight neighboring luminance values; no hidden sampling pass. |

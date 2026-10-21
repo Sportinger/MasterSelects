@@ -796,33 +796,57 @@ bypasses the RGB math. New instances (since the 2026-10 rebuild,
 - **Brightness**: per channel `y = x·m / (x·m + 1 − x)` with `m = 2^(2.5 · Amount)`;
   black and white stay fixed, so there is no grey veil.
 - **Contrast**: S-curve `y = x^c / (x^c + (1 − x)^c)`, slope `c` = Amount at
-  mid-grey 0.5; highlights and shadows roll off instead of clipping.
+  mid-grey 0.5; highlights and shadows roll off instead of clipping. Per channel,
+  so strong values also raise saturation.
 - **Saturation**: mix of Rec.709 luma and RGB by Amount, stopped where the first
   channel reaches 0 or 1, so hue and luma stay (gamut-safe).
 - **Vibrance**: the same gamut-safe mix, with Amount weighted by `1 − S` (HSV
-  saturation) and up to 70 % less on skin hues (a Gaussian around 0.07 turns, about 25°).
+  saturation) and up to 70 % less on skin hues (a Gaussian around 0.07 turns, about 25°),
+  faded in over HSV value 0.15–0.35 and out over saturation 0.6–0.8 (dark warm
+  floors and saturated orange light are not skin).
 - **Exposure**: `2^EV` in linear light (exact sRGB transfer both ways), then the
   display-referred Offset and Gamma of the original effect.
-- **Temperature / Tint**: channel gains in linear light, 0.6 stops red against blue
-  per Temperature unit and 0.5 stops of green per Tint unit, scaled so grey keeps its
-  Rec.709 luminance; black stays black.
+- **Temperature / Tint**: channel gains in linear light. Per Temperature unit red
+  rises and blue falls by 0.6 stops each (1.2 stops apart); per Tint unit green falls
+  0.5 stops and red and blue rise 0.25. The gains are scaled so grey keeps its Rec.709
+  luminance; black stays black.
 - **Hue Shift**: rotation in OkLCh by Shift turns (the inspector shows degrees);
   lightness and chroma stay, colours that leave sRGB are clamped.
-- **Levels**: unchanged remap, but equal input points act as a hard threshold and
+- **Levels**: unchanged remap, but equal input points act as a hard per-channel threshold and
   swapped points as a negative (range `max(|white − black|, 1e-4)` with its sign).
 - **Invert**: `1 − rgb`, unchanged.
 
 Inputs are limited to 0–1 (the effect chain carries 8-bit display-referred colour).
 Values outside a parameter's render range (`renderMin`/`renderMax`: Brightness ±4,
-Contrast and Saturation 0–10, Vibrance −1 to 4, Exposure ±20 EV, Gamma 0.1–10,
-Temperature and Tint ±4) are clamped by the graph's `<param>-clamped` node; the
-inspector and the add/update effect tools say what renders instead. Saved projects
-keep the graph they were saved with (the previous recipes stay in
-`legacyColorEffectGraphs.ts`), so their look does not change. The worker software
-and export path evaluates the same graphs instead of its former shortcuts.
-Adjustment layers on the worker GPU path still use the motion-adjustment 4×5
-colour matrix for Brightness, Contrast and Saturation (linear offset, linear
-contrast, Rec.709 matrix saturation), which does not match these curves.
+Contrast and Saturation 0–10, Vibrance −1 to 4, Exposure ±20 EV, Gamma 0.2–10 for
+Exposure and 0.1–10 for Levels, Temperature and Tint ±4) are clamped by the graph's
+`<param>-clamped` node; the inspector and the add/update effect tools say what
+renders instead (a gamma floor adds "very dark" or "almost black").
+
+Saved work keeps its look. Projects keep the graph they were saved with (the
+previous recipes stay in `legacyColorEffectGraphs.ts`). A color effect stored
+without any graph (projects from before 2026-09-21) is given the original graph when
+the project file is converted (`migrateLoadedEffectOperatorGraph` in
+`loadTimelineHydration.ts`); `addClipEffect` gives new color effects the recipe graph,
+so a graphless effect in the running editor is never mistaken for an old one. Custom
+Looks without `schemaVersion` (saved before the rebuild) apply their color effects
+with the original graphs; Look schema 2 stores each color effect's graph per stack
+entry. Saved original graphs keep their original Node Workspace folders (Color
+Processing, Clamp & Alpha); the recipe stages are only applied to the unedited recipe.
+
+The worker software render modes evaluate the same graphs instead of their former
+shortcuts; programs that read only their own pixel (all color recipes) are evaluated
+once per distinct RGBA8 colour of the frame (about 0.2–0.4 s for a 1080p photo,
+`workerSoftwareImageGraphs.ts`). A layer that mixes them with the retired `blur`
+effect is skipped as `unsupported-effects`. Adjustment layers in the worker GPU
+modes still use the motion-adjustment 4×5 colour matrix for Brightness, Contrast and
+Saturation (linear offset, linear contrast, Rec.709 matrix saturation), which matches
+only the original graphs: each other such effect is reported once per layer in the
+`WorkerGpuAdjustment` log and in the adjustment inspector
+(`adjustment-color-recipe-unsupported`, `workerGpuAdjustmentColorParity.ts`).
+GPU-against-CPU parity of the recipes (within one 8-bit step, including the OkLCh and
+sRGB helpers) is checked by `tests/browser/image-graph-probe.html?suite=color-recipes`;
+`colorRecipeWgsl.test.ts` validates every recipe module with naga where it is installed.
 
 Threshold and Posterize also expose executable pointwise groups. Threshold
 uses Rec.709 luminance and a strict greater-than comparison (equality is black).

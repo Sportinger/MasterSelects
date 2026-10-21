@@ -370,7 +370,10 @@ computes it: an effect's presentation plan names its key outputs (Sigma, Tap
 Count, Box Length, Is Spin), a clamp that limits a bound parameter to its render
 range carries that parameter's name (Amount, Exposure, Gamma), and outputs with
 their own label (UV, Resolution) keep it; only unnamed outputs of several-output
-nodes read `Node: Port`.
+nodes read `Node: Port`. A plan can also name inputs whose operator names say
+nothing: Hue Shift's Combine Vector reads Lightness, Chroma and Hue instead of X, Y
+and Z. Saved original color graphs (before 2026-10) keep their original folders
+(Color Processing, Clamp & Alpha); the recipe stages apply only to the recipe.
 
 The Fisheye upgrade preserves all primitive IDs, parameter bindings, sampling
 scopes and arithmetic, generating the identical shader without additional passes.

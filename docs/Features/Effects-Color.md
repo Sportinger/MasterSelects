@@ -3,10 +3,11 @@
 Nine effects for light and colour, from a quick brightness fix to a complete
 colour mood. Add one in **Properties → Effects → + Add Effect**.
 
-Black stays black and white stays white unless you ask for it, colours keep their
-shade when you push them, and the preview and the export look the same. Effects in
-projects saved before October 2026 keep their earlier look; add the effect again to
-get the new one.
+Black stays black and white stays white unless you ask for it, and colours keep
+their shade when you push them. The export renders the same graphs as the preview
+(adjustment layers in the optional worker GPU modes excepted, see Known gaps).
+Effects in projects and custom Looks saved before October 2026 keep their earlier
+look; add the effect again to get the new one.
 
 ## The nine color effects
 
@@ -33,10 +34,9 @@ Tip: Brightness never burns out the brightest whites; for a camera-like change o
 </figure>
 
 Adds punch: shadows get deeper and highlights brighter, on a soft S-shaped curve,
-so bright details roll off gently instead of burning out.
-- **Amount** – 1 leaves the picture unchanged, 1.2–1.5 adds punch, below 1 the picture gets flatter, 0 is almost plain grey.
-
-Tip: on dark scenes, 1.1–1.3 is usually enough.
+so bright details roll off gently instead of burning out. Strong settings also
+make colours stronger.
+- **Amount** – 1 leaves the picture unchanged, 1.2–1.5 adds punch (1.1–1.3 on dark scenes), below 1 flatter, 0 almost plain grey.
 
 ### Exposure
 <figure class="docs-shot docs-shot--float-right">
@@ -66,7 +66,7 @@ becomes white and how bright the middle is.
 - **Gamma** – above 1 brightens the mid-tones, below 1 darkens them.
 - **Output Black / Output White** – raise the black or lower the white for a softer, faded film look.
 
-Tip: setting Input Black and Input White to the same value gives a hard black-and-white threshold.
+Tip: equal Input Black and Input White give a hard threshold per colour channel, a posterised look; put Saturation 0 before Levels for a pure black-and-white threshold.
 
 ### Saturation
 <figure class="docs-shot docs-shot--float-right">
@@ -90,7 +90,8 @@ into a flat block.
 </figure>
 
 A gentler saturation: it strengthens pale colours a lot and strong colours only a
-little, and it goes easy on skin tones. Good for faces.
+little, and it goes easy on lit skin tones. Good for faces. Brightly lit warm
+surfaces count as skin too, so on a warm-lit stage use Saturation for a stronger push.
 - **Amount** – up for livelier colours, down for a muted look.
 
 Tip: on people, use Vibrance instead of Saturation so skin does not turn orange.
@@ -98,9 +99,9 @@ Tip: on people, use Vibrance instead of Saturation so skin does not turn orange.
 ### Temperature
 <figure class="docs-shot docs-shot--float-right">
 
-![The dancer on stage, split in the middle: left half original, right half with Temperature −0.6, where the warm brown stage and the dress have turned cooler and bluer](assets/effects/temperature.webp)
+![The same part of the harbour town twice: on the left the original, on the right with Temperature −0.6, where the white and yellow house fronts look cooler and slightly bluish, the turquoise sea turns a cooler blue and the sky a deeper blue](assets/effects/temperature.webp)
 
-<figcaption>Left: original. Right: Temperature −0.6.</figcaption>
+<figcaption>The same part of the frame. Left: original. Right: Temperature −0.6.</figcaption>
 </figure>
 
 White balance, like the camera setting: makes the light warmer or cooler. Blacks
@@ -137,9 +138,6 @@ Turns the picture into its negative: dark becomes light and every colour becomes
 its opposite. Transparent areas stay transparent. Invert has no controls.
 
 Tip: add Hue Shift at 180° after Invert to get roughly the original colours back with light and dark swapped.
-
-Known limitations: on adjustment layers, Brightness, Contrast and Saturation can
-still show their earlier, simpler look in some playback modes.
 
 <div class="docs-float-end"></div>
 
@@ -206,17 +204,26 @@ Mask), so you can drop, say, a Brightness Curve into any other image effect grap
 
 <figure class="docs-shot docs-shot--graph">
 
-![The Brightness Curve folder opened: Value cards 1, 2.5, 1 and 0 on the left with the Amount and RGB inputs, then Multiply, Power of Two, Clamp, Subtract, Multiply, Add and Divide](assets/effects/graphs/brightness-curve.webp)
+<div class="docs-shot-stage">
 
-<figcaption>Brightness Curve. Amount × 2.5 goes through Power of Two to become the gain; Multiply, Add and Divide bend each colour channel with it.</figcaption>
+![The Brightness Curve folder opened: on the left the Value cards 1 and 2.5, the Amount input, the RGB input and the Value cards 0 and 1, then Scalar to RGB, Multiply and Clamp, Power of Two and Subtract, Multiply, Add and Divide](assets/effects/graphs/brightness-curve.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 929" aria-hidden="true" focusable="false">
+<defs><marker id="brightness-curve-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M97 297 L97 381" marker-end="url(#brightness-curve-arrow)" />
+<circle class="docs-shot-number" cx="97" cy="297" r="18" /><text x="97" y="297" class="docs-shot-number-text">1</text>
+</svg>
+</div>
+
+<figcaption>Brightness Curve. 1 — the Value 2.5: Amount × 2.5 goes through Power of Two to become the gain; Multiply, Add and Divide bend each colour channel with it.</figcaption>
 </figure>
 
 The curve brightens the dark-to-middle tones of each channel by the gain from
 **Power of Two**, then **Divide** squeezes the result back so that 0 stays 0 and
 1 stays 1. That is why Brightness has no grey veil and never clips. The **Value**
-card showing **2.5** decides how many stops one unit of Amount is worth.
+card **2.5** (1) decides how many stops one unit of Amount is worth.
 
-Remix: set that **2.5** to 1.25 and the whole slider becomes half as strong, for
+Remix: set the Value (1) to 1.25 and the whole slider becomes half as strong, for
 finer control; set it to 4 for a harder push.
 
 ### Exposure and Temperature: working in light
@@ -244,7 +251,8 @@ back into screen colours. That is what makes +1 EV look like twice the light.
 
 Temperature's **White Balance** folder uses the same two conversions, but
 multiplies red, green and blue by different factors. Its **Value** card **0.6** is
-the strength of one Temperature unit (in stops of red against blue).
+the strength of one Temperature unit: red goes up and blue down by 0.6 stops each
+(1.2 stops apart) before the overall brightness is restored.
 
 Remix: for a twice as strong Exposure slider, put a **Multiply** with a
 **Value** of 2 between the **Exposure** card and **Power of Two** (1).
@@ -255,14 +263,14 @@ Remix: for a twice as strong Exposure slider, put a **Multiply** with a
 
 <div class="docs-shot-stage">
 
-![The Hue Rotate (OkLCh) folder opened: RGB into RGB to OkLCh, Split Vector with Lightness, Chroma and Hue, Shift and Hue into Add and Fraction, then Combine Vector and OkLCh to RGB](assets/effects/graphs/hue-shift-rotate.webp)
+![The Hue Rotate (OkLCh) folder opened: RGB into RGB to OkLCh and Split Vector with the outputs Lightness, Chroma and Hue; Hue and the Shift input into Add and Fraction; Combine Vector with the inputs Lightness, Chroma and Hue, then OkLCh to RGB](assets/effects/graphs/hue-shift-rotate.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 535" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 512" aria-hidden="true" focusable="false">
 <defs><marker id="hue-shift-rotate-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M492 22 L492 53" marker-end="url(#hue-shift-rotate-arrow)" />
+<path class="docs-shot-arrow" d="M492 22 L492 54" marker-end="url(#hue-shift-rotate-arrow)" />
 <circle class="docs-shot-number" cx="492" cy="22" r="18" /><text x="492" y="22" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M700 243 L700 327" marker-end="url(#hue-shift-rotate-arrow)" />
-<circle class="docs-shot-number" cx="700" cy="243" r="18" /><text x="700" y="243" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M700 193 L700 277" marker-end="url(#hue-shift-rotate-arrow)" />
+<circle class="docs-shot-number" cx="700" cy="193" r="18" /><text x="700" y="193" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
@@ -276,25 +284,35 @@ and chroma go straight from **Split Vector** (1) to **Combine Vector** (2), so t
 brightness cannot change.
 
 Remix: for richer colours without any shift in hue, put a **Multiply** with a
-**Value** of 1.3 on the Chroma cable between (1) and (2). Colours the screen cannot
-show are cut off at the end, so stay below about 1.5.
+**Value** of 1.3 on the cable from **Chroma** of (1) into the **Chroma** input of
+(2). Colours the screen cannot show are cut off at the end, so stay below about 1.5.
 
 ### Vibrance: Saturation with a weight
 
 <figure class="docs-shot docs-shot--graph">
 
-![The middle of the Vibrance graph: the folders Hue & Saturation, Parameters and Skin Protection feed Muted-Colour Weight through its inputs Saturation (HSV), Skin Weight and Amount; its output Saturation Amount goes into the Amount input of Saturation (Gamut-Safe)](assets/effects/graphs/vibrance.webp)
+<div class="docs-shot-stage">
 
-<figcaption>The middle of the Vibrance graph. Muted-Colour Weight turns Amount into a per-pixel amount for the same Saturation (Gamut-Safe) block the Saturation effect uses.</figcaption>
+![The Muted-Colour Weight folder opened: Saturation into Subtract, then Multiply with Skin Weight, Multiply with Amount, Add and Maximum, whose output is Mix Amount](assets/effects/graphs/vibrance.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 250" aria-hidden="true" focusable="false">
+<defs><marker id="vibrance-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M442 228 L442 163" marker-end="url(#vibrance-arrow)" />
+<circle class="docs-shot-number" cx="442" cy="228" r="18" /><text x="442" y="228" class="docs-shot-number-text">1</text>
+</svg>
+</div>
+
+<figcaption>Muted-Colour Weight, the middle of Vibrance (the constants 1 and 0 are left out). 1 — Multiply weighs the paleness (1 − Saturation) by Skin Weight.</figcaption>
 </figure>
 
 Vibrance reuses Saturation's block and only computes a different amount for every
 pixel. **Hue & Saturation** measures each colour, **Muted-Colour Weight** gives
 pale colours more of the Amount than strong ones, and **Skin Protection** lowers it
-on skin-coloured hues.
+on lit, skin-coloured hues. The result, **Mix Amount**, is the Amount input of
+**Saturation (Gamut-Safe)**.
 
-Remix: to treat skin like every other colour, connect a **Value** of 1 to the
-**Skin Weight** input of **Muted-Colour Weight**.
+Remix: to treat skin like every other colour, connect a **Value** of 1 to input B
+of the **Multiply** (1), in place of **Skin Weight**.
 
 ## Technical details
 
@@ -309,26 +327,41 @@ blocks in the [Node Catalog](./Node-Catalog.md) and the graph contract in the
 - **Formulas.** Brightness `y = x·m / (x·m + 1 − x)`, `m = 2^(2.5·Amount)`;
   Contrast `x^c / (x^c + (1 − x)^c)` with slope `c` = Amount at mid-grey; Exposure
   `2^EV` in linear light with the exact sRGB transfer, then Offset and Gamma as
-  before; Temperature 0.6 stops red against blue per unit, Tint 0.5 stops of
-  green, normalised to keep Rec.709 luminance.
+  before; Temperature raises red and lowers blue by 0.6 stops each per unit (1.2
+  stops apart), Tint lowers green 0.5 stops and raises red and blue 0.25, then the
+  gains are normalised to keep Rec.709 luminance. Contrast works per channel, so
+  strong values also raise saturation and can push warm lights towards red-orange.
 - **Saturation and Vibrance.** Rec.709 luma mix, stopped where the first channel
   reaches 0 or 1 (hue and luma stay). Vibrance weights Amount by `1 − S` (HSV) and
-  spares up to 70 % on skin hues (Gaussian at 0.07 turns, about 25°, width 0.05).
+  spares up to 70 % on skin hues (Gaussian at 0.07 turns, about 25°, width 0.05);
+  the protection fades in over HSV value 0.15–0.35 and out over saturation 0.6–0.8,
+  so dark warm stage floors and strongly saturated orange light get the full Amount.
 - **Hue Shift.** Rotation in OkLCh; colours that leave sRGB are clamped per channel
   (no gamut mapping). Stored in turns: 0.25 is 90°, and keyframes and agent tools
   use turns; only the inspector shows degrees.
 - **Render ranges.** Sliders cover the useful range; typed values render up to
   Brightness ±4, Contrast and Saturation 0–10, Vibrance −1 to 4, Exposure ±20 EV,
-  Gamma 0.1–10 (Exposure and Levels), Temperature and Tint ±4. Beyond that the
-  graph clamps, and the inspector, `addEffect`/`updateEffect` warnings and
-  `listEffects` (`renderRange`) report it. Levels with equal input points is a hard
-  threshold, swapped points give a negative.
+  Gamma 0.2–10 (Exposure) and 0.1–10 (Levels), Temperature and Tint ±4. Beyond that
+  the graph clamps, and the inspector, `addEffect`/`updateEffect` warnings and
+  `listEffects` (`renderRange`) report it. A gamma at its floor is very dark
+  (Exposure, x^5) or almost black (Levels, x^10), and the notice says so. Levels
+  with equal input points is a hard per-channel threshold, swapped points give a
+  negative.
 - **Performance.** All recipes are per-pixel math without extra texture reads. A
   single color effect runs inside the composite pass; in a stack each one is its
-  own pass. The worker software and export path evaluates the same graphs on the CPU.
+  own pass. The worker software render modes evaluate the same graphs on the CPU,
+  once per distinct colour of the frame (about 0.2–0.4 s for a 1080p photo); a layer
+  that mixes them with the retired `blur` effect is skipped and reported
+  (`unsupported-effects`).
 - **Saved projects.** Effects keep the graph they were saved with, so projects from
-  before the 2026-10 rebuild look as before (`legacyColorEffectGraphs.ts`).
-- **Known gaps.** Adjustment layers on the worker GPU path still use the older 4×5
-  colour matrix for Brightness, Contrast and Saturation. Exposure clips each channel
+  before the 2026-10 rebuild look as before (`legacyColorEffectGraphs.ts`). A color
+  effect saved before effect graphs existed (no graph at all) loads with the
+  original graph; new effects get the recipe graph when they are added. Custom
+  Looks saved before the rebuild apply their color effects with the original
+  graphs; new Looks store each color effect's graph (Look schema 2).
+- **Known gaps.** Adjustment layers in the optional worker GPU render modes still
+  use the older 4×5 colour matrix for Brightness, Contrast and Saturation; the
+  adjustment inspector and the `WorkerGpuAdjustment` log name each effect that
+  looks different there (`adjustment-color-recipe-unsupported`). Exposure clips each channel
   hard, so strong +EV can shift hues in the highlights. Contrast pivots at fixed
   mid-grey, Levels has no per-channel mode, Temperature has no Kelvin scale.

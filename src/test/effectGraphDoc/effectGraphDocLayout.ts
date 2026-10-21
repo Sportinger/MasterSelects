@@ -2,7 +2,7 @@
 // folders stay exactly as projected; only card positions change, and focused folders get
 // named stub cards for the values that come from outside them.
 import { reconcileCanvasPlacement } from '../../components/panels/nodes/canvas/nodeCanvasPlacement';
-import { getNodeHeight, getNodeWidth } from '../../components/panels/nodes/canvas/canvasGeometry';
+import { getNodeHeight, getNodeWidth, getPortCenter } from '../../components/panels/nodes/canvas/canvasGeometry';
 import { PREVIEW_BLOCK_GAP } from '../../components/panels/nodes/canvas/spacePreviewNodes';
 import type { NodeGraph, NodeGraphEdge, NodeGraphLayout, NodeGraphNode, NodeGraphPort } from '../../types/nodeGraph';
 
@@ -15,6 +15,8 @@ const COMPACT_ROW_GAP = PREVIEW_BLOCK_GAP;
 const STUB_GAP = 56;
 /** Stacked cards keep the canvas' own clearance, or its placement pass pushes them further apart. */
 const STUB_STACK_GAP = PREVIEW_BLOCK_GAP;
+/** Room between a cable that passes a stub column and the stub's top edge. */
+const STUB_CABLE_CLEARANCE = 24;
 /** Docs columns are wide: aim for a landscape picture. */
 const TARGET_ASPECT = 1.6;
 const MAX_ROWS = 4;
@@ -77,16 +79,41 @@ export function withBoundaryStubs(cropped: NodeGraph, full: NodeGraph, skip: (so
     const column = Math.min(...stub.targets.map(target => columnOf.get(target.id)!));
     byColumn.set(column, [...byColumn.get(column) ?? [], stub]);
   }
+  // Stubs whose consumers follow a column of plain value cards join that column instead of a new
+  // one in between, so the value cables do not run behind the stubs (cards restack by consumer).
+  const joinsPrevious = (index: number) => index > 0 && byColumn.has(index) && columns[index - 1].every(node => node.inputs.length === 0);
+  // Height of the first input a card feeds: the consumer's top plus its port slot, so a card feeding Min sits above one feeding Max.
+  const consumerY = (id: string) => Math.min(...[...cropped.edges, ...edges].filter(edge => edge.fromNodeId === id).map(edge => {
+    const target = members.get(edge.toNodeId);
+    return target ? target.layout.y + Math.max(0, target.inputs.findIndex(port => port.id === edge.toPortId)) : Infinity;
+  }));
   const moved = new Map<string, NodeGraphLayout>();
   let offset = 0;
   columns.forEach((column, index) => {
-    const here = byColumn.get(index);
+    if (joinsPrevious(index + 1)) {
+      const left = Math.min(...column.map(node => node.layout.x)) + offset;
+      const cards = [...column.map(node => ({ node, y: consumerY(node.id), stub: false })),
+        ...byColumn.get(index + 1)!.map(stub => ({ node: stub.node, y: consumerY(stub.node.id), stub: true }))];
+      let nextTop = Math.min(...column.map(node => node.layout.y));
+      for (const card of cards.toSorted((a, b) => a.y - b.y)) {
+        const y = Math.max(Number.isFinite(card.y) ? card.y : nextTop, nextTop);
+        if (card.stub) card.node.layout = { x: left, y }; else moved.set(card.node.id, { x: left, y });
+        nextTop = y + getNodeHeight(card.node) + STUB_STACK_GAP;
+      }
+      return;
+    }
+    const here = joinsPrevious(index) ? undefined : byColumn.get(index);
     if (here) {
       const left = Math.min(...column.map(node => node.layout.x)) + offset;
       let nextTop = -Infinity;
       const firstTarget = (stub: { targets: NodeGraphNode[] }) => stub.targets.find(target => columnOf.get(target.id) === index)!;
       for (const stub of here.toSorted((a, b) => firstTarget(a).layout.y - firstTarget(b).layout.y)) {
-        const y = Math.max(firstTarget(stub).layout.y, nextTop);
+        // Cables into the same card from earlier columns pass through this stub column: the stub
+        // starts just below the lowest such port, so they run above it instead of behind it.
+        const target = firstTarget(stub);
+        const crossing = cropped.edges.filter(edge => edge.toNodeId === target.id && (columnOf.get(edge.fromNodeId) ?? index) < index)
+          .map(edge => getPortCenter(target, edge.toPortId, 'input').y + STUB_CABLE_CLEARANCE);
+        const y = Math.max(target.layout.y, ...crossing, nextTop);
         stub.node.layout = { x: left, y };
         nextTop = y + getNodeHeight(stub.node) + STUB_STACK_GAP;
       }
