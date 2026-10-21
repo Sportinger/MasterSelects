@@ -1,5 +1,7 @@
 // Distort review: transparency keeps its colour (premultiplied sampling), untouched saved Fisheye
 // graphs move to the fixed recipe, and Wave/Twirl/Bulge at zero strength cost nothing.
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FISHEYE_PARAMS } from '../../src/effects/distort/fisheye/parameters';
 import { createDefaultFisheyeGraph } from '../../src/services/operators/fisheyeEffectGraph';
@@ -17,24 +19,13 @@ import { applyWorkerSoftwareSourceResamplingEffects } from '../../src/services/r
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 type Pixel = [number, number, number, number];
-const CHROMA_FIX_NODES = ['red', 'green', 'blue'].flatMap(channel => ['safe-alpha', 'straight', 'at-average'].map(step => `${channel}-channel-${step}`));
-const ALPHA_FIX_NODES = ['source-premultiplied-split', 'source-premultiplied-alpha', 'source-premultiplied-rgb', 'source-premultiplied',
-  'result-split', 'result-alpha', 'coverage-floor', 'result-safe-alpha', 'result-rgb', 'result', ...CHROMA_FIX_NODES];
 
-/** The Fisheye recipe as it shipped before the review: the frame read straight, the average written straight. */
+/** The Fisheye recipe as it shipped before the review (frame read straight, average written straight):
+ * createDefaultFisheyeGraph() of the base commit 1d080e0f, frozen as data. It is not rebuilt from the
+ * current recipe, so later recipe edits cannot make this test agree with itself. */
+const SHIPPED_FISHEYE_JSON = readFileSync(path.join(process.cwd(), 'tests', 'fixtures', 'fisheye-straight-alpha-graph.json'), 'utf8');
 function straightAlphaFisheye(): EffectOperatorGraph {
-  const graph = createDefaultFisheyeGraph(), removed = new Set(ALPHA_FIX_NODES);
-  graph.nodes = graph.nodes.filter(node => !removed.has(node.id));
-  graph.edges = graph.edges.filter(edge => !removed.has(edge.from) && !removed.has(edge.to));
-  graph.edges.push({ id: 'legacy-edge-color', from: 'frame', output: 'image', to: 'edge-color', input: 'image' },
-    { id: 'legacy-original', from: 'frame', output: 'image', to: 'original-sample', input: 'image' },
-    { id: 'legacy-output', from: 'fisheye-image', output: 'image', to: 'output', input: 'image' },
-    { id: 'legacy-red', from: 'red-channel-split', output: 'x', to: 'chroma-rgba', input: 'x' },
-    { id: 'legacy-green', from: 'green-channel-split', output: 'y', to: 'chroma-rgba', input: 'y' },
-    { id: 'legacy-blue', from: 'blue-channel-split', output: 'z', to: 'chroma-rgba', input: 'z' });
-  graph.groups = graph.groups!.map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => !removed.has(id)) }));
-  for (const id of removed) delete graph.layout[id];
-  return graph;
+  return JSON.parse(SHIPPED_FISHEYE_JSON) as EffectOperatorGraph;
 }
 
 const fisheyeDefaults = Object.fromEntries(Object.entries(FISHEYE_PARAMS).map(([id, schema]) => [id, schema.default]));
