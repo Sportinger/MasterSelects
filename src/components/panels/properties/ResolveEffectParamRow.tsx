@@ -1,5 +1,6 @@
 // Generic effect parameter rows in the shared Resolve inspector design (AGENTS.md section 9):
-// slider + number + reset for numbers, InspectorSelect for choices. Effects opt in through
+// slider + number + reset for numbers, InspectorSelect for choices, a checkbox for switches and the
+// native colour input for colours. Effects opt in through
 // RESOLVE_ROW_EFFECTS (resolveEffectRows.ts) as their inspector is revised.
 import { useTimelineStore } from '../../../stores/timeline';
 import { createEffectProperty } from '../../../types/animationProperties';
@@ -26,6 +27,12 @@ interface ResolveEffectParamRowProps {
     inputMethod: 'click' | 'drag' | 'keyboard' | 'reset' | 'select' | 'type') => void;
 }
 
+/** `#rrggbb` for the native colour input (stored colours may carry alpha or be missing). */
+const pickerColor = (value: Value, fallback: EffectParam['default']) => {
+  const color = typeof value === 'string' ? value : String(fallback);
+  return /^#[0-9a-f]{6}/i.test(color) ? color.slice(0, 7) : '#ffffff';
+};
+
 /** One parameter row for the types `hasResolveEffectParamRow` accepts (callers check it first). */
 export function ResolveEffectParamRow({ paramName, definition, value, effect, clipId, onChange, onDragStart, onDragEnd, onParamCommit }: ResolveEffectParamRowProps) {
   const property = `effect.${effect.id}.${paramName}`;
@@ -38,6 +45,15 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
   if (definition.type === 'select') return <ResolveInspectorRow label={definition.label}>
     <InspectorSelect ariaLabel={definition.label} value={String(value)} options={definition.options ?? []}
       onChange={next => { set(next); onParamCommit?.(paramName, 'select', 'select'); }} />
+  </ResolveInspectorRow>;
+  if (definition.type === 'boolean') return <ResolveInspectorRow label={definition.label}>
+    <input type="checkbox" aria-label={definition.label} checked={value === true}
+      onChange={event => { set(event.target.checked); onParamCommit?.(paramName, 'checkbox', 'click'); }} />
+  </ResolveInspectorRow>;
+  // Picking in the native colour dialog sends many changes: one undo step from focus to blur.
+  if (definition.type === 'color') return <ResolveInspectorRow label={definition.label}>
+    <input type="color" aria-label={definition.label} value={pickerColor(value, definition.default)} onFocus={onDragStart}
+      onChange={event => set(event.target.value)} onBlur={() => { onDragEnd?.(); onParamCommit?.(paramName, 'select', 'select'); }} />
   </ResolveInspectorRow>;
   if (definition.type !== 'number') return null;
   if (sourceTarget && clipId) return <ParameterSourceNumberRow clipId={clipId} property={property} />;
