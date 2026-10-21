@@ -83,6 +83,25 @@ describe('saved media opened on demand', () => {
     expect(await pending).toBe(false); expect(mocks.media.files[0].file).toBeUndefined();
     expect(isLinkedMediaDeferred('source-0')).toBe(true);
   });
+  it('opens the source again for a reopened session instead of joining the replaced session open', async () => {
+    const releases: Array<(items: unknown[]) => void> = [];
+    mocks.hydrate.mockImplementation(() => new Promise(resolve => { releases.push(resolve); }));
+    scheduleLinkedMediaConnection(mocks.session as RepositorySession, mocks.media.files, false);
+    const stale = requestLinkedMedia('source-0');
+    await vi.waitFor(() => expect(mocks.hydrate).toHaveBeenCalledTimes(1));
+    // Fast reopen while the first session is still opening source-0.
+    mocks.session = { coordinator: { getProjection: () => ({ entities: new Map() }) } };
+    scheduleLinkedMediaConnection(mocks.session, mocks.media.files, false);
+    const fresh = requestLinkedMedia('source-0');
+    await vi.waitFor(() => expect(mocks.hydrate).toHaveBeenCalledTimes(2));
+    releases[0]([{ id: 'source-0', type: 'video', file: new File(['data'], 'old'), url: 'blob:old' }]);
+    expect(await stale).toBe(false);
+    releases[1]([{ id: 'source-0', type: 'video', file: new File(['data'], 'new'), url: 'blob:new' }]);
+    expect(await fresh).toBe(true);
+    expect(mocks.media.files[0].url).toBe('blob:new');
+    expect(mocks.timeline.clips[0].needsReload).toBeUndefined();
+    expect(isLinkedMediaDeferred('source-0')).toBe(false);
+  });
   it('selects active nested media and multicam angles without selecting the entire composition', () => {
     const parent = { ...clip('parent', 5), inPoint: 100, speed: 2, nestedClips: [clip('nested-active', 110), clip('nested-later', 200)] };
     const ids = selectDemandedLinkedMedia([parent, clip('later', 100)], 10, false,

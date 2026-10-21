@@ -90,7 +90,7 @@ function createDemandOpener(session: RepositorySession | null, items: readonly P
       try {
         if (!current()) return false;
         const batch: MediaFile[] = [];
-        const connected = await connect(item, current, file => batch.push(file), true);
+        const connected = await connect(session, item, current, file => batch.push(file), true);
         if (!current()) return false;
         // Access paused by the browser is not a missing file: the media stays unopened until Re-allow.
         if (!connected && await pauseMediaIfAccessLapsed(item, sessionProjectFolder(session))) return false;
@@ -220,7 +220,7 @@ async function connectAll(session: RepositorySession, items: readonly ProjectMed
     await Promise.all(Array.from({ length: Math.min(CONNECTION_CONCURRENCY, total) }, async () => {
       while (next < total && current()) {
         const item = items[next++];
-        try { if (await connect(item, current, hydrated => pending.push(hydrated), trustSavedLocation)) online++; }
+        try { if (await connect(session, item, current, hydrated => pending.push(hydrated), trustSavedLocation)) online++; }
         catch (error) { log.warn('Could not connect linked media', { id: item.id, name: item.name, error }); }
         done++;
         // Publish the first sources promptly, then avoid hundreds of full media-list renders.
@@ -239,15 +239,22 @@ async function connectAll(session: RepositorySession, items: readonly ProjectMed
  * source on reopen. Two opens created two primary object URLs; the second revoked the first while
  * the store and the media elements kept it (ERR_FILE_NOT_FOUND on every element load).
  */
-const opening = new Map<string, Promise<MediaFile | 'open' | null>>();
+const openingBySession = new WeakMap<RepositorySession, Map<string, Promise<MediaFile | 'open' | null>>>();
 
-async function connect(item: ProjectMedia, current: () => boolean, stage: (file: MediaFile) => void, trustSavedLocation = false): Promise<boolean> {
+/**
+ * Scoped per repository session: a run returns null once its session is replaced, so a reopened
+ * project joining the old session's open would see existing media as missing.
+ */
+async function connect(session: RepositorySession, item: ProjectMedia, current: () => boolean, stage: (file: MediaFile) => void, trustSavedLocation = false): Promise<boolean> {
+  let opening = openingBySession.get(session);
+  if (!opening) { opening = new Map(); openingBySession.set(session, opening); }
   let run = opening.get(item.id);
   if (!run) {
     const started = openLinkedMedia(item, current, trustSavedLocation);
+    const runs = opening;
     run = started;
-    opening.set(item.id, started);
-    void started.then(() => undefined, () => undefined).finally(() => { if (opening.get(item.id) === started) opening.delete(item.id); });
+    runs.set(item.id, started);
+    void started.then(() => undefined, () => undefined).finally(() => { if (runs.get(item.id) === started) runs.delete(item.id); });
   }
   const opened = await run;
   if (opened === 'open') return true;
