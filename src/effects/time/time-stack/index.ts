@@ -7,7 +7,8 @@ export const timeStack: FullscreenEffectDefinition = {
   params: {
     count: { type: 'number', label: 'Instances', default: 20, min: 1, max: 32, step: 1, animatable: false },
     offset: { type: 'number', label: 'Time offset (s)', default: 0.1, min: 0, max: 10, step: 0.01, animatable: false },
-    blendMode: { type: 'select', label: 'Blend mode', default: 'darken', options: SEQUENCE_BLEND_MODES.map(value => ({ value, label: value.split('-').map(word => word[0].toUpperCase() + word.slice(1)).join(' ') })) },
+    decay: { type: 'number', label: 'Decay', default: 1, min: 0, max: 1, step: 0.01, animatable: true },
+    blendMode: { type: 'select', label: 'Blend mode', default: 'lighten', options: SEQUENCE_BLEND_MODES.map(value => ({ value, label: value.split('-').map(word => word[0].toUpperCase() + word.slice(1)).join(' ') })) },
     previewSize: { type: 'select', label: 'Preview size', default: 'full', options: [
       { value: 'small', label: 'Small (960 px)' }, { value: 'full', label: 'Full' },
     ] },

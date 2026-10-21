@@ -1,4 +1,4 @@
-import { createDefaultTimeStackGraph } from './timeStackEffectGraph';
+import { createDefaultTimeStackGraph, upgradeTimeStackGraph } from './timeStackEffectGraph';
 import { upgradeSlitScanGraph } from './slitScanGraphUpgrade';
 import { SLIT_SCAN_PROTECTION_RESOURCE } from './slitScanProtectionGraph';
 import { SLIT_SCAN_TIME_MAP_RESOURCE } from './slitScanTimeMapGraph';
@@ -239,7 +239,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
     const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
-        : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : saved;
+        : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved) : saved;
     const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');

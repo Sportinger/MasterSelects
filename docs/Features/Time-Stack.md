@@ -3,17 +3,28 @@
 # Time Stack
 
 Add **Time > Time Stack** to a video clip, then open its group in the Nodes workspace.
-The default is 20 instances, 0.1 seconds between starts, blended with **Darken**.
-The inspector exposes Instances (1–32), Time offset (0–10 seconds), Blend mode
-(all 37 timeline modes, grouped by family), preview resolution, and GPU frame-cache budget (640 MiB to 4 GiB).
+The default is 20 instances, 0.1 seconds between starts, blended with **Lighten**
+(lit performers on a dark stage leave bright trails) and Decay 1. Use **Darken** for a
+dark subject on a bright background. The inspector exposes Instances (1–32), Time offset
+(0–10 seconds), Decay (0–1, keyframeable), Blend mode (all 37 timeline modes, grouped by
+family), preview resolution, and GPU frame-cache budget (640 MiB to 4 GiB).
 
-At clip time `t`, instance `i` reads `t - i × offset`. Only instances whose start
-has been reached participate. Twenty instances at 0.1 seconds span 1.9 seconds.
-Zero offset starts all instances together. One instance passes the current image.
+At clip time `t`, instance `i` reads `t - i × offset` and blends with opacity
+`decay^i`: at Decay 0.8 the fifth instance keeps 41 % and the twentieth 1.4 %, so the
+trail fades like an echo. Decay 1 keeps every instance at full opacity; values outside
+0–1 are used at the nearest limit (0 as 0.0001) and the inspector says so. Only
+instances whose start has been reached participate. Twenty instances at 0.1 seconds
+span 1.9 seconds. Zero offset starts all instances together. One instance passes the
+current image.
+
+Saved projects keep their look: their stored blend mode stays, untouched saved graphs
+gain the Decay nodes with Decay 1, and graphs edited before Decay existed stay as saved
+(the inspector notes that Decay has no effect there).
 The effect does not extend the clip's duration or repeat its audio.
 
 The editable graph uses a Sequence Index, delay multiplication, Sample Input
-History and Sequence Blend. Eleven nodes represent the entire stack; the GPU
+History, a Decay power (`decay^index`, clamped) and Sequence Blend. Fifteen nodes
+represent the entire stack; the GPU
 loops over the samples instead of expanding twenty separate decoder branches.
 Sequence Blend is reusable with other image sequences. Its numeric modes are
 0 Darken, 1 Lighten, 2 Multiply, 3 Screen, 4 Normal; remaining modes follow

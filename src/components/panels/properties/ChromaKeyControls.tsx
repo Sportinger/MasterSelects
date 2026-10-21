@@ -1,4 +1,7 @@
+import { useMemo } from 'react';
 import type { EffectControlProps } from '../../../effects/types';
+import type { EffectOperatorGraph } from '../../../types/operatorGraph';
+import { effectOperatorGraph } from '../../../services/operators/effectGraphOwner';
 import { chromaKey } from '../../../effects/keying/chroma-key';
 import {
   CHROMA_KEY_DEFAULT_SCREEN_COLOR, CHROMA_KEY_FULL_SCREEN_PURITY, chromaKeyHexColor, chromaKeyNumbers, chromaKeyScreen, chromaKeyScreenPurity,
@@ -20,7 +23,12 @@ const CLAMPED_LABEL: Record<string, string> = {
 };
 
 /** Chroma Key inspector: screen choice, matte levels, edge and spill in the shared Resolve inspector rows. */
-export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId }: EffectControlProps) {
+export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId, operatorGraph }: EffectControlProps & { operatorGraph?: EffectOperatorGraph }) {
+  // A graph edited before the screen-matte rebuild still keys with the retired Tolerance/Edge Softness.
+  const legacyGraph = useMemo(() => {
+    try { return !effectOperatorGraph({ type: 'chroma-key', params: {}, operatorGraph }, { inspectionOnly: true }).nodes.some(node => node.bindings.value === 'clipBlack'); }
+    catch { return false; }
+  }, [operatorGraph]);
   const setPropertyValue = useTimelineStore(state => state.setPropertyValue);
   const clip = useTimelineStore(state => state.clips.find(item => item.id === clipId));
   const screen = chromaKeyScreen(params.keyColor);
@@ -74,6 +82,9 @@ export function ChromaKeyControls({ params, onChange, clipId, effectInstanceId }
           onChange={value => change('spillMethod', value)} />
       </ResolveInspectorRow>
     </ResolveInspectorSection>
+    {legacyGraph && <p className="tracking-panel-status" role="status">
+      This node graph was edited before the keyer was rebuilt and still uses the old Tolerance key, so these controls have no effect. Re-add Chroma Key to use them.
+    </p>}
     {clamped.length > 0 && <p className="tracking-panel-status" role="status">
       Out of range, used at its limit: {clamped.map(key => CLAMPED_LABEL[key] ?? key).join(', ')}.
     </p>}

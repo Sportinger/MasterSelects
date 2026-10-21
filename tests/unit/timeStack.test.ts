@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultTimeStackGraph } from '../../src/services/operators/timeStackEffectGraph';
+import { createDefaultTimeStackGraph, createLegacyTimeStackGraph, timeStackGraphReadsDecay, upgradeTimeStackGraph } from '../../src/services/operators/timeStackEffectGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { BLEND_MODES } from '../../src/types/blendMode';
 import { SEQUENCE_BLEND_MODES } from '../../src/services/operators/sequenceBlendModes';
 import { prepareImageEffect } from '../../src/services/operators/imageEffectRuntimePlan';
 import { timeStack } from '../../src/effects/time/time-stack';
-import { timeStackSettings } from '../../src/effects/time/time-stack/settings';
+import { timeStackDecay, timeStackSettings } from '../../src/effects/time/time-stack/settings';
 import { blendSequencePixel } from '../../src/services/operators/sequenceBlend';
 import { effectOperatorCompileContext, effectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
 
@@ -16,7 +16,7 @@ const plan = (params: Record<string, unknown> = {}) => compileImageOperatorGraph
 
 describe('Time Stack graph', () => {
   it('uses one temporal sampler for twenty distinct offsets and darkens each RGB channel', () => {
-    const compiled = plan(); const delays: number[] = [];
+    const compiled = plan({ blendMode: 'darken' }); const delays: number[] = [];
     const result = evaluateImageOperatorPlan(compiled, frame, { timelineTimeSeconds: 0, uv: [0.5, 0.5], sampleInputHistory: (_uv, delay) => {
       delays.push(delay); return [0.8 - delay / 4, 0.6, 0.4 + delay / 8, 1];
     } });
@@ -24,7 +24,8 @@ describe('Time Stack graph', () => {
     delays.forEach((delay, i) => expect(delay).toBeCloseTo(i * 0.1));
     expect(result[0]).toBeCloseTo(0.325); expect(result.slice(1)).toEqual([0.6, 0.4, 1]);
     expect(compiled.externalResources?.filter(resource => resource.kind === 'input-history')).toHaveLength(2);
-    expect(createDefaultTimeStackGraph().nodes).toHaveLength(11);
+    expect(createLegacyTimeStackGraph().nodes).toHaveLength(11);
+    expect(createDefaultTimeStackGraph().nodes).toHaveLength(15);
   });
 
   it('registers an executable source-time owner without enabling history in unrelated effects', () => {
@@ -44,6 +45,54 @@ describe('Time Stack graph', () => {
     const expected = samples.reduce((back, front) => blendSequencePixel(back, front, mode), [0, 0, 0, 0]);
     result.forEach((value, i) => expect(value).toBeCloseTo(expected[i]));
     expect(result[3]).toBeCloseTo(0.85);
+  });
+
+  it('defaults new stacks to Lighten (lit performers on a dark stage) with Decay 1', () => {
+    expect(defaults).toMatchObject({ blendMode: 'lighten', decay: 1, count: 20, offset: 0.1 });
+  });
+
+  it('fades older instances by Decay: instance i blends with opacity decay^i', () => {
+    const samples: [number, number, number, number][] = [[0.2, 0.2, 0.2, 1], [0.9, 0.5, 0.1, 1], [0.6, 0.95, 0.3, 1], [1, 1, 1, 1]];
+    for (const decay of [1, 0.6, 0.25, 0]) for (const blendMode of ['lighten', 'normal', 'screen']) {
+      const mode = timeStack.params.blendMode.options!.findIndex(option => option.value === blendMode);
+      const result = evaluateImageOperatorPlan(plan({ count: 4, offset: 1, blendMode, decay }), samples[0], {
+        timelineTimeSeconds: 0, uv: [0.5, 0.5], sampleInputHistory: (_uv, delay) => samples[Math.round(delay)],
+      });
+      // Independent reference: Decay 0 is used as the 0.0001 floor (the first instance always counts fully).
+      const used = Math.max(decay, 0.0001);
+      const expected = samples.reduce((back, front, index) => blendSequencePixel(back, front, mode, used ** index), [0, 0, 0, 0]);
+      result.forEach((value, i) => expect(value).toBeCloseTo(expected[i], 5));
+    }
+  });
+
+  it('turns out-of-range Decay into a defined, reported value', () => {
+    expect(timeStackDecay({})).toEqual({ decay: 1, clamped: false });
+    expect(timeStackDecay({ decay: 0.5 })).toEqual({ decay: 0.5, clamped: false });
+    expect(timeStackDecay({ decay: -2 })).toEqual({ decay: 0.0001, clamped: true });
+    expect(timeStackDecay({ decay: 7 })).toEqual({ decay: 1, clamped: true });
+    expect(timeStackDecay({ decay: Number.NaN })).toEqual({ decay: 1, clamped: true });
+    for (const decay of [-2, 7, 0]) {
+      const result = evaluateImageOperatorPlan(plan({ count: 3, offset: 1, decay }), frame, { timelineTimeSeconds: 0, uv: [0, 0],
+        sampleInputHistory: (_uv, delay) => delay > 0 ? [1, 1, 1, 1] : frame });
+      expect(result.every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  it('upgrades an untouched saved graph from before Decay to the same image, and keeps edited graphs', () => {
+    const legacy = createLegacyTimeStackGraph();
+    const upgraded = upgradeTimeStackGraph(legacy);
+    expect(timeStackGraphReadsDecay(upgraded)).toBe(true);
+    const samples: [number, number, number, number][] = [[0.2, 0.3, 0.4, 1], [0.7, 0.1, 0.5, 0.8], [0.4, 0.9, 0.2, 1]];
+    const run = (graph: typeof legacy, params: Record<string, unknown>) => evaluateImageOperatorPlan(
+      compileImageOperatorGraph(graph, { ...defaults, count: 3, offset: 1, ...params }, context), samples[0],
+      { timelineTimeSeconds: 0, uv: [0.5, 0.5], sampleInputHistory: (_uv, delay) => samples[Math.round(delay)] });
+    // A saved project has no Decay value: the default 1 renders exactly what the old graph rendered.
+    const saved = { ...defaults, blendMode: 'darken' } as Record<string, unknown>; delete saved.decay;
+    expect(run(upgraded, saved)).toEqual(run(legacy, saved));
+    const edited = createLegacyTimeStackGraph(); edited.layout.stack = { x: 1, y: 2 }; edited.nodes.find(node => node.id === 'delay')!.bypassed = true;
+    expect(upgradeTimeStackGraph(edited)).toBe(edited);
+    expect(timeStackGraphReadsDecay(edited)).toBe(false);
+    expect(effectOperatorGraph({ type: 'time-stack', params: defaults, operatorGraph: legacy }).nodes.some(node => node.bindings.value === 'decay')).toBe(true);
   });
 
   it('does not darken with transparent black, and preserves straight-alpha color', () => {
