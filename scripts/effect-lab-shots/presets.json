@@ -1,0 +1,5 @@
+{
+  "strips": [
+    { "effect": "drift-lines", "image": "dancer_stage", "width": 1920, "crop": [560, 40, 800, 800], "times": [1.2], "cellWidth": 400 }
+  ]
+}

@@ -17,6 +17,8 @@
 //   node scripts/effect-lab.mjs --compile-probe --effect voxel-relief [--width 1920]
 //       # first frame (waits for the driver to build the pipelines) vs steady frame, in a fresh page
 //   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>]
+//   node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json [--only <effect id>]
+//       # the preset strip of an effect page: one still per preset of the registry, named under it
 //
 // Each variant renders on each image; "original" (effect bypassed) is always the first column.
 // `--pairs` writes docs close-ups: each entry of `{ "pairs": [...] }` renders two effects on one
@@ -35,6 +37,11 @@
 // `"layout": "split"` shows one picture: the crop (default: the whole frame) of the left side up to
 // `"split"` (0.5) of its width, the right side's crop after it, and a thin light divider; `"stack"`
 // puts the two crops one above the other with `gap` between them. `"outWidth"` scales the result.
+// `--presets` reads `{ "strips": [{ "effect", "image", "width": 1920, "crop": [x, y, w, h], "times": [1.2],
+//   "cellWidth": 400, "columns": 2, "backdrop", "maxBytes" }] }` and renders every preset the effect declares
+// (EffectPreset in src/effects/types.ts, read from the live registry, so names and values never drift)
+// on that image, crops each, and lays them out in rows of `columns` (default: 2 for four presets, else up
+// to 3) with the preset name under each cell, as docs/Features/assets/effects/presets/<effect>.webp.
 // Needs a running Vite of this checkout (`npx vite --port 5175 --strictPort`).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -109,6 +116,45 @@ async function composePair(page, entry) {
   return Buffer.from(png, 'base64');
 }
 
+/** Renders every preset of `entry.effect` on one image and composes the labelled preset strip (PNG buffer). */
+async function composePresetStrip(page, entry) {
+  const effect = (await page.evaluate(() => window.__effectLab.describe())).find(item => item.id === entry.effect);
+  if (!effect) throw new Error(`--presets: "${entry.effect}" is not an effect id.`);
+  if (!effect.presets?.length) throw new Error(`--presets: ${entry.effect} declares no presets.`);
+  const cells = [];
+  for (const preset of effect.presets) {
+    const cell = await page.evaluate(job => window.__effectLab.render(job), { effectId: entry.effect, image: `${entry.image}.jpg`,
+      width: entry.width ?? 1920, params: preset.params, times: entry.times });
+    if (cell.gpuFailure) throw new Error(`${entry.effect} ${preset.name}: ${cell.gpuFailure}`);
+    cells.push({ data: cell.png, label: preset.name });
+  }
+  const count = cells.length;
+  const columns = entry.columns ?? (count === 4 ? 2 : Math.min(count, 3));
+  const png = await page.evaluate(async ({ cells, crop, columns, cellWidth, gap, backdrop }) => {
+    const bitmaps = await Promise.all(cells.map(async cell => createImageBitmap(await (await fetch(cell.data)).blob())));
+    const [x, y, w, h] = crop ?? [0, 0, bitmaps[0].width, bitmaps[0].height];
+    // The name stays readable when the strip is shown small (docs-shot--detail, about 200 px per cell).
+    const cellHeight = Math.round(cellWidth * h / w), label = Math.round(cellWidth * 0.13), rows = Math.ceil(cells.length / columns);
+    const canvas = new OffscreenCanvas(columns * cellWidth + (columns - 1) * gap, rows * (cellHeight + label) + (rows - 1) * gap);
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#111'; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.imageSmoothingQuality = 'high';
+    cells.forEach((cell, index) => {
+      const left = (index % columns) * (cellWidth + gap), top = Math.floor(index / columns) * (cellHeight + label + gap);
+      if (backdrop) { context.fillStyle = backdrop; context.fillRect(left, top, cellWidth, cellHeight); }
+      context.drawImage(bitmaps[index], x, y, w, h, left, top, cellWidth, cellHeight);
+      context.fillStyle = '#f2f2f2'; context.font = `600 ${Math.round(label * 0.56)}px system-ui, sans-serif`;
+      context.textAlign = 'center'; context.textBaseline = 'middle';
+      context.fillText(cell.label, left + cellWidth / 2, top + cellHeight + label / 2);
+    });
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(binary);
+  }, { cells, crop: entry.crop, columns, cellWidth: entry.cellWidth ?? 400, gap: entry.gap ?? 6, backdrop: entry.backdrop });
+  return { png: Buffer.from(png, 'base64'), names: cells.map(cell => cell.label) };
+}
+
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
 const url = option('--url', 'http://localhost:5175');
@@ -130,6 +176,18 @@ try {
     console.log(JSON.stringify({ effectId: job.effectId, ...(await page.evaluate(probe => window.__effectLab.probeCompile(probe), job)), errors }));
   } else if (args.includes('--list')) {
     console.log(JSON.stringify(await page.evaluate(() => window.__effectLab.describe()), null, 1));
+  } else if (option('--presets')) {
+    const entries = JSON.parse(fs.readFileSync(option('--presets'), 'utf8')).strips.filter(entry => !option('--only') || entry.effect === option('--only'));
+    if (!entries.length) throw new Error(`No preset strip ${option('--only')} in ${option('--presets')}`);
+    for (const entry of entries) {
+      const strip = await composePresetStrip(page, entry);
+      const out = entry.out ?? `docs/Features/assets/effects/presets/${entry.effect}.webp`;
+      const encoded = await encodeDocShotWebp(page, strip.png, { maxBytes: entry.maxBytes ?? 200000, maxPixelWidth: 1600 });
+      fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
+      fs.writeFileSync(path.resolve(out), encoded.buffer);
+      console.log(`${out}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes, quality ${encoded.quality}; presets ${strip.names.join(', ')}`);
+    }
+    if (errors.length) console.log(`page errors: ${[...new Set(errors)].join(' | ')}`);
   } else if (option('--pairs')) {
     const entries = JSON.parse(fs.readFileSync(option('--pairs'), 'utf8')).pairs.filter(entry => !option('--only') || entry.name === option('--only'));
     if (!entries.length) throw new Error(`No pair ${option('--only')} in ${option('--pairs')}`);

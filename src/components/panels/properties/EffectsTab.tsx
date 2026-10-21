@@ -1,4 +1,5 @@
 import { EffectStyleRow } from './EffectStyleRow';
+import { EffectPresetRow } from './EffectPresetRow';
 import { ChromaKeyControls } from './ChromaKeyControls';
 import { TimeStackControls } from './TimeStackControls';
 import { LensCorrectionControls } from './LensCorrectionControls';
@@ -647,6 +648,7 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                 {!isCollapsed && (
                   <div className="effect-params">
                     <EffectStyleRow clipId={clipId} effect={effect} />
+                    <EffectPresetRow clipId={clipId} effect={effect} />
                     <EffectParams
                       effect={{ ...effect, params: primitiveParams }}
                       onDragStart={handleBatchStart}

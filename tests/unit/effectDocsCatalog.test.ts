@@ -13,6 +13,7 @@ import {
   generatedBlockProblem, isBasicPage, pageLead, planEffectDocs, refreshGeneratedBlocks, snapshotRegistry,
 } from '../../scripts/effectDocsCatalog.mjs';
 import { BUDGETS } from '../../docs-site/scripts/lib/media.mjs';
+import { controlParagraphSkeletons, handWrittenPageProblems } from '../../scripts/effectDocsPageCheck.mjs';
 
 const featuresDir = path.resolve(__dirname, '../../docs/Features');
 const read = (file: string) => (fs.existsSync(path.join(featuresDir, file)) ? fs.readFileSync(path.join(featuresDir, file), 'utf8') : undefined);
@@ -38,6 +39,15 @@ describe('effect docs match the registry', () => {
     expect(plan.problems.map((problem: { text: string }) => problem.text)).toEqual([]);
     const stale = [...plan.texts].filter(([file, text]) => file !== CATALOG_FILE && read(file) !== text).map(([file]) => file);
     expect(stale, rerun).toEqual([]);
+  });
+
+  it('hand-written pages describe every control and preset of the card with its current limits', () => {
+    const problems = pages.flatMap((id) => {
+      const effect = snapshot.effects.find((entry: { id: string }) => entry.id === id), text = read(`effects/${id}.md`);
+      if (!effect || text === undefined || isBasicPage(text)) return [];
+      return handWrittenPageProblems(effect, text, { exists }).map((problem: string) => `effects/${id}.md ${problem}`);
+    });
+    expect(problems, 'node scripts/effect-docs.mjs --controls <id> prints the paragraphs and limits').toEqual([]);
   });
 
   it('every visible effect has its own page', () => {
@@ -144,5 +154,28 @@ describe('effect docs helpers', () => {
     expect(cardText('Turns the picture into a watercolour painting: flat washes; Wash sets the softness.')).toBe('Turns the picture into a watercolour painting.');
     expect(cardText('Adjusts exposure in stops (+1 doubles the light), with a Gamma curve; Offset adds.')).toBe('Adjusts exposure in stops, with a Gamma curve.');
     expect(firstSentence(pageLead('# Glow\n\n<!-- note -->\n\n<figure>\n<img>\n</figure>\n\nA soft [halo](./x.md) around light. It **blooms**.\n') ?? '')).toBe('A soft halo around light.');
+  });
+
+  it('checks control and preset paragraphs of a hand-written page against the card', () => {
+    const demo = { ...effect, params: [{ ...effect.params[0], section: 'Shape' }, { ...effect.params[1], section: 'Shape' }],
+      presets: [{ id: 'soft', name: 'Soft', params: { radius: 4 } }, { id: 'hard', name: 'Hard', params: { radius: 90 } }] };
+    expect(controlParagraphSkeletons(demo)).toContain('### Shape\n\n**Radius** – what it does to the picture; how its values feel. 0 to 100 px, default 10 px.');
+    const page = (controls: string, presets = '**Soft** – gentle.\n\n**Hard** – strong.') => `# Demo\n\nLead.\n\n## Presets\n\n`
+      + `![strip](../assets/effects/presets/demo.webp)\n\n${presets}\n\n## Controls\n\n${controls}\n\n## Technical details\n\nFacts.\n`;
+    const good = '### Shape\n\n**Radius** – softness. 0 to 100 px, default 10 px.\n\n**Turn** – rotation. 0 to 360°, default 90°.';
+    const files = { exists: () => true };
+    expect(handWrittenPageProblems(demo, page(good), files)).toEqual([]);
+    expect(handWrittenPageProblems(demo, page(good.replace('default 10 px', 'default 12 px')), files))
+      .toEqual(['## Controls: the paragraph for **Radius** must state "0 to 100 px, default 10 px"']);
+    expect(handWrittenPageProblems(demo, page('### Shape\n\n**Turn** – rotation. 0 to 360°, default 90°.\n\n**Radius** – softness. 0 to 100 px, default 10 px.'), files))
+      .toEqual(['## Controls: put the paragraphs in card order (Radius, Turn)']);
+    expect(handWrittenPageProblems(demo, page(`${good}\n\n**Gone** – an old control.`), files)).toEqual(['## Controls describes **Gone**, which the card does not show']);
+    expect(handWrittenPageProblems(demo, page(good.replace('### Shape\n\n', '')), files)).toEqual([
+      '## Controls: **Radius** belongs under "### Shape"', '## Controls: **Turn** belongs under "### Shape"']);
+    expect(handWrittenPageProblems(demo, page(good, '**Soft** – gentle.\n\n**Medium** – old.'), files)).toEqual([
+      '## Presets has no paragraph for the preset **Hard**', '## Presets describes **Medium**, which is no preset of Demo']);
+    expect(handWrittenPageProblems(demo, page(good), { exists: () => false })[0]).toMatch(/has no preset strip assets\/effects\/presets\/demo\.webp/u);
+    // A page that still carries the generated table is checked by the table; presets are checked either way.
+    expect(handWrittenPageProblems({ ...demo, presets: [] }, `# Demo\n\n${CONTROLS_START}\nx\n${CONTROLS_END}\n`, files)).toEqual([]);
   });
 });

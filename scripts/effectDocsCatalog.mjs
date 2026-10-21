@@ -34,6 +34,7 @@ export const effectAssets = (id) => ({
   poster: `assets/effects/clips/${id}.webp`,
   clip: `assets/effects/clips/${id}.mp4`,
   thumb: `assets/effects/thumbs/${id}.webp`,
+  presets: `assets/effects/presets/${id}.webp`,
 });
 export const pageFile = (id) => `effects/${id}.md`;
 
@@ -77,8 +78,8 @@ export function snapshotRegistry(api) {
     const cardKeys = new Set((EFFECT_DOC_EXTRAS[id]?.rows ?? []).map((row) => (typeof row === 'string' ? row : row.key)).filter(Boolean));
     const hiddenParams = current.filter(([key, param]) => param.hidden && cardKeys.has(key)).map(describe);
     // Moving: the picture depends on time or on earlier frames, so a still cannot show it (it gets a loop).
-    const moving = Boolean(effect.requiresContinuousRender || effect.usesFeedback || effect.usesInputHistory || effect.sourceTimeOwner
-      || Object.values(effect.params ?? {}).some((param) => param.integratedAs));
+    const moving = Boolean(effect.requiresContinuousRender || effect.timelineAnimated || effect.usesFeedback || effect.usesInputHistory
+      || effect.sourceTimeOwner || Object.values(effect.params ?? {}).some((param) => param.integratedAs));
     return {
       id,
       name: effect.name,
@@ -97,6 +98,8 @@ export function snapshotRegistry(api) {
       hidden: api.hidden.has(id),
       params,
       hiddenParams,
+      // Named starting points of the card's Preset row (EffectPreset), in card order.
+      presets: (effect.presets ?? []).map((preset) => ({ id: preset.id, name: preset.name, params: { ...preset.params } })),
     };
   });
   return { groups: groups.map((group) => ({ ...group, effects: group.effects.filter((id) => !api.hidden.has(id)) })), effects };
@@ -254,13 +257,17 @@ export function controlDefault(param) {
 /** A resource reference (a media, mask or tracking id) stored as text: the card shows a picker or nothing, not a field. */
 const isResourceId = (param) => param.type === 'text' && /Id$/u.test(param.key);
 
-/** The rows of an effect's card per section, in card order, with the rows of effectDocsExtras.mjs. */
-function cardSections(effect, extras) {
+/**
+ * The rows of an effect's card per section, in card order, with the rows of effectDocsExtras.mjs:
+ * [[section, [{ key, name (the card label), label (with its "only when" note), range, default }]]].
+ */
+export function cardSections(effect, extras = EFFECT_DOC_EXTRAS[effect.id] ?? {}) {
   const omitted = new Set(extras.omit ?? []);
   const omittedSections = new Set(extras.omitSections ?? []);
   const known = new Map([...effect.params, ...(effect.hiddenParams ?? [])].map((param) => [param.key, param]));
   const row = (param, overrides = {}) => ({
     key: param?.key,
+    name: overrides.label ?? param.label,
     label: overrides.label ?? (param.onlyWhen ? `${param.label} (${param.onlyWhen.replace(/\.$/u, '')})` : param.label),
     range: overrides.range ?? controlRange(param),
     default: overrides.default ?? controlDefault(param),
@@ -282,7 +289,7 @@ function cardSections(effect, extras) {
     const param = entry.key ? known.get(entry.key) : undefined;
     if (entry.key && !param) throw new Error(`effectDocsExtras.mjs: ${effect.id} names "${entry.key}", which is no current parameter.`);
     const section = entry.section ?? param?.section ?? '';
-    add(section, param ? row(param, entry) : { label: entry.label, range: entry.range ?? '', default: entry.default ?? '' }, entry.before);
+    add(section, param ? row(param, entry) : { name: entry.label, label: entry.label, range: entry.range ?? '', default: entry.default ?? '' }, entry.before);
   }
   const order = extras.sections ?? [];
   const rank = (section) => (section === 'Quality' ? 1e6 : order.includes(section) ? order.indexOf(section) : order.length);
@@ -390,6 +397,8 @@ export function buildCatalog(snapshot, files) {
     if (still) entry.still = still;
     if (files.exists(assets.clip)) entry.clip = assets.clip;
     if (files.exists(assets.thumb)) entry.thumb = assets.thumb;
+    if (effect.presets?.length) entry.presets = effect.presets.map((preset) => preset.name);
+    if (effect.presets?.length && files.exists(assets.presets)) entry.presetStrip = assets.presets;
     if (effect.engine) entry.engine = effect.engine;
     if (effect.moving) entry.moving = true;
     if (effect.experimental) entry.experimental = true;
@@ -494,6 +503,9 @@ export function basicPage(effect, ctx) {
   }
   if (effect.experimental) parts.push(`**Experimental:** ${effect.experimental.trim()}`);
   parts.push('*A short page made from the editor’s effect catalog: what the effect does and its controls. Tips and its node setup will follow.*');
+  if (effect.presets?.length) {
+    parts.push(`**Presets:** ${effect.presets.map((preset) => preset.name).join(' · ')}. Pick one in the **Preset** row of the effect card.`);
+  }
   parts.push(`## Controls\n\n${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`);
   if (effect.styles.length) {
     const names = effect.styles.map((id) => (ctx.hasPage?.(id) ? `[${ctx.names.get(id) ?? id}](./${id}.md)` : ctx.names.get(id) ?? id));

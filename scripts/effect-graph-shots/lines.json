@@ -1,0 +1,5 @@
+{
+  "shots": [
+    "drift-lines?plumbing=hide&omit=output,frame&marks=organized-drift-lines-bands:below,organized-drift-lines-drift:below,organized-drift-lines-sampling:above,organized-drift-lines-lines:above"
+  ]
+}

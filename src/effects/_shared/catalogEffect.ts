@@ -2,6 +2,7 @@ import type {
   EffectCategory,
   EffectDefinition,
   EffectParam,
+  EffectPreset,
 } from '../types';
 import { colorToRgba } from './catalogColor';
 
@@ -23,6 +24,8 @@ export interface CatalogEffectOptions {
   paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
   /** Why the effect is still experimental (FullscreenEffectDefinition.experimental). */
   experimental?: string;
+  /** Named starting points picked in the effect card (EffectPreset). */
+  presets?: readonly EffectPreset[];
 }
 const BASE_PARAMS: Record<string, EffectParam> = {
   scale: {
@@ -42,6 +45,12 @@ const BASE_PARAMS: Record<string, EffectParam> = {
 };
 
 type BaseParam = 'scale' | 'angle' | 'colorA' | 'colorB';
+
+/** A shared base parameter with a look's own additions (a unit, a reported render limit). */
+export function catalogBaseParam(key: BaseParam | 'amount', overrides: Partial<EffectParam>): EffectParam {
+  return { ...BASE_PARAMS[key], ...overrides } as EffectParam;
+}
+
 const BASE_PARAM_NAMES: Record<BaseParam, string> = { scale: 'scale', angle: 'angle', colorA: 'ink color', colorB: 'paper color' };
 
 /**
@@ -80,7 +89,10 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
     entryPoint: options.entryPoint,
     uniformSize: 64,
     params,
+    // A timeline clock holds still while paused: no continuous rendering, but the picture still moves.
     requiresContinuousRender: options.clock === 'timeline' ? false : options.animated,
+    ...(options.animated && options.clock === 'timeline' ? { timelineAnimated: true } : {}),
+    ...(options.presets ? { presets: options.presets } : {}),
     ...(options.paramWarnings ? { paramWarnings: options.paramWarnings } : {}),
     ...(options.experimental ? { experimental: options.experimental } : {}),
     packUniforms: (values, width, height, timelineTimeSeconds = 0) => {

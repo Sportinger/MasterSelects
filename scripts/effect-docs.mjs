@@ -15,15 +15,18 @@
 //                                                      # names the Effect Lab shot file that makes it); --force
 //                                                      # remakes them all, or only these effect or group ids
 //   node scripts/effect-docs.mjs --uncovered           # list visible effects without a page
-//   node scripts/effect-docs.mjs --controls <id>       # print an effect's controls block (to paste into a new page)
+//   node scripts/effect-docs.mjs --controls <id>       # print an effect's controls: the generated table, one paragraph
+//                                                      # skeleton per control with its limits and default (for a
+//                                                      # hand-written page) and its presets with their values
 //
 // The registry is TypeScript: it is loaded through Vite (no dev server, no config file, no browser).
 // Rules for effect pages: docs/Features/Documentation-Site.md ("Effect pages").
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { CONTROLS_END, CONTROLS_START, LAB_STILL_SKIP, THUMB_TARGET_BYTES, controlsTable, effectAssets, isBasicPage, labPair, pageFile, planEffectDocs, snapshotRegistry } from './effectDocsCatalog.mjs';
+import { CONTROLS_END, CONTROLS_START, LAB_STILL_SKIP, controlDefault, THUMB_TARGET_BYTES, controlsTable, effectAssets, isBasicPage, labPair, pageFile, planEffectDocs, snapshotRegistry } from './effectDocsCatalog.mjs';
 import { EFFECT_DOC_EXTRAS } from './effectDocsExtras.mjs';
+import { controlParagraphSkeletons, handWrittenPageProblems } from './effectDocsPageCheck.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const featuresDir = path.join(root, 'docs', 'Features');
@@ -74,6 +77,15 @@ if (controlsFor !== undefined) {
   const effect = snapshot.effects.find((entry) => entry.id === controlsFor);
   if (!effect) throw new Error(`--controls: "${controlsFor}" is not an effect id.`);
   console.log(`${CONTROLS_START}\n${controlsTable(effect)}\n${CONTROLS_END}`);
+  console.log(`\nParagraphs for a hand-written page (## Controls; keep each limits sentence as it is):\n\n${controlParagraphSkeletons(effect)}`);
+  if (effect.presets.length) {
+    console.log(`\nPresets (## Presets, one bold paragraph each; strip: node scripts/effect-lab.mjs --presets scripts/effect-lab-shots/presets.json --only ${effect.id}):`);
+    const shown = (key, value) => {
+      const param = effect.params.find((entry) => entry.key === key);
+      return param ? `${param.label} ${controlDefault({ ...param, default: value })}` : `${key} ${value}`;
+    };
+    for (const preset of effect.presets) console.log(`**${preset.name}** – ${Object.entries(preset.params).map(([key, value]) => shown(key, value)).join(', ')}`);
+  }
   process.exit(0);
 }
 
@@ -129,6 +141,15 @@ const plan = planEffectDocs(snapshot, { read, exists, pages: listPages() }, { ba
 for (const id of plan.unknownPages) notes.push(`effects/${id}.md: "${id}" is not an effect id of the registry; the page is left alone.`);
 for (const problem of plan.problems) notes.push(problem.text);
 if (plan.problems.length) process.exitCode = 1;
+// Hand-written pages: every control of the card and every preset described, with the current limits.
+for (const id of listPages()) {
+  const effect = snapshot.effects.find((entry) => entry.id === id);
+  const text = read(pageFile(id));
+  if (!effect || text === undefined || isBasicPage(text)) continue;
+  const problems = handWrittenPageProblems(effect, text, { exists });
+  for (const problem of problems) notes.push(`${pageFile(id)} ${problem}.`);
+  if (problems.length) process.exitCode = 1;
+}
 const changes = [...plan.texts].filter(([file, text]) => read(file) !== text).map(([file]) => file);
 if (!check) {
   for (const file of changes) {
