@@ -51,7 +51,7 @@ describe('writer handover between tabs', () => {
     const writer = openTab('a');
     const reader = openTab('b');
     await vi.advanceTimersByTimeAsync(0);
-    expect(reader.handover.getState()).toMatchObject({ writerLockHeld: true, writer: { tabId: 'a' } });
+    expect(reader.handover.getSnapshot()).toMatchObject({ writerLockHeld: true, writer: { tabId: 'a' } });
 
     const takeover = reader.handover.requestTakeover();
     await vi.advanceTimersByTimeAsync(0);
@@ -59,11 +59,11 @@ describe('writer handover between tabs', () => {
 
     expect(writer.flushes).toBe(1);
     expect(lockHolder).toBe('b');
-    expect(reader.handover.getState()).toMatchObject({ phase: 'idle', notice: null });
+    expect(reader.handover.getSnapshot()).toMatchObject({ phase: 'idle', notice: null });
     // The former writer says why it is read-only now and learns who writes instead.
     await vi.advanceTimersByTimeAsync(0);
     expect(writer.writable).toBe(false);
-    expect(writer.handover.getState()).toMatchObject({ phase: 'idle', notice: HANDOVER_MOVED_NOTICE, writer: { tabId: 'b' } });
+    expect(writer.handover.getSnapshot()).toMatchObject({ phase: 'idle', notice: HANDOVER_MOVED_NOTICE, writer: { tabId: 'b' } });
   });
 
   it('reports a refused handover and keeps the writer intact', async () => {
@@ -73,8 +73,8 @@ describe('writer handover between tabs', () => {
     const takeover = reader.handover.requestTakeover();
     await vi.advanceTimersByTimeAsync(0);
     await expect(takeover).resolves.toBe(false);
-    expect(reader.handover.getState().phase).toBe('failed');
-    expect(reader.handover.getState().notice).toContain('Save failed: disk full');
+    expect(reader.handover.getSnapshot().phase).toBe('failed');
+    expect(reader.handover.getSnapshot().notice).toContain('Save failed: disk full');
     expect(writer.writable).toBe(true);
     expect(lockHolder).toBe('a');
   });
@@ -85,7 +85,7 @@ describe('writer handover between tabs', () => {
     const blocked = reader.handover.requestTakeover();
     await vi.advanceTimersByTimeAsync(HANDOVER_ACK_MS);
     await expect(blocked).resolves.toBe(false);
-    expect(reader.handover.getState()).toMatchObject({ phase: 'failed', notice: HANDOVER_UNRESPONSIVE });
+    expect(reader.handover.getSnapshot()).toMatchObject({ phase: 'failed', notice: HANDOVER_UNRESPONSIVE });
 
     lockHolder = null; // The frozen tab was closed.
     const free = reader.handover.requestTakeover();

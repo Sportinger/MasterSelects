@@ -66,7 +66,7 @@ export const HANDOVER_STILL_READ_ONLY = 'Editing could not be taken over: anothe
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 export interface WriterHandover {
-  getState(): WriterHandoverState;
+  getSnapshot(): WriterHandoverState;
   subscribe(listener: () => void): () => void;
   /** Re-evaluate after the open project or its write access changed. */
   refresh(): void;
@@ -183,7 +183,7 @@ export function createWriterHandover(host: HandoverHost): WriterHandover {
 
   refresh();
   return {
-    getState: () => state,
+    getSnapshot: () => state,
     subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     refresh,
     requestTakeover,

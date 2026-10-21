@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     hasUnsavedChanges: vi.fn(() => true),
     isProjectOpen: vi.fn(() => false),
     renameProject: vi.fn(async () => true),
+    resolveOpenProjectRoute: vi.fn(async () => 'folder-picker' as const),
     saveProject: vi.fn(async () => true),
   },
   saveCurrentProject: vi.fn(async () => true),

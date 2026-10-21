@@ -23,7 +23,7 @@ function describeWriter(state: WriterHandoverState): string {
 function readView(): WriteAccessView | null {
   const session = getActiveRepositorySession();
   if (!session || session.opening.writable || session.opening.ownershipReason) return null;
-  const state = getEditorWriterHandover().getState();
+  const state = getEditorWriterHandover().getSnapshot();
   const free = state.writerLockHeld === false;
   const action = free
     ? 'Enable editing reopens the project here with write access.'
