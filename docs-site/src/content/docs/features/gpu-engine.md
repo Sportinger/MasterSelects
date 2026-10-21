@@ -67,7 +67,11 @@ Only the first real loss per session is reported as an error; repeats are
 warnings. A loss while the page is hidden, frozen, or unloading (Android Chrome
 reports it as "Device was destroyed.") is a warning and recovery waits until the
 page is visible again. Three real losses within a minute stop recovery and show
-a driver-reset message instead of looping lose/recover.
+a driver-reset message instead of looping lose/recover. That stop is its own
+incident and files one error, `GPU device lost repeatedly; recovery stopped`,
+with the loss message, its occurrence and the window (and `firstLoss` when an
+earlier loss of the same run was still held), since the GPU stays unavailable
+afterwards.
 
 Each loss incident files at most one error. The first real loss's error waits
 for the recovery outcome: a recovered device reports `Device lost`, while a
@@ -190,6 +194,8 @@ Targeted coverage: `gpuUniformRing.test.ts`, `gpuFrameScopedRenderers.test.ts`
 - Idle detection is initially suppressed so browser video surfaces can warm up; it is lifted by the first play event or after about 3 seconds.
 - Playback is limited to about 60 fps.
 - Scrubbing is limited to about 60 fps unless a fresh video frame arrives, which bypasses the limiter.
+- A render request is consumed only by a frame that reaches the render callback. Frames skipped during device recovery, export, or while editor content publication is blocked (project open or composition switch) keep the request, so the first frame after the gate reopens shows the change. A direct `renderHostPort.render()` made while publication is blocked becomes such a request instead of being dropped.
+- The preview keeps one GPU submission in flight and coalesces newer requests until `onSubmittedWorkDone()` settles. A completion fence that does not settle within 1 second releases the queue, renders the newest request, and logs `Preview GPU completion did not settle` with a running count, so a stalled fence can no longer freeze the preview until a reload.
 
 ### Watchdog
 
@@ -300,6 +306,7 @@ Runtime flags are exposed on `window.__ENGINE_FLAGS__`.
 | Black preview after reload | Video GPU surfaces may not be warm yet. The engine suppresses idle until first play, but browser readiness still matters. |
 | Firefox preview instability | HTML video fallback should be using copied textures, not external import. |
 | Export canvas missing | Verify WebGPU context creation on OffscreenCanvas and device validity. |
+| Preview stuck on an old frame until reload | Look for `Preview GPU completion did not settle` (stalled GPU fence; the queue now reopens after 1 second) and `RenderLoop` debug lines about deferred requests. |
 | Device lost | The engine attempts recovery and reconfigures canvases, but a manual reload may still be needed. |
 
 ---

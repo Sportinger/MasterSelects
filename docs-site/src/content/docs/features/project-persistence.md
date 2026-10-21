@@ -65,7 +65,8 @@ prompt, at most 8 further prompts) in the same click, before the project loads,
 so linked media reconnect without a separate step. Access that is still not
 granted is logged and offered by the Reconnect media dialog. Media
 that still lack access are offered in the Reconnect media dialog; choosing
-"Allow on every visit" in the browser prompt avoids the prompt after reloads.
+"Allow on every visit" in the browser prompt (or the installed app, see
+below) avoids the prompt after a browser restart.
 Media imported as single files (picker or drop) keep their exact saved file
 location. The dialog's single "Reconnect media" click re-allows those files
 directly (up to 8 browser prompts) instead of asking for a folder. With more
@@ -147,6 +148,15 @@ offers only the destinations this device supports, best first:
 - **Download .msproj archive** named after the project (full history); on
   iPhone/iPad it lands in the Files app. The open project stays temporary.
 
+Moving between the stores never locks a project read-only: the writer registry
+(`ms-repository-identity-locations`) treats `opfs:<origin>:<path>` and
+`indexeddb:<origin>:<path>` of one repository as the same project changing
+store, and a moved temporary project that gets a new folder name takes over the
+writer registration from its verified source. Copies at any other location still
+open read-only (Copy/Restore). Renaming (also inside Save As and Keep in this
+browser) rewrites only the project root, so media carrying repository-internal
+source-identity proofs no longer abort these moves.
+
 A temporary copy is removed only after its permanent copy is open, writable and
 contains the last confirmed revision; on any failure it stays and the dialog
 says so. The scratch browser recovery is never deleted. The dialog also shows
@@ -195,6 +205,32 @@ loaded yet" (not as "Media file not found") and rebuild the composition once
 the file arrives; an entry that stays without a file outside a load is reported
 as offline or needing relink.
 
+### Installed app keeps folder access
+
+MasterSelects is installable as an app in Chrome and Edge on Windows and Linux
+(`public/manifest.webmanifest`, linked from `index.html`: start URL `/editor`,
+scope `/`, standalone window, `#0f0f0f` theme and background from
+`--bg-primary`). Chrome keeps File System Access grants of an installed web app
+across browser restarts, so projects opened in the app window do not ask for
+their folders again; a browser tab still loses them when the session ends.
+While the browser offers installation (`beforeinstallprompt`) and the editor is
+not already running as an installed app, the **Resume “<project>”** chooser and
+the **Reconnect media** dialog show a dismissible **Install MasterSelects to keep
+folder access** hint. **Install** opens the browser's install dialog; the
+result is shown (installed, or a pointer to the address-bar install icon when
+the dialog could not open) and logged under `AppInstall`. Hiding the hint is
+remembered on this device. An app installed earlier is not detected from a
+browser tab, so the hint is simply absent there: open MasterSelects from its app
+window. Grants belong to the window they were made in; folders allowed in a tab
+must be allowed once more in the app.
+
+There is no service worker; the manifest only makes the editor installable and
+does not cache the app. The icons in `public/icons/` (`any` and `maskable`,
+192/512 px, plus a 180 px `apple-touch-icon`) are rendered from the 2048 px
+"MS" logo by `node scripts/generate-pwa-icons.mjs` (needs ffmpeg). On iPad, a
+home-screen web app has its own storage, separate from Safari's, so projects
+stored in Safari's browser storage do not appear there.
+
 ## Continuous saving
 
 Completed content actions become immutable revisions and enter the asynchronous
@@ -215,11 +251,47 @@ binary artifacts are reused. Saving a keyframe does not rebuild a complete
 Workspace changes such as playhead, zoom, scroll and dock layout use coalesced
 view slots. They do not append content revisions on every playback tick. Each
 view has two slots so an interrupted update can retain its last valid value.
+A workspace that lacks a view (a new tab, browser or machine) takes it from the
+workspace that wrote it most recently. Each slot stores its write time
+(`updatedAt`), because the Native Helper backend reports no file times; slots
+written before that field existed fall back to the file time, and equal times
+pick the lowest workspace id, so every reader chooses the same source.
 
 Pending recovery data is bounded. Storage pressure, lost permissions and I/O
 failures can stop further content edits before the pending budget is exceeded.
 Retry or protect the pending work before changing projects; a failed flush is
 not treated as permission to discard it.
+
+### Folder access paused while a project is open
+
+Chrome can also withdraw a session-only grant while the project is open, for
+example after the tab sat in the background. The editor treats that as a pause,
+not as a failure or a missing file:
+
+- **Detection.** The storage worker reports a refused read or write
+  (`NotAllowedError`/`SecurityError`) with the repository code `access`
+  (`permission` stays reserved for repository policy refusals). Returning to the
+  tab, window focus and a 30-second check also query the project folder and the
+  media locations this session already opened, so the pause shows before a save
+  fails.
+- **One toolbar state.** The toolbar shows "Folder access was paused by the
+  browser" with **Re-allow**; the save status reads **Access paused** (not
+  "Save failed") and re-allows on click, as does Ctrl/Cmd+S.
+- **No data loss.** Edits keep committing in the tab; their writes stay queued
+  in order. Re-allow asks for the project folder first (Chrome's restore prompt
+  can bring back the other folders with it), then the media folders and files of
+  this session, and republishes every queued write before the pause clears. If
+  the browser refuses, the pause and the queue stay.
+- **No relink dialog.** Media whose saved location only waits for the prompt,
+  and whose access worked earlier in this session, stay "not opened yet"
+  instead of offline; export explains the pause. After Re-allow they open from
+  their saved locations. Media that still cannot be read then go to the
+  Reconnect media dialog as before; locations never allowed in this session
+  (e.g. after a browser restart) keep using the Resume and Reconnect flows above.
+- **Interrupted writes.** A write cut off after its file was created leaves an
+  empty file whose removal the browser also refused. Immutable records are
+  never empty, so a later retry finishes that file instead of failing with a
+  conflict.
 
 ## Save status and lifecycle
 
@@ -274,6 +346,19 @@ session-level fallback on browsers without those handles. Project-local or
 imported retained bytes can be read from the repository before requesting an
 external source again.
 
+Linking only survives a reload where the browser can keep the file's handle in
+IndexedDB. The editor measures this with a real handle (an aborted probe write,
+never the user agent): WebKit (Safari on iPhone, iPad and Mac) refuses handles
+with `DataCloneError`, so there - and for every file without a reopenable
+location, such as `<input>` picks - imports and relinks are copied into the
+project's `Raw/` folder by default. This works in named projects and in the
+browser recovery project, in OPFS and in the IndexedDB fallback, and the copies
+move along with **Save permanently**. A notice shows the copied size and the
+browser storage left, reports copies that fail (the media stay usable until the
+next reload) and offers **Link future imports**; **Preferences > Import > Copy
+media that cannot stay linked** holds that per-device choice
+(`ms.media.linkWhenNotDurable`). Chromium keeps linking as before.
+
 The old size-plus-file-prefix fingerprint is a lookup hint. Historical source
 identity requires a full content hash: equal filenames, sizes or the first
 2 MiB do not prove that the original bytes are unchanged. Replacing a source
@@ -327,6 +412,13 @@ archive order, so a small entry never waits behind a later entry that still
 needs input (this ordering once hung the import at "Reading selected project
 10%"). If no entry makes progress for two minutes, the restore fails with an
 "Archive extraction stalled" error naming the entry instead of hanging silently.
+Work on an entry that does not read archive bytes (digesting an already staged
+copy of a large file when a restore resumes) reports progress itself, so it
+never trips the watchdog. A repository archive is recognised at its first
+repository entry instead of being buffered in memory as an old package first.
+The restore stages into `repository-archive-staging/<import>`; that copy is
+removed once the project holds it, after a failed in-place import, and after a
+cancel. Only a failed import into a separate folder keeps it, to resume from.
 
 Duplicates receive a new repository identity and retain the content lineage.
 Incremental backups preserve the source's immutable descriptor and commit chain;
@@ -354,7 +446,12 @@ projects as well as cached handles.
 ## Troubleshooting
 
 - **Folder permission is missing:** reconnect the existing project directory or
-  its external source folder.
+  its external source folder. To stop the prompt after every browser restart,
+  install MasterSelects as an app (see *Installed app keeps folder access*) or
+  choose "Allow on every visit" in the browser prompt.
+- **"Folder access was paused by the browser":** click **Re-allow** and accept
+  the browser prompt; choose "Allow on every visit" or install the app to avoid
+  it. Queued changes are saved afterwards.
 - **Project is read-only:** use **Take over editing** in the toolbar. If the
   writing tab does not answer within a few seconds while it still holds the
   lock (a frozen or suspended tab), the toolbar says so: switch to that tab or
@@ -369,8 +466,13 @@ projects as well as cached handles.
   The archive is streamed from disk into browser storage; the log line
   `Project archive copied into browser storage` reports setup and copy times.
   An incomplete copy or an import that does not open is removed again and
-  reported. The start-up project chooser offers the same import below the stored
-  projects. The stored-project list shows only folders with a project
+  reported. While the import runs, **Cancel import** (or Escape, or closing the
+  dialog) aborts the copy, the archive restore or the conversion; the partial
+  project folder and its staging are removed and the open project stays as it
+  was, including its save status. The start-up project chooser offers the same
+  import below the stored projects, where **Back** turns into **Cancel import**
+  while it runs. A failed or cancelled open of another project never marks the
+  open project as "Save failed". The stored-project list shows only folders with a project
   (`project.msrepo.json`, `project.json` or a not yet imported `.msproj`), not
   model caches or repository staging folders.
 - **Writes are pending or failed:** inspect the storage error, restore access or

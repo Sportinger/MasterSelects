@@ -125,7 +125,9 @@ When a 2D text clip is selected and the preview is in Edit mode, the preview sho
 
 Text inside nested compositions is render-only, so its raster keeps only the pixels the text covers (measured glyph, outline, and shadow bounds plus a small margin) instead of a composition-sized canvas. `src/services/text/textCanvasFrameRegistry.ts` records where that crop sits in the composition-sized source; the compositor samples it through a texture rect, and passes that read a whole source (effects, color correction, edge fill, 3D planes, worker previews) get a composition-sized copy. Path text, captions, and text covering most of the frame stay full-size. A project with hundreds of nested labels therefore no longer holds gigabytes of canvas and GPU memory.
 
-Static text uploads to the GPU only when its raster changes, and animated text stops re-rasterizing once its keyframes hold.
+Static text uploads to the GPU only when its raster changes, and animated text stops re-rasterizing once its keyframes hold. System fonts such as Arial count as ready, so held animated frames with them stay cached too.
+
+A new text clip asks the preview for a frame only after it is in the timeline store, and that request survives skipped frames (see [GPU Engine: Render Loop](/features/gpu-engine/#render-loop)). A text raster drawn synchronously before its Google font finished loading (undo/redo, transitions, animated frames, edits) is redrawn once the font arrives (`src/services/text/textFontRefresh.ts`): the layer cache and compositor bindings are invalidated and a frame is requested, so an idle preview does not keep the fallback face. A font that fails to load logs `Text font did not load` once per family and weight.
 
 ## Automation
 

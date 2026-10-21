@@ -144,6 +144,7 @@ After the video frames finish, the code attempts to extract audio in the backgro
 
 - Audio extraction is non-blocking after the JPEG proxy frames complete.
 - Audio proxy failures are treated as non-fatal.
+- Extraction decodes the source through the shared audio decode chain (browser `decodeAudioData`, then container/WebCodecs, then FFmpeg WASM; see Audio → Waveforms), so codecs the browser cannot play still get a WAV proxy for playback and scrub. A forced regeneration ignores a remembered decode failure.
 - If extraction succeeds, the current audio proxy is saved as WAV. Project compatibility supports `audio.m4a` proxy files.
 - An audio proxy becomes ready after its WAV write succeeds or its temporary audio URL is available. Failed writes report an error and allow a fresh attempt; unpublished temporary audio URLs are released. Project packages still follow the configured manual-save or autosave policy.
 - Scrub audio uses decoded WAV/AudioBuffer data and schedules pitch-stable short grains with minimal overlap.
