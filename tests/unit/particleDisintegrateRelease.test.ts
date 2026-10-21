@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getDefaultParams, getEffect } from '../../src/effects';
 import { particleBudgetNotes, particleGrid } from '../../src/effects/stylize/pixel-particle-disintegrate/budget';
+import { RELEASE_QUANTILE_COUNT, RELEASE_SPREAD, rawReleaseDelay, releaseQuantiles, releaseWindow } from '../../src/effects/stylize/pixel-particle-disintegrate/releaseTiming';
 import { withLegacyLookParams } from '../../src/effects/looks/legacyLookParams';
 import { compileParticleDisintegrateGraph, createDefaultParticleDisintegrateGraph } from '../../src/services/operators/particleDisintegrateGraph';
 import { migratePersistedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
@@ -89,5 +90,35 @@ describe('Pixel Particle Disintegrate Fade', () => {
     expect(migratePersistedEffectOperatorGraph({ ...effect, params: { ...saved, fade: 0.5 } }).params.fade).toBe(0.5);
     expect(withLegacyLookParams('pixel-particle-disintegrate', { progress: 0.3 })).toEqual({ progress: 0.3, fade: 0, cellReference: 'output' });
     expect(withLegacyLookParams('pixel-particle-disintegrate', { progress: 0.3, fade: 0.9, cellReference: '1080p' })).toEqual({ progress: 0.3, fade: 0.9, cellReference: '1080p' });
+  });
+});
+
+describe('Pixel Particle Disintegrate release timing', () => {
+  const defaults = { seed: 1, gustStrength: 0.75, gustScale: 5.5, windSweep: 0.35, releaseContrast: 0.65, stagger: 0.35, directionX: 0, directionY: -0.25 };
+
+  it('measures the spread of the raw delays, so the shader can lay the releases out evenly', () => {
+    const quantiles = releaseQuantiles(defaults, 240, 135);
+    expect(quantiles).toHaveLength(RELEASE_QUANTILE_COUNT + 1);
+    for (let index = 1; index < quantiles.length; index += 1) expect(quantiles[index]).toBeGreaterThanOrEqual(quantiles[index - 1]);
+    // The raw delays bunch up: half of the cells sit in less than a third of their range...
+    const range = quantiles[32] - quantiles[0];
+    expect(quantiles[24] - quantiles[8]).toBeLessThan(range / 3);
+    // ...and the window the ranks are laid out over spans Progress 0 to about 0.84.
+    expect(releaseWindow(quantiles)).toBeCloseTo(Math.min(range * RELEASE_SPREAD, 0.9), 6);
+    expect(releaseWindow(quantiles)).toBeGreaterThan(0.75);
+    expect(releaseWindow(quantiles)).toBeLessThan(0.9);
+    // The sample is the grid's own cells: the quantiles are the sorted raw delays at 32 even steps.
+    const small = releaseQuantiles(defaults, 9, 5), delays: number[] = [];
+    for (let row = 0; row < 5; row += 1) for (let column = 0; column < 9; column += 1) delays.push(rawReleaseDelay(defaults, column, row, 9, 5));
+    const sorted = delays.toSorted((a, b) => a - b);
+    expect(small[0]).toBeCloseTo(sorted[0], 6);
+    expect(small[32]).toBeCloseTo(sorted[44], 6);
+    expect(small[16]).toBeCloseTo(sorted[22], 6);
+  });
+
+  it('keeps everything letting go at once without Stagger and Wind Sweep', () => {
+    expect(releaseWindow(releaseQuantiles({ ...defaults, stagger: 0, windSweep: 0 }, 240, 135))).toBe(0);
+    // Wide Stagger and full Wind Sweep stop at the largest window, so flights still end by Progress 1.
+    expect(releaseWindow(releaseQuantiles({ ...defaults, stagger: 0.95, windSweep: 1 }, 240, 135))).toBe(0.9);
   });
 });

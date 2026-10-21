@@ -28,6 +28,9 @@ struct ParticleParams {
   windSweep: f32,
   releaseContrast: f32,
   fade: f32,
+  releaseWindow: f32,
+  // 33 quantiles (0, 1/32, ..., 1) of the raw delays over the cells (releaseTiming.ts).
+  releaseQuantiles: array<vec4f, 9>,
 };
 
 struct FlatVertexOutput {
@@ -120,11 +123,18 @@ fn samplePremultiplied(uv: vec2f) -> vec4f {
   return mix(mix(pa, pb, f.x), mix(pc, pd, f.x), f.y);
 }
 
-/** Centre of the cell (in uv) that covers `uv`. */
-fn cellCenter(uv: vec2f) -> vec2f {
-  let grid = vec2f(f32(max(params.columns, 1u)), f32(max(params.rows, 1u)));
-  let cell = min(floor(uv * grid), grid - vec2f(1.0));
-  return (cell + vec2f(0.5)) / grid;
+/**
+ * The cell (column, row) whose particle quad covers the pixel at framebuffer position `position`
+ * (a pixel centre): floor((pixel + 0.5) * grid / size) in exact integer arithmetic. A cell border
+ * can fall exactly on a pixel centre (fractional cells, e.g. 5.5 px rows); the rasterizer then gives
+ * the pixel to the quad right of / below the border, which this floor matches. A float floor of the
+ * interpolated uv rounded either way there, leaving holes or double draws along such rows.
+ */
+fn cellAt(position: vec2f) -> vec2u {
+  let grid = vec2u(max(params.columns, 1u), max(params.rows, 1u));
+  let size = max(vec2u(vec2f(params.width, params.height)), vec2u(1u));
+  let pixel = min(vec2u(max(floor(position), vec2f(0.0))), size - vec2u(1u));
+  return min((pixel * 2u + vec2u(1u)) * grid / (size * 2u), grid - vec2u(1u));
 }
 
 @fragment
@@ -137,7 +147,7 @@ fn flatFragmentMain(input: FlatVertexOutput) -> @location(0) vec4f {
   }
   // Cells that are not released yet stay in place as exact source pixels (progress 0 is the
   // original picture); a released cell is drawn by its particle instead.
-  if (cellRelease(cellCenter(input.uv)).local > 0.0) {
+  if (cellRelease(cellAt(input.position.xy)).local > 0.0) {
     return vec4f(0.0);
   }
   return premultiplied * globalFade();
@@ -159,8 +169,48 @@ struct CellRelease {
   seedUv: vec2f,
 };
 
-/** When the cell at `baseUv` lets go (0 = still in place, 1 = at the end of its Tail). */
-fn cellRelease(baseUv: vec2f) -> CellRelease {
+fn releaseQuantile(index: i32) -> f32 {
+  return params.releaseQuantiles[index / 4][index % 4];
+}
+
+/**
+ * Rank (0..1) of a raw delay among the cells: interpolated between the two quantiles around it.
+ * A raw delay many cells share (a quantile run of equal values) is spread over that run by `order`,
+ * the smooth gust field, so a pocket still goes together.
+ */
+fn releaseRank(rawDelay: f32, order: f32) -> f32 {
+  var below = 0;
+  var equal = 0;
+  for (var index = 0; index <= 32; index++) {
+    let quantile = releaseQuantile(index);
+    below += select(0, 1, quantile < rawDelay - 1e-6);
+    equal += select(0, 1, abs(quantile - rawDelay) <= 1e-6);
+  }
+  if (equal > 1) {
+    return (f32(below) + (1.0 - clamp(order, 0.0, 1.0)) * f32(equal - 1)) / 32.0;
+  }
+  if (equal == 1) {
+    return f32(below) / 32.0;
+  }
+  if (below == 0) {
+    return 0.0;
+  }
+  if (below > 32) {
+    return 1.0;
+  }
+  let low = releaseQuantile(below - 1);
+  let high = releaseQuantile(below);
+  return (f32(below - 1) + clamp((rawDelay - low) / max(high - low, 1e-6), 0.0, 1.0)) / 32.0;
+}
+
+/**
+ * When `cell` lets go (0 = still in place, 1 = at the end of its Tail). The flat pass and the particle
+ * pass both ask; the per-cell detail value is an integer hash of the cell, so both stages agree
+ * exactly (a sine hash of a float position flipped with the last bit of rounding between them).
+ */
+fn cellRelease(cell: vec2u) -> CellRelease {
+  let grid = vec2f(f32(max(params.columns, 1u)), f32(max(params.rows, 1u)));
+  let baseUv = (vec2f(cell) + vec2f(0.5)) / grid;
   let seedUv = baseUv + vec2f(params.seed * 0.013, params.seed * 0.017);
   let progress = clamp(params.progress, 0.0, 1.0);
   let gustStrength = clamp(params.gustStrength, 0.0, 2.0);
@@ -171,7 +221,7 @@ fn cellRelease(baseUv: vec2f) -> CellRelease {
   let windDelay = windOrder * clamp(params.windSweep, 0.0, 1.0) * 0.45;
   let gustField = gustNoise(baseUv * gustScale + vec2f(params.seed * 0.031, params.seed * 0.047));
   let gustPocket = smoothstep(0.32, 0.9, gustField);
-  let detailRelease = hash12(seedUv * 17.13);
+  let detailRelease = f32(imageGraphPcg2d(cell + vec2u(bitcast<u32>(params.seed) * 2654435761u, 0x9e3779b9u)) >> 8u) / 16777216.0;
   let releaseBlend = clamp(gustStrength, 0.0, 1.0);
   let releaseField = mix(detailRelease, gustPocket, releaseBlend);
   let contrastedRelease = clamp(
@@ -179,9 +229,12 @@ fn cellRelease(baseUv: vec2f) -> CellRelease {
     0.0,
     1.0
   );
-  let delay = clamp((1.0 - contrastedRelease) * clamp(params.stagger, 0.0, 0.95) + windDelay, 0.0, 0.98);
+  let rawDelay = clamp((1.0 - contrastedRelease) * clamp(params.stagger, 0.0, 0.95) + windDelay, 0.0, 0.98);
+  // Laid out evenly: the cell's rank among all raw delays, over the release window (releaseTiming.ts).
+  let delay = releaseRank(rawDelay, gustField) * params.releaseWindow;
   let tail = max(params.tail, 0.02);
-  let localRaw = smoothstep(delay, min(delay + tail, 1.25), progress);
+  // The flight ends at delay + Tail (1 - delay), so every particle has landed by Progress 1.
+  let localRaw = smoothstep(delay, delay + tail * (1.0 - delay), progress);
   var release: CellRelease;
   release.local = localRaw * localRaw * (3.0 - 2.0 * localRaw);
   release.gustField = gustField;
@@ -216,7 +269,7 @@ fn particleVertexMain(
     (f32(row) + 0.5) / f32(rows)
   );
   let sourceCellUv = vec2f(1.0 / f32(columns), 1.0 / f32(rows));
-  let release = cellRelease(baseUv);
+  let release = cellRelease(vec2u(col, row));
   let local = release.local;
   var out: ParticleVertexOutput;
   if (local <= 0.0) {

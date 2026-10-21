@@ -4,6 +4,7 @@ import particleShaderSource from './shaders/PixelParticleDisintegrate.wgsl?raw';
 import { IMAGE_FRACTAL_NOISE_WGSL } from '../../services/operators/imageNoiseSemantics';
 import { compileParticleDisintegrateGraph } from '../../services/operators/particleDisintegrateGraph';
 import { particleGrid, type ParticleGrid } from '../../effects/stylize/pixel-particle-disintegrate/budget';
+import { releaseQuantiles, releaseWindow } from '../../effects/stylize/pixel-particle-disintegrate/releaseTiming';
 import { Logger } from '../../services/logger';
 
 const log = Logger.create('PixelParticleDisintegrate');
@@ -52,7 +53,8 @@ interface ParticleResources {
   readonly uniforms: GpuUniformRing;
 }
 
-const UNIFORM_SIZE = 128;
+/** 29 parameters, the release window, then 33 release quantiles as vec4s from byte 128 (releaseTiming.ts). */
+const UNIFORM_SIZE = 272;
 /** The gust field uses the shared Fractal Noise node's WGSL (gradient noise, turned octaves). */
 export const PIXEL_PARTICLE_DISINTEGRATE_WGSL = `${IMAGE_FRACTAL_NOISE_WGSL}\n${particleShaderSource}`;
 
@@ -260,7 +262,7 @@ export class PixelParticleDisintegrateRenderer {
     const flatAlpha = plan.passthrough ? 1 : 0;
     const particleAlpha = 1;
 
-    const uniformBuffer = new ArrayBuffer(128);
+    const uniformBuffer = new ArrayBuffer(UNIFORM_SIZE);
     const f32 = new Float32Array(uniformBuffer);
     const u32 = new Uint32Array(uniformBuffer);
     f32[0] = progress;
@@ -293,6 +295,11 @@ export class PixelParticleDisintegrateRenderer {
     f32[27] = clamp(finiteParam(raw, 'releaseContrast', 0.65), 0, 2);
     // Effects saved before Fade existed have none: 0 keeps their particles opaque until the end.
     f32[28] = clamp(finiteParam(raw, 'fade', 0), 0, 1);
+    // Even release over Progress: how the raw delays of these settings spread (releaseTiming.ts).
+    const quantiles = releaseQuantiles({ seed: f32[13], gustStrength: f32[24], gustScale: f32[25], windSweep: f32[26], releaseContrast: f32[27],
+      stagger: f32[11], directionX: f32[7], directionY: f32[8] }, columns, rows);
+    f32[29] = releaseWindow(quantiles);
+    f32.set(quantiles, 32);
 
     return { uniformBuffer, particleCount, columns, rows, cellSize, clampedByBudget };
   }

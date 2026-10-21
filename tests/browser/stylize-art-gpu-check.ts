@@ -68,23 +68,29 @@ async function checkParticles(device: GPUDevice): Promise<{ comparisons: number;
   const renderer = new PixelParticleDisintegrateRenderer(device);
   let comparisons = 0;
   try {
-    // (a)+(b) 64 x 48 with 8 x 8 px cells (Cell Size counts 1080p px: 8 * 1080 / 48 = 180), alpha 128..255.
-    const width = 64, height = 48, cell = 8 * 1080 / height;
-    const { texture, data, pitch } = sourceTexture(device, width, height, (x, y) => [(x * 37 + y * 11) % 256, (x * 5 + y * 71) % 256, (x * y) % 256, 128 + ((x * 13 + y * 7) % 128)]);
-    for (const [name, progress] of [['progress 0', 0], ['progress 0.5', 0.5]] as const) {
-      const { bytes, bytesPerRow } = await renderParticles(device, renderer, texture, width, height, { ...STILL, cellSize: cell, progress });
-      for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-        const s = y * pitch + x * 4, o = y * bytesPerRow + x * 4, alpha = data[s + 3] / 255;
-        // Premultiplied rgba8 accumulation rounds colour by up to 0.5 / alpha levels.
-        const tolerance = Math.ceil(0.5 / alpha) + 1;
-        if (Math.abs(bytes[o + 3] - data[s + 3]) > 1) throw new Error(`particles ${name}: alpha ${bytes[o + 3]} at ${x},${y}, source ${data[s + 3]} (hole or double draw)`);
-        for (let c = 0; c < 3; c++) if (Math.abs(bytes[o + c] - data[s + c]) > tolerance) {
-          throw new Error(`particles ${name}: channel ${c} = ${bytes[o + c]} at ${x},${y}, source ${data[s + c]}`);
+    // (a)+(b) Integer cells (64 x 48, 8 px: Cell Size counts 1080p px, 8 * 1080 / 48 = 180) and fractional
+    // cells, as most frame sizes give since Cell Size counts 1080p px: 137 x 77 (1366 x 768 at a tenth) with
+    // Cell Size 80, 5.70 px cells cut into 25 x 14 cells of 5.48 x 5.5 px; and 70 x 40 with 2.5 px cells, whose
+    // borders fall exactly on pixel centres (x 2.5, 7.5, ...), the rasterization tie the flat pass must match.
+    // Alpha 128..255.
+    for (const [width, height, cellSize] of [[64, 48, 8 * 1080 / 48], [137, 77, 80], [70, 40, 2.5 * 1080 / 40]] as const) {
+      const { texture, data, pitch } = sourceTexture(device, width, height, (x, y) => [(x * 37 + y * 11) % 256, (x * 5 + y * 71) % 256, (x * y) % 256, 128 + ((x * 13 + y * 7) % 128)]);
+      for (const progress of [0, 0.5]) {
+        const name = `${width} x ${height}, Cell Size ${cellSize}, progress ${progress}`;
+        const { bytes, bytesPerRow } = await renderParticles(device, renderer, texture, width, height, { ...STILL, cellSize, progress });
+        for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
+          const s = y * pitch + x * 4, o = y * bytesPerRow + x * 4, alpha = data[s + 3] / 255;
+          // Premultiplied rgba8 accumulation rounds colour by up to 0.5 / alpha levels.
+          const tolerance = Math.ceil(0.5 / alpha) + 1;
+          if (Math.abs(bytes[o + 3] - data[s + 3]) > 1) throw new Error(`particles ${name}: alpha ${bytes[o + 3]} at ${x},${y}, source ${data[s + 3]} (hole or double draw)`);
+          for (let c = 0; c < 3; c++) if (Math.abs(bytes[o + c] - data[s + c]) > tolerance) {
+            throw new Error(`particles ${name}: channel ${c} = ${bytes[o + c]} at ${x},${y}, source ${data[s + c]}`);
+          }
         }
+        comparisons++;
       }
-      comparisons++;
+      texture.destroy();
     }
-    texture.destroy();
 
     // (c) Opaque red inside a transparent border, particles in flight: no darkened or tinted edge.
     const red = sourceTexture(device, 96, 64, (x, y) => x >= 16 && x < 80 && y >= 12 && y < 52 ? [255, 0, 0, 255] : [0, 0, 0, 0]);
@@ -115,6 +121,18 @@ async function checkParticles(device: GPUDevice): Promise<{ comparisons: number;
       // A useful mask has both released cells and cells in place.
       if (inPlace < 0.05 * 240 * 135 || inPlace > 0.95 * 240 * 135) throw new Error(`particle release mask at progress ${progress}: ${inPlace} of ${240 * 135} cells in place`);
       longest = Math.max(longest, longestStraightBorder(mask, mw / 2, mh / 2));
+      comparisons++;
+    }
+    // (e) Even release over Progress at the default Stagger, Wind Sweep and gusts: the share of cells still
+    // in place falls linearly over the release window (0..0.84 here, 1.8 x the raw spread of 0.468), not in
+    // a burst between 0.35 and 0.55 as with the raw delays.
+    for (const progress of [0.25, 0.5, 0.75]) {
+      const { bytes, bytesPerRow } = await renderParticles(device, renderer, white.texture, mw, mh,
+        { ...STILL, particleSize: 0.01, tail: 0.02, cellSize: 8, progress });
+      let inPlace = 0;
+      for (let y = 0; y < mh / 2; y++) for (let x = 0; x < mw / 2; x++) if (bytes[y * 2 * bytesPerRow + x * 2 * 4 + 3] > 127) inPlace++;
+      const share = inPlace / (240 * 135), expected = 1 - progress / 0.84;
+      if (Math.abs(share - expected) > 0.06) throw new Error(`particle release at progress ${progress}: ${share.toFixed(3)} of the cells in place, expected about ${expected.toFixed(3)}`);
       comparisons++;
     }
     white.texture.destroy();

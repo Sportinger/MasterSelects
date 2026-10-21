@@ -15,7 +15,8 @@ const OCTAVE_TURN = 37.5 * Math.PI / 180;
 const OCTAVE_SHIFT: readonly [number, number] = [19.19, 7.73];
 const TAU = Math.PI * 2;
 
-function pcg2d(x: number, y: number): number {
+/** PCG2D integer hash of two u32 values (the WGSL `imageGraphPcg2d`). */
+export function pcg2d(x: number, y: number): number {
   let vx = (Math.imul(x, 1664525) + 1013904223) >>> 0;
   let vy = (Math.imul(y, 1664525) + 1013904223) >>> 0;
   vx = (vx + Math.imul(vy, 1664525)) >>> 0; vy = (vy + Math.imul(vx, 1664525)) >>> 0;
