@@ -8,9 +8,10 @@ const state = vi.hoisted(() => ({
   moveOne: vi.fn(),
   saveToFolder: vi.fn(),
   download: vi.fn(),
+  persistGranted: true,
 }));
 vi.mock('../../src/components/common/toolbar/useSavePermanentlyEnvironment', () => ({
-  useSavePermanentlyEnvironment: () => ({ ...state.environment, requestPersistence: vi.fn(async () => true), recheck: vi.fn() }),
+  useSavePermanentlyEnvironment: () => ({ ...state.environment, requestPersistence: vi.fn(async () => state.persistGranted), recheck: vi.fn() }),
 }));
 vi.mock('../../src/services/project/permanentSave/browserStorageMigration', () => ({
   moveActiveProjectToPersistentBrowserStorage: (openCopy: unknown) => state.moveActive(openCopy),
@@ -85,6 +86,7 @@ describe('SavePermanentlyDialog', () => {
   beforeEach(() => {
     state.environment = { checking: false, folderPicker: false, nativeHelper: false, persistentBrowserStorage: false, persistence: false, appleMobile: false, homeScreen: 'none' };
     for (const mock of [state.moveActive, state.moveOne, state.saveToFolder, state.download]) mock.mockReset();
+    state.persistGranted = true;
   });
   afterEach(cleanup);
   const renderDialog = (overrides = {}, props: Partial<Parameters<typeof SavePermanentlyDialog>[0]> = {}) => render(
@@ -178,13 +180,42 @@ describe('SavePermanentlyDialog', () => {
     expect(onProjectChanged).toHaveBeenCalledOnce();
   });
 
-  it('says nothing changed when no folder was chosen', async () => {
+  it('says nothing was removed when the folder save did not happen (cancelled or failed after picking)', async () => {
     state.environment = { ...state.environment, folderPicker: true };
     state.saveToFolder.mockResolvedValue({ status: 'cancelled' });
     renderDialog();
     fireEvent.click(document.querySelector('.save-permanently-primary')!);
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('No folder chosen. Nothing changed.'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Not saved to a folder. Nothing was removed.'));
     expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy();
+  });
+
+  it('advises only offered destinations when the browser refuses to keep data', async () => {
+    state.persistGranted = false;
+    // Desktop Firefox/Safari: no folder picker, so no folder advice.
+    renderDialog();
+    openMore();
+    fireEvent.click(screen.getByText('Ask to keep it'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('The browser said no. Download a backup.'));
+    cleanup();
+    state.environment = { ...state.environment, folderPicker: true };
+    renderDialog();
+    openMore();
+    fireEvent.click(screen.getByText('Ask to keep it'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('The browser said no. Save to a folder or download a backup.'));
+    cleanup();
+    state.environment = { ...state.environment, folderPicker: false, appleMobile: true, homeScreen: 'browser-tab' };
+    renderDialog();
+    openMore();
+    fireEvent.click(screen.getByText('Ask to keep it'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('The browser said no. Use the Home Screen app or download a backup.'));
+  });
+
+  it('does not advise a backup button the safe state no longer shows after a non-persisted browser save', async () => {
+    state.environment.persistentBrowserStorage = true;
+    state.moveActive.mockResolvedValue({ from: 'Stage Show', to: 'Stage Show', removedTemporary: true, persisted: false });
+    renderDialog();
+    fireEvent.click(screen.getByText('Keep in this browser'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('✓ Saved in this browser.'));
   });
 
   it('explains a failed move and says that nothing was removed', async () => {

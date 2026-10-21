@@ -172,7 +172,7 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
     </p>,
     !environment.checking && environment.persistence === false && <OptionButton key="persist" busy={busy !== null}
       title={busy === 'persist' ? 'Asking…' : 'Ask to keep it'} line="Asks the browser not to delete MasterSelects data."
-      onClick={() => { void run('persist', async () => (await environment.requestPersistence()) ? MESSAGES.persistGranted : MESSAGES.persistDeclined(safariTab)); }} />,
+      onClick={() => { void run('persist', async () => (await environment.requestPersistence()) ? MESSAGES.persistGranted : MESSAGES.persistDeclined(destinations)); }} />,
     !environment.checking && environment.persistence === true && <p key="persisted" className="save-permanently-more-line">This browser promised to keep MasterSelects data.</p>,
     environment.homeScreen === 'home-screen-app' && <p key="home-app" className="save-permanently-more-line">Home Screen app: Safari keeps this app’s data.</p>,
   ].filter(Boolean);

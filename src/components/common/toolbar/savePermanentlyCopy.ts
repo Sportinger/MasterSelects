@@ -40,13 +40,21 @@ export function secondaryOption(destination: ListedDestination, context: { safar
   return { title: 'Download a backup', line: context.appleMobile ? 'One .msproj file in Files → Downloads.' : 'One .msproj file with the whole project.' };
 }
 
+const DECLINED_ADVICE: Partial<Record<PermanentSaveDestination, string>> = {
+  'home-screen': 'use the Home Screen app',
+  folder: 'save to a folder',
+  archive: 'download a backup',
+};
+
 export const MESSAGES = {
   folderSaved: (name: string): Notice => ({ text: `Saved. "${name}" is safe in the chosen folder.`, tone: 'success' }),
-  folderCancelled: { text: 'No folder chosen. Nothing changed.', tone: 'info' } as Notice,
+  // Also when the folder was picked but saving there failed: the old project stays as it was.
+  folderCancelled: { text: 'Not saved to a folder. Nothing was removed.', tone: 'info' } as Notice,
   browserKeptInSafariTab: { text: 'Kept in this browser. Safari can still delete it: add the Home Screen app.', tone: 'warning' } as Notice,
   browserSaved: (persisted: boolean): Notice => persisted
     ? { text: 'Saved. Your project is safe in this browser.', tone: 'success' }
-    : { text: 'Saved in this browser. Download a backup to be extra safe.', tone: 'success' },
+    // No backup advice: the dialog is in its safe state now and shows no backup button.
+    : { text: 'Saved in this browser.', tone: 'success' },
   archiveDownloaded: (file: string, appleMobile: boolean): Notice => ({
     text: `Downloaded "${file}"${appleMobile ? ' to Files → Downloads' : ''}. Open it via Open Project → Import.`, tone: 'success',
   }),
@@ -55,7 +63,10 @@ export const MESSAGES = {
   }),
   othersMoved: (count: number): Notice => ({ text: `Moved ${count} project${count === 1 ? '' : 's'}. Open them via Open Project.`, tone: 'success' }),
   persistGranted: { text: 'Done. The browser will keep MasterSelects data.', tone: 'success' } as Notice,
-  persistDeclined: (safariTab: boolean): Notice => ({
-    text: `The browser said no. ${safariTab ? 'Use the Home Screen app' : 'Save to a folder'} or download a backup.`, tone: 'warning',
-  }),
+  /** Advises only the destinations this dialog actually offers right now. */
+  persistDeclined: (destinations: readonly PermanentSaveDestination[]): Notice => {
+    const advice = destinations.flatMap(destination => DECLINED_ADVICE[destination] ?? []);
+    const sentence = advice.join(' or ');
+    return { text: sentence ? `The browser said no. ${sentence[0].toUpperCase()}${sentence.slice(1)}.` : 'The browser said no.', tone: 'warning' };
+  },
 };
