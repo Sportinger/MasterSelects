@@ -3,10 +3,13 @@
 Effects that bend, swirl or straighten the picture: playful lens looks and
 corrections for photos. Add one in **Properties → Effects → + Add Effect → Lens & Distort**.
 
-Every distortion looks the same in the preview and the export, and pictures with
-transparency (titles, logos, keyed footage) keep clean edges without a dark rim.
+Bulge & Pinch, Twirl, Wave and Fisheye Lens keep pictures with transparency
+(titles, logos, keyed footage) free of a dark rim along their edges.
 
-## The seven distort effects
+## Seven Lens & Distort effects
+
+The **Lens & Distort** menu also holds Kaleidoscope, Mirror, RGB Split, Crystal,
+Glass Dispersion, Film Prism and Holo; see [Effects](./Effects.md#current-effect-categories).
 
 ### Bulge & Pinch
 <figure class="docs-shot docs-shot--float-right">
@@ -18,11 +21,13 @@ transparency (titles, logos, keyed footage) keep clean edges without a dark rim.
 
 Magnifies a round area like a lens bump, or squeezes it together. The edge of
 the area blends smoothly into the untouched picture.
-- **Amount** – 1 changes nothing, above 1 magnifies (1.6 is a clear bump, 2.5 a strong one), below 1 pinches.
+- **Amount** – 1 changes nothing. Above 1 the middle is magnified that many times: 2 (the default) makes it twice as large. Below 1 pinches.
 - **Radius** – size of the area, as a share of the picture height (the width in a portrait picture): 0.5 makes a circle as tall as the picture.
 - **Center X / Center Y** – where the area sits (0.5 / 0.5 is the middle of the picture).
 
-Tip: animate Amount from 1 to let the bump grow out of the picture.
+Tip: animate Amount from 1 to let the bump grow out of the picture. When a pinch
+reaches the edge of the picture, **Frame Edges: Clamp** or **Transparent** avoids
+a mirrored seam along the border.
 
 <div class="docs-float-end"></div>
 
@@ -36,7 +41,7 @@ Tip: animate Amount from 1 to let the bump grow out of the picture.
 
 Turns the picture around a centre point: strongest in the middle, fading out to
 nothing at the edge of the area.
-- **Twist** – how far the middle turns, in degrees. 115° is a soft swirl, 360° a full turn; negative values turn the other way.
+- **Twist** – how far the middle turns, in degrees. 45° is a soft swirl, 115° (the default) a clear one, 360° a full turn; negative values turn the other way.
 - **Radius** – size of the area, as for Bulge & Pinch.
 - **Center X / Center Y** – the centre of the swirl.
 
@@ -52,7 +57,7 @@ Tip: keyframe Twist from 0 up and back to 0 for a swirl transition.
 <figcaption>Top: original. Bottom: the default settings.</figcaption>
 </figure>
 
-Ripples the picture with smooth waves, like a reflection in water or heat haze.
+Ripples the picture with smooth waves, from a gentle ripple to a funhouse wobble.
 The waves travel by themselves.
 - **Horizontal Height / Vertical Height** – how far the picture moves, as a share of the picture (0.015 is 1.5 %).
 - **Horizontal Waves / Vertical Waves** – how many waves fit across and down the picture.
@@ -67,7 +72,7 @@ Tip: small heights (0.005) with a slow Speed read as heat shimmer.
 
 ![The night street twice: on top the original; below, the walker in the middle enlarged and the house fronts at the sides curving like through a fisheye lens](assets/effects/fisheye.webp)
 
-<figcaption>Top: original. Bottom: the default settings (Strength 1, Field of View 140°).</figcaption>
+<figcaption>Top: original. Bottom: the default settings.</figcaption>
 </figure>
 
 The rounded look of an ultra-wide fisheye lens: the middle comes closer and
@@ -75,18 +80,18 @@ straight lines bend towards the edges.
 - **Strength** – 1 is the full fisheye, 0 no change, negative values bend the other way and flatten a fisheye picture.
 - **Field of View** – how wide the imagined lens sees, in degrees: wider looks rounder.
 - **Zoom** – below 1 shows more of the picture around the middle.
-- **Lens Radius** – 1 or less shows the round image circle of the lens (1 is as tall as the picture).
-
-Tip: Lens Radius 0.9 with **Outside Lens: Transparent** makes a round porthole.
+- **Lens Radius** – 1 or less shows the round image circle (1 is as tall as the picture).
 
 <div class="docs-float-end"></div>
+
+Tip: Lens Radius 0.9 with **Outside Lens: Transparent** makes a round porthole.
 
 ### Lens Correction
 <figure class="docs-shot docs-shot--float-right">
 
-![The night street twice: on top with simulated wide-angle distortion, the house edges bowing outward; below, corrected, the edges straight](assets/effects/lens-correction.webp)
+![The night street twice: on top with strong simulated wide-angle distortion, the house fronts at the left and right bowing outward; below, corrected and slightly enlarged, the house edges straight and upright](assets/effects/lens-correction.webp)
 
-<figcaption>Top: the street with simulated wide-angle (barrel) distortion. Bottom: Remove Distortion −14.</figcaption>
+<figcaption>Top: the street with simulated wide-angle (barrel) distortion. Bottom: Remove Distortion −28, Scale 120.</figcaption>
 </figure>
 
 Repairs what a camera lens does to a photo or clip: bowed lines, coloured
@@ -109,9 +114,10 @@ fill them on still photos with AI Edge Fill.
 <figcaption>Top: the street with a simulated upward camera tilt. Bottom: corrected by Guided Perspective.</figcaption>
 </figure>
 
-Straightens buildings and walls that lean because the camera was tilted. Choose
-**Edit guides** and draw lines along edges that should be vertical (or horizontal),
-then **Apply**.
+Straightens buildings and walls that lean because the camera was tilted. On a
+still photo (an image clip), choose **Edit guides** and draw lines along edges
+that should be vertical (or horizontal), then **Apply**. Guides can be drawn on
+still photos only.
 - **Strength** – 100 is the full correction; lower values keep some of the lean, and lines stay straight.
 - **Scale** – enlarges the result to crop the empty borders.
 
@@ -125,12 +131,11 @@ Fills the empty borders that Lens Correction and Guided Perspective leave on a
 still photo with an AI-generated continuation of the scene, so the frame is full
 again. It uses the cloud AI service and its credits; see [AI Edge Fill](./Effects.md#ai-edge-fill).
 
-Known limitations: AI Edge Fill has no picture here because it needs a cloud
-generation. Very strong Twist, Wave with many tiny waves or a strong pinch can
-shimmer on fine detail, and an extreme bulge looks soft, because each pixel is
-read once.
-
 <div class="docs-float-end"></div>
+
+**Known limitations.** Very strong Twist, Wave with many tiny waves or a strong
+pinch can shimmer on fine detail, and a very strong bulge looks soft, because
+each pixel is read once.
 
 ## How the distort effects are built
 
@@ -141,18 +146,18 @@ both best.
 
 <div class="docs-shot-stage">
 
-![The dancer swirled into a spiral in the preview, next to Properties, Effects, with Twirl at Twist 200 degrees, Radius 0.6, Shape Circle and Frame Edges Mirror](assets/effects/editor/twirl-inspector.webp)
+![A slice of the swirled preview next to the Twirl effect card: Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror](assets/effects/editor/twirl-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 437" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 418" aria-hidden="true" focusable="false">
 <defs><marker id="twirl-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M617 264 L701 264" marker-end="url(#twirl-inspector-arrow)" />
-<circle class="docs-shot-number" cx="617" cy="264" r="18" /><text x="617" y="264" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M617 401 L701 401" marker-end="url(#twirl-inspector-arrow)" />
-<circle class="docs-shot-number" cx="617" cy="401" r="18" /><text x="617" y="401" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M415 132 L499 132" marker-end="url(#twirl-inspector-arrow)" />
+<circle class="docs-shot-number" cx="415" cy="132" r="18" /><text x="415" y="132" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M415 359 L499 359" marker-end="url(#twirl-inspector-arrow)" />
+<circle class="docs-shot-number" cx="415" cy="359" r="18" /><text x="415" y="359" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
-<figcaption>Twirl in Properties → Effects. 1 — Twist, in degrees. 2 — Frame Edges.</figcaption>
+<figcaption>The Twirl card in Properties → Effects. 1 — Twist, in degrees. 2 — Frame Edges.</figcaption>
 </figure>
 
 - **Twist** (1) is the turn in the middle of the swirl, in degrees.
@@ -198,8 +203,8 @@ Bulge & Pinch and Twirl differ only in the middle folder.
 
 <svg class="docs-shot-overlay" viewBox="0 0 1017 461" aria-hidden="true" focusable="false">
 <defs><marker id="twirl-angle-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M420 283 L420 199" marker-end="url(#twirl-angle-arrow)" />
-<circle class="docs-shot-number" cx="420" cy="283" r="18" /><text x="420" y="283" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M596 283 L596 199" marker-end="url(#twirl-angle-arrow)" />
+<circle class="docs-shot-number" cx="596" cy="283" r="18" /><text x="596" y="283" class="docs-shot-number-text">1</text>
 <path class="docs-shot-arrow" d="M922 283 L922 199" marker-end="url(#twirl-angle-arrow)" />
 <circle class="docs-shot-number" cx="922" cy="283" r="18" /><text x="922" y="283" class="docs-shot-number-text">2</text>
 </svg>
@@ -210,7 +215,8 @@ Bulge & Pinch and Twirl differ only in the middle folder.
 
 **Minimum**, **Subtract** and the first **Multiply** (1) turn the distance into
 a falloff: full strength in the middle, fading in a soft curve to nothing at the
-edge of the area. The second **Multiply** (2) scales it by **Twist** into the
+edge of the area. The free dots on Minimum (B) and Subtract (A) hold the
+constant 1, so together they compute (1 − min(distance, 1))². The second **Multiply** (2) scales it by **Twist** into the
 **Turn Angle**. **Rotate UV** turns the offset by that angle, and **Divide** and
 **Add** turn the result back into a position in the picture.
 
@@ -222,22 +228,36 @@ straight line instead of a curve, and the swirl stays strong further out.
 
 <figure class="docs-shot docs-shot--graph">
 
-![The Wave Displacement folder opened. Top row: UV, Split Vector, Horizontal Waves, two Multiply nodes, Phase, Add, Sine, Horizontal Height, Multiply and Add. Bottom row: Vertical Waves, two Multiply nodes, Add, Sine, Vertical Height, Multiply, Add and Combine Vector, which outputs Read Position](assets/effects/graphs/wave-displacement.webp)
+<div class="docs-shot-stage">
 
-<figcaption>Wave's Wave Displacement folder. Top row: the up-and-down ripples. Bottom row: the sideways ripples.</figcaption>
+![The up-and-down strand of the Wave Displacement folder in two rows. First row: UV, Split Vector with X and Y outputs, Horizontal Waves and two Multiply nodes. Second row: Phase, Add, Sine, Horizontal Height, Multiply and Add](assets/effects/graphs/wave-displacement.webp)
+
+<svg class="docs-shot-overlay" viewBox="0 0 1017 461" aria-hidden="true" focusable="false">
+<defs><marker id="wave-displacement-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
+<path class="docs-shot-arrow" d="M244 257 L244 173" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="244" cy="257" r="18" /><text x="244" y="257" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M420 439 L420 409" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="420" cy="439" r="18" /><text x="420" y="439" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M746 439 L746 429" marker-end="url(#wave-displacement-arrow)" />
+<circle class="docs-shot-number" cx="746" cy="439" r="18" /><text x="746" y="439" class="docs-shot-number-text">3</text>
+</svg>
+</div>
+
+<figcaption>The up-and-down strand of Wave's Wave Displacement folder; the sideways strand is left out. Green cards are inputs: the picture position (UV) and values from outside the folder. 1 — Split Vector, with its Y output. 2 — Sine. 3 — the Multiply that scales the wave by Horizontal Height.</figcaption>
 </figure>
 
-The top row moves the picture up and down. **Split Vector** splits the
+This strand moves the picture up and down. **Split Vector** (1) splits the
 position into X and Y. X times **Horizontal Waves** (and 2π) plus **Phase** goes
-into a **Sine**; the **Multiply** after **Horizontal Height** scales that wave,
-and **Add** shifts Y by it. The bottom row does the same along Y with the
-vertical controls and shifts X. **Combine Vector** joins both into the **Read
-Position**. Phase grows with Speed over time, so the waves travel.
+into a **Sine** (2); the **Multiply** (3) scales that wave by **Horizontal
+Height**, and the last **Add** shifts Y by it. A second strand in the same
+folder, left out here, does the same along Y with the vertical controls and
+shifts X; **Combine Vector** joins both into the **Read Position**. Phase grows
+with Speed over time, so the waves travel.
 
-Remix, a water reflection: in the top row, add a **Multiply** node between the
-**Sine** and the Multiply after it, and connect the **Y** output of **Split
-Vector** to its second input. Y runs from 0 at the top of the picture to 1 at
-the bottom, so the ripples are calm at the top and strongest at the bottom.
+Remix, a water reflection: add a **Multiply** node between the **Sine** (2) and
+the Multiply (3), and connect the **Y** output of **Split Vector** (1) to its
+second input. Y runs from 0 at the top of the picture to 1 at the bottom, so
+the ripples are calm at the top and strongest at the bottom.
 
 ### The other distort effects
 
@@ -259,30 +279,37 @@ Notes for developers. The recipes live in
 
 - **Formulas.** With p the offset from the centre and r = |p| / Radius:
   Bulge & Pinch reads p × exp(−β (1 − r²)²) for r < 1, with
-  β = 1.232 × max(Amount − 1, 0) − 0.95 × clamp(1 − Amount, 0, 1); a pinch stays
-  above β = −1, so it never folds the picture. Twirl turns p by
+  β = ln(max(Amount, 1)) − 0.95 × clamp(1 − Amount, 0, 1): above 1 the centre is
+  magnified exactly Amount times, and a pinch stays above β = −1, so it never
+  folds the picture. Twirl turns p by
   Twist × (1 − min(r, 1))² radians. Wave adds sin(2π × Horizontal Waves × x + φ) ×
   Horizontal Height to y, then sin(2π × Vertical Waves × y + φ) × Vertical Height
   to x, with φ = Phase (converted to radians) + 2π × Speed × time in seconds.
 - **Units.** Shape Circle measures Radius in units of the shorter frame side
   (0.5 = half of it), so circles stay round and match at every resolution;
   Stretch to Frame measures each axis in its own 0–1 range. Twist is stored in
-  radians (default 2, range ±4π) and only the inspector shows degrees; keyframes
-  and tools use radians. Wave heights are fractions of the picture per axis, so
+  radians (default 2, range ±4π); the inspector rows (also when Twist takes a
+  node source) show degrees, while keyframe lanes, MIDI and tools use radians. Wave heights are fractions of the picture per axis, so
   equal values give different pixel shifts on a 16:9 frame.
 - **Sampling.** The frame is premultiplied into an `rgba16float` cache, read
   with one bilinear sample at the read position and unpremultiplied: two passes,
   and transparent edges keep their colour. Frame Edges mirrors, clamps or clears
   samples outside the frame; Transparent fades over one source pixel by lowering
   alpha only. One sample per pixel means very strong Twist (above about 10 rad),
-  dense waves and strong pinches alias; an Amount of about 8 shows soft
-  magnified pixels.
+  dense waves and strong pinches alias; a bulge far beyond the slider (Amount 8
+  magnifies the centre eight times) shows soft magnified pixels.
+- **Worker CPU fallback.** Without WebGPU (software preview, worker-first export
+  readback) the untouched recipes run as a hand-written pass with the same
+  mapping, frame edges and premultiplied bilinear read, within 1/255 of the
+  graph; edited graphs run through the graph interpreter.
 - **Zero strength.** Amount 1, Twist 0 or both Wave heights 0 skip the built-in
   recipe, so the picture passes through exactly.
 - **Fisheye Lens.** One pass with up to 8 samples per pixel. Each sample is
   premultiplied as it is read and the average is unpremultiplied, so lens and
-  frame feathering lower coverage instead of darkening colour; the worker CPU
-  path matches. The hardware filter still mixes straight texels across a
+  frame feathering lower coverage instead of darkening colour. With Chromatic
+  Aberration, each channel's straight colour is taken from its own sample and
+  premultiplied by the averaged alpha, so fringes across a cut-out never exceed
+  the source colour. The worker CPU path matches. The hardware filter still mixes straight texels across a
   transparent edge inside the source (about one source pixel).
 - **Lens Correction.** Beyond the radius where strong correction would fold the
   picture back, pixels stay transparent with a one-pixel soft edge and a
@@ -295,12 +322,14 @@ Notes for developers. The recipes live in
 - **AI Edge Fill.** Missing or non-numeric placements fall back to finite values
   and a zero-area placement no longer divides by zero.
 - **Warnings.** Clamped or degenerate values (Radius ≤ 0, negative Amount,
-  out-of-range Fisheye values, Lens Correction folding, Guided Perspective
-  limits) appear below the effect in the inspector and in the `addEffect` /
-  `updateEffect` tool results.
+  unknown Shape or Frame Edges choices, out-of-range Fisheye values, Lens
+  Correction folding at the active composition size, Guided Perspective limits)
+  appear below the effect in the inspector, judged on the values at the
+  playhead, and in the `addEffect` / `updateEffect` tool results.
 - **Saved projects.** They open with their settings. Untouched Wave, Twirl and
-  Bulge graphs load as the current recipes with Stretch to Frame and Clamp, so
-  Wave and Twirl look as before; Bulge & Pinch gets the smooth curve. Untouched
+  Bulge graphs, and effects saved before effects owned a graph, load as the
+  current recipes with Stretch to Frame, Clamp and (Wave) Speed 0, so Wave and
+  Twirl look as before; Bulge & Pinch gets the smooth curve. Untouched
   Fisheye graphs of the earlier recipe are recognized by a frozen fingerprint
   and load as the current one; edited graphs stay as saved. Guided Perspective
   below Strength 100 renders the straight-line blend.

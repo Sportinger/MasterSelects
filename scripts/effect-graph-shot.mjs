@@ -13,6 +13,8 @@
 //                      cards (Constants excepted)
 //   rows=n             split a focused folder's flow into n rows (default: landscape fit)
 //   break=a,b          start a new row at these node ids instead (keeps short cables)
+//   hide=a,b           leave these node ids (and the stubs only they used) out of a focused
+//                      folder, to show one strand of a large folder
 //   plumbing=hide      leave out the Constants and Coordinates & Resources folders and their
 //                      cables (overview pictures: the stages read as one path)
 //   chain=1            keep the clip chain (source, transform, output) around the effect

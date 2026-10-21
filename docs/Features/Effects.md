@@ -594,7 +594,7 @@ grades that have not stored their default values yet.
 
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
-- `distort` (8): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge, Fisheye Lens
+- `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md)
 - `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
 - `keying` (1): Chroma Key
 - `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
@@ -1014,9 +1014,12 @@ magnified or squeezed transparent edge keeps its colour; at zero strength (Wave
 heights 0, Twist 0, Amount 1) the built-in recipe is skipped. Twirl and Bulge
 measure Radius in units of the shorter frame side (Shape: Circle) or per axis
 (Stretch to Frame); Frame Edges mirrors, clamps or clears samples from beyond the
-frame. Twist is stored in radians and shown in degrees. Untouched saved Wave,
-Twirl and Bulge graphs move to the current recipes with Stretch to Frame and Clamp,
-which keeps the saved Wave and Twirl look; Bulge gets the smooth curve.
+frame. Twist is stored in radians and shown in degrees. Bulge & Pinch above
+Amount 1 magnifies the centre exactly Amount times. Untouched saved Wave, Twirl
+and Bulge graphs, and effects saved before effects owned a graph, move to the
+current recipes with Stretch to Frame, Clamp and (Wave) Speed 0, which keeps the
+saved Wave and Twirl look; Bulge gets the smooth curve. The worker CPU fallback
+renders the untouched recipes with a hand-written pass that matches the graph.
 Kaleidoscope keeps its original single-pass recipe with fractional segment counts
 and its reflected angular fold. Rewiring the sample to the original UV bypasses
 the distortion.
@@ -1481,7 +1484,9 @@ the picture is shown smaller. Parameters choose the level:
 group id; `focus=folder` shows only one folder, with the flow layout it has
 inside the effect wrapped into rows (`rows=n` sets the count, `break=a,b` starts
 rows at these node ids instead) and named stub cards for the values that come from
-outside the folder (Constants excepted); `plumbing=hide` leaves out the Constants
+outside the folder (Constants excepted); `hide=a,b` leaves these node ids, their
+cables and the stubs only they used out of a focused folder, to show one strand
+of a large folder; `plumbing=hide` leaves out the Constants
 and Coordinates & Resources folders and their cables, so an overview reads as one
 path; `chain=1` keeps the clip source and output. Folder ports are named after what
 they carry ("Sigma", "Tap Count"): an effect's presentation plan names its key

@@ -8,8 +8,8 @@
         "radius": 0.6
       },
       "image": "dancer_stage.jpg",
-      "preview": 640,
-      "alt": "The dancer swirled into a spiral in the preview, next to Properties, Effects, with Twirl at Twist 200 degrees, Radius 0.6, Shape Circle and Frame Edges Mirror",
+      "preview": 260,
+      "alt": "A slice of the swirled preview next to the Twirl effect card: Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror",
       "marks": [
         {
           "target": "Twist",
@@ -19,7 +19,8 @@
           "target": "Frame Edges",
           "label": "Frame Edges"
         }
-      ]
+      ],
+      "top": "card"
     }
   ]
 }

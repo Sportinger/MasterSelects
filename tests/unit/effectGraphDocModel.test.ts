@@ -11,9 +11,9 @@ const labels = (search: string) => doc(search).graph.nodes.map(node => node.labe
 describe('effect graph doc shots: graph selection', () => {
   it('reads the query with stages as the default level and rejects unknown levels and row counts', () => {
     expect(parseEffectGraphDocQuery('?test=effect-graph&effect=box-blur')).toEqual({ effectType: 'box-blur', level: 'stages', open: [], focus: undefined,
-      rows: 'auto', breaks: [], plumbing: 'show', chain: false });
-    expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&break=sample,reduce&plumbing=hide&chain=1'))
-      .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, breaks: ['sample', 'reduce'], plumbing: 'hide', chain: true });
+      rows: 'auto', breaks: [], hide: [], plumbing: 'show', chain: false });
+    expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&break=sample,reduce&hide=X&plumbing=hide&chain=1'))
+      .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, breaks: ['sample', 'reduce'], hide: ['x'], plumbing: 'hide', chain: true });
     expect(() => parseEffectGraphDocQuery('?plumbing=dim')).toThrow(/plumbing/);
     expect(() => parseEffectGraphDocQuery('?level=deep')).toThrow(/Unknown level/);
     expect(() => parseEffectGraphDocQuery('?rows=0')).toThrow(/rows/);
@@ -97,6 +97,22 @@ describe('effect graph doc shots: graph selection', () => {
     // Folder inputs that only constants fed are left out with them.
     const stageB = (graph: typeof shown.graph) => graph.nodes.find(node => node.label === 'Stage B: Coarse Taps')!.inputs.length;
     expect(stageB(hidden.graph)).toBeLessThan(stageB(shown.graph));
+  });
+
+  it('leaves named nodes of a focused folder out with their cables, to show one strand of it', () => {
+    const bottomRow = ['wave-y-cycles', 'wave-y-angle', 'wave-y-phase', 'wave-x-sine', 'wave-x-offset', 'wave-x', 'wave-sample-uv'];
+    const full = doc('?effect=wave&focus=wave-displacement');
+    const strand = doc(`?effect=wave&focus=wave-displacement&hide=${bottomRow.join(',')}`).graph;
+    expect(strand.nodes.length).toBeLessThan(full.graph.nodes.length);
+    const local = (id: string) => id.split('/').at(-1)!;
+    expect(strand.nodes.map(node => local(node.id))).toEqual(expect.arrayContaining(['wave-uv-split', 'wave-y-sine', 'wave-y-offset', 'wave-y']));
+    expect(strand.nodes.some(node => bottomRow.includes(local(node.id)))).toBe(false);
+    // Stubs that only fed the hidden strand (Vertical Waves, Vertical Height) go too.
+    expect(strand.nodes.map(node => node.label)).not.toEqual(expect.arrayContaining(['Vertical Waves']));
+    expect(strand.nodes.map(node => node.label)).toEqual(expect.arrayContaining(['Horizontal Waves', 'Horizontal Height']));
+    const ids = new Set(strand.nodes.map(node => node.id));
+    expect(strand.edges.every(edge => ids.has(edge.fromNodeId) && ids.has(edge.toNodeId))).toBe(true);
+    expect(() => doc('?effect=wave&focus=wave-displacement&hide=nope')).toThrow(/hide: no node nope/);
   });
 
   it('gives a focused folder named stubs for values from outside and keeps each stub beside its consumer', () => {

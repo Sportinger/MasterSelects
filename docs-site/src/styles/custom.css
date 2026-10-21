@@ -74,6 +74,9 @@
 @media (max-width: 50rem) {
   .sl-markdown-content .docs-shot--graph { overflow-x: auto; }
   .sl-markdown-content .docs-shot--graph img { min-width: 44rem; }
+  /* The callout overlay covers its stage: the stage keeps the picture's width, so the
+     callouts scale and scroll together with the picture. */
+  .sl-markdown-content .docs-shot--graph .docs-shot-stage { min-width: 44rem; }
 }
 
 /* Vector callouts identify real controls without changing screenshot content. */
