@@ -13,4 +13,18 @@
   .toolbar-save-status:disabled { cursor: progress; }
   .toolbar-save-status-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
   .toolbar-save-status span[role="status"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .toolbar-write-access { display: inline-flex; align-items: center; gap: 6px; min-width: 0; flex-shrink: 1; }
+  .toolbar-write-access-notice {
+    min-width: 0; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: #e7c276; font-size: 10px;
+  }
+  .toolbar-write-access-button {
+    flex-shrink: 0; padding: 2px 7px; border: 1px solid #e7c276; border-radius: 3px; background: transparent;
+    color: #e7c276; font-size: 10px; cursor: pointer; white-space: nowrap;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .toolbar-write-access-button:focus { outline: none; }
+  .toolbar-write-access-button:focus-visible { outline: 2px solid var(--accent-color, #8ab4f8); outline-offset: 1px; }
+  .toolbar-write-access-button:hover:not(:disabled) { background: var(--bg-hover); }
+  .toolbar-write-access-button:disabled { cursor: progress; opacity: 0.7; }
 }

@@ -12,7 +12,7 @@ export interface EditRejection {
 }
 
 /** Shown when this tab may not write; shared by the repository guard and up-front UI checks. */
-export const READ_ONLY_PROJECT_MESSAGE = 'This project is read-only. Close the other writing tab or grant folder access before editing.';
+export const READ_ONLY_PROJECT_MESSAGE = 'This project is read-only in this tab. Choose "Take over editing" in the toolbar to edit here.';
 
 type Listener = (rejection: EditRejection) => void;
 const listeners = new Set<Listener>();

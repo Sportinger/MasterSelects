@@ -18,6 +18,7 @@ import { useEngineStore } from '../../stores/engineStore';
 import { SettingsDialog } from './SettingsDialog';
 import { SavedToast } from './SavedToast';
 import { ToolbarSaveStatus } from './toolbar/ToolbarSaveStatus';
+import { ToolbarWriteAccess } from './toolbar/ToolbarWriteAccess';
 import { DevChatDialog } from './DevChatDialog';
 import { LeaveNoteDialog } from './LeaveNoteDialog';
 import { LegalDialog } from './LegalDialog';
@@ -422,6 +423,7 @@ export function Toolbar({
 
       <div className="toolbar-section toolbar-right">
         <ToolbarSaveStatus onSave={() => { void projectActions.handleSave(); }} />
+        <ToolbarWriteAccess />
         {(capturePhase === 'recording' || capturePhase === 'paused' || capturePhase === 'stopping') && (
           <button
             className={`toolbar-capture-rec${capturePhase === 'recording' ? ' recording' : ''}`}

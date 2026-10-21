@@ -1,5 +1,6 @@
 import { beginOperationTrace, type OperationTrace } from '../productAnalytics/operationTrace';
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
+import { installEditorWriterHandover } from './repository/lifecycle/editorWriterHandover';
 import { isBrowserStorageUnavailableError } from './core/browserStorageFailure';
 import { isRepositoryHydrating } from './repository/transaction/storeMutationBoundary';
 // Project Lifecycle — create, open, close, auto-sync
@@ -398,6 +399,8 @@ export function setupAutoSync(): void {
   void ensureEditorScratchRepository().catch(error => isBrowserStorageUnavailableError(error)
     ? log.warn('Scratch recovery unavailable: browser storage could not be opened', error)
     : log.error('Scratch recovery could not be opened', error));
+  // Answer write-access requests from other tabs, and let this tab request them.
+  registerAutoSyncDisposer(installEditorWriterHandover());
   registerAutoSyncDisposer(setupTimelineSelectionReloadRecovery());
   registerAutoSyncDisposer(preserveUnsavedProjectOnChunkFailure(hasUnsavedWorkspace));
   // Source edits force dev full reloads; keep timed-save projects from losing pending work.

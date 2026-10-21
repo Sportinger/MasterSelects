@@ -119,6 +119,14 @@ Only one writer owns a repository. A second session can browse read-only.
 Read-only history navigation does not publish project changes or bypass the
 active writer's ownership.
 
+A read-only tab shows **Take over editing** next to the save status; its
+tooltip names when the writing tab started editing and whether it is in the
+background. The action asks the writing tab to save, reopen itself read-only
+(it then says "Editing moved to another tab") and release the writer lock;
+this tab then reopens the project with write access. If no tab holds the lock
+(the writer was closed, or folder access was missing), the action reads
+**Enable editing** and reopens directly, requesting folder access first.
+
 ## Continuous saving
 
 Completed content actions become immutable revisions and enter the asynchronous
@@ -271,9 +279,11 @@ projects as well as cached handles.
 
 - **Folder permission is missing:** reconnect the existing project directory or
   its external source folder.
-- **Project is read-only:** inspect its owner/capability status; another session
-  may own the writer. Deleting media in a read-only tab is refused up front with
-  the read-only notice instead of failing midway.
+- **Project is read-only:** use **Take over editing** in the toolbar. If the
+  writing tab does not answer within a few seconds while it still holds the
+  lock (a frozen or suspended tab), the toolbar says so: switch to that tab or
+  close it and try again. Deleting media in a read-only tab is refused up front
+  with the read-only notice instead of failing midway.
 - **No project folder picker:** browsers without the File System Access API
   (Firefox, Safari) open project folders only through a running Native Helper;
   without it, Open Project shows that guidance and logs a warning, not an error.
