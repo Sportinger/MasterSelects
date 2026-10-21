@@ -301,6 +301,7 @@ The FFmpeg path is a separate CPU-based export pipeline.
 - Uses a single synchronous `callMain()` execution model.
 - Blocks the UI while encoding is running.
 - Reports progress from FFmpeg log output where possible.
+- Holds the whole range uncompressed in memory (width x height x 4 bytes per frame). The buffer is reserved once before rendering and handed to FFmpeg without further copies; when the browser cannot provide it, the export stops immediately with a "Not enough memory" message that names the required size and suggests WebCodecs, a shorter range, or a lower resolution or frame rate.
 
 ### Supported Video Codecs
 
@@ -385,7 +386,7 @@ WebCodecs decoder startup submits a bounded search window of up to 32 samples be
 
 1. Render each frame through the GPU engine.
 2. Read pixels from the GPU.
-3. Collect frames in memory.
+3. Write frames into one preallocated raw buffer that FFmpeg takes over without copying.
 4. Extract audio if enabled and the selected output supports audio.
 5. Run FFmpeg encoding.
 
