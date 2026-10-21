@@ -138,6 +138,21 @@ describe('Editor project selection overlay', () => {
     expect(screen.queryByText('Start with AI')).not.toBeInTheDocument();
   });
 
+  it('tells a folder project and its kept temporary copy apart and lists the folder project first', () => {
+    mocks.getRecentProjects.mockReturnValue([
+      { backend: 'opfs', id: 'temporary', path: 'Show', store: 'indexeddb', lastOpenedAt: new Date('2026-10-21T12:00:00Z').getTime(), name: 'Show' },
+      { backend: 'fsa', id: 'folder', handleKey: 'recentProject:folder', lastOpenedAt: new Date('2026-10-21T11:00:00Z').getTime(), name: 'Show' },
+      { backend: 'opfs', id: 'browser', path: 'Other', store: 'opfs', lastOpenedAt: new Date('2026-10-20T11:00:00Z').getTime(), name: 'Other' },
+    ]);
+    render(<EditorProjectSelectionOverlay onProjectSelected={() => undefined} />);
+
+    const recents = screen.getAllByRole('button').filter(button => button.dataset.location);
+    expect(recents.map(button => [button.querySelector('strong')?.textContent, button.dataset.location])).toEqual([
+      ['Show', 'Folder'], ['Show', 'Temporary'], ['Other', 'Browser local'],
+    ]);
+    expect(recents[1]).toHaveTextContent(/Temporary · /);
+  });
+
   it('creates a named project and closes only after creation succeeds', async () => {
     const onProjectSelected = vi.fn();
     render(<EditorProjectSelectionOverlay onProjectSelected={onProjectSelected} />);

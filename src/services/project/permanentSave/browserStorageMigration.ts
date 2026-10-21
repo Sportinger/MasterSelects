@@ -71,8 +71,9 @@ export async function removeTemporaryCopy(path: string): Promise<boolean> {
   } finally { await owner?.release(); }
 }
 
-async function forgetRecentEntry(path: string): Promise<void> {
-  const entry = getRecentProjects().find(item => item.backend === 'opfs' && item.path === path);
+/** Drops the recent entry of a removed temporary copy, so the startup chooser never offers it again. */
+export async function forgetTemporaryRecentEntry(path: string): Promise<void> {
+  const entry = getRecentProjects().find(item => item.backend === 'opfs' && item.path === path && item.store !== 'opfs');
   if (entry) await removeRecentProject(entry.id);
 }
 
@@ -101,7 +102,7 @@ export async function moveTemporaryProject(name: string, onFile?: (path: string)
     }
     await (await getBrowserStorageRootOf('indexeddb')).removeEntry(name, { recursive: true });
   } finally { await owner?.release(); }
-  if (folder !== name) await forgetRecentEntry(name);
+  if (folder !== name) await forgetTemporaryRecentEntry(name);
   return { from: name, to: folder, removedTemporary: true };
 }
 
@@ -143,7 +144,7 @@ export async function moveActiveProjectToPersistentBrowserStorage(openCopy: Open
   if (!scratch) {
     try {
       removedTemporary = await removeTemporaryCopy(from);
-      if (removedTemporary && folder !== from) await forgetRecentEntry(from);
+      if (removedTemporary && folder !== from) await forgetTemporaryRecentEntry(from);
     } catch (error) { log.warn('The verified project is open; removing its temporary copy failed', error); }
   }
   return { from, to: folder, removedTemporary, persisted };

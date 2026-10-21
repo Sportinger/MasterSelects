@@ -44,6 +44,9 @@ const state = vi.hoisted(() => ({
   lockedNames: new Set<string>(),
   createRepositoryAt: null as null | ((location: Record<string, unknown>) => Promise<void>),
   moveIdentity: vi.fn(async (..._args: string[]) => true),
+  recents: [] as Array<Record<string, unknown>>,
+  removeRecent: vi.fn(async (_id: string) => {}),
+  flush: vi.fn(async () => true),
 }));
 vi.mock('../../src/services/project/repository/backends/repositoryLocationIdentity', () => ({
   moveRepositoryLocationIdentity: state.moveIdentity,
@@ -53,11 +56,11 @@ vi.mock('../../src/services/project/core/indexedDbEntryStore', () => ({
   fallbackStoreExists: async () => true,
 }));
 vi.mock('../../src/services/project/recentProjects', () => ({
-  addRecentOpfsProject: vi.fn(async () => {}), getRecentProjects: () => [], removeRecentProject: vi.fn(async () => {}),
+  addRecentOpfsProject: vi.fn(async () => {}), getRecentProjects: () => state.recents, removeRecentProject: state.removeRecent,
 }));
 vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({
   getActiveRepositorySession: () => state.session,
-  flushEditorRepository: async () => true,
+  flushEditorRepository: () => state.flush(),
   isScratchRepository: () => state.scratch,
   readEditorRepositoryProject: () => ({ name: 'My Project' }),
 }));
@@ -107,10 +110,15 @@ async function seedTemporaryProject(name = 'My Project') {
   return root;
 }
 
-function fakeSession(location: Record<string, unknown>, options: { writable?: boolean; revisions?: string[] } = {}) {
+function fakeSession(location: Record<string, unknown>, options: { writable?: boolean; revisions?: string[]; failedReads?: number; lineageId?: string } = {}) {
   const revisions = new Set(options.revisions ?? ['rev-1']);
+  let failedReads = options.failedReads ?? 0;
   return { location, opening: { writable: options.writable ?? true }, coordinator: { getProjection: () => ({ revisionId: 'rev-1' }) },
-    storage: { getRevision: async (id: string) => revisions.has(id) ? { revisionId: id } : null } };
+    descriptor: { lineageId: options.lineageId ?? 'lineage' },
+    storage: { async getRevision(id: string) {
+      if (failedReads-- > 0) throw new DOMException('A requested file or directory could not be found at the time an operation was processed.', 'NotFoundError');
+      return revisions.has(id) ? { revisionId: id } : null;
+    } } };
 }
 
 beforeEach(async () => {
@@ -120,6 +128,7 @@ beforeEach(async () => {
   vi.stubGlobal('Blob', NodeBlob);
   vi.stubGlobal('FileSystemFileHandle', class { createWritable() { return null; } });
   temporary = memoryStore(); persistent = memoryStore();
+  state.recents = []; state.removeRecent.mockClear(); state.flush.mockReset(); state.flush.mockResolvedValue(true);
   state.temporaryStore = temporary; state.session = null; state.scratch = false; state.lockedNames.clear(); state.createRepositoryAt = null;
   const { createFallbackDirectoryRoot } = await import('../../src/services/project/core/fallbackDirectoryHandle');
   persistentRoot = createFallbackDirectoryRoot(persistent);
@@ -268,6 +277,65 @@ describe('saving the open temporary project to a folder', () => {
       state.session = fakeSession({ kind: 'fsa', handle: {} }); return true;
     })).toEqual({ status: 'saved', removedTemporary: true });
     expect(await hasEntry(temporaryRoot, 'My Project')).toBe(false);
+  });
+
+  it('forgets the removed temporary copy in the recent projects, never a permanent browser project', async () => {
+    const { actions } = await prepare();
+    state.recents = [{ id: 'permanent', backend: 'opfs', path: 'My Project', store: 'opfs' }, { id: 'temporary', backend: 'opfs', path: 'My Project', store: 'indexeddb' }];
+    await actions.saveActiveProjectToFolder('My Project', async () => { state.session = fakeSession({ kind: 'fsa', handle: {} }); return true; });
+    expect(state.removeRecent).toHaveBeenCalledExactlyOnceWith('temporary');
+  });
+
+  it('reads the new folder history once more when the first read fails', async () => {
+    const { temporaryRoot, actions } = await prepare();
+    expect(await actions.saveActiveProjectToFolder('My Project', async () => {
+      state.session = fakeSession({ kind: 'fsa', handle: {} }, { failedReads: 1 }); return true;
+    })).toEqual({ status: 'saved', removedTemporary: true });
+    expect(await hasEntry(temporaryRoot, 'My Project')).toBe(false);
+  });
+
+  it('saves again and completes when saving the latest edits failed after the folder opened', async () => {
+    const { temporaryRoot, actions } = await prepare();
+    const lateFailure = new Error('A requested file or directory could not be found at the time an operation was processed.');
+    expect(await actions.saveActiveProjectToFolder('My Project', async () => {
+      state.session = fakeSession({ kind: 'fsa', handle: {} }); throw lateFailure;
+    })).toEqual({ status: 'saved', removedTemporary: true });
+    expect(state.flush).toHaveBeenCalledOnce();
+    expect(await hasEntry(temporaryRoot, 'My Project')).toBe(false);
+  });
+
+  it('reports edits that still wait for their save without keeping the verified temporary copy', async () => {
+    const { actions } = await prepare();
+    state.flush.mockRejectedValue(new Error('disk busy'));
+    expect(await actions.saveActiveProjectToFolder('My Project', async () => {
+      state.session = fakeSession({ kind: 'fsa', handle: {} }); throw new Error('sync failed');
+    })).toEqual({ status: 'saved', removedTemporary: true, unsavedChanges: 'disk busy' });
+  });
+
+  it('says the folder copy is open but unverified, and keeps the temporary copy', async () => {
+    const { temporaryRoot, actions } = await prepare();
+    const saving = actions.saveActiveProjectToFolder('My Project', async () => {
+      state.session = fakeSession({ kind: 'fsa', handle: {} }, { failedReads: 2 }); return true;
+    });
+    await expect(saving).rejects.toBeInstanceOf(actions.FolderCopyUnverifiedError);
+    await expect(saving).rejects.toThrow(/opens from the chosen folder.*could not be confirmed.*temporary copy was kept/);
+    expect(await hasEntry(temporaryRoot, 'My Project')).toBe(true);
+  });
+
+  it('rejects a folder that holds a different project', async () => {
+    const { temporaryRoot, actions } = await prepare();
+    await expect(actions.saveActiveProjectToFolder('My Project', async () => {
+      state.session = fakeSession({ kind: 'fsa', handle: {} }, { lineageId: 'other' }); return true;
+    })).rejects.toThrow(/different project/);
+    expect(await hasEntry(temporaryRoot, 'My Project')).toBe(true);
+  });
+
+  it('passes a failure on unchanged when the editor never switched to the folder', async () => {
+    const { temporaryRoot, actions } = await prepare();
+    const early = new Error('Folder could not be created');
+    await expect(actions.saveActiveProjectToFolder('My Project', async () => { throw early; })).rejects.toBe(early);
+    expect(state.flush).not.toHaveBeenCalled();
+    expect(await hasEntry(temporaryRoot, 'My Project')).toBe(true);
   });
 
   it('names the archive after the project', async () => {

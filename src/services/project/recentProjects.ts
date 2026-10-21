@@ -2,12 +2,14 @@ import { Logger } from '../logger';
 import { projectDB } from '../projectDB';
 import type { ProjectFile } from './types';
 import { resolveProjectRootMode } from './core/projectRootAccess';
+import { getBrowserStorageKind, type BrowserStorageKind } from './core/browserStorageRoot';
 
 const log = Logger.create('RecentProjects');
 
 const RECENT_PROJECTS_KEY = 'ms-recent-projects';
 const RECENT_PROJECT_HANDLE_PREFIX = 'recentProject:';
 const MAX_RECENT_PROJECTS = 12;
+const storeField = (store: BrowserStorageKind | undefined) => store ? { store } : {};
 
 export const RECENT_PROJECTS_CHANGED_EVENT = 'masterselects-recent-projects-changed';
 
@@ -25,6 +27,8 @@ export interface RecentProjectEntry {
   mediaSourceRootIds?: string[];
   /** Media linked as single files (no project copy), re-allowed by the same click. */
   mediaFileIds?: string[];
+  /** Browser projects: the store it was opened from; `indexeddb` is the temporary fallback. */
+  store?: BrowserStorageKind;
 }
 
 /** One click may prompt for a few files; Chrome's restore prompt usually grants them all at once. */
@@ -240,6 +244,7 @@ export async function addRecentFsaProject(
       path: projectName,
       updatedAt: projectData?.updatedAt,
       lastOpenedAt: Date.now(),
+      ...storeField(getBrowserStorageKind() ?? undefined),
     };
     await persistEntries(upsertEntry(entries, nextEntry));
     return;
@@ -297,11 +302,12 @@ export async function rememberRecentFsaProjectMediaSourceRoots(
     : candidate));
 }
 
-export async function addRecentOpfsProject(path: string, projectData: ProjectFile | null): Promise<void> {
+/** `store` is where the project was opened from (default: this tab's browser storage). */
+export async function addRecentOpfsProject(path: string, projectData: ProjectFile | null, store = getBrowserStorageKind() ?? undefined): Promise<void> {
   const entries = getRecentProjects();
   const existing = entries.find(entry => entry.backend === 'opfs' && entry.path === path);
   await persistEntries(upsertEntry(entries, { id: existing?.id ?? createRecentId(), backend: 'opfs', path,
-    name: projectData?.name ?? getNameFromPath(path), updatedAt: projectData?.updatedAt, lastOpenedAt: Date.now() }));
+    name: projectData?.name ?? getNameFromPath(path), updatedAt: projectData?.updatedAt, lastOpenedAt: Date.now(), ...storeField(store) }));
 }
 
 export async function addRecentNativeProject(

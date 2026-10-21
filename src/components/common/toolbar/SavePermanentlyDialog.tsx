@@ -4,6 +4,7 @@ import { Logger } from '../../../services/logger';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import { moveActiveProjectToPersistentBrowserStorage, moveTemporaryProject, type OpenBrowserStorageCopy } from '../../../services/project/permanentSave/browserStorageMigration';
 import { downloadActiveProjectArchive, saveActiveProjectToFolder } from '../../../services/project/permanentSave/permanentSaveActions';
+import { FolderCopyUnverifiedError } from '../../../services/project/permanentSave/folderCopyUnverifiedError';
 import { canMoveTemporaryProjects, needsHomeScreenStep, resolvePermanentSaveDestinations } from '../../../services/project/permanentSave/permanentSaveOptions';
 import { HEADLINE, MESSAGES, PRIMARY, secondaryOption, whyLine, type ListedDestination, type Notice, type SavePermanentlyVariant } from './savePermanentlyCopy';
 import { SavePermanentlyHomeScreenStep } from './SavePermanentlyHomeScreenStep';
@@ -119,7 +120,10 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
       if (mounted.current && result) setNotice(result);
     } catch (cause) {
       log.warn(`Save permanently (${key}) did not complete`, cause);
-      if (mounted.current) setError(`${describe(cause)} ${status.activeTemporary ? 'Nothing was removed.' : 'Nothing was changed.'}`);
+      // A folder copy that opened but did not verify explains itself: the editor already works on it.
+      const switched = cause instanceof FolderCopyUnverifiedError;
+      if (switched) onProjectChanged();
+      if (mounted.current) setError(switched ? cause.message : `${describe(cause)} ${status.activeTemporary ? 'Nothing was removed.' : 'Nothing was changed.'}`);
     } finally {
       status.refresh(); environment.recheck();
       if (mounted.current) setBusy(null);
@@ -131,7 +135,7 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
       const result = await saveActiveProjectToFolder(projectFileName(), createProject);
       if (result.status === 'cancelled') return MESSAGES.folderCancelled;
       onProjectChanged();
-      return MESSAGES.folderSaved(projectFileName());
+      return MESSAGES.folderSaved(projectFileName(), result.unsavedChanges);
     },
     async browser() {
       const result = await moveActiveProjectToPersistentBrowserStorage(createBrowserStorageCopy);

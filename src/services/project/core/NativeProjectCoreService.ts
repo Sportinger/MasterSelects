@@ -36,7 +36,7 @@ export class NativeProjectCoreService {
   private async adoptSession(): Promise<void> {
     const session = getActiveRepositorySession(); if (!session) throw new Error('Repository activation did not finish');
     this.projectPath = session.location.kind === 'native' ? session.location.path : null;
-    if (session.location.kind === 'opfs') await addRecentOpfsProject(session.location.path, this.getProjectData());
+    if (session.location.kind === 'opfs') await addRecentOpfsProject(session.location.path, this.getProjectData(), session.location.store);
     if (this.projectPath) {
       sessionStorage.setItem(getTabNativeLastProjectPathKey(), this.projectPath);
       localStorage.setItem(LEGACY_NATIVE_LAST_PROJECT_PATH_KEY, this.projectPath);

@@ -92,7 +92,7 @@ export class ProjectCoreService {
     if (!handle) throw new Error('Repository activation has no project directory');
     this.projectHandle = handle; this.pendingHandle = null;
     if (!remember) return;
-    if (session.location.kind === 'opfs') await addRecentOpfsProject(session.location.path, this.getProjectData());
+    if (session.location.kind === 'opfs') await addRecentOpfsProject(session.location.path, this.getProjectData(), session.location.store);
     else { await rememberLastProject(handle); await addRecentFsaProject(handle, this.getProjectData()); }
   }
   async saveProject(): Promise<boolean> { return flushEditorRepository(); }

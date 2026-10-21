@@ -169,8 +169,14 @@ export async function prepareArchive(source: RepositoryBackend, sourceDescriptor
     journals: Array.isArray(options.journals) ? 'selected' : options.journals, workspace: options.workspace, media: options.media,
     selfContained: options.media === 'self-contained', sourceBindingsHead: bindingHead,
     ...(options.projectName?.trim() ? { projectName: options.projectName.trim().slice(0, 256) } : {}) };
-  await writeJson(target, 'archive-manifest.json', manifest, options.signal);
+  // The manifest describes a transport (an exported .msproj); it is written only into export staging,
+  // never into a duplicated project folder (Save As, Save permanently, imports).
   return manifest;
+}
+
+/** Export staging only: the archive's manifest entry, read back by readArchiveManifest after extraction. */
+export async function writeArchiveManifest(staging: RepositoryBackend, manifest: RepositoryArchiveManifest, signal?: AbortSignal): Promise<void> {
+  await writeJson(staging, 'archive-manifest.json', manifest, signal);
 }
 
 export async function readArchiveManifest(backend: RepositoryBackend, signal?: AbortSignal): Promise<RepositoryArchiveManifest> {

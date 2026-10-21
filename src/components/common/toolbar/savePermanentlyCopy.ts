@@ -47,7 +47,9 @@ const DECLINED_ADVICE: Partial<Record<PermanentSaveDestination, string>> = {
 };
 
 export const MESSAGES = {
-  folderSaved: (name: string): Notice => ({ text: `Saved. "${name}" is safe in the chosen folder.`, tone: 'success' }),
+  folderSaved: (name: string, unsavedChanges?: string): Notice => unsavedChanges
+    ? { text: `Saved to the folder. The latest changes are still being saved there (${unsavedChanges}); press Save if it does not finish.`, tone: 'warning' }
+    : { text: `Saved. "${name}" is safe in the chosen folder.`, tone: 'success' },
   // Also when the folder was picked but saving there failed: the old project stays as it was.
   folderCancelled: { text: 'Not saved to a folder. Nothing was removed.', tone: 'info' } as Notice,
   browserKeptInSafariTab: { text: 'Kept in this browser. Safari can still delete it: add the Home Screen app.', tone: 'warning' } as Notice,
