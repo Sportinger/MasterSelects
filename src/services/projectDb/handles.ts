@@ -34,11 +34,35 @@ export async function storeHandle(
     await requestSuccess(request);
     log.debug('Stored handle:', key);
   } catch (error) {
-    if (error instanceof Error && error.name === 'DataCloneError') {
+    if ((error as { name?: unknown } | null)?.name === 'DataCloneError') {
       log.debug('Handle caching unsupported in this browser, skipping:', key);
       return;
     }
     throw error;
+  }
+}
+
+const HANDLE_PROBE_KEY = '__handle_persistence_probe__';
+
+/**
+ * Whether IndexedDB accepts this handle, i.e. whether a linked file can be found
+ * again after a reload. WebKit throws DataCloneError synchronously from put();
+ * the probe transaction is always aborted, so nothing is stored.
+ */
+export function canStoreHandle(db: IDBDatabase, handle: FileSystemHandle): boolean {
+  const transaction = db.transaction(STORES.FS_HANDLES, 'readwrite');
+  // The aborted request reports AbortError; it is expected and must not surface.
+  transaction.onerror = (event) => event.preventDefault();
+  try {
+    const request = transaction.objectStore(STORES.FS_HANDLES).put({ key: HANDLE_PROBE_KEY, handle });
+    request.onerror = (event) => event.preventDefault();
+    return true;
+  } catch (error) {
+    // Checked by name: older WebKit DOMExceptions do not inherit from Error.
+    if ((error as { name?: unknown } | null)?.name === 'DataCloneError') return false;
+    throw error;
+  } finally {
+    try { transaction.abort(); } catch { /* already finished */ }
   }
 }
 

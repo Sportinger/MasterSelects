@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   handleThumbnailDedup: vi.fn(async () => undefined),
   storeFileHandle: vi.fn(),
   storeHandle: vi.fn(async () => undefined),
+  canStoreHandle: vi.fn(async () => true),
   copyToRawFolder: vi.fn(),
   getProxyFrameCount: vi.fn(async () => 0),
   getProxyFrameIndices: vi.fn(async () => new Set<number>()),
@@ -63,6 +64,7 @@ vi.mock('../../src/services/fileSystemService', () => ({
 vi.mock('../../src/services/projectDB', () => ({
   projectDB: {
     storeHandle: mocks.storeHandle,
+    canStoreHandle: mocks.canStoreHandle,
   },
 }));
 
@@ -92,6 +94,19 @@ vi.mock('../../src/stores/settingsStore', () => ({
 
 import { processImport } from '../../src/stores/mediaStore/helpers/importPipeline';
 import { revokeAllMediaObjectUrls } from '../../src/services/project/mediaObjectUrlManager';
+import { resetMediaLinkDurabilityForTests, setCopyingUndurableMedia } from '../../src/services/project/mediaCopy/mediaLinkDurability';
+import { dismissProjectMediaCopyNotice, getProjectMediaCopyNotice } from '../../src/services/project/mediaCopy/projectMediaCopyNotices';
+
+/** Stands in for the browser's FileSystemHandle so the durability probe sees real handles. */
+class FakeFileSystemHandle {}
+
+function linkedHandle(file: File): FileSystemFileHandle {
+  return Object.assign(Object.create(FakeFileSystemHandle.prototype), {
+    kind: 'file',
+    name: file.name,
+    getFile: vi.fn(async () => file),
+  }) as FileSystemFileHandle;
+}
 
 function createFrameIndexSet(count: number): Set<number> {
   return new Set(Array.from({ length: count }, (_, index) => index));
@@ -108,11 +123,17 @@ describe('processImport', () => {
     mocks.isProjectOpen.mockReturnValue(true);
     mocks.requiresProjectLocalMediaCopies.mockReturnValue(false);
     mocks.settingsState.copyMediaToProject = true;
+    mocks.canStoreHandle.mockResolvedValue(true);
+    vi.stubGlobal('FileSystemHandle', FakeFileSystemHandle);
+    resetMediaLinkDurabilityForTests();
+    localStorage.clear();
+    dismissProjectMediaCopyNotice();
   });
 
   afterEach(() => {
     revokeAllMediaObjectUrls();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it('promotes the project RAW copy to the canonical media source', async () => {
@@ -182,17 +203,59 @@ describe('processImport', () => {
     mocks.settingsState.copyMediaToProject = false;
     mocks.requiresProjectLocalMediaCopies.mockReturnValue(false);
     const file = new File(['desktop-bytes'], 'desktop-clip.mp4', { type: 'video/mp4' });
-    const sourceHandle = {
-      name: file.name,
-      getFile: vi.fn(async () => file),
-    } as unknown as FileSystemFileHandle;
+    const sourceHandle = linkedHandle(file);
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:desktop-source');
 
     const result = await processImport({ file, id: 'media-desktop', handle: sourceHandle });
 
+    expect(mocks.canStoreHandle).toHaveBeenCalledWith(sourceHandle);
     expect(mocks.copyToRawFolder).not.toHaveBeenCalled();
     expect(result.mediaFile.file).toBe(file);
     expect(result.mediaFile.projectPath).toBeUndefined();
+    expect(getProjectMediaCopyNotice()).toBeNull();
+  });
+
+  it('copies linked imports into the project when the browser cannot store file handles (WebKit)', async () => {
+    mocks.settingsState.copyMediaToProject = false;
+    mocks.canStoreHandle.mockResolvedValue(false);
+    const file = new File(['ipad-bytes'], 'ipad-linked.mov', { type: 'video/quicktime' });
+    const rawCopyFile = new File(['ipad-bytes'], 'ipad-linked.mov', { type: 'video/quicktime' });
+    mocks.copyToRawFolder.mockResolvedValue({ handle: linkedHandle(rawCopyFile), relativePath: 'Raw/ipad-linked.mov', alreadyExisted: false });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:ipad-copy');
+
+    const result = await processImport({ file, id: 'media-ipad-linked', handle: linkedHandle(file) });
+
+    expect(mocks.copyToRawFolder).toHaveBeenCalledWith(file, undefined);
+    expect(result.mediaFile.projectPath).toBe('Raw/ipad-linked.mov');
+    expect(result.mediaFile.file).toBe(rawCopyFile);
+    expect(getProjectMediaCopyNotice()).toMatchObject({ copiedFiles: 1, copiedBytes: file.size, pendingFiles: 0, failures: [] });
+  });
+
+  it('keeps media linked by choice when the user turned off copying of undurable links', async () => {
+    mocks.settingsState.copyMediaToProject = false;
+    mocks.canStoreHandle.mockResolvedValue(false);
+    setCopyingUndurableMedia(false);
+    const file = new File(['ipad-bytes'], 'ipad-choice.mov', { type: 'video/quicktime' });
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:ipad-linked');
+
+    const result = await processImport({ file, id: 'media-ipad-choice', handle: linkedHandle(file) });
+
+    expect(mocks.copyToRawFolder).not.toHaveBeenCalled();
+    expect(result.mediaFile.projectPath).toBeUndefined();
+    expect(getProjectMediaCopyNotice()).toMatchObject({ linkedFiles: 1, copiedFiles: 0 });
+  });
+
+  it('reports a failed project copy instead of dropping it silently and keeps the import usable', async () => {
+    mocks.settingsState.copyMediaToProject = false;
+    const file = new File(['volatile-bytes'], 'volatile.mp4', { type: 'video/mp4' });
+    mocks.copyToRawFolder.mockRejectedValue(new DOMException('full', 'QuotaExceededError'));
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:volatile');
+
+    const result = await processImport({ file, id: 'media-volatile' });
+
+    expect(result.mediaFile.file).toBe(file);
+    expect(result.mediaFile.projectPath).toBeUndefined();
+    expect(getProjectMediaCopyNotice()?.failures).toEqual([{ name: 'volatile.mp4', bytes: file.size, message: 'browser storage is full' }]);
   });
 
   it('copies transient picker files into a persistent project for refresh restore', async () => {

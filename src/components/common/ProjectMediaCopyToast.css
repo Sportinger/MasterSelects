@@ -1,0 +1,72 @@
+@layer overlays {
+.project-media-copy-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 64px;
+  z-index: calc(var(--z-overlay) + 1);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  width: fit-content;
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  box-shadow: var(--shadow-lg);
+  color: var(--text-primary);
+  transform: translateX(-50%);
+}
+
+.project-media-copy-toast-body {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.project-media-copy-toast-title {
+  color: var(--text-secondary);
+  font-size: var(--font-sm);
+  font-weight: var(--font-medium);
+}
+
+.project-media-copy-toast-text {
+  font-size: var(--font-sm);
+  line-height: 1.4;
+}
+
+.project-media-copy-toast-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: var(--sp-2);
+  margin-left: auto;
+}
+
+.project-media-copy-toast-button {
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: var(--font-sm);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.project-media-copy-toast-button:hover {
+  background: var(--bg-hover);
+}
+
+.project-media-copy-toast-button:focus {
+  outline: none;
+}
+
+.project-media-copy-toast-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+}

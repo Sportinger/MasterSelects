@@ -5,7 +5,8 @@
 
 import { Logger } from '../../logger';
 import { RepositoryError, type RepositoryDescriptor } from '../repository/contracts';
-import { createOpfsRepositoryBackend } from '../repository/backends/opfsBackend';
+import { browserRepositoryLocationId, createOpfsRepositoryBackend } from '../repository/backends/opfsBackend';
+import { moveRepositoryLocationIdentity } from '../repository/backends/repositoryLocationIdentity';
 import { supportsRepositoryWritableStreams } from '../repository/backends/directoryBackend';
 import { readJson } from '../repository/archive/streamIO';
 import { flushEditorRepository, getActiveRepositorySession, isScratchRepository, readEditorRepositoryProject } from '../repository/lifecycle/editorRepositoryLifecycle';
@@ -89,6 +90,10 @@ export async function moveTemporaryProject(name: string, onFile?: (path: string)
     try {
       const copied = await copyDirectoryVerified(source, await target.getDirectoryHandle(folder, { create: true }), onFile);
       log.info('Temporary project copied and verified in persistent browser storage', { name, folder, ...copied });
+      // The copy keeps its repository identity: hand the writer registration to it, or it would open read-only.
+      if (repository && !await moveRepositoryLocationIdentity(repository.descriptor.repositoryId, repository.backend.locationId, browserRepositoryLocationId('opfs', folder))) {
+        log.warn('The moved project could not take over its writer registration; it may open read-only', { name, folder });
+      }
     } catch (error) {
       // Only the incomplete target is discarded; the source stays untouched.
       await target.removeEntry(folder, { recursive: true }).catch(() => {});
