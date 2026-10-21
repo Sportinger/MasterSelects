@@ -3,7 +3,7 @@ import { edgeDetect } from '../../src/effects/stylize/edge-detect';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
-import { createDefaultEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
+import { createEarlierEdgeDetectGraph } from '../../src/services/operators/edgeDetectEffectGraph';
 
 const rowPitch = 256, width = 47, height = 29;
 const cases = [
@@ -67,7 +67,8 @@ export async function checkEdgeDetectGpu(device: GPUDevice): Promise<number> {
     try {
       device.queue.writeTexture({ texture: source }, input, { bytesPerRow: rowPitch }, [width, height]);
       const params = effectOperatorParams({ type: 'edge-detect', params: item.params }), legacy = edgeDetect as FullscreenEffectDefinition;
-      const graph = imageGraphDefinition({ type: 'edge-detect', params }, legacy);
+      // The registered shader is the earlier (pre-2026-10-21) Sobel; saved projects keep that recipe.
+      const graph = imageGraphDefinition({ type: 'edge-detect', params, operatorGraph: createEarlierEdgeDetectGraph() }, legacy);
       const expected = await render(device, sampler, source.createView(), target, readback, legacy, params);
       const actual = await render(device, sampler, source.createView(), target, readback, graph, params);
       if (expected.some((value, index) => value !== actual[index])) throw new Error(`${item.name}: ${mismatch(expected, actual)}`);
@@ -79,7 +80,7 @@ export async function checkEdgeDetectGpu(device: GPUDevice): Promise<number> {
       }
       comparisons++;
       if (item.name === 'default-high-contrast') {
-        const edited = createDefaultEdgeDetectGraph(); edited.nodes.find(node => node.id === 'two')!.constants = { value: 1.5 };
+        const edited = createEarlierEdgeDetectGraph(); edited.nodes.find(node => node.id === 'two')!.constants = { value: 1.5 };
         const changed = imageGraphDefinition({ type: 'edge-detect', params, operatorGraph: edited }, legacy);
         const output = await render(device, sampler, source.createView(), target, readback, changed, params);
         if (output.every((value, index) => value === actual[index])) throw new Error('Edited Sobel coefficient did not change output');

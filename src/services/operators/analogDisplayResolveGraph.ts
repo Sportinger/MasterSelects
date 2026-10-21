@@ -90,10 +90,16 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   const half2 = g.unary('half-vec2', 'convert.scalar-to-vec2', half, 2);
   const curvedHalf = g.binary('curved-half', 'math.multiply.vec2', curved, half2, 10), displayUv = g.binary('display-uv', 'math.add.vec2', curvedHalf, half2, 11);
   const displaySplit = g.unary('display-split', 'vector.split.vec2', displayUv, 12), dx = { node: displaySplit.node, port: 'x' }, dy = { node: displaySplit.node, port: 'y' };
-  const sx0 = g.node('inside-x-min', 'math.step.scalar', 13); g.connect(zero, sx0, 'edge'); g.connect(dx, sx0, 'value');
-  const sx1 = g.node('inside-x-max', 'math.step.scalar', 13); g.connect(dx, sx1, 'edge'); g.connect(one, sx1, 'value');
-  const sy0 = g.node('inside-y-min', 'math.step.scalar', 13); g.connect(zero, sy0, 'edge'); g.connect(dy, sy0, 'value');
-  const sy1 = g.node('inside-y-max', 'math.step.scalar', 13); g.connect(dy, sy1, 'edge'); g.connect(one, sy1, 'value');
+  // Tube coverage, anti-aliased over one output pixel: clamp(distance to the edge in pixels + 0.5, 0, 1).
+  const resolutionSplit = g.unary('resolution-split', 'vector.split.vec2', resolution, 12);
+  const edgeCoverage = (id: string, inset: AnalogDisplayResolveRef, axis: 'x' | 'y') => {
+    const pixels = g.binary(`${id}-px`, 'math.multiply.scalar', inset, { node: resolutionSplit.node, port: axis }, 13);
+    const soft = g.binary(`${id}-soft`, 'math.add.scalar', pixels, half, 13);
+    const coverage = g.node(id, 'math.clamp.scalar', 13); g.connect(soft, coverage, 'value'); g.connect(zero, coverage, 'min'); g.connect(one, coverage, 'max');
+    return coverage;
+  };
+  const sx0 = edgeCoverage('inside-x-min', dx, 'x'), sx1 = edgeCoverage('inside-x-max', g.binary('inside-x-gap', 'math.subtract.scalar', one, dx, 12), 'x');
+  const sy0 = edgeCoverage('inside-y-min', dy, 'y'), sy1 = edgeCoverage('inside-y-max', g.binary('inside-y-gap', 'math.subtract.scalar', one, dy, 12), 'y');
   const insideX = g.binary('inside-x', 'math.multiply.scalar', sx0, sx1, 14), insideY = g.binary('inside-y', 'math.multiply.scalar', sy0, sy1, 14);
   const inside = g.binary('inside', 'math.multiply.scalar', insideX, insideY, 15);
 
@@ -103,6 +109,7 @@ export function createAnalogDisplayResolveIsland(options: AnalogDisplayResolveIs
   const decodedRgb = g.node('decoded-rgb', 'math.mix.rgb', 15); g.connect({ node: sourceSplit.node, port: 'rgb' }, decodedRgb, 'a');
   g.connect({ node: decodedSplit.node, port: 'rgb' }, decodedRgb, 'b'); g.connect(signalAmount, decodedRgb, 't');
 
+  // Bloom reach as a share of the frame width: 1.75 / 360 (written against the former 360-wide raster; saved graphs keep it).
   const width360 = g.scalar('decoded-width', 360), offsetPixels = g.scalar('bloom-offset-pixels', 1.75);
   const offsetX = g.binary('bloom-offset-x', 'math.divide-ieee.scalar', offsetPixels, width360, 3), offset = g.vec2('bloom-offset', offsetX, zero, 4);
   const uvMinus = g.binary('display-minus', 'math.subtract.vec2', displayUv, offset, 12), uvPlus = g.binary('display-plus', 'math.add.vec2', displayUv, offset, 12);

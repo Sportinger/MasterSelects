@@ -1,7 +1,7 @@
 import common from '../../src/effects/_shared/commonShader';
 import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDefinition';
 import { glitch } from '../../src/effects/analog';
-import { createDefaultGlitchGraph } from '../../src/services/operators/glitchEffectGraph';
+import { createLegacyGlitchGraph } from '../../src/services/operators/legacyGlitchGraph';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
@@ -69,7 +69,7 @@ async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTexture
 }
 
 function directGraph(): EffectOperatorGraph {
-  const graph = structuredClone(createDefaultGlitchGraph());
+  const graph = structuredClone(createLegacyGlitchGraph());
   const frame = graph.nodes.find(node => node.operator === 'image.frame'), output = graph.nodes.find(node => node.operator === 'image.output');
   if (!frame || !output) throw new Error('Glitch default graph lacks image boundaries');
   graph.edges = graph.edges.filter(edge => edge.to !== output.id);
@@ -86,7 +86,7 @@ export async function checkGlitchGraphGpu(device: GPUDevice): Promise<number> {
   let comparisons = 0, processed: Uint8Array | undefined;
   try {
     for (const item of cases) {
-      const values = params(item.params), plan = compileImageOperatorGraph(createDefaultGlitchGraph(), values);
+      const values = params(item.params), plan = compileImageOperatorGraph(createLegacyGlitchGraph(), values);
       const expected = await render(device, sampler, source.createView(), target, readback, glitch.shader, glitch.entryPoint, legacyUniforms(values, item.time));
       const actual = await render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, 'glitchGraphFragment'),
         'glitchGraphFragment', packImageOperatorRuntimeUniforms(plan, item.time, width, height));

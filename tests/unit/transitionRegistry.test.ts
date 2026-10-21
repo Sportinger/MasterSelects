@@ -221,7 +221,9 @@ describe('transition registry', () => {
 
   it('defines first-pass render models through primitive recipes', () => {
     expect(getTransition('crossfade')?.recipe).toEqual([
+      expect.objectContaining({ kind: 'opacity', target: 'outgoing', from: 1, to: 0 }),
       expect.objectContaining({ kind: 'opacity', target: 'incoming', from: 0, to: 1 }),
+      { kind: 'blend', target: 'incoming', mode: 'plus' },
     ]);
     expect(getTransition('dip-to-color')?.recipe).toContainEqual({ kind: 'solid', color: '#000000', colorParam: 'color' });
     expect(getTransition('dip-to-black')?.recipe).toContainEqual({ kind: 'solid', color: '#000000' });
@@ -239,7 +241,6 @@ describe('transition registry', () => {
       effectName: 'Gaussian Blur',
       params: {
         radius: { from: 0, to: 28 },
-        samples: 11,
       },
       startProgress: 0,
       endProgress: 0.88,
@@ -303,6 +304,7 @@ describe('transition registry', () => {
       params: {
         amount: { from: 0, to: 0.048 },
         angle: 0,
+        edges: 'mirror',
       },
       startProgress: 0,
       endProgress: 0.62,
@@ -314,7 +316,7 @@ describe('transition registry', () => {
       effectType: 'pixelate',
       effectName: 'Pixelate',
       params: {
-        size: { from: 1, to: 44 },
+        size: { from: 0, to: 44 },
       },
       startProgress: 0,
       endProgress: 0.66,
@@ -342,6 +344,8 @@ describe('transition registry', () => {
       params: {
         segments: { from: 5, to: 14 },
         rotation: { from: 0, to: Math.PI * 2 },
+        shape: 'circle',
+        edges: 'mirror',
       },
       startProgress: 0,
       endProgress: 0.72,
@@ -577,12 +581,10 @@ describe('transition registry', () => {
       effectType: 'glow',
       effectName: 'Glow',
       params: {
-        amount: { from: 0.2, to: 2.2 },
+        amount: { from: 0.1, to: 1.4 },
         threshold: { from: 0.78, to: 0.42 },
-        radius: { from: 18, to: 44 },
+        radius: { from: 60, to: 240 },
         softness: 0.65,
-        rings: 3,
-        samplesPerRing: 10,
       },
       startProgress: 0,
       endProgress: 0.7,
@@ -689,7 +691,6 @@ describe('transition registry', () => {
         amount: { from: 0, to: 0.46 },
         centerX: 0.5,
         centerY: 0.5,
-        samples: 32,
       },
       startProgress: 0,
       endProgress: 0.62,
@@ -703,7 +704,6 @@ describe('transition registry', () => {
       params: {
         amount: { from: 0, to: 0.11 },
         angle: 0,
-        samples: 32,
       },
       startProgress: 0,
       endProgress: 0.66,

@@ -103,7 +103,7 @@ fn cctvFragment(input: VertexOutput) -> @location(0) vec4f {
   let monochrome = vec3f(luminance(color.rgb) * 0.55, luminance(color.rgb), luminance(color.rgb) * 0.62);
   let scan = 0.82 + 0.18 * sin(input.uv.y * params.resolution.y * PI);
   let box = max(trackerBox(centered(input.uv), max(0.08, params.spread * 1.5)), landmarkField(input.uv, 0.014));
-  let noise = (hash(floor(input.uv * params.resolution) + floor(params.time * 24.0)) - 0.5) * 0.08;
+  let noise = (hash(floor(input.uv * params.resolution) + floor(params.time * 24.0 * max(params.speed, 0.0))) - 0.5) * 0.08;
   return vec4f(mix(color.rgb, monochrome * scan + noise + params.color.rgb * box, params.amount), color.a);
 }
 

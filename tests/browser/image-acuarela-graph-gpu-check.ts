@@ -3,7 +3,7 @@ import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDef
 import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
 import { acuarela } from '../../src/effects/stylize/acuarela';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
-import { createDefaultAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
+import { createLegacyAcuarelaGraph } from '../../src/services/operators/acuarelaEffectGraph';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 
@@ -76,7 +76,7 @@ export async function checkAcuarelaGraphGpu(device: GPUDevice): Promise<number> 
   device.queue.writeTexture({ texture: history }, historyBytes, { bytesPerRow: rowPitch }, [width, height]);
   try {
     for (const item of cases) {
-      const params = { ...defaults, ...item.params }, graph = createDefaultAcuarelaGraph();
+      const params = { ...defaults, ...item.params }, graph = createLegacyAcuarelaGraph();
       const plan = compileImageOperatorGraph(graph, params, { parameterSchema: definition.params, allowFrameHistory: true });
       if (plan.passes?.length) throw new Error(`${item.name}: Acuarela unexpectedly compiled to multiple passes`);
       if (!plan.resourceInputs?.includes('effect-history')) throw new Error(`${item.name}: missing effect-history resource`);
@@ -90,7 +90,7 @@ export async function checkAcuarelaGraphGpu(device: GPUDevice): Promise<number> 
       comparisons++;
     }
 
-    const graph = createDefaultAcuarelaGraph(), outputEdge = graph.edges.find(edge => edge.to === 'output' && edge.input === 'image');
+    const graph = createLegacyAcuarelaGraph(), outputEdge = graph.edges.find(edge => edge.to === 'output' && edge.input === 'image');
     if (!outputEdge) throw new Error('Acuarela output edge is unavailable for direct rewire');
     outputEdge.from = 'source'; outputEdge.output = 'image';
     const params = { ...defaults }, plan = compileImageOperatorGraph(graph, params, { parameterSchema: definition.params, allowFrameHistory: true });

@@ -8,6 +8,7 @@ import {
 } from '../../src/services/render/workerGpuAdjustmentPlanAdapter';
 import type { MotionAdjustmentWorkerGpuExecutionPlan } from '../../src/services/motionDesign/adjustment/workerGpuAdjustmentPlan';
 import type { WorkerGpuWebCodecsRenderLayer } from '../../src/services/render/workerGpuRuntimeCommands';
+import { cloneWorkerGpuRenderLayer } from '../../src/services/render/workerGpuMediaSourceRegistry';
 import {
   WORKER_GPU_FRAME_STACK_CONTRACT_VERSION,
   WORKER_GPU_FRAME_STACK_MAX_NESTING_DEPTH,
@@ -1093,6 +1094,22 @@ describe('MD7 recursive exact Worker GPU frame-stack contract', () => {
       })],
     });
     expect(diagnosticCode(substituted)).toBe('MD7_FRAME_STACK_NESTED_REFERENCE_MISMATCH');
+  });
+
+  it('carries the premultiplied flag of a transition composition through the render layer', () => {
+    const premultiplied = (value: unknown) => orderedStack({
+      compositionId: 'composition:transition',
+      occurrenceNamespace: 'occurrence:transition',
+      bindings: [binding('clip:transition', {
+        renderLayer: { ...renderLayer('clip:transition'), premultipliedAlpha: value } as WorkerGpuWebCodecsRenderLayer,
+      })],
+    });
+    expect(diagnosticCode(premultiplied(true))).toBeNull();
+    expect(diagnosticCode(premultiplied('yes'))).toBe('MD7_FRAME_STACK_INVALID_RENDER_LAYER');
+
+    const transitionLayer = { ...layer('transition', { type: 'image' }), premultipliedAlpha: true, blendMode: 'screen' as const };
+    expect(cloneWorkerGpuRenderLayer(transitionLayer)).toMatchObject({ premultipliedAlpha: true, blendMode: 'screen' });
+    expect(cloneWorkerGpuRenderLayer(layer('plain', { type: 'image' }))).not.toHaveProperty('premultipliedAlpha');
   });
 
   it('enforces a global structured-clone string budget on render payload data', () => {

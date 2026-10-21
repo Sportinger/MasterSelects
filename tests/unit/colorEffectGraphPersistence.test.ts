@@ -10,6 +10,7 @@ import type { Effect } from '../../src/types/effects';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
 import { buildEffectOperatorGraph } from '../../src/services/nodeGraph/effectGraphProjection';
+import { foldOperatorGroups } from '../../src/services/nodeGraph/nestedOperatorGroups';
 import { imageOperatorValuePreview } from '../../src/services/nodePreview/imageOperatorPreviews';
 
 const initial = useTimelineStore.getState();
@@ -17,10 +18,13 @@ afterEach(() => useTimelineStore.setState(initial));
 const effect = (type: EditableColorEffectType): Effect => ({ id: `${type}-fx`, name: type, type, enabled: true, params: getDefaultParams(type) });
 
 describe('editable color effect graphs', () => {
+  // Brightness: odds curve with gain 2^(2.5 * amount); Contrast: S-curve x^a / (x^a + (1 - x)^a); Saturation 0: Rec.709 luma.
+  const odds = (x: number) => x * 2 ** 0.5 / (x * 2 ** 0.5 + 1 - x), curve = (x: number) => x * x / (x * x + (1 - x) ** 2);
+  const luma = 0.2126 * 0.2 + 0.7152 * 0.4 + 0.0722 * 0.8;
   it.each([
-    ['brightness', 0.2, [0.4, 0.6, 1, 0.35]],
-    ['contrast', 2, [0, 0.3, 1, 0.35]],
-    ['saturation', 0, [0.3858, 0.3858, 0.3858, 0.35]],
+    ['brightness', 0.2, [odds(0.2), odds(0.4), odds(0.8), 0.35]],
+    ['contrast', 2, [curve(0.2), curve(0.4), curve(0.8), 0.35]],
+    ['saturation', 0, [luma, luma, luma, 0.35]],
   ] as const)('expresses %s as reusable RGB math while preserving alpha', (type, amount, expected) => {
     const graph = createDefaultColorEffectGraph(type);
     const amountNode = graph.nodes.find(node => node.id === 'amount');
@@ -69,5 +73,20 @@ describe('editable color effect graphs', () => {
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'amount')).toMatchObject({ bindings: { value: 'amount' } });
     expect(saved.operatorGraph?.nodes.find(node => node.id === 'amount')?.constants?.value).toBeUndefined();
     expect(() => setOperatorParameter(clip.id, canonical.id, 'amount', 'value', 1.25)).toThrow('outside its supported range');
+  });
+
+  it('names folder ports after the parameter a render-range clamp carries, not "Clamp: Value"', () => {
+    const outputs = (type: EditableColorEffectType, label: string) => {
+      const canonical = migratePersistedEffectOperatorGraph(effect(type));
+      const clip = createMockClip({ id: `${type}-ports`, effects: [canonical] });
+      // In the clip graph every stage folder sits inside the effect's group, which is what folds it.
+      const projected = buildEffectOperatorGraph(clip, canonical);
+      const folded = foldOperatorGroups({ ...projected, groups: projected.groups?.map(group => ({ ...group, parentId: group.parentId ?? 'effect' })) });
+      return folded.nodes.find(node => node.label === label)?.outputs.map(port => port.label);
+    };
+    expect(outputs('exposure', 'Parameters')).toEqual(['Exposure', 'Offset', 'Gamma']);
+    expect(outputs('temperature', 'Parameters')).toEqual(['Temperature', 'Tint']);
+    expect(outputs('vibrance', 'Skin Protection')).toEqual(['Skin Weight']);
+    expect(outputs('exposure', 'Offset & Gamma')).toEqual(['Toned RGB']);
   });
 });

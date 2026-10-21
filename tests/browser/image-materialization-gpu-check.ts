@@ -1,6 +1,6 @@
 import common from '../../src/effects/_shared/commonShader';
 import { ImageGraphPassRuntime } from '../../src/effects/ImageGraphPassRuntime';
-import { createDefaultBoxBlurGraph } from '../../src/services/operators/blurEffectGraphs';
+import { createLegacyBoxBlurGraph } from '../../src/services/operators/legacyBlurEffectGraphs';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorEdge } from '../../src/types/operatorGraph';
 
@@ -23,7 +23,7 @@ fn refTexel() -> vec2f { return vec2f(1.0) / vec2f(textureDimensions(refTexture)
 }`;
 
 function directionalStage(prefix: string, axis: 'x' | 'y', sourceId: string) {
-  const base = createDefaultBoxBlurGraph();
+  const base = createLegacyBoxBlurGraph();
   const rename = (id: string) => id === 'frame' ? sourceId : `${prefix}${id}`;
   const nodes = base.nodes.filter(item => item.id !== 'frame' && item.id !== 'output').map(item => ({ ...item, id: rename(item.id),
     bindings: { ...item.bindings }, constants: item.constants ? { ...item.constants } : undefined }));

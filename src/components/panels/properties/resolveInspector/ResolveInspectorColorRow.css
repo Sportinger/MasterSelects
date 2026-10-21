@@ -1,0 +1,49 @@
+@layer features {
+  /* Colour row of the Resolve inspector: swatch and hex field fill the control column. */
+  .resolve-inspector-color {
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 26px minmax(0, 1fr);
+    gap: 6px;
+    align-items: center;
+  }
+
+  .resolve-inspector-color input {
+    box-sizing: border-box;
+    height: 20px;
+    border: 1px solid var(--separator-color);
+    border-radius: 2px;
+    background: var(--input-bg);
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .resolve-inspector-color input[type="color"] {
+    width: 26px;
+    padding: 1px;
+    cursor: pointer;
+  }
+
+  .resolve-inspector-color input[type="text"] {
+    width: 100%;
+    min-width: 0;
+    padding: 0 6px;
+    color: var(--text-primary);
+    font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* No ring after mouse, pen or touch activation; keyboard focus shows the product ring. */
+  .resolve-inspector-color input:focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  .resolve-inspector-color input:focus-visible {
+    outline: 1px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .resolve-inspector-color input:disabled {
+    opacity: .5;
+    cursor: default;
+  }
+}

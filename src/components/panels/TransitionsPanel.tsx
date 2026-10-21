@@ -26,7 +26,8 @@ import './TransitionsPanel.css';
 interface TransitionItemProps {
   label: string;
   transition: TransitionDefinition;
-  duration: number;
+  /** Length typed at the top of the panel; null uses the transition's own default length. */
+  duration: number | null;
   capability: TransitionCapability;
   showCapabilityBadge: boolean;
   variantCount?: number;
@@ -48,7 +49,7 @@ function TransitionItem({
   const isPlanned = capability === 'planned';
   const dragData = useMemo(() => ({
     type: transition.id,
-    duration,
+    duration: duration ?? transition.defaultDuration,
     params: getDefaultTransitionParams(transition),
   }), [duration, transition]);
   const handleTouchPointerDown = useTransitionTouchTimelineDrag({
@@ -156,7 +157,8 @@ function TransitionItem({
 }
 
 export function TransitionsPanel() {
-  const [duration, setDuration] = useState(2);
+  // Empty means "Auto": each transition drops with its own default length.
+  const [duration, setDuration] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedFamilyKey, setExpandedFamilyKey] = useState<string | null>(null);
   const [collapsedSections, setCollapsedSections] = useState<Set<TransitionFamilyDimension>>(() => new Set());
@@ -175,6 +177,10 @@ export function TransitionsPanel() {
   const isSearchActive = searchQuery.trim().length > 0;
 
   const handleDurationChange = useCallback((e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.value.trim() === '') {
+      setDuration(null);
+      return;
+    }
     const value = parseFloat(e.target.value);
     if (!Number.isNaN(value) && value > 0) {
       setDuration(Math.max(value, 0.1));
@@ -204,10 +210,13 @@ export function TransitionsPanel() {
         <div className="transitions-duration-control">
           <input
             type="number"
-            value={duration}
+            value={duration ?? ''}
             onChange={handleDurationChange}
             min={0.1}
             step={0.1}
+            placeholder="Auto"
+            aria-label="Transition length in seconds"
+            title="Length of dropped transitions. Empty: each transition's own length"
             className="transitions-duration-input"
           />
           <span className="transitions-duration-unit">s</span>

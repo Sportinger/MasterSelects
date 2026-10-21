@@ -1,7 +1,7 @@
 struct LensCorrectionParams {
   distortion: f32, fineDistortion: f32, scale: f32, aspect: f32,
   centerX: f32, centerY: f32, redFringe: f32, blueFringe: f32,
-  vignette: f32, midpoint: f32, cropFactor: f32, pad1: f32,
+  vignette: f32, midpoint: f32, cropFactor: f32, foldRadius: f32,
   distortionProfile: vec4f,
   tcaProfile: vec4f,
   vignetteProfile: vec4f,
@@ -10,8 +10,12 @@ struct LensCorrectionParams {
 @group(0) @binding(1) var inputTex: texture_2d<f32>;
 @group(0) @binding(2) var<uniform> params: LensCorrectionParams;
 
+// Soft coverage of the source frame: one source pixel wide, so curved borders do not stair-step.
 fn lensInside(uv: vec2f) -> f32 {
-  return select(0.0, 1.0, all(uv >= vec2f(0.0)) && all(uv <= vec2f(1.0)));
+  let size = vec2f(textureDimensions(inputTex));
+  let low = uv * size;
+  let high = (vec2f(1.0) - uv) * size;
+  return clamp(min(min(low.x, low.y), min(high.x, high.y)) + 0.5, 0.0, 1.0);
 }
 
 fn lensLinear(color: vec3f) -> vec3f {
@@ -30,6 +34,10 @@ fn lensCorrectionFragment(input: VertexOutput) -> @location(0) vec4f {
   let radiusScale = 2.0 / length(aspect);
   let delta = (input.uv - center) * aspect * radiusScale / params.scale;
   let r2 = dot(delta, delta);
+  // Beyond the fold radius (packUniforms) the correction would mirror the picture: leave it empty,
+  // with a one-pixel soft edge. foldRadius is huge when nothing folds.
+  let outputRadius = length(delta);
+  let foldCoverage = clamp((params.foldRadius - outputRadius) / max(fwidth(outputRadius), 1e-6) + 0.5, 0.0, 1.0);
   // Full-frame 3:2 calibration uses half the short sensor side for PTLens/TCA.
   let profileRadius = length(delta) * 1.80277564 / params.cropFactor;
   let terms = params.distortionProfile;
@@ -48,11 +56,12 @@ fn lensCorrectionFragment(input: VertexOutput) -> @location(0) vec4f {
   let falloff = smoothstep(start, 1.0, length(delta));
   // Positive amount lifts dark lens corners; negative amount darkens them.
   let gain = exp2(2.0 * params.vignette * falloff);
-  let rgb = vec3f(red.r * lensInside(redUv), base.g, blue.b * lensInside(blueUv));
+  // Fringe channels sample the clamped border instead of turning black, so no coloured line runs along the frame.
+  let rgb = vec3f(red.r, base.g, blue.b);
   // PA vignetting uses the source sensor corner radius and acts on linear light.
   let vignetteR2 = r2 * radial * radial / (params.cropFactor * params.cropFactor);
   let v = params.vignetteProfile;
   let attenuation = max(0.05, 1.0 + v.x * vignetteR2 + v.y * vignetteR2 * vignetteR2 + v.z * pow(vignetteR2, 3.0));
   let corrected = select(rgb, lensSrgb(lensLinear(rgb) / attenuation), v.w > 0.5);
-  return vec4f(corrected * gain, base.a) * lensInside(uv);
+  return vec4f(corrected * gain, base.a * lensInside(uv) * foldCoverage);
 }

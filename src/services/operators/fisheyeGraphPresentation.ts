@@ -47,6 +47,7 @@ export function organizeFisheyeGraph(source: EffectOperatorGraph): EffectOperato
     'edge-zero-vector', 'edge-one-vector', 'edge-clamped-uv', 'edge-mirrored-uv', 'edge-repeated-uv',
     'edge-above-mirror', 'edge-above-repeat', 'edge-mirror-or-repeat', 'edge-adjusted-uv',
   ]);
+  section('edges', 'premultiplied-source', 'Premultiplied Source', ['source-premultiplied-split', 'source-premultiplied-alpha', 'source-premultiplied-rgb', 'source-premultiplied']);
   section('edges', 'edge-coverage', 'Frame Coverage', area('edges').nodeIds.filter(id =>
     !['edge-uv', 'edge-sample', 'edge-mode-select', 'edge-mode-nontransparent'].includes(id)));
   section('chroma', 'channel-resolve', 'Combine Chromatic Channels', [
@@ -58,6 +59,7 @@ export function organizeFisheyeGraph(source: EffectOperatorGraph): EffectOperato
     'lens-hard-coverage', 'lens-feather-start-raw', 'lens-feather-start', 'lens-feather-mask', 'lens-soft-coverage', 'lens-feather-enabled',
   ]);
   section('resolve', 'sample-average', 'Average Samples', [...finish, 'fisheye-image']);
+  section('resolve', 'straight-alpha', 'Straight Alpha Output', ['result-split', 'result-alpha', 'coverage-floor', 'result-safe-alpha', 'result-rgb', 'result']);
   const graph = { ...source, groups };
   cache.set(source, graph); cache.set(graph, graph);
   return graph;

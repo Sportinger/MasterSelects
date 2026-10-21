@@ -16,7 +16,8 @@ describe('catalog color and clock reuse', () => {
 
   it('opts only timeline-clock catalogs out of wall-clock continuous rendering', () => {
     expect(blockMosaic.requiresContinuousRender).toBe(false);
-    expect(blockMosaic.packUniforms({}, 640, 360, 2.75)?.[5]).toBe(2.75);
+    // Block Mosaic's WGSL reference: resolution, scale, amount, levels, grout, then the timeline time.
+    expect(blockMosaic.packUniforms({}, 640, 360, 2.75)?.[6]).toBe(2.75);
     vi.spyOn(performance, 'now').mockReturnValue(4_000);
     const legacy = createCatalogEffect({ id: 'legacy-clock', name: 'Legacy', category: 'pixel', shader, entryPoint: 'blockifyFragment', animated: true });
     expect(legacy.requiresContinuousRender).toBe(true);

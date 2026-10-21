@@ -18,7 +18,10 @@ and is never a commit or push target. Kernel-internal code and secrets must stay
 out of this editor repository (see section 7).
 
 Feature docs: one page per feature under `docs/Features/`, index at
-[`docs/Features/README.md`](docs/Features/README.md). Product overview:
+[`docs/Features/README.md`](docs/Features/README.md). Before you write a docs page or
+make its pictures or clips, read the
+[docs style guide](docs/Features/Documentation-Site.md#style-guide): page
+layers, which visual (still, loop or pointer clip), budgets and checks. Product overview:
 [`README.md`](README.md). Maintainer plans in `docs/ongoing/` stay private.
 
 ---
@@ -463,6 +466,10 @@ strings.
 
 ## 12. Nodes and effects: improve them whenever you touch them
 
+**Building a new effect** (usually from a photo, a video or a description of a look) or
+reworking one follows [Building an effect](docs/Features/Effect-Building.md): the reference,
+reuse, robustness, presets, the docs page by the style guide, and one to three review rounds
+by an art director and an engineer who did not build it. Read it before you start.
 
 Whenever dev work touches nodes, effects, operators, the stick-figure rig, or
 the tools agents use to drive them (also while building a project or an

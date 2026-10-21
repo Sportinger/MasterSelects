@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultGlitchGraph } from '../../src/services/operators/glitchEffectGraph';
+import { createLegacyGlitchGraph } from '../../src/services/operators/legacyGlitchGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { effectOperatorGraph, effectOperatorParams, isImageGraphEffectType } from '../../src/services/operators/effectGraphOwner';
 
@@ -23,17 +23,15 @@ const computationalNodes = (graph: ReturnType<typeof effectOperatorGraph>) => gr
   .toSorted((a, b) => a.id.localeCompare(b.id));
 
 describe('Glitch image graph', () => {
-  it('is registered with catalog-owned parameter defaults', () => {
+  it('keeps a saved original graph as saved (no upgrade to the 2026-10 recipe)', () => {
     expect(isImageGraphEffectType('glitch')).toBe(true);
-    const owned = effectOperatorGraph({ type: 'glitch', params: {} }), recipe = createDefaultGlitchGraph();
-    expect(owned.compositionRules).toBe(2);
+    const recipe = createLegacyGlitchGraph(), owned = effectOperatorGraph({ type: 'glitch', params: {}, operatorGraph: recipe });
     expect(computationalNodes(owned)).toEqual(computationalNodes(recipe));
-    expect(effectOperatorGraph({ type: 'glitch', params: {}, operatorGraph: recipe })).toEqual(owned);
-    expect(effectOperatorParams({ type: 'glitch', params: {} })).toMatchObject({ scale: 14, amount: .75, speed: 1 });
+    expect(effectOperatorParams({ type: 'glitch', params: {} })).toMatchObject({ scale: 14, speed: 1 });
   });
 
   it('reuses the canonical hash operator and four explicit channel/alpha samples', () => {
-    const graph = createDefaultGlitchGraph();
+    const graph = createLegacyGlitchGraph();
     expect(graph.nodes.filter(node => node.operator === 'noise.hash2d.vec2')).toHaveLength(2);
     expect(graph.nodes.filter(node => node.operator === 'image.sample').map(node => node.id))
       .toEqual(['red-sample', 'green-sample', 'blue-sample', 'alpha-sample']);
@@ -42,7 +40,7 @@ describe('Glitch image graph', () => {
   });
 
   it('matches tick, band, shared hash, threshold and channel offsets', () => {
-    const params = { scale: 9.5, amount: .8, speed: .35 }, plan = compileImageOperatorGraph(createDefaultGlitchGraph(), params);
+    const params = { scale: 9.5, amount: .8, speed: .35 }, plan = compileImageOperatorGraph(createLegacyGlitchGraph(), params);
     expect(plan.capabilities).toEqual(expect.arrayContaining(['uv', 'time', 'sample']));
     for (const context of [{ uv: [.002, .12] as [number, number], timelineTimeSeconds: 0 },
       { uv: [.53, .71] as [number, number], timelineTimeSeconds: 1.25 }, { uv: [.998, .97] as [number, number], timelineTimeSeconds: 4 }]) {
@@ -53,7 +51,7 @@ describe('Glitch image graph', () => {
 
   it('keeps amount-zero RGB and original-alpha sampling semantics', () => {
     const params = { scale: 2, amount: 0, speed: 1 }, context = { uv: [1, .4] as [number, number], timelineTimeSeconds: .5, sampleImage: sample };
-    expect(evaluateImageOperatorPlan(compileImageOperatorGraph(createDefaultGlitchGraph(), params), [0, 0, 0, 0], context))
+    expect(evaluateImageOperatorPlan(compileImageOperatorGraph(createLegacyGlitchGraph(), params), [0, 0, 0, 0], context))
       .toEqual(reference(context.uv, context.timelineTimeSeconds, params));
   });
 });

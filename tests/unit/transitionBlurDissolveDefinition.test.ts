@@ -31,7 +31,6 @@ describe('blur dissolve transition definition', () => {
       effectName: 'Gaussian Blur',
       params: {
         radius: { from: 0, to: 28 },
-        samples: 11,
       },
       startProgress: 0,
       endProgress: 0.88,
@@ -44,7 +43,6 @@ describe('blur dissolve transition definition', () => {
       effectName: 'Gaussian Blur',
       params: {
         radius: { from: 28, to: 0 },
-        samples: 11,
       },
       startProgress: 0.12,
       endProgress: 1,

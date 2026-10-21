@@ -22,7 +22,31 @@ export function upgradeSlitScanGraph(graph: EffectOperatorGraph): EffectOperator
     graph = { ...graph, nodes: graph.nodes.map(node => node === legacyLimit
       ? { ...node, constants: { ...node.constants, value: 60 } } : node) };
   }
-  return withSlitScanFieldGroups(withSlitScanRgbTime(withSlitScanMotion(withSlitScanGroupBypasses(withSlitScanTimeMap(withSlitScanProtection(upgradeProfiles(graph)))))));
+  return withSlitScanFieldGroups(withSlitScanRgbTime(withSlitScanMotion(withSlitScanGroupBypasses(withSlitScanTimeMap(withSlitScanProtection(
+    separateProfilesFromProtection(upgradeProfiles(graph))))))));
+}
+
+/** Radial/ring profile nodes and the centre distance they share with the protection mask. */
+const PROFILE_DISTANCE_NODES = new Set(['size', 'aspect', 'aspect-scale', 'aspect-uv', 'radius-distance', 'radial-distance',
+  'ring-frequency', 'ring-position', 'ring-time', 'ring-cycles', 'ring-tau', 'ring-radians', 'ring-sine', 'ring-amplitude', 'rings',
+  'radial-threshold', 'is-radial', 'rings-threshold', 'is-rings', 'radial-scan', 'radial-profile', 'spatial-profile']);
+
+/**
+ * Graphs saved before 2026-10 kept the Radial and Time rings profiles in the Protected Center folder, whose
+ * mute routed the profile back to Linear/Center/Wave: with Protected Center muted (the default for new
+ * effects) Radial scan and Time rings rendered as Wave. Move those nodes to the profile folder and drop
+ * that route; muting Protected Center then removes only the protection mask.
+ */
+function separateProfilesFromProtection(graph: EffectOperatorGraph): EffectOperatorGraph {
+  const protection = graph.groups?.find(group => group.id === 'scan-protection');
+  const profile = graph.groups?.find(group => group.id === 'scan-wave');
+  if (!protection || !profile || !protection.nodeIds.includes('spatial-profile')) return graph;
+  const moved = protection.nodeIds.filter(id => PROFILE_DISTANCE_NODES.has(id));
+  const bypassOutputs = protection.bypassOutputs && Object.fromEntries(Object.entries(protection.bypassOutputs)
+    .filter(([output]) => !PROFILE_DISTANCE_NODES.has(output.split(':')[0])));
+  return { ...graph, groups: graph.groups!.map(group => group === protection
+    ? { ...group, nodeIds: group.nodeIds.filter(id => !PROFILE_DISTANCE_NODES.has(id)), ...(bypassOutputs ? { bypassOutputs } : {}) }
+    : group === profile ? { ...group, nodeIds: [...group.nodeIds, ...moved] } : group) };
 }
 
 /** New effects start with optional graph branches muted; existing saved graphs keep their states. */

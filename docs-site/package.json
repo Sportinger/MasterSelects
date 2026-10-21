@@ -7,8 +7,8 @@
     "sync": "node scripts/sync-features.mjs",
     "sync:head": "node scripts/sync-features.mjs --source-ref HEAD",
     "dev": "npm run sync && astro dev",
-    "build": "npm run sync && astro build",
-    "build:head": "npm run sync:head && astro build",
+    "build": "node scripts/sync-features.mjs --build && astro build",
+    "build:head": "node scripts/sync-features.mjs --build --source-ref HEAD && astro build",
     "preview": "astro preview"
   },
   "dependencies": {

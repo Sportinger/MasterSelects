@@ -5,7 +5,7 @@
 import shader from './shader.wgsl?raw';
 import type { EffectParam, FullscreenEffectDefinition } from '../../types';
 import type { ByteTextureContext, ByteTextureUpload } from '../../_shared/byteTexture';
-import { depthParam, numberParam, planMemoryWindow } from './memoryWindow';
+import { depthParam, memoryLeakWarnings, numberParam, planMemoryWindow } from './memoryWindow';
 import { buildMemoryWindow, resolveMemorySource } from './memorySource';
 
 type Primitive = number | boolean | string;
@@ -91,6 +91,7 @@ export const memoryLeak: FullscreenEffectDefinition = {
   uniformSize: 48,
   params: PARAMS,
   byteTexture: provideByteTexture,
+  paramWarnings: memoryLeakWarnings,
   extraControls: () => import('./MemoryLeakControls'),
   packUniforms: (params, width, height) => {
     const plan = planMemoryWindow(params, width, height);

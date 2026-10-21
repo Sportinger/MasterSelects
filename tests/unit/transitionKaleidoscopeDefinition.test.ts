@@ -40,6 +40,8 @@ describe('kaleidoscope transition definition', () => {
         params: {
           segments: { from: 5, to: 14 },
           rotation: { from: 0, to: Math.PI * 2 },
+          shape: 'circle',
+          edges: 'mirror',
         },
         startProgress: 0,
         endProgress: 0.72,
@@ -53,6 +55,8 @@ describe('kaleidoscope transition definition', () => {
         params: {
           segments: { from: 14, to: 6 },
           rotation: { from: -Math.PI * 2, to: 0 },
+          shape: 'circle',
+          edges: 'mirror',
         },
         startProgress: 0.28,
         endProgress: 1,

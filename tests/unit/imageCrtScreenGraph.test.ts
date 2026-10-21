@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDefaultCrtScreenGraph } from '../../src/services/operators/crtScreenEffectGraph';
+import { createLegacyCrtScreenGraph } from '../../src/services/operators/legacyCrtScreenGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 import { effectOperatorGraph, effectOperatorParams, isImageGraphEffectType, isLocalImageEffectType } from '../../src/services/operators/effectGraphOwner';
 import { getDefaultParams } from '../../src/effects';
@@ -29,19 +29,18 @@ const computationalNodes = (graph: ReturnType<typeof effectOperatorGraph>) => gr
   .toSorted((a, b) => a.id.localeCompare(b.id));
 
 describe('CRT Screen image graph', () => {
-  it('uses the canonical contextual owner and catalog defaults', () => {
+  it('uses the canonical contextual owner and catalog defaults and keeps saved original graphs', () => {
     const effect: Effect = { id: 'crt', name: 'CRT Screen', type: 'crt-screen', enabled: true, params: {} };
     expect(isImageGraphEffectType(effect.type)).toBe(true);
     expect(isLocalImageEffectType(effect.type)).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(getDefaultParams('crt-screen'));
-    const owned = effectOperatorGraph(effect), recipe = createDefaultCrtScreenGraph();
-    expect(owned.compositionRules).toBe(2);
+    // A saved original graph stays as saved (no upgrade to the 2026-10 recipe).
+    const recipe = createLegacyCrtScreenGraph(), owned = effectOperatorGraph({ ...effect, operatorGraph: recipe });
     expect(computationalNodes(owned)).toEqual(computationalNodes(recipe));
-    expect(effectOperatorGraph({ ...effect, operatorGraph: recipe })).toEqual(owned);
   });
 
   it('uses owner-bound parameters and only shared granular operators', () => {
-    const graph = createDefaultCrtScreenGraph();
+    const graph = createLegacyCrtScreenGraph();
     expect(graph.nodes.find(node => node.id === 'scale')?.bindings).toEqual({ value: 'scale' });
     expect(graph.nodes.find(node => node.id === 'amount')?.bindings).toEqual({ value: 'amount' });
     expect(graph.nodes.find(node => node.id === 'speed')?.bindings).toEqual({ value: 'speed' });
@@ -50,7 +49,7 @@ describe('CRT Screen image graph', () => {
   });
 
   it('matches curvature, clamp, mask modulo, scanline, flicker and sampled alpha', () => {
-    const graph = createDefaultCrtScreenGraph(), params = { scale: 3, amount: .72, speed: .25 };
+    const graph = createLegacyCrtScreenGraph(), params = { scale: 3, amount: .72, speed: .25 };
     const plan = compileImageOperatorGraph(graph, params);
     expect(plan.capabilities).toEqual(expect.arrayContaining(['uv', 'resolution', 'time', 'sample']));
     for (const context of [
@@ -64,7 +63,7 @@ describe('CRT Screen image graph', () => {
   });
 
   it('retains exact bypass and scale-floor boundaries', () => {
-    const graph = createDefaultCrtScreenGraph(), context = { uv: [.2, .4] as [number, number], resolution: [17, 9] as [number, number], timelineTimeSeconds: .5, sampleImage: sample };
+    const graph = createLegacyCrtScreenGraph(), context = { uv: [.2, .4] as [number, number], resolution: [17, 9] as [number, number], timelineTimeSeconds: .5, sampleImage: sample };
     expect(evaluateImageOperatorPlan(compileImageOperatorGraph(graph, { scale: .25, amount: 0, speed: 1 }), [0, 0, 0, 0], context))
       .toEqual(reference(context.uv, context.resolution, context.timelineTimeSeconds, .25, 0, 1));
     const full = evaluateImageOperatorPlan(compileImageOperatorGraph(graph, { scale: 1, amount: 1, speed: 1 }), [0, 0, 0, 0], context);

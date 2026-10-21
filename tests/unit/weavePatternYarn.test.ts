@@ -36,19 +36,20 @@ describe('Weave pattern and yarn profile', () => {
 
   it('interlaces warp and weft according to the draft', () => {
     const program = compile();
-    expect(program).toMatchObject({ strandCount: 40, pointCount: 24 * (16 * 16 + 1) + 16 * (24 * 16 + 1),
+    // The default sheet: 16 warps and 10 wefts over 1.6 × 0.96, 16 points per crossing.
+    expect(program).toMatchObject({ strandCount: 26, pointCount: 16 * (10 * 16 + 1) + 10 * (16 * 16 + 1),
       render: { profile: { plies: 3, fibers: 5, radius: 0.028 } } });
     const curves = evaluateGeometryProgram(program);
-    // Plain weave: warp 0 lies in front at weft 0 and behind at weft 1; weft 0 does the opposite.
+    // Plain weave: warp 0 lies in front at weft 0 and behind at weft 1; weft 0 (yarn 16) does the opposite.
     expect(z(curves, 0, 8)).toBeCloseTo(0.03, 6);
     expect(z(curves, 0, 24)).toBeCloseTo(-0.03, 6);
-    expect(z(curves, 24, 8)).toBeCloseTo(-0.03, 6);
-    expect(z(curves, 24, 24)).toBeCloseTo(0.03, 6);
+    expect(z(curves, 16, 8)).toBeCloseTo(-0.03, 6);
+    expect(z(curves, 16, 24)).toBeCloseTo(0.03, 6);
     // Halfway between crossings the cosine crimp passes through zero.
     expect(z(curves, 0, 16)).toBeCloseTo(0, 6);
     // Warp 0 runs vertically at the first column; weft 0 horizontally at the first row.
-    expect(curves.positions[curves.starts[0] * 3]).toBeCloseTo((0.5 / 24 - 0.5) * 2.4, 6);
-    expect(curves.positions[curves.starts[24] * 3 + 1]).toBeCloseTo((0.5 / 16 - 0.5) * 1.6, 6);
+    expect(curves.positions[curves.starts[0] * 3]).toBeCloseTo((0.5 / 16 - 0.5) * 1.6, 6);
+    expect(curves.positions[curves.starts[16] * 3 + 1]).toBeCloseTo((0.5 / 10 - 0.5) * 0.96, 6);
   });
 
   it('shifts twill diagonally and floats satin', () => {
@@ -93,6 +94,7 @@ describe('Weave pattern and yarn profile', () => {
       expect(packed[base + 7]).toBe(1);
     }
     const warpEnd = (curves.starts[0] + curves.counts[0] - 1) * STRAND_POINT_FLOATS;
-    expect(packed[warpEnd + 3]).toBeGreaterThan(1.6);
+    // A warp runs the sheet height (0.96) plus its crimp.
+    expect(packed[warpEnd + 3]).toBeGreaterThan(0.96);
   });
 });

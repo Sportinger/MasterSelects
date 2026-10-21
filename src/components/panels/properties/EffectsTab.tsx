@@ -1,4 +1,6 @@
 import { EffectStyleRow } from './EffectStyleRow';
+import { EffectPresetRow } from './EffectPresetRow';
+import { ChromaKeyControls } from './ChromaKeyControls';
 import { TimeStackControls } from './TimeStackControls';
 import { LensCorrectionControls } from './LensCorrectionControls';
 import { GuidedPerspectiveControls } from './GuidedPerspectiveControls';
@@ -18,7 +20,7 @@ import {
 } from '../../../types/animationProperties';
 import type { AudioEffectParamValue } from '../../../types/audio';
 import { isAudioEffect, type EffectType } from '../../../types/effects';
-import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects } from '../../../effects';
+import { EFFECT_REGISTRY, getDefaultParams, getCategoriesWithEffects, getEffectDisplayName, getRenderedDefaultParams } from '../../../effects';
 import { groupEffectParameters } from '../../../effects/parameterGroups';
 import { VoxelReliefControls } from './VoxelReliefControls';
 import { EXTRA_CONTROLS_REGISTRY } from '../../../effects/extraControlsRegistry';
@@ -39,6 +41,11 @@ import { LandmarkTrackingControls } from './LandmarkTrackingControls';
 import { EffectCatalogPicker } from './EffectCatalogPicker';
 import { trackEditorControlCommitted } from '../../../services/productAnalytics';
 import { EffectGpuFailureNotice } from './EffectGpuFailureNotice';
+import { EffectBudgetNotice } from './EffectBudgetNotice';
+import { ResolveEffectParamRow } from './ResolveEffectParamRow';
+import { hasResolveEffectParamRow, RESOLVE_ROW_EFFECTS } from './resolveEffectRows';
+import { effectParamDefinitions } from '../../../services/operators/effectParamVisibility';
+import { EffectParamRangeNotice } from './EffectParamRangeNotice';
 import './effectValueControls.css';
 
 type PrimitiveEffectParamValue = number | boolean | string;
@@ -227,6 +234,7 @@ const EffectParams = memo(function EffectParams(props: EffectParamsViewProps) {
   return <EffectSectionBypass clipId={clipId} effectId={effect.id}>
     <ExposedGraphValueControls clipId={clipId} effect={effect} />
     <EffectParamsContent {...props} onChange={onChange} onParamCommit={onParamCommit} />
+    <EffectBudgetNotice effectType={effect.type} params={effect.params} operatorGraph={effect.operatorGraph} />
   </EffectSectionBypass>;
 }, (previous, next) => previous.clipId === next.clipId
   && previous.effect.id === next.effect.id && previous.effect.type === next.effect.type
@@ -251,7 +259,8 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
     return exposedGraphValues(effect.operatorGraph).length ? null : <p className="effect-info">No parameters</p>;
   }
 
-  if (effect.type === 'time-stack') return <TimeStackControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
+  if (effect.type === 'chroma-key') return <ChromaKeyControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} operatorGraph={effect.operatorGraph} onChange={onChange} clipId={clipId} />;
+  if (effect.type === 'time-stack') return <TimeStackControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} operatorGraph={effect.operatorGraph} onChange={onChange} clipId={clipId} />;
   if (effect.type === 'lens-correction') return <LensCorrectionControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
   if (effect.type === 'guided-perspective') return <GuidedPerspectiveControls effectId={effect.type} effectInstanceId={effect.id} params={effect.params} onChange={onChange} clipId={clipId} />;
 
@@ -260,7 +269,17 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   if (effect.type === 'splat-exploration' && clipId) return <SplatExplorationControls clipId={clipId} effectId={effect.id} />;
   if (effect.type === 'voxel-relief' && clipId) return <VoxelReliefControls clipId={clipId} effectId={effect.id} />;
 
-  const parameterGroups = groupEffectParameters(effectDef.params);
+  // Hidden/retired parameters follow what this instance's graph actually reads.
+  const parameterGroups = groupEffectParameters(effectParamDefinitions(effect));
+  const resolveRows = RESOLVE_ROW_EFFECTS.has(effect.type);
+  const rowsClass = (base: string) => resolveRows ? `${base} effect-params--resolve-rows` : base;
+  const row = (paramName: string, paramDef: typeof effectDef.params[string], noMaxLimit = false) => {
+    const value = effect.params[paramName] ?? paramDef.legacyDefault ?? paramDef.default;
+    // Decide before creating the element: a rendered-null Resolve row would hide the parameter.
+    if (resolveRows && hasResolveEffectParamRow(paramDef)) return <ResolveEffectParamRow key={paramName} paramName={paramName} definition={paramDef}
+      value={value} effect={effect} clipId={clipId} onChange={onChange} onDragStart={onDragStart} onDragEnd={onDragEnd} onParamCommit={onParamCommit} />;
+    return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, noMaxLimit, onDragStart, onDragEnd, onParamCommit);
+  };
   const ExtraControls = EXTRA_CONTROLS_REGISTRY[effectDef.id];
   const ungroupedParams = parameterGroups.find((group) => group.id === '__ungrouped__')?.params ?? [];
   const namedGroups = parameterGroups.filter((group) => !group.quality && group.label);
@@ -283,22 +302,16 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
   return (
     <>
       {ungroupedParams.length > 0 && (
-        <div className="effect-param-section">
-          {ungroupedParams.map(([paramName, paramDef]) => {
-            const value = effect.params[paramName] ?? paramDef.default;
-            return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, false, onDragStart, onDragEnd, onParamCommit);
-          })}
+        <div className={rowsClass('effect-param-section')}>
+          {ungroupedParams.map(([paramName, paramDef]) => row(paramName, paramDef))}
         </div>
       )}
 
       {namedGroups.map((group) => {
         return (
           <ResolveInspectorSection key={group.id} title={group.label!} defaultOpen={group.id !== 'group:camera'}>
-              <div className="effect-quality-params">
-                {group.params.map(([paramName, paramDef]) => {
-                  const value = effect.params[paramName] ?? paramDef.default;
-                  return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, false, onDragStart, onDragEnd, onParamCommit);
-                })}
+              <div className={rowsClass('effect-quality-params')}>
+                {group.params.map(([paramName, paramDef]) => row(paramName, paramDef))}
               </div>
           </ResolveInspectorSection>
         );
@@ -321,12 +334,9 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
             )}
           </div>
           {qualityExpanded && (
-            <div className="effect-quality-params">
-              {qualityParams.map(([paramName, paramDef]) => {
-                const value = effect.params[paramName] ?? paramDef.default;
-                // Quality params have no max limit when dragging
-                return renderParamControl(paramName, paramDef, value, effect, onChange, defaults, clipId, true, onDragStart, onDragEnd, onParamCommit);
-              })}
+            <div className={rowsClass('effect-quality-params')}>
+              {/* Quality params have no max limit when dragging */}
+              {qualityParams.map(([paramName, paramDef]) => row(paramName, paramDef, true))}
               <div className="effect-quality-warning">
                 High values may cause slowdowns
               </div>
@@ -348,7 +358,8 @@ function EffectParamsContent({ effect, onChange, clipId, onDragStart, onDragEnd,
 
 interface EffectsTabProps {
   clipId: string;
-  effects: Array<{ id: string; name: string; type: string; enabled: boolean; params: EffectParamsRecord }>;
+  effects: Array<{ id: string; name: string; type: string; enabled: boolean; params: EffectParamsRecord;
+    operatorGraph?: import('../../../types/operatorGraph').EffectOperatorGraph }>;
   isAudioClip?: boolean;
 }
 
@@ -519,9 +530,10 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
           {videoEffects.map((effect, idx) => {
             const interpolated = interpolatedEffects.find(e => e.id === effect.id) || effect;
             const effectDef = EFFECT_REGISTRY.get(effect.type);
+            // Missing parameters show what renders: a saved instance's legacy value, else the default.
             const primitiveParams = toPrimitiveEffectParams(
               interpolated.params,
-              effectDef ? getDefaultParams(effect.type) : {},
+              effectDef ? getRenderedDefaultParams(effect.type) : {},
             );
             const isEnabled = effect.enabled !== false; // default to true if undefined
             const isOrbitActive = effectOrbitTarget?.clipId === clipId && effectOrbitTarget.effectId === effect.id;
@@ -577,12 +589,12 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                     className="effect-collapse-toggle"
                     aria-expanded={!isCollapsed}
                     onClick={() => toggleEffectCollapsed(effect.id)}
-                    title={isCollapsed ? `Expand ${effect.name}` : `Collapse ${effect.name}`}
+                    title={`${isCollapsed ? 'Expand' : 'Collapse'} ${getEffectDisplayName(effect)}`}
                   >
                     <span className="effect-collapse-chevron" aria-hidden="true">
                       {isCollapsed ? '\u25B6' : '\u25BC'}
                     </span>
-                    <span className="effect-name">{effect.name}</span>
+                    <span className="effect-name">{getEffectDisplayName(effect)}</span>
                   </button>
                   <button
                     className={`effect-bypass-btn ${!isEnabled ? 'bypassed' : ''}`}
@@ -632,9 +644,11 @@ export function EffectsTab({ clipId, effects, isAudioClip }: EffectsTabProps) {
                   }}>×</button>
                 </div>
                 <EffectGpuFailureNotice effectType={effect.type} />
+                <EffectParamRangeNotice effectType={effect.type} params={primitiveParams} graph={effect.operatorGraph} />
                 {!isCollapsed && (
                   <div className="effect-params">
                     <EffectStyleRow clipId={clipId} effect={effect} />
+                    <EffectPresetRow clipId={clipId} effect={effect} />
                     <EffectParams
                       effect={{ ...effect, params: primitiveParams }}
                       onDragStart={handleBatchStart}

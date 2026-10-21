@@ -4,7 +4,8 @@ struct StickFigureParams {
   // output width/height, limb radius, head radius (output pixels)
   size: vec4f,
   color: vec4f,
-  // opacity, unused
+  // opacity, head style (0 = filled disc, 1 = ring), ring centre-line radius, ring half stroke
+  // (stickFigureRing: the limb thickness, grown outward so the opening keeps half the head radius)
   style: vec4f,
   // Twelve joints in output pixels (see SKELETON_JOINTS), two per vec4.
   joints: array<vec4f, 6>,
@@ -19,6 +20,13 @@ fn stickFigureJoint(index: u32) -> vec2f {
   return select(packed.zw, packed.xy, index % 2u == 0u);
 }
 
+// A Ring head with its neck: the ring around its centre line, and the neck cut off flat at the ring's
+// outer edge, so no rounded limb end reaches into the opening.
+fn stickFigureRingDistance(headDistance: f32, neckDistance: f32, centre: f32, halfStroke: f32) -> f32 {
+  let ring = abs(headDistance - centre) - halfStroke;
+  return min(ring, max(neckDistance, centre + halfStroke - headDistance));
+}
+
 fn stickFigureCapsule(point: vec2f, a: vec2f, b: vec2f, radius: f32) -> f32 {
   let pa = point - a;
   let ba = b - a;
@@ -30,13 +38,16 @@ fn stickFigureCapsule(point: vec2f, a: vec2f, b: vec2f, radius: f32) -> f32 {
 fn stickFigureFragment(input: VertexOutput) -> @location(0) vec4f {
   let source = textureSample(inputTex, texSampler, input.uv);
   let point = input.uv * params.size.xy;
-  // Order matches SKELETON_SEGMENTS: torso, neck, arms, legs.
-  var segments = array<vec2u, 10>(
-    vec2u(0u, 1u), vec2u(1u, 2u), vec2u(1u, 4u), vec2u(4u, 5u), vec2u(1u, 6u),
+  // SKELETON_SEGMENTS without the neck (drawn with the head): torso, arms, legs.
+  var segments = array<vec2u, 9>(
+    vec2u(0u, 1u), vec2u(1u, 4u), vec2u(4u, 5u), vec2u(1u, 6u),
     vec2u(6u, 7u), vec2u(0u, 8u), vec2u(8u, 9u), vec2u(0u, 10u), vec2u(10u, 11u)
   );
-  var distance = length(point - stickFigureJoint(3u)) - params.size.w;
-  for (var index = 0u; index < 10u; index = index + 1u) {
+  let headDistance = length(point - stickFigureJoint(3u));
+  let neckDistance = stickFigureCapsule(point, stickFigureJoint(1u), stickFigureJoint(2u), params.size.z);
+  var distance = select(min(headDistance - params.size.w, neckDistance),
+    stickFigureRingDistance(headDistance, neckDistance, params.style.z, params.style.w), params.style.y > 0.5);
+  for (var index = 0u; index < 9u; index = index + 1u) {
     let segment = segments[index];
     distance = min(distance, stickFigureCapsule(point, stickFigureJoint(segment.x), stickFigureJoint(segment.y), params.size.z));
   }

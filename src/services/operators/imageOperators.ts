@@ -2,10 +2,11 @@ import type { OperatorDefinition, OperatorPort } from '../../types/operatorGraph
 import { MOTION_IMAGE_OPERATORS } from './motionImageOperators';
 import { GLYPH_FONT_OPTIONS } from '../../effects/_shared/glyphFonts';
 import { TEXT_ATLAS_DEFAULT_CHARACTERS, TEXT_ATLAS_MAX_CHARACTERS } from './imageOperatorGlyphResources';
+import { CACHE_IMAGE_SCALE_OPTIONS } from './imageResourceScale';
 
 const port = (id: string, type: OperatorPort['type'], label: string, required = false): OperatorPort =>
   ({ id, type, label, required, ...(type === 'image' && required
-    ? { contract: { formats: ['decoded-frame', 'analog-decoded-360x288-rgba16f'] } } : {}) });
+    ? { contract: { formats: ['decoded-frame', 'analog-decoded-702x288-rgba16f'] } } : {}) });
 
 const imageOperator = (definition: Omit<OperatorDefinition, 'version' | 'invalidates' | 'runtime' | 'state' | 'fusion'>): OperatorDefinition => ({
   ...definition,
@@ -137,6 +138,18 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
     inputs: [port('rgb', 'rgb', 'RGB', true)], outputs: [port('value', 'vec3', 'HSV')], parameters: [], addable: true }),
   imageOperator({ id: 'convert.hsv-to-rgb', family: 'convert.rgb-hsv', variant: 'hsv-rgb', label: 'HSV to RGB', description: 'Converts HSV to source-encoded RGB.',
     inputs: [port('value', 'vec3', 'HSV', true)], outputs: [port('rgb', 'rgb', 'RGB')], parameters: [], addable: true }),
+  imageOperator({ id: 'convert.rgb-to-oklch', family: 'convert.rgb-oklch', variant: 'rgb-oklch', label: 'RGB to OkLCh',
+    description: 'Converts source-encoded RGB to perceptual OkLCh: X = lightness (0 black, 1 white), Y = chroma, Z = hue in turns (0–1). Rotating Z keeps perceived brightness, unlike HSV. Neutral greys report hue 0.',
+    inputs: [port('rgb', 'rgb', 'RGB', true)], outputs: [port('value', 'vec3', 'LCh')], parameters: [], addable: true }),
+  imageOperator({ id: 'convert.oklch-to-rgb', family: 'convert.rgb-oklch', variant: 'oklch-rgb', label: 'OkLCh to RGB',
+    description: 'Converts OkLCh (lightness, chroma, hue in turns) back to source-encoded RGB. Not clamped: colours outside the sRGB gamut leave 0–1, so clamp afterwards.',
+    inputs: [port('value', 'vec3', 'LCh', true)], outputs: [port('rgb', 'rgb', 'RGB')], parameters: [], addable: true }),
+  imageOperator({ id: 'color.srgb-to-linear.rgb', family: 'color.transfer', variant: 'srgb-linear', label: 'sRGB to Linear',
+    description: 'Decodes sRGB-encoded RGB to linear light with the exact sRGB curve. Do light math (exposure, white balance, mixing light) between this and Linear to sRGB. Negative values mirror; values above 1 continue the curve.',
+    inputs: [port('rgb', 'rgb', 'sRGB', true)], outputs: [port('rgb', 'rgb', 'Linear RGB')], parameters: [], addable: true, bypass: 'passthrough' }),
+  imageOperator({ id: 'color.linear-to-srgb.rgb', family: 'color.transfer', variant: 'linear-srgb', label: 'Linear to sRGB',
+    description: 'Encodes linear-light RGB back to sRGB with the exact sRGB curve (inverse of sRGB to Linear). Not clamped.',
+    inputs: [port('rgb', 'rgb', 'Linear RGB', true)], outputs: [port('rgb', 'rgb', 'sRGB')], parameters: [], addable: true, bypass: 'passthrough' }),
   imageOperator({ id: 'color.luminance-rec709.rgb', family: 'color.luminance', variant: 'rec709-rgb', label: 'Luminance',
     description: 'Computes 0.2126 R + 0.7152 G + 0.0722 B directly in the source color encoding.',
     inputs: [port('rgb', 'rgb', 'RGB', true)], outputs: [port('value', 'number', 'Luminance')], parameters: [], addable: true }),
@@ -240,8 +253,10 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
     inputs: [], outputs: [port('image', 'image', 'Image')], parameters: [], addable: false,
     consumers: ['image'], implementation: 'shared' }), state: 'frame-history', fusion: 'pass-boundary' },
   { ...imageOperator({ id: 'image.materialize', family: 'image.materialize', variant: 'rgba16float', label: 'Cache Image',
-    description: 'Stores an image expression in an internal rgba16float resource before downstream evaluation.',
-    inputs: [port('image', 'image', 'Image', true)], outputs: [port('image', 'image', 'Image')], parameters: [], addable: true }), fusion: 'pass-boundary' },
+    description: 'Stores an image expression in an internal rgba16float resource before downstream evaluation. Resolution renders the cache at a fraction of the frame (a smooth, cheaper copy, sampled with normalized UV); it is a fixed setting and cannot be animated. Max size (pixels of the longer side, 0 = full) caps the cache further, for statistics such as an average colour; the smaller of the two wins.',
+    inputs: [port('image', 'image', 'Image', true)], outputs: [port('image', 'image', 'Image')],
+    parameters: [{ id: 'scale', label: 'Resolution', type: 'select', default: '1', options: CACHE_IMAGE_SCALE_OPTIONS, animatable: false },
+      { id: 'maxEdge', label: 'Max size (px)', type: 'number', default: 0, min: 0, max: 8192, step: 1 }], addable: true }), fusion: 'pass-boundary' },
   imageOperator({ id: 'image.resource-input', label: 'Materialized Resource', description: 'Compiler-owned materialized image input.',
     inputs: [], outputs: [port('image', 'image', 'Image')], parameters: [], addable: false }),
   ...(['image', 'scalar'] as const).map(variant => ({ ...imageOperator({ id: variant === 'image' ? 'image.temporal-smooth' : 'image.temporal-smooth.scalar',
@@ -313,6 +328,16 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
     inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
   imageOperator({ id: 'noise.hash2d.vec2', family: 'noise.hash2d', variant: 'vec2', label: 'Random (Hash)', description: 'Deterministic shared two-dimensional sine hash.',
     inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
+  imageOperator({ id: 'noise.cell-hash.vec2', family: 'noise.cell-hash', variant: 'vec2', label: 'Random (Cell)',
+    description: 'Uniform random value from 0 to 1 for each whole-number cell of the input (the input is rounded down), from an integer PCG hash: identical on every GPU and in software, and free of the stripes a sine hash shows at large coordinates. Neighbouring cells are unrelated; offset the input to get another pattern. For a random value of exact (also fractional) keys use Random (Integer Hash).',
+    inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
+  imageOperator({ id: 'noise.hash2d-pcg.vec2', family: 'noise.hash2d', variant: 'pcg', label: 'Random (Integer Hash)',
+    description: 'Deterministic integer hash (bit mix + PCG2D) of the exact input bits, uniform in [0, 1) for any input size. Unlike the sine hash it shows no stripes for large, small or fractional keys; it does not round its input (for one value per whole-number cell use Random (Cell)).',
+    inputs: [port('value', 'vec2', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
+  imageOperator({ id: 'noise.fractal2d.vec2', family: 'noise.fractal2d', variant: 'vec2', label: 'Fractal Noise',
+    description: 'Smooth gradient noise at a position in noise cells (one cell = one blob), summed over 1-8 octaves; each octave doubles the frequency and Roughness (0-1) sets its strength. Returns 0-1 (0.5 = mean). Integer-hashed, so large positions stay clean (unlike Random (Hash)).',
+    inputs: [port('value', 'vec2', 'Position', true), port('octaves', 'number', 'Octaves', true), port('roughness', 'number', 'Roughness', true)],
+    outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
   imageOperator({ id: 'vector.dot.vec2', family: 'vector.dot', variant: 'vec2', label: 'Dot Product', description: 'Dot product of two vec2 values.',
     inputs: [port('a', 'vec2', 'A', true), port('b', 'vec2', 'B', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true }),
   imageOperator({ id: 'math.sin.scalar', family: 'math.sin', variant: 'scalar', label: 'Sine', description: 'Sine of a scalar angle in radians.',
@@ -320,6 +345,9 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
   imageOperator({ id: 'math.cos.scalar', family: 'math.cos', variant: 'scalar', label: 'Cosine', description: 'Cosine of a scalar angle in radians.',
     inputs: [port('value', 'number', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true, bypass: 'passthrough' }),
   imageOperator({ id: 'math.exp.scalar', family: 'math.exp', variant: 'scalar', label: 'Exponential', description: 'Natural exponential of a scalar.',
+    inputs: [port('value', 'number', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true, bypass: 'passthrough' }),
+  imageOperator({ id: 'math.log.scalar', family: 'math.log', variant: 'scalar', label: 'Natural Logarithm',
+    description: 'Natural logarithm of a scalar (inverse of Exponential). Zero gives -infinity and negative values NaN; clamp the input first when it can reach them.',
     inputs: [port('value', 'number', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true, bypass: 'passthrough' }),
   imageOperator({ id: 'math.gaussian.scalar', family: 'math.gaussian', variant: 'scalar', label: 'Gaussian Falloff',
     description: 'Evaluates exp(-(value²)/((2×sigma)×sigma)), matching the shared shader Gaussian.',
@@ -347,6 +375,8 @@ export const IMAGE_OPERATORS: readonly OperatorDefinition[] = [
   imageOperator({ id: 'convert.scalar-to-vec4', family: 'convert.scalar-vector', variant: 'vec4', label: 'Scalar to Vector 4',
     description: 'Replicates one scalar into four vector components.', inputs: [port('value', 'number', 'Value', true)], outputs: [port('value', 'vec4', 'Vector')], parameters: [], addable: true }),
   imageOperator({ id: 'math.floor.scalar', family: 'math.floor', variant: 'scalar', label: 'Floor', description: 'Rounds a scalar down.',
+    inputs: [port('value', 'number', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true, bypass: 'passthrough' }),
+  imageOperator({ id: 'math.ceil.scalar', family: 'math.ceil', variant: 'scalar', label: 'Ceiling', description: 'Rounds a scalar up, for example to a whole sample count.',
     inputs: [port('value', 'number', 'Value', true)], outputs: [port('value', 'number', 'Value')], parameters: [], addable: true, bypass: 'passthrough' }),
   imageOperator({ id: 'math.round-even.scalar', family: 'math.round', variant: 'nearest-even-scalar', label: 'Round',
     description: 'Rounds a finite f32 scalar to the nearest integer; exact halfway cases select the even integer.',

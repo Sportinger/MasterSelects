@@ -35,6 +35,8 @@ export const rgbSplitGlitch: TransitionDefinition = {
       params: {
         amount: { from: 0, to: 0.048 },
         angle: 0,
+        // Explicit: an effect without these controls loads as saved before they existed (Stretch to Frame / Clamp).
+        edges: 'mirror',
       },
       startProgress: 0,
       endProgress: 0.62,
@@ -48,6 +50,7 @@ export const rgbSplitGlitch: TransitionDefinition = {
       params: {
         amount: { from: 0.048, to: 0 },
         angle: 3.14159,
+        edges: 'mirror',
       },
       startProgress: 0.34,
       endProgress: 1,

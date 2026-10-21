@@ -20,6 +20,12 @@ export interface AudioTrackHandoffState {
 type GetClipAudioElement = (clip: TimelineClip) => HTMLAudioElement | null;
 type GetClipSourceMediaFileId = (clip: TimelineClip) => string | undefined;
 
+/** Crossfaded clips are no cut: per track the clip and element that play on after the fade (plus the window's other elements), and a veto. */
+export interface AudioHandoffCrossfades {
+  overrides: ReadonlyMap<string, { clip: TimelineClip; audioElement: HTMLAudioElement; retainedElements?: readonly HTMLAudioElement[] }>;
+  blocksHandoff?: (previousClipId: string, clip: TimelineClip) => boolean;
+}
+
 export class AudioTrackHandoffManager {
   private lastTrackState = new Map<string, AudioTrackHandoffState>();
   private handoffs = new Map<string, HTMLAudioElement>();
@@ -43,16 +49,25 @@ export class AudioTrackHandoffManager {
     return this.handoffs.get(clipId) ?? null;
   }
 
+  /** The element a track played this clip on in the last playing frame (its own or a handoff), or null. */
+  getLastPlayedElement(trackId: string, clipId: string): HTMLAudioElement | null {
+    const last = this.lastTrackState.get(trackId);
+    return last?.clipId === clipId ? last.audioElement : null;
+  }
+
   compute(
     ctx: FrameContext,
     getClipAudioElement: GetClipAudioElement,
-    getClipSourceMediaFileId: GetClipSourceMediaFileId
+    getClipSourceMediaFileId: GetClipSourceMediaFileId,
+    crossfades?: AudioHandoffCrossfades,
   ): void {
     this.handoffs.clear();
     this.handoffElements.clear();
     if (ctx.isDraggingPlayhead) return;
 
     for (const track of ctx.audioTracks) {
+      const crossfade = crossfades?.overrides.get(track.id);
+      if (crossfade) { [crossfade.audioElement, ...(crossfade.retainedElements ?? [])].forEach((audio) => this.handoffElements.add(audio)); continue; }
       const clip = getClipForTrack(ctx, track.id);
       if (!clip?.source || !clipUsesSourceAudioLayer(clip)) continue;
 
@@ -87,6 +102,7 @@ export class AudioTrackHandoffManager {
         continue;
       }
 
+      if (crossfades?.blocksHandoff?.(prev.clipId, clip)) continue;
       const inOutGap = Math.abs(clip.inPoint - prev.outPoint);
       if (inOutGap > 0.1) {
         log.debug('Audio handoff SKIP: non-continuous', { gap: inOutGap.toFixed(3) });
@@ -95,11 +111,7 @@ export class AudioTrackHandoffManager {
 
       const elemDrift = Math.abs(prev.audioElement.currentTime - clip.inPoint);
       if (elemDrift > 0.5) {
-        log.debug('Audio handoff SKIP: element too far', {
-          elementTime: prev.audioElement.currentTime.toFixed(3),
-          inPoint: clip.inPoint.toFixed(3),
-          drift: elemDrift.toFixed(3),
-        });
+        log.debug('Audio handoff SKIP: element too far', { elementTime: prev.audioElement.currentTime.toFixed(3), inPoint: clip.inPoint.toFixed(3), drift: elemDrift.toFixed(3) });
         continue;
       }
 
@@ -116,9 +128,12 @@ export class AudioTrackHandoffManager {
   updateLastTrackState(
     ctx: FrameContext,
     getClipAudioElement: GetClipAudioElement,
-    getClipSourceMediaFileId: GetClipSourceMediaFileId
+    getClipSourceMediaFileId: GetClipSourceMediaFileId,
+    crossfades?: AudioHandoffCrossfades,
   ): void {
     for (const track of ctx.audioTracks) {
+      const crossfade = crossfades?.overrides.get(track.id);
+      if (crossfade) { this.setLastTrackState(track.id, crossfade.clip, crossfade.audioElement, getClipSourceMediaFileId); continue; }
       const clip = getClipForTrack(ctx, track.id);
       if (!clip?.source || !clipUsesSourceAudioLayer(clip)) {
         this.lastTrackState.delete(track.id);
@@ -128,16 +143,12 @@ export class AudioTrackHandoffManager {
       const currentAudioElement = getClipAudioElement(clip);
       if (!currentAudioElement) continue;
 
-      const handoffElement = this.handoffs.get(clip.id);
-      const audio = handoffElement ?? currentAudioElement;
-      this.lastTrackState.set(track.id, {
-        clipId: clip.id,
-        fileId: getClipSourceMediaFileId(clip) || '',
-        file: clip.file,
-        audioElement: audio,
-        outPoint: clip.outPoint,
-      });
+      this.setLastTrackState(track.id, clip, this.handoffs.get(clip.id) ?? currentAudioElement, getClipSourceMediaFileId);
     }
+  }
+
+  private setLastTrackState(trackId: string, clip: TimelineClip, audioElement: HTMLAudioElement, getFileId: GetClipSourceMediaFileId): void {
+    this.lastTrackState.set(trackId, { clipId: clip.id, fileId: getFileId(clip) || '', file: clip.file, audioElement, outPoint: clip.outPoint });
   }
 
   private setHandoff(clipId: string, audio: HTMLAudioElement): void {

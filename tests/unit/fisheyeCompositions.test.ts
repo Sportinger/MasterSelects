@@ -7,7 +7,7 @@ import { compileImageOperatorGraph } from '../../src/services/operators/imageOpe
 import { effectOperatorGraph, effectOperatorParams, effectOperatorCompileContext } from '../../src/services/operators/effectGraphOwner';
 import { validateEffectGraph } from '../../src/services/operators/effectGraph';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
-import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
+import { createLegacyKaleidoscopeGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 
 const semantic = (graph: EffectOperatorGraph) => ({
   nodes: graph.nodes.toSorted((a, b) => a.id.localeCompare(b.id)),
@@ -20,10 +20,10 @@ describe('Fisheye shared nested compositions', () => {
     const original = createDefaultFisheyeGraph(), graph = composed(), expanded = expandOperatorCompositions(graph);
     expect(graph.nodes.filter(node => node.operator === 'coordinates.restore-lens.vec2')).toHaveLength(3);
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'coordinates.divide-x.vec2')).toHaveLength(6);
-    expect(expanded.nodes).toHaveLength(250);
-    // 17 presentation areas, 3 lens transforms, 6 nested divides and 1 shared sample normalization.
+    expect(expanded.nodes).toHaveLength(269);
+    // 19 presentation areas, 3 lens transforms, 6 nested divides and 1 shared sample normalization.
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'sampling.normalize-rgba')).toHaveLength(1);
-    expect(expanded.groups).toHaveLength(27);
+    expect(expanded.groups).toHaveLength(29);
     expect(semantic(expanded)).toEqual(semantic(original));
     expect(validateEffectGraph(graph)).toEqual([]);
     let roundTrip = graph;
@@ -61,7 +61,7 @@ describe('Fisheye shared nested compositions', () => {
   it('upgrades revision-one graphs without rerunning old rules and refuses cross-folder matches or private fan-out', () => {
     const legacy = createDefaultFisheyeGraph(); legacy.compositionRules = 1;
     expect(recognizeOperatorCompositions(legacy).nodes.filter(node => node.operator === 'coordinates.restore-lens.vec2')).toHaveLength(3);
-    const ungrouped = expandOperatorCompositions(createDefaultUvDistortGraph('kaleidoscope'));
+    const ungrouped = expandOperatorCompositions(createLegacyKaleidoscopeGraph());
     delete ungrouped.groups; ungrouped.compositionRules = 1;
     expect(recognizeOperatorCompositions(ungrouped).nodes).toEqual(ungrouped.nodes);
     const split = createDefaultFisheyeGraph();
@@ -85,6 +85,6 @@ describe('Fisheye shared nested compositions', () => {
     expect(organizeFisheyeGraph(graph)).toBe(graph);
     const custom = createDefaultFisheyeGraph(); custom.groups![0].label = 'My settings';
     expect(organizeFisheyeGraph(custom)).toBe(custom);
-    expect(effectOperatorGraph({ type: 'fisheye', params: {}, operatorGraph: source }).groups).toHaveLength(27);
+    expect(effectOperatorGraph({ type: 'fisheye', params: {}, operatorGraph: source }).groups).toHaveLength(29);
   });
 });

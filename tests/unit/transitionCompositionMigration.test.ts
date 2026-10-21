@@ -7,7 +7,11 @@ import {
 } from '../../src/services/project/load/loadTimelineHydration';
 import type { ProjectComposition } from '../../src/services/project/projectFileService';
 import type { SerializableClip } from '../../src/types/timeline';
+import { Logger } from '../../src/services/logger';
 import { installFakeMediaStore } from '../helpers/fakeMediaStore';
+import { upgradeGeneratedClipContent } from '../../src/services/timeline/transitionGeneratedContent';
+import { buildOpacityKeyframesFromRecipe } from '../../src/services/timeline/transitionCompositionRecipeTemplate';
+import { crossfade } from '../../src/transitions/crossfade';
 
 vi.mock('../../src/services/compositionRenderer', () => ({
   compositionRenderer: { invalidateCompositionAndParents: vi.fn() },
@@ -404,5 +408,125 @@ describe('transition composition load migration', () => {
     expect(clip.transitionSourceMap).toEqual(projectComposition.clips[0].transitionSourceMap);
     expect(clip.transitionRecipeBlendWindows).toEqual(projectComposition.clips[0].transitionRecipeBlendWindows);
     expect(composition.transitionComp?.sourceLayout).toBe('mapped-v3');
+  });
+
+  it('upgrades a stored Crossfade composition on load without losing changes made inside it', () => {
+    const outgoing = clip('out', 0);
+    const incoming = clip('in', 2);
+    outgoing.transitionOut = { id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'in' };
+    incoming.transitionIn = { id: 'transition-1', type: 'crossfade', duration: 1, linkedClipId: 'out' };
+    const parent: Composition = {
+      id: 'parent', name: 'Parent', type: 'composition', parentId: null, createdAt: 1,
+      width: 1920, height: 1080, frameRate: 30, duration: 4, backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [outgoing, incoming], duration: 4 },
+    };
+    useMediaStore.setState({ compositions: [parent], activeCompositionId: 'parent', openCompositionIds: ['parent'] });
+    normalizeLoadedTransitionCompositions();
+
+    const outgoingId = 'transition-comp:transition-1:outgoing';
+    const created = useMediaStore.getState().compositions.find((composition) => composition.transitionComp?.kind === 'transition-comp')!;
+    // As saved before the recipe revision: old key, no outgoing fade, plus a title and a grade the user added inside.
+    const title = { ...clip('user-title', 0), trackId: 'user-track', name: 'Title' };
+    const grade = { id: 'user-grade', name: 'Brightness', type: 'brightness', enabled: true, params: { amount: 0.2 } } as SerializableClip['effects'][number];
+    const stale: Composition = {
+      ...created,
+      transitionComp: { ...created.transitionComp!, templateParamsKey: JSON.stringify({ params: [] }) },
+      timelineData: {
+        ...created.timelineData!,
+        clips: [
+          ...created.timelineData!.clips.map((candidate) => candidate.id === outgoingId
+            ? { ...candidate, keyframes: [], effects: [grade] }
+            : candidate),
+          title,
+        ],
+      },
+    };
+    useMediaStore.setState({
+      compositions: useMediaStore.getState().compositions.map((composition) => composition.id === stale.id ? stale : composition),
+    });
+
+    normalizeLoadedTransitionCompositions();
+
+    const upgraded = useMediaStore.getState().compositions.find((composition) => composition.id === stale.id)!;
+    const upgradedOutgoing = upgraded.timelineData!.clips.find((candidate) => candidate.id === outgoingId)!;
+    expect(upgraded.timelineData!.clips.map((candidate) => candidate.id)).toContain('user-title');
+    expect(upgradedOutgoing.effects).toEqual([grade]);
+    expect(upgradedOutgoing.keyframes?.filter((keyframe) => keyframe.property === 'opacity').map((keyframe) => keyframe.value))
+      .toEqual([1, 0]);
+    expect(JSON.parse(upgraded.transitionComp!.templateParamsKey!)).toEqual({ params: [], revision: [1, 1] });
+  });
+  it('keeps a generated wipe mask and keyframe edited inside a stored composition when it is upgraded on load', () => {
+    const outgoing = clip('out', 0);
+    const incoming = clip('in', 2);
+    outgoing.transitionOut = { id: 'wipe-1', type: 'wipe-left', duration: 1, linkedClipId: 'in' };
+    incoming.transitionIn = { id: 'wipe-1', type: 'wipe-left', duration: 1, linkedClipId: 'out' };
+    const parent: Composition = {
+      id: 'parent', name: 'Parent', type: 'composition', parentId: null, createdAt: 1,
+      width: 1920, height: 1080, frameRate: 30, duration: 4, backgroundColor: '#000000',
+      timelineData: { tracks: [], clips: [outgoing, incoming], duration: 4 },
+    };
+    useMediaStore.setState({ compositions: [parent], activeCompositionId: 'parent', openCompositionIds: ['parent'] });
+    normalizeLoadedTransitionCompositions();
+
+    const created = useMediaStore.getState().compositions.find((composition) => composition.transitionComp?.kind === 'transition-comp')!;
+    const masked = created.timelineData!.clips.find((candidate) =>
+      candidate.masks?.some((mask) => mask.id.startsWith('transition-comp:')) &&
+      candidate.keyframes?.some((keyframe) => keyframe.id.startsWith(`${candidate.id}:kf:`)))!;
+    expect(masked).toBeDefined();
+    const generatedMask = masked.masks!.find((mask) => mask.id.startsWith('transition-comp:'))!;
+    const generatedKeyframe = masked.keyframes!.find((keyframe) => keyframe.id.startsWith(`${masked.id}:kf:`))!;
+    // Saved before the shared materializer revision, with a softer, inverted wipe edge and an eased keyframe.
+    const editedMask = { ...generatedMask, feather: 42, inverted: !generatedMask.inverted };
+    const editedKeyframe = { ...generatedKeyframe, easing: 'ease-in-out' as const };
+    const stale: Composition = {
+      ...created,
+      transitionComp: { ...created.transitionComp!, templateParamsKey: JSON.stringify({ params: [] }) },
+      timelineData: {
+        ...created.timelineData!,
+        clips: created.timelineData!.clips.map((candidate) => candidate.id === masked.id
+          ? {
+            ...candidate,
+            masks: candidate.masks!.map((mask) => mask.id === generatedMask.id ? editedMask : mask),
+            keyframes: candidate.keyframes!.map((keyframe) => keyframe.id === generatedKeyframe.id ? editedKeyframe : keyframe),
+          }
+          : candidate),
+      },
+    };
+    useMediaStore.setState({
+      compositions: useMediaStore.getState().compositions.map((composition) => composition.id === stale.id ? stale : composition),
+    });
+    Logger.clear();
+
+    normalizeLoadedTransitionCompositions();
+
+    expect(Logger.search('kept as edited')).toHaveLength(1);
+    const upgraded = useMediaStore.getState().compositions.find((composition) => composition.id === stale.id)!;
+    const upgradedClip = upgraded.timelineData!.clips.find((candidate) => candidate.id === masked.id)!;
+    expect(upgradedClip.masks?.find((mask) => mask.id === generatedMask.id)).toEqual(editedMask);
+    expect(upgradedClip.keyframes?.find((keyframe) => keyframe.id === generatedKeyframe.id)).toEqual(editedKeyframe);
+    // Untouched generated content is still the template's.
+    const otherKeyframes = masked.keyframes!.filter((keyframe) => keyframe.id !== generatedKeyframe.id);
+    expect(upgradedClip.keyframes?.filter((keyframe) => keyframe.id !== generatedKeyframe.id)).toEqual(otherKeyframes);
+    expect(JSON.parse(upgraded.transitionComp!.templateParamsKey!).revision).toEqual([1, 0]);
+  });
+
+  it('upgrades unscaled opacity keyframes when the clip opacity changed after the composition was made', () => {
+    // Made at 100 % (stored on the composition clip), later set to 50 % on the parent clip.
+    const id = 'transition-comp:x:incoming';
+    const stored = { ...clip(id, 0), keyframes: buildOpacityKeyframesFromRecipe(crossfade.recipe, 'incoming', id, 1, 1) };
+    const generated = {
+      ...clip(id, 0),
+      transform: { ...clip(id, 0).transform, opacity: 0.5 },
+      keyframes: buildOpacityKeyframesFromRecipe(crossfade.recipe, 'incoming', id, 1, 0.5),
+    };
+    const kept: string[] = [];
+    const upgraded = upgradeGeneratedClipContent({ ...stored }, stored, generated, kept);
+    expect(kept).toEqual([]);
+    expect(upgraded.keyframes?.map((keyframe) => keyframe.value)).toEqual([0, 0.5]);
+    // A keyframe the user really edited is still kept.
+    const edited = { ...stored, keyframes: stored.keyframes.map((keyframe, index) => index === 1 ? { ...keyframe, value: 0.8 } : keyframe) };
+    const keptEdited: string[] = [];
+    upgradeGeneratedClipContent({ ...edited }, edited, generated, keptEdited);
+    expect(keptEdited).toEqual([edited.keyframes[1].id]);
   });
 });

@@ -97,6 +97,7 @@ export const ADJUSTMENT_EFFECT_COMPATIBILITY_MATRIX = Object.freeze({
     surfaces: REQUIRED_ALL_SURFACES,
     parameters: Object.freeze({
       radius: numberPolicy(10, 0, 50, false),
+      // Accepted for saved projects; no renderer reads it (the effect's `deprecated` note tells tool callers).
       samples: numberPolicy(5, 1, 64, true),
     }),
   }),

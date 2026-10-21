@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { holo } from '../../src/effects/analog';
-import { createDefaultHoloGraph } from '../../src/services/operators/holoEffectGraph';
+import { createLegacyHoloGraph } from '../../src/services/operators/legacyHoloGraph';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
 type Rgba = [number, number, number, number];
@@ -20,7 +20,7 @@ function reference(uv: [number, number], time: number, params: { amount: number;
 
 describe('Holo image graph', () => {
   it('binds only the catalog parameters used by the legacy shader', () => {
-    const graph = createDefaultHoloGraph();
+    const graph = createLegacyHoloGraph();
     expect(graph.nodes.find(node => node.id === 'scale')).toBeUndefined();
     for (const [nodeId, parameterId] of [['amount', 'amount'], ['speed', 'speed'], ['color-a', 'colorA'], ['color-b', 'colorB']] as const) {
       expect(graph.nodes.find(node => node.id === nodeId)?.bindings).toEqual({ value: parameterId });
@@ -30,7 +30,7 @@ describe('Holo image graph', () => {
 
   it('matches the legacy formula with an explicit coarse CPU derivative policy', () => {
     const params = { amount: .73, speed: 1.4, colorA: '#22d3ee', colorB: '#f472b6' }, time = .65;
-    const plan = compileImageOperatorGraph(createDefaultHoloGraph(), params, { parameterSchema: holo.params });
+    const plan = compileImageOperatorGraph(createLegacyHoloGraph(), params, { parameterSchema: holo.params });
     const context = { uv: [.375, .375] as [number, number], resolution: [4, 4] as [number, number], pixelCoordinate: [1, 1] as [number, number],
       derivativeAutoMode: 'coarse' as const, timelineTimeSeconds: time, sampleImage: sample };
     const actual = evaluateImageOperatorPlan(plan, [0, 0, 0, 0], context), expected = reference(context.uv, time, params);

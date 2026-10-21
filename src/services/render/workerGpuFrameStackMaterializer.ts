@@ -339,9 +339,8 @@ function createSourceLayer(
     maskInvert: renderLayer.maskInvert,
     maskClipId: renderLayer.maskClipId,
     sourceRect: renderLayer.sourceRect ? { ...renderLayer.sourceRect } : undefined,
-    transitionRender: renderLayer.transitionRender
-      ? { ...renderLayer.transitionRender }
-      : undefined,
+    transitionRender: renderLayer.transitionRender ? { ...renderLayer.transitionRender } : undefined,
+    ...(renderLayer.premultipliedAlpha ? { premultipliedAlpha: true } : {}),
   };
 }
 

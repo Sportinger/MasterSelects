@@ -1,0 +1,11 @@
+{
+  "shots": [
+    "threshold?focus=color-processing&only=luma,compare,hard&rows=1&layout=float@threshold-step",
+    "glow?focus=glow-resolve-and-alpha&only=resolve-premultiplied,resolve-room,resolve-falloff,resolve-remaining,resolve-result&rows=1&layout=float@glow-resolve",
+    "grain?focus=film-response-midtones&only=response-luma,response-bell,response-inverse,response-midtone,response&rows=1@grain-film-response",
+    "sharpen?focus=halo-limit&only=excess-above,roll-off-above-share,roll-off-above-ratio,roll-off-above-log,roll-off-above,inside-range,limited-luma-up&rows=1@sharpen-halo-limit",
+    "vignette?plumbing=hide&omit=output@vignette",
+    "edge-detect?plumbing=hide&omit=output@edge-detect",
+    "scanlines?plumbing=hide&omit=output@scanlines"
+  ]
+}

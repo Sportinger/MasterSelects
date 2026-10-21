@@ -58,9 +58,9 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
     if (typeof value === 'number') readTimelineRuntimeState(useTimelineStore).setPropertyValue(clip.id, property, value);
     else editEffectGraph(clip.id, effectId, 'Edit node parameter', (_, params) => { params[key] = value; });
   });
-  const numberRow = (key: string, label: string, value: number, fallback: number, min = -30, max = 30, step = 0.01, animatable = true) =>
+  const numberRow = (key: string, label: string, value: number, fallback: number, min = -30, max = 30, step = 0.01, animatable = true, suffix?: string) =>
     <ResolveInspectorNumberRow key={key} label={label} ariaLabel={`${operator.label} ${label}`} value={value} defaultValue={fallback}
-      min={min} max={max} step={step} onChange={v => set(key, v)} persistenceKey={`operator.${effectId}.${key}`}
+      min={min} max={max} step={step} suffix={suffix} onChange={v => set(key, v)} persistenceKey={`operator.${effectId}.${key}`}
       keyframeToggle={animatable ? <button type="button" className="keyframe-toggle" aria-label={`Keyframe ${operator.label} ${label}`}
         onClick={() => readTimelineRuntimeState(useTimelineStore).addKeyframe(clip.id, `effect.${effectId}.${key}` as Keyframe['property'], value)}>◇</button> : undefined} />;
   return <div className="operator-parameters" onPointerUp={event => {
@@ -136,7 +136,11 @@ export function OperatorParameters({ clip, effectId, nodeId, projectedNode }: { 
             value={selected} options={[...(select.options ?? [])]} onChange={next => set(binding, next)}
             onReset={control?.type === 'select' ? () => set(binding, control.default) : undefined} /></ResolveInspectorRow>;
         }
-        return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, control?.animatable ?? spec.animatable);
+        // Display unit: the owner parameter's unit when it shows the stored value unscaled (a scaled or
+        // radian parameter shows its stored number here), else the operator's declared unit (° for degrees).
+        const ownerUnit = control && control.displayScale === undefined && control.displayUnit === undefined ? control.unit : undefined;
+        const suffix = ownerUnit ?? (spec.unit === 'degrees' ? '°' : undefined);
+        return numberRow(binding, control?.label ?? spec.label, Number(value), Number(control?.default ?? spec.default), control?.min ?? spec.min, control?.max ?? spec.max, control?.step ?? spec.step, control?.animatable ?? spec.animatable, suffix);
       })}
       <ExposeValueControls clipId={clip.id} effectId={effectId} graph={graph} node={node} safely={safely} />
       {effect.type !== 'audio-math' && projectedNode && node.operator.startsWith('math.') && node.operator !== 'math.constant' &&

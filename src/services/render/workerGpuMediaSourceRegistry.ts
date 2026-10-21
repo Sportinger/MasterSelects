@@ -52,10 +52,6 @@ export interface WorkerGpuVideoPresentationLayerStyle {
   readonly vignetteSize: number;
   readonly vignetteSoftness: number;
   readonly vignetteRoundness: number;
-  readonly chromaKeyMode: number;
-  readonly chromaKeyTolerance: number;
-  readonly chromaKeySoftness: number;
-  readonly chromaKeySpill: number;
   readonly scanlineDensity: number;
   readonly scanlineOpacity: number;
   readonly scanlineSpeed: number;
@@ -147,6 +143,7 @@ export function cloneWorkerGpuRenderLayer(layer: Layer): WorkerGpuWebCodecsRende
     maskInvert: layer.maskInvert,
     maskClipId: layer.maskClipId,
     transitionRender: layer.transitionRender ? { ...layer.transitionRender } : undefined,
+    ...(layer.premultipliedAlpha ? { premultipliedAlpha: true } : {}),
   };
 }
 
@@ -244,10 +241,6 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
     vignetteSize: 0.5,
     vignetteSoftness: 0.5,
     vignetteRoundness: 1,
-    chromaKeyMode: 0,
-    chromaKeyTolerance: 0.2,
-    chromaKeySoftness: 0.1,
-    chromaKeySpill: 0.5,
     scanlineDensity: 0,
     scanlineOpacity: 0,
     scanlineSpeed: 0,
@@ -302,13 +295,10 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
         params.rgbSplitAmount = finiteEffectNumber(effectParams.amount, 0.01);
         params.rgbSplitAngle = finiteEffectNumber(effectParams.angle, 0);
         break;
-      case 'gaussian-blur':
-      case 'box-blur':
+      // Gaussian, Box, Motion, Radial and Zoom Blur, Glow and Chroma Key are image graphs: they never
+      // reach this legacy table (filtered above) and run their own graph in the worker compositor.
       case 'blur':
-        params.blurRadius = Math.max(0, finiteEffectNumber(
-          effectParams.radius,
-          finiteEffectNumber(effectParams.amount, effectType === 'box-blur' ? 5 : 10),
-        ));
+        params.blurRadius = Math.max(0, finiteEffectNumber(effectParams.radius, finiteEffectNumber(effectParams.amount, 10)));
         break;
       case 'exposure':
         params.exposure = finiteEffectNumber(effectParams.exposure, 0);
@@ -334,12 +324,6 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
         params.vignetteSoftness = finiteEffectNumber(effectParams.softness, 0.5);
         params.vignetteRoundness = finiteEffectNumber(effectParams.roundness, 1);
         break;
-      case 'chroma-key':
-        params.chromaKeyMode = effectParams.keyColor === 'blue' ? 2 : 1;
-        params.chromaKeyTolerance = finiteEffectNumber(effectParams.tolerance, 0.2);
-        params.chromaKeySoftness = finiteEffectNumber(effectParams.softness, 0.1);
-        params.chromaKeySpill = finiteEffectNumber(effectParams.spillSuppression, 0.5);
-        break;
       case 'scanlines':
         params.scanlineDensity = finiteEffectNumber(effectParams.density, 5);
         params.scanlineOpacity = finiteEffectNumber(effectParams.opacity, 0.3);
@@ -350,24 +334,8 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
         params.grainSize = Math.max(0.001, finiteEffectNumber(effectParams.size, 1));
         params.grainSpeed = finiteEffectNumber(effectParams.speed, 1);
         break;
-      case 'wave':
-        params.waveAmplitudeX = finiteEffectNumber(effectParams.amplitudeX, 0.02);
-        params.waveAmplitudeY = finiteEffectNumber(effectParams.amplitudeY, 0.02);
-        params.waveFrequencyX = finiteEffectNumber(effectParams.frequencyX, 5);
-        params.waveFrequencyY = finiteEffectNumber(effectParams.frequencyY, 5);
-        break;
-      case 'twirl':
-        params.twirlAmount = finiteEffectNumber(effectParams.amount, 1);
-        params.twirlRadius = Math.max(0.0001, finiteEffectNumber(effectParams.radius, 0.5));
-        params.twirlCenterX = finiteEffectNumber(effectParams.centerX, 0.5);
-        params.twirlCenterY = finiteEffectNumber(effectParams.centerY, 0.5);
-        break;
-      case 'bulge':
-        params.bulgeAmount = finiteEffectNumber(effectParams.amount, 0.5);
-        params.bulgeRadius = Math.max(0.0001, finiteEffectNumber(effectParams.radius, 0.5));
-        params.bulgeCenterX = finiteEffectNumber(effectParams.centerX, 0.5);
-        params.bulgeCenterY = finiteEffectNumber(effectParams.centerY, 0.5);
-        break;
+      // Wave, Twirl and Bulge & Pinch are image graphs: like the blurs they never reach this legacy
+      // table (filtered above), so their uniforms stay neutral and the shader has no branch for them.
       case 'sharpen':
         params.sharpenAmount = finiteEffectNumber(effectParams.amount, 1);
         params.sharpenRadius = Math.max(0, finiteEffectNumber(effectParams.radius, 1));
@@ -375,11 +343,6 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
       case 'edge-detect':
         params.edgeDetectStrength = finiteEffectNumber(effectParams.strength, 1);
         params.edgeDetectInvert = effectBoolean(effectParams.invert);
-        break;
-      case 'glow':
-        params.glowAmount = finiteEffectNumber(effectParams.amount, 1);
-        params.glowThreshold = finiteEffectNumber(effectParams.threshold, 0.6);
-        params.glowRadius = Math.max(0, finiteEffectNumber(effectParams.radius, 20));
         break;
       case 'levels':
         params.levelsInputBlack = finiteEffectNumber(effectParams.inputBlack, 0);

@@ -78,7 +78,7 @@ import './styles/medium-experience.css';
 import './styles/shared-controls.css';
 
 // Dev test pages - lazy loaded to avoid bloating main bundle
-// Access via ?test=parallel-decode or ?test=flex-eq
+// Access via ?test=parallel-decode, ?test=flex-eq, ?test=keyframe-curve or ?test=effect-graph&effect=<id>
 const ParallelDecodeTest = lazy(() =>
   import('./test/ParallelDecodeTest').then(m => ({ default: m.ParallelDecodeTest }))
 );
@@ -88,6 +88,10 @@ const FlexEqVisualQa = lazy(() =>
 const KeyframeCurveVisualQa = lazy(() =>
   import('./test/KeyframeCurveVisualQa').then(m => ({ default: m.KeyframeCurveVisualQa }))
 );
+// Docs tooling only: it replaces the timeline store's clips, so production builds leave it out.
+const EffectGraphDocShot = import.meta.env.DEV ? lazy(() =>
+  import('./test/effectGraphDoc/EffectGraphDocShot').then(m => ({ default: m.EffectGraphDocShot }))
+) : null;
 
 interface AppProps {
   initialExperience?: EditorEntryExperience;
@@ -502,6 +506,14 @@ function App({ initialExperience = 'editor' }: AppProps) {
     return (
       <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
         <KeyframeCurveVisualQa />
+      </Suspense>
+    );
+  }
+
+  if (testMode === 'effect-graph' && EffectGraphDocShot) {
+    return (
+      <Suspense fallback={<div style={{ padding: 20 }}>Loading test...</div>}>
+        <EffectGraphDocShot />
       </Suspense>
     );
   }

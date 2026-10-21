@@ -4,6 +4,9 @@ import type { WorkerRenderSoftwareFrame } from '../../src/services/render/worker
 import { drawWorkerSoftwareLayer } from '../../src/services/render/workerRenderHostSoftwarePainter';
 import { createWorkerSoftwareFeedbackStore } from '../../src/services/render/workerSoftwareFeedbackEffects';
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from '../../src/services/render/workerSoftwareGlow';
+import { directionalBlurPlan, mirrorRepeat, transformDirectionalPixel, type DirectionalBlurType } from '../../src/effects/blur/blurSampling';
+import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
+import type { Layer } from '../../src/types/layers';
 
 function baseContext() {
   return {
@@ -86,6 +89,20 @@ function drawLayerWithPixels(
   );
   expect(targetContext.drawImage).toHaveBeenCalled();
   return outputPixels;
+}
+
+/** Pixel effects of a fresh built-in Wave, Twirl or Bulge, as the software plan builds them. */
+function uvDistortPixelEffects(type: 'wave' | 'twirl' | 'bulge', params: Record<string, number | string>) {
+  const plan = workerSoftwareEffectPlanForLayer({ id: 'distort-layer', effects: [{ id: `${type}-fx`, type, name: type, enabled: true, params }] } as unknown as Layer);
+  expect(plan?.pixelEffects.uvDistortAdjustments).toHaveLength(1);
+  expect(plan?.pixelEffects.imageOperatorPlans).toBeUndefined();
+  return plan!.pixelEffects;
+}
+
+/** Linear filtering of one opaque row at u (texel centres at (i + 0.5) / n, clamp to edge). */
+function rowBilinear(row: number[], u: number): number {
+  const x = Math.min(row.length - 1, Math.max(0, u * row.length - 0.5)), left = Math.floor(x), right = Math.min(row.length - 1, left + 1);
+  return row[left] + (row[right] - row[left]) * (x - left);
 }
 
 describe('worker software painter', () => {
@@ -200,7 +217,8 @@ describe('worker software painter', () => {
       filter: 'none',
       pixelEffects: {
         brightness: 0,
-        rgbSplit: { amount: 1 / 3, angle: 0 },
+        // A third of the width: red reads one pixel to the right, blue one to the left (Clamp edges).
+        mirrorPixelAdjustments: [{ type: 'rgb-split', amount: 1 / 3, angle: 0, lens: false, edges: 'clamp' }],
       },
       geometry: {
         position: { x: 0, y: 0 },
@@ -455,11 +473,12 @@ describe('worker software painter', () => {
       const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
       return t * t * (3 - 2 * t);
     };
+    // Graphless Vignettes are the current recipe: at Roundness 1 a circle in pixels with the
+    // corners at distance 1, and a feather of at least 1.5 px (here wider than Softness 0.5).
+    const halfDiagonal = Math.hypot(3, 1) / 2;
     const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      const distance = Math.abs(uvX - 0.5) * 2;
-      const vignette = 1 - smoothstep(0.2, 0.7, distance);
-      const factor = (1 - 0.8) + vignette * 0.8;
+      const distance = Math.abs(x + 0.5 - 1.5) / halfDiagonal;
+      const factor = 1 - 0.8 * smoothstep(0.2, 0.2 + Math.max(0.5, 1.5 / halfDiagonal), distance);
       return Math.round(200 * factor);
     };
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
@@ -469,28 +488,37 @@ describe('worker software painter', () => {
     ]);
   });
 
-  it('applies chroma key alpha and spill suppression in the worker pixel pass', () => {
+  it('applies the chroma key screen matte, screen subtraction and spill in the worker pixel pass', () => {
+    // Two screen pixels (the screen colour is measured from the frame), a near-white subject and red.
     const inputPixels = new Uint8ClampedArray([
-      0, 255, 0, 255,
+      60, 150, 70, 255,
+      60, 150, 70, 255,
+      230, 230, 225, 255,
       255, 0, 0, 255,
     ]);
     const outputPixels = drawLayerWithPixels(
       inputPixels,
-      2,
+      4,
       1,
       {
         brightness: 0,
         chromaKeyAdjustments: [{
-          keyColor: 'green',
-          tolerance: 0.2,
-          softness: 0.1,
-          spillSuppression: 0.5,
+          screen: 'green',
+          screenColor: [0.3, 0.6, 0.35],
+          clipBlack: 0.3,
+          clipWhite: 0.85,
+          spillSuppression: 1,
+          view: 'result',
         }],
       },
     );
 
+    // Screen: transparent, despilled to the mean of red and blue; the subject stays opaque and only loses
+    // its slight green excess (Neutral spill), red stays as it is.
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      64, 128, 64, 0,
+      60, 65, 70, 0,
+      60, 65, 70, 0,
+      230, 227, 225, 255,
       255, 0, 0, 255,
     ]);
   });
@@ -519,29 +547,23 @@ describe('worker software painter', () => {
   });
 
   it('applies scanlines using timeline time in the worker pixel pass', () => {
-    const inputPixels = new Uint8ClampedArray([
-      100, 100, 100, 255,
-    ]);
+    // 64 rows at Density 1: lines 4 px apart, just visible (closer lines fade into an even darkening).
+    const height = 64, row = 10, inputPixels = new Uint8ClampedArray(height * 4).map((_, index) => (index & 3) === 3 ? 255 : 100);
     const timelineTime = 1.25;
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      1,
-      1,
-      {
-        brightness: 0,
-        scanlineAdjustments: [{ density: 1, opacity: 0.5, speed: 2 }],
-      },
-      timelineTime,
-    );
+    const outputPixels = drawLayerWithPixels(inputPixels, 1, height,
+      { brightness: 0, scanlineAdjustments: [{ density: 1, opacity: 0.5, speed: 2 }] }, timelineTime);
 
-    const uvY = 0.5;
+    const uvY = (row + 0.5) / height;
     const scrollOffset = timelineTime * 2 * 0.1;
     const scanline = Math.sin((uvY + scrollOffset) * 1 * 100) * 0.5 + 0.5;
     const darken = 1 - 0.5 * (1 - scanline);
     const expected = Math.round(100 * darken);
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
+    expect(outputPixels ? Array.from(outputPixels.slice(row * 4, row * 4 + 4)) : null).toEqual([
       expected, expected, expected, 255,
     ]);
+    // A single pixel row cannot show lines: it gets their average darkening.
+    expect(Array.from(drawLayerWithPixels(new Uint8ClampedArray([100, 100, 100, 255]), 1, 1,
+      { brightness: 0, scanlineAdjustments: [{ density: 1, opacity: 0.5, speed: 2 }] }, timelineTime)!)).toEqual([75, 75, 75, 255]);
   });
 
   it('applies grain using deterministic timeline time in the worker pixel pass', () => {
@@ -582,29 +604,20 @@ describe('worker software painter', () => {
       50, 0, 0, 255,
       90, 0, 0, 255,
     ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        waveAdjustments: [{
-          amplitudeX: 0,
-          amplitudeY: 0.5,
-          frequencyX: 1,
-          frequencyY: 0.25,
-        }],
-      },
-    );
-
+    // amplitudeY 0.5 at frequencyY 0.25 on the single row (v = 0.5) shifts every read by
+    // 0.5 * sin(tau * 0.25 * 0.5) = 0.354 of the width; Clamp holds the right border.
+    const outputPixels = drawLayerWithPixels(inputPixels, 3, 1, uvDistortPixelEffects('wave', {
+      amplitudeX: 0, amplitudeY: 0.5, frequencyX: 1, frequencyY: 0.25, speed: 0, phase: 0, edges: 'clamp',
+    }));
+    const shift = 0.5 * Math.sin(Math.PI * 2 * 0.25 * 0.5);
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      50, 0, 0, 255,
+      Math.round(rowBilinear([10, 50, 90], 1 / 6 + shift)), 0, 0, 255,
       90, 0, 0, 255,
       90, 0, 0, 255,
     ]);
   });
 
-  it('applies kaleidoscope distortion as a worker source-resampling pass', () => {
+  it('applies kaleidoscope distortion as a worker whole-frame resampling pass', () => {
     const inputPixels = new Uint8ClampedArray([
       10, 0, 0, 255,
       50, 0, 0, 255,
@@ -616,7 +629,9 @@ describe('worker software painter', () => {
       1,
       {
         brightness: 0,
-        kaleidoscopeAdjustments: [{ segments: 4, rotation: 0 }],
+        // Stretch to Frame and Clamp: the original UV-space fold (both outer pixels read the right edge).
+        mirrorPixelAdjustments: [{ type: 'kaleidoscope', segments: 4, rotation: 0, sourceAngle: 0, zoom: 1, centerX: 0.5, centerY: 0.5,
+          stretch: true, edges: 'clamp' }],
       },
     );
 
@@ -767,125 +782,47 @@ describe('worker software painter', () => {
     expect(second ? Array.from(second) : null).toEqual([98, 49, 0, 250]);
   });
 
-  it('applies motion blur as a weighted worker source-resampling pass', () => {
-    const inputPixels = new Uint8ClampedArray([
-      10, 0, 0, 255,
-      50, 0, 0, 255,
-      90, 0, 0, 255,
-    ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        motionBlurAdjustments: [{ amount: 0.5, angle: 0, samples: 4 }],
-      },
-    );
-
-    const sampleAt = (uvX: number): number => {
-      const wrapped = uvX - Math.floor(uvX * 0.5) * 2;
-      const mirrored = wrapped > 1 ? 2 - wrapped : wrapped;
-      const index = Math.max(0, Math.min(2, Math.round(mirrored * 2)));
-      return [10, 50, 90][index] ?? 0;
-    };
-    const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      let total = 0;
-      let weightTotal = 0;
-      for (let sampleIndex = 0; sampleIndex < 4; sampleIndex += 1) {
-        const t = (sampleIndex / 3 - 0.5) * 2;
-        const weight = Math.exp(-t * t * 2);
-        total += sampleAt(uvX + t * 0.5) * weight;
-        weightTotal += weight;
+  // Directional blurs follow the shared contract (effects/blur/blurSampling.ts) in one stage of
+  // evenly spaced, taper-weighted taps along each pixel's range, averaged with premultiplied alpha.
+  const contractRow = (type: DirectionalBlurType, params: Record<string, unknown>, row: Array<[number, number]>) => {
+    const width = row.length, plan = directionalBlurPlan(type, params, width, 1);
+    const nearest = (u: number) => row[Math.max(0, Math.min(width - 1, Math.round(u * (width - 1))))];
+    return row.flatMap((_pixel, x) => {
+      const pixel: [number, number] = [x + 0.5, 0.5], { start, length } = plan.range(pixel);
+      const count = Math.max(2, Math.min(64, Math.ceil(Math.abs(length) * plan.speed(pixel)) + 1));
+      let red = 0, alpha = 0, total = 0;
+      for (let index = 0; index < count; index++) {
+        const t = (index + 0.5) / count, weight = plan.taper(t), [px] = transformDirectionalPixel(plan, pixel, start + length * t);
+        const u = type === 'motion-blur' ? mirrorRepeat(px / width) : Math.max(0, Math.min(1, px / width));
+        const [value, opacity] = nearest(u);
+        red += value * opacity * weight; alpha += opacity * weight; total += weight;
       }
-      return Math.round(total / weightTotal);
-    };
+      return [Math.round(red / Math.max(alpha, 1e-6)), 0, 0, Math.round(alpha / total)];
+    });
+  };
+  const row: Array<[number, number]> = [[10, 255], [50, 255], [90, 255]];
+  const rowPixels = new Uint8ClampedArray(row.flatMap(([red, alpha]) => [red, 0, 0, alpha]));
 
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      expectedAtX(0), 0, 0, 255,
-      expectedAtX(1), 0, 0, 255,
-      expectedAtX(2), 0, 0, 255,
-    ]);
+  it('applies motion blur along the contract streak as a worker source-resampling pass', () => {
+    const outputPixels = drawLayerWithPixels(rowPixels, 3, 1, { brightness: 0, motionBlurAdjustments: [{ amount: 0.5, angle: 0 }] });
+    expect(outputPixels ? Array.from(outputPixels) : null).toEqual(contractRow('motion-blur', { amount: 0.5, angle: 0 }, row));
   });
 
-  it('applies radial blur as a weighted worker source-resampling pass', () => {
-    const inputPixels = new Uint8ClampedArray([
-      10, 0, 0, 255,
-      50, 0, 0, 255,
-      90, 0, 0, 255,
-    ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        radialBlurAdjustments: [{ amount: 2, centerX: 0, centerY: 0.5, samples: 4 }],
-      },
-    );
-
-    const sampleAt = (uvX: number): number => {
-      const index = Math.max(0, Math.min(2, Math.round(Math.max(0, Math.min(1, uvX)) * 2)));
-      return [10, 50, 90][index] ?? 0;
-    };
-    const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      const distance = Math.abs(uvX);
-      let total = 0;
-      let weightTotal = 0;
-      for (let sampleIndex = 0; sampleIndex < 4; sampleIndex += 1) {
-        const t = sampleIndex / 3;
-        const scale = 1 - 2 * 0.2 * t * distance;
-        const weight = 1 - t * 0.5;
-        total += sampleAt(uvX * scale) * weight;
-        weightTotal += weight;
-      }
-      return Math.round(total / weightTotal);
-    };
-
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      expectedAtX(0), 0, 0, 255,
-      expectedAtX(1), 0, 0, 255,
-      expectedAtX(2), 0, 0, 255,
-    ]);
+  it('applies radial zoom and spin blur as worker source-resampling passes', () => {
+    const zoom = drawLayerWithPixels(rowPixels, 3, 1, { brightness: 0, radialBlurAdjustments: [{ amount: 2, centerX: 0, centerY: 0.5, mode: 'zoom' }] });
+    expect(zoom ? Array.from(zoom) : null).toEqual(contractRow('radial-blur', { amount: 2, centerX: 0, centerY: 0.5 }, row));
+    const spin = drawLayerWithPixels(rowPixels, 3, 1, { brightness: 0, radialBlurAdjustments: [{ amount: 2, centerX: 0.5, centerY: 0.5, mode: 'spin' }] });
+    // The centre pixel sits on the rotation centre and keeps its colour.
+    expect(spin ? Array.from(spin).slice(4, 8) : null).toEqual([50, 0, 0, 255]);
   });
 
-  it('applies zoom blur as a worker source-resampling pass', () => {
-    const inputPixels = new Uint8ClampedArray([
-      10, 0, 0, 255,
-      50, 0, 0, 255,
-      90, 0, 0, 255,
-    ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        zoomBlurAdjustments: [{ amount: 1, centerX: 0, centerY: 0.5, samples: 4 }],
-      },
-    );
-
-    const sampleAt = (uvX: number): number => {
-      const index = Math.max(0, Math.min(2, Math.round(Math.max(0, Math.min(1, uvX)) * 2)));
-      return [10, 50, 90][index] ?? 0;
-    };
-    const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      let total = 0;
-      for (let sampleIndex = 0; sampleIndex < 4; sampleIndex += 1) {
-        const t = sampleIndex / 3;
-        total += sampleAt(uvX * (1 + 0.5 * t));
-      }
-      return Math.round(total / 4);
-    };
-
-    expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
-      expectedAtX(0), 0, 0, 255,
-      expectedAtX(1), 0, 0, 255,
-      expectedAtX(2), 0, 0, 255,
-    ]);
+  it('applies zoom blur as a worker source-resampling pass and keeps colour at alpha edges', () => {
+    const outputPixels = drawLayerWithPixels(rowPixels, 3, 1, { brightness: 0, zoomBlurAdjustments: [{ amount: 1, centerX: 0, centerY: 0.5 }] });
+    expect(outputPixels ? Array.from(outputPixels) : null).toEqual(contractRow('zoom-blur', { amount: 1, centerX: 0, centerY: 0.5 }, row));
+    const edge = new Uint8ClampedArray([200, 0, 0, 255, 200, 0, 0, 255, 0, 0, 0, 0]);
+    const blurred = drawLayerWithPixels(edge, 3, 1, { brightness: 0, motionBlurAdjustments: [{ amount: 0.5, angle: 0 }] });
+    expect(blurred?.[8]).toBe(200);
+    expect(blurred?.[11]).toBeGreaterThan(0);
   });
 
   it('applies twirl distortion as a worker source-resampling pass', () => {
@@ -894,25 +831,15 @@ describe('worker software painter', () => {
       50, 0, 0, 255,
       90, 0, 0, 255,
     ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        twirlAdjustments: [{
-          amount: Math.PI,
-          radius: 1,
-          centerX: 0.5,
-          centerY: 0.5,
-        }],
-      },
-    );
-
+    const outputPixels = drawLayerWithPixels(inputPixels, 3, 1, uvDistortPixelEffects('twirl', {
+      amount: Math.PI, radius: 1, centerX: 0.5, centerY: 0.5, shape: 'frame', edges: 'clamp',
+    }));
+    // The outer pixels sit at r = 1/3 and turn by pi * (2/3)^2 about the centre.
+    const angle = Math.PI * (2 / 3) ** 2, reach = Math.cos(angle) / 3;
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
+      Math.round(rowBilinear([10, 50, 90], 0.5 - reach)), 0, 0, 255,
       50, 0, 0, 255,
-      50, 0, 0, 255,
-      50, 0, 0, 255,
+      Math.round(rowBilinear([10, 50, 90], 0.5 + reach)), 0, 0, 255,
     ]);
   });
 
@@ -922,25 +849,64 @@ describe('worker software painter', () => {
       50, 0, 0, 255,
       90, 0, 0, 255,
     ]);
-    const outputPixels = drawLayerWithPixels(
-      inputPixels,
-      3,
-      1,
-      {
-        brightness: 0,
-        bulgeAdjustments: [{
-          amount: 2,
-          radius: 1,
-          centerX: 0.5,
-          centerY: 0.5,
-        }],
-      },
-    );
-
+    const outputPixels = drawLayerWithPixels(inputPixels, 3, 1, uvDistortPixelEffects('bulge', {
+      amount: 2, radius: 1, centerX: 0.5, centerY: 0.5, shape: 'frame', edges: 'clamp',
+    }));
+    // r = 1/3: the read offset shrinks by exp(-ln 2 * (1 - 1/9)^2).
+    const reach = Math.exp(-Math.log(2) * (8 / 9) ** 2) / 3;
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([
+      Math.round(rowBilinear([10, 50, 90], 0.5 - reach)), 0, 0, 255,
       50, 0, 0, 255,
-      50, 0, 0, 255,
-      50, 0, 0, 255,
+      Math.round(rowBilinear([10, 50, 90], 0.5 + reach)), 0, 0, 255,
     ]);
+  });
+
+  describe('Kaleidoscope, Mirror, RGB Split and Pixelate in a stack', () => {
+    type StackEffect = { type: string; params: Record<string, number | string | boolean> };
+    const twirl: StackEffect = { type: 'twirl', params: { amount: 3, radius: .6, centerX: .45, centerY: .5 } };
+    const kaleidoscope: StackEffect = { type: 'kaleidoscope', params: { segments: 5, rotation: .3 } };
+    const layerOf = (effects: StackEffect[]) => ({ id: 'stack-layer', effects: effects.map((effect, index) => ({ id: `fx-${index}-${effect.type}`,
+      name: effect.type, enabled: true, ...effect })) } as unknown as Layer);
+    const plan = (effects: StackEffect[]) => workerSoftwareEffectPlanForLayer(layerOf(effects))!;
+    const width = 24, height = 14;
+    const input = new Uint8ClampedArray(width * height * 4).map((_, index) => {
+      const pixel = index >> 2, x = pixel % width, y = Math.floor(pixel / width);
+      return [x * 10 + y * 3, y * 17 + (x % 5) * 9, (x * y * 7) % 256, 255][index & 3];
+    });
+    const draw = (effects: StackEffect[], pixels = input) => drawLayerWithPixels(pixels, width, height, plan(effects).pixelEffects)!;
+
+    it('runs them first as one hand-written pass only when nothing that moves or mixes pixels comes before them', () => {
+      expect(plan([kaleidoscope, twirl]).pixelEffects).toMatchObject({ mirrorPixelAdjustments: [{ type: 'kaleidoscope' }], uvDistortAdjustments: [{ kind: 'twirl' }] });
+      // Pointwise effects in front join the pass as whole-frame steps in stack order (see workerSoftwareMirrorPixelStack.test.ts).
+      expect(plan([{ type: 'posterize', params: { levels: 4 } }, kaleidoscope]).pixelEffects).toMatchObject({
+        mirrorPixelAdjustments: [{ type: 'pointwise', step: { kind: 'posterize' } }, { type: 'kaleidoscope' }] });
+      expect(plan([{ type: 'posterize', params: { levels: 4 } }, kaleidoscope]).pixelEffects.posterizeAdjustments).toBeUndefined();
+      // The rebuilt color recipes have no hand-written twin: their layer runs as exact graph plans.
+      expect(plan([{ type: 'exposure', params: { exposure: .5 } }, kaleidoscope]).pixelEffects.mirrorPixelAdjustments).toBeUndefined();
+      expect(plan([{ type: 'mirror', params: {} }, { type: 'pixelate', params: { size: 30 } }]).pixelEffects.mirrorPixelAdjustments).toHaveLength(2);
+      // A resampling or neighbourhood effect first would run after the hand-written pass: the layer runs as ordered graph plans.
+      for (const earlier of [twirl, { type: 'motion-blur', params: { amount: .05, angle: 0 } }, { type: 'zoom-blur', params: { amount: .3 } }]) {
+        const stacked = plan([earlier, kaleidoscope]).pixelEffects;
+        expect(stacked.mirrorPixelAdjustments).toBeUndefined();
+        expect(stacked.imageOperatorPlanOwners?.map(owner => JSON.parse(owner.feedbackKey)[1])).toEqual([`fx-0-${earlier.type}`, 'fx-1-kaleidoscope']);
+      }
+      for (const earlier of [{ type: 'gaussian-blur', params: { radius: 4 } }, { type: 'sharpen', params: { amount: 1 } }, { type: 'glow', params: {} }]) {
+        expect(plan([earlier, { type: 'pixelate', params: { size: 30 } }]).pixelEffects.mirrorPixelAdjustments).toBeUndefined();
+      }
+    });
+
+    it('renders Twirl then Kaleidoscope differently from Kaleidoscope then Twirl, each as its effects one after the other', () => {
+      const twirlFirst = draw([twirl, kaleidoscope]), kaleidoscopeFirst = draw([kaleidoscope, twirl]);
+      let differing = 0;
+      for (let index = 0; index < twirlFirst.length; index += 4) {
+        differing += Number([0, 1, 2].some(channel => Math.abs(twirlFirst[index + channel] - kaleidoscopeFirst[index + channel]) > 8));
+      }
+      expect(differing).toBeGreaterThan(width * height / 5);
+      // Independent reference: each effect alone, applied in stack order.
+      for (const [stacked, [first, second]] of [[twirlFirst, [twirl, kaleidoscope]], [kaleidoscopeFirst, [kaleidoscope, twirl]]] as const) {
+        const reference = draw([second], draw([first]));
+        for (let index = 0; index < stacked.length; index += 1) expect(Math.abs(stacked[index] - reference[index])).toBeLessThanOrEqual(3);
+      }
+    });
   });
 });

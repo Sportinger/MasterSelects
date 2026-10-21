@@ -38,8 +38,8 @@ describe('image choice node preview', () => {
     previewTextStore.retain(owner, new Set(['choice-preview']));
     act(() => previewTextStore.publish(frame));
     render(<NodeValuePreview node={node} />);
-    expect(screen.getByRole('combobox', { name: 'Choice Projection inline' })).toHaveTextContent('Equisolid Angle');
-    expect(screen.queryByLabelText('Choice Projection inline', { selector: 'input[type="color"]' })).toBeNull();
+    expect(screen.getByRole('combobox', { name: 'Projection inline' })).toHaveTextContent('Equisolid Angle');
+    expect(screen.queryByLabelText('Projection inline', { selector: 'input[type="color"]' })).toBeNull();
   });
 
   it('keeps optionless strings on the existing color control path', () => {

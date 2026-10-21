@@ -67,6 +67,25 @@
 @media (min-width: 60rem) {
   .sl-markdown-content .docs-shot--detail { max-width: 27rem; }
 }
+/* Every picture links to its full-size file (sync-features.mjs wraps it). */
+.sl-markdown-content .docs-shot-zoom { display: block; cursor: zoom-in; }
+.sl-markdown-content .docs-shot-zoom:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; border-radius: .5rem; }
+/* Node graphs keep a legible size on narrow screens and scroll sideways inside their figure.
+   The callout stage (not only the picture) gets the width, so its overlay stays on the picture;
+   the caption stays in view. It says that the picture scrolls only where it does: below the
+   44rem stage plus the 1rem gutters on both sides. */
+@media (max-width: 50rem) {
+  .sl-markdown-content .docs-shot--graph { overflow-x: auto; }
+  .sl-markdown-content .docs-shot--graph img,
+  .sl-markdown-content .docs-shot--graph .docs-shot-stage { min-width: 44rem; }
+  .sl-markdown-content .docs-shot--graph figcaption { position: sticky; left: 0; }
+}
+@media (max-width: 46rem) {
+  .sl-markdown-content .docs-shot--graph figcaption::before {
+    content: 'Scroll sideways, or tap the picture to enlarge it. ';
+    color: var(--sl-color-gray-1);
+  }
+}
 
 /* Vector callouts identify real controls without changing screenshot content. */
 .sl-markdown-content .docs-shot-stage { position: relative; }
@@ -92,4 +111,451 @@
   font: 700 22px system-ui, sans-serif;
   text-anchor: middle;
   dominant-baseline: central;
+}
+
+/* Live callouts (src/scripts/docsCallouts.js): each callout rests at 10 % and comes to full strength
+   while its word in the text (or the callout itself) is hovered; a line with right-angle corners runs
+   from the word to the callout. */
+.docs-callouts-live .docs-callout {
+  opacity: 0.1;
+  pointer-events: visiblePainted;
+  transition: opacity 0.2s ease;
+}
+.docs-callouts-live .docs-callout.is-active { opacity: 1; }
+.sl-markdown-content .docs-callout-word {
+  cursor: pointer;
+  border-radius: 3px;
+  text-decoration: underline dotted #ffd54a 2px;
+  text-underline-offset: 3px;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+:root[data-theme='light'] .sl-markdown-content .docs-callout-word { text-decoration-color: #b98900; }
+.sl-markdown-content .docs-callout-word.is-active {
+  background-color: rgb(255 213 74 / 0.22);
+  box-shadow: 0 0 0 2px rgb(255 213 74 / 0.22);
+}
+.docs-callout-link {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 5;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.docs-callout-link.is-active { opacity: 1; }
+.docs-callout-link path {
+  fill: none;
+  stroke: #ffd54a;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.7));
+  transition: stroke-dashoffset 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.docs-callout-link circle { fill: #ffd54a; filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.7)); }
+@media (prefers-reduced-motion: reduce) {
+  .docs-callout-link path, .docs-callouts-live .docs-callout { transition: none; }
+}
+
+/* Floating shots: the text runs beside the picture on wide screens and below it on phones.
+   Use <figure class="docs-shot docs-shot--float-right"> (or --float-left) around the image. */
+@media (min-width: 50rem) {
+  .sl-markdown-content .docs-shot--float-right,
+  .sl-markdown-content .docs-shot--float-left {
+    width: 58%;
+    margin-top: .35rem;
+    margin-bottom: 1rem;
+  }
+  .sl-markdown-content .docs-shot--float-right { float: right; margin-left: 1.5rem; }
+  .sl-markdown-content .docs-shot--float-left { float: left; margin-right: 1.5rem; }
+  .sl-markdown-content h2,
+  .sl-markdown-content h3,
+  .sl-markdown-content .docs-float-end { clear: both; }
+  /* Lists and paragraphs beside a floating shot stay in one column: bullets keep clear of the
+     picture, and a tip does not jump to full width under it mid-sentence. */
+  .sl-markdown-content .docs-shot--float-right ~ ul,
+  .sl-markdown-content .docs-shot--float-left ~ ul,
+  .sl-markdown-content .docs-shot--float-right ~ p,
+  .sl-markdown-content .docs-shot--float-left ~ p { display: flow-root; }
+}
+
+/* Clips: <figure class="docs-shot docs-clip"> around a muted loop, in the same frame as the
+   pictures (scripts/doc-clip.mjs prints the figure). The sync gives every <video> the class
+   docs-clip-video, site URLs and its poster's size (the box is reserved before it loads);
+   src/scripts/docsClips.js plays it only while it is in view and never under reduced motion. */
+.sl-markdown-content .docs-clip video,
+.sl-markdown-content .docs-clip-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: .5rem;
+  background: #111;
+  object-fit: contain;
+}
+.sl-markdown-content .docs-clip-video:focus { outline: none; }
+.sl-markdown-content .docs-clip-video:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; }
+.sl-markdown-content .docs-clip > p { margin: 0; }
+
+/* Compare sliders: <figure class="docs-shot docs-compare"> around a pair asset (original | effect at
+   the same size, no gap). The sync (scripts/lib/compare.mjs) builds a stage of one half's size: the
+   effect half below, the original half above it, clipped at --docs-compare. Without JavaScript it is
+   a split picture with a thin line; src/scripts/docsCompare.js marks it data-ready and makes the
+   line draggable (data-glide eases a jump, data-live shows a loop's canvas halves). */
+@property --docs-compare {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 50%;
+}
+.sl-markdown-content .docs-compare-stage {
+  --docs-compare: 50%;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: .5rem;
+  background: #111;
+  touch-action: pan-y pinch-zoom;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-markdown-content .docs-compare-stage[data-ready] { cursor: ew-resize; }
+.sl-markdown-content .docs-compare-stage[data-glide] { transition: --docs-compare .18s ease-out; }
+.sl-markdown-content .docs-compare-before,
+.sl-markdown-content .docs-compare-after { position: absolute; inset: 0; overflow: hidden; }
+.sl-markdown-content .docs-compare-before { clip-path: inset(0 calc(100% - var(--docs-compare)) 0 0); }
+/* Each half shows its side of the pair: the picture is twice as wide as the stage. */
+.sl-markdown-content .docs-compare .docs-compare-stage img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 200%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+.sl-markdown-content .docs-compare .docs-compare-after img { left: -100%; }
+.sl-markdown-content .docs-compare .docs-compare-frame {
+  position: absolute;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+}
+.sl-markdown-content .docs-compare .docs-compare-stage[data-live] .docs-compare-frame { display: block; }
+/* The loop's video lies under the halves, which show its frames. */
+.sl-markdown-content .docs-compare .docs-compare-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+}
+.sl-markdown-content .docs-compare-tag {
+  position: absolute;
+  top: .5rem;
+  padding: .05rem .4rem;
+  border-radius: .25rem;
+  background: rgb(0 0 0 / .5);
+  color: #fff;
+  font-size: .6875rem;
+  font-weight: 500;
+  line-height: 1.5;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.sl-markdown-content .docs-compare-before .docs-compare-tag { left: .5rem; }
+.sl-markdown-content .docs-compare-after .docs-compare-tag { right: .5rem; }
+/* The divider: a thin white line, and (once the script runs) a small round handle in its middle. */
+.sl-markdown-content .docs-compare-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--docs-compare);
+  width: 2px;
+  margin-left: -1px;
+  background: rgb(255 255 255 / .9);
+  box-shadow: 0 0 2px rgb(0 0 0 / .5);
+  outline: none;
+}
+.sl-markdown-content .docs-compare-stage[data-ready] .docs-compare-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2rem;
+  height: 2rem;
+  translate: -50% -50%;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: rgb(0 0 0 / .4) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23fff'%3E%3Cpath d='M8 5.5 3.5 10 8 14.5zM12 5.5l4.5 4.5-4.5 4.5z'/%3E%3C/svg%3E") center / 1.1rem no-repeat;
+  box-shadow: 0 1px 4px rgb(0 0 0 / .45);
+}
+.sl-markdown-content .docs-compare-handle:focus { outline: none; }
+.sl-markdown-content .docs-compare-handle:focus-visible::after {
+  outline: 2px solid var(--sl-color-accent);
+  outline-offset: 2px;
+}
+/* Play button of a loop under reduced motion or blocked autoplay (docsClips.js marks the video). */
+.sl-markdown-content .docs-compare-play {
+  position: absolute;
+  right: .5rem;
+  bottom: .5rem;
+  display: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / .55);
+  color: #fff;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-markdown-content .docs-compare-stage:has(> video[data-docs-manual]) .docs-compare-play { display: grid; }
+.sl-markdown-content .docs-compare-play svg { width: 1rem; height: 1rem; fill: currentColor; }
+.sl-markdown-content .docs-compare-play[data-playing] .docs-compare-play-icon,
+.sl-markdown-content .docs-compare-play:not([data-playing]) .docs-compare-pause-icon { display: none; }
+.sl-markdown-content .docs-compare-play:focus { outline: none; }
+.sl-markdown-content .docs-compare-play:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
+
+/* Edit diagrams: inline SVG with real <text>; everything inherits the theme through
+   currentColor, and meaning never rests on colour alone (clips carry their letters). */
+.sl-markdown-content .docs-diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  color: var(--sl-color-white);
+  font-family: var(--sl-font);
+  overflow: visible;
+}
+.sl-markdown-content .docs-diagram text { fill: currentColor; font-size: 14px; }
+.sl-markdown-content .docs-diagram .docs-diagram-lane { fill: var(--sl-color-gray-6); stroke: var(--sl-color-hairline); }
+.sl-markdown-content .docs-diagram .docs-diagram-clip { fill: var(--sl-color-gray-5); stroke: currentColor; stroke-width: 1.5; }
+.sl-markdown-content .docs-diagram .docs-diagram-clip--alt { fill: var(--sl-color-accent-low); stroke: var(--sl-color-accent); }
+.sl-markdown-content .docs-diagram .docs-diagram-highlight { fill: none; stroke: #ffd54a; stroke-width: 3; }
+.sl-markdown-content .docs-diagram .docs-diagram-playhead { stroke: var(--sl-color-accent); stroke-width: 2; }
+.sl-markdown-content .docs-diagram .docs-diagram-muted { fill: var(--sl-color-gray-3); }
+@media (max-width: 50rem) {
+  .sl-markdown-content .docs-diagram--wide { overflow-x: auto; }
+  .sl-markdown-content .docs-diagram--wide svg { min-width: 36rem; }
+  .sl-markdown-content .docs-diagram--wide figcaption { position: sticky; left: 0; }
+}
+
+/* Effect galleries: <!-- docs-gallery: <group> --> expands to a card grid (thumbnail, name, one
+   line). Two columns on phones; every card keeps the old heading slug as its id. */
+.sl-markdown-content .docs-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+  gap: .75rem;
+  margin: 1.5rem 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+@media (max-width: 34rem) {
+  .sl-markdown-content .docs-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+}
+.sl-markdown-content .docs-gallery > li {
+  min-width: 0;
+  margin: 0;
+  scroll-margin-top: calc(var(--sl-nav-height, 3.5rem) + 1.5rem);
+}
+.sl-markdown-content .docs-gallery-card {
+  display: flex;
+  flex-direction: column;
+  gap: .2rem;
+  height: 100%;
+  padding: .45rem .45rem .6rem;
+  border: 1px solid var(--sl-color-hairline);
+  border-radius: .5rem;
+  color: var(--sl-color-white);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-markdown-content a.docs-gallery-card:hover { border-color: var(--sl-color-accent); }
+.sl-markdown-content a.docs-gallery-card:focus { outline: none; }
+.sl-markdown-content a.docs-gallery-card:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
+.sl-markdown-content .docs-gallery > li:target .docs-gallery-card { border-color: #ffd54a; box-shadow: 0 0 0 1px #ffd54a; }
+.sl-markdown-content .docs-gallery-thumb {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin: 0 0 .3rem;
+  object-fit: cover;
+  border-radius: .3rem;
+  background: var(--sl-color-gray-5);
+}
+.sl-markdown-content .docs-gallery-name { font-size: .9375rem; font-weight: 600; line-height: 1.3; }
+.sl-markdown-content .docs-gallery-text { color: var(--sl-color-gray-2); font-size: .8125rem; line-height: 1.45; }
+.sl-markdown-content .docs-gallery-card--soon { color: var(--sl-color-gray-2); border-style: dashed; }
+
+/* Phone header: a long site title ends in an ellipsis instead of being cut mid-word. */
+.site-title { min-width: 0; }
+.site-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Lightbox (src/scripts/docsLightbox.js): a click on a picture opens it full screen, zoomable with the
+   wheel and movable by dragging; the callout names and notes stand left and right of it. */
+.docs-lightbox-open { overflow: hidden; }
+.docs-lightbox {
+  --docs-lightbox-left: 0;
+  --docs-lightbox-right: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  grid-template-columns: var(--docs-lightbox-left) minmax(0, 1fr) var(--docs-lightbox-right);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: 'bar bar bar' 'left view right';
+  background: #0b0c10;
+  color: #e8e9ec;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+.docs-lightbox.is-open { opacity: 1; }
+.docs-lightbox.has-left { --docs-lightbox-left: clamp(12rem, 19vw, 19rem); }
+.docs-lightbox.has-right { --docs-lightbox-right: clamp(12rem, 19vw, 19rem); }
+.docs-lightbox-bar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.9rem;
+}
+.docs-lightbox-hint { margin-right: auto; font-size: 0.85rem; color: #9aa0ab; }
+.docs-lightbox-caption { margin: 0 auto 0 0; font-size: 0.9rem; color: #c9ccd4; }
+.docs-lightbox-bar .docs-lightbox-caption + .docs-lightbox-hint { display: none; }
+.docs-lightbox-fit,
+.docs-lightbox-close {
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 0.08);
+  color: #eceef2;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.45rem 0.8rem;
+  cursor: pointer;
+}
+.docs-lightbox-close { font-size: 1.35rem; padding: 0.3rem 0.65rem; }
+.docs-lightbox-fit:hover,
+.docs-lightbox-close:hover { background: rgb(255 255 255 / 0.16); }
+.docs-lightbox button:focus { outline: none; }
+.docs-lightbox button:focus-visible { outline: 2px solid #ffd54a; outline-offset: 2px; }
+.docs-lightbox-view {
+  grid-area: view;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.docs-lightbox.is-dragging .docs-lightbox-view { cursor: grabbing; }
+.docs-lightbox-canvas { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.docs-lightbox-stage { position: relative; }
+.docs-lightbox-stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.docs-lightbox-stage .docs-shot-overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+/* Callouts keep their size on screen at any zoom: --docs-lightbox-k is fitted scale / scale. */
+.docs-lightbox-stage .docs-shot-number { r: calc(18px * var(--docs-lightbox-k, 1)); stroke-width: calc(2px * var(--docs-lightbox-k, 1)); }
+.docs-lightbox-stage .docs-shot-number-text { font-size: calc(22px * var(--docs-lightbox-k, 1)); }
+.docs-lightbox-stage .docs-shot-arrow { stroke-width: calc(4px * var(--docs-lightbox-k, 1)); }
+.docs-lightbox-notes {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 0.8rem;
+  overflow-y: auto;
+}
+.docs-lightbox-notes--left { grid-area: left; }
+.docs-lightbox-notes--right { grid-area: right; }
+.docs-lightbox-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.docs-lightbox-notes--left .docs-lightbox-note { flex-direction: row-reverse; text-align: right; }
+.docs-lightbox-note.is-active { background: rgb(255 213 74 / 0.12); border-color: rgb(255 213 74 / 0.45); }
+.docs-lightbox-badge {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: #ffd54a;
+  color: #111;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.docs-lightbox-note-text { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.92rem; line-height: 1.35; }
+.docs-lightbox-note-text strong { color: #fff; font-size: 1rem; }
+.docs-lightbox-note-text span { color: #b4b8c2; }
+.docs-lightbox-line {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 1001;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.docs-lightbox-line.is-active { opacity: 1; }
+.docs-lightbox-line path {
+  fill: none;
+  stroke: #ffd54a;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 1.5px rgb(0 0 0 / 0.7));
+  transition: stroke-dashoffset 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.docs-lightbox-line circle { fill: #ffd54a; }
+@media (max-width: 50rem) {
+  .docs-lightbox,
+  .docs-lightbox.has-left,
+  .docs-lightbox.has-right {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: 'bar' 'view' 'left' 'right';
+  }
+  .docs-lightbox-notes { justify-content: flex-start; max-height: 24vh; padding: 0.4rem 0.8rem; }
+  .docs-lightbox-notes--left .docs-lightbox-note { flex-direction: row; text-align: left; }
+  .docs-lightbox-hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .docs-lightbox, .docs-lightbox-line path { transition: none; }
 }

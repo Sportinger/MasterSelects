@@ -1,3 +1,4 @@
+import { createLegacyPixelateGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { describe, expect, it, vi } from 'vitest';
 import { splitLayerEffects } from '../../src/engine/render/layerEffectStack';
 import { createDefaultInvertImageGraph, compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
@@ -15,8 +16,8 @@ import { threshold } from '../../src/effects/stylize/threshold';
 import { posterize } from '../../src/effects/stylize/posterize';
 import type { FullscreenEffectDefinition } from '../../src/effects/types';
 import { createOperatorCompositePipeline } from '../../src/engine/pipeline/compositor/operatorPipeline';
-import { createDefaultPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
-import { createDefaultVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
+import { createEarlierPointwiseEffectGraph } from '../../src/services/operators/pointwiseEffectGraphs';
+import { createEarlierScanlinesGraph, createEarlierVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 import { vignette } from '../../src/effects/stylize/vignette';
 import { scanlines } from '../../src/effects/stylize/scanlines';
 import { pixelate } from '../../src/effects/distort/pixelate';
@@ -84,19 +85,20 @@ describe('image graph render integration', () => {
   });
 
   it('retains posterize white overflow until the render-target format clamps it', () => {
-    const plan = compileImageOperatorGraph(createDefaultPointwiseEffectGraph('posterize'), { levels: 6 });
+    const plan = compileImageOperatorGraph(createEarlierPointwiseEffectGraph('posterize'), { levels: 6 });
     expect(evaluateImageOperatorPlan(plan, [1, 1, 1, 0.4])).toEqual([1.2, 1.2, 1.2, 0.4]);
   });
 
   it('keeps contextual graphs in a fullscreen pass and supplies fragment UV', () => {
-    const instance = { id: 'vignette-test', type: 'vignette', name: 'Vignette', enabled: true, params: {} };
+    // The earlier recipe (saved projects) reads only UV; the current one also reads the resolution.
+    const instance = { id: 'vignette-test', type: 'vignette', name: 'Vignette', enabled: true, params: {}, operatorGraph: createEarlierVignetteGraph() };
     expect(splitLayerEffects([instance]).complexEffects).toEqual([instance]);
     const definition = imageGraphDefinition(instance, vignette as FullscreenEffectDefinition);
     expect(definition.shader).toContain('evaluateImageGraph(textureSample(inputTex, texSampler, input.uv), input.uv, imageParameters)');
   });
 
   it('packs composition time after the shared parameter block without specializing the shader key', () => {
-    const instance = { id: 'scanlines-time', type: 'scanlines', name: 'Scanlines', enabled: true, params: {} };
+    const instance = { id: 'scanlines-time', type: 'scanlines', name: 'Scanlines', enabled: true, params: {}, operatorGraph: createEarlierScanlinesGraph() };
     const atTwo = imageGraphDefinition(instance, scanlines as FullscreenEffectDefinition, 2);
     const atThree = imageGraphDefinition(instance, scanlines as FullscreenEffectDefinition, 3);
     expect(atTwo.id).toBe(atThree.id);
@@ -107,7 +109,8 @@ describe('image graph render integration', () => {
   });
 
   it('adapts sampling graphs with the existing texture source and packed input resolution', () => {
-    const instance = { id: 'pixelate-sample', type: 'pixelate', name: 'Pixelate', enabled: true, params: {} };
+    // The pre-review single-pass Pixelate graph (edited saved graphs keep it): one fullscreen sampling pass.
+    const instance = { id: 'pixelate-sample', type: 'pixelate', name: 'Pixelate', enabled: true, params: {}, operatorGraph: createLegacyPixelateGraph() };
     const definition = imageGraphDefinition(instance, pixelate as FullscreenEffectDefinition);
     const packed = definition.packUniforms({}, 1280, 720)!;
     expect(definition.uniformSize).toBe(272);
@@ -118,7 +121,7 @@ describe('image graph render integration', () => {
 
   it('routes an edited formerly-local graph with UV capability through a fullscreen pass', () => {
     const instance = { id: 'brightness-uv', type: 'brightness', name: 'Brightness', enabled: true,
-      params: { amount: 0.2 }, operatorGraph: createDefaultVignetteGraph() };
+      params: { amount: 0.2 }, operatorGraph: createEarlierVignetteGraph() };
     expect(splitLayerEffects([instance]).complexEffects).toEqual([instance]);
   });
 

@@ -117,6 +117,8 @@ export interface InspectorRowProps {
   className?: string;
   disabled?: boolean;
   label: string;
+  /** Id of the row's single control: the label text then activates it (a checkbox row clicks anywhere). */
+  labelFor?: string;
   target?: string;
   title?: string;
   variant: InspectorVariant;
@@ -129,6 +131,7 @@ export function InspectorRow({
   className,
   disabled = false,
   label,
+  labelFor,
   target,
   title,
   variant,
@@ -146,7 +149,9 @@ export function InspectorRow({
       data-export-target={target}
       title={title}
     >
-      <span className={`inspector-row-label ${prefix}-row-label`}>{label}</span>
+      {labelFor
+        ? <label className={`inspector-row-label ${prefix}-row-label`} htmlFor={labelFor}>{label}</label>
+        : <span className={`inspector-row-label ${prefix}-row-label`}>{label}</span>}
       <div className={`inspector-row-control ${prefix}-row-control`}>{children}</div>
       {(actions || alwaysRenderActions) && (
         <div className={`inspector-row-actions ${prefix}-row-actions`}>{actions}</div>

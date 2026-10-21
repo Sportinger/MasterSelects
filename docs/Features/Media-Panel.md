@@ -47,7 +47,7 @@ unchanged and are retained for project save/relink; reopening develops the RAW
 again. Decoding is serialized and its runtime PNG cache is limited to 128 MiB.
 This is a fixed RAW development, without interactive RAW exposure/white-balance
 controls or a 16-bit RAW grading pipeline. Other camera RAW extensions are not
-yet advertised. See [Lens Correction](Effects.md#lens-correction) for the Canon
+yet advertised. See [Lens Correction](Effect-System.md#lens-correction) for the Canon
 EF 24–105 mm profile dropdown and manual
 optical corrections.
 

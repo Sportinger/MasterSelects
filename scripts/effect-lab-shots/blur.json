@@ -1,0 +1,26 @@
+{
+  "pairs": [
+    {
+      "name": "gaussian-blur",
+      "out": "docs/Features/assets/effects/gaussian-blur.webp",
+      "image": "harbor_town",
+      "width": 1920,
+      "layout": "compare",
+      "left": { "effect": "original" },
+      "right": { "effect": "gaussian-blur", "params": { "radius": 12 } },
+      "alt": "The harbour town, original left and with Gaussian Blur at Radius 12 right: boats, houses and the mountain go soft and their edges melt into the sky and the water",
+      "caption": "Left: original. Right: Radius 12."
+    },
+    {
+      "name": "box-vs-gaussian-lights",
+      "out": "docs/Features/assets/effects/box-vs-gaussian-lights.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [630, 390, 240, 146],
+      "zoom": 1.5,
+      "gap": 6,
+      "left": { "effect": "gaussian-blur", "params": { "radius": 10 } },
+      "right": { "effect": "box-blur", "params": { "radius": 10 } }
+    }
+  ]
+}

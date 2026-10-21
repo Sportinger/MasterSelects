@@ -9,6 +9,7 @@ const parameters = (group: string): OperatorParameter[] => Object.entries(VOXEL_
     id, label: value.label, type: value.type === 'select' ? 'select' : value.type === 'boolean' ? 'boolean' : 'number', default: value.default,
     ...(value.type === 'select' ? { options: value.options } : {}),
     min: value.min, max: value.max, step: value.step, animatable: value.animatable,
+    ...(value.unit === '°' ? { unit: 'degrees' } : {}),
   }));
 const op = (id: string, label: string, description: string, inputs: OperatorPort[], outputs: OperatorPort[], params: OperatorParameter[], addable = true): OperatorDefinition =>
   ({ id, version: 1, label, description, inputs, outputs, parameters: params, runtime: 'builtin', invalidates: 'appearance', bypass: 'mute', addable });

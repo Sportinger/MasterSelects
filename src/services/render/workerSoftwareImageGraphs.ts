@@ -1,5 +1,7 @@
 import type { ImageOperatorPlan } from '../operators/imageOperatorGraph';
 import { createImageOperatorEvaluator } from '../operators/imageOperatorEvaluation';
+import { pointwiseOperation } from '../operators/fields/pointwiseOperations';
+import { imageResourceSize } from '../operators/imageResourceScale';
 import { glyphAtlasCacheKey } from '../../effects/_shared/glyphAtlasPlan';
 import { rasterizeGlyphAtlas } from '../../effects/_shared/glyphAtlasRaster';
 import { IMAGE_FRAME_HISTORY_RESOURCE_ID } from '../operators/imageOperatorResources';
@@ -124,9 +126,7 @@ function applyMaterializedPasses(data: Uint8ClampedArray, width: number, height:
   const descriptors = new Map((plan.resources ?? []).map(resource => [resource.id, resource]));
   const produced = new Map<string, FloatRaster>();
   for (const { pass, resources } of passes) {
-    const maxEdge = pass.outputResource ? descriptors.get(pass.outputResource)?.maxEdge : undefined;
-    const scale = maxEdge ? Math.min(1, maxEdge / Math.max(width, height)) : 1;
-    const passWidth = Math.max(1, Math.round(width * scale)), passHeight = Math.max(1, Math.round(height * scale));
+    const { width: passWidth, height: passHeight } = imageResourceSize(pass.outputResource ? descriptors.get(pass.outputResource) : undefined, width, height);
     const samplers = new Map([...resources].map(([id, resource]) => [id, snapshotSampler(resource.pixels, resource.width, resource.height)]));
     const loaders = new Map([...resources].map(([id, resource]) => [id, snapshotPixelLoader(resource.pixels, resource.width, resource.height)]));
     for (const [id, raster] of produced) {
@@ -155,6 +155,37 @@ function applyMaterializedPasses(data: Uint8ClampedArray, width: number, height:
 }
 
 const toByte = (value: number) => Math.round(Math.min(1, Math.max(0, value)) * 255);
+/** Distinct input colours a pointwise program remembers per frame (16 MB of Map entries at most). */
+const POINTWISE_MEMO_LIMIT = 1 << 20;
+
+/** Evaluator operations outside the pointwise table that still read only their arguments. */
+const PURE_PIXEL_OPERATIONS = new Set(['input', 'constant', 'parameter', 'rgb-to-hsv', 'hsv-to-rgb', 'rgb-to-oklch', 'oklch-to-rgb', 'gaussian-scalar']);
+
+/** A program that reads nothing but its own input pixel (no UV, time, sampling, scopes or resources). */
+function isPointwiseProgram(plan: ImageOperatorPlan, resources: ReadonlyMap<string, SoftwareExternalResource>): boolean {
+  return plan.capabilities.length === 0 && plan.sampleScopes.length === 0 && !plan.frameHistoryResource
+    && !(plan.resourceInputs?.length) && resources.size === 0
+    && plan.instructions.every(item => PURE_PIXEL_OPERATIONS.has(item.operation) || !!pointwiseOperation(item.operation));
+}
+
+/**
+ * Pointwise programs (the color recipes) map equal input colours to equal outputs, so each distinct
+ * RGBA8 colour is evaluated once per frame: a 1080p photo has far fewer colours than pixels.
+ */
+function applyPointwiseProgram(data: Uint8ClampedArray, plan: ImageOperatorPlan): void {
+  const evaluate = createImageOperatorEvaluator(plan), memo = new Map<number, number>();
+  const words = new Uint32Array(data.buffer, data.byteOffset, data.length / 4);
+  const bytes = new Uint8ClampedArray(4), out = new Uint32Array(bytes.buffer);
+  for (let index = 0; index < words.length; index++) {
+    const key = words[index], known = memo.get(key);
+    if (known !== undefined) { words[index] = known; continue; }
+    const offset = index * 4;
+    const result = evaluate([data[offset] / 255, data[offset + 1] / 255, data[offset + 2] / 255, data[offset + 3] / 255], {});
+    bytes[0] = toByte(result[0]); bytes[1] = toByte(result[1]); bytes[2] = toByte(result[2]); bytes[3] = toByte(result[3]);
+    if (memo.size < POINTWISE_MEMO_LIMIT) memo.set(key, out[0]);
+    words[index] = out[0];
+  }
+}
 
 /** Applies canonical image programs (single-pass or materialized pass chains) to a straight-alpha RGBA8 raster. */
 export function applyWorkerSoftwareImageGraphs(data: Uint8ClampedArray, width: number, height: number,
@@ -180,6 +211,7 @@ export function applyWorkerSoftwareImageGraphs(data: Uint8ClampedArray, width: n
   });
   for (const { plan, owner, resources, passes } of prepared) {
     if (passes) { applyMaterializedPasses(data, width, height, plan, passes, timelineTime); continue; }
+    if (isPointwiseProgram(plan, resources) && data.byteOffset % 4 === 0) { applyPointwiseProgram(data, plan); continue; }
     const input = data.slice(), sampleImage = snapshotSampler(input, width, height), loadImage = snapshotPixelLoader(input, width, height);
     const evaluate = createImageOperatorEvaluator(plan);
     const samplers = new Map([...resources].map(([id, resource]) => [id, snapshotSampler(resource.pixels, resource.width, resource.height)]));

@@ -208,7 +208,7 @@ export function EffectNodeParameters({ clip, node }: { clip: TimelineClip; node:
               effect={effect}
               paramName={paramName}
               paramDef={paramDef}
-              value={coerceEffectEditorValue(interpolatedEffect.params[paramName], paramDef.default)}
+              value={coerceEffectEditorValue(interpolatedEffect.params[paramName], paramDef.legacyDefault ?? paramDef.default)}
             />
           ))
         ) : (

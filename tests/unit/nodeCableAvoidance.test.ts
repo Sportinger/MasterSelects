@@ -61,6 +61,18 @@ describe('cable obstacle avoidance', () => {
     expect(back.some(point => point.y > backFrom.y && point.y < backTo.y)).toBe(true);
   });
 
+  it('keeps a short link between facing cards direct instead of looping back', () => {
+    // A value card right before its consumer: the port tips sit 24 units out from the port dots.
+    for (const [gap, dy] of [[56, 40], [70, 113], [56, -60]]) {
+      const value = { x: 0, y: 0, width: 184, height: 135 }, consumer = { x: 184 + gap, y: 0, width: 184, height: 200 };
+      const from = { x: 184 - 12.5 + 24, y: 100 }, to = { x: consumer.x + 12.5 - 24, y: 100 + dy };
+      const route = routeAroundCards([value, consumer], [{ id: 'e', from, to }]).get('e');
+      const points = [from, ...route ?? [], to];
+      for (let index = 1; index < points.length; index++) expect(points[index].x).toBeGreaterThanOrEqual(points[index - 1].x);
+      for (const card of [value, consumer]) expect(hits(sampleCableRoute(cableRoute(from, to, 'curved', route)), { x: card.x + 2, y: card.y + 2, width: card.width - 4, height: card.height - 4 })).toBe(false);
+    }
+  });
+
   it('routes a large column layout within an interactive budget', () => {
     const cards: AvoidRect[] = [];
     for (let column = 0; column < 25; column++) for (let row = 0; row < 20; row++) cards.push({ x: column * 400, y: row * 260, width: 184, height: 180 });

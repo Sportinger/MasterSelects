@@ -53,6 +53,8 @@ export const BLEND_MODE_MAP: Record<string, number> = {
   'silhouette-alpha': 34,
   'silhouette-luma': 35,
   'alpha-add': 36,
+  // Internal transition operator, see BlendMode 'plus'
+  'plus': 37,
 };
 
 // Layer render data prepared for GPU rendering

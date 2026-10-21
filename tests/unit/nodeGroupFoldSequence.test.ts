@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMockClip } from '../helpers/mockData';
+import { createLegacyKaleidoscopeGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { buildClipNodeGraphDocument } from '../../src/services/nodeGraph';
 import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipGraph';
 import { reconcileCanvasPlacement } from '../../src/components/panels/nodes/canvas/nodeCanvasPlacement';
@@ -8,7 +9,9 @@ import { createNodeGroupFoldKeyframes, createNodeGroupFoldSequence, nodeGroupFol
 import type { NodeLayoutSnapshot } from '../../src/components/panels/nodes/canvas/nodeLayoutTransition';
 
 function setup() {
-  const clip = createMockClip({ effects: [{ id: 'k', name: 'Kaleidoscope', type: 'kaleidoscope', enabled: true, params: { segments: 6, rotation: 0 } }] });
+  const clip = createMockClip({ effects: [{ id: 'k', name: 'Kaleidoscope', type: 'kaleidoscope', enabled: true, params: { segments: 6, rotation: 0 },
+    // The pre-review recipe: three shared coordinate compositions and no stage folders.
+    operatorGraph: createLegacyKaleidoscopeGraph() }] });
   const full = buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip, [], [], undefined, true);
   const project = (states: Record<string, boolean>) => {
     const current = { ...clip, nodeGraph: { version: 1 as const, nodes: [], groups: Object.fromEntries(Object.entries(states).map(([id, collapsed]) => [id, { collapsed }])) } };

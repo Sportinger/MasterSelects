@@ -29,9 +29,9 @@ export const PARTICLE_DISINTEGRATE_OPERATORS: readonly OperatorDefinition[] = [
     [], [{ id: 'force', label: 'Force', type: 'force' }], parameters('directionX', 'directionY', 'gustStrength', 'gustScale')),
   op('forces.curl-noise', 'Curl Noise', 'Swirls released particles through a curl noise field; Turbulence adds finer jitter.',
     [], [{ id: 'force', label: 'Force', type: 'force' }], parameters('curlStrength', 'turbulence')),
-  op('render.pixel-particles', 'Particle Render', 'Draws the particles as the clip image. Mute to show the unchanged input image.',
+  op('render.pixel-particles', 'Particle Render', 'Draws the particles as the clip image: each starts as its exact cell, grows to Particle Size and takes its Shape as it flies, and Fade thins it out over its flight. Mute to show the unchanged input image.',
     [particles('particles', true)], [{ id: 'image', label: 'Rendered image', type: 'image' }],
-    parameters('particleSize', 'softness', 'shape', 'maxPreviewParticles', 'maxExportParticles', 'maxInstances'), { addable: false }),
+    parameters('particleSize', 'softness', 'shape', 'fade', 'maxPreviewParticles', 'maxExportParticles', 'maxInstances'), { addable: false }),
 ];
 
 export const PARTICLE_DISINTEGRATE_SHARED_OPERATOR_IDS = new Set(['image.frame', 'forces.gravity']);

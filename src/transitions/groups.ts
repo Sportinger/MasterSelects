@@ -209,7 +209,7 @@ export const DISSOLVE_TRANSITION_GROUP: DissolveTransitionGroup = {
 };
 
 export const DISSOLVE_TRANSITION_OPTION_LABELS: Record<DissolveTransitionOption, string> = {
-  crossfade: 'Cross',
+  crossfade: 'Crossfade',
   'blur-dissolve': 'Blur',
   'additive-dissolve': 'Add',
   'non-additive-dissolve': 'Dark',

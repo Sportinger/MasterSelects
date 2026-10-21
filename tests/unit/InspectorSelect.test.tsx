@@ -58,6 +58,29 @@ describe('InspectorSelect pointer interaction', () => {
     expect(trigger).not.toHaveFocus();
   });
 
+  it('opens upward when the menu would run past the bottom of its scrolling panel', () => {
+    const rect = (top: number, height: number) => ({ top, bottom: top + height, height, left: 0, right: 200, width: 200, x: 0, y: top, toJSON: () => ({}) });
+    const panelRect = vi.fn(() => rect(100, 200));
+    const selectRect = vi.fn(() => rect(270, 24));
+    render(<div data-testid="panel" style={{ overflowY: 'auto' }}><InspectorSelect ariaLabel="Audio curve"
+      onChange={vi.fn()} options={[...OPTIONS]} value="normal" /></div>);
+    screen.getByTestId('panel').getBoundingClientRect = panelRect as unknown as () => DOMRect;
+    const trigger = screen.getByRole('combobox', { name: 'Audio curve' });
+    (trigger.parentElement as HTMLElement).getBoundingClientRect = selectRect as unknown as () => DOMRect;
+    const offsetHeight = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(80);
+    try {
+      fireEvent.click(trigger);
+      // 6 px left below the select inside the panel, 170 px above it.
+      expect(screen.getByRole('listbox')).toHaveAttribute('data-placement', 'above');
+      fireEvent.click(trigger);
+      selectRect.mockImplementation(() => rect(110, 24));
+      fireEvent.click(trigger);
+      expect(screen.getByRole('listbox')).toHaveAttribute('data-placement', 'below');
+    } finally {
+      offsetHeight.mockRestore();
+    }
+  });
+
   it('cycles the selected value with the mouse wheel while closed', () => {
     const onChange = vi.fn();
     const { rerender } = render(

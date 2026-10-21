@@ -1,4 +1,5 @@
-﻿import type {
+﻿import { resolveWorkerPresenterBlendIndex } from './workerGpuPresenterBlendModes';
+import type {
   WorkerGpuPresentBaseOptions,
   WorkerGpuPresentDiagnostics,
   WorkerGpuPresentResult,
@@ -57,8 +58,7 @@ export interface WorkerGpuVideoFramePresentLayer {
   readonly blurRadius?: number; readonly exposure?: number; readonly exposureOffset?: number; readonly exposureGamma?: number;
   readonly temperature?: number; readonly tint?: number; readonly vibrance?: number; readonly thresholdLevel?: number;
   readonly posterizeLevels?: number; readonly vignetteAmount?: number; readonly vignetteSize?: number; readonly vignetteSoftness?: number;
-  readonly vignetteRoundness?: number; readonly chromaKeyMode?: number; readonly chromaKeyTolerance?: number; readonly chromaKeySoftness?: number;
-  readonly chromaKeySpill?: number; readonly scanlineDensity?: number; readonly scanlineOpacity?: number; readonly scanlineSpeed?: number;
+  readonly vignetteRoundness?: number; readonly scanlineDensity?: number; readonly scanlineOpacity?: number; readonly scanlineSpeed?: number;
   readonly grainAmount?: number; readonly grainSize?: number; readonly grainSpeed?: number;
   readonly waveAmplitudeX?: number; readonly waveAmplitudeY?: number; readonly waveFrequencyX?: number; readonly waveFrequencyY?: number;
   readonly twirlAmount?: number; readonly twirlRadius?: number; readonly twirlCenterX?: number; readonly twirlCenterY?: number;
@@ -110,32 +110,7 @@ const BITMAP_LAYER_COMPOSITE_SHADER = VIDEO_FRAME_LAYER_COMPOSITE_SHADER
     'textureSample(frameTexture, frameSampler, input.uv)',
   );
 
-const BLEND_MODE_TO_GPU_INDEX: Record<string, number> = {
-  normal: 0,
-  dissolve: 0,
-  'dancing-dissolve': 0,
-  multiply: 1,
-  screen: 2,
-  overlay: 3,
-  darken: 4,
-  'darker-color': 4,
-  lighten: 5,
-  'lighter-color': 5,
-  add: 6,
-  'linear-dodge': 6,
-  subtract: 7,
-  'linear-burn': 7,
-  difference: 8,
-  'classic-difference': 8,
-  exclusion: 9,
-  'color-dodge': 10,
-  'classic-color-dodge': 10,
-  'color-burn': 11,
-  'classic-color-burn': 11,
-  'hard-light': 12,
-  'soft-light': 13,
-  divide: 14,
-};
+
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -268,7 +243,7 @@ function createLayerUniformBuffer(
   const f32 = (offset: number, value: number) => view.setFloat32(offset, value, true);
   const u32 = (offset: number, value: number) => view.setUint32(offset, value, true);
   f32(0, Math.max(0, Math.min(1, finiteNumber(layer.opacity, 1))));
-  u32(4, BLEND_MODE_TO_GPU_INDEX[layer.blendMode] ?? 0);
+  u32(4, resolveWorkerPresenterBlendIndex(layer.blendMode));
   f32(8, finiteNumber(layer.inlineBrightness, 0));
   f32(12, finiteNumber(layer.inlineContrast, 1));
   f32(16, finiteNumber(layer.inlineSaturation, 1));
@@ -292,10 +267,7 @@ function createLayerUniformBuffer(
   f32(88, finiteNumber(layer.vignetteSize, 0.5));
   f32(92, finiteNumber(layer.vignetteSoftness, 0.5));
   f32(96, finiteNumber(layer.vignetteRoundness, 1));
-  u32(100, Math.max(0, Math.floor(finiteNumber(layer.chromaKeyMode, 0))));
-  f32(104, finiteNumber(layer.chromaKeyTolerance, 0.2));
-  f32(108, finiteNumber(layer.chromaKeySoftness, 0.1));
-  f32(112, finiteNumber(layer.chromaKeySpill, 0.5));
+  // 100..115: reserved (retired chroma key), left at 0.
   f32(116, finiteNumber(layer.scanlineDensity, 0));
   f32(120, finiteNumber(layer.scanlineOpacity, 0));
   f32(124, finiteNumber(layer.scanlineSpeed, 0));

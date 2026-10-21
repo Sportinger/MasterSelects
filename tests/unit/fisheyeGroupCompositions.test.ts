@@ -33,7 +33,7 @@ function replaceArea(definition: OperatorDefinition) {
 
 describe('Fisheye processing groups in the reusable node menu', () => {
   it('offers every processing area and subgroup in image graphs, with no effect-owned parameter bindings', () => {
-    expect(FISHEYE_GROUP_COMPOSITIONS).toHaveLength(15);
+    expect(FISHEYE_GROUP_COMPOSITIONS).toHaveLength(17);
     for (const definition of FISHEYE_GROUP_COMPOSITIONS) {
       expect(getEffectOperator(definition.id)).toBe(definition);
       expect(addableEffectOperators('invert')).toContain(definition);

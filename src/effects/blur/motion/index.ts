@@ -1,7 +1,10 @@
-// Motion Blur Effect - High Quality
+// Motion Blur: two-stage directional blur along an on-screen angle; Length reaches a share of the frame size to each side.
+// Rendering is owned by the editable operator graph (services/operators/directionalBlurEffectGraphs.ts);
+// directionalBlur.wgsl is its WGSL reference. Contract: ../blurSampling.ts.
 
-import shader from './shader.wgsl?raw';
+import shader from '../directionalBlur.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { finiteBlurParam } from '../blurSampling';
 
 export const motionBlur: EffectDefinition = {
   id: 'motion-blur',
@@ -10,12 +13,12 @@ export const motionBlur: EffectDefinition = {
 
   shader,
   entryPoint: 'motionBlurFragment',
-  uniformSize: 16,
+  uniformSize: 32,
 
   params: {
     amount: {
       type: 'number',
-      label: 'Amount',
+      label: 'Length',
       default: 0.05,
       min: 0,
       max: 0.3,
@@ -30,6 +33,8 @@ export const motionBlur: EffectDefinition = {
       max: 6.28318,
       step: 0.01,
       animatable: true,
+      // Stored in radians (tools, keyframes); the card shows degrees.
+      displayUnit: 'degrees',
     },
     samples: {
       type: 'number',
@@ -39,16 +44,12 @@ export const motionBlur: EffectDefinition = {
       max: 128,
       step: 1,
       animatable: false,
-      quality: true,
+      hidden: true,
+      deprecated: 'Motion Blur now chooses its taps from the streak length automatically; samples has no effect.',
     },
   },
 
-  packUniforms: (params) => {
-    return new Float32Array([
-      params.amount as number ?? 0.05,
-      params.angle as number ?? 0,
-      params.samples as number ?? 24,
-      0,
-    ]);
-  },
+  packUniforms: (params, width, height) => new Float32Array([
+    finiteBlurParam(params.amount, 0.05), finiteBlurParam(params.angle, 0), 0.5, 0.5, width, height, 0, 0,
+  ]),
 };

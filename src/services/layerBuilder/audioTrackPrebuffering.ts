@@ -14,6 +14,8 @@ type AudioTrackPrebufferManagerOptions = {
   getPlayableSourceAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
   stemBufferMixers: AudioTrackStemBufferMixerManager;
   stemPreviewElements: AudioTrackStemPreviewElementManager;
+  /** Clips whose element a crossfade positioned at its earlier start this frame. */
+  isPreparedElsewhere?: (clipId: string) => boolean;
 };
 
 export class AudioTrackPrebufferManager {
@@ -21,11 +23,13 @@ export class AudioTrackPrebufferManager {
   private getPlayableSourceAudioElement: (clip: TimelineClip) => HTMLAudioElement | null;
   private stemBufferMixers: AudioTrackStemBufferMixerManager;
   private stemPreviewElements: AudioTrackStemPreviewElementManager;
+  private isPreparedElsewhere: (clipId: string) => boolean;
 
   constructor(options: AudioTrackPrebufferManagerOptions) {
     this.getPlayableSourceAudioElement = options.getPlayableSourceAudioElement;
     this.stemBufferMixers = options.stemBufferMixers;
     this.stemPreviewElements = options.stemPreviewElements;
+    this.isPreparedElsewhere = options.isPreparedElsewhere ?? (() => false);
   }
 
   preBufferUpcomingAudio(ctx: FrameContext): void {
@@ -34,7 +38,7 @@ export class AudioTrackPrebufferManager {
     const lookaheadEnd = ctx.playheadPosition + AUDIO_LOOKAHEAD_TIME;
 
     for (const clip of ctx.clips) {
-      if (!clip.source) continue;
+      if (!clip.source || this.isPreparedElsewhere(clip.id)) continue;
       if (clip.startTime <= ctx.playheadPosition || clip.startTime > lookaheadEnd) continue;
 
       const stemSeparation = clip.audioState?.stemSeparation;
@@ -68,6 +72,8 @@ export class AudioTrackPrebufferManager {
       for (const audio of audioElements) {
         if (this.preBufferedAudio.has(audio)) continue;
         if (!audio.src && audio.readyState === 0) continue;
+        // A playing element is in use (a crossfade's incoming sound starts before its clip): never move it.
+        if (!audio.paused) continue;
         if (Math.abs(audio.currentTime - clip.inPoint) > 0.1) audio.currentTime = clip.inPoint;
         this.preBufferedAudio.add(audio);
       }

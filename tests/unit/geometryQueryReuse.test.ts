@@ -7,7 +7,7 @@ import type { SlitScanGeometryCapture } from '../../src/effects/time/slit-scan/g
 
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-it('rebinds changed query values, recompiles graph edits, and rejects invalid input', () => {
+it('rebinds changed query values, recompiles graph edits, and renders non-finite input at the default', () => {
   vi.stubGlobal('GPUTextureUsage', { TEXTURE_BINDING: 1, RENDER_ATTACHMENT: 2 });
   const effect = { id: 'surface', type: 'slit-scan', params: getDefaultParams('slit-scan') };
   const graph = effectOperatorGraph(effect);
@@ -28,7 +28,11 @@ it('rebinds changed query values, recompiles graph edits, and rejects invalid in
   expect(compile).toHaveBeenCalledTimes(1);
   expect(second.passes![0].program.instructions).toBe(first.passes![0].program.instructions);
   expect(second.passes![0].program.values).not.toEqual(first.passes![0].program.values);
-  expect(() => query.capture({ ...next, effect: { ...next.effect, params: { ...next.effect.params, angle: NaN } } }, 'history')).toThrow(/finite/);
+  // A non-finite number renders the parameter's default (effectOperatorParams), like every image-graph
+  // effect; tools and the inspector report it instead of the query failing.
+  query.capture({ ...next, effect: { ...next.effect, params: { ...next.effect.params, angle: NaN } } }, 'history');
+  const third = (encode.mock.calls as unknown as [{ plan: compiler.ImageOperatorPlan }][])[2][0].plan;
+  expect(third.passes![0].program.values).toEqual(first.passes![0].program.values);
   query.capture({ ...next, graph: { ...graph, layout: { ...graph.layout, history: { x: 7, y: 9 } } } }, 'history');
   expect(compile).toHaveBeenCalledTimes(2);
 });

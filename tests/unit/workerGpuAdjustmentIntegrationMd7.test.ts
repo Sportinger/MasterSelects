@@ -351,8 +351,9 @@ describe('MD7 strict worker GPU adjustment integration', () => {
     expect(pipelineLabels).toEqual([
       'composite',
       'worker-gpu-adjustment-color-matrix-pipeline',
-      'worker-gpu-adjustment-separable-blur-pipeline',
-      'worker-gpu-adjustment-separable-blur-pipeline',
+      'worker-gpu-adjustment-blur-premultiply-pipeline',
+      'worker-gpu-adjustment-blur-horizontal-pipeline',
+      'worker-gpu-adjustment-blur-vertical-pipeline',
       'composite',
     ]);
     expect(compositor.composite).toHaveBeenCalledOnce();

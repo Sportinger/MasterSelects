@@ -193,7 +193,8 @@ export class AudioTrackRuntimeElementManager {
 
     pauseAudioElement(currentExisting);
     if (currentExisting) {
-      audioRoutingManager.removeRoute(currentExisting);
+      // The replaced clone is dropped: dispose its route (removeRoute would keep the graph in the routing map).
+      audioRoutingManager.disposeRoute(currentExisting);
       this.releaseElementResource(currentExisting);
     }
     const proxyInstance = createAudioProxyInstance(sharedProxy);
@@ -218,7 +219,8 @@ export class AudioTrackRuntimeElementManager {
       pauseAudioElement(existing);
     }
     if (existing) {
-      audioRoutingManager.removeRoute(existing);
+      // The clone is dropped; a later request creates a new one, so its route is disposed, not kept.
+      audioRoutingManager.disposeRoute(existing);
       this.releaseElementResource(existing);
     }
     activeStore.elements.delete(clipId);

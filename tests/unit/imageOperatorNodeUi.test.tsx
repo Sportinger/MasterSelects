@@ -13,7 +13,8 @@ import { getEditableDraggableNumberSettings, operatorConstantNumberPersistenceKe
 import { createDefaultMirrorGraph } from '../../src/services/operators/samplingEffectGraphs';
 import { createDefaultBlockMosaicGraph } from '../../src/services/operators/blockEffectGraphs';
 import { OperatorColorInput } from '../../src/components/panels/nodes/workspace/OperatorColorInput';
-import { createDefaultGaussianBlurGraph } from '../../src/services/operators/blurEffectGraphs';
+import { createDefaultSharpenGraph } from '../../src/services/operators/blurEffectGraphs';
+import { createEarlierVignetteGraph } from '../../src/services/operators/contextualEffectGraphs';
 
 const initial = useTimelineStore.getState();
 const owner = {};
@@ -37,8 +38,9 @@ function fixture() {
 
 describe('image operator node UI', () => {
   it('labels the kernel index as scoped instead of inventing a numeric or image preview', () => {
-    const effect: Effect = { id: 'blur-ui', name: 'Gaussian Blur', type: 'gaussian-blur', enabled: true,
-      params: {}, operatorGraph: createDefaultGaussianBlurGraph() };
+    // Sharpen keeps a 2D kernel reduction (Box and Gaussian Blur are separable sequence reductions now).
+    const effect: Effect = { id: 'blur-ui', name: 'Sharpen', type: 'sharpen', enabled: true,
+      params: {}, operatorGraph: createDefaultSharpenGraph() };
     const clip = createMockClip({ id: 'blur-clip', effects: [effect] });
     const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'index')!;
     const frame = imageOperatorValuePreview({ key: 'kernel-index', revision: '1', time: 0, clipId: clip.id, node,
@@ -111,11 +113,11 @@ describe('image operator node UI', () => {
     const effect: Effect = { id: 'mosaic-ui', name: 'Block Mosaic', type: 'block-mosaic', enabled: true,
       params: { colorA: '#11223380' }, operatorGraph: createDefaultBlockMosaicGraph() };
     const clip = createMockClip({ id: 'mosaic-clip', effects: [effect] });
-    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'color-a')!;
-    node.preview = { enabled: true, requested: true, key: 'mosaic-color-a' };
-    const frame = imageOperatorValuePreview({ key: 'mosaic-color-a', revision: '1', time: 0, clipId: clip.id, node,
+    const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'grout-color')!;
+    node.preview = { enabled: true, requested: true, key: 'mosaic-grout-color' };
+    const frame = imageOperatorValuePreview({ key: 'mosaic-grout-color', revision: '1', time: 0, clipId: clip.id, node,
       width: 164, height: 100, interval: 16, priority: 1 }, clip, effect)!;
-    expect(frame.controls?.[0]).toMatchObject({ label: 'Ink', value: '#11223380', defaultValue: '#111827' });
+    expect(frame.controls?.[0]).toMatchObject({ label: 'Grout Color', value: '#11223380', defaultValue: '#111827' });
   });
 
   it('edits bound Mirror booleans without numeric coercion and preserves owner defaults', () => {
@@ -135,7 +137,7 @@ describe('image operator node UI', () => {
     previewTextStore.retain(owner, new Set(['mirror-horizontal']));
     act(() => previewTextStore.publish(horizontal.frame));
     render(<NodeValuePreview node={horizontal.node} />);
-    const checkbox = screen.getByRole('checkbox', { name: /Horizontal inline/ });
+    const checkbox = screen.getByRole('checkbox', { name: /Left \/ Right inline/ });
     expect(checkbox).toBeChecked();
     fireEvent.click(checkbox);
     const saved = useTimelineStore.getState().clips[0].effects[0];
@@ -145,7 +147,8 @@ describe('image operator node UI', () => {
   });
 
   it('keeps UV-dependent distances as image previews while exposing uniform operands', () => {
-    const effect: Effect = { id: 'vignette-ui', name: 'Vignette', type: 'vignette', enabled: true, params: {} };
+    // The earlier Vignette (saved projects) scales its UV distance by a constant 2.
+    const effect: Effect = { id: 'vignette-ui', name: 'Vignette', type: 'vignette', enabled: true, params: {}, operatorGraph: createEarlierVignetteGraph() };
     const clip = createMockClip({ id: 'vignette-clip', effects: [effect] });
     const node = buildEffectOperatorGraph(clip, effect).nodes.find(candidate => candidate.id === 'distance')!;
     const request = { key: 'distance', revision: '1', time: 0, clipId: clip.id, node,
@@ -180,13 +183,13 @@ describe('image operator node UI', () => {
     previewTextStore.retain(owner, new Set(['image-literal']));
     act(() => previewTextStore.publish(frame));
     render(<NodeValuePreview node={node} />);
-    const slider = screen.getByRole('slider', { name: 'Value Value inline' });
+    const slider = screen.getByRole('slider', { name: 'Value inline' });
     expect(slider).toHaveAttribute('aria-valuenow', '0.25');
     expect(slider).toHaveAttribute('aria-valuemin', '-30');
     expect(slider).toHaveAttribute('aria-valuemax', '30');
     expect(screen.queryByRole('status', { name: 'Value output value live value' })).toBeNull();
     fireEvent.doubleClick(slider);
-    const input = screen.getByRole('textbox', { name: 'Value Value inline' });
+    const input = screen.getByRole('textbox', { name: 'Value inline' });
     fireEvent.change(input, { target: { value: '0.75' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     const saved = useTimelineStore.getState().clips[0].effects[0].operatorGraph?.nodes.find(candidate => candidate.id === 'literal');
@@ -207,15 +210,15 @@ describe('image operator node UI', () => {
     previewTextStore.retain(owner, new Set(['image-literal-settings']));
     act(() => previewTextStore.publish(frame));
     render(<NodeValuePreview node={node} />);
-    let slider = screen.getByRole('slider', { name: 'Value Value inline' });
+    let slider = screen.getByRole('slider', { name: 'Value inline' });
     expect(slider).toHaveAttribute('aria-valuemin', '-100');
     expect(slider).toHaveAttribute('aria-valuemax', '100');
     fireEvent.doubleClick(slider);
-    const input = screen.getByRole('textbox', { name: 'Value Value inline' });
+    const input = screen.getByRole('textbox', { name: 'Value inline' });
     fireEvent.change(input, { target: { value: '175' } });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(useTimelineStore.getState().clips[0].effects[0].operatorGraph?.nodes.find(candidate => candidate.id === 'literal')?.constants?.value).toBe(100);
-    slider = screen.getByRole('slider', { name: 'Value Value inline' });
+    slider = screen.getByRole('slider', { name: 'Value inline' });
     fireEvent.contextMenu(slider);
     expect(useTimelineStore.getState().clips[0].effects[0].operatorGraph?.nodes.find(candidate => candidate.id === 'literal')?.constants?.value).toBe(4);
   });

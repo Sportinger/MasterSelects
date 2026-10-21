@@ -233,9 +233,10 @@ describe('Expected effects per category', () => {
     expect(getEffectsByCategory('keying').length).toBe(1);
   });
 
-  it('marks Acuarela as feedback-driven and continuous', () => {
+  it('keeps Acuarela feedback-capable for its saved smoke recipe but static while paused', () => {
     expect(getEffect('acuarela')?.usesFeedback).toBe(true);
-    expect(getEffect('acuarela')?.requiresContinuousRender).toBe(true);
+    // The watercolour recipe depends on the timeline time only; the smoke recipe's history only advances with it.
+    expect(getEffect('acuarela')?.requiresContinuousRender).toBeUndefined();
   });
 
   it('marks Rom1 as feedback-driven and continuous', () => {
@@ -535,25 +536,28 @@ describe('Quality parameter properties', () => {
     }
   });
 
-  it('quality parameters should exist on multi-sample blur effects', () => {
-    const blurEffectsWithQuality = ['gaussian-blur', 'radial-blur', 'zoom-blur', 'motion-blur'];
-    for (const id of blurEffectsWithQuality) {
+  it('blur effects choose their own taps: the old samples are hidden, documented no-ops', () => {
+    for (const id of ['gaussian-blur', 'radial-blur', 'zoom-blur', 'motion-blur']) {
       const effect = getEffect(id)!;
-      const qualityParams = Object.values(effect.params).filter(p => p.quality === true);
-      expect(qualityParams.length).toBeGreaterThan(0);
+      expect(Object.values(effect.params).filter(p => p.quality === true)).toHaveLength(0);
+      expect(effect.params.samples).toMatchObject({ hidden: true, animatable: false, deprecated: expect.any(String) });
     }
   });
 
-  it('glow effect should have quality parameters (rings, samplesPerRing)', () => {
+  it('glow keeps the ring quality parameters only for Glows saved with the ring version', () => {
     const glow = getEffect('glow')!;
-    expect(glow.params.rings.quality).toBe(true);
-    expect(glow.params.samplesPerRing.quality).toBe(true);
+    for (const name of ['rings', 'samplesPerRing']) {
+      expect(glow.params[name]).toMatchObject({ hidden: true, animatable: false, deprecated: expect.any(String) });
+      expect(glow.params[name].quality).toBeUndefined();
+    }
+    expect(getDefaultParams('glow')).not.toHaveProperty('rings');
   });
 
-  it('gaussian-blur samples should be a quality parameter', () => {
+  it('gaussian-blur keeps its retired samples definition for saved projects, new instances leave it out', () => {
     const gb = getEffect('gaussian-blur')!;
-    expect(gb.params.samples.quality).toBe(true);
-    expect(gb.params.samples.animatable).toBe(false);
+    expect(gb.params.samples).toMatchObject({ default: 5, hidden: true, animatable: false });
+    expect(getDefaultParams('gaussian-blur')).toEqual({ radius: 10 });
+    for (const id of ['motion-blur', 'radial-blur', 'zoom-blur']) expect(getDefaultParams(id)).not.toHaveProperty('samples');
   });
 
   it('effects without multi-sample logic should not have quality params', () => {
@@ -631,10 +635,7 @@ describe('Registry helper functions', () => {
     const defaults = getDefaultParams('chroma-key');
     expect(defaults).toHaveProperty('keyColor');
     expect(defaults.keyColor).toBe('green');
-    expect(defaults).toHaveProperty('tolerance');
-    expect(defaults.tolerance).toBe(0.2);
-    expect(defaults).toHaveProperty('softness');
-    expect(defaults).toHaveProperty('spillSuppression');
+    expect(defaults).toMatchObject({ clipBlack: 0.3, clipWhite: 0.85, edgeShrink: 0, edgeSoftness: 0, spillSuppression: 1, spillMethod: 'average', view: 'result' });
   });
 
   it('getDefaultParams should return correct defaults for mirror (boolean params)', () => {
@@ -643,10 +644,10 @@ describe('Registry helper functions', () => {
     expect(defaults.vertical).toBe(false);
   });
 
-  it('getDefaultParams key count should match effect params count', () => {
+  it('getDefaultParams key count should match the count of params that are not retired', () => {
     for (const effect of getAllEffects()) {
       const defaults = getDefaultParams(effect.id);
-      const paramCount = Object.keys(effect.params).length;
+      const paramCount = Object.values(effect.params).filter(param => !param.deprecated).length;
       expect(Object.keys(defaults).length).toBe(paramCount);
     }
   });
@@ -696,13 +697,14 @@ describe('Registry helper functions', () => {
 
   it('effectStackNeedsContinuousRender returns true for enabled continuous render effects', () => {
     expect(effectStackNeedsContinuousRender([
-      { type: 'acuarela', enabled: true },
+      { type: 'rom1', enabled: true },
     ])).toBe(true);
   });
 
   it('effectStackNeedsContinuousRender ignores disabled and non-continuous effects', () => {
     expect(effectStackNeedsContinuousRender([
-      { type: 'acuarela', enabled: false },
+      { type: 'rom1', enabled: false },
+      { type: 'acuarela', enabled: true },
       { type: 'gaussian-blur', enabled: true },
     ])).toBe(false);
   });
@@ -783,31 +785,24 @@ describe('packUniforms function', () => {
     const effect = getEffect('chroma-key')!;
     expect(isFullscreenEffectDefinition(effect)).toBe(true);
     if (!isFullscreenEffectDefinition(effect)) return;
-    const uniforms = effect.packUniforms(
-      { keyColor: 'green', tolerance: 0.2, softness: 0.1, spillSuppression: 0.5 },
-      1920, 1080,
-    );
+    const uniforms = effect.packUniforms({ keyColor: 'green', clipBlack: 0.2, clipWhite: 0.9, spillSuppression: 0.5 }, 1920, 1080);
     expect(uniforms).toBeInstanceOf(Float32Array);
-    // Green: R=0, G=1, B=0
-    expect(uniforms![0]).toBe(0); // keyR
-    expect(uniforms![1]).toBe(1); // keyG
-    expect(uniforms![2]).toBe(0); // keyB
-    expect(uniforms![3]).toBeCloseTo(0.2, 5); // tolerance (Float32 precision)
+    // Preset green screen colour, green as the screen channel, then Clip Black/White, spill and spill method.
+    expect(Array.from(uniforms!.slice(0, 3))).toEqual([0.25, 0.6, 0.3].map(Math.fround));
+    expect(Array.from(uniforms!.slice(4, 7))).toEqual([0, 1, 0]);
+    expect(Array.from(uniforms!.slice(8, 12))).toEqual([0.2, 0.9, 0.5, 0].map(Math.fround));
   });
 
   it('chroma-key packUniforms should encode blue screen correctly', () => {
     const effect = getEffect('chroma-key')!;
     expect(isFullscreenEffectDefinition(effect)).toBe(true);
     if (!isFullscreenEffectDefinition(effect)) return;
-    const uniforms = effect.packUniforms(
-      { keyColor: 'blue', tolerance: 0.3, softness: 0.15, spillSuppression: 0.6 },
-      1920, 1080,
-    );
+    const uniforms = effect.packUniforms({ keyColor: 'blue', clipBlack: 3, spillSuppression: 0.6, spillMethod: 'max' }, 1920, 1080);
     expect(uniforms).toBeInstanceOf(Float32Array);
-    // Blue: R=0, G=0, B=1
-    expect(uniforms![0]).toBe(0); // keyR
-    expect(uniforms![1]).toBe(0); // keyG
-    expect(uniforms![2]).toBe(1); // keyB
+    expect(Array.from(uniforms!.slice(0, 3))).toEqual([0.2, 0.3, 0.65].map(Math.fround));
+    expect(Array.from(uniforms!.slice(4, 7))).toEqual([0, 0, 1]);
+    // Out-of-range Clip Black arrives clamped; Gentle spill is 1.
+    expect(Array.from(uniforms!.slice(8, 12))).toEqual([1, 0.85, 0.6, 1].map(Math.fround));
   });
 
   it('mirror packUniforms should encode boolean params as 0/1 floats', () => {
@@ -946,9 +941,10 @@ describe('Specific effect definitions', () => {
     expect(mirror.params.vertical.default).toBe(false);
   });
 
-  it('glow should have 6 parameters with correct types', () => {
+  it('glow should have 7 parameters with correct types', () => {
     const glow = getEffect('glow')!;
-    expect(Object.keys(glow.params)).toHaveLength(6);
+    expect(Object.keys(glow.params)).toHaveLength(7);
+    expect(glow.params.color).toMatchObject({ type: 'color', default: '#ffffff', graphOnly: true });
     expect(glow.params.amount.type).toBe('number');
     expect(glow.params.threshold.type).toBe('number');
     expect(glow.params.radius.type).toBe('number');
@@ -962,9 +958,9 @@ describe('Specific effect definitions', () => {
     expect(gb.uniformSize).toBe(16);
   });
 
-  it('chroma-key uniformSize should be 32 bytes', () => {
+  it('chroma-key uniformSize should be 48 bytes', () => {
     const ck = getEffect('chroma-key')!;
-    expect(ck.uniformSize).toBe(32);
+    expect(ck.uniformSize).toBe(48);
   });
 
   it('glow uniformSize should be 32 bytes', () => {
@@ -972,15 +968,16 @@ describe('Specific effect definitions', () => {
     expect(glow.uniformSize).toBe(32);
   });
 
-  it('uses the iPad-tuned defaults for Glow and Voxel Relief', () => {
+  it('uses the bloom defaults for Glow (the iPad-tuned ring values stay with saved ring Glows) and Voxel Relief', () => {
     const glow = getEffect('glow')!;
     const voxelRelief = getEffect('voxel-relief')!;
 
     expect(Object.fromEntries(Object.entries(glow.params).map(([key, value]) => [key, value.default]))).toEqual({
-      amount: 5,
-      threshold: 0.7935,
-      radius: 1,
-      softness: 0.496,
+      amount: 2.5,
+      threshold: 0.95,
+      softness: 0.5,
+      radius: 80,
+      color: '#ffffff',
       rings: 6.85,
       samplesPerRing: 17.95,
     });

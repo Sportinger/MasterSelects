@@ -491,6 +491,7 @@ export class RenderDispatcher {
           data.layer.id,
           nestedPreviewRenderScale,
           nc.frameRate ?? 30,
+          nc.partial !== true,
         );
         if (view) {
           data.textureView = view;

@@ -3,7 +3,7 @@ import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDef
 import { ribbonScan } from '../../src/effects/analog';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
-import { createDefaultRibbonScanGraph } from '../../src/services/operators/ribbonScanEffectGraph';
+import { createLegacyRibbonScanGraph } from '../../src/services/operators/legacyRibbonScanGraph';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 
 const width = 63;
@@ -102,7 +102,7 @@ async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTexture
 }
 
 function directGraph(): EffectOperatorGraph {
-  const graph = structuredClone(createDefaultRibbonScanGraph());
+  const graph = structuredClone(createLegacyRibbonScanGraph());
   const output = graph.nodes.find(node => node.operator === 'image.output');
   const frame = graph.nodes.find(node => node.operator === 'image.frame');
   if (!frame || !output) throw new Error('Ribbon Scan default graph lacks image boundaries');
@@ -123,7 +123,7 @@ export async function checkRibbonScanGraphGpu(device: GPUDevice): Promise<number
   try {
     for (const item of cases) {
       const params = resolvedParams(item.params);
-      const plan = compileImageOperatorGraph(createDefaultRibbonScanGraph(), params);
+      const plan = compileImageOperatorGraph(createLegacyRibbonScanGraph(), params);
       const expected = await render(device, sampler, source.createView(), target, readback,
         ribbonScan.shader, ribbonScan.entryPoint, packLegacy(params, item.time));
       const actual = await render(device, sampler, source.createView(), target, readback,

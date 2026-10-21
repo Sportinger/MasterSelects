@@ -5,12 +5,12 @@ import { createMockClip } from '../helpers/mockData';
 import { reconcileCanvasPlacement, moveCanvasPlacement, arrangeFlowPlacement } from '../../src/components/panels/nodes/canvas/nodeCanvasPlacement';
 import { NODE_WIDTH } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 import { nodeGroupBounds } from '../../src/components/panels/nodes/canvas/groupBounds';
-import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
+import { createLegacyKaleidoscopeGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import type { NodeGraph, NodeCanvasPlacement } from '../../src/types/nodeGraph';
 import { createNodeLayoutTransition } from '../../src/components/panels/nodes/canvas/nodeLayoutTransition';
 
 const fixture = () => createMockClip({ id: 'layout-clip', effects: [{ id: 'k', name: 'Kaleidoscope', type: 'kaleidoscope', enabled: true,
-  params: { segments: 6, rotation: 0 }, operatorGraph: createDefaultUvDistortGraph('kaleidoscope') }] });
+  params: { segments: 6, rotation: 0 }, operatorGraph: createLegacyKaleidoscopeGraph() }] });
 const project = (clip: ReturnType<typeof fixture>) => buildUnifiedClipGraph(buildClipNodeGraphDocument(clip), clip);
 const position = (graph: NodeGraph, placement: NodeCanvasPlacement) => graph.nodes.map(node => ({ ...node, layout: placement.nodes[node.id] }));
 

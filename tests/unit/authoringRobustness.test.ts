@@ -48,6 +48,45 @@ describe('effect parameter validation', () => {
     const ok = await executeAITool('updateEffect', { clipId: 'c', effectId, params: { amount: 0.3 } }, 'internal');
     expect(ok.success).toBe(true);
   });
+
+  it('accepts retired parameters for old callers but says that they do nothing', async () => {
+    const clip = createMockClip({ id: 'c', trackId: 't', duration: 4, effects: [] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 't' })], clipKeyframes: new Map() });
+    const added = await executeAITool('addEffect', { clipId: 'c', effectType: 'gaussian-blur', params: { radius: 12, samples: 20 } }, 'internal');
+    expect(added.success).toBe(true);
+    expect((added.data as { warnings?: string[] }).warnings).toEqual([expect.stringMatching(/^samples: .*no effect/)]);
+    const effectId = (added.data as { effectId: string }).effectId;
+    const updated = await executeAITool('updateEffect', { clipId: 'c', effectId, params: { radius: 4 } }, 'internal');
+    expect((updated.data as { warnings?: string[] }).warnings).toBeUndefined();
+    const listed = await executeAITool('listEffects', {}, 'internal');
+    const blur = (listed.data as { categories: { effects: { id: string; params: { name: string }[] }[] }[] }).categories
+      .flatMap(category => category.effects).find(effect => effect.id === 'gaussian-blur')!;
+    expect(blur.params.map(param => param.name)).toEqual(['radius']);
+    // Only retired parameters leave the list: other effects' hidden inputs stay as before.
+    const lens = (listed.data as { categories: { effects: { id: string; params: { name: string }[] }[] }[] }).categories
+      .flatMap(category => category.effects).find(effect => effect.id === 'lens-correction')!;
+    expect(lens.params.map(param => param.name)).toContain('sourceAspect');
+  });
+
+  it('says when a value lies outside the rendered range and what renders instead', async () => {
+    const clip = createMockClip({ id: 'c', trackId: 't', duration: 4, effects: [] });
+    useTimelineStore.setState({ clips: [clip], tracks: [createMockTrack({ id: 't' })], clipKeyframes: new Map() });
+    const added = await executeAITool('addEffect', { clipId: 'c', effectType: 'saturation', params: { amount: -1 } }, 'internal');
+    expect((added.data as { warnings?: string[] }).warnings).toEqual(['amount: Amount -1 is below the rendered range (0 to 10) and renders as 0.']);
+    const effectId = (added.data as { effectId: string }).effectId;
+    const inside = await executeAITool('updateEffect', { clipId: 'c', effectId, params: { amount: 4 } }, 'internal');
+    expect((inside.data as { warnings?: string[] }).warnings).toBeUndefined();
+    const gamma = await executeAITool('addEffect', { clipId: 'c', effectType: 'exposure', params: { gamma: 0 } }, 'internal');
+    expect((gamma.data as { warnings?: string[] }).warnings).toEqual([expect.stringMatching(/^gamma: Gamma 0 is below the rendered range \(0\.2 to 10\) and renders as 0\.2 \(very dark\)\.$/)]);
+    const levels = await executeAITool('addEffect', { clipId: 'c', effectType: 'levels', params: { gamma: 0 } }, 'internal');
+    expect((levels.data as { warnings?: string[] }).warnings).toEqual([expect.stringMatching(/^gamma: Gamma 0 is below the rendered range \(0\.1 to 10\) and renders as 0\.1 \(almost black\)\.$/)]);
+    const above = await executeAITool('addEffect', { clipId: 'c', effectType: 'levels', params: { gamma: 12 } }, 'internal');
+    expect((above.data as { warnings?: string[] }).warnings).toEqual(['gamma: Gamma 12 is above the rendered range (0.1 to 10) and renders as 10.']);
+    const listed = await executeAITool('listEffects', {}, 'internal');
+    const saturation = (listed.data as { categories: { effects: { id: string; params: { name: string; renderRange?: unknown }[] }[] }[] }).categories
+      .flatMap(category => category.effects).find(effect => effect.id === 'saturation')!;
+    expect(saturation.params[0]).toMatchObject({ name: 'amount', renderRange: [0, 10] });
+  });
 });
 
 describe('action lanes follow split and trim', () => {

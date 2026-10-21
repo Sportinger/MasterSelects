@@ -2,7 +2,8 @@ import { create } from 'zustand';
 import { persist, subscribeWithSelector } from 'zustand/middleware';
 import { getEffect } from '..';
 import { STARTER_LOOKS } from './starterLooks';
-import type { LookCategory, LookDefinition, LookStackEntry } from './types';
+import { hasEarlierStylizeRecipe } from '../../services/operators/stylizeRecipes';
+import { LOOK_SCHEMA_VERSION, type LookCategory, type LookDefinition, type LookStackEntry } from './types';
 
 interface LookStoreState {
   customLooks: LookDefinition[];
@@ -19,9 +20,11 @@ function cleanStack(stack: LookStackEntry[]): LookStackEntry[] {
     .map((entry) => ({
       effectId: entry.effectId,
       enabled: entry.enabled !== false,
+      ...(entry.recipe === 'earlier' ? { recipe: 'earlier' as const } : {}),
       params: Object.fromEntries(Object.entries(entry.params).filter(([, value]) => (
         typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'
       ))),
+      ...(entry.operatorGraph && typeof entry.operatorGraph === 'object' ? { operatorGraph: structuredClone(entry.operatorGraph) } : {}),
     }));
 }
 
@@ -46,6 +49,7 @@ export const useLookStore = create<LookStoreState>()(
             stack: normalizedStack,
             tags: ['custom'],
             builtIn: false,
+            schemaVersion: LOOK_SCHEMA_VERSION,
           };
           set((state) => ({ customLooks: [...state.customLooks, saved] }));
           return saved;
@@ -57,10 +61,22 @@ export const useLookStore = create<LookStoreState>()(
       {
         name: 'masterselects.looks.v1',
         partialize: (state) => ({ customLooks: state.customLooks }),
+        // Version 1 (2026-10-21) records stylize recipes; Looks saved before hold earlier recipes.
+        version: 1,
+        migrate: (persisted, version) => migratePersistedLooks(persisted, version) as Pick<LookStoreState, 'customLooks'>,
       },
     ),
   ),
 );
+
+/** Custom Looks saved before version 1 (2026-10-21): their stylize effects ran the earlier recipes. */
+export function migratePersistedLooks(persisted: unknown, version: number): { customLooks: LookDefinition[] } {
+  const looks = (persisted as { customLooks?: unknown } | undefined)?.customLooks;
+  const customLooks = Array.isArray(looks) ? looks as LookDefinition[] : [];
+  if (version >= 1) return { customLooks };
+  return { customLooks: customLooks.map(look => ({ ...look, stack: (Array.isArray(look.stack) ? look.stack : []).map(entry =>
+    hasEarlierStylizeRecipe(entry.effectId) ? { ...entry, recipe: 'earlier' as const } : entry) })) };
+}
 
 export function getVisibleLooks(state: Pick<LookStoreState, 'customLooks' | 'query' | 'category'>): LookDefinition[] {
   const query = state.query.trim().toLocaleLowerCase();

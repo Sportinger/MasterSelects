@@ -1326,8 +1326,7 @@ describe('worker render host runtime bridge', () => {
           filter: 'none',
           pixelEffects: {
             brightness: 0,
-            mirrorHorizontal: true,
-            mirrorVertical: false,
+            mirrorPixelAdjustments: [{ type: 'mirror', horizontal: true, vertical: false, keepEnd: false, angle: 0, centerX: 0.5, centerY: 0.5, edges: 'mirror' }],
           },
           geometry: {
             position: { x: 0, y: 0 },
@@ -1389,7 +1388,7 @@ describe('worker render host runtime bridge', () => {
       fillRect: vi.fn(),
       getImageData: vi.fn(() => ({
         data: new Uint8ClampedArray([
-          1, 2, 3, 255,
+          2, 4, 6, 255,
           10, 20, 30, 255,
           40, 50, 60, 255,
           70, 80, 90, 255,
@@ -1436,7 +1435,8 @@ describe('worker render host runtime bridge', () => {
           filter: 'none',
           pixelEffects: {
             brightness: 0,
-            pixelateSize: 2,
+            // 2160 pixels of a 1080p frame on a 1-pixel-high frame: 2-pixel cells, centred (x 0–1 and 2–3).
+            mirrorPixelAdjustments: [{ type: 'pixelate', size: 2160 }],
           },
           geometry: {
             position: { x: 0, y: 0 },
@@ -1450,10 +1450,10 @@ describe('worker render host runtime bridge', () => {
 
       const writtenImageData = scratchContext.putImageData.mock.calls[0]?.[0] as ImageData | undefined;
       expect(writtenImageData?.data).toEqual(new Uint8ClampedArray([
-        1, 2, 3, 255,
-        1, 2, 3, 255,
-        40, 50, 60, 255,
-        40, 50, 60, 255,
+        6, 12, 18, 255,
+        6, 12, 18, 255,
+        55, 65, 75, 255,
+        55, 65, 75, 255,
       ]));
     } finally {
       await bridge.disposeRenderer('test cleanup');

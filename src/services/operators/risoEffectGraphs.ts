@@ -14,7 +14,7 @@ class Builder {
   binary(id: string, operator: string, a: Ref, b: Ref) { const out = this.node(id, operator); this.edge(a, out, 'a'); this.edge(b, out, 'b'); return out; }
 }
 
-/** Shared granular construction of the legacy risoColor pipeline. */
+/** Shared granular construction of the risoColor pipeline (shader.wgsl in src/effects/halftone is its WGSL reference). */
 export function createDefaultRisoGraph(type: EditableRisoEffectType): EffectOperatorGraph {
   const g = new Builder(), frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const resolution = g.node('resolution', 'image.resolution'), resolutionSplit = g.node('resolution-split', 'vector.split.vec2', 'x'); g.edge(resolution, resolutionSplit, 'value');
@@ -38,7 +38,11 @@ export function createDefaultRisoGraph(type: EditableRisoEffectType): EffectOper
   const oneRgb = g.node('one-rgb', 'convert.scalar-to-rgb', 'rgb'); g.edge(one, oneRgb, 'value');
   const aInk = g.node('a-ink', 'math.multiply.rgb-scalar'); g.edge(aRgb, aInk, 'a'); g.edge(a, aInk, 'b');
   const bInk = g.node('b-ink', 'math.multiply.rgb-scalar'); g.edge(bRgb, bInk, 'a'); g.edge(b, bInk, 'b');
-  const aRemaining = g.binary('a-remaining', 'math.subtract.rgb', oneRgb, aInk), bRemaining = g.binary('b-remaining', 'math.subtract.rgb', oneRgb, bInk);
+  // Each ink filters the paper towards its own colour where it prints: paper × mix(1, ink, coverage).
+  const aAbsorbs = g.binary('a-absorbs', 'math.subtract.rgb', oneRgb, aRgb), bAbsorbs = g.binary('b-absorbs', 'math.subtract.rgb', oneRgb, bRgb);
+  const aFilter = g.node('a-filter', 'math.multiply.rgb-scalar'); g.edge(aAbsorbs, aFilter, 'a'); g.edge(a, aFilter, 'b');
+  const bFilter = g.node('b-filter', 'math.multiply.rgb-scalar'); g.edge(bAbsorbs, bFilter, 'a'); g.edge(b, bFilter, 'b');
+  const aRemaining = g.binary('a-remaining', 'math.subtract.rgb', oneRgb, aFilter), bRemaining = g.binary('b-remaining', 'math.subtract.rgb', oneRgb, bFilter);
   const paperVector = g.node('paper-vector', 'vector.combine.vec3'); g.edge(g.number('paper-r', .96), paperVector, 'x'); g.edge(g.number('paper-g', .93), paperVector, 'y'); g.edge(g.number('paper-b', .85), paperVector, 'z');
   const paper = g.node('paper', 'convert.vec3-to-rgb', 'rgb'); g.edge(paperVector, paper, 'value');
   const paperA = g.binary('paper-a', 'math.multiply.rgb', paper, aRemaining), subtractive = g.binary('subtractive', 'math.multiply.rgb', paperA, bRemaining);

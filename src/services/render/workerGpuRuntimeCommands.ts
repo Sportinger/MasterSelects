@@ -200,6 +200,8 @@ export interface WorkerGpuWebCodecsRenderLayer {
   readonly maskInvert?: boolean;
   readonly maskClipId?: string;
   readonly transitionRender?: WorkerGpuTransitionRenderState;
+  /** The source texture holds premultiplied colour (a composited transition composition). */
+  readonly premultipliedAlpha?: boolean;
 }
 
 export interface WorkerGpuWebCodecsFrameLayer {
@@ -236,10 +238,6 @@ export interface WorkerGpuWebCodecsFrameLayer {
   readonly vignetteSize?: number;
   readonly vignetteSoftness?: number;
   readonly vignetteRoundness?: number;
-  readonly chromaKeyMode?: number;
-  readonly chromaKeyTolerance?: number;
-  readonly chromaKeySoftness?: number;
-  readonly chromaKeySpill?: number;
   readonly scanlineDensity?: number;
   readonly scanlineOpacity?: number;
   readonly scanlineSpeed?: number;

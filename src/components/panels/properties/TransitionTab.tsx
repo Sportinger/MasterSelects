@@ -82,6 +82,8 @@ import {
 } from './transitionChoiceMetadata';
 import { DatamoshBakeSection } from './DatamoshBakeSection';
 import { TransitionControlsSections } from './TransitionControlsSections';
+import { InspectorSelect } from '../../inspector/InspectorSelect';
+import { ResolveInspectorRow, ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
 
 interface TransitionTabProps {
   clip: TimelineClip;
@@ -279,48 +281,24 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
   const dipColorValue = dipOption === 'custom'
     ? String(getTransitionParamValue(transition, definition, 'color') ?? '#000000')
     : '#000000';
-  const params = definition.params
-    ? Object.entries(definition.params)
-      .filter(([, param]) => param.hidden !== true)
-      .filter(([paramId]) => !(isAudioOnlyTransition && paramId === 'includeAudio'))
-      .filter(([paramId]) => !handledParamIds.has(paramId))
-    : [];
 
   return (
     <div className="transition-properties-tab">
-      <section className="properties-section">
-        <h4>{definition.name}</h4>
-        <div className="control-row">
-          <label className="prop-label" htmlFor="transition-type-select">Effect</label>
-          <select
-            id="transition-type-select"
+      <ResolveInspectorSection indicator="none" title={definition.name}>
+        <ResolveInspectorRow label="Effect">
+          <InspectorSelect
+            ariaLabel="Transition effect"
             value={activeTransitionOption}
-            onChange={(event) => updateTransitionFamily(event.currentTarget.value)}
-          >
-            {availableTransitionOptionGroups.map(group => (
-              <optgroup key={group.dimension} label={group.label}>
-                {group.options.map(candidate => (
-                  <option key={candidate.value} value={candidate.value}>{candidate.label}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-        <div className="control-row">
-          <span className="prop-label">Type</span>
-          <span className="transition-static-value">{definition.category}</span>
-        </div>
-        <div className="control-row">
-          <span className="prop-label">Edge</span>
-          <span className="transition-static-value">
-            {definition.defaultPlacement === 'start-at-cut' ? 'After cut' : 'Centered on cut'}
-          </span>
-        </div>
-        <div className="control-row">
-          <span className="prop-label">Policy</span>
-          <span className="transition-static-value">Hold frames</span>
-        </div>
-      </section>
+            groups={availableTransitionOptionGroups.map(group => ({ label: group.label, options: group.options }))}
+            onChange={updateTransitionFamily}
+          />
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Type"><span className="transition-static-value">{definition.category}</span></ResolveInspectorRow>
+        <ResolveInspectorRow label="Edge">
+          <span className="transition-static-value">{definition.defaultPlacement === 'start-at-cut' ? 'After cut' : 'Centered on cut'}</span>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Policy"><span className="transition-static-value">Hold frames</span></ResolveInspectorRow>
+      </ResolveInspectorSection>
 
       {dissolveOption ? (
         <section className="properties-section transition-choice-section">
@@ -686,7 +664,10 @@ export function TransitionTab({ clip, edge, transitionId }: TransitionTabProps) 
         bodyEnd={plan.bodyEnd}
         realHandleDuration={realHandleDuration}
         holdDuration={holdDuration}
-        params={params}
+        isAudioOnlyTransition={isAudioOnlyTransition}
+        handledParamIds={handledParamIds}
+        outgoingClip={outgoingClip}
+        getMediaDuration={getMediaDuration}
         onUpdateDuration={updateDuration}
         onUpdateParam={updateParam}
       />

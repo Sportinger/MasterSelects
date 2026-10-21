@@ -85,8 +85,12 @@ fn edgeAdjustedUv(uv: vec2f) -> vec2f {
   return fract(uv);
 }
 
+fn premultiplied(color: vec4f) -> vec4f { return vec4f(color.rgb * color.a, color.a); }
+
+// Premultiplied colour: coverage, the outside mix and the sample average scale all four channels.
+// Like the graph, each filtered sample is premultiplied as it is read.
 fn sampleWithEdges(uv: vec2f) -> vec4f {
-  let color = textureSample(inputTex, texSampler, edgeAdjustedUv(uv));
+  let color = premultiplied(textureSample(inputTex, texSampler, edgeAdjustedUv(uv)));
   if (params.edgeMode >= 0.5) {
     return color;
   }
@@ -120,7 +124,10 @@ fn renderFisheyeSample(outputUv: vec2f) -> vec4f {
     let red = sampleWithEdges(lensSpaceToUv(direction * sampleRadius * (1.0 + chromaShift)));
     let green = sampleWithEdges(lensSpaceToUv(direction * sampleRadius));
     let blue = sampleWithEdges(lensSpaceToUv(direction * sampleRadius * (1.0 - chromaShift)));
-    lensColor = vec4f(red.r, green.g, blue.b, (red.a + green.a + blue.a) / 3.0);
+    // Samples are premultiplied by their own alpha: straight colour per channel, then the shared alpha.
+    let alpha = (red.a + green.a + blue.a) / 3.0;
+    let straight = vec3f(red.r / max(red.a, 0.000001), green.g / max(green.a, 0.000001), blue.b / max(blue.a, 0.000001));
+    lensColor = vec4f(straight * alpha, alpha);
   }
 
   let vignetteStart = max(0.0, 1.0 - params.vignetteSoftness);
@@ -130,7 +137,7 @@ fn renderFisheyeSample(outputUv: vec2f) -> vec4f {
     lensColor.a,
   );
 
-  let originalColor = textureSample(inputTex, texSampler, outputUv);
+  let originalColor = premultiplied(textureSample(inputTex, texSampler, outputUv));
   let outsideColor = select(originalColor, vec4f(0.0), params.outsideMode > 0.5);
   return mix(outsideColor, lensColor, lensCoverage(radius));
 }
@@ -160,5 +167,6 @@ fn fisheyeFragment(input: VertexOutput) -> @location(0) vec4f {
       accumulated += renderFisheyeSample(input.uv + jitter);
     }
   }
-  return accumulated / f32(sampleTotal);
+  let average = accumulated / f32(sampleTotal);
+  return vec4f(average.rgb / max(average.a, 0.000001), average.a);
 }

@@ -129,17 +129,80 @@ export function getEffect(id: string): EffectDefinition | undefined {
 }
 
 /**
+ * The name to show for an effect instance. New instances are named after their type id
+ * (`gaussian-blur`); those show the registered name (Gaussian Blur), renamed ones their own.
+ */
+export function getEffectDisplayName(effect: { name: string; type: string }): string {
+  return effect.name === effect.type ? getEffect(effect.type)?.name ?? effect.name : effect.name;
+}
+
+/**
  * Get default parameters for an effect
  */
 export function getDefaultParams(id: string): Record<string, number | boolean | string> {
   const effect = getEffect(id);
   if (!effect) return {};
 
+  // Retired (deprecated) parameters are still accepted from saved projects, but new instances
+  // do not carry them: nothing reads them, and graphs fall back to the catalog default.
   const defaults: Record<string, number | boolean | string> = {};
   Object.entries(effect.params).forEach(([key, param]) => {
-    defaults[key] = param.default;
+    if (!param.deprecated) defaults[key] = param.default;
   });
   return defaults;
+}
+
+/**
+ * The values a stored instance renders for parameters it does not carry: `legacyDefault` (instances
+ * saved before the parameter existed keep their look), otherwise `default`. Inspectors fill missing
+ * parameters with these, so they show what renders; new instances store getDefaultParams.
+ */
+export function getRenderedDefaultParams(id: string): Record<string, number | boolean | string> {
+  const effect = getEffect(id);
+  if (!effect) return {};
+  const defaults: Record<string, number | boolean | string> = {};
+  Object.entries(effect.params).forEach(([key, param]) => {
+    if (!param.deprecated) defaults[key] = param.legacyDefault ?? param.default;
+  });
+  return defaults;
+}
+
+/**
+ * `params` with every parameter the instance does not carry set to its `legacyDefault`, the value it
+ * renders with. Use it where stored params are copied into a new instance (Looks), which would
+ * otherwise get the new `default`. Returns `params` itself when nothing is missing.
+ */
+export function withLegacyDefaultParams<T extends Record<string, unknown>>(id: string, params: T): T {
+  const missing = Object.entries(getEffect(id)?.params ?? {})
+    .filter(([key, param]) => param.legacyDefault !== undefined && !param.deprecated && params[key] === undefined);
+  return missing.length ? { ...params, ...Object.fromEntries(missing.map(([key, param]) => [key, param.legacyDefault])) } : params;
+}
+
+type RateTravel = readonly [rate: string, travel: string];
+const rateTravelCache = new Map<string, readonly RateTravel[]>();
+
+/** Rate parameters of an effect type and the runtime-only parameter their travelled distance goes to (EffectParam.integratedAs). */
+export function effectRateTravelParams(id: string): readonly RateTravel[] {
+  let entries = rateTravelCache.get(id);
+  if (!entries) {
+    entries = Object.entries(getEffect(id)?.params ?? {})
+      .flatMap(([name, definition]) => definition.integratedAs ? [[name, definition.integratedAs] as const] : []);
+    if (getEffect(id)) rateTravelCache.set(id, entries);
+  }
+  return entries;
+}
+
+/**
+ * `params` without runtime-only travel parameters (speedTravel, spinTravel). Rendering computes
+ * them from a keyframed rate; a stored value (a tool call or a save before 2026-10-21) would freeze
+ * the pattern. Returns `params` itself when it carries none.
+ */
+export function withoutRuntimeTravelParams<T extends Record<string, unknown>>(id: string, params: T): T {
+  const stored = effectRateTravelParams(id).filter(([, travel]) => travel in params);
+  if (!stored.length) return params;
+  const kept = { ...params };
+  for (const [, travel] of stored) delete kept[travel];
+  return kept;
 }
 
 /**

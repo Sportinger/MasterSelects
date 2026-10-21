@@ -1,7 +1,9 @@
 import { CompositorPipeline } from '../../src/engine/pipeline/CompositorPipeline';
 import type { Layer } from '../../src/engine/core/types';
 import { compileImageOperatorGraph, createDefaultInvertImageGraph } from '../../src/services/operators/imageOperatorGraph';
-import { createDefaultColorEffectGraph } from '../../src/services/operators/colorEffectGraphs';
+// The compositor's inline brightness/contrast/saturation uniforms are the original math, which the
+// original graphs (kept for saved projects) reproduce; the 2026-10 recipes have their own GPU check (suite=color-recipes).
+import { createLegacyColorEffectGraph as createDefaultColorEffectGraph } from '../../src/services/operators/legacyColorEffectGraphs';
 
 export async function checkImageCompositeGpu(device: GPUDevice, sampler: GPUSampler, fixture: Uint8Array, size: number) {
   const sampled = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;

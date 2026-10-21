@@ -1,13 +1,36 @@
 import type { TimelineClip } from '../../types/timeline';
+import { getTransitionAudioEnvelopeGain } from './audioCrossfadeGains';
 import { isAutomaticCutFade } from './automaticCutDeClick';
 import { getAudioEditOperationPreviewVolumeMultiplier } from './clipAudioEditPreview';
 
+/** Points per crossfade ramp: a linear ramp between them stays within 0.05 dB of the curve for a 1 s fade. */
+const ENVELOPE_POINTS = 64;
+
 export function automaticCutFadeSignature(clip: TimelineClip): string {
   return JSON.stringify([clip.id, clip.inPoint, clip.outPoint,
-    (clip.audioState?.editStack ?? []).filter(isAutomaticCutFade)]);
+    (clip.audioState?.editStack ?? []).filter(isAutomaticCutFade), clip.transitionAudioEnvelopes ?? null]);
 }
 
-/** Schedule against the audio clock; a display frame may miss an entire short fade. */
+/** True when the clip's sound has edge gains (automatic cut de-clicks or crossfade ramps) to schedule. */
+export function hasScheduledEdgeGains(clip: TimelineClip): boolean {
+  return (clip.transitionAudioEnvelopes?.length ?? 0) > 0 || clip.audioState?.editStack?.some(isAutomaticCutFade) === true;
+}
+
+/** The edge gain (automatic cut de-clicks × crossfade ramps, as export multiplies them) at a source time of the clip. */
+export function getScheduledEdgeGainAt(clip: TimelineClip, sourceTime: number): number {
+  const ramps = (clip.transitionAudioEnvelopes ?? []).reduce((value, envelope) => (
+    value * getTransitionAudioEnvelopeGain(envelope, sourceTime)
+  ), 1);
+  return (clip.audioState?.editStack ?? []).filter(isAutomaticCutFade).reduce((value, operation) => (
+    value * getAudioEditOperationPreviewVolumeMultiplier(operation, sourceTime)
+  ), ramps);
+}
+
+/**
+ * Schedule against the audio clock; a display frame may miss an entire short
+ * fade. Covers the automatic cut de-clicks and the preview crossfade ramps
+ * (TransitionAudioEnvelope), all before the route's effects.
+ */
 export function scheduleAutomaticCutFades(
   gain: AudioParam,
   clip: TimelineClip,
@@ -18,27 +41,30 @@ export function scheduleAutomaticCutFades(
 ): void {
   gain.cancelScheduledValues(contextStart);
   const operations = (clip.audioState?.editStack ?? []).filter(isAutomaticCutFade);
+  const envelopes = clip.transitionAudioEnvelopes ?? [];
   const attack = fadePlaybackStart && operations.length > 0 ? Math.min(0.003 * rate, (clip.outPoint - sourceStart) / 2) : 0;
-  const valueAt = (time: number) => (attack > 0 ? Math.min(1, Math.max(0, (time - sourceStart) / attack)) : 1) * operations.reduce((value, operation) => (
-    value * getAudioEditOperationPreviewVolumeMultiplier(operation, time)
-  ), 1);
+  const valueAt = (time: number) => (attack > 0 ? Math.min(1, Math.max(0, (time - sourceStart) / attack)) : 1) *
+    getScheduledEdgeGainAt(clip, time);
   gain.setValueAtTime(valueAt(sourceStart), contextStart);
-  if (operations.length === 0 || rate <= 0 || !Number.isFinite(rate)) return;
+  if ((operations.length === 0 && envelopes.length === 0) || rate <= 0 || !Number.isFinite(rate)) return;
 
-  // Only subdivide the tiny fade ranges, never the full source duration. Include
+  // Only subdivide the fade ranges, never the full source duration. Include
   // overlapping operations in the product so repeated edits keep their envelope.
   const points = new Set<number>();
+  const addRange = (rangeStart: number, rangeEnd: number, count: number) => {
+    const start = Math.max(sourceStart, clip.inPoint, rangeStart);
+    const end = Math.min(clip.outPoint, rangeEnd);
+    if (end <= start) return;
+    for (let index = 0; index <= count; index += 1) points.add(start + (end - start) * index / count);
+  };
   if (attack > 0) points.add(sourceStart + attack);
   for (const operation of operations) {
     const range = operation.timeRange!;
-    const start = Math.max(sourceStart, clip.inPoint, Math.min(range.start, range.end));
-    const end = Math.min(clip.outPoint, Math.max(range.start, range.end));
-    if (end <= start) continue;
-    for (let index = 0; index <= 32; index += 1) {
-      points.add(start + (end - start) * index / 32);
-    }
+    addRange(Math.min(range.start, range.end), Math.max(range.start, range.end), 32);
   }
+  for (const envelope of envelopes) addRange(envelope.sourceStart, envelope.sourceEnd, ENVELOPE_POINTS);
   for (const time of [...points].toSorted((a, b) => a - b)) {
+    if (time <= sourceStart) continue;
     gain.linearRampToValueAtTime(valueAt(time), contextStart + (time - sourceStart) / rate);
   }
   // Hold silence after the out edge, even if the display loop pauses us late.

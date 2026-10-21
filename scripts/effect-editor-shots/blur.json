@@ -1,0 +1,62 @@
+{
+  "shots": [
+    {
+      "name": "gaussian-blur-inspector",
+      "effect": "gaussian-blur",
+      "params": {
+        "radius": 10
+      },
+      "image": "harbor_town.jpg",
+      "preview": 200,
+      "alt": "Properties, Effects with + Add Effect and a Gaussian Blur card at Radius 10, beside a strip of the blurred preview",
+      "marks": [
+        {
+          "target": "add",
+          "from": "right",
+          "label": "+ Add Effect lists every effect"
+        },
+        {
+          "target": "Radius",
+          "label": "Radius"
+        },
+        {
+          "target": "bypass",
+          "from": "below",
+          "label": "Bypass, to compare with the original"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ]
+    },
+    {
+      "name": "gaussian-blur-nodes",
+      "view": "nodes",
+      "layout": "float",
+      "effect": "gaussian-blur",
+      "params": {
+        "radius": 10
+      },
+      "image": "harbor_town.jpg",
+      "alt": "The Nodes tab with the clip picked as its source: the clip's image source, the folded Gaussian Blur card with the \u203a left of its title, and the output",
+      "marks": [
+        {
+          "target": "dock:Nodes",
+          "from": "below",
+          "label": "the Nodes tab"
+        },
+        {
+          "target": "source",
+          "from": "right",
+          "label": "pick the clip here (the tab starts on the whole Timeline)"
+        },
+        {
+          "target": "expand:Gaussian Blur",
+          "from": "above",
+          "label": "the \u203a opens the effect"
+        }
+      ]
+    }
+  ]
+}

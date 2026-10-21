@@ -1,0 +1,69 @@
+{
+  "pairs": [
+    {
+      "name": "kaleidoscope",
+      "out": "docs/Features/assets/effects/kaleidoscope.webp",
+      "image": "dancer_stage",
+      "width": 1920,
+      "layout": "stack",
+      "outWidth": 960,
+      "gap": 4,
+      "left": { "effect": "original" },
+      "right": { "effect": "kaleidoscope", "params": { "segments": 8 } }
+    },
+    {
+      "name": "mirror",
+      "out": "docs/Features/assets/effects/mirror.webp",
+      "image": "harbor_town",
+      "width": 1920,
+      "layout": "stack",
+      "outWidth": 960,
+      "gap": 4,
+      "left": { "effect": "original" },
+      "right": { "effect": "mirror", "params": { "horizontal": false, "vertical": true } }
+    },
+    {
+      "name": "rgb-split",
+      "out": "docs/Features/assets/effects/rgb-split.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "split",
+      "outWidth": 1600,
+      "left": { "effect": "original" },
+      "right": { "effect": "rgb-split", "params": { "amount": 0.01 } }
+    },
+    {
+      "name": "pixelate",
+      "out": "docs/Features/assets/effects/pixelate.webp",
+      "image": "harbor_town",
+      "width": 1920,
+      "layout": "split",
+      "outWidth": 1600,
+      "left": { "effect": "original" },
+      "right": { "effect": "pixelate", "params": { "size": 24 } }
+    },
+    {
+      "name": "blockify",
+      "out": "docs/Features/assets/effects/blockify.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "layout": "stack",
+      "crop": [480, 0, 960, 540],
+      "outWidth": 960,
+      "gap": 4,
+      "left": { "effect": "original" },
+      "right": { "effect": "blockify", "params": {} }
+    },
+    {
+      "name": "block-mosaic",
+      "out": "docs/Features/assets/effects/block-mosaic.webp",
+      "image": "harbor_town",
+      "width": 1920,
+      "layout": "split",
+      "crop": [720, 240, 960, 540],
+      "outWidth": 1600,
+      "left": { "effect": "original" },
+      "right": { "effect": "block-mosaic", "params": {} }
+    }
+  ]
+}

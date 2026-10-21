@@ -72,8 +72,19 @@ class GraphBuilder {
   }
 }
 
+/**
+ * Every sample is premultiplied as it is read and the averaged result is unpremultiplied once:
+ * feathered lens and frame edges, the outside mix and the edge-sampling average then scale
+ * coverage, never colour (no dark rim next to transparency). One pass: the hardware filter still
+ * mixes straight texels, which only matters across a transparent edge inside the source itself.
+ */
 export function createDefaultFisheyeGraph(): EffectOperatorGraph {
   const g = new GraphBuilder(), frame = g.node('frame', 'image.frame', 0, 'parameters'), uv = g.node('uv', 'image.normalized-uv', 1, 'aa');
+  const sourceSplit = g.unary('source-premultiplied-split', 'vector.split.rgba', frame, 1, 'edges', 'image');
+  const sourceAlpha = g.node('source-premultiplied-alpha', 'convert.alpha-to-scalar', 2, 'edges'); g.connect({ node: sourceSplit.node, port: 'alpha' }, sourceAlpha, 'alpha');
+  const sourceRgb = g.binary('source-premultiplied-rgb', 'math.multiply.rgb-scalar', { node: sourceSplit.node, port: 'rgb' }, sourceAlpha, 3, 'edges');
+  const premultipliedSource = g.node('source-premultiplied', 'vector.combine.rgba', 4, 'edges');
+  g.connect(sourceRgb, premultipliedSource, 'rgb'); g.connect({ node: sourceSplit.node, port: 'alpha' }, premultipliedSource, 'alpha');
   const resolution = g.node('resolution', 'image.resolution', 0, 'parameters'), resolutionSplit = g.unary('resolution-split', 'vector.split.vec2', resolution, 1, 'parameters');
   const width = { node: resolutionSplit.node, port: 'x' }, height = { node: resolutionSplit.node, port: 'y' };
   const zero = g.scalar('zero', 0), one = g.scalar('one', 1), half = g.scalar('half', .5), epsilon = g.scalar('epsilon', .0001);
@@ -181,7 +192,7 @@ export function createDefaultFisheyeGraph(): EffectOperatorGraph {
   const aboveRepeat = g.binary('edge-above-repeat', 'compare.greater.scalar', edgeMode, modeRepeat, 25, 'edges'); aboveRepeat.port = 'condition';
   const mirrorOrRepeat = g.selectVec2('edge-mirror-or-repeat', aboveRepeat, mirroredUv, repeatedUv, 26, 'edges');
   const adjustedUv = g.selectVec2('edge-adjusted-uv', aboveMirror, clampedUv, mirrorOrRepeat, 27, 'edges');
-  const edgeColor = g.node('edge-color', 'image.sample', 28, 'edges'); g.connect(frame, edgeColor, 'image'); g.connect(adjustedUv, edgeColor, 'uv'); edgeColor.port = 'image';
+  const edgeColor = g.node('edge-color', 'image.sample', 28, 'edges'); g.connect(premultipliedSource, edgeColor, 'image'); g.connect(adjustedUv, edgeColor, 'uv'); edgeColor.port = 'image';
   const edgeSplit = g.unary('edge-uv-split', 'vector.split.vec2', edgeUv, 25, 'edges');
   const edgeX = { node: edgeSplit.node, port: 'x' }, edgeY = { node: edgeSplit.node, port: 'y' };
   const oneMinusX = g.binary('edge-one-minus-x', 'math.subtract.scalar', one, edgeX, 26, 'edges');
@@ -219,12 +230,19 @@ export function createDefaultFisheyeGraph(): EffectOperatorGraph {
   const alphaRG = g.binary('alpha-red-green', 'math.add.scalar', { node: redSplit.node, port: 'w' }, { node: greenSplit.node, port: 'w' }, 40, 'chroma');
   const alphaSum = g.binary('alpha-sum', 'math.add.scalar', alphaRG, { node: blueSplit.node, port: 'w' }, 41, 'chroma');
   const averageAlpha = g.binary('alpha-average', 'math.divide-ieee.scalar', alphaSum, three, 42, 'chroma');
-  const separated = g.node('chroma-rgba', 'vector.combine.vec4', 42, 'chroma');
-  g.connect({ node: redSplit.node, port: 'x' }, separated, 'x'); g.connect({ node: greenSplit.node, port: 'y' }, separated, 'y');
-  g.connect({ node: blueSplit.node, port: 'z' }, separated, 'z'); g.connect(averageAlpha, separated, 'w');
-  const separatedImage = g.unary('chroma-image', 'convert.vec4-to-image', separated, 43, 'chroma');
+  // Each channel's sample is premultiplied by its own alpha: take its straight colour, then
+  // premultiply it by the shared averaged alpha, so a fringe across a cut-out never exceeds 1.
+  const channelAtAverage = (id: string, split: Ref, port: string) => {
+    const safeAlpha = g.binary(`${id}-safe-alpha`, 'math.max.scalar', { node: split.node, port: 'w' }, tiny, 40, 'chroma');
+    const straight = g.binary(`${id}-straight`, 'math.divide-ieee.scalar', { node: split.node, port }, safeAlpha, 41, 'chroma');
+    return g.binary(`${id}-at-average`, 'math.multiply.scalar', straight, averageAlpha, 43, 'chroma');
+  };
+  const separated = g.node('chroma-rgba', 'vector.combine.vec4', 44, 'chroma');
+  g.connect(channelAtAverage('red-channel', redSplit, 'x'), separated, 'x'); g.connect(channelAtAverage('green-channel', greenSplit, 'y'), separated, 'y');
+  g.connect(channelAtAverage('blue-channel', blueSplit, 'z'), separated, 'z'); g.connect(averageAlpha, separated, 'w');
+  const separatedImage = g.unary('chroma-image', 'convert.vec4-to-image', separated, 45, 'chroma');
   const chromaEnabled = g.binary('chroma-enabled', 'compare.greater.scalar', aberration, tiny, 42, 'chroma'); chromaEnabled.port = 'condition';
-  let lensColor = g.selectImage('chroma-select', chromaEnabled, greenSample, separatedImage, 44, 'chroma');
+  let lensColor = g.selectImage('chroma-select', chromaEnabled, greenSample, separatedImage, 46, 'chroma');
 
   // Vignette preserves alpha, then lens coverage mixes with selected outside color.
   const vignetteStartRaw = g.binary('vignette-start-raw', 'math.subtract.scalar', one, vignetteSoftness, 36, 'resolve');
@@ -236,7 +254,7 @@ export function createDefaultFisheyeGraph(): EffectOperatorGraph {
   const darkenedRgb = g.binary('vignette-rgb', 'math.multiply.rgb-scalar', { node: lensSplit.node, port: 'rgb' }, vignetteFactor, 46, 'resolve');
   const vignetteImage = g.node('vignette-image', 'vector.combine.rgba', 47, 'resolve'); g.connect(darkenedRgb, vignetteImage, 'rgb'); g.connect({ node: lensSplit.node, port: 'alpha' }, vignetteImage, 'alpha'); vignetteImage.port = 'image';
   lensColor = vignetteImage;
-  const original = g.node('original-sample', 'image.sample', 45, 'resolve'); g.connect(frame, original, 'image'); g.connect(outputUv, original, 'uv'); original.port = 'image';
+  const original = g.node('original-sample', 'image.sample', 45, 'resolve'); g.connect(premultipliedSource, original, 'image'); g.connect(outputUv, original, 'uv'); original.port = 'image';
   const transparent = g.node('transparent', 'values.color', 45, 'resolve', { value: '#00000000' });
   const transparentImage = g.unary('transparent-image', 'convert.vec4-to-image', transparent, 46, 'resolve');
   const transparentOutside = g.binary('outside-transparent', 'compare.greater.scalar', outsideMode, zero, 46, 'resolve'); transparentOutside.port = 'condition';
@@ -263,6 +281,13 @@ export function createDefaultFisheyeGraph(): EffectOperatorGraph {
   const weightVector = g.unary('aa-weight-vector', 'convert.scalar-to-vec4', weightSum, 53, 'aa');
   const average = g.binary('aa-average', 'math.divide-ieee.vec4', sum, weightVector, 54, 'aa');
   const image = g.unary('fisheye-image', 'convert.vec4-to-image', average, 55, 'resolve');
-  const output = g.node('output', 'image.output', 56, 'resolve'); g.connect(image, output, 'image');
+  // Premultiplied average → straight RGBA; fully transparent pixels stay black.
+  const resultSplit = g.unary('result-split', 'vector.split.rgba', image, 56, 'resolve', 'image');
+  const resultAlpha = g.node('result-alpha', 'convert.alpha-to-scalar', 57, 'resolve'); g.connect({ node: resultSplit.node, port: 'alpha' }, resultAlpha, 'alpha');
+  const safeAlpha = g.binary('result-safe-alpha', 'math.max.scalar', resultAlpha, g.scalar('coverage-floor', 1e-6, 57, 'resolve'), 58, 'resolve');
+  const resultRgb = g.binary('result-rgb', 'math.divide-ieee.rgb-scalar', { node: resultSplit.node, port: 'rgb' }, safeAlpha, 59, 'resolve');
+  const result = g.node('result', 'vector.combine.rgba', 60, 'resolve');
+  g.connect(resultRgb, result, 'rgb'); g.connect({ node: resultSplit.node, port: 'alpha' }, result, 'alpha');
+  const output = g.node('output', 'image.output', 61, 'resolve'); g.connect(result, output, 'image');
   return { version: 1, schemaVersion: 1, domain: 'image', nodes: g.nodes, edges: g.edges, layout: g.layout, groups: g.groups() };
 }

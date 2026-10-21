@@ -9,6 +9,11 @@ import {
 } from '../../src/stores/historyStore';
 import { useMediaStore } from '../../src/stores/mediaStore';
 import { useTimelineStore } from '../../src/stores/timeline';
+import { createDefaultColorEffectGraph } from '../../src/services/operators/colorEffectGraphs';
+import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
+import { effectOperatorGraph, effectOperatorParams, migrateLoadedEffectOperatorGraph } from '../../src/services/operators/effectGraphOwner';
+import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
+import type { Effect } from '../../src/types/effects';
 
 const initialTimelineState = useTimelineStore.getState();
 const initialMediaState = useMediaStore.getState();
@@ -389,5 +394,43 @@ describe('MD7 AI Motion Adjustment authoring', () => {
     expect(getHistoryStateView().redo()).toMatchObject({ operation: 'redo' });
     expect(useTimelineStore.getState().clips.find((clip) => clip.id === clipId)?.source?.type)
       .toBe('motion-adjustment');
+  });
+
+  it('keeps the saved color math of effects that configure keeps and gives new color effects the recipe', async () => {
+    const { clipId } = await createAdjustment({
+      effects: [
+        { id: 'effect:fade', type: 'brightness', parameters: { amount: -1 } },
+        { id: 'effect:punch', type: 'contrast', parameters: { amount: 1.2 } },
+      ],
+    });
+    const created = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!;
+    for (const effect of created.effects) {
+      expect(matchesEffectRecipe(effect.operatorGraph!, createDefaultColorEffectGraph(effect.type as 'brightness' | 'contrast'))).toBe(true);
+    }
+    // An old project: both effects loaded without a graph, so they carry the original color math.
+    useTimelineStore.setState({
+      clips: useTimelineStore.getState().clips.map((clip) => clip.id === clipId
+        ? { ...clip, effects: clip.effects.map(({ operatorGraph: _dropped, ...effect }) => migrateLoadedEffectOperatorGraph(effect as Effect)) }
+        : clip),
+    });
+    const configured = await executeAITool('editMotionAdjustment', {
+      operation: 'configure',
+      clipId,
+      effects: [
+        { id: 'effect:fade', type: 'brightness', parameters: { amount: -1 } },
+        { id: 'effect:punch', type: 'contrast', parameters: { amount: 1.5 } },
+        { id: 'effect:mute', type: 'saturation', parameters: { amount: 0.5 } },
+      ],
+    }, 'internal');
+    expect(configured.success).toBe(true);
+    const [fade, punch, mute] = useTimelineStore.getState().clips.find((clip) => clip.id === clipId)!.effects;
+    const rgb = (effect: Effect) => evaluateImageOperatorPlan(
+      compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)), [0.5, 0.3, 0.2, 1]).slice(0, 3);
+    // Original brightness: an additive offset, so -1 still fades to black (the recipe curve would end near 0.15).
+    rgb(fade).forEach((channel) => expect(channel).toBeCloseTo(0, 5));
+    // Original contrast: linear around 0.5 with a clip, now at 1.5.
+    [0.5, 0.2, 0.05].forEach((value, index) => expect(rgb(punch)[index]).toBeCloseTo(value, 5));
+    expect(matchesEffectRecipe(punch.operatorGraph!, createDefaultColorEffectGraph('contrast'))).toBe(false);
+    expect(matchesEffectRecipe(mute.operatorGraph!, createDefaultColorEffectGraph('saturation'))).toBe(true);
   });
 });

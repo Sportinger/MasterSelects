@@ -25,6 +25,8 @@ import {
 import { cleanupEffectParamTimelineState } from './helpers/propertyTimelineCleanup';
 import { reconcileRemovedParameterTargets } from '../../services/parameterSources/parameterSourceLifecycle';
 import { createInitialSlitScanGraph } from '../../services/operators/slitScanGraphUpgrade';
+import { COLOR_RECIPE_EFFECT_TYPES, createDefaultColorEffectGraph, type EditableColorEffectType } from '../../services/operators/colorEffectGraphs';
+import { createStylizeRecipeGraph, stylizeNewInstanceParams } from '../../services/operators/stylizeRecipes';
 import { reconcileSlitScanDuration } from './helpers/slitScanDuration';
 import { FLOCKING_EFFECT_TYPE, flockingEffectOf } from '../../services/flock/flockEffect';
 import { createFlockPresetDefinition } from '../../services/flock/presets/flockPresets';
@@ -134,26 +136,36 @@ function reconcileEffectRemovalInNodeGraph(
   });
 }
 
+/** Initial params without the ones a caller leaves out (a Look entry pinned to an original analog graph). */
+function withoutParams(params: Effect['params'], omit: readonly string[] | undefined): Effect['params'] {
+  return omit?.length ? Object.fromEntries(Object.entries(params).filter(([id]) => !omit.includes(id))) : params;
+}
+
 export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get) => ({
-  addClipEffect: (clipId, effectType) => {
+  addClipEffect: (clipId, effectType, options) => {
     const { clipKeyframes, invalidateCache } = get();
     const clips = get().clips;
     // One swarm per clip: adding Flocking again returns the existing effect.
     const existingFlocking = effectType === FLOCKING_EFFECT_TYPE ? flockingEffectOf(clips.find(c => c.id === clipId)) : undefined;
     if (existingFlocking) return existingFlocking.id;
+    // Effects whose look is a versioned recipe carry it from the start (a graphless color or stylize
+    // effect in a project file is legacy); `options.operatorGraph` (a Look entry's stored graph) wins.
+    const recipeGraph = options?.operatorGraph ?? (effectType === 'slit-scan' ? createInitialSlitScanGraph()
+      : COLOR_RECIPE_EFFECT_TYPES.has(effectType) ? createDefaultColorEffectGraph(effectType as EditableColorEffectType)
+        : createStylizeRecipeGraph(effectType));
     const effect: Effect = {
       id: generateEffectId(),
       name: effectType === FLOCKING_EFFECT_TYPE ? 'Flocking' : effectType === 'lens-correction' ? 'Lens Correction' : effectType === 'guided-perspective' ? 'Guided Perspective' : effectType === 'stick-figure' ? 'Stick Figure' : effectType,
       type: effectType as EffectType,
       enabled: true,
-      params: { ...getDefaultEffectParams(effectType), ...(effectType === 'slit-scan' ? {
+      params: withoutParams({ ...getDefaultEffectParams(effectType), ...stylizeNewInstanceParams(effectType), ...(effectType === 'slit-scan' ? {
         stabilizationEnabled: false,
         geometryMode: '2d',
         geometrySampler: 'history',
         geometryLastMode: 'motion-surface',
         geometryPromoted3D: false,
-      } : {}) },
-      ...(effectType === 'slit-scan' ? { operatorGraph: createInitialSlitScanGraph() } : {}),
+      } : {}) }, options?.omitParams),
+      ...(recipeGraph ? { operatorGraph: recipeGraph } : {}),
     };
     const keyframes = clipKeyframes.get(clipId) ?? [];
     set({

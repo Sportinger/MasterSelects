@@ -47,6 +47,7 @@ export const filmRoll: TransitionDefinition = {
       endProgress: 1,
       curve: 'ease-out',
     },
+    // A vertical Motion Blur reaches Length times the frame height to each side.
     {
       kind: 'effect',
       target: 'outgoing',
@@ -55,7 +56,6 @@ export const filmRoll: TransitionDefinition = {
       params: {
         amount: { from: 0, to: 0.1 },
         angle: 1.5708,
-        samples: 32,
       },
       startProgress: 0,
       endProgress: 0.72,
@@ -69,7 +69,6 @@ export const filmRoll: TransitionDefinition = {
       params: {
         amount: { from: 0.1, to: 0 },
         angle: 1.5708,
-        samples: 32,
       },
       startProgress: 0.28,
       endProgress: 1,

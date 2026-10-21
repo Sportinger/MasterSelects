@@ -35,7 +35,6 @@ export const directionalBlur: TransitionDefinition = {
       params: {
         amount: { from: 0, to: 0.11 },
         angle: 0,
-        samples: 32,
       },
       startProgress: 0,
       endProgress: 0.66,
@@ -49,7 +48,6 @@ export const directionalBlur: TransitionDefinition = {
       params: {
         amount: { from: 0.11, to: 0 },
         angle: 0,
-        samples: 32,
       },
       startProgress: 0.34,
       endProgress: 1,

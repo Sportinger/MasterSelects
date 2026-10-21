@@ -1,7 +1,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { TransitionsPanel } from '../../src/components/panels/TransitionsPanel';
+import { getActiveTransitionDragData, setActiveTransitionDragData } from '../../src/components/timeline/transitionDragData';
 
 function getRenderedItemLabels(container: HTMLElement): string[] {
   return Array.from(container.querySelectorAll('.transition-item-name'))
@@ -114,5 +115,30 @@ describe('TransitionsPanel', () => {
     expect(screen.getByText('Magnetic Tiles').closest('.transition-item')?.getAttribute('draggable')).toBe('true');
     expect(screen.getByText('Shatter Glass').closest('.transition-item')?.getAttribute('draggable')).toBe('true');
     expect(screen.getByText('Shatter Glass').closest('.transition-item')?.getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('drops each transition with its own default length until a length is typed', () => {
+    const { container } = render(<TransitionsPanel />);
+    const dragStart = (label: string) => {
+      const dataTransfer = { setData: vi.fn(), setDragImage: vi.fn(), effectAllowed: '' };
+      const name = Array.from(container.querySelectorAll('.transition-item-name')).find((item) => item.textContent === label);
+      fireEvent.dragStart(name!.closest('.transition-item')!, { dataTransfer });
+      const payload = JSON.parse(dataTransfer.setData.mock.calls[0][1] as string) as { type: string; duration: number };
+      setActiveTransitionDragData(null);
+      return payload;
+    };
+    const durationInput = screen.getByLabelText('Transition length in seconds') as HTMLInputElement;
+    expect(durationInput.value).toBe('');
+    expect(durationInput.placeholder).toBe('Auto');
+
+    // The Dissolve family drops its default, Crossfade, with Crossfade's own 1 s.
+    expect(dragStart('Dissolve')).toMatchObject({ type: 'crossfade', duration: 1 });
+    expect(getActiveTransitionDragData()).toBeNull();
+
+    fireEvent.change(durationInput, { target: { value: '2.5' } });
+    expect(dragStart('Dissolve')).toMatchObject({ type: 'crossfade', duration: 2.5 });
+
+    fireEvent.change(durationInput, { target: { value: '' } });
+    expect(dragStart('Dissolve')).toMatchObject({ duration: 1 });
   });
 });

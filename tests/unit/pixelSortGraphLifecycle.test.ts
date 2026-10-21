@@ -22,7 +22,7 @@ describe('Pixel Sort compute graph lifecycle', () => {
   it('edits, keys, serializes, and restores owner-bound values and layout', async () => {
     const base: Effect = { id: 'pixel-sort-fx', type: 'pixel-sort', name: 'Pixel Sort', enabled: true, params: {} };
     const canonical = migratePersistedEffectOperatorGraph(base), originalGraph = structuredClone(canonical.operatorGraph!);
-    expect(effectOperatorParams(canonical)).toMatchObject({ amount: .8, threshold: .45, scale: 16 });
+    expect(effectOperatorParams(canonical)).toMatchObject({ amount: .5, threshold: .45, scale: 16 });
     const clip = createMockClip({ id: 'pixel-sort-clip', effects: [canonical], source: { type: 'solid' }, solidColor: '#315779' });
     const property = 'effect.pixel-sort-fx.threshold' as Keyframe['property'];
     const keys: Keyframe[] = [{ id: 'threshold-0', clipId: clip.id, property, time: 0, value: .2, easing: 'linear' },

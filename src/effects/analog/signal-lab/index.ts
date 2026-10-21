@@ -12,10 +12,29 @@ function mappedValue(values: Record<string, Primitive>, key: string, variants: R
   return variants[typeof value === 'string' ? value : fallback] ?? variants[fallback] ?? 0;
 }
 
+/** Parameters the signal model clamps to their declared range (shader.wgsl); the others are used as given. */
+export const ANALOG_SIGNAL_CLAMPED_PARAMS: ReadonlySet<string> = new Set(['amount', 'palAmount', 'lumaBandwidth', 'chromaBandwidth', 'chromaLevel', 'ycCrosstalk', 'rfAmount', 'signalStrength',
+  'colorLock', 'receiverAmount', 'vhsAmount', 'crtAmount']);
+const format = (value: number) => Number(value.toPrecision(4)).toString();
+
+/** Values outside a control's range (keyframes and tools do not clamp): say what the signal model does with them. */
+function analogSignalParamWarnings(values: Record<string, Primitive>): string[] {
+  return Object.entries(ANALOG_SIGNAL_LAB_PARAMS).flatMap(([id, definition]) => {
+    const value = values[id];
+    if (definition.type !== 'number' || typeof value !== 'number' || !Number.isFinite(value)) return [];
+    const min = definition.min ?? -Infinity, max = definition.max ?? Infinity;
+    if (value >= min && value <= max) return [];
+    return ANALOG_SIGNAL_CLAMPED_PARAMS.has(id)
+      ? [`${definition.label} ${format(value)} is outside ${format(min)} to ${format(max)} and renders as ${format(Math.min(max, Math.max(min, value)))}.`]
+      : [`${definition.label} ${format(value)} is outside ${format(min)} to ${format(max)}; the signal model uses it as given, which can look extreme.`];
+  });
+}
+
 export const analogSignalLab: ComputeEffectDefinition = {
   pipelineKind: 'compute', computeMode: 'analog-signal', id: 'analog-signal-lab', name: 'Analog Signal Lab', category: 'analog',
   shader, entryPoint: 'analogResolveCompute', uniformSize: 160, workgroupSize: [8, 8], requiresContinuousRender: false,
   params: ANALOG_SIGNAL_LAB_PARAMS,
+  paramWarnings: analogSignalParamWarnings,
   packUniforms: (values, width, height, timelineTimeSeconds = 0) => new Float32Array([
     width, height, Number.isFinite(timelineTimeSeconds) ? timelineTimeSeconds : 0,
     numberValue(values, 'seed', 1), numberValue(values, 'amount', 1), numberValue(values, 'signalStrength', 0.82),

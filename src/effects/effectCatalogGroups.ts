@@ -33,16 +33,17 @@ export function effectGroup(effectId: string): { id: EffectGroupId | 'other'; la
  * parameters are "styles": the inspector can switch between them in place.
  */
 const ENGINES: Record<string, readonly string[]> = {
-  'two-tone-pattern': ['drift-lines', 'glitch-grid', 'riso-glow', 'scatter-mosaic', 'crt-screen', 'crystal', 'film-prism', 'glass-dispersion', 'glitch', 'holo', 'ribbon-scan', 'wave-lines', 'block-mosaic', 'bricks', 'embroidery', 'outline',
-    'cross-stitch', 'dither', 'halftone', 'paper-print', 'pixel-poster', 'riso', 'blockify', 'contour-map', 'crosshatch', 'kilim', 'vector-tiling'],
+  'two-tone-pattern': ['drift-lines', 'glitch-grid', 'riso-glow', 'scatter-mosaic', 'crt-screen', 'crystal', 'film-prism', 'glass-dispersion', 'glitch', 'holo', 'ribbon-scan', 'wave-lines', 'bricks', 'embroidery', 'outline',
+    'cross-stitch', 'dither', 'halftone', 'paper-print', 'pixel-poster', 'riso', 'contour-map', 'crosshatch', 'kilim', 'vector-tiling'],
   'glyph-mosaic': ['ascii', 'brand-generator', 'grid-glyph', 'inscribe', 'number-field', 'pixel-code', 'stitch-poster', 'word-mosaic', 'contour-type',
     'capsule-cloud', 'data-hatch', 'dither-text', 'glyph-matrix', 'matrix', 'pixel-dither', 'retro-matrix', 'symbol-matrix', 'ui-collage'],
   'tracking-overlay': ['cctv', 'hud-tracker', 'rain-reveal', 'stardust', 'tracked-scene'],
-  watercolor: ['acuarela', 'rom1'],
 };
 const ENGINE_OF = new Map(Object.entries(ENGINES).flatMap(([engine, ids]) => ids.map(id => [id, engine] as const)));
 export function effectEngine(effectId: string): string | undefined { return ENGINE_OF.get(effectId); }
 export function effectEngineMembers(engine: string): readonly string[] { return ENGINES[engine] ?? []; }
 
-/** Kept for saved projects and reachable as a style of its engine, but not offered as a new effect. */
-export const EFFECTS_HIDDEN_FROM_CATALOG: ReadonlySet<string> = new Set(['rom1']);
+/** Kept for saved projects and reachable as a style of its engine, but not offered as a new effect.
+ * (Rom1 was hidden while it was a style of Acuarela; since Acuarela became a watercolour, Rom1 is the
+ * only watery-smoke look and is offered again.) */
+export const EFFECTS_HIDDEN_FROM_CATALOG: ReadonlySet<string> = new Set<string>();

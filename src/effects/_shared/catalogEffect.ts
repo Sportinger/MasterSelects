@@ -2,6 +2,7 @@ import type {
   EffectCategory,
   EffectDefinition,
   EffectParam,
+  EffectPreset,
 } from '../types';
 import { colorToRgba } from './catalogColor';
 
@@ -17,6 +18,14 @@ export interface CatalogEffectOptions {
   animated?: boolean;
   clock?: 'timeline';
   variantMap?: Record<string, number>;
+  /** Shared base parameters this effect never reads, with the reason tools return; kept hidden so saved values still load. */
+  retired?: Record<string, string>;
+  /** Notes for values the recipe clamps or cannot show (see FullscreenEffectDefinition.paramWarnings). */
+  paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
+  /** Why the effect is still experimental (FullscreenEffectDefinition.experimental). */
+  experimental?: string;
+  /** Named starting points picked in the effect card (EffectPreset). */
+  presets?: readonly EffectPreset[];
 }
 const BASE_PARAMS: Record<string, EffectParam> = {
   scale: {
@@ -35,6 +44,24 @@ const BASE_PARAMS: Record<string, EffectParam> = {
   colorB: { type: 'color', label: 'Paper', default: '#f8fafc', group: 'Color' },
 };
 
+type BaseParam = 'scale' | 'angle' | 'colorA' | 'colorB';
+
+/** A shared base parameter with a look's own additions (a unit, a reported render limit). */
+export function catalogBaseParam(key: BaseParam | 'amount', overrides: Partial<EffectParam>): EffectParam {
+  return { ...BASE_PARAMS[key], ...overrides } as EffectParam;
+}
+
+const BASE_PARAM_NAMES: Record<BaseParam, string> = { scale: 'scale', angle: 'angle', colorA: 'ink color', colorB: 'paper color' };
+
+/**
+ * `retired` entries for shared base parameters a look's recipe never reads: the card hides them,
+ * tools say the value is ignored, and saved values still load (a style switch keeps them).
+ * tests/unit/effectControlsRead.test.ts fails when a shown control is not read.
+ */
+export function ignoredBaseParams(name: string, keys: readonly BaseParam[]): Record<string, string> {
+  return Object.fromEntries(keys.map(key => [key, `${name} has no ${BASE_PARAM_NAMES[key]}; the value is ignored.`]));
+}
+
 function numberParam(params: Record<string, Primitive>, key: string, fallback: number): number {
   const value = params[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -42,12 +69,10 @@ function numberParam(params: Record<string, Primitive>, key: string, fallback: n
 
 export function createCatalogEffect(options: CatalogEffectOptions): EffectDefinition {
   const params = Object.fromEntries(
-    Object.entries({ ...BASE_PARAMS, ...options.params }).map(([name, param]) => [
-      name,
-      param.type === 'number' && param.animatable === undefined
-        ? { ...param, animatable: true }
-        : param,
-    ]),
+    Object.entries({ ...BASE_PARAMS, ...options.params }).map(([name, param]) => {
+      const animatable = param.type === 'number' && param.animatable === undefined ? { ...param, animatable: true } : param;
+      return [name, options.retired?.[name] ? { ...animatable, deprecated: options.retired[name] } : animatable];
+    }),
   );
   if (options.animated && !params.speed) {
     params.speed = {
@@ -64,7 +89,12 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
     entryPoint: options.entryPoint,
     uniformSize: 64,
     params,
+    // A timeline clock holds still while paused: no continuous rendering, but the picture still moves.
     requiresContinuousRender: options.clock === 'timeline' ? false : options.animated,
+    ...(options.animated && options.clock === 'timeline' ? { timelineAnimated: true } : {}),
+    ...(options.presets ? { presets: options.presets } : {}),
+    ...(options.paramWarnings ? { paramWarnings: options.paramWarnings } : {}),
+    ...(options.experimental ? { experimental: options.experimental } : {}),
     packUniforms: (values, width, height, timelineTimeSeconds = 0) => {
       const colorA = colorToRgba(values.colorA, '#111827');
       const colorB = colorToRgba(values.colorB, '#f8fafc');

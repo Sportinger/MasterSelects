@@ -23,7 +23,6 @@ describe('lens and motion blur transition definitions', () => {
       params: {
         amount: { from: 0, to: 0.11 },
         angle: 0,
-        samples: 32,
       },
       startProgress: 0,
       endProgress: 0.66,
@@ -37,7 +36,6 @@ describe('lens and motion blur transition definitions', () => {
       params: {
         amount: { from: 0.11, to: 0 },
         angle: 0,
-        samples: 32,
       },
       startProgress: 0.34,
       endProgress: 1,
@@ -74,7 +72,6 @@ describe('lens and motion blur transition definitions', () => {
       params: {
         amount: { from: 0.16, to: 0 },
         angle: 0,
-        samples: 40,
       },
       startProgress: 0.32,
       endProgress: 1,

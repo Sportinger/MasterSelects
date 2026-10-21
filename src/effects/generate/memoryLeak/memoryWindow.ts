@@ -201,3 +201,30 @@ export function gatherHeapWindow(
   }
   return out;
 }
+
+const MEMORY_MIN_FLOAT_GAIN = 0.001;
+
+/**
+ * Values the window planner or the decoder graph replace (keyframes and tools do not clamp): named
+ * for the inspector and tool results instead of rendering a different block silently.
+ */
+export function memoryLeakWarnings(params: Record<string, Primitive>): string[] {
+  const notes: string[] = [];
+  const size = params.size;
+  if (typeof size === 'number' && Number.isFinite(size) && (size < MEMORY_BLOCK_MIN_WIDTH || size > MEMORY_BLOCK_MAX_WIDTH)) {
+    notes.push(`size: ${size} is outside ${MEMORY_BLOCK_MIN_WIDTH}–${MEMORY_BLOCK_MAX_WIDTH} memory pixels and renders as ${Math.max(MEMORY_BLOCK_MIN_WIDTH, Math.min(MEMORY_BLOCK_MAX_WIDTH, Math.round(size)))}.`);
+  }
+  for (const [key, unit] of [['offset', 'MB'], ['stride', 'KB']] as const) {
+    const value = params[key];
+    if (typeof value === 'number' && value < 0) notes.push(`${key}: ${value} ${unit} is below 0 and renders as 0.`);
+  }
+  const gain = params.floatGain;
+  if (typeof gain === 'number' && Number.isFinite(gain) && gain < MEMORY_MIN_FLOAT_GAIN) {
+    notes.push(`floatGain: ${gain} renders as ${MEMORY_MIN_FLOAT_GAIN}, so 32-bit float pixels come out almost black.`);
+  }
+  const mix = params.mix;
+  if (typeof mix === 'number' && Number.isFinite(mix) && (mix < 0 || mix > 1)) notes.push(`mix: ${mix} is outside 0–1 and renders as ${Math.max(0, Math.min(1, mix))}.`);
+  if (params.depth !== undefined && depthParam(params) !== String(params.depth)) notes.push(`depth: "${String(params.depth)}" is not an option; using 8-bit.`);
+  if (params.motion !== undefined && motionParam(params) !== String(params.motion)) notes.push(`motion: "${String(params.motion)}" is not an option; the block holds still.`);
+  return notes;
+}

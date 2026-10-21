@@ -74,7 +74,8 @@ export function buildCanvasScene(options: Options): CanvasScene {
   const collapsedProxies = new Set(graph.groups?.filter(group => group.collapsed).map(group => group.proxyId));
   const bounds = options.groupBounds ?? nodeGroupBounds(graph, options.groupFrameNodes ?? nodes);
   const occlusions = createCanvasCableOcclusion(graph, bounds);
-  const scene: CanvasScene = { graphId: graph.id, nodes: [], cables: [], groups: [], plugs: [], ...(options.glideMs ? { glideMs: options.glideMs } : {}) };
+  const scene: CanvasScene = { graphId: graph.id, nodes: [], cables: [], groups: [], plugs: [], ...(options.glideMs ? { glideMs: options.glideMs } : {}),
+    ...(graph.overviewTitles === 'uniform' ? { uniformTitles: true } : {}) };
   for (const group of graph.groups ?? []) {
     if (group.collapsed) continue;
     const b = bounds.get(group.id);

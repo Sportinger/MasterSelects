@@ -7,6 +7,7 @@ import { createSerializableTimelineState } from '../../src/stores/timeline/seria
 import { useTimelineStore } from '../../src/stores/timeline';
 import { captureSnapshot, getHistoryStateView, initHistoryStoreRefs, setHistoryCallbacks } from '../../src/stores/historyStore';
 import { createMockClip, createMockTrack } from '../helpers/mockData';
+import { evaluateImagePasses } from '../helpers/imageGraphPasses';
 import type { Effect, Keyframe, TimelineClip } from '../../src/types';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { buildBaseLayerProps } from '../../src/engine/export/layerBuilder/baseLayers';
@@ -110,10 +111,14 @@ describe('image graph lifecycle parity', () => {
       expect(exportParams[item.parameter]).toBeCloseTo(item.expected);
       const context = { uv: [0.9, 0.5] as [number, number], resolution: [64, 37] as [number, number], timelineTimeSeconds: 1,
         sampleImage: () => pixel };
-      const previewPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams), pixel, context);
-      const exportPixel = evaluateImageOperatorPlan(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams), pixel, context);
+      // Box and Gaussian Blur are two-pass (separable) plans; their cache is evaluated on the CPU at the sampled UV.
+      const run = (plan: ReturnType<typeof compileImageOperatorGraph>) => plan.passes?.length
+        ? evaluateImagePasses(plan, context.uv, context.resolution, () => pixel, { timelineTimeSeconds: 1 }) : evaluateImageOperatorPlan(plan, pixel, context);
+      const previewPixel = run(compileImageOperatorGraph(effectOperatorGraph(preview), previewParams));
+      const exportPixel = run(compileImageOperatorGraph(effectOperatorGraph(exported), exportParams));
       expect(previewPixel).toEqual(exportPixel);
-      if (item.type === 'box-blur' || item.type === 'gaussian-blur') expect(exportPixel[3]).toBeCloseTo(pixel[3], 12);
+      // Multi-pass plans (separable blurs, cell averages) average the alpha of their taps.
+      if (['box-blur', 'gaussian-blur', 'blockify', 'block-mosaic'].includes(item.type)) expect(exportPixel[3]).toBeCloseTo(pixel[3], 12);
       else expect(exportPixel[3]).toBe(pixel[3]);
       const endpoints = [0, 2].map(time => {
         const sampled = evaluateCompositionClipEffects([effect], keys, time)[0];
@@ -164,8 +169,10 @@ describe('image graph lifecycle parity', () => {
       const plan = compileImageOperatorGraph(effectOperatorGraph(candidate), effectOperatorParams(candidate), effectOperatorCompileContext(candidate));
       const derivativeContext = type === 'holo' ? { uv: [45.5 / 64, 13.5 / 37] as [number, number],
         pixelCoordinate: [45, 13] as [number, number], derivativeAutoMode: 'coarse' as const } : { uv: [.71, .36] as [number, number] };
-      return { plan, value: evaluateImageOperatorPlan(plan, pixel, { ...derivativeContext, resolution: [64, 37], timelineTimeSeconds,
-        sampleImage: ([u, v]) => [u, v, u * .3 + v * .2, .2 + u * .6] }) };
+      const sampleImage = ([u, v]: [number, number]): [number, number, number, number] => [u, v, u * .3 + v * .2, .2 + u * .6];
+      // Wave, Twirl, Bulge, CRT Screen and Film Prism read a premultiplied cache pass: their plans are pass chains.
+      return { plan, value: plan.passes?.length ? evaluateImagePasses(plan, derivativeContext.uv, [64, 37], sampleImage, { timelineTimeSeconds })
+        : evaluateImageOperatorPlan(plan, pixel, { ...derivativeContext, resolution: [64, 37], timelineTimeSeconds, sampleImage }) };
     };
     const endpointPlans: ReturnType<typeof compileImageOperatorGraph>[] = [];
     for (const time of [0, 1, 2]) {
@@ -186,7 +193,9 @@ describe('image graph lifecycle parity', () => {
       const seekTimes = type === 'wave-lines' || type === 'film-prism' || type === 'crystal' || type === 'glass-dispersion' || type === 'holo' || type === 'riso-glow'
         || type === 'scatter-mosaic' || type === 'drift-lines' ? [0, .8]
         : type === 'glitch-grid' ? [0, 1.9] : type === 'glitch' ? [0, 1.2] : [.25, 1.25];
-      expect(evaluate(sampled, seekTimes[0]).value).not.toEqual(evaluate(sampled, seekTimes[1]).value);
+      // Glitch changes in bursts: a single pixel may sit unglitched at both times, so it scans a second of states.
+      if (type === 'glitch') expect(new Set(Array.from({ length: 12 }, (_, step) => JSON.stringify(evaluate(sampled, step / 12).value))).size).toBeGreaterThan(1);
+      else expect(evaluate(sampled, seekTimes[0]).value).not.toEqual(evaluate(sampled, seekTimes[1]).value);
     }
     const serialized = createSerializableTimelineState(useTimelineStore.getState());
     await useTimelineStore.getState().loadState(JSON.parse(JSON.stringify(serialized)));
@@ -203,9 +212,11 @@ describe('image graph lifecycle parity', () => {
       params: type === 'scanlines' ? { density: 5, opacity: 0.6, speed: 2, seed: 0 }
         : { amount: 0.25, size: 1.2, speed: 2, seed: 0 } };
     const plan = compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
-    const atOne = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 1 });
-    const repeated = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 1 });
-    const sought = evaluateImageOperatorPlan(plan, pixel, { uv: [0.37, 0.61], timelineTimeSeconds: 2.25 });
+    // The current recipes measure in pixels (line fade, 1080p-relative grain cells): a 720p frame shows the lines.
+    const context = { uv: [0.37, 0.61] as [number, number], resolution: [1280, 720] as [number, number] };
+    const atOne = evaluateImageOperatorPlan(plan, pixel, { ...context, timelineTimeSeconds: 1 });
+    const repeated = evaluateImageOperatorPlan(plan, pixel, { ...context, timelineTimeSeconds: 1 });
+    const sought = evaluateImageOperatorPlan(plan, pixel, { ...context, timelineTimeSeconds: 2.25 });
     expect(repeated).toEqual(atOne);
     expect(sought).not.toEqual(atOne);
     expect(plan.key).toBe(compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect)).key);
@@ -215,10 +226,9 @@ describe('image graph lifecycle parity', () => {
     const effect: Effect = { id: 'block-mosaic-time', type: 'block-mosaic', name: 'Block Mosaic', enabled: true,
       params: { scale: 8, amount: 1, speed: 2, colorA: '#33669980', colorB: '#f0c04040' } };
     const plan = compileImageOperatorGraph(effectOperatorGraph(effect), effectOperatorParams(effect));
-    const evaluate = (timelineTimeSeconds: number) => evaluateImageOperatorPlan(plan, pixel, {
-      uv: [0.37, 0.61], resolution: [64, 37], timelineTimeSeconds,
-      sampleImage: ([u, v]) => [u, v, (u + v) / 2, u > 0.5 ? 0.25 : 0.75],
-    });
+    // The tile layout reshuffles with time: compare a row of pixels, any of which may sit in a merged tile.
+    const evaluate = (timelineTimeSeconds: number) => Array.from({ length: 16 }, (_, index) => evaluateImagePasses(plan, [(index + 0.5) / 16, 0.61], [64, 37],
+      ([u, v]) => [u, v, (u + v) / 2, u > 0.5 ? 0.25 : 0.75], { timelineTimeSeconds }));
     const atOne = evaluate(1), repeated = evaluate(1), sought = evaluate(2.25);
     expect(repeated).toEqual(atOne);
     expect(sought).not.toEqual(atOne);

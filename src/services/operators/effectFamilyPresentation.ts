@@ -1,11 +1,12 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorGroup } from '../../types/operatorGraph';
 import { expandOperatorCompositions, sameCompositionNode } from './operatorComposition';
-import { effectPresentationPlan } from './effectPresentationPlans';
+import { effectPresentationPlan, legacyEffectPresentationPlans, type EffectPresentationPlan } from './effectPresentationPlans';
 
 const originals = new Map<string, EffectOperatorGraph>();
 const cache = new WeakMap<EffectOperatorGraph, Map<string, EffectOperatorGraph>>();
-const literal = (node: BoundOperatorNode) => node.operator.startsWith('values.') && !!node.constants && !Object.keys(node.bindings).length;
-const literalKey = (node: BoundOperatorNode) => JSON.stringify([node.operator, node.operatorVersion ?? 1, node.constants, node.enabled, node.bypassed]);
+/** A constant value node: recipe matching treats duplicated copies of it as one. */
+export const literal = (node: BoundOperatorNode) => node.operator.startsWith('values.') && !!node.constants && !Object.keys(node.bindings).length;
+export const literalKey = (node: BoundOperatorNode) => JSON.stringify([node.operator, node.operatorVersion ?? 1, node.constants, node.enabled, node.bypassed]);
 
 /** Matching allows only duplicated immutable leaves introduced by exact composition extraction.
  * Presentation (layout, folders, packed compositions) is ignored; node fields and wiring must match. */
@@ -54,20 +55,34 @@ function readableGroups(graph: EffectOperatorGraph, proposed: OperatorGroup[]): 
   }
 }
 
+/** An earlier recipe of the same effect (e.g. the original color graphs) with its own presentation. */
+export interface EarlierEffectRecipe { key: string; createDefault: () => EffectOperatorGraph; plan: EffectPresentationPlan }
+
 /** The untouched recipe gets a one-time readable layout. Saved edits, folder boundaries and ungrouping win. */
 export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed: EffectOperatorGraph, type: string,
-  createDefault: () => EffectOperatorGraph): EffectOperatorGraph {
-  const plan = effectPresentationPlan(type);
-  if (!plan || source.effectPresentationRules || source.incomplete || source.groups?.some(group => !group.composition)) return composed;
+  createDefault: () => EffectOperatorGraph, earlier?: EarlierEffectRecipe): EffectOperatorGraph {
+  const current = effectPresentationPlan(type);
+  // The current recipe first, then earlier recipes that saved effects may still run (each with its
+  // own folders): the caller's (the original color graphs) and the effect's legacy plans (analog).
+  const candidates: Array<{ key: string; create: () => EffectOperatorGraph; plan: EffectPresentationPlan }> = [
+    ...(current ? [{ key: type, create: createDefault, plan: current }] : []),
+    ...(earlier ? [{ key: `${type}|${earlier.key}`, create: earlier.createDefault, plan: earlier.plan }] : []),
+    ...legacyEffectPresentationPlans(type).map((entry, index) => ({ key: `${type}:legacy-${index}`, ...entry }))];
+  if (!candidates.length || source.effectPresentationRules || source.incomplete || source.groups?.some(group => !group.composition)) return composed;
   const cached = cache.get(source)?.get(type); if (cached) return cached;
-  let original = originals.get(type);
-  if (!original) { original = createDefault(); originals.set(type, original); }
-  if (!matchesEffectRecipe(source, original)) return composed;
+  const recipeOf = (key: string, create: () => EffectOperatorGraph) => {
+    let original = originals.get(key);
+    if (!original) { original = create(); originals.set(key, original); }
+    return original;
+  };
+  const match = candidates.find(candidate => matchesEffectRecipe(source, recipeOf(candidate.key, candidate.create)));
+  if (!match) return composed;
+  const plan = match.plan, original = recipeOf(match.key, match.create);
   const originalNodes = new Map(original.nodes.map(node => [node.id, node]));
   const labels = { controls: 'Parameters', constants: 'Constants', sources: 'Coordinates & Resources', ...plan.labels };
   const members = new Map<string, string[]>();
   for (const node of composed.nodes) {
-    if (['image.frame', 'image.output'].includes(node.operator) || node.id === 'split' && type !== 'mirror'
+    if (['image.frame', 'image.output'].includes(node.operator) || node.id === 'split' && type !== 'mirror' && type !== 'glitch'
       || node.id === 'rgba' && type === 'invert') continue;
     let stage: string;
     if (node.operator.startsWith('values.')) stage = literal(node) ? 'constants' : 'controls';
@@ -80,7 +95,8 @@ export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed:
         'glyph.cell-grid': 'grid', 'glyph.tone-index': 'index', 'glyph.atlas-alpha': 'atlas', 'feedback.decay-max-rgba': 'feedback',
         'color.soft-bright-pass': 'bright', 'color.sobel-magnitude': 'gradient', 'sampling.bounded-count': 'count',
         // Glow normalizes inside each prefilter pass; its stage follows the owning pass, not the final resolve.
-        'sampling.normalize-rgba': type === 'sharpen' || type === 'box-blur' ? 'average' : type === 'glow' ? '' : 'finish',
+        // Glow and the multi-pass blurs normalize inside each pass; the stage follows the owning pass.
+        'sampling.normalize-rgba': type === 'sharpen-earlier' ? 'average' : ['glow', 'glow-earlier', 'sharpen', 'box-blur', 'gaussian-blur', 'motion-blur', 'radial-blur', 'zoom-blur', 'pixelate', 'blockify', 'block-mosaic', 'acuarela'].includes(type) ? '' : 'finish',
         'sampling.texel-offset.vec2': 'sampling', 'sampling.gaussian-weight.vec2': 'weight', 'coordinates.centered-scale.vec2': 'sampling',
       };
       const shared = sharedStages[node.operator];

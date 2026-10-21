@@ -6,13 +6,13 @@ import { buildUnifiedClipGraph } from '../../src/services/nodeGraph/unifiedClipG
 import { useUnifiedNodeActions } from '../../src/components/panels/nodes/useUnifiedNodeActions';
 import type { FlockGraphActions } from '../../src/components/panels/nodes/flock/useFlockGraphActions';
 import { useTimelineStore } from '../../src/stores/timeline';
-import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
+import { createLegacyKaleidoscopeGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { groupOperators } from '../../src/services/operators/operatorGroups';
 
 afterEach(() => { cleanup(); useTimelineStore.setState({ clips: [], tracks: [], isExporting: false }); });
 
 function setup() {
-  const operatorGraph = createDefaultUvDistortGraph('kaleidoscope');
+  const operatorGraph = createLegacyKaleidoscopeGraph();
   const wrapper = groupOperators(operatorGraph, ['sample'], [], 'Hidden sampling');
   const clip = createMockClip({ id: 'clip', effects: [{ id: 'k', type: 'kaleidoscope', name: 'Kaleidoscope', enabled: true,
     params: { segments: 6, rotation: 0 }, operatorGraph }] });

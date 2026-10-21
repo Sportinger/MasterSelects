@@ -1,8 +1,8 @@
 import { EffectsPipeline } from '../EffectsPipeline';
-import { getDefaultParams } from '..';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { Logger } from '../../services/logger';
 import type { LookDefinition } from './types';
+import { lookPreviewEffects } from './lookEntryGraph';
 import { fitThumbnailToWidthRect } from './lookThumbnailGeometry';
 import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
 
@@ -186,13 +186,8 @@ class LookThumbnailRuntime {
     const pingView = ping.createView();
     const pongView = pong.createView();
     const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    const effects = look.stack.map((entry, index) => ({
-      id: `${look.id}:${index}`,
-      type: entry.effectId,
-      name: entry.effectId,
-      enabled: entry.enabled,
-      params: { ...getDefaultParams(entry.effectId), ...entry.params },
-    }));
+    // As applyLookToClip: the same graphs and values (lookEntryGraph.ts).
+    const effects = lookPreviewEffects(look);
     const encoder = device.createCommandEncoder();
     const result = this.pipeline.applyEffects(
       encoder,

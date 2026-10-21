@@ -1,7 +1,10 @@
-// Zoom Blur Effect
+// Zoom Blur: two-stage zoom streaks outward from a centre (log-scale steps).
+// Rendering is owned by the editable operator graph (services/operators/directionalBlurEffectGraphs.ts);
+// directionalBlur.wgsl is its WGSL reference. Contract: ../blurSampling.ts.
 
-import shader from './shader.wgsl?raw';
+import shader from '../directionalBlur.wgsl?raw';
 import type { EffectDefinition } from '../../types';
+import { finiteBlurParam } from '../blurSampling';
 
 export const zoomBlur: EffectDefinition = {
   id: 'zoom-blur',
@@ -10,7 +13,7 @@ export const zoomBlur: EffectDefinition = {
 
   shader,
   entryPoint: 'zoomBlurFragment',
-  uniformSize: 16,
+  uniformSize: 32,
 
   params: {
     amount: {
@@ -48,16 +51,12 @@ export const zoomBlur: EffectDefinition = {
       max: 256,
       step: 1,
       animatable: false,
-      quality: true,
+      hidden: true,
+      deprecated: 'Zoom Blur now chooses its taps from the streak length automatically; samples has no effect.',
     },
   },
 
-  packUniforms: (params) => {
-    return new Float32Array([
-      params.amount as number ?? 0.3,
-      params.centerX as number ?? 0.5,
-      params.centerY as number ?? 0.5,
-      params.samples as number ?? 16,
-    ]);
-  },
+  packUniforms: (params, width, height) => new Float32Array([
+    finiteBlurParam(params.amount, 0.3), 0, finiteBlurParam(params.centerX, 0.5), finiteBlurParam(params.centerY, 0.5), width, height, 1, 0,
+  ]),
 };

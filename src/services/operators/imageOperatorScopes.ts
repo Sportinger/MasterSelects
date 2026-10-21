@@ -4,7 +4,7 @@ import type { ImagePlanInstruction } from './imageOperatorPlanTypes';
 export interface ImageScopeValue { node: BoundOperatorNode; output: string }
 
 const PURE_PREFIXES = ['values.', 'math.', 'vector.', 'convert.', 'coordinates.', 'optics.', 'compare.', 'logic.', 'color.'];
-const PURE_INTRINSICS = new Set(['image.normalized-uv', 'image.resolution', 'image.timeline-time', 'pattern.bayer4.vec2', 'noise.hash2d.vec2']);
+const PURE_INTRINSICS = new Set(['image.normalized-uv', 'image.resolution', 'image.timeline-time', 'pattern.bayer4.vec2', 'noise.hash2d.vec2', 'noise.cell-hash.vec2', 'noise.hash2d-pcg.vec2', 'noise.fractal2d.vec2']);
 const CONTEXT_LEAVES = new Set(['image.kernel-index', 'image.sequence-index']);
 
 const isPure = (operator: string) => PURE_INTRINSICS.has(operator) || PURE_PREFIXES.some(prefix => operator.startsWith(prefix));
@@ -78,4 +78,46 @@ export function commonPureImageBranchValues(
   };
   const ordered = dependencies(branches[0]), common = new Set(dependencies(branches[1]).map(value => `${value.node.id}:${value.output}`));
   return ordered.filter(value => common.has(`${value.node.id}:${value.output}`));
+}
+
+/**
+ * Kernel loop-invariant values: the largest sub-expressions of a kernel reducer's sample and
+ * weight that do not depend on the kernel index (directly or through a sampled image chain).
+ * The compiler evaluates them once in the enclosing scope and passes them into the kernel term,
+ * instead of recomputing them for every tap (a noise field per tap made a 7 x 7 kernel cost 49
+ * noise evaluations per pixel). Leaves (constants, parameters, uv) are free and stay inside.
+ * Only eagerly evaluated inputs count: pure operators, a sample's coordinate, a choice's condition.
+ */
+export function kernelInvariantValues(roots: readonly ImageScopeValue[], nodes: ReadonlyMap<string, BoundOperatorNode>,
+  incoming: ReadonlyMap<string, readonly OperatorEdge[]>): ImageScopeValue[] {
+  const kernelMemo = new Map<string, boolean>();
+  const dependsOnKernel = (node: BoundOperatorNode): boolean => {
+    const known = kernelMemo.get(node.id);
+    if (known !== undefined) return known;
+    kernelMemo.set(node.id, false);
+    const result = CONTEXT_LEAVES.has(node.operator) || inputEdges(node, incoming).some(edge => {
+      const source = nodes.get(edge.from);
+      return !!source && dependsOnKernel(source);
+    });
+    kernelMemo.set(node.id, result);
+    return result;
+  };
+  const hoistable = (node: BoundOperatorNode) => !node.bypassed && !dependsOnKernel(node)
+    && (isEligiblePure(node) || node.operator === 'image.sample' || node.operator === 'image.load-pixel-clamped')
+    && inputEdges(node, incoming).length > 0;
+  const found = new Map<string, ImageScopeValue>(), seen = new Set<string>();
+  const walk = (value: ImageScopeValue) => {
+    const key = `${value.node.id}:${value.output}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (hoistable(value.node)) { found.set(key, value); return; }
+    const allowed = eagerInputs(value.node);
+    for (const edge of inputEdges(value.node, incoming)) {
+      if (allowed && !allowed.has(edge.input)) continue;
+      const source = nodes.get(edge.from);
+      if (source) walk({ node: source, output: edge.output });
+    }
+  };
+  for (const root of roots) walk(root);
+  return [...found.values()];
 }

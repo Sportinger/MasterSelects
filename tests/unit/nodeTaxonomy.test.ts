@@ -48,7 +48,8 @@ describe('node catalog taxonomy', () => {
     const groups = getCategoriesWithEffects();
     expect(groups[0]).toMatchObject({ category: 'Color & Tone' });
     expect(groups[0].effects[0].id).toBe('brightness');
-    expect(groups.flatMap(group => group.effects.map(effect => effect.id))).not.toContain('rom1');
+    // Rom1 is offered again: since Acuarela became a watercolour it is the only watery-smoke look.
+    expect(groups.flatMap(group => group.effects.map(effect => effect.id))).toContain('rom1');
     expect(groups.every(group => !/^[a-z]+$/.test(group.category))).toBe(true);
   });
 
@@ -62,7 +63,8 @@ describe('node catalog taxonomy', () => {
   });
 
   it('offers styles only between looks that share every parameter', () => {
-    expect(effectStyleOptions('acuarela').map(option => option.value)).toEqual(['acuarela', 'rom1']);
+    // Acuarela (watercolour) and Rom1 (watery smoke) no longer share their parameters.
+    expect(effectStyleOptions('acuarela')).toEqual([]);
     expect(effectStyleOptions('halftone').map(option => option.value)).toEqual(expect.arrayContaining(['riso', 'dither', 'crosshatch']));
     expect(effectStyleOptions('halftone').map(option => option.value)).not.toContain('glitch');
     expect(effectStyleOptions('chroma-key')).toEqual([]);

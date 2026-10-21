@@ -7,6 +7,7 @@ import { appendSilence, getPlanTailSeconds } from './rangePlanning';
 import { buildClipRenderProgress, type AudioExportProgressSink } from './progress';
 import type { Keyframe } from '../../../types/keyframes';
 import type { TimelineClip } from '../../../types/timeline';
+import type { AudioCrossfadeGainEnvelope } from '../../../services/audio/audioCrossfadeGains';
 
 export interface RenderExportClipAudioOptions {
   clips: TimelineClip[];
@@ -14,6 +15,8 @@ export interface RenderExportClipAudioOptions {
   preTrimmedClipIds?: ReadonlySet<string>;
   sourceBufferStarts?: ReadonlyMap<string, number>;
   clipKeyframes: Map<string, Keyframe[]>;
+  /** Audio crossfade gains per clip (timeline seconds), applied before the clip and track effects. */
+  crossfadeEnvelopes?: ReadonlyMap<string, readonly AudioCrossfadeGainEnvelope[]>;
   audioGraphPlan: AudioGraphRenderPlan;
   clipAudioRenderer: ClipAudioRenderService;
   graphEffectRenderer: AudioEffectRenderer;
@@ -46,6 +49,7 @@ export async function renderExportClipAudioEffects(
       sourceIsClipRange: options.preTrimmedClipIds?.has(clip.id) === true,
       sourceBufferStart: options.sourceBufferStarts?.get(clip.id),
       keyframes,
+      crossfadeEnvelopes: options.crossfadeEnvelopes?.get(clip.id),
       effectTailSeconds: clipTailSeconds,
       onProgress: progress => options.onProgress?.(
         buildClipRenderProgress(clip, index, options.clips.length, progress)

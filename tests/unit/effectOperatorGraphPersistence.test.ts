@@ -30,7 +30,8 @@ describe('effect-owned operator graph persistence', () => {
     const migrated = migratePersistedEffectOperatorGraph(legacy);
 
     expect(migrated.operatorGraph).toMatchObject({ ...graph, schemaVersion: 1 });
-    expect(migrated.params).toEqual({ stableParam: 42 });
+    // Voxel Relief saved before the hue-keeping shading keeps its darker sides, and before Distance existed its Distance 1 framing.
+    expect(migrated.params).toEqual(type === 'voxel-relief' ? { stableParam: 42, shading: 'legacy', distance: 1 } : { stableParam: 42 });
     expect(migrated.operatorGraph?.nodes.map(node => node.id)).toEqual(graph.nodes.map(node => node.id));
     expect(migrated.operatorGraph?.nodes.map(node => node.bindings)).toEqual(graph.nodes.map(node => node.bindings));
     expect(migrated.operatorGraph?.nodes.every(node => node.operatorVersion === 1)).toBe(true);

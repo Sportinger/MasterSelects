@@ -27,6 +27,7 @@ import { imageGraphDefinition } from './_shared/imageGraphDefinition';
 import { resolveImageGraphExternalResources } from './_shared/imageGraphExternalResources';
 import { EffectPipelineCache } from './EffectPipelineCache';
 import { captureImageOperatorPreviews } from '../services/nodePreview/imageOperatorTexturePreviews';
+import { imageOperatorPreviewPrefix } from '../services/nodePreview/imageOperatorPreviewStages';
 import type { ImageOperatorMemoryWindowResource } from '../services/operators/imageOperatorExternalResources';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from '../services/operators/analogSignalGraph';
 import { captureAnalogSignalStagePreviews } from '../services/nodePreview/analogSignalPreviews';
@@ -37,13 +38,10 @@ import { effectOperatorParams } from '../services/operators/effectGraphOwner';
 import { prepareImageEffect } from '../services/operators/imageEffectRuntimePlan';
 import { compileComputeImageGraph } from '../services/operators/computeImageGraph';
 import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
+import { isNeutralEffect } from '../services/operators/neutralEffects';
+import { reportBlurBudget } from './blur/blurBudgetLog';
 import { TemporalSmoothHistory } from './TemporalSmoothHistory';
-import {
-  transitionFrameHistory,
-  type FrameHistoryDiscontinuity,
-  type FrameHistoryState,
-} from './frameHistoryTransition';
-import { resolveFeedbackHistoryLoop } from './_shared/feedbackParameters';
+import { EffectFeedbackHistory, type EffectFrameHistoryContext } from './EffectFeedbackHistory';
 import { toPrimitiveEffectParams } from './_shared/effectUniformParams';
 import { SlitScanOutputProcessing } from './time/slit-scan/SlitScanOutputProcessing';
 import { clearEffectGpuFailures, EffectGpuPipelineError, reportEffectGpuFailure } from './effectGpuFailures';
@@ -69,32 +67,14 @@ interface EffectInstance {
   params: Record<string, unknown>;
 }
 
-interface FeedbackState {
-  committedTexture: GPUTexture;
-  committedView: GPUTextureView;
-  currentTexture: GPUTexture;
-  width: number;
-  height: number;
-  lifecycle: FrameHistoryState | null;
-  lastEventRevision?: number;
-  planKey?: string;
-  committedRevision: number;
-}
-
-export interface EffectFrameHistoryContext {
-  scopeId: string;
-  eventRevision: number;
-  discontinuity?: FrameHistoryDiscontinuity;
-  ownerRevision: number;
-}
-
+export type { EffectFrameHistoryContext } from './EffectFeedbackHistory';
 
 export class EffectsPipeline {
   private inputHistory: InputHistoryRuntime;
   private temporalResources: TemporalEffectResources;
   private device: GPUDevice;
   private pipelineCache: EffectPipelineCache;
-  private feedbackStates = new Map<string, FeedbackState>();
+  private feedbackHistory: EffectFeedbackHistory;
   private landmarkBuffers = new EffectLandmarkBuffers();
   private byteTextures: ByteTextureCache;
   private computeRuntime: ComputeEffectRuntime;
@@ -115,6 +95,7 @@ export class EffectsPipeline {
     this.byteTextures = new ByteTextureCache(device);
     this.imageGraphPassRuntime = new ImageGraphPassRuntime(device);
     this.temporalSmoothing = new TemporalSmoothHistory(device);
+    this.feedbackHistory = new EffectFeedbackHistory(device);
   }
 
   /**
@@ -167,7 +148,8 @@ export class EffectsPipeline {
 
   /** Compile only the requested effect, used by budgeted thumbnail prewarming. */
   prewarmEffect(effectType: string): void {
-    if (INLINE_EFFECT_IDS.has(effectType)) return;
+    // Graph-owned effects render through their compiled graph, never their registered shader.
+    if (INLINE_EFFECT_IDS.has(effectType) || isImageGraphEffectType(effectType)) return;
     const effect = getEffect(effectType);
     if (isFullscreenEffectDefinition(effect)) {
       if (effect.usesInputHistory) return; // The graph supplies the temporal sampler bindings.
@@ -211,101 +193,11 @@ export class EffectsPipeline {
     return this.pipelineCache.createBindGroup(effectType, entries);
   }
 
-  private getFeedbackState(effect: EffectInstance, width: number, height: number, scopeId: string): FeedbackState {
-    const key = JSON.stringify([scopeId, effect.id]);
-    const existing = this.feedbackStates.get(key);
-
-    if (existing && existing.width === width && existing.height === height) {
-      return existing;
-    }
-
-    existing?.committedTexture.destroy();
-    existing?.currentTexture.destroy();
-
-    const createTexture = (role: string) => this.device.createTexture({
-      label: `effect-feedback-${role}-${effect.type}-${effect.id}`,
-      size: { width, height },
-      format: 'rgba8unorm',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT |
-        GPUTextureUsage.TEXTURE_BINDING |
-        GPUTextureUsage.COPY_DST |
-        GPUTextureUsage.COPY_SRC,
-    });
-    const committedTexture = createTexture('committed');
-    const currentTexture = createTexture('current');
-
-    const state: FeedbackState = {
-      committedTexture,
-      committedView: committedTexture.createView(),
-      currentTexture,
-      width,
-      height,
-      lifecycle: null,
-      committedRevision: 0,
-    };
-    this.feedbackStates.set(key, state);
-    return state;
-  }
-
-  private clearFeedback(commandEncoder: GPUCommandEncoder, state: FeedbackState): void {
-    const pass = commandEncoder.beginRenderPass({
-      colorAttachments: [{
-        view: state.committedView,
-        clearValue: { r: 0, g: 0, b: 0, a: 0 },
-        loadOp: 'clear',
-        storeOp: 'store',
-      }],
-    });
-    pass.end();
-    state.committedRevision += 1;
-  }
-
-  private prepareFeedbackState(commandEncoder: GPUCommandEncoder, state: FeedbackState, effect: EffectInstance,
-    timelineTimeSeconds: number, frameHistory?: EffectFrameHistoryContext, planKey?: string, rebuiltPipeline = false): void {
-    const eventIsNew = frameHistory !== undefined && frameHistory.eventRevision !== state.lastEventRevision;
-    const recompiled = planKey !== undefined && state.planKey !== undefined && state.planKey !== planKey;
-    const transition = transitionFrameHistory(rebuiltPipeline || recompiled ? null : state.lifecycle, {
-      timelineTimeSeconds, ownerRevision: frameHistory?.ownerRevision ?? 0,
-      resetRequested: effect.params.reset === true,
-      discontinuity: eventIsNew ? frameHistory.discontinuity : undefined,
-      loopPolicy: resolveFeedbackHistoryLoop(effect.params),
-    });
-    state.lifecycle = transition.state;
-    state.planKey = planKey ?? state.planKey;
-    if (frameHistory) state.lastEventRevision = frameHistory.eventRevision;
-    if (transition.action === 'reset') this.clearFeedback(commandEncoder, state);
-    else if (transition.action === 'advance') {
-      commandEncoder.copyTextureToTexture({ texture: state.currentTexture }, { texture: state.committedTexture },
-        { width: state.width, height: state.height });
-      state.committedRevision += 1;
-    }
-  }
-
-  private copyFeedbackOutput(commandEncoder: GPUCommandEncoder, state: FeedbackState, outputView: GPUTextureView,
-    pingView: GPUTextureView, pongView: GPUTextureView, width: number, height: number, pingTexture?: GPUTexture, pongTexture?: GPUTexture): void {
-    const outputTexture = this.getOutputTexture(outputView, pingView, pongView, pingTexture, pongTexture);
-    if (outputTexture) commandEncoder.copyTextureToTexture({ texture: outputTexture }, { texture: state.currentTexture }, { width, height });
-  }
-
-  private getOutputTexture(
-    outputView: GPUTextureView,
-    pingView: GPUTextureView,
-    pongView: GPUTextureView,
-    pingTexture?: GPUTexture,
-    pongTexture?: GPUTexture
-  ): GPUTexture | null {
-    if (outputView === pingView) return pingTexture ?? null;
-    if (outputView === pongView) return pongTexture ?? null;
-    return null;
-  }
-
   private getNextOutputView(currentOutput: GPUTextureView, pingView: GPUTextureView, pongView: GPUTextureView): GPUTextureView {
     return currentOutput === pingView ? pongView : pingView;
   }
 
-  /**
-   * Apply effects to a texture using ping-pong rendering
-   */
+  /** Apply effects to a texture using ping-pong rendering. */
   applyEffects(
     commandEncoder: GPUCommandEncoder,
     effects: EffectInstance[],
@@ -342,6 +234,14 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const originalEffect of enabledEffects) {
+      // A zero-strength blur or a neutral distort passes its input through; its preview shows that
+      // input. Open previews of its inner nodes need the graph to run, so then it renders normally.
+      if (isNeutralEffect(originalEffect, outputWidth, outputHeight)
+        && !nodePreviewTextureTap.matching(imageOperatorPreviewPrefix(originalEffect.id)).length) {
+        nodePreviewTextureTap.capture(`effect:${originalEffect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
+        continue;
+      }
+      reportBlurBudget(originalEffect, outputWidth, outputHeight);
       const stackSettings = originalEffect.type === 'time-stack' ? timeStackSettings(originalEffect.params, temporalSource?.localTime ?? 0) : undefined;
       const effect = stackSettings ? { ...originalEffect, params: { ...originalEffect.params, count: stackSettings.activeCount, offset: stackSettings.offset } } : originalEffect.type === 'slit-scan' && (isCollectingTemporalPreparations() || geometryCapture)
         ? { ...originalEffect, params: { ...originalEffect.params, scanSmoothingPreview: false } } : originalEffect;
@@ -353,8 +253,8 @@ export class EffectsPipeline {
       if (preparedImage?.graph.incomplete) continue;
       const imagePlan = preparedImage?.plan;
       let feedbackState = imagePlan?.frameHistoryResource
-        ? this.getFeedbackState(effect, outputWidth, outputHeight, frameHistory?.scopeId ?? 'legacy') : null;
-      if (feedbackState && imagePlan) this.prepareFeedbackState(commandEncoder, feedbackState, effect, timelineTimeSeconds, frameHistory, imagePlan.key);
+        ? this.feedbackHistory.get(effect, outputWidth, outputHeight, frameHistory?.scopeId ?? 'legacy') : null;
+      if (feedbackState && imagePlan) this.feedbackHistory.prepare(commandEncoder, feedbackState, effect, timelineTimeSeconds, frameHistory, imagePlan.key);
       const resolveMemoryWindow = imageGraphEffect ? (descriptor: ImageOperatorMemoryWindowResource) => {
           if (!registered || !isFullscreenEffectDefinition(registered) || !registered.byteTexture) {
             throw new Error('Memory window graph requires a byte-texture provider.');
@@ -449,7 +349,11 @@ export class EffectsPipeline {
             height: outputHeight, timelineTimeSeconds, plan: imagePlan, outputView: effectOutput, outputFormat: 'rgba8unorm',
             instanceId: JSON.stringify([frameHistory?.scopeId ?? 'legacy', effect.id]), batch: imagePassBatch,
             externalResources: imageExternalResources });
-          if (imagePassBatch) this.temporalSmoothing.commit(commandEncoder, imagePlan, effect.id, frameHistory?.scopeId, this.imageGraphPassRuntime, imagePassBatch);
+          if (imagePassBatch) {
+            this.temporalSmoothing.commit(commandEncoder, imagePlan, effect.id, frameHistory?.scopeId, this.imageGraphPassRuntime, imagePassBatch);
+            // Its pass caches serve the next effect.
+            this.imageGraphPassRuntime.releaseBatch(imagePassBatch);
+          }
           effectInput = effectOutput;
           if (effect.type === 'slit-scan' && preparedImage && imageExternalResources) {
             effectInput = this.slitScanOutput.process({ effect, graph: preparedImage.graph, device: this.device, encoder: commandEncoder,
@@ -464,7 +368,7 @@ export class EffectsPipeline {
                 commandEncoder, temporalSource, { view: graphInput, width: outputWidth, height: outputHeight }, plan.externalResources, graph) }, geometryCapture);
           }
           effectInput = this.temporalResources.finishImage(effect.id, timelineTimeSeconds, commandEncoder, effectInput, outputWidth, outputHeight, previewKey);
-          if (feedbackState) this.copyFeedbackOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
+          if (feedbackState) this.feedbackHistory.copyOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
             outputWidth, outputHeight, pingTexture, pongTexture);
           effectOutput = this.getNextOutputView(effectOutput, pingView, pongView); swapped = !swapped;
           nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
@@ -570,11 +474,11 @@ export class EffectsPipeline {
       }
 
       feedbackState = definition.usesFeedback
-        ? this.getFeedbackState(effect, outputWidth, outputHeight, frameHistory?.scopeId ?? 'legacy')
+        ? this.feedbackHistory.get(effect, outputWidth, outputHeight, frameHistory?.scopeId ?? 'legacy')
         : null;
 
       if (feedbackState) {
-        this.prepareFeedbackState(commandEncoder, feedbackState, effect, timelineTimeSeconds, frameHistory, undefined, rebuiltPipeline);
+        this.feedbackHistory.prepare(commandEncoder, feedbackState, effect, timelineTimeSeconds, frameHistory, undefined, rebuiltPipeline);
       }
 
       const entries: GPUBindGroupEntry[] = [
@@ -628,7 +532,7 @@ export class EffectsPipeline {
       effectPass.end();
 
       if (feedbackState) {
-        this.copyFeedbackOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
+        this.feedbackHistory.copyOutput(commandEncoder, feedbackState, effectOutput, pingView, pongView,
           outputWidth, outputHeight, pingTexture, pongTexture);
       }
 
@@ -674,11 +578,7 @@ export class EffectsPipeline {
     this.temporalResources.destroy();
     this.slitScanOutput.destroy();
     this.denseTerrain?.destroy();this.denseTerrain=undefined;
-    for (const state of this.feedbackStates.values()) {
-      state.committedTexture.destroy();
-      state.currentTexture.destroy();
-    }
-    this.feedbackStates.clear();
+    this.feedbackHistory.destroy();
     this.landmarkBuffers.destroy();
     this.byteTextures.destroy();
     this.pipelineCache.clear(); clearEffectGpuFailures();

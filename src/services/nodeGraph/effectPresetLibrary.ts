@@ -1,6 +1,6 @@
 import type { Effect } from '../../types/effects';
 import { getEffect } from '../../effects';
-import { effectOperatorGraph, hasEffectOperatorGraph } from '../operators/effectGraphOwner';
+import { effectOperatorGraph, hasEffectOperatorGraph, migratePersistedEffectOperatorGraph } from '../operators/effectGraphOwner';
 import { EFFECT_GRAPH_PARAM } from '../operators/effectGraph';
 
 export const EFFECT_PRESET_STORAGE_KEY = 'masterselects.effect.presets.v1';
@@ -54,7 +54,9 @@ export function removeEffectPreset(id: string, store: StoragePort = storage()): 
 
 export function instantiateEffectPreset(preset: EffectPreset): Effect {
   if (!getEffect(preset.effect.type)) throw new Error('This preset’s effect is no longer available.');
-  const effect: Effect = { ...structuredClone(preset.effect), id: crypto.randomUUID(), name: preset.label };
+  // A preset is persisted data like a saved project: run the same upgrade, so a
+  // preset stored with a retired recipe renders now as it will after a reload.
+  const effect = migratePersistedEffectOperatorGraph({ ...structuredClone(preset.effect), id: crypto.randomUUID(), name: preset.label });
   // Operator IDs are local to their effect owner; the new owner ID isolates every copy.
   if (hasEffectOperatorGraph(effect.type)) effectOperatorGraph(effect);
   return effect;

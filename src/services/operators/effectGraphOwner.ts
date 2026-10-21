@@ -1,4 +1,4 @@
-import { createDefaultTimeStackGraph } from './timeStackEffectGraph';
+import { createDefaultTimeStackGraph, upgradeTimeStackGraph } from './timeStackEffectGraph';
 import { upgradeSlitScanGraph } from './slitScanGraphUpgrade';
 import { SLIT_SCAN_PROTECTION_RESOURCE } from './slitScanProtectionGraph';
 import { SLIT_SCAN_TIME_MAP_RESOURCE } from './slitScanTimeMapGraph';
@@ -29,33 +29,47 @@ import type { ImageOperatorCompileContext } from './imageOperatorChoice';
 import { compileAnalogSignalGraph, createDefaultAnalogSignalGraph } from './analogSignalGraph';
 import { ANALOG_SIGNAL_OPERATORS } from './analogSignalOperators';
 import { migrateAnalogSignalGraph } from './analogSignalMigration';
-import { createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
-import { getEffect } from '../../effects';
+import { COLOR_RECIPE_EFFECT_TYPES, createDefaultColorEffectGraph, type EditableColorEffectType } from './colorEffectGraphs';
+import { createLegacyColorEffectGraph } from './legacyColorEffectGraphs';
+import { ORIGINAL_COLOR_PRESENTATION } from './effectPresentationPlans';
+import { getEffect, withoutRuntimeTravelParams } from '../../effects';
 import { createDefaultPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
-import { createDefaultContextualEffectGraph, type EditableContextualEffectType } from './contextualEffectGraphs';
+import type { EditableContextualEffectType } from './contextualEffectGraphs';
+import { createDefaultGrainGraph } from './grainEffectGraph';
+import { createDefaultSharpenGraph } from './sharpenEffectGraph';
+import { createDefaultVignetteGraph } from './vignetteEffectGraph';
+import { createDefaultScanlinesGraph } from './scanlinesEffectGraph';
 import { createDefaultSamplingEffectGraph, type EditableSamplingEffectType } from './samplingEffectGraphs';
 import { createDefaultBlockEffectGraph, type EditableBlockEffectType } from './blockEffectGraphs';
 import { normalizeCatalogColor } from '../../effects/_shared/catalogColor';
+import { finiteEffectNumber } from '../../effects/_shared/effectNumberParam';
 import { createDefaultBlurEffectGraph, type EditableBlurEffectType } from './blurEffectGraphs';
 import { createDefaultDirectionalBlurGraph, type EditableDirectionalBlurEffectType } from './directionalBlurEffectGraphs';
 import { createDefaultEdgeDetectGraph } from './edgeDetectEffectGraph';
-import { createDefaultGlowGraph } from './glowEffectGraph';
+import { createDefaultGlowGraph } from './glowBloomEffectGraph';
 import { upgradeGlowGraph } from './glowGraphUpgrade';
+import { createEarlierStylizeGraph, stylizePresentation, upgradePointwiseStylizeGraph } from './stylizeRecipes';
+import { clampSmokeGainGraph, kneeRom1GainGraph } from './smokeGainUpgrade';
+import { withLegacySheenParams } from '../../effects/stylize/sheen/legacy';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
 import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
-import { organizeGaussianBlurGraph } from './gaussianBlurGraphPresentation';
+import { upgradeFisheyeGraph } from './fisheyeGraphUpgrade';
+import { isUpgradableBlurEffectType, upgradeBlurGraph } from './blurGraphUpgrade';
 import { organizeEffectFamilyGraph } from './effectFamilyPresentation';
+import { upgradePersistedUvDistortEffect } from './uvDistortGraphUpgrade';
+import { upgradePersistedMirrorPixelEffect } from './mirrorPixelGraphUpgrade';
 import { normalizeFisheyeParameters } from '../../effects/distort/fisheye/normalization';
-import { createDefaultCrtScreenGraph } from './crtScreenEffectGraph';
-import { createDefaultRibbonScanGraph } from './ribbonScanEffectGraph';
+import { createDefaultCrtScreenGraph } from './crtScreenRecipe';
+import { pinOriginalAnalogGraph } from './analogLegacyGraphs';
+import { createDefaultRibbonScanGraph } from './ribbonScanRecipe';
 import { createDefaultWaveLinesGraph } from './waveLinesEffectGraph';
-import { createDefaultGlitchGraph } from './glitchEffectGraph';
-import { createDefaultFilmPrismGraph } from './filmPrismEffectGraph';
+import { createDefaultGlitchGraph } from './glitchRecipe';
+import { createDefaultFilmPrismGraph } from './filmPrismRecipe';
 import { createDefaultCrystalGraph } from './crystalEffectGraph';
 import { createDefaultGlassDispersionGraph } from './glassDispersionEffectGraph';
 import { createDefaultHalftoneGraph, type EditableHalftoneEffectType } from './halftoneEffectGraphs';
-import { createDefaultHoloGraph } from './holoEffectGraph';
+import { createDefaultHoloGraph } from './holoRecipe';
 import { createDefaultRisoGraph, type EditableRisoEffectType } from './risoEffectGraphs';
 import { createDefaultDitherGraph, type EditableDitherEffectType } from './ditherEffectGraphs';
 import { createDefaultPaperPrintGraph } from './paperPrintEffectGraph';
@@ -64,12 +78,14 @@ import { createDefaultToneGeometryGraph } from './toneGeometryEffectGraph';
 import { createDefaultCrossStitchGraph } from './crossStitchEffectGraph';
 import { createDefaultMotionHalftoneGraph, type EditableMotionHalftoneEffectType } from './motionHalftoneEffectGraphs';
 import { createDefaultAsciiGhostGraph, createDefaultAsciiGraph, createDefaultBrandGeneratorGraph, createDefaultCapsuleCloudGraph, createDefaultDataHatchGraph, createDefaultDitherTextGraph, createDefaultGlyphMatrixGraph, createDefaultGridGlyphGraph, createDefaultInscribeGraph, createDefaultMatrixGraph, createDefaultNumberFieldGraph, createDefaultPixelCodeGraph, createDefaultPixelDitherGraph, createDefaultRetroMatrixGraph, createDefaultStitchPosterGraph, createDefaultSymbolMatrixGraph, createDefaultUiCollageGraph, createDefaultWordMosaicGraph } from './asciiEffectGraph';
-import { createDefaultAcuarelaGraph } from './acuarelaEffectGraph';
+import { createLegacyAcuarelaGraph, hasLegacyAcuarelaParams } from './acuarelaEffectGraph';
+import { createDefaultAcuarelaGraph } from './acuarelaWatercolorGraph';
 import { createDefaultVoronoiGraph } from './voronoiEffectGraph';
 import { createDefaultPixelSortGraph } from './pixelSortEffectGraph';
 import { createDefaultQuadtreeGraph } from './quadtreeEffectGraph';
 import { createDefaultContourGraph } from './contourEffectGraph';
 import { createDefaultChromaKeyGraph } from './chromaKeyEffectGraph';
+import { upgradeChromaKeyGraph } from './chromaKeyGraphUpgrade';
 import { createDefaultRom1Graph } from './rom1EffectGraph';
 import { createDefaultMemoryLeakGraph } from './memoryLeakEffectGraph';
 import { createDefaultContourTypeGraph } from './asciiEffectGraph';
@@ -174,8 +190,9 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         || effectType === 'vector-tiling' || effectType === 'embroidery' || effectType === 'outline' || effectType === 'bricks'
         ? () => createDefaultGeometryFragmentGraph(effectType)
       : effectType === 'threshold' || effectType === 'posterize' ? () => createDefaultPointwiseEffectGraph(effectType)
-        : effectType === 'vignette' || effectType === 'scanlines' || effectType === 'grain'
-          ? () => createDefaultContextualEffectGraph(effectType)
+        : effectType === 'grain' ? createDefaultGrainGraph
+        : effectType === 'vignette' ? createDefaultVignetteGraph
+        : effectType === 'scanlines' ? createDefaultScanlinesGraph
         : effectType === 'ascii' ? createDefaultAsciiGraph
         : effectType === 'number-field' ? createDefaultNumberFieldGraph
         : effectType === 'grid-glyph' ? createDefaultGridGlyphGraph
@@ -198,7 +215,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
         : effectType === 'chroma-key' ? createDefaultChromaKeyGraph
         : effectType === 'rom1' ? createDefaultRom1Graph
         : effectType === 'memory-leak' ? createDefaultMemoryLeakGraph
-        : effectType === 'acuarela' ? createDefaultAcuarelaGraph
+        : effectType === 'acuarela' ? (hasLegacyAcuarelaParams(effect.params) ? createLegacyAcuarelaGraph : createDefaultAcuarelaGraph)
         : effectType === 'crt-screen' ? createDefaultCrtScreenGraph
         : effectType === 'ribbon-scan' ? createDefaultRibbonScanGraph
         : effectType === 'wave-lines' ? createDefaultWaveLinesGraph
@@ -220,7 +237,8 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
           ? () => createDefaultSamplingEffectGraph(effectType)
         : effectType === 'blockify' || effectType === 'block-mosaic'
           ? () => createDefaultBlockEffectGraph(effectType)
-        : effectType === 'box-blur' || effectType === 'gaussian-blur' || effectType === 'sharpen'
+        : effectType === 'sharpen' ? createDefaultSharpenGraph
+        : effectType === 'box-blur' || effectType === 'gaussian-blur'
           ? () => createDefaultBlurEffectGraph(effectType)
         : effectType === 'motion-blur' || effectType === 'radial-blur' || effectType === 'zoom-blur'
           ? () => createDefaultDirectionalBlurGraph(effectType)
@@ -236,9 +254,19 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     // Parameters only reach the compile check, so inspection ignores their identity.
     if (known && known.signature === signature && (options.inspectionOnly || known.params === effect.params)) return known.graph;
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
-    const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
-      : effectType === 'gaussian-blur' ? organizeGaussianBlurGraph(saved) : effectType === 'glow' ? upgradeGlowGraph(saved) : saved;
-    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
+    const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
+      : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved)
+        : effectType === 'chroma-key' ? upgradeChromaKeyGraph(saved) : effectType === 'time-stack' ? upgradeTimeStackGraph(saved)
+          : effectType === 'rom1' ? kneeRom1GainGraph(saved) : effectType === 'acuarela' ? clampSmokeGainGraph(saved)
+            : upgradePointwiseStylizeGraph(effectType, saved);
+    // Stylize effects saved with their earlier recipe (before 2026-10-21) keep it and its folder plan
+    // (its own presentation type, e.g. 'glow-earlier').
+    const stylizeEarlier = stylizePresentation(effectType, presented);
+    // A saved original color graph (before 2026-10) keeps its original folders; the recipe stages fit only the recipe.
+    const colorEarlier = COLOR_RECIPE_EFFECT_TYPES.has(effectType) && effectType !== 'hue-shift' ? { key: 'original-color', plan: ORIGINAL_COLOR_PRESENTATION,
+      createDefault: () => createLegacyColorEffectGraph(effectType as EditableColorEffectType) } : undefined;
+    const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), stylizeEarlier?.key ?? effectType,
+      stylizeEarlier?.createDefault ?? fallback, colorEarlier);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));
     const errors = validateEffectGraph(graph, typeof graph.incomplete === 'string');
     if (errors.length) throw new Error(errors[0]);
@@ -256,10 +284,28 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
   throw new Error('This effect has no operator graph.');
 }
 
+/**
+ * Project-file entry point. An effect saved before effect graphs existed (no graph at all) rendered
+ * an earlier recipe, so it gets that graph instead of the current one and the project keeps its
+ * look: a color effect (projects before 2026-09-21) the original color math, a rebuilt stylize
+ * effect (2026-10-21) its earlier recipe. A graphless effect in the running editor is a new one
+ * and keeps the current recipe.
+ */
+export function migrateLoadedEffectOperatorGraph(effect: Effect): Effect {
+  const graphless = !effect.operatorGraph && effect.params[EFFECT_GRAPH_PARAM] === undefined;
+  const earlier = !graphless ? undefined : COLOR_RECIPE_EFFECT_TYPES.has(effect.type)
+    ? createLegacyColorEffectGraph(effect.type as EditableColorEffectType) : createEarlierStylizeGraph(effect.type);
+  return migratePersistedEffectOperatorGraph(earlier ? { ...effect, operatorGraph: earlier } : effect);
+}
+
 /** Converts the former JSON parameter into the canonical effect-owned field.
  * Canonical data always wins, but is still validated before it can enter runtime state. */
-/** Name the effect a failed migration belongs to; a bare graph error leaves the project unopenable without a clue. */
+/** Name the effect a failed migration belongs to; a bare graph error leaves the project unopenable without a clue.
+ * Every persisted effect passes here (project load and save, nested compositions, presets), so it also
+ * drops runtime-only travel saved before 2026-10-21 (withoutRuntimeTravelParams). */
 export function migratePersistedEffectOperatorGraph(effect: Effect): Effect {
+  const params = withoutRuntimeTravelParams(effect.type, effect.params);
+  if (params !== effect.params) effect = { ...effect, params };
   try { return migratePersistedEffectGraph(effect); } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`Effect "${effect.name}" (${effect.type}): ${reason}`, { cause: error });
@@ -270,8 +316,12 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   const legacy = effect.params[EFFECT_GRAPH_PARAM];
   if (!hasEffectOperatorGraph(effect.type)) {
     if (effect.operatorGraph || legacy !== undefined) throw new Error(`Effect ${effect.id} does not support an operator graph.`);
-    return effect;
+    // Sheen saved before the falloff profile keeps its flat-topped band and even light.
+    return (effect.type as string) === 'sheen' && effect.params.profile === undefined ? { ...effect, params: withLegacySheenParams(effect.params) } : effect;
   }
+  // Graph-less analog effects from before their 2026-10 rebuild keep their original look.
+  effect = pinOriginalAnalogGraph(effect);
+  effect = upgradePersistedMirrorPixelEffect(upgradePersistedUvDistortEffect(effect));
   // A valid Weave document with unfinished wiring is an editable draft, not
   // an unloadable project. Keep every node/cable; reject structural corruption.
   if (effect.type === WEAVE_EFFECT_TYPE) {
@@ -303,6 +353,18 @@ function migratePersistedEffectGraph(effect: Effect): Effect {
   const params = { ...effect.params };
   delete params[EFFECT_GRAPH_PARAM];
   if (effect.type === 'grain' && params.seed === undefined) params.seed = 0;
+  // Store the value an effect saved before a parameter existed renders with (e.g. Time Stack Decay 1).
+  for (const [id, spec] of Object.entries(getEffect(effect.type)?.params ?? {})) {
+    if (spec.legacyDefault !== undefined && params[id] === undefined) params[id] = spec.legacyDefault;
+  }
+  // Effects saved before Fade existed keep their particles opaque over the flight.
+  if (effect.type === PARTICLE_DISINTEGRATE && params.fade === undefined) params.fade = 0;
+  // Effects saved before Cell Size counted 1080p pixels keep their output-pixel grid.
+  if (effect.type === PARTICLE_DISINTEGRATE && params.cellReference === undefined) params.cellReference = 'output';
+  // Voxel Relief saved before the hue-keeping shading keeps its darker, greying sides.
+  if (effect.type === 'voxel-relief' && params.shading === undefined) params.shading = 'legacy';
+  // Voxel Relief saved before Distance existed framed the relief at Distance 1 (the default is now 0.8).
+  if (effect.type === 'voxel-relief' && params.distance === undefined) params.distance = 1;
   return { ...effect, params, operatorGraph: structuredClone(versionedGraph) };
 }
 export function validateEffectOwnerGraph(effect: Pick<Effect, 'type'>, graph: EffectOperatorGraph, params: Record<string, unknown>) {
@@ -360,12 +422,16 @@ export function effectOperatorParams(effect: EffectGraphOwner): Record<string, u
   if (effect.type === 'splat-exploration') return { ...defaultSplatGraph(true).params, ...effect.params };
   if (isImageGraphEffectType(effect.type) || effect.type === 'analog-signal-lab' || isComputeImageEffectType(effect.type)) {
     const definition = getEffect(effect.type);
-    const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.default]));
+    // A parameter missing from stored params predates it: render with its legacy value where it has one.
+    const defaults = Object.fromEntries(Object.entries(definition?.params ?? {}).map(([id, spec]) => [id, spec.legacyDefault ?? spec.default]));
     const resolved = { ...defaults, ...effect.params };
     for (const [id, spec] of Object.entries(definition?.params ?? {})) {
       if (spec.type === 'color' && typeof spec.default === 'string') {
         resolved[id] = normalizeCatalogColor(resolved[id] as number | boolean | string | undefined, spec.default);
       }
+      // NaN, Infinity, null (JSON's NaN) or text in a number parameter render the default instead of
+      // failing the graph; tools and the effect's inspector report such values (effectNumberParam.ts).
+      if (spec.type === 'number' && typeof spec.default === 'number') resolved[id] = finiteEffectNumber(resolved[id], spec.default);
     }
     if (effect.type === 'fisheye') {
       return { ...resolved, ...normalizeFisheyeParameters(resolved) };

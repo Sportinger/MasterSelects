@@ -70,27 +70,106 @@ describe('ImageGraphPassRuntime', () => {
     expect(() => runtime.encode({ ...common, externalResources: new Map([['atlas', { view, identity: '' }]]) })).toThrow(/content identity/);
   });
 
-  it('drops replaced topology ownership before submission and disposes only the active allocation', () => {
-    const draws: unknown[] = [], destroyed: Array<ReturnType<typeof vi.fn>> = [];
+  it('pools pass caches by size: instances share them, a batch holds its own until released or the next encoder', () => {
+    const destroyed: Array<ReturnType<typeof vi.fn>> = [];
     const createTexture = vi.fn(() => { const destroy = vi.fn(); destroyed.push(destroy); const view = {}; return { destroy, createView: () => view }; });
     const pipeline = { getBindGroupLayout: () => ({}) };
     const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}), queue: { writeBuffer: vi.fn() }, createTexture,
       createShaderModule: vi.fn(() => ({})), createRenderPipeline: vi.fn(() => pipeline), createBindGroup: vi.fn(() => ({})), createBuffer: vi.fn() } as unknown as GPUDevice;
-    const encoder = { beginRenderPass: vi.fn(({ colorAttachments }) => ({ setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: () => draws.push(colorAttachments[0].view), end: vi.fn() })) } as unknown as GPUCommandEncoder;
+    const encoder = () => ({ beginRenderPass: vi.fn(() => ({ setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() })) }) as unknown as GPUCommandEncoder;
     const producer = base('producer'), final = base('final', ['blur']);
     const plan = { ...final, passes: [{ id: 'blur-pass', program: producer, inputResources: [], outputResource: 'blur' },
       { id: 'final-pass', program: final, inputResources: ['blur'] }], resources: [{ id: 'blur', producerPassId: 'blur-pass', format: 'rgba16float' as const }] };
-    const runtime = new ImageGraphPassRuntime(device), common = { encoder, sampler: {} as GPUSampler, source: { kind: 'texture' as const, view: {} as GPUTextureView },
-      timelineTimeSeconds: 0, plan, outputView: {} as GPUTextureView, instanceId: 'effect-a' };
-    expect(runtime.encode({ ...common, width: 320, height: 180 })).toBe(true);
-    expect(draws).toHaveLength(2); expect(createTexture).toHaveBeenCalledTimes(1);
-    runtime.encode({ ...common, width: 320, height: 180 }); expect(createTexture).toHaveBeenCalledTimes(1);
-    const replacement = { ...plan, key: 'replacement', passes: plan.passes!.map(pass => ({
-      ...pass, program: { ...pass.program, key: `${pass.program.key}-replacement` },
-    })) };
-    runtime.encode({ ...common, plan: replacement, width: 320, height: 180 });
-    expect(createTexture).toHaveBeenCalledTimes(2); expect(destroyed[0]).not.toHaveBeenCalled();
-    runtime.dispose(); expect(destroyed[0]).not.toHaveBeenCalled(); expect(destroyed[1]).toHaveBeenCalledOnce();
+    const runtime = new ImageGraphPassRuntime(device), frame = encoder(), common = { sampler: {} as GPUSampler,
+      source: { kind: 'texture' as const, view: {} as GPUTextureView }, timelineTimeSeconds: 0, plan, outputView: {} as GPUTextureView, width: 320, height: 180 };
+    // Ten blur instances in one frame, encoded one after another: one cache texture.
+    for (let index = 0; index < 10; index++) runtime.encode({ ...common, encoder: frame, instanceId: `effect-${index}` });
+    expect(createTexture).toHaveBeenCalledTimes(1);
+    // Batches keep their caches readable (previews, history) until released.
+    const first = runtime.createBatch(), second = runtime.createBatch();
+    runtime.encode({ ...common, encoder: frame, instanceId: 'a', batch: first });
+    runtime.encode({ ...common, encoder: frame, instanceId: 'b', batch: second });
+    expect(createTexture).toHaveBeenCalledTimes(2);
+    expect(runtime.poolStats()).toEqual({ leased: 2, free: 0 });
+    runtime.releaseBatch(first);
+    // A released batch forgets its views (the pool may hand them to the next effect) and refuses reuse.
+    expect(first.encoded.size + first.resources.size).toBe(0);
+    expect(runtime.getBatchResourceView(first, 'blur')).toBeUndefined();
+    expect(() => runtime.encode({ ...common, encoder: frame, instanceId: 'a-again', batch: first })).toThrow(/released/);
+    runtime.encode({ ...common, encoder: frame, instanceId: 'c' });
+    expect(createTexture).toHaveBeenCalledTimes(2);
+    // A new encoder returns every lease of the previous one.
+    runtime.encode({ ...common, encoder: encoder(), instanceId: 'next-frame' });
+    expect(runtime.poolStats()).toEqual({ leased: 0, free: 2 });
+    expect(createTexture).toHaveBeenCalledTimes(2);
+    runtime.dispose();
+    expect(destroyed.every(destroy => destroy.mock.calls.length === 1)).toBe(true);
+  });
+
+  it('renders each scaled Cache Image pass into a texture of its own size', () => {
+    const sizes: Array<{ width: number; height: number }> = [];
+    const createTexture = vi.fn((descriptor: GPUTextureDescriptor) => { sizes.push(descriptor.size as { width: number; height: number }); const view = {}; return { destroy: vi.fn(), createView: () => view }; });
+    const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}), queue: { writeBuffer: vi.fn() }, createTexture,
+      createShaderModule: vi.fn(() => ({})), createRenderPipeline: vi.fn(() => ({ getBindGroupLayout: () => ({}) })), createBindGroup: vi.fn(() => ({})), createBuffer: vi.fn(() => ({})) } as unknown as GPUDevice;
+    const encoder = { beginRenderPass: vi.fn(() => ({ setPipeline() {}, setBindGroup() {}, draw() {}, end() {} })) } as unknown as GPUCommandEncoder;
+    const half = base('half'), quarter = base('quarter', ['half']), final = base('final', ['quarter']);
+    const plan = { ...final, passes: [{ id: 'half-pass', program: half, inputResources: [], outputResource: 'half' },
+      { id: 'quarter-pass', program: quarter, inputResources: ['half'], outputResource: 'quarter' }, { id: 'final-pass', program: final, inputResources: ['quarter'] }],
+    resources: [{ id: 'half', producerPassId: 'half-pass', format: 'rgba16float' as const, scale: 0.5 },
+      { id: 'quarter', producerPassId: 'quarter-pass', format: 'rgba16float' as const, scale: 1 / 1024 }] };
+    const runtime = new ImageGraphPassRuntime(device);
+    runtime.encode({ encoder, sampler: {} as GPUSampler, source: { kind: 'texture', view: {} as GPUTextureView }, width: 1921, height: 1081,
+      timelineTimeSeconds: 0, outputView: {} as GPUTextureView, instanceId: 'scaled', plan });
+    // Rounded, never below one pixel.
+    expect(sizes).toEqual([{ width: 961, height: 541 }, { width: 2, height: 1 }]);
+    runtime.dispose();
+  });
+
+  it('ignores a batch released after an encoder switch: its textures already serve the new encoder', () => {
+    const createTexture = vi.fn(() => { const view = {}; return { destroy: vi.fn(), createView: () => view }; });
+    const pipeline = { getBindGroupLayout: () => ({}) };
+    const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}), queue: { writeBuffer: vi.fn() }, createTexture,
+      createShaderModule: vi.fn(() => ({})), createRenderPipeline: vi.fn(() => pipeline), createBindGroup: vi.fn(() => ({})), createBuffer: vi.fn() } as unknown as GPUDevice;
+    const encoder = () => ({ beginRenderPass: vi.fn(() => ({ setPipeline: vi.fn(), setBindGroup: vi.fn(), draw: vi.fn(), end: vi.fn() })) }) as unknown as GPUCommandEncoder;
+    const producer = base('producer'), final = base('final', ['blur']);
+    const plan = { ...final, passes: [{ id: 'blur-pass', program: producer, inputResources: [], outputResource: 'blur' },
+      { id: 'final-pass', program: final, inputResources: ['blur'] }], resources: [{ id: 'blur', producerPassId: 'blur-pass', format: 'rgba16float' as const }] };
+    const runtime = new ImageGraphPassRuntime(device), common = { sampler: {} as GPUSampler,
+      source: { kind: 'texture' as const, view: {} as GPUTextureView }, timelineTimeSeconds: 0, plan, outputView: {} as GPUTextureView, width: 320, height: 180 };
+    const stale = runtime.createBatch(), current = runtime.createBatch();
+    runtime.encode({ ...common, encoder: encoder(), instanceId: 'previous-frame', batch: stale });
+    // The next encoder takes the texture back and leases it to a new batch.
+    runtime.encode({ ...common, encoder: encoder(), instanceId: 'this-frame', batch: current });
+    expect(createTexture).toHaveBeenCalledTimes(1);
+    expect(runtime.poolStats()).toEqual({ leased: 1, free: 0 });
+    // Releasing the stale batch must not return the texture the current batch still reads.
+    runtime.releaseBatch(stale);
+    expect(runtime.poolStats()).toEqual({ leased: 1, free: 0 });
+    runtime.encode({ ...common, encoder: current.encoder!, instanceId: 'other' });
+    expect(createTexture).toHaveBeenCalledTimes(2);
+    runtime.releaseBatch(current);
+    expect(runtime.poolStats()).toEqual({ leased: 0, free: 2 });
+    runtime.dispose();
+  });
+
+  it('destroys pool textures that no encoder used for a while, after the queue finished', async () => {
+    const destroyed: Array<ReturnType<typeof vi.fn>> = [];
+    const createTexture = vi.fn(() => { const destroy = vi.fn(); destroyed.push(destroy); return { destroy, createView: () => ({}) }; });
+    const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}),
+      queue: { writeBuffer: vi.fn(), onSubmittedWorkDone: vi.fn(() => Promise.resolve()) }, createTexture, createShaderModule: () => ({}),
+      createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }), createBindGroup: () => ({}) } as unknown as GPUDevice;
+    const encoder = () => ({ beginRenderPass: () => ({ setPipeline() {}, setBindGroup() {}, draw() {}, end() {} }) }) as unknown as GPUCommandEncoder;
+    const producer = base('producer'), final = base('final', ['r']);
+    const plan = { ...final, passes: [{ id: 'producer', program: producer, inputResources: [], outputResource: 'r' },
+      { id: 'final', program: final, inputResources: ['r'] }], resources: [{ id: 'r', producerPassId: 'producer', format: 'rgba16float' as const }] };
+    const runtime = new ImageGraphPassRuntime(device), common = { sampler: {} as GPUSampler, source: { kind: 'texture' as const, view: {} as GPUTextureView },
+      timelineTimeSeconds: 0, plan, outputView: {} as GPUTextureView, instanceId: 'resized' };
+    runtime.encode({ ...common, encoder: encoder(), width: 3840, height: 2160 });
+    for (let frame = 0; frame < 130; frame++) runtime.encode({ ...common, encoder: encoder(), width: 1920, height: 1080 });
+    await Promise.resolve(); await Promise.resolve();
+    expect(destroyed[0]).toHaveBeenCalledOnce();
+    expect(destroyed[1]).not.toHaveBeenCalled();
+    expect(runtime.poolStats().free).toBe(1);
   });
 
   it('rejects a consumer before its declared resource producer', () => {
@@ -134,7 +213,7 @@ describe('ImageGraphPassRuntime', () => {
     expect(draw).toHaveBeenCalledTimes(5);
   });
 
-  it('bounds instance allocations and structural pipelines with LRU eviction', () => {
+  it('bounds structural pipelines with LRU eviction', () => {
     const device = { limits: { maxSampledTexturesPerShaderStage: 16 }, lost: new Promise(() => {}), queue: { writeBuffer: vi.fn() },
       createTexture: () => ({ destroy() {}, createView: () => ({}) }), createShaderModule: () => ({}),
       createRenderPipeline: () => ({ getBindGroupLayout: () => ({}) }), createBindGroup: () => ({}) } as unknown as GPUDevice;
@@ -143,9 +222,9 @@ describe('ImageGraphPassRuntime', () => {
       source: { kind: 'texture' as const, view: {} as GPUTextureView }, width: 8, height: 8, timelineTimeSeconds: 0, outputView: {} as GPUTextureView };
     for (let index = 0; index < 70; index++) { const program = base(`program-${index}`);
       runtime.encode({ ...common, instanceId: `effect-${index}`, plan: { ...program, passes: [{ id: 'final', program, inputResources: [] }], resources: [] } }); }
-    const caches = runtime as unknown as { allocations: Map<string, unknown>; activeAllocationKeys: Map<string, string>; pipelines: Map<string, unknown> };
-    expect(caches.allocations.size).toBeLessThanOrEqual(32); expect(caches.activeAllocationKeys.size).toBeLessThanOrEqual(32);
+    const caches = runtime as unknown as { pipelines: Map<string, unknown> };
     expect(caches.pipelines.size).toBeLessThanOrEqual(64);
+    expect(runtime.poolStats()).toEqual({ leased: 0, free: 0 });
   });
 
   it('exposes an exact materialized producer without encoding the final copy and rejects another encoder', () => {

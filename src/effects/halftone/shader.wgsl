@@ -88,7 +88,8 @@ fn risoColor(uv: vec2f, glow: f32) -> vec3f {
   let a = 1.0 - luminance(source(uv - offset).rgb);
   let b = 1.0 - luminance(source(uv + offset).rgb);
   let paper = vec3f(0.96, 0.93, 0.85);
-  let subtractive = paper * (1.0 - a * params.colorA.rgb) * (1.0 - b * params.colorB.rgb);
+  // Each ink filters the paper towards its own colour where it prints.
+  let subtractive = paper * mix(vec3f(1.0), params.colorA.rgb, a) * mix(vec3f(1.0), params.colorB.rgb, b);
   return subtractive + glow * (a * params.colorA.rgb + b * params.colorB.rgb) * 0.3;
 }
 
@@ -167,11 +168,26 @@ fn scatterMosaicFragment(input: VertexOutput) -> @location(0) vec4f {
   return source(uv);
 }
 
+// Turns a vector like the graph's Rotate UV operator (coordinateRotation.wgsl), so both stay bit-identical.
+fn driftRotate(value: vec2f, angle: f32) -> vec2f {
+  let sine = sin(angle);
+  let cosine = cos(angle);
+  return vec2f(value.x * cosine - value.y * sine, value.x * sine + value.y * cosine);
+}
+
 @fragment
 fn driftLinesFragment(input: VertexOutput) -> @location(0) vec4f {
-  let row = floor(input.uv.y * params.resolution.y / max(params.scale, 2.0));
-  let shift = sin(row * 0.71 + params.time * params.speed * 2.0) * params.amount * 0.06;
-  let sampled = source(input.uv + vec2f(shift, 0.0));
-  let line = 0.82 + 0.18 * sin(input.uv.y * params.resolution.y * PI / max(params.scale, 2.0));
+  // The operations of createDriftLinesGraph in its order: bands of Scale pixels of a 1080p frame
+  // (shorter side, at least one pixel) at Angle (counter-clockwise), counted from the top edge.
+  let center = params.resolution * 0.5;
+  let radians = params.angle * 0.017453292519943295;
+  let across = driftRotate(input.uv * params.resolution - center, radians).y + center.y;
+  let rowHeight = max(max(params.scale, 2.0) * (min(params.resolution.x, params.resolution.y) / 1080.0), 1.0);
+  let row = floor(across / rowHeight);
+  let phase = row * 0.71 + params.time * params.speed * 2.0;
+  let shift = sin(phase) * params.amount * (params.resolution.x * 0.06);
+  let offset = driftRotate(vec2f(shift, 0.0), 0.0 - radians);
+  let sampled = source(input.uv + offset / params.resolution);
+  let line = 0.82 + sin(across * PI / rowHeight) * 0.18;
   return vec4f(sampled.rgb * line, sampled.a);
 }

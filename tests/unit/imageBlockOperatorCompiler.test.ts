@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { colorToRgba } from '../../src/effects/_shared/catalogColor';
-import { createDefaultBlockifyGraph, createDefaultBlockMosaicGraph } from '../../src/services/operators/blockEffectGraphs';
+// The pre-review recipes (graphs users edited before the review keep them); the current recipes are
+// covered in mirrorPixelRecipes.test.ts.
+import { createLegacyBlockifyGraph as createDefaultBlockifyGraph, createLegacyBlockMosaicGraph as createDefaultBlockMosaicGraph } from '../../src/services/operators/legacyMirrorPixelEffectGraphs';
 import { effectOperatorParams } from '../../src/services/operators/effectGraphOwner';
 import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/services/operators/imageOperatorGraph';
 
 const source = ([u, v]: [number, number]): [number, number, number, number] => [u, v, .8, .2 + u * .5];
 const close = (values: number[]) => values.map(value => expect.closeTo(value, 8));
 
-describe('block sampling image graphs', () => {
+describe('pre-review block sampling image graphs', () => {
   it('matches Blockify snapped color, posterization, clamp and sampled alpha', () => {
     const graph = createDefaultBlockifyGraph();
     expect(graph.nodes.length).toBeLessThanOrEqual(64);

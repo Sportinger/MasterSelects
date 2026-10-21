@@ -11,9 +11,12 @@ import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNu
 import { ResolveInspectorIconButton, ResolveInspectorRow } from './resolveInspector/ResolveInspectorPrimitives';
 import { KeyframeToggle } from './shared';
 import type { AnimatableProperty } from '../../../types/animationProperties';
+import type { ParamDisplay } from '../../../effects/paramDisplay';
 import './ParameterSourceControls.css';
 
-export function ParameterSourceNumberRow({ clipId, property, disabled = false }: { clipId: string; property: string; disabled?: boolean }) {
+export function ParameterSourceNumberRow({ clipId, property, disabled = false, display }: {
+  clipId: string; property: string; disabled?: boolean; display?: ParamDisplay;
+}) {
   const clip = useTimelineStore(state => state.clips.find(item => item.id === clipId));
   const keys = useTimelineStore(state => state.clipKeyframes.get(clipId));
   const playhead = useTimelineStore(state => state.playheadPosition);
@@ -28,6 +31,9 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false }:
     const result = createParameterSourceEvaluator(clip, keys ?? [], Math.max(0, Math.min(clip.duration, playhead - clip.startTime))).resolve(property);
     value = result.value; kind = result.kind === 'node' ? 'Node' : result.kind === 'keyframes' ? 'Keys' : 'Fixed';
   } catch (failure) { error = failure instanceof Error ? failure.message : String(failure); kind = 'Error'; }
+  // Display units only (the caller's, else the target's: Hue Shift turns as degrees); stored values stay in the target's unit.
+  const shownAs = display ?? target.display, scale = shownAs?.scale ?? 1;
+  const scaled = (limit: number | undefined) => limit === undefined ? undefined : limit * scale;
   const safely = (action: () => void) => { try { action(); setMessage(''); } catch (failure) { setMessage(failure instanceof Error ? failure.message : String(failure)); } };
   const nodes = clip.nodeGraph?.parameterSources?.graph.nodes ?? [];
   const selection = driven ? `node:${binding!.source!.nodeId}|${binding!.source!.portId}` : binding?.localMode === 'constant' ? 'fixed' : 'auto';
@@ -36,14 +42,15 @@ export function ParameterSourceNumberRow({ clipId, property, disabled = false }:
     const button = event.target instanceof Element ? event.target.closest('button') : null;
     if (button) requestAnimationFrame(() => { if (document.activeElement === button) button.blur(); });
   }}>
-    <ResolveInspectorNumberRow label={target.label} ariaLabel={target.label} value={value} defaultValue={target.defaultValue}
-      min={target.min} max={target.max} hardMin={target.hardMin} hardMax={target.hardMax} step={target.step}
+    <ResolveInspectorNumberRow label={target.label} ariaLabel={target.label} value={value * scale} defaultValue={target.defaultValue * scale}
+      min={target.min * scale} max={target.max * scale} hardMin={scaled(target.hardMin)} hardMax={scaled(target.hardMax)}
+      step={shownAs?.step ?? target.step * scale} suffix={shownAs?.suffix} decimals={shownAs?.decimals}
       disabled={readOnly || driven || !!error} persistenceKey={`parameter.${property}`}
-      onReset={next => safely(() => { if (!readOnly && !driven) setParameterBaseValue(clipId, property, next); })}
+      onReset={next => safely(() => { if (!readOnly && !driven) setParameterBaseValue(clipId, property, next / scale); })}
       onChange={next => safely(() => {
         if (readOnly || driven) return;
         const state = useTimelineStore.getState();
-        state.setPropertyValue(clipId, property as AnimatableProperty, next);
+        state.setPropertyValue(clipId, property as AnimatableProperty, next / scale);
       })}
       keyframeToggle={!readOnly && !driven && !error && binding?.localMode !== 'constant'
         ? <KeyframeToggle clipId={clipId} property={property as AnimatableProperty} value={value} /> : undefined} />

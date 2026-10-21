@@ -6,6 +6,7 @@ import { createDefaultInvertImageGraph } from '../../src/services/operators/imag
 import { checkImageCompositeGpu } from './image-composite-gpu-check';
 import { checkWorkerImageGraphGpu } from './image-worker-gpu-check';
 import { checkRemainingColorEffectsGpu } from './image-color-effects-gpu-check';
+import { checkColorRecipesGpu } from './image-color-recipes-gpu-check';
 import { checkPointwiseEffectsGpu } from './image-pointwise-effects-gpu-check';
 import { checkVignetteGpu } from './image-vignette-gpu-check';
 import { checkTimeEffectsGpu } from './image-time-effects-gpu-check';
@@ -16,6 +17,7 @@ import { checkImageMaterializationGpu } from './image-materialization-gpu-check'
 import { checkDirectionalBlurGpu } from './image-directional-blur-gpu-check';
 import { checkEdgeDetectGpu } from './image-edge-detect-gpu-check';
 import { checkGlowGpu } from './image-glow-gpu-check';
+import { checkStylizeRecipesGpu } from './image-stylize-recipes-gpu-check';
 import { checkUvDistortGpu } from './image-uv-distort-gpu-check';
 import { checkImageOpticsGpu } from './image-optics-gpu-check';
 import { checkImageReducerBranchesGpu } from './image-reducer-branch-gpu-check';
@@ -50,6 +52,7 @@ import { checkImageGeometryPatternsGpu } from './image-geometry-patterns-gpu-che
 import { checkChromaKeyGraphGpu } from './image-chroma-key-graph-gpu-check';
 import { checkRom1GraphGpu } from './image-rom1-graph-gpu-check';
 import { checkMemoryLeakGraphGpu } from './image-memory-leak-graph-gpu-check';
+import { checkStylizeArtGpu } from './stylize-art-gpu-check';
 
 async function checkGpu() {
   const adapter = await navigator.gpu?.requestAdapter();
@@ -57,6 +60,30 @@ async function checkGpu() {
   const device = await adapter.requestDevice();
   device.pushErrorScope('validation');
   const suite = new URLSearchParams(location.search).get('suite');
+  if (suite === 'blur') {
+    try {
+      const blur = await checkBlurEffectsGpu(device), directional = await checkDirectionalBlurGpu(device), materialization = await checkImageMaterializationGpu(device);
+      const validation = await device.popErrorScope();
+      if (validation) throw new Error(validation.message);
+      return `PASS: ${blur} blur, ${directional} directional-blur and ${materialization} materialization comparisons; the blur pass chains match their WGSL references and keep hard alpha edges clean; no validation errors.`;
+    } finally { device.destroy(); }
+  }
+  if (suite === 'color-recipes') {
+    try {
+      const comparisons = await checkColorRecipesGpu(device);
+      const validation = await device.popErrorScope();
+      if (validation) throw new Error(validation.message);
+      return `PASS: ${comparisons} color recipe cases; GPU within one 8-bit step of the CPU evaluator on every texel; no validation errors.`;
+    } finally { device.destroy(); }
+  }
+  if (suite === 'stylize-art') {
+    try {
+      const summary = await checkStylizeArtGpu(device);
+      const validation = await device.popErrorScope();
+      if (validation) throw new Error(validation.message);
+      return `PASS: ${summary}; particles keep the exact picture at rest and in place, clean alpha edges and no straight release borders; Sheen adds light monotonically without clipping; no validation errors.`;
+    } finally { device.destroy(); }
+  }
   if (suite === 'memory-leak') {
     try {
       const comparisons = await checkMemoryLeakGraphGpu(device);
@@ -78,7 +105,7 @@ async function checkGpu() {
       const comparisons = await checkChromaKeyGraphGpu(device);
       const validation = await device.popErrorScope();
       if (validation) throw new Error(validation.message);
-      return `PASS: ${comparisons} Chroma Key comparisons; strict legacy RGBA8 parity, key choices, extrema, alpha, and bypass verified.`;
+      return `PASS: ${comparisons} Chroma Key comparisons; the multi-pass screen-matte plan (grid and colour caches, edge passes, picked colour, matte view) and an edited Rec.601 graph match the CPU pass runner within 2/255.`;
     } finally { device.destroy(); }
   }
   if (suite === 'contour-type') {
@@ -316,6 +343,7 @@ async function checkGpu() {
     const directionalBlurComparisons = await checkDirectionalBlurGpu(device);
     const edgeDetectComparisons = await checkEdgeDetectGpu(device);
     const glowComparisons = await checkGlowGpu(device);
+    const stylizeComparisons = await checkStylizeRecipesGpu(device);
     const uvDistortComparisons = await checkUvDistortGpu(device);
     const opticsComparisons = await checkImageOpticsGpu(device);
     const choiceComparisons = await checkImageChoiceGpu(device);
@@ -323,7 +351,7 @@ async function checkGpu() {
     const reducerBranchComparisons = await checkImageReducerBranchesGpu(device);
     const fisheyeGraphComparisons = await checkFisheyeGraphGpu(device);
     await checkImageNamedInputsGpu(device);
-    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, ${directionalBlurComparisons} directional-blur, ${edgeDetectComparisons} edge-detect, ${glowComparisons} Glow, ${uvDistortComparisons} UV-distort, ${opticsComparisons} optics, ${choiceComparisons} choice, ${reducerBranchComparisons} reducer-branch, and ${fisheyeGraphComparisons} Fisheye-graph shader comparisons`;
+    const workerResult = `${await checkWorkerImageGraphGpu(device)}; ${colorComparisons} remaining-color, ${pointwiseComparisons} pointwise, ${vignetteComparisons} vignette, ${timeComparisons} time-effect, ${samplingComparisons} sampling-effect, ${blockComparisons} block-effect, ${blurComparisons} blur, ${materializationComparisons} materialization, ${directionalBlurComparisons} directional-blur, ${edgeDetectComparisons} edge-detect, ${glowComparisons} Glow, ${stylizeComparisons} current stylize recipe (GPU vs CPU), ${uvDistortComparisons} UV-distort, ${opticsComparisons} optics, ${choiceComparisons} choice, ${reducerBranchComparisons} reducer-branch, and ${fisheyeGraphComparisons} Fisheye-graph shader comparisons`;
     const validation = await device.popErrorScope();
     if (validation) throw new Error(validation.message);
     return `PASS: 64 RGBA pixels — legacy/default byte equality; bypass and rewired output equal input; alpha preserved; actual GPU output changes; ${workerResult}; no validation errors.`;

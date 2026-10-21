@@ -1,0 +1,11 @@
+/* Docs picture page: the bare Node Workspace canvas, filling the window. */
+html, body, #root { height: 100%; margin: 0; }
+body { background: var(--bg-primary); }
+.effect-graph-doc { display: flex; flex-direction: column; height: 100vh; overflow: hidden; color: var(--text-primary); background: var(--bg-primary); }
+/* Editor chrome (owner title, view buttons, zoom readout) is not part of the picture. */
+.effect-graph-doc .node-workspace-toolbar,
+.effect-graph-doc .node-workspace-graph-message { display: none; }
+.effect-graph-doc--error { align-items: center; justify-content: center; padding: 24px; font: 14px/1.5 system-ui, sans-serif; text-align: center; }
+/* Group lock, bypass and focus buttons are editing tools; the fold chevron and count stay. */
+.effect-graph-doc .node-workspace-group-header > button[aria-pressed],
+.effect-graph-doc .node-workspace-group-focus { display: none; }

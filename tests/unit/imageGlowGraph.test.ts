@@ -1,6 +1,6 @@
 import { createLegacyAlphaGlowGraph } from '../../src/services/operators/legacyAlphaGlowGraph';
 import { describe, expect, it } from 'vitest';
-import { createDefaultGlowGraph, createLegacyGlowGraph } from '../../src/services/operators/glowEffectGraph';
+import { createRingGlowGraph, createLegacyGlowGraph } from '../../src/services/operators/glowEffectGraph';
 import { upgradeGlowGraph } from '../../src/services/operators/glowGraphUpgrade';
 import {
   effectOperatorGraph, effectOperatorParams, isImageGraphEffectType, isLocalImageEffectType, migratePersistedEffectOperatorGraph,
@@ -82,7 +82,7 @@ describe('glow sampling contract', () => {
 
 describe('glow image graph', () => {
   it('compiles to a bright/horizontal pass, a vertical pass and the ring resolve with the six stable bindings', () => {
-    const graph = createDefaultGlowGraph();
+    const graph = createRingGlowGraph();
     expect(Object.fromEntries(graph.nodes.flatMap(item => Object.entries(item.bindings).map(([port, binding]) => [binding, `${item.id}.${port}`])))).toEqual({
       amount: 'amount.value', threshold: 'threshold.value', radius: 'radius.value', softness: 'softness.value', rings: 'rings.value', samplesPerRing: 'samples.value',
     });
@@ -98,7 +98,7 @@ describe('glow image graph', () => {
 
   it('samples the prefiltered light at isotropic pixel offsets and keeps each ring total weight', () => {
     const params = { ...DEFAULTS, amount: .7, threshold: .38, radius: 2.4, softness: .42, rings: 2.9, samplesPerRing: 4.9 };
-    const plan = compileImageOperatorGraph(createDefaultGlowGraph(), params), sampling = resolveGlowSampling(params);
+    const plan = compileImageOperatorGraph(createRingGlowGraph(), params), sampling = resolveGlowSampling(params);
     const uv: [number, number] = [.43, .57], resolution: [number, number] = [108, 192], light: Pixel = [.3, .2, .1, 1];
     const center: Pixel = [.8, .9, .7, 1], coordinates: Array<[number, number]> = [];
     const actual = evaluateImageOperatorPlan(plan, center, { uv, resolution, sampleImage: noSourceResampling,
@@ -119,7 +119,7 @@ describe('glow image graph', () => {
   });
 
   it('carries the halo outside transparent pixels with straight alpha', () => {
-    const plan = compileImageOperatorGraph(createDefaultGlowGraph(), { ...DEFAULTS, amount: 1 });
+    const plan = compileImageOperatorGraph(createRingGlowGraph(), { ...DEFAULTS, amount: 1 });
     const light: Pixel = [.05, .1, .2, 1];
     const halo = evaluateImageOperatorPlan(plan, [0, 0, 0, 0], { uv: [.5, .5], resolution: [64, 64], sampleImage: noSourceResampling, sampleResource: () => light });
     const glow = light.slice(0, 3).map(value => value * resolveGlowSampling(DEFAULTS).samplesPerRing);
@@ -135,7 +135,7 @@ describe('glow image graph', () => {
   it('matches the independent CPU reference through the software pass runtime on a non-square layer', () => {
     const width = 24, height = 40, params = { ...DEFAULTS, amount: 1.6, threshold: .35, radius: .6 };
     const source = strokeRaster(width, height), expected = referenceGlow(source, width, height, params);
-    const plan = compileImageOperatorGraph(createDefaultGlowGraph(), params);
+    const plan = compileImageOperatorGraph(createRingGlowGraph(), params);
     expect(canApplyWorkerSoftwareImageGraphPlan(plan)).toBe(true);
     const actual = source.slice();
     applyWorkerSoftwareImageGraphs(actual, width, height, [plan], 0);
@@ -182,36 +182,36 @@ describe('glow image graph', () => {
 });
 
 describe('glow graph ownership and migration', () => {
-  it('uses catalog defaults through the contextual owner without becoming inline-local', () => {
-    const effect = { type: 'glow', params: {} };
+  it('keeps a saved ring Glow and its folders through the contextual owner without becoming inline-local', () => {
+    // A graphless Glow is a new one (the bloom, glowBloom.test.ts); saved ring Glows keep their graph.
+    const effect = { type: 'glow', params: DEFAULTS, operatorGraph: createRingGlowGraph() };
     expect(isImageGraphEffectType('glow')).toBe(true);
     expect(isLocalImageEffectType('glow')).toBe(false);
     expect(effectOperatorParams(effect)).toMatchObject(DEFAULTS);
     const owned = effectOperatorGraph(effect);
-    expect(computational(owned)).toEqual(computational(createDefaultGlowGraph()));
-    expect(effectOperatorGraph({ ...effect, operatorGraph: createDefaultGlowGraph() })).toEqual(owned);
+    expect(computational(owned)).toEqual(computational(createRingGlowGraph()));
     expect(owned.groups?.map(group => group.label)).toEqual(expect.arrayContaining(['Bright Pass', 'Vertical Prefilter', 'Ring Sampling']));
   });
 
   it('upgrades untouched saved legacy graphs, including packed and organized ones', () => {
     const legacy = createLegacyGlowGraph();
-    expect(computational(upgradeGlowGraph(legacy))).toEqual(computational(createDefaultGlowGraph()));
+    expect(computational(upgradeGlowGraph(legacy))).toEqual(computational(createRingGlowGraph()));
     const packed = packOperatorCompositions(recognizeOperatorCompositions(legacy));
     expect(packed.nodes.some(node => node.operator === 'color.soft-bright-pass')).toBe(true);
     const saved = { ...packed, effectPresentationRules: 1 as const, groups: [{ id: 'organized-glow-count', label: 'Ring & Sample Counts',
       color: '#6b99bd', nodeIds: ['rings-clamped', 'rings-count'], collapsedByDefault: true }] };
-    expect(computational(upgradeGlowGraph(saved))).toEqual(computational(createDefaultGlowGraph()));
+    expect(computational(upgradeGlowGraph(saved))).toEqual(computational(createRingGlowGraph()));
     const effect: Effect = { id: 'fx', type: 'glow', name: 'Glow', enabled: true, params: { ...DEFAULTS }, operatorGraph: saved };
-    expect(computational(effectOperatorGraph(effect))).toEqual(computational(createDefaultGlowGraph()));
+    expect(computational(effectOperatorGraph(effect))).toEqual(computational(createRingGlowGraph()));
     const persisted = migratePersistedEffectOperatorGraph(effect);
-    expect(computational(persisted.operatorGraph!)).toEqual(computational(createDefaultGlowGraph()));
+    expect(computational(persisted.operatorGraph!)).toEqual(computational(createRingGlowGraph()));
     expect(compileImageOperatorGraph(expandOperatorCompositions(persisted.operatorGraph!), DEFAULTS).passes).toHaveLength(3);
   });
 
   it('upgrades alpha-aware single-pass graphs while retaining authored modifications', () => {
     const legacy = createLegacyAlphaGlowGraph();
     for (const saved of [legacy, packOperatorCompositions(recognizeOperatorCompositions(legacy))]) {
-      expect(computational(upgradeGlowGraph(saved))).toEqual(computational(createDefaultGlowGraph()));
+      expect(computational(upgradeGlowGraph(saved))).toEqual(computational(createRingGlowGraph()));
     }
     const edited = createLegacyAlphaGlowGraph();
     edited.nodes.find(node => node.id === 'ten')!.constants = { value: 8 };
@@ -233,6 +233,6 @@ describe('glow graph ownership and migration', () => {
     const brightPass = PROCESSING_COMPOSITIONS.find(item => item.id === 'color.soft-bright-pass');
     expect(brightPass?.composition?.graph.nodes.map(node => `${node.id}:${node.operator}`)).toEqual([
       'sample-luma:color.luminance-rec709.image', 'sample-bright:math.smoothstep.scalar', 'bright-sample:math.multiply.image-scalar']);
-    expect(recognizeOperatorCompositions(createDefaultGlowGraph()).nodes.some(node => node.operator === 'color.soft-bright-pass')).toBe(true);
+    expect(recognizeOperatorCompositions(createRingGlowGraph()).nodes.some(node => node.operator === 'color.soft-bright-pass')).toBe(true);
   });
 });

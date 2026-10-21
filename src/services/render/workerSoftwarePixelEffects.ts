@@ -1,4 +1,5 @@
 import type { WorkerRenderSoftwareFrame } from './workerRenderHostRuntimeCommands';
+import { chromaKeyCpuKey, chromaKeyCpuScreen, prepareChromaKeyCpu } from '../../effects/keying/chroma-key/keyerCpu';
 import type { RuntimePrimaryColorParams } from '../../types/colorCorrection';
 import { applyShadowHighlightTone } from '../../engine/color/shadowHighlightTone';
 import {
@@ -14,11 +15,14 @@ import {
   type WorkerSoftwareFeedbackFrameMetadata,
 } from './workerSoftwareFeedbackEffects';
 import { applyWorkerSoftwareImageGraphs } from './workerSoftwareImageGraphs';
+import { applyWorkerSoftwareMirrorPixelEffects } from './workerSoftwareMirrorPixelEffects';
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from './workerSoftwareGlow';
-
-function finiteNumber(value: number | undefined, fallback: number): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-}
+import {
+  applyExposureAdjustment, applyGrainAdjustment, applyLevelsAdjustment, applyPosterizeAdjustment,
+  applyScanlineAdjustment, applyTemperatureAdjustment, applyThresholdAdjustment, applyVibranceAdjustment, applyVignetteAdjustment,
+  clamp01, finiteNumber, luma,
+} from './workerSoftwarePointwiseEffects';
+import { applyWorkerSoftwareBloom, prepareWorkerSoftwareBloom } from './workerSoftwareBloom';
 
 function clampByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)));
@@ -26,14 +30,6 @@ function clampByte(value: number): number {
 
 function clampIndex(value: number, maxExclusive: number): number {
   return Math.max(0, Math.min(maxExclusive - 1, value));
-}
-
-function clamp01(value: number): number {
-  return Math.max(0, Math.min(1, value));
-}
-
-function luma(r: number, g: number, b: number): number {
-  return r * 0.2126 + g * 0.7152 + b * 0.0722;
 }
 
 function hueRotate(
@@ -109,159 +105,6 @@ function applyPrimaryColorGrade(
   g += params.tint * 0.05;
   b -= params.temperature * 0.08;
   return [r, g, b];
-}
-
-function applyExposureAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['exposureAdjustments']
-  >[number],
-): readonly [number, number, number] {
-  const exposure = 2 ** finiteNumber(adjustment.exposure, 0);
-  const offset = finiteNumber(adjustment.offset, 0);
-  const gamma = Math.max(finiteNumber(adjustment.gamma, 1), 0.001);
-  const adjust = (value: number): number => clamp01(Math.max(value * exposure + offset, 0) ** (1 / gamma));
-  return [adjust(input[0]), adjust(input[1]), adjust(input[2])];
-}
-
-function applyTemperatureAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['temperatureAdjustments']
-  >[number],
-): readonly [number, number, number] {
-  const temperature = finiteNumber(adjustment.temperature, 0);
-  const tint = finiteNumber(adjustment.tint, 0);
-  return [
-    clamp01(input[0] + temperature * 0.1 + tint * 0.05),
-    clamp01(input[1] - tint * 0.1),
-    clamp01(input[2] - temperature * 0.1 + tint * 0.05),
-  ];
-}
-
-function luma601(r: number, g: number, b: number): number {
-  return r * 0.299 + g * 0.587 + b * 0.114;
-}
-
-function remapLevelsChannel(
-  value: number,
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['levelsAdjustments']
-  >[number],
-): number {
-  const inputBlack = finiteNumber(adjustment.inputBlack, 0);
-  const inputWhite = finiteNumber(adjustment.inputWhite, 1);
-  const gamma = Math.max(finiteNumber(adjustment.gamma, 1), 0.001);
-  const outputBlack = finiteNumber(adjustment.outputBlack, 0);
-  const outputWhite = finiteNumber(adjustment.outputWhite, 1);
-  const inputRange = inputWhite - inputBlack;
-  const normalized = inputRange === 0 ? 0 : clamp01((value - inputBlack) / inputRange);
-  const gammaAdjusted = Math.max(normalized, 0) ** (1 / gamma);
-  return outputBlack * (1 - gammaAdjusted) + outputWhite * gammaAdjusted;
-}
-
-function applyLevelsAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['levelsAdjustments']
-  >[number],
-): readonly [number, number, number] {
-  return [
-    remapLevelsChannel(input[0], adjustment),
-    remapLevelsChannel(input[1], adjustment),
-    remapLevelsChannel(input[2], adjustment),
-  ];
-}
-
-function applyThresholdAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['thresholdAdjustments']
-  >[number],
-): readonly [number, number, number] {
-  const result = luma(input[0], input[1], input[2]) > finiteNumber(adjustment.level, 0.5) ? 1 : 0;
-  return [result, result, result];
-}
-
-function applyPosterizeAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['posterizeAdjustments']
-  >[number],
-): readonly [number, number, number] {
-  const levels = Math.max(finiteNumber(adjustment.levels, 6), 2);
-  const posterize = (value: number): number => Math.floor(value * levels) / (levels - 1);
-  return [posterize(input[0]), posterize(input[1]), posterize(input[2])];
-}
-
-function smoothstep(edge0: number, edge1: number, value: number): number {
-  if (edge0 === edge1) return value < edge0 ? 0 : 1;
-  const t = clamp01((value - edge0) / (edge1 - edge0));
-  return t * t * (3 - 2 * t);
-}
-
-function applyVignetteAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['vignetteAdjustments']
-  >[number],
-  uvX: number,
-  uvY: number,
-): readonly [number, number, number] {
-  const amount = finiteNumber(adjustment.amount, 0.5);
-  const size = finiteNumber(adjustment.size, 0.5);
-  const softness = finiteNumber(adjustment.softness, 0.5);
-  const roundness = finiteNumber(adjustment.roundness, 1);
-  const centerX = uvX - 0.5;
-  const centerY = uvY - 0.5;
-  const distance = Math.hypot(centerX, centerY * roundness) * 2;
-  const vignette = 1 - smoothstep(size, size + softness, distance);
-  const factor = 1 * (1 - amount) + vignette * amount;
-  return [input[0] * factor, input[1] * factor, input[2] * factor];
-}
-
-function rgbToYcbcr(input: readonly [number, number, number]): readonly [number, number, number] {
-  const y = 0.299 * input[0] + 0.587 * input[1] + 0.114 * input[2];
-  const cb = 0.564 * (input[2] - y);
-  const cr = 0.713 * (input[0] - y);
-  return [y, cb, cr];
-}
-
-function applyChromaKeyAdjustment(
-  input: readonly [number, number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['chromaKeyAdjustments']
-  >[number],
-): readonly [number, number, number, number] {
-  const key: readonly [number, number, number] = adjustment.keyColor === 'blue'
-    ? [0, 0, 1]
-    : [0, 1, 0];
-  const sourceYcbcr = rgbToYcbcr([input[0], input[1], input[2]]);
-  const keyYcbcr = rgbToYcbcr(key);
-  const cbcrDistance = Math.hypot(sourceYcbcr[1] - keyYcbcr[1], sourceYcbcr[2] - keyYcbcr[2]);
-  const alpha = smoothstep(
-    finiteNumber(adjustment.tolerance, 0.2),
-    finiteNumber(adjustment.tolerance, 0.2) + finiteNumber(adjustment.softness, 0.1),
-    cbcrDistance,
-  );
-  const spillSuppression = Math.max(0, finiteNumber(adjustment.spillSuppression, 0.5));
-  let r = input[0];
-  let g = input[1];
-  let b = input[2];
-  if (spillSuppression > 0) {
-    if (adjustment.keyColor === 'green') {
-      const spillAmount = Math.max(0, g - Math.max(r, b)) * spillSuppression;
-      g -= spillAmount;
-      r += spillAmount * 0.5;
-      b += spillAmount * 0.5;
-    } else {
-      const spillAmount = Math.max(0, b - Math.max(r, g)) * spillSuppression;
-      b -= spillAmount;
-      r += spillAmount * 0.5;
-      g += spillAmount * 0.5;
-    }
-  }
-  return [r, g, b, input[3] * alpha];
 }
 
 function sampleLuma(
@@ -365,64 +208,8 @@ function applySharpenAdjustment(
   ];
 }
 
-function fract(value: number): number {
-  return value - Math.floor(value);
-}
-
-function applyScanlineAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['scanlineAdjustments']
-  >[number],
-  uvY: number,
-  timelineTime: number,
-): readonly [number, number, number] {
-  const scrollOffset = timelineTime * finiteNumber(adjustment.speed, 0) * 0.1;
-  const scanline = Math.sin((uvY + scrollOffset) * finiteNumber(adjustment.density, 5) * 100) * 0.5 + 0.5;
-  const darken = 1 - finiteNumber(adjustment.opacity, 0.3) * (1 - scanline);
-  return [input[0] * darken, input[1] * darken, input[2] * darken];
-}
-
-function applyGrainAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['grainAdjustments']
-  >[number],
-  uvX: number,
-  uvY: number,
-  timelineTime: number,
-): readonly [number, number, number] {
-  const size = Math.max(finiteNumber(adjustment.size, 1), 0.001);
-  const time = timelineTime * finiteNumber(adjustment.speed, 1);
-  const grainU = uvX * (100 / size) + time * 0.1;
-  const grainV = uvY * (100 / size) + time * 0.07;
-  const noise = fract(Math.sin(grainU * 12.9898 + grainV * 78.233) * 43758.5453) * 2 - 1;
-  const luminance = luma(input[0], input[1], input[2]);
-  const intensity = finiteNumber(adjustment.amount, 0.1) * (1 - luminance * 0.5);
-  return [
-    clamp01(input[0] + noise * intensity),
-    clamp01(input[1] + noise * intensity),
-    clamp01(input[2] + noise * intensity),
-  ];
-}
-
-function applyVibranceAdjustment(
-  input: readonly [number, number, number],
-  adjustment: NonNullable<
-    WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['vibranceAdjustments']
-  >[number],
-): readonly [number, number, number] {
-  const maxChannel = Math.max(input[0], input[1], input[2]);
-  const minChannel = Math.min(input[0], input[1], input[2]);
-  const saturation = (maxChannel - minChannel) / (maxChannel + 0.001);
-  const vibrance = finiteNumber(adjustment.amount, 0) * (1 - saturation);
-  const gray = luma601(input[0], input[1], input[2]);
-  const mixAmount = 1 + vibrance;
-  const mix = (channel: number): number => clamp01(gray * (1 - mixAmount) + channel * mixAmount);
-  return [mix(input[0]), mix(input[1]), mix(input[2])];
-}
-
-export function hasWorkerSoftwarePixelEffects(layer: WorkerRenderSoftwareFrame['layers'][number]): boolean {
+/** Effects of the per-pixel loop (everything but the image graphs and the whole-frame mirror/pixel pass). */
+function hasPerPixelEffects(layer: WorkerRenderSoftwareFrame['layers'][number]): boolean {
   const feedbackEffectCount = (layer.pixelEffects?.acuarelaAdjustments?.length ?? 0)
     + (layer.pixelEffects?.rom1Adjustments?.length ?? 0);
   const colorGradeNodeCount = layer.pixelEffects?.colorGradePrimaryNodes?.length ?? 0;
@@ -440,7 +227,6 @@ export function hasWorkerSoftwarePixelEffects(layer: WorkerRenderSoftwareFrame['
   const scanlineAdjustmentCount = layer.pixelEffects?.scanlineAdjustments?.length ?? 0;
   const grainAdjustmentCount = layer.pixelEffects?.grainAdjustments?.length ?? 0;
   return feedbackEffectCount > 0
-    || (layer.pixelEffects?.imageOperatorPlans?.length ?? 0) > 0
     || Math.abs(finiteNumber(layer.pixelEffects?.brightness, 0)) > 0.0001
     || exposureAdjustmentCount > 0
     || temperatureAdjustmentCount > 0
@@ -456,11 +242,13 @@ export function hasWorkerSoftwarePixelEffects(layer: WorkerRenderSoftwareFrame['
     || scanlineAdjustmentCount > 0
     || grainAdjustmentCount > 0
     || hasWorkerSoftwareSourceResamplingEffects(layer.pixelEffects)
-    || layer.pixelEffects?.mirrorHorizontal === true
-    || layer.pixelEffects?.mirrorVertical === true
-    || finiteNumber(layer.pixelEffects?.pixelateSize, 0) > 1
-    || finiteNumber(layer.pixelEffects?.rgbSplit?.amount, 0) > 0
     || colorGradeNodeCount > 0;
+}
+
+export function hasWorkerSoftwarePixelEffects(layer: WorkerRenderSoftwareFrame['layers'][number]): boolean {
+  return hasPerPixelEffects(layer)
+    || (layer.pixelEffects?.imageOperatorPlans?.length ?? 0) > 0
+    || (layer.pixelEffects?.mirrorPixelAdjustments?.length ?? 0) > 0;
 }
 
 export function applyWorkerSoftwarePixelEffects(
@@ -474,11 +262,6 @@ export function applyWorkerSoftwarePixelEffects(
   feedbackFrameMetadata?: WorkerSoftwareFeedbackFrameMetadata,
 ): void {
   const brightness = finiteNumber(layer.pixelEffects?.brightness, 0);
-  const mirrorHorizontal = layer.pixelEffects?.mirrorHorizontal === true;
-  const mirrorVertical = layer.pixelEffects?.mirrorVertical === true;
-  const pixelateSize = Math.floor(finiteNumber(layer.pixelEffects?.pixelateSize, 0));
-  const rgbSplit = layer.pixelEffects?.rgbSplit;
-  const rgbSplitAmount = Math.max(0, finiteNumber(rgbSplit?.amount, 0));
   const exposureAdjustments = layer.pixelEffects?.exposureAdjustments ?? [];
   const temperatureAdjustments = layer.pixelEffects?.temperatureAdjustments ?? [];
   const vibranceAdjustments = layer.pixelEffects?.vibranceAdjustments ?? [];
@@ -493,8 +276,6 @@ export function applyWorkerSoftwarePixelEffects(
   const scanlineAdjustments = layer.pixelEffects?.scanlineAdjustments ?? [];
   const grainAdjustments = layer.pixelEffects?.grainAdjustments ?? [];
   const colorGradePrimaryNodes = layer.pixelEffects?.colorGradePrimaryNodes ?? [];
-  const hasPixelate = pixelateSize > 1;
-  const hasRgbSplit = rgbSplitAmount > 0;
   if (!hasWorkerSoftwarePixelEffects(layer)) return;
 
   const imageData = context.getImageData(0, 0, width, height);
@@ -503,6 +284,14 @@ export function applyWorkerSoftwarePixelEffects(
     owners: layer.pixelEffects?.imageOperatorPlanOwners, store: feedbackStore, scopeId: feedbackScopeId,
     frame: feedbackFrameMetadata ?? { timelineTimeSeconds: timelineTime },
   });
+  // Kaleidoscope, Mirror, RGB Split and Pixelate, with the pointwise effects in front of them,
+  // run first on the whole frame in stack order; the rest of the stack follows per pixel.
+  applyWorkerSoftwareMirrorPixelEffects(data, width, height, layer.pixelEffects?.mirrorPixelAdjustments ?? [], timelineTime);
+  // Nothing left for the per-pixel loop: skip its identity pass over the frame.
+  if (!hasPerPixelEffects(layer)) {
+    context.putImageData(imageData, 0, 0);
+    return;
+  }
   const feedbackFrame = createWorkerSoftwareFeedbackFrame({
     pixelEffects: layer.pixelEffects,
     store: feedbackStore,
@@ -511,11 +300,7 @@ export function applyWorkerSoftwarePixelEffects(
     height,
     frame: feedbackFrameMetadata ?? { timelineTimeSeconds: timelineTime },
   });
-  const sourceData = mirrorHorizontal
-    || mirrorVertical
-    || hasPixelate
-    || hasRgbSplit
-    || hasWorkerSoftwareFeedbackEffects(layer.pixelEffects)
+  const sourceData = hasWorkerSoftwareFeedbackEffects(layer.pixelEffects)
     || edgeDetectAdjustments.length > 0
     || sharpenAdjustments.length > 0
     || glowAdjustments.length > 0
@@ -523,27 +308,28 @@ export function applyWorkerSoftwarePixelEffects(
     || colorGradePrimaryNodes.length > 0
     ? new Uint8ClampedArray(data)
     : data;
+  // Chroma Key estimates its screen colour and local Screen Grid once per frame from the layer source pixels;
+  // the plan only allows it as the layer's sole pixel effect (workerSoftwareEffectPlan.ts), so those are the
+  // pixels it keys.
+  const chromaKeyers = chromaKeyAdjustments.map(adjustment => prepareChromaKeyCpu(chromaKeyCpuScreen(sourceData, adjustment, width, height), adjustment));
+  const keyed = new Float64Array(4);
   // Glow is a separable neighborhood prefilter; build it once per frame, then sample rings per pixel.
-  const glowFields = glowAdjustments.map(adjustment => prepareWorkerSoftwareGlow(sourceData, width, height, adjustment));
-  const splitDx = hasRgbSplit ? Math.round(Math.cos(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * width) : 0;
-  const splitDy = hasRgbSplit ? Math.round(Math.sin(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * height) : 0;
+  // 'bloom': graphless (current) Glows; otherwise the earlier ring Glow.
+  const glowFields = glowAdjustments.map(adjustment => {
+    if (adjustment.recipe !== 'bloom') {
+      const ring = prepareWorkerSoftwareGlow(sourceData, width, height, adjustment);
+      return (x: number, y: number) => applyWorkerSoftwareGlow(ring, sourceData, x, y);
+    }
+    const bloom = prepareWorkerSoftwareBloom(sourceData, width, height, adjustment);
+    return (x: number, y: number) => applyWorkerSoftwareBloom(bloom, sourceData, x, y);
+  });
   for (let y = 0; y < height; y += 1) {
-    const sampleY = mirrorVertical && y >= height / 2 ? height - 1 - y : y;
-    const pixelY = hasPixelate ? Math.floor(sampleY / pixelateSize) * pixelateSize : sampleY;
     for (let x = 0; x < width; x += 1) {
-      const sampleX = mirrorHorizontal && x >= width / 2 ? width - 1 - x : x;
-      const pixelX = hasPixelate ? Math.floor(sampleX / pixelateSize) * pixelateSize : sampleX;
       const targetIndex = (y * width + x) * 4;
-      const sourceIndex = (pixelY * width + pixelX) * 4;
-      const rIndex = hasRgbSplit
-        ? (clampIndex(pixelY + splitDy, height) * width + clampIndex(pixelX + splitDx, width)) * 4
-        : sourceIndex;
-      const bIndex = hasRgbSplit
-        ? (clampIndex(pixelY - splitDy, height) * width + clampIndex(pixelX - splitDx, width)) * 4
-        : sourceIndex;
-      let r = sourceData[rIndex] / 255 + brightness;
+      const sourceIndex = targetIndex;
+      let r = sourceData[sourceIndex] / 255 + brightness;
       let g = sourceData[sourceIndex + 1] / 255 + brightness;
-      let b = sourceData[bIndex + 2] / 255 + brightness;
+      let b = sourceData[sourceIndex + 2] / 255 + brightness;
       let alpha = sourceData[sourceIndex + 3] / 255;
       const sourceResampled = applyWorkerSoftwareSourceResamplingEffects(
         sourceData,
@@ -552,6 +338,7 @@ export function applyWorkerSoftwarePixelEffects(
         x,
         y,
         layer.pixelEffects,
+        timelineTime,
       );
       if (sourceResampled) {
         [r, g, b, alpha] = sourceResampled;
@@ -585,15 +372,14 @@ export function applyWorkerSoftwarePixelEffects(
         [r, g, b] = applyPosterizeAdjustment([r, g, b], adjustment);
       }
       for (const adjustment of vignetteAdjustments) {
-        const uvX = (x + 0.5) / width;
-        const uvY = (y + 0.5) / height;
-        [r, g, b] = applyVignetteAdjustment([r, g, b], adjustment, uvX, uvY);
+        [r, g, b] = applyVignetteAdjustment([r, g, b], adjustment, x + 0.5, y + 0.5, width, height);
       }
-      for (const adjustment of chromaKeyAdjustments) {
-        [r, g, b, alpha] = applyChromaKeyAdjustment([r, g, b, alpha], adjustment);
+      for (const keyer of chromaKeyers) {
+        chromaKeyCpuKey(keyer, r, g, b, alpha, x, y, keyed);
+        r = keyed[0]; g = keyed[1]; b = keyed[2]; alpha = keyed[3];
       }
       for (const adjustment of edgeDetectAdjustments) {
-        [r, g, b, alpha] = applyEdgeDetectAdjustment(sourceData, width, height, pixelX, pixelY, adjustment);
+        [r, g, b, alpha] = applyEdgeDetectAdjustment(sourceData, width, height, x, y, adjustment);
       }
       for (const adjustment of sharpenAdjustments) {
         const uvX = (x + 0.5) / width;
@@ -601,11 +387,11 @@ export function applyWorkerSoftwarePixelEffects(
         [r, g, b, alpha] = applySharpenAdjustment(sourceData, width, height, uvX, uvY, adjustment);
       }
       for (const glow of glowFields) {
-        [r, g, b, alpha] = applyWorkerSoftwareGlow(glow, sourceData, x, y);
+        [r, g, b, alpha] = glow(x, y);
       }
       for (const adjustment of scanlineAdjustments) {
         const uvY = (y + 0.5) / height;
-        [r, g, b] = applyScanlineAdjustment([r, g, b], adjustment, uvY, timelineTime);
+        [r, g, b] = applyScanlineAdjustment([r, g, b], adjustment, uvY, timelineTime, height);
       }
       for (const adjustment of grainAdjustments) {
         const uvX = (x + 0.5) / width;

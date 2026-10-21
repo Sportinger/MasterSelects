@@ -56,6 +56,12 @@ export interface Layer {
   masks?: ClipMask[]; // Optional nested/serialized masks for mask texture generation.
   sourceRect?: LayerSourceRect;  // Normalized source UV rect; defaults to full source.
   transitionRender?: TransitionRenderState;
+  /**
+   * Runtime-only: the source texture holds premultiplied colour (a composited
+   * transition composition). The compositor divides by alpha before blending,
+   * so partly transparent pixels are not darkened a second time.
+   */
+  premultipliedAlpha?: boolean;
   /** Runtime-only resolved terrain data for projecting this layer's native texture. */
   terrainProjection?: import('./terrainAttachment').TerrainProjectionDescriptor;
   /** Runtime-only terrain data for positioning native screen-facing content. */
@@ -198,4 +204,6 @@ export interface NestedCompositionData {
   currentTime?: number;  // Current time for frame caching
   sceneClips?: TimelineClip[];
   sceneTracks?: TimelineTrack[];
+  /** Runtime-only: `layers` are only part of the composition (a transition's blend part). */
+  partial?: boolean;
 }

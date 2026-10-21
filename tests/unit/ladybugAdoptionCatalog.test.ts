@@ -60,8 +60,8 @@ describe('Ladybug adoption catalog', () => {
     expect(isComputeEffectDefinition(getEffect('contour'))).toBe(true);
   });
 
-  it('ships 14 valid curated looks with only declared parameters', () => {
-    expect(STARTER_LOOKS).toHaveLength(14);
+  it('ships 17 valid curated looks with only declared parameters', () => {
+    expect(STARTER_LOOKS).toHaveLength(17);
     for (const look of STARTER_LOOKS) {
       expect(look.stack.length, look.id).toBeGreaterThan(0);
       for (const entry of look.stack) {

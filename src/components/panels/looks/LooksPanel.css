@@ -4,5 +4,6 @@
   .looks-panel input, .looks-panel select, .looks-panel button { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 4px; color: var(--text-primary); min-width: 0; padding: 6px 8px; }
   .looks-panel button:disabled { cursor: not-allowed; opacity: 0.45; }
   .looks-panel-hint { color: var(--text-secondary); font-size: 12px; margin: 8px 0; }
+  .looks-panel-notice { color: var(--warning); }
   .looks-grid { display: grid; gap: 9px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }

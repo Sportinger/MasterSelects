@@ -63,3 +63,17 @@
     }
   }
 }
+
+/* A value at the playhead lies outside the rendered range and is clamped. */
+.effect-param-range-notice {
+  margin: 0;
+  padding: var(--sp-1) var(--sp-2) var(--sp-2);
+}
+
+/* The Preset row's note on controls that kept their keyframes or their node (EffectPresetRow). */
+.effects-tab .effect-preset-notice {
+  margin: 2px 0 6px;
+  color: var(--text-muted);
+  font-size: var(--font-xs);
+  line-height: 1.45;
+}

@@ -2,12 +2,15 @@ import { blendSequencePixel } from './sequenceBlend';
 import type { ImageOperatorEvaluationContext, ImageOperatorPlan } from './imageOperatorGraph';
 import { pointwiseOperation } from './fields/pointwiseOperations';
 import { imageFract, imageHsvToRgb, imageRgbToHsv } from './imageColorSemantics';
+import { oklchToRgb, rgbToOklch } from './imageColorSpaceSemantics';
 import { projectImageRadius, rotateImageCoordinate, unprojectImageRadius } from './imageOpticsSemantics';
 import { imageDegreesToRadians } from './imageAngleSemantics';
 import { normalizeImageVector2 } from './imageVectorSemantics';
 import { evaluateImageDerivativeQuad, type ImageDerivativeMode } from './imageOperatorDerivatives';
 import { evaluateImageBayer4 } from './imagePatternSemantics';
+import { evaluateFractalNoise2d } from './imageNoiseSemantics';
 import { sortImageSegment } from './imageSegmentSortSemantics';
+import { imageHashPcg2d } from './imageHashPcg';
 import { partitionImageQuadtree } from './imageQuadtreePartitionSemantics';
 import { imageSampleScopeNeedsSource, imageScopeReadsPrimaryInput } from './imageOperatorScopes';
 import { marchingSquaresTopology } from './marchingSquaresTopology';
@@ -15,6 +18,17 @@ import { temporalDeformation } from './motionDeformationMath';
 import { evaluateOpticalFlow, evaluateDirectionalSmooth, evaluateMotionConsistency } from './motionImageEvaluation';
 import { imageIntegerCellOrigin } from './imageCoordinateSemantics';
 import { decodeBytePixel8, decodeBytePixel16, decodeBytePixel32, type BytePixelFloatMode } from './bytePixelSemantics';
+
+/** CPU twin of IMAGE_CELL_HASH_WGSL (PCG2D of the whole-number cell). */
+export const imageCellHash = (value: readonly number[]) => {
+  let x = (Math.floor(value[0]) | 0) >>> 0, y = (Math.floor(value[1]) | 0) >>> 0;
+  x = (Math.imul(x, 1664525) + 1013904223) >>> 0; y = (Math.imul(y, 1664525) + 1013904223) >>> 0;
+  x = (x + Math.imul(y, 1664525)) >>> 0; y = (y + Math.imul(x, 1664525)) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0; y = (y ^ (y >>> 16)) >>> 0;
+  x = (x + Math.imul(y, 1664525)) >>> 0; y = (y + Math.imul(x, 1664525)) >>> 0;
+  x = (x ^ (x >>> 16)) >>> 0;
+  return (x >>> 8) / 16777216;
+};
 
 const imageHash2d = (value: number[]) => {
   const x = value[0] * 127.1 + value[1] * 311.7, y = value[0] * 269.5 + value[1] * 183.3;
@@ -215,8 +229,10 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
       const descriptor = kernelScopes.get(item.value!);
       if (!descriptor) throw new Error(`Image kernel scope ${String(item.value)} is missing.`);
       const result = { sum: [0, 0, 0, 0], weightSum: 0 };
+      // Captured loop-invariant values of this scope reach the kernel term lexically.
+      const lexical = descriptor.captures?.length ? values : undefined;
       for (let x = -extent; x <= extent; x++) for (let y = -extent; y <= extent; y++) {
-        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y]);
+        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y], undefined, undefined, lexical);
         const sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
         for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight;
         result.weightSum += weight;
@@ -229,8 +245,9 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
       const descriptor = rectScopes.get(item.value!);
       if (!descriptor) throw new Error(`Image rectangular kernel scope ${String(item.value)} is missing.`);
       const result = { sum: [0, 0, 0, 0], weightSum: 0 };
+      const lexical = descriptor.captures?.length ? values : undefined;
       for (let x = 0; x < width; x++) for (let y = 0; y < height; y++) {
-        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y]), sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
+        const term = evaluateScope(descriptor.id, scopePixel, scopeUv, [x, y], undefined, undefined, lexical), sample = term[descriptor.sample] as number[], weight = term[descriptor.weight] as number;
         for (let channel = 0; channel < 4; channel++) result.sum[channel] += sample[channel] * weight; result.weightSum += weight;
       }
       kernelResults.set(item.value!, result); values.push(result.sum);
@@ -270,8 +287,13 @@ export function createImageOperatorEvaluator(plan: ImageOperatorPlan) {
     else if (item.operation === 'project-radius') values.push(projectImageRadius(args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'unproject-radius') values.push(unprojectImageRadius(args[0] as number, args[1] as number, args[2] as number));
     else if (item.operation === 'hash2d-vec2') values.push(imageHash2d(args[0] as number[]));
+    else if (item.operation === 'cell-hash-vec2') values.push(imageCellHash(args[0] as number[]));
+    else if (item.operation === 'hash2d-pcg-vec2') values.push(imageHashPcg2d(args[0] as number[]));
+    else if (item.operation === 'fractal-noise2d') values.push(evaluateFractalNoise2d(args[0] as number[], args[1] as number, args[2] as number));
     else if (item.operation === 'rgb-to-hsv') values.push(imageRgbToHsv(args[0] as [number, number, number]));
     else if (item.operation === 'hsv-to-rgb') values.push(imageHsvToRgb(args[0] as [number, number, number]));
+    else if (item.operation === 'rgb-to-oklch') values.push(rgbToOklch(args[0] as number[]));
+    else if (item.operation === 'oklch-to-rgb') values.push(oklchToRgb(args[0] as number[]));
     else values.push([...(args[0] as number[]), args[1] as number]);
    }
    return values;

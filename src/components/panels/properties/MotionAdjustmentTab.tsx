@@ -6,6 +6,7 @@ import type { BlendMode } from '../../../types';
 import { DraggableNumber, KeyframeToggle } from './shared';
 import { formatBlendModeName } from './sharedConstants';
 import { getMotionAdjustmentDiagnostics } from './motionAdjustmentDiagnostics';
+import { getRenderHostDevMode, type RenderHostDevMode } from '../../../services/render/renderHostPort';
 
 const ADJUSTMENT_BLEND_MODES = [
   'normal',
@@ -14,6 +15,9 @@ const ADJUSTMENT_BLEND_MODES = [
   'overlay',
   'add',
 ] as const satisfies readonly BlendMode[];
+
+/** Render host modes whose worker presenter draws adjustment layers itself. */
+const WORKER_RENDER_MODES: ReadonlySet<RenderHostDevMode> = new Set<RenderHostDevMode>(['worker-presenting', 'worker-only', 'worker-gpu-only']);
 
 interface MotionAdjustmentTabProps {
   clipId: string;
@@ -28,7 +32,8 @@ export function MotionAdjustmentTab({
 }: MotionAdjustmentTabProps) {
   const clip = useTimelineStore((state) => state.clips.find((candidate) => candidate.id === clipId));
   const diagnostics = useMemo(
-    () => getMotionAdjustmentDiagnostics(clipId, clip?.effects ?? [], blendMode),
+    () => getMotionAdjustmentDiagnostics(clipId, clip?.effects ?? [], blendMode,
+      { workerRenderMode: WORKER_RENDER_MODES.has(getRenderHostDevMode() ?? 'main') }),
     [blendMode, clip?.effects, clipId],
   );
   const setPropertyValue = useTimelineStore((state) => state.setPropertyValue);

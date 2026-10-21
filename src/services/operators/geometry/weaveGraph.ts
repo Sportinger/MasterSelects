@@ -80,20 +80,24 @@ export function createWaveStrandsGraph(): EffectOperatorGraph {
     groups: [{ id: 'wave-offset', label: 'Wave Offset', color: '#8a7fd1', nodeIds: WAVE_NODES.map(([id]) => id) }] };
 }
 
+// New Weaves start as a smaller sheet (about two thirds of the frame width, three fifths of its height)
+// in a softer, darker wool, so the clip under it stays readable; its 40 × 24 cloth cells are square
+// (0.04 × 0.04). Saved Weaves store their graph and keep their look (the 2.4 × 1.6 sheet with
+// 24 × 16 threads in preset wool and a 40 × 27 cloth).
 const FABRIC_NODES: Spec[] = [
-  ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 24, wefts: 16, width: 2.4, height: 1.6, crimp: 0.03, resolution: 16 }],
+  ['pattern', 'weave.pattern', 0, 80, { pattern: 'plain', warps: 16, wefts: 10, width: 1.6, height: 0.96, crimp: 0.03, resolution: 16 }],
   ['yarn', 'geometry.yarn-profile', 1320, 80, { plies: 3, fibers: 5, radius: 0.028, plyTwist: 5, fiberTwist: -11 }],
   ['yarn-radius', 'math.multiply.scalar', 1320, 300],
   ['render', 'render.strands', 2600, 80, { width: 0.0035, color: '#e8e2d6' }],
   ['output', 'scene.output', 2920, 80],
   ['flyaways', 'geometry.flyaways', 1640, 80, { density: 3, length: 0.08, lift: 2.5, hair: 0.35, seed: 0 }],
-  ['fiber', 'material.fiber', 1960, 80, { preset: 'wool' }],
+  ['fiber', 'material.fiber', 1960, 80, { preset: 'custom', color: '#8a857c' }],
 ];
 /** Wind Cloth: the woven sheet is held at its corners and billows like a sail in gusty, swirling wind (no gravity). */
 const CLOTH_NODES: Spec[] = [
   ['wind', 'forces.wind', 1320, 620, { direction: [0.2, 0, 1], strength: 0.35, gust: 0.5 }],
   ['swirl', 'forces.turbulence', 1320, 860, { strength: 0.15, frequency: 1.5 }],
-  ['cloth', 'geometry.cloth-sheet', 1640, 620, { columns: 40, rows: 27, width: 2.4, height: 1.6, pin: 'corners', stretch: 0.9, bend: 0.6,
+  ['cloth', 'geometry.cloth-sheet', 1640, 620, { columns: 40, rows: 24, width: 1.6, height: 0.96, pin: 'corners', stretch: 0.9, bend: 0.6,
     damping: 0.5, substeps: 6, preroll: 2 }],
   ['bind', 'geometry.surface-bind', 2280, 80, { height: 1 }],
 ];

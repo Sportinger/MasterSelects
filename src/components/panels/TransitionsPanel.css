@@ -49,6 +49,14 @@
   outline: none;
 }
 
+.transitions-duration-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.transitions-duration-control:has(.transitions-duration-input:focus-visible) {
+  box-shadow: inset 0 0 0 1px var(--accent, #4a9eff);
+}
+
 .transitions-duration-input::-webkit-inner-spin-button,
 .transitions-duration-input::-webkit-outer-spin-button {
   -webkit-appearance: none;

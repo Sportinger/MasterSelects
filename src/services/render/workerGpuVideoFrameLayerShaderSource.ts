@@ -1,3 +1,5 @@
+import { WORKER_PRESENTER_PLUS_BLEND_WGSL } from './workerGpuPresenterBlendModes';
+
 export const VIDEO_FRAME_LAYER_COMPOSITE_SHADER = `
 struct VertexOutput { @builtin(position) position: vec4f, @location(0) uv: vec2f };
 struct LayerParams {
@@ -26,10 +28,11 @@ struct LayerParams {
   vignetteSize: f32,
   vignetteSoftness: f32,
   vignetteRoundness: f32,
-  chromaKeyMode: u32,
-  chromaKeyTolerance: f32,
-  chromaKeySoftness: f32,
-  chromaKeySpill: f32,
+  // Bytes 100..115 are reserved (the retired single-pass chroma key; Chroma Key renders as an image graph).
+  reserved100: u32,
+  reserved104: f32,
+  reserved108: f32,
+  reserved112: f32,
   scanlineDensity: f32,
   scanlineOpacity: f32,
   scanlineSpeed: f32,
@@ -150,29 +153,8 @@ fn hsv2rgb(c: vec3f) -> vec3f {
 
 fn effectUv(sourceUv: vec2f) -> vec2f {
   var uv = sourceUv;
-  if (abs(layer.waveAmplitudeX) > 0.000001 || abs(layer.waveAmplitudeY) > 0.000001) {
-    uv.y += sin(uv.x * layer.waveFrequencyX * 6.28318530718) * layer.waveAmplitudeX;
-    uv.x += sin(uv.y * layer.waveFrequencyY * 6.28318530718) * layer.waveAmplitudeY;
-  }
-  if (abs(layer.twirlAmount) > 0.000001) {
-    let center = vec2f(layer.twirlCenterX, layer.twirlCenterY);
-    let delta = uv - center;
-    let dist = length(delta);
-    let safeRadius = max(layer.twirlRadius, 0.0001);
-    let factor = 1.0 - min(dist / safeRadius, 1.0);
-    let angle = layer.twirlAmount * factor * factor;
-    let rotated = vec2f(delta.x * cos(angle) - delta.y * sin(angle), delta.x * sin(angle) + delta.y * cos(angle));
-    uv = select(uv, center + rotated, dist < safeRadius);
-  }
-  if (abs(layer.bulgeAmount) > 0.000001) {
-    let center = vec2f(layer.bulgeCenterX, layer.bulgeCenterY);
-    let delta = uv - center;
-    let dist = length(delta);
-    let safeDist = max(dist, 0.0001);
-    let radius = max(layer.bulgeRadius, 0.0001);
-    let newDist = pow(safeDist / radius, layer.bulgeAmount) * radius;
-    uv = select(uv, center + delta / safeDist * newDist, dist < radius && dist > 0.0);
-  }
+  // Wave, Twirl and Bulge & Pinch run as image graphs, never in this fast path: their uniforms
+  // (still in the struct for its layout) stay neutral and are not read here.
   if (layer.mirrorHorizontal == 1u && uv.x > 0.5) { uv.x = 1.0 - uv.x; }
   if (layer.mirrorVertical == 1u && uv.y > 0.5) { uv.y = 1.0 - uv.y; }
   if (layer.kaleidoscopeSegments >= 2.0) {
@@ -297,20 +279,6 @@ fn applyColorEffects(color: vec4f, uv: vec2f) -> vec4f {
     let grain = noise(grainUv) * 2.0 - 1.0;
     rgb += vec3f(grain * layer.grainAmount * (1.0 - luminosity(rgb) * 0.5));
   }
-  if (layer.chromaKeyMode != 0u) {
-    let key = select(vec3f(0.0, 1.0, 0.0), vec3f(0.0, 0.0, 1.0), layer.chromaKeyMode == 2u);
-    let diff = distance(rgb, key);
-    let keep = smoothstep(layer.chromaKeyTolerance, layer.chromaKeyTolerance + layer.chromaKeySoftness, diff);
-    alpha *= keep;
-    if (layer.chromaKeyMode == 1u) {
-      let spill = max(0.0, rgb.g - max(rgb.r, rgb.b)) * layer.chromaKeySpill;
-      rgb += vec3f(spill * 0.5, -spill, spill * 0.5);
-    }
-    if (layer.chromaKeyMode == 2u) {
-      let spill = max(0.0, rgb.b - max(rgb.r, rgb.g)) * layer.chromaKeySpill;
-      rgb += vec3f(spill * 0.5, spill * 0.5, -spill);
-    }
-  }
   return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), clamp(alpha, 0.0, 1.0));
 }
 
@@ -319,7 +287,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let baseColor = textureSample(baseTexture, frameSampler, input.uv);
   let layerUv = effectUv(input.uv);
   let frameColor = applyColorEffects(sampleFrame(layerUv), input.uv);
-  let alpha = clamp(frameColor.a * clamp(layer.opacity, 0.0, 1.0), 0.0, 1.0);
+  let alpha = clamp(frameColor.a * clamp(layer.opacity, 0.0, 1.0), 0.0, 1.0);${WORKER_PRESENTER_PLUS_BLEND_WGSL}
   let blended = clampColor(blendRgb(baseColor.rgb, frameColor.rgb, layer.blendMode));
   let outAlpha = alpha + baseColor.a * (1.0 - alpha);
   return vec4f(mix(baseColor.rgb, blended, alpha), outAlpha);

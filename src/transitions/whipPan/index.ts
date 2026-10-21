@@ -55,7 +55,6 @@ export const whipPan: TransitionDefinition = {
       params: {
         amount: { from: 0, to: 0.16 },
         angle: 0,
-        samples: 40,
       },
       startProgress: 0,
       endProgress: 0.68,
@@ -69,7 +68,6 @@ export const whipPan: TransitionDefinition = {
       params: {
         amount: { from: 0.16, to: 0 },
         angle: 0,
-        samples: 40,
       },
       startProgress: 0.32,
       endProgress: 1,

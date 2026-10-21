@@ -8,7 +8,7 @@ const BLEND_MODES = new Set<BlendMode>([
   'overlay', 'soft-light', 'hard-light', 'linear-light', 'vivid-light', 'pin-light', 'hard-mix',
   'difference', 'classic-difference', 'exclusion', 'subtract', 'divide',
   'hue', 'saturation', 'color', 'luminosity',
-  'stencil-alpha', 'stencil-luma', 'silhouette-alpha', 'silhouette-luma', 'alpha-add',
+  'stencil-alpha', 'stencil-luma', 'silhouette-alpha', 'silhouette-luma', 'alpha-add', 'plus',
 ]);
 
 function isValidWindow(window: unknown): window is TransitionRecipeBlendWindow {
@@ -38,4 +38,15 @@ export function resolveTransitionRecipeBlendMode(
     }
   }
   return blendMode;
+}
+
+/** True when a valid recipe window covers the composition time, whatever its mode. */
+export function isTransitionRecipeBlendWindowActive(
+  windows: readonly TransitionRecipeBlendWindow[] | undefined | null,
+  parentCompositionTime: number,
+): boolean {
+  if (!Number.isFinite(parentCompositionTime) || !Array.isArray(windows)) return false;
+  return windows.some((window) => isValidWindow(window) &&
+    parentCompositionTime >= window.compStart &&
+    parentCompositionTime < window.compEnd);
 }

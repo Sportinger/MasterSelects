@@ -21,8 +21,8 @@ export function withSlitScanGroupBypasses(graph: EffectOperatorGraph): EffectOpe
       add('subject-protected', 'math.multiply.scalar', input('subject-protected', 'a'));
       add('subject-clamp', 'math.clamp.scalar', number('zero', 0));
     } else if (group.id === 'scan-protection') {
+      // Only the mask: the Radial and Time rings profiles live in the profile folder (slitScanGraphUpgrade.ts).
       add('protection-mask', 'select.scalar', number('one', 1));
-      add('spatial-profile', 'select.scalar', input('spatial-profile', 'falseValue'));
     }
     return Object.keys(outputs).length ? { ...group, bypassOutputs: outputs } : group;
   }) };

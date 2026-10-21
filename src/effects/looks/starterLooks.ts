@@ -31,7 +31,7 @@ export const STARTER_LOOKS: LookDefinition[] = [
     fx('grain', { amount: 0.13 }),
   ]),
   look('crt-memory', 'CRT Memory', 'analog', ['crt', 'retro', 'scanline'], [
-    fx('crt-screen', { amount: 0.72, scale: 3, speed: 0.25 }),
+    fx('crt-screen', { amount: 1, curvature: 0.3, lineCount: 240, scanlines: 0.7, maskStrength: 0.4, flicker: 0.25, speed: 0.6 }),
     fx('rgb-split', { amount: 0.012 }),
   ]),
   look('paper-press', 'Paper Press', 'print', ['paper', 'press', 'soft'], [
@@ -39,11 +39,11 @@ export const STARTER_LOOKS: LookDefinition[] = [
     fx('grain', { amount: 0.08 }),
   ]),
   look('holo-drift', 'Holo Drift', 'digital', ['hologram', 'spectrum', 'animated'], [
-    fx('holo', { amount: 0.72, scale: 16, speed: 0.8, colorA: '#13d8e8', colorB: '#ef65bc' }),
+    fx('holo', { amount: 0.6, stripes: 0.75, speed: 0.8, colorA: '#13d8e8', colorB: '#ef65bc' }),
     fx('glow', { amount: 0.2 }),
   ]),
   look('crystal-signal', 'Crystal Signal', 'digital', ['glass', 'refraction', 'clean'], [
-    fx('crystal', { amount: 0.62, scale: 18, speed: 0.2 }),
+    fx('crystal', { amount: 0.35, scale: 18, speed: 0.2 }),
     fx('sharpen', { amount: 0.22 }),
   ]),
   look('pixel-editorial', 'Pixel Editorial', 'editorial', ['pixel', 'poster', 'bold'], [
@@ -55,14 +55,26 @@ export const STARTER_LOOKS: LookDefinition[] = [
   ]),
   look('data-glitch', 'Data Glitch', 'digital', ['glitch', 'grid', 'motion'], [
     fx('glitch-grid', { amount: 0.55, scale: 20, speed: 1.25 }),
-    fx('glitch', { amount: 0.32, scale: 28, speed: 0.8 }),
+    fx('glitch', { amount: 0.45, density: 0.3, bands: 20, split: 0.5, speed: 0.8 }),
   ]),
   look('mosaic-motion', 'Mosaic Motion', 'motion', ['mosaic', 'kinetic', 'block'], [
     fx('scatter-mosaic', { amount: 0.62, scale: 16, speed: 0.65 }),
     fx('posterize', { levels: 7 }),
   ]),
+  look('pal-broadcast', 'PAL Broadcast', 'analog', ['pal', 'tv', 'crt', 'signal'], [
+    fx('analog-signal-lab', { rfNoise: 0.06, impulseNoise: 0.02, ghostLevel: 0.08, syncInstability: 0.06, ycCrosstalk: 0.1,
+      crtAmount: 0.7, scanlines: 0.45, maskStrength: 0.3, bloom: 0.3, curvature: 0.2 }),
+  ]),
+  look('weak-antenna', 'Weak Antenna', 'analog', ['pal', 'tv', 'noise', 'ghost', 'signal'], [
+    fx('analog-signal-lab', { signalStrength: 0.38, rfNoise: 0.55, impulseNoise: 0.2, ghostLevel: 0.4, ghostDelayUs: 3.2,
+      syncInstability: 0.35, colorLock: 0.6 }),
+  ]),
+  look('worn-vhs', 'Worn VHS', 'analog', ['vhs', 'tape', 'tracking', 'retro'], [
+    fx('analog-signal-lab', { rfAmount: 0, vhsAmount: 1, tapeSpeed: 'lp', tracking: 0.3, dropout: 0.15, tapeWear: 0.25,
+      chromaBleed: 0.6, headSwitching: 0.7, crtAmount: 0.2 }),
+  ]),
   look('prism-film', 'Prism Film', 'analog', ['film', 'prism', 'grain'], [
-    fx('film-prism', { amount: 0.68, speed: 0.3 }),
+    fx('film-prism', { amount: 0.6, grain: 0.25, speed: 1 }),
     fx('grain', { amount: 0.12 }),
   ]),
   look('wave-blueprint', 'Wave Blueprint', 'editorial', ['line', 'blueprint', 'graphic'], [

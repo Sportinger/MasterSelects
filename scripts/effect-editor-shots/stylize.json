@@ -1,0 +1,34 @@
+{
+  "shots": [
+    {
+      "name": "glow-inspector",
+      "effect": "glow",
+      "params": {
+        "amount": 2.5,
+        "threshold": 0.95,
+        "radius": 80
+      },
+      "image": "neon_rain_street.jpg",
+      "preview": 380,
+      "alt": "Properties, Effects with a Glow card at its default values (Amount 2.5, Threshold 0.95, Softness 0.5, Radius 80, Color white) beside the glowing night street in the preview",
+      "marks": [
+        {
+          "target": "Amount",
+          "label": "Amount: how bright"
+        },
+        {
+          "target": "Threshold",
+          "label": "Threshold: what glows"
+        },
+        {
+          "target": "Radius",
+          "label": "Radius: how far it spreads"
+        }
+      ],
+      "top": "tabs",
+      "hide": [
+        "Particle Out"
+      ]
+    }
+  ]
+}

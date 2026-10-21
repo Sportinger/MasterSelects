@@ -111,7 +111,8 @@ alternative to cable dragging. A Keyframes source references a stored curve,
 not the already-modulated result. Combine it with an LFO through Add/Multiply;
 fan out one source through separate Remaps to control multiple parameters.
 Remap makes unit conversions explicit; Clamp supplies explicit limits. Blur
-Radius cannot be negative. Quality/iteration settings are not control targets.
+Radius cannot be negative; it is measured in pixels of a 1080p frame and scales with
+the rendered size. Quality/iteration settings are not control targets.
 
 An unwired LFO uses clip time: `offset + amplitude * sin(2π * (frequency * time + phase))`.
 Frequency is Hz; phase is cycles. Connect a Time node in Timeline mode to use the
@@ -176,6 +177,15 @@ rig node to its obvious targets (figure joints, or this clip's position and rota
 **Lift** moves the whole figure after ground snapping (negative = up), so jumps work
 with Plant; drive it with Ballistic for a free jump. Facing mirrors the figure around
 its pelvis, so Pelvis X stays a screen position.
+
+**Head** draws the head filled (the original look) or as a ring with the limb
+thickness, up to the head radius; thicker lines grow the ring outward (at most 1.5 ×
+Head Radius) so its opening stays at least half the head radius, and the neck ends
+flat at the ring instead of reaching into it. The inspector shows angles in degrees and lengths and positions in pixels.
+Positions and lengths are kept within ±100 000 figure pixels (beyond that 32-bit GPU
+maths would break the drawing up); the inspector and tool results, `createRig`
+included, say when a value is clamped, when Scale at or below 0 leaves no figure, and
+when the whole figure lies outside its layer.
 
 **Actions.** The Stick Figure's **Actions** lane holds action clips: Idle, Walk, Run,
 Jump, Punch, Kick, Duck, Hit React, Throw, Grab, Land and Fall. Each has authored key
@@ -290,22 +300,29 @@ cannot connect, the node stays unconnected there and the original cable remains.
 
 The Fisheye node groups include Lens Projection, Chromatic Aberration, Lens Vignette
 and Lens Coverage; its other processing areas are advanced building parts.
-The **Color & Mask** category includes **Hue Shift**, built from the existing RGB/HSV
-conversion, vector and scalar math nodes rather than a separate opaque operator.
+The **Color & Mask** category includes **Hue Shift** (the HSV block of Hue Shift
+graphs saved before 2026-10) and the colour recipe blocks of the rebuilt colour
+effects (Brightness Curve, Contrast Curve, Exposure (Stops), White Balance,
+Saturation (Gamut-Safe), Hue Rotate (OkLCh)), all built from existing conversion,
+vector and scalar math nodes rather than separate opaque operators.
 These are also available from the inspector's **Add node** selector in other
 supported image-effect graphs. The parameter and constant folders are organization
 for the original effect, not separate processing blocks.
 
-The **Sampling** section provides **Texel Offset**, **Gaussian Weight**, and
-**Normalize by Weight**. These expand into existing vector, scalar and
-conversion operators. Exact matching formulas in Gaussian Blur, Box Blur and
-Sharpen become shared instances; edited formulas and user group boundaries are
-preserved. Gaussian Blur's original graph is organized into Radius & Sample Count,
-Kernel Sampling, Gaussian Weight, and Weighted Blur & Bypass, with frame input and
-output outside. The radius threshold and existing sampling/alpha arithmetic are
-unchanged. This is an organization/reuse upgrade, not a separable-blur optimization.
+The **Sampling** section provides **Texel Offset**, **Gaussian Weight**,
+**Normalize by Weight**, **Pair Tap Offsets** and **Merge Pair Weights**. These
+expand into existing vector, scalar and conversion operators. Exact matching
+formulas become shared instances; edited formulas and user group boundaries are
+preserved. Box and Gaussian Blur are separable graphs organized into
+Premultiplied Source (cached), Radius & Tap Count, Horizontal Pass, Vertical Pass
+and Straight Alpha Output; each pass uses one Pair Tap Offsets, two kernel weights
+and one Merge Pair Weights block, so another kernel (a tent, a custom curve) only
+replaces the two weight nodes. Motion, Radial and Zoom Blur are organized into
+Premultiplied Source (cached), Blur Range, Tap Counts & Box Length, Stage A (short
+box, cached), Stage B (coarse taps) and Straight Alpha Output. Details: [Effect system → Editable blur kernels](./Effect-System.md#editable-blur-kernels).
+**Natural Logarithm** and **Ceiling** are available as scalar math nodes.
 
-The same organization now covers Box Blur/Sharpen, Motion/Radial/Zoom Blur,
+The same organization now covers Sharpen,
 Glow/Edge Detect, Wave/Twirl/Bulge, Pixelate/Mirror/RGB Split/Blockify/Block Mosaic,
 Brightness/Contrast/Saturation/Exposure/Levels/Temperature/Vibrance/Threshold/
 Posterize/Invert, and all 19 ASCII/Glyph variants (including ASCII Ghost).
@@ -357,6 +374,18 @@ Collapsed local folders expose one input per incoming signal, even when several
 internal nodes consume it. Reconnecting or disconnecting that socket updates all
 of its original leaf endpoints; expanding still reveals the individual wires.
 Value outputs carry their parameter or constant names in the folder interface.
+Other folder ports are named after what they carry, not after the node type that
+computes it: an effect's presentation plan names its key outputs (Sigma, Tap
+Count, Box Length, Is Spin), a clamp that limits a bound parameter to its render
+range carries that parameter's name (Amount, Exposure, Gamma), and outputs with
+their own label (UV, Resolution) keep it; only unnamed outputs of several-output
+nodes read `Node: Port`. A plan can also name inputs whose operator names say
+nothing: Hue Shift's Combine Vector reads Lightness, Chroma and Hue instead of X, Y
+and Z. Saved original color graphs (before 2026-10) keep their original folders
+(Color Processing, Clamp & Alpha); the recipe stages apply only to the recipe.
+A node whose result is used through some of its outputs offers only those: the
+unused Y and Z of a Split Vector whose X feeds another node are not folder outputs.
+A node with no used output still offers all of them, so a new result can be wired out.
 
 The Fisheye upgrade preserves all primitive IDs, parameter bindings, sampling
 scopes and arithmetic, generating the identical shader without additional passes.
@@ -366,11 +395,13 @@ folder but never across its boundary. Migration revisions avoid regrouping a
 previously ungrouped instance. Nested instances retain their children's identities
 and positions through save/reopen and detach locally when edited.
 
-Hue Shift uses the same expandable composition model for its RGB-to-HSV conversion,
-wrapped hue addition and HSV-to-RGB conversion. Its Shift value remains outside the
-shared interior as a normal effect-owned parameter, so keyframes and the original
-0–1 turns contract stay intact. Existing flat Hue Shift graphs are recognized by
-structure and retain their primitive IDs when the composition is opened.
+Hue Shift uses the same expandable composition model: new instances rotate hue in
+OkLCh (RGB to OkLCh, wrapped hue addition, OkLCh to RGB); graphs saved before
+2026-10 keep their RGB-to-HSV block. Its Shift value remains outside the shared
+interior as a normal effect-owned parameter, so keyframes and the original 0–1
+turns contract stay intact (the inspector shows degrees). Existing flat Hue Shift
+graphs are recognized by structure and retain their primitive IDs when the
+composition is opened.
 
 The definitions can be added to other image-effect graphs. Exact structural
 recognition also replaces matching, ungrouped primitive patterns when an existing
@@ -435,7 +466,9 @@ bindings; inputs absent in the new mode disconnect in the same undo step.
 Flock math cards offer all operations supported by the Flock registry.
 
 Numeric **Value** cards use a white accent and show the editable number to the
-left of the output connector. Their **Type** dropdown is available only in the
+left of the output connector. A Value card driven by an effect parameter is titled
+with that parameter (**Radius**, **Length**) instead of "Value"; its outputs in
+a folded folder read "Radius: Value". Their **Type** dropdown is available only in the
 right inspector. Image graphs offer Float and Integer; Integer truncates toward
 zero after parameter animation while retaining the shared numeric signal port.
 Changing type preserves compatible connections and parameter bindings.
@@ -498,7 +531,11 @@ the obstacle search reruns after the drop. Groups containing an endpoint remain
 accessible; unrelated groups, including nested frames, are obstacles. Backward links
 also detour around such groups. Links without a
 clear path inside the search budget and hidden legacy DOM rendering keep direct
-routes. Avoid is an editor preference like the line style.
+routes, and so do facing ports closer than their two port stubs (a value card right
+before its consumer): a grid route there would double back in a loop. Avoid is an
+editor preference like the line style; a graph can also require it
+(`NodeGraph.cableRouting: 'avoid'`, used by the docs graph pictures) without
+changing the preference.
 
 ### Cable branch points
 
@@ -573,7 +610,9 @@ their content changes or the zoom needs a sharper bitmap; overview levels keep
 zoom-in headroom and zooming out reuses a card bitmap for up to one octave, so a
 fast wheel zoom does not re-rasterize every card. While a wheel zoom animates,
 invisible DOM hit targets keep their membership and update once it settles; cables are stroked in shared batches, and
-far overviews draw them slightly thinner. Card hit targets return in small
+far overviews draw them slightly thinner. Below 75 % zoom card titles are drawn larger
+(up to three lines) over the whole card text band, also on folded folders, so
+an overview stays readable. Card hit targets return in small
 batches after a fold. In canvas mode, cable hover, click and context menu use a
 geometry index instead of per-cable DOM paths: the segment between two pointer
 samples is tested, so fast sweeps highlight every cable they cross, and pressing
@@ -643,8 +682,8 @@ the effect through history and project save/load.
 
 The same applies to Exposure, Levels, Hue Shift, Temperature and Vibrance. Their
 inspectors retain the original parameter schemas and keyframes while the canvas
-shows the actual scalar/RGB arithmetic, HSV conversion, channel reducers and
-range/gamma stages. Rewiring those nodes changes the compiled result; source alpha
+shows the actual scalar/RGB arithmetic, colour-space conversions (sRGB/linear,
+OkLCh, HSV), channel reducers and range/gamma stages. Rewiring those nodes changes the compiled result; source alpha
 continues directly to the final combine node.
 
 Threshold exposes Rec.709 luminance, strict comparison and scalar selection as
@@ -857,11 +896,11 @@ samples separately count synchronous calls, cumulative CPU time and maximum job
 time, including work that previously escaped the scheduler through microtasks.
 
 The local development page `/tests/browser/node-effect-performance.html` compares
-Exposure, Chroma Key and Holo against their original registered shaders using
+Exposure and Holo against their original registered shaders using
 synthetic pixels at 1080p and 4K. It warms pipelines, alternates execution order,
 uses GPU timestamp queries when available, and checks output pixels. A separate
 CPU measurement exercises the real fullscreen `EffectsPipeline.applyEffects`
-for Chroma Key and Holo with stable graphs and no preview requests. Exposure is
+for Holo with stable graphs and no preview requests. Exposure is
 excluded from that CPU test because the editor normally fuses it into the
 compositor. Downloadable JSON keeps GPU execution and CPU preparation separate;
 these measurements do not represent whole-editor playback or decode performance.

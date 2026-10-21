@@ -19,7 +19,7 @@ import { buildBaseLayerProps } from './layerBuilder/baseLayers';
 import {
   buildNestedLayersForExport,
   getNestedClipSourceTime,
-  buildTransitionCompositionLayerForExport,
+  buildTransitionCompositionLayersForExport,
 } from './layerBuilder/nestedLayers';
 import { buildTextLikeLayer, isTextLikeClipSource } from './layerBuilder/textLayers';
 import { buildVideoLayer } from './layerBuilder/videoLayers';
@@ -349,7 +349,7 @@ export function buildLayersAtTime(
 
     const activeTransition = transitionParticipantsByTrack?.get(track.id);
     if (activeTransition) {
-      const transitionCompLayer = buildTransitionCompositionLayerForExport({
+      layers.push(...buildTransitionCompositionLayersForExport({
         activeTransition,
         layerIndex: trackIndex,
         parentCompositionId: 'export',
@@ -365,10 +365,7 @@ export function buildLayersAtTime(
         frameRate: ctx.fps,
         parentTransformClips: ctx.compositionClips ?? ctx.renderClipsAtTime ?? ctx.clipsAtTime,
         parentTransformTimelineTime: ctx.time,
-      });
-      if (transitionCompLayer) {
-        layers.push(transitionCompLayer);
-      }
+      }));
       continue;
     }
 

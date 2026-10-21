@@ -6,7 +6,7 @@ import {
 import { compositionRenderer } from '../compositionRenderer';
 import { getEffectiveScale } from '../../utils/transformScale';
 import type { FrameContext } from './types';
-import { buildTransitionNestedCompositionLayer } from './transitionNestedCompositionLayer';
+import { buildTransitionNestedCompositionLayers } from './transitionNestedCompositionLayer';
 import { evaluateParentedClipTransform } from './parentTransformEvaluation';
 import { compositionPixelSizeOf } from '../../utils/parentPositionFrame';
 
@@ -125,13 +125,14 @@ function applyNestedTransitionParentTransforms(input: {
   };
 }
 
-export function buildLayerBuilderNestedTransitionLayer(params: {
+/** The layers of a transition inside a nested composition, top first; null when no transition is active. */
+export function buildLayerBuilderNestedTransitionLayers(params: {
   parentClip: TimelineClip;
   nestedTrack: TimelineTrack;
   layerIndex: number;
   clipTime: number;
   ctx: FrameContext;
-}): Layer | null {
+}): Layer[] | null {
   const { parentClip, nestedTrack, layerIndex, clipTime, ctx } = params;
   const activeTransition = findActiveTransitionPlanForTrack({
     clips: parentClip.nestedClips ?? [],
@@ -144,7 +145,7 @@ export function buildLayerBuilderNestedTransitionLayer(params: {
   if (!activeTransition) return null;
 
   const parentCompositionId = parentClip.compositionId || parentClip.id;
-  const transitionLayer = buildTransitionNestedCompositionLayer({
+  const transitionLayers = buildTransitionNestedCompositionLayers({
     activeTransition,
     layerIndex,
     parentCompositionId,
@@ -162,20 +163,20 @@ export function buildLayerBuilderNestedTransitionLayer(params: {
         compositionRenderer.evaluateAtTime(compositionId, time, options) as Layer[],
     },
   });
-  if (!transitionLayer) return null;
+  if (transitionLayers.length === 0) return null;
   const transitionCompositionId = activeTransition.outgoingClip.transitionOut?.compositionId;
   const transitionComposition = transitionCompositionId
     ? ctx.compositionById.get(transitionCompositionId)
     : undefined;
-  if (!transitionComposition) return transitionLayer;
+  if (!transitionComposition) return transitionLayers;
 
-  return applyNestedTransitionParentTransforms({
-    layer: transitionLayer,
+  return transitionLayers.map((layer) => applyNestedTransitionParentTransforms({
+    layer,
     transitionComposition,
     parentClip,
     parentTime: clipTime,
     outgoingClip: activeTransition.outgoingClip,
     incomingClip: activeTransition.incomingClip,
     ctx,
-  });
+  }));
 }

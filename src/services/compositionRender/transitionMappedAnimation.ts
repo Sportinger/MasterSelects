@@ -8,6 +8,7 @@ import { appendSurfaceEffects, type SurfaceClip } from '../planarTracking/surfac
 import { applyParameterSourcesToEffects } from '../parameterSources/parameterSourceRendering';
 import type { ParameterSourceClip } from '../parameterSources/parameterSourceTargets';
 import {
+  getTransitionOpacityReference,
   isValidTransitionSourceMap,
   resolveTransitionSourceMapTime,
 } from '../timeline/transitionSourceMap';
@@ -58,7 +59,8 @@ function evaluateSingleDomain(
       clip.videoInspectorSections?.stabilization,
       clip,
     )),
-    effects: addSurfaces(cloneEffects(evaluateCompositionClipEffects(clip.effects, keyframes, compositionLocalTime)), clip, compositionLocalTime, keyframes),
+    effects: addSurfaces(cloneEffects(evaluateCompositionClipEffects(clip.effects, keyframes, compositionLocalTime, undefined, clip.startTime ?? 0)),
+      clip, compositionLocalTime, keyframes),
     masks: evaluateCompositionClipMasks(clip.masks, keyframes, compositionLocalTime),
     animationTime: compositionLocalTime,
   };
@@ -78,10 +80,21 @@ function composeScaleAxis(
   return multiplyRelative(original ?? 1, generated ?? 1, base ?? 1);
 }
 
+/**
+ * The clip's own opacity times the transition's factor. Generated opacity
+ * keyframes are relative to getTransitionOpacityReference(base); a clip at
+ * static opacity 0 without generated opacity keyframes keeps its own animation.
+ */
+function composeOpacity(original: number, generated: number, base: number, generatedAnimated: boolean): number {
+  if (!generatedAnimated && !(base > 1e-6)) return original;
+  return original * (generated / getTransitionOpacityReference(base));
+}
+
 function composeTransforms(
   original: ClipTransform,
   generated: ClipTransform,
   parentBase: ClipTransform,
+  generatedOpacityAnimated: boolean,
 ): ClipTransform {
   const scaleAll = composeScaleAxis(
     original.scale.all,
@@ -95,7 +108,7 @@ function composeTransforms(
   );
 
   return {
-    opacity: multiplyRelative(original.opacity, generated.opacity, parentBase.opacity),
+    opacity: composeOpacity(original.opacity, generated.opacity, parentBase.opacity, generatedOpacityAnimated),
     blendMode: generated.blendMode,
     position: {
       x: original.position.x + generated.position.x - parentBase.position.x,
@@ -121,6 +134,8 @@ function composeTransforms(
   };
 }
 
+/** Source effects run on the parent clip's clock (keyed rates travel as on the parent timeline,
+ * from `parentClockStart`); generated effects on the composition clock from `clipClockStart`. */
 function evaluateEffectsByDomain(
   effects: Effect[],
   sourceEffectCount: number,
@@ -128,11 +143,14 @@ function evaluateEffectsByDomain(
   animationTime: number,
   generatedKeyframes: readonly Keyframe[] | undefined,
   compositionLocalTime: number,
+  [parentClockStart, clipClockStart]: readonly [number, number],
 ): Effect[] {
   return effects.map((effect, index) => cloneEffects(evaluateCompositionClipEffects(
     [effect],
     index < sourceEffectCount ? parentKeyframes : generatedKeyframes,
     index < sourceEffectCount ? animationTime : compositionLocalTime,
+    undefined,
+    index < sourceEffectCount ? parentClockStart : clipClockStart,
   ))[0]!);
 }
 
@@ -201,7 +219,12 @@ export function evaluateTransitionMappedAnimation(
   );
 
   return {
-    transform: composeTransforms(originalTransform, generatedTransform, parentAnimation.baseTransform),
+    transform: composeTransforms(
+      originalTransform,
+      generatedTransform,
+      parentAnimation.baseTransform,
+      keyframes?.some((keyframe) => keyframe.property === 'opacity') === true,
+    ),
     effects: addSurfaces(evaluateEffectsByDomain(
       clip.effects,
       parentAnimation.sourceEffectIds.length,
@@ -209,6 +232,7 @@ export function evaluateTransitionMappedAnimation(
       animationTime,
       keyframes,
       compositionLocalTime,
+      [parentAnimation.parameterTimelineStart ?? clip.startTime ?? 0, clip.startTime ?? 0],
     ), clip, compositionLocalTime, keyframes),
     masks: evaluateMasksByDomain(
       clip.masks,

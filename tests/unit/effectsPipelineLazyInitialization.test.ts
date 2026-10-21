@@ -65,7 +65,12 @@ describe('EffectsPipeline startup', () => {
 
     const pipeline = new EffectsPipeline(device, onPipelineReady);
     await pipeline.createPipelines();
+    // Graph-owned effects (the blurs) render through their compiled graph: prewarm skips their
+    // registered reference shader instead of compiling a pipeline nothing uses.
     pipeline.prewarmEffect('gaussian-blur');
+    pipeline.prewarmEffect('motion-blur');
+    expect(device.pushErrorScope).not.toHaveBeenCalled();
+    pipeline.prewarmEffect('lens-correction');
 
     expect(pipeline.getPipelineCount()).toBe(0);
     expect(device.pushErrorScope).toHaveBeenCalledWith('validation');

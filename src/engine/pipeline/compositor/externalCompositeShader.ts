@@ -569,6 +569,8 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let sourceUV = orientSourceUv(displaySourceUV);
   let baseColor = textureSample(baseTexture, texSampler, input.uv);
   var layerColor = textureSampleBaseClampToEdge(videoTexture, texSampler, sourceUV);
+  // Low byte = blend mode; bit 8 (premultiplied source) never applies to external video.
+  let blendMode = layer.blendMode & 0xFFu;
 
   // Apply inline color effects (invert → brightness+contrast → saturation)
   var ec = layerColor.rgb;
@@ -583,7 +585,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   var blended: vec3f;
   var finalAlpha: f32 = maskAlpha * layer.opacity;
 
-  switch (layer.blendMode) {
+  switch (blendMode) {
     case 0u: { blended = blendNormal(baseColor.rgb, layerColor.rgb); }
     case 1u: { blended = blendDissolve(baseColor.rgb, layerColor.rgb, input.uv, layer.opacity); finalAlpha = 1.0; }
     case 2u: { blended = blendDancingDissolve(baseColor.rgb, layerColor.rgb, input.uv, layer.opacity, layer.time); finalAlpha = 1.0; }
@@ -621,6 +623,7 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     case 34u: { blended = baseColor.rgb; finalAlpha = (1.0 - layerColor.a) * layer.opacity; }
     case 35u: { blended = baseColor.rgb; finalAlpha = (1.0 - getLuminosity(layerColor.rgb)) * layer.opacity; }
     case 36u: { blended = layerColor.rgb; finalAlpha = min(baseColor.a + layerColor.a * layer.opacity, 1.0); }
+    case 37u: { blended = layerColor.rgb; }
     default: { blended = layerColor.rgb; }
   }
 
@@ -635,10 +638,15 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     finalAlpha = finalAlpha * maskValue;
   }
 
-  if (layer.blendMode >= 32u && layer.blendMode <= 35u) {
+  if (blendMode >= 32u && blendMode <= 35u) {
     return vec4f(blended * finalAlpha, finalAlpha);
   }
-  if (layer.blendMode == 36u) {
+  // Plus (Porter-Duff) for dissolves: add premultiplied colour and alpha.
+  if (blendMode == 37u) {
+    let plusAlpha = select(finalAlpha, 0.0, outOfBounds);
+    return vec4f(min(baseColor.rgb + blended * plusAlpha, vec3f(1.0)), min(baseColor.a + plusAlpha, 1.0));
+  }
+  if (blendMode == 36u) {
     return vec4f(mix(baseColor.rgb, blended, layerColor.a * layer.opacity), finalAlpha);
   }
 

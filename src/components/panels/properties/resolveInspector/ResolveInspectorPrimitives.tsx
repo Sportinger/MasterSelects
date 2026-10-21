@@ -54,6 +54,8 @@ interface ResolveInspectorRowProps {
   className?: string;
   disabled?: boolean;
   label: string;
+  /** Id of the row's single control, so its label text activates it. */
+  labelFor?: string;
   title?: string;
 }
 
@@ -63,6 +65,7 @@ export function ResolveInspectorRow({
   className,
   disabled = false,
   label,
+  labelFor,
   title,
 }: ResolveInspectorRowProps) {
   return (
@@ -72,6 +75,7 @@ export function ResolveInspectorRow({
       className={className}
       disabled={disabled}
       label={label}
+      labelFor={labelFor}
       title={title}
       variant="resolve"
     >

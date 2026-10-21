@@ -7,7 +7,7 @@ import {
   DEFAULT_TRANSITION_PLACEMENT,
   findActiveTransitionPlanForTrack,
 } from '../../stores/timeline/editOperations/transitionPlanner';
-import { buildTransitionNestedCompositionLayer } from '../layerBuilder/transitionNestedCompositionLayer';
+import { buildTransitionNestedCompositionLayers } from '../layerBuilder/transitionNestedCompositionLayer';
 import type { BackgroundVideoPlaybackOptions } from './layerEvaluation';
 import type {
   CompositionMediaFile,
@@ -99,7 +99,7 @@ export function buildCompositionTransitionLayersForTrack(params: {
   });
   if (!activeTransition) return null;
 
-  const nestedLayer = buildTransitionNestedCompositionLayer({
+  const nestedLayers = buildTransitionNestedCompositionLayers({
     activeTransition,
     layerIndex: trackIndex,
     parentCompositionId: compositionId,
@@ -113,5 +113,5 @@ export function buildCompositionTransitionLayersForTrack(params: {
       evaluateCompositionAtTime,
     },
   });
-  return nestedLayer ? [nestedLayer as EvaluatedLayer] : [];
+  return nestedLayers as EvaluatedLayer[];
 }

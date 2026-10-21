@@ -1,6 +1,8 @@
 import type { TimelineClip } from '../../types/timeline';
 import { isColorGradeNode, parseColorProperty, RUNTIME_COLOR_PARAM_DEFS } from '../../types/colorCorrection';
 import { HUE_SHIFT_PARAMS } from '../../effects/color/remainingColorParams';
+import type { EffectParam } from '../../effects/types';
+import { effectParamDisplay, type ParamDisplay } from '../../effects/paramDisplay';
 import { GAUSSIAN_BLUR_PARAMS } from '../../effects/blur/gaussian/params';
 import { slitScanParams } from '../../effects/time/slit-scan/parameters';
 import { graphParameterTargets } from './graphParameterTargets';
@@ -19,6 +21,8 @@ export interface ParameterSourceTarget {
   unit: string;
   hardMin?: number;
   hardMax?: number;
+  /** Display only: rows show value × display.scale with its suffix (Hue Shift: turns as degrees). */
+  display?: ParamDisplay;
 }
 
 export type ParameterSourceClip = Pick<TimelineClip, 'effects' | 'colorCorrection' | 'nodeGraph' | 'startTime'>
@@ -56,11 +60,12 @@ export function parameterSourceTargets(clip: ParameterSourceClip): ParameterSour
     const entry = effect.type === 'hue-shift' ? { name: 'shift', def: HUE_SHIFT_PARAMS.shift, unit: 'turns' }
       : effect.type === 'gaussian-blur' ? { name: 'radius', def: GAUSSIAN_BLUR_PARAMS.radius, unit: 'pixels' } : undefined;
     if (!entry) continue;
-    const { name, def, unit } = entry;
+    const { name, unit } = entry, def: EffectParam = entry.def;
     const stored = effect.params[name];
     targets.push({ path: `effect.${effect.id}.${name}`, label: def.label, group: effect.name,
       value: typeof stored === 'number' ? stored : Number(def.default), defaultValue: Number(def.default),
       min: def.min ?? 0, max: def.max ?? 1, step: def.step ?? 0.01, unit,
+      ...(def.displayScale || def.displayUnit ? { display: effectParamDisplay(def, typeof stored === 'number' ? stored : Number(def.default)) } : {}),
       ...(effect.type === 'gaussian-blur' ? { hardMin: 0 } : {}) });
   }
   return targets;

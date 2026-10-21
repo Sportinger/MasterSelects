@@ -38,7 +38,7 @@ const EXACT: Record<string, NodeCategoryId> = {
   'geometry.motion-time': 'time',
   'image.timeline-time': 'values', 'math.constant': 'values', 'signal.sine-gain.scalar': 'values',
   'convert.degrees-to-radians.scalar': 'math',
-  'convert.rgb-to-hsv': 'color', 'convert.hsv-to-rgb': 'color', 'image.mask-overlay': 'color', 'image.luminance': 'color',
+  'convert.rgb-to-hsv': 'color', 'convert.hsv-to-rgb': 'color', 'convert.rgb-to-oklch': 'color', 'convert.oklch-to-rgb': 'color', 'image.mask-overlay': 'color', 'image.luminance': 'color',
   'image.rgb-split': 'vector', 'image.rgb-combine': 'vector',
   'color.sobel-magnitude': 'sampling', 'field.sobel': 'sampling', 'image.sample': 'sampling', 'image.load-pixel-clamped': 'sampling',
   'image.materialize': 'sampling', 'image.resource-input': 'sampling', 'image.segment-sort-luma': 'sampling', 'image.quadtree-partition': 'sampling',
@@ -134,14 +134,20 @@ const VARIANT_LABELS: Record<string, string> = {
   value: 'Value', 'value-lazy': 'Value (lazy)', vector: 'Vector 2', box: 'Box', sphere: 'Sphere', cylinder: 'Cylinder',
   auto: 'Automatic', fine: 'Fine', coarse: 'Coarse',
 };
-export function operatorVariantLabel(operator: Pick<OperatorDefinition, 'variant'>): string {
+/** Families whose variants are algorithms rather than component counts. */
+const FAMILY_VARIANT_LABELS: Record<string, Record<string, string>> = {
+  'noise.hash2d': { vec2: 'Sine', pcg: 'Integer (PCG)' },
+};
+export function operatorVariantLabel(operator: Pick<OperatorDefinition, 'variant'> & Partial<Pick<OperatorDefinition, 'family'>>): string {
   const variant = operator.variant ?? '';
-  return VARIANT_LABELS[variant] ?? variant.replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
+  return FAMILY_VARIANT_LABELS[operator.family ?? '']?.[variant] ?? VARIANT_LABELS[variant]
+    ?? variant.replace(/-/g, ' ').replace(/\b\w/g, letter => letter.toUpperCase());
 }
 /** Inspector row label for a family's variant choice. */
 export function operatorFamilyChoiceLabel(family: string | undefined): string {
   return family === 'values.numeric' ? 'Type' : family === 'geometry.primitive' ? 'Shape' : family === 'color.luminance' ? 'Standard'
-    : family === 'control.switch' ? 'Switches' : family === 'image.derivative' ? 'Precision' : family === 'image.temporal-smooth' ? 'Smooths' : 'Components';
+    : family === 'control.switch' ? 'Switches' : family === 'image.derivative' ? 'Precision' : family === 'image.temporal-smooth' ? 'Smooths'
+      : family === 'noise.hash2d' ? 'Algorithm' : 'Components';
 }
 
 export interface OperatorMenuGroup<T> { id: NodeCategoryId | 'other'; label: string; entries: T[] }

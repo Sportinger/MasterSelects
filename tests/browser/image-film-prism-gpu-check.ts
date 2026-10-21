@@ -1,7 +1,7 @@
 import common from '../../src/effects/_shared/commonShader';
 import { imageGraphProgramShader } from '../../src/effects/_shared/imageGraphDefinition';
 import { filmPrism } from '../../src/effects/analog';
-import { createDefaultFilmPrismGraph } from '../../src/services/operators/filmPrismEffectGraph';
+import { createLegacyFilmPrismGraph } from '../../src/services/operators/legacyFilmPrismGraph';
 import { compileImageOperatorGraph } from '../../src/services/operators/imageOperatorGraph';
 import { packImageOperatorRuntimeUniforms } from '../../src/services/operators/imageOperatorRuntimeUniforms';
 import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
@@ -66,7 +66,7 @@ async function render(device: GPUDevice, sampler: GPUSampler, source: GPUTexture
 }
 
 function directGraph(): EffectOperatorGraph {
-  const graph = structuredClone(createDefaultFilmPrismGraph());
+  const graph = structuredClone(createLegacyFilmPrismGraph());
   const frame = graph.nodes.find(node => node.operator === 'image.frame'), output = graph.nodes.find(node => node.operator === 'image.output');
   if (!frame || !output) throw new Error('Film Prism default graph lacks image boundaries');
   graph.edges = graph.edges.filter(edge => edge.to !== output.id);
@@ -83,7 +83,7 @@ export async function checkFilmPrismGraphGpu(device: GPUDevice): Promise<number>
   let comparisons = 0, processed: Uint8Array | undefined;
   try {
     for (const item of cases) {
-      const values = params(item.params), plan = compileImageOperatorGraph(createDefaultFilmPrismGraph(), values);
+      const values = params(item.params), plan = compileImageOperatorGraph(createLegacyFilmPrismGraph(), values);
       const expected = await render(device, sampler, source.createView(), target, readback, filmPrism.shader, filmPrism.entryPoint, legacyUniforms(values, item.time));
       const actual = await render(device, sampler, source.createView(), target, readback, imageGraphProgramShader(plan, 'filmPrismGraphFragment'),
         'filmPrismGraphFragment', packImageOperatorRuntimeUniforms(plan, item.time, width, height));

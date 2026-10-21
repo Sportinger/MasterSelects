@@ -33,14 +33,15 @@ export interface ImageOperatorPlan extends ImageOperatorProgram {
   valueBindings?: readonly ImageOperatorValueBinding[];
   fusion: 'inline'; capabilities: readonly ImageOperatorCapability[]; instructions: ImagePlanInstruction[]; output: number;
   sampleScopes: readonly ImageOperatorSampleScope[];
-  kernelScopes?: readonly { id: number; sample: number; weight: number }[];
-  rectScopes?: readonly { id: number; sample: number; weight: number }[];
+  /** `captures`: registers of the enclosing scope the kernel term reads (loop-invariant values computed once). */
+  kernelScopes?: readonly { id: number; sample: number; weight: number; captures?: readonly number[] }[];
+  rectScopes?: readonly { id: number; sample: number; weight: number; captures?: readonly number[] }[];
   sequenceScopes?: readonly { id: number; sample: number; weight: number; blend?: boolean }[];
   segmentSortScopes?: readonly { id: number; sample: number }[];
   quadtreeScopes?: readonly { id: number; sample: number }[];
   resourceInputs?: readonly string[]; resourceSampling?: readonly ImageOperatorResourceSampling[];
   passes?: readonly { id: string; program: ImageOperatorPlan; inputResources: readonly string[]; outputResource?: string }[];
-  resources?: readonly { id: string; producerPassId: string; format: 'rgba16float'; maxEdge?: number }[];
+  resources?: readonly { id: string; producerPassId: string; format: 'rgba16float'; maxEdge?: number; scale?: number }[];
   previewResourceId?: string; frameHistoryResource?: string;
   externalResources?: readonly ImageOperatorExternalResource[]; fieldResources?: readonly ImageOperatorFieldResource[];
 }

@@ -3,6 +3,7 @@ import type { NodeGraph, NodeGraphDocument, NodeGraphNode } from '../../types/no
 import type { Keyframe } from '../../types/keyframes';
 import type { TimelineClip } from '../../types/timeline';
 import { buildEffectOperatorGraph } from './effectGraphProjection';
+import { getEffectDisplayName } from '../../effects';
 import { findClipOperatorEffect, resolveClipOperatorOwner } from '../operators/clipOperatorGraphOwner';
 import { hasEffectOperatorGraph } from '../operators/effectGraphOwner';
 import { foldOperatorGroups } from './nestedOperatorGroups';
@@ -31,7 +32,7 @@ export function buildUnifiedClipGraph(document: NodeGraphDocument, clip: Timelin
     const state = clip.nodeGraph?.groups?.[groupId];
     const offset = state?.position ?? { x: cursor + 35, y: 95 };
     const collapsed = !expandAllGroups && state?.collapsed !== false;
-    const group = { id: groupId, label: effect?.name ?? (groupId === 'text' ? 'Text' : groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
+    const group = { id: groupId, label: effect ? getEffectDisplayName(effect) : (groupId === 'text' ? 'Text' : groupId === 'scene3d' ? '3D Scene' : groupId === 'flock' ? 'Flock' : 'Color'),
       color: groupId === 'scene3d' ? '#d7a262' : groupId === 'flock' ? '#7ea65b' : groupId === 'color' ? '#ba8bd6' : '#55a6c4', collapsed, nodeIds: [] as string[], proxyId: rootNode.id, issue: inner.issue,
       ...(effect ? { effectId: effect.id, bypassNodeId: rootNode.id, bypassed: !effect.enabled && !effect.detached, ...(effect.detached ? { detached: true } : {}) } : {}),
       // Only a still empty image graph (clip input and output anchors) keeps a hand-sized frame.

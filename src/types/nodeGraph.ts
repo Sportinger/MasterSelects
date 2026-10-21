@@ -24,6 +24,8 @@ export type NodeGraphAudioSemanticKind =
 export interface NodeGraphPortMetadata {
   /** Recorded dependency, changed through its owning action rather than cable editing. */
   readOnly?: boolean;
+  /** The label names what the value is (an effect presentation plan's role, such as "Sigma"); folder ports keep it. */
+  carriedLabel?: boolean;
   animationProperty?: string;
   controlProperty?: string;
   sourceArtifact?: { kind: 'face-landmarks' | 'scene-depth'; effectId?: string };
@@ -233,6 +235,11 @@ export interface NodeGraph {
     composition?: { operatorId: string; description: string; position: NodeGraphLayout; inputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }>; outputs: Array<OperatorPort & { endpoints: OperatorEndpoint[] }> } }>;
   /** Uncollapsed nodes used to resolve exposed ports of nested groups. */
   expandedNodes?: NodeGraphNode[];
+  /** Zoomed-out card titles: `uniform` gives every card one size (docs pictures), instead of each filling its card. */
+  overviewTitles?: 'fit' | 'uniform';
+  /** `avoid`: cables route around cards whatever the editor preference (docs pictures: a cable
+   * drawn behind a card would show the wrong wiring). */
+  cableRouting?: 'avoid';
 }
 
 export interface NodeGraphView {

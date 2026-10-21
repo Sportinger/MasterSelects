@@ -1,3 +1,5 @@
+import type { WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
+import type { WorkerSoftwareMirrorPixelAdjustment } from './workerSoftwareMirrorPixelEffects';
 import type {
   RenderCommand,
   RenderCommandTarget,
@@ -159,24 +161,26 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly outputBlack: number;
     readonly outputWhite: number;
   }[];
+  /** Current Threshold (effects/stylize/pointwiseModel.ts): Softness 0 is the strict step. */
   readonly thresholdAdjustments?: readonly {
     readonly level: number;
+    readonly softness?: number;
   }[];
+  /** Current Posterize (effects/stylize/pointwiseModel.ts): Softness rounds the steps, Brightness Only keeps hue. */
   readonly posterizeAdjustments?: readonly {
     readonly levels: number;
+    readonly softness?: number;
+    readonly brightnessOnly?: boolean;
   }[];
+  /** Current Vignette (graphless effects): distance with the corners at 1, Roundness 0 = frame shape, 1 = circle in pixels. */
   readonly vignetteAdjustments?: readonly {
     readonly amount: number;
     readonly size: number;
     readonly softness: number;
     readonly roundness: number;
   }[];
-  readonly chromaKeyAdjustments?: readonly {
-    readonly keyColor: 'green' | 'blue';
-    readonly tolerance: number;
-    readonly softness: number;
-    readonly spillSuppression: number;
-  }[];
+  /** Chroma Key screen matte without the Edge kernel (see effects/keying/chroma-key/keyerCpu.ts). */
+  readonly chromaKeyAdjustments?: readonly import('../../effects/keying/chroma-key/keyerCpu').ChromaKeyCpuSettings[];
   readonly edgeDetectAdjustments?: readonly {
     readonly strength: number;
     readonly invert: boolean;
@@ -186,13 +190,16 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly radius: number;
   }[];
   readonly glowAdjustments?: readonly {
+    /** 'bloom': a graphless (current) Glow (workerSoftwareBloom.ts), Radius in 1080p pixels; otherwise the earlier ring Glow. */
+    readonly recipe?: 'bloom';
     readonly amount: number;
     readonly threshold: number;
     readonly radius: number;
     readonly softness: number;
-    readonly rings: number;
-    readonly samplesPerRing: number;
+    readonly rings?: number;
+    readonly samplesPerRing?: number;
   }[];
+  /** Current Scanlines (effects/stylize/scanlines/scanlinesModel.ts): too dense lines fade into an even darkening. */
   readonly scanlineAdjustments?: readonly {
     readonly density: number;
     readonly opacity: number;
@@ -203,28 +210,8 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly size: number;
     readonly speed: number;
   }[];
-  readonly waveAdjustments?: readonly {
-    readonly amplitudeX: number;
-    readonly amplitudeY: number;
-    readonly frequencyX: number;
-    readonly frequencyY: number;
-  }[];
-  readonly kaleidoscopeAdjustments?: readonly {
-    readonly segments: number;
-    readonly rotation: number;
-  }[];
-  readonly twirlAdjustments?: readonly {
-    readonly amount: number;
-    readonly radius: number;
-    readonly centerX: number;
-    readonly centerY: number;
-  }[];
-  readonly bulgeAdjustments?: readonly {
-    readonly amount: number;
-    readonly radius: number;
-    readonly centerX: number;
-    readonly centerY: number;
-  }[];
+  /** Untouched built-in Wave, Twirl and Bulge & Pinch (edited graphs run as imageOperatorPlans). */
+  readonly uvDistortAdjustments?: readonly WorkerSoftwareUvDistortAdjustment[];
   readonly fisheyeAdjustments?: readonly {
     readonly projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';
     readonly strength: number;
@@ -246,30 +233,24 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly vignetteSoftness: number;
     readonly samples: number;
   }[];
+  /** Directional blurs follow effects/blur/blurSampling.ts (Motion/Radial pass through below 0, pixel-space Motion angle). */
   readonly motionBlurAdjustments?: readonly {
     readonly amount: number;
     readonly angle: number;
-    readonly samples: number;
   }[];
   readonly radialBlurAdjustments?: readonly {
     readonly amount: number;
     readonly centerX: number;
     readonly centerY: number;
-    readonly samples: number;
+    readonly mode: 'zoom' | 'spin';
   }[];
   readonly zoomBlurAdjustments?: readonly {
     readonly amount: number;
     readonly centerX: number;
     readonly centerY: number;
-    readonly samples: number;
   }[];
-  readonly mirrorHorizontal?: boolean;
-  readonly mirrorVertical?: boolean;
-  readonly pixelateSize?: number;
-  readonly rgbSplit?: {
-    readonly amount: number;
-    readonly angle: number;
-  };
+  /** Untouched built-in Kaleidoscope, Mirror, RGB Split and Pixelate, in stack order (edited graphs run as imageOperatorPlans). */
+  readonly mirrorPixelAdjustments?: readonly WorkerSoftwareMirrorPixelAdjustment[];
   readonly colorGradePrimaryNodes?: readonly RuntimePrimaryColorParams[];
 }
 

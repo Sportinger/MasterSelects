@@ -1,4 +1,5 @@
 import common from '../../src/effects/_shared/commonShader';
+import { createEarlierStylizeGraph } from '../../src/services/operators/stylizeRecipes';
 import { imageGraphDefinition } from '../../src/effects/_shared/imageGraphDefinition';
 import { grain } from '../../src/effects/stylize/grain';
 import { scanlines } from '../../src/effects/stylize/scanlines';
@@ -76,7 +77,8 @@ export async function checkTimeEffectsGpu(device: GPUDevice, sampler: GPUSampler
   try {
     for (const item of cases) {
       const legacy = definitions[item.type] as FullscreenEffectDefinition;
-      const graph = imageGraphDefinition({ type: item.type, params: item.params }, legacy, item.time);
+      // The registered shaders are the earlier (pre-2026-10-21) recipes; saved projects keep them.
+      const graph = imageGraphDefinition({ type: item.type, params: item.params, operatorGraph: createEarlierStylizeGraph(item.type) }, legacy, item.time);
       const expected = await render(device, sampler, source.createView(), target, readback, legacy, item.params, item.time);
       const actual = await render(device, sampler, source.createView(), target, readback, graph, item.params, item.time);
       const mismatch = expected.findIndex((value, index) => value !== actual[index]);
