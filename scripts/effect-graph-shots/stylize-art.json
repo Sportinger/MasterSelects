@@ -1,0 +1,8 @@
+{
+  "shots": [
+    "acuarela?plumbing=hide&omit=output,organized-acuarela-controls,organized-acuarela-space&cables=avoid@acuarela",
+    "acuarela?focus=pigment-density&cables=avoid&marks=density:below,density-painted:below@acuarela-pigment-density",
+    "voxel-relief?open=column-geometry",
+    "pixel-particle-disintegrate?open=forces&cables=avoid"
+  ]
+}
