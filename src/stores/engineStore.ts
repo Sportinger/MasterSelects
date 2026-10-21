@@ -45,6 +45,11 @@ export type GaussianSplatLoadProgressUpdate = Omit<
   percent?: number;
 };
 
+export interface EngineInitFailureOptions {
+  /** Show GPU setup advice (Linux Vulkan banner, driver help). Default true. */
+  setupAdvice?: boolean;
+}
+
 interface EngineState {
   // Engine status
   isEngineReady: boolean;
@@ -53,6 +58,8 @@ interface EngineState {
   engineStats: EngineStats;
   gpuInfo: { vendor: string; device: string; description: string } | null;
   linuxVulkanWarning: boolean;
+  /** False when the failure is not a setup problem (e.g. recovery after the GPU already worked). */
+  engineInitSetupAdvice: boolean;
   sceneNavClipId: string | null;
   // Effect-camera orbit mode: preview drags drive the named effect instance's
   // camera params (see EffectCameraInteraction). Ephemeral, clip-scoped.
@@ -73,7 +80,7 @@ interface EngineState {
 
   // Actions
   setEngineReady: (ready: boolean) => void;
-  setEngineInitFailed: (failed: boolean, error?: string) => void;
+  setEngineInitFailed: (failed: boolean, error?: string, options?: EngineInitFailureOptions) => void;
   setEngineStats: (stats: EngineStats) => void;
   setGpuInfo: (info: { vendor: string; device: string; description: string } | null) => void;
   setLinuxVulkanWarning: (show: boolean) => void;
@@ -193,6 +200,7 @@ export const useEngineStore = create<EngineState>()(
     engineInitError: null,
     gpuInfo: null,
     linuxVulkanWarning: false,
+    engineInitSetupAdvice: true,
     sceneNavClipId: null,
     effectOrbitTarget: null,
     sceneNavOrbitTarget: null,
@@ -226,13 +234,15 @@ export const useEngineStore = create<EngineState>()(
       set({ isEngineReady: ready });
     },
 
-    setEngineInitFailed: (failed: boolean, error?: string) => {
+    setEngineInitFailed: (failed: boolean, error?: string, options?: EngineInitFailureOptions) => {
       const isLinux = navigator.platform.toLowerCase().includes('linux')
         && !/android/i.test(navigator.userAgent);
+      const setupAdvice = options?.setupAdvice ?? true;
       set({
         engineInitFailed: failed,
         engineInitError: error ?? null,
-        linuxVulkanWarning: failed && isLinux
+        engineInitSetupAdvice: setupAdvice,
+        linuxVulkanWarning: failed && setupAdvice && isLinux
           && !localStorage.getItem(LINUX_VULKAN_DISMISSED_KEY),
       });
     },

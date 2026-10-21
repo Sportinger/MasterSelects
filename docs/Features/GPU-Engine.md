@@ -71,9 +71,12 @@ Each loss incident files at most one error. The first real loss's error waits
 for the recovery outcome: a recovered device reports `Device lost`, while a
 recovery that gives up (for example when Chrome refuses a new adapter after
 repeated GPU-process crashes) reports only `GPU recovery failed`, including the
-original loss message. The individual recovery attempts in between are
-warnings. The preview then says the GPU stopped responding and asks to save and
-reload the editor to restore it. The console capture in runtime diagnostics
+loss message of that incident as `lostDevice` (also for a later loss whose
+`Device lost` was not filed again). The individual recovery attempts in between
+are warnings. The preview then says the GPU stopped responding and asks to save
+and reload the editor to restore it. Because the GPU already worked in this
+session, a recovery failure shows no setup advice: no Linux Vulkan banner and no
+driver/Vulkan help line (`setEngineInitFailed(..., { setupAdvice: false })`). The console capture in runtime diagnostics
 drops the Logger's clock prefix so a logged failure keeps one stable message.
 
 Targeted coverage: `webgpuContext.test.ts`, `contextRecoveryWiring.test.ts`,

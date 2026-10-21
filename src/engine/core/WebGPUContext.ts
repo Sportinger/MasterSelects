@@ -67,6 +67,7 @@ export class WebGPUContext {
   private hasTriedLowPowerFallback = false;
   private powerPreferenceFallbackCallbacks: Set<(preference: GPUPowerPreference) => void> = new Set();
   private readonly lossPolicy = new DeviceLossPolicy();
+  private incidentLossMessage: string | null = null; // loss that started the current incident
 
   async initialize(powerPreference?: GPUPowerPreference): Promise<boolean> {
     // Store the preference if provided
@@ -371,6 +372,7 @@ export class WebGPUContext {
     const recoveryGeneration = ++this.initializationGeneration;
     const decision = this.lossPolicy.classify();
     const details = { reason: info.reason, message: info.message, kind: decision.kind };
+    this.incidentLossMessage = info.message;
     if (decision.report === 'error') {
       this.lossPolicy.holdReport(info.message);
       log.warn('Device lost; recovering before reporting', details);
@@ -458,8 +460,9 @@ export class WebGPUContext {
           this.initializationFailure === 'device_timeout' ||
           this.initializationFailure === 'unsupported') break;
     }
-    // The one error of this incident; it carries the loss that started it.
-    const lostDevice = this.lossPolicy.takeHeldReport();
+    // The one error of this incident; it carries the loss that started it,
+    // also when an earlier incident already filed that first loss.
+    const lostDevice = this.lossPolicy.takeHeldReport() ?? this.incidentLossMessage;
     log.error('GPU recovery failed', {
       attempts: this.recoveryAttempts,
       failure: this.initializationFailure,
