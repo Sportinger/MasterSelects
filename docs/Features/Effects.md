@@ -254,17 +254,27 @@ its radial/rings profile branch, returning to the upstream linear/center/wave pr
 - **Source sampling** decodes the source video independently, applying clip trim
   and speed. Render preceding effects to an intermediate video to include them;
   arbitrary preceding effect stacks are not reevaluated.
-- **Look** (top of the Time section) applies a starting point: Sweep · left → right
-  (the defaults), Falling time · top → bottom, Out from the center, Wave folds, Radial
-  bloom, Time rings or Time steps · 12 bands. A look sets only Profile, Angle, Delay,
-  Time bands, Mix, Waves, Phase and Speed; it reads **Custom** once any of them changes.
+- **Look** (top of the Time section) applies a starting point: Sweep (left → right, the
+  defaults), Falling time (top → bottom), Center out, Wave folds, Radial bloom, Time
+  rings or Time steps (12 bands). A look sets only Profile, Angle, Delay, Time bands,
+  Mix, Waves, Phase and Speed; it reads **Custom** once any of them changes, and while
+  any of them has keyframes or a node source (the inspector names those values, which
+  keep animating).
+- **Radial scan** and **Time rings** live in the Wave & Profile folder of the graph.
+  Earlier graphs kept them in the Protected Center folder, whose mute (the default for
+  new effects) routed the profile back to Wave, so Radial scan and Time rings rendered as
+  Wave. Saved graphs are upgraded on load (the nodes move to the profile folder) and
+  now render the chosen profile; muting Protected Center removes only the protection.
 - **Time** and **Wave** come first in the Slit Scan inspector, followed by **Sampling**
   and **Preview quality** (collapsed), because these sections have no bypass switch. Newly added effects start with 3D geometry enabled and the other switchable sections bypassed and collapsed; enabling a section opens it. Existing effects keep their saved switch states. Time opens by default. **Preview quality**
   switches between Small preview
   (160 px maximum edge) and Full size. Both use the same source timestamps and sample
   count. New Slit Scan effects default to resident GPU history, 4 GiB history memory,
-  Blend adjacent frames temporal sampling (Nearest leaves hard stair steps on moving
-  subjects; older saved effects without this setting already rendered with Blend),
+  Blend adjacent frames temporal sampling (**Sampling → Temporal sampling**; Nearest
+  leaves hard stair steps on moving subjects, Blend softens them into overlapping
+  ghosts but does not remove them on fast limbs: **Motion compensation** shifts each
+  frame along the optical flow for a continuous smear; older saved effects without
+  this setting already rendered with Blend),
   shared-source Hybrid export processing, 1920 samples,
   zero scan smoothing, a 0.25 deformation threshold, Full size and Adaptive preview quality.
   The sample count is limited by the source's longer dimension in the inspector.
@@ -783,9 +793,14 @@ Chroma Key is an editable screen-difference keyer in three passes: a 64 px Scree
 Grid of screen-like colours, a 1 px Screen Color average (the automatic screen
 colour) and the key pass with Clip Black/White, optional Shrink/Grow and Edge
 Softness passes (pixels at 1080p, none while both are 0), screen subtraction with
-the local grid colour, and Neutral or Gentle spill suppression. See
+the local grid colour, and Neutral or Gentle spill suppression. A picked screen colour
+folds both measurement passes away. See
 [Keying and Time Effects](./Effects-Keying-Time.md). Untouched saved Rec.601 graphs
-upgrade; edited ones keep reading the retired Tolerance and Edge Softness.
+upgrade; edited ones keep reading the retired Tolerance and Edge Softness: their
+inspector shows those controls, and tools report the new parameters as unused there.
+The worker CPU keyer (software preview and export readback) keys only a layer whose
+sole effect is Chroma Key; with other effects or a colour grade it declines, since its
+fixed order and source-frame screen measurement would differ from the GPU.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
 feedback decay, and final RGBA mixing as shared nodes. Detail changes frequency,
@@ -1555,9 +1570,13 @@ graphs scroll sideways on narrow screens.
 For an effect without folders (Time Stack), `only=` without `focus` picks the
 recipe from the whole effect. In a recipe, `omit=` also takes stubs (`uv:uv`, as
 the stub list names them) and leaves them out before the layout, so they leave no
-gap. `name.<id>=Label` gives the stub fed by node `<id>` a name for the picture
-("Time map" instead of the generic "Switch"); real cards keep their editor names,
-and a name that matches no stub fails with the list of stubs.
+gap. A stub carries the name of what its source outputs: name those outputs in the
+effect's port labels (`portLabels` in `effectPresentationPlans.ts`, for example "Time
+Map" on Slit Scan's Switch), so the editor's cards and folder ports read the same.
+`name.<id>=Label` overrides a stub's name for the picture only; real cards keep their
+editor names, and a name that matches no stub fails with the list of stubs. Port
+labels show at about 9 px in the 720 px docs column while a picture is three cards
+wide (four: about 7 px): crop a recipe to the cards its text and remix need.
 
 ### Effect editor excerpts
 
@@ -1577,10 +1596,10 @@ text. `top: "tabs"` crops below the dock tab row (from the Properties sub-tabs),
 the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
 `--only <name>` recaptures one shot. A control the script cannot find stops it
 with the card's text, so a renamed parameter does not silently drop a callout.
-`viewport: { width, height }` sets the editor window (default 1600 × 900): a wider
-window gives the Properties panel room, so an effect with inspector sections
-(Chroma Key) shows its rows with sliders instead of the narrow layout. A card taller
-than the panel is cropped at the panel's bottom edge, not in the timeline below.
+`viewport: { width, height }` sets the editor window (default 1600 × 900). Keep the
+default width so the picture shows the inspector as most users see it; a taller window
+fits a long card. A card taller than the panel is cropped at the panel's bottom edge,
+not in the timeline below.
 
 ### When the GPU cannot build an effect
 

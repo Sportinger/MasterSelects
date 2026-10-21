@@ -5,12 +5,14 @@
       "effect": "chroma-key",
       "params": {},
       "image": "greenscreen_dancer.jpg",
-      "preview": 460,
-      "alt": "Properties, Effects with a Chroma Key card at its default settings (Screen: Green screen, View: Final result, Clip Black, Clip White, Shrink / Grow, Edge Softness, Spill Suppression, Spill Method), beside the keyed dancer in the preview",
+      "preview": 0,
+      "top": "card",
+      "layout": "float",
+      "alt": "The Chroma Key card in Properties, Effects at its default settings, editor window 1600 px wide: Key (Screen: Green, View: Final result), Matte (Clip Black 0.30, Clip White 0.85), Edge (Shrink / Grow and Softness at 0 px) and Spill (Suppression 1.00, Method: Neutral)",
       "marks": [
         {
           "target": "Screen",
-          "label": "Screen: green, blue or a colour you pick"
+          "label": "Screen: Green, Blue or a colour you pick"
         },
         {
           "target": "View",
@@ -21,13 +23,9 @@
           "label": "Clip Black and Clip White set the matte"
         }
       ],
-      "top": "tabs",
-      "hide": [
-        "Particle Out"
-      ],
       "viewport": {
-        "width": 2000,
-        "height": 1000
+        "width": 1600,
+        "height": 1150
       }
     }
   ]
