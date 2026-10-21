@@ -13,7 +13,7 @@ MasterSelects publishes its product documentation as a regular part of the main 
 
 The root production build runs the editor build first and then the documentation build. The documentation sync converts the feature Markdown into Starlight content, copies shared documentation assets, and writes the static result to `dist/docs/`.
 
-The site lives under the `/docs` base, so the sync writes every page link as `/docs/features/<page>/` (hand-written Starlight pages do the same). Each picture becomes a link to its full-size file with `width`, `height` and lazy loading after the first one; node-graph figures (`docs-shot--graph`) scroll sideways on narrow screens instead of shrinking. A running `astro dev` of the same `docs-site` keeps its content cache (the sync checks the process behind `.astro/dev.json`); the build (`--build`) always starts from a clean cache.
+The site lives under the `/docs` base, so the sync writes every page link as `/docs/features/<page>/` (hand-written Starlight pages do the same); links to the feature index (`./README.md`, such as the "Back to Index" lines) go to `/docs/getting-started/overview/`, the page the index becomes. Each picture becomes a link to its full-size file with `width`, `height` and lazy loading after the first one; node-graph figures (`docs-shot--graph`) scroll sideways on narrow screens instead of shrinking. A running `astro dev` of the same `docs-site` keeps its content cache (the sync checks the process behind `.astro/dev.json`); the build (`--build`) always starts from a clean cache.
 
 For shared-workspace deployments, `npm run docs:build:head` can render the committed feature-documentation state without copying unrelated uncommitted documentation changes.
 

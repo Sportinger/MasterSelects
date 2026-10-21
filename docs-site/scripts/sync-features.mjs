@@ -106,13 +106,14 @@ function convert(markdown, { title }) {
     const [rawPath, anchor = ''] = target.split('#');
     const suffix = anchor ? `#${anchor}` : '';
     const clean = rawPath.replace(/^\.\//, '');
-    // Feature-to-feature links become site routes.
+    // The feature index is the site's overview page (it has no /features/readme/ route).
     const fileName = path.posix.basename(clean);
+    if (clean === 'README.md') {
+      return `${imagePrefix}[${label}](${siteBase}/getting-started/overview/${suffix})`;
+    }
+    // Feature-to-feature links become site routes.
     if (slugByFile.has(fileName) && !clean.includes('/')) {
       return `${imagePrefix}[${label}](${siteBase}/features/${slugByFile.get(fileName)}/${suffix})`;
-    }
-    if (fileName === 'README.md' && (clean === 'README.md' || clean === './README.md')) {
-      return `${imagePrefix}[${label}](${siteBase}/getting-started/overview/${suffix})`;
     }
     // Shared images move into the site's public/ folder. A picture opens its full-size file
     // (graphs and fine detail stay readable on small screens) and loads lazily below the top.
