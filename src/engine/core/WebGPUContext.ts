@@ -8,6 +8,7 @@ import { recordGpuAdapter, recordGpuStartupFailure } from '../../services/diagno
 import type { GPUInitializationFailure } from './gpuInitializationFailure';
 import { GPUInitializationCancelledError, GPURequestTimeoutError, requestEditorDevice, requestGpuAdapter, type GPURequestAdapterOptionsWithFeatureLevel } from './gpuDeviceRequest';
 import { DeviceLossPolicy, REPEATED_LOSS_WINDOW_MS, whenPageVisible } from './deviceLossPolicy';
+import { guardGpuDevice } from './gpuPipelineGuard';
 
 const log = Logger.create('WebGPUContext');
 
@@ -203,6 +204,7 @@ export class WebGPUContext {
       }
       log.info('GPU device created successfully');
       attachWebGPUDeviceDiagnostics(this.device, 'WebGPUContext');
+      guardGpuDevice(this.device, 'editor');
 
       const initializedDevice = this.device;
       const generation = this.initializationGeneration;

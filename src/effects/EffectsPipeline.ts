@@ -46,6 +46,7 @@ import {
 import { resolveFeedbackHistoryLoop } from './_shared/feedbackParameters';
 import { toPrimitiveEffectParams } from './_shared/effectUniformParams';
 import { SlitScanOutputProcessing } from './time/slit-scan/SlitScanOutputProcessing';
+import { clearEffectGpuFailures, EffectGpuPipelineError, reportEffectGpuFailure } from './effectGpuFailures';
 
 const log = Logger.create('EffectsPipeline');
 
@@ -468,7 +469,7 @@ export class EffectsPipeline {
           effectOutput = this.getNextOutputView(effectOutput, pingView, pongView); swapped = !swapped;
           nodePreviewTextureTap.capture(`effect:${effect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
         } catch (error) {
-          log.error(`Resource-backed image effect failed: ${effect.type}`, error);
+          log.error(`Resource-backed image effect failed: ${effect.type}`, error); if (error instanceof EffectGpuPipelineError) reportEffectGpuFailure(effect.type, error.message);
           if (isCollectingTemporalPreparations()) throw error;
           if (geometryCapture) setTemporalStatus(`${effect.id}:geometry`, `Geometry unavailable: ${String(error)}`);
         }
@@ -545,11 +546,9 @@ export class EffectsPipeline {
       const bindGroupLayout = this.pipelineCache.getBindGroupLayout(pipelineKey);
 
       if (!isFullscreenEffectDefinition(definition) || !pipeline || !bindGroupLayout) {
-        if (
-          !this.pipelineCache.isPendingOrFailed(pipelineKey)
-        ) {
-          log.warn(`No pipeline for effect type: ${effect.type}`);
-        }
+        const failure = this.pipelineCache.getFailure(pipelineKey); // Skipped; the inspector says why.
+        if (failure) reportEffectGpuFailure(effect.type, failure);
+        else if (!this.pipelineCache.isPendingOrFailed(pipelineKey)) log.warn(`No pipeline for effect type: ${effect.type}`);
         continue;
       }
 
@@ -682,7 +681,7 @@ export class EffectsPipeline {
     this.feedbackStates.clear();
     this.landmarkBuffers.destroy();
     this.byteTextures.destroy();
-    this.pipelineCache.clear();
+    this.pipelineCache.clear(); clearEffectGpuFailures();
     this.computeRuntime.clear();
     this.splitComparePipeline.destroy();
     this.imageGraphPassRuntime.dispose(); this.temporalSmoothing.destroy();

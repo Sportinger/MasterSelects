@@ -26,7 +26,8 @@ export function activateDockPanel(panelType: string): void {
 /** Request a specific tab in the Properties panel (transform, effects, masks, transcript, analysis, volume, text) */
 export function openPropertiesTab(tab: string): void {
   void import('../../stores/dockStore').then(({ FACTORY_START_LAYOUT_ID, useDockStore }) => {
-    if (useDockStore.getState().activeSavedLayoutId === FACTORY_START_LAYOUT_ID) return;
+    // The import resolves later; the page (or a test environment) may be gone by then.
+    if (typeof window === 'undefined' || useDockStore.getState().activeSavedLayoutId === FACTORY_START_LAYOUT_ID) return;
     window.dispatchEvent(new CustomEvent('openPropertiesTab', { detail: { tab } }));
   });
 }

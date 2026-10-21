@@ -1394,6 +1394,44 @@ effects during application.
 Effects with `uniformSize` 0 use no uniform buffer.
 Most effects use a 16-byte-aligned uniform block; a few multi-parameter effects use larger blocks.
 
+### When the GPU cannot build an effect
+
+Building a pipeline can fail on a device in three ways: an invalid shader or
+descriptor (validation), a driver compiler that gives up (internal, for example
+`CreateGraphicsPipelines failed with VK_ERROR_UNKNOWN` for Voxel Relief on an
+Android/Vulkan device) or memory exhaustion. Fullscreen effects
+(`EffectPipelineCache`), compute effects (`ComputeEffectRuntime`) and image graph
+passes (`ImageGraphPassRuntime`) learn the verdict for all three through
+`createCheckedPipeline` (`src/engine/core/gpuPipelineGuard.ts`). Previously only validation was
+scoped: a driver failure stayed in the cache as a valid-looking pipeline, and
+every frame that set it invalidated the whole frame's command buffer, so all
+layers stopped rendering, not just that effect.
+
+A failed pipeline is dropped and not rebuilt for the same shader; the effect is
+skipped (pass-through) while every other effect keeps rendering. The failure is
+logged with its kind and recorded in `src/effects/effectGpuFailures.ts`; the
+effect card shows "This device's graphics driver could not build this effect,
+so it is skipped." (full driver message as tooltip). A new GPU device clears the
+record. The device-wide guard (see [GPU Engine](/features/gpu-engine/#pipelines-the-driver-cannot-build))
+covers every other GPU subsystem the same way.
+
+Shader compile cost matters on mobile drivers. Voxel Relief used to inline its
+576-step raymarch four times (one per anti-aliasing sample), sampled the source
+colour on every traversal step and copied the 512-byte field-graph array into
+every evaluator call; its driver compile took about 290 ms on a desktop Vulkan
+driver and failed on an Android device. It now loops over the four samples,
+samples the colour once at the hit and evaluates the field graph directly from
+the uniform (`src/shaders/scalarFieldShader.ts`, shared with the 3D voxel
+instance and path-tracer emission shaders): about 75 ms, with identical pixels.
+The shared lattice noise (`src/engine/procedural/latticeNoiseWgsl.ts`) had the
+same problem: `curlNoise3` wrote out six `curlPotential` calls of three
+`valueNoise3` each, and the flock simulation called it twice per particle, so
+the flock compute shader carried 36 inlined noise evaluations. Loops over axes
+and octaves (and a single `spawnParticle` call site) cut its driver compile from
+about 500 ms to about 270 ms; results match within float rounding. Keep heavy
+shader functions out of unrolled call sites, and never pass large arrays by
+value.
+
 Effects can opt into temporal feedback through `usesFeedback`. Feedback effects
 sample their own previous output frame on binding 3 and the pipeline maintains
 separate committed-history and current-output textures per composition/layer/effect.

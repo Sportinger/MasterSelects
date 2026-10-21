@@ -6,6 +6,7 @@ import type { Effect } from '../../types/effects';
 import { isFullscreenEffectDefinition } from '../../effects/types';
 import { prefersSoftwareTimelineCanvas } from '../../utils/canvasPlatform';
 import { renderSoftwareGuidePhoto } from './lensPhotoSoftware';
+import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
 
 /** Bounded still-image guide canvas uses exactly the preceding lens shader. */
 export async function createGuidedPhotoPreview(file: File, lensEffects: Effect[], maxDimension = 1600): Promise<{ blob: Blob; aspect: number; sourceWidth: number; sourceHeight: number }> {
@@ -38,7 +39,7 @@ export async function createGuidedPhotoPreview(file: File, lensEffects: Effect[]
     if (!device) {
       const adapter = await navigator.gpu?.requestAdapter();
       if (!adapter) throw new Error('WebGPU is needed to show the lens-corrected guide image.');
-      ownedDevice = await adapter.requestDevice(); device = ownedDevice;
+      ownedDevice = guardGpuDevice(await adapter.requestDevice(), 'photo-guide'); device = ownedDevice;
     }
     context = canvas.getContext('webgpu');
     if (!context) throw new Error('Guide image canvas unavailable.');

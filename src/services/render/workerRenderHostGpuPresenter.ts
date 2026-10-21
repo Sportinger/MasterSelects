@@ -5,6 +5,7 @@ import type {
 } from './workerRenderHostRuntimeCommands';
 import { closeWorkerSoftwareFrameBitmaps, forEachWorkerSoftwareLayerInPaintOrder } from './workerRenderHostSoftwarePainter';
 import { calculateSourcePixelScale } from '../../utils/sourcePixelScale';
+import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
 
 type WorkerGpuGlobal = typeof globalThis & {
   navigator?: Navigator & {
@@ -95,7 +96,7 @@ async function requestSharedWorkerGpuDevice(): Promise<GPUDevice | null> {
       ? await gpu.requestAdapter()
       : null;
     const device = await adapter?.requestDevice();
-    return device ?? null;
+    return device ? guardGpuDevice(device, 'render-worker') : null;
   })().catch(() => null);
   return sharedDevicePromise;
 }

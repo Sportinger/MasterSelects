@@ -58,18 +58,31 @@ fn valueNoise1(t: f32, channel: u32) -> f32 {
 
 const CURL_EPS: f32 = 0.25;
 
+// Loops instead of repeated calls: drivers inline every call site, and the written-out
+// form put 18 copies of valueNoise3 into each curlNoise3 caller. Results are bit-identical.
 fn curlPotential(q: vec3f) -> vec3f {
-  return vec3f(valueNoise3(q, 1u), valueNoise3(q + vec3f(31.4, 0.0, 0.0), 2u), valueNoise3(q + vec3f(0.0, 47.2, 0.0), 3u));
+  var potential = vec3f(0.0);
+  for (var axis = 0u; axis < 3u; axis++) {
+    var offset = vec3f(0.0);
+    if (axis == 1u) { offset.x = 31.4; } else if (axis == 2u) { offset.y = 47.2; }
+    potential[axis] = valueNoise3(q + offset, axis + 1u);
+  }
+  return potential;
 }
 
 /** Curl of a value-noise vector potential via central differences (divergence-free flow). */
 fn curlNoise3(q: vec3f) -> vec3f {
-  let dx = vec3f(CURL_EPS, 0.0, 0.0);
-  let dy = vec3f(0.0, CURL_EPS, 0.0);
-  let dz = vec3f(0.0, 0.0, CURL_EPS);
-  let gx = (curlPotential(q + dx) - curlPotential(q - dx)) / (2.0 * CURL_EPS);
-  let gy = (curlPotential(q + dy) - curlPotential(q - dy)) / (2.0 * CURL_EPS);
-  let gz = (curlPotential(q + dz) - curlPotential(q - dz)) / (2.0 * CURL_EPS);
+  var gradient = array<vec3f, 3>(vec3f(0.0), vec3f(0.0), vec3f(0.0));
+  for (var sample = 0u; sample < 6u; sample++) {
+    let axis = sample >> 1u;
+    let side = select(1.0, -1.0, (sample & 1u) == 1u);
+    var offset = vec3f(0.0);
+    offset[axis] = CURL_EPS * side;
+    gradient[axis] += curlPotential(q + offset) * side;
+  }
+  let gx = gradient[0] / (2.0 * CURL_EPS);
+  let gy = gradient[1] / (2.0 * CURL_EPS);
+  let gz = gradient[2] / (2.0 * CURL_EPS);
   return vec3f(gy.z - gz.y, gz.x - gx.z, gx.y - gy.x);
 }
 `;

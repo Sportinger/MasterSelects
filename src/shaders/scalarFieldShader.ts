@@ -1,8 +1,17 @@
-// Shared scalar field arithmetic for instanced geometry and raymarched relief.
-fn evaluateScalarField(sampleValue: f32, operations: array<vec4f, 32>, count: u32, output: u32) -> f32 {
+/**
+ * WGSL evaluator for scalar-field programs (`services/operators/scalarField.ts`,
+ * CPU twin `evaluateScalarField.ts`), bound to the caller's uniform operation
+ * array. The former shared function took `array<vec4f, 32>` by value, so every
+ * inlined call copied 512 bytes into registers; inside the Voxel Relief
+ * raymarch loop that was a large part of what mobile Vulkan compilers rejected
+ * (`CreateGraphicsPipelines failed with VK_ERROR_UNKNOWN`).
+ */
+export function scalarFieldShader(functionName: string, operations: string): string {
+  return /* wgsl */`
+fn ${functionName}(sampleValue: f32, count: u32, output: u32) -> f32 {
   var values: array<f32, 32>;
   for (var i = 0u; i < min(count, 32u); i += 1u) {
-    let operation = operations[i];
+    let operation = ${operations}[i];
     let a = values[min(u32(operation.y), 31u)];
     let b = values[min(u32(operation.z), 31u)];
     var result = 0.0;
@@ -29,4 +38,6 @@ fn evaluateScalarField(sampleValue: f32, operations: array<vec4f, 32>, count: u3
     values[i] = clamp(result, -10000.0, 10000.0);
   }
   return values[min(output, 31u)];
+}
+`;
 }

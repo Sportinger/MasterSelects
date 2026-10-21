@@ -1,7 +1,7 @@
 // One voxel block of a voxel-relief layer: its center and half size in the layer's local space
 // (extruding along +Z), its color and relief height. Shared by the raster pass (VoxelPass.wgsl)
 // and the path tracer's box emission (pathtrace/scene/PtVoxelEmission.wgsl), so both place the
-// same blocks. Requires scalarField.wgsl (evaluateScalarField).
+// same blocks. Requires scalarFieldShader('voxelEvaluateField', 'voxel.graphField') after this file.
 
 struct VoxelUniforms {
   viewProjection: mat4x4f,
@@ -64,7 +64,7 @@ fn voxelBlock(instanceIndex: u32) -> VoxelBlock {
   // extrusion looked like a voxel scene trapped behind a flat media window.
   var fieldHeight = max(voxel.height.y + height01 * voxel.height.x, 0.0) * alphaScale;
   if (voxel.graphFlags.z > 0.0) {
-    fieldHeight = max(0.0, evaluateScalarField(luminance(source.rgb), voxel.graphField, u32(voxel.graphFlags.z), u32(voxel.graphFlags.w))) * source.a;
+    fieldHeight = max(0.0, voxelEvaluateField(luminance(source.rgb), u32(voxel.graphFlags.z), u32(voxel.graphFlags.w))) * source.a;
   }
   let blockHeight = fieldHeight * voxel.graphBoxSize.z * voxel.grid.w * 0.5;
   let fill = (1.0 - clamp(voxel.grid.z, 0.0, 0.42)) * alphaScale;

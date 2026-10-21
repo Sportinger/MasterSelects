@@ -4,6 +4,7 @@ import { renderHostPort } from '../../services/render/renderHostPort';
 import { Logger } from '../../services/logger';
 import type { LookDefinition } from './types';
 import { fitThumbnailToWidthRect } from './lookThumbnailGeometry';
+import { guardGpuDevice } from '../../engine/core/gpuPipelineGuard';
 
 const THUMBNAIL_WIDTH = 256;
 const THUMBNAIL_HEIGHT = 144;
@@ -128,6 +129,7 @@ class LookThumbnailRuntime {
     if (!navigator.gpu) return null;
     this.deviceRequest = navigator.gpu.requestAdapter({ powerPreference: 'high-performance' })
       .then((adapter) => adapter?.requestDevice({ label: 'look-thumbnail-device' }) ?? null)
+      .then((device) => device && guardGpuDevice(device, 'look-thumbnails'))
       .then((device) => {
         if (device) {
           void device.lost.then(() => {

@@ -704,3 +704,9 @@
   }
 }
 }
+
+/* Above the bottom progress overlays, so both can show at once. */
+.preview-gpu-failure {
+  top: 42px;
+  bottom: auto;
+}

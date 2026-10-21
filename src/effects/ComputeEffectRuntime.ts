@@ -4,11 +4,18 @@ import type { AnalogSignalPlan } from '../services/operators/analogSignalGraph';
 import type { ComputeImagePlan } from '../services/operators/computeImageGraph';
 import { ImageGraphComputeOutputRuntime } from './ImageGraphComputeOutputRuntime';
 import { JumpFloodRuntime } from './JumpFloodRuntime';
+import { createCheckedPipeline } from '../engine/core/gpuPipelineGuard';
+import { reportEffectGpuFailure } from './effectGpuFailures';
+import { Logger } from '../services/logger';
+
+const log = Logger.create('ComputeEffectRuntime');
 
 interface ComputePipelineState {
   pipeline: GPUComputePipeline;
   layout: GPUBindGroupLayout;
   signature: string;
+  /** Set when the driver could not build the pipeline; the effect is then skipped. */
+  failure?: string;
 }
 
 export class ComputeEffectRuntime {
@@ -48,13 +55,20 @@ export class ComputeEffectRuntime {
     }
     const layout = this.device.createBindGroupLayout({ label: `compute-effect-${definition.id}-layout`, entries });
     const module = this.device.createShaderModule({ label: `compute-effect-${definition.id}`, code: definition.shader });
-    const pipeline = this.device.createComputePipeline({
+    const { pipeline, settled } = createCheckedPipeline(this.device, () => this.device.createComputePipeline({
       label: `compute-effect-${definition.id}-pipeline`,
       layout: this.device.createPipelineLayout({ bindGroupLayouts: [layout] }),
       compute: { module, entryPoint: definition.entryPoint },
-    });
-    const state = { pipeline, layout, signature };
+    }));
+    const state: ComputePipelineState = { pipeline, layout, signature };
     this.states.set(definition.id, state);
+    void settled.then(failure => {
+      if (!failure || this.states.get(definition.id) !== state) return;
+      // An invalid pipeline would invalidate the whole frame's command buffer.
+      state.failure = failure.message;
+      log.error(`Compute effect pipeline could not be built (${failure.kind}): ${definition.id}; the effect is skipped`, failure);
+      reportEffectGpuFailure(definition.id, failure.message);
+    });
     return state;
   }
 
@@ -119,6 +133,7 @@ export class ComputeEffectRuntime {
         onImagePreviewInputs: options.onAnalogImageInputs });
     }
     const state = this.ensureSingle(options.definition);
+    if (state.failure) return false;
     const entries: GPUBindGroupEntry[] = [
       { binding: 1, resource: options.inputView },
       { binding: 5, resource: options.outputView },

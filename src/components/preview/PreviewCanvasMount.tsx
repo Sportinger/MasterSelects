@@ -44,6 +44,7 @@ import { usePreview3DMediaDrop } from './usePreview3DMediaDrop';
 import { FlockGuidanceOverlay } from './flock/FlockGuidanceOverlay';
 import { rendersFlock } from '../../services/flock/flockEffect';
 import { PreviewScenePreparationOverlay } from './PreviewScenePreparationOverlay';
+import { PreviewGpuFailureNotice } from './PreviewGpuFailureNotice';
 import { PathTraceRegionOverlay } from './PathTraceRegionOverlay';
 import { PerspectiveGuidePreviewHost } from './PerspectiveGuidePreviewHost';
 import { PreviewRulers } from './PreviewRulers';
@@ -432,6 +433,7 @@ export function PreviewCanvasMount({
         <PreviewSplatProgressOverlay progress={activeSplatLoadProgress} />
         {!activeSplatLoadProgress && !isExporting && !sourceMonitorActive && isEngineReady
           && <PreviewScenePreparationOverlay clips={clips} tracks={tracks} />}
+        {isEngineReady && <PreviewGpuFailureNotice />}
         {!isExporting && !sourceMonitorActive && isEngineReady
           && <PathTraceRegionOverlay compositionId={displayedCompId} canvasInContainer={canvasInContainer} />}
         {rulersVisible && isEngineReady && (

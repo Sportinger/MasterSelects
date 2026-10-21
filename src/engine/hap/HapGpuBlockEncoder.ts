@@ -7,6 +7,8 @@
 
 import shaderSource from './hapBlockEncode.wgsl?raw';
 import { Logger } from '../../services/logger';
+import { createCheckedPipeline } from '../core/gpuPipelineGuard';
+import type { PipelineCreationFailure } from '../core/gpuPipelineErrorScopes';
 
 const log = Logger.create('HapGpuBlockEncoder');
 
@@ -44,6 +46,8 @@ export class HapGpuBlockEncoder {
   private readonly stagingBuffer: GPUBuffer;
   private readonly uniformBuffer: GPUBuffer;
   private readonly pipeline: GPUComputePipeline;
+  /** Driver verdict on the encode pipeline; a failure means CPU fallback. */
+  private readonly pipelineSettled: Promise<PipelineCreationFailure | null>;
   private readonly bindGroup: GPUBindGroup;
   private readonly blocksX: number;
   private readonly blocksY: number;
@@ -102,11 +106,13 @@ export class HapGpuBlockEncoder {
       label: 'hap-block-encode',
       code: shaderSource,
     });
-    this.pipeline = device.createComputePipeline({
+    const { pipeline, settled } = createCheckedPipeline(device, () => device.createComputePipeline({
       label: `hap-encode-${format}`,
       layout: 'auto',
       compute: { module, entryPoint: ENTRY_POINTS[format] },
-    });
+    }));
+    this.pipeline = pipeline;
+    this.pipelineSettled = settled;
     this.bindGroup = device.createBindGroup({
       layout: this.pipeline.getBindGroupLayout(0),
       entries: [
@@ -129,7 +135,14 @@ export class HapGpuBlockEncoder {
       const adapter = await withTimeout(navigator.gpu.requestAdapter(), 4000, 'requestAdapter');
       if (!adapter) return null;
       const device = await withTimeout(adapter.requestDevice(), 4000, 'requestDevice');
-      return new HapGpuBlockEncoder(device, format, width, height);
+      const encoder = new HapGpuBlockEncoder(device, format, width, height);
+      const failure = await encoder.pipelineSettled;
+      if (failure) {
+        log.warn(`GPU could not build the HAP encoder (${failure.kind}), using CPU fallback`, failure.message);
+        encoder.destroy();
+        return null;
+      }
+      return encoder;
     } catch (error) {
       log.warn('WebGPU unavailable for HAP encode, using CPU fallback', error);
       return null;

@@ -1,5 +1,5 @@
 // Raster voxel relief: instanced blocks placed by voxelBlock (VoxelInstance.wgsl), plus the floor.
-// Requires scalarField.wgsl and VoxelInstance.wgsl.
+// Requires VoxelInstance.wgsl and its voxelEvaluateField (scalarFieldShader).
 
 struct VertexOutput {
   @builtin(position) position: vec4f,

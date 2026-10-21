@@ -1,7 +1,7 @@
 // Voxel Relief - raymarched brightness-driven block extrusion.
 
 import shader from './shader.wgsl?raw';
-import scalarFieldShader from '../../../shaders/scalarField.wgsl?raw';
+import { scalarFieldShader } from '../../../shaders/scalarFieldShader';
 import { packScalarField } from '../../../services/operators/scalarField';
 import type { EffectDefinition } from '../../types';
 import { VOXEL_RELIEF_PARAMS } from './parameters';
@@ -12,7 +12,7 @@ export const voxelRelief: EffectDefinition = {
   name: 'Voxel Relief',
   category: 'stylize',
 
-  shader: scalarFieldShader + '\n' + shader,
+  shader: scalarFieldShader('voxelEvaluateField', 'params.graphField') + '\n' + shader,
   entryPoint: 'voxelReliefFragment',
   uniformSize: 704,
   usesFeedback: true,
