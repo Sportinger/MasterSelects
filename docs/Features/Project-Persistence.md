@@ -138,6 +138,21 @@ this tab then reopens the project with write access. If no tab holds the lock
 (the writer was closed, or folder access was missing), the action reads
 **Enable editing** and reopens directly, requesting folder access first.
 
+A read-only tab does not follow the writer's edits live. The writing tab
+announces every saved revision on the handover channel; a read-only tab that
+shows an older revision (including a former writer after a handover) then says
+"This project changed in another tab" and offers **Reload**, which reopens it
+read-only at the latest saved revision. While a handover or reload runs, the
+toolbar buttons stay focusable (`aria-disabled`); when the focused button
+disappears after a keyboard takeover or reload, focus moves to the save status
+instead of falling to the page body.
+
+During a project open or reopen, media entries exist before their runtime
+files are restored. Composition previews log such clips at debug level as "not
+loaded yet" (not as "Media file not found") and rebuild the composition once
+the file arrives; an entry that stays without a file outside a load is reported
+as offline or needing relink.
+
 ## Continuous saving
 
 Completed content actions become immutable revisions and enter the asynchronous

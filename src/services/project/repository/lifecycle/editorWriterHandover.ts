@@ -1,5 +1,6 @@
 import { Logger } from '../../../logger';
 import { createWriterHandover, type HandoverChannel, type HandoverMessage, type WriterHandover } from './writerHandover';
+import type { RepositorySession } from '../RepositorySession';
 import { flushEditorRepository, getActiveRepositorySession, openEditorRepository, repositoryWorkspaceId, subscribeRepositoryLifecycle } from './editorRepositoryLifecycle';
 
 const log = Logger.create('WriterHandover');
@@ -40,6 +41,30 @@ async function isWriterLockHeld(repositoryId: string): Promise<boolean | null> {
   return (snapshot.held ?? []).some(lock => lock.name === `ms.repository.writer:${repositoryId}`);
 }
 
+/**
+ * Writer side: announce every saved revision (all queued operations confirmed), so read-only
+ * tabs of the same project notice that their projection is out of date.
+ */
+function watchSavedRevisions(target: WriterHandover): () => void {
+  let watched: { session: RepositorySession; stop: () => void } | null = null;
+  const sync = () => {
+    const session = getActiveRepositorySession();
+    const writable = session?.opening.writable === true ? session : null;
+    if (watched?.session === writable) return;
+    watched?.stop(); watched = null;
+    if (!writable) return;
+    let announced = writable.coordinator.getStatus().revisionId;
+    watched = { session: writable, stop: writable.coordinator.subscribe(status => {
+      if (!status.revisionId || status.revisionId === announced || status.confirmedSequence < status.appliedSequence) return;
+      announced = status.revisionId;
+      target.announceCommit(status.revisionId);
+    }) };
+  };
+  sync();
+  const unsubscribe = subscribeRepositoryLifecycle(sync);
+  return () => { unsubscribe(); watched?.stop(); watched = null; };
+}
+
 export function getEditorWriterHandover(): WriterHandover {
   if (handover) return handover;
   const created = createWriterHandover({
@@ -55,6 +80,11 @@ export function getEditorWriterHandover(): WriterHandover {
       await reopenActiveProject();
     },
     reopenForWriting: reopenActiveProject,
+    getRevision: () => getActiveRepositorySession()?.coordinator.getStatus().revisionId ?? null,
+    async reloadReadOnly() {
+      log.info('Reloading this read-only tab to show the latest revision saved by the editing tab');
+      await reopenActiveProject();
+    },
     isWriterLockHeld,
     isVisible: () => typeof document === 'undefined' || document.visibilityState === 'visible',
     now: () => Date.now(),
@@ -63,8 +93,9 @@ export function getEditorWriterHandover(): WriterHandover {
     warn: (message, data) => log.warn(message, data),
   });
   const unsubscribe = subscribeRepositoryLifecycle(() => created.refresh());
+  const stopWatching = watchSavedRevisions(created);
   handover = created;
-  cleanup = () => { unsubscribe(); created.dispose(); if (handover === created) handover = null; cleanup = null; };
+  cleanup = () => { unsubscribe(); stopWatching(); created.dispose(); if (handover === created) handover = null; cleanup = null; };
   return created;
 }
 

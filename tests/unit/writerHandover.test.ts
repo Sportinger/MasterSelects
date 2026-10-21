@@ -5,8 +5,9 @@ import {
 } from '../../src/services/project/repository/lifecycle/writerHandover';
 
 // Two tabs of one browser share a BroadcastChannel (no self-delivery) and one writer lock.
-interface Tab { id: string; writable: boolean; flushes: number; refuse: string | null; handover: WriterHandover }
+interface Tab { id: string; writable: boolean; flushes: number; refuse: string | null; revision: string; reloads: number; handover: WriterHandover }
 let lockHolder: string | null;
+let savedRevision: string;
 let bus: Set<{ tab: string; listener: (message: HandoverMessage) => void }>;
 
 function channel(tab: string): HandoverChannel {
@@ -19,7 +20,7 @@ function channel(tab: string): HandoverChannel {
 }
 
 function openTab(id: string): Tab {
-  const tab = { id, writable: false, flushes: 0, refuse: null } as Tab;
+  const tab = { id, writable: false, flushes: 0, refuse: null, revision: savedRevision, reloads: 0 } as Tab;
   if (!lockHolder) { lockHolder = id; tab.writable = true; }
   tab.handover = createWriterHandover({
     tabId: id, channel: channel(id),
@@ -32,8 +33,10 @@ function openTab(id: string): Tab {
     },
     async reopenForWriting() {
       if (!lockHolder) lockHolder = id;
-      tab.writable = lockHolder === id; return tab.writable;
+      tab.writable = lockHolder === id; tab.revision = savedRevision; return tab.writable;
     },
+    getRevision: () => tab.revision,
+    async reloadReadOnly() { tab.reloads++; tab.revision = savedRevision; },
     isWriterLockHeld: async () => lockHolder !== null,
     isVisible: () => true,
     now: () => Date.now(),
@@ -44,7 +47,7 @@ function openTab(id: string): Tab {
 }
 
 describe('writer handover between tabs', () => {
-  beforeEach(() => { vi.useFakeTimers(); lockHolder = null; bus = new Set(); });
+  beforeEach(() => { vi.useFakeTimers(); lockHolder = null; bus = new Set(); savedRevision = 'r1'; });
   afterEach(() => { vi.useRealTimers(); });
 
   it('shows the writing tab and moves write access after it saved', async () => {
@@ -92,5 +95,60 @@ describe('writer handover between tabs', () => {
     await vi.advanceTimersByTimeAsync(HANDOVER_ACK_MS);
     await expect(free).resolves.toBe(true);
     expect(lockHolder).toBe('b');
+  });
+
+  it('marks a read-only tab stale when the writer saves a newer revision, and reloads it', async () => {
+    const writer = openTab('a');
+    const reader = openTab('b');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reader.handover.getSnapshot().stale).toBe(false);
+
+    // The writer deletes media and saves: the reader's projection (r1) is now out of date.
+    savedRevision = 'r2'; writer.revision = 'r2';
+    writer.handover.announceCommit('r2');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reader.handover.getSnapshot().stale).toBe(true);
+    expect(writer.handover.getSnapshot().stale).toBe(false);
+
+    await expect(reader.handover.reloadLatest()).resolves.toBe(true);
+    expect(reader.reloads).toBe(1);
+    expect(reader.handover.getSnapshot()).toMatchObject({ phase: 'idle', stale: false });
+    // A read-only tab never announces commits.
+    reader.handover.announceCommit('r3');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(writer.handover.getSnapshot().stale).toBe(false);
+  });
+
+  it('marks the former writer stale after a handover once the new writer saves', async () => {
+    const first = openTab('a');
+    const second = openTab('b');
+    const takeover = second.handover.requestTakeover();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(takeover).resolves.toBe(true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(first.handover.getSnapshot()).toMatchObject({ notice: HANDOVER_MOVED_NOTICE, stale: false });
+
+    savedRevision = 'r2'; second.revision = 'r2';
+    second.handover.announceCommit('r2');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(first.handover.getSnapshot().stale).toBe(true);
+  });
+
+  it('reports a failed reload visibly', async () => {
+    openTab('a');
+    const reader = openTab('b');
+    reader.handover.dispose();
+    const broken = createWriterHandover({
+      tabId: 'c', channel: channel('c'),
+      getRepository: () => ({ repositoryId: 'repo', writable: false }),
+      releaseWriter: async () => {}, reopenForWriting: async () => false,
+      getRevision: () => 'r1', reloadReadOnly: async () => { throw new Error('disk gone'); },
+      isWriterLockHeld: async () => true, isVisible: () => true, now: () => Date.now(),
+      setTimeout: (callback, ms) => setTimeout(callback, ms),
+      clearTimeout: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    });
+    await expect(broken.reloadLatest()).resolves.toBe(false);
+    expect(broken.getSnapshot()).toMatchObject({ phase: 'failed' });
+    expect(broken.getSnapshot().notice).toContain('disk gone');
   });
 });

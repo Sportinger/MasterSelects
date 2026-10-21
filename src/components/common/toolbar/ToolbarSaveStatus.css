@@ -25,6 +25,6 @@
   }
   .toolbar-write-access-button:focus { outline: none; }
   .toolbar-write-access-button:focus-visible { outline: 2px solid var(--accent-color, #8ab4f8); outline-offset: 1px; }
-  .toolbar-write-access-button:hover:not(:disabled) { background: var(--bg-hover); }
-  .toolbar-write-access-button:disabled { cursor: progress; opacity: 0.7; }
+  .toolbar-write-access-button:hover:not([aria-disabled="true"]) { background: var(--bg-hover); }
+  .toolbar-write-access-button[aria-disabled="true"] { cursor: progress; opacity: 0.7; }
 }
