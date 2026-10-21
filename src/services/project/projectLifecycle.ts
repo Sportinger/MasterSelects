@@ -1,6 +1,7 @@
 import { beginOperationTrace, type OperationTrace } from '../productAnalytics/operationTrace';
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
 import { isBrowserStorageUnavailableError } from './core/browserStorageFailure';
+import { discardStoredProjectArchive, storeProjectArchiveInBrowser } from './browserProjectArchive';
 import { isRepositoryHydrating } from './repository/transaction/storeMutationBoundary';
 // Project Lifecycle — create, open, close, auto-sync
 
@@ -368,6 +369,23 @@ export async function openStoredProject(name: string): Promise<boolean> {
     );
     throw error;
   }
+}
+
+/**
+ * Copy an exported .msproj archive into browser storage and open it there.
+ * Browsers without a folder picker or Native Helper restore projects this way;
+ * an import that does not open leaves no half-imported project behind.
+ */
+export async function openProjectArchive(file: File): Promise<boolean> {
+  const name = await storeProjectArchiveInBrowser(file);
+  try {
+    if (await openStoredProject(name)) return true;
+  } catch (error) {
+    await discardStoredProjectArchive(name);
+    throw error;
+  }
+  await discardStoredProjectArchive(name);
+  return false;
 }
 
 /**

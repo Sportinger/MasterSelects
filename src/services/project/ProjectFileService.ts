@@ -14,7 +14,8 @@ import { CacheService } from './domains/CacheService';
 import { ProxyStorageService, type ProxyFrameScanProgressCallback, type ProxyFrameWriter } from './domains/ProxyStorageService';
 import { RawMediaService } from './domains/RawMediaService';
 import { PROJECT_FOLDERS } from './core/constants';
-import { ProjectBackendUnavailableError } from './projectBackendAvailability';
+import { ProjectBackendUnavailableError, selectOpenProjectRoute, type OpenProjectRoute } from './projectBackendAvailability';
+import { isOpfsAvailable } from './core/projectRootAccess';
 import {
   getFsaProjectPackageSession,
   getNativeProjectPackageSession,
@@ -295,19 +296,17 @@ class ProjectFileService {
   }
 
   async openProject(): Promise<boolean> {
-    if (this._activeBackend === 'fsa' && this.isFsaAvailable) {
-      return this.coreService.openProject();
-    }
+    if (this._activeBackend === 'fsa' && this.isFsaAvailable) return this.coreService.openProject();
     const nativeCore = await this.ensureNativeBackendReady();
     if (!nativeCore) throw new ProjectBackendUnavailableError();
-    const projectRoot = await NativeHelperClient.getProjectRoot();
-    const projectPath = await pickNativeFolder(
-      'Select an existing project folder',
-      projectRoot,
-    );
+    const projectPath = await pickNativeFolder('Select an existing project folder', await NativeHelperClient.getProjectRoot());
+    return projectPath ? nativeCore.loadProject(projectPath) : false;
+  }
 
-    if (!projectPath) return false;
-    return nativeCore.loadProject(projectPath);
+  /** Without a folder picker or Native Helper, Open Project lists browser-stored projects instead. */
+  async resolveOpenProjectRoute(): Promise<OpenProjectRoute> {
+    return selectOpenProjectRoute({ folderPicker: this._activeBackend === 'fsa' && this.isFsaAvailable,
+      nativeHelper: async () => Boolean(await this.ensureNativeBackendReady()), browserStorage: isOpfsAvailable() });
   }
 
   getRecentProjects(): RecentProjectEntry[] {

@@ -1,4 +1,5 @@
 import { RepositoryArchiveDialog } from './toolbar/RepositoryArchiveDialog';
+import { BrowserProjectOpenDialog } from './toolbar/BrowserProjectOpenDialog';
 import { LegacyImportTargetHost } from './toolbar/LegacyImportDialog';
 import { MediaReconnectHost } from './toolbar/MediaReconnectOverlay';
 // Toolbar component - After Effects style menu bar
@@ -118,6 +119,8 @@ export function Toolbar({
   })));
 
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [showBrowserProjectDialog, setShowBrowserProjectDialog] = useState(false);
+  const openBrowserProjectDialog = useCallback(() => setShowBrowserProjectDialog(true), []);
   const [openMenu, setOpenMenu] = useState<MenuId>(null);
   const [projectName, setProjectName] = useState('Untitled Project');
   const [isProjectOpen, setIsProjectOpen] = useState(false);
@@ -277,6 +280,7 @@ export function Toolbar({
 
   const projectActions = useToolbarProjectActions({
     closeMenu,
+    openBrowserProjectDialog,
     openProjectNameDialog,
     projectName,
     resetMediaProject,
@@ -446,6 +450,13 @@ export function Toolbar({
 
       {isSettingsOpen && <SettingsDialog onClose={closeSettings} />}
       {showArchiveDialog && <RepositoryArchiveDialog onClose={() => setShowArchiveDialog(false)} />}
+      {showBrowserProjectDialog && (
+        <BrowserProjectOpenDialog
+          onClose={() => setShowBrowserProjectDialog(false)}
+          onOpenStored={projectActions.handleOpenStoredProject}
+          onImportArchive={projectActions.handleImportProjectArchive}
+        />
+      )}
       <LegacyImportTargetHost />
       <MediaReconnectHost />
       {projectNameDialog && (

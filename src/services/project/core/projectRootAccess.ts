@@ -135,23 +135,48 @@ export async function acquireProjectRoot(mode: ProjectRootMode, options: { throw
   return null;
 }
 
+/** Browser-storage folders the repository layer uses for staging, scratch recovery and downloads. */
+const INTERNAL_STORAGE_FOLDERS = new Set([
+  'archive-downloads', 'archive-staging', 'repository-archive-staging',
+  'repository-backup-restores', 'repository-file-staging', 'repository-scratch',
+]);
+
+function isNotFound(error: unknown): boolean {
+  return error instanceof DOMException && (error.name === 'NotFoundError' || error.name === 'TypeMismatchError');
+}
+
+async function hasFile(folder: FileSystemDirectoryHandle, name: string): Promise<boolean> {
+  try { await folder.getFileHandle(name); return true; } catch (error) { if (isNotFound(error)) return false; throw error; }
+}
+
+/** A project folder holds a repository, a legacy project.json, or a not yet imported .msproj archive. */
+async function isProjectFolder(folder: FileSystemDirectoryHandle): Promise<boolean> {
+  if (await hasFile(folder, 'project.msrepo.json') || await hasFile(folder, 'project.json')) return true;
+  for await (const entry of (folder as IterableDirectoryHandle).values()) {
+    if (entry.kind === 'file' && entry.name.toLowerCase().endsWith('.msproj')) return true;
+  }
+  return false;
+}
+
 /**
  * Names of the project folders inside a root. OPFS has no system dialog to
- * open an existing project, so the app has to offer the list itself.
+ * open an existing project, so the app has to offer the list itself. Model
+ * caches and repository staging folders share that root and are not projects.
  */
 export async function listProjectFolderNames(root: FileSystemDirectoryHandle): Promise<string[]> {
+  const folders: FileSystemDirectoryHandle[] = [];
   const names: string[] = [];
 
   try {
     for await (const entry of (root as IterableDirectoryHandle).values()) {
-      if (entry.kind === 'directory') {
-        names.push(entry.name);
-      }
+      if (entry.kind === 'directory' && !INTERNAL_STORAGE_FOLDERS.has(entry.name)) folders.push(entry);
     }
+    for (const folder of folders) if (await isProjectFolder(folder)) names.push(folder.name);
   } catch (error) {
     log.error('Failed to list project folders', error);
     throw error;
   }
 
+  if (folders.length > names.length) log.debug('Skipped browser-storage folders without a project', { skipped: folders.length - names.length });
   return names.toSorted((a, b) => a.localeCompare(b));
 }

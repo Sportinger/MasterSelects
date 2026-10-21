@@ -275,8 +275,16 @@ projects as well as cached handles.
   may own the writer. Deleting media in a read-only tab is refused up front with
   the read-only notice instead of failing midway.
 - **No project folder picker:** browsers without the File System Access API
-  (Firefox, Safari) open project folders only through a running Native Helper;
-  without it, Open Project shows that guidance and logs a warning, not an error.
+  (Firefox, Safari) open project folders only through a running Native Helper.
+  Without it, File > Open Project lists the projects stored in this browser and
+  offers **Import .msproj archive**: the archive is copied into a new
+  browser-storage project folder (`Name`, `Name (2)`, …) and opened there, which
+  restores a repository archive or converts an older `.msproj` package in place.
+  An incomplete copy or an import that does not open is removed again and
+  reported. The start-up project chooser offers the same import below the stored
+  projects. The stored-project list shows only folders with a project
+  (`project.msrepo.json`, `project.json` or a not yet imported `.msproj`), not
+  model caches or repository staging folders.
 - **Writes are pending or failed:** inspect the storage error, restore access or
   available space, and retry. A pending edit is not yet a confirmed disk save.
 - **The history index is unavailable:** records remain authoritative; allow

@@ -2,7 +2,11 @@ import { useCallback } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { Logger } from '../../../services/logger';
 import { failProjectLoadProgress } from '../../../services/project/load/loadProgress';
-import { isProjectBackendUnavailable } from '../../../services/project/projectBackendAvailability';
+import {
+  isExpectedArchiveImportRejection,
+  isProjectBackendUnavailable,
+  ProjectBackendUnavailableError,
+} from '../../../services/project/projectBackendAvailability';
 import { reportProjectSaveFailure } from '../../../services/project/projectSaveStatus';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
 import {
@@ -13,6 +17,8 @@ import {
   createNewProject,
   loadProjectToStores,
   openExistingProject,
+  openProjectArchive,
+  openStoredProject,
   saveCurrentProject,
   setProjectLoadProgress,
 } from '../../../services/projectSync';
@@ -30,6 +36,8 @@ const log = Logger.create('Toolbar');
 
 interface UseToolbarProjectActionsArgs {
   closeMenu: () => void;
+  /** Open Project without a folder picker or Native Helper: browser-stored projects and .msproj import. */
+  openBrowserProjectDialog: () => void;
   openProjectNameDialog: (request: ProjectNameDialogRequest) => void;
   projectName: string;
   resetMediaProject: (name: string) => void;
@@ -44,6 +52,7 @@ interface UseToolbarProjectActionsArgs {
 
 export function useToolbarProjectActions({
   closeMenu,
+  openBrowserProjectDialog,
   openProjectNameDialog,
   projectName,
   setIsLoading,
@@ -110,6 +119,14 @@ export function useToolbarProjectActions({
       blocking: true,
     });
     try {
+      const route = await projectFileService.resolveOpenProjectRoute();
+      if (route === 'browser-storage') {
+        // No folder can be picked here; projects in this browser and .msproj archives still open.
+        setProjectLoadProgress(null);
+        openBrowserProjectDialog();
+        return;
+      }
+      if (route === 'unavailable') throw new ProjectBackendUnavailableError();
       const success = await openExistingProject();
       if (!success) {
         setProjectLoadProgress(null);
@@ -129,7 +146,58 @@ export function useToolbarProjectActions({
       setIsLoading(false);
       closeMenu();
     }
-  }, [closeMenu, setIsLoading, setIsProjectOpen, setProjectName]);
+  }, [closeMenu, openBrowserProjectDialog, setIsLoading, setIsProjectOpen, setProjectName]);
+
+  /** Shared by the browser-storage open dialog; resolves to the message to show, or null once open. */
+  const openFromBrowserStorage = useCallback(async (
+    action: 'open' | 'import',
+    open: () => Promise<boolean>,
+  ): Promise<string | null> => {
+    setIsLoading(true);
+    setProjectLoadProgress({
+      phase: 'opening',
+      percent: 3,
+      message: action === 'import' ? 'Importing project archive' : 'Opening project',
+      blocking: true,
+    });
+    try {
+      if (!await open()) {
+        setProjectLoadProgress(null);
+        return 'The project could not be opened.';
+      }
+      const data = projectFileService.getProjectData();
+      if (data) {
+        setProjectName(data.name);
+        setIsProjectOpen(true);
+        setNeedsPermission(false);
+        setPendingProjectName(null);
+      }
+      setRecentProjects(projectFileService.getRecentProjects());
+      return null;
+    } catch (error) {
+      setProjectLoadProgress(null);
+      const storageFailure = describeBrowserStorageFailure(error);
+      const fallback = action === 'import' ? 'The project archive could not be imported.' : 'The project could not be opened.';
+      if (storageFailure) {
+        log.warn(`Browser project ${action} blocked: browser storage is unavailable`, error);
+        return `${fallback} ${storageFailure}`;
+      }
+      if (isExpectedArchiveImportRejection(error)) log.warn(`Browser project ${action} rejected`, error);
+      else log.error(`Browser project ${action} failed`, error);
+      const reason = error instanceof Error ? error.message.trim() : '';
+      return reason ? `${fallback} ${reason}` : fallback;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [setIsLoading, setIsProjectOpen, setNeedsPermission, setPendingProjectName, setProjectName, setRecentProjects]);
+
+  const handleOpenStoredProject = useCallback((name: string) => (
+    openFromBrowserStorage('open', () => openStoredProject(name))
+  ), [openFromBrowserStorage]);
+
+  const handleImportProjectArchive = useCallback((file: File) => (
+    openFromBrowserStorage('import', () => openProjectArchive(file))
+  ), [openFromBrowserStorage]);
 
   const handleOpenRecent = useCallback(async (projectId: string) => {
 
@@ -338,9 +406,11 @@ export function useToolbarProjectActions({
 
   return {
     handleClearRecentProjects,
+    handleImportProjectArchive,
     handleNew,
     handleOpen,
     handleOpenRecent,
+    handleOpenStoredProject,
     handleProjectNameSubmit,
     handleRename,
     handleRestorePermission,
