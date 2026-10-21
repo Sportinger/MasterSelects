@@ -19,14 +19,21 @@ import {
   isAudioAnalysisCancellation,
   isUndecodableAudioSourceError,
   isUnreadableClipSourceError,
-  resolveClipSourceFile,
+  resolveClipSource,
   updateAudioAnalysisJobProgress,
 } from './clipAudioAnalysisShared';
+import {
+  MAX_WAVEFORM_MEDIA_DEFERRALS,
+  cancelWaveformMediaDeferral,
+  deferWaveformUntilMediaLoaded,
+} from './clipWaveformSourceDeferral';
+import { ensureDeferredPyramidRefPatch } from './deferredPyramidRefPatch';
 
 const log = Logger.create('ClipWaveformAnalysis');
 
 export function cancelAudioAnalysisForClipAction(context: ClipActionContext, clipId: string): void {
   const { get, set } = context;
+  cancelWaveformMediaDeferral(clipId);
   const cancelled = clipAudioAnalysisJobService.cancelClip(clipId);
   if (cancelled === 0) return;
   set({ clips: updateClipById(get().clips, clipId, clearAudioAnalysisJobUpdate()) });
@@ -36,6 +43,8 @@ export async function generateWaveformForClipAction(
   context: ClipActionContext,
   clipId: string,
   options: GenerateClipAudioAnalysisOptions = {},
+  /** Internal: how often this request already waited for the clip's media runtime. */
+  mediaDeferrals = 0,
 ): Promise<void> {
   const { get, set } = context;
   // The initial update runs before assignment; its guard must still see undefined.
@@ -100,13 +109,24 @@ export async function generateWaveformForClipAction(
           waveform = new Array(Math.max(1, Math.floor(clip.duration * 50))).fill(0);
         }
       } else {
-        const sourceFile = await resolveClipSourceFile(clip);
+        const resolution = await resolveClipSource(clip);
+        const sourceFile = resolution.file;
         if (!sourceFile) {
-          log.warn('No file found for clip', { clipId });
-          updateClips(clips => updateClipById(clips, clipId, {
-            ...(!options.derivedOnly ? { file: undefined, needsReload: true } : {}),
-            ...clearAudioAnalysisJobUpdate(),
-          }));
+          const mediaFileId = resolution.mediaFileId;
+          updateClips(clips => updateClipById(clips, clipId, clearAudioAnalysisJobUpdate()));
+          if (resolution.gap === 'loading' && resolution.watchLoaded && mediaDeferrals < MAX_WAVEFORM_MEDIA_DEFERRALS) {
+            // Reopen in progress: the media exists and its File arrives shortly. Waiting is not a failure.
+            log.debug('Waveform waits for the clip media to finish loading', { clipId, mediaFileId });
+            deferWaveformUntilMediaLoaded({
+              clipId,
+              watchLoaded: resolution.watchLoaded,
+              retry: () => { void generateWaveformForClipAction(context, clipId, options, mediaDeferrals + 1); },
+            });
+            return;
+          }
+          if (resolution.gap === 'missing') log.warn('No file found for clip', { clipId, mediaFileId });
+          else log.warn('Waveform source is not loaded (offline or needs relink)', { clipId, mediaFileId, waitedForMedia: mediaDeferrals > 0 });
+          if (!options.derivedOnly) updateClips(clips => updateClipById(clips, clipId, { file: undefined, needsReload: true }));
           return;
         }
 
@@ -150,6 +170,7 @@ export async function generateWaveformForClipAction(
               ));
           },
         });
+        if (analysis.pyramidStorage === 'memory') ensureDeferredPyramidRefPatch();
         waveform = analysis.waveform;
         waveformChannels = analysis.waveformChannels;
         audioAnalysisRefs = analysis.audioAnalysisRefs;
