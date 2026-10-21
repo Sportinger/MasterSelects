@@ -8,7 +8,6 @@ import { RepositoryError, type RepositoryDescriptor } from '../repository/contra
 import { createOpfsRepositoryBackend } from '../repository/backends/opfsBackend';
 import { supportsRepositoryWritableStreams } from '../repository/backends/directoryBackend';
 import { readJson } from '../repository/archive/streamIO';
-import { createRepositoryAt } from '../repository/lifecycle/repositoryProjectOperations';
 import { flushEditorRepository, getActiveRepositorySession, isScratchRepository, readEditorRepositoryProject } from '../repository/lifecycle/editorRepositoryLifecycle';
 import { getBrowserStorageKind, getBrowserStorageRootOf, openPersistentBrowserRoot, switchBrowserStorageToOpfs } from '../core/browserStorageRoot';
 import { fallbackStoreExists } from '../core/indexedDbEntryStore';
@@ -104,11 +103,18 @@ export async function moveTemporaryProject(name: string, onFile?: (path: string)
 export interface ActiveProjectMove extends MovedProject { persisted: boolean }
 
 /**
+ * Opens a copy of the open project in OPFS as the project core's own session
+ * (projectFileService.createProjectInBrowserStorage), so thumbnails, waveforms and
+ * caches follow the copy instead of the temporary folder removed afterwards.
+ */
+export type OpenBrowserStorageCopy = (path: string, name: string) => Promise<boolean>;
+
+/**
  * Copies the open temporary project (history, journals, workspace views) into
  * OPFS as a new repository, opens it there, verifies it and only then retires the
  * temporary copy. The browser recovery area itself is never deleted.
  */
-export async function moveActiveProjectToPersistentBrowserStorage(): Promise<ActiveProjectMove> {
+export async function moveActiveProjectToPersistentBrowserStorage(openCopy: OpenBrowserStorageCopy): Promise<ActiveProjectMove> {
   const session = getActiveRepositorySession();
   if (!session || !isTemporaryProjectLocation(session.location) || session.location.kind !== 'opfs') {
     throw new RepositoryError('conflict', 'The open project is not in temporary storage.');
@@ -124,7 +130,7 @@ export async function moveActiveProjectToPersistentBrowserStorage(): Promise<Act
   await flushEditorRepository();
   const revisionId = session.coordinator.getProjection().revisionId;
   const folder = await freeFolderName(await openPersistentBrowserRoot(), name);
-  await createRepositoryAt({ kind: 'opfs', path: folder, store: 'opfs' }, name, true);
+  if (!await openCopy(folder, name)) throw new RepositoryError('io', 'The permanent copy could not be created. The temporary project was kept.');
   await verifyProjectSwitch(session, revisionId, location => location.kind === 'opfs' && location.path === folder && location.store === 'opfs');
   switchBrowserStorageToOpfs();
   await addRecentOpfsProject(folder, readEditorRepositoryProject());

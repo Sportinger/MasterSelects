@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Logger } from '../../../services/logger';
-import { subscribeBrowserStorageKind } from '../../../services/project/core/browserStorageRoot';
+import { isBrowserStorageFallbackActive, subscribeBrowserStorageKind } from '../../../services/project/core/browserStorageRoot';
 import { getActiveRepositorySession, isScratchRepository, subscribeRepositoryLifecycle } from '../../../services/project/repository/lifecycle/editorRepositoryLifecycle';
 import { canUsePersistentBrowserStorage, listTemporaryProjects } from '../../../services/project/permanentSave/browserStorageMigration';
 import { isTemporaryProjectLocation } from '../../../services/project/permanentSave/permanentSaveOptions';
@@ -14,6 +14,8 @@ export interface PermanentSaveStatus {
   scratch: boolean;
   /** OPFS works in this tab now, so temporary projects can move into it. */
   persistentBrowserStorage: boolean;
+  /** This tab opens browser projects from OPFS, so projects moved there show up in Open Project. */
+  tabOnPersistentStorage: boolean;
   /** Other projects still held in the fallback database. */
   temporaryProjects: string[];
   refresh(): void;
@@ -22,7 +24,7 @@ export interface PermanentSaveStatus {
 function readActive() {
   const session = getActiveRepositorySession();
   const activeTemporary = isTemporaryProjectLocation(session?.location);
-  return { activeTemporary, scratch: activeTemporary && isScratchRepository() };
+  return { activeTemporary, scratch: activeTemporary && isScratchRepository(), tabOnPersistentStorage: !isBrowserStorageFallbackActive() };
 }
 
 /** Follows the open project's storage and looks for projects left in the temporary store. */
@@ -36,7 +38,8 @@ export function usePermanentSaveStatus(): PermanentSaveStatus {
     const update = () => {
       setActive(previous => {
         const next = readActive();
-        return previous.activeTemporary === next.activeTemporary && previous.scratch === next.scratch ? previous : next;
+        return previous.activeTemporary === next.activeTemporary && previous.scratch === next.scratch
+          && previous.tabOnPersistentStorage === next.tabOnPersistentStorage ? previous : next;
       });
       setGeneration(value => value + 1);
     };

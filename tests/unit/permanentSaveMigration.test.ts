@@ -60,6 +60,22 @@ vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecyc
 vi.mock('../../src/services/project/repository/lifecycle/exportProjectArchive', () => ({
   exportCurrentProjectArchive: vi.fn(), pickArchiveOutput: vi.fn(),
 }));
+// The real project core is used; its unrelated collaborators stay out of the module graph.
+vi.mock('../../src/services/projectDB', () => ({ projectDB: {} }));
+vi.mock('../../src/services/project/androidProjectAutoRestore', () => ({ isAndroidAutoRestoreProjectHandle: () => false }));
+vi.mock('../../src/services/project/legacyImportTarget', () => ({ requestLegacyImportTarget: vi.fn() }));
+vi.mock('../../src/services/project/mediaSourceRootAccess', () => ({ requestMediaSourceRootAccess: vi.fn() }));
+vi.mock('../../src/services/project/repository/transaction/editorRepositorySession', () => ({ updateEditorRepositoryProjectFields: vi.fn() }));
+vi.mock('../../src/services/project/repository/lifecycle/repositoryLocations', () => ({
+  isLegacyProjectLocation: vi.fn(async () => false),
+  // Same resolution as the real helper: the location's explicit store, else this tab's choice.
+  directoryForOpfs: async (path: string, store?: 'opfs' | 'indexeddb') => {
+    const roots = await import('../../src/services/project/core/browserStorageRoot');
+    let folder = await (store ? roots.getBrowserStorageRootOf(store) : roots.getBrowserStorageRoot());
+    for (const part of path.split('/')) folder = await folder.getDirectoryHandle(part, { create: true });
+    return folder;
+  },
+}));
 vi.mock('../../src/services/project/repository/lifecycle/repositoryProjectOperations', () => ({
   createRepositoryAt: (location: Record<string, unknown>) => state.createRepositoryAt!(location),
 }));
@@ -112,6 +128,13 @@ beforeEach(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+/** The editor's project core, as the toolbar hands it to the move (projectFileService.createProjectInBrowserStorage). */
+async function projectCore() {
+  const { ProjectCoreService } = await import('../../src/services/project/core/ProjectCoreService');
+  const core = new ProjectCoreService({} as never);
+  return { core, openCopy: (path: string, name: string) => core.createProjectInBrowserStorage(path, name) };
+}
+
 describe('moving projects that are not open', () => {
   it('copies and verifies every file before removing the temporary project', async () => {
     const temporaryRoot = await seedTemporaryProject();
@@ -162,12 +185,29 @@ describe('moving the open temporary project', () => {
     await root.getBrowserStorageRoot();
     expect(root.getBrowserStorageKind()).toBe('indexeddb');
     const migration = await import('../../src/services/project/permanentSave/browserStorageMigration');
-    const result = await migration.moveActiveProjectToPersistentBrowserStorage();
+    const { openCopy } = await projectCore();
+    const result = await migration.moveActiveProjectToPersistentBrowserStorage(openCopy);
     expect(result).toMatchObject({ from: 'My Project', to: 'My Project', removedTemporary: true, persisted: true });
     expect(state.session?.location).toEqual({ kind: 'opfs', path: 'My Project', store: 'opfs' });
     expect(root.getBrowserStorageKind()).toBe('opfs');
     expect(sessionStorage.getItem('ms.browserStorage.kind')).toBe('opfs');
     expect(await hasEntry(temporaryRoot, 'My Project')).toBe(false);
+  });
+
+  it('re-adopts the copy in the project core so routed files land in OPFS, not in the removed temporary folder', async () => {
+    const temporaryRoot = await seedTemporaryProject();
+    state.session = fakeSession({ kind: 'opfs', path: 'My Project' });
+    state.createRepositoryAt = async location => { state.session = fakeSession(location); };
+    await (await import('../../src/services/project/core/browserStorageRoot')).getBrowserStorageRoot();
+    const { core, openCopy } = await projectCore();
+    const migration = await import('../../src/services/project/permanentSave/browserStorageMigration');
+    await migration.moveActiveProjectToPersistentBrowserStorage(openCopy);
+    expect(await hasEntry(temporaryRoot, 'My Project')).toBe(false);
+    // Thumbnails, waveforms and caches resolve their folder through getProjectHandle().
+    await writeFile(core.getProjectHandle()!, 'Cache/thumbnails/t1.jpg', bytes('thumb'));
+    const copy = await persistentRoot.getDirectoryHandle('My Project');
+    const thumbnail = await (await (await (await copy.getDirectoryHandle('Cache')).getDirectoryHandle('thumbnails')).getFileHandle('t1.jpg')).getFile();
+    expect(thumbnail.size).toBe(5);
   });
 
   it('keeps the temporary copy and the fallback when the copy lacks the saved revision', async () => {
@@ -177,7 +217,7 @@ describe('moving the open temporary project', () => {
     const root = await import('../../src/services/project/core/browserStorageRoot');
     await root.getBrowserStorageRoot();
     const migration = await import('../../src/services/project/permanentSave/browserStorageMigration');
-    await expect(migration.moveActiveProjectToPersistentBrowserStorage()).rejects.toThrow(/temporary project was kept/);
+    await expect(migration.moveActiveProjectToPersistentBrowserStorage((await projectCore()).openCopy)).rejects.toThrow(/temporary project was kept/);
     expect(root.getBrowserStorageKind()).toBe('indexeddb');
     expect(await hasEntry(temporaryRoot, 'My Project')).toBe(true);
   });
@@ -189,7 +229,7 @@ describe('moving the open temporary project', () => {
     state.createRepositoryAt = async location => { state.session = fakeSession(location); };
     await (await import('../../src/services/project/core/browserStorageRoot')).getBrowserStorageRoot();
     const migration = await import('../../src/services/project/permanentSave/browserStorageMigration');
-    expect(await migration.moveActiveProjectToPersistentBrowserStorage()).toMatchObject({ removedTemporary: false });
+    expect(await migration.moveActiveProjectToPersistentBrowserStorage((await projectCore()).openCopy)).toMatchObject({ removedTemporary: false });
     expect(await hasEntry(temporaryRoot, 'repository-scratch')).toBe(true);
   });
 });

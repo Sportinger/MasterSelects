@@ -465,6 +465,7 @@ export function Toolbar({
           projectName={projectFileService.getProjectData()?.name ?? projectName}
           onClose={() => setShowSavePermanently(false)}
           createProject={createNewProject}
+          createBrowserStorageCopy={(path, name) => projectFileService.createProjectInBrowserStorage(path, name)}
           onProjectChanged={() => {
             const data = projectFileService.getProjectData();
             if (data) { setProjectName(data.name); setIsProjectOpen(true); setNeedsPermission(false); }

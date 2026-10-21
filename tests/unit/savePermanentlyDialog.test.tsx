@@ -13,7 +13,7 @@ vi.mock('../../src/components/common/toolbar/useSavePermanentlyEnvironment', () 
   useSavePermanentlyEnvironment: () => ({ ...state.environment, requestPersistence: vi.fn(async () => true), recheck: vi.fn() }),
 }));
 vi.mock('../../src/services/project/permanentSave/browserStorageMigration', () => ({
-  moveActiveProjectToPersistentBrowserStorage: () => state.moveActive(),
+  moveActiveProjectToPersistentBrowserStorage: (openCopy: unknown) => state.moveActive(openCopy),
   moveTemporaryProject: (name: string) => state.moveOne(name),
 }));
 vi.mock('../../src/services/project/permanentSave/permanentSaveActions', () => ({
@@ -23,8 +23,11 @@ vi.mock('../../src/services/project/permanentSave/permanentSaveActions', () => (
 import { SavePermanentlyDialog } from '../../src/components/common/toolbar/SavePermanentlyDialog';
 import { ToolbarSavePermanently } from '../../src/components/common/toolbar/ToolbarSavePermanently';
 
-const status = (overrides: Partial<{ activeTemporary: boolean; scratch: boolean; persistentBrowserStorage: boolean; temporaryProjects: string[] }> = {}) => ({
-  activeTemporary: true, scratch: false, persistentBrowserStorage: false, temporaryProjects: [] as string[], refresh: vi.fn(), ...overrides,
+type StatusOverrides = Partial<{ activeTemporary: boolean; scratch: boolean; persistentBrowserStorage: boolean; tabOnPersistentStorage: boolean; temporaryProjects: string[] }>;
+// A tab whose open project is temporary runs on the fallback; otherwise it uses OPFS.
+const status = (overrides: StatusOverrides = {}) => ({
+  activeTemporary: true, scratch: false, persistentBrowserStorage: false, tabOnPersistentStorage: overrides.activeTemporary === false,
+  temporaryProjects: [] as string[], refresh: vi.fn(), ...overrides,
 });
 const optionTitles = () => Array.from(document.querySelectorAll('.save-permanently-option-title')).map(node => node.firstChild?.textContent);
 
@@ -39,10 +42,13 @@ describe('save permanently destinations', () => {
   });
 
   it('shows the toolbar action for a temporary project or movable leftovers only', () => {
-    expect(shouldOfferPermanentSave({ activeTemporary: true, persistentBrowserStorage: false, temporaryProjects: [] })).toBe(true);
-    expect(shouldOfferPermanentSave({ activeTemporary: false, persistentBrowserStorage: false, temporaryProjects: ['A'] })).toBe(false);
-    expect(shouldOfferPermanentSave({ activeTemporary: false, persistentBrowserStorage: true, temporaryProjects: ['A'] })).toBe(true);
-    expect(shouldOfferPermanentSave({ activeTemporary: false, persistentBrowserStorage: true, temporaryProjects: [] })).toBe(false);
+    const base = { activeTemporary: false, persistentBrowserStorage: true, tabOnPersistentStorage: true, temporaryProjects: ['A'] };
+    expect(shouldOfferPermanentSave({ ...base, activeTemporary: true, persistentBrowserStorage: false, tabOnPersistentStorage: false, temporaryProjects: [] })).toBe(true);
+    expect(shouldOfferPermanentSave({ ...base, persistentBrowserStorage: false })).toBe(false);
+    expect(shouldOfferPermanentSave(base)).toBe(true);
+    expect(shouldOfferPermanentSave({ ...base, temporaryProjects: [] })).toBe(false);
+    // OPFS works again, but this tab still opens browser projects from the fallback.
+    expect(shouldOfferPermanentSave({ ...base, tabOnPersistentStorage: false })).toBe(false);
   });
 });
 
@@ -53,7 +59,8 @@ describe('SavePermanentlyDialog', () => {
   });
   afterEach(cleanup);
   const renderDialog = (overrides = {}, props: Partial<Parameters<typeof SavePermanentlyDialog>[0]> = {}) => render(
-    <SavePermanentlyDialog status={status(overrides)} projectName="Stage Show" onClose={vi.fn()} createProject={vi.fn()} onProjectChanged={vi.fn()} {...props} />,
+    <SavePermanentlyDialog status={status(overrides)} projectName="Stage Show" onClose={vi.fn()} createProject={vi.fn()}
+      createBrowserStorageCopy={vi.fn()} onProjectChanged={vi.fn()} {...props} />,
   );
 
   it('offers only the archive on iPad Private Browsing, with the Home Screen note', () => {
@@ -103,6 +110,23 @@ describe('SavePermanentlyDialog', () => {
     fireEvent.click(screen.getByText('Move 2 to this browser’s permanent storage'));
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Moved 2 projects/));
     expect(state.moveOne.mock.calls).toEqual([['A'], ['B']]);
+  });
+
+  it('moves the open project through the project core copy', async () => {
+    state.environment.persistentBrowserStorage = true;
+    state.moveActive.mockResolvedValue({ from: 'Stage Show', to: 'Stage Show', removedTemporary: true, persisted: true });
+    const createBrowserStorageCopy = vi.fn();
+    renderDialog({}, { createBrowserStorageCopy });
+    fireEvent.click(screen.getByText('Keep in this browser'));
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved permanently in this browser/));
+    expect(state.moveActive).toHaveBeenCalledWith(createBrowserStorageCopy);
+  });
+
+  it('lists leftovers without offering their move while this tab still uses the temporary store', () => {
+    state.environment.persistentBrowserStorage = true;
+    renderDialog({ temporaryProjects: ['A', 'B'] });
+    expect(screen.queryByText(/^Move 2 to/)).toBeNull();
+    expect(screen.getByText(/Also in temporary storage: A, B\..*after this project was kept in this browser/)).toBeTruthy();
   });
 });
 

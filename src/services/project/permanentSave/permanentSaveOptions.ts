@@ -33,11 +33,24 @@ export function resolvePermanentSaveDestinations(environment: PermanentSaveEnvir
   return destinations;
 }
 
-/** The toolbar action shows while the open project is temporary, or while other projects can be moved out. */
-export function shouldOfferPermanentSave(state: {
+export interface TemporaryProjectsState {
   activeTemporary: boolean;
   persistentBrowserStorage: boolean;
+  /** This tab opens browser projects from OPFS (or has not chosen yet), not from the fallback. */
+  tabOnPersistentStorage: boolean;
   temporaryProjects: readonly string[];
-}): boolean {
-  return state.activeTemporary || (state.persistentBrowserStorage && state.temporaryProjects.length > 0);
+}
+
+/**
+ * Projects left in the fallback can move into OPFS only while this tab itself
+ * uses OPFS: otherwise Open Project and their recent entries still resolve to the
+ * fallback, and the moved projects could not be opened here.
+ */
+export function canMoveTemporaryProjects(state: TemporaryProjectsState): boolean {
+  return state.persistentBrowserStorage && state.tabOnPersistentStorage && state.temporaryProjects.length > 0;
+}
+
+/** The toolbar action shows while the open project is temporary, or while other projects can be moved out. */
+export function shouldOfferPermanentSave(state: TemporaryProjectsState): boolean {
+  return state.activeTemporary || canMoveTemporaryProjects(state);
 }

@@ -127,7 +127,8 @@ offers only the destinations this device supports, best first:
   editor switches to the folder.
 - **Keep in this browser** (when OPFS opens and accepts a write in this tab
   now): the repository is copied into OPFS as a new repository and opened
-  there; the tab then uses OPFS, also across reloads. Locations carry an
+  there and adopted by the project core, so thumbnails, waveforms and caches
+  follow the copy; the tab then uses OPFS, also across reloads. Locations carry an
   explicit `store` (`opfs`/`indexeddb`) so one tab can address both stores.
 - **Download .msproj archive** named after the project (full history); on
   iPhone/iPad it lands in the Files app. The open project stays temporary.
@@ -138,8 +139,9 @@ says so. The scratch browser recovery is never deleted. The dialog also shows
 whether the browser keeps its storage (`navigator.storage.persisted()`), can
 ask for it (`persist()`), and on iPhone/iPad notes that Safari grants persistence
 by its own heuristics, most likely for the Home Screen app, whose storage is
-separate. When a tab can use OPFS while projects remain in the fallback
-database, the button reads "Move N temporary projects" and moves them with a
+separate. When a tab itself uses OPFS while projects remain in the fallback
+database (a tab still on the fallback only lists them, because Open Project
+would not find them there), the button reads "Move N temporary projects" and moves them with a
 byte-verified copy (SHA-256 per file) under their repository writer lock; a
 project open in another tab is skipped. Only when IndexedDB refuses as
 well do project dialogs and the save status explain the cause instead of the

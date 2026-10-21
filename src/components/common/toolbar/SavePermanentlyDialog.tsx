@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState, type PointerEvent } from 'react';
 import { Logger } from '../../../services/logger';
 import { describeBrowserStorageFailure } from '../../../services/project/core/browserStorageFailure';
-import { moveActiveProjectToPersistentBrowserStorage, moveTemporaryProject } from '../../../services/project/permanentSave/browserStorageMigration';
+import { moveActiveProjectToPersistentBrowserStorage, moveTemporaryProject, type OpenBrowserStorageCopy } from '../../../services/project/permanentSave/browserStorageMigration';
 import { downloadActiveProjectArchive, saveActiveProjectToFolder } from '../../../services/project/permanentSave/permanentSaveActions';
-import { resolvePermanentSaveDestinations, type PermanentSaveDestination } from '../../../services/project/permanentSave/permanentSaveOptions';
+import { canMoveTemporaryProjects, resolvePermanentSaveDestinations, type PermanentSaveDestination } from '../../../services/project/permanentSave/permanentSaveOptions';
 import type { PermanentSaveStatus } from './usePermanentSaveStatus';
 import { useSavePermanentlyEnvironment } from './useSavePermanentlyEnvironment';
 import '../ProjectNameDialog.css';
@@ -19,6 +19,8 @@ interface SavePermanentlyDialogProps {
   onClose(): void;
   /** The toolbar's Save As: picks a folder and switches the open project to it. */
   createProject(name: string): Promise<boolean>;
+  /** Opens a copy of the open project in this browser's persistent storage as the editor's project. */
+  createBrowserStorageCopy: OpenBrowserStorageCopy;
   /** The open project moved; the toolbar re-reads its name and state. */
   onProjectChanged(): void;
 }
@@ -33,7 +35,7 @@ function describe(error: unknown): string {
   return describeBrowserStorageFailure(error) ?? (error instanceof Error ? error.message : String(error));
 }
 
-export function SavePermanentlyDialog({ status, projectName, onClose, createProject, onProjectChanged }: SavePermanentlyDialogProps) {
+export function SavePermanentlyDialog({ status, projectName, onClose, createProject, createBrowserStorageCopy, onProjectChanged }: SavePermanentlyDialogProps) {
   const titleId = useId();
   const dialog = useRef<HTMLDivElement>(null);
   const mounted = useRef(true);
@@ -43,7 +45,8 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const destinations = environment.checking ? [] : resolvePermanentSaveDestinations({ ...environment, activeTemporary: status.activeTemporary });
-  const canMoveOthers = environment.persistentBrowserStorage && status.temporaryProjects.length > 0;
+  // Moved projects are only reachable via Open Project once this tab itself uses OPFS.
+  const canMoveOthers = canMoveTemporaryProjects({ ...status, persistentBrowserStorage: environment.persistentBrowserStorage });
 
   useEffect(() => {
     mounted.current = true;
@@ -74,7 +77,7 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
       return `Saved permanently. "${name.trim() || projectName}" now opens from the chosen folder.${result.removedTemporary ? ' The temporary copy was removed.' : ''}`;
     },
     async browser() {
-      const result = await moveActiveProjectToPersistentBrowserStorage();
+      const result = await moveActiveProjectToPersistentBrowserStorage(createBrowserStorageCopy);
       onProjectChanged();
       return `Saved permanently in this browser as "${result.to}".${result.removedTemporary ? ' The temporary copy was removed.' : ''}`
         + (result.persisted ? '' : ' The browser did not promise to keep its storage under disk pressure; also download an archive for a copy outside the browser.');
@@ -131,6 +134,10 @@ export function SavePermanentlyDialog({ status, projectName, onClose, createProj
           {busy === 'others' ? 'Moving…' : `Move ${status.temporaryProjects.length} to this browser’s permanent storage`}
         </button>
       </div>}
+      {!canMoveOthers && status.temporaryProjects.length > 0 && <p className="save-permanently-others">
+        Also in temporary storage: {status.temporaryProjects.join(', ')}.
+        {environment.persistentBrowserStorage && ' They can move into this browser’s permanent storage after this project was kept in this browser.'}
+      </p>}
       {!environment.checking && <p className="save-permanently-persistence">
         {environment.persistence === true ? 'This browser keeps MasterSelects storage permanently.'
           : environment.persistence === 'unsupported' ? 'This browser does not report whether it keeps its storage.'
