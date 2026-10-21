@@ -27,6 +27,8 @@
 //              number, reach its arrow length (overlay units, default 84; the crop grows to keep it);
 //              label goes into the printed caption.
 //   alt, caption  printed into the figure
+//   viewport { width, height } of the browser window in CSS px, default 1600 x 900: wider gives
+//            the inspector room for its full rows, taller fits a long effect card
 // Needs a Vite of this checkout (`npx vite --port 5176 --strictPort`); each shot's project lives in
 // a throwaway browser context.
 import fs from 'node:fs';
@@ -45,7 +47,10 @@ if (!shots.length) throw new Error(`No shot named ${only} in ${shotFile}`);
 const url = option('--url', 'http://localhost:5176').replace(/\/$/, '');
 const out = path.resolve(option('--out', 'docs/Features/assets/effects/editor'));
 const imageDir = path.resolve('tests/browser/effect-lab/images');
-const viewport = { width: 1600, height: 900 };
+// The browser window in CSS px; a shot's `viewport` overrides it (a wider window gives the dock
+// panels, and so the inspector, more room; a taller one fits a long effect card).
+const DEFAULT_VIEWPORT = { width: 1600, height: 900 };
+const viewport = { ...DEFAULT_VIEWPORT };
 
 const launchArgs = ['--enable-unsafe-webgpu', '--enable-features=Vulkan,VulkanFromANGLE', '--use-angle=vulkan',
   '--ignore-gpu-blocklist', '--window-position=0,0'];
@@ -171,7 +176,7 @@ function measure({ preview, top, marks, view }) {
   // `tabs`: from the row of Properties sub-tabs (Transform, Color, Effects, …), below the dock tabs.
   const tabRow = top === 'tabs' ? [...panel.querySelectorAll('button, [role=tab]')].find(element => element.textContent.trim().startsWith('Effects'))?.parentElement : undefined;
   const cropTop = top === 'card' ? cardBox.top - 8 : tabRow ? tabRow.getBoundingClientRect().top : panelBox.top;
-  const crop = { left: Math.max(0, panelBox.left - preview), top: Math.max(0, cropTop), right: panelBox.right, bottom: Math.min(window.innerHeight, cardBox.bottom + 12) };
+  const crop = { left: Math.max(0, panelBox.left - preview), top: Math.max(0, cropTop), right: panelBox.right, bottom: Math.min(window.innerHeight, panelBox.bottom, cardBox.bottom + 12) };
   return { crop, marks: marks.map(mark => {
     const target = typeof mark === 'string' ? mark : mark.target;
     const found = find(target);
@@ -196,6 +201,7 @@ function figure(shot, file, crop, boxes) {
 
 // One browser per shot: a fresh project in its own private file system, and one GPU device at a time.
 for (const shot of shots) {
+  Object.assign(viewport, DEFAULT_VIEWPORT, shot.viewport ?? {});
   const browser = await chromium.launch({ channel: 'chrome', headless: false, args: [...launchArgs, `--window-size=${viewport.width},${viewport.height + 120}`] });
   try {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2 });
