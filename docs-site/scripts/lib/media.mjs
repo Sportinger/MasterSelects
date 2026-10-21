@@ -1,8 +1,8 @@
 // Size probes and byte budgets for the pictures and clips of the docs.
 // Budgets (docs plan §7): WebP/PNG/JPEG ≤ 200 KB and ≤ 1600 px wide (scripts/docShotWebp.mjs),
-// gallery thumbnails ≤ 30 KB, clips ≤ 1 MB and ≤ 8 s.
+// gallery thumbnails ≤ 30 KB, clips ≤ 1.5 MB and ≤ 12 s (the default of scripts/doc-clip.mjs).
 
-export const BUDGETS = { imageBytes: 200_000, imageWidth: 1600, thumbBytes: 30_000, clipBytes: 1_000_000, clipSeconds: 8 };
+export const BUDGETS = { imageBytes: 200_000, imageWidth: 1600, thumbBytes: 30_000, clipBytes: 1_500_000, clipSeconds: 12 };
 export const IMAGE_EXTENSIONS = /\.(?:webp|png|jpe?g|gif|avif|svg)$/iu;
 export const VIDEO_EXTENSIONS = /\.(?:mp4|webm)$/iu;
 

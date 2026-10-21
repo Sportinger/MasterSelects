@@ -31,7 +31,7 @@
 //           | { "drag": "<row label>", "to": value or [values] }; "ms" sets a move's duration.
 //           Targets: the exact visible text ("+ Add Effect", "Glitch"), "slider:<row label>",
 //           "preview:<x>,<y>" (0–1) or "@<x>,<y>" (CSS px)
-//   width (default 1280), fps (30), maxBytes (default 2 MB), poster, jpegQuality (screencast, 88)
+//   width (default 1280), fps (30), maxBytes (default 1.5 MB), poster, jpegQuality (screencast, 88)
 //   Keep the real mouse away from the browser window while it records: the script warns when
 //   pointer events arrived that it did not send.
 // Both: alt, caption, float ("left" | "right") go into the printed figure.

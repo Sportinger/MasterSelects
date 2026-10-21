@@ -2,6 +2,65 @@
 
 For developers and agents who write or build the documentation. MasterSelects publishes its product documentation at `https://www.masterselects.com/docs/`, as part of the main website. The editor's **Info > Documentation** action opens that page in a new browser tab.
 
+## Style guide
+
+The short version for everyone who writes a page or makes its pictures. The sections below hold the details.
+
+**Voice.** Less is more. Write for a video artist, not for a developer: everyday words, short sentences, present tense, "you". Say what something does and what it is for before saying how it works. Facts come from the code and the running editor, not from older docs.
+
+**Three layers on every page.**
+
+1. **Top:** what it is and what it is for, one picture beside the text, the key controls or steps and one tip. A reader who stops here can use it.
+2. **Middle:** how it is built: node graph pictures, editor excerpts with numbered callouts, one change to try (**Remix:**).
+3. **Bottom:** `## Technical details`: units, limits, saved projects and links to the developer pages. Code paths appear only here.
+
+Each page type has a fixed template: [Page templates](#page-templates).
+
+**Which visual.**
+
+| The page shows | Medium | Made with |
+|---|---|---|
+| An effect whose look is static | original \| effect still (split) | `scripts/effect-lab.mjs --pairs` |
+| An effect that moves or depends on time | a short loop on moving footage, in place of the still | `scripts/doc-clip.mjs` |
+| How to do something in the editor (add, drag, trim) | a clip with a visible pointer | `scripts/doc-clip.mjs`, `"kind": "operation"` |
+| A part of the editor (inspector, panel) | a still with numbered callouts | `scripts/effect-editor-shot.mjs` |
+| A node graph | a graph picture | `scripts/effect-graph-shot.mjs` |
+| Tracks, time, before and after | an inline SVG diagram | by hand ([Diagrams](#pictures-clips-diagrams-and-galleries)) |
+
+- **No GIFs.** Motion is an MP4 (H.264, muted, no audio) with a WebP poster. The site plays it only while it is on screen and shows the poster under reduced motion.
+- **Motion only where motion is the point.** One still or loop at the top of an effect page; an operation clip only where the page explains how to do something.
+- **Loops** last 3–6 s and run seamlessly (the end fades into the start). They use the shared moving footage `dancer_stage_motion.mp4`, which is not in the repository (`--media <folder>`).
+- **Stills** use the shared Effect Lab images in `tests/browser/effect-lab/images/` (`dancer_stage`, `harbor_town`, `neon_rain_street`, `greenscreen_dancer`). Pick the one on which the effect reads best.
+- **Operation clips** are recorded in the real editor: the drawn pointer moves in eased arcs and ripples on every click. They are cropped to the panels that matter. Keep the real mouse off the recording window.
+- **Default settings**, unless the caption names the changed values ("Left: original. Right: Radius 12.").
+- **Alt text** says what the picture shows; the caption names every callout number.
+- **Look at every new picture and clip yourself** (a contact sheet for a batch) before you commit it. A broken or too dark render is not published: name it in `PICTURE_PENDING` (`scripts/effectDocsCatalog.mjs`) instead.
+
+**Formatting.**
+
+- A picture is `<figure class="docs-shot">` with a `<figcaption>`; `docs-shot--float-right` or `--float-left` puts the top picture beside the text.
+- Tables have at most four short columns.
+- No manual table of contents and no change-log wording.
+- Details: [Pictures, clips, diagrams and galleries](#pictures-clips-diagrams-and-galleries).
+
+**Budgets.**
+
+| Asset | Limit |
+|---|---|
+| Pictures | WebP ≤ 200 KB and ≤ 1600 px wide |
+| Gallery thumbnails | ≤ 30 KB |
+| Clips | ≤ 1.5 MB and ≤ 12 s |
+| A whole page | about 600 KB per effect page, 1.5 MB per guide |
+
+The tools encode to fit, and the sync warns about anything over. Reshoot only when the UI visibly changed: every reshoot stays in the Git history.
+
+**Before you commit.**
+
+1. For effect pages: `node scripts/effect-docs.mjs`, then `npx vitest run tests/unit/effectDocsCatalog.test.ts tests/unit/docsSiteSync.test.ts`.
+2. `npm run sync` in `docs-site/` must report no new warnings (links, alt text, posters, budgets).
+3. Open the changed pages in a docs dev server on a free port (`npx astro dev --port <port>` in `docs-site/`), 1440 px and 420 px wide. Check that there is no sideways scrolling, the pictures load, floats drop below the text on a phone and the clips play.
+4. Commit only the sources and assets. The site files are generated and untracked ([Generated output](#generated-output)).
+
 ## Sources and URLs
 
 `docs/Features/` is the single source of truth. `docs-site/` renders it with Astro Starlight; `docs-site/scripts/sync-features.mjs` converts the pages before every dev start and build.
@@ -178,7 +237,7 @@ The Markdown shortcut `![Glitch on a dancer](../assets/effects/clips/glitch.mp4)
 
 Paths are relative to `docs/Features`. Further fields: `basic` (a generated basic page), `clip` (`assets/effects/clips/<id>.mp4`), `engine` (the shared engine of style effects), `moving` (time-based, so it gets a loop), `experimental` and `hidden`. Without the catalog, cards show the page title (or the id) and no picture.
 
-**Budgets.** WebP/PNG/JPEG ≤ 200 KB and ≤ 1600 px wide (`scripts/docShotWebp.mjs`), gallery thumbnails ≤ 30 KB, clips ≤ 1 MB and ≤ 8 s; about 600 KB per effect page and 1.5 MB per guide. Reshoot only when the UI visibly changed: every reshoot stays in the Git history.
+**Budgets** for pictures, thumbnails and clips: [Style guide](#style-guide). `scripts/docShotWebp.mjs` encodes pictures to fit, `scripts/doc-clip.mjs` clips.
 
 ## Shot and clip tooling
 
@@ -314,13 +373,7 @@ not in the timeline below.
 
 ### Docs clips (motion and editor operations)
 
-Which medium (owner decision 2026-10-21): an effect whose look is static keeps an
-original | effect still (Effect Lab pairs above). An effect that moves or depends on
-time (Glitch bursts, CRT flicker and hum, film grain, VHS faults) gets a short loop
-on moving footage instead, in the still's place, with the same figure and float. An
-editor operation (adding an effect, dragging a control) gets a clip with a visible
-pointer. Less is more: at most one clip per effect, and an operation clip only where
-a page says how to do something.
+Which medium a page needs (still, loop or operation clip): [Style guide](#style-guide).
 
 `scripts/doc-clip.mjs <shot file>` makes both kinds in the real editor of the
 checkout, each in a throwaway project of hardware-GPU Chrome, from one JSON shot
@@ -341,8 +394,7 @@ list per docs page (`scripts/doc-clips/analog.json`):
   ripple on clicks. The clip shows the named dock groups (`panels`), cropped together.
 
 Each clip becomes `<name>.mp4` (H.264, yuv420p, BT.709, faststart, no audio; the
-CRF rises until it fits `maxBytes`, 1.5 MB for effect clips and 2 MB for
-operations) and a WebP poster (`poster` seconds into the clip), and the script
+CRF rises until it fits `maxBytes`, 1.5 MB by default) and a WebP poster (`poster` seconds into the clip), and the script
 prints the figure:
 
 ```html

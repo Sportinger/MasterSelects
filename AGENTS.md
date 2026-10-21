@@ -18,7 +18,10 @@ and is never a commit or push target. Kernel-internal code and secrets must stay
 out of this editor repository (see section 7).
 
 Feature docs: one page per feature under `docs/Features/`, index at
-[`docs/Features/README.md`](docs/Features/README.md). Product overview:
+[`docs/Features/README.md`](docs/Features/README.md). Before you write a docs page or
+make its pictures or clips, read the
+[docs style guide](docs/Features/Documentation-Site.md#style-guide): page
+layers, which visual (still, loop or pointer clip), budgets and checks. Product overview:
 [`README.md`](README.md). Maintainer plans in `docs/ongoing/` stay private.
 
 ---

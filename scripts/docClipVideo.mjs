@@ -116,6 +116,6 @@ export function encodeRecording(clip, { frames, end, crop, output, poster, workD
   const graph = `[0:v]crop=${even(crop.width)}:${even(crop.height)}:${crop.x}:${crop.y},scale=${width}:${height}:flags=lanczos,`
     // Screencast frames are JPEG: full-range BT.601.
     + `scale=in_range=full:in_color_matrix=bt601:out_color_matrix=bt709:out_range=limited,format=yuv420p,setsar=1,fps=${clip.fps ?? 30}[v]`;
-  const encoded = encodeWithinBudget({ inputArgs: ['-f', 'concat', '-safe', '0', '-i', list], graph, output, maxBytes: clip.maxBytes ?? 2_000_000, crf: clip.crf ?? 22 });
+  const encoded = encodeWithinBudget({ inputArgs: ['-f', 'concat', '-safe', '0', '-i', list], graph, output, maxBytes: clip.maxBytes ?? 1_500_000, crf: clip.crf ?? 22 });
   return { ...encoded, ...probeVideo(output), posterBytes: writePoster(output, poster, clip.poster ?? 0) };
 }
