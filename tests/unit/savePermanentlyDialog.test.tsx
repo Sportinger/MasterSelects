@@ -161,7 +161,7 @@ describe('SavePermanentlyDialog', () => {
     expect(dialog.closest('.project-name-dialog-backdrop')?.parentElement).toBe(document.body);
     const body = dialog.querySelector('.save-permanently-body');
     const footer = dialog.querySelector('.save-permanently-footer');
-    expect(body?.querySelector('.save-permanently-options')).toBeTruthy();
+    expect(body?.querySelector('.save-permanently-fix')).toBeTruthy();
     expect(footer?.parentElement).toBe(dialog);
     expect(body?.contains(footer!)).toBe(false);
     expect(footer?.textContent).toBe('Close');
