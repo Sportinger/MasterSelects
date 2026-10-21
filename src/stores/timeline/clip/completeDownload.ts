@@ -13,6 +13,7 @@ import {
 import { generateClipId } from '../helpers/idGenerator';
 import { updateClipById } from '../helpers/clipStateHelpers';
 import { Logger } from '../../../services/logger';
+import { isUndecodableAudioSourceError } from '../../../services/audio/decode/errors';
 import {
   SOURCE_WAVEFORM_MAX_PREVIEW_SAMPLES,
   SOURCE_WAVEFORM_PREVIEW_SAMPLES_PER_SECOND,
@@ -227,7 +228,9 @@ async function generateWaveformAsync(
     });
     log.debug('Waveform generated for audio clip');
   } catch (e) {
-    log.warn('Waveform generation failed', e);
+    // The clip waveform analysis logs the one explained warning for an undecodable source.
+    if (isUndecodableAudioSourceError(e)) log.debug('Waveform generation failed', e);
+    else log.warn('Waveform generation failed', e);
     set({ clips: updateClipById(get().clips, audioClipId, { waveformGenerating: false }) });
   }
 }

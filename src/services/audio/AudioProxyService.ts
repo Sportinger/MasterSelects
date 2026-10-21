@@ -11,6 +11,8 @@ import { isMxfFile } from '../mediaMetadata/mxf/mxfMediaMetadata';
 import { MxfAudioUnavailableError } from '../mediaRuntime/mxf/mxfPcmWav';
 import { buildMxfAudioProxyWav } from '../mediaRuntime/mxf/mxfAudioProxyClient';
 import { readLongPcmWavInfo } from './longPcmWav';
+import { isUndecodableAudioSourceError } from './decode/errors';
+import { runSharedBrowserAudioDecode } from './decode/sharedBrowserAudioDecode';
 
 const log = Logger.create('AudioProxy');
 
@@ -208,7 +210,8 @@ export async function ensureAudioProxyForMediaFile(
             reader.dispose();
           }
         } else {
-          audioBuffer = await getSharedAudioDecodeService().decodeAudioBuffer(
+          // Shares decodeAudioData with a concurrent source waveform job of the same file.
+          audioBuffer = await runSharedBrowserAudioDecode(sourceFile, () => getSharedAudioDecodeService().decodeAudioBuffer(
             { kind: 'file', file: sourceFile },
             {
               mediaFileId: mediaFile.id,
@@ -219,7 +222,7 @@ export async function ensureAudioProxyForMediaFile(
                 sourceFileSize: sourceFile.size,
               },
             },
-          );
+          ));
         }
       } catch (error) {
         if (mediaFile.type === 'video' && isDecodeMissingAudio(error)) {
@@ -228,7 +231,13 @@ export async function ensureAudioProxyForMediaFile(
         }
         const message = error instanceof Error ? error.message : String(error);
         callbacks.onUpdate?.({ status: 'error', progress: 0, storageKey, error: message });
-        log.warn('Audio proxy decode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+        // An undecodable source shows as the proxy error status; the waveform analysis
+        // logs the one explained warning for it.
+        if (isUndecodableAudioSourceError(error)) {
+          log.debug('Audio proxy decode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+        } else {
+          log.warn('Audio proxy decode failed', { mediaId: mediaFile.id, name: mediaFile.name, error });
+        }
         return;
       }
 
