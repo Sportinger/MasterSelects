@@ -237,6 +237,17 @@ primitive patterns can adopt the same definitions across image effects.
 The numeric Value family exposes Float and Integer variants in the inspector;
 Integer truncates toward zero and keeps the number-port contract.
 
+## Random nodes
+
+Image graphs offer two deterministic hashes of a Vector 2 key, both returning a
+number in [0, 1): **Random (Hash)** (`noise.hash2d.vec2`), the original sine hash
+that older effects keep, and **Random (Integer Hash)** (`noise.hash2d-pcg.vec2`), a
+lowbias32 bit mix plus PCG2D on the exact float bits. Use the integer hash for new
+graphs: the sine hash shows diagonal stripes on cell grids and loses quality on
+large keys, the integer hash stays uniform for any key (Glitch and Film Prism use
+it), and for the same key it gives bit-identical values on the GPU and in the CPU
+evaluator.
+
 ## Categories, names and visibility
 
 `src/services/operators/operatorTaxonomy.ts` is the one presentation taxonomy for
