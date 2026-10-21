@@ -2,7 +2,7 @@ import { beginOperationTrace, type OperationTrace } from '../productAnalytics/op
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
 import { installEditorWriterHandover } from './repository/lifecycle/editorWriterHandover';
 import { isBrowserStorageUnavailableError } from './core/browserStorageFailure';
-import { discardStoredProjectArchive, storeProjectArchiveInBrowser } from './browserProjectArchive';
+import { discardStoredProjectArchive, releaseRestoredProjectArchive, storeProjectArchiveInBrowser } from './browserProjectArchive';
 import { isRepositoryHydrating } from './repository/transaction/storeMutationBoundary';
 // Project Lifecycle — create, open, close, auto-sync
 
@@ -381,7 +381,11 @@ export async function openStoredProject(name: string, options: { signal?: AbortS
 export async function openProjectArchive(file: File, signal?: AbortSignal): Promise<boolean> {
   const name = await storeProjectArchiveInBrowser(file, signal);
   try {
-    if (await openStoredProject(name, { signal })) return true;
+    if (await openStoredProject(name, { signal })) {
+      // The restored project now stands on its own; reopening it never imports again.
+      await releaseRestoredProjectArchive(name).catch(error => log.warn('Restored archive copy cleanup failed', { name, error }));
+      return true;
+    }
   } catch (error) {
     await discardStoredProjectArchive(name);
     throw error;

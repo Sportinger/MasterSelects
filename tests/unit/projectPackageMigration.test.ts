@@ -31,6 +31,8 @@ vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecyc
 }));
 vi.mock('../../src/services/project/repository/lifecycle/repositoryLocations', () => ({
   directoryForOpfs: vi.fn(async (path: string) => repo.opfsRoot!.getDirectoryHandle(path, { create: true })),
+  // Opening never creates a stored project folder; a missing one is reported instead.
+  opfsLocationExists: vi.fn(async (path: string) => repo.opfsRoot!.getDirectoryHandle(path).then(() => true, () => false)),
   isLegacyProjectLocation: repo.isLegacyProjectLocation,
 }));
 vi.mock('../../src/services/project/repository/transaction/editorRepositorySession', () => ({
@@ -167,6 +169,13 @@ describe('project repository creation and legacy conversion', () => {
     expect(await readProjectParent()).toBe(root);
     expect(storeHandle).not.toHaveBeenCalled();
     expect(getHandle).not.toHaveBeenCalled();
+    // A stored project removed since then is neither restored nor recreated as an empty folder.
+    sessionStorage.setItem('ms.repository.last-opfs-path', 'Removed Cut');
+    const calls = repo.openRepositoryProject.mock.calls.length;
+    expect(await new ProjectCoreService(fileStorageService).restoreLastProject()).toBe(false);
+    await expect(new ProjectCoreService(fileStorageService).openStoredProject('Removed Cut')).rejects.toMatchObject({ code: 'io' });
+    expect(repo.openRepositoryProject.mock.calls.length).toBe(calls);
+    expect(root.directories.has('Removed Cut')).toBe(false);
   });
 
   it.each(['picker', 'existing-folder'])('creates a project despite an unavailable handle cache (%s)', async (mode) => {

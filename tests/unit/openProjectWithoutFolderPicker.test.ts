@@ -4,8 +4,10 @@ import { listProjectFolderNames } from '../../src/services/project/core/projectR
 import {
   archiveProjectName,
   discardStoredProjectArchive,
+  releaseRestoredProjectArchive,
   storeProjectArchiveInBrowser,
 } from '../../src/services/project/browserProjectArchive';
+import { writeZip } from '../../src/services/project/repository/archive/streamZip';
 
 vi.mock('../../src/services/project/repository/lifecycle/editorRepositoryLifecycle', () => ({
   getActiveRepositorySession: () => null,
@@ -123,5 +125,55 @@ describe('.msproj archive import into browser storage', () => {
     const name = await storeProjectArchiveInBrowser(new File(['bytes'], 'Show.msproj'));
     await discardStoredProjectArchive(name);
     expect(root.entries.has(name)).toBe(false);
+  });
+});
+
+/** A repository archive reduced to its manifest; enough for naming the imported project. */
+async function manifestArchive(fileName: string, manifest: Record<string, unknown>): Promise<File> {
+  const parts: Uint8Array[] = [];
+  async function* bytes(value: string) { yield new TextEncoder().encode(value); }
+  async function* entries() { yield { path: 'archive-manifest.json', chunks: bytes(JSON.stringify(manifest)) }; }
+  await writeZip(entries(), async chunk => { parts.push(chunk.slice()); });
+  return new File(parts.map(part => part.slice().buffer as ArrayBuffer), fileName);
+}
+async function storedFile(folder: FakeDirectory, path: string[], content: string): Promise<void> {
+  let directory = folder;
+  for (const part of path.slice(0, -1)) directory = await directory.getDirectoryHandle(part, { create: true });
+  (await directory.getFileHandle(path.at(-1)!, { create: true })).data = new Blob([content]);
+}
+
+describe('imported archive project naming and cleanup', () => {
+  const format = 'masterselects-repository-archive';
+
+  it('names the browser folder after the project recorded in the archive, with free-name suffixing', async () => {
+    await expect(storeProjectArchiveInBrowser(await manifestArchive('export-final.msproj', { format, projectName: 'Opera: Night' }))).resolves.toBe('Opera Night');
+    await expect(storeProjectArchiveInBrowser(await manifestArchive('other.msproj', { format, projectName: 'Opera: Night' }))).resolves.toBe('Opera Night (2)');
+    expect(root.entries.has('Opera Night (2)')).toBe(true);
+  });
+
+  it('falls back to the file name for archives without a recorded project name', async () => {
+    await expect(storeProjectArchiveInBrowser(await manifestArchive('export-Show.msproj', { format }))).resolves.toBe('export-Show');
+    await expect(storeProjectArchiveInBrowser(new File(['not a zip'], 'Plain.msproj'))).resolves.toBe('Plain');
+  });
+
+  it('removes the archive copy only after its repository restore was recorded as complete', async () => {
+    const restored = await root.getDirectoryHandle('Show', { create: true });
+    await storedFile(restored, ['Show.msproj'], 'archive');
+    await storedFile(restored, ['.masterselects', 'imports', 'a', 'complete.json'], JSON.stringify({ kind: 'repository-archive', package: 'Show.msproj', commit: { commitId: 'c' } }));
+    await expect(releaseRestoredProjectArchive('Show')).resolves.toBe(true);
+    expect(restored.entries.has('Show.msproj')).toBe(false);
+
+    // An old-format package stays: its converted project still reads files from it.
+    const legacy = await root.getDirectoryHandle('Old', { create: true });
+    await storedFile(legacy, ['Old.msproj'], 'package');
+    await storedFile(legacy, ['.masterselects', 'imports', 'b', 'complete.json'], JSON.stringify({ sourceId: 'x', commit: { commitId: 'c' } }));
+    await expect(releaseRestoredProjectArchive('Old')).resolves.toBe(false);
+    expect(legacy.entries.has('Old.msproj')).toBe(true);
+
+    const unfinished = await root.getDirectoryHandle('Half', { create: true });
+    await storedFile(unfinished, ['Half.msproj'], 'archive');
+    await storedFile(unfinished, ['.masterselects', 'imports', 'c', 'target.json'], JSON.stringify({ kind: 'repository-archive', package: 'Half.msproj' }));
+    await expect(releaseRestoredProjectArchive('Half')).resolves.toBe(false);
+    expect(unfinished.entries.has('Half.msproj')).toBe(true);
   });
 });

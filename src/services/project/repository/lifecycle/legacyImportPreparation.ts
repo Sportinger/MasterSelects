@@ -125,6 +125,14 @@ const assertNotCancelled = (signal?: AbortSignal) => { if (signal?.aborted) thro
 async function restoreArchiveIntoTarget(request: LegacyImportRequest, packagePath: string, packageIdentity: { hash: string; length: number } | null,
   importId: string, descriptor: RepositoryDescriptor, target: RepositoryBackend, owner: RepositoryOwner): Promise<RepositoryDescriptor> {
   const { source, signal } = request;
+  // A repository already in the target came from an earlier restore that stopped before its commit; its
+  // published segments cannot be replaced, so the archive must go into a new project instead.
+  if (await target.stat('project.msrepo.json')) throw new RepositoryError('conflict', 'An earlier import of this archive into this folder did not finish. Import the .msproj archive again into a new project.');
+  // Recorded before the copy: an interrupted restore is then never opened as a half-built project, and a
+  // finished one (complete.json below) opens as an ordinary repository every later time.
+  const binding = { kind: 'repository-archive', sourceId: source.sourceId, sourceLocationId: source.locationId, targetLocationId: target.locationId,
+    package: packagePath, packageIdentity, repositoryId: descriptor.repositoryId };
+  await writeJson(target, `${IMPORTS}${importId}/target.json`, binding, signal);
   const stagingPath = 'repository-archive-staging/' + importId;
   const restored = await request.backendFor({ kind: 'opfs', path: stagingPath });
   const stagingOwner = await restored.acquireOwner('archive-stage-' + importId);
@@ -137,7 +145,12 @@ async function restoreArchiveIntoTarget(request: LegacyImportRequest, packagePat
     const current = await fileDigest(source, packagePath, signal);
     if (current.hash !== packageIdentity?.hash || current.length !== packageIdentity?.length) throw new RepositoryError('conflict', 'Archive source changed during restore');
     const duplicated = await prepareArchive(restored, manifest.repository, manifest.targetCommit, target, owner,
-      { history: { kind: 'all' }, journals: 'all', workspace: manifest.workspace, media: 'linked', targetRepositoryId: descriptor.repositoryId, signal });
+      { history: { kind: 'all' }, journals: 'all', workspace: manifest.workspace, media: 'linked', targetRepositoryId: descriptor.repositoryId,
+        projectName: manifest.projectName, signal });
+    const head = (await recoverRepository(target, duplicated.repository, signal)).head;
+    if (!head) throw new RepositoryError('corrupt', 'Restored archive has no confirmed project revision');
+    await writeJson(target, `${IMPORTS}${importId}/complete.json`, { ...binding, commit: head }, signal);
+    log.info('Repository archive restored as a project', { importId });
     return duplicated.repository;
   } catch (error) {
     const isCancel = Boolean(signal?.aborted) || error instanceof RepositoryError && error.code === 'cancelled';

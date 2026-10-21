@@ -5,7 +5,7 @@ import { exportRepositoryArchive } from '../archive/archiveTransport';
 import { captureRuntimeArchiveSources } from '../archive/runtimeSources';
 import { RepositoryError } from '../contracts';
 import { backendForLocation } from './repositoryLocations';
-import { getActiveRepositorySession, flushEditorRepository } from './editorRepositoryLifecycle';
+import { getActiveRepositorySession, flushEditorRepository, readEditorRepositoryProject } from './editorRepositoryLifecycle';
 import { recoverRepository } from '../persistence/recovery';
 import { getBrowserStorageRoot } from '../../core/browserStorageRoot';
 
@@ -84,6 +84,7 @@ export async function exportCurrentProjectArchive(selection: ProjectArchiveSelec
       } while (cursor);
       await exportRepositoryArchive(source, session.descriptor, pin, staging, owner, { history: selection.history,
         journals: selection.journals, workspace, media: selection.media, targetRepositoryId: targetId, signal,
+        projectName: readEditorRepositoryProject()?.name,
         resolveSources: captureRuntimeArchiveSources(session) }, chunk => output.write(chunk));
       await output.close();
       log.info('Project archive export completed');
