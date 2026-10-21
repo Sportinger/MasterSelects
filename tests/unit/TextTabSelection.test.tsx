@@ -10,6 +10,7 @@ import { POPULAR_FONTS } from '../../src/services/googleFontsService';
 vi.mock('../../src/services/googleFontsService', async importOriginal => ({
   ...await importOriginal<typeof import('../../src/services/googleFontsService')>(),
   googleFontsService: { loadFont: vi.fn(async () => {}), preloadFont: vi.fn(async () => {}),
+    isFontLoaded: () => true, isManagedFont: () => false,
     getAvailableWeights: (family: string) => family === 'Thin Only' ? [300] : [400, 700] },
 }));
 vi.mock('../../src/stores/historyStore', async importOriginal => ({

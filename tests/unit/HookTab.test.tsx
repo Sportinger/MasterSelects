@@ -21,6 +21,8 @@ vi.mock('../../src/services/googleFontsService', () => ({
     getAvailableWeights: () => [400, 700, 800, 900],
     loadFont: vi.fn().mockResolvedValue(undefined),
     preloadFont: vi.fn().mockResolvedValue(undefined),
+    isFontLoaded: () => true,
+    isManagedFont: () => false,
   },
 }));
 

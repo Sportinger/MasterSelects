@@ -4,6 +4,7 @@ import { getTransitionOverlayCanvas } from '../layerBuilder/transitionOverlayCan
 import { mathSceneRenderer } from '../mathScene/MathSceneRenderer';
 import { textRenderer } from '../textRenderer';
 import { getCanvasSourceSize, getTextCanvasFrame, renderFramedTextCanvas } from '../text/textCanvasFrame';
+import { redrawTextWhenFontLoads } from '../text/textFontRefresh';
 
 export interface TimelineGeneratedCanvasDimensions {
   width?: number;
@@ -119,6 +120,19 @@ export async function createTimelineTextCanvasRuntime(params: {
 }
 
 export function renderTimelineTextCanvasRuntime(params: {
+  textProperties: TextClipProperties;
+  currentCanvas?: HTMLCanvasElement | null;
+  dimensions?: TimelineGeneratedCanvasDimensions;
+}): HTMLCanvasElement {
+  const canvas = drawTimelineTextCanvasRuntime(params);
+  // Synchronous redraws (history, transitions, edits) cannot await a web font.
+  redrawTextWhenFontLoads(canvas, params.textProperties, () => {
+    drawTimelineTextCanvasRuntime({ ...params, currentCanvas: canvas });
+  });
+  return canvas;
+}
+
+function drawTimelineTextCanvasRuntime(params: {
   textProperties: TextClipProperties;
   currentCanvas?: HTMLCanvasElement | null;
   dimensions?: TimelineGeneratedCanvasDimensions;

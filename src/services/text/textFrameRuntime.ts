@@ -7,9 +7,8 @@ import { sampleTextProperties } from './textAnimation';
 import { formatTextValueTemplate, hasTextValueTokens } from './textValueTemplate';
 import { resolveTextClipValue } from './textValueLink';
 import { getActiveCompositionFrameRate } from '../../stores/timeline/editOperations/activeCompositionFrameRate';
-import { isCssGenericFontFamily } from '../fontFamily';
-import { googleFontsService } from '../googleFontsService';
 import { clearTextCanvasFrame, getCanvasSourceSize, getTextCanvasFrame, renderFramedTextCanvas } from './textCanvasFrame';
+import { isTextFontReady, redrawTextWhenFontLoads } from './textFontRefresh';
 
 const canvases: WeakMap<HTMLCanvasElement, HTMLCanvasElement> = import.meta.hot?.data?.textFrameCanvases ?? new WeakMap();
 const renderedProps: WeakMap<HTMLCanvasElement, { props: TextClipProperties; width: number; height: number }> = import.meta.hot?.data?.textFrameRenderedRasters ?? new WeakMap();
@@ -23,11 +22,6 @@ function sameTextProperties(a: TextClipProperties, b: TextClipProperties): boole
   if (a === b) return true;
   const keys = Object.keys(a) as (keyof TextClipProperties)[];
   return keys.length === Object.keys(b).length && keys.every((key) => Object.is(a[key], b[key]));
-}
-
-/** A raster drawn with a fallback font must be redrawn once the real font arrives. */
-function fontReady(props: TextClipProperties): boolean {
-  return isCssGenericFontFamily(props.fontFamily) || googleFontsService.isFontLoaded(props.fontFamily, props.fontWeight);
 }
 
 /** Runtime-only canvas; never overwrite a clip's static raster with an animated frame. */
@@ -58,7 +52,13 @@ export function renderTextFrame(clip: TimelineClip, keys: readonly Keyframe[], l
     if (canvas.height !== height) canvas.height = height;
     textRenderer.render(frameProps, canvas);
   }
-  if (fontReady(frameProps)) renderedProps.set(canvas, { props: frameProps, width, height });
-  else renderedProps.delete(canvas);
+  // A raster drawn with a fallback font is redrawn by the next frame once the real
+  // font arrives; system fonts need no load, so their held frames stay cached.
+  if (isTextFontReady(frameProps)) renderedProps.set(canvas, { props: frameProps, width, height });
+  else {
+    renderedProps.delete(canvas);
+    const frameCanvas = canvas;
+    redrawTextWhenFontLoads(frameCanvas, frameProps, () => renderedProps.delete(frameCanvas));
+  }
   return canvas;
 }
