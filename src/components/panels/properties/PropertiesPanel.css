@@ -1380,51 +1380,30 @@
   cursor: pointer;
 }
 
-.transition-duration-row input[type="number"] {
-  width: 72px;
-  padding: 4px 6px;
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-}
-
-.transition-param-row .prop-label {
-  width: auto;
-  min-width: 84px;
-}
-
-.transition-param-row input[type="number"],
-.transition-param-row input[type="text"] {
-  flex: 1;
-  min-width: 0;
-  padding: 4px 6px;
-  color: var(--text-primary);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-}
-
-.transition-checkbox-row {
-  justify-content: space-between;
-}
-
-.transition-select-row .inspector-select {
-  flex: 1;
-}
-
-/* The shared `.control-row span` rule (right-aligned secondary text) must not reach the select's own labels. */
-.transition-select-row .inspector-select span {
-  min-width: 0;
-  text-align: left;
-  font-size: inherit;
-  color: inherit;
-}
-
-.transition-checkbox-row input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
+.transition-param-checkbox {
+  width: 14px;
+  height: 14px;
   margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Pointer clicks blur the checkbox; the keyboard keeps a product-styled ring. */
+.transition-param-checkbox:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.transition-param-checkbox:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.transition-param-color {
+  width: 36px;
+  height: 20px;
+  padding: 1px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
 }
 
 .transition-static-value,

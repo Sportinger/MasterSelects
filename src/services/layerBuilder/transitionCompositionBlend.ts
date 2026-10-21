@@ -175,6 +175,36 @@ interface PartDraft extends TransitionCompositionBlendPart {
 const isVisibleLayer = (layer: Layer) => layer.visible !== false && layer.opacity > 0;
 
 /**
+ * The Crossfade's 'plus' belongs on the upper of its two clips: the lower one
+ * is drawn over the transparent background, the upper one added to it. When
+ * the incoming track was moved below the outgoing one inside the composition,
+ * the operator moves with it; left on the lower clip, the Normal clip above
+ * would cover the sum, (1−t)·A + t²·B: a visible dip.
+ */
+function placePlusOnUpperParticipant(
+  transitionId: string,
+  nestedLayers: Layer[],
+  participants: readonly ParticipantInfo[],
+): Layer[] {
+  const roles = nestedLayers.map((layer) => findParticipant(layer, participants)?.role);
+  const plusIndex = nestedLayers.findIndex((layer, index) => roles[index] && layer.blendMode === 'plus');
+  if (plusIndex < 0) return nestedLayers;
+  const plusRole = roles[plusIndex];
+  const upperIndex = roles.findIndex((role) => role && role !== plusRole);
+  if (upperIndex < 0 || upperIndex > plusIndex) return nestedLayers;
+  const upperRole = roles[upperIndex];
+  reportOnce(`${transitionId}:plus-moved`, () => log.info(
+    'The incoming clip is below the outgoing clip inside this transition; the dissolve adds the upper clip instead',
+    { transitionId },
+  ));
+  return nestedLayers.map((layer, index) => {
+    if (roles[index] === plusRole && layer.blendMode === 'plus') return { ...layer, blendMode: 'normal' as const };
+    if (roles[index] === upperRole && index < plusIndex) return { ...layer, blendMode: 'plus' as const };
+    return layer;
+  });
+}
+
+/**
  * The Crossfade's 'plus' adds the incoming clip to everything below it in its
  * part. Clips the user put below the transition's own clips inside the
  * composition would be added too and overexpose the picture; they become their
@@ -230,15 +260,16 @@ export function resolveTransitionCompositionBlend(params: {
   nestedLayers: Layer[];
   compositionTime?: number;
 }): TransitionCompositionBlendResolution {
-  const { transitionId, composition, nestedLayers, compositionTime = Number.NaN } = params;
+  const { transitionId, composition, compositionTime = Number.NaN } = params;
   const link = composition.transitionComp;
   if (link?.kind !== 'transition-comp') {
-    return { parts: [{ blendMode: 'normal', nestedLayers }], participantBlendModes: [] };
+    return { parts: [{ blendMode: 'normal', nestedLayers: params.nestedLayers }], participantBlendModes: [] };
   }
   const participants = getParticipants(composition, {
     outgoing: link.linkedOutgoingClipId,
     incoming: link.linkedIncomingClipId,
   });
+  const nestedLayers = placePlusOnUpperParticipant(transitionId, params.nestedLayers, participants);
   const participantBlendModes = [...new Set(participants.filter((participant) => participant.clips.length > 0)
     .map((participant) => participant.mode))];
   if (participants.every((participant) => participant.mode === 'normal')) {

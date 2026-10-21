@@ -80,10 +80,15 @@ describe('audio crossfades in export', () => {
     // Preview picks the same pair for the audio track.
     const sync = new AudioTrackCrossfadeTransitionSync({
       isAudioSourceClip: (candidate) => candidate.source?.type === 'audio',
+      getAudioProxyElementForClip: () => null,
+      getClipAudioElement: () => null,
     } as unknown as ConstructorParameters<typeof AudioTrackCrossfadeTransitionSync>[0]);
-    const ctx = { clips, playheadPosition: 14, mediaFileById: new Map([['va1-media', { duration: MEDIA_DURATION }], ['va2-media', { duration: MEDIA_DURATION }]]) } as unknown as FrameContext;
-    expect(sync.getActiveForTrack(ctx, { id: 'a1' } as TimelineTrack)?.outgoingClip.id).toBe('va1');
-    expect(sync.getActiveForTrack({ ...ctx, playheadPosition: 34 } as FrameContext, { id: 'a1' } as TimelineTrack)).toBeNull();
+    const ctx = {
+      clips, playheadPosition: 14, audioTracks: [{ id: 'a1' }, { id: 'a2' }], isPlaying: false,
+      mediaFileById: new Map([['va1-media', { duration: MEDIA_DURATION }], ['va2-media', { duration: MEDIA_DURATION }]]),
+    } as unknown as FrameContext;
+    expect(sync.planFrame(ctx).windows.get('a1')?.pair.outgoingClip.id).toBe('va1');
+    expect(sync.planFrame({ ...ctx, playheadPosition: 34 } as FrameContext).windows.size).toBe(0);
   });
 
   it('continues the outgoing clip into its tail handle and starts the incoming clip early from its head handle', () => {
@@ -228,7 +233,7 @@ describe('audio crossfades in export', () => {
     expect(applyAudioCrossfadeEnvelopes(source, [{ ...envelope, start: 5, end: 6 }], 0)).toBe(source);
   });
 
-  it('plays the same gains in preview, silent where a clip has no sound', () => {
+  it('plays the same gains in preview: on the level while scrubbing, silent where a clip has no sound', () => {
     const run = (clips: TimelineClip[], playheadPosition: number) => {
       const synced: Array<{ clipId: string; volume: number }> = [];
       const element = { src: 'blob:audio', readyState: 4, paused: false, pause: vi.fn() } as unknown as HTMLAudioElement;
@@ -246,6 +251,7 @@ describe('audio crossfades in export', () => {
       const ctx = {
         clips,
         playheadPosition,
+        audioTracks: [track],
         mediaFileById: new Map(clips.map((candidate) => [candidate.mediaFileId, { duration: MEDIA_DURATION }])),
         unmutedAudioTrackIds: new Set(['a1']),
         getInterpolatedEffects: () => [],
@@ -253,12 +259,13 @@ describe('audio crossfades in export', () => {
         getSourceTimeForClip: (_clipId: string, local: number) => local,
         isPlaying: false,
       } as unknown as FrameContext;
-      const activeTransition = sync.getActiveForTrack(ctx, track)!;
+      const window = sync.planFrame(ctx).windows.get('a1');
+      if (!window) return synced;
       sync.sync({
         ctx,
         state: { masterSet: true } as Parameters<AudioTrackCrossfadeTransitionSync['sync']>[0]['state'],
         track,
-        activeTransition,
+        window,
         activeTransitionAudioClipIds: new Set(),
         regionGainPreview: null,
       });
@@ -270,12 +277,15 @@ describe('audio crossfades in export', () => {
     expect(full[0].volume).toBeCloseTo(Math.cos(0.75 * Math.PI / 2));
     expect(full[1].volume).toBeCloseTo(Math.sin(0.75 * Math.PI / 2));
 
-    // With 0.1 s handles the incoming clip stays silent (its held frame) until 3.9 s.
+    // With 0.1 s handles the fade runs 3.9–4.1 s; outside it the track plays normally (no window).
     const short = [
       clip('a1', 0, 'audio', { inPoint: 15.9, outPoint: 19.9, transitionOut: crossfade('a2') }),
       clip('a2', 4, 'audio', { inPoint: 0.1, outPoint: 4.1 }),
     ];
-    expect(run(short, 3.5)).toEqual([{ clipId: 'a1', volume: 1 }]);
-    expect(run(short, 4.5)).toEqual([{ clipId: 'a2', volume: 1 }]);
+    expect(run(short, 3.5)).toEqual([]);
+    expect(run(short, 4.5)).toEqual([]);
+    const middle = run(short, 4);
+    expect(middle.map((entry) => entry.clipId)).toEqual(['a1', 'a2']);
+    expect(middle[0].volume).toBeCloseTo(Math.SQRT1_2);
   });
 });

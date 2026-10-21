@@ -9,6 +9,9 @@ import type { ProjectComposition } from '../../src/services/project/projectFileS
 import type { SerializableClip } from '../../src/types/timeline';
 import { Logger } from '../../src/services/logger';
 import { installFakeMediaStore } from '../helpers/fakeMediaStore';
+import { upgradeGeneratedClipContent } from '../../src/services/timeline/transitionGeneratedContent';
+import { buildOpacityKeyframesFromRecipe } from '../../src/services/timeline/transitionCompositionRecipeTemplate';
+import { crossfade } from '../../src/transitions/crossfade';
 
 vi.mock('../../src/services/compositionRenderer', () => ({
   compositionRenderer: { invalidateCompositionAndParents: vi.fn() },
@@ -505,5 +508,25 @@ describe('transition composition load migration', () => {
     const otherKeyframes = masked.keyframes!.filter((keyframe) => keyframe.id !== generatedKeyframe.id);
     expect(upgradedClip.keyframes?.filter((keyframe) => keyframe.id !== generatedKeyframe.id)).toEqual(otherKeyframes);
     expect(JSON.parse(upgraded.transitionComp!.templateParamsKey!).revision).toEqual([1, 0]);
+  });
+
+  it('upgrades unscaled opacity keyframes when the clip opacity changed after the composition was made', () => {
+    // Made at 100 % (stored on the composition clip), later set to 50 % on the parent clip.
+    const id = 'transition-comp:x:incoming';
+    const stored = { ...clip(id, 0), keyframes: buildOpacityKeyframesFromRecipe(crossfade.recipe, 'incoming', id, 1, 1) };
+    const generated = {
+      ...clip(id, 0),
+      transform: { ...clip(id, 0).transform, opacity: 0.5 },
+      keyframes: buildOpacityKeyframesFromRecipe(crossfade.recipe, 'incoming', id, 1, 0.5),
+    };
+    const kept: string[] = [];
+    const upgraded = upgradeGeneratedClipContent({ ...stored }, stored, generated, kept);
+    expect(kept).toEqual([]);
+    expect(upgraded.keyframes?.map((keyframe) => keyframe.value)).toEqual([0, 0.5]);
+    // A keyframe the user really edited is still kept.
+    const edited = { ...stored, keyframes: stored.keyframes.map((keyframe, index) => index === 1 ? { ...keyframe, value: 0.8 } : keyframe) };
+    const keptEdited: string[] = [];
+    upgradeGeneratedClipContent({ ...edited }, edited, generated, keptEdited);
+    expect(keptEdited).toEqual([edited.keyframes[1].id]);
   });
 });

@@ -204,4 +204,6 @@ export interface NestedCompositionData {
   currentTime?: number;  // Current time for frame caching
   sceneClips?: TimelineClip[];
   sceneTracks?: TimelineTrack[];
+  /** Runtime-only: `layers` are only part of the composition (a transition's blend part). */
+  partial?: boolean;
 }

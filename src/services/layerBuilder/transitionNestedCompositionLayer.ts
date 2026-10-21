@@ -77,6 +77,8 @@ export function createTransitionNestedCompositionLayers(params: {
         currentTime: compositionTime,
         sceneClips,
         sceneTracks,
+        // A blend part draws only some of the composition's layers.
+        ...(blend.parts.length > 1 ? { partial: true } : {}),
       },
     },
     effects: [],

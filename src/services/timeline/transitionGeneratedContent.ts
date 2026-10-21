@@ -56,9 +56,11 @@ function sameJson(a: unknown, b: unknown): boolean {
 /**
  * True when a stored generated keyframe is exactly what a template made: the
  * regenerated keyframe, or what the materializer wrote before revision 1,
- * which did not scale recipe opacity by the clip's own opacity yet.
+ * which did not scale recipe opacity by the clip's own opacity yet. Such an
+ * old value times the opacity the regenerated value was scaled by (or the
+ * opacity stored on the clip, which may be older) gives the regenerated one.
  */
-function isUntouchedGeneratedKeyframe(existing: Keyframe, regenerated: Keyframe, clipOpacity: number): boolean {
+function isUntouchedGeneratedKeyframe(existing: Keyframe, regenerated: Keyframe, opacityReferences: readonly (number | undefined)[]): boolean {
   if (!sameNumber(existing.time, regenerated.time) ||
     (existing.easing ?? 'linear') !== (regenerated.easing ?? 'linear') ||
     (existing.hold === true) !== (regenerated.hold === true) ||
@@ -69,8 +71,8 @@ function isUntouchedGeneratedKeyframe(existing: Keyframe, regenerated: Keyframe,
     return false;
   }
   if (sameNumber(existing.value, regenerated.value)) return true;
-  return existing.property === 'opacity' &&
-    sameNumber(existing.value * getTransitionOpacityReference(clipOpacity), regenerated.value);
+  return existing.property === 'opacity' && opacityReferences.some((opacity) =>
+    sameNumber(existing.value * getTransitionOpacityReference(opacity), regenerated.value));
 }
 
 function findRegeneratedKeyframe(existing: Keyframe, regenerated: readonly Keyframe[]): Keyframe | undefined {
@@ -114,12 +116,15 @@ export function upgradeGeneratedClipContent(
   generated: SerializableClip,
   kept: string[],
 ): SerializableClip {
-  const clipOpacity = existing.transform?.opacity ?? 1;
+  // The regenerated keyframes are scaled by the parent clip's current opacity;
+  // the composition clip's stored transform keeps the opacity from when the
+  // transition was made, so it alone can be stale.
+  const opacityReferences = [generated.transform?.opacity, existing.transform?.opacity];
   const keyframes = upgradeGeneratedItems(
     existing.keyframes ?? [],
     generated.keyframes ?? [],
     (keyframe) => isGeneratedTransitionKeyframeId(existing.id, keyframe.id),
-    (keyframe, regenerated) => isUntouchedGeneratedKeyframe(keyframe, regenerated, clipOpacity),
+    (keyframe, regenerated) => isUntouchedGeneratedKeyframe(keyframe, regenerated, opacityReferences),
     findRegeneratedKeyframe,
     kept,
   );

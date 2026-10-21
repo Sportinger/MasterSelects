@@ -119,6 +119,21 @@ describe('transition composition blend parts', () => {
     ]);
   });
 
+  it('adds the upper clip when the incoming track was moved below the outgoing one inside the composition', () => {
+    const composition = buildComposition('crossfade', ['normal', 'normal']);
+    // Track order swapped: outgoing on top, the incoming (recipe 'plus') below it.
+    const swapped = exportLayers(composition).toReversed().map((layer) =>
+      layer.id.endsWith(':incoming') ? { ...layer, blendMode: 'plus' as const } : layer);
+    Logger.clear();
+    Logger.setLevel('INFO');
+    const parts = resolveTransitionCompositionBlend({ transitionId: 'transition-1', composition, nestedLayers: swapped, compositionTime: 0.5 })
+      .parts.map((part) => part.nestedLayers.map((layer) => `${layer.id.split(':').pop()}:${layer.blendMode}`));
+    Logger.setLevel('WARN');
+    // Lower clip over transparency, upper clip added: (1−t)·A + t·B, as before the move.
+    expect(parts).toEqual([['outgoing:plus', 'incoming:normal']]);
+    expect(Logger.search('adds the upper clip')).toHaveLength(1);
+  });
+
   it('says so when the transition\'s clips are not found among the layers instead of blending twice', () => {
     const composition = buildComposition('crossfade', ['screen', 'screen']);
     const anonymous = exportLayers(composition).map((layer, index) => ({ ...layer, id: `layer-${index}`, sourceClipId: undefined }));

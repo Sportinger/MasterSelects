@@ -5,13 +5,16 @@ import {
   type TransitionParamDefinition,
   type TransitionParamValue,
 } from '../../../transitions';
-import { useMemo } from 'react';
+import { useMemo, type PointerEvent as ReactPointerEvent } from 'react';
 import { InspectorSelect } from '../../inspector/InspectorSelect';
 import type { TimelineClip } from '../../../types/timeline';
 import type { TimelineTransition } from '../../../types/timelineCore';
-import { resolveAudioCrossfadeFromClip } from '../../../services/audio/audioCrossfadePlanning';
+import { resolveAudioCrossfadeFromClip, type AudioCrossfadeResolution } from '../../../services/audio/audioCrossfadePlanning';
+import { useMediaStore } from '../../../stores/mediaStore';
 import { useTimelineStore } from '../../../stores/timeline';
 import type { TransitionSourceDurationResolver } from '../../../stores/timeline/editOperations/transitionPlanner';
+import { ResolveInspectorRow, ResolveInspectorSection } from './resolveInspector/ResolveInspectorPrimitives';
+import { ResolveInspectorNumberRow } from './resolveInspector/ResolveInspectorNumberRow';
 
 interface TransitionControlsSectionsProps {
   definition: TransitionDefinition;
@@ -33,7 +36,7 @@ interface TransitionControlsSectionsProps {
 }
 
 function formatSeconds(value: number): string {
-  return `${value.toFixed(2)}s`;
+  return `${value.toFixed(2)} s`;
 }
 
 function getVisibleParams(
@@ -52,9 +55,28 @@ function getVisibleParams(
 
 const AUDIO_SKIP_NOTES = {
   'no-linked-audio': 'No linked sound on one track – nothing to blend',
-  'linked-audio-on-different-tracks': 'The clips\u2019 sound is on different tracks – nothing to blend',
+  'linked-audio-on-different-tracks': 'The clips’ sound is on different tracks – nothing to blend',
 } as const;
 
+const CURVE_LABELS = { 'equal-power': 'Equal power', 'equal-gain': 'Equal gain' } as const;
+
+/** Mouse, pen and touch clicks leave no focus ring on a checkbox; the keyboard keeps its own. */
+function blurAfterPointer(event: ReactPointerEvent<HTMLInputElement>): void {
+  const target = event.currentTarget;
+  requestAnimationFrame(() => target.blur());
+}
+
+function getSelectOptions(paramId: string, param: TransitionParamDefinition, audio: AudioCrossfadeResolution | null) {
+  return (param.options ?? []).map((option) => ({
+    // Auto shows what it plays for these clips.
+    label: paramId === 'audioCurve' && option.value === 'auto' && audio?.pair
+      ? `Auto (${CURVE_LABELS[audio.pair.fade.curve]})`
+      : option.label,
+    value: String(option.value),
+  }));
+}
+
+/** Transition timing, source handles and parameters in the unified inspector rows. */
 export function TransitionControlsSections({
   definition,
   transition,
@@ -72,6 +94,9 @@ export function TransitionControlsSections({
 }: TransitionControlsSectionsProps) {
   const clips = useTimelineStore(state => state.clips);
   const clipKeyframes = useTimelineStore(state => state.clipKeyframes);
+  const frameRate = useMediaStore(state =>
+    state.compositions.find(composition => composition.id === state.activeCompositionId)?.frameRate ?? 30);
+  const fps = Number.isFinite(frameRate) && frameRate > 0 ? frameRate : 30;
   // The same plan preview and export use: the sound this Crossfade blends, or why it blends none.
   const audio = useMemo(() => outgoingClip?.transitionOut?.type === 'crossfade'
     ? resolveAudioCrossfadeFromClip(outgoingClip, clips, { getMediaDuration, getClipKeyframes: id => clipKeyframes.get(id) })
@@ -79,49 +104,54 @@ export function TransitionControlsSections({
   const params = getVisibleParams(definition, transition, isAudioOnlyTransition, handledParamIds);
   const fade = audio?.pair?.fade;
   const audioShortened = !!fade && fade.overlap < duration - 0.005;
+  // Whole project frames, so the transition starts and ends on a frame.
+  const minFrames = Math.max(1, Math.ceil(definition.minDuration * fps - 1e-6));
+  const maxFrames = Math.max(minFrames, Math.floor((definition.maxDuration ?? 10) * fps + 1e-6));
+  const toFrames = (seconds: number) => Math.min(maxFrames, Math.max(minFrames, Math.round(seconds * fps)));
+  const frames = toFrames(duration);
   return (
     <>
-      <section className="properties-section">
-        <h4>Timing</h4>
-        <div className="control-row transition-duration-row">
-          <label className="prop-label" htmlFor="transition-duration-input">Duration</label>
-          <input
-            id="transition-duration-input"
-            type="number"
-            min={definition.minDuration}
-            step={0.05}
-            value={Number(duration.toFixed(3))}
-            onChange={(event) => onUpdateDuration(Number(event.currentTarget.value))}
-          />
-          <span className="transition-static-value">{formatSeconds(bodyStart)} - {formatSeconds(bodyEnd)}</span>
-        </div>
-      </section>
+      <ResolveInspectorSection indicator="none" title="Timing">
+        <ResolveInspectorNumberRow
+          label="Duration"
+          value={duration}
+          defaultValue={definition.defaultDuration}
+          min={minFrames / fps}
+          max={maxFrames / fps}
+          hardMin={minFrames / fps}
+          hardMax={maxFrames / fps}
+          step={1 / fps}
+          decimals={2}
+          suffix=" s"
+          onChange={(seconds) => onUpdateDuration(toFrames(seconds) / fps)}
+        />
+        <ResolveInspectorRow label="Range">
+          <span className="transition-static-value">
+            {formatSeconds(bodyStart)} – {formatSeconds(bodyEnd)} · {frames} frames
+          </span>
+        </ResolveInspectorRow>
+      </ResolveInspectorSection>
 
-      <section className="properties-section">
-        <h4>Source Handles</h4>
-        <div className="control-row">
-          <span className="prop-label">Real</span>
+      <ResolveInspectorSection indicator="none" title="Source Handles">
+        <ResolveInspectorRow label="Real">
           <span className="transition-static-value">{formatSeconds(realHandleDuration)}</span>
-        </div>
-        <div className="control-row">
-          <span className="prop-label">Hold</span>
+        </ResolveInspectorRow>
+        <ResolveInspectorRow label="Hold">
           <span className={holdDuration > 0 ? 'transition-hold-value' : 'transition-static-value'}>
             {formatSeconds(holdDuration)}
           </span>
-        </div>
+        </ResolveInspectorRow>
         {fade ? (
-          <div className="control-row" title="The sound fades only where both clips have sound beyond the cut">
-            <span className="prop-label">Audio</span>
+          <ResolveInspectorRow label="Audio" title="The sound fades only where both clips have sound beyond the cut">
             <span className={audioShortened ? 'transition-hold-value' : 'transition-static-value'}>
               {!audio?.pair?.usesHandles ? 'Cut (retimed clip)'
                 : fade.kind === 'declick' ? 'Cut (no extra sound)' : formatSeconds(fade.overlap)}
             </span>
-          </div>
+          </ResolveInspectorRow>
         ) : null}
-      </section>
+      </ResolveInspectorSection>
 
-      <section className="properties-section">
-        <h4>Parameters</h4>
+      <ResolveInspectorSection indicator="none" title="Parameters">
         {params.length === 0 ? (
           <div className="transition-static-value">No additional parameters</div>
         ) : params.map(([paramId, param]) => {
@@ -130,61 +160,61 @@ export function TransitionControlsSections({
             const skipReason = paramId === 'includeAudio' && value === true ? audio?.skipReason : undefined;
             return (
               <div key={paramId}>
-                <label className="control-row transition-param-row transition-checkbox-row">
-                  <span className="prop-label">{param.label}</span>
+                <ResolveInspectorRow label={param.label}>
                   <input
                     type="checkbox"
+                    className="transition-param-checkbox"
+                    aria-label={param.label}
                     checked={value === true}
+                    onPointerUp={blurAfterPointer}
                     onChange={(event) => onUpdateParam(paramId, event.currentTarget.checked)}
                   />
-                </label>
+                </ResolveInspectorRow>
                 {skipReason ? <div className="transition-param-note">{AUDIO_SKIP_NOTES[skipReason]}</div> : null}
               </div>
             );
           }
           if (param.type === 'number') {
+            const fallback = Number(param.defaultValue);
             return (
-              <div className="control-row transition-param-row" key={paramId}>
-                <label className="prop-label" htmlFor={`transition-param-${paramId}`}>{param.label}</label>
-                <input
-                  id={`transition-param-${paramId}`}
-                  type="number"
-                  min={param.min}
-                  max={param.max}
-                  step={param.step ?? 0.01}
-                  value={typeof value === 'number' ? value : Number(param.defaultValue)}
-                  onChange={(event) => onUpdateParam(paramId, Number(event.currentTarget.value))}
-                />
-              </div>
+              <ResolveInspectorNumberRow
+                key={paramId}
+                label={param.label}
+                value={typeof value === 'number' ? value : fallback}
+                defaultValue={fallback}
+                min={param.min ?? 0}
+                max={param.max ?? Math.max(1, fallback)}
+                step={param.step ?? 0.01}
+                onChange={(next) => onUpdateParam(paramId, next)}
+              />
             );
           }
           if (param.type === 'select') {
             return (
-              <div className="control-row transition-param-row transition-select-row" key={paramId}>
-                <span className="prop-label">{param.label}</span>
+              <ResolveInspectorRow key={paramId} label={param.label}>
                 <InspectorSelect
                   ariaLabel={param.label}
                   value={String(value ?? param.defaultValue)}
-                  options={(param.options ?? []).map(option => ({ label: option.label, value: String(option.value) }))}
+                  options={getSelectOptions(paramId, param, audio)}
                   onChange={(next) => onUpdateParam(paramId, next)}
                   onReset={() => onUpdateParam(paramId, param.defaultValue)}
                 />
-              </div>
+              </ResolveInspectorRow>
             );
           }
           return (
-            <div className="control-row transition-param-row" key={paramId}>
-              <label className="prop-label" htmlFor={`transition-param-${paramId}`}>{param.label}</label>
+            <ResolveInspectorRow key={paramId} label={param.label}>
               <input
-                id={`transition-param-${paramId}`}
+                className={param.type === 'color' ? 'transition-param-color' : 'resolve-inspector-field'}
+                aria-label={param.label}
                 type={param.type === 'color' ? 'color' : 'text'}
                 value={String(value ?? param.defaultValue)}
                 onChange={(event) => onUpdateParam(paramId, event.currentTarget.value)}
               />
-            </div>
+            </ResolveInspectorRow>
           );
         })}
-      </section>
+      </ResolveInspectorSection>
     </>
   );
 }

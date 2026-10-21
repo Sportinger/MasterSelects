@@ -1368,19 +1368,26 @@ Leak, …) are separate parts, and clips with different modes are two parts
 added inside the composition below the transition's own clips are a separate
 Normal part, so `plus` does not add them; if the transition's clips cannot be
 found among the layers, their mode stays inside the composition and a warning is
-logged. Audio (Include audio, or two audio clips) uses one plan for preview,
-Properties and export (`audioCrossfadePlanning`, `audioCrossfadeGains`): the
-fade runs only where both clips have sound, with 5 ms de-clicks when they
-overlap less than 10 ms, and export applies the gains before the clip and track
-effects. Retimed, reversed or composition clips cannot play their extra footage
-in step, so they meet at the edit everywhere (Properties: "Cut (retimed
-clip)"). Audio curve: Equal power (default) or Equal gain. Nested crossfades are
-not rendered in export; the export log says so. Default length 1 s; the
-Transitions panel's length field is Auto unless a length is typed. Live check:
-in the editor on a real GPU, preview and export frames stayed within 1–5/255
-(preview) and H.264 noise (export) of (1−t)·A + t·B for video, alpha cards over
-a background, a 50 % incoming clip and two Screen clips, and the export audio
-matched the sources × planned gains to 0.001 dB.
+logged; an incoming clip moved below the outgoing one inside the composition
+takes the Normal mode and the upper clip gets `plus`. Audio (Include audio, or
+two audio clips) uses one plan for preview, Properties and export
+(`audioCrossfadePlanning`, `audioCrossfadeGains`): the fade runs only where both
+clips have sound, with 5 ms de-clicks when they overlap less than 10 ms, and the
+gains apply before the clip and track effects, so effect tails ring out alike.
+Preview schedules them on each route's pre-effect gain on the audio clock
+(`audioCrossfadePreviewVoices`): the incoming sound starts 0.25 s early at gain
+0, crossfaded clips stay on their own audio element (no buffer mixer, no cut
+handoff), and the halves of one recording (same file and source offset) play
+once with both gains added, as the export's sample sum does. Retimed, reversed
+or composition clips cannot play their extra footage in step, so they meet at
+the edit everywhere (Properties: "Cut (retimed clip)"). Audio curve: Auto
+(default; also for crossfades saved without one) is Equal gain for the halves of
+one recording and Equal power otherwise. Audio crossfades inside a nested
+composition are not rendered; its mixdown cuts at the edit in preview and
+export, and the export log says so. Default length 1 s, snapped to project
+frames in Properties; the Transitions panel's length field is Auto unless a
+length is typed. Checked in the editor on a real GPU against (1−t)·A + t·B and
+a recording of the preview output.
 User guide with pictures: [Dissolve Transitions](./Transitions-Dissolve.md).
 
 The current user-facing suite is grouped by family in the Transitions panel and

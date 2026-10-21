@@ -28,6 +28,7 @@ type RenderNestedComposition = (
   motionFrameAdmission?: MotionFrameRuntimeAdmission, renderOccurrenceKey?: string,
   previewRenderScale?: number,
   frameRate?: number,
+  layersAreComplete?: boolean,
 ) => GPUTextureView | null;
 
 function getNestedRenderOccurrenceKey(parentOccurrenceKey: string | undefined, layerId: string): string {
@@ -150,6 +151,7 @@ export class NestedLayerCollector {
           getNestedRenderOccurrenceKey(renderOccurrenceKey, layer.id),
           previewRenderScale,
           nc.frameRate ?? 30,
+          nc.partial !== true,
         );
         if (subTextureView) {
           result.push({

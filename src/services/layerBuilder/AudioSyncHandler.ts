@@ -1,7 +1,7 @@
 import { createStoreSpeedSource, resolveClipSourceTime } from '../timeline/retime/clipRetime';
 import { resolveAudioPreviewRetime, flagAudioPreviewRetime } from '../timeline/retime/clipAudioRetime';
 import { readEditorContentPublication } from '../project/repository/transaction/editorPublication';
-import { isAutomaticCutFade } from '../audio/automaticCutDeClick';
+import { hasScheduledEdgeGains } from '../audio/automaticCutFadePlayback';
 // AudioSyncHandler - Unified audio synchronization for all audio sources
 // Consolidates 4 similar 80-line blocks into one reusable handler
 
@@ -308,7 +308,7 @@ export class AudioSyncHandler {
     const needsMeter = Boolean(meterTrackId);
     const hasExistingRoute = audioRoutingManager.hasRoute(element);
 
-    const hasCutFades = clip.audioState?.editStack?.some(isAutomaticCutFade) === true;
+    const hasCutFades = hasScheduledEdgeGains(clip);
     if (hasCutFades || hasEQ || hasPan || hasProcessors || hasMasterRoute || volume > 1 || needsMeter || hasExistingRoute) {
       const effectiveEqGains = eqGains ?? EMPTY_EQ_GAINS;
       if (

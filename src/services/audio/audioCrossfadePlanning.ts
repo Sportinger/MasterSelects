@@ -29,6 +29,12 @@ export interface AudioCrossfadePair {
    * (with a de-click) in preview and export alike.
    */
   usesHandles: boolean;
+  /**
+   * Both sides continue one recording (the halves of a split clip): in the
+   * fade they play the same sound, so preview plays it once with both gains
+   * added, and the Auto audio curve uses Equal gain.
+   */
+  continuousSource: boolean;
   /** The outgoing and incoming audio clips (for linked audio: the clips linked to the videos). */
   outgoingClip: TimelineClip;
   incomingClip: TimelineClip;
@@ -59,6 +65,23 @@ export function canCrossfadeThroughHandles(clip: TimelineClip, keyframes: readon
   const speed = createClipSpeedSource(clip, [...keyframes]);
   return Math.abs(speed.speedAt(0) - 1) < 1e-6 &&
     Math.abs(speed.integrate(clip.duration) - clip.duration) < 1e-6;
+}
+
+const CONTINUOUS_SOURCE_EPSILON_SECONDS = 0.002;
+
+function getAudioSourceMediaId(clip: TimelineClip): string | undefined {
+  return clip.source?.mediaFileId ?? clip.mediaFileId;
+}
+
+/**
+ * True when the incoming clip continues the outgoing clip's recording: the same
+ * media at the same source offset, both played 1:1 (`usesHandles`). Inside
+ * the fade both then play exactly the same samples.
+ */
+export function isContinuousAudioSource(outgoing: TimelineClip, incoming: TimelineClip, usesHandles: boolean): boolean {
+  const mediaId = getAudioSourceMediaId(outgoing);
+  return usesHandles && !!mediaId && mediaId === getAudioSourceMediaId(incoming) &&
+    Math.abs((outgoing.inPoint - outgoing.startTime) - (incoming.inPoint - incoming.startTime)) < CONTINUOUS_SOURCE_EPSILON_SECONDS;
 }
 
 /** Same rule as resolveAudioSyncMedia(clip).sourceType === 'audio' in preview audio sync. */
@@ -163,10 +186,11 @@ export function resolveAudioCrossfadeFromClip(
     getMediaDuration: options.getMediaDuration,
   });
   if (!plan) return { pair: null };
-  const curve = getCrossfadeAudioCurve(getTransitionParamValue(transition, definition, 'audioCurve'));
   const keyframesOf = (clip: TimelineClip) => options.getClipKeyframes?.(clip.id) ?? [];
   const usesHandles = canCrossfadeThroughHandles(outgoingAudio, keyframesOf(outgoingAudio)) &&
     canCrossfadeThroughHandles(incomingAudio, keyframesOf(incomingAudio));
+  const continuousSource = isContinuousAudioSource(outgoingAudio, incomingAudio, usesHandles);
+  const curve = getCrossfadeAudioCurve(getTransitionParamValue(transition, definition, 'audioCurve'), continuousSource);
   const fade = planAudioCrossfadeFade(plan, curve, usesHandles);
   const bodyDuration = plan.bodyEnd - plan.bodyStart;
   if (fade.overlap < bodyDuration - 1e-3) {
@@ -181,9 +205,27 @@ export function resolveAudioCrossfadeFromClip(
   }
   return {
     pair: {
-      kind, transitionId: transition.id, plan, fade, usesHandles, outgoingClip: outgoingAudio, incomingClip: incomingAudio,
+      kind, transitionId: transition.id, plan, fade, usesHandles, continuousSource,
+      outgoingClip: outgoingAudio, incomingClip: incomingAudio,
     },
   };
+}
+
+/**
+ * True when a Crossfade at either edge of this clip may blend its sound: cheap,
+ * for callers that keep such clips on one playback path (no planning).
+ */
+export function hasAudioCrossfadeEdge(
+  clip: TimelineClip,
+  clips: readonly TimelineClip[],
+  isAudioSourceClip: (clip: TimelineClip) => boolean = isAudioCrossfadeSourceClip,
+): boolean {
+  const isCrossfade = (candidate: TimelineClip) =>
+    candidate.transitionOut?.type === 'crossfade' || candidate.transitionIn?.type === 'crossfade';
+  if (!isAudioSourceClip(clip)) return false;
+  if (isCrossfade(clip)) return true;
+  const linked = clip.linkedClipId ? getClipLookup(clips).get(clip.linkedClipId) : undefined;
+  return !!linked && isCrossfade(linked);
 }
 
 export function planAudioCrossfadeFromClip(

@@ -23,8 +23,12 @@ export const crossfade: TransitionDefinition = {
     audioCurve: {
       type: 'select',
       label: 'Audio curve',
-      defaultValue: 'equal-power',
+      // Auto: Equal gain inside one continuous recording (a split clip), Equal
+      // power between two different sounds. Crossfades saved without this
+      // parameter use Auto too.
+      defaultValue: 'auto',
       options: [
+        { label: 'Auto', value: 'auto' },
         { label: 'Equal power', value: 'equal-power' },
         { label: 'Equal gain', value: 'equal-gain' },
       ],
@@ -62,13 +66,20 @@ export const crossfade: TransitionDefinition = {
 
 export type CrossfadeAudioCurve = 'equal-power' | 'equal-gain';
 
-export function getCrossfadeAudioCurve(value: unknown): CrossfadeAudioCurve {
-  return value === 'equal-gain' ? 'equal-gain' : 'equal-power';
+/**
+ * The curve a Crossfade's Audio curve setting plays. 'auto' (and a missing or
+ * unknown value) picks Equal gain when both sides continue one recording (the
+ * two halves of a split clip, which play the same sound in the fade) and
+ * Equal power between two different sounds.
+ */
+export function getCrossfadeAudioCurve(value: unknown, continuousSource = false): CrossfadeAudioCurve {
+  if (value === 'equal-gain' || value === 'equal-power') return value;
+  return continuousSource ? 'equal-gain' : 'equal-power';
 }
 
 /**
  * Audio crossfade gains for fade progress 0..1.
- * - 'equal-power' (default; Premiere "Constant Power", Resolve "+3 dB"): keeps
+ * - 'equal-power' (Premiere "Constant Power", Resolve "+3 dB"): keeps
  *   the loudness of two different sounds steady, where a linear fade dips
  *   about 3 dB at the midpoint.
  * - 'equal-gain' (Premiere "Constant Gain", Resolve "0 dB"): the gains add up

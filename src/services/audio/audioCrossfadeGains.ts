@@ -1,6 +1,7 @@
 import { createBuffer } from '../../engine/audio/audioBufferFactory';
 import type { TransitionParticipantPlan, TransitionPlan } from '../../stores/timeline/editOperations/transitionPlanner';
-import { getCrossfadeAudioGains, type CrossfadeAudioCurve } from '../../transitions';
+import { getCrossfadeAudioGains, type CrossfadeAudioCurve } from '../../transitions/crossfade';
+import type { TransitionAudioEnvelope } from '../../types/timelineCore';
 
 /** Overlaps shorter than this get a de-click at the edit instead of a crossfade. */
 export const MIN_AUDIO_CROSSFADE_SECONDS = 0.01;
@@ -88,6 +89,13 @@ export function getAudioCrossfadeEnvelopeGain(envelope: AudioCrossfadeGainEnvelo
   return envelope.role === 'outgoing' ? gains.outgoing : gains.incoming;
 }
 
+/** Gain of a preview crossfade voice at a source time of its clip ('sum': both sides of one recording). */
+export function getTransitionAudioEnvelopeGain(envelope: TransitionAudioEnvelope, sourceTime: number): number {
+  const gains = getCrossfadeAudioGains(getFadeProgress(envelope.sourceStart, envelope.sourceEnd, sourceTime), envelope.curve);
+  if (envelope.role === 'sum') return gains.outgoing + gains.incoming;
+  return envelope.role === 'outgoing' ? gains.outgoing : gains.incoming;
+}
+
 export function getAudioCrossfadeEnvelopes(fade: AudioCrossfadeFade): {
   outgoing: AudioCrossfadeGainEnvelope;
   incoming: AudioCrossfadeGainEnvelope;
@@ -109,7 +117,8 @@ export function getAudioCrossfadeGainsAt(fade: AudioCrossfadeFade, time: number)
 /**
  * Applies crossfade envelopes sample by sample to clip audio that starts at
  * `clipStartTime` on the timeline, before the clip and track effects, so an
- * effect tail (reverb, delay) decays from the faded sound, as in preview.
+ * effect tail (reverb, delay) decays from the faded sound. Preview applies the
+ * same gains on the route's pre-effect gain (TransitionAudioEnvelope).
  * Returns the input buffer when no envelope changes it.
  */
 export function applyAudioCrossfadeEnvelopes(

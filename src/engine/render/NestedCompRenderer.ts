@@ -249,6 +249,8 @@ export class NestedCompRenderer {
     renderOccurrenceKey?: string,
     previewRenderScale = 1,
     frameRate = 30,
+    /** False when the layers are only part of the composition: its full output cannot stand in for them. */
+    layersAreComplete = true,
   ): GPUTextureView | null {
     if (depth >= MAX_NESTING_DEPTH) {
       log.warn('Max nesting depth reached in preRender', { compositionId, depth });
@@ -268,6 +270,7 @@ export class NestedCompRenderer {
     // active output directly instead of rendering every child layer again.
     // The parent compositor still applies the wrapper transform/effects.
     const activeOutput = renderOccurrenceKey !== undefined
+      && layersAreComplete
       && particleQuality === 'preview'
       && isActiveNestedComposition(compositionId)
       ? this.nestedCompTextures.get(compositionId)
