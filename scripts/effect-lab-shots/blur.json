@@ -1,0 +1,15 @@
+{
+  "pairs": [
+    {
+      "name": "box-vs-gaussian-lights",
+      "out": "docs/Features/assets/effects/box-vs-gaussian-lights.webp",
+      "image": "neon_rain_street",
+      "width": 1920,
+      "crop": [630, 390, 240, 146],
+      "zoom": 1.5,
+      "gap": 6,
+      "left": { "effect": "gaussian-blur", "params": { "radius": 10 } },
+      "right": { "effect": "box-blur", "params": { "radius": 10 } }
+    }
+  ]
+}

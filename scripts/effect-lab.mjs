@@ -7,12 +7,45 @@
 //       [--images dancer_stage,harbor_town,neon_rain_street] [--width 960]
 //       [--times 0,0.033,0.067] [--url http://localhost:5175]
 //       [--inset 0.7]   # image at 70 % on transparency; the sheet shows cells over a checkerboard
+//   node scripts/effect-lab.mjs --pairs scripts/effect-lab-shots/blur.json [--only <name>]
 //
 // Each variant renders on each image; "original" (effect bypassed) is always the first column.
+// `--pairs` writes docs close-ups: each entry of `{ "pairs": [...] }` renders two effects on one
+// image and puts the same crop of both side by side as a WebP:
+//   { "name", "out": "docs/Features/assets/effects/<file>.webp", "image": "neon_rain_street",
+//     "width": 1920, "crop": [x, y, w, h] (px of the rendered frame), "zoom": 1.5 (enlarges the
+//     crop, for small lights), "gap": 6,
+//     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ... } }
+// (an effect of "original" is the unchanged image).
 // Needs a running Vite of this checkout (`npx vite --port 5175 --strictPort`).
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { encodeDocShotWebp } from './docShotWebp.mjs';
+
+/** Renders both sides of a pair entry, crops them and composes them side by side (PNG buffer). */
+async function composePair(page, entry) {
+  const side = spec => page.evaluate(job => window.__effectLab.render(job), {
+    effectId: spec.effect === 'original' ? 'gaussian-blur' : spec.effect, image: `${entry.image}.jpg`, width: entry.width ?? 1920,
+    params: spec.params ?? {}, bypass: spec.effect === 'original' });
+  const [left, right] = [await side(entry.left), await side(entry.right)];
+  for (const [label, cell] of [['left', left], ['right', right]]) if (cell.gpuFailure) throw new Error(`${entry.name} ${label}: ${cell.gpuFailure}`);
+  const png = await page.evaluate(async ({ left, right, crop, gap, zoom }) => {
+    const [x, y, w, h] = crop, cw = Math.round(w * zoom), ch = Math.round(h * zoom);
+    const canvas = new OffscreenCanvas(cw * 2 + gap, ch), context = canvas.getContext('2d');
+    context.fillStyle = '#111'; context.fillRect(0, 0, canvas.width, canvas.height);
+    context.imageSmoothingQuality = 'high';
+    for (const [index, data] of [left, right].entries()) {
+      const bitmap = await createImageBitmap(await (await fetch(data)).blob());
+      context.drawImage(bitmap, x, y, w, h, index * (cw + gap), 0, cw, ch);
+    }
+    const blob = await canvas.convertToBlob({ type: 'image/png' });
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(binary);
+  }, { left: left.png, right: right.png, crop: entry.crop, gap: entry.gap ?? 6, zoom: entry.zoom ?? 1 });
+  return Buffer.from(png, 'base64');
+}
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
@@ -31,6 +64,16 @@ try {
 
   if (args.includes('--list')) {
     console.log(JSON.stringify(await page.evaluate(() => window.__effectLab.describe()), null, 1));
+  } else if (option('--pairs')) {
+    const entries = JSON.parse(fs.readFileSync(option('--pairs'), 'utf8')).pairs.filter(entry => !option('--only') || entry.name === option('--only'));
+    if (!entries.length) throw new Error(`No pair ${option('--only')} in ${option('--pairs')}`);
+    for (const entry of entries) {
+      const encoded = await encodeDocShotWebp(page, await composePair(page, entry), { maxBytes: entry.maxBytes ?? 200000, maxPixelWidth: 1600 });
+      fs.mkdirSync(path.dirname(path.resolve(entry.out)), { recursive: true });
+      fs.writeFileSync(path.resolve(entry.out), encoded.buffer);
+      console.log(`${entry.out}: ${encoded.width}x${encoded.height}, ${encoded.size} bytes, quality ${encoded.quality}`);
+    }
+    if (errors.length) console.log(`page errors: ${[...new Set(errors)].join(' | ')}`);
   } else {
     const effectId = option('--effect');
     if (!effectId) throw new Error('--effect <id> or --list is required');

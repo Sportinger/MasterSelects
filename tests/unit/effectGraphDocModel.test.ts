@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EFFECT_GRAPH_DOC_GROUP, buildEffectGraphDoc, effectGraphDocFoldState, parseEffectGraphDocQuery, slugLabel,
 } from '../../src/test/effectGraphDoc/effectGraphDocModel';
-import { wrappedRowCount } from '../../src/test/effectGraphDoc/effectGraphDocLayout';
+import { cableCrossings, wrappedRowCount } from '../../src/test/effectGraphDoc/effectGraphDocLayout';
 import { getNodeHeight } from '../../src/components/panels/nodes/canvas/canvasGeometry';
 
 const doc = (search: string) => buildEffectGraphDoc(parseEffectGraphDocQuery(search));
@@ -11,9 +11,11 @@ const labels = (search: string) => doc(search).graph.nodes.map(node => node.labe
 describe('effect graph doc shots: graph selection', () => {
   it('reads the query with stages as the default level and rejects unknown levels and row counts', () => {
     expect(parseEffectGraphDocQuery('?test=effect-graph&effect=box-blur')).toEqual({ effectType: 'box-blur', level: 'stages', open: [], focus: undefined,
-      rows: 'auto', breaks: [], only: [], plumbing: 'show', chain: false });
-    expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&break=sample,reduce&plumbing=hide&chain=1'))
-      .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, breaks: ['sample', 'reduce'], only: [], plumbing: 'hide', chain: true });
+      rows: 'auto', breaks: [], only: [], plumbing: 'show', constants: 'show', omit: [], chain: false });
+    expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&break=sample,reduce&plumbing=hide&constants=hide&omit=output&chain=1'))
+      .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, breaks: ['sample', 'reduce'], only: [],
+        plumbing: 'hide', constants: 'hide', omit: ['output'], chain: true });
+    expect(() => parseEffectGraphDocQuery('?constants=dim')).toThrow(/constants/);
     expect(() => parseEffectGraphDocQuery('?only=taper')).toThrow(/focus/);
     expect(() => parseEffectGraphDocQuery('?plumbing=dim')).toThrow(/plumbing/);
     expect(() => parseEffectGraphDocQuery('?level=deep')).toThrow(/Unknown level/);
@@ -107,11 +109,17 @@ describe('effect graph doc shots: graph selection', () => {
     expect(at('horizontal-sample').y).toBeGreaterThan(at('horizontal-offset').y);
   });
 
-  it('shows a picked recipe of a folder compactly, with named stubs for everything else it reads', () => {
+  it('shows a picked recipe of a folder compactly, with named stubs and the constants it reads', () => {
     const { graph } = doc('?effect=motion-blur&focus=stage-b-coarse-taps&only=taper-double,taper-centered,taper-squared,taper-exponent,taper,coarse-weight&rows=1');
-    const cards = graph.nodes.filter(node => !node.id.startsWith('doc-stub:'));
+    const cards = graph.nodes.filter(node => !node.id.startsWith('doc-stub:') && !node.operatorId?.startsWith('values.'));
     expect(cards.map(node => node.id.split('/').at(-1))).toEqual(expect.arrayContaining(['taper-double', 'taper', 'coarse-weight']));
     expect(cards).toHaveLength(6);
+    // The literals the math reads are value cards titled by their name: t × 2 − 1, squared, × Taper Gain.
+    const constants = graph.nodes.filter(node => node.operatorId?.startsWith('values.')).map(node => node.label);
+    expect(constants.toSorted()).toEqual(['One', 'Taper Gain', 'Two']);
+    const gain = graph.nodes.find(node => node.label === 'Taper Gain')!;
+    expect(graph.edges.some(edge => edge.fromNodeId === gain.id && edge.toNodeId.endsWith('/taper-exponent'))).toBe(true);
+    expect(doc('?effect=motion-blur&focus=stage-b-coarse-taps&only=taper-exponent&constants=hide').graph.nodes.some(node => node.label === 'Taper Gain')).toBe(false);
     // The chain reads left to right on one level, and the inputs from outside the pick are named.
     const at = (id: string) => graph.nodes.find(node => node.id.endsWith(`/${id}`))!.layout;
     expect(at('taper-double').x).toBeLessThan(at('taper').x);
@@ -119,8 +127,32 @@ describe('effect graph doc shots: graph selection', () => {
     expect(at('taper-double').y).toBe(at('taper').y);
     const stubs = graph.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label);
     expect(stubs).toEqual(expect.arrayContaining(['Position t', 'Box Weight']));
+    // Box Weight sits under the row beside the last Multiply, not in the path of Exponential's cable.
+    const boxWeight = graph.nodes.find(node => node.label === 'Box Weight')!;
+    expect(boxWeight.layout.y).toBeGreaterThan(at('taper').y + getNodeHeight(graph.nodes.find(node => node.id.endsWith('/taper'))!));
+    expect(cableCrossings(graph.nodes, graph.edges)).toEqual([]);
     expect(graph.overviewTitles).toBe('uniform');
     expect(() => doc('?effect=motion-blur&focus=stage-b-coarse-taps&only=nothing-here')).toThrow(/No node nothing-here/);
+  });
+
+  it('lays recipes and overviews out so no cable runs through a card it does not connect', () => {
+    for (const search of ['?effect=gaussian-blur&plumbing=hide&omit=output', '?effect=motion-blur&plumbing=hide&omit=output',
+      '?effect=gaussian-blur&focus=horizontal-pass&only=compound-shared-zero,horizontal-far-weight,horizontal-near-weight-raw,compound-shared-weight-floor,horizontal-sample,horizontal-reduce,compound-shared-horizontal-weight-vec4,horizontal-cache',
+      '?effect=radial-blur&focus=blur-range&only=is-spin,range-length']) {
+      const { graph } = doc(search);
+      expect(cableCrossings(graph.nodes, graph.edges).map(({ edge, card }) => `${edge.fromNodeId} → ${edge.toNodeId} through ${card.label}`), search).toEqual([]);
+    }
+    // Stubs that feed one card stack tightly near the canvas' own clearance (56; slots are searched
+    // in steps of 8), in the order of its ports.
+    const { graph } = doc('?effect=gaussian-blur&focus=horizontal-pass&only=compound-shared-zero');
+    const [index, pairs, stride] = ['Tap Index', 'Pairs', 'Stride'].map(label => graph.nodes.find(node => node.label === label)!);
+    for (const [upper, lower] of [[index, pairs], [pairs, stride]]) {
+      const gap = lower.layout.y - (upper.layout.y + getNodeHeight(upper));
+      expect(gap).toBeGreaterThanOrEqual(56);
+      expect(gap).toBeLessThan(64);
+    }
+    expect(() => doc('?effect=gaussian-blur&plumbing=hide&omit=nothing')).toThrow(/No node nothing to omit/);
+    expect(doc('?effect=gaussian-blur&plumbing=hide&omit=output').graph.nodes.some(node => node.label === 'Output')).toBe(false);
   });
 
   it('gives each wrapped row its own height, so a short row leaves no empty band', () => {

@@ -5,13 +5,16 @@ import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { NodeGraphCanvas } from '../../components/panels/nodes/NodeGraphCanvas';
 import { reconcileCanvasPlacement } from '../../components/panels/nodes/canvas/nodeCanvasPlacement';
 import { annotatedGraphBounds } from '../../components/panels/nodes/canvas/groupBounds';
-import { getPortCenter } from '../../components/panels/nodes/canvas/canvasGeometry';
+import { getNodeWidth, getPortCenter } from '../../components/panels/nodes/canvas/canvasGeometry';
 import { cableRoute, sampleCableRoute } from '../../components/panels/nodes/canvas/cableRoute';
+import { buildCanvasScene } from '../../components/panels/nodes/canvas/rendering/buildCanvasScene';
+import { paintedTitleSize } from '../../components/panels/nodes/canvas/rendering/paintNodeCanvas';
 import type { NodeGraph } from '../../types/nodeGraph';
 import { useTimelineStore } from '../../stores/timeline';
 import {
-  buildEffectGraphDoc, effectGraphDocTrack, parseEffectGraphDocQuery, type EffectGraphDoc, type EffectGraphDocQuery,
+  EFFECT_GRAPH_DOC_CLIP_ID, buildEffectGraphDoc, effectGraphDocTrack, parseEffectGraphDocQuery, type EffectGraphDoc, type EffectGraphDocQuery,
 } from './effectGraphDocModel';
+import { cableCrossings } from './effectGraphDocLayout';
 import '../../components/panels/nodes/NodeWorkspacePanel.css';
 import './EffectGraphDocShot.css';
 
@@ -20,8 +23,14 @@ interface EffectGraphDocState { ready: boolean; error?: string; title?: string; 
   /** Local node id and title of every card, for `only=`, `break=` and `marks=`. */
   cards?: string[];
   /** How far cables bend out past the cards and frames on each side (graph units): the crop keeps them. */
-  overhang?: { left: number; top: number; right: number; bottom: number } }
-declare global { interface Window { __effectGraphDoc?: EffectGraphDocState } }
+  overhang?: { left: number; top: number; right: number; bottom: number };
+  /** Cables that run through a card other than their two ends ("from → to through card"). */
+  crossings?: string[];
+  /** Cards the canvas placed elsewhere than the doc layout asked (graph units moved). */
+  displaced?: string[] }
+/** The fitted canvas zoom and the title size most cards are painted with (graph units), measured after Fit. */
+interface EffectGraphDocTitle { zoom: number; titleSize: number }
+declare global { interface Window { __effectGraphDoc?: EffectGraphDocState; __effectGraphDocTitle?: () => EffectGraphDocTitle | undefined } }
 
 const noop = () => {};
 
@@ -54,7 +63,10 @@ export function EffectGraphDocShot() {
   }, [query, queryError, overrides]);
   const doc = result.doc;
 
-  // Cards read their clip from the timeline store, as in the Node Workspace.
+  // Cards read their clip (and its preview preferences) from the timeline store, as in the Node
+  // Workspace. The canvas waits for it: its first placement would otherwise reserve preview space
+  // under every card and keep those gaps.
+  const storedClip = useTimelineStore(state => state.clips.find(clip => clip.id === EFFECT_GRAPH_DOC_CLIP_ID));
   useLayoutEffect(() => {
     if (doc) useTimelineStore.setState({ clips: [doc.clip], tracks: [effectGraphDocTrack()], clipKeyframes: new Map() });
   }, [doc]);
@@ -64,8 +76,27 @@ export function EffectGraphDocShot() {
     const placement = reconcileCanvasPlacement(doc.graph);
     const placed = doc.graph.nodes.map(node => ({ ...node, layout: placement.nodes[node.id] ?? node.layout }));
     const bounds = annotatedGraphBounds(doc.graph, placed);
+    const label = (id: string) => placed.find(node => node.id === id)?.label ?? id;
+    const crossings = cableCrossings(placed, doc.graph.edges)
+      .map(({ edge, card }) => `${label(edge.fromNodeId)} → ${label(edge.toNodeId)} runs through ${card.label}`);
+    const displaced = doc.graph.nodes.flatMap(node => {
+      const at = placement.nodes[node.id];
+      const moved = at ? Math.hypot(at.x - node.layout.x, at.y - node.layout.y) : 0;
+      return moved > 1 ? [`${node.label}: ${Math.round(moved)}`] : [];
+    });
+    window.__effectGraphDocTitle = () => {
+      const card = document.querySelector<HTMLElement>('.node-workspace-node[data-node-id]');
+      const node = card && placed.find(item => item.id === card.dataset.nodeId);
+      const context = new OffscreenCanvas(8, 8).getContext('2d');
+      if (!card || !node || !context) return undefined;
+      const zoom = card.getBoundingClientRect().width / getNodeWidth(node);
+      const { clips, clipKeyframes, getSourceTimeForClip } = useTimelineStore.getState();
+      const scene = buildCanvasScene({ graph: doc.graph, nodes: placed, plugs: [], selection: new Set(), selectedNodeId: null, selectedEdgeId: null,
+        hoveredEdgeId: null, hoveredPort: null, draft: null, clips, keyframes: clipKeyframes, sourceTime: getSourceTimeForClip });
+      return { zoom, titleSize: paintedTitleSize(context, scene, zoom) };
+    };
     window.__effectGraphDoc = { ready: true, title: doc.title, nodes: doc.graph.nodes.length, edges: doc.graph.edges.length,
-      overhang: cableOverhang(doc.graph, placed, bounds),
+      crossings, displaced, overhang: cableOverhang(doc.graph, placed, bounds),
       bounds: { width: Math.round(bounds.right - bounds.left), height: Math.round(bounds.bottom - bounds.top) }, folders: doc.groups,
       cards: doc.graph.nodes.map(node => `${node.id.split('/').at(-1)} (${node.label})`) };
   }, [doc, result.error]);
@@ -77,6 +108,6 @@ export function EffectGraphDocShot() {
 
   if (!doc) return <main className="effect-graph-doc effect-graph-doc--error" role="alert">{result.error}</main>;
   return <main className="effect-graph-doc" aria-label={`${doc.title} node graph`}>
-    <NodeGraphCanvas graph={doc.graph} selectedNodeId={null} onSelectNode={noop} onToggleGroup={toggleGroup} />
+    {storedClip === doc.clip && <NodeGraphCanvas graph={doc.graph} selectedNodeId={null} onSelectNode={noop} onToggleGroup={toggleGroup} />}
   </main>;
 }

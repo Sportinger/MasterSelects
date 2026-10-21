@@ -72,12 +72,15 @@
 .sl-markdown-content .docs-shot-zoom:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 3px; border-radius: .5rem; }
 /* Node graphs keep a legible size on narrow screens and scroll sideways inside their figure.
    The callout stage (not only the picture) gets the width, so its overlay stays on the picture;
-   the caption stays in view and says that the picture scrolls. */
+   the caption stays in view. It says that the picture scrolls only where it does: below the
+   44rem stage plus the 1rem gutters on both sides. */
 @media (max-width: 50rem) {
   .sl-markdown-content .docs-shot--graph { overflow-x: auto; }
   .sl-markdown-content .docs-shot--graph img,
   .sl-markdown-content .docs-shot--graph .docs-shot-stage { min-width: 44rem; }
   .sl-markdown-content .docs-shot--graph figcaption { position: sticky; left: 0; }
+}
+@media (max-width: 46rem) {
   .sl-markdown-content .docs-shot--graph figcaption::before {
     content: 'Scroll sideways, or tap the picture to enlarge it. ';
     color: var(--sl-color-gray-1);

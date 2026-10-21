@@ -10,7 +10,7 @@ import { DEFAULT_TRANSFORM } from '../../stores/timeline/constants';
 import type { EffectType } from '../../types/effects';
 import type { NodeGraph } from '../../types/nodeGraph';
 import type { TimelineClip, TimelineTrack } from '../../types/timeline';
-import { compactFlowLayout, withBoundaryStubs, withCanvasPlacement, wrapFlowRows } from './effectGraphDocLayout';
+import { compactRecipeLayout, withBoundaryStubs, withCanvasPlacement, wrapFlowRows } from './effectGraphDocLayout';
 
 /**
  * `stages`: the effect is open and its folders (stages, compositions) are folded, as when an
@@ -33,6 +33,10 @@ export interface EffectGraphDocQuery {
   only: string[];
   /** `hide`: leave out the Constants and Coordinates & Resources folders and their cables, so the stages read as one path. */
   plumbing: 'show' | 'hide';
+  /** With `only`: literal values the picks read from the Constants folder become value cards (`show`, default) or stay cut. */
+  constants: 'show' | 'hide';
+  /** Cards left out with their cables (local ids), e.g. the effect's Output card in an overview. */
+  omit: string[];
   /** Keep the clip chain (source, transform, output) around the effect. */
   chain: boolean;
 }
@@ -74,10 +78,12 @@ export function parseEffectGraphDocQuery(search: string): EffectGraphDocQuery {
   if (rows && !(Number(rows) >= 1)) throw new Error(`rows must be a number from 1 (got "${rows}").`);
   const plumbing = params.get('plumbing') ?? 'show';
   if (plumbing !== 'show' && plumbing !== 'hide') throw new Error(`Unknown plumbing "${plumbing}": use show or hide.`);
+  const constants = params.get('constants') ?? 'show';
+  if (constants !== 'show' && constants !== 'hide') throw new Error(`Unknown constants "${constants}": use show or hide.`);
   const only = listParam(params.get('only'));
   if (only.length && !focus) throw new Error('only= picks nodes inside a focused folder: add focus=<folder>.');
   return { effectType: params.get('effect')?.trim() || 'gaussian-blur', level, open: listParam(params.get('open')), focus,
-    rows: rows ? Math.round(Number(rows)) : 'auto', breaks: listParam(params.get('break')), only, plumbing, chain: params.get('chain') === '1' };
+    rows: rows ? Math.round(Number(rows)) : 'auto', breaks: listParam(params.get('break')), only, plumbing, constants, omit: listParam(params.get('omit')), chain: params.get('chain') === '1' };
 }
 
 export const slugLabel = (label: string) => label.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -157,14 +163,27 @@ function withoutPlumbing(graph: NodeGraph): NodeGraph {
 /** A local node id; recognized compositions start with `@`, which the token may leave out (it ends a shot name). */
 const isNode = (id: string, token: string) => [token, `@${token}`].some(local => id.toLowerCase() === local || id.toLowerCase().endsWith(`/${local}`));
 
-/** Keeps the picked nodes of a focused folder; cables from the others become stubs later. */
+/** Keeps the picked nodes of a focused folder; cables from the others become stubs later (laid out with them). */
 function keepOnly(graph: NodeGraph, tokens: readonly string[]): NodeGraph {
   const missing = tokens.filter(token => !graph.nodes.some(node => isNode(node.id, token)));
   if (missing.length) throw new Error(`No node ${missing.join(', ')} in this folder. Nodes: ${graph.nodes.map(node => node.id.split('/').at(-1)).join(', ')}.`);
   const kept = new Set(graph.nodes.filter(node => tokens.some(token => isNode(node.id, token))).map(node => node.id));
-  return compactFlowLayout({ ...graph, nodes: graph.nodes.filter(node => kept.has(node.id)),
+  return { ...graph, nodes: graph.nodes.filter(node => kept.has(node.id)),
     edges: graph.edges.filter(edge => kept.has(edge.fromNodeId) && kept.has(edge.toNodeId)),
-    groups: graph.groups?.map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => kept.has(id)) })) });
+    // Folded folders that were not picked would still reserve their frame on the canvas.
+    groups: graph.groups?.map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => kept.has(id)) }))
+      .filter(group => !group.collapsed || kept.has(group.proxyId)) };
+}
+
+/** Leaves out the named cards and their cables. */
+function omitNodes(graph: NodeGraph, tokens: readonly string[]): NodeGraph {
+  if (!tokens.length) return graph;
+  const missing = tokens.filter(token => !graph.nodes.some(node => isNode(node.id, token)));
+  if (missing.length) throw new Error(`No node ${missing.join(', ')} to omit. Nodes: ${graph.nodes.map(node => node.id.split('/').at(-1)).join(', ')}.`);
+  const dropped = new Set(graph.nodes.filter(node => tokens.some(token => isNode(node.id, token))).map(node => node.id));
+  return { ...graph, nodes: graph.nodes.filter(node => !dropped.has(node.id)),
+    edges: graph.edges.filter(edge => !dropped.has(edge.fromNodeId) && !dropped.has(edge.toNodeId)),
+    groups: graph.groups?.map(group => ({ ...group, nodeIds: group.nodeIds.filter(id => !dropped.has(id)) })) };
 }
 
 /** Keeps the nodes, edges and folders inside one group (the effect, or a focused folder). */
@@ -191,12 +210,19 @@ export function buildEffectGraphDoc(query: EffectGraphDocQuery, overrides: Recor
   const picked = folder && query.only.length ? keepOnly(folder, query.only) : folder;
   // A focused folder is laid out here (rows, stubs, picks); the canvas must not re-flow it.
   const fixedLayout = (graph: NodeGraph): NodeGraph => ({ ...graph, groups: graph.groups?.map(({ layoutMode: _flow, ...group }) => group) });
-  const cropped = picked ? fixedLayout(wrapFlowRows(withBoundaryStubs(picked, placed, skip), query.rows, query.breaks))
+  // A recipe (only=) is laid out afresh with its stubs and constants; a whole folder keeps its flow and gets stub columns.
+  const shaped = picked && query.only.length
+    ? compactRecipeLayout(withBoundaryStubs(picked, placed, skip, { constants: query.constants === 'show', place: false }))
+    : picked && withBoundaryStubs(picked, placed, skip);
+  const cropped = shaped ? fixedLayout(wrapFlowRows(shaped, query.rows, query.breaks))
     : query.chain ? full : cropToGroup(full, EFFECT_GRAPH_DOC_GROUP);
-  const graph = query.plumbing === 'hide' && !focus ? withoutPlumbing(cropped) : cropped;
+  // Without plumbing the stages read as one path: lay them out like a recipe, so no cable runs
+  // behind a stage it does not belong to (the editor's flow layout allows that).
+  const graph = query.plumbing === 'hide' && !focus && !query.chain ? fixedLayout(compactRecipeLayout(omitNodes(withoutPlumbing(cropped), query.omit)))
+    : omitNodes(query.plumbing === 'hide' && !focus ? withoutPlumbing(cropped) : cropped, query.omit);
   // The canvas refits per graph id: one id per level keeps a refit when the level changes.
   const id = `${full.id}:${query.effectType}:${query.level}:${query.open.join('+')}:${query.focus ?? ''}:${query.rows}:${query.breaks.join('+')}:${query.only.join('+')}`
-    + `:${query.plumbing}:${query.chain ? 'chain' : 'effect'}`;
+    + `:${query.plumbing}:${query.constants}:${query.omit.join('+')}:${query.chain ? 'chain' : 'effect'}`;
   const values = graph.nodes.filter(node => node.operatorId?.startsWith('values.'));
   const shown = { ...clip, nodeGraph: { ...clip.nodeGraph!, previews: { enabled: false,
     nodes: Object.fromEntries(values.map(node => [nodePreviewPreferenceKey(clip.id, node), { enabled: true }])) } } };
