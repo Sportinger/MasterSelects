@@ -2,16 +2,11 @@
 
 # MasterSelects Documentation
 
-What MasterSelects can do, with a link to the page for each part. The sidebar of the
-documentation site lists every page by topic.
-
----
-
-## Overview
-
 MasterSelects is a browser-based WebGPU compositor and media editor with timeline editing, nested compositions, AI-assisted workflows, project-local media management, and an optional native helper for the browser gaps that still matter.
 
-### Current Highlights
+What it can do, with a link to the page for each part. The sidebar of the documentation site lists every page by topic.
+
+## Current Highlights
 
 | Capability | Description |
 |---|---|

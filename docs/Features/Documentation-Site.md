@@ -98,7 +98,7 @@ Everything the sync writes is generated and untracked (`.gitignore`): `docs-site
 
 ## Build integration
 
-The root production build runs the editor build first and then the documentation build (`npm run docs:build`): it installs the `docs-site` packages, runs the sync with `--build` (which always clears the Astro content cache) and writes the static site to `dist/docs/`. A running `astro dev` of the same `docs-site` keeps its content cache (the sync checks the process behind `.astro/dev.json`). `npm run docs:build:head` renders the committed state of `docs/Features` (`--source-ref HEAD`) without unrelated uncommitted documentation changes.
+The root production build runs the editor build first and then the documentation build (`npm run docs:build`): it installs the `docs-site` packages, runs the sync with `--build` (which always clears the Astro content cache) and writes the static site to `dist/docs/`. A running `astro dev` of the same `docs-site` keeps its content cache (the sync checks the process behind `.astro/dev.json`). It restarts for a new sidebar but keeps serving pages a sync removed: the sync then says so, and the dev server needs a restart. `npm run docs:build:head` renders the committed state of `docs/Features` (`--source-ref HEAD`) without unrelated uncommitted documentation changes.
 
 The sync reports, without failing:
 
