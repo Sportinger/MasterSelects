@@ -2,7 +2,7 @@ import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { BlurGraphBuilder, premultipliedSourceCache, type GraphPort } from './blurGraphBuilder';
 
 /**
- * Acuarela watercolour recipe (see docs/Features/Effects-Stylize-Art.md and Effects.md). Four passes:
+ * Acuarela watercolour recipe (see docs/Features/effects/acuarela.md). Four passes:
  *
  * 1. `source-cache`: the frame premultiplied into an rgba16float cache, so every filtered read
  *    below mixes premultiplied texels (clean colour at transparent edges).

@@ -113,10 +113,9 @@ What it can do, with a link to the page for each part. The sidebar of the docume
 
 | Document | Effect group | Description |
 |---|---|---|
-| [Overview](./Effects-Color.md) | `color` | Brightness, Contrast, Exposure, Levels, Saturation, Vibrance, Temperature, Hue Shift and Invert with split-screen pictures, their controls, the colour recipes behind them, and technical notes |
-| [Overview](./Effects-Blur.md) | `blur` | The five blurs with before/after pictures, their controls in the editor, the node graphs behind them, and technical notes |
-| [Overview](./Effects-Stylize.md) | `stylize` | Glow, Film Grain, Vignette, Sharpen, Edge Detect, Posterize, Threshold and Scanlines with before/after pictures, their controls, the recipes behind them, and technical notes |
-| [Painterly, relief and particles](./Effects-Stylize-Art.md) | `stylize` | Acuarela, Rom1, Sheen, Voxel Relief and Pixel Particle Disintegrate with before/after pictures, their controls, how they are built, and technical notes |
+| [Overview](./Effects-Color.md) | `color` | Which colour effect to choose, the gallery of the group and the graph shape all colour effects share |
+| [Overview](./Effects-Blur.md) | `blur` | Which blur to choose, the gallery of the group and the recipe all blurs share |
+| [Overview](./Effects-Stylize.md) | `stylize` | Which light or stylize effect to choose, the gallery of the group and how these effects are built |
 | [Overview](./Effects-Distort.md) | `distort` | Bulge & Pinch, Twirl, Wave, Fisheye Lens, Lens Correction, Guided Perspective and AI Edge Fill with before/after pictures, their controls, the read-position graph behind them, and technical notes |
 | [Mirror, split and pixel](./Effects-Mirror-Pixel.md) | `pixel` | Kaleidoscope, Mirror, RGB Split, Pixelate, Blockify and Block Mosaic with before/after pictures, their controls, the graphs behind them, and technical notes |
 | [Overview](./Effects-Analog.md) | `analog` | CRT Screen, Glitch, Film Prism, Analog Signal Lab, Crystal Glass, Glass Dispersion, Holo, Ribbon Scan, Wave Lines and Pixel Sort with before/after pictures, their controls, the recipes behind them, and technical notes |

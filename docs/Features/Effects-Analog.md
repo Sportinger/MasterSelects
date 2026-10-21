@@ -148,7 +148,7 @@ full PAL frame from top to bottom.
 CRT Screen, Glitch, Film Prism, Holo and Ribbon Scan are small node graphs you can
 open and change; the first three open as stage folders.
 Open the **Nodes** tab and pick the clip in its source list: the effect is a folded
-card, and the › left of its title opens it (the [Blur page](./Effects-Blur.md#how-the-blur-effects-are-built)
+card, and the › left of its title opens it ([Using effects](./Effects.md#the-node-setup)
 shows where). Inside, every stage is a folder with its own ›. Changes apply to this
 one effect. [Node Workspace](./Node-Workspace.md) shows how to add and connect nodes.
 

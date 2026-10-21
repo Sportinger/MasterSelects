@@ -1,6 +1,7 @@
 {
   "shots": [
     "brightness?plumbing=hide",
+    "contrast?focus=contrast-curve&only=input,curve-shadows,curve-one,curve-one-rgb,curve-inverse,curve-highlights,curve-total,curve&rows=1&name.curve-slope-rgb=Slope@contrast-curve",
     "brightness?focus=brightness-curve&only=curve-stops-per-amount,curve-stops,curve-gain,input,curve-lifted,curve-one,curve-one-rgb,curve-rest,curve-total,curve&marks=curve-stops-per-amount:above@brightness-curve",
     "exposure?focus=exposure-stops&marks=light-gain:above@exposure-stops",
     "hue-shift?focus=hue-rotate-oklch&marks=hue-lch-split:above,hue-lch-combine:above@hue-shift-rotate",

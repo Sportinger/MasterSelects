@@ -115,7 +115,7 @@ to **Final result**.
 
 Each of the three effects is also a node graph you can open and change: open the
 **Nodes** tab, pick the clip in its source list and click the › left of the
-effect's title ([as for the blurs](./Effects-Blur.md#how-the-blur-effects-are-built)).
+effect's title ([shown here](./Effects.md#the-node-setup)).
 Changes apply to this one effect. The pictures below show small recipes from these
 graphs; green cards stand for values from elsewhere in the graph and carry the names
 the editor shows on those outputs.

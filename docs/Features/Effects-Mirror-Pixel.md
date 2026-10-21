@@ -158,7 +158,7 @@ than in the export.
 Every effect on this page is a small node graph you can open and change: select
 the clip, open the **Nodes** tab and use the › on the effect's card, then on each
 folder. Changes apply to this one effect.
-[Blur Effects](./Effects-Blur.md#how-the-blur-effects-are-built) shows the steps
+[Using effects](./Effects.md#the-node-setup) shows the steps
 with pictures, [Node Workspace](./Node-Workspace.md) how to add and connect nodes.
 
 ### Two ideas
