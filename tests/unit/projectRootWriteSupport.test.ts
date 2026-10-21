@@ -10,10 +10,12 @@ import { NativeProjectCoreService } from '../../src/services/project/core/Native
 import { NativeHelperClient } from '../../src/services/nativeHelper/NativeHelperClient';
 import { fileStorageService } from '../../src/services/project/core/FileStorageService';
 import { acquireProjectRoot, getProjectWriteSupportError, resolveProjectRootMode } from '../../src/services/project/core/projectRootAccess';
+import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, canHostNativeHelper, describeBrowserStorageFailure } from '../../src/services/project/core/browserStorageFailure';
+import { projectFileService } from '../../src/services/project/ProjectFileService';
 
 vi.mock('../../src/services/nativeHelper/NativeHelperClient', () => ({
   NativeHelperClient: {
-    isConnected: vi.fn(() => false), getProjectRoot: vi.fn(async () => null),
+    isConnected: vi.fn(() => false), connect: vi.fn(async () => false), getProjectRoot: vi.fn(async () => null),
     grantPath: vi.fn(async () => true), createDir: vi.fn(async () => false),
   },
 }));
@@ -44,7 +46,9 @@ it('bounds OPFS recovery and preserves permission errors without retrying them',
   const unavailable = new DOMException('Unavailable', 'UnknownError');
   const getDirectory = vi.fn().mockRejectedValue(unavailable);
   vi.stubGlobal('navigator', { storage: { getDirectory } });
-  await expect(acquireProjectRoot('opfs', { throwOnFailure: true })).rejects.toBe(unavailable);
+  // Persistent WebKit UnknownError is environment storage loss: explain it instead of rethrowing opaque text.
+  await expect(acquireProjectRoot('opfs', { throwOnFailure: true })).rejects.toMatchObject({
+    name: 'RepositoryError', code: 'unsupported', message: BROWSER_STORAGE_UNAVAILABLE_MESSAGE, cause: unavailable });
   expect(getDirectory).toHaveBeenCalledTimes(2);
   getDirectory.mockClear().mockRejectedValue(new DOMException('Denied', 'SecurityError'));
   await expect(acquireProjectRoot('opfs', { throwOnFailure: true })).rejects.toMatchObject({ name: 'SecurityError' });
@@ -150,4 +154,33 @@ it('rejects direct package migration before creating an empty package file', asy
     {} as ProjectFile,
   )).rejects.toMatchObject({ name: 'NotSupportedError' });
   expect(getFileHandle).not.toHaveBeenCalled();
+});
+
+describe('iOS browser storage failures', () => {
+  const iPadDesktopMode = { userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15', platform: 'MacIntel', maxTouchPoints: 5 };
+
+  it('recognizes the worker-relayed WebKit text and leaves other failures untouched', () => {
+    const relayed = new Error('The operation failed for an unknown transient reason (e.g. out of memory).');
+    relayed.name = 'RepositoryError';
+    expect(describeBrowserStorageFailure(relayed)).toBe(BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
+    expect(describeBrowserStorageFailure(new Error('wrapped', { cause: new DOMException('x', 'UnknownError') }))).toBe(BROWSER_STORAGE_UNAVAILABLE_MESSAGE);
+    expect(describeBrowserStorageFailure(new DOMException('Denied', 'SecurityError'))).toBeNull();
+  });
+
+  it('never asks for the desktop Native Helper on iOS, iPadOS or Android', async () => {
+    expect(canHostNativeHelper(iPadDesktopMode)).toBe(false);
+    expect(canHostNativeHelper({ userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15' })).toBe(false);
+    expect(canHostNativeHelper({ userAgent: 'Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 Chrome/130' })).toBe(false);
+    expect(canHostNativeHelper({ userAgent: 'Mozilla/5.0 (X11; Linux x86_64) Gecko/20100101 Firefox/131.0', platform: 'Linux x86_64' })).toBe(true);
+
+    vi.stubGlobal('showDirectoryPicker', undefined);
+    vi.stubGlobal('showSaveFilePicker', undefined);
+    vi.stubGlobal('FileSystemFileHandle', class { createWritable() {} });
+    const unavailable = new DOMException('The operation failed for an unknown transient reason (e.g. out of memory).', 'UnknownError');
+    vi.stubGlobal('navigator', { ...iPadDesktopMode, storage: { getDirectory: vi.fn().mockRejectedValue(unavailable) } });
+    const connect = vi.mocked(NativeHelperClient.connect);
+    connect.mockClear();
+    await expect(projectFileService.createProject('Phone project')).rejects.toMatchObject({ code: 'unsupported', message: BROWSER_STORAGE_UNAVAILABLE_MESSAGE });
+    expect(connect).not.toHaveBeenCalled();
+  });
 });

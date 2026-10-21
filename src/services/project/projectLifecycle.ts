@@ -1,5 +1,6 @@
 import { beginOperationTrace, type OperationTrace } from '../productAnalytics/operationTrace';
 import { ensureEditorScratchRepository } from './repository/lifecycle/editorRepositoryLifecycle';
+import { isBrowserStorageUnavailableError } from './core/browserStorageFailure';
 import { isRepositoryHydrating } from './repository/transaction/storeMutationBoundary';
 // Project Lifecycle — create, open, close, auto-sync
 
@@ -393,7 +394,10 @@ export async function closeCurrentProject(): Promise<void> {
  */
 export function setupAutoSync(): void {
   teardownAutoSync();
-  void ensureEditorScratchRepository().catch(error => log.error('Scratch recovery could not be opened', error));
+  // Unavailable browser storage is the environment (the save status says so), not a code error.
+  void ensureEditorScratchRepository().catch(error => isBrowserStorageUnavailableError(error)
+    ? log.warn('Scratch recovery unavailable: browser storage could not be opened', error)
+    : log.error('Scratch recovery could not be opened', error));
   registerAutoSyncDisposer(setupTimelineSelectionReloadRecovery());
   registerAutoSyncDisposer(preserveUnsavedProjectOnChunkFailure(hasUnsavedWorkspace));
   // Source edits force dev full reloads; keep timed-save projects from losing pending work.

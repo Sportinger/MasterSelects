@@ -7,6 +7,8 @@
 // handles without supporting writable streams; creation checks both capabilities.
 
 import { Logger } from '../../logger';
+import { RepositoryError } from '../repository/contracts';
+import { BROWSER_STORAGE_UNAVAILABLE_MESSAGE, isBrowserStorageUnavailableError, retryTransientStorage } from './browserStorageFailure';
 
 const log = Logger.create('ProjectRootAccess');
 
@@ -99,16 +101,17 @@ export async function acquireProjectRoot(mode: ProjectRootMode, options: { throw
   if (mode === 'opfs') {
     await ensurePersistentStorage();
     try {
-      try {
-        return await navigator.storage.getDirectory();
-      } catch (error) {
-        // WebKit can abort OPFS while its storage process is resuming. Retry
-        // acquisition once; no project directory or file has been mutated.
-        if (!(error instanceof DOMException) || !['AbortError', 'UnknownError'].includes(error.name)) throw error;
-        await new Promise(resolve => setTimeout(resolve, 200));
-        return await navigator.storage.getDirectory();
-      }
+      // WebKit can abort OPFS while its storage process is resuming. Retry
+      // acquisition once; no project directory or file has been mutated.
+      return await retryTransientStorage(() => navigator.storage.getDirectory(), 'Opening the origin private file system');
     } catch (error) {
+      if (isBrowserStorageUnavailableError(error)) {
+        // Environment, not code: Private Browsing, in-app browsers or low space.
+        // Callers show the explanation; this is not an application error.
+        log.warn('Origin private file system is unavailable in this browser', error);
+        if (options.throwOnFailure) throw new RepositoryError('unsupported', BROWSER_STORAGE_UNAVAILABLE_MESSAGE, { cause: error });
+        return null;
+      }
       log.error('Failed to open the origin private file system', error);
       if (options.throwOnFailure) throw error;
       return null;
