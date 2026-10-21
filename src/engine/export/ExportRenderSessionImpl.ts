@@ -11,7 +11,7 @@ import {
   exportRenderHostPort,
   type ExportRenderHostPort,
 } from './exportRenderHostPort';
-import { seekVideo } from './VideoSeeker';
+import { recordExportSeekOutcome, seekVideo } from './VideoSeeker';
 import type { RenderSurfaceFrameContext } from '../../services/render/renderHostTypes';
 import { waitForLiveInputExportTime } from './liveInputExport';
 import { collectTemporalPreparations, awaitTemporalPreparations } from '../../effects/time/temporalResourcePreparation';
@@ -185,6 +185,7 @@ function waitForNestedCompositionRetry(signal: AbortSignal): Promise<void> {
 async function waitForExportLayerVideoSources(
   layers: Layer[],
   signal: AbortSignal,
+  exportTime: number,
 ): Promise<void> {
   const sources = new Map<HTMLVideoElement, number | null>();
   collectExportLayerVideoSources(layers, sources);
@@ -193,7 +194,7 @@ async function waitForExportLayerVideoSources(
   await Promise.all([...sources.entries()].map(async ([video, targetTime]) => {
     if (signal.aborted) throw new Error('Export cancelled');
     if (targetTime !== null) {
-      await seekVideo(video, targetTime);
+      recordExportSeekOutcome(await seekVideo(video, targetTime), null, exportTime);
       return;
     }
     await waitForVideoReady(video);
@@ -281,7 +282,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
     this.host.setRenderTimeOverride(input.time);
     const ensureLayersStart = performance.now();
     await this.host.ensureExportLayersReady(layers);
-    await waitForExportLayerVideoSources(layers, this.signal);
+    await waitForExportLayerVideoSources(layers, this.signal, input.time);
     const ensureLayersMs = performance.now() - ensureLayersStart;
 
     const maskSyncStart = performance.now();
@@ -330,7 +331,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
         }
         await waitForNestedCompositionRetry(this.signal);
         await this.host.ensureExportLayersReady(layers);
-        await waitForExportLayerVideoSources(layers, this.signal);
+        await waitForExportLayerVideoSources(layers, this.signal, input.time);
       }
     }
 
@@ -465,7 +466,7 @@ export class ExportRenderSessionImpl implements ExportRenderSession {
         current = (await input.layersAtTime(input.time + offset)) as Layer[];
         this.host.setRenderTimeOverride(input.time + offset);
         await this.host.ensureExportLayersReady(current);
-        await waitForExportLayerVideoSources(current, this.signal);
+        await waitForExportLayerVideoSources(current, this.signal, input.time + offset);
       }
       // Let OIDN tiles and other queued tasks run, and leave the GPU a short gap so the rest of the
       // system (desktop compositor, other apps) stays responsive during a long path traced export.

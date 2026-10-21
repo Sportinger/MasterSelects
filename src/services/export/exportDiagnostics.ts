@@ -67,7 +67,22 @@ interface ExportRunState {
   slowFrames: ExportFrameTiming[];
   cutFrames: ExportFrameTiming[];
   progressSamples: Array<Record<string, unknown>>;
+  seekTimeouts: number;
+  previousFrameFallbacks: number;
+  fallbackSamples: ExportSeekTimeout[];
 }
+
+/** A precise-mode seek that exceeded its budget during export. */
+export interface ExportSeekTimeout {
+  exportTime: number;
+  sourceTime: number;
+  clipId?: string;
+  clipName?: string;
+  /** The exported frame repeats the previously decoded frame of this clip. */
+  usedPreviousFrame: boolean;
+}
+
+const MAX_SEEK_FALLBACK_SAMPLES = 20;
 
 const MAX_SLOW_FRAMES = 40;
 const MAX_CUT_FRAMES = 80;
@@ -169,6 +184,11 @@ function summarizeRun(run: ExportRunState): Record<string, unknown> {
     },
     phaseTotals,
     phaseAverages,
+    seeks: {
+      timeouts: run.seekTimeouts,
+      previousFrameFallbacks: run.previousFrameFallbacks,
+      fallbackSamples: run.fallbackSamples.map(sample => ({ ...sample, exportTime: round(sample.exportTime), sourceTime: round(sample.sourceTime) })),
+    },
     slowFrames: run.slowFrames.map(compactFrame),
     cutFrames: run.cutFrames.slice(-20).map(compactFrame),
     progressSamples: run.progressSamples,
@@ -197,6 +217,9 @@ class ExportDiagnosticsService {
       slowFrames: [],
       cutFrames: [],
       progressSamples: [],
+      seekTimeouts: 0,
+      previousFrameFallbacks: 0,
+      fallbackSamples: [],
     };
     log.info('Export diagnostics started', { runId, settings });
     return runId;
@@ -300,9 +323,26 @@ class ExportDiagnosticsService {
     }
   }
 
+  recordSeekTimeout(timeout: ExportSeekTimeout): void {
+    if (!this.currentRun) {
+      return;
+    }
+    this.currentRun.seekTimeouts += 1;
+    if (!timeout.usedPreviousFrame) return;
+    this.currentRun.previousFrameFallbacks += 1;
+    if (this.currentRun.fallbackSamples.length < MAX_SEEK_FALLBACK_SAMPLES) this.currentRun.fallbackSamples.push(timeout);
+  }
+
   finish(status: Exclude<ExportRunStatus, 'running'>, error?: unknown): void {
     if (!this.currentRun) {
       return;
+    }
+    if (this.currentRun.previousFrameFallbacks > 0) {
+      log.warn('Export frames repeat the previous frame after a seek timeout', {
+        runId: this.currentRun.runId,
+        frames: this.currentRun.previousFrameFallbacks,
+        samples: this.currentRun.fallbackSamples.slice(0, 5),
+      });
     }
 
     this.currentRun.status = status;

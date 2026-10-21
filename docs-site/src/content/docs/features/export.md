@@ -124,6 +124,7 @@ Nested preview and export account for each composition wrapper's start time and 
 - Uses detached `HTMLVideoElement` instances and browser seeking.
 - Prepares nested video sources for the selected export range and parent trims. Ordinary forward 1x composition branches skip unused descendants; retimed or transition-driven branches keep conservative preparation. Composition wrappers do not consume video decoders.
 - If a required video cannot be admitted within the media budget, preparation reports the failure before rendering.
+- A seek that exceeds its 2-second budget waits briefly for the frame. If the frame then decoded, it is logged at info; if not, the warning says the exported frame repeats the previously decoded frame, and the run's diagnostics (`debugExport` → `exportStats.*.seeks`) count `timeouts` and `previousFrameFallbacks` with sample times and clips. The export finish logs one summary warning when any frame repeated.
 - Waits for ready state and a fresh frame before capture. A temporarily unavailable nested source triggers the export readiness retry; an older preview composition texture is never accepted as the current export frame.
 - Is slower than fast mode, but it is the explicit compatibility choice for difficult files or timing cases.
 - Streamed LOD splats (`*.lod.zip`) choose their chunks while a frame is drawn. Before each frame

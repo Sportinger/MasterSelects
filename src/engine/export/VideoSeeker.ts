@@ -14,6 +14,7 @@ import { MAX_NESTING_DEPTH } from '../../stores/timeline/constants';
 import { updateRuntimePlaybackTime } from '../../services/mediaRuntime/runtimePlayback';
 import { getClipSourceWindowTime, getMappedClipSourceTime } from './layerBuilder/timing';
 import { isLiveInputClip } from './liveInputExport';
+import { exportDiagnostics } from '../../services/export/exportDiagnostics';
 
 const log = Logger.create('VideoSeeker');
 import { ParallelDecodeManager } from '../ParallelDecodeManager';
@@ -194,6 +195,22 @@ function getMappedVideoSeekTargets(ctx: FrameContext): VideoSeekTarget[] {
   return targets;
 }
 
+/** Counts slow and fallen-back precise seeks in the export run's diagnostics (debugExport `exportStats`). */
+export function recordExportSeekOutcome(
+  outcome: VideoSeekOutcome,
+  clip: Pick<TimelineClip, 'id' | 'name'> | null,
+  exportTime: number,
+): void {
+  if (!outcome.timedOut) return;
+  exportDiagnostics.recordSeekTimeout({
+    exportTime,
+    sourceTime: outcome.targetTime,
+    clipId: clip?.id,
+    clipName: clip?.name,
+    usedPreviousFrame: outcome.usedPreviousFrame,
+  });
+}
+
 async function seekSequentialMode(
   ctx: FrameContext,
   clipStates: Map<string, ExportClipState>
@@ -235,7 +252,8 @@ async function seekSequentialMode(
             nestedClip.source?.videoElement
           );
           if (nestedVideo) {
-            seekPromises.push(seekVideo(nestedVideo, nestedClipTime).then(() => {
+            seekPromises.push(seekVideo(nestedVideo, nestedClipTime).then(outcome => {
+              recordExportSeekOutcome(outcome, nestedClip, time);
               updateRuntimePlaybackTime(nestedState?.runtimeSource, nestedClipTime, 'export');
             }));
           }
@@ -277,7 +295,8 @@ async function seekSequentialMode(
       const exportVideo = getExportVideoElement(clip.id, clipStates, clip.source.videoElement);
       if (exportVideo) {
         // PRECISE MODE: HTMLVideoElement seeking
-        seekPromises.push(seekVideo(exportVideo, clipTime).then(() => {
+        seekPromises.push(seekVideo(exportVideo, clipTime).then(outcome => {
+          recordExportSeekOutcome(outcome, clip, time);
           updateRuntimePlaybackTime(clipState?.runtimeSource, clipTime, 'export');
         }));
       }
@@ -412,7 +431,21 @@ async function ensureVideoReadyForExport(video: HTMLVideoElement, targetTime: nu
   }
 }
 
-export async function seekVideo(video: HTMLVideoElement, time: number): Promise<void> {
+/** How a precise-mode (HTMLVideoElement) seek ended. */
+export interface VideoSeekOutcome {
+  targetTime: number;
+  /** The seek exceeded its event budget. */
+  timedOut: boolean;
+  /**
+   * Still no decoded frame for targetTime when the frame was due: the element shows its previous
+   * frame, so the exported frame repeats it. Only possible after a timeout.
+   */
+  usedPreviousFrame: boolean;
+}
+
+export const VIDEO_SEEK_TIMEOUT_MS = 2000;
+
+export async function seekVideo(video: HTMLVideoElement, time: number): Promise<VideoSeekOutcome> {
   const duration = Number.isFinite(video.duration) ? video.duration : 0;
   const maxSeekTime = duration > 0 ? Math.max(0, duration - 0.001) : 0;
   const targetTime = duration > 0
@@ -422,9 +455,10 @@ export async function seekVideo(video: HTMLVideoElement, time: number): Promise<
   // A nearby time may be on the other side of a backward frame boundary.
   if (Math.abs(video.currentTime - targetTime) < 0.000001 && !video.seeking) {
     await ensureVideoReadyForExport(video, targetTime);
-    return;
+    return { targetTime, timedOut: false, usedPreviousFrame: false };
   }
 
+  let timedOut = false;
   await new Promise<void>((resolve) => {
     let resolved = false;
 
@@ -436,11 +470,10 @@ export async function seekVideo(video: HTMLVideoElement, time: number): Promise<
     };
 
     const timeoutId = setTimeout(() => {
-      log.warn(
-        `Seek timeout at ${targetTime} (readyState=${video.readyState}, currentTime=${video.currentTime.toFixed(3)}, seeking=${video.seeking})`
-      );
+      timedOut = true;
+      log.debug(`Seek timeout at ${targetTime} (readyState=${video.readyState}, seeking=${video.seeking}); waiting briefly for the frame`);
       finish();
-    }, 2000);
+    }, VIDEO_SEEK_TIMEOUT_MS);
 
     const cleanup = () => {
       clearTimeout(timeoutId);
@@ -473,6 +506,16 @@ export async function seekVideo(video: HTMLVideoElement, time: number): Promise<
   });
 
   await ensureVideoReadyForExport(video, targetTime);
+  if (!timedOut) return { targetTime, timedOut, usedPreviousFrame: false };
+  const usedPreviousFrame = video.seeking || video.readyState < 2;
+  if (usedPreviousFrame) {
+    log.warn(`Seek timeout at ${targetTime}: no decoded frame yet, the export frame repeats the previous frame`, {
+      readyState: video.readyState, seeking: video.seeking,
+    });
+  } else {
+    log.info(`Seek at ${targetTime} exceeded ${VIDEO_SEEK_TIMEOUT_MS} ms; the frame was decoded before rendering`);
+  }
+  return { targetTime, timedOut, usedPreviousFrame };
 }
 
 /**
