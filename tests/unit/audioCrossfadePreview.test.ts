@@ -256,11 +256,16 @@ describe('effect tails after a preview crossfade', () => {
       ...clips[0],
       audioState: { effectStack: [{ id: 'echo', descriptorId: 'audio-delay', enabled: true, params: { time: 0.5, feedback: 0.5, mix: 1 } }] },
     } as TimelineClip;
-    const sync = createSync({ a: mediaElement('a'), b: mediaElement('b') });
-    expect(sync.planFrame(frameContext(clips, 4.6)).tailClipIds.has('a')).toBe(true);
-    expect(sync.planFrame(frameContext(clips, 4.5 + 30)).tailClipIds.size).toBe(0);
+    const elements = { a: mediaElement('a', { paused: false }), b: mediaElement('b') };
+    const sync = createSync(elements);
+    // The window played a's voice on its element; that element keeps ringing afterwards.
+    sync.planFrame(frameContext(clips, 4.2));
+    expect([...sync.planFrame(frameContext(clips, 4.6)).tailElements]).toEqual([elements.a]);
+    expect(sync.planFrame(frameContext(clips, 4.5 + 30)).tailElements.size).toBe(0);
     // Without an effect there is nothing to ring.
-    expect(sync.planFrame(frameContext(differentSounds(), 4.6)).tailClipIds.size).toBe(0);
+    const plain = createSync(elements);
+    plain.planFrame(frameContext(differentSounds(), 4.2));
+    expect(plain.planFrame(frameContext(differentSounds(), 4.6)).tailElements.size).toBe(0);
   });
 });
 
@@ -441,6 +446,20 @@ describe('one voice or two for a split recording', () => {
       expect(voicesAt(sync, clips, time, options)).toBe(1);
       expect(sync.blocksHandoff(frameContext(clips, time, true, options), 'a', clips[1])).toBe(false);
     }
+  });
+
+  it('decides once while the clips and keyframes stay the same', () => {
+    let routes = 0;
+    routeOverride.current = () => { routes += 1; return undefined; };
+    const clips = splitRecording();
+    const sync = createSync({ a: mediaElement('a', { paused: false }) });
+    // frameContext hands out a new empty keyframe list per call, as the store does.
+    for (const time of [3.6, 3.8, 4.0, 4.2]) {
+      voicesAt(sync, clips, time);
+      sync.blocksHandoff(frameContext(clips, time), 'a', clips[1]);
+    }
+    // One route per side at the edit, computed on the first frame only.
+    expect(routes).toBe(2);
   });
 
   it('ignores ids nested in the route settings, but not a real difference', () => {

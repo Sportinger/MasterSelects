@@ -1390,7 +1390,8 @@ earlier window ends, and crossfades that overlap on one clip start the later
 one where the earlier ends (logged; export renders both). A clip with fades on
 both edges keeps both, multiplied as in export, and crossfaded edges never
 apply their automatic cut de-click. The faded-out sound's effect tail (clip and
-track effects) keeps its route connected. Clips playing audible separated stems
+track effects) keeps the route of the element it played on connected, also when
+that is another clip's proxy from a cut handoff. Clips playing audible separated stems
 cut at the edit in preview (logged); export renders their crossfade. Retimed, reversed
 or composition clips cannot play their extra footage in step, so they meet at
 the edit everywhere (Properties: "Cut (retimed clip)"). Audio curve: Auto

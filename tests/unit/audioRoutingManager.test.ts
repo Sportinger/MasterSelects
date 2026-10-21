@@ -122,13 +122,28 @@ describe('audioRoutingManager media routes', () => {
   });
 
   it('reuses the source node when a disposed element is routed again', async () => {
+    type Node = { connect: ReturnType<typeof vi.fn>; disconnect: ReturnType<typeof vi.fn> };
+    const routeOf = (media: HTMLMediaElement) =>
+      (audioRoutingManager as unknown as { routes: Map<HTMLMediaElement, { cutGainNode: Node }> }).routes.get(media);
     const audio = element();
     expect(await audioRoutingManager.applyEffects(audio, 1, [])).toBe(true);
+    const source = (audioRoutingManager.getActiveContext() as unknown as {
+      createMediaElementSource: { mock: { results: Array<{ value: Node }> } };
+    }).createMediaElementSource.mock.results[0].value;
+    const firstCutGain = routeOf(audio)!.cutGainNode;
+    source.disconnect.mockClear();
     audioRoutingManager.disposeRoute(audio);
     expect(audioRoutingManager.activeRouteCount).toBe(0);
+    // The disposed graph no longer hears the element.
+    expect(source.disconnect).toHaveBeenCalled();
+    source.connect.mockClear();
     // A browser refuses a second source node for one element; the route still comes back.
     expect(await audioRoutingManager.applyEffects(audio, 1, [])).toBe(true);
     expect(audioRoutingManager.hasRoute(audio)).toBe(true);
     expect(createdSources()).toBe(1);
+    const nextCutGain = routeOf(audio)!.cutGainNode;
+    expect(nextCutGain).not.toBe(firstCutGain);
+    expect(source.connect).toHaveBeenCalledTimes(1);
+    expect(source.connect).toHaveBeenCalledWith(nextCutGain);
   });
 });

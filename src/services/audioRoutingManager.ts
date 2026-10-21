@@ -71,11 +71,12 @@ const audioRoutingDebugCounters: AudioRoutingDebugCounters = {
 };
 
 const reverbImpulseCache = new Map<string, AudioBuffer>();
-// Module state (like the cache above), so a manager kept across HMR has it too.
+// Module state parked in import.meta.hot.data like the manager itself: after HMR
+// the kept manager runs this module's new methods, which must still see them.
 /** Routes being built (the context may still be resuming): one creation per element, cancelled by a removal. */
-const pendingRoutes = new Map<HTMLMediaElement, Promise<AudioRoute | null>>();
+const pendingRoutes: Map<HTMLMediaElement, Promise<AudioRoute | null>> = import.meta.hot?.data?.pendingRoutes ?? new Map();
 /** Source nodes of disposed routes: an element can feed only one, so a reused element gets it back. */
-const disposedSources = new WeakMap<HTMLMediaElement, AudioNode>();
+const disposedSources: WeakMap<HTMLMediaElement, AudioNode> = import.meta.hot?.data?.disposedSources ?? new WeakMap();
 
 class AudioRoutingManager {
   private audioContext: AudioContext | null = null;
@@ -656,5 +657,9 @@ class AudioRoutingManager {
 export const audioRoutingManager: AudioRoutingManager = import.meta.hot?.data?.audioRoutingManager ?? new AudioRoutingManager();
 if (import.meta.hot) {
   Object.setPrototypeOf(audioRoutingManager, AudioRoutingManager.prototype);
-  import.meta.hot.dispose(data => { data.audioRoutingManager = audioRoutingManager; });
+  import.meta.hot.dispose(data => {
+    data.audioRoutingManager = audioRoutingManager;
+    data.pendingRoutes = pendingRoutes;
+    data.disposedSources = disposedSources;
+  });
 }

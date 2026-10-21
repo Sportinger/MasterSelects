@@ -1380,10 +1380,11 @@
   cursor: pointer;
 }
 
-/* The label text and the whole control cell toggle the checkbox. */
+/* The label text and the whole control cell toggle the checkbox, without a tap highlight. */
 .transition-checkbox-row .resolve-inspector-row-label,
 .transition-param-toggle {
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .transition-param-toggle {
@@ -1392,7 +1393,6 @@
   align-self: stretch;
   width: 100%;
   min-height: 24px;
-  -webkit-tap-highlight-color: transparent;
 }
 
 .transition-param-checkbox {

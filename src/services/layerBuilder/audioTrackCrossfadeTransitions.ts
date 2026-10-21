@@ -116,8 +116,12 @@ export interface AudioCrossfadeFrame {
   preparedClipIds: Set<string>;
   /** Per track: the clip and element that keep playing after the window. */
   handoffOverrides: Map<string, AudioCrossfadeHandoffOverride>;
-  /** Outgoing clips whose effect tail (reverb, delay) still rings: their route stays connected. */
-  tailClipIds: Set<string>;
+  /**
+   * Elements a faded-out sound played on whose effect tail (reverb, delay) still
+   * rings: their route stays connected. That can be another clip's element (a
+   * cut handoff's proxy), so it is kept by element, not by clip.
+   */
+  tailElements: Set<HTMLAudioElement>;
 }
 
 export class AudioTrackCrossfadeTransitionSync {
@@ -126,7 +130,7 @@ export class AudioTrackCrossfadeTransitionSync {
   private readonly effectTails = new WeakMap<TimelineClip, { track: TimelineTrack | undefined; seconds: number }>();
   /** One decision per crossfade (keyed by its outgoing clip), kept while its clips and keyframes stay the same. */
   private readonly singleVoiceDecisions = new WeakMap<TimelineClip, SingleVoiceDecision>();
-  /** Per active window (transition id): the element its outgoing voice plays on, fixed for the window. */
+  /** Per window (transition id): the element its outgoing voice plays on, fixed for the window and its effect tail. */
   private outgoingElements = new Map<string, HTMLAudioElement>();
   /** When this sync first asked for an element's route (performance ms). */
   private readonly routeRequestedAt = new WeakMap<HTMLMediaElement, number>();
@@ -157,8 +161,13 @@ export class AudioTrackCrossfadeTransitionSync {
     const track = ctx.audioTracks.find((candidate) => candidate.id === pair.outgoingClip.trackId);
     if (!track) return false;
     const { outgoingClip, incomingClip } = pair;
-    const outgoingKeys = ctx.getClipKeyframes?.(outgoingClip.id);
-    const incomingKeys = ctx.getClipKeyframes?.(incomingClip.id);
+    // The store hands out a new empty list per call: no keyframes is undefined, so the cache hits.
+    const keysOf = (clip: TimelineClip) => {
+      const keys = ctx.getClipKeyframes?.(clip.id);
+      return keys?.length ? keys : undefined;
+    };
+    const outgoingKeys = keysOf(outgoingClip);
+    const incomingKeys = keysOf(incomingClip);
     const cached = this.singleVoiceDecisions.get(outgoingClip);
     if (cached && cached.incoming === incomingClip && cached.track === track &&
       cached.outgoingKeys === outgoingKeys && cached.incomingKeys === incomingKeys) return cached.singleVoice;
@@ -211,7 +220,7 @@ export class AudioTrackCrossfadeTransitionSync {
 
   planFrame(ctx: FrameContext): AudioCrossfadeFrame {
     const frame: AudioCrossfadeFrame = {
-      windows: new Map(), edgeClips: new Map(), preparedClipIds: new Set(), handoffOverrides: new Map(), tailClipIds: new Set(),
+      windows: new Map(), edgeClips: new Map(), preparedClipIds: new Set(), handoffOverrides: new Map(), tailElements: new Set(),
     };
     const playhead = ctx.playheadPosition;
     const outgoingElements = new Map<string, HTMLAudioElement>();
@@ -244,9 +253,13 @@ export class AudioTrackCrossfadeTransitionSync {
         const incoming = preview.voices.find((voice) => voice.clip.id === pair.incomingClip.id);
         if (incoming) this.prepareVoice(ctx, incoming, trackId, frame);
       } else if (playhead >= preview.end && preview.voices.length > 1) {
-        // The faded-out sound's echo or reverb rings on, as in export.
+        // The faded-out sound's echo or reverb rings on, as in export, on the element it played on.
         const track = ctx.audioTracks.find((candidate) => candidate.id === trackId);
-        if (playhead < preview.end + this.getEffectTailSeconds(pair.outgoingClip, track)) frame.tailClipIds.add(pair.outgoingClip.id);
+        const tailElement = this.outgoingElements.get(pair.transitionId);
+        if (tailElement && playhead < preview.end + this.getEffectTailSeconds(pair.outgoingClip, track)) {
+          frame.tailElements.add(tailElement);
+          outgoingElements.set(pair.transitionId, tailElement);
+        }
       }
     }
     this.preparedClipIds = frame.preparedClipIds;

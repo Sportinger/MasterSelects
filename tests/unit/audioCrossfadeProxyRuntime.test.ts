@@ -46,14 +46,14 @@ function differentSounds(outgoingExtra: Partial<TimelineClip> = {}): TimelineCli
   ];
 }
 
-function frameContext(clips: TimelineClip[], playheadPosition: number, isPlaying = true): FrameContext {
+function frameContext(clips: TimelineClip[], playheadPosition: number, isPlaying = true, mediaDuration = 20): FrameContext {
   const clipsAtTime = clips.filter((clip) => playheadPosition >= clip.startTime && playheadPosition < clip.startTime + clip.duration);
   return {
     clips, clipsAtTime, playheadPosition, isPlaying, isDraggingPlayhead: false, playbackSpeed: 1, now: 1000,
     audioTracks: [track], videoTracks: [], tracks: [track],
     unmutedAudioTrackIds: new Set(['a1']),
     clipsByTrackId: new Map(clipsAtTime.map((clip) => [clip.trackId, clip])),
-    mediaFileById: new Map(clips.map((clip) => [clip.mediaFileId, { duration: 20 }])),
+    mediaFileById: new Map(clips.map((clip) => [clip.mediaFileId, { duration: mediaDuration }])),
     getInterpolatedEffects: () => [],
     getInterpolatedSpeed: () => 1,
     getSourceTimeForClip: (_clipId: string, localTime: number) => localTime,
@@ -110,6 +110,8 @@ describe('preview crossfade with audio proxies', () => {
     manager.audioSyncHandler = {
       syncAudioElement: vi.fn((target) => {
         synced.push(target.element);
+        // A playing element is where it was synced to (a cut handoff checks that).
+        Object.defineProperty(target.element, 'currentTime', { value: target.clipTime, writable: true, configurable: true });
         void audioRoutingManager.applyEffects(target.element, target.volume ?? 1, target.eqGains ?? [], target.pan, target.processors, target.masterRoute);
       }),
       stopScrubAudio: vi.fn(),
@@ -170,7 +172,7 @@ describe('preview crossfade with audio proxies', () => {
     const outgoing = manager.runtimeElements.getAudioTrackProxy('a')!;
     expect(audioRoutingManager.hasRoute(outgoing)).toBe(true);
     const frame = runFrame(manager, frameContext(clips, 4.7));
-    expect(frame.tailClipIds.has('a')).toBe(true);
+    expect(frame.tailElements.has(outgoing)).toBe(true);
     expect(manager.runtimeElements.getAudioTrackProxy('a')).toBe(outgoing);
     expect(audioRoutingManager.hasRoute(outgoing)).toBe(true);
     // Once the tail has rung out the proxy is released with its route.
@@ -195,5 +197,31 @@ describe('preview crossfade with audio proxies', () => {
       expect(manager.runtimeElements.getAudioTrackProxy('a')).toBe(voice);
     }
     expect(audioRoutingManager.hasRoute(voice)).toBe(true);
+  });
+
+  it('keeps the echo ringing on the proxy a cut handoff passed to the outgoing clip', async () => {
+    // A | B one recording split with a plain cut (B continues on A's proxy), then B → C with Echo on B.
+    const echo = { audioState: { effectStack: [{ id: 'echo', descriptorId: 'audio-delay', enabled: true, params: { delayMs: 500, feedback: 0.5, mix: 1 } }] } };
+    const clips = [
+      audioClip('A', 0, 0, 'long'),
+      audioClip('B', 4, 4, 'long', { transitionOut: crossfade('C'), ...echo } as Partial<TimelineClip>),
+      audioClip('C', 8, 2, 'pb', { transitionIn: crossfade('B') }),
+    ];
+    for (const time of [3.0, 3.5, 3.9, 4.05, 4.2, 5, 6, 7.0, 7.3, 7.6, 8.0, 8.3, 8.45]) {
+      runFrame(manager, frameContext(clips, time, true, 40));
+      await settle();
+    }
+    const handoffProxy = manager.runtimeElements.getAudioTrackProxy('A')!;
+    // B played on A's proxy before and inside its crossfade.
+    expect(audioRoutingManager.hasRoute(handoffProxy)).toBe(true);
+    const tail = runFrame(manager, frameContext(clips, 8.7, true, 40));
+    await settle();
+    expect(tail.tailElements.has(handoffProxy)).toBe(true);
+    expect(manager.runtimeElements.getAudioTrackProxy('A')).toBe(handoffProxy);
+    expect(audioRoutingManager.hasRoute(handoffProxy)).toBe(true);
+    // Once the echo has rung out the proxy goes with its route.
+    runFrame(manager, frameContext(clips, 8.5 + 15, true, 40));
+    expect(manager.runtimeElements.getAudioTrackProxy('A')).toBeUndefined();
+    expect(audioRoutingManager.hasRoute(handoffProxy)).toBe(false);
   });
 });

@@ -556,7 +556,7 @@ export class AudioTrackSyncManager {
   /**
    * Pause audio not at playhead
    */
-  private pauseInactiveAudio(ctx: FrameContext, activeTransitionAudioClipIds = new Set<string>(), crossfades?: Pick<AudioCrossfadeFrame, 'tailClipIds' | 'preparedClipIds'>): void {
+  private pauseInactiveAudio(ctx: FrameContext, activeTransitionAudioClipIds = new Set<string>(), crossfades?: Pick<AudioCrossfadeFrame, 'tailElements' | 'preparedClipIds'>): void {
     const activeClipIds = new Set([
       ...ctx.clipsAtTime.map(clip => clip.id),
       ...activeTransitionAudioClipIds,
@@ -575,7 +575,7 @@ export class AudioTrackSyncManager {
       // or that an upcoming crossfade positioned is only paused: removing it would cut the sound or waste the preparation.
       const audioTrackProxy = this.runtimeElements.getAudioTrackProxy(clip.id);
       if (audioTrackProxy && !isAtPlayhead && !this.audioHandoffs.hasHandoffElement(audioTrackProxy)) {
-        if (crossfades?.tailClipIds.has(clip.id) || crossfades?.preparedClipIds.has(clip.id)) pauseAudioElement(audioTrackProxy);
+        if (crossfades?.tailElements.has(audioTrackProxy) || crossfades?.preparedClipIds.has(clip.id)) pauseAudioElement(audioTrackProxy);
         else this.runtimeElements.removeAudioTrackProxy(clip.id);
       }
 
