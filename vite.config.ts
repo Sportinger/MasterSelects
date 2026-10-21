@@ -1,10 +1,10 @@
 import { defineConfig, type Plugin, type ProxyOptions } from 'vite'
 import react from '@vitejs/plugin-react'
 import { APP_VERSION } from './src/version'
-import { gzipSync } from 'node:zlib'
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import path from 'path'
 import { buildIdentity } from './tools/buildIdentity'
+import { compressOversizedSam2OrtWasm, ffmpegCoreAssets } from './tools/buildAssetPlugins.ts'
 import {
   allowedFileRoots,
   bridgeToken,
@@ -185,95 +185,7 @@ function devHostedMediaDownloadPlugin(apiTarget: string): Plugin {
   };
 }
 
-const SAM2_ORT_WASM_GZIP_PLACEHOLDER = '__SAM2_ORT_WASM_GZIP_URL__';
-const CLOUDFLARE_PAGES_MAX_ASSET_BYTES = 25 * 1024 * 1024;
 const FFMPEG_CORE_DIRECTORY = path.resolve(__dirname, 'node_modules', '@ffmpeg', 'core', 'dist', 'umd');
-
-function ffmpegCoreAssets(): Plugin {
-  const coreJsPath = path.join(FFMPEG_CORE_DIRECTORY, 'ffmpeg-core.js');
-  const coreWasmPath = path.join(FFMPEG_CORE_DIRECTORY, 'ffmpeg-core.wasm');
-  let compressedWasm: Buffer | null = null;
-  const getCompressedWasm = () => {
-    compressedWasm ??= gzipSync(readFileSync(coreWasmPath), { level: 9 });
-    return compressedWasm;
-  };
-
-  return {
-    name: 'ffmpeg-core-assets',
-    configureServer(server) {
-      server.middlewares.use((request, response, next) => {
-        if (request.url === '/ffmpeg/ffmpeg-core.js') {
-          response.setHeader('Content-Type', 'text/javascript; charset=utf-8');
-          response.end(readFileSync(coreJsPath));
-          return;
-        }
-        if (request.url === '/ffmpeg/ffmpeg-core.wasm.gz') {
-          response.setHeader('Content-Type', 'application/gzip');
-          response.end(getCompressedWasm());
-          return;
-        }
-        next();
-      });
-    },
-    closeBundle() {
-      const outputDirectory = path.resolve(__dirname, 'dist', 'ffmpeg');
-      mkdirSync(outputDirectory, { recursive: true });
-      writeFileSync(path.join(outputDirectory, 'ffmpeg-core.js'), readFileSync(coreJsPath));
-      writeFileSync(path.join(outputDirectory, 'ffmpeg-core.wasm.gz'), getCompressedWasm());
-    },
-  };
-}
-
-function compressOversizedSam2OrtWasm(): Plugin {
-  return {
-    name: 'compress-oversized-sam2-ort-wasm',
-    apply: 'build',
-    closeBundle() {
-      const assetsDirectory = path.resolve(__dirname, 'dist/assets');
-      const oversizedWasmFiles = readdirSync(assetsDirectory).filter((fileName) => {
-        if (!/^ort-wasm-simd-threaded\.jsep-.*\.wasm$/.test(fileName)) {
-          return false;
-        }
-
-        return readFileSync(path.join(assetsDirectory, fileName)).byteLength > CLOUDFLARE_PAGES_MAX_ASSET_BYTES;
-      });
-
-      if (oversizedWasmFiles.length === 0) {
-        return;
-      }
-      if (oversizedWasmFiles.length !== 1) {
-        throw new Error(`Expected one oversized SAM2 ORT WASM asset, found ${oversizedWasmFiles.length}.`);
-      }
-
-      const wasmFileName = oversizedWasmFiles[0];
-      const wasmPath = path.join(assetsDirectory, wasmFileName);
-      const gzipFileName = `${wasmFileName}.gz`;
-      const gzipBytes = gzipSync(readFileSync(wasmPath), { level: 9 });
-      if (gzipBytes.byteLength > CLOUDFLARE_PAGES_MAX_ASSET_BYTES) {
-        throw new Error(`Compressed SAM2 ORT WASM asset is still too large: ${gzipBytes.byteLength} bytes.`);
-      }
-
-      const workerFiles = readdirSync(assetsDirectory).filter((fileName) => fileName.endsWith('.js'));
-      const workerMatches = workerFiles.filter((fileName) =>
-        readFileSync(path.join(assetsDirectory, fileName), 'utf8').includes(SAM2_ORT_WASM_GZIP_PLACEHOLDER),
-      );
-      if (workerMatches.length === 0) {
-        throw new Error('Missing SAM2 worker runtime placeholder.');
-      }
-
-      for (const workerFile of workerMatches) {
-        const workerPath = path.join(assetsDirectory, workerFile);
-        const workerSource = readFileSync(workerPath, 'utf8').replaceAll(
-          SAM2_ORT_WASM_GZIP_PLACEHOLDER,
-          `/assets/${gzipFileName}`,
-        );
-        writeFileSync(workerPath, workerSource);
-      }
-      writeFileSync(path.join(assetsDirectory, gzipFileName), gzipBytes);
-      unlinkSync(wasmPath);
-    },
-  };
-}
 
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
@@ -367,7 +279,7 @@ export default defineConfig(({ command, mode }) => {
       devHostedMediaDownloadPlugin(hostedApiProxyTarget),
       createDevBridgePlugin({ enableAiToolsBridge: enableDevBridge }),
       splatTransformWebpWasmPathFix(),
-      ffmpegCoreAssets(),
+      ffmpegCoreAssets(FFMPEG_CORE_DIRECTORY),
       compressOversizedSam2OrtWasm(),
       ...(devRootCaPath ? [lanRootCaPlugin(devRootCaPath)] : []),
       // Replace __APP_VERSION__ in index.html during build

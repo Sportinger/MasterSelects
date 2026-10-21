@@ -257,6 +257,7 @@ The **MatAnyone2** tab combines two different mask sources:
 - **MatAnyone2** is a separate native-helper-backed video matting step that consumes either mask source and produces a transparent foreground video plus an alpha sidecar
 
 SAM 2 inference runs locally in the browser using ONNX Runtime with WebGPU acceleration. No API keys or cloud services are involved.
+The ONNX Runtime WASM is fetched as a gzip file only when the build had to compress it for the 25 MiB Cloudflare Pages asset limit; otherwise (dev server, smaller runtime) the SAM 2 worker, like the Roto worker, lets ONNX Runtime load its own WASM instead of fetching the unreplaced build placeholder.
 
 ### Location
 - Tab in dock panels alongside AI Chat and Scene Description
