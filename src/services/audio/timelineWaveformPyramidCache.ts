@@ -3,7 +3,8 @@ import type { MediaFileAudioAnalysisRefs } from '../../types/audio';
 import type { TimelineWaveformPyramid } from '../../components/timeline/utils/waveformLod';
 import { Logger } from '../logger';
 import type { AudioArtifactStore } from './AudioArtifactStore';
-import { AudioDecodeService } from './AudioDecodeService';
+import { AudioDecodeService, BROWSER_AUDIO_DECODE_DECODER_ID } from './AudioDecodeService';
+import { decodeSourceAudioWithFallbacks, SOURCE_AUDIO_FALLBACK_DECODE_ATTEMPTS } from './decode/sourceAudioFallbackDecode';
 import { readLongPcmWavInfo, readLongWavFingerprintBytes } from './longPcmWav';
 import { buildPeakDecimatedAudioBuffer } from './longWavPeaksClient';
 
@@ -391,43 +392,33 @@ async function decodeTimelineWaveformAnalysisForFile(file: File, options: Genera
     const arrayBuffer = await file.arrayBuffer();
     assertCurrentAnalysis(options);
 
-    let audioBuffer: AudioBuffer;
-    try {
-      audioBuffer = await decodeService.decodeAudioBuffer(
-        {
-          kind: 'array-buffer',
-          arrayBuffer,
-          name: file.name,
-          mimeType: file.type || undefined,
-        },
-        {
-          mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
-          sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
-          clipAudioStateHash: options.clipAudioStateHash,
-          signal: options.signal,
-          metadata: {
-            source: 'timeline-waveform-pyramid',
-            sourceFileName: file.name,
-            sourceFileSize: file.size,
-            sourceLastModified: file.lastModified,
+    // Browser decodeAudioData first, then the container/WebCodecs and FFmpeg paths.
+    const { buffer: audioBuffer } = await decodeSourceAudioWithFallbacks(file, [
+      {
+        id: BROWSER_AUDIO_DECODE_DECODER_ID,
+        decode: () => decodeService.decodeAudioBuffer(
+          {
+            kind: 'array-buffer',
+            arrayBuffer,
+            name: file.name,
+            mimeType: file.type || undefined,
           },
-        },
-      );
-    } catch (decodeError) {
-      const { readIsobmffMetadata } = await import('../mediaMetadata/isobmffMetadata');
-      const { MediaAudioRangeReader } = await import('../../engine/audio/exportPipeline/MediaAudioRangeReader');
-      const duration = (await readIsobmffMetadata(file))?.duration;
-      if (!duration || duration <= 0) throw decodeError;
-      const reader = new MediaAudioRangeReader(file);
-      try {
-        audioBuffer = await reader.read(0, duration);
-      } catch (fallbackError) {
-        log.debug('Container audio fallback could not decode the source either', { file: file.name, fallbackError });
-        throw decodeError;
-      } finally {
-        reader.dispose();
-      }
-    }
+          {
+            mediaFileId: options.mediaFileId ?? `file:${file.name}:${file.size}:${file.lastModified}`,
+            sourceFingerprint: `file:${file.name}:${file.size}:${file.lastModified}`,
+            clipAudioStateHash: options.clipAudioStateHash,
+            signal: options.signal,
+            metadata: {
+              source: 'timeline-waveform-pyramid',
+              sourceFileName: file.name,
+              sourceFileSize: file.size,
+              sourceLastModified: file.lastModified,
+            },
+          },
+        ),
+      },
+      ...SOURCE_AUDIO_FALLBACK_DECODE_ATTEMPTS,
+    ], options.signal);
     assertCurrentAnalysis(options);
     return await generateTimelineWaveformAnalysisFromBuffer(file, arrayBuffer, audioBuffer, options);
   } finally {

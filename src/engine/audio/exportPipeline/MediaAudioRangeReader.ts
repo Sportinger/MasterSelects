@@ -119,6 +119,17 @@ export class MediaAudioRangeReader {
     return output;
   }
 
+  /** Decodes the whole primary audio track; the duration comes from the container itself. */
+  async readAll(signal?: AbortSignal, maxBytes = Infinity): Promise<AudioBuffer> {
+    const track = await this.getTrack();
+    signal?.throwIfAborted();
+    const duration = await track.computeDuration();
+    if (!Number.isFinite(duration) || duration <= 0) {
+      throw new MediaAudioRangeError('Media audio track has no measurable duration');
+    }
+    return this.read(0, duration, signal, maxBytes);
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
