@@ -1,0 +1,29 @@
+{
+  "shots": [
+    {
+      "name": "twirl-inspector",
+      "effect": "twirl",
+      "params": {
+        "amount": 3.49,
+        "radius": 0.6
+      },
+      "image": "dancer_stage.jpg",
+      "preview": 0,
+      "alt": "The Twirl effect card in Properties → Effects: Twist 200°, Radius 0.6, Center X and Center Y 0.5, Shape Circle and Frame Edges Mirror",
+      "marks": [
+        {
+          "target": "Twist",
+          "label": "Twist, shown in degrees",
+          "reach": 60
+        },
+        {
+          "target": "Frame Edges",
+          "label": "Frame Edges",
+          "reach": 60
+        }
+      ],
+      "top": "card",
+      "layout": "float"
+    }
+  ]
+}

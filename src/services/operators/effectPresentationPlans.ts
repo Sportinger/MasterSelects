@@ -25,6 +25,10 @@ const DIRECTIONAL_PORTS = { ...BLUR_PORTS, 'amount-positive': 'Amount ≥ 0', di
   'taper-t': 'Position t', taper: 'Taper', 'covered-weight': 'Box Weight', 'coarse-weight': 'Tap Weight', 'coarse-count-here': 'Taps Here',
   'coarse-sample:image': 'Coarse Sample', 'radial-log-scale': 'Zoom Range', 'radial-longest': 'Longest Zoom', 'spin-arc': 'Spin Arc',
   'spin-start': 'Spin Start', 'zoom-end-scale': 'End Scale' };
+const UV_DISTORT_PORTS = { 'source-cache': 'Premultiplied Source', 'edge-uv': 'Sample UV', 'result:image': 'Distorted Image',
+  'space-center': 'Centre', 'space-scale': 'Shape Scale', 'space-p': 'Offset', 'space-r': 'Distance / Radius', 'one-vec2': '(1, 1)',
+  'bulge-scale': 'Lens Scale', 'bulge-moved': 'Moved Offset', 'twirl-angle': 'Turn Angle', 'twirl-moved': 'Moved Offset',
+  'space-sample-uv': 'Read Position', 'wave-sample-uv': 'Read Position', phase: 'Phase' };
 
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
@@ -78,8 +82,14 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : includes('strength scaled clamped inverse invert selected rgba image', id) ? 'finish' : 'sampling',
   };
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
-    labels: { coordinates: type === 'wave' ? 'Wave Coordinates' : type === 'twirl' ? 'Twirl Coordinates' : 'Bulge Coordinates', sampling: 'Image Sampling' },
-    stage: ({ id }) => id === 'sample' ? 'sampling' : 'coordinates',
+    labels: { premultiply: 'Premultiplied Source (cached)', space: 'Centre, Shape & Radius', phase: 'Phase & Speed', edges: 'Frame Edges & Sampling',
+      coordinates: type === 'wave' ? 'Wave Displacement' : type === 'twirl' ? 'Twirl Angle' : 'Bulge & Pinch Curve', finish: 'Straight Alpha Output' },
+    portLabels: UV_DISTORT_PORTS,
+    stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : /^(result|coverage-floor)/.test(id) ? 'finish'
+      : id === 'sample' || /^edge-/.test(id) ? 'edges'
+      : id === 'one-vec2' ? (type === 'wave' ? 'edges' : 'space')
+        : /^space-(moved-delta|sample-uv)$/.test(id) ? 'coordinates' : /^space-/.test(id) ? 'space'
+          : /^phase(-|$)/.test(id) ? 'phase' : 'coordinates',
   };
   if (['pixelate', 'mirror', 'rgb-split', 'blockify', 'block-mosaic'].includes(type)) return {
     labels: { coordinates: 'Grid & Coordinates', sampling: 'Image Sampling', finish: 'Color & Alpha' },

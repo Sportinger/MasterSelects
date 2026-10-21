@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Effect } from '../../src/types/effects';
+import type { EffectOperatorGraph } from '../../src/types/operatorGraph';
 import { createDefaultUvDistortGraph } from '../../src/services/operators/uvDistortEffectGraphs';
+import { createLegacyBulgeGraph, createLegacyTwirlGraph, createLegacyWaveGraph } from '../../src/services/operators/legacyUvDistortEffectGraphs';
+import { createDefaultBulgeGraph, createDefaultTwirlGraph, createDefaultWaveGraph } from '../../src/services/operators/uvDistortRecipes';
+import { matchesEffectRecipe } from '../../src/services/operators/effectFamilyPresentation';
+import { rendersBuiltInUvDistortRecipe } from '../../src/services/operators/uvDistortIdentity';
+import { workerSoftwareEffectPlanForLayer } from '../../src/services/render/workerSoftwareEffectPlan';
+import type { Layer } from '../../src/types';
 import { EFFECT_PRESET_STORAGE_KEY, instantiateEffectPreset, listEffectPresets, removeEffectPreset, saveEffectPreset } from '../../src/services/nodeGraph/effectPresetLibrary';
 import { applyEffectPreset } from '../../src/services/nodeGraph/applyEffectPreset';
 import { useTimelineStore } from '../../src/stores/timeline';
@@ -35,6 +42,26 @@ describe('effect preset library', () => {
     expect(listEffectPresets(store)).toEqual([]);
     expect(second.operatorGraph!.edges).toEqual(restored.effect.operatorGraph!.edges);
   });
+
+  it.each([
+    ['wave', createLegacyWaveGraph, createDefaultWaveGraph, { amplitudeX: .03, amplitudeY: .01, frequencyX: 6, frequencyY: 2 }, { speed: 0, phase: 0, edges: 'clamp' }],
+    ['twirl', createLegacyTwirlGraph, createDefaultTwirlGraph, { amount: 3, radius: .7, centerX: .4, centerY: .6 }, { shape: 'frame', edges: 'clamp' }],
+    ['bulge', createLegacyBulgeGraph, createDefaultBulgeGraph, { amount: .5, radius: .5, centerX: .5, centerY: .5 }, { shape: 'frame', edges: 'clamp' }],
+  ] as [string, () => EffectOperatorGraph, () => EffectOperatorGraph, Record<string, number>, Record<string, number | string>][])(
+    'instantiates a %s preset saved with the retired recipe as the current recipe with its original look', (type, legacy, current, params, legacyParams) => {
+      // Presets saved before the distort rebuild always stored the (then current) recipe graph.
+      const preset = { id: 'old', label: `Old ${type}`, effect: { type, enabled: true, params: { ...params }, operatorGraph: legacy() } };
+      const effect = instantiateEffectPreset(preset);
+      expect(matchesEffectRecipe(effect.operatorGraph!, current())).toBe(true);
+      expect(effect.params).toEqual({ ...params, ...legacyParams });
+      // It renders like the reloaded project: the built-in recipe, so the worker CPU uses the hand-written pass.
+      expect(rendersBuiltInUvDistortRecipe(effect)).toBe(true);
+      const plan = workerSoftwareEffectPlanForLayer({ id: 'layer', effects: [effect] } as unknown as Layer)!;
+      expect(plan.pixelEffects.uvDistortAdjustments).toHaveLength(1);
+      expect(plan.pixelEffects.imageOperatorPlans).toBeUndefined();
+      // The stored preset itself is not changed.
+      expect(preset.effect.params).toEqual(params);
+    });
 
   it('does not overwrite unreadable libraries and reports quota failures', () => {
     const store = memory(); store.setItem(EFFECT_PRESET_STORAGE_KEY, '{');

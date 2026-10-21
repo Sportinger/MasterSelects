@@ -8,6 +8,7 @@ import { isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
+import { workerSoftwareUvDistortAdjustment, type WorkerSoftwareUvDistortAdjustment } from './workerSoftwareUvDistortEffects';
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
@@ -101,25 +102,8 @@ interface MutableWorkerSoftwarePixelEffects {
   }[];
   scanlineAdjustments?: { density: number; opacity: number; speed: number }[];
   grainAdjustments?: { amount: number; size: number; speed: number }[];
-  waveAdjustments?: {
-    amplitudeX: number;
-    amplitudeY: number;
-    frequencyX: number;
-    frequencyY: number;
-  }[];
+  uvDistortAdjustments?: WorkerSoftwareUvDistortAdjustment[];
   kaleidoscopeAdjustments?: { segments: number; rotation: number }[];
-  twirlAdjustments?: {
-    amount: number;
-    radius: number;
-    centerX: number;
-    centerY: number;
-  }[];
-  bulgeAdjustments?: {
-    amount: number;
-    radius: number;
-    centerX: number;
-    centerY: number;
-  }[];
   fisheyeAdjustments?: {
     projection: 'equidistant' | 'equisolid' | 'stereographic' | 'orthographic';
     strength: number;
@@ -329,37 +313,21 @@ function effectFilterPart(
       });
       return '';
     case 'wave':
+    case 'twirl':
+    case 'bulge': {
+      // Only the untouched built-in recipe reaches this switch (see workerSoftwareEffectPlanForLayer).
+      const adjustment = workerSoftwareUvDistortAdjustment(effect);
+      if (adjustment === undefined) return null;
+      if (adjustment === null) return '';
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
-      (pixelEffects.waveAdjustments ??= []).push({
-        amplitudeX: finiteEffectNumber(effect.params.amplitudeX, 0.02),
-        amplitudeY: finiteEffectNumber(effect.params.amplitudeY, 0.02),
-        frequencyX: finiteEffectNumber(effect.params.frequencyX, 5),
-        frequencyY: finiteEffectNumber(effect.params.frequencyY, 5),
-      });
+      (pixelEffects.uvDistortAdjustments ??= []).push(adjustment);
       return '';
+    }
     case 'kaleidoscope':
       if (!canAddSourceResamplingEffect(pixelEffects)) return null;
       (pixelEffects.kaleidoscopeAdjustments ??= []).push({
         segments: Math.max(2, finiteEffectNumber(effect.params.segments, 6)),
         rotation: finiteEffectNumber(effect.params.rotation, 0),
-      });
-      return '';
-    case 'twirl':
-      if (!canAddSourceResamplingEffect(pixelEffects)) return null;
-      (pixelEffects.twirlAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 1),
-        radius: Math.max(0.0001, finiteEffectNumber(effect.params.radius, 0.5)),
-        centerX: finiteEffectNumber(effect.params.centerX, 0.5),
-        centerY: finiteEffectNumber(effect.params.centerY, 0.5),
-      });
-      return '';
-    case 'bulge':
-      if (!canAddSourceResamplingEffect(pixelEffects)) return null;
-      (pixelEffects.bulgeAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 0.5),
-        radius: Math.max(0.0001, finiteEffectNumber(effect.params.radius, 0.5)),
-        centerX: finiteEffectNumber(effect.params.centerX, 0.5),
-        centerY: finiteEffectNumber(effect.params.centerY, 0.5),
       });
       return '';
     case 'fisheye': {
@@ -462,9 +430,11 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
   outputSize?: { readonly width: number; readonly height: number }): WorkerSoftwareEffectPlan | null {
   const pixelEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
   const activeEffects = layer.effects.filter(effect => effect.enabled !== false && !effect.type.startsWith('audio-'));
+  // Built-in Wave, Twirl and Bulge keep a hand-written pass even with a stored copy of their
+  // recipe (interpreting their graph per pixel is far slower); edited graphs run as graphs.
   const hasPersistedImageGraph = activeEffects.some(effect => isImageGraphEffectType(effect.type)
-    && (effect.operatorGraph || effect.params.operatorGraph !== undefined));
-  if (hasPersistedImageGraph) {
+    && (effect.operatorGraph || effect.params.operatorGraph !== undefined) && workerSoftwareUvDistortAdjustment(effect) === undefined);
+  const graphPlans = (): WorkerSoftwareEffectPlan | null => {
     if (!activeEffects.every(effect => isImageGraphEffectType(effect.type))) return null;
     try {
       const plans: ImageOperatorPlan[] = [];
@@ -477,11 +447,16 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
         owners.push({ feedbackKey: JSON.stringify([layer.id, effect.id]), reset: effect.params.reset === true,
           historyLoop: resolveFeedbackHistoryLoop(effect.params) });
       }
-      pixelEffects.imageOperatorPlans = plans;
-      pixelEffects.imageOperatorPlanOwners = owners;
-      return { filter: 'none', pixelEffects };
+      const graphEffects = createEmptyPixelEffects(layer.colorCorrection?.primaryNodes);
+      graphEffects.imageOperatorPlans = plans;
+      graphEffects.imageOperatorPlanOwners = owners;
+      return { filter: 'none', pixelEffects: graphEffects };
     } catch { return null; }
-  }
+  };
+  if (hasPersistedImageGraph) return graphPlans();
+  // The hand-written pass holds one resampling effect; stacked built-in distorts (Wave then
+  // Twirl, …) run as ordered graph plans instead of skipping the layer.
+  const stackedFallback = () => activeEffects.some(effect => workerSoftwareUvDistortAdjustment(effect)) ? graphPlans() : null;
   const parts: string[] = [];
   let activeVisualEffectCount = 0;
   for (const effect of layer.effects) {
@@ -489,7 +464,7 @@ export function workerSoftwareEffectPlanForLayer(layer: Layer,
       activeVisualEffectCount += 1;
     }
     const part = effectFilterPart(effect, pixelEffects, layer.id, outputSize);
-    if (part === null) return null;
+    if (part === null) return stackedFallback();
     if (part) parts.push(part);
   }
   const feedbackEffectCount = (pixelEffects.acuarelaAdjustments?.length ?? 0)

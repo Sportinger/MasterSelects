@@ -237,6 +237,9 @@ export interface NodeGraph {
   expandedNodes?: NodeGraphNode[];
   /** Zoomed-out card titles: `uniform` gives every card one size (docs pictures), instead of each filling its card. */
   overviewTitles?: 'fit' | 'uniform';
+  /** `avoid`: cables route around cards whatever the editor preference (docs pictures: a cable
+   * drawn behind a card would show the wrong wiring). */
+  cableRouting?: 'avoid';
 }
 
 export interface NodeGraphView {

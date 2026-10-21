@@ -38,7 +38,7 @@ import { effectOperatorParams } from '../services/operators/effectGraphOwner';
 import { prepareImageEffect } from '../services/operators/imageEffectRuntimePlan';
 import { compileComputeImageGraph } from '../services/operators/computeImageGraph';
 import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
-import { isNeutralBlurEffect } from '../services/operators/blurIdentity';
+import { isNeutralEffect } from '../services/operators/neutralEffects';
 import { reportBlurBudget } from './blur/blurBudgetLog';
 import { TemporalSmoothHistory } from './TemporalSmoothHistory';
 import { EffectFeedbackHistory, type EffectFrameHistoryContext } from './EffectFeedbackHistory';
@@ -234,9 +234,9 @@ export class EffectsPipeline {
     let swapped = false;
 
     for (const originalEffect of enabledEffects) {
-      // A zero-strength blur passes its input through; its preview shows that input. Open
-      // previews of its inner nodes need the graph to run, so then it renders normally.
-      if (isNeutralBlurEffect(originalEffect, outputWidth, outputHeight)
+      // A zero-strength blur or a neutral distort passes its input through; its preview shows that
+      // input. Open previews of its inner nodes need the graph to run, so then it renders normally.
+      if (isNeutralEffect(originalEffect, outputWidth, outputHeight)
         && !nodePreviewTextureTap.matching(imageOperatorPreviewPrefix(originalEffect.id)).length) {
         nodePreviewTextureTap.capture(`effect:${originalEffect.id}`, this.device, commandEncoder, sampler, effectInput, outputWidth, outputHeight);
         continue;

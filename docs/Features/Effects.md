@@ -594,7 +594,7 @@ grades that have not stored their default values yet.
 
 - `color` (9): Brightness, Contrast, Saturation, Vibrance, Hue Shift, Temperature, Exposure, Levels, Invert
 - `blur` (5): Box Blur, Gaussian Blur, Radial Blur, Zoom Blur, Motion Blur
-- `distort` (8): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge, Fisheye Lens
+- `distort` (11): Pixelate, Kaleidoscope, Mirror, RGB Split, Twirl, Wave, Bulge & Pinch, Fisheye Lens, Lens Correction, Guided Perspective, AI Edge Fill. The **Lens & Distort** menu shows these (Pixelate sits under Pixel & Mosaic) plus Crystal, Glass Dispersion, Film Prism and Holo; see [Distort Effects](./Effects-Distort.md)
 - `stylize` (12): Vignette, Grain, Sharpen, Posterize, Glow, Edge Detect, Scanlines, Threshold, Acuarela, Rom1, Voxel Relief, Pixel Particle Disintegrate
 - `keying` (1): Chroma Key
 - `generate`: Memory Leak, **Flocking** (a node-graph swarm drawn in 3D above any clip; see [Flock Clips](./Flock-Clips.md#flocking-is-an-effect)) and **Stick Figure** (a posable stick figure whose joints are keyframeable and node-drivable; best on a Blank Clip, see [Node Workspace](./Node-Workspace.md#stick-figures-and-rig-nodes))
@@ -619,7 +619,11 @@ Fisheye's default image graph is editable rather than an opaque distortion
 node. It exposes AA jitter, lens projection, edge policy, chromatic sampling,
 vignette, outside coverage and final resolve while retaining one effect pass.
 Persisted edits therefore change preview and export execution, not merely the
-workspace diagram.
+workspace diagram. Each sample is premultiplied as it is read and the averaged
+result is unpremultiplied, so lens and frame feathering, the outside mix and edge
+sampling lower coverage instead of darkening colour; the worker CPU path does the
+same. Untouched saved graphs of the earlier straight-alpha recipe (recognized by a
+frozen recipe fingerprint) load as the current recipe; edited graphs stay as saved.
 
 Image effects reuse a bounded cache of validated graphs and compiled CPU render
 plans across playback, inline rendering, previews and worker-software export.
@@ -1026,14 +1030,25 @@ packed, folded or laid-out form of the original single-pass recipe) is upgraded
 to the new recipe on load; graphs whose nodes, wiring, exposed values or folder
 bypasses were edited are kept exactly as authored and keep the legacy sampling.
 
-Wave, Twirl, Bulge and Kaleidoscope use editable UV/math graphs followed by a
-single image sample. Wave preserves its sequential cross-axis displacement;
-Twirl and Bulge retain their strict radius tests and original center behavior.
-Kaleidoscope retains fractional segment counts and its reflected angular fold.
-All four preserve the existing parameter IDs, defaults and ranges. Their RGBA
-output is sampled at the transformed coordinates, including alpha, with the
-existing linear/clamp sampler. Rewiring the sample to the original UV bypasses
-the distortion without introducing another render pass.
+### Editable UV distortions
+
+Wave, Twirl, Bulge & Pinch and Kaleidoscope use editable UV/math graphs followed
+by a single image sample. Wave, Twirl and Bulge & Pinch (see
+[Distort Effects](./Effects-Distort.md)) read that sample from a premultiplied
+`rgba16float` copy of the frame and unpremultiply the result (two passes), so a
+magnified or squeezed transparent edge keeps its colour; at zero strength (Wave
+heights 0, Twist 0, Amount 1) the built-in recipe is skipped. Twirl and Bulge
+measure Radius in units of the shorter frame side (Shape: Circle) or per axis
+(Stretch to Frame); Frame Edges mirrors, clamps or clears samples from beyond the
+frame. Twist is stored in radians and shown in degrees. Bulge & Pinch above
+Amount 1 magnifies the centre exactly Amount times. Untouched saved Wave, Twirl
+and Bulge graphs, and effects saved before effects owned a graph, move to the
+current recipes with Stretch to Frame, Clamp and (Wave) Speed 0, which keeps the
+saved Wave and Twirl look; Bulge gets the smooth curve. The worker CPU fallback
+renders the untouched recipes with a hand-written pass that matches the graph.
+Kaleidoscope keeps its original single-pass recipe with fractional segment counts
+and its reflected angular fold. Rewiring the sample to the original UV bypasses
+the distortion.
 
 The image operator catalog also offers two-dimensional rotation and radial
 projection/inverse-projection primitives for equidistant, equisolid,
@@ -1515,8 +1530,11 @@ wrapped row is as tall as its own cards; `plumbing=hide` leaves out the Constant
 and Coordinates & Resources folders and their cables and lays the stages out the
 same way, so an overview reads as one path; `omit=a,b` leaves out cards (an
 overview without the effect's Output card); `chain=1` keeps the clip source and
-output. The page mounts the canvas only once the clip is in the timeline store, so
-its first placement does not reserve preview space under cards that have none. Folder ports are named after what
+output; `cables=avoid` routes the cables around the cards like the Node Workspace's
+**Avoid** button (`NodeGraph.cableRouting`), so no cable runs behind a stub or a
+wrapped row and shows the wrong wiring. The page mounts the canvas only once the
+clip is in the timeline store, so its first placement does not reserve preview space
+under cards that have none. Folder ports are named after what
 they carry ("Sigma", "Tap Count"): an effect's presentation plan names its key
 outputs (`portLabels` in `effectPresentationPlans.ts`). Folder headers stay
 clickable for exploring. The page is part of dev builds only.
@@ -1529,18 +1547,21 @@ Chrome as WebP (at most 1600 px wide and 200 KB) into
 `node scripts/effect-graph-shot.mjs 'gaussian-blur?plumbing=hide'`,
 with a Vite of the checkout running (`npx vite --port 5176 --strictPort`). A shot
 is `<effect>[?query][@file name]`; `--list` prints the folders and node ids of each
-effect. Cables that bend out past the cards (the last cable of a wrapped row) stay
-inside the crop. Two checks keep pictures readable: a shot fails when a cable runs
-through (or within 8 units of) a card other than its two ends, since it would look
-like that card's connection (`crossings=allow` lets it pass with a warning), and a
-shot warns when card titles show below 11 px at the docs width of its layout (720 px
-full, 418 px float). Before warning, the script narrows the page step by step: a
-lower zoom letters titles larger relative to the cards, and the picture still
-fills the column. Folded cards show their › on the canvas (it used to be drawn
+effect. Cables that bend out past the cards (the last cable of a wrapped row, or an
+avoiding route) stay inside the crop. Two checks keep pictures readable: a shot fails
+when a cable runs through (or within 8 units of) a card other than its two ends, since
+it would look like that card's connection (`crossings=allow` lets it pass with a
+warning), and a shot warns when card titles show below 11 px at the docs width of its
+layout (720 px full, 418 px float). Before warning, the script narrows the page step
+by step: a lower zoom letters titles larger relative to the cards, and the picture
+still fills the column. Folded cards show their › on the canvas (it used to be drawn
 only by the DOM button of an active card).
-`marks=id[:from],…` in a shot's query adds numbered callouts on those node cards
-and prints the figure markup (`layout=float` sizes them for a picture beside the
-text). The docs site links every picture to its full-size file and lets node
+`marks=id[:from][:reach],…` in a shot's query adds numbered callouts on those node
+cards (a stub id such as `wave-uv-split:y` keeps its colon; `reach` is the arrow
+length in overlay units, default 84) and prints the figure markup (`layout=float`
+sizes them for a picture beside the text). The crop grows into the canvas margin,
+with extra room above and below for vertical callouts, so an arrow keeps its length
+instead of shrinking to a badge on the card edge. The docs site links every picture to its full-size file and lets node
 graphs scroll sideways on narrow screens.
 
 ### Effect editor excerpts
@@ -1557,7 +1578,9 @@ at the words, not at the empty rest of their row) in the
 clip picked as its graph source (targets `dock:Nodes`, `source`, `expand:<card>`
 for the › of a folded card, `port:<name>`); `layout: "float"` sizes them for a picture beside the
 text. `top: "tabs"` crops below the dock tab row (from the Properties sub-tabs),
-`preview` sets the width of the preview strip, and `hide` leaves named buttons that
+`preview` sets the width of the preview strip (0: the card alone), a mark's `reach`
+sets its arrow length (the crop grows to keep it), a parameter callout points at the
+label text, and `hide` leaves named buttons that
 the picture does not explain out of it. One shot file per category, e.g. `scripts/effect-editor-shots/blur.json`;
 `--only <name>` recaptures one shot. A control the script cannot find stops it
 with the card's text, so a renamed parameter does not silently drop a callout.
@@ -2019,6 +2042,11 @@ numeric controls support keyframes. Manual adjustments below are added on top.
 
 The default is an identity transform. Uncovered borders are transparent, and
 corrections are nondestructive, saved with the effect, and applied during export.
+Barrel correction strong enough to fold the outer picture back on itself (Remove
+Distortion below about −33, Fine Distortion below about −20, or less together with
+a profile) stops at the fold: pixels beyond it stay transparent, and the inspector
+and tool results say so. The fringe channels repeat the border pixel instead of
+turning black, so no coloured line runs along the frame.
 Selecting a profile is explicit; automatic matching and other lens variants are
 not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed
 in [Third-party notices](../../THIRD_PARTY_NOTICES.md#lensfun-lens-calibration-data).
@@ -2064,7 +2092,10 @@ the selected clip or composition cancels the draft session.
 
 The effect derives a projective transform from the guide vanishing points and fits
 the entire photo with uniform scale. **Scale** can crop transparent borders;
-**Strength** blends back toward the original geometry. Both support keyframes.
+**Strength** blends the transform back toward the original geometry, so lines stay
+straight at any Strength (saved projects with Strength below 100 render this
+corrected blend). Both support keyframes. Slanted borders get a one-pixel soft edge;
+out-of-range Scale, Strength or matrix values are clamped and reported.
 Guides and correction persist in the project and render during export. Duplicate,
 short, incomplete, and unstable guide pairs are rejected with an explanation.
 Drawing guides currently supports still images, including CR2. The guide photo

@@ -150,29 +150,8 @@ fn hsv2rgb(c: vec3f) -> vec3f {
 
 fn effectUv(sourceUv: vec2f) -> vec2f {
   var uv = sourceUv;
-  if (abs(layer.waveAmplitudeX) > 0.000001 || abs(layer.waveAmplitudeY) > 0.000001) {
-    uv.y += sin(uv.x * layer.waveFrequencyX * 6.28318530718) * layer.waveAmplitudeX;
-    uv.x += sin(uv.y * layer.waveFrequencyY * 6.28318530718) * layer.waveAmplitudeY;
-  }
-  if (abs(layer.twirlAmount) > 0.000001) {
-    let center = vec2f(layer.twirlCenterX, layer.twirlCenterY);
-    let delta = uv - center;
-    let dist = length(delta);
-    let safeRadius = max(layer.twirlRadius, 0.0001);
-    let factor = 1.0 - min(dist / safeRadius, 1.0);
-    let angle = layer.twirlAmount * factor * factor;
-    let rotated = vec2f(delta.x * cos(angle) - delta.y * sin(angle), delta.x * sin(angle) + delta.y * cos(angle));
-    uv = select(uv, center + rotated, dist < safeRadius);
-  }
-  if (abs(layer.bulgeAmount) > 0.000001) {
-    let center = vec2f(layer.bulgeCenterX, layer.bulgeCenterY);
-    let delta = uv - center;
-    let dist = length(delta);
-    let safeDist = max(dist, 0.0001);
-    let radius = max(layer.bulgeRadius, 0.0001);
-    let newDist = pow(safeDist / radius, layer.bulgeAmount) * radius;
-    uv = select(uv, center + delta / safeDist * newDist, dist < radius && dist > 0.0);
-  }
+  // Wave, Twirl and Bulge & Pinch run as image graphs, never in this fast path: their uniforms
+  // (still in the struct for its layout) stay neutral and are not read here.
   if (layer.mirrorHorizontal == 1u && uv.x > 0.5) { uv.x = 1.0 - uv.x; }
   if (layer.mirrorVertical == 1u && uv.y > 0.5) { uv.y = 1.0 - uv.y; }
   if (layer.kaleidoscopeSegments >= 2.0) {

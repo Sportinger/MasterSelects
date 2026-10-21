@@ -3,7 +3,10 @@ import {
   EFFECT_GRAPH_DOC_GROUP, buildEffectGraphDoc, effectGraphDocFoldState, parseEffectGraphDocQuery, slugLabel,
 } from '../../src/test/effectGraphDoc/effectGraphDocModel';
 import { cableCrossings, wrappedRowCount } from '../../src/test/effectGraphDoc/effectGraphDocLayout';
-import { getNodeHeight } from '../../src/components/panels/nodes/canvas/canvasGeometry';
+import { getNodeHeight, getNodeWidth, getPortCenter } from '../../src/components/panels/nodes/canvas/canvasGeometry';
+import { routeAroundCards } from '../../src/components/panels/nodes/canvas/cableAvoidance';
+import { cableRoute, sampleCableRoute } from '../../src/components/panels/nodes/canvas/cableRoute';
+import type { NodeGraph } from '../../src/types/nodeGraph';
 
 const doc = (search: string) => buildEffectGraphDoc(parseEffectGraphDocQuery(search));
 const labels = (search: string) => doc(search).graph.nodes.map(node => node.label);
@@ -11,11 +14,12 @@ const labels = (search: string) => doc(search).graph.nodes.map(node => node.labe
 describe('effect graph doc shots: graph selection', () => {
   it('reads the query with stages as the default level and rejects unknown levels and row counts', () => {
     expect(parseEffectGraphDocQuery('?test=effect-graph&effect=box-blur')).toEqual({ effectType: 'box-blur', level: 'stages', open: [], focus: undefined,
-      rows: 'auto', breaks: [], only: [], plumbing: 'show', constants: 'show', omit: [], chain: false });
-    expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&break=sample,reduce&plumbing=hide&constants=hide&omit=output&chain=1'))
+      rows: 'auto', breaks: [], only: [], plumbing: 'show', constants: 'show', omit: [], chain: false, cables: 'direct' });
+    expect(parseEffectGraphDocQuery('?effect=zoom-blur&level=all&open=A,b&focus=Stage-B&rows=2&break=sample,reduce&plumbing=hide&constants=hide&omit=output&chain=1&cables=avoid'))
       .toEqual({ effectType: 'zoom-blur', level: 'all', open: ['a', 'b'], focus: 'stage-b', rows: 2, breaks: ['sample', 'reduce'], only: [],
-        plumbing: 'hide', constants: 'hide', omit: ['output'], chain: true });
+        plumbing: 'hide', constants: 'hide', omit: ['output'], chain: true, cables: 'avoid' });
     expect(() => parseEffectGraphDocQuery('?constants=dim')).toThrow(/constants/);
+    expect(() => parseEffectGraphDocQuery('?cables=around')).toThrow(/Unknown cables/);
     expect(() => parseEffectGraphDocQuery('?only=taper')).toThrow(/focus/);
     expect(() => parseEffectGraphDocQuery('?plumbing=dim')).toThrow(/plumbing/);
     expect(() => parseEffectGraphDocQuery('?level=deep')).toThrow(/Unknown level/);
@@ -75,6 +79,18 @@ describe('effect graph doc shots: graph selection', () => {
     const motion = doc('?effect=radial-blur').graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
     expect(motion).toEqual(expect.arrayContaining(['Is Spin', 'Box Length', 'Range Length', 'Short Boxes']));
     expect(motion.some(label => /^Switch: Value$/.test(label))).toBe(false);
+  });
+
+  it('names the folder ports of Twirl, Bulge & Pinch and Wave by what they carry', () => {
+    for (const effect of ['twirl', 'bulge', 'wave']) {
+      const ports = doc(`?effect=${effect}`).graph.nodes.flatMap(node => [...node.inputs, ...node.outputs]).map(port => port.label);
+      expect(ports).toContain('Read Position');
+      expect(ports.some(label => /^(Divide|Multiply|Add|Switch|Combine Vector|Vector): Value$/.test(label) || label === 'Vector')).toBe(false);
+    }
+    const twirl = doc('?effect=twirl').graph.nodes.find(node => node.label === 'Centre, Shape & Radius')!;
+    expect(twirl.outputs.map(port => port.label)).toEqual(expect.arrayContaining(['Centre', 'Shape Scale', 'Offset', 'Distance / Radius']));
+    const stubs = doc('?effect=twirl&focus=twirl-angle').graph.nodes.filter(node => node.id.startsWith('doc-stub:')).map(node => node.label);
+    expect(stubs).toEqual(expect.arrayContaining(['Distance / Radius', 'Twist', 'Offset', 'Shape Scale', 'Centre']));
   });
 
   it('hides the plumbing folders on request, so the stages read as one path', () => {
@@ -160,6 +176,30 @@ describe('effect graph doc shots: graph selection', () => {
     const second = graph.nodes.find(node => node.id.endsWith('/horizontal-sample'))!.layout.y;
     const firstRowBottom = Math.max(...graph.nodes.filter(node => node.layout.y < second).map(node => node.layout.y + getNodeHeight(node)));
     expect(second - firstRowBottom).toBeLessThanOrEqual(120);
+  });
+
+  it('routes every cable of a wrapped focus around the cards with cables=avoid, as the Distort page pictures need', () => {
+    // Port tips sit 24 units out from the port dots, as the canvas draws them.
+    const behindCards = (graph: NodeGraph, avoid: boolean) => {
+      const byId = new Map(graph.nodes.map(node => [node.id, node]));
+      const cards = graph.nodes.map(node => ({ id: node.id, x: node.layout.x, y: node.layout.y, width: getNodeWidth(node), height: getNodeHeight(node) }));
+      const cables = graph.edges.map(edge => {
+        const out = getPortCenter(byId.get(edge.fromNodeId)!, edge.fromPortId, 'output'), into = getPortCenter(byId.get(edge.toNodeId)!, edge.toPortId, 'input');
+        return { id: edge.id, from: { x: out.x + 24, y: out.y }, to: { x: into.x - 24, y: into.y } };
+      });
+      const routes = avoid ? routeAroundCards(cards, cables) : undefined;
+      return cables.filter(cable => sampleCableRoute(cableRoute(cable.from, cable.to, 'curved', routes?.get(cable.id))).some(point => cards.some(card =>
+        point.x > card.x + 4 && point.x < card.x + card.width - 4 && point.y > card.y + 4 && point.y < card.y + card.height - 4))).length;
+    };
+    for (const search of ['?effect=twirl&focus=twirl-angle&rows=2',
+      '?effect=wave&focus=wave-displacement&only=wave-x-cycles,wave-x-angle,wave-x-phase,wave-y-sine,wave-y-offset,wave-y&break=wave-y-offset']) {
+      const direct = doc(search).graph, avoiding = doc(`${search}&cables=avoid`).graph;
+      expect(direct.cableRouting).toBeUndefined();
+      expect(avoiding.cableRouting).toBe('avoid');
+      // Direct cables pass behind stubs and wrapped rows here, so the picture would show wrong wiring.
+      expect(behindCards(direct, false)).toBeGreaterThan(0);
+      expect(behindCards(avoiding, true)).toBe(0);
+    }
   });
 
   it('names the available folders when a token matches none, and rejects effects without a graph', () => {

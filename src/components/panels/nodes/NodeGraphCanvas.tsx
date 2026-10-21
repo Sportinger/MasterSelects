@@ -233,7 +233,7 @@ export function NodeGraphCanvas({
   const cableStyle = useSettingsStore(state => state.nodeCableStyle);
   const styledCables = useMemo(() => cableStyle === 'angular' ? parallelAngularLanes(routedCables) : routedCables,
     [cableStyle, routedCables]);
-  const shownCables = useCableAvoidance(styledCables, displayNodes, animating || nodeDragging, groupBounds, graph.groups, nodeDragging);
+  const shownCables = useCableAvoidance(styledCables, displayNodes, animating || nodeDragging, groupBounds, graph.groups, nodeDragging, sourceGraph.cableRouting === 'avoid');
   const { hoveredPort, hoveredEdgeId, portHoverEvents } = useNodePortHover(nodesById);
   const graphBounds = useMemo(() => {
     const bounds = annotatedGraphBounds(graph, displayNodes, freezeGroupFrames ? undefined : groupBounds);

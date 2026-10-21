@@ -39,6 +39,8 @@ export interface EffectGraphDocQuery {
   omit: string[];
   /** Keep the clip chain (source, transform, output) around the effect. */
   chain: boolean;
+  /** `avoid`: cables route around cards (the Node Workspace's Avoid), so none passes behind a card. */
+  cables: 'direct' | 'avoid';
 }
 
 /** Folders that only feed numbers and coordinates into every stage. */
@@ -82,8 +84,11 @@ export function parseEffectGraphDocQuery(search: string): EffectGraphDocQuery {
   if (constants !== 'show' && constants !== 'hide') throw new Error(`Unknown constants "${constants}": use show or hide.`);
   const only = listParam(params.get('only'));
   if (only.length && !focus) throw new Error('only= picks nodes inside a focused folder: add focus=<folder>.');
+  const cables = params.get('cables') ?? 'direct';
+  if (cables !== 'direct' && cables !== 'avoid') throw new Error(`Unknown cables "${cables}": use direct or avoid.`);
   return { effectType: params.get('effect')?.trim() || 'gaussian-blur', level, open: listParam(params.get('open')), focus,
-    rows: rows ? Math.round(Number(rows)) : 'auto', breaks: listParam(params.get('break')), only, plumbing, constants, omit: listParam(params.get('omit')), chain: params.get('chain') === '1' };
+    rows: rows ? Math.round(Number(rows)) : 'auto', breaks: listParam(params.get('break')), only, plumbing, constants, omit: listParam(params.get('omit')),
+    chain: params.get('chain') === '1', cables };
 }
 
 export const slugLabel = (label: string) => label.toLowerCase().replace(/&/g, ' and ').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -222,11 +227,12 @@ export function buildEffectGraphDoc(query: EffectGraphDocQuery, overrides: Recor
     : omitNodes(query.plumbing === 'hide' && !focus ? withoutPlumbing(cropped) : cropped, query.omit);
   // The canvas refits per graph id: one id per level keeps a refit when the level changes.
   const id = `${full.id}:${query.effectType}:${query.level}:${query.open.join('+')}:${query.focus ?? ''}:${query.rows}:${query.breaks.join('+')}:${query.only.join('+')}`
-    + `:${query.plumbing}:${query.constants}:${query.omit.join('+')}:${query.chain ? 'chain' : 'effect'}`;
+    + `:${query.plumbing}:${query.constants}:${query.omit.join('+')}:${query.chain ? 'chain' : 'effect'}:${query.cables}`;
   const values = graph.nodes.filter(node => node.operatorId?.startsWith('values.'));
   const shown = { ...clip, nodeGraph: { ...clip.nodeGraph!, previews: { enabled: false,
     nodes: Object.fromEntries(values.map(node => [nodePreviewPreferenceKey(clip.id, node), { enabled: true }])) } } };
   // Docs pictures give every card title one size, so short stub names do not outshout the recipe.
-  return { title: focus ? `${clip.name} – ${focus.label}` : clip.name, clip: shown, graph: { ...graph, id, overviewTitles: 'uniform' },
+  return { title: focus ? `${clip.name} – ${focus.label}` : clip.name, clip: shown, graph: { ...graph, id, overviewTitles: 'uniform',
+    ...(query.cables === 'avoid' ? { cableRouting: 'avoid' as const } : {}) },
     groups: folders.map(folder => ({ id: folder.id, label: folder.label, path: folder.path, collapsed: states[folder.id]?.collapsed ?? true })) };
 }

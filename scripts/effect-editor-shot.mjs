@@ -17,14 +17,15 @@
 //            dock tab row down; preview/top do not apply
 //   hide     button texts left out of the picture (e.g. an unrelated quick-add button)
 //   layout   "full" (docs column) or "float" (beside text): sizes the callouts, default "full"
-//   marks    numbered callouts, in order. A mark is a target or { target, from, label }:
-//              a parameter row label ("Radius", "Center X"), "tab:<sub-tab>" ("tab:Effects"),
-//              "bypass", "remove", "add" (+ Add Effect) or "preview:<x>,<y>" (0–1 in the preview);
-//              in the nodes view "dock:<tab>" ("dock:Nodes"), "source" (the graph source picker),
-//              "expand:<card title>" (the › of a folded card) or "port:<port name>" (a port row);
-//              text targets point at the text itself, not at the empty rest of its row;
-//              from = left (default) | right | above | below places the number; label goes into
-//              the printed caption.
+//   marks    numbered callouts, in order. A mark is a target or { target, from, reach, label }:
+//              a parameter row label ("Radius", "Center X"; the arrow points at the label text),
+//              "tab:<sub-tab>" ("tab:Effects"), "bypass", "remove", "add" (+ Add Effect) or
+//              "preview:<x>,<y>" (0–1 in the preview); in the nodes view "dock:<tab>" ("dock:Nodes"),
+//              "source" (the graph source picker), "expand:<card title>" (the › of a folded card) or
+//              "port:<port name>" (a port row); text targets point at the text itself, not at the
+//              empty rest of its row; from = left (default) | right | above | below places the
+//              number, reach its arrow length (overlay units, default 84; the crop grows to keep it);
+//              label goes into the printed caption.
 //   alt, caption  printed into the figure
 // Needs a Vite of this checkout (`npx vite --port 5176 --strictPort`); each shot's project lives in
 // a throwaway browser context.
@@ -32,7 +33,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
 import { encodeDocShotWebp } from './docShotWebp.mjs';
-import { calloutOverlay, docsFigure } from './docShotFigure.mjs';
+import { calloutOverlay, cropWithCallouts, docsFigure } from './docShotFigure.mjs';
 
 const args = process.argv.slice(2);
 const option = (name, fallback) => { const index = args.indexOf(name); return index >= 0 ? args[index + 1] : fallback; };
@@ -174,7 +175,14 @@ function measure({ preview, top, marks, view }) {
   return { crop, marks: marks.map(mark => {
     const target = typeof mark === 'string' ? mark : mark.target;
     const found = find(target);
-    return found ? (found instanceof Element ? box(found) : found) : { missing: target };
+    if (!found) return { missing: target };
+    if (!(found instanceof Element)) return found;
+    // A parameter label is right-aligned in a wide cell: point at its text, not at the empty cell.
+    const special = /^(preview:|tab:)/.test(target) || ['bypass', 'remove', 'add'].includes(target);
+    if (special || found.children.length) return box(found);
+    const range = document.createRange(); range.selectNodeContents(found);
+    const text = range.getBoundingClientRect();
+    return text.width ? { left: text.left, top: text.top, right: text.right, bottom: text.bottom } : box(found);
   }), text: card.innerText.replace(/\s+/g, ' ').slice(0, 300) };
 }
 
@@ -208,6 +216,10 @@ for (const shot of shots) {
       await page.screenshot({ path: path.join(out, `${shot.name}.missing.png`) }).catch(() => {});
       throw new Error(`${shot.name}: no control found for ${missing.join(', ')}; the page reads "${text}" (screenshot: ${shot.name}.missing.png)`);
     }
+    // Callouts keep their full arrows: the crop grows where a number would sit outside it.
+    const marked = (shot.marks ?? []).map(mark => typeof mark === 'string' ? { target: mark } : mark);
+    if (marked.length) Object.assign(crop, cropWithCallouts({ layout: shot.layout ?? 'full', crop, boxes: marks, marks: marked,
+      bounds: { left: 0, top: 0, right: viewport.width, bottom: viewport.height } }));
     const clip = { x: crop.left, y: crop.top, width: crop.right - crop.left, height: crop.bottom - crop.top };
     const encoded = await encodeDocShotWebp(page, await page.screenshot({ type: 'png', clip }), { maxBytes: 200000, maxPixelWidth: 1600 });
     fs.mkdirSync(out, { recursive: true });

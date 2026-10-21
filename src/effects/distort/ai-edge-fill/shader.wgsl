@@ -36,7 +36,9 @@ fn aiEdgeFillFragment(input: VertexOutput) -> @location(0) vec4f {
   if (params.canvasSpace > 0.5) {
     let a = params.row0.x; let b = params.row0.y;
     let d = params.row1.x; let e = params.row1.y;
-    outside = vec2f(e * outside.x - b * outside.y, a * outside.y - d * outside.x) / (a * e - b * d);
+    // A degenerate (zero-area) placement must not divide by zero and turn the seam NaN.
+    let det = a * e - b * d;
+    outside = vec2f(e * outside.x - b * outside.y, a * outside.y - d * outside.x) / (select(-1.0, 1.0, det >= 0.0) * max(abs(det), 0.000001));
   }
   // Far outside the image footprint there cannot be an adjacent source edge.
   if (params.seamRadius > 0.0 && length(outside / vec2f(1.0, aspect)) <= params.seamRadius) {

@@ -155,6 +155,9 @@ export function buildEffectMaterializationFromRecipe(
           radius: primitive.distortion === 'swirl' ? 0.72 : 0.92,
           centerX: 0.5,
           centerY: 0.5,
+          // Match the compositor's own swirl/drop distortion: frame-shaped area, clamped edges.
+          shape: 'frame',
+          edges: 'clamp',
         },
       });
       keyframes.push(

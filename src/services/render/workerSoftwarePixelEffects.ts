@@ -552,6 +552,7 @@ export function applyWorkerSoftwarePixelEffects(
         x,
         y,
         layer.pixelEffects,
+        timelineTime,
       );
       if (sourceResampled) {
         [r, g, b, alpha] = sourceResampled;

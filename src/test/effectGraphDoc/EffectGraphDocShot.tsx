@@ -1,11 +1,12 @@
-// ?test=effect-graph&effect=<id>[&level=stages|all][&open=<folders>][&focus=<folder>][&chain=1]
+// ?test=effect-graph&effect=<id>[&level=stages|all][&open=<folders>][&focus=<folder>][&chain=1][&cables=avoid]
 // Shows an effect's real default operator graph on the Node Workspace canvas, read-only and
 // fitted to the window, for docs pictures (scripts/effect-graph-shot.mjs).
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { NodeGraphCanvas } from '../../components/panels/nodes/NodeGraphCanvas';
 import { reconcileCanvasPlacement } from '../../components/panels/nodes/canvas/nodeCanvasPlacement';
 import { annotatedGraphBounds } from '../../components/panels/nodes/canvas/groupBounds';
-import { getNodeWidth, getPortCenter } from '../../components/panels/nodes/canvas/canvasGeometry';
+import { getNodeHeight, getNodeWidth, getPortCenter } from '../../components/panels/nodes/canvas/canvasGeometry';
+import { routeAroundCards } from '../../components/panels/nodes/canvas/cableAvoidance';
 import { cableRoute, sampleCableRoute } from '../../components/panels/nodes/canvas/cableRoute';
 import { buildCanvasScene } from '../../components/panels/nodes/canvas/rendering/buildCanvasScene';
 import { paintedTitleSize } from '../../components/panels/nodes/canvas/rendering/paintNodeCanvas';
@@ -34,14 +35,23 @@ declare global { interface Window { __effectGraphDoc?: EffectGraphDocState; __ef
 
 const noop = () => {};
 
-/** Cables leaving the last card of a wrapped row bend out past the frame before they turn back. */
+/** Cables leaving the last card of a wrapped row bend out past the frame before they turn back.
+ * With `cableRouting: 'avoid'` the routes around the cards decide instead (as the canvas draws them). */
 function cableOverhang(graph: NodeGraph, placed: NodeGraph['nodes'], bounds: { left: number; top: number; right: number; bottom: number }) {
   const byId = new Map(placed.map(node => [node.id, node]));
   const overhang = { left: 0, top: 0, right: 0, bottom: 0 };
-  for (const edge of graph.edges) {
+  // Plug tips sit 24 units out from the port dots (connectionPlugs.ts).
+  const cables = graph.edges.flatMap(edge => {
     const from = byId.get(edge.fromNodeId), to = byId.get(edge.toNodeId);
-    if (!from || !to) continue;
-    for (const point of sampleCableRoute(cableRoute(getPortCenter(from, edge.fromPortId, 'output'), getPortCenter(to, edge.toPortId, 'input')))) {
+    if (!from || !to) return [];
+    const out = getPortCenter(from, edge.fromPortId, 'output'), into = getPortCenter(to, edge.toPortId, 'input');
+    return [{ id: edge.id, from: { x: out.x + 24, y: out.y }, to: { x: into.x - 24, y: into.y } }];
+  });
+  const routes = graph.cableRouting === 'avoid'
+    ? routeAroundCards(placed.map(node => ({ x: node.layout.x, y: node.layout.y, width: getNodeWidth(node), height: getNodeHeight(node) })), cables)
+    : undefined;
+  for (const cable of cables) {
+    for (const point of sampleCableRoute(cableRoute(cable.from, cable.to, 'curved', routes?.get(cable.id)))) {
       overhang.left = Math.max(overhang.left, bounds.left - point.x); overhang.right = Math.max(overhang.right, point.x - bounds.right);
       overhang.top = Math.max(overhang.top, bounds.top - point.y); overhang.bottom = Math.max(overhang.bottom, point.y - bounds.bottom);
     }

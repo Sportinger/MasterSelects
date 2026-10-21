@@ -19,7 +19,9 @@ export async function renderSoftwareGuidePhoto(bitmap: ImageBitmap, effects: Eff
       const p = definition.packUniforms({ ...effect.params as Record<string, number | boolean | string>, sourceAspect: width / height }, width, height)!;
       const source = context.getImageData(0, 0, width, height).data;
       const output = context.createImageData(width, height);
-      const inside = (u: number, v: number) => u >= 0 && u <= 1 && v >= 0 && v <= 1;
+      // Soft one-pixel coverage of the source frame, as in both shaders.
+      const coverage = (u: number, v: number) => Math.max(0, Math.min(1,
+        Math.min(u * width, v * height, (1 - u) * width, (1 - v) * height) + .5));
       const sample = (u: number, v: number, channel: number) => {
         const x = Math.max(0, Math.min(width - 1, u * width - .5)), y = Math.max(0, Math.min(height - 1, v * height - .5));
         const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(x0 + 1, width - 1), y1 = Math.min(y0 + 1, height - 1);
@@ -33,12 +35,16 @@ export async function renderSoftwareGuidePhoto(bitmap: ImageBitmap, effects: Eff
           if (effect.type === 'guided-perspective') {
             const u = ((x + .5) / width - .5) / p[12] + .5;
             const v = ((y + .5) / height - .5) / p[12] + .5;
+            // The packed matrix already includes Strength (guidedPerspectiveMatrix).
             const w = p[8] * u + p[9] * v + p[10];
-            const safeW = Math.sign(w || 1) * Math.max(Math.abs(w), .00001);
-            const sx = u * (1 - p[13]) + (p[0] * u + p[1] * v + p[2]) / safeW * p[13];
-            const sy = v * (1 - p[13]) + (p[4] * u + p[5] * v + p[6]) / safeW * p[13];
-            if (Math.abs(w) > .00001 && inside(sx, sy)) {
-              for (let c = 0; c < 4; c++) output.data[(y * width + x) * 4 + c] = Math.round(sample(sx, sy, c) * 255);
+            const safeW = Math.max(w, .00001);
+            const sx = (p[0] * u + p[1] * v + p[2]) / safeW;
+            const sy = (p[4] * u + p[5] * v + p[6]) / safeW;
+            const covered = w > .00001 ? coverage(sx, sy) : 0;
+            if (covered > 0) {
+              const offset = (y * width + x) * 4;
+              for (let c = 0; c < 3; c++) output.data[offset + c] = Math.round(sample(sx, sy, c) * 255);
+              output.data[offset + 3] = Math.round(sample(sx, sy, 3) * covered * 255);
             }
             continue;
           }
@@ -49,7 +55,9 @@ export async function renderSoftwareGuidePhoto(bitmap: ImageBitmap, effects: Eff
           const radial = Math.max(.05, measured * (1 + p[0] * r2 + p[1] * r2 * r2));
           const sx = dx * radial / (p[3] * radiusScale), sy = dy * radial / radiusScale;
           const u = p[4] + sx, v = p[5] + sy;
-          if (!inside(u, v)) continue;
+          // Beyond the fold radius (p[11]) the correction would mirror the picture: leave it empty.
+          const covered = coverage(u, v) * Math.max(0, Math.min(1, (p[11] - r) * width * p[2] / (p[3] * radiusScale) + .5));
+          if (covered <= 0) continue;
           const tcaR2 = profileR * profileR * radial * radial;
           const redScale = (p[17] + p[16] * tcaR2) * (1 + p[6]), blueScale = (p[19] + p[18] * tcaR2) * (1 + p[7]);
           const redU = p[4] + sx * redScale, redV = p[5] + sy * redScale;
@@ -58,10 +66,10 @@ export async function renderSoftwareGuidePhoto(bitmap: ImageBitmap, effects: Eff
           const gain = 2 ** (2 * p[8] * t * t * (3 - 2 * t));
           const vr2 = r2 * radial * radial / (p[10] * p[10]);
           const attenuation = Math.max(.05, 1 + p[20] * vr2 + p[21] * vr2 ** 2 + p[22] * vr2 ** 3);
-          const rgb = [inside(redU, redV) ? sample(redU, redV, 0) : 0, sample(u, v, 1), inside(blueU, blueV) ? sample(blueU, blueV, 2) : 0];
+          const rgb = [sample(redU, redV, 0), sample(u, v, 1), sample(blueU, blueV, 2)];
           const offset = (y * width + x) * 4;
           rgb.forEach((color, channel) => { output.data[offset + channel] = Math.round((p[23] > .5 ? srgb(linear(color) / attenuation) : color) * gain * 255); });
-          output.data[offset + 3] = Math.round(sample(u, v, 3) * 255);
+          output.data[offset + 3] = Math.round(sample(u, v, 3) * covered * 255);
         }
         if (y % 32 === 31) await new Promise(resolve => setTimeout(resolve, 0));
       }

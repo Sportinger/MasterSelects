@@ -12,6 +12,8 @@ export interface PassEvaluationOptions {
   filterResources?: boolean;
   /** Store cached texels as float16, like the rgba16float caches. */
   float16?: boolean;
+  /** Timeline time for plans that read it (e.g. a travelling Wave). */
+  timelineTimeSeconds?: number;
 }
 
 const f16round = (Math as unknown as { f16round?: (value: number) => number }).f16round ?? ((value: number) => value);
@@ -57,7 +59,7 @@ export function createImagePassEvaluator(plan: ImageOperatorPlan, resolution: [n
     ? bilinear(resolution[0], resolution[1], (x, y) => texel(id, x, y), sampled)
     : evaluate(producer(id), sampled);
   function evaluate(program: ImageOperatorPlan, at: [number, number]): Pixel {
-    return evaluateImageOperatorPlan(program, sampleImage(at), { uv: at, resolution, sampleImage, sampleResource });
+    return evaluateImageOperatorPlan(program, sampleImage(at), { uv: at, resolution, sampleImage, sampleResource, timelineTimeSeconds: options.timelineTimeSeconds });
   }
   return uv => evaluate(plan, uv);
 }

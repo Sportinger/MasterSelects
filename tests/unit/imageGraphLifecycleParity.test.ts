@@ -168,8 +168,10 @@ describe('image graph lifecycle parity', () => {
       const plan = compileImageOperatorGraph(effectOperatorGraph(candidate), effectOperatorParams(candidate), effectOperatorCompileContext(candidate));
       const derivativeContext = type === 'holo' ? { uv: [45.5 / 64, 13.5 / 37] as [number, number],
         pixelCoordinate: [45, 13] as [number, number], derivativeAutoMode: 'coarse' as const } : { uv: [.71, .36] as [number, number] };
-      return { plan, value: evaluateImageOperatorPlan(plan, pixel, { ...derivativeContext, resolution: [64, 37], timelineTimeSeconds,
-        sampleImage: ([u, v]) => [u, v, u * .3 + v * .2, .2 + u * .6] }) };
+      const sampleImage = ([u, v]: [number, number]): [number, number, number, number] => [u, v, u * .3 + v * .2, .2 + u * .6];
+      // Wave, Twirl and Bulge read a premultiplied source cache: their plans are pass chains.
+      return { plan, value: plan.passes?.length ? evaluateImagePasses(plan, derivativeContext.uv, [64, 37], sampleImage, { timelineTimeSeconds })
+        : evaluateImageOperatorPlan(plan, pixel, { ...derivativeContext, resolution: [64, 37], timelineTimeSeconds, sampleImage }) };
     };
     const endpointPlans: ReturnType<typeof compileImageOperatorGraph>[] = [];
     for (const time of [0, 1, 2]) {

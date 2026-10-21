@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { guidedPerspective } from '../../src/effects/distort/guided-perspective';
+import { guidedPerspective, guidedPerspectiveMatrix, guidedPerspectiveWarnings } from '../../src/effects/distort/guided-perspective';
 import { IDENTITY, invertMatrix, multiplyMatrix, parsePerspectiveGuides, solveGuidedPerspective, transformGuidePoint,
   type Matrix3, type PerspectiveGuide } from '../../src/effects/distort/guided-perspective/guideGeometry';
 
@@ -78,9 +78,33 @@ describe('Guided Perspective', () => {
   it('packs a neutral finite shader transform and bounds corrupted parameters', () => {
     const values = guidedPerspective.packUniforms({}, 1920, 1080)!;
     expect(values.byteLength).toBe(64);
-    expect([...values]).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 1, 0, 0]);
-    const corrupted = guidedPerspective.packUniforms({ matrix0: 1e300, matrix1: NaN, scale: Infinity, strength: -10 }, 1, 1)!;
+    expect([...values]).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0]);
+    const corrupted = guidedPerspective.packUniforms({ matrix0: 1e300, matrix1: NaN, scale: Infinity, strength: 250 }, 1, 1)!;
     expect([...corrupted].every(Number.isFinite)).toBe(true);
-    expect(corrupted[0]).toBe(10000); expect(corrupted[12]).toBe(1); expect(corrupted[13]).toBe(0);
+    expect(corrupted[0]).toBe(10000); expect(corrupted[12]).toBe(1);
+    // Strength 0 (or below) is the untouched photo.
+    expect([...guidedPerspective.packUniforms({ matrix0: 3, matrix7: .4, strength: -10 }, 1, 1)!].slice(0, 12))
+      .toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0]);
+    expect(guidedPerspectiveWarnings({ matrix0: 1e300, scale: Infinity, strength: 250 })).toHaveLength(3);
+    expect(guidedPerspectiveWarnings({ scale: 120, strength: 40 })).toEqual([]);
+  });
+  it('keeps straight lines straight at partial strength by blending the projective matrix', () => {
+    const { inverse } = solveGuidedPerspective(vertical, 1.5);
+    const values = Object.fromEntries(inverse.map((value, i) => [`matrix${i}`, value * 1.7]));
+    for (const strength of [0, 35, 50, 100]) {
+      const m = guidedPerspectiveMatrix({ ...values, strength });
+      const map = (u: number, v: number): [number, number] => {
+        const w = m[6] * u + m[7] * v + m[8];
+        return [(m[0] * u + m[1] * v + m[2]) / w, (m[3] * u + m[4] * v + m[5]) / w];
+      };
+      // Three points on one output line land on one source line (zero cross product).
+      const [a, b, c] = [map(.1, .2), map(.5, .55), map(.9, .9)];
+      expect((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])).toBeCloseTo(0, 12);
+      if (strength === 0) expect(map(.3, .7)[0]).toBeCloseTo(.3, 12);
+    }
+    // Full strength is the stored correction (any overall scale of the matrix maps the same).
+    const full = guidedPerspectiveMatrix({ ...values, strength: 100 });
+    const p = transformGuidePoint(inverse, .3, .6), q = transformGuidePoint(full as Matrix3, .3, .6);
+    expect(q[0]).toBeCloseTo(p[0], 12); expect(q[1]).toBeCloseTo(p[1], 12);
   });
 });

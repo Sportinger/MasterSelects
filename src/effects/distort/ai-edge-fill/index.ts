@@ -3,6 +3,12 @@ import { edgeFillArtifacts } from './edgeFillArtifacts';
 import shader from './shader.wgsl?raw';
 import { EDGE_FILL_PROMPT } from './edgeFillPrompt';
 
+/** Captured canvas placement; a missing or non-numeric entry falls back to identity instead of NaN (a black frame). */
+const placement = (value: unknown, fallback: number) => {
+  const parsed = typeof value === 'number' ? value : Number(value ?? fallback);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
 export const aiEdgeFill: FullscreenEffectDefinition = {
   id: 'ai-edge-fill', name: 'AI Edge Fill', category: 'distort',
   shader, entryPoint: 'aiEdgeFillFragment', uniformSize: 48,
@@ -26,8 +32,8 @@ export const aiEdgeFill: FullscreenEffectDefinition = {
     typeof params.mix === 'number' && Number.isFinite(params.mix) ? Math.max(0, Math.min(100, params.mix)) / 100 : 1,
     edgeFillArtifacts.get(String(params.artifactId || '')) ? 1 : 0, params.canvasSpace === true ? 1 : 0,
     Math.max(0, Math.min(64, Number(params.seamBlend ?? 12) || 0)) / Math.max(1, Number(params.canvasWidth) || width),
-    Number(params.placement0 ?? 1), Number(params.placement1 ?? 0), Number(params.placement2 ?? 0), 0,
-    Number(params.placement3 ?? 0), Number(params.placement4 ?? 1), Number(params.placement5 ?? 0), 0,
+    placement(params.placement0, 1), placement(params.placement1, 0), placement(params.placement2, 0), 0,
+    placement(params.placement3, 0), placement(params.placement4, 1), placement(params.placement5, 0), 0,
   ]),
   extraControls: () => import('./AiEdgeFillControls'),
 };
