@@ -29,6 +29,7 @@ import { describeBrowserStorageFailure } from '../../services/project/core/brows
 import { isExpectedArchiveImportRejection } from '../../services/project/projectBackendAvailability';
 import { resumePendingProject } from '../../services/project/pendingProjectResume';
 import { validateProjectName } from './projectNameValidation';
+import { InstallAppHint } from './InstallAppHint';
 import { Logger } from '../../services/logger';
 import './EditorProjectSelectionOverlay.css';
 
@@ -449,6 +450,7 @@ export function EditorProjectSelectionOverlay({
           )}
 
           {error && <p className="editor-project-error" role="alert">{error}</p>}
+          {pendingProjectName !== null && <InstallAppHint className="editor-project-install-hint" />}
         </div>
       </section>
     </div>

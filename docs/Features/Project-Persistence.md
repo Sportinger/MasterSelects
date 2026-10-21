@@ -61,7 +61,8 @@ prompt, at most 8 further prompts) in the same click, before the project loads,
 so linked media reconnect without a separate step. Access that is still not
 granted is logged and offered by the Reconnect media dialog. Media
 that still lack access are offered in the Reconnect media dialog; choosing
-"Allow on every visit" in the browser prompt avoids the prompt after reloads.
+"Allow on every visit" in the browser prompt (or the installed app, see
+below) avoids the prompt after a browser restart.
 Media imported as single files (picker or drop) keep their exact saved file
 location. The dialog's single "Reconnect media" click re-allows those files
 directly (up to 8 browser prompts) instead of asking for a folder. With more
@@ -190,6 +191,32 @@ files are restored. Composition previews log such clips at debug level as "not
 loaded yet" (not as "Media file not found") and rebuild the composition once
 the file arrives; an entry that stays without a file outside a load is reported
 as offline or needing relink.
+
+### Installed app keeps folder access
+
+MasterSelects is installable as an app in Chrome and Edge on Windows and Linux
+(`public/manifest.webmanifest`, linked from `index.html`: start URL `/editor`,
+scope `/`, standalone window, `#0f0f0f` theme and background from
+`--bg-primary`). Chrome keeps File System Access grants of an installed web app
+across browser restarts, so projects opened in the app window do not ask for
+their folders again; a browser tab still loses them when the session ends.
+While the browser offers installation (`beforeinstallprompt`) and the editor is
+not already running as an installed app, the **Resume “<project>”** chooser and
+the **Reconnect media** dialog show a dismissible **Install MasterSelects to keep
+folder access** hint. **Install** opens the browser's install dialog; the
+result is shown (installed, or a pointer to the address-bar install icon when
+the dialog could not open) and logged under `AppInstall`. Hiding the hint is
+remembered on this device. An app installed earlier is not detected from a
+browser tab, so the hint is simply absent there: open MasterSelects from its app
+window. Grants belong to the window they were made in; folders allowed in a tab
+must be allowed once more in the app.
+
+There is no service worker; the manifest only makes the editor installable and
+does not cache the app. The icons in `public/icons/` (`any` and `maskable`,
+192/512 px, plus a 180 px `apple-touch-icon`) are rendered from the 2048 px
+"MS" logo by `node scripts/generate-pwa-icons.mjs` (needs ffmpeg). On iPad, a
+home-screen web app has its own storage, separate from Safari's, so projects
+stored in Safari's browser storage do not appear there.
 
 ## Continuous saving
 
@@ -350,7 +377,9 @@ projects as well as cached handles.
 ## Troubleshooting
 
 - **Folder permission is missing:** reconnect the existing project directory or
-  its external source folder.
+  its external source folder. To stop the prompt after every browser restart,
+  install MasterSelects as an app (see *Installed app keeps folder access*) or
+  choose "Allow on every visit" in the browser prompt.
 - **Project is read-only:** use **Take over editing** in the toolbar. If the
   writing tab does not answer within a few seconds while it still holds the
   lock (a frozen or suspended tab), the toolbar says so: switch to that tab or

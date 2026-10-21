@@ -1,6 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EditorProjectSelectionOverlay } from '../../src/components/common/EditorProjectSelectionOverlay';
+import { installAppInstallPromptCapture, resetAppInstallPromptForTests } from '../../src/services/pwa/appInstallPrompt';
 
 const mocks = vi.hoisted(() => ({
   createBlankProject: vi.fn(),
@@ -100,6 +101,21 @@ describe('Editor project selection overlay', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Folder access was not allowed');
     expect(screen.getByRole('button', { name: /Resume “Opera Night”/ })).not.toBeDisabled();
     expect(onProjectSelected).not.toHaveBeenCalled();
+  });
+
+  it('offers installing the app next to Resume while the browser allows it', () => {
+    mocks.needsPermission.mockReturnValue(true);
+    mocks.getPendingProjectName.mockReturnValue('Opera Night');
+    resetAppInstallPromptForTests();
+    installAppInstallPromptCapture();
+    const offer = Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
+      prompt: vi.fn(async () => {}),
+      userChoice: Promise.resolve({ outcome: 'dismissed' as const }),
+    });
+    window.dispatchEvent(offer);
+    render(<EditorProjectSelectionOverlay onProjectSelected={() => undefined} />);
+    expect(screen.getByText('Install MasterSelects to keep folder access')).toBeInTheDocument();
+    resetAppInstallPromptForTests();
   });
 
   it('shows a storage listing failure instead of claiming no projects exist', async () => {

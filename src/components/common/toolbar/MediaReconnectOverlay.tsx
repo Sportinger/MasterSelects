@@ -8,6 +8,7 @@ import { getProjectMediaSourceRootStates } from '../../../services/project/media
 import { isLinkedMediaConnectionRunning, subscribeLinkedMediaConnection } from '../../../services/project/repository/transaction/editorLinkedMediaConnection';
 import { getEditorRepositorySession, subscribeEditorRepositorySession } from '../../../services/project/repository/transaction/editorMutationRuntime';
 import { takeOverEditing } from '../../../services/project/repository/lifecycle/editorWriterHandover';
+import { InstallAppHint } from '../InstallAppHint';
 import '../ProjectNameDialog.css';
 import './RepositoryArchiveDialog.css';
 
@@ -141,7 +142,8 @@ export function MediaReconnectHost() {
           {readOnly ? 'This project is open for editing in another tab, so this tab cannot save reconnected media. Take over editing here: the other tab saves its changes and switches to read-only.'
             : oneClick ? `Allow access to “${[...folders, ...(fileAccess ? knownFiles : [])].join('”, “')}” once to reconnect them.`
             : `Choose the folder that contains ${offline === 1 ? 'it' : 'them'}; a whole drive works too. MasterSelects finds and reconnects the files automatically.${knownFiles.length ? ` The folder picker opens where “${knownFiles[0]}” was last found.` : ''}`}</p>
-        {oneClick && !readOnly && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a reload.</p>}
+        {oneClick && !readOnly && <p>Tip: choose “Allow on every visit” in the browser prompt so this is not needed after a browser restart.</p>}
+        {!readOnly && <InstallAppHint />}
         {status && <p role="status" aria-live="polite">{status}</p>}
         {failure && <p role="alert">Reconnecting stopped: {failure}</p>}
         {result?.deniedFolders.length ? <p role="alert">Access was not granted for “{result.deniedFolders.join('”, “')}”.</p> : null}
