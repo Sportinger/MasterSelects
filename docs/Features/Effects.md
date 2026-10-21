@@ -619,7 +619,11 @@ Fisheye's default image graph is editable rather than an opaque distortion
 node. It exposes AA jitter, lens projection, edge policy, chromatic sampling,
 vignette, outside coverage and final resolve while retaining one effect pass.
 Persisted edits therefore change preview and export execution, not merely the
-workspace diagram.
+workspace diagram. Each sample is premultiplied as it is read and the averaged
+result is unpremultiplied, so lens and frame feathering, the outside mix and edge
+sampling lower coverage instead of darkening colour; the worker CPU path does the
+same. Untouched saved graphs of the earlier straight-alpha recipe (recognized by a
+frozen recipe fingerprint) load as the current recipe; edited graphs stay as saved.
 
 Image effects reuse a bounded cache of validated graphs and compiled CPU render
 plans across playback, inline rendering, previews and worker-software export.
@@ -1000,14 +1004,20 @@ packed, folded or laid-out form of the original single-pass recipe) is upgraded
 to the new recipe on load; graphs whose nodes, wiring, exposed values or folder
 bypasses were edited are kept exactly as authored and keep the legacy sampling.
 
-Wave, Twirl, Bulge and Kaleidoscope use editable UV/math graphs followed by a
-single image sample. Wave preserves its sequential cross-axis displacement;
-Twirl and Bulge retain their strict radius tests and original center behavior.
-Kaleidoscope retains fractional segment counts and its reflected angular fold.
-All four preserve the existing parameter IDs, defaults and ranges. Their RGBA
-output is sampled at the transformed coordinates, including alpha, with the
-existing linear/clamp sampler. Rewiring the sample to the original UV bypasses
-the distortion without introducing another render pass.
+Wave, Twirl, Bulge & Pinch and Kaleidoscope use editable UV/math graphs followed
+by a single image sample. Wave, Twirl and Bulge & Pinch (see
+[Distort Effects](./Effects-Distort.md)) read that sample from a premultiplied
+`rgba16float` copy of the frame and unpremultiply the result (two passes), so a
+magnified or squeezed transparent edge keeps its colour; at zero strength (Wave
+heights 0, Twist 0, Amount 1) the built-in recipe is skipped. Twirl and Bulge
+measure Radius in units of the shorter frame side (Shape: Circle) or per axis
+(Stretch to Frame); Frame Edges mirrors, clamps or clears samples from beyond the
+frame. Twist is stored in radians and shown in degrees. Untouched saved Wave,
+Twirl and Bulge graphs move to the current recipes with Stretch to Frame and Clamp,
+which keeps the saved Wave and Twirl look; Bulge gets the smooth curve.
+Kaleidoscope keeps its original single-pass recipe with fractional segment counts
+and its reflected angular fold. Rewiring the sample to the original UV bypasses
+the distortion.
 
 The image operator catalog also offers two-dimensional rotation and radial
 projection/inverse-projection primitives for equidistant, equisolid,
@@ -1958,6 +1968,11 @@ numeric controls support keyframes. Manual adjustments below are added on top.
 
 The default is an identity transform. Uncovered borders are transparent, and
 corrections are nondestructive, saved with the effect, and applied during export.
+Barrel correction strong enough to fold the outer picture back on itself (Remove
+Distortion below about −33, Fine Distortion below about −20, or less together with
+a profile) stops at the fold: pixels beyond it stay transparent, and the inspector
+and tool results say so. The fringe channels repeat the border pixel instead of
+turning black, so no coloured line runs along the frame.
 Selecting a profile is explicit; automatic matching and other lens variants are
 not included yet. Calibration provenance and its CC BY-SA 3.0 license are listed
 in [Third-party notices](../../THIRD_PARTY_NOTICES.md#lensfun-lens-calibration-data).
@@ -2003,7 +2018,10 @@ the selected clip or composition cancels the draft session.
 
 The effect derives a projective transform from the guide vanishing points and fits
 the entire photo with uniform scale. **Scale** can crop transparent borders;
-**Strength** blends back toward the original geometry. Both support keyframes.
+**Strength** blends the transform back toward the original geometry, so lines stay
+straight at any Strength (saved projects with Strength below 100 render this
+corrected blend). Both support keyframes. Slanted borders get a one-pixel soft edge;
+out-of-range Scale, Strength or matrix values are clamped and reported.
 Guides and correction persist in the project and render during export. Duplicate,
 short, incomplete, and unstable guide pairs are rejected with an explanation.
 Drawing guides currently supports still images, including CR2. The guide photo
