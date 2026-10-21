@@ -26,6 +26,15 @@ const DIRECTIONAL_PORTS = { ...BLUR_PORTS, 'amount-positive': 'Amount ≥ 0', di
   'coarse-sample:image': 'Coarse Sample', 'radial-log-scale': 'Zoom Range', 'radial-longest': 'Longest Zoom', 'spin-arc': 'Spin Arc',
   'spin-start': 'Spin Start', 'zoom-end-scale': 'End Scale' };
 
+const GLOW_PORTS: Record<string, string> = { 'source-split:rgb': 'Source Color', 'source-alpha': 'Source Alpha', 'bright-cache': 'Bright Light',
+  'tap-weight': 'Tap Weight', 'up-uv': 'Up Read Position', 'down-uv': 'Down Read Position', 'level-weight': 'Level Weight',
+  'top-level-weight': 'Top Level Weight', 'glow-light': 'Glow Light', 'glow-amount': 'Glow Amount', 'glow-tinted': 'Tinted Glow', 'color-rgb': 'Glow Color', 'glow-scaled': 'Glow',
+  'resolve-premultiplied': 'Premultiplied Source', 'resolve-result': 'Picture + Glow',
+  ...Object.fromEntries(Array.from({ length: 10 }, (_, index) => [[`down-${index + 1}-cache`, `Level ${index + 1} (1/${2 ** (index + 1)} size)`],
+    [`up-${index + 1}-cache`, `Levels ${index + 1}+ Added`]]).flat()) };
+// Threshold and Posterize: the hard step and the soft ramp that Softness blends in.
+const POINTWISE_PORTS = { compare: 'Above Level', hard: 'Hard Step', ramp: 'Soft Ramp', soft: 'Softness On', smooth: 'Soft Steps', steps: 'Steps' };
+
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
   if (type === 'crt-screen') return {
@@ -92,6 +101,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   if (type === 'glow') return {
     labels: { bright: 'Bright Pass (soft knee)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid: Halve the Light',
       up: 'Pyramid: Add Levels Back Up', finish: 'Glow Resolve & Alpha' },
+    portLabels: GLOW_PORTS,
     stage: ({ id }) => /^(bright-|source-)/.test(id) ? 'bright'
       : /^(tap-|texel$|one-vec2$|up-offset$|up-uv$|down-offset$|down-uv$|level-|top-level-)/.test(id) ? 'kernel'
         : /^down-/.test(id) ? 'down' : /^up-/.test(id) ? 'up' : 'finish',
@@ -132,6 +142,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
   };
   if (COLORS.has(type)) return {
     labels: { processing: 'Color Processing', finish: 'Clamp & Alpha' },
+    ...(type === 'threshold' || type === 'posterize' ? { portLabels: POINTWISE_PORTS } : {}),
     stage: ({ id }) => includes('clamp combine image', id) ? 'finish' : 'processing',
   };
   if (GLYPH_PRESENTATION_EFFECTS.has(type)) return {
