@@ -1,0 +1,394 @@
+[
+  {
+    "label": "Getting Started",
+    "items": [
+      {
+        "label": "UI Panels",
+        "slug": "features/ui-panels"
+      },
+      {
+        "label": "Keyboard Shortcuts",
+        "slug": "features/keyboard-shortcuts"
+      },
+      {
+        "label": "Android App",
+        "slug": "features/android-app"
+      }
+    ]
+  },
+  {
+    "label": "Editing",
+    "items": [
+      {
+        "label": "Timeline",
+        "slug": "features/timeline"
+      },
+      {
+        "label": "Preview",
+        "slug": "features/preview"
+      },
+      {
+        "label": "Keyframes",
+        "slug": "features/keyframes"
+      },
+      {
+        "label": "Masks",
+        "slug": "features/masks"
+      },
+      {
+        "label": "Text Clips",
+        "slug": "features/text-clips"
+      },
+      {
+        "label": "Dynamic Captions",
+        "slug": "features/captions"
+      },
+      {
+        "label": "Motion Design",
+        "slug": "features/motion-design"
+      },
+      {
+        "label": "Vector Animation",
+        "slug": "features/vector-animation"
+      },
+      {
+        "label": "Image Mode",
+        "slug": "features/image-mode"
+      },
+      {
+        "label": "Notebook",
+        "slug": "features/documents"
+      },
+      {
+        "label": "Annotations",
+        "slug": "features/annotations"
+      },
+      {
+        "label": "Timeline Rulers",
+        "slug": "features/timeline-rulers"
+      },
+      {
+        "label": "Slot Grid",
+        "slug": "features/slot-grid"
+      }
+    ]
+  },
+  {
+    "label": "Effects",
+    "items": [
+      {
+        "label": "Effects Overview",
+        "slug": "features/effects"
+      },
+      {
+        "label": "Color Correction",
+        "slug": "features/color-correction"
+      },
+      {
+        "label": "Time Stack",
+        "slug": "features/time-stack"
+      },
+      {
+        "label": "Slit Scan 3D",
+        "slug": "features/slit-scan-3d"
+      },
+      {
+        "label": "Memory Leak",
+        "slug": "features/memory-leak"
+      },
+      {
+        "label": "Node Workspace",
+        "slug": "features/node-workspace"
+      },
+      {
+        "label": "Node Catalog",
+        "slug": "features/node-catalog"
+      }
+    ]
+  },
+  {
+    "label": "Transitions",
+    "items": [
+      {
+        "label": "Transition Compositions",
+        "slug": "features/transition-compositions"
+      }
+    ]
+  },
+  {
+    "label": "Audio",
+    "items": [
+      {
+        "label": "Audio Overview",
+        "slug": "features/audio"
+      },
+      {
+        "label": "Audio Workstation",
+        "slug": "features/audio-workstation"
+      },
+      {
+        "label": "Audio Intelligence",
+        "slug": "features/audio-intelligence"
+      },
+      {
+        "label": "Tempo And Metronome",
+        "slug": "features/tempo-and-metronome"
+      },
+      {
+        "label": "Score Tracks",
+        "slug": "features/score-tracks"
+      },
+      {
+        "label": "MuScriptor Music-to-MIDI",
+        "slug": "features/muscriptor"
+      }
+    ]
+  },
+  {
+    "label": "3D and Scans",
+    "items": [
+      {
+        "label": "3D Layers",
+        "slug": "features/3d-layers"
+      },
+      {
+        "label": "Flock Clips",
+        "slug": "features/flock-clips"
+      },
+      {
+        "label": "Weave",
+        "slug": "features/weave"
+      },
+      {
+        "label": "Path Tracing",
+        "slug": "features/path-tracing"
+      },
+      {
+        "label": "Browser 3D Scan",
+        "slug": "features/3d-scan"
+      },
+      {
+        "label": "Surface Tracking",
+        "slug": "features/surface-tracking"
+      }
+    ]
+  },
+  {
+    "label": "Media and Export",
+    "items": [
+      {
+        "label": "Media Panel",
+        "slug": "features/media-panel"
+      },
+      {
+        "label": "Media Discovery",
+        "slug": "features/media-discovery"
+      },
+      {
+        "label": "Media Downloads",
+        "slug": "features/download-panel"
+      },
+      {
+        "label": "Screen Capture",
+        "slug": "features/screen-capture"
+      },
+      {
+        "label": "Live Inputs",
+        "slug": "features/live-inputs"
+      },
+      {
+        "label": "Proxy System",
+        "slug": "features/proxy-system"
+      },
+      {
+        "label": "Scene-Cut Detection",
+        "slug": "features/scene-cut-detection"
+      },
+      {
+        "label": "Export",
+        "slug": "features/export"
+      },
+      {
+        "label": "Project Persistence",
+        "slug": "features/project-persistence"
+      },
+      {
+        "label": "Project Repository and Durable History",
+        "slug": "features/project-repository"
+      },
+      {
+        "label": "Native Helper",
+        "slug": "features/native-helper"
+      },
+      {
+        "label": "H.265 / HEVC Decoding",
+        "slug": "features/hevc-decoding"
+      },
+      {
+        "label": "ProRes Browser Decode",
+        "slug": "features/prores-browser-decode"
+      },
+      {
+        "label": "MXF Browser Decode",
+        "slug": "features/mxf-browser-decode"
+      }
+    ]
+  },
+  {
+    "label": "AI",
+    "items": [
+      {
+        "label": "AI Integration",
+        "slug": "features/ai-integration"
+      },
+      {
+        "label": "FlashBoard",
+        "slug": "features/flashboard"
+      },
+      {
+        "label": "AI Studio",
+        "slug": "features/ai-studio"
+      },
+      {
+        "label": "Story Workflow",
+        "slug": "features/seedance-preproduction"
+      },
+      {
+        "label": "Editable Motion Graphics",
+        "slug": "features/editable-motion-graphics"
+      },
+      {
+        "label": "Scene Streams",
+        "slug": "features/scene-streams"
+      },
+      {
+        "label": "AI Depth Map",
+        "slug": "features/depth-estimation"
+      },
+      {
+        "label": "Face Analysis",
+        "slug": "features/face-analysis"
+      },
+      {
+        "label": "Guest Hosted AI Access",
+        "slug": "features/guest-hosted-ai-access"
+      },
+      {
+        "label": "Live Credit Burn Meter",
+        "slug": "features/credit-burn-meter"
+      }
+    ]
+  },
+  {
+    "label": "Developers",
+    "collapsed": true,
+    "items": [
+      {
+        "label": "GPU Engine",
+        "slug": "features/gpu-engine"
+      },
+      {
+        "label": "Linux / Mesa GPU",
+        "slug": "features/linux-mesa-gpu"
+      },
+      {
+        "label": "Media Runtime",
+        "slug": "features/media-runtime"
+      },
+      {
+        "label": "Signal IR",
+        "slug": "features/signal-ir"
+      },
+      {
+        "label": "Operator Graph Compiler",
+        "slug": "features/operator-graph-compiler"
+      },
+      {
+        "label": "Inspector Performance",
+        "slug": "features/inspector-performance"
+      },
+      {
+        "label": "Kernel Client",
+        "slug": "features/kernel-client"
+      },
+      {
+        "label": "AI Bridge Control",
+        "slug": "features/ai-bridge-control"
+      },
+      {
+        "label": "Security",
+        "slug": "features/security"
+      },
+      {
+        "label": "Debugging",
+        "slug": "features/debugging"
+      },
+      {
+        "label": "Playback Debugging",
+        "slug": "features/playback-debugging"
+      },
+      {
+        "label": "OCR Analysis",
+        "slug": "features/ocr-analysis"
+      },
+      {
+        "label": "Documentation Website",
+        "slug": "features/documentation-site"
+      },
+      {
+        "label": "Landing Page",
+        "slug": "features/landing-page"
+      }
+    ]
+  },
+  {
+    "label": "Testing and Operations",
+    "collapsed": true,
+    "items": [
+      {
+        "label": "LAN Device Testing",
+        "slug": "features/lan-device-testing"
+      },
+      {
+        "label": "Windows Beta Testing",
+        "slug": "features/windows-beta-testing"
+      },
+      {
+        "label": "Flex EQ Visual QA",
+        "slug": "features/flex-eq-visual-qa"
+      },
+      {
+        "label": "Agent Timeline Benchmarking",
+        "slug": "features/agent-timeline-benchmarking"
+      },
+      {
+        "label": "Product Analytics",
+        "slug": "features/product-analytics"
+      },
+      {
+        "label": "Codex Usage Monitoring",
+        "slug": "features/codex-usage-monitoring"
+      },
+      {
+        "label": "Social Operations",
+        "slug": "features/social-operations"
+      },
+      {
+        "label": "Visitor Notifier",
+        "slug": "features/visitor-notifier"
+      },
+      {
+        "label": "Telegram Dev Chat",
+        "slug": "features/telegram-dev-chat"
+      },
+      {
+        "label": "Credit Claims",
+        "slug": "features/credit-claims"
+      },
+      {
+        "label": "Consumer Contract",
+        "slug": "features/consumer-contract"
+      }
+    ]
+  }
+]

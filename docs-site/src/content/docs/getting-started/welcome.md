@@ -16,12 +16,14 @@ still lack.
 
 ## Where to go next
 
-- The [Overview](/getting-started/overview/) summarizes every major
+- The [Overview](/docs/getting-started/overview/) summarizes every major
   capability with links into the detailed feature pages.
-- The **Features** section in the sidebar documents each subsystem —
-  from the [Timeline](/features/timeline/) and
-  [GPU engine](/features/gpu-engine/) to
-  [Motion Design](/features/motion-design/) and the
-  [Audio workstation](/features/audio-workstation/).
+- The sidebar groups the feature pages by topic — Editing, Effects,
+  Transitions, Audio, 3D, Media and Export, and AI — from the
+  [Timeline](/docs/features/timeline/) and
+  [Effects](/docs/features/effects/) to
+  [Motion Design](/docs/features/motion-design/) and the
+  [Audio workstation](/docs/features/audio-workstation/). Pages for
+  developers and operations sit in the collapsed groups at the end.
 - Return to the [MasterSelects editor](https://www.masterselects.com) whenever
   you are ready to put a workflow into practice.
