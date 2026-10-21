@@ -17,12 +17,16 @@
 //   only=a,b           with focus: just these nodes (local ids, see --list), laid out compactly;
 //                      their other inputs become named stubs (a recipe, not the whole folder) and
 //                      the literal values they read from Constants become value cards
+//                      (without focus: picked from the whole effect, for effects without folders)
+//   name.<id>=Label    with only: picture name of the stub fed by node <id> (or <id>:<port>, as the
+//                      error for an unknown id lists them), e.g. name.smooth-or-banded=Time map
 //   constants=hide     with only: leave those literal values cut instead
 //   plumbing=hide      leave out the Constants and Coordinates & Resources folders and their
 //                      cables (overview pictures: the stages read as one path, laid out afresh
 //                      so no cable runs behind a stage it does not belong to)
 //   omit=a,b           leave out these cards and their cables (local ids), e.g. omit=output: an
 //                      overview ends at the stage that hands the image back
+//                      (in a recipe also stubs, as <id>:<port>, before the layout: no gap)
 //   chain=1            keep the clip chain (source, transform, output) around the effect
 // (a composition's `@` id may be given without its `@`) and two picture options: marks=id[:from],...  numbered callouts on these node cards (from =
 // left|right|above|below), printed with the figure markup; layout=full|float sizes the callouts.
