@@ -807,8 +807,11 @@ strict greater-than comparison (equality is black). Posterize uses
 clamped it). Since 2026-10-21 both have a **Softness** (default 0): Threshold ramps
 smoothly from Level − Softness/2 to Level + Softness/2 (a brightness width, 0–0.5);
 Posterize rounds each step edge into a smooth ramp of that share of a step (0–1).
-Softness 0 renders exactly the earlier math, so untouched saved graphs simply read as
-the current recipe. Both preserve source alpha and the original ranges, defaults and
+Posterize also has **Brightness Only** (off by default): the staircase runs on the
+brightest channel and the colour is scaled with it, so hue and saturation stay and
+light neutral areas cannot split into false colours where their channels cross a step
+apart. Softness 0 without Brightness Only renders exactly the earlier math, so
+untouched saved graphs simply read as the current recipe. Both preserve source alpha and the original ranges, defaults and
 keyframe IDs; Levels below 2 and negative Softness are reported, not silently clamped.
 
 Vignette (contract `src/effects/stylize/vignette/vignetteModel.ts`) measures the
@@ -835,11 +838,15 @@ preserve source alpha and use one fullscreen pass.
   resolution. Lines closer than 4 px fade into their even average (fully below
   2 px) instead of flickering as moiré; Opacity is limited to 0–1. Both limits are
   reported in the inspector and tool results.
-- **Film Grain** (`grainModel.ts`, since 2026-10-21): smooth two-octave value noise
-  built from **Random (Cell)** hashes on a grid of Size pixels of a 1080p frame, so
-  the grain looks the same at every render size. A new pattern appears at
-  `round(time × 60 × Speed)` (Speed 1 changes it on every frame up to 60 fps, 0
-  freezes it); Seed picks another pattern. The noise is zero-mean (no pumping),
+- **Film Grain** (`grainModel.ts`, since 2026-10-21): smooth value noise built from
+  **Random (Cell)** hashes on a grid of Size pixels of a 1080p frame, so the grain
+  looks the same at every render size. Three layers of it, their grids turned by 0°,
+  30° and 60°, add up to grain without a grid direction (a single layer shows squares
+  at coarse sizes). A new pattern appears at `round(time × 60 × Speed)` (Speed 1
+  changes it on every frame up to 60 fps, 0 freezes it; Speed above 1 changes nothing
+  more and is reported); the whole-number pattern index and Seed pick the pattern
+  offset through Random (Cell), exact up to index 2²⁴, so long timelines never cycle
+  through a few patterns. The noise is zero-mean (no pumping),
   strongest in the midtones (30 % of it in black and white, like film) and has a
   standard deviation of about `0.35 × Amount` there. **Color** (0–1) mixes each
   channel from shared grain towards its own. Grains saved earlier keep their
@@ -1000,22 +1007,31 @@ Saved custom layouts/groups are not automatically replaced by presentation stage
 2026-10-21) premultiplies the frame into a cache, blurs it with the separable
 Gaussian Blur passes (σ = Radius pixels of a 1080p frame, at least 0.25 px) and adds
 `Amount × (luma − blurred luma)` to R, G and B alike, so edges get crisp without
-colour fringes. A halo limit keeps the sharpened brightness within the darkest and
-brightest brightness of a 3×3 window (taps one σ apart, at least a pixel) plus 15 %
-of that window's range, which removes the bright and dark outlines of a classic
-unsharp mask. Negative Amount softens; alpha is kept. Three passes. Sharpens saved
+colour fringes. A halo limit removes the bright and dark outlines of a classic unsharp
+mask: one Kernel Sum (Rect) over 5×5 taps spread evenly over ±max(σ, 1) px (read
+from the premultiplied cache, transparent taps weigh nothing) gives a smooth darkest
+and brightest brightness of the neighbourhood (means weighted by `exp(±64 × Δluma)`),
+and the change may approach that range plus 15 % of it softly, `room × (1 −
+exp(−change / room))`, so strong settings keep their gradation instead of flattening
+into plateaus. Nothing depends on the timeline time. Negative Amount softens; alpha
+is kept. Three passes. Sharpens saved
 earlier keep the fixed 7×7 kernel graph (no halo limit, Radius in render pixels).
 
 **Edge Detect** (contract `src/effects/stylize/edge-detect/edgeDetectModel.ts`,
 since 2026-10-21) is a derivative-of-Gaussian gradient of premultiplied brightness
 in one window reduction: σ = **Width** pixels of a 1080p frame (at least 0.7 px),
 window ±2σ up to ±8 px. Dividing by the window's own second moment makes it exact for
-brightness ramps at any Width and resolution, so a step of contrast c reads about
-`c × 4 × Strength` (the brightness of the earlier Sobel), clamped to 0–1. Lines are
-white on black (Invert: black on white); **Color** tints them with the picture's own
-colour at full brightness. Output alpha is `max(source alpha, edge)`: transparent
-surroundings stay transparent and a layer's outline shows. Cost grows with Width:
-(2⌈2σ⌉ + 1)² taps, 25 at the default on 1080p, at most 289. Edge Detects saved earlier
+brightness ramps at any Width and resolution, so a step of contrast c gives a
+response of about `x = c × 4 × Strength` (the brightness of the earlier Sobel); the
+line strength is `1 − exp(−x)`, linear for faint edges and rolling off softly instead
+of clipping, so dense detail keeps its structure. Lines are white on black (Invert:
+black on white); **Color** tints them with the picture's own colour at full
+brightness, the alpha-weighted mean of the pixel and two taps one and two σ towards
+the brighter side. Lines are composited over the background premultiplied: alpha =
+`edge + source alpha × (1 − edge)`, colour = `(line × edge + background × source
+alpha × (1 − edge)) / alpha`, so transparent surroundings stay transparent and a
+layer's outline shows outside it in its full line colour. Cost grows with Width:
+(2⌈2σ⌉ + 1)² taps, 25 at the default on 1080p, at most 289, plus two colour taps. Edge Detects saved earlier
 keep the eight-tap Sobel at render resolution (alpha always one); its Sobel Magnitude
 stays available as a reusable block.
 
@@ -1024,23 +1040,32 @@ lens bloom in 21 graph passes, most of them tiny:
 
 1. **Bright pass** (full size, cached): the share of each pixel's light above a soft
    knee around Threshold, taken from the brightest channel so saturated lights glow
-   too; knee = Softness × Threshold. Light is premultiplied by alpha.
+   too; knee = Softness × Threshold. Light is premultiplied by alpha. The default
+   Threshold 0.8 keeps a mid-bright daylight sky out of the glow.
 2. **Pyramid down**: ten Cache Images at 1/2 … 1/1024 of the frame, each a
    `[1 3 3 1]` reduction of the one above.
 3. **Pyramid up**: from the smallest level back up with a 3×3 tent; each level joins
    with a weight that grows smoothly as Radius (pixels of a 1080p frame) reaches its
-   size, so Radius widens the glow continuously. The finest level always glows.
-4. **Resolve**: the tent-upsampled glow, divided by the square root of the summed
-   level weights (wide glows grow without flooding the frame), × Amount × **Color**,
-   is added to the premultiplied source. Output alpha is `max(source alpha,
-   brightest result channel)` and RGB is un-premultiplied by it, so the halo also
-   appears around glyphs on transparent layers.
+   reach, so Radius widens the glow continuously. Levels finer than 3 px (1080p) fade
+   out, so 4K renders the same levels as 1080p. **Level 0**, the bright pass itself,
+   stands for the 1080p levels a smaller render cannot resolve
+   (`log2(min(Radius, its reach) / 3) + 1` of them) and fills up to a total weight of
+   1 when Radius is finer than the pyramid: a reduced preview matches the export and
+   a tiny Radius stays tight.
+4. **Resolve**: the glow, divided by the square root of the summed level weights
+   (wide glows grow without flooding the frame), × Amount × **Color**, is screened
+   onto the premultiplied source with a soft roll-off, `1 − (1 − picture) ×
+   exp(−glow)`: faint glows add their light, bright areas have less room left and
+   nothing passes white, so colours keep their hue and the frame cannot clip. Output
+   alpha is `max(source alpha, brightest result channel)` and RGB is un-premultiplied
+   by it, so the halo also appears around glyphs on transparent layers.
 
 Cost does not depend on Radius: about 2.7 full-frame passes of work and about 1.7
 frames of `rgba16float` cache memory per Glow (the full-size bright pass plus two
 pyramids of a third of a frame each). Radius stops
 widening the glow once the largest level is reached (about 1536 at 1080p); the
-inspector and tool results say so, as they do for negative values.
+inspector and tool results say so, as they do for negative values and for a
+Threshold whose knee starts above white (nothing can glow).
 
 Glows saved before 2026-10-21 keep the **earlier ring version** (contract
 `glowSampling.ts`, graph `createRingGlowGraph`): a bright pass, a separable
@@ -1444,7 +1469,9 @@ out-of-range UVs so fast horizontal transition blurs do not expose transparent
 borders. `Projector Flicker` uses deterministic generated-solid
 exposure pulses, `Film Roll` combines vertical transform overscan with
 transition-scoped Motion Blur, and `Vignette Bloom` uses registered `glow` and
-`vignette` effects on both transition participants. `Light Sweep` uses a
+`vignette` effects on both transition participants (since 2026-10-21 tuned for the
+bloom Glow, Radius 60–240, and for the pixel-distance Vignette, Roundness 0 with Size
+and Softness divided by √2, the same falloff as before). `Light Sweep` uses a
 cached transparent generated overlay canvas with a screen-blended diagonal
 highlight band, while `Light Leak` uses the same deterministic overlay
 primitive for warm edge streaks and analog wash. Those overlay canvases are

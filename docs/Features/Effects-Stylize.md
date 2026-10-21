@@ -9,16 +9,16 @@ Add one in **Properties → Effects → + Add Effect**.
 ### Glow
 <figure class="docs-shot docs-shot--float-right">
 
-![The night street with neon signs, original left and with Glow right: the signs, shop lights and the wet street get soft halos in their own colours](assets/effects/glow.webp)
+![The night street with neon signs, original left and with Glow right: the pink, cyan and orange signs and the shop lights get soft halos in their own colours, and the wet street glows with their reflections](assets/effects/glow.webp)
 
-<figcaption>Left: original. Right: Amount 1.6, Threshold 0.5, Radius 70.</figcaption>
+<figcaption>Left: original. Right: Amount 2.5, Threshold 0.5, Radius 100.</figcaption>
 </figure>
 
 Makes the bright parts of the picture shine with a soft halo, like light
 blooming in a lens. Good for neon, stage lights, candles and dreamy scenes.
 - **Threshold** – which parts glow: only what is brighter than this. Lower it and more of the picture glows.
 - **Radius** – how far the light spreads: 20 is a tight halo, 40 a soft glow, 150 and more a wide haze.
-- **Amount** – how bright the glow is.
+- **Amount** – how bright the glow is. The glow is screened on, so colours keep their hue and nothing burns out to white.
 - **Color** – tints the glow, for example warm orange for candle light.
 
 Tip: Softness decides how gently light near the threshold joins in; keep it at 0.5 for a natural look.
@@ -34,16 +34,16 @@ Tip: Softness decides how gently light near the threshold joins in; keep it at 0
 Adds the fine, living texture of film. The grain changes on every frame, is
 strongest in the mid tones and keeps its size at any resolution.
 - **Amount** – how strong: 0.1 is subtle, 0.3 a heavy, grainy look.
-- **Size** – 1 is fine like 35 mm film, 2–3 coarse like 16 mm.
+- **Size** – 1 is fine like 35 mm film, 2–3 coarse like 16 mm, 5 big, soft clumps.
 - **Speed** – 1 gives new grain on every frame, 0 freezes it.
 - **Color** – 0 is black-and-white grain, 1 lets every colour channel have its own grain.
 
 ### Vignette
 <figure class="docs-shot docs-shot--float-right">
 
-![The harbour town, original left and with Vignette right: the right-hand corners and edges fall off into darkness](assets/effects/vignette.webp)
+![The harbour town twice, the original above and with Vignette below: a round falloff darkens the sky, the mountains on the left and the harbour edges evenly towards all four corners, while the houses in the middle stay bright](assets/effects/vignette.webp)
 
-<figcaption>Left: original. Right: Amount 0.85, Size 0.25, Softness 0.8.</figcaption>
+<figcaption>Top: original. Bottom: Amount 0.85, Size 0.25, Softness 0.8, Roundness 1 (a circle).</figcaption>
 </figure>
 
 Darkens the edges and corners so the eye goes to the middle of the frame.
@@ -57,9 +57,9 @@ Tip: Amount 0.3 with a large Softness is barely noticeable, yet it calms busy ed
 ### Sharpen
 <figure class="docs-shot docs-shot--float-left">
 
-![The houses of the harbour town, enlarged: original left, sharpened right with crisper windows and edges and no bright or dark outlines](assets/effects/sharpen.webp)
+![Pink and white houses with green shutters and a café terrace in the harbour town, enlarged four times: original left, sharpened right with crisper shutters, windows, umbrellas and people and no bright or dark outlines](assets/effects/sharpen.webp)
 
-<figcaption>The same houses, enlarged. Left: original. Right: Amount 2, Radius 1.5.</figcaption>
+<figcaption>Houses on the harbour front, enlarged. Left: original. Right: Amount 3, Radius 1.</figcaption>
 </figure>
 
 Brings out detail and crisp edges in soft footage, without the bright and dark
@@ -70,35 +70,38 @@ outlines that strong sharpening usually leaves.
 ### Edge Detect
 <figure class="docs-shot docs-shot--float-right">
 
-![The dancer on stage, original left and with Edge Detect right: only her outlines and the folds of the dress remain, as glowing lines in her own warm colours on black](assets/effects/edge-detect.webp)
+![The dancer on stage, original left and with Edge Detect right: only her outlines, her hair and the folds of the dress remain, as glowing lines in her own warm colours on black, and the stage floor becomes a fine web of lines](assets/effects/edge-detect.webp)
 
-<figcaption>Left: original. Right: Width 1.5, Strength 1.5, Color 0.7.</figcaption>
+<figcaption>Left: original. Right: Width 1.5, Strength 2, Color 0.7.</figcaption>
 </figure>
 
 Turns the picture into its outlines: bright lines where things meet, dark
 everywhere else.
-- **Strength** – how bright and how many lines.
+- **Strength** – how bright and how many lines; busy detail fades in softly instead of turning solid white.
 - **Width** – line thickness; it stays the same at any resolution.
 - **Color** – 0 draws white lines, 1 draws them in the picture's own colours.
 - **Invert** – dark lines on white, like a pencil drawing.
 
+On a title or cut-out on a transparent layer, the outline is drawn just outside it too, in the full line colour.
+
 ### Posterize
 <figure class="docs-shot docs-shot--float-left">
 
-![The harbour town, original left and posterized right: the sky, houses and sea are reduced to a few flat, bold tones](assets/effects/posterize.webp)
+![The dancer on stage, original left and posterized right with Brightness Only: her dress breaks into a few flat cream and brown tones, the hazy stage drops to black and the blue stage light becomes two clean bands, all in their own colours](assets/effects/posterize.webp)
 
-<figcaption>Left: original. Right: Levels 5, Softness 0.3.</figcaption>
+<figcaption>Left: original. Right: Levels 4, Softness 0.2, Brightness Only.</figcaption>
 </figure>
 
 Reduces the picture to a few flat tones per colour, like a screen print or a
 poster.
 - **Levels** – how many tones: 2–4 is bold and graphic, 8 and more subtle.
-- **Softness** – rounds the jumps between tones, so skies and faces don't break into jagged bands.
+- **Softness** – rounds the jumps between tones, so their edges stay smooth instead of jagged.
+- **Brightness Only** – steps only the brightness and keeps every colour as it is. Without it each colour channel is stepped on its own, which can tint light grey clouds lavender or add coloured fringes.
 
 ### Threshold
 <figure class="docs-shot docs-shot--float-right">
 
-![The dancer on stage, original left and with Threshold right: she becomes a white silhouette on black, with the stage light as a white spot](assets/effects/threshold.webp)
+![The dancer on stage, original left and with Threshold right: she becomes a white silhouette on black, with a soft sliver of the blue stage light at the top right edge](assets/effects/threshold.webp)
 
 <figcaption>Left: original. Right: Level 0.3, Softness 0.12.</figcaption>
 </figure>
@@ -127,11 +130,15 @@ Lines too close to show at the current size blend into an even darkening
 instead of flickering, so a small preview can look smoother than the full-size
 export.
 
-**Saved projects:** effects saved before this update keep their earlier look; the
-effect card names it and offers the new version with one click.
+**Saved projects:** effects and Custom Looks saved before this update keep their
+earlier look; the effect card names it and offers the new version with one click.
+The Vignette Bloom and Scanline Glitch transitions use the new versions: Vignette
+Bloom's flash no longer turns bright pictures fully white, and very dense scanlines
+darken evenly instead of flickering.
 
-**Known limitations:** very large grain (Size 4–5) looks blotchy rather than like
-film, and wide Edge Detect lines cost more render time.
+**Known limitations:** wide Edge Detect lines cost more render time, and the
+software preview (used when the GPU preview is unavailable) shows effects added by
+transitions with simplified versions of the earlier looks.
 
 <div class="docs-float-end"></div>
 
@@ -192,9 +199,9 @@ cables at the **Switch**: **One** into False, **Zero** into True.
 
 <figure class="docs-shot docs-shot--float-right">
 
-![Inside Glow Resolve & Alpha: Glow Light times Glow Color, then times Glow Amount gives the Glow; Source Color times Source Alpha gives the premultiplied picture; Add puts the Glow on the picture](assets/effects/graphs/glow-resolve.webp)
+![Inside Glow Resolve & Alpha: Power raises e to minus the Glow, giving exp(−Glow); One minus the Premultiplied Source gives the Room left to white; Multiply makes Room × exp(−Glow), and One minus that, in Subtract, is the picture screened with the glow](assets/effects/graphs/glow-resolve.webp)
 
-<figcaption>The last step of Glow: the glow is tinted, scaled by Amount and added onto the picture.</figcaption>
+<figcaption>The last step of Glow: the room left to white shrinks by exp(−Glow), so the glow brightens the picture but never pushes it past white.</figcaption>
 </figure>
 
 **Bright Pass** keeps only the light above Threshold. **Pyramid: Halve the
@@ -202,11 +209,14 @@ Light** then shrinks that light ten times, each copy half the size of the last
 (a **Cache Image** with its **Resolution** set to 1/2, 1/4 …), so every copy is
 softer and reaches further. **Pyramid: Add Levels Back Up** adds the copies
 together; Radius decides how many join. **Glow Resolve & Alpha** tints the result,
-scales it and adds it onto the picture.
+scales it and screens it onto the picture: 1 − (1 − picture) × exp(−glow). Faint
+glows add their light; bright parts have less room left, so nothing burns out to
+white and colours keep their hue.
 
 Remix: to see the glow alone, on black, open **Glow Resolve & Alpha** and plug a
 **Value** of 0 into the Scalar input of the **Multiply** fed by **Source Color**.
-Handy for checking what Threshold picks.
+Handy for judging the glow's shape and colour on its own; to check what Threshold
+picks, look at the output of **Bright Pass** instead.
 
 <div class="docs-float-end"></div>
 
@@ -221,7 +231,8 @@ Handy for checking what Threshold picks.
 
 The grain itself comes from **Random (Cell)** nodes in the **Smooth Noise**
 folder: one random value per grain cell, blended smoothly between neighbouring
-cells. **Film Response** then decides how much grain each pixel gets, from its
+cells. Three such layers, their grids turned by 0°, 30° and 60°, add up so no grid
+direction shows, even with coarse grain. **Film Response** then decides how much grain each pixel gets, from its
 brightness: all of it in the midtones and 0.3 of it (**Shadow Floor**) in pure
 black and white, as on film.
 
@@ -233,17 +244,20 @@ and white completely clean.
 
 <figure class="docs-shot docs-shot--graph">
 
-![Sharpen's Halo Limit folder: Brightest Nearby minus Darkest Nearby, times Overshoot (0.15), is added to Brightest Nearby and subtracted from Darkest Nearby; Clamp keeps Sharpened Brightness between those two limits](assets/effects/graphs/sharpen-halo-limit.webp)
+![Sharpen's Halo Limit folder, the brightening half: Ceiling minus Brightness, at least a tiny floor, is the Room Up; minus the Wanted Up change divided by that Room goes through Exponential; one minus it is the Share of Room, and Multiply by the Room gives Limited Up](assets/effects/graphs/sharpen-halo-limit.webp)
 
-<figcaption>Halo Limit: the sharpened brightness may pass the darkest and brightest pixel nearby by only 15 % (Overshoot) of their difference.</figcaption>
+<figcaption>Halo Limit, brightening half: Room × (1 − exp(−wanted / Room)) follows small changes closely and never passes the ceiling, the brightest pixel nearby plus Overshoot.</figcaption>
 </figure>
 
 Sharpen blurs a copy with the same two passes as Gaussian Blur (**Horizontal**
 and **Vertical Blur Pass**) and adds the difference between the picture and that
 soft copy, times Amount (**Unsharp Mask**). Classic sharpening stops there and
 draws bright and dark outlines along edges. **Halo Limit** prevents them: it
-looks up the darkest and brightest pixel in the 3 × 3 neighbourhood and
-**Clamp**s the result to that range, plus a small **Overshoot**.
+measures the darkest and brightest brightness around each pixel (a smooth minimum
+and maximum over 5 × 5 points, up to one Radius away) and lets the change approach
+that range, plus a small **Overshoot**, softly: small changes pass almost as they are,
+large ones slow down before the limit, so even strong settings keep their
+gradation.
 
 Remix: select **Overshoot** and set it to 1 for the classic, punchy look with
 halos, or to 0 for the cleanest result.
@@ -266,44 +280,63 @@ compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
   preview, export and 4K match. Vignette measures pixel distance with every corner
   at 1 on any aspect. Scanlines Density counts lines over the frame height (5 ≈ 80).
 - **Glow.** A soft-knee bright pass on the brightest channel (knee = Softness ×
-  Threshold), premultiplied; ten half-size Cache Image levels (`[1 3 3 1]` down, 3 × 3
-  tent up); a level joins as Radius grows from half its reach to its reach. 21 small
-  passes and about 1.7 frames of `rgba16float` cache at any Radius. Alpha grows
-  into the halo, so titles on transparent layers glow outside their letters.
-  Radius past the largest level (about 1536 at 1080p) is reported.
-- **Film Grain.** Two octaves of value noise from **Random (Cell)**
+  Threshold, default Threshold 0.8), premultiplied; ten half-size Cache Image levels
+  (`[1 3 3 1]` down, 3 × 3 tent up); a level joins as Radius grows from half its reach
+  to its reach, levels finer than 3 px fade out, and level 0 (the bright pass itself)
+  carries what a smaller render cannot resolve, so previews match the export. The
+  glow is screened on, `1 − (1 − picture) × exp(−glow)`. 21 small passes and about
+  1.7 frames of `rgba16float` cache at any Radius. Alpha grows into the halo, so
+  titles on transparent layers glow outside their letters. Radius past the largest
+  level (about 1536 at 1080p) and a Threshold above white are reported.
+- **Film Grain.** Three layers of value noise from **Random (Cell)**
   (`noise.cell-hash.vec2`, an integer PCG hash, identical on every GPU and in
-  software). A new pattern every `round(time × 60 × Speed)`; zero-mean, standard
-  deviation 0.35 × Amount in the midtones. Color blends shared grain towards one
-  grain per channel.
+  software), their grids turned by 0°, 30° and 60°. A new pattern every
+  `round(time × 60 × Speed)`, its offset hashed from that whole number and Seed (exact
+  for 77 hours at 60 patterns a second); zero-mean, standard deviation 0.35 × Amount
+  in the midtones. Color blends shared grain towards one grain per channel. Speed
+  above 1 changes nothing more and is reported.
 - **Sharpen.** Premultiplied source cache, then the Gaussian Blur's separable
   passes (sigma = Radius); brightness unsharp mask applied equally to R, G and B;
-  halo limit from a 3 × 3 Darken/Lighten window (Sequence Blend, approximate under
-  partial alpha). Three passes. Amount below 0 (typed or via tools) softens and is
-  reported.
+  halo limit from a smooth minimum and maximum over 5 × 5 taps within ±max(Radius,
+  1) px (one Kernel Sum (Rect), exponentially weighted), approached softly with
+  `room × (1 − exp(−change / room))`. Three passes, independent of the timeline time.
+  Amount below 0 (typed or via tools) softens and is reported.
 - **Edge Detect.** Derivative of a Gaussian on premultiplied brightness in one
-  Kernel Sum (Rect), normalized by the window's own second moment. Width is sigma
-  (at least 0.7 px), the window reaches at most ±8 px: up to 289 reads per pixel.
-  Alpha is max(source alpha, edge), so transparent surroundings stay transparent
-  and a layer's outline counts as an edge.
+  Kernel Sum (Rect), normalized by the window's own second moment; line strength
+  `1 − exp(−response)`. Width is sigma (at least 0.7 px), the window reaches at most
+  ±8 px: up to 289 reads per pixel, plus two for Color, which takes the colour from
+  the brighter side of the edge. Lines are composited premultiplied (alpha = edge +
+  source alpha × (1 − edge)), so transparent surroundings stay transparent and a
+  layer's outline shows in its full line colour.
 - **Vignette, Scanlines.** Vignette's feather is at least 1.5 px, and a dither of
   at most half an 8-bit step, only where the picture changes, prevents banding.
   Scanlines fade into their even average below a 4 px line spacing (fully at
   2 px); Opacity is limited to 0–1.
 - **Threshold, Posterize.** Softness 0 is pixel-identical to the earlier hard
   step. Posterize output is limited to 0–1; Levels below 2 or fractional are
-  reported.
+  reported. Brightness Only steps the brightest channel and scales the colour with
+  it.
 - **Out-of-range values.** Tool results and the inspector list every value that
-  is clamped or ignored (`paramWarnings`), instead of failing silently.
+  is clamped or ignored (`paramWarnings`), instead of failing silently. The notes
+  describe the current recipes; an effect that still runs an earlier one gets a
+  single note naming that version instead.
 - **Saved projects.** Effects saved before 2026-10-21 keep their earlier graph and
   folders (`stylizeRecipes.ts`); the card offers **Use the new …**, which for Glow
   and Vignette also resets the values (Vignette's old Roundness 0.5–2 meant
-  something else). Glow's Rings and Samples/Ring are read only by those earlier
-  ring graphs. Untouched earlier Threshold and Posterize graphs become the current
-  recipe automatically.
-- **Software preview.** Graphless Glows generated by transitions render with the
-  earlier ring approximation in the worker software preview, and the CPU graph
-  path is slow for the Glow pyramid at large sizes.
+  something else) and removes their keyframes, in one undo step. Glow's Rings and
+  Samples/Ring are read only by those earlier ring graphs. Untouched earlier
+  Threshold and Posterize graphs become the current recipe automatically. Custom
+  Looks record `recipe: 'earlier'` for such effects (Looks saved before are migrated),
+  so applying them recreates the earlier graph. Transitions build their effects
+  without a graph at render time, so they use the current recipes: Vignette Bloom is
+  retuned (Glow Radius 60–240; Vignette Roundness 0 with Size and Softness ÷ √2, the
+  same falloff as before), Scanline Glitch keeps its values.
+- **Software preview.** The worker software renderer (the Linux fallback) evaluates
+  stylize effects that carry a graph on the CPU, which is slow at large sizes (the
+  Glow pyramid most of all). Graphless ones, as transitions create them, render
+  with pixel approximations of the earlier recipes there (the ring Glow, the UV
+  ellipse Vignette, unfaded Scanlines and the earlier Grain, Sharpen and Edge
+  Detect), so that preview can differ from the export.
 - **Pictures on this page.** `scripts/effect-graph-shot.mjs` and
   `scripts/effect-editor-shot.mjs`, each with a `stylize.json` manifest
   (`scripts/effect-graph-shots/`, `scripts/effect-editor-shots/`).
