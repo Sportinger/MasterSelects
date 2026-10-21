@@ -74,9 +74,11 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : includes('strength scaled clamped inverse invert selected rgba image', id) ? 'finish' : 'sampling',
   };
   if (['wave', 'twirl', 'bulge'].includes(type)) return {
-    labels: { space: 'Centre, Shape & Radius', phase: 'Phase & Speed', edges: 'Frame Edges & Sampling',
-      coordinates: type === 'wave' ? 'Wave Displacement' : type === 'twirl' ? 'Twirl Angle' : 'Bulge & Pinch Curve' },
-    stage: ({ id }) => id === 'sample' || /^edge-/.test(id) ? 'edges'
+    labels: { premultiply: 'Premultiplied Source (cached)', space: 'Centre, Shape & Radius', phase: 'Phase & Speed', edges: 'Frame Edges & Sampling',
+      coordinates: type === 'wave' ? 'Wave Displacement' : type === 'twirl' ? 'Twirl Angle' : 'Bulge & Pinch Curve', finish: 'Straight Alpha Output' },
+    portLabels: { 'source-cache': 'Premultiplied Source', 'edge-uv': 'Sample UV', 'result:image': 'Distorted Image' },
+    stage: ({ id }) => /^source-/.test(id) ? 'premultiply' : /^(result|coverage-floor)/.test(id) ? 'finish'
+      : id === 'sample' || /^edge-/.test(id) ? 'edges'
       : id === 'one-vec2' ? (type === 'wave' ? 'edges' : 'space')
         : /^space-(moved-delta|sample-uv)$/.test(id) ? 'coordinates' : /^space-/.test(id) ? 'space'
           : /^phase(-|$)/.test(id) ? 'phase' : 'coordinates',

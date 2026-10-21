@@ -4,6 +4,7 @@ import { compileImageOperatorGraph, evaluateImageOperatorPlan } from '../../src/
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from '../../src/services/operators/uvDistortEffectGraphs';
 import { createLegacyBulgeGraph, createLegacyTwirlGraph, createLegacyWaveGraph } from '../../src/services/operators/legacyUvDistortEffectGraphs';
 import { getEffect } from '../../src/effects';
+import { discreteImage, evaluateImagePasses } from '../helpers/imageGraphPasses';
 
 type UV = [number, number];
 type Pixel = [number, number, number, number];
@@ -46,15 +47,31 @@ function coverageReference(uv: UV, [width, height]: UV): number {
   return clamp01(Math.min(uv[0] * width, uv[1] * height, (1 - uv[0]) * width, (1 - uv[1]) * height) + .5);
 }
 
+const premultiply = ([r, g, b, a]: Pixel): Pixel => [r * a, g * a, b * a, a];
+
+/**
+ * Evaluates the two-pass plan (premultiplied source cache, then the distort) and records where
+ * the distort pass reads the cache: the warped sample UV.
+ */
 function run(type: EditableUvDistortEffectType, params: Record<string, number | string>, uv: UV, options: { time?: number; resolution?: UV; graph?: ReturnType<typeof createDefaultUvDistortGraph> } = {}) {
   const effect = { type, params };
   const resolved = effectOperatorParams(effect);
   const plan = compileImageOperatorGraph(options.graph ?? createDefaultUvDistortGraph(type), resolved, effectOperatorCompileContext(effect));
-  const sampled: UV[] = [];
-  const output = evaluateImageOperatorPlan(plan, source(uv), { uv, resolution: options.resolution ?? RESOLUTION,
-    timelineTimeSeconds: options.time ?? 0, sampleImage: at => { sampled.push(at); return source(at); } });
-  return { sampled, output, params: resolved as Record<string, number | string> };
+  const resolution = options.resolution ?? RESOLUTION, sampled: UV[] = [], cached: Pixel[] = [];
+  // The premultiplied source cache, then the final distort pass.
+  expect(plan.passes?.map(pass => !!pass.outputResource)).toEqual([true, false]);
+  const cache = plan.passes![0];
+  const output = evaluateImageOperatorPlan(plan, source(uv), { uv, resolution, timelineTimeSeconds: options.time ?? 0, sampleImage: source,
+    sampleResource: (id, at) => {
+      expect(id).toBe(cache.outputResource);
+      sampled.push(at);
+      const texel = evaluateImageOperatorPlan(cache.program, source(at), { uv: at, resolution, sampleImage: source });
+      cached.push(texel);
+      return texel;
+    } });
+  return { sampled, cached, output, params: resolved as Record<string, number | string> };
 }
+const expectPixel = (actual: Pixel, expected: Pixel) => actual.forEach((value, channel) => expect(value).toBeCloseTo(expected[channel], 12));
 
 describe('Wave, Twirl and Bulge & Pinch graphs', () => {
   it.each([
@@ -63,11 +80,13 @@ describe('Wave, Twirl and Bulge & Pinch graphs', () => {
     ['twirl', { amount: -2.7, radius: .8, centerX: .44, centerY: .57 }, [.61, .42]],
     ['twirl', { amount: 4, radius: .5, centerX: .5, centerY: .5, shape: 'frame' }, [.55, .45]],
   ] as const)('%s matches an independent reference in shape space and samples once (%j)', (type, overrides, uv) => {
-    const { sampled, output, params } = run(type, { ...overrides }, [...uv] as UV);
+    const { sampled, cached, output, params } = run(type, { ...overrides }, [...uv] as UV);
     const expected = edgeReference(radialReference(type, [...uv] as UV, params), params.edges);
     expect(sampled).toHaveLength(1);
     expect(sampled[0][0]).toBeCloseTo(expected[0], 12); expect(sampled[0][1]).toBeCloseTo(expected[1], 12);
-    expect(output).toEqual(source(sampled[0]));
+    // The cache holds premultiplied colour; the output is straight again.
+    expectPixel(cached[0], premultiply(source(sampled[0])));
+    expectPixel(output, source(sampled[0]));
   });
 
   it('keeps circles round on a wide frame and stretches them only with Shape: Stretch to Frame', () => {
@@ -147,26 +166,41 @@ describe('Wave, Twirl and Bulge & Pinch graphs', () => {
     const mirror = run('wave', { ...params, edges: 'mirror' }, uv), clamp = run('wave', { ...params, edges: 'clamp' }, uv);
     expect(mirror.sampled[0][1]).toBeCloseTo(2 - raw[1], 12); expect(clamp.sampled[0][1]).toBe(1);
     const transparent = run('wave', { ...params, edges: 'transparent' }, uv);
-    const sampled = source(transparent.sampled[0]);
-    expect(transparent.output.slice(0, 3)).toEqual(sampled.slice(0, 3));
-    expect(transparent.output[3]).toBeCloseTo(sampled[3] * coverageReference(raw, RESOLUTION), 12);
-    expect(transparent.output[3]).toBe(0);
+    expect(coverageReference(raw, RESOLUTION)).toBe(0);
+    expect(transparent.output).toEqual([0, 0, 0, 0]);
+    // On the frame border the sample is half covered: alpha halves, the colour stays (no dark rim).
+    const still = { amplitudeX: 0, amplitudeY: 0, frequencyX: 1, frequencyY: 1, speed: 0, phase: 0, edges: 'transparent' };
+    const border: UV = [.37, 1], half = run('wave', still, border), expected = source(border);
+    expect(coverageReference(border, RESOLUTION)).toBe(.5);
+    expectPixel(half.output, [expected[0], expected[1], expected[2], expected[3] * .5]);
     // Half a pixel inside the frame keeps full coverage; the border pixel is half covered.
     expect(coverageReference([.5, 1 - .5 / 1080], RESOLUTION)).toBe(1);
     expect(coverageReference([.5, 1], RESOLUTION)).toBe(.5);
   });
 
-  it.each(['wave', 'twirl', 'bulge'] as const)('%s is owner-backed, one pass, bounded and rewires to source UV', type => {
+  it.each(['wave', 'twirl', 'bulge'] as const)('%s is owner-backed, a cache plus one distort pass, bounded and rewires to source UV', type => {
     const effect = { type, params: {} }, graph = effectOperatorGraph(effect), params = effectOperatorParams(effect);
     expect(isImageGraphEffectType(type)).toBe(true); expect(isLocalImageEffectType(type)).toBe(false);
-    expect(graph.nodes.length).toBeLessThanOrEqual(80);
-    const plan = compileImageOperatorGraph(graph, params, effectOperatorCompileContext(effect)); expect(plan.passes).toBeUndefined();
+    expect(graph.nodes.length).toBeLessThanOrEqual(90);
+    const plan = compileImageOperatorGraph(graph, params, effectOperatorCompileContext(effect)); expect(plan.passes).toHaveLength(2);
     const rewired = structuredClone(createDefaultUvDistortGraph(type)), uvEdge = rewired.edges.find(item => item.to === 'sample' && item.input === 'uv')!;
     uvEdge.from = 'uv'; uvEdge.output = 'uv';
-    const uv: UV = [.31, .67], sampled: UV[] = [];
-    evaluateImageOperatorPlan(compileImageOperatorGraph(rewired, params, effectOperatorCompileContext(effect)), source(uv),
-      { uv, resolution: RESOLUTION, sampleImage: at => { sampled.push(at); return source(at); } });
-    expect(sampled[0]).toEqual(uv);
+    const uv: UV = [.31, .67];
+    expect(run(type, {}, uv, { graph: rewired }).sampled[0]).toEqual(uv);
+  });
+
+  it('filters premultiplied texels at a cut-out edge, so a magnified edge keeps its colour', () => {
+    // Opaque red texels next to transparent black ones: the straight bilinear mix would give dark red.
+    const texels = (x: number): Pixel => x < 2 ? [1, 0, 0, 1] : [0, 0, 0, 0];
+    const still = { amplitudeX: 0, amplitudeY: 0, frequencyX: 1, frequencyY: 1, speed: 0, phase: 0, edges: 'clamp' };
+    const effect = { type: 'wave', params: still };
+    const plan = compileImageOperatorGraph(createDefaultUvDistortGraph('wave'), effectOperatorParams(effect), effectOperatorCompileContext(effect));
+    for (const [u, coverage] of [[.5, .5], [.4375, .75], [.5625, .25]] as const) {
+      const pixel = evaluateImagePasses(plan, [u, .5], [4, 1], discreteImage(4, 1, x => texels(x)), { filterResources: true, float16: true, timelineTimeSeconds: 0 });
+      // Independent reference: bilinear weights of the two texel centres around u, on premultiplied texels.
+      expect(pixel[3]).toBeCloseTo(coverage, 3);
+      expect(pixel[0]).toBeCloseTo(1, 3); expect(pixel[1]).toBe(0); expect(pixel[2]).toBe(0);
+    }
   });
 });
 

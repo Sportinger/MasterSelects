@@ -20,10 +20,10 @@ describe('Fisheye shared nested compositions', () => {
     const original = createDefaultFisheyeGraph(), graph = composed(), expanded = expandOperatorCompositions(graph);
     expect(graph.nodes.filter(node => node.operator === 'coordinates.restore-lens.vec2')).toHaveLength(3);
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'coordinates.divide-x.vec2')).toHaveLength(6);
-    expect(expanded.nodes).toHaveLength(250);
-    // 17 presentation areas, 3 lens transforms, 6 nested divides and 1 shared sample normalization.
+    expect(expanded.nodes).toHaveLength(260);
+    // 19 presentation areas, 3 lens transforms, 6 nested divides and 1 shared sample normalization.
     expect(expanded.groups!.filter(group => group.composition?.instance.operator === 'sampling.normalize-rgba')).toHaveLength(1);
-    expect(expanded.groups).toHaveLength(27);
+    expect(expanded.groups).toHaveLength(29);
     expect(semantic(expanded)).toEqual(semantic(original));
     expect(validateEffectGraph(graph)).toEqual([]);
     let roundTrip = graph;
@@ -85,6 +85,6 @@ describe('Fisheye shared nested compositions', () => {
     expect(organizeFisheyeGraph(graph)).toBe(graph);
     const custom = createDefaultFisheyeGraph(); custom.groups![0].label = 'My settings';
     expect(organizeFisheyeGraph(custom)).toBe(custom);
-    expect(effectOperatorGraph({ type: 'fisheye', params: {}, operatorGraph: source }).groups).toHaveLength(27);
+    expect(effectOperatorGraph({ type: 'fisheye', params: {}, operatorGraph: source }).groups).toHaveLength(29);
   });
 });

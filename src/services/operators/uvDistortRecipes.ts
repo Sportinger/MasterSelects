@@ -1,5 +1,5 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { BlurGraphBuilder, type GraphPort } from './blurGraphBuilder';
+import { BlurGraphBuilder, premultipliedSourceCache, unpremultiplyNodes, type GraphPort } from './blurGraphBuilder';
 
 /**
  * Wave, Twirl and Bulge & Pinch recipes (see docs/Features/Effects-Distort.md).
@@ -20,6 +20,8 @@ import { BlurGraphBuilder, type GraphPort } from './blurGraphBuilder';
  * - Frame edges: Mirror reflects samples that leave the frame, Clamp repeats the border
  *   pixel (the original behaviour), Transparent leaves them empty with a one-pixel soft edge
  *   that lowers alpha only.
+ * - Alpha: the single bilinear sample reads the frame premultiplied (an rgba16float cache) and
+ *   the result is unpremultiplied, so cut-outs and transparent edges keep their colour.
  */
 export const BULGE_BETA_PER_AMOUNT = 1.232;
 export const PINCH_BETA_LIMIT = 0.95;
@@ -60,8 +62,13 @@ function frameSpaceToUv(g: BlurGraphBuilder, moved: GraphPort): string {
   return g.binary('space-sample-uv', 'math.add.vec2', 'space-center', 'space-moved-delta');
 }
 
-/** Frame-edge handling and the single image sample; wires `output`. */
+/**
+ * Frame-edge handling and the single image sample; wires `output`. The sample reads a
+ * premultiplied copy of the frame (`source-cache`), so the bilinear filter never mixes the colour
+ * of a transparent texel into a visible one: magnified or squeezed cut-outs keep clean edges.
+ */
 function edgeSampling(g: BlurGraphBuilder, sampleUv: GraphPort): void {
+  const source = premultipliedSourceCache(g);
   g.bound('edge-mode', 'edges', 'values.choice');
   g.number('edge-clamp-threshold', .5); g.number('edge-transparent-threshold', 1.5);
   g.add('edge-not-mirror', 'compare.greater.scalar', { a: 'edge-mode', b: 'edge-clamp-threshold' });
@@ -70,8 +77,9 @@ function edgeSampling(g: BlurGraphBuilder, sampleUv: GraphPort): void {
   g.add('edge-mirrored-uv', 'coordinates.mirror-repeat.vec2', { value: sampleUv });
   g.add('edge-clamped-uv', 'math.clamp.vec2', { value: sampleUv, min: 'edge-zero-vec2', max: 'one-vec2' });
   g.add('edge-uv', 'select.vec2', { condition: ['edge-not-mirror', 'condition'], falseValue: 'edge-mirrored-uv', trueValue: 'edge-clamped-uv' });
-  g.add('sample', 'image.sample', { image: ['frame', 'image'], uv: 'edge-uv' });
-  // Transparent: distance inside the frame in source pixels, one-pixel soft edge on alpha only.
+  g.add('sample', 'image.sample', { image: [source, 'image'], uv: 'edge-uv' });
+  // Transparent: distance inside the frame in source pixels, a one-pixel soft edge. Scaling the
+  // premultiplied sample lowers coverage only; the colour is restored by the unpremultiply below.
   g.binary('edge-low-px', 'math.multiply.vec2', sampleUv, ['resolution', 'value']);
   g.binary('edge-high-uv', 'math.subtract.vec2', 'one-vec2', sampleUv);
   g.binary('edge-high-px', 'math.multiply.vec2', 'edge-high-uv', ['resolution', 'value']);
@@ -80,13 +88,9 @@ function edgeSampling(g: BlurGraphBuilder, sampleUv: GraphPort): void {
   g.binary('edge-inside-px', 'math.min.scalar', 'edge-low-min', 'edge-high-min');
   g.binary('edge-inside-centered', 'math.add.scalar', 'edge-inside-px', 'half');
   g.add('edge-coverage', 'math.clamp.scalar', { value: 'edge-inside-centered', min: 'zero', max: 'one' });
-  g.add('edge-split', 'vector.split.rgba', { image: ['sample', 'image'] });
-  g.add('edge-alpha', 'convert.alpha-to-scalar', { alpha: ['edge-split', 'alpha'] });
-  g.binary('edge-covered-alpha', 'math.multiply.scalar', 'edge-alpha', 'edge-coverage');
-  g.unary('edge-covered-alpha-channel', 'convert.scalar-to-alpha', 'edge-covered-alpha');
-  g.add('edge-covered', 'vector.combine.rgba', { rgb: ['edge-split', 'rgb'], alpha: ['edge-covered-alpha-channel', 'alpha'] });
-  g.add('edge-result', 'control.select.image', { condition: ['edge-transparent', 'condition'], falseValue: ['sample', 'image'], trueValue: ['edge-covered', 'image'] });
-  g.add('output', 'image.output', { image: ['edge-result', 'image'] });
+  g.add('edge-weight', 'select.scalar', { condition: ['edge-transparent', 'condition'], falseValue: 'one', trueValue: 'edge-coverage' });
+  g.add('edge-result', 'math.multiply.image-scalar', { a: ['sample', 'image'], b: 'edge-weight' });
+  unpremultiplyNodes(g, ['edge-result', 'value']);
 }
 
 export function createDefaultBulgeGraph(): EffectOperatorGraph {

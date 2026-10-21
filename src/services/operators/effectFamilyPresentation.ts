@@ -4,8 +4,9 @@ import { effectPresentationPlan } from './effectPresentationPlans';
 
 const originals = new Map<string, EffectOperatorGraph>();
 const cache = new WeakMap<EffectOperatorGraph, Map<string, EffectOperatorGraph>>();
-const literal = (node: BoundOperatorNode) => node.operator.startsWith('values.') && !!node.constants && !Object.keys(node.bindings).length;
-const literalKey = (node: BoundOperatorNode) => JSON.stringify([node.operator, node.operatorVersion ?? 1, node.constants, node.enabled, node.bypassed]);
+/** A constant value node: recipe matching treats duplicated copies of it as one. */
+export const literal = (node: BoundOperatorNode) => node.operator.startsWith('values.') && !!node.constants && !Object.keys(node.bindings).length;
+export const literalKey = (node: BoundOperatorNode) => JSON.stringify([node.operator, node.operatorVersion ?? 1, node.constants, node.enabled, node.bypassed]);
 
 /** Matching allows only duplicated immutable leaves introduced by exact composition extraction.
  * Presentation (layout, folders, packed compositions) is ignored; node fields and wiring must match. */

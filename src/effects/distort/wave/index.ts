@@ -61,6 +61,7 @@ export const wave: EffectDefinition = {
       step: 0.01,
       animatable: true,
       group: 'motion',
+      graphOnly: true,
     },
     phase: {
       type: 'number',
@@ -71,6 +72,7 @@ export const wave: EffectDefinition = {
       step: 1,
       animatable: true,
       group: 'motion',
+      graphOnly: true,
     },
   },
 

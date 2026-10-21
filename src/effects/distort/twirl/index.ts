@@ -15,15 +15,17 @@ export const twirl: EffectDefinition = {
   uniformSize: 32,
 
   params: {
-    // Stored in radians (saved projects and keyframes); 1 is about 57 degrees, 6.28 one full turn.
+    // Stored in radians (saved projects, keyframes, tools); the inspector shows degrees
+    // (default 2 rad = 115 degrees, range two full turns either way).
     amount: {
       type: 'number',
       label: 'Twist',
       default: 2,
-      min: -12.57,
-      max: 12.57,
+      min: -4 * Math.PI,
+      max: 4 * Math.PI,
       step: 0.01,
       animatable: true,
+      displayUnit: 'degrees',
     },
     radius: {
       type: 'number',

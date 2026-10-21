@@ -33,6 +33,8 @@ export interface EffectParam {
   // Read only through the effect's operator graph: hidden (and reported by tools) when an
   // edited graph no longer binds it.
   graphOnly?: boolean;
+  // Stored in radians (project data, keyframes, tools); the effect inspector shows and edits degrees.
+  displayUnit?: 'degrees';
 }
 
 /**

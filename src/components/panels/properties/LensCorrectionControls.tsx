@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { EffectControlProps } from '../../../effects/types';
-import { LENS_CORRECTION_PARAMS, lensCorrectionWarnings, normalizeLensCorrection } from '../../../effects/distort/lens-correction';
+import { LENS_CORRECTION_PARAMS, normalizeLensCorrection } from '../../../effects/distort/lens-correction';
 import { CANON_24_105_PROFILE, LENS_PROFILE_OPTIONS } from '../../../effects/distort/lens-correction/lensProfile';
 import { getRawPhotoMetadata, isRawImageFile } from '../../../services/rawImage/rawImageDecode';
 import type { RawPhotoMetadata } from '../../../services/rawImage/rawPhotoMetadata';
@@ -67,8 +67,6 @@ export function LensCorrectionControls({ params, onChange, clipId, effectInstanc
       value={params.fitFullImage === true ? 'fit' : 'original'}
       options={[{value:'original',label:'Original size'},{value:'fit',label:'Fit entire photo'}]}
       onChange={value=>change('fitFullImage',value==='fit')} /></ResolveInspectorRow>}
-      {rows(group)}
-      {group === 'geometry' && lensCorrectionWarnings(params).map(warning =>
-        <p key={warning} className="effect-info" role="status">{warning}</p>)}</ResolveInspectorSection>)}
+      {rows(group)}</ResolveInspectorSection>)}
   </div>;
 }

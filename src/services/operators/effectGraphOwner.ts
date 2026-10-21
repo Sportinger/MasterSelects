@@ -44,6 +44,7 @@ import { upgradeGlowGraph } from './glowGraphUpgrade';
 import { createDefaultUvDistortGraph, type EditableUvDistortEffectType } from './uvDistortEffectGraphs';
 import { createDefaultFisheyeGraph } from './fisheyeEffectGraph';
 import { organizeFisheyeGraph } from './fisheyeGraphPresentation';
+import { upgradeFisheyeGraph } from './fisheyeGraphUpgrade';
 import { isUpgradableBlurEffectType, upgradeBlurGraph } from './blurGraphUpgrade';
 import { organizeEffectFamilyGraph } from './effectFamilyPresentation';
 import { upgradePersistedUvDistortEffect } from './uvDistortGraphUpgrade';
@@ -237,7 +238,7 @@ export function effectOperatorGraph(effect: EffectGraphOwner, options: { inspect
     // Parameters only reach the compile check, so inspection ignores their identity.
     if (known && known.signature === signature && (options.inspectionOnly || known.params === effect.params)) return known.graph;
     const saved = effect.operatorGraph ?? readEffectGraph(effect.params[EFFECT_GRAPH_PARAM], fallback);
-    const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(saved)
+    const presented = effectType === 'slit-scan' ? upgradeSlitScanGraph(saved) : effectType === 'fisheye' ? organizeFisheyeGraph(upgradeFisheyeGraph(saved))
       : isUpgradableBlurEffectType(effectType) ? upgradeBlurGraph(effectType, saved) : effectType === 'glow' ? upgradeGlowGraph(saved) : saved;
     const composed = organizeEffectFamilyGraph(presented, recognizeOperatorCompositions(presented), effectType, fallback);
     const graph = expandOperatorCompositions(migrateImageOperatorGraph(composed));

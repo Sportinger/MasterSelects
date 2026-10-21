@@ -213,7 +213,7 @@ function fisheyeEdgeSample(
     sampleX = clamp01(sampleX);
     sampleY = clamp01(sampleY);
   }
-  const color = sampleRgba(sourceData, width, height, sampleX, sampleY);
+  const color = premultipliedRgba(sampleRgba(sourceData, width, height, sampleX, sampleY));
   if (adjustment.edgeMode !== 'transparent') return color;
 
   const insideDistance = Math.min(uvX, uvY, 1 - uvX, 1 - uvY);
@@ -222,6 +222,13 @@ function fisheyeEdgeSample(
     : smoothstep(0, adjustment.edgeFeather, insideDistance);
   return [color[0] * coverage, color[1] * coverage, color[2] * coverage, color[3] * coverage];
 }
+
+/** Fisheye works on premultiplied colour (as its graph does), so coverage and averages never darken edges. */
+const premultipliedRgba = (color: Rgba): Rgba => [color[0] * color[3], color[1] * color[3], color[2] * color[3], color[3]];
+const straightRgba = (color: Rgba): Rgba => {
+  const alpha = Math.max(color[3], 1e-6);
+  return [color[0] / alpha, color[1] / alpha, color[2] / alpha, color[3]];
+};
 
 function mixRgba(from: Rgba, to: Rgba, amount: number): Rgba {
   return [
@@ -278,7 +285,7 @@ function renderFisheyeSample(
     lensColor[3],
   ];
 
-  const original = sampleRgba(sourceData, width, height, uvX, uvY);
+  const original = premultipliedRgba(sampleRgba(sourceData, width, height, uvX, uvY));
   const outside: Rgba = adjustment.outside === 'transparent' ? [0, 0, 0, 0] : original;
   const coverage = adjustment.feather <= 0.00001
     ? (radius <= 1 ? 1 : 0)
@@ -300,7 +307,7 @@ function applyFisheyeAdjustment(
   adjustment: FisheyeAdjustment,
 ): Rgba {
   if (adjustment.samples <= 1) {
-    return renderFisheyeSample(sourceData, width, height, uvX, uvY, adjustment);
+    return straightRgba(renderFisheyeSample(sourceData, width, height, uvX, uvY, adjustment));
   }
   let red = 0;
   let green = 0;
@@ -321,7 +328,7 @@ function applyFisheyeAdjustment(
     blue += sample[2];
     alpha += sample[3];
   }
-  return [red / adjustment.samples, green / adjustment.samples, blue / adjustment.samples, alpha / adjustment.samples];
+  return straightRgba([red / adjustment.samples, green / adjustment.samples, blue / adjustment.samples, alpha / adjustment.samples]);
 }
 
 export function hasWorkerSoftwareSourceResamplingEffects(

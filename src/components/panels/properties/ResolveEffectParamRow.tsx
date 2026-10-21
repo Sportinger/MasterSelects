@@ -41,11 +41,14 @@ export function ResolveEffectParamRow({ paramName, definition, value, effect, cl
   if (definition.type !== 'number') return null;
   if (sourceTarget && clipId) return <ParameterSourceNumberRow clipId={clipId} property={property} />;
   const min = definition.min ?? 0, max = definition.max ?? 1, number = typeof value === 'number' ? value : Number(definition.default);
-  return <ResolveInspectorNumberRow label={definition.label} value={number} defaultValue={Number(definition.default)}
-    min={min} max={max} step={definition.step ?? 0.01} sensitivity={Math.max(0.5, (max - min) / 100)}
+  // Radians stay the stored unit; the row reads and edits whole degrees.
+  const scale = definition.displayUnit === 'degrees' ? 180 / Math.PI : 1, degrees = scale !== 1;
+  return <ResolveInspectorNumberRow label={definition.label} value={number * scale} defaultValue={Number(definition.default) * scale}
+    min={min * scale} max={max * scale} step={degrees ? 1 : definition.step ?? 0.01} sensitivity={Math.max(0.5, (max - min) * scale / 100)}
+    suffix={degrees ? '°' : undefined} decimals={degrees ? 0 : undefined}
     persistenceKey={`effect.${clipId ?? 'global'}.${effect.id}.${paramName}`}
     midiTarget={clipId ? { clipId, property: createEffectProperty(effect.id, paramName), label: definition.label, currentValue: number, min, max } : null}
-    onChange={set} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={method => onParamCommit?.(paramName, 'number', method)}
+    onChange={next => set(next / scale)} onDragStart={onDragStart} onDragEnd={onDragEnd} onCommit={method => onParamCommit?.(paramName, 'number', method)}
     keyframeToggle={definition.animatable && clipId
       ? <EffectKeyframeToggle clipId={clipId} effectId={effect.id} paramName={paramName} value={number} /> : undefined} />;
 }

@@ -37,7 +37,7 @@ import { effectOperatorParams } from '../services/operators/effectGraphOwner';
 import { prepareImageEffect } from '../services/operators/imageEffectRuntimePlan';
 import { compileComputeImageGraph } from '../services/operators/computeImageGraph';
 import { ImageGraphPassRuntime } from './ImageGraphPassRuntime';
-import { isNeutralBlurEffect } from '../services/operators/blurIdentity';
+import { isNeutralEffect } from '../services/operators/neutralEffects';
 import { TemporalSmoothHistory } from './TemporalSmoothHistory';
 import {
   transitionFrameHistory,
@@ -330,7 +330,7 @@ export class EffectsPipeline {
       frameRate: typeof requestedFrameRate === 'number' && Number.isFinite(requestedFrameRate) && requestedFrameRate > 0 ? requestedFrameRate : 30,
       scopeId: renderClock?.scopeId || 'legacy',
     };
-    const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-') && !isNeutralBlurEffect(e, outputWidth, outputHeight));
+    const enabledEffects = effects.filter(e => e.enabled && !e.type.startsWith('audio-') && !isNeutralEffect(e, outputWidth, outputHeight));
     this.temporalResources.retainTimeStacks(frameHistory?.scopeId ?? clock.scopeId, new Set(enabledEffects.filter(effect => effect.type === 'time-stack').map(effect => effect.id)));
     if (enabledEffects.length === 0) {
       return { finalView: inputView, swapped: false };
