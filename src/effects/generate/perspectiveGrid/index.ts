@@ -36,7 +36,7 @@ export const PERSPECTIVE_GRID_PARAMS = {
   },
   // Keyframeable: a keyed ramp scrolls by the distance travelled (integratedAs), not Speed × time.
   speed: number('Speed', 1.5, -20, 20, 0.1, true, { group: 'Motion', unit: ' rows/s', integratedAs: PERSPECTIVE_GRID_SPEED_TRAVEL }),
-  offset: number('Scroll Offset', 0, -1000, 1000, 0.01, true, { group: 'Motion' }),
+  offset: number('Scroll Offset', 0, -1000, 1000, 0.01, true, { group: 'Motion', unit: ' rows' }),
   color: { type: 'color', label: 'Line Color', default: '#2ee6ff', group: 'Look' },
   opacity: number('Opacity', 0.8, 0, 1, 0.01, true, { group: 'Look', renderMin: 0, renderMax: 1 }),
   fade: number('Horizon Fade', 1.4, 0.05, 6, 0.05, true, { group: 'Look', renderMin: 0, renderMax: PERSPECTIVE_GRID_MAX_FADE }),

@@ -153,6 +153,21 @@ export function getDefaultParams(id: string): Record<string, number | boolean | 
 }
 
 /**
+ * The values a stored instance renders for parameters it does not carry: `legacyDefault` (instances
+ * saved before the parameter existed keep their look), otherwise `default`. Inspectors fill missing
+ * parameters with these, so they show what renders; new instances store getDefaultParams.
+ */
+export function getRenderedDefaultParams(id: string): Record<string, number | boolean | string> {
+  const effect = getEffect(id);
+  if (!effect) return {};
+  const defaults: Record<string, number | boolean | string> = {};
+  Object.entries(effect.params).forEach(([key, param]) => {
+    if (!param.deprecated) defaults[key] = param.legacyDefault ?? param.default;
+  });
+  return defaults;
+}
+
+/**
  * Get all registered effects
  */
 export function getAllEffects(): EffectDefinition[] {

@@ -59,7 +59,8 @@ function evaluateSingleDomain(
       clip.videoInspectorSections?.stabilization,
       clip,
     )),
-    effects: addSurfaces(cloneEffects(evaluateCompositionClipEffects(clip.effects, keyframes, compositionLocalTime)), clip, compositionLocalTime, keyframes),
+    effects: addSurfaces(cloneEffects(evaluateCompositionClipEffects(clip.effects, keyframes, compositionLocalTime, undefined, clip.startTime ?? 0)),
+      clip, compositionLocalTime, keyframes),
     masks: evaluateCompositionClipMasks(clip.masks, keyframes, compositionLocalTime),
     animationTime: compositionLocalTime,
   };
@@ -133,6 +134,8 @@ function composeTransforms(
   };
 }
 
+/** Source effects run on the parent clip's clock (keyed rates travel as on the parent timeline,
+ * from `parentClockStart`); generated effects on the composition clock from `clipClockStart`. */
 function evaluateEffectsByDomain(
   effects: Effect[],
   sourceEffectCount: number,
@@ -140,11 +143,14 @@ function evaluateEffectsByDomain(
   animationTime: number,
   generatedKeyframes: readonly Keyframe[] | undefined,
   compositionLocalTime: number,
+  [parentClockStart, clipClockStart]: readonly [number, number],
 ): Effect[] {
   return effects.map((effect, index) => cloneEffects(evaluateCompositionClipEffects(
     [effect],
     index < sourceEffectCount ? parentKeyframes : generatedKeyframes,
     index < sourceEffectCount ? animationTime : compositionLocalTime,
+    undefined,
+    index < sourceEffectCount ? parentClockStart : clipClockStart,
   ))[0]!);
 }
 
@@ -226,6 +232,7 @@ export function evaluateTransitionMappedAnimation(
       animationTime,
       keyframes,
       compositionLocalTime,
+      [parentAnimation.parameterTimelineStart ?? clip.startTime ?? 0, clip.startTime ?? 0],
     ), clip, compositionLocalTime, keyframes),
     masks: evaluateMasksByDomain(
       clip.masks,

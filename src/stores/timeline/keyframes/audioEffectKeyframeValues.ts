@@ -15,6 +15,7 @@ import {
   effectOperatorParams,
   isImageGraphEffectType,
 } from '../../../services/operators/effectGraphOwner';
+import { getEffect } from '../../../effects';
 
 export interface AudioKeyframeInvalidationTarget {
   clipId: string;
@@ -69,6 +70,11 @@ export function getLegacyEffectKeyframeBaseValue(
     // Cable defaults live in settings; explicit timeline keys supply the animated value.
     if (effect.type === 'face-cables' && /^cable_.+_(slack|windZ|windGusts|stiffness|gravity|damping|viscosity|width)$/.test(paramName)
       && value === undefined) return 0;
+    // A parameter the instance does not store renders at its legacy value (or default): keys animate from it.
+    if (value === undefined || value === null) {
+      const definition = getEffect(effect.type)?.params[paramName];
+      if (definition?.type === 'number') value = definition.legacyDefault ?? definition.default;
+    }
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
   }
 

@@ -17,7 +17,7 @@ export function sharedSceneOutputLayer(clip: TimelineClip, timelineTime: number,
   if (!document) return { sceneGraphOutputSelection: { include: [] } };
   const time = timelineTime - document.startTime;
   const effects = document.keyframes.length
-    ? evaluateCompositionClipEffects([document.effect], document.keyframes, time)
+    ? evaluateCompositionClipEffects([document.effect], document.keyframes, time, undefined, document.startTime)
     : [document.effect];
   return {
     sharedSceneGraph: splatEffectScene(effects),

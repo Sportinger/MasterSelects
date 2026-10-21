@@ -9,11 +9,7 @@ import { bindCableRenderTime } from '../faceCables/cableRenderTime';
 import { pauseIncompleteOperatorEffects } from '../operators/editableOperatorGraph';
 import { appendSurfaceEffects, type SurfaceClip } from '../planarTracking/surfaceEffects';
 import { createMaskEdgeFeatherProperty, createMaskPathProperty, parseMaskProperty } from '../../types/animationProperties';
-import {
-  getLegacyEffectKeyframeBaseValue,
-  mergeLegacyEffectParamPatch,
-  parseEffectKeyframeProperty,
-} from '../../stores/timeline/keyframes/audioEffectKeyframeValues';
+import { evaluateEffectKeyframes } from '../../stores/timeline/keyframes/effectKeyframeEvaluation';
 import {
   getInterpolatedMaskPathValue,
   getMaskPathValue,
@@ -40,11 +36,18 @@ export function evaluateCompositionClipTransform(
     : interpolated;
 }
 
+/**
+ * Effects of a clip inside a composition at `localTime`, with the same keyframe evaluation as the
+ * timeline (evaluateEffectKeyframes). `rateClockStart` is where the clip starts on the clock its
+ * effects are rendered with (the composition time), so keyed and unkeyed rates agree; it defaults to
+ * the clip's start time.
+ */
 export function evaluateCompositionClipEffects(
   effects: Effect[] | undefined,
   keyframes: readonly Keyframe[] | undefined,
   localTime: number,
   surfaceClip?: SurfaceClip & Partial<ParameterSourceClip>,
+  rateClockStart = surfaceClip?.startTime ?? 0,
 ): Effect[] {
   const withSurfaces = (result: Effect[]) => {
     // Stick Figure action lanes sit between keyframes and node sources, as on the timeline.
@@ -55,43 +58,7 @@ export function evaluateCompositionClipEffects(
     const timed = bindCableRenderTime(pauseIncompleteOperatorEffects(result), localTime, surfaceClip?.videoInspectorSections?.stabilization);
     return surfaceClip ? appendSurfaceEffects(timed, surfaceClip, localTime, keyframes) : timed;
   };
-  if (!effects?.length || !keyframes?.length) return withSurfaces(effects ?? []);
-
-  const effectKeyframes = keyframes.filter((keyframe) => keyframe.property.startsWith('effect.'));
-  if (effectKeyframes.length === 0) return withSurfaces(effects);
-
-  const interpolationKeyframes = [...keyframes];
-  return withSurfaces(effects.map((effect) => {
-    let params = { ...effect.params };
-    const paramNames = new Set<string>();
-
-    Object.keys(effect.params).forEach((paramName) => {
-      if (typeof effect.params[paramName] === 'number') {
-        paramNames.add(paramName);
-      }
-    });
-    effectKeyframes.forEach((keyframe) => {
-      const effectProperty = parseEffectKeyframeProperty(keyframe.property);
-      if (effectProperty?.effectId === effect.id) {
-        paramNames.add(effectProperty.paramName);
-      }
-    });
-
-    paramNames.forEach((paramName) => {
-      const property = `effect.${effect.id}.${paramName}` as Keyframe['property'];
-      if (!effectKeyframes.some((keyframe) => keyframe.property === property)) return;
-
-      const baseValue = getLegacyEffectKeyframeBaseValue(effect, paramName);
-      if (baseValue === undefined) return;
-
-      params = mergeLegacyEffectParamPatch(
-        { ...effect, params },
-        { [paramName]: interpolateKeyframes(interpolationKeyframes, property, localTime, baseValue) },
-      );
-    });
-
-    return { ...effect, params };
-  }));
+  return withSurfaces(evaluateEffectKeyframes(effects ?? [], keyframes ?? [], localTime, rateClockStart));
 }
 
 export function evaluateCompositionClipMasks(

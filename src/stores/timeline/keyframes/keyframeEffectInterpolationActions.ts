@@ -2,13 +2,7 @@ import type { AnimatableProperty, KeyframeActions, SliceCreator } from '../types
 import { applyParameterSourcesToEffects, evaluateParameterSourceColorGrade } from '../../../services/parameterSources/parameterSourceRendering';
 import { getHexColorChannel, rgbColorToHex } from '../../../utils/colorParam';
 import { interpolateKeyframes } from '../../../utils/keyframeInterpolation';
-import { integrateKeyframedRate } from '../../../utils/speedIntegration';
-import { getEffect } from '../../../effects';
-import {
-  getLegacyEffectKeyframeBaseValue,
-  mergeLegacyEffectParamPatch,
-  parseEffectKeyframeProperty,
-} from './audioEffectKeyframeValues';
+import { evaluateEffectKeyframes } from './effectKeyframeEvaluation';
 import {
   getCustomNodeDefinition,
   getCustomNodeParamDefaults,
@@ -37,63 +31,8 @@ export const createKeyframeEffectInterpolationActions: SliceCreator<KeyframeEffe
     const keyframes = clipKeyframes.get(clipId) || [];
     const withSurfaces = (effects: typeof clip.effects) => appendSurfaceEffects(bindCableRenderTime(pauseIncompleteOperatorEffects(
       applyParameterSourcesToEffects(clip, keyframes, clipLocalTime, applyStickFigureActions(clip, effects, clipLocalTime))), clipLocalTime, clip.videoInspectorSections?.stabilization), clip, clipLocalTime, keyframes);
-    if (keyframes.length === 0) {
-      return withSurfaces(clip.effects);
-    }
-
-    const effectKeyframes = keyframes.filter(k => k.property.startsWith('effect.'));
-    if (effectKeyframes.length === 0) {
-      return withSurfaces(clip.effects);
-    }
-
-    return withSurfaces(clip.effects.map(effect => {
-      let newParams = { ...effect.params };
-      const paramNames = new Set<string>();
-
-      Object.keys(effect.params).forEach(paramName => {
-        if (typeof effect.params[paramName] === 'number') {
-          paramNames.add(paramName);
-        }
-      });
-
-      effectKeyframes.forEach(keyframe => {
-        const effectProperty = parseEffectKeyframeProperty(keyframe.property);
-        if (effectProperty?.effectId === effect.id) {
-          paramNames.add(effectProperty.paramName);
-        }
-      });
-
-      paramNames.forEach(paramName => {
-        const propertyKey = `effect.${effect.id}.${paramName}`;
-        const paramKeyframes = effectKeyframes.filter(k => k.property === propertyKey);
-        if (paramKeyframes.length === 0) {
-          return;
-        }
-
-        const baseValue = getLegacyEffectKeyframeBaseValue(effect, paramName);
-        if (baseValue === undefined) {
-          return;
-        }
-
-        const interpolatedValue = interpolateKeyframes(
-          keyframes,
-          propertyKey as AnimatableProperty,
-          clipLocalTime,
-          baseValue,
-        );
-        newParams = mergeLegacyEffectParamPatch(
-          { ...effect, params: newParams },
-          { [paramName]: interpolatedValue },
-        );
-        // A keyed rate (Speed, Spin) also gets the distance it has travelled (EffectParam.integratedAs).
-        const integratedAs = getEffect(effect.type)?.params[paramName]?.integratedAs;
-        if (integratedAs) {
-          newParams[integratedAs] = integrateKeyframedRate(keyframes, propertyKey as AnimatableProperty, clipLocalTime, baseValue);
-        }
-      });
-
-      return { ...effect, params: newParams };
-    }));
+    // Keyframes, then the distance keyed rates have travelled on the timeline clock (shared with compositions).
+    return withSurfaces(evaluateEffectKeyframes(clip.effects, keyframes, clipLocalTime, clip.startTime));
   },
 
   getInterpolatedNodeGraphParams: (clipId, nodeId, clipLocalTime) => {

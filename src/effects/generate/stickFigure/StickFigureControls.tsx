@@ -14,6 +14,7 @@ import {
 import { deleteSkeletonPose, listSkeletonPoses, saveSkeletonPose } from '../../../services/rig/skeletonPoseLibrary';
 import { driveStickFigureWithGait } from '../../../services/rig/stickFigureActions';
 import { StickFigureActionLane } from './StickFigureActionLane';
+import { STICK_FIGURE_PARAMS } from './params';
 
 const EASINGS: ReadonlyArray<{ value: EasingType; label: string }> = [
   { value: 'ease-in-out', label: 'Ease in-out' }, { value: 'linear', label: 'Linear' },
@@ -46,7 +47,9 @@ export default function StickFigureControls({ params, clipId = '', effectInstanc
     const localTime = clip ? Math.max(0, Math.min(clip.duration, state.playheadPosition - clip.startTime)) : 0;
     const effect = clip ? state.getInterpolatedEffects(clipId, localTime).find(item => item.id === effectInstanceId) : undefined;
     const values = effect?.params ?? params;
-    return Object.fromEntries(SKELETON_ANGLE_KEYS.map(key => [key, Number(values[key] ?? 0)])) as Record<SkeletonAngleKey, number>;
+    // A joint the figure does not store renders the rig's rest pose (legacyDefault).
+    const rest = (key: SkeletonAngleKey) => STICK_FIGURE_PARAMS[key].legacyDefault ?? STICK_FIGURE_PARAMS[key].default;
+    return Object.fromEntries(SKELETON_ANGLE_KEYS.map(key => [key, Number(values[key] ?? rest(key))])) as Record<SkeletonAngleKey, number>;
   };
   const applyPose = (keyed: boolean) => {
     const pose = poseOf(poseId);

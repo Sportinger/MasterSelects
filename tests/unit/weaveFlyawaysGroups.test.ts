@@ -42,7 +42,8 @@ describe('Weave flyaways and node groups', () => {
   it('packs the strand index for per-yarn flyaway hashing', () => {
     const curves = evaluateGeometryProgram(compile(createDefaultWeaveGraph()));
     const packed = packStrandPoints(curves);
-    for (const strand of [0, 7, 39]) {
+    // 16 warps and 10 wefts in the default sheet: the last yarn is 25.
+    for (const strand of [0, 7, 25]) {
       const first = curves.starts[strand], last = first + curves.counts[strand] - 1;
       expect(packed[first * STRAND_POINT_FLOATS + 11]).toBe(strand);
       expect(packed[last * STRAND_POINT_FLOATS + 11]).toBe(strand);

@@ -7,7 +7,7 @@ import { getDefaultParams } from '../../src/effects';
 import { colorWheel } from '../../src/effects/generate/colorWheel';
 import { perspectiveGrid } from '../../src/effects/generate/perspectiveGrid';
 import { stickFigure } from '../../src/effects/generate/stickFigure';
-import { stickFigureRing, STICK_FIGURE_RING_MAX_HALF_STROKE } from '../../src/effects/generate/stickFigure/layout';
+import { stickFigureRing, STICK_FIGURE_RING_MIN_OPENING } from '../../src/effects/generate/stickFigure/layout';
 
 type Scalar = (...args: number[]) => number;
 type Params = Record<string, number | boolean | string>;
@@ -180,17 +180,48 @@ describe('Color Wheel disc and hue (WGSL on the CPU)', () => {
 });
 
 describe('Stick Figure ring head', () => {
-  it('keeps the outer edge at the head radius and an opening of at least half of it', () => {
-    for (const [limb, head] of [[6, 26], [20, 26], [40, 26], [300, 26], [0.5, 0.5]]) {
-      const { centre, halfStroke } = stickFigureRing(limb, head);
-      expect(centre + halfStroke).toBeCloseTo(head, 6);
-      expect(centre - halfStroke).toBeGreaterThanOrEqual(head * (1 - 2 * STICK_FIGURE_RING_MAX_HALF_STROKE) - 1e-9);
-      expect(centre - halfStroke).toBeGreaterThanOrEqual(head / 2 - 1e-9);
+  const ringFns = wgslScalarFunctions(stickFigure.shader, ['stickFigureRingDistance']);
+  /** Independent capsule distance (plain geometry). */
+  const capsule = (px: number, py: number, ax: number, ay: number, bx: number, by: number, radius: number) => {
+    const t = clamp(((px - ax) * (bx - ax) + (py - ay) * (by - ay)) / Math.max((bx - ax) ** 2 + (by - ay) ** 2, 1e-6), 0, 1);
+    return Math.hypot(px - ax - (bx - ax) * t, py - ay - (by - ay) * t) - radius;
+  };
+
+  it('strokes the ring like the limbs, keeps half the head radius open and grows at most to 1.5 × the head', () => {
+    for (const [limb, head] of [[6, 26], [12, 26], [20, 26], [40, 26], [300, 26], [0.5, 0.5]]) {
+      const { centre, halfStroke, outer } = stickFigureRing(limb, head);
+      expect(outer).toBeCloseTo(centre + halfStroke, 9);
+      expect(centre - halfStroke).toBeGreaterThanOrEqual(head * STICK_FIGURE_RING_MIN_OPENING - 1e-9);
+      expect(outer).toBeLessThanOrEqual(1.5 * head + 1e-9);
+      // The limb thickness up to one head radius.
+      expect(2 * halfStroke).toBeCloseTo(Math.min(2 * limb, head), 9);
     }
-    // Thin lines keep the limb thickness.
-    expect(stickFigureRing(6, 26).halfStroke).toBe(6);
-    const packed = stickFigure.packUniforms({ ...getDefaultParams('stick-figure'), headStyle: 'ring', thickness: 80 }, 1920, 1080)!;
-    expect(packed[11]).toBeCloseTo(26 * STICK_FIGURE_RING_MAX_HALF_STROKE, 4);
-    expect(packed[10] + packed[11]).toBeCloseTo(packed[3], 4);
+    // Thin lines keep the outer edge at the head radius.
+    expect(stickFigureRing(6, 26).outer).toBeCloseTo(26, 9);
+  });
+
+  it('leaves the opening empty: no neck or ring pixel inside it, also with thick lines', () => {
+    for (const thickness of [6, 24, 80]) {
+      const packed = stickFigure.packUniforms({ ...getDefaultParams('stick-figure'), headStyle: 'ring', thickness }, 1920, 1080)!;
+      const limbR = packed[2], centre = packed[10], halfStroke = packed[11];
+      const [nx, ny, bx, by, hx, hy] = [packed[14], packed[15], packed[16], packed[17], packed[18], packed[19]];
+      const opening = centre - halfStroke;
+      let checked = 0;
+      for (let y = -opening; y <= opening; y += 0.5) {
+        for (let x = -opening; x <= opening; x += 0.5) {
+          const d = Math.hypot(x, y);
+          if (d > opening - 0.6) continue; // the anti-aliased rim
+          const distance = ringFns.stickFigureRingDistance(d, capsule(hx + x, hy + y, nx, ny, bx, by, limbR), centre, halfStroke);
+          expect(clamp(0.5 - distance, 0, 1), `thickness ${thickness} at ${x}, ${y}`).toBe(0);
+          checked += 1;
+        }
+      }
+      expect(checked).toBeGreaterThan(100);
+      // The neck still reaches the ring: just outside its outer edge, towards the neck, it is drawn.
+      const toNeck = Math.hypot(bx - hx, by - hy) || 1;
+      const edge = centre + halfStroke + 0.75;
+      const px = hx + (bx - hx) / toNeck * edge, py = hy + (by - hy) / toNeck * edge;
+      expect(ringFns.stickFigureRingDistance(edge, capsule(px, py, nx, ny, bx, by, limbR), centre, halfStroke)).toBeLessThan(0);
+    }
   });
 });

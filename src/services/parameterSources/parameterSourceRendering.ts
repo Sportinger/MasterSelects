@@ -8,6 +8,7 @@ import { parameterSourceTime } from './parameterSourceTime';
 import type { ClipTransform } from '../../types/timelineCore';
 import { isTransformParameterPath, writeTransformParameter } from './transformParameterTargets';
 import { Logger } from '../logger';
+import { getEffect } from '../../effects';
 
 const log = Logger.create('ParameterSources');
 
@@ -24,10 +25,28 @@ export function applyParameterSourcesToEffects(clip: ParameterSourceClip, keys: 
       && ((binding.source && binding.enabled !== false) || binding.localMode === 'constant'));
     if (!entries.length) return effect;
     const params = { ...effect.params };
-    for (const [path] of entries) params[path.slice(prefix.length)] = evaluator.resolve(path).value;
+    for (const [path] of entries) {
+      const name = path.slice(prefix.length);
+      params[name] = evaluator.resolve(path).value;
+      dropKeyedRateTravel(effect, name, params);
+    }
     return { ...effect, params };
   });
 }
+
+/** A rate a source drives (Speed, Spin) moves at rate × time: the travel integrated from its keyframes
+ * would otherwise win and the source would be ignored without a word (EffectParam.integratedAs). */
+function dropKeyedRateTravel(effect: Effect, name: string, params: Effect['params']): void {
+  const travel = getEffect(effect.type)?.params[name]?.integratedAs;
+  if (!travel || !(travel in params)) return;
+  delete params[travel];
+  const key = `${effect.id}\0${name}`;
+  if (reportedSourceRates.has(key)) return;
+  if (reportedSourceRates.size > 256) reportedSourceRates.clear();
+  reportedSourceRates.add(key);
+  log.warn(`${effect.name} ${name} is driven by a source, so it runs at ${name} × time; its keyframes do not set the travelled distance.`);
+}
+const reportedSourceRates = new Set<string>();
 
 /**
  * Final transform override, AFTER keyframe interpolation and BEFORE inspector bypass and parenting.

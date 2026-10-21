@@ -38,15 +38,17 @@ export function stickFigureLayout(params: Params, width: number, height: number)
   };
 }
 
-/** Largest ring half stroke as a share of the head radius (the opening is at least 1 − 2 × this). */
-export const STICK_FIGURE_RING_MAX_HALF_STROKE = 0.25;
+/** The Ring head's opening keeps at least this share of the head radius. */
+export const STICK_FIGURE_RING_MIN_OPENING = 0.5;
 
-/** The Ring head: a stroke as thick as the limbs, but at most a quarter of the head radius each side
- * of its centre line, so the opening keeps at least half the head radius however thick the lines are;
- * the outer edge stays at the head radius. */
-export function stickFigureRing(limbRadius: number, headRadius: number): { centre: number; halfStroke: number } {
-  const halfStroke = Math.min(limbRadius, headRadius * STICK_FIGURE_RING_MAX_HALF_STROKE);
-  return { centre: headRadius - halfStroke, halfStroke };
+/** The Ring head: a stroke as thick as the limbs, so head and body read with one line weight. Thin
+ * lines keep the outer edge at the head radius; thicker ones grow the ring outward (to at most
+ * 1.5 × the head radius, a stroke of at most one head radius) so the opening stays at least half the
+ * head radius. `outer` is where the neck ends (stickFigureRingDistance). */
+export function stickFigureRing(limbRadius: number, headRadius: number): { centre: number; halfStroke: number; outer: number } {
+  const stroke = Math.min(2 * limbRadius, headRadius);
+  const inner = Math.max(headRadius - stroke, headRadius * STICK_FIGURE_RING_MIN_OPENING);
+  return { centre: inner + stroke / 2, halfStroke: stroke / 2, outer: inner + stroke };
 }
 
 const scaleOf = (params: Params) => typeof params.scale === 'number' && Number.isFinite(params.scale) ? params.scale : 1;
@@ -67,7 +69,7 @@ export function stickFigureWarnings(params: Params, width = 1920, height = 1080)
   if (scaleOf(params) <= 0) return [`scale: ${scaleOf(params)} gives the figure no size, so it is drawn as a dot at the pelvis. Use a scale above 0 (1 = 1080p proportions).`];
   const notes = scaledLengthNotes(params);
   const { joints, limbRadius, headRadius } = stickFigureLayout(params, width, height);
-  const pad = Math.max(limbRadius, headRadius);
+  const pad = Math.max(limbRadius, headRadius, stickFigureRing(limbRadius, headRadius).outer);
   const inside = SKELETON_SEGMENTS.some(([a, b]) => segmentTouchesFrame(joints[a], joints[b], pad, width, height))
     || joints.some(joint => joint.x > -pad && joint.x < width + pad && joint.y > -pad && joint.y < height + pad);
   if (inside) return notes;
