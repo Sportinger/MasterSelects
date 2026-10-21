@@ -14,6 +14,10 @@ import {
   type TransitionTouchDragBridgeEventDetail,
 } from '../../src/components/timeline/transitionDragData';
 import type { TimelineTrack } from '../../src/types/timeline';
+import { getTransition } from '../../src/transitions';
+
+// The panel's transition length is Auto by default: a dragged Dissolve carries its own length (1 s).
+const DISSOLVE_LENGTH = getTransition('crossfade')!.defaultDuration;
 
 const originalElementFromPointDescriptor = Object.getOwnPropertyDescriptor(document, 'elementFromPoint');
 
@@ -58,7 +62,7 @@ describe('transition touch timeline drag', () => {
     });
     act(() => dispatchTouchPointer('pointermove', 28, 22));
 
-    expect(getActiveTransitionDragData()).toMatchObject({ duration: 2 });
+    expect(getActiveTransitionDragData()).toMatchObject({ duration: DISSOLVE_LENGTH });
     expect(document.querySelector('.transition-touch-drag-ghost')).not.toBeNull();
 
     act(() => dispatchTouchPointer('pointerup', 36, 24));
@@ -82,7 +86,7 @@ describe('transition touch timeline drag', () => {
     });
     act(() => dispatchTouchPointer('pointermove', 12, 38));
 
-    expect(getActiveTransitionDragData()).toMatchObject({ duration: 2 });
+    expect(getActiveTransitionDragData()).toMatchObject({ duration: DISSOLVE_LENGTH });
     expect(document.querySelector('.transition-touch-drag-ghost')).not.toBeNull();
 
     act(() => dispatchTouchPointer('pointerup', 14, 48));
@@ -132,7 +136,7 @@ describe('transition touch timeline drag', () => {
     act(() => vi.advanceTimersByTime(140));
     act(() => dispatchTouchPointer('pointermove', 28, 42));
 
-    expect(getActiveTransitionDragData()).toMatchObject({ duration: 2 });
+    expect(getActiveTransitionDragData()).toMatchObject({ duration: DISSOLVE_LENGTH });
     expect(phases.at(-1)).toMatchObject({ phase: 'move', clientX: 28, clientY: 42 });
     const dragGhost = document.querySelector<HTMLElement>('.transition-touch-drag-ghost');
     expect(dragGhost?.textContent).toContain('Dissolve');
