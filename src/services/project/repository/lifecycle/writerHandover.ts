@@ -5,6 +5,8 @@
  * its pending changes, reopens its own project read-only (which releases the
  * lock) and confirms; the requester then reopens the project and acquires the
  * lock. Every step that cannot complete ends in a visible `failed` state.
+ * The writer also announces each saved revision, so read-only tabs know when
+ * their projection is out of date (`stale`) and can reload it.
  *
  * The protocol is transport- and lifecycle-agnostic so it can be unit-tested;
  * `editorWriterHandover.ts` binds it to BroadcastChannel and the editor lifecycle.
@@ -12,7 +14,7 @@
 
 export interface HandoverRepository { repositoryId: string; writable: boolean }
 export interface WriterInfo { tabId: string; since: number; visible: boolean }
-export type HandoverPhase = 'idle' | 'requesting' | 'reopening' | 'releasing' | 'failed';
+export type HandoverPhase = 'idle' | 'requesting' | 'reopening' | 'releasing' | 'reloading' | 'failed';
 export interface WriterHandoverState {
   phase: HandoverPhase;
   /** The tab that currently writes this repository, when it answered. */
@@ -21,11 +23,14 @@ export interface WriterHandoverState {
   writerLockHeld: boolean | null;
   /** Last outcome the person should see (handover failure, or editing moved away). */
   notice: string | null;
+  /** Read-only tab: the writing tab saved a revision this tab does not show yet. */
+  stale: boolean;
 }
 
 export type HandoverMessage =
   | { type: 'who'; repositoryId: string; from: string }
-  | { type: 'writer'; repositoryId: string; tabId: string; since: number; visible: boolean }
+  | { type: 'writer'; repositoryId: string; tabId: string; since: number; visible: boolean; revisionId?: string | null }
+  | { type: 'committed'; repositoryId: string; tabId: string; revisionId: string }
   | { type: 'release'; repositoryId: string; from: string; requestId: string }
   | { type: 'releasing'; repositoryId: string; requestId: string }
   | { type: 'released'; repositoryId: string; requestId: string }
@@ -45,6 +50,10 @@ export interface HandoverHost {
   releaseWriter(): Promise<void>;
   /** Requester side: reopen the project; resolves whether this tab now writes it. */
   reopenForWriting(): Promise<boolean>;
+  /** The saved revision this tab's projection shows (null: none or unknown). */
+  getRevision(): string | null;
+  /** Read-only side: reopen the project to show the writer's latest saved revision. */
+  reloadReadOnly(): Promise<void>;
   /** Whether any tab or worker holds the writer lock; null when the browser cannot tell. */
   isWriterLockHeld(repositoryId: string): Promise<boolean | null>;
   isVisible(): boolean;
@@ -62,6 +71,7 @@ export const HANDOVER_RELEASE_MS = 60_000;
 export const HANDOVER_MOVED_NOTICE = 'Editing moved to another tab. This tab saved its changes and is now read-only.';
 export const HANDOVER_UNRESPONSIVE = 'The tab that is editing this project did not respond. Switch to it (or close it) and try again.';
 export const HANDOVER_STILL_READ_ONLY = 'Editing could not be taken over: another tab still writes this project, or folder access was not granted.';
+export const HANDOVER_STALE_NOTICE = 'This project changed in another tab. Reload to see the latest saved state.';
 
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 
@@ -74,19 +84,36 @@ export interface WriterHandover {
   requestTakeover(): Promise<boolean>;
   /** Shows a takeover failure detected before the protocol started (e.g. denied folder access). */
   reportFailure(notice: string): void;
+  /** Writer side: tell read-only tabs that this revision is saved. */
+  announceCommit(revisionId: string): void;
+  /** Read-only side: reopen the project at the writer's latest saved revision. */
+  reloadLatest(): Promise<boolean>;
   dispose(): void;
 }
 
 export function createWriterHandover(host: HandoverHost): WriterHandover {
-  let state: WriterHandoverState = { phase: 'idle', writer: null, writerLockHeld: null, notice: null };
+  let state: WriterHandoverState = { phase: 'idle', writer: null, writerLockHeld: null, notice: null, stale: false };
   const listeners = new Set<() => void>();
   let known: string | null = null;
   let writerSince = 0;
+  /** Latest revision a writing tab announced for the open repository. */
+  let announced: { repositoryId: string; revisionId: string } | null = null;
   let lockProbe = 0;
   let pending: { requestId: string; repositoryId: string; resolve(outcome: 'releasing' | 'released' | { refused: string } | 'timeout'): void; timer: unknown } | null = null;
 
   const set = (next: Partial<WriterHandoverState>) => { state = { ...state, ...next }; for (const listener of listeners) listener(); };
-  const announce = (repositoryId: string) => host.channel.post({ type: 'writer', repositoryId, tabId: host.tabId, since: writerSince, visible: host.isVisible() });
+  const announce = (repositoryId: string) => host.channel.post({ type: 'writer', repositoryId, tabId: host.tabId, since: writerSince, visible: host.isVisible(), revisionId: host.getRevision() });
+  const isStale = () => {
+    const repository = host.getRepository();
+    return Boolean(repository && !repository.writable && announced?.repositoryId === repository.repositoryId
+      && announced.revisionId !== host.getRevision());
+  };
+  const noteRevision = (repositoryId: string, revisionId: string | null | undefined) => {
+    if (!revisionId) return;
+    announced = { repositoryId, revisionId };
+    const stale = isStale();
+    if (stale !== state.stale) set({ stale });
+  };
 
   const probeLock = (repositoryId: string) => {
     const probe = ++lockProbe;
@@ -100,14 +127,15 @@ export function createWriterHandover(host: HandoverHost): WriterHandover {
     if (key === known) return;
     known = key;
     if (state.phase === 'failed') state = { ...state, phase: 'idle' };
-    if (!repository) { set({ writer: null, writerLockHeld: null, notice: null }); return; }
+    if (announced && announced.repositoryId !== repository?.repositoryId) announced = null;
+    if (!repository) { set({ writer: null, writerLockHeld: null, notice: null, stale: false }); return; }
     if (repository.writable) {
       writerSince = host.now();
-      set({ writer: null, writerLockHeld: true, notice: state.phase === 'reopening' ? null : state.notice });
+      set({ writer: null, writerLockHeld: true, notice: state.phase === 'reopening' ? null : state.notice, stale: false });
       announce(repository.repositoryId);
       return;
     }
-    set({ writer: null, writerLockHeld: null });
+    set({ writer: null, writerLockHeld: null, stale: isStale() });
     host.channel.post({ type: 'who', repositoryId: repository.repositoryId, from: host.tabId });
     probeLock(repository.repositoryId);
   };
@@ -140,7 +168,12 @@ export function createWriterHandover(host: HandoverHost): WriterHandover {
     if (!repository || incoming.repositoryId !== repository.repositoryId) return;
     switch (incoming.type) {
       case 'who': if (repository.writable && incoming.from !== host.tabId) announce(repository.repositoryId); return;
-      case 'writer': if (!repository.writable && incoming.tabId !== host.tabId) set({ writer: { tabId: incoming.tabId, since: incoming.since, visible: incoming.visible }, writerLockHeld: true }); return;
+      case 'writer':
+        if (repository.writable || incoming.tabId === host.tabId) return;
+        set({ writer: { tabId: incoming.tabId, since: incoming.since, visible: incoming.visible }, writerLockHeld: true });
+        noteRevision(repository.repositoryId, incoming.revisionId); return;
+      case 'committed':
+        if (!repository.writable && incoming.tabId !== host.tabId) noteRevision(repository.repositoryId, incoming.revisionId); return;
       case 'release':
         if (incoming.from === host.tabId || !repository.writable || state.phase === 'releasing') return;
         void release(repository.repositoryId, incoming.requestId); return;
@@ -181,6 +214,15 @@ export function createWriterHandover(host: HandoverHost): WriterHandover {
     }
   }
 
+  async function reloadLatest(): Promise<boolean> {
+    const repository = host.getRepository();
+    if (!repository || repository.writable || (state.phase !== 'idle' && state.phase !== 'failed')) return false;
+    set({ phase: 'reloading', notice: null });
+    try { await host.reloadReadOnly(); } catch (error) { return fail(`The latest project state could not be loaded: ${message(error)}`); }
+    refresh(); set({ phase: 'idle', stale: isStale() });
+    return true;
+  }
+
   refresh();
   return {
     getSnapshot: () => state,
@@ -188,6 +230,11 @@ export function createWriterHandover(host: HandoverHost): WriterHandover {
     refresh,
     requestTakeover,
     reportFailure: notice => { fail(notice); },
+    announceCommit(revisionId) {
+      const repository = host.getRepository();
+      if (repository?.writable) host.channel.post({ type: 'committed', repositoryId: repository.repositoryId, tabId: host.tabId, revisionId });
+    },
+    reloadLatest,
     dispose() { unsubscribe(); listeners.clear(); if (pending) host.clearTimeout(pending.timer); pending = null; },
   };
 }

@@ -40,6 +40,7 @@ import {
   getTimelineImageSource,
 } from './compositionRender/sourceSetup';
 import { disposeCompositionSources, reportCompositionSource } from './compositionRender/sourceLifecycle';
+import { createArrivedClipMediaWatch, reportClipMediaGap } from './compositionRender/clipMediaGap';
 import { renderFramedTextCanvas } from './text/textCanvasFrame';
 import {
   loadImageSource,
@@ -76,6 +77,7 @@ function pauseInactiveCompositionVideos(
 class CompositionRendererService {
   // Cache of prepared sources per composition
   private compositionSources: Map<string, CompositionSources> = new Map();
+  private readonly arrivedMedia = createArrivedClipMediaWatch(this.compositionSources, id => this.invalidateCompositionAndParents(id));
 
   // Callbacks for when a composition is ready
   private readyCallbacks: Map<string, (() => void)[]> = new Map();
@@ -168,6 +170,7 @@ class CompositionRendererService {
 
     // Load sources for all video/image clips
     const loadPromises: Promise<void>[] = [];
+    let waitingForMedia = 0;
 
     for (const clip of clips) {
       // Handle both TimelineClip (active) and SerializableClip (stored)
@@ -406,11 +409,7 @@ class CompositionRendererService {
       }
 
       if (!mediaFile?.file && !(sourceType === 'image' && mediaFile?.url)) {
-        log.warn(`Media file not found for clip ${clip.id}`, {
-          mediaFileId,
-          availableFileIds: mediaFiles.map(f => f.id).slice(0, 5), // First 5 for brevity
-          totalFiles: mediaFiles.length,
-        });
+        if (reportClipMediaGap(log, sources, clip.id, mediaFileId, mediaFile, mediaFiles, mediaState.projectLoadProgress?.active === true, sourceType === 'image') === 'loading') waitingForMedia++;
         continue;
       }
 
@@ -464,6 +463,7 @@ class CompositionRendererService {
       }
     }
 
+    if (sources.pendingMediaFileIds?.size) this.arrivedMedia.arm();
     // Wait for all sources to load
     log.info(`prepareComposition: waiting for ${loadPromises.length} sources to load`);
     await Promise.all(loadPromises);
@@ -476,7 +476,7 @@ class CompositionRendererService {
     this.notReadyWarned.delete(compositionId);
     log.info(`Composition ready: ${composition.name}, ${sources.clipSources.size} sources loaded`);
 
-    if (sources.clipSources.size === 0 && clips.length > 0) {
+    if (sources.clipSources.size === 0 && clips.length > waitingForMedia) {
       log.warn(`prepareComposition: No sources loaded for ${clips.length} clips! Check mediaFileId values.`);
       for (const clip of clips) {
         const sc = clip as SerializableClip;

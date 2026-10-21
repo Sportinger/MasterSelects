@@ -64,6 +64,8 @@ export interface CompositionSources {
   isReady: boolean;
   disposed: boolean;
   lastAccessTime: number;
+  /** Media entries whose runtime source was not loaded at prepare time (value: a URL is enough, images). */
+  pendingMediaFileIds?: Map<string, boolean>;
 }
 
 export interface EvaluatedLayer extends Omit<Layer, 'id'> {
