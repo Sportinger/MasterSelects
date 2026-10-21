@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Copies the hashed /assets/ files of recent production deployments into the
 // new build before it is deployed.
 //
@@ -15,10 +14,11 @@
 // Production deploys go through `npm run deploy:pages` (scripts/deploy-pages.mjs), which runs
 // this retention and refuses to deploy unless the previous deployment's entry chunks and
 // project storage worker ended up in dist/assets.
-import { execFileSync } from 'node:child_process';
+// No shebang on purpose: npm runs this with node, and a CRLF after a shebang breaks vitest imports.
 import { existsSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { runCommand } from './run-command.mjs';
 
 const ASSET_NAME = String.raw`[A-Za-z0-9_][A-Za-z0-9_.-]*\.(?:js|mjs|css|wasm|webp|jpe?g|png|svg|ttf|woff2?|gz|json)`;
 // Vite references chunks as "./name.js" (dynamic import), "assets/name.js"
@@ -42,11 +42,6 @@ function parseArgs(argv) {
   }
   if (!Number.isInteger(options.keep) || options.keep < 1) throw new Error('--keep needs a positive integer');
   return options;
-}
-
-function runCommand(command, args) {
-  // npx is a .cmd shim on Windows, which execFile only starts through a shell.
-  return execFileSync(command, args, { encoding: 'utf8', shell: process.platform === 'win32', stdio: ['ignore', 'pipe', 'pipe'] });
 }
 
 /** The newest `keep` production deployments, newest (the live one) first. */
