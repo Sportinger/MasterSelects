@@ -536,6 +536,10 @@ export class RenderLoop {
     }
   }
 
+  getIsScrubbing(): boolean {
+    return this.isScrubbing;
+  }
+
   setIsScrubbing(scrubbing: boolean): void {
     const wasScrubbing = this.isScrubbing;
     this.isScrubbing = scrubbing;

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { PREVIEW_GPU_FENCE_TIMEOUT_MS, renderWithPreviewBackpressure } from '../../src/engine/engineCore/previewGpuBackpressure';
+import { PREVIEW_GPU_FENCE_TIMEOUT_MS, previewGpuSubmissionLimit, renderWithPreviewBackpressure } from '../../src/engine/engineCore/previewGpuBackpressure';
 
 function gpu() {
   let resolve!: () => void, reject!: (error: Error) => void;
@@ -22,6 +22,25 @@ describe('preview GPU backpressure', () => {
     expect(submitted).toEqual([0, 90]);
     expect(wake).toHaveBeenCalledTimes(1);
     await Promise.resolve(); expect(wake).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows a paused seek onto a new clip at once instead of waiting behind the previous fence', async () => {
+    const g = gpu(), submitted: string[] = [];
+    const limit = previewGpuSubmissionLimit(false);
+    const wake = vi.fn(() => renderWithPreviewBackpressure(g.device, false, () => submitted.push('latest'), wake, limit));
+    // The text edit that created the clip still occupies the GPU when the playhead moves onto it.
+    renderWithPreviewBackpressure(g.device, false, () => submitted.push('edit'), wake, limit);
+    renderWithPreviewBackpressure(g.device, false, () => submitted.push('new clip'), wake, limit);
+    renderWithPreviewBackpressure(g.device, false, () => submitted.push('coalesced'), wake, limit);
+    expect(submitted).toEqual(['edit', 'new clip']);
+    g.resolve(); await Promise.resolve(); await Promise.resolve();
+    expect(wake).toHaveBeenCalledTimes(1);
+    expect(submitted).toEqual(['edit', 'new clip', 'latest']);
+  });
+
+  it('keeps one submission in flight during playback and scrubbing', () => {
+    expect(previewGpuSubmissionLimit(true)).toBe(1);
+    expect(previewGpuSubmissionLimit(false)).toBe(2);
   });
 
   it('does not keep a paused scene rendering after its GPU work completes', async () => {

@@ -1,4 +1,4 @@
-import { renderWithPreviewBackpressure } from './engineCore/previewGpuBackpressure';
+import { previewGpuSubmissionLimit, renderWithPreviewBackpressure } from './engineCore/previewGpuBackpressure';
 import type { ModelSequenceData } from '../types/mediaSequences';
 import type { Layer, EngineStats } from './core/types';
 // OutputWindow type no longer needed — state lives in renderTargetStore
@@ -488,7 +488,8 @@ export class WebGPUEngine {
     frameContext?: import('../services/render/renderHostTypes').RenderSurfaceFrameContext,
   ): void {
     renderWithPreviewBackpressure(this.context.getDevice(), this.exportCanvasManager.shouldSkipPreviewOutput(),
-      () => this.renderDispatcher?.render(layers, frameContext), () => this.requestRender());
+      () => this.renderDispatcher?.render(layers, frameContext), () => this.requestRender(),
+      previewGpuSubmissionLimit(this._isPlaying || !!this.renderLoop?.getIsScrubbing()));
   }
 
   setRenderTimeOverride(time: number | null): void {

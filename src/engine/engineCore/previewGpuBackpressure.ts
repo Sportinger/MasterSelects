@@ -1,7 +1,7 @@
 import { Logger } from '../../services/logger';
 import { retainHmrSingleton } from './hmrSingleton';
 
-interface PreviewQueue { busy: boolean; requestLatest?: () => void; stalledFences: number }
+interface PreviewQueue { inFlight: number; requestLatest?: () => void; stalledFences: number }
 const queues = retainHmrSingleton({ hot: import.meta.hot?.data ? import.meta.hot : undefined,
   key: 'previewGpuQueues', create: () => new WeakMap<GPUDevice, PreviewQueue>() });
 const log = Logger.create('PreviewGpuBackpressure');
@@ -14,23 +14,33 @@ const log = Logger.create('PreviewGpuBackpressure');
  */
 export const PREVIEW_GPU_FENCE_TIMEOUT_MS = 1000;
 
-/** Keep one preview submission in flight. Skipped requests retain no layers, media or old times. */
+/**
+ * Preview submissions allowed in flight. Playback and scrubbing keep one, so a slow GPU
+ * drops stale frames instead of queueing them. A paused preview admits one more: a
+ * discrete change (a seek onto a new clip, an edit) must not keep showing the previous
+ * picture until an earlier fence settles, which WebKit can report late.
+ */
+export function previewGpuSubmissionLimit(continuous: boolean): number {
+  return continuous ? 1 : 2;
+}
+
+/** Keep the preview's submissions in flight bounded. Skipped requests retain no layers, media or old times. */
 export function renderWithPreviewBackpressure(device: GPUDevice | null, exact: boolean,
-  render: () => void, requestLatest: () => void): void {
+  render: () => void, requestLatest: () => void, maxInFlight = 1): void {
   // Export and RAM-preview generation own exact-frame sequencing and must never drop frames.
   if (!device || exact) { render(); return; }
   let state = queues.get(device);
-  if (!state) { state = { busy: false, stalledFences: 0 }; queues.set(device, state); }
-  if (state.busy) { state.requestLatest = requestLatest; return; }
+  if (!state) { state = { inFlight: 0, stalledFences: 0 }; queues.set(device, state); }
+  if (state.inFlight >= Math.max(1, maxInFlight)) { state.requestLatest = requestLatest; return; }
   const queue = state;
-  queue.busy = true;
+  queue.inFlight += 1;
   let settled = false;
   let timeout: ReturnType<typeof setTimeout> | null = null;
   const release = (completed: boolean) => {
     if (settled) return;
     settled = true;
     if (timeout !== null) clearTimeout(timeout);
-    queue.busy = false;
+    queue.inFlight = Math.max(0, queue.inFlight - 1);
     const wake = queue.requestLatest;
     queue.requestLatest = undefined;
     // Device loss recovery owns the next render after a rejected fence.
