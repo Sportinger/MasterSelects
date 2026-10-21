@@ -7,10 +7,10 @@
       "width": 1920,
       "layout": "pair",
       "crop": [
-        700,
-        130,
         960,
-        640
+        250,
+        640,
+        400
       ],
       "outWidth": 1600,
       "gap": 6,
@@ -191,7 +191,8 @@
         "params": {
           "progress": 0.4
         }
-      }
+      },
+      "backdrop": "checker"
     }
   ]
 }

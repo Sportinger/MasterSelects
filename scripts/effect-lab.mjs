@@ -21,6 +21,7 @@
 //     "left": { "effect": "gaussian-blur", "params": {...} }, "right": { "effect": ..., "params": ..., "times": [...] } }
 // (`times`: timeline seconds rendered in order, for feedback effects that build up over frames)
 // (an effect of "original" is the unchanged image).
+// `"backdrop": "checker"` draws a checkerboard behind both crops, so transparent pixels show.
 // `"layout": "split"` shows one picture: the crop (default: the whole frame) of the left side up to
 // `"split"` (0.5) of its width, the right side's crop after it, and a thin light divider; `"stack"`
 // puts the two crops one above the other with `gap` between them. `"outWidth"` scales the result.
@@ -37,7 +38,7 @@ async function composePair(page, entry) {
     params: spec.params ?? {}, bypass: spec.effect === 'original', times: spec.times });
   const [left, right] = [await side(entry.left), await side(entry.right)];
   for (const [label, cell] of [['left', left], ['right', right]]) if (cell.gpuFailure) throw new Error(`${entry.name} ${label}: ${cell.gpuFailure}`);
-  const png = await page.evaluate(async ({ left, right, crop, gap, zoom, layout, split, outWidth }) => {
+  const png = await page.evaluate(async ({ left, right, crop, gap, zoom, layout, split, outWidth, backdrop }) => {
     const bitmaps = [await createImageBitmap(await (await fetch(left)).blob()), await createImageBitmap(await (await fetch(right)).blob())];
     const [x, y, w, h] = crop ?? [0, 0, bitmaps[0].width, bitmaps[0].height];
     const scale = !outWidth ? zoom : layout === 'pair' ? (outWidth - gap) / (w * 2) : outWidth / w;
@@ -53,7 +54,13 @@ async function composePair(page, entry) {
       context.fillStyle = 'rgba(255, 255, 255, 0.85)'; context.fillRect(Math.round(cut * scale) - 1, 0, 2, ch);
     } else {
       for (const [index, bitmap] of bitmaps.entries()) {
-        context.drawImage(bitmap, x, y, w, h, layout === 'stack' ? 0 : index * (cw + gap), layout === 'stack' ? index * (ch + gap) : 0, cw, ch);
+        const left = layout === 'stack' ? 0 : index * (cw + gap), top = layout === 'stack' ? index * (ch + gap) : 0;
+        // "backdrop": "checker" shows transparent pixels as a checkerboard instead of the dark page.
+        if (backdrop === 'checker') for (let ty = 0; ty < ch; ty += 16) for (let tx = 0; tx < cw; tx += 16) {
+          context.fillStyle = ((tx + ty) / 16) % 2 ? '#8c8c8c' : '#bdbdbd';
+          context.fillRect(left + tx, top + ty, Math.min(16, cw - tx), Math.min(16, ch - ty));
+        }
+        context.drawImage(bitmap, x, y, w, h, left, top, cw, ch);
       }
     }
     const blob = await canvas.convertToBlob({ type: 'image/png' });
@@ -61,7 +68,7 @@ async function composePair(page, entry) {
     let binary = ''; for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return btoa(binary);
   }, { left: left.png, right: right.png, crop: entry.crop, gap: entry.gap ?? 6, zoom: entry.zoom ?? 1, layout: entry.layout ?? 'pair',
-    split: entry.split ?? 0.5, outWidth: entry.outWidth });
+    split: entry.split ?? 0.5, outWidth: entry.outWidth, backdrop: entry.backdrop });
   return Buffer.from(png, 'base64');
 }
 

@@ -710,11 +710,15 @@ ASCII Ghost combines the current result with explicit previous-frame history usi
 component-wise decay, including alpha. Inscribe retains automatic GPU derivatives
 of the sampled cell tone; CPU evaluation requires an explicit fine/coarse policy.
 
-Acuarela is a three-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
-premultiplied source cache, an edge-aware 7 x 7 pigment wash read at a position that
-wobbles by Bleed pixels (`wash-cache`), and a pass that changes each colour like more or
-less pigment, `C' = C - (C - C^2)(d - 1)`, with the density `d` built from edge pooling,
-granulation on a paper height field and blooms. Its noise fields use the shared
+Acuarela is a four-pass watercolour graph (`acuarelaWatercolorGraph.ts`): a
+premultiplied source cache, two edge-aware 7 x 7 washes with per-pixel jittered taps (the
+first read at a position that wobbles by up to Bleed pixels, capped at 12, into
+`wash-first-cache`; the second over the first, wider in wet patches, into `wash-cache`), and
+a pass that groups the wash into tones (Simplify), lifts black toward an indigo pigment
+(Shadow Pigment) and changes each colour like more or less pigment,
+`C' = C - (C - C^2)(d - 1)`, with the density `d` (clamped to 0-4) built from edge pooling,
+granulation on a paper height field (weighted toward light washes) and blooms. Mix blends
+premultiplied. Its noise fields use the shared
 **Fractal Noise** node (`noise.fractal2d.vec2`, PCG-hashed gradient noise, 1-8 octaves),
 which stays free of the streaks Random (Hash) shows at large positions. Sizes are pixels
 of a 1080p frame; the recipe has no frame history and Mix 0 is skipped. Acuarela effects
@@ -794,7 +798,9 @@ unchanged, including the legacy Custom choice's green fallback. It retains its
 fullscreen output boundary rather than adding a new inline optimization.
 
 ROM1 exposes four noise octaves, displacement, edge masking, source lift,
-feedback decay, and final RGBA mixing as shared nodes. Detail changes frequency,
+feedback decay, and final RGBA mixing as shared nodes. Its source lift passes Gain through a
+soft shoulder, `0.35 (1 - exp(-max(Gain, 0) / 0.35))`, so large values wash the frame out
+instead of turning it white; saved graphs get the shoulder nodes on load. Detail changes frequency,
 not octave count; Speed scales displacement, not timeline time. Its history uses
 the shared seek/reset/loop contract, and feedback can raise output alpha as in
 the legacy shader. Direct source wiring prunes history resources and processing.
@@ -1428,16 +1434,19 @@ cell, grows to Particle Size and takes its shape over the first quarter of its f
 Fade (0-1) thins and shrinks each particle over its own flight (effects saved before
 Fade read 0). Particles read the source premultiplied (manual bilinear), so cut-out
 edges keep their colour. Particle release is driven by a deterministic
-gust field: coherent noise pockets, a wind-front delay, and the clip seed decide
+gust field: coherent noise pockets (4 octaves of the shared gradient Fractal Noise, turned
+per octave, so no pocket has straight lattice edges), a wind-front delay, and the clip seed decide
 which regions separate first, so the breakup starts in scattered islands and
 then grows without relying on accumulated simulation state. Each particle
 carries UVs from its original source cell, so moving particles keep their
 assigned image patch instead of sampling from their new screen position. Preview
 and export use explicit render/media time instead of wall-clock time.
-The grid has one particle per Cell Size cell; above the preview or export particle
-budget the cells grow until the grid fits (rows are never dropped), the renderer logs it
-once, and the effect card names the cell sizes preview and export draw at the
-composition size.
+The grid has one particle per Cell Size cell, with Cell Size in pixels of a 1080p frame
+(shorter side), so previews at any Preview Quality, thumbnails and exports cut the same
+grid; effects saved before keep counting output pixels (`cellReference: 'output'`, set on
+load, reported in the effect card). Above the preview or export particle budget the cells
+grow until the grid fits (rows are never dropped), the renderer logs it once, and the
+effect card names the cell sizes preview and export draw.
 
 This effect is terminal in the clip effect stack. Effects before it are pre-rendered
 into the particle source texture; effects after it are ignored with a renderer
@@ -1681,7 +1690,7 @@ Voxel Relief uses the same binding to smooth a
 raymarched block-heightfield between video frames and remains a complex
 raymarch/feedback effect.
 
-Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled.
+Voxel Relief raymarches a perspective camera pointed at the source plane. The source image is sampled as a grid of rectangular prisms, with luminance driving each prism height and dark gaps between cells instead of a second flat video layer behind the relief. New instances use the iPad-tuned relief defaults: 107.4 columns, 1.2 height, 3.0 height contrast, and `Limit to Video` enabled, with Distance 0.85 so the relief fills the layer at the default tilt. Block sides keep at least 55 % of the column colour and tall columns brighten their own colour (2D raymarch and native 3D); effects saved before keep the darker, greying shading (`shading: 'legacy'`, set on load).
 With `Limit to Video` enabled, the raymarcher discards voxel cells outside the source rectangle and uses a finite source-sized floor, so orbit views show only the actual video footprint instead of repeating its edge pixels around the subject. Existing project instances retain their stored parameters.
 
 Glow also starts from the iPad-tuned preset: amount 5, threshold 0.7935, radius 1, softness 0.496, 6.85 rings, and 17.95 samples per ring. Existing Glow instances likewise retain their stored parameters.

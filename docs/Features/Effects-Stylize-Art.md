@@ -10,9 +10,9 @@ Add one in **Properties → Effects → + Add Effect**: Acuarela, Rom1 and Sheen
 ### Acuarela
 <figure class="docs-shot docs-shot--float-right">
 
-![The houses and boats of the harbour twice: on the left the photo; on the right the same scene as a watercolour, with flat washes of colour, darker paint along the edges of roofs and walls and a grainy paper texture in the sky](assets/effects/acuarela.webp)
+![The hillside houses of the harbour twice, close up: on the left the photo; on the right the same houses as a watercolour, with flat washes of colour, dark lines of pooled paint around every house and roof, simpler windows and a grainy paper texture](assets/effects/acuarela.webp)
 
-<figcaption>Left: original. Right: Acuarela at its default settings.</figcaption>
+<figcaption>Left: original. Right: Acuarela at its default settings (a close-up of a 1080p frame).</figcaption>
 </figure>
 
 Paints the picture as a watercolour: flat washes of colour, darker paint where the
@@ -21,7 +21,8 @@ so it works on moving footage as well as on stills.
 - **Wash** – how much the colour flattens into washes, in pixels: 1–2 keeps detail, 6 and more is loose and soft.
 - **Bleed** – how far wet paint wobbles and runs across edges, in pixels.
 - **Edges** and **Blooms** – the darker paint along every edge, and a few lighter stains with a dark rim.
-- **Granulation**, **Paper** and **Lift** – grainy pigment, the paper's relief, and white paper showing through.
+- **Simplify** and **Shadow Pigment** – fewer, flatter tones, and how far black lifts to a dark indigo paint.
+- **Granulation**, **Paper** and **Lift** – grainy pigment, the paper's relief (both mostly in light washes), and white paper showing through.
 
 Tip: set **Flow** to 0.1–0.3 and the wet areas drift slowly, as if the paint were still wet.
 
@@ -37,7 +38,7 @@ Watery smoke: bright parts of the picture smear along slowly drifting currents a
 trails that build up over time and fade. This was the original look of Acuarela.
 - **Strength** – how far the picture smears.
 - **Speed** – how fast the currents drift.
-- **Gain** – brightens the trails.
+- **Gain** – brightens the trails; high values wash the picture out but never turn it white.
 - **History Loop** and **Reset** – whether the trails start fresh when playback loops, and a manual restart.
 
 Tip: the trails build up while the clip plays; a single paused frame shows less.
@@ -47,17 +48,18 @@ Tip: the trails build up while the clip plays; a single paused frame shows less.
 ### Sheen
 <figure class="docs-shot docs-shot--float-right">
 
-![The dancer twice: on the left the photo; on the right a warm golden band of light crossing the picture diagonally, brightening her dress while the folds of the fabric stay visible](assets/effects/sheen.webp)
+![The dancer twice: on the left the photo; on the right a warm golden beam of light crossing the picture diagonally, brightest along its middle and fading toward its edges, strongest on her light dress while the folds of the fabric stay visible](assets/effects/sheen.webp)
 
-<figcaption>Left: original. Right: a warm Sheen (Angle −60°, Intensity 1.2).</figcaption>
+<figcaption>Left: original. Right: a warm Sheen (Color #ffcc66, Angle −60°, Width 0.16, Intensity 1.2).</figcaption>
 </figure>
 
 A band of light that sweeps across the layer, the classic shine over a logo or a title.
 It stays inside the layer's shape, and the picture underneath stays visible in the light.
 - **Position** – where the band is; keyframe it from 0 to 1 for the sweep.
 - **Angle** – the direction of the band, in degrees.
-- **Width** and **Softness** – how broad the band is and how soft its edges are.
+- **Width** and **Softness** – how far the light reaches from the middle of the band, and how gently it fades (1 fades all the way, 0 is a hard-edged band).
 - **Intensity** and **Color** – how bright it is and its tint.
+- **Highlights** – how much more the light catches bright parts than dark ones.
 
 Tip: on a title, a narrow, soft band (Width 0.08) sweeping in half a second reads as a glint.
 
@@ -66,7 +68,7 @@ Tip: on a title, a narrow, soft band (Width 0.08) sweeping in half a second read
 
 ![The dancer twice: on the left the photo; on the right the stage turned into a wall of small blocks seen from a slight angle, with the bright dancer standing out from it as a relief of taller blocks](assets/effects/voxel-relief.webp)
 
-<figcaption>Left: original. Right: Voxel Relief seen from the side (Tilt 70°, Yaw −18°, Height 0.35).</figcaption>
+<figcaption>Left: original. Right: Voxel Relief seen from the side (Tilt 70°, Yaw −18°, Distance 1.05, Columns 120, Height 0.35, Height Contrast 2).</figcaption>
 </figure>
 
 Builds the picture out of small blocks in 3D: bright parts rise, dark parts stay low.
@@ -74,7 +76,7 @@ Press **Orbit** on the effect card, then drag in the preview to look from anothe
 and scroll to move closer.
 - **Columns** – how many blocks across the picture.
 - **Height** – how far bright parts rise.
-- **Tilt**, **Yaw** and **Distance** – the camera, in degrees and distance.
+- **Tilt** and **Yaw** (degrees) and **Distance** – where the camera looks from.
 - **Light Angle** – where the light comes from.
 
 Tip: **Open Nodes** in the effect card shows the relief as nodes, where you can swap the block shape.
@@ -82,15 +84,15 @@ Tip: **Open Nodes** in the effect card shows the relief as nodes, where you can 
 ### Pixel Particle Disintegrate
 <figure class="docs-shot docs-shot--float-right">
 
-![The dancer twice: on the left the photo; on the right the picture breaking apart into small particles that blow away, with dark gaps where parts of the dress and the stage have already gone](assets/effects/pixel-particle-disintegrate.webp)
+![The dancer twice: on the left the photo; on the right the picture breaking apart into small particles that blow away in drifting, cloud-shaped patches; where the particles have already gone, a grey checkerboard shows through](assets/effects/pixel-particle-disintegrate.webp)
 
-<figcaption>Left: original. Right: Progress 0.4; the dark gaps are already empty (transparent).</figcaption>
+<figcaption>Left: original. Right: Progress 0.4 over a checkerboard, which shows where the picture is already empty (transparent).</figcaption>
 </figure>
 
 The picture breaks into small particles that blow away, as the clip's exit. At Progress 0
 the picture is untouched; at 1 it is gone.
 - **Progress** – keyframe it from 0 to 1; the **Particle Out** button below + Add Effect sets this up at the end of the clip.
-- **Cell Size** – the size of each particle, in pixels.
+- **Cell Size** – the size of each particle, in pixels of a 1080p frame (it scales with the frame size).
 - **Stagger** and **Wind Sweep** – how unevenly and in which order the parts let go.
 - **Fade** – how much each particle fades and shrinks while it flies.
 
@@ -100,8 +102,8 @@ Tip: change **Seed** for a different pattern with the same settings.
 
 **Known limitations:** Sheen measures Position across the whole layer, so on a small logo
 in a large transparent layer the band crosses the logo during only part of the sweep.
-Pixel Particle Disintegrate draws larger particles in the preview than in the export at
-very large sizes such as 4K; the effect card says when.
+With a very small Cell Size, Pixel Particle Disintegrate can draw larger particles in the
+preview than in the export to stay within its particle budget; the effect card says when.
 
 ## How the painterly, relief and particle effects are built
 
@@ -111,7 +113,7 @@ very large sizes such as 4K; the effect card says when.
 
 ![The Acuarela effect card in Properties → Effects beside the preview of the harbour painted as a watercolour](assets/effects/editor/acuarela-inspector.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 624" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 688" aria-hidden="true" focusable="false">
 <defs><marker id="acuarela-inspector-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
 <path class="docs-shot-arrow" d="M581 184 L665 184" marker-end="url(#acuarela-inspector-arrow)" />
 <circle class="docs-shot-number" cx="581" cy="184" r="18" /><text x="581" y="184" class="docs-shot-number-text">1</text>
@@ -147,18 +149,28 @@ Voxel Relief also has **Open Nodes** in its effect card. Changes apply to this o
 
 <figure class="docs-shot docs-shot--graph">
 
-![Acuarela opened in the Node Workspace: Input Frame feeds Premultiplied Source and Paper Light, Lift & Mix; Premultiplied Source and Wet Patches & Bleed feed Pigment Wash; Pigment Wash feeds Edge Pooling; Edge Pooling feeds Paper & Granulation, Blooms, Pigment Density and Paper Light, Lift & Mix; Pigment Density feeds Paper Light, Lift & Mix](assets/effects/graphs/acuarela.webp)
+![Acuarela opened in the Node Workspace, first half: Input Frame feeds Premultiplied Source; Premultiplied Source and Wet Patches & Bleed feed Pigment Wash; Pigment Wash feeds its First Wash into Second Wash & Wet Bleeding, which also reads the Wet Patches; the second wash's Pigment Wash feeds Edge Pooling](assets/effects/graphs/acuarela.webp)
 
-<figcaption>Acuarela's stages (the Parameters and Frame &amp; Paper Coordinates folders and the Output card left out).</figcaption>
+<figcaption>Acuarela, first half: from the frame to the two washes and Edge Pooling.</figcaption>
 </figure>
 
 The picture is painted in the order a painter would work. **Wet Patches & Bleed** decides
 where the paint is still wet and how far each spot wobbles. **Pigment Wash** flattens the
-colour inside shapes but stops at their borders (in wet patches it runs across them).
-**Edge Pooling** finds the darker side of every border, **Paper & Granulation** makes the
-paper's grain and **Blooms** the few stains. **Pigment Density** turns all of that into
-more or less paint, and **Paper Light, Lift & Mix** adds the paper's relief and blends
-with the original.
+colour inside shapes but stops at their borders, and **Second Wash & Wet Bleeding** goes
+over the first wash once more: that makes the washes flatter, and in wet patches it lets
+colour run across the borders. **Edge Pooling** finds the darker side of every border.
+
+<figure class="docs-shot docs-shot--graph">
+
+![Acuarela opened in the Node Workspace, second half: the second wash feeds Edge Pooling; Edge Pooling feeds Simplify, Blooms, Paper & Granulation and Pigment Density; Simplify feeds Shadow Pigment; Shadow Pigment, Blooms and Paper & Granulation feed Pigment Density; Pigment Density and Paper & Granulation feed Paper Light, Lift & Mix](assets/effects/graphs/acuarela-paint.webp)
+
+<figcaption>Acuarela, second half: from Edge Pooling to the finished paint.</figcaption>
+</figure>
+
+**Simplify** groups the wash into a few tones, like layered glazes, and **Shadow Pigment**
+lifts black to a dark indigo paint. **Paper & Granulation** makes the paper's grain and
+**Blooms** the few stains. **Pigment Density** turns all of that into more or less paint,
+and **Paper Light, Lift & Mix** adds the paper's relief and blends with the original.
 
 ### Acuarela: more or less pigment
 
@@ -166,30 +178,29 @@ with the original.
 
 <div class="docs-shot-stage">
 
-![Pigment Density opened: in the bottom row Edge Pooling, Granulation and Blooms are added up, clamped and reduced by one; in the top row Wash Colour is clamped, multiplied by itself and subtracted from itself; a Multiply joins both rows and the last Subtract outputs the Painted Colour](assets/effects/graphs/acuarela-pigment-density.webp)
+![Pigment Density opened: in the bottom row Edge Pooling and Granulation are added, Blooms is added to that in a second Add, then the sum is added to one, clamped and reduced by one; in the top row the Shadow-lifted Colour is clamped, multiplied by itself and subtracted from itself; a Multiply joins both rows and the last Subtract outputs the Painted Colour](assets/effects/graphs/acuarela-pigment-density.webp)
 
-<svg class="docs-shot-overlay" viewBox="0 0 1017 417" aria-hidden="true" focusable="false">
+<svg class="docs-shot-overlay" viewBox="0 0 1017 400" aria-hidden="true" focusable="false">
 <defs><marker id="acuarela-pigment-density-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 Z" fill="#ffd54a" /></marker></defs>
-<path class="docs-shot-arrow" d="M604 395 L604 311" marker-end="url(#acuarela-pigment-density-arrow)" />
-<circle class="docs-shot-number" cx="604" cy="395" r="18" /><text x="604" y="395" class="docs-shot-number-text">1</text>
-<path class="docs-shot-arrow" d="M946 275 L946 191" marker-end="url(#acuarela-pigment-density-arrow)" />
-<circle class="docs-shot-number" cx="946" cy="275" r="18" /><text x="946" y="275" class="docs-shot-number-text">2</text>
+<path class="docs-shot-arrow" d="M376 377 L376 293" marker-end="url(#acuarela-pigment-density-arrow)" />
+<circle class="docs-shot-number" cx="376" cy="377" r="18" /><text x="376" y="377" class="docs-shot-number-text">1</text>
+<path class="docs-shot-arrow" d="M949 273 L949 189" marker-end="url(#acuarela-pigment-density-arrow)" />
+<circle class="docs-shot-number" cx="949" cy="273" r="18" /><text x="949" y="273" class="docs-shot-number-text">2</text>
 </svg>
 </div>
 
-<figcaption>1 — the Clamp that limits the amount of pigment. 2 — the last Subtract, the Painted Colour. The values One, Zero and Three come from the Constants folder and are left out, so some inputs look empty.</figcaption>
+<figcaption>1 — the second Add, where Blooms joins the amount of pigment. 2 — the last Subtract, the Painted Colour. The constant inputs (One, Zero and the cap 4) come from the Constants folder and are not drawn.</figcaption>
 </figure>
 
 One formula from watercolour research does the painting: new colour = C − (C − C²) × (d − 1).
-The bottom row adds up the amount of pigment d = 1 + edge pooling + granulation + blooms,
-and the **Clamp** (1) keeps it between 0 and 3. Above 1 a colour darkens as if more
-pigment had settled there, below 1 it lightens; white paper and black stay as they are.
-The top row works out C − C² for the wash colour, and the last **Subtract** (2) gives the
-painted colour.
+The bottom row adds up the amount of pigment d = 1 + edge pooling + granulation + blooms
+(Blooms joins at the second **Add**, 1), and the **Clamp** keeps it between 0 and 4.
+Above 1 a colour darkens as if more pigment had settled there, below 1 it lightens; white
+paper and black stay as they are. The top row works out C − C² for the shadow-lifted wash
+colour, and the last **Subtract** (2) gives the painted colour.
 
-Remix: for paint that only ever darkens, open the **Constants** folder and plug **One**
-into Min of the Clamp (1) in place of Zero. The middles of the blooms and the light side
-of every edge then keep the wash colour instead of turning lighter.
+Remix: drag the cable from **Blooms** off the second **Add** (1). The stains disappear
+while the pooled edges and the grain stay; plug it back in to restore them.
 
 ### Voxel Relief: blocks, camera, light
 
@@ -232,51 +243,44 @@ unplugged or muted force adds nothing; plug it back in to restore it.
 Notes for developers. Formulas and history are in [Effects](./Effects.md), nodes in
 [Node Catalog](./Node-Catalog.md), compilation in [Operator Graph Compiler](./Operator-Graph-Compiler.md).
 
-- **Acuarela passes.** The frame is premultiplied into an `rgba16float` cache, the edge-aware
-  7 × 7 pigment wash (taps 0.6 sigma apart, sigma = Wash) goes into a second cache, and one
-  last pass adds density, paper and Mix. The density formula is Bousseau et al. 2006,
-  "Interactive watercolor rendering". Recipe: `src/services/operators/acuarelaWatercolorGraph.ts`;
-  see [Effects: glyph, cell and compute effects](./Effects.md#glyph-cell-and-compute-effects).
-- **Units.** Wash, Bleed and Grain Size are pixels of a 1080p frame (its shorter side) and scale
-  with the rendered size, so preview, export and 4K match. Flow is cycles per second; it moves
-  the wet patches and the wobble with the timeline, while the paper stays put. Sheen's and Voxel
-  Relief's angles are degrees.
-- **Noise.** Acuarela's paper, wet patches and blooms use the shared **Fractal Noise** node
-  (`noise.fractal2d.vec2`, integer-hashed gradient noise, 1–8 octaves), which stays clean at
-  large positions; see [Node Catalog](./Node-Catalog.md#composed-coordinate-nodes).
-- **Still and skipped.** Acuarela has no frame history: a paused frame stays put and needs no
-  continuous rendering, and Mix 0 skips the effect. The graph has about 340 nodes; the first
-  frame takes about 360 ms with the graph compile, then about 9 ms per 1080p frame (desktop
-  Vulkan).
-- **Rom1 feedback.** Rom1 builds every frame on the previous result, so its trails grow during
-  playback; History Loop (Reset or Continuous) and Reset control that history. Gain above 1 turns
-  the frame white, Speed, Detail or Density at 0 or below freeze the smoke, and the effect card and
-  tool results say so. Its graph is one long chain of about 390 nodes without folders; see
+- **Acuarela passes.** Four passes: the frame premultiplied into an `rgba16float` cache, two
+  edge-aware 7 × 7 washes (taps 0.6 sigma apart; sigma = Wash × (1 + 0.3 wet), then
+  0.6 × Wash + 0.25 × Bleed × wet, with wet 0–1 in wet patches), each into a cache, and one pass for tones, density, paper and Mix. Each pixel
+  turns and shifts its tap grid at random, so thin lines become fine grain instead of repeated
+  copies; the wobble of the read position is capped at 12 px, so neighbouring pixels never read
+  far-apart rows. Mix blends premultiplied, so transparent layers keep their edge colour. The
+  density formula is Bousseau et al. 2006, "Interactive watercolor rendering"; d is clamped to
+  0–4 and the effect card says when Edges, Granulation and Blooms can reach the cap. Recipe:
+  `src/services/operators/acuarelaWatercolorGraph.ts`; see
+  [Effects: glyph, cell and compute effects](./Effects.md#glyph-cell-and-compute-effects).
+- **Units and cost.** Wash and Bleed are pixels of a 1080p frame (its shorter side), so preview,
+  export and 4K match; Grain Size is a scale factor of the paper grain (1 = standard). Flow is
+  cycles per second. Kernel values that do not change from tap to tap (wet patches, wobble, tap
+  jitter) are computed once per pixel, so Acuarela takes about 3 ms per 1080p frame after a
+  first frame of 170–250 ms with the graph compile (desktop Vulkan).
+- **Rom1 Gain.** Gain is added to every pixel through a soft shoulder, 0.35 × (1 − exp(−Gain / 0.35)):
+  small values are unchanged, large ones ease toward 0.35, so the frame never turns white. Rom1
+  builds every frame on the previous result (History Loop and Reset control it); see
   [Effects: editable keying and feedback graphs](./Effects.md#editable-keying-and-feedback-graphs).
-- **Sheen light.** The band lifts each colour with a soft highlight shoulder,
-  1 − (1 − c) · exp(−light / (1 − c)), so it never clips to flat white; anti-aliased edges get
-  the full light, Softness 0 is a hard edge with 1 px anti-aliasing, and Intensity below 0
-  renders as 0 (reported). Position spans the whole layer, not the logo's own bounds.
-- **Voxel Relief limits.** The 2D relief is raymarched (Ray Steps); as a 3D scene object it uses
-  instancing. Values its shader clamps (Columns, Distance, FOV, Gap, Ray Steps and others) are
-  named in the effect card and tool results, and a missing or broken value falls back to the
-  default. First frame 63–103 ms with the shader compile, then about 17 ms per frame. See
+- **Sheen light.** The band's light falls off from its middle as exp(−4.5 t^(2 / Softness)) (t = 0
+  in the middle, 1 at Width; one pixel of anti-aliasing at the edge), is weighted by the colour's
+  luminance through Highlights, and lifts each colour with a soft shoulder,
+  1 − (1 − c) · exp(−light / (1 − c)), so it never clips to flat white. Position spans the whole layer.
+- **Voxel Relief.** The 2D relief is raymarched (Ray Steps); as a 3D scene object it uses
+  instancing. Block sides keep at least 55 % of the column colour, and tall columns brighten their
+  own colour instead of turning grey. The default Distance 0.85 fills the layer at the default Tilt.
+  Values its shader clamps are named in the effect card and tool results; see
   [Effects: editable Voxel Relief nodes](./Effects.md#editable-voxel-relief-nodes).
-- **Particle budget.** One particle per Cell Size cell, up to the Preview Particle Budget
-  (60,000), Export Particle Budget (180,000) and Hard Particle Limit (220,000). Over budget the
-  cells grow until the grid fits; no rows are dropped. At 4K with Cell Size 8 the preview draws
-  12 px cells and the export 8 px; the effect card says so. Motion follows Progress and Seed,
-  not a simulation, so every frame renders the same. The effect ends the clip's effect stack:
-  effects after it are ignored with a warning. See [Effects: particle render effects](./Effects.md#particle-render-effects).
-- **Saved projects.** Acuarela effects saved with the earlier smoke look keep it: a stored graph
-  renders as saved, and a graph-less smoke effect gets the smoke graph. The smoke controls (Gain,
-  Speed, Detail and others) are retired for the watercolour and show only where a graph reads them.
-  Sheen bands saved before now keep the picture visible instead of turning flat white, and
-  particles saved before Fade existed keep Fade 0.
+- **Particles.** One particle per Cell Size cell, up to the Preview (60,000) and Export (180,000)
+  Particle Budget and the Hard Particle Limit (220,000); over budget the cells grow until the grid
+  fits, and the effect card says so. The release pockets come from 4 octaves of gradient Fractal
+  Noise, turned per octave, so no pocket has straight lattice edges. Motion follows Progress and
+  Seed, not a simulation. See [Effects: particle render effects](./Effects.md#particle-render-effects).
+- **Saved projects.** Acuarela effects saved with the earlier smoke look keep it (their Gain is now
+  clamped to 0–1). Sheen saved before keeps its flat-topped band and even light, Voxel Relief its
+  darker sides, and particles their output-pixel Cell Size and Fade 0; the effect card names the
+  first and the last. Rom1's high Gain values now wash the picture out instead of turning it white,
+  and the particle release pockets of saved projects fall in new places (a deliberate fix of the
+  straight-edged pockets).
 - **Software preview.** The worker software preview runs Rom1 and the smoke-look Acuarela on the
-  CPU; the watercolour Acuarela would take minutes per frame there, so it falls back to the
-  main-thread GPU renderer.
-- **Pictures on this page.** `scripts/effect-lab.mjs` (stills, manifest
-  `scripts/effect-lab-shots/stylize-art.json`), `scripts/effect-graph-shot.mjs` and
-  `scripts/effect-editor-shot.mjs`, each with a `stylize-art.json` manifest in
-  `scripts/effect-graph-shots/` and `scripts/effect-editor-shots/`.
+  CPU; the watercolour Acuarela falls back to the main-thread GPU renderer.
