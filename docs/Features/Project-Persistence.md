@@ -261,7 +261,15 @@ require the source repository's IndexedDB index.
 The current `.msproj` archive writer uses classic ZIP. It rejects archives at
 the 4 GiB size boundary or 65,535-entry boundary instead of emitting an invalid
 file; ZIP64 is not supported. Directory-based repository storage and backups do
-not use this ZIP container limit.
+not use this ZIP container limit. The exported file is named after the open
+project (`<Project name>.msproj`); only an unnamed project falls back to
+`MasterSelects Project.msproj`.
+
+Restoring an archive streams it entry by entry: entries are stored strictly in
+archive order, so a small entry never waits behind a later entry that still
+needs input (this ordering once hung the import at "Reading selected project
+10%"). If no entry makes progress for two minutes, the restore fails with an
+"Archive extraction stalled" error naming the entry instead of hanging silently.
 
 Duplicates receive a new repository identity and retain the content lineage.
 Incremental backups preserve the source's immutable descriptor and commit chain;
@@ -301,6 +309,8 @@ projects as well as cached handles.
   offers **Import .msproj archive**: the archive is copied into a new
   browser-storage project folder (`Name`, `Name (2)`, …) and opened there, which
   restores a repository archive or converts an older `.msproj` package in place.
+  The archive is streamed from disk into browser storage; the log line
+  `Project archive copied into browser storage` reports setup and copy times.
   An incomplete copy or an import that does not open is removed again and
   reported. The start-up project chooser offers the same import below the stored
   projects. The stored-project list shows only folders with a project

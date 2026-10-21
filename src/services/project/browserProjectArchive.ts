@@ -59,6 +59,27 @@ async function removeFolder(root: FileSystemDirectoryHandle, name: string): Prom
 }
 
 /**
+ * Streams the archive straight from disk into a native OPFS writable, so the
+ * browser never materializes the whole file or writes it in small slices.
+ * The IndexedDB fallback writable is not a WritableStream; it takes the file
+ * as one Blob and stores it in its own large chunks.
+ */
+async function copyFileInto(file: File, writable: FileSystemWritableFileStream): Promise<void> {
+  if (typeof WritableStream !== 'undefined' && writable instanceof WritableStream && typeof file.stream === 'function') {
+    // pipeTo closes the destination on success and aborts it on failure.
+    await file.stream().pipeTo(writable);
+    return;
+  }
+  try {
+    await writable.write(file);
+    await writable.close();
+  } catch (error) {
+    await writable.abort().catch(() => {});
+    throw error;
+  }
+}
+
+/**
  * Copies the archive into a new browser-storage project folder and returns
  * the folder name to open. A partial copy is removed and reported, never kept.
  */
@@ -67,6 +88,7 @@ export async function storeProjectArchiveInBrowser(file: File): Promise<string> 
     throw new RepositoryError('unsupported', 'Choose a MasterSelects project archive (.msproj file).');
   }
   if (file.size === 0) throw new RepositoryError('corrupt', 'The selected project archive is empty.');
+  const started = performance.now(); let copyStarted = started; let copyMs = 0;
   const root = await acquireProjectRoot('opfs', { throwOnFailure: true });
   if (!root) throw new RepositoryError('unsupported', 'This browser does not provide project file storage.');
   const name = await uniqueStoredProjectName(root, archiveProjectName(file.name));
@@ -77,13 +99,9 @@ export async function storeProjectArchiveInBrowser(file: File): Promise<string> 
       throw new RepositoryError('unsupported', 'This browser cannot write project files. Update your browser before importing a project.');
     }
     const writable = await handle.createWritable({ keepExistingData: false });
-    try {
-      await writable.write(file);
-      await writable.close();
-    } catch (error) {
-      await writable.abort().catch(() => {});
-      throw error;
-    }
+    copyStarted = performance.now();
+    await copyFileInto(file, writable);
+    copyMs = performance.now() - copyStarted;
     const copied = await handle.getFile();
     if (copied.size !== file.size) {
       throw new RepositoryError('io', 'The project archive was not completely copied into browser storage. Check the free space and try again.');
@@ -92,7 +110,10 @@ export async function storeProjectArchiveInBrowser(file: File): Promise<string> 
     await removeFolder(root, name);
     throw error;
   }
-  log.info('Project archive copied into browser storage', { bytes: file.size });
+  // Timings separate storage setup from the byte copy when an import feels slow.
+  log.info('Project archive copied into browser storage', {
+    bytes: file.size, setupMs: Math.round(copyStarted - started), copyMs: Math.round(copyMs), totalMs: Math.round(performance.now() - started),
+  });
   return name;
 }
 

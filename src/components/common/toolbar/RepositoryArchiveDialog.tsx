@@ -9,7 +9,7 @@ import { Logger } from '../../../services/logger';
 
 const log = Logger.create('ProjectArchiveExport');
 
-export function RepositoryArchiveDialog({ onClose }: { onClose(): void }) {
+export function RepositoryArchiveDialog({ onClose, projectName }: { onClose(): void; projectName?: string }) {
   const titleId = useId(); const dialog = useRef<HTMLDivElement>(null); const controller = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const [kind, setKind] = useState<'current' | 'named' | 'branches' | 'all'>('current');
@@ -49,7 +49,7 @@ export function RepositoryArchiveDialog({ onClose }: { onClose(): void }) {
     let output: Awaited<ReturnType<typeof pickArchiveOutput>> = null;
     try {
       // File picker must precede asynchronous revision lookup to retain the user gesture.
-      output = await pickArchiveOutput('MasterSelects Project'); if (!output) { if (mounted.current) setBusy(false); return; }
+      output = await pickArchiveOutput(projectName ?? ''); if (!output) { if (mounted.current) setBusy(false); return; }
       if (getActiveRepositorySession() !== session) throw new Error('Project changed while choosing the destination. Export the selected project again.');
       if (session.opening.writable) await flushEditorRepository();
       let history: HistorySelection;
