@@ -11,6 +11,11 @@
 //   repeats are warnings so one bad driver does not flood error reporting.
 //   Several real losses in a short window stop recovery instead of looping
 //   lose -> recover -> lose forever.
+//
+// One incident files at most one error. The first real loss's error is held
+// until recovery has an outcome: a recovered loss reports "Device lost", a
+// failed recovery reports only "GPU recovery failed" (carrying the loss), and
+// the individual recovery attempts in between are warnings.
 
 export const REPEATED_LOSS_LIMIT = 3;
 export const REPEATED_LOSS_WINDOW_MS = 60_000;
@@ -58,6 +63,7 @@ export function whenPageVisible(callback: () => void): void {
 export class DeviceLossPolicy {
   private recentLosses: number[] = [];
   private reportedUnexpectedLoss = false;
+  private heldReport: string | null = null;
   private readonly now: () => number;
 
   constructor(now: () => number = () => Date.now()) {
@@ -77,5 +83,17 @@ export class DeviceLossPolicy {
     const report = this.reportedUnexpectedLoss ? 'warn' : 'error';
     this.reportedUnexpectedLoss = true;
     return { kind: 'unexpected', report, recover: 'now', occurrence };
+  }
+
+  /** Keeps a loss's error report until its recovery has an outcome. */
+  holdReport(message: string): void {
+    this.heldReport = message;
+  }
+
+  /** The held loss message (once), or null when this incident has none. */
+  takeHeldReport(): string | null {
+    const message = this.heldReport;
+    this.heldReport = null;
+    return message;
   }
 }

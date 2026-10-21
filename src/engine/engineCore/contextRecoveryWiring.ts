@@ -4,7 +4,7 @@
 
 import { Logger } from '../../services/logger';
 import { useEngineStore } from '../../stores/engineStore';
-import { describeGPUInitializationFailure } from '../core/gpuInitializationFailure';
+import { describeGPURecoveryFailure } from '../core/gpuInitializationFailure';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { WebGPUContext } from '../core/WebGPUContext';
 
@@ -39,7 +39,7 @@ export function wireContextRecovery(context: WebGPUContext, handlers: ContextRec
   context.onRecoveryFailed((failure) => {
     handlers.setRecovering(false);
     useEngineStore.getState().setEngineReady(false);
-    useEngineStore.getState().setEngineInitFailed(true, describeGPUInitializationFailure(failure));
+    useEngineStore.getState().setEngineInitFailed(true, describeGPURecoveryFailure(failure));
   });
 
   context.onPowerPreferenceFallback((preference) => {

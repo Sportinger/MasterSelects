@@ -243,7 +243,7 @@ export class WebGPUContext {
       if (!this.adapter) {
         this.initializationFailure = 'adapter_unavailable';
         recordGpuStartupFailure('adapter_unavailable');
-        log.error('Failed to get GPU adapter (all attempts)');
+        this.logInitFailure('Failed to get GPU adapter (all attempts)');
         return false;
       }
       log.info('Adapter obtained');
@@ -304,7 +304,7 @@ export class WebGPUContext {
       if (!this.device) {
         this.initializationFailure = 'device_failed';
         recordGpuStartupFailure('device_failed');
-        log.error('Failed to create GPU device');
+        this.logInitFailure('Failed to create GPU device');
         return false;
       }
       log.info('GPU device created successfully');
@@ -355,9 +355,15 @@ export class WebGPUContext {
         ? (error.phase === 'adapter' ? 'adapter_timeout' : 'device_timeout')
         : 'initialization_failed';
       recordGpuStartupFailure(this.initializationFailure);
-      log.error('Failed to initialize WebGPU', error);
+      this.logInitFailure('Failed to initialize WebGPU', error);
       return false;
     }
+  }
+
+  /** During loss recovery a failed attempt is a warning; recoverDevice files the incident's error. */
+  private logInitFailure(message: string, error?: unknown): void {
+    if (!this.isRecovering) log.error(message, error);
+    else log.warn(`${message}; recovery attempt ${this.recoveryAttempts}`, error);
   }
 
   /** The editor's current device was lost without the editor destroying it. */
@@ -365,8 +371,10 @@ export class WebGPUContext {
     const recoveryGeneration = ++this.initializationGeneration;
     const decision = this.lossPolicy.classify();
     const details = { reason: info.reason, message: info.message, kind: decision.kind };
-    if (decision.report === 'error') log.error('Device lost', info.message);
-    else if (decision.kind === 'background') log.warn('Device lost while the page was hidden or unloading; restoring when visible', details);
+    if (decision.report === 'error') {
+      this.lossPolicy.holdReport(info.message);
+      log.warn('Device lost; recovering before reporting', details);
+    } else if (decision.kind === 'background') log.warn('Device lost while the page was hidden or unloading; restoring when visible', details);
     else if (decision.kind === 'repeated') log.warn('Device lost repeatedly; stopping recovery', { ...details, occurrence: decision.occurrence });
     else log.warn('Device lost again', { ...details, occurrence: decision.occurrence });
     this.isInitialized = false;
@@ -382,6 +390,7 @@ export class WebGPUContext {
     this.adapter = null;
     this.initPromise = null;
     if (decision.recover === 'stop') {
+      this.reportHeldLoss();
       this.initializationFailure = 'device_lost_repeatedly';
       this.finishRecoveryFailure();
       return;
@@ -434,11 +443,12 @@ export class WebGPUContext {
           if (generation !== this.initializationGeneration) return;
           this.isRecovering = false;
           this.recoveryAttempts = 0;
+          this.reportHeldLoss();
           return;
         } catch (error) {
           if (generation !== this.initializationGeneration) return;
           this.initializationFailure = 'initialization_failed';
-          log.error('Failed to restore engine resources', error);
+          log.warn('Failed to restore engine resources', error);
           break;
         }
       }
@@ -448,8 +458,20 @@ export class WebGPUContext {
           this.initializationFailure === 'device_timeout' ||
           this.initializationFailure === 'unsupported') break;
     }
-    log.error('GPU recovery failed', { attempts: this.recoveryAttempts, failure: this.initializationFailure });
+    // The one error of this incident; it carries the loss that started it.
+    const lostDevice = this.lossPolicy.takeHeldReport();
+    log.error('GPU recovery failed', {
+      attempts: this.recoveryAttempts,
+      failure: this.initializationFailure,
+      ...(lostDevice !== null ? { lostDevice } : {}),
+    });
     this.finishRecoveryFailure();
+  }
+
+  /** A held first-loss report becomes the incident's error once recovery ends without giving up. */
+  private reportHeldLoss(): void {
+    const message = this.lossPolicy.takeHeldReport();
+    if (message !== null) log.error('Device lost', message);
   }
 
   getDevice(): GPUDevice | null {
@@ -492,9 +514,7 @@ export class WebGPUContext {
     return this.isInitialized;
   }
 
-  /**
-   * Get GPU info (vendor, device name, etc.)
-   */
+  /** Get GPU info (vendor, device name, etc.) */
   getGPUInfo(): { vendor: string; device: string; description: string } | null {
     if (!this.adapter) return null;
 
@@ -580,30 +600,22 @@ export class WebGPUContext {
     return texture;
   }
 
-  /**
-   * Register a callback to be notified when the device is lost
-   */
+  /** Register a callback to be notified when the device is lost */
   onDeviceLost(callback: DeviceLostCallback): void {
     this.deviceLostCallbacks.add(callback);
   }
 
-  /**
-   * Remove a device lost callback
-   */
+  /** Remove a device lost callback */
   offDeviceLost(callback: DeviceLostCallback): void {
     this.deviceLostCallbacks.delete(callback);
   }
 
-  /**
-   * Register a callback to be notified when the device is restored after loss
-   */
+  /** Register a callback to be notified when the device is restored after loss */
   onDeviceRestored(callback: DeviceRestoredCallback): void {
     this.deviceRestoredCallbacks.add(callback);
   }
 
-  /**
-   * Remove a device restored callback
-   */
+  /** Remove a device restored callback */
   offDeviceRestored(callback: DeviceRestoredCallback): void {
     this.deviceRestoredCallbacks.delete(callback);
   }
@@ -616,41 +628,28 @@ export class WebGPUContext {
     this.powerPreferenceFallbackCallbacks.add(callback);
   }
 
-  /**
-   * Remove a power preference fallback callback
-   */
+  /** Remove a power preference fallback callback */
   offPowerPreferenceFallback(callback: (preference: GPUPowerPreference) => void): void {
     this.powerPreferenceFallbackCallbacks.delete(callback);
   }
 
   private notifyPowerPreferenceFallback(preference: GPUPowerPreference): void {
     for (const callback of this.powerPreferenceFallbackCallbacks) {
-      try {
-        callback(preference);
-      } catch (e) {
-        log.error('Error in power preference fallback callback', e);
-      }
+      try { callback(preference); } catch (e) { log.error('Error in power preference fallback callback', e); }
     }
   }
 
-  /**
-   * Check if the context is currently recovering from a device loss
-   */
+  /** Check if the context is currently recovering from a device loss */
   get recovering(): boolean {
     return this.isRecovering;
   }
 
-  /**
-   * Get the current power preference
-   */
+  /** Get the current power preference */
   getPowerPreference(): GPUPowerPreference {
     return this.currentPowerPreference;
   }
 
-  /**
-   * Reinitialize with a new power preference
-   * This destroys the current device and creates a new one
-   */
+  /** Reinitialize with a new power preference: destroys the current device and creates a new one. */
   async reinitializeWithPreference(preference: GPUPowerPreference): Promise<boolean> {
     log.info(`Reinitializing with powerPreference: ${preference}`);
 
