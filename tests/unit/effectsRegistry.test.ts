@@ -549,10 +549,11 @@ describe('Quality parameter properties', () => {
     expect(glow.params.samplesPerRing.quality).toBe(true);
   });
 
-  it('gaussian-blur keeps its retired samples value for saved projects', () => {
+  it('gaussian-blur keeps its retired samples definition for saved projects, new instances leave it out', () => {
     const gb = getEffect('gaussian-blur')!;
     expect(gb.params.samples).toMatchObject({ default: 5, hidden: true, animatable: false });
-    expect(getDefaultParams('gaussian-blur')).toMatchObject({ radius: 10, samples: 5 });
+    expect(getDefaultParams('gaussian-blur')).toEqual({ radius: 10 });
+    for (const id of ['motion-blur', 'radial-blur', 'zoom-blur']) expect(getDefaultParams(id)).not.toHaveProperty('samples');
   });
 
   it('effects without multi-sample logic should not have quality params', () => {
@@ -642,10 +643,10 @@ describe('Registry helper functions', () => {
     expect(defaults.vertical).toBe(false);
   });
 
-  it('getDefaultParams key count should match effect params count', () => {
+  it('getDefaultParams key count should match the count of params that are not retired', () => {
     for (const effect of getAllEffects()) {
       const defaults = getDefaultParams(effect.id);
-      const paramCount = Object.keys(effect.params).length;
+      const paramCount = Object.values(effect.params).filter(param => !param.deprecated).length;
       expect(Object.keys(defaults).length).toBe(paramCount);
     }
   });

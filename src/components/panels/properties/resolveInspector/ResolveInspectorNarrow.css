@@ -1,6 +1,7 @@
 @layer features {
   @container (max-width: 380px) {
-    .resolve-inspector-section {
+    .resolve-inspector-section,
+    .effect-params {
       --resolve-inspector-row-height: 22px;
       --resolve-inspector-label-width: 78px;
       --resolve-inspector-label-control-gap: 8px;
@@ -44,7 +45,8 @@
   }
 
   @container (max-width: 300px) {
-    .resolve-inspector-section {
+    .resolve-inspector-section,
+    .effect-params {
       --resolve-inspector-label-width: 60px;
       --resolve-inspector-label-control-gap: 6px;
       --resolve-inspector-control-action-gap: 5px;

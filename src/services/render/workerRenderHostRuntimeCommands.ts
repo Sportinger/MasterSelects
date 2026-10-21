@@ -228,7 +228,7 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly vignetteSoftness: number;
     readonly samples: number;
   }[];
-  /** Directional blurs follow effects/blur/blurSampling.ts (signed amounts, pixel-space Motion angle). */
+  /** Directional blurs follow effects/blur/blurSampling.ts (Motion/Radial pass through below 0, pixel-space Motion angle). */
   readonly motionBlurAdjustments?: readonly {
     readonly amount: number;
     readonly angle: number;

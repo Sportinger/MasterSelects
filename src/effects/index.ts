@@ -143,9 +143,11 @@ export function getDefaultParams(id: string): Record<string, number | boolean | 
   const effect = getEffect(id);
   if (!effect) return {};
 
+  // Retired (deprecated) parameters are still accepted from saved projects, but new instances
+  // do not carry them: nothing reads them, and graphs fall back to the catalog default.
   const defaults: Record<string, number | boolean | string> = {};
   Object.entries(effect.params).forEach(([key, param]) => {
-    defaults[key] = param.default;
+    if (!param.deprecated) defaults[key] = param.default;
   });
   return defaults;
 }
