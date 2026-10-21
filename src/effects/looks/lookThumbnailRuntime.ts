@@ -1,5 +1,5 @@
 import { EffectsPipeline } from '../EffectsPipeline';
-import { getDefaultParams } from '..';
+import { lookThumbnailEffects } from './lookStackEffects';
 import { renderHostPort } from '../../services/render/renderHostPort';
 import { Logger } from '../../services/logger';
 import type { LookDefinition } from './types';
@@ -186,13 +186,8 @@ class LookThumbnailRuntime {
     const pingView = ping.createView();
     const pongView = pong.createView();
     const sampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear' });
-    const effects = look.stack.map((entry, index) => ({
-      id: `${look.id}:${index}`,
-      type: entry.effectId,
-      name: entry.effectId,
-      enabled: entry.enabled,
-      params: { ...getDefaultParams(entry.effectId), ...entry.params },
-    }));
+    // Old custom Looks render their original analog graphs, exactly as applying them does.
+    const effects = lookThumbnailEffects(look);
     const encoder = device.createCommandEncoder();
     const result = this.pipeline.applyEffects(
       encoder,

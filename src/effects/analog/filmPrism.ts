@@ -9,7 +9,7 @@ const params: Record<string, EffectParam> = {
   mode: { type: 'select', label: 'Shape', default: 'lens', options: FILM_PRISM_MODE_OPTIONS, group: 'Fringe', graphOnly: true },
   angle: { type: 'number', label: 'Prism Angle', default: 0, min: -180, max: 180, step: 1, animatable: true, group: 'Fringe', graphOnly: true },
   grain: { type: 'number', label: 'Grain', default: 0.3, min: 0, max: 1, step: 0.01, animatable: true, group: 'Grain', graphOnly: true },
-  grainSize: { type: 'number', label: 'Grain Size', default: 1.2, min: 0.5, max: 4, step: 0.1, animatable: true, group: 'Grain', graphOnly: true },
+  grainSize: { type: 'number', label: 'Grain Size', default: 1.2, min: FILM_PRISM_GRAIN_SIZE_RANGE[0], max: FILM_PRISM_GRAIN_SIZE_RANGE[1], step: 0.1, animatable: true, group: 'Grain', graphOnly: true },
   speed: { type: 'number', label: 'Grain Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Grain' },
 };
 const ranges = { amount: [0, 1], grain: [0, 1], grainSize: FILM_PRISM_GRAIN_SIZE_RANGE } as const;

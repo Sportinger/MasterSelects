@@ -1,5 +1,6 @@
-import type { BoundOperatorNode } from '../../types/operatorGraph';
+import type { BoundOperatorNode, EffectOperatorGraph } from '../../types/operatorGraph';
 import { FILM_PRISM_SPECTRUM } from '../../effects/analog/filmPrismLimits';
+import { createLegacyCrtScreenGraph } from './legacyCrtScreenGraph';
 
 export interface EffectPresentationPlan {
   labels: Record<string, string>;
@@ -29,20 +30,38 @@ const DIRECTIONAL_PORTS = { ...BLUR_PORTS, 'amount-positive': 'Amount ≥ 0', di
   'coarse-sample:image': 'Coarse Sample', 'radial-log-scale': 'Zoom Range', 'radial-longest': 'Longest Zoom', 'spin-arc': 'Spin Arc',
   'spin-start': 'Spin Start', 'zoom-end-scale': 'End Scale' };
 
+/** The CRT Screen graph saved before the 2026-10 rebuild keeps the stage folders it opened with. */
+const LEGACY_CRT_PLAN: EffectPresentationPlan = {
+  labels: { curvature: 'Screen Curvature', sampling: 'Clamped Image Sampling', scan: 'Scanlines',
+    mask: 'RGB Phosphor Mask', flicker: 'Timeline Flicker', finish: 'Color Mix & Sampled Alpha' },
+  stage: ({ id }) => includes('uv-split resolution-split', id) ? 'sources'
+    : /^(scan-|scan$)/.test(id) ? 'scan'
+      : /^(time-speed$|flicker(?:-|$))/.test(id) ? 'flicker'
+        : /^(safe-scale$|pixel-x$|mask(?:-|$)|is-|above-half$|below-one-half$)/.test(id) ? 'mask'
+          : includes('min-vec2 max-vec2 clamped-uv curved-sample color', id) ? 'sampling'
+            : /^(masked-color|scanned-color|flickered-color|mixed-color|combine)$/.test(id) ? 'finish' : 'curvature',
+};
+
+/** Earlier recipes of a type that saved effects may still run, each with the folders it opened with. */
+export function legacyEffectPresentationPlans(type: string): Array<{ create: () => EffectOperatorGraph; plan: EffectPresentationPlan }> {
+  return type === 'crt-screen' ? [{ create: createLegacyCrtScreenGraph, plan: LEGACY_CRT_PLAN }] : [];
+}
+
 /** Presentation stages name existing computations; they never replace an operator or route a signal. */
 export function effectPresentationPlan(type: string): EffectPresentationPlan | undefined {
   if (type === 'crt-screen') return {
-    labels: { premultiply: 'Premultiplied Source (cached)', screen: 'Tube Shape & Rim', scan: 'Scanline Beams',
+    labels: { premultiply: 'Linear Light Source (cached)', screen: 'Tube Shape & Rim', scan: 'Scanline Beams',
       mask: 'Phosphor Mask', flicker: 'Hum Bar & Flutter', finish: 'Light Out & Alpha' },
     portLabels: { 'screen-uv': 'Tube Position', 'screen-tube': 'Tube Coverage', 'screen-vignette': 'Rim Shade', 'scan-linear': 'Beam Light',
-      'scan-depth': 'Beam Depth', 'mask-factor:rgb': 'Mask', 'flicker-gain': 'Flicker Gain', 'flat-alpha': 'Coverage', 'zero-rgb': 'Black', 'line0-rgb': 'Line Colour', 'line1-rgb': 'Next Line Colour',
+      'scan-depth': 'Beam Depth', 'mask-factor:rgb': 'Mask', 'flicker-gain': 'Flicker Gain', 'flat-alpha': 'Coverage', 'zero-rgb': 'Black', 'line0-linear': 'Line Light', 'line1-linear': 'Next Line Light',
       'scan-d0': 'Distance to Line', 'scan-d1': 'Distance to Next Line', 'scan-w0-weight': 'Beam Weight', 'scan-w1-weight': 'Next Beam Weight',
-      ...clampLabels({ amount: 'Mix', curvature: 'Curvature', 'line-count': 'Line Count', 'scanline-depth': 'Line Depth',
+      'scan-sigma-floor': 'Half-Pixel Floor', 'scan-line-height': 'Line Height', 'scan-w0-brightness': 'Line Brightness',
+      'source-cache': 'Linear Light Source', ...clampLabels({ amount: 'Mix', curvature: 'Curvature', 'line-count': 'Line Count', 'scanline-depth': 'Line Depth',
         'mask-strength': 'Mask Strength', 'mask-size': 'Mask Size', flicker: 'Flicker' }) },
     // Only the parameter clamps are controls: the beams' own luma clamps belong to Scanline Beams.
-    stage: ({ id }) => /-clamped$/.test(id) && !/^scan-/.test(id) ? 'controls' : /^source-/.test(id) ? 'premultiply'
+    stage: ({ id }) => /-clamped$/.test(id) && !/^scan-/.test(id) ? 'controls' : /^(source-|zero-rgb$|gamma-rgb$)/.test(id) ? 'premultiply'
       : /^(screen-|one-vec2$|half-vec2$)/.test(id) ? 'screen'
-        : /^(scan-|flat-|line[01]-|zero-rgb$|gamma-rgb$)/.test(id) ? 'scan'
+        : /^(scan-|flat-|line[01]-)/.test(id) ? 'scan'
           : /^mask-/.test(id) ? 'mask' : /^flicker-/.test(id) ? 'flicker'
             : id === 'resolution-split' ? 'sources' : 'finish',
   };
@@ -51,14 +70,14 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       channels: 'Channel Reads', finish: 'Channel Swap & Alpha' },
     portLabels: { 'state-tick': 'Glitch State', 'state-seed': 'Seed Key', 'state-level': 'Burst Level', 'tear-shift': 'Tear Shift',
       'tear-active': 'Row Torn', 'block-offset': 'Block Offset', 'block-active': 'Block Moved', 'block-rotate': 'Swap Channels',
-      'read-uv': 'Read Position', 'state-burst-salt': 'Burst Key', 'state-strength': 'Burst Strength', 'state-burst': 'Glitching', 'split-shift': 'Split Shift', 'red-read-uv': 'Red Read Position', 'blue-read-uv': 'Blue Read Position',
+      'read-uv': 'Read Position', 'state-seed-key': 'Seed Key Offset', 'state-strength': 'Burst Strength', 'state-burst': 'Glitching', 'split-shift': 'Split Shift', 'red-read-uv': 'Red Read Position', 'blue-read-uv': 'Blue Read Position',
       'red-alpha': 'Red Alpha', 'green-alpha': 'Green Alpha', 'blue-alpha': 'Blue Alpha',
       'red-premultiplied': 'Red', 'green-premultiplied': 'Green', 'blue-premultiplied': 'Blue',
       ...clampLabels({ amount: 'Intensity', density: 'Density', bands: 'Bands', split: 'RGB Split', seed: 'Seed' }) },
     stage: ({ id }) => /^(amount|density|bands|split|seed)-clamped$/.test(id) ? 'controls'
-      : /^(uv-split|resolution-split)$/.test(id) ? 'sources' : /^state-/.test(id) ? 'state' : /^tear-/.test(id) ? 'tear'
+      : /^(uv-split|resolution-split|half-vec2)$/.test(id) ? 'sources' : /^state-/.test(id) ? 'state' : /^tear-/.test(id) ? 'tear'
         : /^block-/.test(id) ? 'block' : /^(read-|split-|red-read-uv$|blue-read-uv$)/.test(id) ? 'read'
-          : /^(red|green|blue)-|^half-vec2$/.test(id) ? 'channels' : 'finish',
+          : /^(red|green|blue)-/.test(id) ? 'channels' : 'finish',
   };
   if (type === 'film-prism') return {
     labels: { premultiply: 'Premultiplied Source (cached)', spread: 'Fringe Spread & Direction', positions: 'Tap Positions',

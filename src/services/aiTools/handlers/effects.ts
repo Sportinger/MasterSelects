@@ -11,6 +11,7 @@ import { adaptTimelineEffectsToMotionAdjustmentContracts } from '../../motionDes
 import { isSupportedAdjustmentEffectType } from '../../motionDesign/adjustment/supportedEffects';
 import { effectParamDefinitions, unusedParamWarnings } from '../../operators/effectParamVisibility';
 import { blurBudgetNotes } from '../../../effects/blur/blurSampling';
+import { effectExperimentalNote } from '../../../effects/types';
 import { useMediaStore } from '../../../stores/mediaStore';
 import type { Effect } from '../../../types/effects';
 
@@ -44,6 +45,7 @@ export async function handleListEffects(): Promise<ToolResult> {
     effects: effects.map(e => ({
       id: e.id,
       name: e.name,
+      ...(effectExperimentalNote(e) ? { experimental: effectExperimentalNote(e) } : {}),
       // Retired parameters (accepted, but they do nothing) are not offered; other hidden ones stay listed.
       params: Object.entries(e.params).filter(([, param]) => !param.deprecated).map(([key, param]) => ({
         name: key,
@@ -105,7 +107,9 @@ export async function handleAddEffect(
 
   invalidateCache();
   const added = useTimelineStore.getState().clips.find(c => c.id === clipId)?.effects.find(e => e.id === newEffect?.id);
-  const warnings = effectParamWarnings(added, Object.keys(customParams ?? {}));
+  const experimental = effectExperimentalNote(getEffect(effectType));
+  const warnings = [...(experimental ? [`${getEffect(effectType)!.name} is experimental: ${experimental}`] : []),
+    ...effectParamWarnings(added, Object.keys(customParams ?? {}))];
 
   return {
     success: true,

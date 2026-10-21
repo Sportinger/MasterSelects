@@ -59,6 +59,23 @@ describe('typed node port contracts', () => {
     expect(boundary.metadata?.groupEndpoint).toEqual({ nodeId: 'stitch', portId: 'background' });
     expect(describePortText(boundary)).toContain('same source UV and coordinate space');
   });
+  it('offers a folded folder only the used outputs of a node whose result is partly used', () => {
+    const number = (id: string, direction: 'input' | 'output') => ({ id, label: id.toUpperCase(), type: 'number' as const, direction });
+    const graph: NodeGraph = { id: 'test', owner: { kind: 'clip', id: 'clip', name: 'Test' },
+      nodes: [
+        { id: 'split', label: 'Split Vector', kind: 'effect', runtime: 'builtin', inputs: [], outputs: [number('x', 'output'), number('y', 'output'), number('z', 'output')], layout: { x: 0, y: 0 } },
+        { id: 'loose', label: 'Loose', kind: 'effect', runtime: 'builtin', inputs: [], outputs: [number('value', 'output')], layout: { x: 0, y: 200 } },
+        { id: 'sink', label: 'Sink', kind: 'effect', runtime: 'builtin', inputs: [number('a', 'input')], outputs: [], layout: { x: 400, y: 0 } },
+      ],
+      edges: [{ id: 'split-sink', fromNodeId: 'split', fromPortId: 'x', toNodeId: 'sink', toPortId: 'a', type: 'number' }],
+      groups: [{ id: 'outer', label: 'Outer', color: '#fff', collapsed: false, nodeIds: ['split', 'loose', 'sink'], proxyId: 'outer-proxy' },
+        { id: 'reads', label: 'Reads', color: '#fff', collapsed: true, nodeIds: ['split', 'loose'], parentId: 'outer', proxyId: 'reads-proxy' }] };
+    const folded = foldOperatorGroups(graph, { version: 1, nodes: [], groups: { reads: { collapsed: true } } });
+    const proxy = folded.nodes.find(node => node.id === 'reads-proxy')!;
+    // X feeds the sink; Y and Z of the same split are not results. A node with no used output still offers it.
+    expect(proxy.outputs.map(port => port.metadata?.groupEndpoint)).toEqual([{ nodeId: 'split', portId: 'x' }, { nodeId: 'loose', portId: 'value' }]);
+  });
+
   it('retains distinct Flock signals and generic clip ports', () => {
     const port = { type: 'geometry', metadata: { semanticKind: 'flock:behavior' } };
     expect(describeNodePort(port).typeLabel).toBe('Behavior');

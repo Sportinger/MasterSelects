@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { getDefaultParams } from '../../../effects';
-import type { EffectDefinition } from '../../../effects/types';
+import { effectExperimentalNote, type EffectDefinition } from '../../../effects/types';
 import { catalogText } from '../../../services/nodeGraph/catalogText';
 import type { LookDefinition } from '../../../effects/looks/types';
 import { LookTile } from '../looks/LookTile';
@@ -33,13 +33,14 @@ export function EffectCatalogPicker({ groups, sourceFrameId, onSelect }: EffectC
           .filter((effect) => {
             if (!normalizedQuery) return true;
             const text = catalogText(`effect:${effect.id}`);
-            return `${effect.name} ${effect.id} ${group.category} ${text.description ?? ''} ${text.tags.join(' ')}`.toLocaleLowerCase().includes(normalizedQuery);
+            return `${effect.name} ${effect.id} ${group.category} ${text.description ?? ''} ${text.tags.join(' ')}${effectExperimentalNote(effect) ? ' experimental' : ''}`.toLocaleLowerCase().includes(normalizedQuery);
           })
           .map((effect) => ({
             effect,
             look: {
               id: `effect-preview-${effect.id}`,
-              name: effect.name,
+              // Experimental effects say so in the list (their note explains the known artefacts).
+              name: effectExperimentalNote(effect) ? `${effect.name} (Experimental)` : effect.name,
               category: 'digital',
               thumbnail: { kind: 'generated' },
               stack: [{ effectId: effect.id, params: getDefaultParams(effect.id), enabled: true }],

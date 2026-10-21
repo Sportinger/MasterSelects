@@ -21,6 +21,8 @@ export interface CatalogEffectOptions {
   retired?: Record<string, string>;
   /** Notes for values the recipe clamps or cannot show (see FullscreenEffectDefinition.paramWarnings). */
   paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
+  /** Why the effect is still experimental (FullscreenEffectDefinition.experimental). */
+  experimental?: string;
 }
 const BASE_PARAMS: Record<string, EffectParam> = {
   scale: {
@@ -68,6 +70,7 @@ export function createCatalogEffect(options: CatalogEffectOptions): EffectDefini
     params,
     requiresContinuousRender: options.clock === 'timeline' ? false : options.animated,
     ...(options.paramWarnings ? { paramWarnings: options.paramWarnings } : {}),
+    ...(options.experimental ? { experimental: options.experimental } : {}),
     packUniforms: (values, width, height, timelineTimeSeconds = 0) => {
       const colorA = colorToRgba(values.colorA, '#111827');
       const colorB = colorToRgba(values.colorB, '#f8fafc');

@@ -9,10 +9,10 @@ const params: Record<string, EffectParam> = {
   scale: { type: 'number', label: 'Scale', default: 14, min: 2, max: 80, step: 1, animatable: true, group: 'Pattern' },
   amount: { type: 'number', label: 'Intensity', default: 0.6, min: 0, max: 1, step: 0.01, animatable: true },
   density: { type: 'number', label: 'Density', default: 0.35, min: 0, max: 1, step: 0.01, animatable: true, graphOnly: true },
-  bands: { type: 'number', label: 'Bands', default: 16, min: 2, max: 80, step: 1, animatable: true, group: 'Pattern', graphOnly: true },
+  bands: { type: 'number', label: 'Bands', default: 16, min: GLITCH_BAND_RANGE[0], max: GLITCH_BAND_RANGE[1], step: 1, animatable: true, group: 'Pattern', graphOnly: true },
   split: { type: 'number', label: 'RGB Split', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true, group: 'Pattern', graphOnly: true },
   speed: { type: 'number', label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion' },
-  seed: { type: 'number', label: 'Seed', default: 0, min: 0, max: 999, step: 1, animatable: false, group: 'Motion', graphOnly: true },
+  seed: { type: 'number', label: 'Seed', default: 0, min: GLITCH_SEED_RANGE[0], max: GLITCH_SEED_RANGE[1], step: 1, animatable: false, group: 'Motion', graphOnly: true },
 };
 const ranges = { amount: [0, 1], density: [0, 1], bands: GLITCH_BAND_RANGE, split: [0, 2], seed: GLITCH_SEED_RANGE } as const;
 

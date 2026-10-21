@@ -7,6 +7,9 @@ export const FILM_PRISM_GRAIN_SIZE_RANGE = [0.5, 6] as const;
 export const FILM_PRISM_GRAIN_FPS = 24;
 /** The grain frame key cycles after this many patterns (about 41 s), keeping hash inputs small. */
 export const FILM_PRISM_GRAIN_CYCLE = 997;
+/** Grain key rows per frame: above the cell rows of an 8K frame at the finest grain, and
+ * FILM_PRISM_GRAIN_CYCLE x this stays below 2^24, so every key is an exact f32 integer. */
+export const FILM_PRISM_GRAIN_FRAME_ROWS = 16384;
 /**
  * Seven reads spread over t in [-1, 1] with normalized red, green and blue weights (triangular
  * spectrum bells at -0.6, 0 and +0.6): edges break into a smooth red-to-blue rainbow.

@@ -19,8 +19,10 @@ export const pixelSort: ComputeEffectDefinition = {
     category: 'analog',
     params: {
       scale: { type: 'number', label: 'Segment Size', default: 16, min: 4, max: 16, step: 1, group: 'Structure' },
+      amount: { type: 'number', label: 'Amount', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true, group: 'Style' },
     },
   }),
+  experimental: 'Sorts fixed runs of at most 16 pixels instead of brightness intervals, so smooth areas such as sky show a fine stripe texture at the run seams.',
   // The sort works on fixed runs of at most 16 pixels (image.segment-sort-luma); say what renders.
   paramWarnings: values => [
     ...(typeof values.scale === 'number' && (values.scale < 4 || values.scale > 16)

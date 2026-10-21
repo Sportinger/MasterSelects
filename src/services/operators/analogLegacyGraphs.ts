@@ -4,6 +4,8 @@ import { EFFECT_GRAPH_PARAM } from './effectGraph';
 import { createLegacyCrtScreenGraph } from './legacyCrtScreenGraph';
 import { createLegacyGlitchGraph } from './legacyGlitchGraph';
 import { createLegacyFilmPrismGraph } from './legacyFilmPrismGraph';
+import { createLegacyHoloGraph } from './legacyHoloGraph';
+import { createLegacyRibbonScanGraph } from './legacyRibbonScanGraph';
 
 /**
  * Analog effects whose look was rebuilt in the 2026-10 analog review. Saved effects keep the look
@@ -19,6 +21,8 @@ const REBUILT: Record<string, { marker: string; original: () => EffectOperatorGr
   'crt-screen': { marker: 'lineCount', original: createLegacyCrtScreenGraph },
   glitch: { marker: 'density', original: createLegacyGlitchGraph },
   'film-prism': { marker: 'grain', original: createLegacyFilmPrismGraph },
+  holo: { marker: 'stripes', original: createLegacyHoloGraph },
+  'ribbon-scan': { marker: 'edges', original: createLegacyRibbonScanGraph },
 };
 
 export function isRebuiltAnalogEffectType(type: string): boolean { return Object.hasOwn(REBUILT, type); }

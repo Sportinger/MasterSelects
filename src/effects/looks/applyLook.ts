@@ -1,12 +1,11 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import type { LookDefinition, LookStackEntry } from './types';
-import { originalAnalogGraph, predatesAnalogRecipe } from '../../services/operators/analogLegacyGraphs';
+import { lookEntryOriginalGraph } from './lookStackEffects';
 
 /** A custom Look saved before an analog effect's 2026-10 rebuild keeps that effect's original look. */
 function keepOriginalAnalogLook(look: LookDefinition, entry: LookStackEntry, clipId: string, effectId: string): void {
-  if (look.builtIn || !predatesAnalogRecipe(entry.effectId, entry.params)) return;
-  const operatorGraph = originalAnalogGraph(entry.effectId), state = useTimelineStore.getState();
+  const operatorGraph = lookEntryOriginalGraph(look, entry), state = useTimelineStore.getState();
   const clip = state.clips.find(candidate => candidate.id === clipId);
   if (!operatorGraph || !clip) return;
   state.updateClip(clipId, { effects: clip.effects.map(effect => effect.id === effectId ? { ...effect, operatorGraph } : effect) });

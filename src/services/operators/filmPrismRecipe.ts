@@ -1,7 +1,8 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { premultipliedSourceCache, type GraphPort } from './blurGraphBuilder';
 import { AnalogRecipeBuilder } from './analogRecipeBuilder';
-import { FILM_PRISM_GRAIN_SIZE_RANGE, FILM_PRISM_REACH, FILM_PRISM_SPECTRUM, FILM_PRISM_GRAIN_FPS, FILM_PRISM_GRAIN_CYCLE } from '../../effects/analog/filmPrismLimits';
+import { FILM_PRISM_GRAIN_SIZE_RANGE, FILM_PRISM_REACH, FILM_PRISM_SPECTRUM, FILM_PRISM_GRAIN_FPS, FILM_PRISM_GRAIN_CYCLE,
+  FILM_PRISM_GRAIN_FRAME_ROWS } from '../../effects/analog/filmPrismLimits';
 
 /**
  * Film Prism recipe (see docs/Features/Effects-Analog.md).
@@ -80,11 +81,13 @@ function fringe(g: AnalogRecipeBuilder, cache: string) {
   return sums as Record<'red' | 'green' | 'blue', { colour: GraphPort; alpha: GraphPort }>;
 }
 
-/** One octave of smooth value noise in [0, 1] over `cell` (grain cells), keyed by the grain frame. */
+/**
+ * One octave of smooth value noise in [0, 1] over `cell` (grain cells), keyed by the grain frame.
+ * Corner keys are exact integers below 2^24 (cell index plus an integer frame offset), so the two
+ * cells that share a corner hash the same bits on the GPU (f32) and the CPU (f64): no seams.
+ */
 function valueNoise(g: AnalogRecipeBuilder, id: string, cell: GraphPort, frameOffset: GraphPort): string {
-  // Fold the cell index into [0, 509): small exact keys at any resolution.
-  const folded = g.unary(`${id}-fold-fract`, 'math.fract.vec2', g.binary(`${id}-fold-scaled`, 'math.divide-ieee.vec2-scalar', g.unary(`${id}-cell-floor`, 'math.floor.vec2', cell), 'grain-wrap'));
-  const base = g.add2(`${id}-base`, g.mul2(`${id}-wrapped`, folded, 'grain-wrap-vec2'), frameOffset);
+  const base = g.add2(`${id}-base`, g.unary(`${id}-cell-floor`, 'math.floor.vec2', cell), frameOffset);
   const [fx, fy] = g.split2(`${id}-fraction`, g.unary(`${id}-fraction-value`, 'math.fract.vec2', cell));
   const fade = (fade: string, f: GraphPort) => g.mul(fade, g.mul(`${fade}-squared`, f, f), g.sub(`${fade}-shape`, 'three', g.mul(`${fade}-double`, 'two', f)));
   const ux = fade(`${id}-fade-x`, fx), uy = fade(`${id}-fade-y`, fy);
@@ -102,11 +105,13 @@ function grainNoise(g: AnalogRecipeBuilder) {
   const step = g.fn('grain-step', 'floor', g.mul('grain-clock', g.mul('grain-time', 'time', 'speed'), g.number('grain-fps', FILM_PRISM_GRAIN_FPS)));
   const cycle = g.number('grain-cycle', FILM_PRISM_GRAIN_CYCLE);
   const frame = g.sub('grain-frame', step, g.mul('grain-cycles', g.fn('grain-cycle-count', 'floor', g.div('grain-cycle-position', step, cycle)), cycle));
-  const offset = g.vec2('grain-frame-offset', g.mul('grain-frame-x', frame, g.number('grain-frame-x-salt', 3.17)), g.mul('grain-frame-y', frame, g.number('grain-frame-y-salt', 1.93)));
-  g.number('grain-wrap', 509); g.splat2('grain-wrap-vec2', 'grain-wrap');
+  // Each frame moves the keys by FILM_PRISM_GRAIN_FRAME_ROWS cell rows (more rows than an 8K frame has
+  // cells), and the fine octave lives on its own key rows: integer keys below 2^24 for every frame.
+  const offset = g.vec2('grain-frame-offset', 'zero', g.mul('grain-frame-rows', frame, g.number('grain-frame-stride', FILM_PRISM_GRAIN_FRAME_ROWS)));
   const coarse = valueNoise(g, 'grain-coarse', cell, offset);
   const fineCell = g.add2('grain-fine-cell', g.scale2('grain-fine-scaled', cell, g.number('grain-fine-ratio', 2.03)), g.splat2('grain-fine-shift', g.number('grain-fine-salt', 17.1)));
-  const fine = valueNoise(g, 'grain-fine', fineCell, offset);
+  const fineOffset = g.add2('grain-fine-offset', offset, g.vec2('grain-fine-key-shift', g.number('grain-fine-key-column', 1 << 20), 'zero'));
+  const fine = valueNoise(g, 'grain-fine', fineCell, fineOffset);
   const blend = g.plus('grain-blend', g.mul('grain-coarse-share', coarse, g.number('grain-coarse-weight', .6)), g.mul('grain-fine-share', fine, g.number('grain-fine-weight', .4)));
   // The blend of two octaves clusters around 0.5; 2.5 x (blend - 0.5) spans about [-1, 1].
   return g.mul('grain-noise', g.sub('grain-centred', blend, 'half'), g.number('grain-spread', 2.5));

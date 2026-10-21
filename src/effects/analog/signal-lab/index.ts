@@ -12,8 +12,8 @@ function mappedValue(values: Record<string, Primitive>, key: string, variants: R
   return variants[typeof value === 'string' ? value : fallback] ?? variants[fallback] ?? 0;
 }
 
-/** Parameters the signal model clamps to their declared range; the others are used as given. */
-const CLAMPED = new Set(['amount', 'palAmount', 'lumaBandwidth', 'chromaBandwidth', 'chromaLevel', 'ycCrosstalk', 'rfAmount', 'signalStrength',
+/** Parameters the signal model clamps to their declared range (shader.wgsl); the others are used as given. */
+export const ANALOG_SIGNAL_CLAMPED_PARAMS: ReadonlySet<string> = new Set(['amount', 'palAmount', 'lumaBandwidth', 'chromaBandwidth', 'chromaLevel', 'ycCrosstalk', 'rfAmount', 'signalStrength',
   'colorLock', 'receiverAmount', 'vhsAmount', 'crtAmount']);
 const format = (value: number) => Number(value.toPrecision(4)).toString();
 
@@ -24,7 +24,7 @@ function analogSignalParamWarnings(values: Record<string, Primitive>): string[] 
     if (definition.type !== 'number' || typeof value !== 'number' || !Number.isFinite(value)) return [];
     const min = definition.min ?? -Infinity, max = definition.max ?? Infinity;
     if (value >= min && value <= max) return [];
-    return CLAMPED.has(id)
+    return ANALOG_SIGNAL_CLAMPED_PARAMS.has(id)
       ? [`${definition.label} ${format(value)} is outside ${format(min)} to ${format(max)} and renders as ${format(Math.min(max, Math.max(min, value)))}.`]
       : [`${definition.label} ${format(value)} is outside ${format(min)} to ${format(max)}; the signal model uses it as given, which can look extreme.`];
   });

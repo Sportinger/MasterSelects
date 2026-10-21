@@ -28,4 +28,20 @@ describe('analog effects say in the inspector what they clamp or cannot draw', (
     expect(notice).toMatch(/Chroma Level 5 is outside 0 to 2 and renders as 2/);
     expect(notice).toMatch(/Fine Tuning 3 is outside -1 to 1; the signal model uses it as given/);
   });
+
+  it('says which effects are still experimental and why, in the inspector and in the effect list', async () => {
+    for (const type of ['crystal', 'glass-dispersion', 'pixel-sort']) {
+      render(<EffectBudgetNotice effectType={type} params={getDefaultParams(type)} />);
+      expect(screen.getByRole('status').textContent).toMatch(/^Experimental: /);
+      cleanup();
+    }
+    const { getCategoriesWithEffects } = await import('../../src/effects');
+    const { EffectCatalogPicker } = await import('../../src/components/panels/properties/EffectCatalogPicker');
+    render(<EffectCatalogPicker groups={getCategoriesWithEffects()} sourceFrameId="" onSelect={() => {}} />);
+    expect(screen.getAllByText('Crystal Glass (Experimental)').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Pixel Sort (Experimental)').length).toBeGreaterThan(0);
+    expect(screen.queryByText('CRT Screen (Experimental)')).toBeNull();
+    expect(screen.getAllByText('CRT Screen').length).toBeGreaterThan(0);
+  });
 });
+

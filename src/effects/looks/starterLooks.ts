@@ -39,11 +39,11 @@ export const STARTER_LOOKS: LookDefinition[] = [
     fx('grain', { amount: 0.08 }),
   ]),
   look('holo-drift', 'Holo Drift', 'digital', ['hologram', 'spectrum', 'animated'], [
-    fx('holo', { amount: 0.72, scale: 16, speed: 0.8, colorA: '#13d8e8', colorB: '#ef65bc' }),
+    fx('holo', { amount: 0.6, stripes: 0.75, speed: 0.8, colorA: '#13d8e8', colorB: '#ef65bc' }),
     fx('glow', { amount: 0.2 }),
   ]),
   look('crystal-signal', 'Crystal Signal', 'digital', ['glass', 'refraction', 'clean'], [
-    fx('crystal', { amount: 0.62, scale: 18, speed: 0.2 }),
+    fx('crystal', { amount: 0.35, scale: 18, speed: 0.2 }),
     fx('sharpen', { amount: 0.22 }),
   ]),
   look('pixel-editorial', 'Pixel Editorial', 'editorial', ['pixel', 'poster', 'bold'], [
@@ -70,7 +70,7 @@ export const STARTER_LOOKS: LookDefinition[] = [
       syncInstability: 0.35, colorLock: 0.6 }),
   ]),
   look('worn-vhs', 'Worn VHS', 'analog', ['vhs', 'tape', 'tracking', 'retro'], [
-    fx('analog-signal-lab', { rfAmount: 0, vhsAmount: 1, tapeSpeed: 'lp', tracking: 0.3, dropout: 0.15, tapeWear: 0.35,
+    fx('analog-signal-lab', { rfAmount: 0, vhsAmount: 1, tapeSpeed: 'lp', tracking: 0.3, dropout: 0.15, tapeWear: 0.25,
       chromaBleed: 0.6, headSwitching: 0.7, crtAmount: 0.2 }),
   ]),
   look('prism-film', 'Prism Film', 'analog', ['film', 'prism', 'grain'], [

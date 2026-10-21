@@ -1,5 +1,5 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { premultipliedSourceCache, type GraphPort } from './blurGraphBuilder';
+import type { GraphPort } from './blurGraphBuilder';
 import { AnalogRecipeBuilder, straightSample } from './analogRecipeBuilder';
 import { CRT_LINE_COUNT_RANGE, CRT_MASK_SIZE_RANGE, CRT_MIN_LINE_PX, CRT_MIN_STRIPE_PX } from '../../effects/analog/crtScreenLimits';
 
@@ -10,23 +10,30 @@ import { CRT_LINE_COUNT_RANGE, CRT_MASK_SIZE_RANGE, CRT_MIN_LINE_PX, CRT_MIN_STR
  * - Screen: barrel warp x' = x(1 + k y^2), y' = y(1 + k x^2) on [-1, 1] coordinates with
  *   k = 0.18 * Curvature * Mix. Outside the tube is transparent; the corners are rounded with
  *   radius 5 % of the frame height and a one-pixel soft edge; the rim darkens by up to 40 %.
- * - Scanlines: Line Count beams over the frame height. Each output pixel adds the two nearest
- *   lines (sampled at their centres) with a Gaussian beam profile in linear light; the beam
- *   width grows from 0.16 to 0.42 line heights with the line's brightness, so dark parts show
- *   lines and highlights bloom into the gaps. Depth blends from the full-resolution picture to
- *   the beams; lines thinner than 2 px fade out instead of aliasing.
+ * - Scanlines: Line Count beams over the frame height. Each line's light is the picture averaged
+ *   in linear light over the line's height (four reads), so thin detail between line centres is
+ *   not skipped. Each output pixel adds the two nearest lines with a Gaussian beam profile in linear
+ *   light; the beam width grows from 0.16 to 0.42 line heights with the line's brightness (never
+ *   below half a pixel), so dark parts show lines and highlights bloom into the gaps. Each beam
+ *   carries the light of its line (the profile is normalized to its area), so the average
+ *   exposure stays that of the source at every brightness. Depth blends from the full-resolution
+ *   picture to the beams; lines closer than CRT_MIN_LINE_PX (2.25 px) fade out instead of aliasing.
  * - Phosphor mask: sinusoidal RGB stripes (Aperture Grille) or stripes broken by staggered
  *   slots (Slot Mask), Mask Size = stripe width in pixels at 1080 lines (scaled with the frame
- *   height); the mask keeps the average brightness, and fades out below about 1 px stripes.
+ *   height); both masks keep the average brightness (the slot term is divided by its mean), and
+ *   fade out below about 1 px stripes. Bright areas can clip where the mask peaks.
  * - Flicker: a slow rolling hum bar plus a fast brightness flutter, driven by timeline time.
- * - Alpha: the three reads come from a premultiplied cache, so cut-out edges keep their colour.
+ * - Light: the frame is cached once as premultiplied linear light (rgba16float), so every filtered
+ *   read averages light and cut-out edges keep their colour; the result is encoded back with 1/2.2.
  */
 const GAMMA = 2.2;
+/** Slot Mask: the dark gap ramps in from SLOT_EDGE to 0.5 of each half slot row and darkens by SLOT_DARKNESS. */
+const SLOT_EDGE = .36, SLOT_DARKNESS = .7;
 
 function sources(g: AnalogRecipeBuilder) {
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution'); g.add('time', 'image.timeline-time');
   g.number('zero', 0); g.number('one', 1); g.number('half', .5); g.number('two', 2); g.number('tau', Math.PI * 2);
-  g.number('coverage-floor', 1e-6);
+  g.number('coverage-floor', 1e-6); g.number('inverse-gamma', 1 / GAMMA);
   g.split2('resolution-split', ['resolution', 'value']);
 }
 
@@ -74,36 +81,65 @@ function linear(g: AnalogRecipeBuilder, id: string, rgb: GraphPort) {
   return g.binary(id, 'math.power.rgb', positive, ['gamma-rgb', 'rgb']);
 }
 
-/** Gaussian beam weight exp(-d^2 / (2 sigma^2)), sigma from the line's brightness. */
-function beam(g: AnalogRecipeBuilder, id: string, distance: GraphPort, rgb: GraphPort) {
-  const luma = g.add(`${id}-luma`, 'color.luminance-rec709.rgb', { rgb });
-  const sigma = g.mix(`${id}-sigma`, 'scan-sigma-min', 'scan-sigma-max', g.clamp(`${id}-luma-clamped`, luma, 'zero', 'one'));
+/** Gaussian beam weight exp(-d^2 / (2 sigma^2)) / (sqrt(2 pi) sigma): the beam spreads its line's light, it does not add or lose any. */
+function beam(g: AnalogRecipeBuilder, id: string, distance: GraphPort, linearRgb: GraphPort) {
+  // The beam widens with the line's brightness (encoded, as seen): luminance of its linear light ^ (1 / 2.2).
+  const luma = g.add(`${id}-luma`, 'color.luminance-rec709.rgb', { rgb: linearRgb });
+  const brightness = g.binary(`${id}-brightness`, 'math.power.scalar', g.clamp(`${id}-luma-clamped`, luma, 'zero', 'one'), 'inverse-gamma');
+  const sigma = g.max(`${id}-sigma`, g.mix(`${id}-sigma-luma`, 'scan-sigma-min', 'scan-sigma-max', brightness), 'scan-sigma-floor');
   const spread = g.mul(`${id}-spread`, g.mul(`${id}-sigma-squared`, sigma, sigma), 'two');
   const exponent = g.sub(`${id}-exponent`, 'zero', g.div(`${id}-ratio`, g.mul(`${id}-d2`, distance, distance), spread));
-  return g.fn(`${id}-weight`, 'exp', exponent);
+  return g.div(`${id}-weight`, g.fn(`${id}-profile`, 'exp', exponent), g.mul(`${id}-area`, sigma, 'scan-root-tau'));
+}
+
+/** The frame as premultiplied linear light in an rgba16float cache: every filtered read averages light, not gamma-encoded values. */
+function linearLightCache(g: AnalogRecipeBuilder): string {
+  g.rgbConstant('zero-rgb', 'zero');
+  g.rgbConstant('gamma-rgb', g.number('gamma', GAMMA));
+  g.add('source-split', 'vector.split.rgba', { image: ['frame', 'image'] });
+  const alpha = g.add('source-alpha', 'convert.alpha-to-scalar', { alpha: ['source-split', 'alpha'] });
+  const light = g.scaleRgb('source-light', linear(g, 'source-linear', ['source-split', 'rgb']), alpha);
+  g.add('source-premultiplied', 'vector.combine.rgba', { rgb: light, alpha: ['source-split', 'alpha'] });
+  return g.add('source-cache', 'image.materialize', { image: ['source-premultiplied', 'image'] });
+}
+
+/** A line's light: the cached picture averaged over the line's height (four reads), as straight linear rgb. */
+function lineLight(g: AnalogRecipeBuilder, id: string, cache: string, x: GraphPort, centre: GraphPort): string {
+  const reads = [-3 / 8, -1 / 8, 1 / 8, 3 / 8].map((offset, index) => {
+    const tap = `${id}-tap${index}`;
+    const y = g.plus(`${tap}-y`, centre, g.mul(`${tap}-offset`, 'scan-line-height', g.number(`${tap}-share`, offset)));
+    g.add(`${tap}-sample`, 'image.sample', { image: [cache, 'image'], uv: g.vec2(`${tap}-uv`, x, y) });
+    return g.add(tap, 'convert.image-to-vec4', { image: [`${tap}-sample`, 'image'] });
+  });
+  const first = g.add(`${id}-mix-a`, 'math.mix.vec4', { a: reads[0], b: reads[1], t: 'half' });
+  const second = g.add(`${id}-mix-b`, 'math.mix.vec4', { a: reads[2], b: reads[3], t: 'half' });
+  g.add(`${id}-average`, 'convert.vec4-to-image', { value: g.add(`${id}-mix`, 'math.mix.vec4', { a: first, b: second, t: 'half' }) });
+  g.add(`${id}-split`, 'vector.split.rgba', { image: [`${id}-average`, 'image'] });
+  const alpha = g.add(`${id}-alpha`, 'convert.alpha-to-scalar', { alpha: [`${id}-split`, 'alpha'] });
+  return g.add(`${id}-linear`, 'math.divide-ieee.rgb-scalar', { a: [`${id}-split`, 'rgb'], b: g.max(`${id}-safe-alpha`, alpha, 'coverage-floor') });
 }
 
 /** Flat read and the two-line beam sum in linear light: `scan-linear`. */
 function scanlines(g: AnalogRecipeBuilder, cache: string) {
-  g.rgbConstant('zero-rgb', 'zero');
-  g.rgbConstant('gamma-rgb', g.number('gamma', GAMMA));
-  g.number('scan-sigma-min', .16); g.number('scan-sigma-max', .42);
+  g.number('scan-sigma-min', .16); g.number('scan-sigma-max', .42); g.number('scan-root-tau', Math.sqrt(2 * Math.PI));
   const [x, y] = g.split2('scan-screen-uv', 'screen-uv');
   const flat = straightSample(g, 'flat', cache, 'screen-uv');
+  // Line spacing in output pixels; beams stay at least half a pixel wide so they sample cleanly.
+  const linePx = g.div('scan-line-px', ['resolution-split', 'y'], 'line-count-clamped');
+  g.div('scan-sigma-floor', g.number('scan-sigma-floor-px', .5), linePx);
+  g.div('scan-line-height', 'one', 'line-count-clamped');
   const position = g.mul('scan-position', y, 'line-count-clamped');
   const first = g.fn('scan-first', 'floor', g.sub('scan-shifted', position, 'half'));
   const d0 = g.sub('scan-d0', g.sub('scan-offset', position, 'half'), first), d1 = g.sub('scan-d1', 'one', d0);
   const y0 = g.div('scan-y0', g.plus('scan-centre0', first, 'half'), 'line-count-clamped');
   const y1 = g.div('scan-y1', g.plus('scan-centre1', first, g.number('one-point-five', 1.5)), 'line-count-clamped');
-  const line0 = straightSample(g, 'line0', cache, g.vec2('scan-uv0', x, y0));
-  const line1 = straightSample(g, 'line1', cache, g.vec2('scan-uv1', x, y1));
-  const sum = g.addRgb('scan-beams', g.scaleRgb('scan-beam0', linear(g, 'line0-linear', line0.rgb), beam(g, 'scan-w0', d0, line0.rgb)),
-    g.scaleRgb('scan-beam1', linear(g, 'line1-linear', line1.rgb), beam(g, 'scan-w1', d1, line1.rgb)));
+  const line0 = lineLight(g, 'line0', cache, x, y0), line1 = lineLight(g, 'line1', cache, x, y1);
+  const sum = g.addRgb('scan-beams', g.scaleRgb('scan-beam0', line0, beam(g, 'scan-w0', d0, line0)),
+    g.scaleRgb('scan-beam1', line1, beam(g, 'scan-w1', d1, line1)));
   // Lines thinner than CRT_MIN_LINE_PX cannot be drawn without aliasing; they fade to the flat picture.
-  const linePx = g.div('scan-line-px', ['resolution-split', 'y'], 'line-count-clamped');
   const fade = g.smooth('scan-fade', g.number('scan-fade-start', CRT_MIN_LINE_PX - 1), g.number('scan-fade-end', CRT_MIN_LINE_PX), linePx);
   const depth = g.mul('scan-depth', g.mul('scan-depth-amount', 'scanline-depth-clamped', 'amount-clamped'), fade);
-  g.mixRgb('scan-linear', linear(g, 'flat-linear', flat.rgb), sum, depth);
+  g.mixRgb('scan-linear', flat.rgb, sum, depth);
   return { flatAlpha: flat.alpha, depth };
 }
 
@@ -123,9 +159,11 @@ function mask(g: AnalogRecipeBuilder) {
   const column = g.fn('mask-column', 'floor', phase);
   const stagger = g.fn('mask-stagger', 'fract', g.mul('mask-column-half', column, 'half'));
   const row = g.fn('mask-row', 'fract', g.plus('mask-row-staggered', g.div('mask-row-phase', g.mul('mask-y-px', v, height), g.mul('mask-slot-px', triad, 'two')), stagger));
-  const slotGap = g.smooth('mask-slot-gap', g.number('mask-slot-edge0', .36), 'half', g.fn('mask-row-centre', 'abs', g.sub('mask-row-offset', row, 'half')));
+  const slotGap = g.smooth('mask-slot-gap', g.number('mask-slot-edge0', SLOT_EDGE), 'half', g.fn('mask-row-centre', 'abs', g.sub('mask-row-offset', row, 'half')));
   const isSlot = g.greater('mask-is-slot', 'mask-type', 'half');
-  const slot = g.select('mask-slot', isSlot, 'one', g.sub('mask-slot-light', 'one', g.mul('mask-slot-depth', slotGap, g.number('mask-slot-darkness', .7))));
+  // Divided by its mean over a slot (the gap ramps over 0.5 - SLOT_EDGE of each half row), so the Slot Mask keeps the average light.
+  const slotLight = g.sub('mask-slot-light', 'one', g.mul('mask-slot-depth', slotGap, g.number('mask-slot-darkness', SLOT_DARKNESS)));
+  const slot = g.select('mask-slot', isSlot, 'one', g.div('mask-slot-balanced', slotLight, g.number('mask-slot-mean', 1 - SLOT_DARKNESS * (.5 - SLOT_EDGE))));
   const fade = g.smooth('mask-fade', g.number('mask-fade-start', CRT_MIN_STRIPE_PX * .6), g.number('mask-fade-end', CRT_MIN_STRIPE_PX), stripe);
   const strength = g.mul('mask-depth', g.mul('mask-depth-amount', 'mask-strength-clamped', 'amount-clamped'), g.mul('mask-depth-fade', fade, g.number('mask-contrast', .85)));
   const factor = (id: string, profile: string) => g.plus(`${id}-factor`, 'one', g.mul(`${id}-swing`,
@@ -149,17 +187,15 @@ export function createDefaultCrtScreenGraph(): EffectOperatorGraph {
   const g = new AnalogRecipeBuilder();
   sources(g);
   controls(g);
-  const cache = premultipliedSourceCache(g);
+  const cache = linearLightCache(g);
   screen(g);
-  const { flatAlpha, depth } = scanlines(g, cache);
+  const { flatAlpha } = scanlines(g, cache);
   mask(g);
   flicker(g);
-  // Scanlines darken mid-tones; a mild gain keeps the overall exposure close to the source.
-  const gain = g.plus('finish-gain', 'one', g.mul('finish-gain-depth', depth, g.number('finish-gain-scale', .25)));
-  const shade = g.mul('finish-shade', g.mul('finish-shade-rim', 'screen-vignette', 'flicker-gain'), gain);
+  const shade = g.mul('finish-shade', 'screen-vignette', 'flicker-gain');
   const lit = g.scaleRgb('finish-lit', g.mulRgb('finish-masked', 'scan-linear', ['mask-factor', 'rgb']), shade);
   const encoded = g.binary('finish-encoded', 'math.power.rgb', g.binary('finish-positive', 'math.max.rgb', lit, ['zero-rgb', 'rgb']),
-    g.rgbConstant('inverse-gamma-rgb', g.number('inverse-gamma', 1 / GAMMA)));
+    g.rgbConstant('inverse-gamma-rgb', 'inverse-gamma'));
   const rgb = g.add('finish-rgb', 'math.clamp.rgb-scalar', { value: encoded, min: 'zero', max: 'one' });
   const alpha = g.unary('finish-alpha-value', 'convert.scalar-to-alpha', g.mul('finish-coverage', flatAlpha, 'screen-tube'));
   g.add('finish', 'vector.combine.rgba', { rgb, alpha: [alpha, 'alpha'] });

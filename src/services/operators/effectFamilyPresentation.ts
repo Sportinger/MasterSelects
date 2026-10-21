@@ -1,6 +1,6 @@
 import type { BoundOperatorNode, EffectOperatorGraph, OperatorGroup } from '../../types/operatorGraph';
 import { expandOperatorCompositions, sameCompositionNode } from './operatorComposition';
-import { effectPresentationPlan } from './effectPresentationPlans';
+import { effectPresentationPlan, legacyEffectPresentationPlans } from './effectPresentationPlans';
 
 const originals = new Map<string, EffectOperatorGraph>();
 const cache = new WeakMap<EffectOperatorGraph, Map<string, EffectOperatorGraph>>();
@@ -57,12 +57,20 @@ function readableGroups(graph: EffectOperatorGraph, proposed: OperatorGroup[]): 
 /** The untouched recipe gets a one-time readable layout. Saved edits, folder boundaries and ungrouping win. */
 export function organizeEffectFamilyGraph(source: EffectOperatorGraph, composed: EffectOperatorGraph, type: string,
   createDefault: () => EffectOperatorGraph): EffectOperatorGraph {
-  const plan = effectPresentationPlan(type);
-  if (!plan || source.effectPresentationRules || source.incomplete || source.groups?.some(group => !group.composition)) return composed;
+  const current = effectPresentationPlan(type);
+  // The current recipe first, then earlier recipes that saved effects may still run (each with its own folders).
+  const candidates = [...(current ? [{ key: type, create: createDefault, plan: current }] : []),
+    ...legacyEffectPresentationPlans(type).map((entry, index) => ({ key: `${type}:legacy-${index}`, ...entry }))];
+  if (!candidates.length || source.effectPresentationRules || source.incomplete || source.groups?.some(group => !group.composition)) return composed;
   const cached = cache.get(source)?.get(type); if (cached) return cached;
-  let original = originals.get(type);
-  if (!original) { original = createDefault(); originals.set(type, original); }
-  if (!matchesEffectRecipe(source, original)) return composed;
+  const recipeOf = (key: string, create: () => EffectOperatorGraph) => {
+    let original = originals.get(key);
+    if (!original) { original = create(); originals.set(key, original); }
+    return original;
+  };
+  const match = candidates.find(candidate => matchesEffectRecipe(source, recipeOf(candidate.key, candidate.create)));
+  if (!match) return composed;
+  const plan = match.plan, original = recipeOf(match.key, match.create);
   const originalNodes = new Map(original.nodes.map(node => [node.id, node]));
   const labels = { controls: 'Parameters', constants: 'Constants', sources: 'Coordinates & Resources', ...plan.labels };
   const members = new Map<string, string[]>();

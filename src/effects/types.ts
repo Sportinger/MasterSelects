@@ -85,6 +85,9 @@ export interface FullscreenEffectDefinition {
    */
   paramWarnings?: (params: Record<string, number | boolean | string>, width?: number, height?: number) => string[];
 
+  /** Optional: why the effect is still experimental (its known artefacts). Pickers mark it; the inspector and tools show the note. */
+  experimental?: string;
+
   // Optional: Multi-pass for complex effects (blur, glow, etc.)
   passes?: number;
 
@@ -165,6 +168,8 @@ export interface ComputeEffectDefinition {
   computeMode?: 'single' | 'jump-flood' | 'analog-signal';
   /** Notes for values the renderer clamps, ignores or cannot show (see FullscreenEffectDefinition.paramWarnings). */
   paramWarnings?: FullscreenEffectDefinition['paramWarnings'];
+  /** Why the effect is still experimental (see FullscreenEffectDefinition.experimental). */
+  experimental?: string;
   requiresContinuousRender?: boolean;
   customControls?: ComponentType<EffectControlProps>;
 }
@@ -173,6 +178,11 @@ export interface ComputeEffectDefinition {
  * Complete effect definition - each effect module exports this.
  */
 export type EffectDefinition = FullscreenEffectDefinition | ParticleRenderEffectDefinition | ComputeEffectDefinition;
+
+/** Why an effect is still experimental, or undefined for a finished effect. */
+export function effectExperimentalNote(definition: EffectDefinition | undefined): string | undefined {
+  return definition && 'experimental' in definition ? definition.experimental : undefined;
+}
 
 export function isFullscreenEffectDefinition(
   effect: EffectDefinition | undefined,

@@ -10,11 +10,11 @@ const params: Record<string, EffectParam> = {
   scale: { type: 'number', label: 'Mask Density', default: 3, min: 1, max: 12, step: 1, animatable: true, group: 'Phosphor Mask' },
   amount: { type: 'number', label: 'Mix', default: 1, min: 0, max: 1, step: 0.01, animatable: true },
   curvature: { type: 'number', label: 'Curvature', default: 0.35, min: 0, max: 1, step: 0.01, animatable: true, group: 'Screen', graphOnly: true },
-  lineCount: { type: 'number', label: 'Line Count', default: 240, min: 60, max: 1080, step: 1, animatable: true, group: 'Scanlines', graphOnly: true },
+  lineCount: { type: 'number', label: 'Line Count', default: 240, min: CRT_LINE_COUNT_RANGE[0], max: CRT_LINE_COUNT_RANGE[1], step: 1, animatable: true, group: 'Scanlines', graphOnly: true },
   scanlines: { type: 'number', label: 'Line Depth', default: 0.75, min: 0, max: 1, step: 0.01, animatable: true, group: 'Scanlines', graphOnly: true },
   maskType: { type: 'select', label: 'Mask', default: 'aperture', options: CRT_MASK_OPTIONS, group: 'Phosphor Mask', graphOnly: true },
   maskStrength: { type: 'number', label: 'Mask Strength', default: 0.5, min: 0, max: 1, step: 0.01, animatable: true, group: 'Phosphor Mask', graphOnly: true },
-  maskSize: { type: 'number', label: 'Mask Size', default: 2, min: 1, max: 8, step: 0.1, animatable: true, group: 'Phosphor Mask', graphOnly: true },
+  maskSize: { type: 'number', label: 'Mask Size', default: 2, min: CRT_MASK_SIZE_RANGE[0], max: CRT_MASK_SIZE_RANGE[1], step: 0.1, animatable: true, group: 'Phosphor Mask', graphOnly: true },
   flicker: { type: 'number', label: 'Flicker', default: 0.2, min: 0, max: 1, step: 0.01, animatable: true, group: 'Motion', graphOnly: true },
   speed: { type: 'number', label: 'Speed', default: 1, min: 0, max: 5, step: 0.05, animatable: true, group: 'Motion' },
 };

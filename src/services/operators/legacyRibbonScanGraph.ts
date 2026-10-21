@@ -16,8 +16,12 @@ class Builder {
   binary(id: string, operator: string, a: Ref, b: Ref) { const out = this.node(id, operator, 'value'); this.edge(a, out, 'a'); this.edge(b, out, 'b'); return out; }
 }
 
-/** Granular equivalent of the catalog ribbonScanFragment; schema remains effect-owned. */
-export function createDefaultRibbonScanGraph(): EffectOperatorGraph {
+/**
+ * The Ribbon Scan graph as it shipped before the 2026-10 analog review (displacement up to 8 % of the width, clamped edges). Frozen: saved effects
+ * that still carry it keep their look and graph-less old effects are given it on load
+ * (analogLegacyGraphs.ts). Never change it.
+ */
+export function createLegacyRibbonScanGraph(): EffectOperatorGraph {
   const g = new Builder();
   const frame = g.node('frame', 'image.frame', 'image'), uv = g.node('uv', 'image.normalized-uv', 'uv');
   const splitUv = g.node('uv-split', 'vector.split.vec2', 'x'); g.edge(uv, splitUv, 'value');
