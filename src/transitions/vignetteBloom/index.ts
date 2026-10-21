@@ -33,9 +33,10 @@ export const vignetteBloom: TransitionDefinition = {
       effectType: 'glow',
       effectName: 'Glow',
       params: {
-        amount: { from: 0.2, to: 2.2 },
+        // Bloom units: the bright pass ramps up to white, so Amount 1.4 at Threshold 0.42 gives the
+        // flash the ring Glow gave at 2.2. Radius in 1080p pixels (the ring spread about 5x as far per unit).
+        amount: { from: 0.1, to: 1.4 },
         threshold: { from: 0.78, to: 0.42 },
-        // Bloom Radius in 1080p pixels (the ring Glow this was tuned for spread about 5x as far per unit).
         radius: { from: 60, to: 240 },
         softness: 0.65,
       },
@@ -49,7 +50,7 @@ export const vignetteBloom: TransitionDefinition = {
       effectType: 'glow',
       effectName: 'Glow',
       params: {
-        amount: { from: 2.2, to: 0.2 },
+        amount: { from: 1.4, to: 0.1 },
         threshold: { from: 0.42, to: 0.78 },
         radius: { from: 240, to: 60 },
         softness: 0.65,

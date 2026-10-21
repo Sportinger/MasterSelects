@@ -139,8 +139,9 @@ describe('stylize recipes: any value stays finite', () => {
 describe('stylize recipes: notes for values that change nothing', () => {
   it('says when Glow cannot glow and when Grain Speed has no further effect', () => {
     const glowNotes = (getEffect('glow') as FullscreenEffectDefinition).paramWarnings!;
-    expect(glowNotes({ ...getDefaultParams('glow'), threshold: 1.5, softness: 0.2 } as Record<string, number>, 1920, 1080).join(' ')).toMatch(/nothing glows/);
-    expect(glowNotes({ ...getDefaultParams('glow'), threshold: 1, softness: 0.5 } as Record<string, number>, 1920, 1080)).toEqual([]);
+    expect(glowNotes({ ...getDefaultParams('glow'), threshold: 1.5, softness: 0.2 } as Record<string, number>, 1920, 1080).join(' ')).toMatch(/does not glow/);
+    expect(glowNotes({ ...getDefaultParams('glow'), threshold: 1, softness: 0.5 } as Record<string, number>, 1920, 1080).join(' ')).toMatch(/only pixels brighter than white/);
+    expect(glowNotes({ ...getDefaultParams('glow'), threshold: 0.99, softness: 0.5 } as Record<string, number>, 1920, 1080)).toEqual([]);
     const grainNotes = (getEffect('grain') as FullscreenEffectDefinition).paramWarnings!;
     expect(grainNotes({ ...getDefaultParams('grain'), speed: 5 } as Record<string, number>, 1920, 1080).join(' ')).toMatch(/changes nothing above 1/);
   });
@@ -326,34 +327,72 @@ describe('Edge Detect on a transparent layer', () => {
 });
 
 describe('Sharpen', () => {
-  const width = 48, height = 27;
-  const step = (x: number): Pixel => (x < 24 ? [0.2, 0.25, 0.3, 1] : [0.7, 0.75, 0.8, 1]);
+  // Rows of a picture that only changes along x. Radius is in pixels of a 1080p frame, so
+  // `radiusFor` gives the Radius whose blur sigma is `sigma` pixels on this small frame.
+  const width = 96, height = 12, radiusFor = (sigma: number) => sigma * 1080 / height;
+  const sharpenRow = (signal: (x: number) => number, amount: number, sigma: number) => {
+    const out = render('sharpen', { amount, radius: radiusFor(sigma) }, width, height, x => { const v = signal(x); return [v, v, v, 1]; });
+    return Array.from({ length: width }, (_, x) => luma(at(out, width, x, 6)));
+  };
+  /** Independent reference: plain unsharp mask, l + Amount * (l - Gaussian(l)), clamp-to-edge. */
+  const plainUnsharp = (signal: (x: number) => number, amount: number, sigma: number) => Array.from({ length: width }, (_, x) => {
+    let sum = 0, total = 0;
+    for (let offset = -Math.ceil(4 * sigma); offset <= Math.ceil(4 * sigma); offset++) {
+      const weight = Math.exp(-offset * offset / (2 * sigma * sigma));
+      sum += weight * signal(Math.min(width - 1, Math.max(0, x + offset))); total += weight;
+    }
+    return signal(x) + amount * (signal(x) - sum / total);
+  });
+  const step = (x: number) => (x < 48 ? 0.25 : 0.7);
 
-  it('crisps a step edge without halos beyond the small overshoot and leaves flat areas alone', () => {
-    const out = render('sharpen', { amount: 5, radius: 2 }, width, height, x => step(x));
-    const row = Array.from({ length: width }, (_, x) => luma(at(out, width, x, 13)));
-    const low = luma(step(0)), high = luma(step(47)), margin = 0.15 * (high - low) + 2 / 255;
-    expect(Math.min(...row)).toBeGreaterThanOrEqual(low - margin);
-    expect(Math.max(...row)).toBeLessThanOrEqual(high + margin);
-    expect(row[23] - row[24]).toBeLessThan(0);
-    expect(Math.abs(row[2] - low)).toBeLessThan(2 / 255);
-    // Detail is added: the edge is steeper than in the source (two neighbours apart).
-    expect(row[25] - row[22]).toBeGreaterThan(high - low - 1 / 255);
+  it('crisps a step edge with only a small halo and leaves flat areas alone', () => {
+    for (const amount of [1, 3, 5]) {
+      const row = sharpenRow(step, amount, 2), plain = plainUnsharp(step, amount, 2);
+      const halo = Math.max(Math.max(...row) - 0.7, 0.25 - Math.min(...row));
+      const plainHalo = Math.max(...plain) - 0.7;
+      // At most half the plain unsharp mask's halo, and at most 27 % of the edge even at Amount 5.
+      expect(halo).toBeLessThan(Math.min(0.27 * 0.45, plainHalo / 2));
+      expect(row[47] - step(47)).toBeLessThan(-0.02);
+      expect(row[48] - step(48)).toBeGreaterThan(0.02);
+      for (const x of [4, 20, 76, 91]) expect(Math.abs(row[x] - step(x))).toBeLessThan(1.5 / 255);
+    }
   });
 
-  it('keeps gradation at strong, wide settings: a ramp stays a ramp (no plateaus) and nothing reads the timeline time', () => {
-    const ramp = (x: number): Pixel => { const v = 0.15 + 0.6 * x / 47 + (x % 6 < 3 ? 0.04 : -0.04); return [v, v, v, 1]; };
-    const out = render('sharpen', { amount: 5, radius: 5 }, width, height, x => ramp(x));
-    const values = Array.from({ length: width }, (_, x) => luma(at(out, width, x, 13)));
-    const levels = new Set(values.slice(4, 44).map(value => Math.round(value * 255)));
-    expect(levels.size).toBeGreaterThan(20);
+  it('keeps texture: neighbouring pixels never swap their order and contrast grows with Amount', () => {
+    // A strong ±0.2 texture at Radius 3 px: the worst case of the halo limit, whose range is the whole texture.
+    const sine = (x: number) => 0.5 + 0.2 * Math.sin(0.5 * x);
+    const amplitudes = [1, 3, 5].map(amount => {
+      const row = sharpenRow(sine, amount, 3);
+      for (let x = 13; x < width - 13; x++) {
+        const rising = sine(x) - sine(x - 1), moved = (row[x] - row[x - 1]) * Math.sign(rising);
+        // Never against the source; at Amount 1 every source step of 2 levels or more stays a step
+        // (stronger settings may round two neighbours at a peak into the same level, never reverse them).
+        if (Math.abs(rising) > 1.5 / 255) expect(moved).toBeGreaterThanOrEqual(amount === 1 ? 0.5 / 255 : 0);
+      }
+      const middle = row.slice(13, width - 13);
+      return (Math.max(...middle) - Math.min(...middle)) / 2;
+    });
+    expect(amplitudes[0]).toBeGreaterThan(0.2);
+    expect(amplitudes[1]).toBeGreaterThan(amplitudes[0] + 2 / 255);
+    expect(amplitudes[2]).toBeGreaterThan(amplitudes[1] + 2 / 255);
+  });
+
+  it('sharpens fine, faint texture on a gradient almost like the plain unsharp mask (Amount 3, Radius 2 px)', () => {
+    const texture = (x: number) => 0.3 + 0.4 * x / width + 0.02 * Math.sin(0.9 * x);
+    const highPass = (row: number[]) => row.slice(12, width - 12).map((value, index) => value - (row[index + 11] + row[index + 13]) / 2);
+    const energy = (values: number[]) => values.reduce((sum, value) => sum + value * value, 0);
+    const kept = energy(highPass(sharpenRow(texture, 3, 2))) / energy(highPass(plainUnsharp(texture, 3, 2)));
+    expect(kept).toBeGreaterThan(0.8);
+  });
+
+  it('does not read the timeline time', () => {
     expect(plan('sharpen', { amount: 5, radius: 5 }).passes!.some(pass => pass.program.capabilities.includes('time'))).toBe(false);
   });
 
   it('keeps a flat colour layer on transparency free of dark or bright fringes', () => {
-    const out = render('sharpen', { amount: 3, radius: 1.5 }, width, height, (x, y) => (x > 12 && x < 36 && y > 6 && y < 20 ? [0.9, 0.5, 0.2, 1] : [0, 0, 0, 0]));
+    const out = render('sharpen', { amount: 3, radius: radiusFor(1.5) }, 48, 27, (x, y) => (x > 12 && x < 36 && y > 6 && y < 20 ? [0.9, 0.5, 0.2, 1] : [0, 0, 0, 0]));
     for (let y = 7; y < 20; y++) for (let x = 13; x < 36; x++) {
-      const pixel = at(out, width, x, y);
+      const pixel = at(out, 48, x, y);
       expect(Math.abs(pixel[0] - 0.9) + Math.abs(pixel[1] - 0.5) + Math.abs(pixel[2] - 0.2)).toBeLessThan(4 / 255);
     }
   });
@@ -363,10 +402,15 @@ describe('Glow', () => {
   const width = 128, height = 72;
   const dot = (alphaOutside = 1, half = 2) => (x: number, y: number): Pixel => (Math.abs(x - 63.5) < half && Math.abs(y - 35.5) < half ? [1, 1, 1, 1] : [0, 0, 0, alphaOutside]);
 
-  it('passes the share of light above the soft-knee threshold (model reference)', () => {
-    expect(glowContribution(0.5, 0.8, 0.5)).toBeCloseTo((0.5 - 0.4) ** 2 / (4 * 0.4) / 0.5, 9);
-    expect(glowContribution(1, 0.8, 0.5)).toBeCloseTo((1 - 0.4) ** 2 / 1.6, 9);
-    expect(glowContribution(0.3, 0.8, 0.5)).toBe(0);
+  it('lets light through on a smooth ramp from just below Threshold up to white (model reference)', () => {
+    // Threshold 0.8, Softness 0.5: the ramp starts at 0.8 - 0.5 * min(0.8, 0.2) = 0.7 and ends at white.
+    const ramp = (peak: number) => { const t = Math.min(1, Math.max(0, (peak - 0.7) / 0.3)); return t * t * (3 - 2 * t); };
+    for (const peak of [0.3, 0.7, 0.75, 0.85, 0.95, 1, 1.4]) expect(glowContribution(peak, 0.8, 0.5)).toBeCloseTo(ramp(peak), 9);
+    // Threshold 0.3: the ramp starts at 0.3 - 0.5 * 0.3 = 0.15, so a mid grey glows partly.
+    expect(glowContribution(0.5, 0.3, 0.5)).toBeCloseTo(((0.35 / 0.85) ** 2) * (3 - 2 * 0.35 / 0.85), 9);
+    // At or above white only brighter (HDR) values glow.
+    expect(glowContribution(1, 1.2, 0.5)).toBe(0);
+    expect(glowContribution(1.3, 1.2, 0.5)).toBe(1);
   });
 
   it('leaves pictures below the threshold untouched', () => {
@@ -394,9 +438,13 @@ describe('Glow', () => {
   it('screens the glow on: a mid-bright saturated sky stays its colour, and strong glows never clip', () => {
     const hue = ([r, g, b]: readonly number[]) => { const max = Math.max(r, g, b), d = max - Math.min(r, g, b); return 60 * (max === b ? 4 + (r - g) / d : max === g ? 2 + (b - r) / d : (g - b) / d); };
     // A whole frame of sky is the worst case: every neighbour adds its light.
+    // At the defaults a mid-bright daylight sky (brightest channel 0.78) stays out of the glow entirely.
     const sky: Pixel = [0.3, 0.53, 0.78, 1], calm = at(render('glow', {}, 32, 18, () => sky), 32, 16, 9);
-    for (let channel = 0; channel < 3; channel++) expect(calm[channel] - sky[channel]).toBeLessThan(0.1);
-    expect(Math.abs(hue(calm) - hue(sky))).toBeLessThan(4);
+    for (let channel = 0; channel < 3; channel++) expect(Math.abs(calm[channel] - sky[channel])).toBeLessThan(2 / 255);
+    // With a low Threshold that lets the whole sky glow, a moderate glow keeps its hue (a strong one washes towards white).
+    const lifted = at(render('glow', { threshold: 0.6, amount: 0.25 }, 32, 18, () => sky), 32, 16, 9);
+    expect(lifted[2]).toBeGreaterThan(sky[2] + 0.02);
+    expect(Math.abs(hue(lifted) - hue(sky))).toBeLessThan(4);
     const neon: Pixel = [0.81, 0.09, 0.73, 1];
     const strong = at(render('glow', { amount: 2, threshold: 0.2 }, 32, 18, () => neon), 32, 16, 9);
     expect(strong[0]).toBeLessThan(1);

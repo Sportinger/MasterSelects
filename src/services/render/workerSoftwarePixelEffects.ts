@@ -15,6 +15,8 @@ import {
 } from './workerSoftwareFeedbackEffects';
 import { applyWorkerSoftwareImageGraphs } from './workerSoftwareImageGraphs';
 import { applyWorkerSoftwareGlow, prepareWorkerSoftwareGlow } from './workerSoftwareGlow';
+import { applyWorkerSoftwareBloom, prepareWorkerSoftwareBloom } from './workerSoftwareBloom';
+import { VIGNETTE_MIN_FEATHER_PX, vignetteDistance } from '../../effects/stylize/vignette/vignetteModel';
 
 function finiteNumber(value: number | undefined, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -200,23 +202,22 @@ function smoothstep(edge0: number, edge1: number, value: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/** Graphless Vignettes are the current recipe (vignetteModel.ts): corners at 1, Roundness 0 = frame, 1 = circle. Only the half-step dither is left out. */
 function applyVignetteAdjustment(
   input: readonly [number, number, number],
   adjustment: NonNullable<
     WorkerRenderSoftwareFrame['layers'][number]['pixelEffects']['vignetteAdjustments']
   >[number],
-  uvX: number,
-  uvY: number,
+  pixelX: number,
+  pixelY: number,
+  width: number,
+  height: number,
 ): readonly [number, number, number] {
   const amount = finiteNumber(adjustment.amount, 0.5);
   const size = finiteNumber(adjustment.size, 0.5);
-  const softness = finiteNumber(adjustment.softness, 0.5);
-  const roundness = finiteNumber(adjustment.roundness, 1);
-  const centerX = uvX - 0.5;
-  const centerY = uvY - 0.5;
-  const distance = Math.hypot(centerX, centerY * roundness) * 2;
-  const vignette = 1 - smoothstep(size, size + softness, distance);
-  const factor = 1 * (1 - amount) + vignette * amount;
+  const feather = Math.max(finiteNumber(adjustment.softness, 0.5), VIGNETTE_MIN_FEATHER_PX / (Math.hypot(width, height) / 2));
+  const distance = vignetteDistance(pixelX, pixelY, width, height, finiteNumber(adjustment.roundness, 1));
+  const factor = Math.max(0, 1 - amount * smoothstep(size, size + feather, distance));
   return [input[0] * factor, input[1] * factor, input[2] * factor];
 }
 
@@ -524,7 +525,15 @@ export function applyWorkerSoftwarePixelEffects(
     ? new Uint8ClampedArray(data)
     : data;
   // Glow is a separable neighborhood prefilter; build it once per frame, then sample rings per pixel.
-  const glowFields = glowAdjustments.map(adjustment => prepareWorkerSoftwareGlow(sourceData, width, height, adjustment));
+  // 'bloom': graphless (current) Glows; otherwise the earlier ring Glow.
+  const glowFields = glowAdjustments.map(adjustment => {
+    if (adjustment.recipe !== 'bloom') {
+      const ring = prepareWorkerSoftwareGlow(sourceData, width, height, adjustment);
+      return (x: number, y: number) => applyWorkerSoftwareGlow(ring, sourceData, x, y);
+    }
+    const bloom = prepareWorkerSoftwareBloom(sourceData, width, height, adjustment);
+    return (x: number, y: number) => applyWorkerSoftwareBloom(bloom, sourceData, x, y);
+  });
   const splitDx = hasRgbSplit ? Math.round(Math.cos(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * width) : 0;
   const splitDy = hasRgbSplit ? Math.round(Math.sin(finiteNumber(rgbSplit?.angle, 0)) * rgbSplitAmount * height) : 0;
   for (let y = 0; y < height; y += 1) {
@@ -585,9 +594,7 @@ export function applyWorkerSoftwarePixelEffects(
         [r, g, b] = applyPosterizeAdjustment([r, g, b], adjustment);
       }
       for (const adjustment of vignetteAdjustments) {
-        const uvX = (x + 0.5) / width;
-        const uvY = (y + 0.5) / height;
-        [r, g, b] = applyVignetteAdjustment([r, g, b], adjustment, uvX, uvY);
+        [r, g, b] = applyVignetteAdjustment([r, g, b], adjustment, x + 0.5, y + 0.5, width, height);
       }
       for (const adjustment of chromaKeyAdjustments) {
         [r, g, b, alpha] = applyChromaKeyAdjustment([r, g, b, alpha], adjustment);
@@ -601,7 +608,7 @@ export function applyWorkerSoftwarePixelEffects(
         [r, g, b, alpha] = applySharpenAdjustment(sourceData, width, height, uvX, uvY, adjustment);
       }
       for (const glow of glowFields) {
-        [r, g, b, alpha] = applyWorkerSoftwareGlow(glow, sourceData, x, y);
+        [r, g, b, alpha] = glow(x, y);
       }
       for (const adjustment of scanlineAdjustments) {
         const uvY = (y + 0.5) / height;

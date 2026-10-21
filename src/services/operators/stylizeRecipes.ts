@@ -12,6 +12,7 @@ import { createDefaultScanlinesGraph } from './scanlinesEffectGraph';
 import { createDefaultSharpenGraph } from './sharpenEffectGraph';
 import { createDefaultVignetteGraph } from './vignetteEffectGraph';
 import { createDefaultPointwiseEffectGraph, createEarlierPointwiseEffectGraph, type EditablePointwiseEffectType } from './pointwiseEffectGraphs';
+import { GLOW_DEFAULTS } from '../../effects/stylize/glow/glowBloom';
 
 /**
  * Stylize recipes rebuilt on 2026-10-21 (Glow, Film Grain, Sharpen, Vignette, Scanlines, Edge
@@ -70,6 +71,21 @@ const earlierRecognizers: Partial<Record<StylizeRecipeEffectType, (graph: Effect
   threshold: recognizer(EARLIER.threshold), posterize: recognizer(EARLIER.posterize),
 };
 
+const currentRecognizers = Object.fromEntries(Object.entries(CURRENT).map(([type, create]) => [type, recognizer(create)])) as Record<StylizeRecipeEffectType, (graph: EffectOperatorGraph | undefined) => boolean>;
+
+/** True when `graph` is the untouched current recipe of this stylize effect (any presentation). */
+export function isCurrentStylizeGraph(type: string, graph: EffectOperatorGraph | undefined): boolean {
+  return isRecipeType(type) && currentRecognizers[type](graph);
+}
+
+/**
+ * Values a new instance starts with where they differ from the parameter defaults. The defaults
+ * stay what saved effects without the value mean (Posterize saved before Brightness Only existed
+ * steps each channel); a new Posterize steps the brightness, so skies keep their hue.
+ */
+const NEW_INSTANCE_PARAMS: Partial<Record<StylizeRecipeEffectType, Record<string, number | boolean>>> = { posterize: { brightnessOnly: true } };
+export const stylizeNewInstanceParams = (type: string): Record<string, number | boolean> => (isRecipeType(type) && NEW_INSTANCE_PARAMS[type]) || {};
+
 /** True when `graph` is an untouched earlier recipe of this stylize effect (any presentation). */
 export function isEarlierStylizeGraph(type: string, graph: EffectOperatorGraph | undefined): boolean {
   return isRecipeType(type) && !!earlierRecognizers[type]?.(graph);
@@ -100,7 +116,7 @@ const RUNS_EARLIER = 'runs the earlier version saved with its project (before 20
 /** What the inspector says about an untouched earlier recipe, and the values an update resets. */
 export const STYLIZE_RECIPE_UPDATES: Partial<Record<StylizeRecipeEffectType, StylizeRecipeUpdate>> = {
   glow: { message: 'This Glow was saved with the earlier ring version and keeps that look; Color has no effect on it.',
-    label: 'Use the new Glow (resets its values)', resetParams: { amount: 1.5, threshold: 0.8, softness: 0.5, radius: 40 },
+    label: 'Use the new Glow (resets its values)', resetParams: { ...GLOW_DEFAULTS },
     toolNote: `This Glow ${RUNS_EARLIER}: rings of samples, Radius in steps of about 10 px per ring, Rings and Samples/Ring apply, Color has no effect.` },
   grain: { message: 'This Film Grain was saved with the earlier noise and keeps that look; Color has no effect on it.', label: 'Use the new Film Grain',
     toolNote: `This Film Grain ${RUNS_EARLIER}: per-pixel noise, Size and Speed act as they did then (Speed up to 5), Color has no effect.` },

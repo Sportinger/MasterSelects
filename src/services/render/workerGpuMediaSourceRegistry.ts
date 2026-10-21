@@ -302,7 +302,7 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
         params.rgbSplitAmount = finiteEffectNumber(effectParams.amount, 0.01);
         params.rgbSplitAngle = finiteEffectNumber(effectParams.angle, 0);
         break;
-      // Gaussian, Box, Motion, Radial and Zoom Blur are image graphs: they never reach this
+      // Gaussian, Box, Motion, Radial and Zoom Blur and Glow are image graphs: they never reach this
       // legacy table (filtered above) and run their own graph in the worker compositor.
       case 'blur':
         params.blurRadius = Math.max(0, finiteEffectNumber(effectParams.radius, finiteEffectNumber(effectParams.amount, 10)));
@@ -372,11 +372,6 @@ function workerGpuEffectParams(effects: ReturnType<typeof splitLayerEffects>['co
       case 'edge-detect':
         params.edgeDetectStrength = finiteEffectNumber(effectParams.strength, 1);
         params.edgeDetectInvert = effectBoolean(effectParams.invert);
-        break;
-      case 'glow':
-        params.glowAmount = finiteEffectNumber(effectParams.amount, 1);
-        params.glowThreshold = finiteEffectNumber(effectParams.threshold, 0.6);
-        params.glowRadius = Math.max(0, finiteEffectNumber(effectParams.radius, 20));
         break;
       case 'levels':
         params.levelsInputBlack = finiteEffectNumber(effectParams.inputBlack, 0);

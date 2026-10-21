@@ -1827,13 +1827,13 @@ describe('worker software preview frame builder', () => {
     expect(frame.frame.layers).toHaveLength(1);
     expect(frame.frame.layers[0]?.filter).toBe('none');
     expect(frame.frame.layers[0]?.pixelEffects).toMatchObject({
+      // A graphless Glow is the current bloom; the earlier ring counts are not read.
       glowAdjustments: [{
+        recipe: 'bloom',
         amount: 0.6,
         threshold: 0.35,
         radius: 2,
         softness: 0.7,
-        rings: 2,
-        samplesPerRing: 8,
       }],
     });
     expect(frame.diagnostics.skippedByReason['unsupported-effects']).toBe(0);

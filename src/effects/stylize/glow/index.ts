@@ -1,4 +1,4 @@
-// Glow Effect - a lens bloom: soft-knee bright pass, a half-size pyramid and a tent upsample.
+// Glow Effect - a lens bloom: a bright pass that ramps up to white, a half-size pyramid and a tent upsample.
 // Rendering is owned by the editable operator graph (services/operators/glowBloomEffectGraph.ts);
 // its contract is glowBloom.ts. Glows saved before the bloom keep their ring graph
 // (services/operators/glowEffectGraph.ts, contract glowSampling.ts); shader.wgsl is the WGSL
@@ -6,7 +6,7 @@
 
 import shader from './shader.wgsl?raw';
 import type { EffectDefinition } from '../../types';
-import { glowParamNotes } from './glowBloom';
+import { GLOW_DEFAULTS, glowParamNotes } from './glowBloom';
 
 const RING_ONLY = 'Only Glows saved with the earlier ring version read it; the bloom chooses its own sampling, so it has no effect here.';
 
@@ -25,7 +25,7 @@ export const glow: EffectDefinition = {
     amount: {
       type: 'number',
       label: 'Amount',
-      default: 1.5,
+      default: GLOW_DEFAULTS.amount,
       min: 0,
       max: 5,
       step: 0.05,
@@ -34,7 +34,7 @@ export const glow: EffectDefinition = {
     threshold: {
       type: 'number',
       label: 'Threshold',
-      default: 0.8,
+      default: GLOW_DEFAULTS.threshold,
       min: 0,
       max: 1,
       step: 0.01,
@@ -43,7 +43,7 @@ export const glow: EffectDefinition = {
     softness: {
       type: 'number',
       label: 'Softness',
-      default: 0.5,
+      default: GLOW_DEFAULTS.softness,
       min: 0,
       max: 1,
       step: 0.01,
@@ -52,7 +52,7 @@ export const glow: EffectDefinition = {
     radius: {
       type: 'number',
       label: 'Radius',
-      default: 40,
+      default: GLOW_DEFAULTS.radius,
       min: 0,
       max: 300,
       step: 1,
@@ -87,10 +87,10 @@ export const glow: EffectDefinition = {
 
   packUniforms: (params, width, height) => {
     return new Float32Array([
-      params.amount as number ?? 1,
-      params.threshold as number ?? 0.6,
-      params.radius as number ?? 40,
-      params.softness as number ?? 0.5,
+      params.amount as number ?? GLOW_DEFAULTS.amount,
+      params.threshold as number ?? GLOW_DEFAULTS.threshold,
+      params.radius as number ?? GLOW_DEFAULTS.radius,
+      params.softness as number ?? GLOW_DEFAULTS.softness,
       width,
       height,
       params.rings as number ?? 6.85,

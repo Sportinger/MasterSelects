@@ -981,10 +981,10 @@ describe('Specific effect definitions', () => {
     const voxelRelief = getEffect('voxel-relief')!;
 
     expect(Object.fromEntries(Object.entries(glow.params).map(([key, value]) => [key, value.default]))).toEqual({
-      amount: 1.5,
-      threshold: 0.8,
+      amount: 2.5,
+      threshold: 0.95,
       softness: 0.5,
-      radius: 40,
+      radius: 80,
       color: '#ffffff',
       rings: 6.85,
       samplesPerRing: 17.95,

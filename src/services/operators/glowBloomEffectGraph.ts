@@ -1,5 +1,5 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
-import { GLOW_FINEST_REACH, GLOW_KNEE_FLOOR, GLOW_LEVEL_REACH, GLOW_LEVELS, GLOW_PEAK_FLOOR, GLOW_REFERENCE_HEIGHT } from '../../effects/stylize/glow/glowBloom';
+import { GLOW_FINEST_REACH, GLOW_LEVEL_REACH, GLOW_LEVELS, GLOW_RAMP_FLOOR, GLOW_REFERENCE_HEIGHT } from '../../effects/stylize/glow/glowBloom';
 import { BlurGraphBuilder, normalizeNodes, type GraphPort } from './blurGraphBuilder';
 
 /** Light carried by a pyramid level: rgb is the light, alpha the summed weights of the levels in it. */
@@ -16,39 +16,33 @@ function filterTaps(g: BlurGraphBuilder, prefix: string, source: GraphPort, uv: 
 
 /**
  * Glow v3, a lens bloom (contract in `effects/stylize/glow/glowBloom.ts`): a full-size bright
- * pass, a pyramid of GLOW_LEVELS half-size Cache Images ([1 3 3 1] downsample), and the way back
+ * pass (a ramp from just below Threshold to white), a pyramid of GLOW_LEVELS half-size Cache Images ([1 3 3 1] downsample), and the way back
  * up with a 3x3 tent that adds every level by its Radius weight; the bright pass itself is level
- * 0. The glow is screened onto the picture (1 - (1 - picture) * exp(-glow)), so it never clips.
+ * 0. The glow is screened onto the picture (1 - (1 - picture) * exp(-glow)), so it never clips hard.
  * One shared tap kernel serves every pass; each pass reads it in its own resolution. About 2.7
  * full-frame passes of work and about 1.7 frames of rgba16float cache memory, at any Radius.
  */
 export function createDefaultGlowGraph(): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
   g.add('frame', 'image.frame'); g.add('uv', 'image.normalized-uv'); g.add('resolution', 'image.resolution');
-  g.number('zero', 0); g.number('one', 1); g.number('two', 2); g.number('three', 3); g.number('four', 4); g.number('half', .5);
-  g.number('knee-floor', GLOW_KNEE_FLOOR); g.number('peak-floor', GLOW_PEAK_FLOOR); g.number('coverage-floor', 1e-6);
+  g.number('zero', 0); g.number('one', 1); g.number('two', 2); g.number('three', 3); g.number('half', .5);
+  g.number('ramp-floor', GLOW_RAMP_FLOOR); g.number('coverage-floor', 1e-6);
   const amount = g.bound('amount', 'amount'), threshold = g.bound('threshold', 'threshold');
   const softness = g.bound('softness', 'softness'), radius = g.bound('radius', 'radius');
   const color = g.bound('color', 'color', 'values.color');
 
-  // Bright pass: the share of each pixel's light above the soft-knee threshold, premultiplied.
+  // Bright pass: a smooth ramp on each pixel's brightest channel, from Softness × headroom below
+  // Threshold up to white, where all of its light glows (glowShare); premultiplied.
   const source = g.add('source-split', 'vector.split.rgba', { image: ['frame', 'image'] });
   const alpha = g.add('source-alpha', 'convert.alpha-to-scalar', { alpha: [source, 'alpha'] });
   const peak = g.add('bright-peak', 'vector.reduce-max.rgb', { rgb: [source, 'rgb'] });
   const t = g.binary('bright-threshold', 'math.max.scalar', threshold, 'zero');
   const softnessSafe = g.binary('bright-softness', 'math.max.scalar', softness, 'zero');
-  const kneeRaw = g.binary('bright-knee-raw', 'math.multiply.scalar', t, softnessSafe);
-  const knee = g.binary('bright-knee', 'math.max.scalar', kneeRaw, 'knee-floor');
-  const over = g.binary('bright-over', 'math.subtract.scalar', peak, t);
-  const kneeSpan = g.binary('bright-knee-span', 'math.multiply.scalar', knee, 'two');
-  const softRaw = g.binary('bright-soft-raw', 'math.add.scalar', over, knee);
-  const soft = g.add('bright-soft', 'math.clamp.scalar', { value: softRaw, min: 'zero', max: kneeSpan });
-  const softSquared = g.binary('bright-soft-squared', 'math.multiply.scalar', soft, soft);
-  const kneeQuad = g.binary('bright-knee-quad', 'math.multiply.scalar', knee, 'four');
-  const curve = g.binary('bright-curve', 'math.divide-ieee.scalar', softSquared, kneeQuad);
-  const glowing = g.binary('bright-glowing', 'math.max.scalar', curve, over);
-  const peakSafe = g.binary('bright-peak-safe', 'math.max.scalar', peak, 'peak-floor');
-  const contribution = g.binary('bright-contribution', 'math.divide-ieee.scalar', glowing, peakSafe);
+  const headroom = g.binary('bright-headroom', 'math.max.scalar', g.binary('bright-headroom-raw', 'math.min.scalar', t,
+    g.binary('bright-gap', 'math.subtract.scalar', 'one', t)), 'zero');
+  const rampStart = g.binary('bright-ramp-start', 'math.subtract.scalar', t, g.binary('bright-knee', 'math.multiply.scalar', softnessSafe, headroom));
+  const rampEnd = g.binary('bright-ramp-end', 'math.max.scalar', 'one', g.binary('bright-ramp-end-min', 'math.add.scalar', rampStart, 'ramp-floor'));
+  const contribution = g.add('bright-contribution', 'math.smoothstep.scalar', { edge0: rampStart, edge1: rampEnd, value: peak });
   const energy = g.binary('bright-energy', 'math.multiply.scalar', contribution, alpha);
   const light = g.add('bright-light', 'math.multiply.rgb-scalar', { a: [source, 'rgb'], b: energy });
   const lightImage = g.add('bright-image', 'vector.combine.rgba', { rgb: light, alpha: [source, 'alpha'] });
@@ -135,7 +129,8 @@ export function createDefaultGlowGraph(): EffectOperatorGraph {
   const tinted = g.binary('glow-tinted', 'math.multiply.rgb', glowLight, [g.add('color-rgb', 'convert.vec4-to-rgb', { value: color }), 'rgb']);
   const glow = g.add('glow-scaled', 'math.multiply.rgb-scalar', { a: tinted, b: intensity });
   // Screen with a soft roll-off: 1 - (1 - picture) * exp(-glow). Small glows add light like Add,
-  // bright areas have less room left, nothing passes white: hue holds and the frame cannot clip.
+  // bright areas have less room left and nothing passes white (no hard clipping; very strong
+  // glows still approach white).
   const premultiplied = g.add('resolve-premultiplied', 'math.multiply.rgb-scalar', { a: [source, 'rgb'], b: alpha });
   const oneRgb: GraphPort = [g.unary('one-rgb', 'convert.scalar-to-rgb', 'one'), 'rgb'];
   const room = g.binary('resolve-room', 'math.subtract.rgb', oneRgb, premultiplied);

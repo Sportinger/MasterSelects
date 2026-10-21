@@ -6,20 +6,32 @@
  *   Gaussian of the premultiplied picture (sigma = Radius pixels of a 1080p frame), so
  *   transparent surroundings never darken an edge. Adding the same brightness change to R, G
  *   and B sharpens without colour fringes.
- * - Halo limit: SHARPEN_WINDOW_TAPS x SHARPEN_WINDOW_TAPS taps spread evenly over ±max(sigma, 1)
- *   pixels give a smooth darkest and brightest brightness of the neighbourhood (exponentially
- *   weighted means, SHARPEN_WINDOW_SHARPNESS per unit of brightness; transparent taps weigh
- *   nothing). The change may approach that range plus SHARPEN_OVERSHOOT of it, softly:
- *   room * (1 - exp(-change / room)). Edges get crisp; halos stay small and strong settings keep
- *   their gradation instead of flattening into plateaus.
+ * - Halo limit: the smooth darkest and brightest brightness of the neighbourhood within
+ *   ±SHARPEN_WINDOW_SIGMAS sigma (at least ±1 px), taken densely, one pixel apart, first along each
+ *   row (in the horizontal blur pass) and then down a column of those rows (exponentially weighted
+ *   means, SHARPEN_WINDOW_SHARPNESS per unit of brightness; transparent taps weigh nothing). The
+ *   sharpened brightness passes unchanged within that range plus a margin (SHARPEN_OVERSHOOT of
+ *   the range, at least SHARPEN_MARGIN_FLOOR); beyond it the excess e rolls off as
+ *   s * ln(1 + e / s), s = SHARPEN_ROLL_OFF * margin. It keeps growing, so stronger settings keep
+ *   adding contrast and neighbouring pixels keep their order (no plateaus), while halos at edges
+ *   stay a small fraction of the edge.
  * - Amount scales the detail; negative values soften. Alpha is kept.
  */
 import { GAUSSIAN_REACH_SIGMAS, SEPARABLE_MAX_PAIRS_PER_SIDE } from '../../blur/blurSampling';
 
 export const SHARPEN_REFERENCE_HEIGHT = 1080;
 export const SHARPEN_MIN_SIGMA_PX = 0.25;
-export const SHARPEN_OVERSHOOT = 0.15;
-export const SHARPEN_WINDOW_TAPS = 5;
+/** Margin beyond the neighbourhood's range: this share of the range, at least SHARPEN_MARGIN_FLOOR. */
+export const SHARPEN_OVERSHOOT = 0.05;
+export const SHARPEN_MARGIN_FLOOR = 0.04;
+/** Scale of the logarithmic roll-off beyond the margin, as a share of the margin. */
+export const SHARPEN_ROLL_OFF = 0.5;
+/** The window reaches this many sigma (the reach of the blur's halo). */
+export const SHARPEN_WINDOW_SIGMAS = 2;
+/** Window taps per side; wider windows space their taps further apart. */
+export const SHARPEN_WINDOW_MAX_TAPS_PER_SIDE = 24;
+/** Row extremes of a row without any opaque tap: far outside every range, so the column ignores them. */
+export const SHARPEN_EMPTY_ROW = 8;
 /** Exponent per unit of brightness of the smooth window minimum and maximum. */
 export const SHARPEN_WINDOW_SHARPNESS = 64;
 /** Window exponents are limited to ± this, so the sums stay finite for bright HDR values. */

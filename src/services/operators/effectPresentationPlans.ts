@@ -70,17 +70,22 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
         : /^(frame|uv|resolution|index|one-vec2|texel-size|offset|radius-vec2|scaled-offset|sample)/.test(id) ? 'sampling' : 'finish',
   };
   if (type === 'sharpen') return {
-    labels: { size: 'Radius & Tap Count', premultiply: 'Premultiplied Source (cached)', horizontal: 'Horizontal Blur Pass', vertical: 'Vertical Blur Pass',
-      detail: 'Unsharp Mask (brightness)', halo: 'Halo Limit', finish: 'Apply to Color & Alpha' },
-    portLabels: { ...SEPARABLE_PORTS, 'sharpened-luma': 'Sharpened Brightness', 'darkest-value': 'Darkest Nearby', 'brightest-value': 'Brightest Nearby',
-      detail: 'Detail', 'detail-change': 'Wanted Change', 'detail-up': 'Wanted Up', 'detail-down': 'Wanted Down', 'halo-ceiling': 'Ceiling', 'halo-floor': 'Floor',
-      'halo-room-up-raw': 'Ceiling − Brightness', 'halo-room-up': 'Room Up', 'halo-room-down': 'Room Down', 'halo-limited-up-negative': '−Wanted Up',
-      'halo-limited-up-exponent': '−Wanted Up / Room', 'halo-limited-up-falloff': 'exp(−Wanted Up / Room)', 'halo-limited-up-share': 'Share of Room',
-      'halo-limited-up': 'Limited Up', 'halo-limited-down': 'Limited Down', 'limited-change': 'Limited Change' },
-    stage: ({ id }) => /^(source-premultiplied|source-cache)/.test(id) ? 'premultiply' : /^horizontal-/.test(id) ? 'horizontal' : /^vertical-/.test(id) ? 'vertical'
-      : /^(darkest-|brightest-|window-|halo-|limited-|detail-(change|up|down|negative)|exponent-|room-floor|overshoot)/.test(id) ? 'halo'
-        : /^(source-split|source-luma|blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
-          : /^(luma-change|result-|combine)/.test(id) ? 'finish' : 'size',
+    labels: { size: 'Radius & Window Size', premultiply: 'Premultiplied Source (cached)', horizontal: 'Horizontal Blur Pass', rows: 'Row: Darkest & Brightest',
+      vertical: 'Vertical Blur Pass', window: 'Window: Darkest & Brightest', detail: 'Unsharp Mask (brightness)', halo: 'Halo Limit', finish: 'Apply to Color & Alpha' },
+    portLabels: { ...SEPARABLE_PORTS, 'sharpened-luma': 'Sharpened Brightness', 'window-darkest': 'Darkest Nearby', 'window-brightest': 'Brightest Nearby',
+      detail: 'Detail', 'row-max': 'Row Brightest', 'row-min': 'Row Darkest', 'row-cache': 'Rows (blur, darkest, brightest)', 'row-tap-luma': 'Tap Brightness',
+      'window-range': 'Range', 'halo-margin-raw': 'Range × Overshoot', 'halo-margin': 'Margin', 'halo-ceiling-raw': 'Brightest + Margin', 'halo-ceiling': 'Ceiling',
+      'halo-floor-raw': 'Darkest − Margin', 'halo-floor': 'Floor', 'roll-off-scale': 'Roll-off Scale', 'excess-above-raw': 'Sharpened − Ceiling', 'excess-above': 'Excess Above',
+      'excess-below': 'Excess Below', 'inside-range': 'Within Floor…Ceiling', 'roll-off-above-share': 'Excess / Scale', 'roll-off-above-ratio': '1 + Excess / Scale',
+      'roll-off-above-log': 'ln(1 + Excess / Scale)', 'roll-off-above': 'Rolled-off Excess', 'roll-off-below': 'Rolled-off Excess Below',
+      'limited-luma-up': 'Within + Rolled-off Excess', 'limited-luma': 'Limited Brightness', 'limited-change': 'Limited Change',
+      overshoot: 'Overshoot', 'margin-floor': 'Margin Floor', 'roll-off': 'Roll Off' },
+    stage: ({ id }) => /^(source-premultiplied|source-cache)/.test(id) ? 'premultiply' : /^horizontal-/.test(id) ? 'horizontal'
+      : /^(row-|empty-row-)/.test(id) ? 'rows' : /^vertical-/.test(id) ? 'vertical'
+        : /^(column-|window-(brightest|darkest|bright-total|dark-total))/.test(id) ? 'window'
+          : /^(window-range|halo-|overshoot|margin-floor|roll-off|excess-|inside-range|limited-luma)/.test(id) ? 'halo'
+            : /^(source-split|source-luma|blur-|detail|scaled-detail|sharpened-luma)/.test(id) ? 'detail'
+              : /^(limited-change|luma-change|result-|combine)/.test(id) ? 'finish' : 'size',
   };
   if (type === 'vignette') return {
     labels: { shape: 'Distance & Roundness', falloff: 'Falloff (Size, Softness, Amount)', dither: 'Anti-Banding Dither', finish: 'Darken & Alpha' },
@@ -103,7 +108,7 @@ export function effectPresentationPlan(type: string): EffectPresentationPlan | u
       : /^(opacity-limited|gain|darkening|gap|source-split|shaded|combine)$/.test(id) ? 'finish' : 'lines',
   };
   if (type === 'glow') return {
-    labels: { bright: 'Bright Pass (soft knee)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid: Halve the Light',
+    labels: { bright: 'Bright Pass (ramp to white)', kernel: 'Tap Kernel & Level Weight', down: 'Pyramid: Halve the Light',
       up: 'Pyramid: Add Levels Back Up', finish: 'Glow Resolve & Alpha' },
     portLabels: GLOW_PORTS,
     stage: ({ id }) => /^(bright-|source-)/.test(id) ? 'bright'

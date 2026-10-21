@@ -1,7 +1,7 @@
 // Where a worker software preview layer's pixels come from: a nested composition, a text
 // canvas, a runtime (WebCodecs) frame or an HTML video snapshot, with the reason when none is
 // usable. Split from workerSoftwarePreviewFrame.ts, which assembles the frame from these sources.
-import type { Layer } from '../../types';
+import type { Layer } from '../../types/layers';
 import { mediaRuntimeRegistry } from '../mediaRuntime/registry';
 import { getFullFrameCanvas } from '../text/textCanvasFrameRegistry';
 import type { FrameHandle, RuntimeFrame } from '../mediaRuntime/types';

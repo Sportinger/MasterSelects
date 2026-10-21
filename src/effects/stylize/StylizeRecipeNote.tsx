@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { EffectControlProps } from '../types';
 import { useTimelineStore } from '../../stores/timeline';
 import { endBatch, startBatch } from '../../stores/historyStore';
-import type { AnimatableProperty } from '../../types';
+import type { AnimatableProperty } from '../../types/animationProperties';
 import { editEffectGraph } from '../../services/operators/effectGraphEditing';
 import { createStylizeRecipeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_UPDATES } from '../../services/operators/stylizeRecipes';
 import { glowQualityNote, resolveGlowSampling } from './glow/glowSampling';

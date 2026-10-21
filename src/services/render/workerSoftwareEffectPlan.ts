@@ -8,6 +8,7 @@ import { isImageGraphEffectType } from '../operators/effectGraphOwner';
 import { resolveFeedbackHistoryLoop } from '../../effects/_shared/feedbackParameters';
 import { canApplyWorkerSoftwareImageGraphPlan } from './workerSoftwareImageGraphs';
 import { GAUSSIAN_SIGMA_PER_RADIUS, blurPixelScale, radialBlurMode } from '../../effects/blur/blurSampling';
+import { GLOW_DEFAULTS } from '../../effects/stylize/glow/glowBloom';
 
 const CANVAS_COMPOSITE_BY_BLEND_MODE: Partial<Record<BlendMode, GlobalCompositeOperation>> = {
   normal: 'source-over',
@@ -92,12 +93,13 @@ interface MutableWorkerSoftwarePixelEffects {
   edgeDetectAdjustments?: { strength: number; invert: boolean }[];
   sharpenAdjustments?: { amount: number; radius: number }[];
   glowAdjustments?: {
+    recipe?: 'bloom';
     amount: number;
     threshold: number;
     radius: number;
     softness: number;
-    rings: number;
-    samplesPerRing: number;
+    rings?: number;
+    samplesPerRing?: number;
   }[];
   scanlineAdjustments?: { density: number; opacity: number; speed: number }[];
   grainAdjustments?: { amount: number; size: number; speed: number }[];
@@ -274,6 +276,7 @@ function effectFilterPart(
       });
       return '';
     case 'vignette':
+      // Graphless Vignettes are the current recipe; the worker uses its pixel distance (vignetteModel.ts).
       (pixelEffects.vignetteAdjustments ??= []).push({
         amount: finiteEffectNumber(effect.params.amount, 0.5),
         size: finiteEffectNumber(effect.params.size, 0.5),
@@ -304,14 +307,14 @@ function effectFilterPart(
       });
       return '';
     case 'glow':
+      // A graphless Glow (the Vignette Bloom transition builds them) is the current bloom; the
+      // worker renders it with a CPU pyramid of the same recipe (workerSoftwareBloom.ts).
       (pixelEffects.glowAdjustments ??= []).push({
-        amount: finiteEffectNumber(effect.params.amount, 5),
-        threshold: finiteEffectNumber(effect.params.threshold, 0.7935),
-        radius: Math.max(0, finiteEffectNumber(effect.params.radius, 1)),
-        softness: Math.max(0.001, finiteEffectNumber(effect.params.softness, 0.496)),
-        // Clamped and truncated by the shared Glow sampling contract, like the GPU graph.
-        rings: finiteEffectNumber(effect.params.rings, 6.85),
-        samplesPerRing: finiteEffectNumber(effect.params.samplesPerRing, 17.95),
+        recipe: 'bloom',
+        amount: finiteEffectNumber(effect.params.amount, GLOW_DEFAULTS.amount),
+        threshold: finiteEffectNumber(effect.params.threshold, GLOW_DEFAULTS.threshold),
+        radius: Math.max(0, finiteEffectNumber(effect.params.radius, GLOW_DEFAULTS.radius)),
+        softness: Math.max(0, finiteEffectNumber(effect.params.softness, GLOW_DEFAULTS.softness)),
       });
       return '';
     case 'scanlines':

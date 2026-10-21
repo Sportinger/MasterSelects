@@ -456,11 +456,12 @@ describe('worker software painter', () => {
       const t = Math.max(0, Math.min(1, (value - edge0) / (edge1 - edge0)));
       return t * t * (3 - 2 * t);
     };
+    // Graphless Vignettes are the current recipe: at Roundness 1 a circle in pixels with the
+    // corners at distance 1, and a feather of at least 1.5 px (here wider than Softness 0.5).
+    const halfDiagonal = Math.hypot(3, 1) / 2;
     const expectedAtX = (x: number): number => {
-      const uvX = (x + 0.5) / 3;
-      const distance = Math.abs(uvX - 0.5) * 2;
-      const vignette = 1 - smoothstep(0.2, 0.7, distance);
-      const factor = (1 - 0.8) + vignette * 0.8;
+      const distance = Math.abs(x + 0.5 - 1.5) / halfDiagonal;
+      const factor = 1 - 0.8 * smoothstep(0.2, 0.2 + Math.max(0.5, 1.5 / halfDiagonal), distance);
       return Math.round(200 * factor);
     };
     expect(outputPixels ? Array.from(outputPixels) : null).toEqual([

@@ -36,6 +36,26 @@ describe('limit notes follow the recipe an effect runs', () => {
     expect(effectDefinitionNotes(earlier('scanlines', { opacity: 2, density: 12 }), 640, 360)).toEqual([]);
   });
 
+  it('hedges the notes of an edited graph: its own nodes decide, so no clamp is claimed as fact', () => {
+    const edited = earlier('vignette', { roundness: 1.5 });
+    const literal = edited.operatorGraph!.nodes.find(node => node.operator === 'values.number' && typeof node.constants?.value === 'number')!;
+    literal.constants = { value: Number(literal.constants!.value) + 0.25 };
+    expect(isEarlierStylizeGraph('vignette', edited.operatorGraph)).toBe(false);
+    const notes = effectDefinitionNotes(edited, 1920, 1080);
+    expect(notes).toHaveLength(1);
+    expect(notes[0]).toMatch(/^This Vignette runs an edited graph, so its own nodes decide how these values act/);
+    // Values the standard recipe takes as set give no note at all, edited or not.
+    expect(effectDefinitionNotes({ ...edited, params: { ...edited.params, roundness: 0.5 } }, 1920, 1080)).toEqual([]);
+    // A graphless (in-editor) effect runs the current recipe and gets its notes as they are.
+    expect(effectDefinitionNotes({ ...current('vignette', { roundness: 1.5 }), operatorGraph: undefined }, 1920, 1080).join(' ')).toMatch(/used as 1/);
+  });
+
+  it('reports a note function that fails instead of dropping it', () => {
+    const effect = current('vignette');
+    const notes = effectDefinitionNotes({ ...effect, params: new Proxy({}, { get: () => { throw new Error('broken value'); } }) }, 1920, 1080);
+    expect(notes).toEqual(['Vignette: its value notes could not be computed (broken value).']);
+  });
+
   it('tells tools which version an earlier effect runs instead of a false clamp note', async () => {
     const clipId = withClip([earlier('vignette', { roundness: 1.5 }), earlier('scanlines'), current('vignette', { roundness: 1.5 })]);
     const update = async (effectId: string, params: Record<string, unknown>) =>
@@ -66,6 +86,20 @@ describe('Custom Looks keep the recipe their stylize effects were saved with', (
     expect(glow.params).toMatchObject({ amount: 5, radius: 1 });
     expect(isEarlierStylizeGraph('vignette', vignette.operatorGraph)).toBe(false);
   });
+
+  it('starts a new Posterize on Brightness Only, while a Look saved without that value keeps stepping each channel', () => {
+    const clipId = withClip([]);
+    useTimelineStore.getState().addClipEffect(clipId, 'posterize');
+    expect(useTimelineStore.getState().clips[0].effects[0].params.brightnessOnly).toBe(true);
+    // The parameter default stays what saved effects without the value mean.
+    expect(getDefaultParams('posterize').brightnessOnly).toBe(false);
+    const look: LookDefinition = { id: 'custom-poster', name: 'Poster', category: 'custom', thumbnail: { kind: 'generated' }, tags: [], builtIn: false,
+      stack: [{ effectId: 'posterize', params: { levels: 4 }, enabled: true }, { effectId: 'posterize', params: { levels: 4, brightnessOnly: true }, enabled: true }] };
+    applyLookToClip(look, clipId);
+    const [, perChannel, brightness] = useTimelineStore.getState().clips[0].effects;
+    expect(perChannel.params).toMatchObject({ levels: 4, brightnessOnly: false });
+    expect(brightness.params).toMatchObject({ levels: 4, brightnessOnly: true });
+  });
 });
 
 describe('Use the new … (StylizeRecipeNote)', () => {
@@ -73,7 +107,7 @@ describe('Use the new … (StylizeRecipeNote)', () => {
     const glow = earlier('glow', { amount: 5, radius: 2 });
     const keyframe = (time: number, value: number): Keyframe => ({ id: `k${time}`, clipId: 'stylize-clip', time, property: `effect.${glow.id}.radius`, value, easing: 'linear' } as Keyframe);
     const clipId = withClip([glow], [keyframe(0, 1), keyframe(1, 3)]);
-    render(<StylizeRecipeNote clipId={clipId} effectInstanceId={glow.id} effectId="glow" params={glow.params} onChange={() => {}} />);
+    render(<StylizeRecipeNote clipId={clipId} effectInstanceId={glow.id} effectId="glow" params={glow.params as Record<string, number | boolean | string>} onChange={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: STYLIZE_RECIPE_UPDATES.glow!.label }));
     const state = useTimelineStore.getState(), updated = state.clips[0].effects[0];
     expect(isEarlierStylizeGraph('glow', updated.operatorGraph)).toBe(false);

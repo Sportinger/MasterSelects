@@ -165,6 +165,7 @@ export interface WorkerRenderSoftwarePixelEffects {
   readonly posterizeAdjustments?: readonly {
     readonly levels: number;
   }[];
+  /** Current Vignette (graphless effects): distance with the corners at 1, Roundness 0 = frame shape, 1 = circle in pixels. */
   readonly vignetteAdjustments?: readonly {
     readonly amount: number;
     readonly size: number;
@@ -186,12 +187,14 @@ export interface WorkerRenderSoftwarePixelEffects {
     readonly radius: number;
   }[];
   readonly glowAdjustments?: readonly {
+    /** 'bloom': a graphless (current) Glow (workerSoftwareBloom.ts), Radius in 1080p pixels; otherwise the earlier ring Glow. */
+    readonly recipe?: 'bloom';
     readonly amount: number;
     readonly threshold: number;
     readonly radius: number;
     readonly softness: number;
-    readonly rings: number;
-    readonly samplesPerRing: number;
+    readonly rings?: number;
+    readonly samplesPerRing?: number;
   }[];
   readonly scanlineAdjustments?: readonly {
     readonly density: number;

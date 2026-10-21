@@ -576,7 +576,7 @@ describe('transition registry', () => {
       effectType: 'glow',
       effectName: 'Glow',
       params: {
-        amount: { from: 0.2, to: 2.2 },
+        amount: { from: 0.1, to: 1.4 },
         threshold: { from: 0.78, to: 0.42 },
         radius: { from: 60, to: 240 },
         softness: 0.65,

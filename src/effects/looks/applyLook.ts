@@ -1,7 +1,8 @@
 import { startBatch, endBatch } from '../../stores/historyStore';
 import { useTimelineStore } from '../../stores/timeline';
 import { editEffectGraph } from '../../services/operators/effectGraphEditing';
-import { createEarlierStylizeGraph, hasEarlierStylizeRecipe, isEarlierStylizeGraph } from '../../services/operators/stylizeRecipes';
+import { createEarlierStylizeGraph, hasEarlierStylizeRecipe, isEarlierStylizeGraph, stylizeNewInstanceParams } from '../../services/operators/stylizeRecipes';
+import { getEffect } from '..';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import type { LookDefinition, LookStackEntry } from './types';
 
@@ -17,7 +18,13 @@ export function applyLookToClip(look: LookDefinition, clipId: string): void {
         for (const key of Object.keys(target)) delete (target as unknown as Record<string, unknown>)[key];
         Object.assign(target, earlier);
       });
-      if (Object.keys(entry.params).length > 0) updateClipEffect(clipId, effectId, entry.params);
+      // Values a new instance starts with differently (Posterize Brightness Only) keep what an entry
+      // saved without them meant: the parameter default.
+      const definitions = getEffect(entry.effectId)?.params ?? {};
+      const unsaved = Object.fromEntries(Object.keys(stylizeNewInstanceParams(entry.effectId)).filter(name => !(name in entry.params) && definitions[name])
+        .map(name => [name, definitions[name].default]));
+      const params = { ...unsaved, ...entry.params };
+      if (Object.keys(params).length > 0) updateClipEffect(clipId, effectId, params);
       if (!entry.enabled) setClipEffectEnabled(clipId, effectId, false);
     }
   } finally {

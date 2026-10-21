@@ -1,14 +1,17 @@
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { GAUSSIAN_REACH_SIGMAS, SEPARABLE_MAX_PAIRS_PER_SIDE } from '../../effects/blur/blurSampling';
-import { SHARPEN_EXPONENT_LIMIT, SHARPEN_MIN_SIGMA_PX, SHARPEN_OVERSHOOT, SHARPEN_REFERENCE_HEIGHT, SHARPEN_WINDOW_SHARPNESS, SHARPEN_WINDOW_TAPS } from '../../effects/stylize/sharpen/sharpenModel';
-import { BlurGraphBuilder, premultipliedSourceCache } from './blurGraphBuilder';
+import { SHARPEN_EMPTY_ROW, SHARPEN_EXPONENT_LIMIT, SHARPEN_MARGIN_FLOOR, SHARPEN_MIN_SIGMA_PX, SHARPEN_OVERSHOOT, SHARPEN_REFERENCE_HEIGHT, SHARPEN_ROLL_OFF,
+  SHARPEN_WINDOW_MAX_TAPS_PER_SIDE, SHARPEN_WINDOW_SHARPNESS, SHARPEN_WINDOW_SIGMAS } from '../../effects/stylize/sharpen/sharpenModel';
+import { BlurGraphBuilder, premultipliedSourceCache, type GraphPort } from './blurGraphBuilder';
 import { separablePass } from './blurEffectGraphs';
 
 /**
  * Sharpen v2 (contract in `effects/stylize/sharpen/sharpenModel.ts`): the frame premultiplied
- * into a cache, a separable Gaussian of it (the Gaussian Blur passes), a brightness unsharp mask
- * and a soft halo limit towards the darkest and brightest brightness around each pixel. Three GPU
- * passes; nothing depends on the timeline time.
+ * into a cache; a row pass that blurs its brightness and alpha horizontally (the Gaussian Blur's
+ * separable pass) and takes the smooth darkest and brightest brightness of a dense row window;
+ * and a final pass that blurs vertically, takes the same extremes over a column of those rows,
+ * sharpens brightness and rolls off what passes the neighbourhood's range. Three GPU passes;
+ * nothing depends on the timeline time.
  */
 export function createDefaultSharpenGraph(): EffectOperatorGraph {
   const g = new BlurGraphBuilder();
@@ -29,63 +32,89 @@ export function createDefaultSharpenGraph(): EffectOperatorGraph {
   const weightAt = (id: string, offset: string) => g.add(id, 'math.gaussian.scalar', { value: offset, sigma });
   // Filtered taps read the premultiplied cache: exact at alpha edges (no dark fringe).
   const premultiplied = premultipliedSourceCache(g);
-  const horizontal = separablePass(g, 'horizontal', [premultiplied, 'image'], weightAt);
-  const cache = g.add('horizontal-cache', 'image.materialize', { image: horizontal });
-  const blurred = separablePass(g, 'vertical', [cache, 'image'], weightAt);
-
-  // Unsharp mask on brightness: blurred colour is un-premultiplied before its luma is taken.
   const source = g.add('source-split', 'vector.split.rgba', { image: ['frame', 'image'] });
   const luma = g.add('source-luma', 'color.luminance-rec709.rgb', { rgb: [source, 'rgb'] });
-  const blurSplit = g.add('blur-split', 'vector.split.rgba', { image: blurred });
-  const blurAlpha = g.binary('blur-alpha', 'math.max.scalar', g.add('blur-alpha-raw', 'convert.alpha-to-scalar', { alpha: [blurSplit, 'alpha'] }), 'alpha-floor');
-  const blurLuma = g.binary('blur-luma', 'math.divide-ieee.scalar', g.add('blur-luma-premultiplied', 'color.luminance-rec709.rgb', { rgb: [blurSplit, 'rgb'] }), blurAlpha);
+
+  // Window: taps one pixel apart (wider steps beyond SHARPEN_WINDOW_MAX_TAPS_PER_SIDE) over
+  // ±SHARPEN_WINDOW_SIGMAS sigma, so the extremes follow the picture smoothly from pixel to pixel.
+  g.number('window-sigmas', SHARPEN_WINDOW_SIGMAS); g.number('window-taps-limit', SHARPEN_WINDOW_MAX_TAPS_PER_SIDE);
+  const windowReach = g.binary('window-reach', 'math.max.scalar', g.binary('window-reach-raw', 'math.multiply.scalar', sigma, 'window-sigmas'), 'one');
+  const windowSide = g.binary('window-side', 'math.min.scalar', g.unary('window-side-needed', 'math.ceil.scalar', windowReach), 'window-taps-limit');
+  const windowStep = g.binary('window-step', 'math.divide-ieee.scalar', windowReach, windowSide);
+  const windowCount = g.binary('window-count', 'math.add.scalar', g.binary('window-side-double', 'math.multiply.scalar', windowSide, 'two'), 'one');
+  const windowIndex = g.add('window-index', 'vector.split.vec2', { value: g.add('window-kernel', 'image.kernel-index') });
+  const windowOffsetPx = (axis: 'x' | 'y') => g.binary(`window-${axis}-px`, 'math.multiply.scalar',
+    g.binary(`window-${axis}`, 'math.subtract.scalar', [windowIndex, axis], windowSide), windowStep);
+  // Smooth extremes: exponentially weighted means relative to this pixel's brightness, limited so the sums stay finite.
+  g.number('window-sharpness', SHARPEN_WINDOW_SHARPNESS); g.number('exponent-limit', SHARPEN_EXPONENT_LIMIT); g.number('exponent-floor', -SHARPEN_EXPONENT_LIMIT);
+  const extremeWeight = (id: string, value: GraphPort, direction: 'bright' | 'dark') => {
+    const difference = direction === 'bright' ? g.binary(`${id}-difference`, 'math.subtract.scalar', value, luma)
+      : g.binary(`${id}-difference`, 'math.subtract.scalar', luma, value);
+    return g.unary(id, 'math.exp.scalar', g.add(`${id}-exponent`, 'math.clamp.scalar', { value: g.binary(`${id}-exponent-raw`, 'math.multiply.scalar',
+      difference, 'window-sharpness'), min: 'exponent-floor', max: 'exponent-limit' }));
+  };
+  /** (bright weight × bright value, bright weight, dark weight × dark value, dark weight) as one image for a Kernel Sum. */
+  const momentsImage = (prefix: string, bright: GraphPort, dark: GraphPort) => {
+    const brightWeight = extremeWeight(`${prefix}-bright-weight`, bright, 'bright'), darkWeight = extremeWeight(`${prefix}-dark-weight`, dark, 'dark');
+    return g.add(`${prefix}-moments`, 'convert.vec4-to-image', { value: g.add(`${prefix}-moments-vec4`, 'vector.combine.vec4', {
+      x: g.binary(`${prefix}-bright-moment`, 'math.multiply.scalar', brightWeight, bright), y: brightWeight,
+      z: g.binary(`${prefix}-dark-moment`, 'math.multiply.scalar', darkWeight, dark), w: darkWeight }) });
+  };
+  const extremes = (prefix: string, sums: string): [string, string] => [
+    g.binary(`${prefix}-brightest`, 'math.divide-ieee.scalar', [sums, 'x'], g.binary(`${prefix}-bright-total`, 'math.max.scalar', [sums, 'y'], 'weight-floor')),
+    g.binary(`${prefix}-darkest`, 'math.divide-ieee.scalar', [sums, 'z'], g.binary(`${prefix}-dark-total`, 'math.max.scalar', [sums, 'w'], 'weight-floor'))];
+
+  // Row pass: horizontal blur (premultiplied brightness, alpha) and the row's extremes.
+  const horizontal = g.add('horizontal-split', 'vector.split.rgba', { image: separablePass(g, 'horizontal', [premultiplied, 'image'], weightAt) });
+  const rowUv = g.binary('row-uv', 'math.add.vec2', ['uv', 'uv'], g.binary('row-offset-uv', 'math.divide-ieee.vec2',
+    g.add('row-offset-px', 'vector.combine.vec2', { x: windowOffsetPx('x'), y: 'zero' }), 'resolution'));
+  const rowTap = g.add('row-tap', 'vector.split.rgba', { image: [g.add('row-sample', 'image.sample', { image: [premultiplied, 'image'], uv: rowUv }), 'image'] });
+  const rowTapAlpha = g.add('row-tap-alpha', 'convert.alpha-to-scalar', { alpha: [rowTap, 'alpha'] });
+  const rowTapLuma = g.binary('row-tap-luma', 'math.divide-ieee.scalar', g.add('row-tap-luma-premultiplied', 'color.luminance-rec709.rgb', { rgb: [rowTap, 'rgb'] }),
+    g.binary('row-tap-alpha-safe', 'math.max.scalar', rowTapAlpha, 'alpha-floor'));
+  const rowReduce = g.add('row-reduce', 'image.kernel-rect-reduce',
+    { sample: [momentsImage('row', rowTapLuma, rowTapLuma), 'image'], weight: rowTapAlpha, width: windowCount, height: 'one' });
+  const rowSums = g.add('row-sums', 'vector.split.vec4', { value: [rowReduce, 'sum'] });
+  const [rowBrightest, rowDarkest] = extremes('row', rowSums);
+  // A row without any opaque tap marks itself out of range, so the column ignores it.
+  g.number('empty-row-low', -SHARPEN_EMPTY_ROW); g.number('empty-row-high', SHARPEN_EMPTY_ROW);
+  const rowCovered = g.binary('row-covered', 'compare.greater.scalar', [rowReduce, 'weightSum'], 'alpha-floor');
+  const rowImage = g.add('row-image', 'convert.vec4-to-image', { value: g.add('row-vec4', 'vector.combine.vec4', {
+    x: g.add('row-blur-luma', 'color.luminance-rec709.rgb', { rgb: [horizontal, 'rgb'] }), y: g.add('row-blur-alpha', 'convert.alpha-to-scalar', { alpha: [horizontal, 'alpha'] }),
+    z: g.add('row-max', 'select.scalar', { condition: [rowCovered, 'condition'], trueValue: rowBrightest, falseValue: 'empty-row-low' }),
+    w: g.add('row-min', 'select.scalar', { condition: [rowCovered, 'condition'], trueValue: rowDarkest, falseValue: 'empty-row-high' }) }) });
+  const rows = g.add('row-cache', 'image.materialize', { image: [rowImage, 'image'] });
+
+  // Final pass: vertical blur → unsharp mask on brightness (blurred brightness un-premultiplied).
+  const blurred = g.add('vertical-split', 'vector.split.vec4', { value: [g.add('vertical-vec4', 'convert.image-to-vec4', { image: separablePass(g, 'vertical', [rows, 'image'], weightAt) }), 'value'] });
+  const blurLuma = g.binary('blur-luma', 'math.divide-ieee.scalar', [blurred, 'x'], g.binary('blur-alpha', 'math.max.scalar', [blurred, 'y'], 'alpha-floor'));
   const detail = g.binary('detail', 'math.subtract.scalar', luma, blurLuma);
   const sharpened = g.binary('sharpened-luma', 'math.add.scalar', luma, g.binary('scaled-detail', 'math.multiply.scalar', detail, amount));
 
-  // Halo limit window: SHARPEN_WINDOW_TAPS² taps evenly spread over ±max(sigma, 1) px, read from the
-  // premultiplied cache (exact between texels, transparent taps weigh nothing). One Kernel Sum
-  // gathers exponentially weighted brightness: a smooth darkest and brightest value of the window
-  // that cannot alias like a sparse minimum and maximum.
-  g.number('window-taps', SHARPEN_WINDOW_TAPS); g.number('window-centre', (SHARPEN_WINDOW_TAPS - 1) / 2);
-  const windowStep = g.binary('window-step', 'math.divide-ieee.scalar', g.binary('window-reach', 'math.max.scalar', sigma, 'one'), 'window-centre');
-  const windowIndex = g.add('window-index', 'vector.split.vec2', { value: g.add('window-kernel', 'image.kernel-index') });
-  const windowOffset = g.add('window-offset', 'vector.combine.vec2', { x: g.binary('window-x', 'math.subtract.scalar', [windowIndex, 'x'], 'window-centre'),
-    y: g.binary('window-y', 'math.subtract.scalar', [windowIndex, 'y'], 'window-centre') });
-  const windowUv = g.binary('window-uv', 'math.add.vec2', ['uv', 'uv'], g.binary('window-offset-uv', 'math.divide-ieee.vec2',
-    g.add('window-offset-px', 'math.multiply.vec2-scalar', { a: windowOffset, b: windowStep }), 'resolution'));
-  const tap = g.add('window-tap', 'vector.split.rgba', { image: [g.add('window-sample', 'image.sample', { image: [premultiplied, 'image'], uv: windowUv }), 'image'] });
-  const tapAlpha = g.add('window-tap-alpha', 'convert.alpha-to-scalar', { alpha: [tap, 'alpha'] });
-  const tapLuma = g.binary('window-luma', 'math.divide-ieee.scalar', g.add('window-luma-premultiplied', 'color.luminance-rec709.rgb', { rgb: [tap, 'rgb'] }),
-    g.binary('window-alpha-safe', 'math.max.scalar', tapAlpha, 'alpha-floor'));
-  // Exponents relative to this pixel's brightness, limited so the sums stay finite for any picture.
-  g.number('window-sharpness', SHARPEN_WINDOW_SHARPNESS); g.number('exponent-limit', SHARPEN_EXPONENT_LIMIT); g.number('exponent-floor', -SHARPEN_EXPONENT_LIMIT);
-  const exponent = g.add('window-exponent', 'math.clamp.scalar', { value: g.binary('window-exponent-raw', 'math.multiply.scalar',
-    g.binary('window-difference', 'math.subtract.scalar', tapLuma, luma), 'window-sharpness'), min: 'exponent-floor', max: 'exponent-limit' });
-  const towardsBright = g.unary('window-bright-weight', 'math.exp.scalar', exponent);
-  const towardsDark = g.unary('window-dark-weight', 'math.exp.scalar', g.binary('window-exponent-negative', 'math.subtract.scalar', 'zero', exponent));
-  const moments = g.add('window-moments', 'convert.vec4-to-image', { value: g.add('window-moments-vec4', 'vector.combine.vec4', {
-    x: g.binary('window-bright-luma', 'math.multiply.scalar', towardsBright, tapLuma), y: towardsBright,
-    z: g.binary('window-dark-luma', 'math.multiply.scalar', towardsDark, tapLuma), w: towardsDark }) });
-  const windowSums = g.add('window-sums', 'vector.split.vec4', { value: [g.add('window-reduce', 'image.kernel-rect-reduce',
-    { sample: [moments, 'image'], weight: tapAlpha, width: 'window-taps', height: 'window-taps' }), 'sum'] });
-  const brightest = g.binary('brightest-value', 'math.divide-ieee.scalar', [windowSums, 'x'], g.binary('brightest-weight', 'math.max.scalar', [windowSums, 'y'], 'weight-floor'));
-  const darkest = g.binary('darkest-value', 'math.divide-ieee.scalar', [windowSums, 'z'], g.binary('darkest-weight', 'math.max.scalar', [windowSums, 'w'], 'weight-floor'));
+  // Column of row extremes: the darkest and brightest brightness of the whole window.
+  const columnUv = g.binary('column-uv', 'math.add.vec2', ['uv', 'uv'], g.binary('column-offset-uv', 'math.divide-ieee.vec2',
+    g.add('column-offset-px', 'vector.combine.vec2', { x: 'zero', y: windowOffsetPx('y') }), 'resolution'));
+  const columnTap = g.add('column-tap', 'vector.split.vec4', { value: [g.add('column-tap-vec4', 'convert.image-to-vec4', { image: [g.add('column-sample', 'image.sample', { image: [rows, 'image'], uv: columnUv }), 'image'] }), 'value'] });
+  const columnSums = g.add('column-sums', 'vector.split.vec4', { value: [g.add('column-reduce', 'image.kernel-rect-reduce',
+    { sample: [momentsImage('column', [columnTap, 'z'], [columnTap, 'w']), 'image'], weight: 'one', width: 'one', height: windowCount }), 'sum'] });
+  const [brightest, darkest] = extremes('window', columnSums);
 
-  // Soft limit: the change approaches the room up to (or down to) the window's range plus
-  // Overshoot, room * (1 - exp(-change / room)), so plateaus keep their gradation.
-  g.number('overshoot', SHARPEN_OVERSHOOT); g.number('room-floor', 1e-6);
-  const margin = g.binary('halo-margin', 'math.multiply.scalar', g.binary('window-range', 'math.subtract.scalar', brightest, darkest), 'overshoot');
-  const roomUp = g.binary('halo-room-up', 'math.max.scalar', g.binary('halo-room-up-raw', 'math.subtract.scalar',
-    g.binary('halo-ceiling', 'math.add.scalar', brightest, margin), luma), 'room-floor');
-  const roomDown = g.binary('halo-room-down', 'math.max.scalar', g.binary('halo-room-down-raw', 'math.subtract.scalar', luma,
-    g.binary('halo-floor', 'math.subtract.scalar', darkest, margin)), 'room-floor');
-  const detailChange = g.binary('detail-change', 'math.subtract.scalar', sharpened, luma);
-  const softLimit = (id: string, push: string, room: string) => g.binary(id, 'math.multiply.scalar', room, g.binary(`${id}-share`, 'math.subtract.scalar', 'one',
-    g.unary(`${id}-falloff`, 'math.exp.scalar', g.binary(`${id}-exponent`, 'math.divide-ieee.scalar', g.binary(`${id}-negative`, 'math.subtract.scalar', 'zero', push), room))));
-  const up = softLimit('halo-limited-up', g.binary('detail-up', 'math.max.scalar', detailChange, 'zero'), roomUp);
-  const down = softLimit('halo-limited-down', g.binary('detail-down', 'math.max.scalar', g.binary('detail-negative', 'math.subtract.scalar', 'zero', detailChange), 'zero'), roomDown);
-  const limitedChange = g.binary('limited-change', 'math.subtract.scalar', up, down);
-  const change = g.add('luma-change', 'convert.scalar-to-rgb', { value: limitedChange });
+  // Halo limit: the result may pass the window's range by a margin (Overshoot of the range, at
+  // least the margin floor); beyond it the excess rolls off logarithmically, never flat.
+  g.number('overshoot', SHARPEN_OVERSHOOT); g.number('margin-floor', SHARPEN_MARGIN_FLOOR); g.number('roll-off', SHARPEN_ROLL_OFF);
+  const margin = g.binary('halo-margin', 'math.max.scalar', g.binary('halo-margin-raw', 'math.multiply.scalar',
+    g.binary('window-range', 'math.subtract.scalar', brightest, darkest), 'overshoot'), 'margin-floor');
+  const ceiling = g.binary('halo-ceiling', 'math.max.scalar', g.binary('halo-ceiling-raw', 'math.add.scalar', brightest, margin), luma);
+  const floor = g.binary('halo-floor', 'math.min.scalar', g.binary('halo-floor-raw', 'math.subtract.scalar', darkest, margin), luma);
+  // Never 0, so a Roll Off or Margin Floor of 0 typed into the graph becomes a hard limit instead of NaN.
+  const scale = g.binary('roll-off-scale', 'math.max.scalar', g.binary('roll-off-scale-raw', 'math.multiply.scalar', margin, 'roll-off'), 'alpha-floor');
+  const rollOff = (id: string, excess: string) => g.binary(id, 'math.multiply.scalar', scale, g.unary(`${id}-log`, 'math.log.scalar',
+    g.binary(`${id}-ratio`, 'math.add.scalar', 'one', g.binary(`${id}-share`, 'math.divide-ieee.scalar', excess, scale))));
+  const above = g.binary('excess-above', 'math.max.scalar', g.binary('excess-above-raw', 'math.subtract.scalar', sharpened, ceiling), 'zero');
+  const below = g.binary('excess-below', 'math.max.scalar', g.binary('excess-below-raw', 'math.subtract.scalar', floor, sharpened), 'zero');
+  const inside = g.add('inside-range', 'math.clamp.scalar', { value: sharpened, min: floor, max: ceiling });
+  const limited = g.binary('limited-luma', 'math.subtract.scalar', g.binary('limited-luma-up', 'math.add.scalar', inside, rollOff('roll-off-above', above)), rollOff('roll-off-below', below));
+  const change = g.add('luma-change', 'convert.scalar-to-rgb', { value: g.binary('limited-change', 'math.subtract.scalar', limited, luma) });
   const result = g.add('result-rgb', 'math.clamp.rgb-scalar', { value: g.binary('result-raw', 'math.add.rgb', [source, 'rgb'], [change, 'rgb']), min: 'zero', max: 'one' });
   const output = g.add('combine', 'vector.combine.rgba', { rgb: result, alpha: [source, 'alpha'] });
   g.add('output', 'image.output', { image: [output, 'image'] });

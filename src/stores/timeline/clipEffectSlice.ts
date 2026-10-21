@@ -25,7 +25,7 @@ import {
 import { cleanupEffectParamTimelineState } from './helpers/propertyTimelineCleanup';
 import { reconcileRemovedParameterTargets } from '../../services/parameterSources/parameterSourceLifecycle';
 import { createInitialSlitScanGraph } from '../../services/operators/slitScanGraphUpgrade';
-import { createStylizeRecipeGraph } from '../../services/operators/stylizeRecipes';
+import { createStylizeRecipeGraph, stylizeNewInstanceParams } from '../../services/operators/stylizeRecipes';
 import { reconcileSlitScanDuration } from './helpers/slitScanDuration';
 import { FLOCKING_EFFECT_TYPE, flockingEffectOf } from '../../services/flock/flockEffect';
 import { createFlockPresetDefinition } from '../../services/flock/presets/flockPresets';
@@ -149,7 +149,7 @@ export const createClipEffectSlice: SliceCreator<ClipEffectActions> = (set, get)
       name: effectType === FLOCKING_EFFECT_TYPE ? 'Flocking' : effectType === 'lens-correction' ? 'Lens Correction' : effectType === 'guided-perspective' ? 'Guided Perspective' : effectType === 'stick-figure' ? 'Stick Figure' : effectType,
       type: effectType as EffectType,
       enabled: true,
-      params: { ...getDefaultEffectParams(effectType), ...(effectType === 'slit-scan' ? {
+      params: { ...getDefaultEffectParams(effectType), ...stylizeNewInstanceParams(effectType), ...(effectType === 'slit-scan' ? {
         stabilizationEnabled: false,
         geometryMode: '2d',
         geometrySampler: 'history',

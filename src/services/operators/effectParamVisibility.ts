@@ -2,7 +2,10 @@ import { getEffect } from '../../effects';
 import type { EffectParam } from '../../effects/types';
 import type { EffectOperatorGraph } from '../../types/operatorGraph';
 import { effectOperatorGraph, isImageGraphEffectType } from './effectGraphOwner';
-import { isEarlierStylizeGraph } from './stylizeRecipes';
+import { isCurrentStylizeGraph, isEarlierStylizeGraph, STYLIZE_RECIPE_EFFECT_TYPES } from './stylizeRecipes';
+import { Logger } from '../logger';
+
+const log = Logger.create('EffectParamVisibility');
 
 /** The parts of an effect instance that decide which of its parameters still act. */
 export interface EffectParamOwner { type: string; params: Record<string, unknown>; operatorGraph?: EffectOperatorGraph }
@@ -53,13 +56,26 @@ export function unusedParamWarnings(effect: EffectParamOwner, names: readonly st
 
 /**
  * The effect's own notes on values it clamps, ignores or cannot show (`paramWarnings`), judged on
- * the recipe this instance runs: the notes describe the current recipe, so an instance that still
- * runs an untouched earlier stylize recipe gets none (its inspector card and tool results name the
- * earlier version instead, see `earlierStylizeRecipeNote`).
+ * the recipe this instance runs. The notes describe a rebuilt stylize effect's current recipe: an
+ * instance on an untouched earlier recipe gets none (its inspector card and tool results name the
+ * earlier version instead, see `earlierStylizeRecipeNote`), and an edited graph gets them as one
+ * hedged note, because its own nodes decide what happens to those values. A note function that
+ * throws is logged and reported, never dropped silently.
  */
 export function effectDefinitionNotes(effect: EffectParamOwner, width: number, height: number): string[] {
   const definition = getEffect(effect.type);
   if (!definition || !('paramWarnings' in definition) || !definition.paramWarnings) return [];
-  if (isEarlierStylizeGraph(effect.type, effect.operatorGraph)) return [];
-  try { return definition.paramWarnings(effect.params as Record<string, number | boolean | string>, width, height); } catch { return []; }
+  const recipe = STYLIZE_RECIPE_EFFECT_TYPES.has(effect.type);
+  if (recipe && isEarlierStylizeGraph(effect.type, effect.operatorGraph)) return [];
+  let notes: string[];
+  try { notes = definition.paramWarnings(effect.params as Record<string, number | boolean | string>, width, height); } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    log.warn(`${definition.name}: its value notes could not be computed`, error);
+    return [`${definition.name}: its value notes could not be computed (${reason}).`];
+  }
+  if (!notes.length || !recipe) return notes;
+  let graph: EffectOperatorGraph | undefined;
+  try { graph = effectOperatorGraph(effect, { inspectionOnly: true }); } catch { graph = undefined; }
+  if (isCurrentStylizeGraph(effect.type, graph)) return notes;
+  return [`This ${definition.name} runs an edited graph, so its own nodes decide how these values act; the standard recipe would say: ${notes.join(' ')}`];
 }

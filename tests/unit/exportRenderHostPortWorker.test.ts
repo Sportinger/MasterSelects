@@ -886,13 +886,13 @@ describe('worker-first export render host port', () => {
     expect(mockFactory.bridge.presentSoftwareFrame).toHaveBeenCalledTimes(1);
     expect(mockFactory.bridge.presentSoftwareFrame.mock.calls[0]?.[3].layers[0].pixelEffects)
       .toMatchObject({
+        // A graphless Glow is the current bloom; the earlier ring counts are not read.
         glowAdjustments: [{
+          recipe: 'bloom',
           amount: 0.6,
           threshold: 0.35,
           radius: 2,
           softness: 0.7,
-          rings: 2,
-          samplesPerRing: 8,
         }],
       });
     expect(mockFactory.engine.ensureExportLayersReady).not.toHaveBeenCalled();
